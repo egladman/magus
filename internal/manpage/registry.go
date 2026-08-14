@@ -14,7 +14,6 @@ var All = []Command{
 	xCommand,
 	whereCommand,
 	affectedCommand,
-	insightCommand,
 	graphCommand,
 	queryCommand,
 	explainCommand,
@@ -27,6 +26,7 @@ var All = []Command{
 	doctorCommand,
 	configCommand,
 	memoryCommand,
+	notesCommand,
 	serverCommand,
 	buzzCommand,
 	completionCommand,
@@ -96,7 +96,11 @@ step at a time.`,
 	Usage: "magus describe <noun> [<name>] [flags]",
 	BuildFlags: func(fs *flag.FlagSet) {
 		fs.Bool("explain", false, "For a target ref with charms: show the per-charm argv trace (base then each charm)")
+		fs.Bool("e", false, "Short for --explain on a target ref, and for --evaluated on a project listing")
 		fs.Bool("evaluated", false, "For projects: print workspace-rooted globs, effective claims, and per-target policies")
+		fs.Bool("cache", false, "For a target ref: show its live cache key, the ref a run would print, and the component classes behind it")
+		fs.String("against", "", "With --cache: diff the live key inputs against the stored lines behind an output ref")
+		fs.Bool("no-default-charms", false, "With --cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)")
 	},
 	Examples: []Example{
 		{"List every target", "magus describe targets"},
@@ -123,11 +127,19 @@ the anchor that the affected set keys off, and always runs it read-only; apply
 the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 	Usage: "magus run <target> [flags] [project...]",
 	BuildFlags: func(fs *flag.FlagSet) {
-		fs.Bool("dry-run", false, "Print what would run without executing")
 		fs.Bool("graph", false, "Render the dependency graph for the selected scope instead of executing")
 		fs.Bool("upstream", false, "With --graph: show dependents instead of dependencies")
 		fs.Int("depth", 0, "With --graph: cap displayed depth (0 = unlimited)")
 		fs.Bool("no-cache", false, "Force a fresh run even on a cache hit; still refreshes the entry")
+		fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
+		fs.Bool("detach", false, "Hand the run to the daemon and return immediately; follow it with magus status --watch")
+		fs.Bool("open", false, "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)")
+		fs.Bool("step", false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
+		fs.String("race", "", "Run the same target repeatedly to surface order-dependent failures")
+		fs.Duration("timeout", 0, "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)")
+		fs.Int("shard", 0, "This run's shard index within a CI matrix; paired with --n-shards")
+		fs.Int("n-shards", 0, "Total shard count for this CI matrix run; paired with --shard")
+		fs.Bool("no-volatility-retry", false, "Disable volatility auto-retry for this run")
 	},
 	Targets: CommonTargets,
 	Examples: []Example{
@@ -227,6 +239,14 @@ history to find the commit that introduced a regression.`,
 		fs.String("base", "", "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)")
 		fs.Bool("stdin", false, "Read changed file paths from stdin instead of running a VCS diff")
 		fs.Bool("null", false, "With --stdin: expect NUL-separated paths and double-NUL between batches")
+		fs.String("b", "", "Short for --base")
+		fs.Bool("no-cache", false, "Force a fresh run even on a cache hit; still refreshes the entry")
+		fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
+		fs.Bool("detach", false, "Hand the run to the daemon and return immediately; follow it with magus status --watch")
+		fs.Bool("open", false, "Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)")
+		fs.Bool("step", false, "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)")
+		fs.String("race", "", "Run the same target repeatedly to surface order-dependent failures")
+		fs.Duration("timeout", 0, "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)")
 		fs.Bool("graph", false, "Render the dependency graph for the affected scope instead of executing")
 		fs.Bool("upstream", false, "With --graph: show dependents instead of dependencies")
 		fs.Int("depth", 0, "With --graph: cap displayed depth (0 = unlimited)")
@@ -234,6 +254,7 @@ history to find the commit that introduced a regression.`,
 		fs.Bool("plan", false, "Emit a provider-neutral JSON CI shard plan for the affected set")
 		fs.Int("max-shards", 8, "With --plan: maximum CI shards (-1 = unlimited)")
 		fs.Int("max-parallel-budget", 0, "With --plan: cross-shard concurrency cap; 0 = unlimited")
+		fs.Bool("detail", false, "With --plan: add per-shard detail - the invocation, its spells, the files it declares it writes, and the skills its work routes to")
 		fs.String("bisect", "", "Drive VCS bisect to find the commit that broke <project>")
 		fs.String("good", "", "With --bisect: known-good commit SHA (auto-detected from history when empty)")
 		fs.String("target", "test", "With --bisect: magus target to bisect")
@@ -249,86 +270,6 @@ history to find the commit that introduced a regression.`,
 		{"Emit a CI shard plan for the affected set", "magus affected ci --plan"},
 		{"Shard a test plan across at most four workers", "magus affected test --plan --max-shards 4"},
 		{"Bisect a regression in myapp", "magus affected --bisect ./apps/myapp"},
-	},
-}
-
-var insightCommand = Command{
-	Name:        "insight",
-	Short:       "Behavioral code analysis from VCS, run-outcome, and knowledge-graph sources",
-	Description: "Show where a codebase's attention and risk concentrate: hotspots, temporal coupling, ownership, and trend from VCS history, volatility from run-outcome history, and unreferenced symbols from the knowledge graph.",
-	Tags:        []string{"cli", "magus insight", "analysis", "hotspots", "ownership", "coupling", "vcs", "volatility", "flaky", "unreferenced", "symbols"},
-	Long: `Read history to show where a codebase's attention and risk concentrate.
-Four lenses read version-control history; a fifth, volatility, reads run-outcome
-history instead; a sixth, unreferenced, reads the knowledge graph. The VCS lenses
-are contextual to the working directory by default -
-run from inside a subtree and each reflects only that subtree's history; pass
---workspace to analyze the whole workspace (the fan-in postflight uses this). The
-active VCS adapter must report per-commit files (git can).
-
-VCS-history lenses (the first argument):
-
-  hotspots   Edit frequency x complexity - the prime refactoring targets. The
-             project view is the dependency graph heat-colored by churn (with
-             authors, recency, blast radius, and CI duration); --files ranks
-             individual files by churn x complexity.
-  affinity   Projects that change together (temporal coupling). A hidden pair
-             co-changes without either declaring a dependency on the other - a
-             candidate architectural smell.
-  ownership  Author concentration: the primary author and their share, distinct
-             author count (bus factor), and abandonment (projects gone quiet).
-  trend      The recent half of the window versus the earlier half: a positive
-             delta is a rising hotspot, a negative one is cooling.
-
-Run-outcome lens:
-
-  volatility Each (project, target) pair's recent pass/fail/volatile record scored
-             by its Wilson lower bound; a pair at or above the configured threshold
-             is flagged volatile - a flakiness signal, the prime stabilization
-             targets. It reads the shared runtime-history file, not git, so it takes
-             no --commits/--since window and is always workspace-wide.
-
-Knowledge-graph lens:
-
-  unreferenced
-             Code symbols the workspace defines and nothing in it names: no call
-             from another symbol, and no file outside the one defining them. It
-             reads the SCIP symbol index, so it takes no --commits/--since window.
-
-             These are candidates for review, not a delete list. Reflection,
-             interface dispatch, build tags, generated call sites, and any consumer
-             outside this workspace are invisible to a static index. Read the
-             result's verdict before trusting it: "unknown" means a project's symbol
-             index was missing, so the list is what magus could see rather than what
-             exists. Build the missing index with magus graph build.
-
-  report     Every lens plus graph stats as one whole-workspace Markdown document.
-             With --mermaid-style=safe the Mermaid subset is restricted to what
-             older or partial renderers (GitHub step summaries, blog renderers)
-             reliably handle; the default "standard" emits the full Mermaid spec
-             for tools that render it. The magusfile's postflight target prints
-             this to stdout for local use.
-
-The VCS lenses read the commit log: --commits caps the scan; --since bounds it by
-date (90d, 12w, 6mo, 1y). Each lens accepts -o text|json|yaml|name; hotspots and
-affinity also render -o mermaid (the hotspots file view renders a
-churn-vs-complexity quadrant). The structural companion - god nodes, orphans, and
-doc coverage from the knowledge graph - is magus graph stats; the report embeds it.`,
-	Usage: "magus insight <lens> [flags]",
-	BuildFlags: func(fs *flag.FlagSet) {
-		fs.Int("commits", 500, "Cap on how many recent commits to scan (VCS lenses only)")
-		fs.String("since", "", "Only commits within this window, e.g. 90d, 12w, 6mo, 1y (VCS lenses only)")
-		fs.Bool("workspace", false, "Analyze the whole workspace instead of the current project/subtree")
-		fs.Bool("files", false, "hotspots: rank individual files instead of projects")
-	},
-	Examples: []Example{
-		{"Prime refactoring targets (files)", "magus insight hotspots --files"},
-		{"Churn-vs-complexity quadrant", "magus insight hotspots --files -o mermaid"},
-		{"Hidden architectural coupling", "magus insight affinity"},
-		{"Bus factor and abandonment", "magus insight ownership"},
-		{"Rising vs cooling activity", "magus insight trend --since 90d"},
-		{"Flaky (volatile) targets", "magus insight volatility"},
-		{"Symbols nothing names", "magus insight unreferenced"},
-		{"Whole-workspace report (all lenses)", "magus insight report --workspace"},
 	},
 }
 
@@ -511,6 +452,14 @@ Subcommands (the first argument):
 		{Name: "export", Short: "Export the merged knowledge graph (json node-link or graphml)", BuildFlags: func(fs *flag.FlagSet) {
 			fs.Bool("refresh", false, "Force a full graph rebuild before exporting")
 			fs.Bool("global", false, "Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace")
+			fs.Bool("reproducible", false, "Omit everything that is not a function of the source tree (locally observed runtime attrs, git history), so two checkouts of one commit export identical bytes")
+			fs.Bool("open", false, "Deliver the graph to the hosted Graph Explorer instead of stdout; it never leaves your machine")
+			fs.Bool("follow", false, "With --open: keep the explorer updating from the running daemon instead of showing a snapshot (needs magus server start)")
+			fs.Bool("targets", false, "With --open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it")
+			fs.Bool("serve", false, "With --open: hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)")
+			fs.Bool("print", false, "With --open: print the explorer URL to stdout instead of launching a browser")
+			fs.String("url", "https://eli.gladman.cc/magus/console/graph/", "With --open: base URL of the Graph Explorer page (override for a self-hosted mirror)")
+			fs.Bool("static", false, "Deprecated alias for --reproducible")
 			fs.String("select", "", "Export only the neighborhood of a query (same grammar as magus query); required for -o dot and -o mermaid")
 			fs.Int("budget", 50, "Node budget for --select (how many nodes the neighborhood may collect)")
 		}},
@@ -518,13 +467,7 @@ Subcommands (the first argument):
 			fs.String("kind", "", "Scope every section to one node kind (spell, target, doc, ...)")
 			fs.Bool("refresh", false, "Force a full graph rebuild first")
 			fs.Bool("global", false, "Union the workspaces registered in config (knowledge.workspaces) before computing stats")
-		}},
-		{Name: "open", Short: "Open the workspace graph in the hosted Graph Explorer (data never leaves your machine)", BuildFlags: func(fs *flag.FlagSet) {
-			fs.Bool("targets", false, "Open the target dependency graph instead of the knowledge graph; pass a project path as a positional argument to scope to one project")
-			fs.Bool("serve", false, "Hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)")
-			fs.Bool("print", false, "Print the explorer URL to stdout instead of opening a browser")
-			fs.Bool("refresh", false, "Force a full graph rebuild before opening (knowledge graph only)")
-			fs.String("url", "https://eli.gladman.cc/magus/console/graph/", "Base URL of the Graph Explorer page (override for a self-hosted mirror)")
+			fs.Bool("symbols", false, "Include the lazily-loaded symbol shards in the stats; excluded by default because they can dwarf the domain graph")
 		}},
 	},
 	Examples: []Example{
@@ -535,10 +478,10 @@ Subcommands (the first argument):
 		{"A query's neighborhood as Mermaid", "magus graph export --select 'kind:spell go' -o mermaid"},
 		{"Where structural risk concentrates", "magus graph stats"},
 		{"Doc coverage for spells only", "magus graph stats --kind spell"},
-		{"Open knowledge graph in browser", "magus graph open"},
-		{"Open target dependency graph", "magus graph open --targets"},
-		{"Scope target graph to one project", "magus graph open --targets docs"},
-		{"Print the URL instead of opening", "magus graph open --targets --print"},
+		{"Open knowledge graph in browser", "magus graph export --open"},
+		{"Open target dependency graph", "magus graph export --open --targets"},
+		{"Scope target graph to one project", "magus graph export --open --targets docs"},
+		{"Print the URL instead of opening", "magus graph export --open --targets --print"},
 	},
 }
 
@@ -586,7 +529,10 @@ snapshot on its own line for log capture.`,
 	Usage: "magus status [flags]",
 	BuildFlags: func(fs *flag.FlagSet) {
 		fs.Duration("watch", 0, "Poll and reprint at this interval (minimum 15s; 0 means one-shot)")
+		fs.Duration("W", 0, "Short for --watch")
 		fs.Bool("compact", false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
+		fs.Bool("c", false, "Short for --compact")
+		fs.Bool("symbols", false, "Include the expensive symbol-index freshness scan")
 		fs.String("socket", "", "Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir")
 		fs.String("probe", "", "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)")
 		fs.String("workspace", "", "Workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
@@ -819,6 +765,7 @@ and an index result answer different questions, and quietly substituting
 one for the other is how a wrong answer looks right.`,
 	BuildFlags: func(fs *flag.FlagSet) {
 		fs.Bool("refresh", false, "Re-ingest the SCIP index before answering")
+		fs.Bool("occurrences", false, "Every exact source range, uncapped and verified against the tree - the view a mechanical edit needs, where the default line list is capped and describes fan-in")
 	},
 	Usage: "magus refs <symbol> [flags]",
 	Examples: []Example{
@@ -906,7 +853,7 @@ var memoryCommand = Command{
 	Name:        "memory",
 	Short:       "Durable cross-session project memory",
 	Description: "Manage the per-repository handoff journal that lives outside the checkout: named entries people and agents can read across sessions and worktrees.",
-	Tags:        []string{"cli", "magus memory", "handoff", "journal", "notes", "agents"},
+	Tags:        []string{"cli", "magus memory", "handoff", "journal", "agents"},
 	Long: `Manage the per-repository handoff journal, which is stored outside the
 checkout so it survives worktrees and branch switches.
 
@@ -937,6 +884,46 @@ the CLI is readable by an agent without either side learning a new format.`,
 		{"List entries and warnings", "magus memory ls"},
 		{"Read one entry", "magus memory get release-checklist"},
 		{"Check the journal's health", "magus memory verify"},
+	},
+}
+
+var notesCommand = Command{
+	Name:        "notes",
+	Short:       "Human-authored notes committed to the repository",
+	Description: "Read the workspace's human-authored notes: prose a person wrote about the code, anchored to graph entities but derived from none of them.",
+	Tags:        []string{"cli", "magus notes", "notes", "knowledge", "annotations"},
+	Long: `Read the workspace's human-authored notes.
+
+A note carries knowledge whose only provenance is a person: something no
+extractor could derive from the tree, and that no rebuild would recover. That
+is what separates it from the two things it is NOT. Documentation describes the
+system for a reader and lives in the docs tree. A NOTE/WHY/TODO comment marks
+one location in one file. A note attaches to graph ENTITIES - a symbol, a file,
+a project, a target, another note - and may span several at once, which is how
+it can record something like "these two caches must be invalidated together"
+that no single comment could hold.
+
+Anchors are required, and they name node IDs rather than positions. A symbol
+anchor survives the code moving file and line and breaks only on a rename or a
+deletion, which is exactly when the note should be re-read; a line number would
+break on the next edit above it with nothing to detect.
+
+There is no put. Notes are written by a person in their own editor and
+committed under their own name, which is what makes git attribution meaningful
+and what keeps the store worth trusting. Set knowledge.notes.path in magus.yaml
+to declare where they live; with nothing declared the feature is inert.`,
+	Usage: "magus notes <ls|get|edit|verify> [flags]",
+	Children: []Command{
+		{Name: "ls", Short: "Show notes and any repair warnings"},
+		{Name: "get", Short: "Show one note"},
+		{Name: "edit", Short: "Open one note in $VISUAL or $EDITOR"},
+		{Name: "verify", Short: "Check malformed notes and anchors that no longer resolve"},
+	},
+	Examples: []Example{
+		{"List every note", "magus notes ls"},
+		{"Read one note", "magus notes get cache-invalidation-pairing"},
+		{"Write or revise one", "magus notes edit cache-invalidation-pairing"},
+		{"Check every anchor still resolves", "magus notes verify"},
 	},
 }
 
@@ -1009,13 +996,14 @@ paths-relative-to-<dir> case. Absolute destinations are refused unless
 	BuildFlags: func(fs *flag.FlagSet) {
 		fs.String("dir", ".", "Repo directory to install into (agent install)")
 		fs.Bool("force", false, "Overwrite existing installed skill files (agent install)")
-		fs.Bool("simple", false, "Install the shorter curated permutation of each skill (agent install)")
+		fs.Bool("prune", false, "Also remove installed skills this binary no longer ships; without it they are reported and left in place, and only skills magus wrote are ever candidates (agent install)")
 		fs.Bool("tar", false, "Stream a tar archive to stdout instead of writing files (agent install)")
 		fs.Bool("global", false, "Allow absolute destination paths in write mode (agent install)")
 	},
 	Examples: []Example{
 		{"Install into a repo's Claude skills", "magus agent install .claude/skills"},
 		{"Refresh installed skills", "magus agent install .claude/skills --force"},
+		{"Refresh, and drop skills this version no longer ships", "magus agent install .claude/skills --force --prune"},
 		{"Install anywhere via tar", "magus agent install --tar | tar -xf - -C ~/.config/opencode/skills"},
 		{"Print a starter AGENTS.md", "magus agent sample"},
 	},

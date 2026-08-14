@@ -2,9 +2,14 @@ package main
 
 import (
 	"flag"
+	"os"
+	"sort"
+	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/manpage"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestReorderFlagsFirst(t *testing.T) {
@@ -113,4 +118,197 @@ func TestSplitTargetFromArgs(t *testing.T) {
 			assert.Equal(t, c.rest, rest, "rest")
 		})
 	}
+}
+
+// ---- the man page's flag list vs what the CLI binds ----
+
+// TestManpageFlagsMatchTheCLI is the gate on the man page's copy of every command's
+// flags.
+//
+// internal/manpage/registry.go restates each command's flags because the real ones are
+// bound in closures inside package main, which nothing outside it can import. That copy
+// drifted for as long as it existed: it advertised --simple for months after the flag was
+// deleted, and it still omitted most of what several commands accept. Nothing reported
+// either direction, because a generated man page is only ever compared against itself.
+//
+// The comparison runs against the CLI as built, not against its source. Each documented
+// command is invoked with -h, which makes cmdParse bind every flag and then stop at
+// flag.ErrHelp before the command does any work; recordFlagSet captures the fully bound
+// set on the way through. A source scan cannot do this - it sees neither the config flags
+// generated from the schema nor the display flags, so it reports --dry-run as
+// undocumented when it is simply global.
+//
+// Global flags are subtracted from BOTH sides, computed rather than listed, so this stays
+// a check on what a command adds.
+func TestManpageFlagsMatchTheCLI(t *testing.T) {
+	globals := globalFlagNames()
+
+	for _, cmd := range manpage.All {
+		for _, probe := range flagProbes(cmd) {
+			t.Run(strings.ReplaceAll(probe.name, " ", "_"), func(t *testing.T) {
+				documented := documentedFlagNames(probe.name, probe.buildFlags, globals)
+				for _, argv := range probe.argvs {
+					runCLIQuietly(t, append(argv, "-h")...)
+				}
+
+				bound, ok := recordedFlagsUnder(probe.name)
+				if !ok {
+					// The command never reached cmdParse under -h. Not a drift finding:
+					// it means this probe cannot see the command's flags, and a check
+					// that cannot look must say so rather than report "no drift".
+					t.Skipf("%q did not reach flag parsing under -h; its man page flags are unverified", probe.name)
+				}
+				actual := make([]string, 0, len(bound))
+				for _, f := range bound {
+					if !globals[f.Name] {
+						actual = append(actual, f.Name)
+					}
+				}
+				sort.Strings(actual)
+
+				assert.Equal(t, documented, actual,
+					"the man page's flag list for %q disagrees with what the command binds.\n"+
+						"Fix internal/manpage/registry.go - it is a hand-written copy of the real\n"+
+						"flags, and this is the only thing that notices when it goes stale.",
+					probe.name)
+			})
+		}
+	}
+}
+
+// flagProbe is one command whose flags can be compared: the argv that reaches it, and the
+// man page's claim about it.
+type flagProbe struct {
+	name       string
+	argvs      [][]string
+	buildFlags func(*flag.FlagSet)
+}
+
+// modeArgv lists the invocations needed to bind a command's whole documented flag set.
+//
+// Two things make one invocation insufficient. A target-scoped command registers per
+// TARGET ("run build", never "run"), because the target is part of the invocation rather
+// than a flag. And a command with MODES binds a different set in each: `magus affected
+// <t>` , `--plan` and `--bisect` are three separate flag sets, and the man page documents
+// their union, so the probe has to cover all three or it reports the modes it never
+// entered as undocumented.
+var modeArgv = map[string][][]string{
+	"run":      {{"run", "build"}},
+	"affected": {{"affected", "build"}, {"affected", "build", "--plan"}, {"affected", "--bisect", "x"}},
+	// describe binds nothing until it has its noun, and binds a DIFFERENT set per noun:
+	// a target ref gets the cache-key flags, a project listing gets --evaluated.
+	//
+	// watch is deliberately NOT probed. It is a long-running file watcher that starts
+	// watching before -h can stop it, so probing it hangs the test rather than reading
+	// its flags. Its man-page flags stay unverified, and the skip says so out loud -
+	// which is the honest outcome for a command this check cannot safely enter.
+	"describe": {{"describe", "targets"}, {"describe", "projects"}},
+}
+
+// argvsFor turns a documented command name into the invocations that reach its flags.
+func argvsFor(name string) [][]string {
+	if modes, ok := modeArgv[name]; ok {
+		return modes
+	}
+	return [][]string{strings.Fields(name)}
+}
+
+// recordedFlagsUnder is the union of everything a probe bound: the record filed under the
+// name itself, plus every record filed under a key extending it. The union is the point -
+// a multi-mode command files one record per mode ("affected build", "affected build
+// --plan"), and the man page describes the command, not one mode of it.
+func recordedFlagsUnder(name string) ([]recordedFlag, bool) {
+	flagRecord.Lock()
+	defer flagRecord.Unlock()
+	seen := map[string]bool{}
+	var out []recordedFlag
+	for key, flags := range flagRecord.byCommand {
+		if key != name && !strings.HasPrefix(key, name+" ") {
+			continue
+		}
+		for _, f := range flags {
+			if !seen[f.Name] {
+				seen[f.Name] = true
+				out = append(out, f)
+			}
+		}
+	}
+	return out, len(out) > 0
+}
+
+// flagProbes expands one man-page command into the invocations that actually bind flags.
+// A command with subcommands binds nothing itself - `magus server -h` prints its own
+// usage and parses nothing - so its children are what get probed.
+func flagProbes(cmd manpage.Command) []flagProbe {
+	if len(cmd.Children) == 0 {
+		if cmd.BuildFlags == nil {
+			return nil
+		}
+		return []flagProbe{{name: cmd.Name, argvs: argvsFor(cmd.Name), buildFlags: cmd.BuildFlags}}
+	}
+	var out []flagProbe
+	for _, child := range cmd.Children {
+		if child.BuildFlags == nil {
+			continue
+		}
+		out = append(out, flagProbe{name: cmd.Name + " " + child.Name, argvs: argvsFor(cmd.Name + " " + child.Name), buildFlags: child.BuildFlags})
+	}
+	return out
+}
+
+// modeSelectors are documented flags that SELECT a mode rather than configure one, and
+// are therefore read straight from argv before any FlagSet exists: `magus affected
+// --explain <project>` and `--plan` each dispatch to a different command path with its
+// own flags (parseExplainArgs, and the --plan scan in affectedCmd). They are real, they
+// are documented correctly, and they can never appear in a recorded flag set - so they
+// are excluded rather than "fixed" out of the man page.
+var modeSelectors = map[string]map[string]bool{
+	"affected": {"explain": true, "plan": true},
+}
+
+// documentedFlagNames lists the non-global flag names a BuildFlags closure declares.
+func documentedFlagNames(command string, build func(*flag.FlagSet), globals map[string]bool) []string {
+	fs := flag.NewFlagSet("doc", flag.ContinueOnError)
+	build(fs)
+	var out []string
+	fs.VisitAll(func(f *flag.Flag) {
+		if !globals[f.Name] && !modeSelectors[command][f.Name] {
+			out = append(out, f.Name)
+		}
+	})
+	sort.Strings(out)
+	return out
+}
+
+// runCLIQuietly drives the real CLI in process with output discarded. -h is always the
+// last argument, so parsing stops before the command acts.
+func runCLIQuietly(t *testing.T, argv ...string) {
+	t.Helper()
+	devnull, err := os.OpenFile(os.DevNull, os.O_WRONLY, 0)
+	require.NoError(t, err)
+	defer func() { _ = devnull.Close() }()
+
+	oldOut, oldErr, oldArgs := os.Stdout, os.Stderr, os.Args
+	os.Stdout, os.Stderr, os.Args = devnull, devnull, append([]string{"magus"}, argv...)
+	defer func() { os.Stdout, os.Stderr, os.Args = oldOut, oldErr, oldArgs }()
+
+	// Restore the environment afterwards. Driving the real CLI in this process is the
+	// whole point of the check and also its hazard: a probe left MAGUS_DAEMON_SOCKET
+	// behind, and the next test in the package then refused to start a daemon because
+	// it believed it was running under a parent magus. Snapshot everything rather than
+	// the one variable that bit, since the next leak will be a different name.
+	env := os.Environ()
+	defer func() {
+		os.Clearenv()
+		for _, kv := range env {
+			if k, v, ok := strings.Cut(kv, "="); ok {
+				_ = os.Setenv(k, v)
+			}
+		}
+	}()
+
+	// A command that panics or exits under -h is a finding for another test; here it
+	// only means the record stays absent and the subtest skips with that stated.
+	defer func() { _ = recover() }()
+	runCLI()
 }

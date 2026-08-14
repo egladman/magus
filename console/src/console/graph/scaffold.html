@@ -21,7 +21,7 @@
         <button type="button" class="console-graph-views__chip" data-radialpick title="Pick a target to see its neighborhood as rings by distance.">See a target's neighbors</button>
         <button type="button" class="console-graph-views__chip" data-view="hubs" title="The highest-degree targets, the ones everything touches. CLI: magus query kind:target">Show the most depended-on targets</button>
         <button type="button" class="console-graph-views__chip" data-view="orphans" title="Targets with no dependents, potentially dead or unconfigured. CLI: magus query -kind:project">Show targets nothing depends on</button>
-        <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode: magus graph open --live">See what my last change affects</button>
+        <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode: magus graph export --open --follow">See what my last change affects</button>
         <button type="button" id="clear-view-btn" class="console-graph-views__clear" hidden>Clear</button>
         </div>
       </div>
@@ -111,8 +111,8 @@
         <div class="console-graph-sidebar__source">
           <p class="console-graph-sidebar__sourcelabel">Graph</p>
           <div class="pf-v6-c-toggle-group console-graph-display__kindgroup" role="group" aria-label="Graph">
-            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="targets" title="The target graph: targets and what they depend on. Switch requires a live workspace (magus graph open --live)."><span class="pf-v6-c-toggle-group__text">Target</span></button></div>
-            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="knowledge" title="The full code graph: projects, targets, spells, modules, files, docs. Switch requires a live workspace (magus graph open --live)."><span class="pf-v6-c-toggle-group__text">Knowledge</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="targets" title="The target graph: targets and what they depend on. Switch requires a live workspace (magus graph export --open --follow)."><span class="pf-v6-c-toggle-group__text">Target</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="knowledge" title="The full code graph: projects, targets, spells, modules, files, docs. Switch requires a live workspace (magus graph export --open --follow)."><span class="pf-v6-c-toggle-group__text">Knowledge</span></button></div>
           </div>
         </div>
         <!-- Display mode: ALWAYS VISIBLE (Decision 3, discoverability phase) - the manual
@@ -146,7 +146,7 @@
             <button type="button" class="console-graph-views__chip" data-radialpick title="Pick a target to see its neighborhood as rings by distance.">See a target's neighbors</button>
             <button type="button" class="console-graph-views__chip" data-view="hubs" title="The highest-degree targets, the ones everything touches. CLI: magus query kind:target">Show the most depended-on targets</button>
             <button type="button" class="console-graph-views__chip" data-view="orphans" title="Targets with no dependents, potentially dead or unconfigured. CLI: magus query -kind:project">Show targets nothing depends on</button>
-            <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode: magus graph open --live">See what my last change affects</button>
+            <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode: magus graph export --open --follow">See what my last change affects</button>
           </div>
         </div>
         <!-- Colors and forces: the interactive display controls, collapsed by default so
@@ -310,7 +310,7 @@
         <dt><code>#src=&lt;url&gt;</code></dt>
         <dd>A URL-encoded address the page fetches the JSON from: a loopback server (<code>magus graph open --serve</code>) or any CORS-enabled address, e.g. a committed <code>graph.json</code>'s raw link. The same <code>#src=</code> the playground uses.</dd>
         <dt><code>#port=7391&amp;token=&lt;bearer&gt;</code></dt>
-        <dd>Connect to a running daemon for a live workspace view. Loopback-implied: the port expands to literal <code>127.0.0.1</code> (never <code>localhost</code>). Token consumed on load, stripped from the URL, stored in session storage. Use <code>magus graph open --live</code> to build this link. Not available in Safari (see console docs).</dd>
+        <dd>Connect to a running daemon for a live workspace view. Loopback-implied: the port expands to literal <code>127.0.0.1</code> (never <code>localhost</code>). Token consumed on load, stripped from the URL, stored in session storage. Use <code>magus graph export --open --follow</code> to build this link. Not available in Safari (see console docs).</dd>
         <dt><code>#node=&lt;id&gt;</code></dt>
         <dd>Select and center a node on load, e.g. <code>#node=spell:go</code>.</dd>
         <dt><code>#q=&lt;query&gt;</code></dt>

@@ -34,7 +34,7 @@ const (
 // one-shot handoff, not a standing service. It inherits the server's loopback bind and wraps
 // its route in the same stack as every other loopback endpoint: [RequireLoopbackPeer]
 // (defense in depth over the bind), [CORS] (locked to the single site origin), and
-// [BearerGuard] with a per-run random token. `graph open --serve` uses it.
+// [BearerGuard] with a per-run random token. `graph export --open --serve` uses it.
 type BlobServer struct {
 	srv    *Server
 	path   string

@@ -79,7 +79,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		upstream          *bool
 		graphDepth        *int
 		step              *bool
-		live              *bool
+		openViewer        *bool
 		noCache           *bool
 
 		noDefaultCharms *bool
@@ -99,7 +99,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		graphDepth = fs.Int("depth", 0, "With --graph: cap displayed depth (0 = unlimited)")
 		step = fs.Bool("step", false, "Pause before each subprocess for interactive stepping (requires TTY; implies --concurrency=1)")
 		noDefaultCharms = fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
-		live = fs.Bool("live", false, "Print a local log-viewer link and stream this run's output to it live over an ephemeral loopback server (127.0.0.1); the link and data never leave your machine")
+		openViewer = fs.Bool("open", false, "Open this run in the browser log viewer and stream to it as it goes, over an ephemeral loopback server (127.0.0.1); the link and data never leave your machine")
 		noCache = fs.Bool("no-cache", false, "Force a fresh run even on a cache hit; still refreshes the entry (unlike a skip_cache target, which never snapshots)")
 		detach = fs.Bool("detach", false, "Hand this run to the daemon and return immediately; watch it with magus status --watch")
 		fs.Usage = func() {
@@ -284,7 +284,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if targetName == "ci" {
 		trigger = journal.TriggerCI
 	}
-	liveBC, stopLive := beginLive(ctx, *live)
+	liveBC, stopLive := beginLive(ctx, *openViewer)
 	defer stopLive()
 	// An adopted run (dispatched by the daemon) also feeds the daemon's live-run registry,
 	// carried on ctx; a plain CLI run has no sink, so this is empty there.

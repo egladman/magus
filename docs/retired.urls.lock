@@ -211,3 +211,15 @@ reference/buzz/encoding/
 # declaring page when the platform notes were folded into setup.
 tags/macos/
 tags/windows/
+tags/analysis/
+tags/hotspots/
+tags/symbols/
+tags/volatility/
+
+# Each skill page tags itself with its own name, so renaming a skill retires its
+# tag page. Not aliased, unlike the skill pages themselves: a tag page is an
+# index the site generates from the tags in use, with no source file to carry a
+# redirect, and the successor index is one URL over at the new name.
+tags/magus-buzz/
+tags/magus-memory/
+tags/magus-vcs/

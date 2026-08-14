@@ -1,9 +1,9 @@
 // This file is the live SSE side of the viewer wire contract: an ephemeral loopback server
 // that streams one invocation's journal to a local browser tool-page over Server-Sent
-// Events, gated by a per-run bearer token, for `run --live`. It is built on the shared
+// Events, gated by a per-run bearer token, for `run --open`. It is built on the shared
 // [httpx.Server]: it binds 127.0.0.1 only, guards each route with [httpx.RequireLoopbackPeer],
 // and CORS-locks it to the single site origin serving the page. The static sibling (a JSON
-// blob for `graph open --serve`) is httpx.BlobServer. It lives in the same package as the
+// blob for `graph export --open --serve`) is httpx.BlobServer. It lives in the same package as the
 // viewer wire encoders, so it calls EncodeEvent directly.
 
 package viewer

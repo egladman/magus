@@ -6,7 +6,7 @@
 //
 // Distinct from graph-explorer.js's live-badge/snapshot-badge (data provenance:
 // where the graph came from). This is network state, not data state - both can
-// be true at once (an offline snapshot is the normal case for `magus graph open`
+// be true at once (an offline snapshot is the normal case for `magus graph export --open`
 // without --serve), so they are separate elements, never merged into one.
 
 export function initOfflineBadge(): void {

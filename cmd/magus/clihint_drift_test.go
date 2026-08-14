@@ -30,7 +30,7 @@ func TestClihintHeadsAreRealSubcommands(t *testing.T) {
 // drift if graphSubs stays in sync with graphCmd's switch (which SuggestNearest
 // already depends on).
 func TestClihintGraphLeavesAreRealSubcommands(t *testing.T) {
-	for _, c := range []clihint.Command{clihint.GraphOpen, clihint.GraphExport, clihint.GraphStats} {
+	for _, c := range []clihint.Command{clihint.GraphExport, clihint.GraphStats} {
 		if c.Head() != "graph" {
 			t.Fatalf("expected a graph-family command, got %q", c)
 		}

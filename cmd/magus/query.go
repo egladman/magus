@@ -159,7 +159,7 @@ func queryCmd(ctx context.Context, root string, args []string) error {
 	if open || printURL || attempts || meta || publish {
 		// --open/--print/--attempts/--meta only apply to `query output <ref>`. Set on a graph
 		// search, they were a mistake; stop rather than silently ignore them.
-		fmt.Fprintf(os.Stderr, "magus query: --open/--print/--attempts/--meta/--publish apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.\n", clihint.QueryOutput, clihint.GraphOpen)
+		fmt.Fprintf(os.Stderr, "magus query: --open/--print/--attempts/--meta/--publish apply only to `%s <ref>`. To open the knowledge graph in a browser, use `%s`.\n", clihint.QueryOutput, clihint.GraphExport.With("--open"))
 		return errSilent{exitCode: 2}
 	}
 	if len(pos) == 0 && kinds == "" {
@@ -243,7 +243,7 @@ type outputRefRecord struct {
 // queryOutputRef retrieves a target's captured output by reference id (or unique prefix). The
 // default prints the exact bytes to stdout (pipe-friendly); -o json/yaml prints the descriptor
 // record; --open hands it to the browser log viewer. The bytes never leave the machine: --open
-// rides them in a URL fragment, exactly like `magus graph open`.
+// rides them in a URL fragment, exactly like `magus graph export --open`.
 func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) error {
 	m, err := loadMagus(ctx, root)
 	if err != nil {

@@ -63,14 +63,38 @@ deps     The project dependency DAG. A trailing list of project paths roots
 **--budget** *int* (default: 50)
 : Node budget for --select (how many nodes the neighborhood may collect)
 
+**--follow**
+: With --open: keep the explorer updating from the running daemon instead of showing a snapshot (needs magus server start)
+
 **--global**
 : Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace
+
+**--open**
+: Deliver the graph to the hosted Graph Explorer instead of stdout; it never leaves your machine
+
+**--print**
+: With --open: print the explorer URL to stdout instead of launching a browser
 
 **--refresh**
 : Force a full graph rebuild before exporting
 
+**--reproducible**
+: Omit everything that is not a function of the source tree (locally observed runtime attrs, git history), so two checkouts of one commit export identical bytes
+
 **--select** *string*
 : Export only the neighborhood of a query (same grammar as magus query); required for -o dot and -o mermaid
+
+**--serve**
+: With --open: hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)
+
+**--static**
+: Deprecated alias for --reproducible
+
+**--targets**
+: With --open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it
+
+**--url** *string* (default: https://eli.gladman.cc/magus/console/graph/)
+: With --open: base URL of the Graph Explorer page (override for a self-hosted mirror)
 
 ### graph stats options
 
@@ -83,22 +107,8 @@ deps     The project dependency DAG. A trailing list of project paths roots
 **--refresh**
 : Force a full graph rebuild first
 
-### graph open options
-
-**--print**
-: Print the explorer URL to stdout instead of opening a browser
-
-**--refresh**
-: Force a full graph rebuild before opening (knowledge graph only)
-
-**--serve**
-: Hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)
-
-**--targets**
-: Open the target dependency graph instead of the knowledge graph; pass a project path as a positional argument to scope to one project
-
-**--url** *string* (default: https://eli.gladman.cc/magus/console/graph/)
-: Base URL of the Graph Explorer page (override for a self-hosted mirror)
+**--symbols**
+: Include the lazily-loaded symbol shards in the stats; excluded by default because they can dwarf the domain graph
 
 ## Subcommands
 
@@ -110,9 +120,6 @@ deps     The project dependency DAG. A trailing list of project paths roots
 
 **stats**
 : Report the knowledge graph's shape: god nodes, orphans, doc coverage
-
-**open**
-: Open the workspace graph in the hosted Graph Explorer (data never leaves your machine)
 
 ## Examples
 
@@ -161,28 +168,28 @@ magus graph stats --kind spell
 *Open knowledge graph in browser*
 
 ```sh
-magus graph open
+magus graph export --open
 ```
 
 *Open target dependency graph*
 
 ```sh
-magus graph open --targets
+magus graph export --open --targets
 ```
 
 *Scope target graph to one project*
 
 ```sh
-magus graph open --targets docs
+magus graph export --open --targets docs
 ```
 
 *Print the URL instead of opening*
 
 ```sh
-magus graph open --targets --print
+magus graph export --open --targets --print
 ```
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-insight**(1)](magus-insight.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-memory**(1)](magus-memory.md), [**magus-server**(1)](magus-server.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-hook**(1)](magus-hook.md), [**magus-notify**(1)](magus-notify.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-server**(1)](magus-server.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-hook**(1)](magus-hook.md), [**magus-notify**(1)](magus-notify.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

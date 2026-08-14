@@ -13,24 +13,24 @@ import (
 )
 
 // beginLive, when enabled, starts an ephemeral 127.0.0.1 SSE server for the current
-// run and prints a local log-viewer link up front, so a long run (especially `magus
-// affected ci`) can be opened and watched as it streams. It returns the broadcaster to
+// run, launches the browser log viewer on it and prints the link too, so a long run
+// (especially `magus affected ci`) can be watched as it streams. It returns the broadcaster to
 // fold into the invocation's sinks - so every captured record fans out to the live
 // stream - and a stop function to defer, which closes the broadcaster (ending the stream)
 // and shuts the server down after a brief grace window. When disabled or if the server
-// cannot start it returns (nil, no-op) and the run proceeds normally: --live never blocks
+// cannot start it returns (nil, no-op) and the run proceeds normally: --open never blocks
 // a run.
 //
 // The link, the data, and the server are all loopback-local; the fragment carrying the
 // connection details is never transmitted, so nothing about the run leaves the machine.
 // This is the run-time sibling of `magus query ref --open` (a finished run) and mirrors
-// `graph open --live`, but streams over loopback SSE rather than the daemon bridge.
+// `graph export --open --follow`, but streams over loopback SSE rather than the daemon bridge.
 func beginLive(ctx context.Context, enabled bool) (*journal.Broadcaster, func()) {
 	if !enabled {
 		return nil, func() {}
 	}
 	// The viewer page base defaults to the hosted log viewer; MAGUS_LOG_VIEWER_URL overrides
-	// it for a self-hosted mirror (also how a locally-served site tests --live, since the
+	// it for a self-hosted mirror (also how a locally-served site tests --open, since the
 	// SSE server CORS-locks to this origin).
 	base := defaultLogViewerURL
 	if v := strings.TrimSpace(os.Getenv("MAGUS_LOG_VIEWER_URL")); v != "" {
@@ -38,16 +38,24 @@ func beginLive(ctx context.Context, enabled bool) (*journal.Broadcaster, func())
 	}
 	origin, err := httpx.ParseOrigin(base)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "magus: --live could not derive the viewer origin (%v); continuing without it.\n", err)
+		fmt.Fprintf(os.Stderr, "magus: --open could not derive the viewer origin (%v); continuing without it.\n", err)
 		return nil, func() {}
 	}
 	bc := journal.NewBroadcaster()
 	ls, err := viewer.StartLive(origin, bc)
 	if err != nil {
-		fmt.Fprintf(os.Stderr, "magus: --live could not start the log stream server (%v); continuing without it.\n", err)
+		fmt.Fprintf(os.Stderr, "magus: --open could not start the log stream server (%v); continuing without it.\n", err)
 		return nil, func() {}
 	}
-	fmt.Fprintf(os.Stderr, "watch this run live (loopback, stays on your machine):\n  %s\n", ls.ViewerURL(base))
+	url := ls.ViewerURL(base)
+	// Printed as well as opened, always. A browser that cannot launch (ssh, CI, a
+	// headless box) is the normal case for a long run, and a failure to open must not
+	// cost the reader the link - so the link goes out first and the launch is
+	// best-effort on top of it. --open never blocks or fails a run.
+	fmt.Fprintf(os.Stderr, "watch this run (loopback, stays on your machine):\n  %s\n", url)
+	if err := openBrowser(url); err != nil {
+		fmt.Fprintf(os.Stderr, "magus: --open could not launch a browser (%v); open the link above yourself.\n", err)
+	}
 	return bc, func() {
 		bc.Close()
 		ls.Stop(ctx)

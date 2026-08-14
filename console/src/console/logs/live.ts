@@ -1,5 +1,5 @@
 // live.ts - live streaming (#port=<port>&token=, or the daemon-origin/shared console). A run started
-// with `--live` prints a link to an ephemeral 127.0.0.1 SSE server. The viewer connects (fetch-based
+// with `--open` opens and streams to to an ephemeral 127.0.0.1 SSE server. The viewer connects (fetch-based
 // SSE + bearer token, mirroring the graph explorer's live client), decodes each frame as a protobuf
 // Event, appends it, re-renders on a frame tick, and auto-scrolls unless the reader pins the view with
 // Pause. Datadog-style live tail. The live buffer (state.liveEvents / liveInvocation) is also reused by

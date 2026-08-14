@@ -17,7 +17,7 @@ import (
 const committedGraphPath = "docs/graph.json"
 
 // hostedExplorerURL is the hosted, data-agnostic Graph Explorer (the same page
-// `magus graph open` targets). Any repo's committed graph.json loads in it via
+// `magus graph export --open` targets). Any repo's committed graph.json loads in it via
 // #src=, so this is a constant, not the repo's own site.
 const hostedExplorerURL = defaultExploreURL
 

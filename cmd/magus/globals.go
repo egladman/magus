@@ -3,8 +3,10 @@ package main
 import (
 	"flag"
 	"strings"
+	"sync"
 
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/config"
 )
 
 // Bridge aliases: the output vocabulary lives in output.go (package main).
@@ -65,6 +67,7 @@ func cmdParse(name string, args []string, local func(*flag.FlagSet)) ([]string, 
 	if local != nil {
 		local(fs)
 	}
+	recordFlagSet(name, fs)
 	// Reorder so a flag may follow a positional (`magus run build --explain`);
 	// stdlib flag otherwise stops at the first positional. Done after binding so the
 	// full flag set (config + display + local) is known for value detection.
@@ -179,4 +182,64 @@ func flagValueOf(arg, name string) string {
 		}
 	}
 	return ""
+}
+
+// ---- what each command actually bound, for the man page's parity gate ----
+
+// The man page's flag list is a SECOND copy of every command's flags, hand-written in
+// internal/manpage/registry.go because the real ones are bound in closures inside this
+// package, which nothing outside `package main` can import. A second copy drifts: the
+// registry advertised --simple for months after that flag was deleted, and it has never
+// mentioned most of what `run` and `affected` actually accept.
+//
+// Moving 91 binding sites into an importable package would remove the copy outright, at
+// the cost of touching every command. This is the cheaper half of that trade and it buys
+// the part that matters: the copy stays, but it can no longer drift SILENTLY. cmdParse is
+// the single funnel every command's flags pass through, so recording there yields each
+// command's real, fully-bound flag set - config flags, display flags and local ones alike
+// - and TestManpageFlagsMatchTheCLI compares that against the registry.
+//
+// Recording is unconditional rather than test-gated. It is one map write per invocation
+// of one command, and a record that only exists under a test hook is a record that can be
+// wrong in the binary people actually run.
+
+var flagRecord struct {
+	sync.Mutex
+	byCommand map[string][]recordedFlag
+}
+
+// recordedFlag is what a command actually bound, as opposed to what the man page claims.
+type recordedFlag struct {
+	Name  string
+	Usage string
+}
+
+// recordFlagSet snapshots every flag bound for name. Called by cmdParse AFTER the local
+// registration closure, so the record is the complete set the parser will honour.
+func recordFlagSet(name string, fs *flag.FlagSet) {
+	var flags []recordedFlag
+	fs.VisitAll(func(f *flag.Flag) {
+		flags = append(flags, recordedFlag{Name: f.Name, Usage: f.Usage})
+	})
+	flagRecord.Lock()
+	defer flagRecord.Unlock()
+	if flagRecord.byCommand == nil {
+		flagRecord.byCommand = map[string][]recordedFlag{}
+	}
+	flagRecord.byCommand[name] = flags
+}
+
+// globalFlagNames is the set every command gets for free - the config flags generated
+// from the config schema plus the display flags. The man page documents these once,
+// centrally, so they are subtracted from both sides of the comparison rather than
+// guessed at: --dry-run reads like an undocumented command flag to a source scanner and
+// is in fact a generated config flag, and that false positive is what made a purely
+// static version of this check unusable.
+func globalFlagNames() map[string]bool {
+	fs := flag.NewFlagSet("globals", flag.ContinueOnError)
+	gen.BindFlags(fs, &config.Config{})
+	bindDisplayFlags(fs)
+	out := map[string]bool{}
+	fs.VisitAll(func(f *flag.Flag) { out[f.Name] = true })
+	return out
 }

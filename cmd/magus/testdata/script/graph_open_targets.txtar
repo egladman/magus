@@ -1,6 +1,6 @@
 # --targets opens the target dependency graph (instead of the knowledge graph)
 # in the Graph Explorer via the #data= fragment. --print emits the URL headlessly.
-exec magus graph open --targets --print
+exec magus graph export --open --targets --print
 stdout 'https://eli\.gladman\.cc/magus/console/graph/#data='
 # the fragment is gzip+base64url (starts with the gzip magic H4sI in base64url)
 stdout '#data=H4sI'
@@ -9,39 +9,39 @@ stdout '#data=H4sI'
 ! exists .magus/knowledge/manifest.json
 
 # --targets scoped to a known project includes only that project.
-exec magus graph open --targets --print .
+exec magus graph export --open --targets --print .
 stdout '#data=H4sI'
 
 # --targets scoped to an unknown project exits 2 and names valid projects.
-! exec magus graph open --targets --print no_such_project
+! exec magus graph export --open --targets --print no_such_project
 stderr 'unknown project'
 stderr 'no_such_project'
 stderr '\.'
 
 # --targets and --serve are incompatible.
-! exec magus graph open --targets --serve
+! exec magus graph export --open --targets --serve
 stderr 'cannot be used together'
 stderr 'fragment'
 
 # --targets and --global are incompatible.
-! exec magus graph open --targets --global
+! exec magus graph export --open --targets --global
 stderr 'cannot be used together'
 stderr 'positional'
 
 # --targets and --refresh are incompatible.
-! exec magus graph open --targets --refresh
+! exec magus graph export --open --targets --refresh
 stderr 'cannot be used together'
 stderr 'magusfile'
 
 # the URL is deterministic: two runs produce the same fragment.
-exec magus graph open --targets --print
+exec magus graph export --open --targets --print
 cp stdout url1.txt
-exec magus graph open --targets --print
+exec magus graph export --open --targets --print
 cp stdout url2.txt
 cmp url1.txt url2.txt
 
 # --url still works with --targets (self-hosted mirror).
-exec magus graph open --targets --print --url http://localhost:9999/graph/
+exec magus graph export --open --targets --print --url http://localhost:9999/graph/
 stdout 'http://localhost:9999/graph/#data=H4sI'
 
 -- magus.yaml --
