@@ -798,6 +798,28 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		} else {
 			h.printf("charms: (none)\n")
 		}
+	case "cache.remote.posture":
+		// The probe the header cannot make, phrased like the header it follows.
+		state := "inactive here"
+		if recordBool(r, "active") {
+			state = "active"
+		}
+		h.printf("remote: %s (%s, verify %s, sign %s)\n", recordStr(r, "backend"), state,
+			onOff(recordBool(r, "verify")), onOff(recordBool(r, "sign")))
+	case "cache.remote.hit":
+		h.printf("  restored %s from the remote cache (%s)\n",
+			displayProjectLabel(label, project), fmtBytesLog(recordInt(r, "bytes")))
+	case "cache.remote.push":
+		h.printf("  published %s to the remote cache (%s)\n",
+			displayProjectLabel(label, project), fmtBytesLog(recordInt(r, "bytes")))
+	case "cache.remote.readonly":
+		h.printf("remote: read-only - a trust set is declared but this machine has no signing key, so nothing is published\n")
+	case "cache.remote.summary":
+		// The ZERO case is the point: a configured remote that did nothing says so,
+		// because silence is what made it indistinguishable from working.
+		h.printf("remote: %d restored, %d published, %d failed (%s down, %s up)\n",
+			recordInt(r, "hits"), recordInt(r, "published"), recordInt(r, "failures"),
+			fmtBytesLog(recordInt(r, "down_bytes")), fmtBytesLog(recordInt(r, "up_bytes")))
 	case "cache.backend":
 		h.printf("cache: %s (%s)\n", recordStr(r, "tier"), recordStr(r, "mode"))
 	case "cache.base":
@@ -917,7 +939,10 @@ func (h *PrettyHandler) printRepro(project, target string) {
 	if project == "" || target == "" {
 		return
 	}
-	h.printf("  %s\n", clihint.Run.With(target, project))
+	// Unindented: nothing else on screen uses depth, so the indent bought grouping
+	// that adjacency already gives while costing copy fidelity - a reader selecting
+	// the line got leading whitespace they had to strip.
+	h.printf("%s\n", clihint.Run.With(target, project))
 }
 
 // failureReport is one failure as printFailure needs it.
@@ -1097,17 +1122,24 @@ func failureCauses(cause string) []string {
 	return out
 }
 
-// printRef prints a successful target's output reference id on its own line.
+// printRef prints a successful target's output reference id, labelled, after a
+// blank line.
 //
-// Bare on purpose: a passing target prints one of these EACH, so spelling the
-// retrieval command out here would add a line per target to every run. The
-// summary carries that once instead - see the legend in cache.summary.
+// The id stays the LAST token on its own line, which is what makes a double-click
+// select exactly it - the property that matters most, because a ref's whole job is
+// to be copied into `magus x <ref>` or `magus query output <ref>`. The label is
+// what makes it findable in a wall of build output; the blank line is what stops it
+// reading as stray output from the target above.
+//
+// Bare rather than wrapped in a command: a passing target prints one of these EACH,
+// so spelling the retrieval out per line would add a line per target. The summary
+// legend carries that once instead.
 func (h *PrettyHandler) printRef(ref string) {
 	if ref == "" {
 		return
 	}
 	h.mintedRef = true
-	h.printf("%s\n", ref)
+	h.printf("\nref  %s\n", ref)
 }
 
 // printRefLegend says once, at the end of a run, what the bare ids above are.
@@ -1755,4 +1787,29 @@ func spansCols(spans []tty.Span) int {
 		n += tty.Cols(sp.Text)
 	}
 	return n
+}
+
+// onOff renders a posture flag the way the run header renders state: a word, not a
+// boolean, because "verify false" reads as a failure and "verify off" as a setting.
+func onOff(b bool) string {
+	if b {
+		return "on"
+	}
+	return "off"
+}
+
+// fmtBytesLog renders a transfer size for a human scanning a run. Base-1024 with
+// binary suffixes, matching config_cache.go's fmtBytes rather than inventing a
+// second spelling of the same quantity in one binary.
+func fmtBytesLog(n int) string {
+	switch {
+	case n >= 1<<30:
+		return fmt.Sprintf("%.1f GiB", float64(n)/(1<<30))
+	case n >= 1<<20:
+		return fmt.Sprintf("%.1f MiB", float64(n)/(1<<20))
+	case n >= 1<<10:
+		return fmt.Sprintf("%.1f KiB", float64(n)/(1<<10))
+	default:
+		return fmt.Sprintf("%d B", n)
+	}
 }

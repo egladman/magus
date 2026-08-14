@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2182,
-  "edge_count": 5711,
+  "node_count": 2183,
+  "edge_count": 5712,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -540,6 +540,14 @@
       "label": "MGS8003",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/outputref/MGS8003/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS8004",
+      "kind": "diagnostic",
+      "label": "MGS8004",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/outputref/MGS8004/"
       }
     },
     {
@@ -4385,12 +4393,10 @@
       "label": "docs/reference/codes/outputref/MGS8004.md",
       "source": "docs/reference/codes/outputref/MGS8004.md",
       "attrs": {
-        "diagnostic": "MGS7002",
         "role": "doc",
         "section": "reference",
         "tags": "output-ref,reproduce,cache-key,platform,diagnostics",
-        "title": "MGS8004: output ref was produced on a different machine",
-        "unknown_codes": "MGS8004"
+        "title": "MGS8004: output ref was produced on a different machine"
       }
     },
     {
@@ -33918,6 +33924,14 @@
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
+      "provenance": "docs/reference/codes/outputref/MGS8004.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/outputref/MGS8004.md",
+      "target": "diagnostic:MGS8004",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
       "provenance": "docs/reference/codes/outputref/MGS8004.md"
     },
     {

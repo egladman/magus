@@ -92,7 +92,12 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 			slog.String("ref", "out1a2b3c4d"),
 		)))
 		out := buf.String()
-		assert.Contains(t, out, "\nout1a2b3c4d\n", "the ref must sit alone on its own bare line for clean copy")
+		// Labelled, after a blank line, with the id LAST on the line: the label makes
+		// it findable in build output, the blank line stops it reading as the target's
+		// own stray output, and the id being last is what makes a double-click select
+		// exactly it.
+		assert.Contains(t, out, "\n\nref  out1a2b3c4d\n", "the ref must be labelled, separated, and last on its line")
+		assert.NotContains(t, out, "  magus run", "the repro command is unindented so copying it needs no trimming")
 		assert.NotContains(t, out, "full output:", "a passing run gets no failure hint")
 	})
 
