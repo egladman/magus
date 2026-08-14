@@ -87,11 +87,34 @@ func writeBinder(b *bytes.Buffer, command string, flags []manpage.Flag) {
 	}
 	b.WriteString("}\n\n")
 
-	fmt.Fprintf(b, "// Bind%s registers `magus %s`'s flags on fs and returns the destination.\nfunc Bind%s(fs *flag.FlagSet) *%s {\n\tvar f %s\n", goIdent(command), command, goIdent(command), typeName, typeName)
+	// Commands with a runtime default take a Defaults argument. Emitted only when one
+	// is declared, so the common command keeps a one-argument binder.
+	var runtime []aliasGroup
 	for _, g := range groups {
+		if g.primary.DefaultAtBind {
+			runtime = append(runtime, g)
+		}
+	}
+	defaultsType := goIdent(command) + "Defaults"
+	param := ""
+	if len(runtime) > 0 {
+		fmt.Fprintf(b, "// %s carries the defaults `magus %s` resolves at runtime (config, a\n// package constant) rather than declaring as a literal.\ntype %s struct {\n", defaultsType, command, defaultsType)
+		for _, g := range runtime {
+			fmt.Fprintf(b, "\t%s %s // %s\n", g.field, goType(g.primary.Kind), g.spellings())
+		}
+		b.WriteString("}\n\n")
+		param = ", d " + defaultsType
+	}
+
+	fmt.Fprintf(b, "// Bind%s registers `magus %s`'s flags on fs and returns the destination.\nfunc Bind%s(fs *flag.FlagSet%s) *%s {\n\tvar f %s\n", goIdent(command), command, goIdent(command), param, typeName, typeName)
+	for _, g := range groups {
+		def := flagDefaultLiteral(g.primary)
+		if g.primary.DefaultAtBind {
+			def = "d." + g.field
+		}
 		for _, name := range g.names {
 			fmt.Fprintf(b, "\tfs.%sVar(&f.%s, %s, %s, %q)\n",
-				bindMethod(g.primary.Kind), g.field, "Flag"+goIdent(command)+goIdent(name), flagDefaultLiteral(g.primary), docFor(flags, name))
+				bindMethod(g.primary.Kind), g.field, "Flag"+goIdent(command)+goIdent(name), def, docFor(flags, name))
 		}
 	}
 	b.WriteString("\treturn &f\n}\n")
@@ -262,11 +285,37 @@ func constsFor(command string, flags []manpage.Flag, seen map[string]string) []s
 	return out
 }
 
+// initialisms are the words Go spells in full caps, as a subset of the list Go's
+// own linters carry (x/lint's commonInitialisms, which staticcheck's ST1003
+// inherited), plus the two this workspace's vocabulary adds.
+//
+// A table rather than a library call because there is no algorithm here: no
+// transformation derives "URL" from "url" - it is a convention list, and every
+// package that offers this ships the same hardcoded map or asks the caller to
+// register one. golang.org/x/text/cases does LANGUAGE casing, and titling "url"
+// with it produces "Url", the output this exists to prevent.
+//
+// It matters more here than in hand-written code because these identifiers are
+// EXPORTED constants and struct fields: a generated "Url" cannot be fixed at the
+// place it is read.
+var initialisms = map[string]string{
+	"url": "URL", "vcs": "VCS", "id": "ID", "api": "API",
+	"ci": "CI", "json": "JSON", "yaml": "YAML", "tty": "TTY", "mcp": "MCP",
+}
+
 // goIdent turns a command or flag name into an exported Go identifier fragment:
 // "no-default-charms" becomes "NoDefaultCharms", "graph deps" becomes "GraphDeps".
+//
+// Case is preserved after the first rune, so the one-character flags -c and -C
+// would collide; constsFor's panic catches that at generate time rather than
+// emitting one constant for two flags.
 func goIdent(s string) string {
 	var b strings.Builder
 	for _, part := range strings.FieldsFunc(s, func(r rune) bool { return r == '-' || r == ' ' || r == '_' }) {
+		if up, ok := initialisms[strings.ToLower(part)]; ok {
+			b.WriteString(up)
+			continue
+		}
 		b.WriteString(strings.ToUpper(part[:1]))
 		b.WriteString(part[1:])
 	}

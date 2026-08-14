@@ -68,6 +68,21 @@ type Flag struct {
 	// time.Duration, matching Kind. A nil Default means the kind's zero value.
 	Default any
 
+	// DefaultAtBind means the real default is a runtime value the caller supplies,
+	// and Default is only what the docs should show.
+	//
+	// Some defaults are not literals: --max-shards falls back to the configured
+	// ci.max_shards, --budget to a package constant. Written as data, those became
+	// hardcoded numbers in the generated binder that DISAGREED with the live
+	// binding, silently dropping config support for anything that adopted it. A
+	// generated binder for such a command takes a <Command>Defaults argument, so
+	// the caller cannot forget to supply the value - leaving it out is a compile
+	// error rather than a wrong default nobody notices.
+	//
+	// Default should still carry the documented value (usually the config default),
+	// because the man page has to print something and printing 0 would be a lie.
+	DefaultAtBind bool
+
 	// AliasOf names the flag this one is a second spelling of: --test is AliasOf
 	// "t", -b is AliasOf "base". Both names stay real flags and both keep their own
 	// help line; what the alias does NOT get is its own value.
@@ -83,16 +98,18 @@ type Flag struct {
 	// No Enum field, deliberately. Every closed-set value in this CLI belongs to
 	// the GLOBAL -o flag, which this registry does not model (see Flags above), and
 	// no per-command flag has one - the string flags here take refs, paths, commit
-	// SHAs and queries. The -o list is enumerated once at its real source
-	// (main.CommonFormats, rendered by main.FormatChoices); an unused Enum here
-	// would be a second place to declare a set nothing in this package owns.
+	// SHAs and queries. The -o list is enumerated once at its real source, the
+	// CommonFormats slice in cmd/magus/output.go; an unused Enum here would be a
+	// second place to declare a set nothing in this package owns.
 }
 
 // Target is a named unit of work a project spell implements (e.g. "build", "test", "lint").
+//
+// No Flags: a target is dispatched by the command it hangs off, and never carried
+// its own flag list - every Target literal in the registry sets Name and Short only.
 type Target struct {
 	Name  string
 	Short string
-	Flags []Flag
 }
 
 // Example is a single usage example in the man-page EXAMPLES section.
@@ -108,15 +125,9 @@ type Example struct {
 // rather than by a test comparing two hand-written copies.
 func (c Command) BindFlags(fs *flag.FlagSet) { bindFlags(fs, c.Flags) }
 
-// BindFlags registers t's flags on fs.
-func (t Target) BindFlags(fs *flag.FlagSet) { bindFlags(fs, t.Flags) }
-
 // HasFlags reports whether anything would be registered, so a caller can skip
 // building a FlagSet it would not use.
 func (c Command) HasFlags() bool { return len(c.Flags) > 0 }
-
-// HasFlags reports whether anything would be registered.
-func (t Target) HasFlags() bool { return len(t.Flags) > 0 }
 
 func bindFlags(fs *flag.FlagSet, flags []Flag) {
 	for _, f := range flags {
@@ -149,14 +160,4 @@ func defaultOf[T any](v any) T {
 	}
 	var zero T
 	return zero
-}
-
-// Names returns the declared flag names in order, for callers that need to
-// reference a flag without spelling it as a literal.
-func Names(flags []Flag) []string {
-	out := make([]string, 0, len(flags))
-	for _, f := range flags {
-		out = append(out, f.Name)
-	}
-	return out
 }

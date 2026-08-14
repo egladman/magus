@@ -207,7 +207,7 @@ func hasDetachFlag(args []string) bool {
 		if !strings.HasPrefix(a, "-") {
 			continue
 		}
-		if key, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); key == detachFlagName {
+		if key, _, _ := strings.Cut(strings.TrimLeft(a, "-"), "="); key == gen.FlagRunDetach {
 			return true
 		}
 	}
@@ -788,7 +788,7 @@ func usage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Global flags (work before or after the subcommand):")
 	fmt.Fprintln(os.Stderr, "  --help, -h           show help (top-level or subcommand)")
-	fmt.Fprintln(os.Stderr, "  --output, -o <fmt>   output format ("+FormatChoices()+")")
+	fmt.Fprintln(os.Stderr, "  --output, -o <fmt>   "+outputFormatHelp)
 	fmt.Fprintln(os.Stderr, "  -q, --quiet          suppress progress; only print errors + dump failing project output")
 	fmt.Fprintln(os.Stderr, "  -s, --silent         like -q, but bound failing dumps (tail + log path) and bubble up only 'magus:notice:' lines")
 	fmt.Fprintln(os.Stderr, "  -v, -vv, -vvv        detail (-v), plus live target output (-vv), plus tracing (-vvv)")

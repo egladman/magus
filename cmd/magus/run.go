@@ -624,10 +624,6 @@ func envDefault(fs *flag.FlagSet, name, value string) {
 	f.DefValue = value
 }
 
-// detachFlagName is the one flag these helpers act on; it is named once so the two that
-// add and remove it cannot disagree.
-const detachFlagName = gen.FlagRunDetach
-
 // localOnlyFlags never travel to the daemon. --detach would make it detach
 // again, handing the work to itself forever; --wait describes what THIS process
 // does after submitting and means nothing to the run itself.
@@ -636,7 +632,7 @@ const detachFlagName = gen.FlagRunDetach
 // second one used to be spelled "wait" right here, beside a constant for the
 // first - and a flag whose name is a literal in one place and a constant in
 // another is a rename waiting to go half-applied.
-var localOnlyFlags = []string{detachFlagName, gen.FlagRunWait}
+var localOnlyFlags = []string{gen.FlagRunDetach, gen.FlagRunWait}
 
 // withoutDetachFlag drops the local-only flags from an argv, in every spelling
 // the flag package accepts: -name, --name, and either with an inline =value.

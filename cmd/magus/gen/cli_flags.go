@@ -130,7 +130,7 @@ const (
 	// graph export: --targets
 	FlagGraphExportTargets = "targets"
 	// graph export: --url
-	FlagGraphExportUrl = "url"
+	FlagGraphExportURL = "url"
 	// graph stats: --global
 	FlagGraphStatsGlobal = "global"
 	// graph stats: --kind
@@ -154,7 +154,7 @@ const (
 	// init: --local
 	FlagInitLocal = "local"
 	// init: --vcs
-	FlagInitVcs = "vcs"
+	FlagInitVCS = "vcs"
 	// memory: --body
 	FlagMemoryBody = "body"
 	// memory: --status
@@ -190,7 +190,7 @@ const (
 	// query: --secrets
 	FlagQuerySecrets = "secrets"
 	// query: --url
-	FlagQueryUrl = "url"
+	FlagQueryURL = "url"
 	// refs: --occurrences
 	FlagRefsOccurrences = "occurrences"
 	// refs: --refresh
@@ -260,9 +260,9 @@ const (
 	// status: --workspace
 	FlagStatusWorkspace = "workspace"
 	// vcs: --against
-	FlagVcsAgainst = "against"
+	FlagVCSAgainst = "against"
 	// vcs: --untracked
-	FlagVcsUntracked = "untracked"
+	FlagVCSUntracked = "untracked"
 	// watch: --backend
 	FlagWatchBackend = "backend"
 	// watch: --debounce
@@ -360,8 +360,14 @@ type AffectedFlags struct {
 	Target            string        // --target
 }
 
+// AffectedDefaults carries the defaults `magus affected` resolves at runtime (config, a
+// package constant) rather than declaring as a literal.
+type AffectedDefaults struct {
+	MaxShards int // --max-shards
+}
+
 // BindAffected registers `magus affected`'s flags on fs and returns the destination.
-func BindAffected(fs *flag.FlagSet) *AffectedFlags {
+func BindAffected(fs *flag.FlagSet, d AffectedDefaults) *AffectedFlags {
 	var f AffectedFlags
 	fs.BoolVar(&f.DryRun, FlagAffectedDryRun, false, "Print what would run without executing")
 	fs.StringVar(&f.Base, FlagAffectedBase, "", "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)")
@@ -381,7 +387,7 @@ func BindAffected(fs *flag.FlagSet) *AffectedFlags {
 	fs.IntVar(&f.Depth, FlagAffectedDepth, 0, "With --graph: cap displayed depth (0 = unlimited)")
 	fs.StringVar(&f.Explain, FlagAffectedExplain, "", "Show why <project> is in the affected set instead of executing")
 	fs.BoolVar(&f.Plan, FlagAffectedPlan, false, "Emit a provider-neutral JSON CI shard plan for the affected set")
-	fs.IntVar(&f.MaxShards, FlagAffectedMaxShards, 8, "With --plan: maximum CI shards (-1 = unlimited)")
+	fs.IntVar(&f.MaxShards, FlagAffectedMaxShards, d.MaxShards, "With --plan: maximum CI shards (-1 = unlimited)")
 	fs.IntVar(&f.MaxParallelBudget, FlagAffectedMaxParallelBudget, 0, "With --plan: cross-shard concurrency cap; 0 = unlimited")
 	fs.BoolVar(&f.Detail, FlagAffectedDetail, false, "With --plan: add per-shard detail - the invocation, its spells, the files it declares it writes, and the skills its work routes to")
 	fs.StringVar(&f.Bisect, FlagAffectedBisect, "", "Drive VCS bisect to find the commit that broke <project>")
@@ -418,14 +424,20 @@ type GraphExportFlags struct {
 	Targets      bool   // --targets
 	Serve        bool   // --serve
 	Print        bool   // --print
-	Url          string // --url
+	URL          string // --url
 	Static       bool   // --static
 	Select       string // --select
 	Budget       int    // --budget
 }
 
+// GraphExportDefaults carries the defaults `magus graph export` resolves at runtime (config, a
+// package constant) rather than declaring as a literal.
+type GraphExportDefaults struct {
+	Budget int // --budget
+}
+
 // BindGraphExport registers `magus graph export`'s flags on fs and returns the destination.
-func BindGraphExport(fs *flag.FlagSet) *GraphExportFlags {
+func BindGraphExport(fs *flag.FlagSet, d GraphExportDefaults) *GraphExportFlags {
 	var f GraphExportFlags
 	fs.BoolVar(&f.Refresh, FlagGraphExportRefresh, false, "Force a full graph rebuild before exporting")
 	fs.BoolVar(&f.Global, FlagGraphExportGlobal, false, "Union the workspaces registered in config (knowledge.workspaces); node IDs are namespaced by workspace")
@@ -435,10 +447,10 @@ func BindGraphExport(fs *flag.FlagSet) *GraphExportFlags {
 	fs.BoolVar(&f.Targets, FlagGraphExportTargets, false, "With --open: open the target dependency graph instead of the knowledge graph; pass a project path to scope it")
 	fs.BoolVar(&f.Serve, FlagGraphExportServe, false, "With --open: hand the graph to the page from an ephemeral loopback server instead of a URL fragment (no size limit; incompatible with --targets)")
 	fs.BoolVar(&f.Print, FlagGraphExportPrint, false, "With --open: print the explorer URL to stdout instead of launching a browser")
-	fs.StringVar(&f.Url, FlagGraphExportUrl, "https://eli.gladman.cc/magus/console/graph/", "With --open: base URL of the Graph Explorer page (override for a self-hosted mirror)")
+	fs.StringVar(&f.URL, FlagGraphExportURL, "https://eli.gladman.cc/magus/console/graph/", "With --open: base URL of the Graph Explorer page (override for a self-hosted mirror)")
 	fs.BoolVar(&f.Static, FlagGraphExportStatic, false, "Deprecated alias for --reproducible")
 	fs.StringVar(&f.Select, FlagGraphExportSelect, "", "Export only the neighborhood of a query (same grammar as magus query); required for -o dot and -o mermaid")
-	fs.IntVar(&f.Budget, FlagGraphExportBudget, 50, "Node budget for --select (how many nodes the neighborhood may collect)")
+	fs.IntVar(&f.Budget, FlagGraphExportBudget, d.Budget, "Node budget for --select (how many nodes the neighborhood may collect)")
 	return &f
 }
 
@@ -471,7 +483,7 @@ type QueryFlags struct {
 	Publish  bool   // --publish
 	Open     bool   // --open
 	Print    bool   // --print
-	Url      string // --url
+	URL      string // --url
 	Secrets  bool   // --secrets
 }
 
@@ -487,7 +499,7 @@ func BindQuery(fs *flag.FlagSet) *QueryFlags {
 	fs.BoolVar(&f.Publish, FlagQueryPublish, false, "output <ref>: upload this run's output to the remote cache as a signed bundle")
 	fs.BoolVar(&f.Open, FlagQueryOpen, false, "output <ref>: open the captured output in the browser log viewer (delivered privately)")
 	fs.BoolVar(&f.Print, FlagQueryPrint, false, "With --open, print the viewer URL instead of launching a browser")
-	fs.StringVar(&f.Url, FlagQueryUrl, "", "With --open, base URL of the log viewer page (override for a self-hosted mirror)")
+	fs.StringVar(&f.URL, FlagQueryURL, "", "With --open, base URL of the log viewer page (override for a self-hosted mirror)")
 	fs.BoolVar(&f.Secrets, FlagQuerySecrets, false, "invocation <id>: list only the credential reads (reference and provider, never the value)")
 	return &f
 }
@@ -588,17 +600,17 @@ func BindClean(fs *flag.FlagSet) *CleanFlags {
 	return &f
 }
 
-// VcsFlags are the flags declared for `magus vcs`.
-type VcsFlags struct {
+// VCSFlags are the flags declared for `magus vcs`.
+type VCSFlags struct {
 	Against   string // --against
 	Untracked bool   // --untracked
 }
 
-// BindVcs registers `magus vcs`'s flags on fs and returns the destination.
-func BindVcs(fs *flag.FlagSet) *VcsFlags {
-	var f VcsFlags
-	fs.StringVar(&f.Against, FlagVcsAgainst, "", "Merge this ref first, then settle what it conflicts with (vcs resolve)")
-	fs.BoolVar(&f.Untracked, FlagVcsUntracked, false, "Also stage undeclared files (vcs add)")
+// BindVCS registers `magus vcs`'s flags on fs and returns the destination.
+func BindVCS(fs *flag.FlagSet) *VCSFlags {
+	var f VCSFlags
+	fs.StringVar(&f.Against, FlagVCSAgainst, "", "Merge this ref first, then settle what it conflicts with (vcs resolve)")
+	fs.BoolVar(&f.Untracked, FlagVCSUntracked, false, "Also stage undeclared files (vcs add)")
 	return &f
 }
 
@@ -656,7 +668,7 @@ type InitFlags struct {
 	Global bool   // --global
 	Local  bool   // --local
 	Force  bool   // --force
-	Vcs    string // --vcs
+	VCS    string // --vcs
 }
 
 // BindInit registers `magus init`'s flags on fs and returns the destination.
@@ -665,7 +677,7 @@ func BindInit(fs *flag.FlagSet) *InitFlags {
 	fs.BoolVar(&f.Global, FlagInitGlobal, false, "Write only the global config; skip the workspace bootstrap")
 	fs.BoolVar(&f.Local, FlagInitLocal, false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")
 	fs.BoolVar(&f.Force, FlagInitForce, false, "Overwrite an existing config file")
-	fs.StringVar(&f.Vcs, FlagInitVcs, "", "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY")
+	fs.StringVar(&f.VCS, FlagInitVCS, "", "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY")
 	return &f
 }
 

@@ -393,25 +393,6 @@ const (
 // template= form is handled separately by ResolveOutput.
 var CommonFormats = []Format{FormatText, FormatJSON, FormatYAML, FormatJSONL, FormatName}
 
-// FormatChoices renders the accepted -o values for a help string, appending any
-// command-specific extras before the template= form.
-//
-// This list is the CLI's one real enum, and it was being retyped wherever it was
-// shown: the top-level help advertised text|json|yaml|name|template and had
-// silently fallen a format behind CommonFormats, so `-o jsonl` worked and went
-// undocumented. Rendering from the slice means adding a format updates every
-// help string that shows it, and none that do not.
-func FormatChoices(extra ...Format) string {
-	parts := make([]string, 0, len(CommonFormats)+len(extra)+1)
-	for _, f := range CommonFormats {
-		parts = append(parts, string(f))
-	}
-	for _, f := range extra {
-		parts = append(parts, string(f))
-	}
-	return strings.Join(append(parts, string(FormatTemplate)+"=<go-template>"), "|")
-}
-
 // OutputOptions is the parsed -o value; Template is set when Format is FormatTemplate.
 // Obtain one from ResolveOutput — the zero value (empty Format) is not a valid
 // opts and matches no renderer.
