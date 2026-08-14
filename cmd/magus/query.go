@@ -643,13 +643,9 @@ func openOutputInViewer(desc magus.OutputDescriptor, events []journal.Event, inv
 }
 
 func explainCmd(ctx context.Context, root string, args []string) error {
-	var (
-		refresh     bool
-		globalScope bool
-	)
+	var xf *gen.ExplainFlags
 	pos, err := cmdParse("explain", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild before explaining")
-		fs.BoolVar(&globalScope, "global", false, "resolve across the workspaces registered in config (knowledge.workspaces)")
+		xf = gen.BindExplain(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus explain <node-id-or-name> [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -674,7 +670,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 	}
 
 	seedsSymbols := knowledge.SeedsSymbols(pos[0])
-	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, seedsSymbols)
+	g, err := loadKnowledgeGraph(ctx, root, xf.Refresh, xf.Global, seedsSymbols)
 	if err != nil {
 		return err
 	}
@@ -715,13 +711,9 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 }
 
 func pathCmd(ctx context.Context, root string, args []string) error {
-	var (
-		refresh     bool
-		globalScope bool
-	)
+	var pf *gen.PathFlags
 	pos, err := cmdParse("path", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild before pathfinding")
-		fs.BoolVar(&globalScope, "global", false, "resolve endpoints across the workspaces registered in config (knowledge.workspaces)")
+		pf = gen.BindPath(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus path <a> <b> [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -745,7 +737,7 @@ func pathCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	g, err := loadKnowledgeGraph(ctx, root, refresh, globalScope, knowledge.SeedsSymbols(pos[0]) || knowledge.SeedsSymbols(pos[1]))
+	g, err := loadKnowledgeGraph(ctx, root, pf.Refresh, pf.Global, knowledge.SeedsSymbols(pos[0]) || knowledge.SeedsSymbols(pos[1]))
 	if err != nil {
 		return err
 	}

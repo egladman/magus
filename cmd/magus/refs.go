@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/types"
 )
@@ -19,10 +20,9 @@ import (
 // loads the lazily-loaded @symbols shards. Its output is occurrence-shaped (file:line
 // rows), which is why it is a distinct subcommand rather than a `magus query` neighborhood.
 func refsCmd(ctx context.Context, root string, args []string) error {
-	var refresh, occurrences bool
+	var rf *gen.RefsFlags
 	pos, err := cmdParse("refs", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&refresh, "refresh", false, "force a full graph rebuild before resolving")
-		fs.BoolVar(&occurrences, "occurrences", false, "every exact source range, verified against the tree (for mechanical edits)")
+		rf = gen.BindRefs(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus refs <symbol> [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -47,7 +47,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	g, err := loadKnowledgeGraphForRefs(ctx, root, refresh, pos[0])
+	g, err := loadKnowledgeGraphForRefs(ctx, root, rf.Refresh, pos[0])
 	if err != nil {
 		return err
 	}
@@ -83,7 +83,7 @@ func refsCmd(ctx context.Context, root string, args []string) error {
 	}
 	out.Answer = types.Answer(len(out.Refs) > 0, reason, gaps)
 
-	if occurrences {
+	if rf.Occurrences {
 		return emitOccurrences(ctx, root, opts, out)
 	}
 
