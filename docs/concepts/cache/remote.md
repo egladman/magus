@@ -202,6 +202,56 @@ env:
   MAGUS_CACHE_SIGNING_KEY: ${{ secrets.MAGUS_CACHE_SIGNING_KEY }}
 ```
 
+### Runbook: turning it on for a GitHub repository
+
+Four steps, in this order. The cache stays off until the last one, so a half-finished
+setup degrades to local-only rather than breaking a build.
+
+**1. Mint the keypair.** It prints the seed once, to the terminal, and never to disk:
+
+```sh
+magus config cache key generate
+```
+
+**2. Store the seed as a secret, over stdin.** `gh secret set` reads the value from
+standard input when you give it no `--body`, so the seed never appears in your shell
+history or in the process list. Paste it at the prompt, then press Ctrl-D:
+
+```sh
+gh secret set MAGUS_CACHE_SIGNING_KEY
+```
+
+Never pass a seed as `--body` or with `echo ... |` - both put it in history. If you
+would rather it never reach your terminal at all, use the one-shot CI bootstrap job
+described above, or paste it into the web UI at _Settings -> Secrets and variables ->
+Actions -> Secrets -> New repository secret_.
+
+**3. Publish the public key.** It is not secret, so an argument is fine here. It goes
+in two places - `magus.yaml` is what every consumer verifies against, and the
+repository variable is what the workflow hands to `MAGUS_CACHE_REMOTE_TRUSTED_KEYS`:
+
+```sh
+gh variable set MAGUS_CACHE_PUBLIC_KEY --body "<the public key from step 1>"
+```
+
+Then add the same value under `cache.remote.trusted_keys` in `magus.yaml` and commit it.
+
+**4. Confirm what CI signs with.** This derives the public identity from the seed and
+never echoes the seed itself:
+
+```sh
+magus config cache key id
+```
+
+Run it locally with `MAGUS_CACHE_SIGNING_KEY` exported, or in a CI step, and check the
+pubkey it prints matches the one in `magus.yaml`.
+
+**Do not set `MAGUS_CACHE_REMOTE_INSECURE` to enable the cache.** It disables
+verification, and because a workspace commonly gates its `cache.remote(...)` wiring on
+either variable, setting it can be the only thing turning the cache on - a setup that
+looks configured, ships a `trusted_keys` block, and verifies nothing. Let the trust set
+be the switch.
+
 ## Read-only on untrusted refs (defense in depth)
 
 Signatures are the primary defense; opening the cache read-only on untrusted refs

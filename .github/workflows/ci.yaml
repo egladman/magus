@@ -31,7 +31,15 @@ env:
   GOEXPERIMENT: jsonv2
   # PRs may read the cache but cannot publish to it.
   MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
-  MAGUS_CACHE_REMOTE_INSECURE: 'true'
+  # The trust set is what wires the shared cache (see the `if` at magusfile.buzz's
+  # cache.remote block) AND what verifies it. MAGUS_CACHE_REMOTE_INSECURE used to be
+  # set here too, which was the whole configuration doing two wrong things at once:
+  # it was the only thing turning the cache ON, and remoteCacheSigningOpts returns
+  # WithInsecureRemote before it ever reads a trust set - so the trusted_keys in
+  # magus.yaml were never consulted and CI replayed unsigned artifacts.
+  #
+  # Unset this variable and the cache is simply not wired: no error, no remote hits.
+  # Setting it is what turns on both the cache and its verification, together.
   MAGUS_CACHE_REMOTE_TRUSTED_KEYS: ${{ vars.MAGUS_CACHE_PUBLIC_KEY }}
   # A CEILING, not a target: the forecaster picks the count, and may raise it to
   # split a shard predicted to exceed the runner's memory. Held at 2 deliberately -

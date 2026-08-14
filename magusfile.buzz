@@ -45,6 +45,18 @@ import "spells/golang/gomod" as gomod;
 import "project/libs/gopherbuzz" as gopherbuzz;
 
 // Cross-shard remote cache via GitHub Actions Cache; self-gates on GITHUB_ACTIONS.
+//
+// The trust set is the switch: declaring the keys that verify the cache is what turns
+// the cache on. The insecure arm is an escape hatch for validating a backend BEFORE
+// minting keys, and it is deliberately second here - reaching for it as the way to
+// enable the cache is a trap that costs you the verification you thought you had.
+// remoteCacheSigningOpts returns WithInsecureRemote before it ever reads a trust set,
+// so an insecure wiring silently ignores every key in magus.yaml. ci.yaml set it that
+// way for a while and replayed unsigned artifacts the whole time.
+//
+// Two resolutions of one knob, and they can disagree: this reads raw os\env, while the
+// engine reads the parsed config (magus.yaml, then env, then flags). `insecure: false`
+// in magus.yaml with the env var set wires a backend here that the engine then refuses.
 import "spells/github/actions" as github;
 final cache_trusted = os\env("MAGUS_CACHE_REMOTE_TRUSTED_KEYS");
 final cache_insecure = os\env("MAGUS_CACHE_REMOTE_INSECURE");
