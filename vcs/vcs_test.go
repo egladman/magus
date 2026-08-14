@@ -532,11 +532,9 @@ func TestParseTagsPattern(t *testing.T) {
 // Each backend is skipped when its binary is absent rather than failing, so the suite
 // still means something on a machine with only git.
 //
-// jj is NOT covered here yet, deliberately rather than by omission. Two unresolved
-// things block it, both worth their own change: `jj git init` writes .jj AND .git, and
-// builtin lists git first, so autodetect resolves a colocated jj repo to git; and
-// naming "jj" explicitly still produced a git-shaped exit 128, which was not chased
-// down. A jj case asserting today's behaviour would pin whichever of those is wrong.
+// The driver is named through VCSOptions.Name. Resolve's second parameter is a base
+// REF, not a name - passing "jj" there silently autodetects instead, which is what
+// once made this look like a broken jj driver.
 func TestMetadataReportsRevisionAcrossBackends(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -558,6 +556,18 @@ func TestMetadataReportsRevisionAcrossBackends(t *testing.T) {
 				vcsTestRun(t, dir, "hg", "commit", "-m", "init", "-u", "test")
 			},
 		},
+		{
+			name: "jj",
+			bin:  "jj",
+			init: func(t *testing.T, dir string) {
+				vcsTestRun(t, dir, "jj", "git", "init")
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644))
+				// jj's working copy IS a commit, so an edit lands in @ and shows as a
+				// diff against its parent. `jj new` closes it and starts an empty one,
+				// which is jj's equivalent of a clean tree.
+				vcsTestRun(t, dir, "jj", "new")
+			},
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, err := exec.LookPath(tc.bin); err != nil {
@@ -566,12 +576,7 @@ func TestMetadataReportsRevisionAcrossBackends(t *testing.T) {
 			dir := t.TempDir()
 			tc.init(t, dir)
 
-			// The driver is named EXPLICITLY rather than autodetected. `jj git init`
-			// writes both .jj and .git, and builtin lists git first, so autodetect
-			// resolves a colocated jj repo to git - a real precedence question, but
-			// not the contract under test here, which is that each driver reports a
-			// revision for a repo of its own kind.
-			res, err := Resolve(t.Context(), dir, tc.name, types.VCSOptions{})
+			res, err := Resolve(t.Context(), dir, "", types.VCSOptions{Name: tc.name})
 			require.NoError(t, err, "Resolve")
 			require.NotNil(t, res.VCS, "no driver detected for a %s repo", tc.name)
 
@@ -609,7 +614,7 @@ func TestMetadataReportsDirtyAcrossBackends(t *testing.T) {
 			tc.init(t, dir)
 			require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("changed\n"), 0o644))
 
-			res, err := Resolve(t.Context(), dir, tc.name, types.VCSOptions{})
+			res, err := Resolve(t.Context(), dir, "", types.VCSOptions{Name: tc.name})
 			require.NoError(t, err, "Resolve")
 			require.NotNil(t, res.VCS)
 
@@ -630,4 +635,40 @@ func vcsTestRun(t *testing.T, dir, bin string, args ...string) {
 	if out, err := cmd.CombinedOutput(); err != nil {
 		t.Skipf("%s %v failed: %v\n%s", bin, args, err, out)
 	}
+}
+
+// A colocated jj workspace satisfies git's claim too, because `jj git init` writes
+// .git as jj's storage backend. Autodetect has to answer jj, or magus records git's
+// HEAD - which lags jj's working-copy commit until refs sync - as the revision an
+// output ref reproduces from, describing a tree other than the one built.
+func TestAutodetectPrefersJJInAColocatedRepo(t *testing.T) {
+	if _, err := exec.LookPath("jj"); err != nil {
+		t.Skip("jj not available")
+	}
+	dir := t.TempDir()
+	vcsTestRun(t, dir, "jj", "git", "init")
+	require.DirExists(t, filepath.Join(dir, ".jj"))
+	require.DirExists(t, filepath.Join(dir, ".git"), "jj git init is expected to colocate; this test is meaningless otherwise")
+
+	res, err := Resolve(t.Context(), dir, "", types.VCSOptions{})
+	require.NoError(t, err, "Resolve")
+	assert.Equal(t, "jj", res.Name, "a repo with .jj is driven by jj, whatever else it contains")
+	assert.Equal(t, types.VCSSourceAuto, res.Source)
+}
+
+// git stays the answer where it is the only marker, and where there is none at all.
+func TestAutodetectKeepsGitForPlainRepositoriesAndAsTheDefault(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n"})
+	res, err := Resolve(t.Context(), repo, "", types.VCSOptions{})
+	require.NoError(t, err, "Resolve")
+	assert.Equal(t, "git", res.Name)
+	assert.Equal(t, types.VCSSourceAuto, res.Source)
+
+	// No marker at all: git is the fallback, and reordering builtin must not have
+	// quietly made jj the default for every unversioned directory.
+	bare, err := Resolve(t.Context(), t.TempDir(), "", types.VCSOptions{})
+	require.NoError(t, err, "Resolve")
+	assert.Equal(t, "git", bare.Name, "an unversioned directory defaults to git")
+	assert.Equal(t, types.VCSSourceDefault, bare.Source)
 }
