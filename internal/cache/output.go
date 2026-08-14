@@ -76,17 +76,14 @@ type OutputDescriptor struct {
 	TimestampMs int64  `json:"timestamp_ms"`    // unix milliseconds, matching DurationMs' unit
 	DurationMs  int64  `json:"duration_ms"`
 
-	// Schema v2 (portable refs): Ref is the key-derived portable id shared by every
-	// attempt of the step, and the fields below carry the identity it derives from.
-	// A v1 descriptor (Schema zero) predates portable refs: its Ref is the
-	// execution-unique file stem and these fields are empty.
-	Schema       int    `json:"schema,omitempty"`
+	// Ref is the key-derived portable id shared by every attempt of the step; the
+	// fields below carry the identity it derives from.
 	Key          string `json:"key,omitempty"`         // full cache key hash (64 hex)
 	KeyVersion   int    `json:"key_version,omitempty"` // hashStep KeyVersion that produced Key
 	Attempt      string `json:"attempt,omitempty"`     // execution-unique id; the file stem
 	MagusVersion string `json:"magus_version,omitempty"`
 
-	// Schema v3: the cache key pins a TREE STATE (via its source content hashes)
+	// The cache key pins a TREE STATE (via its source content hashes)
 	// without naming it - it deliberately contains no commit, branch, or base. Revision
 	// and Dirty close that gap: they record the VCS state the run's inputs were read
 	// at, so a ref fetched from a foreign machine (CI, a teammate) can say not just
@@ -96,12 +93,16 @@ type OutputDescriptor struct {
 	// (a workspace with no VCS is a supported, silent no-op).
 	Revision string `json:"revision,omitempty"` // full VCS revision hash inputs were read at; "" when unknown
 	Dirty    bool   `json:"dirty,omitempty"`    // working tree had uncommitted changes; Revision alone then is necessary but not sufficient to reproduce
-}
 
-// descriptorSchema is the OutputDescriptor schema this store writes. v3 added
-// Revision/Dirty; v2 introduced portable (key-derived) refs; v1 descriptors carry no
-// schema field.
-const descriptorSchema = 3
+	// The last key inputs a reader cannot recover from the fields above. Charms are
+	// folded into Target by reproTarget and sources are pinned by Revision, but these
+	// key the cache while appearing nowhere else, so `magus x <ref>` would otherwise
+	// rebuild a DIFFERENT invocation and report success. Spell is the sharpest:
+	// `go::go-build` and `go-build` are the same Target with different bodies.
+	Spell     string   `json:"spell,omitempty"`      // spell::op filter that selected the definition
+	ExtraArgs []string `json:"extra_args,omitempty"` // trailing args forwarded after --
+	VCSName   string   `json:"vcs,omitempty"`        // provider Revision came from: git, hg, jj
+}
 
 // AmbiguousRefError is returned by output lookup when a ref (or prefix) matches more
 // than one stored identity. Candidates are pasteable-back refs, sorted: a step
@@ -189,7 +190,6 @@ const (
 // the run's own outcome.
 func (s *OutputStore) Persist(ctx context.Context, cacheKey string, output []byte, d OutputDescriptor) (OutputDescriptor, error) {
 	d.Ref = PortableRef(cacheKey)
-	d.Schema = descriptorSchema
 	d.Key = cacheKey
 	d.KeyVersion = KeyVersion
 	d.Attempt = s.mintAttempt(cacheKey)

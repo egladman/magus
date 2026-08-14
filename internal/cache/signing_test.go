@@ -220,7 +220,7 @@ func TestHashStep_KeyVersionIsHashed(t *testing.T) {
 	assert.NotEmpty(t, h1, "hashStep returned empty hash")
 	// The current KeyVersion is always mixed in; bumping it must change the
 	// hash. Verified here by asserting the current constant is the intended value.
-	const wantKeyVersion = 6
+	const wantKeyVersion = 7
 	assert.Equal(t, wantKeyVersion, KeyVersion, "KeyVersion changed; update this test when bumping")
 }
 

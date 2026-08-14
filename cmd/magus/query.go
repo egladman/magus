@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/graph/url"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/render"
@@ -288,6 +289,12 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 	if o.out.Format == FormatJSON || o.out.Format == FormatYAML {
 		return emitFormatted(o.out, outputRefRecord{OutputDescriptor: desc, Output: string(data)})
 	}
+	// On stderr, after the bytes: stdout stays pipe-clean, and a reader who has just
+	// looked at what a run PRODUCED is one step from wanting to run it. Only worth
+	// saying when the descriptor records a target to reproduce.
+	if desc.Target != "" {
+		interactive.Emit(os.Stderr, fmt.Sprintf("reproduce this invocation here with `magus x %s`", ref))
+	}
 	_, err = os.Stdout.Write(data) // default: verbatim bytes, pipe-clean
 	return err
 }
@@ -528,7 +535,7 @@ func showOutputMeta(ctx context.Context, m *magus.Magus, ref string, out OutputO
 		// already has its bytes, and the KEY, not the commit, is what decided that.
 		// Only print when the two actually differ: same revision is the common case
 		// and needs no callout.
-		if cur, _ := m.CurrentRevision(ctx); cur != "" && cur != desc.Revision {
+		if _, cur, _ := m.CurrentRevision(ctx); cur != "" && cur != desc.Revision {
 			fmt.Printf("recorded at %s, you are on %s.\n", magus.ShortRevision(desc.Revision), magus.ShortRevision(cur))
 		}
 	}

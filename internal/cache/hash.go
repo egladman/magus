@@ -21,11 +21,18 @@ import (
 )
 
 // KeyVersion is bumped when the set of hashed fields changes, forcing a full rebuild.
-// 6 adds the spell: line for explicit spell::op runs. The line is emitted only when
-// the filter is set, but the usual empty-adds-nothing back-compat is not enough here:
-// a pre-6 store may already hold entries an op-form run recorded under the plain
-// target's key, and only a version bump evicts that poison class.
-const KeyVersion = 6
+// It is the ONLY version in this system: the output descriptor carries no schema of
+// its own, because a descriptor is stored under a key that already contains this
+// number, and magus reads no descriptor it did not write.
+//
+// 7 drops that descriptor schema and evicts every entry predating the change, so no
+// descriptor missing the reproduce fields (spell, args, vcs) survives to be read as
+// though those were empty rather than unrecorded.
+//
+// 6 added the spell: line for explicit spell::op runs - emitted only when the filter
+// is set, but a pre-6 store could already hold entries an op-form run recorded under
+// the plain target's key, and only a bump evicts that poison class.
+const KeyVersion = 7
 
 // hashStep computes the cache key for a Step (version, path, target, sources,
 // env, deps, spell version, tool versions). Sources use an mtime fast-path.

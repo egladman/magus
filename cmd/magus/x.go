@@ -5,7 +5,9 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"log/slog"
 	"os"
+	"regexp"
 	"strings"
 	"sync"
 
@@ -40,6 +42,13 @@ func x(ctx context.Context, root string, _ runConfig, args []string) error {
 	})
 	if err != nil {
 		return err
+	}
+
+	// A ref names the project and target outright, so there is nothing to pick and
+	// the TTY gate below does not apply. Checked first for that reason: the gate
+	// would otherwise reject the one form of x that needs no terminal.
+	if len(filters) == 1 && outputRefShape.MatchString(filters[0]) {
+		return reproduceRef(ctx, root, filters[0], *step)
 	}
 
 	// No override: x draws a picker and reads keystrokes, so without a terminal
@@ -316,4 +325,113 @@ func pickTarget(ctx context.Context, last string) (string, error) {
 // isInteractiveTTY reports whether stdin and stderr are both terminals.
 func isInteractiveTTY() bool {
 	return tty.StdinIsTerminal() && tty.IsTerminalWriter(os.Stderr, tty.SystemProbe)
+}
+
+// outputRefShape matches the refs magus prints. Deliberately a shape test, not a
+// lookup: it only decides which of x's two modes the argument selects, and the
+// resolver below is what says whether the ref exists.
+var outputRefShape = regexp.MustCompile(`^out[0-9a-f]{8,}$`)
+
+// reproduceRef re-runs the invocation an output ref recorded.
+//
+// The ref is the whole point: it comes off a CI log, names a run on a machine you
+// do not have, and the descriptor carries what it takes to run it here - project,
+// target (charms folded in by reproTarget), and the revision its inputs were read
+// at. When the artifact is in reach the cache replays it; when it is not, this runs
+// the same invocation rather than a similar one.
+func reproduceRef(ctx context.Context, root, ref string, step bool) error {
+	m, err := loadMagus(ctx, root)
+	if err != nil {
+		return err
+	}
+	d, err := m.OutputDescriptorByRef(ref)
+	if err != nil {
+		// Not here yet, which is the ordinary case for a ref copied out of CI: ask the
+		// remote published store before giving up.
+		_, remote, rerr := m.OutputByRefRemote(ctx, ref)
+		if rerr != nil {
+			return err
+		}
+		d = remote
+	}
+	if d.Target == "" || d.Project == "" {
+		return fmt.Errorf("magus x: ref %s records no target to reproduce", ref)
+	}
+
+	parsed, err := types.ParseTarget(d.Target)
+	if err != nil {
+		return fmt.Errorf("magus x: ref %s records target %q: %w", ref, d.Target, err)
+	}
+
+	// Said before running, not after: reproduction that cannot be exact should say so
+	// while you can still act on it. Neither condition blocks the run - a rebuild at
+	// the wrong revision is still often what you want, and deciding otherwise for you
+	// would make the ref useless the moment it is a day old.
+	if d.Dirty {
+		interactive.Emit(os.Stderr, fmt.Sprintf(
+			"ref %s was produced from a working tree with uncommitted changes; its revision alone cannot reproduce it", ref))
+	}
+	// Compared by KEY, not by revision. A different commit is not a different
+	// invocation: most commits touch none of a given target's sources, and comparing
+	// revisions warned "this will rebuild" for runs that then replayed in 69ms. The
+	// key IS the identity the cache decides on, so equality here is not a prediction.
+	if d.Key != "" {
+		switch live, _, kerr := m.ComputeTargetKey(ctx, d.Project, parsed.Name, parsed.Charms); {
+		case kerr != nil:
+			// Best-effort: a key that will not compute is not a reason to refuse the run.
+			slog.DebugContext(ctx, "magus x: could not compute the local key", slog.String("error", kerr.Error()))
+		case live == d.Key:
+			interactive.Emit(os.Stderr, fmt.Sprintf(
+				"ref %s reproduces exactly here: same cache key, so this replays the recorded run", ref))
+		default:
+			interactive.Emit(os.Stderr, fmt.Sprintf(
+				"ref %s was produced from different inputs (key %s, yours %s), so this runs the target rather than replaying it",
+				ref, shortRev(d.Key), shortRev(live)))
+			// Only when the PROVIDERS agree. A git SHA and an hg node id are both 40
+			// hex, so comparing across providers renders a confident answer to a
+			// question that was never asked.
+			if d.Revision != "" {
+				name, head, _ := m.CurrentRevision(ctx)
+				switch {
+				case d.VCSName != "" && name != "" && d.VCSName != name:
+					interactive.Emit(os.Stderr, fmt.Sprintf(
+						"it was recorded under %s and this workspace resolves to %s, so the two revisions are not comparable", d.VCSName, name))
+				case head != "" && head != d.Revision:
+					interactive.Emit(os.Stderr, fmt.Sprintf(
+						"it was recorded at %s and you are at %s", shortRev(d.Revision), shortRev(head)))
+				}
+			}
+		}
+	}
+
+	m.LogScope(ctx, d.Project, "ref "+ref)
+	if step {
+		ctx = withStepGate(ctx)
+	}
+
+	targets := []types.Target{{Path: d.Project, Name: parsed.Name, Charms: parsed.Charms}}
+	opts := []magus.RunOption{magus.WithCharms(parsed.Charms...)}
+	if d.Spell != "" {
+		opts = append(opts, magus.WithSpellFilter(d.Spell))
+	}
+	if len(d.ExtraArgs) > 0 {
+		opts = append(opts, magus.WithExtraArgs(d.ExtraArgs))
+	}
+	if globalCfg.DryRun {
+		opts = append(opts, magus.WithDryRun())
+	}
+	if step {
+		opts = append(opts, magus.WithStep())
+	}
+	if parsed.Name == "ci" {
+		return m.RunCI(ctx, targets, opts...)
+	}
+	return m.Run(ctx, targets, opts...)
+}
+
+func shortRev(r string) string {
+	if len(r) > 12 {
+		return r[:12]
+	}
+	return r
 }

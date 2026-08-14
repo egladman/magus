@@ -523,3 +523,111 @@ func TestParseTagsPattern(t *testing.T) {
 	_, err = parseTags(lines, "v[")
 	require.Error(t, err, "a malformed glob is a caller bug, not a silent match-nothing")
 }
+
+// Metadata is what puts a revision into every output ref, so `magus x <ref>` can say
+// which commit reproduces a run recorded on another machine. That contract belongs to
+// the DRIVER interface, not to git: a backend returning an empty ID silently degrades
+// every ref it touches to "unknown revision", and nothing else would notice.
+//
+// Each backend is skipped when its binary is absent rather than failing, so the suite
+// still means something on a machine with only git.
+//
+// jj is NOT covered here yet, deliberately rather than by omission. Two unresolved
+// things block it, both worth their own change: `jj git init` writes .jj AND .git, and
+// builtin lists git first, so autodetect resolves a colocated jj repo to git; and
+// naming "jj" explicitly still produced a git-shaped exit 128, which was not chased
+// down. A jj case asserting today's behaviour would pin whichever of those is wrong.
+func TestMetadataReportsRevisionAcrossBackends(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		bin  string
+		init func(t *testing.T, dir string)
+	}{
+		{
+			name: "git",
+			bin:  "git",
+			init: func(t *testing.T, dir string) { gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"}) },
+		},
+		{
+			name: "hg",
+			bin:  "hg",
+			init: func(t *testing.T, dir string) {
+				vcsTestRun(t, dir, "hg", "init")
+				require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644))
+				vcsTestRun(t, dir, "hg", "add", "a.txt")
+				vcsTestRun(t, dir, "hg", "commit", "-m", "init", "-u", "test")
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := exec.LookPath(tc.bin); err != nil {
+				t.Skipf("%s not available", tc.bin)
+			}
+			dir := t.TempDir()
+			tc.init(t, dir)
+
+			// The driver is named EXPLICITLY rather than autodetected. `jj git init`
+			// writes both .jj and .git, and builtin lists git first, so autodetect
+			// resolves a colocated jj repo to git - a real precedence question, but
+			// not the contract under test here, which is that each driver reports a
+			// revision for a repo of its own kind.
+			res, err := Resolve(t.Context(), dir, tc.name, types.VCSOptions{})
+			require.NoError(t, err, "Resolve")
+			require.NotNil(t, res.VCS, "no driver detected for a %s repo", tc.name)
+
+			meta, err := res.VCS.Metadata(t.Context(), dir)
+			require.NoError(t, err, "Metadata")
+			assert.NotEmpty(t, meta.ID,
+				"%s reported no revision; every output ref from this backend would say 'unknown'", tc.name)
+			assert.False(t, meta.IsDirty, "a freshly committed tree is not dirty")
+		})
+	}
+}
+
+// The dirty bit is the honesty flag on a ref: it is what tells a reader the recorded
+// revision alone cannot reproduce the run. A backend that never sets it makes every
+// ref look exactly reproducible.
+func TestMetadataReportsDirtyAcrossBackends(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		bin  string
+		init func(t *testing.T, dir string)
+	}{
+		{"git", "git", func(t *testing.T, dir string) { gitInitRepo(t, dir, map[string]string{"a.txt": "one\n"}) }},
+		{"hg", "hg", func(t *testing.T, dir string) {
+			vcsTestRun(t, dir, "hg", "init")
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("one\n"), 0o644))
+			vcsTestRun(t, dir, "hg", "add", "a.txt")
+			vcsTestRun(t, dir, "hg", "commit", "-m", "init", "-u", "test")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			if _, err := exec.LookPath(tc.bin); err != nil {
+				t.Skipf("%s not available", tc.bin)
+			}
+			dir := t.TempDir()
+			tc.init(t, dir)
+			require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("changed\n"), 0o644))
+
+			res, err := Resolve(t.Context(), dir, tc.name, types.VCSOptions{})
+			require.NoError(t, err, "Resolve")
+			require.NotNil(t, res.VCS)
+
+			meta, err := res.VCS.Metadata(t.Context(), dir)
+			require.NoError(t, err, "Metadata")
+			assert.True(t, meta.IsDirty,
+				"%s did not report an uncommitted edit; refs would claim exact reproducibility they cannot deliver", tc.name)
+		})
+	}
+}
+
+// vcsTestRun runs one VCS command in dir, skipping the test when the tool refuses to
+// initialize (a sandbox with no writable config home, say) rather than failing.
+func vcsTestRun(t *testing.T, dir, bin string, args ...string) {
+	t.Helper()
+	cmd := exec.Command(bin, args...)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		t.Skipf("%s %v failed: %v\n%s", bin, args, err, out)
+	}
+}

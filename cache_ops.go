@@ -194,7 +194,6 @@ type OutputDescriptor struct {
 	ErrMsg      string `json:"error,omitempty"` // failure message; empty on success
 	TimestampMs int64  `json:"timestamp_ms"`    // unix milliseconds, matching DurationMs' unit
 	DurationMs  int64  `json:"duration_ms"`
-	Schema      int    `json:"schema,omitempty"`
 
 	Key          string `json:"key,omitempty"`         // full cache key hash (64 hex)
 	KeyVersion   int    `json:"key_version,omitempty"` // hashStep KeyVersion that produced Key
@@ -203,14 +202,19 @@ type OutputDescriptor struct {
 
 	Revision string `json:"revision,omitempty"` // full VCS revision hash inputs were read at; "" when unknown
 	Dirty    bool   `json:"dirty,omitempty"`    // working tree had uncommitted changes at capture time
+
+	Spell     string   `json:"spell,omitempty"`      // spell::op filter that selected the definition
+	ExtraArgs []string `json:"extra_args,omitempty"` // trailing args forwarded after --
+	VCSName   string   `json:"vcs,omitempty"`        // provider Revision came from: git, hg, jj
 }
 
 func newOutputDescriptor(d cache.OutputDescriptor) OutputDescriptor {
 	return OutputDescriptor{
 		Ref: d.Ref, Project: d.Project, Target: d.Target, Inv: d.Inv,
 		Failed: d.Failed, ErrMsg: d.ErrMsg, TimestampMs: d.TimestampMs, DurationMs: d.DurationMs,
-		Schema: d.Schema, Key: d.Key, KeyVersion: d.KeyVersion, Attempt: d.Attempt, MagusVersion: d.MagusVersion,
+		Key: d.Key, KeyVersion: d.KeyVersion, Attempt: d.Attempt, MagusVersion: d.MagusVersion,
 		Revision: d.Revision, Dirty: d.Dirty,
+		Spell: d.Spell, ExtraArgs: d.ExtraArgs, VCSName: d.VCSName,
 	}
 }
 

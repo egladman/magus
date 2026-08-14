@@ -160,6 +160,12 @@ type Step struct {
 	// step) and copied onto every step. Display-only provenance for the output
 	// descriptor (recordOutput) - never hashed, so a run before vs. after a commit still
 	// shares a cache entry when the tree content is unchanged.
+	// VCSName is the provider the two above came from ("git", "hg", "jj"). Recorded
+	// because a bare hash does not identify its own kind: a git SHA and an hg node id
+	// are both 40 hex, and a colocated jj repo can yield either a git commit or a jj
+	// commit_id. Comparing two revisions without it is a confident answer to the
+	// wrong question.
+	VCSName  string
 	Revision string
 	Dirty    bool
 }
@@ -637,6 +643,9 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 		DurationMs:  dur.Milliseconds(),
 		Revision:    s.Revision,
 		Dirty:       s.Dirty,
+		Spell:       s.Spell,
+		ExtraArgs:   s.ExtraArgs,
+		VCSName:     s.VCSName,
 	}
 	if runErr != nil {
 		d.ErrMsg = runErr.Error()

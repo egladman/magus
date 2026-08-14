@@ -657,16 +657,18 @@ func toolVersionMode() string {
 // executeStages resolves it ONCE per invocation and copies it onto every step, as
 // toolVersionsByProject does - probing per target would spawn a VCS subprocess per step.
 // The two returns are types.VCSMeta's Hash and IsDirty.
-func (m *Magus) CurrentRevision(ctx context.Context) (revision string, dirty bool) {
+func (m *Magus) CurrentRevision(ctx context.Context) (name, revision string, dirty bool) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {
-		return "", false
+		return "", "", false
 	}
 	meta, err := res.VCS.Metadata(ctx, m.ws.Root)
 	if err != nil {
-		return "", false
+		return "", "", false
 	}
-	return meta.ID, meta.IsDirty
+	// The provider name rides along because a hash does not identify its own kind,
+	// and resolving it a second time would spawn another VCS subprocess.
+	return res.Name, meta.ID, meta.IsDirty
 }
 
 // checkToolWindows fails the run when a probed tool falls outside the window its project
@@ -895,7 +897,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 				label := types.ProjectDisplayName(p.Path, p.Name, p.Dir)
 				planned++
 				if m.cache != nil {
-					m.cache.LogDry(ctx, p.Path, label, st.target)
+					// Charms folded in, matching the executed line: a dry run whose repro
+					// command omits them prints a command that reproduces something else,
+					// and it is printed precisely when the reader is asking what will run.
+					m.cache.LogDry(ctx, p.Path, label, charmedTarget(st.target, opts.Charms))
 				} else {
 					fmt.Printf("[dry] %s\n", label)
 				}
@@ -980,7 +985,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		return err
 	}
 	// Resolved ONCE for the whole invocation, not per target - see CurrentRevision.
-	revision, dirty := m.CurrentRevision(ctx)
+	vcsName, revision, dirty := m.CurrentRevision(ctx)
 
 	// Active charms participate in the cache key: a charm can change a target's
 	// behaviour (pass/fail or output), so charm-variant runs must not collide.
@@ -1004,6 +1009,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 			applyRunKeying(&step, toolVer[p.Path], charmKey)
 			step.Revision = revision
 			step.Dirty = dirty
+			step.VCSName = vcsName
 			// Args after `--` change what the target does, so they key the cache
 			// exactly as charms do; without this a run with different args
 			// replays the previous run's result.
@@ -1764,4 +1770,13 @@ func diagEventFromError(projectPath, target string, err error) (types.Diagnostic
 		unit += ":" + target
 	}
 	return types.DiagnosticEvent{Code: de.Code, Message: de.Msg, Unit: unit}, true
+}
+
+// charmedTarget renders "target:charm,..." the way cache.reproTarget does for an
+// executed step, so a dry run and a real run print the same repro command.
+func charmedTarget(target string, charms []string) string {
+	if len(charms) == 0 {
+		return target
+	}
+	return target + ":" + strings.Join(charms, ",")
 }
