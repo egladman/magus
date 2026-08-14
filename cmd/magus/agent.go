@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive"
@@ -157,23 +158,19 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	// stderr redirected that looked exactly like a successful install - the
 	// skills were never written and nothing said so.
 	bindDisplayFlags(fset)
-	dir := fset.String("dir", ".", "Repo directory to install into")
-	force := fset.Bool("force", false, "Overwrite existing installed skill files (write mode)")
+	af := gen.BindAgent(fset)
 	// Not implied by --force, and not the default. --force overwrites files this
 	// command is about to write and can name; --prune deletes directories the caller
 	// has not seen, picked by a rule inside a binary they may have just upgraded.
 	// Without it, install still SAYS what is stale, so the orphans stay visible
 	// rather than becoming invisible again.
-	prune := fset.Bool("prune", false, "Also remove installed skills this binary no longer ships (magus-written ones only)")
-	tarMode := fset.Bool("tar", false, "Stream a tar archive of the skills to stdout instead of writing files")
-	global := fset.Bool("global", false, "Allow absolute destination paths in write mode (use --tar | tar -xf - for paths outside the repo instead)")
 	fset.Usage = func() { agentUsage(os.Stderr) }
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	dests := fset.Args()
 
-	if *tarMode {
+	if af.Tar {
 		if len(dests) > 1 {
 			return fmt.Errorf("agent install --tar: at most one destination path prefix is allowed (the path inside the tar archive)")
 		}
@@ -195,7 +192,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		agentUsage(os.Stderr)
 		return fmt.Errorf("agent install: name at least one destination directory (e.g. .claude/skills) or pass --tar")
 	}
-	if !*global {
+	if !af.Global {
 		for _, d := range dests {
 			if filepath.IsAbs(d) || strings.HasPrefix(d, "~") {
 				return fmt.Errorf("agent install: destination %q is outside the working tree; pass --global, or use --tar | tar -xf - -C %q instead", d, d)
@@ -206,22 +203,22 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	var written []string
 	var removed, stale []string
 	for _, dest := range dests {
-		w, err := agentSkills.WriteSkillTree(*dir, dest, *force, agent.VariantSimple)
+		w, err := agentSkills.WriteSkillTree(af.Dir, dest, af.Force, agent.VariantSimple)
 		if err != nil {
 			return err
 		}
 		written = append(written, w...)
 		// After writing, never before: a prune that ran first would delete a skill
 		// this install then failed to replace.
-		if *prune {
-			r, err := agentSkills.PruneSkillTree(*dir, dest)
+		if af.Prune {
+			r, err := agentSkills.PruneSkillTree(af.Dir, dest)
 			if err != nil {
 				return err
 			}
 			removed = append(removed, r...)
 			continue
 		}
-		s, err := agentSkills.StaleSkillDirs(*dir, dest)
+		s, err := agentSkills.StaleSkillDirs(af.Dir, dest)
 		if err != nil {
 			return err
 		}
@@ -235,7 +232,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	for _, p := range removed {
 		slog.InfoContext(ctx, "agent install: removed skill this binary no longer ships", slog.String("path", p))
 	}
-	printAgentInstallNextSteps(*dir, written, stale, agent.VariantSimple)
+	printAgentInstallNextSteps(af.Dir, written, stale, agent.VariantSimple)
 	return nil
 }
 
@@ -343,16 +340,13 @@ type guardVerdict struct {
 // that would block every tool call.
 func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
 	fset := flag.NewFlagSet("hook", flag.ContinueOnError)
-	asPath := fset.Bool("path", false, "Judge the input as a FILE PATH an edit is about to write, not as a shell command: editing a declared target output is advised against")
+	hf := gen.BindHook(fset)
 	// Attribution, not policy: these name WHO produced the observation, and the
 	// guard's verdict never reads them. Every one is optional and unvalidated -
 	// including the host name, which is an opaque label the caller chooses rather
 	// than a set magus knows, because a magus that enumerated hosts would need a
 	// release per host. A wrapper that cannot extract a session id must still get
 	// a verdict; erroring here would block a tool call over metadata.
-	host := fset.String("agent-name", "", "Name of the agent host this invocation came from, recorded on the activity event")
-	session := fset.String("session", "", "The host's own session id for this invocation, recorded on the activity event")
-	event := fset.String("event", "", "The host's hook event name (e.g. PreToolUse), recorded on the activity event")
 	// The whole display set, not a hand-rolled -o: this command used to define
 	// its own output flag and so silently lacked -s, -q, -v and --tee. That gap
 	// is the reason for the rule - a flag accepted on most commands teaches
@@ -373,14 +367,14 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	}
 
 	input, hasInput := readGuardInput(in)
-	who := hookAttribution{Host: *host, Session: *session, Event: *event}
+	who := hookAttribution{Host: hf.AgentName, Session: hf.Session, Event: hf.Event}
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
 	if req, isEnvelope := decodeHookEnvelope(input.Value); isEnvelope {
 		input.Value = req.Value
 		if req.IsPath {
-			*asPath = true
+			hf.Path = true
 		}
 		if who.Session == "" {
 			who.Session = req.Who.Session
@@ -390,7 +384,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		}
 	}
 	verdict := guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
-	if *asPath {
+	if hf.Path {
 		if hasInput {
 			// The generated-output rule is definitive (it reads declared globs), so it
 			// speaks first; the memory nudge is a heuristic on the filename and only
