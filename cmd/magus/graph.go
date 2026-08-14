@@ -17,6 +17,7 @@ import (
 	"time"
 
 	magus "github.com/egladman/magus"
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/graph/knowledge"
@@ -140,17 +141,9 @@ func graphBuild(ctx context.Context, root string, args []string) error {
 // `magus run <target> --graph` and `magus affected <target> --graph` scope to a
 // run (those flags remain as scoped passthroughs).
 func graphDeps(ctx context.Context, root string, args []string) error {
-	var (
-		upstream bool
-		depth    int
-		spell    string
-		target   string
-	)
+	var gf *gen.GraphDepsFlags
 	pos, err := cmdParse("graph deps", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&upstream, "upstream", false, "show dependents instead of dependencies")
-		fs.IntVar(&depth, "depth", 0, "cap displayed depth (0 = unlimited)")
-		fs.StringVar(&spell, "spell", "", "only projects driven by this spell")
-		fs.StringVar(&target, "target", "", "target whose duration history annotates nodes (default: build)")
+		gf = gen.BindGraphDeps(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus graph deps [flags] [project...]")
 			fmt.Fprintln(os.Stderr, "")
@@ -171,11 +164,11 @@ func graphDeps(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	return renderWorkspaceGraph(ctx, ws, graphRenderOptions{
-		Upstream: upstream,
-		Depth:    depth,
-		Spell:    spell,
+		Upstream: gf.Upstream,
+		Depth:    gf.Depth,
+		Spell:    gf.Spell,
 		Roots:    pos,
-		Target:   target,
+		Target:   gf.Target,
 	})
 }
 

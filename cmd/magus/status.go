@@ -15,25 +15,12 @@ import (
 	"text/tabwriter"
 	"time"
 
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/types"
 )
-
-// statusFlags groups the local flags for `magus status` into one value: an
-// idiomatic options struct with a bind method (plain stdlib flag, no reflection,
-// no runtime cost), so the command's whole flag surface lives in one place and is
-// testable. The middle ground between loose per-flag vars and a declarative
-// registry; reach for it when a command carries several flags.
-type statusFlags struct {
-	watchInterval time.Duration
-	socket        string
-	compact       bool
-	symbols       bool
-	probe         string
-	workspace     string
-}
 
 // statusWatchMin keeps status cheap enough to leave running beside real work.
 // A tighter loop adds no useful signal: locks, services, and pool snapshots do
@@ -41,39 +28,39 @@ type statusFlags struct {
 // its next poll before the last one has finished.
 const statusWatchMin = 15 * time.Second
 
-func (f *statusFlags) bind(fs *flag.FlagSet) {
-	fs.DurationVar(&f.watchInterval, "watch", 0, "poll and reprint at this interval (minimum 15s; 0 means one-shot)")
-	fs.DurationVar(&f.watchInterval, "W", 0, "Short for --watch")
-	fs.StringVar(&f.socket, "socket", "", "proc server address as unix:// URL or bare path (default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir)")
-	fs.BoolVar(&f.compact, "compact", false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
-	fs.BoolVar(&f.compact, "c", false, "Short for --compact")
-	fs.BoolVar(&f.symbols, "symbols", false, "Include the expensive symbol-index freshness scan")
-	fs.StringVar(&f.probe, "probe", "", "exec-probe mode: liveness, readiness, mcp (comma-combinable, e.g. liveness,mcp); exits 0=healthy, 1=unhealthy; ignores --watch/--compact")
-	fs.StringVar(&f.workspace, "workspace", "", "workspace root to check for readiness with --probe=readiness (default: any loaded workspace)")
-	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "usage: magus status [flags]")
-		fmt.Fprintln(os.Stderr, "\nShow magus's configured telemetry, cache settings, and (when a parent")
-		fmt.Fprintln(os.Stderr, "process is running) the live concurrency-pool state.")
-		fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted, see `magus -h`):")
-		fs.PrintDefaults()
+// bindStatus registers status's flags from the command registry and installs its
+// usage banner. The hand-written options struct this replaced described itself as
+// "the middle ground between loose per-flag vars and a declarative registry" - the
+// registry now exists, so the middle ground is gone.
+func bindStatus(f **gen.StatusFlags) func(*flag.FlagSet) {
+	return func(fs *flag.FlagSet) {
+		*f = gen.BindStatus(fs)
+		fs.Usage = func() {
+			fmt.Fprintln(os.Stderr, "usage: magus status [flags]")
+			fmt.Fprintln(os.Stderr, "\nShow magus's configured telemetry, cache settings, and (when a parent")
+			fmt.Fprintln(os.Stderr, "process is running) the live concurrency-pool state.")
+			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted, see `magus -h`):")
+			fs.PrintDefaults()
+		}
+
 	}
 }
 
 func status(ctx context.Context, args []string) error {
-	var f statusFlags
-	if _, err := cmdParse("status", args, f.bind); err != nil {
+	var f *gen.StatusFlags
+	if _, err := cmdParse("status", args, bindStatus(&f)); err != nil {
 		return err
 	}
 
 	// Probe mode: exec-probe semantics — exit 0 healthy, exit 1 unhealthy.
 	// Ignores --watch, --compact, and -o formatting flags. The value is
 	// comma-combinable (e.g. --probe=liveness,mcp), failing if any listed probe does.
-	if f.probe != "" {
-		kinds, err := parseProbeKinds(f.probe)
+	if f.Probe != "" {
+		kinds, err := parseProbeKinds(f.Probe)
 		if err != nil {
 			return err
 		}
-		return runProbes(ctx, f.socket, globalCfg.MCP, kinds, f.workspace)
+		return runProbes(ctx, f.Socket, globalCfg.MCP, kinds, f.Workspace)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -81,13 +68,13 @@ func status(ctx context.Context, args []string) error {
 		return err
 	}
 
-	if f.watchInterval == 0 {
-		return printStatus(buildStatusReport(ctx, f.socket, f.symbols), opts, 0, f.compact)
+	if f.Watch == 0 {
+		return printStatus(buildStatusReport(ctx, f.Socket, f.Symbols), opts, 0, f.Compact)
 	}
-	f.watchInterval = clampStatusWatch(f.watchInterval)
+	f.Watch = clampStatusWatch(f.Watch)
 
 	isTTY := tty.IsTerminalWriter(os.Stdout, tty.SystemProbe)
-	useGrid := gridEnabled(opts, isTTY) && !f.compact
+	useGrid := gridEnabled(opts, isTTY) && !f.Compact
 
 	// In watch+grid mode, animate at 150ms ticks (fluid spinner rotation)
 	// while retaining the last snapshot until the next real poll. Every other
@@ -98,16 +85,16 @@ func status(ctx context.Context, args []string) error {
 		animTick = time.NewTicker(150 * time.Millisecond)
 		defer animTick.Stop()
 	}
-	queryTick := time.NewTicker(f.watchInterval)
+	queryTick := time.NewTicker(f.Watch)
 	defer queryTick.Stop()
 
 	animFrame := 0
-	report := buildStatusReport(ctx, f.socket, f.symbols)
+	report := buildStatusReport(ctx, f.Socket, f.Symbols)
 	repaint := tty.NewInlineView(os.Stdout, tty.SystemProbe)
 	defer repaint.Finish()
 	inline := opts.Format == outputText && isTTY
 	for {
-		if err := paintStatusFrame(repaint, inline, report, opts, animFrame, f.compact); err != nil {
+		if err := paintStatusFrame(repaint, inline, report, opts, animFrame, f.Compact); err != nil {
 			return err
 		}
 		if !useGrid {
@@ -115,7 +102,7 @@ func status(ctx context.Context, args []string) error {
 			case <-ctx.Done():
 				return nil
 			case <-queryTick.C:
-				report = buildStatusReport(ctx, f.socket, f.symbols)
+				report = buildStatusReport(ctx, f.Socket, f.Symbols)
 			}
 			continue
 		}
@@ -125,7 +112,7 @@ func status(ctx context.Context, args []string) error {
 		case <-animTick.C:
 			animFrame++
 		case <-queryTick.C:
-			report = buildStatusReport(ctx, f.socket, f.symbols)
+			report = buildStatusReport(ctx, f.Socket, f.Symbols)
 		}
 	}
 }

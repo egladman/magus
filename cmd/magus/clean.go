@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"os"
 
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/types"
 )
 
@@ -17,9 +18,9 @@ import (
 //
 // Pass --dry-run (the global flag) to preview without deleting.
 func cleanCmd(ctx context.Context, root string, args []string) error {
-	var cacheFlag *bool
+	var cf *gen.CleanFlags
 	projectArgs, err := cmdParse("clean", args, func(fs *flag.FlagSet) {
-		cacheFlag = fs.Bool("cache", false, "Also invalidate magus cache entries for the selected projects")
+		cf = gen.BindClean(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus clean [flags] [project...]")
 			fmt.Fprintln(os.Stderr, "")
@@ -71,7 +72,7 @@ func cleanCmd(ctx context.Context, root string, args []string) error {
 		}
 	}
 
-	if *cacheFlag && !dryRun {
+	if cf.Cache && !dryRun {
 		if err := m.CleanCache(ctx, projects...); err != nil {
 			return fmt.Errorf("clean --cache: %w", err)
 		}
