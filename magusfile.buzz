@@ -1675,7 +1675,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // aim them at. Every .buzz here imports "magus"/"magus/spell" and uses embedding-only
 // constructs, so a non-embedded parse rejects all 62 of them; that is by design, not
 // drift. What they were meant to protect is already covered: spells/examples/**
-// by TestExamplesParseAndRecord (ParseEmbedded), every spell source by buzz-test's glob
+// by TestSpellExamplesParseAndRecord in internal/dry (ParseEmbedded), every spell source by buzz-test's glob
 // below, and every magusfile by doctor's magusfile-syntax check. Reviving them means first
 // having standalone Buzz and pinning `buzz` in mise.toml, which is not the case today.
 //
@@ -1755,7 +1755,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // that failure on the next spell someone adds, so match every source instead and let a
     // new spell be covered by existing.
     //
-    // spells/examples/** is excluded because TestExamplesParseAndRecord already parses all
+    // spells/examples/** is excluded because internal/dry's TestSpellExamplesParseAndRecord parses all
     // 48 of them, and they are illustrative sources that do not have to resolve host modules.
     foreach (spell in fs\glob("spells/**/*.buzz")) {
         if (spell.value.startsWith("spells/examples/")) { continue; }
