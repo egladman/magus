@@ -203,7 +203,8 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	var written []string
 	var removed, stale []string
 	for _, dest := range dests {
-		w, err := agentSkills.WriteSkillTree(af.Dir, dest, af.Force, agent.VariantSimple)
+		base, leaf := installTarget(af.Dir, dest, af.Global)
+		w, err := agentSkills.WriteSkillTree(base, leaf, af.Force, agent.VariantSimple)
 		if err != nil {
 			return err
 		}
@@ -211,14 +212,14 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		// After writing, never before: a prune that ran first would delete a skill
 		// this install then failed to replace.
 		if af.Prune {
-			r, err := agentSkills.PruneSkillTree(af.Dir, dest)
+			r, err := agentSkills.PruneSkillTree(base, leaf)
 			if err != nil {
 				return err
 			}
 			removed = append(removed, r...)
 			continue
 		}
-		s, err := agentSkills.StaleSkillDirs(af.Dir, dest)
+		s, err := agentSkills.StaleSkillDirs(base, leaf)
 		if err != nil {
 			return err
 		}
@@ -1733,4 +1734,25 @@ func byteSize(n int64) string {
 		return fmt.Sprintf("%d B", n)
 	}
 	return fmt.Sprintf("%.1f KB", float64(n)/1024)
+}
+
+// installTarget resolves a destination into the (base, leaf) pair the catalog
+// writers take.
+//
+// --global is the flag that permits an absolute destination, and it never
+// worked: this command let one past its own guard and Catalog.WriteSkillTree
+// then refused it unconditionally, so `agent install /abs/path --global` failed
+// with the message telling the caller to pass the flag they had just passed.
+//
+// Fixed HERE rather than by adding an escape hatch to the catalog. That guard is
+// the library's own safety property - it also blocks "../../outside", which no
+// CLI flag should be able to switch off - so instead the absolute path is split
+// into the directory it names and the leaf inside it. The containment check the
+// catalog performs is then still meaningful: the write stays under the directory
+// the caller actually named.
+func installTarget(dir, dest string, global bool) (base, leaf string) {
+	if global && filepath.IsAbs(dest) {
+		return filepath.Dir(dest), filepath.Base(dest)
+	}
+	return dir, dest
 }
