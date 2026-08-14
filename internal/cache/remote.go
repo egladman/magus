@@ -14,6 +14,8 @@ import (
 	"path"
 	"path/filepath"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/egladman/magus/internal/httpx"
@@ -123,7 +125,7 @@ func OpenRemoteBackend(ctx context.Context, selector string) (RemoteBackend, err
 // existing one from the shared store — which is exactly what a PR CI run wants
 // (read remote hits, but never publish).
 func (c *Cache) fetchFromRemote(ctx context.Context, projectPath, hash string) bool {
-	if !c.remote.Active(ctx) {
+	if !c.remoteActive(ctx) {
 		return false
 	}
 	// Timed around the WHOLE fetch, not around GetArtifact alone: the call returns a
@@ -133,34 +135,150 @@ func (c *Cache) fetchFromRemote(ctx context.Context, projectPath, hash string) b
 	start := time.Now()
 	defer func() { httpx.RecorderFrom(ctx).Add(time.Since(start)) }()
 
+	stats := remoteStatsFrom(ctx)
 	r, err := c.remote.GetArtifact(ctx, projectPath, hash)
 	if err != nil {
+		// Counted: a transport error is the case the summary exists for, and leaving it
+		// out let a dead remote end the run on "failures=0" at Info.
+		stats.failed(0)
 		c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
 			fmt.Sprintf("remote get %s (%s): %v", projectPath, shortHash(hash), err)))
 		return false
 	}
 	if r == nil {
-		return false // remote miss
+		stats.miss()
+		return false
 	}
 	defer r.Close()
-	if err := c.importArtifact(ctx, r, projectPath, hash); err != nil {
+	// Counted here rather than trusting the backend: an empty artifact and a 40MB one
+	// both "succeed". observability's wrapper counts the same bytes but only when
+	// telemetry is on, and this line has to be true either way.
+	counted := &countingReader{Reader: r}
+	if err := c.importArtifact(ctx, counted, projectPath, hash); err != nil {
+		stats.failed(counted.n)
 		c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
 			fmt.Sprintf("remote import %s (%s): %v", projectPath, shortHash(hash), err)))
 		return false
 	}
+	stats.hit(counted.n)
+	// INFO because a reader asking "is the remote doing anything" has no reason to
+	// suspect a verbosity flag.
+	c.log.InfoContext(ctx, "cache.remote.hit",
+		slog.String("project", projectPath),
+		slog.String("hash", shortHash(hash)),
+		slog.Int64("bytes", counted.n),
+		slog.Duration("duration", time.Since(start)))
 	return true
+}
+
+// countingReader totals bytes actually read.
+type countingReader struct {
+	io.Reader
+	n int64
+}
+
+func (c *countingReader) Read(p []byte) (int, error) {
+	n, err := c.Reader.Read(p)
+	c.n += int64(n)
+	return n, err
+}
+
+// remoteStats totals what ONE RUN did with the remote cache.
+//
+// Run-scoped and carried on the context, not held on Cache: the daemon reuses one
+// Cache per workspace across runs and can serve two adopted runs at once, so fields on
+// Cache would report the process's history and interleave concurrent runs. Same shape
+// and nil tolerance as httpx.Recorder, so uninstrumented paths need no guard.
+type remoteStats struct {
+	hits, misses, puts, fails atomic.Int64
+	down, up                  atomic.Int64
+	postureOnce, readonlyOnce sync.Once
+}
+
+// Nil-safe METHODS rather than a nil-safe helper taking &s.field: the argument
+// expression dereferences before the callee can check, which segfaults on the
+// uninstrumented paths this type exists to tolerate.
+func (s *remoteStats) hit(n int64) {
+	if s != nil {
+		s.hits.Add(1)
+		s.down.Add(n)
+	}
+}
+
+func (s *remoteStats) miss() {
+	if s != nil {
+		s.misses.Add(1)
+	}
+}
+
+func (s *remoteStats) published(n int64) {
+	if s != nil {
+		s.puts.Add(1)
+		s.up.Add(n)
+	}
+}
+
+// downloaded records bytes that transferred before a failure, so a run that pulled
+// 400MB of rejected artifacts does not report down=0.
+func (s *remoteStats) failed(downloaded int64) {
+	if s != nil {
+		s.fails.Add(1)
+		s.down.Add(downloaded)
+	}
+}
+
+type remoteStatsKey struct{}
+
+// WithRemoteStats installs run-scoped remote-cache counters on ctx.
+func WithRemoteStats(ctx context.Context) context.Context {
+	return context.WithValue(ctx, remoteStatsKey{}, &remoteStats{})
+}
+
+func remoteStatsFrom(ctx context.Context) *remoteStats {
+	s, _ := ctx.Value(remoteStatsKey{}).(*remoteStats)
+	return s
+}
+
+// remoteActive reports whether the backend engaged, logging the posture once per run
+// as a side effect. The inactive case earns that line: in the header a dormant backend
+// and a working one are identical, and this is the probe LogCache refuses to make.
+func (c *Cache) remoteActive(ctx context.Context) bool {
+	active := c.remote.Active(ctx)
+	if s := remoteStatsFrom(ctx); s != nil {
+		s.postureOnce.Do(func() { c.logPosture(ctx, active) })
+	}
+	return active
+}
+
+func (c *Cache) logPosture(ctx context.Context, active bool) {
+	name := c.remote.Name()
+	if name == "" {
+		name = "remote"
+	}
+	c.log.InfoContext(ctx, "cache.remote.posture",
+		slog.String("backend", name),
+		slog.Bool("active", active),
+		slog.Bool("verify", c.verifier != nil),
+		slog.Bool("sign", c.signer != nil))
 }
 
 // pushToRemote exports the local artifact for (projectPath, hash) and uploads it.
 // Errors are logged but not returned: a failed push is not a build failure.
 func (c *Cache) pushToRemote(ctx context.Context, s Step, hash string) {
-	if !c.remote.Active(ctx) {
+	if !c.remoteActive(ctx) {
 		return // skip the export entirely when the backend is inactive
 	}
 	// Trust set configured but no signing key: an unsigned push would be rejected
 	// by every verifier, so don't publish. This is what stops a consumer-only
 	// machine (a laptop, a PR runner) from writing the shared store at all.
+	//
+	// Said out loud because it is also the half-finished CI setup: trust set declared,
+	// signing secret forgotten, store stays empty while every run reports success.
+	stats := remoteStatsFrom(ctx)
 	if c.verifier != nil && c.signer == nil {
+		if stats != nil {
+			stats.readonlyOnce.Do(func() { c.log.InfoContext(ctx, "cache.remote.readonly") })
+		}
 		return
 	}
 	pr, pw := io.Pipe()
@@ -171,16 +289,53 @@ func (c *Cache) pushToRemote(ctx context.Context, s Step, hash string) {
 		errCh <- err
 	}()
 	putStart := time.Now()
-	putErr := c.remote.PutArtifact(ctx, s.ProjectPath, hash, pr)
+	// Counted on the read side: what exportArtifact wrote in would report a full
+	// upload for a transfer that died mid-stream.
+	counted := &countingReader{Reader: pr}
+	putErr := c.remote.PutArtifact(ctx, s.ProjectPath, hash, counted)
 	// The upload streams from the pipe, so PutArtifact spans the transfer and this is
 	// the real wait. Waiting to publish is still waiting.
 	httpx.RecorderFrom(ctx).Add(time.Since(putStart))
 	_ = pr.CloseWithError(putErr)
 	exportErr := <-errCh
 	if exportErr != nil || putErr != nil {
+		stats.failed(0)
 		c.log.WarnContext(ctx, "cache.warn", slog.String("msg",
 			fmt.Sprintf("remote push %s (%s): export=%v put=%v", s.ProjectPath, shortHash(hash), exportErr, putErr)))
+		return
 	}
+	stats.published(counted.n)
+	c.log.InfoContext(ctx, "cache.remote.push",
+		slog.String("project", s.ProjectPath),
+		slog.String("hash", shortHash(hash)),
+		slog.Int64("bytes", counted.n),
+		slog.Duration("duration", time.Since(putStart)))
+}
+
+// LogRemoteSummary accounts for what the remote cache did this run, reading the
+// run-scoped counters off ctx. It is the only place the ZERO case gets stated: a run
+// that never touched a configured remote says so rather than saying nothing, and
+// silence is what made that indistinguishable from working.
+func (c *Cache) LogRemoteSummary(ctx context.Context) {
+	stats := remoteStatsFrom(ctx)
+	if c.remote == nil || stats == nil {
+		return
+	}
+	fails := stats.fails.Load()
+	attrs := []any{
+		slog.Int64("hits", stats.hits.Load()),
+		slog.Int64("misses", stats.misses.Load()),
+		slog.Int64("published", stats.puts.Load()),
+		slog.Int64("failures", fails),
+		slog.Int64("down_bytes", stats.down.Load()),
+		slog.Int64("up_bytes", stats.up.Load()),
+	}
+	// Warn so a run whose remote degraded cannot end on a line that reads like success.
+	if fails > 0 {
+		c.log.WarnContext(ctx, "cache.remote.summary", attrs...)
+		return
+	}
+	c.log.InfoContext(ctx, "cache.remote.summary", attrs...)
 }
 
 // exportArtifact writes a gzip-tar containing the manifest, its blobs, the captured

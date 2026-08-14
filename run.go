@@ -918,6 +918,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	}
 
 	start := time.Now()
+	// Run-scoped remote-cache counters. Installed here rather than held on Cache
+	// because the daemon reuses one Cache per workspace across runs and can serve two
+	// adopted runs at once; LogRemoteSummary below reads them back off ctx.
+	ctx = cache.WithRemoteStats(ctx)
 
 	var uniqueProjects []*types.Project
 	seenProj := make(map[string]struct{})
@@ -1248,6 +1252,10 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	if s := m.cache.Stats(); s.Hit+s.Miss+s.Error > 1 {
 		m.cache.LogSummary(ctx, time.Since(start))
 	}
+	// Beside the footer, not deferred by the caller: every path that runs targets
+	// reaches here, including `magus x` and the MCP run tool, and a deferred summary
+	// landed after the terminal band was released.
+	m.cache.LogRemoteSummary(ctx)
 
 	return runErr
 }
