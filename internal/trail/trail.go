@@ -81,9 +81,16 @@ const (
 	KindAgentCommand Kind = "agent_command"
 	// KindMemory is the console MemoryService door onto the durable magus_memory files. Unlike the
 	// other kinds it audits READS too (List/Get), not just edits: the memory files are the agent's
-	// own working notes, so knowing when the operator inspected them is part of the governance story,
+	// own handoff journal, so knowing when the operator inspected it is part of the governance story,
 	// and the mount opts into read auditing (the agent/MCP door is already audited separately).
 	KindMemory Kind = "memory"
+	// KindNotes is the console NotesService door onto the workspace's human-authored notes.
+	// Every event under it is a READ, because that service has no write path: a note's whole
+	// value is the guarantee that a person wrote it, so the browser never becomes an author.
+	// Reads are audited for one reason the shared store does not supply on its own - this is
+	// the only surface that can serve the PRIVATE store, which is not in any repository and
+	// which nothing else attributes.
+	KindNotes Kind = "notes"
 
 	// KindCredentialGrant records that a run made a credential reachable: a magusfile
 	// granted one to a destination host, or opened a loopback endpoint carrying one.

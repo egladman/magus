@@ -92,7 +92,7 @@ type Option func(*options)
 
 // WithAuditReads makes the interceptor record READ calls (Get/List/...) in addition to mutations.
 // It is off by default because the trail is for consequential actions, not queries - but the memory
-// service opts in, since a read of the agent's own working notes is itself worth auditing there. The
+// service opts in, since a read of the agent's own handoff journal is itself worth auditing there. The
 // token service does NOT set it, so its ListTokens stays unrecorded.
 func WithAuditReads() Option {
 	return func(o *options) { o.auditReads = true }

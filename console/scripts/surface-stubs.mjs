@@ -11,7 +11,7 @@
 // (internal/service/console) and the console's CLEAN_PATH_SURFACES.
 import { readFileSync, writeFileSync, mkdirSync } from "node:fs";
 
-const SURFACES = ["logs", "dashboard", "graph", "activity"];
+const SURFACES = ["logs", "dashboard", "graph", "activity", "notes"];
 const shell = readFileSync("index.html", "utf8").replace("<head>", '<head>\n  <base href="../">');
 for (const d of SURFACES) {
   mkdirSync(`gen/${d}`, { recursive: true });

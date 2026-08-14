@@ -30,6 +30,7 @@ import (
 	mcp "github.com/egladman/magus/internal/handler/mcp"
 	memoryhandler "github.com/egladman/magus/internal/handler/memory"
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
+	noteshandler "github.com/egladman/magus/internal/handler/notes"
 	"github.com/egladman/magus/internal/handler/status"
 	tokenhandler "github.com/egladman/magus/internal/handler/token"
 	toolhandler "github.com/egladman/magus/internal/handler/tool"
@@ -44,6 +45,7 @@ import (
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1/jobv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/memory/v1/memoryv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1/metricsv1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/notes/v1/notesv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/status/v1/statusv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/token/v1/tokenv1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/tool/v1/toolv1connect"
@@ -464,6 +466,24 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			memoryPath, memoryHandler := memoryv1connect.NewMemoryServiceHandler(memoryhandler.NewService(opts.Magus), memoryAudit)
 			httpServer.Handle(memoryPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, memoryHandler))))
 			log.InfoContext(ctx, "[BRIDGE] memory service mounted", slog.String("path", memoryPath))
+
+			// Notes service: the typed surface the console's Notes view uses to READ the
+			// workspace's human-authored notes. Read-only by construction - the contract has no
+			// write RPC - because a note's value is the guarantee that a person wrote it, and a
+			// browser write would put an unattributable author on the one node class nothing in
+			// the repository corroborates. The way in stays `magus notes edit`, in an editor,
+			// committed under the author's name.
+			//
+			// Deliberately NOT in shareGuarded, and here that is not a preference: the private
+			// store is by definition not shared with anyone and may live anywhere on disk, so a
+			// LAN share listener must never be able to reach it. Mounted on the loopback
+			// listener behind the standard bearer guard like the memory service beside it.
+			// Audits READS (WithAuditReads) for the same reason memory does, sharpened by the
+			// private store: this is the only door that serves notes nothing else attributes.
+			notesAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindNotes, trailrpc.WithAuditReads()))
+			notesPath, notesHandler := notesv1connect.NewNotesServiceHandler(noteshandler.NewService(opts.Magus, opts.Config), notesAudit)
+			httpServer.Handle(notesPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, notesHandler))))
+			log.InfoContext(ctx, "[BRIDGE] notes service mounted", slog.String("path", notesPath))
 
 			log.InfoContext(ctx, "[BRIDGE] console mounted", slog.String("addr", addr.String()))
 		}
