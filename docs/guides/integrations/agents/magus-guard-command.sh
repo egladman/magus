@@ -39,7 +39,7 @@
 # (not delivered). It is machine-read by the host-parity gate, which fails the
 # build when a decision or surface exists in the guard contract that some host
 # was never asked about. Keep it true to what HOST_RESPONSE actually renders.
-# magus-guard-template: 3
+# magus-guard-template: 4
 # magus-guard-coverage: schema=1 host=claude-code,codex surface=command deny=model advise=model pass=none
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}` and
@@ -48,6 +48,13 @@
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
 [ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
+# Prefer the workspace's own ./magus over PATH. A repository that builds magus, or pins a
+# newer one than is installed, keeps its RULES in that binary - and an older PATH copy does
+# not fail loudly when it lacks them. It does not recognize the config key that ARMS a rule,
+# warns about an unknown field, and returns pass: silent non-enforcement at exit 0. Measured
+# 2026-08-13, when a write into a declared notes store was allowed by a binary that predated
+# the knowledge.notes key while `magus doctor` reported the guard as fine.
+[ -n "$GUARD_MAGUS_BIN" ] || { [ -x ./magus ] && GUARD_MAGUS_BIN=./magus; }
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 [ -n "$GUARD_UNAVAILABLE_RESPONSE" ] || GUARD_UNAVAILABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard."}}'
 [ -n "$GUARD_FAILED_RESPONSE" ] || GUARD_FAILED_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: the magus binary was found but could not judge this command, so its deny and advise rules are unenforced right now. It is probably too old for the hook subcommand, or cannot load this workspace - run magus hook by hand to see the error, then rebuild or update it to restore the guard."}}'

@@ -18,9 +18,9 @@ hand-edit it.
   tool; read its status/decisions files at session start.
 - Invoke the Skill tool at these moments, before acting - not after something
   breaks: `git commit`/`git add`/`git stash`/`git reset` or reading a diff ->
-  Skill(magus-vcs); about to build/test/lint/generate -> Skill(magus-run);
+  Skill(magus-vcs-hygiene); about to build/test/lint/generate -> Skill(magus-run);
   "what exists / depends on / uses X" -> Skill(magus-query); "how does magus
-  X work" -> Skill(magus-docs).
+  X work" -> Skill(magus-docs-lookup).
 
 ## Commands
 
@@ -306,7 +306,7 @@ deliberately instead:
 - Git is the orchestrator's job: do VCS ops yourself, never delegate git to a
   subagent, and run mutating subagents isolated or serialized. Never a whole-tree
   git op (`stash`/`reset`/`checkout .`/`clean`) to verify a build - it wipes a
-  concurrent agent's untracked work. See the magus-vcs skill.
+  concurrent agent's untracked work. See the magus-vcs-hygiene skill.
 - Code that exists ONLY to keep older data, artifacts, or callers working carries a
   `compat(until: <condition>):` comment, in the shape of the existing
   `optimization:` prefix. Three things, or it is not auditable: what it supports,

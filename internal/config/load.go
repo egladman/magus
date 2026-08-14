@@ -175,6 +175,20 @@ func warnIfConcurrencyHigh(concurrency, numCPU int) {
 	}
 }
 
+// LoadWorkspaceOnly loads the defaults plus ONLY the workspace's own magus.yaml, skipping
+// the user-global, cwd, and environment tiers.
+//
+// It answers "what did THIS repository opt into" rather than [Load]'s "what is in effect
+// here". The distinction matters to any rule that ENFORCES something: a value set once in
+// user-global config is in effect in every workspace on the machine, so acting on the
+// merged value would impose one repository's policy on repositories that never adopted it.
+func LoadWorkspaceOnly(root string) (Config, error) {
+	if root == "" {
+		return Defaults(), nil
+	}
+	return loadDirInto(Defaults(), root)
+}
+
 // loadDirInto looks for magus.yaml or .magus.yaml in dir and, if found,
 // merges it on top of cfg. Returns cfg unchanged when neither file exists.
 // Returns an error when both files exist in the same directory.

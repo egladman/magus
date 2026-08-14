@@ -947,7 +947,7 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
     fs\mkdirAll("gen");
     // The knowledge graph (nodes/links). No dedicated binding for `graph export`, so
     // magus.cmd is the documented escape hatch.
-    final knowledge = magus\cmd("graph", args: ["export", "--static", "-o", "json"], opts: {"quiet": true}).stdout;
+    final knowledge = magus\cmd("graph", args: ["export", "--reproducible", "-o", "json"], opts: {"quiet": true}).stdout;
     fs\writeFile(fs\join("gen", "knowledge-graph.json"), knowledge);
     // The target graph ({definition, projects}), the same bytes as
     // `magus describe graph -o json`, which is what the explorer's target adapter reads.
@@ -961,7 +961,15 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
 // under the `gha` charm; that branch was unreachable (nothing set
 // MAGUS_INSIGHT_OUTPUT_PATH or ran this target in CI) and was removed.
 export fun postflight(ctx: magus\Context, args: [str]) > void !> any {
-    magus\log.info(magus\insight(["report", "--workspace"]).stdout);
+    // A summary built from the typed report rather than the Markdown `magus insight report
+    // --workspace` used to render. This target only ever logged that document locally, so
+    // the counts are what a reader was actually skimming for; the full rendering lives in
+    // the console and the MCP tool, which read the same values.
+    final r = magus\insight([]);
+    magus\log.info("hotspots: {r.hotspots.files.len()} file(s) ranked by churn against complexity");
+    magus\log.info("ownership: {r.ownership.projects.len()} project(s) attributed");
+    magus\log.info("affinity: {r.affinity.pairs.len()} coupled project pair(s)");
+    magus\log.info("volatility: {r.volatility.targets.len()} target(s) with recorded run history");
 }
 
 // Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).

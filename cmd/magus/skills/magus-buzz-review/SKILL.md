@@ -1,12 +1,12 @@
 # Reviewing Buzz code
 
-magus-buzz teaches how to WRITE Buzz. This is for REVIEWING it - a magusfile, a
+magus-buzz-write teaches how to WRITE Buzz. This is for REVIEWING it - a magusfile, a
 spell, or a standalone `.buzz` script - across three lenses run in parallel{{if .Full}},
 the same fan-out-and-merge shape go-review-ultra uses for Go{{end}}.
 
 Do not use this for magusfile/target/spell CONTRACTS: caching, `ctx.needs`,
 wards, op kinds, charms, what makes something a command vs a service. That is
-magus-buzz's territory{{if .Full}} and it already covers it; restating it here would only
+magus-buzz-write's territory{{if .Full}} and it already covers it; restating it here would only
 drift out of sync with it{{end}}. This skill covers the LANGUAGE underneath those
 contracts: is the code idiomatic, is it correct, does it run where the author
 thinks it runs.
@@ -127,7 +127,7 @@ That is the fixture doing its job.
 - **A magusfile carrying logic that wants a test is a finding.**{{if .Full}} A
   magusfile is declarative configuration; a test of it tests your
   configuration, not your logic.{{end}} The fix is moving that logic into a
-  spell or a sibling module - see magus-buzz's "Test what you write".
+  spell or a sibling module - see magus-buzz-write's "Test what you write".
 
 ## Lens: skeptic and correctness
 
@@ -327,8 +327,8 @@ times instead of once{{end}}.
 ## What this skill does not do
 
 - Magusfile/target/spell contracts - caching, `ctx.needs`, wards, charms, what
-  makes an op a service. Use magus-buzz.
+  makes an op a service. Use magus-buzz-write.
 - Write code or apply fixes. Output is a merged findings report.
-- Teach Buzz syntax from scratch. Use magus-buzz for that, and point a reader
+- Teach Buzz syntax from scratch. Use magus-buzz-write for that, and point a reader
   there when a finding needs the "how do I write it correctly" answer rather
   than "here is what's wrong".

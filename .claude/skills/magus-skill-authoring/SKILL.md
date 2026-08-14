@@ -84,7 +84,7 @@ A third permutation costs a constant, not a new markup convention:
 
 The body IS a template, including inside fenced code blocks, so a skill that
 documents `{{ }}` syntax must escape it as a string constant. magus-run
-documents the `-o template` flag and magus-buzz documents mustache; both hit
+documents the `-o template` flag and magus-buzz-write documents mustache; both hit
 this:
 
 ```markdown

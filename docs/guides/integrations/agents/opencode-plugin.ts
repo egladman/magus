@@ -20,7 +20,7 @@
 // context-injection arm. That is what the two declarations below record, and
 // they are machine-read by the host-parity gate - see the longer note in
 // magus-guard-command.sh.
-// magus-guard-template: 3
+// magus-guard-template: 4
 // magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=human pass=none
 // magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=human pass=none
 //
@@ -29,6 +29,7 @@
 // brew, asdf, ~/.local/bin), set GUARD_MAGUS_BIN to an absolute path. That name
 // deliberately avoids the MAGUS_* space, which is magus's own config surface.
 
+import { existsSync } from "node:fs";
 import type { Plugin } from "@opencode-ai/plugin";
 
 /** The verdict schema this plugin understands; a bump means re-read the docs. */
@@ -76,7 +77,10 @@ function argString(args: unknown, keys: readonly string[]): string {
 }
 
 export const MagusGuard: Plugin = async () => {
-  const magus = process.env.GUARD_MAGUS_BIN ?? "magus";
+  // Prefer the workspace's own ./magus over PATH, for the reason spelled out in
+  // magus-guard-command.sh: an older PATH binary does not fail when it lacks a rule, it
+  // fails to recognize the config key that arms the rule and returns pass.
+  const magus = process.env.GUARD_MAGUS_BIN ?? (existsSync("./magus") ? "./magus" : "magus");
 
   /**
    * Runs one `magus hook` invocation and returns its raw stdout, or null when the

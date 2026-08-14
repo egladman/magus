@@ -258,7 +258,7 @@ flowchart LR
         logs["Log Viewer"]
         actv["Activity Trail"]
     end
-    serve["Ephemeral loopback server<br/>graph open --serve (Safari fallback)"]
+    serve["Ephemeral loopback server<br/>graph export --open --serve (Safari fallback)"]
 
     sources["Declared sources<br/>magusfiles, docs, buzz,<br/>SCIP index, git history, CODEOWNERS"]
     gjson["Graph export -o json<br/>console graph demo data<br/>MAGUS.md (routing index)"]
@@ -425,7 +425,7 @@ The four apps ship as one console; each link below opens it on the
 matching app.
 
 - [Dashboard](https://eli.gladman.cc/magus/console/) shows live daemon health, the concurrency pool, running targets, and cache activity.[^app-dashboard]
-- [Graph Explorer](https://eli.gladman.cc/magus/console/) navigates targets, spells, and their dependency graph (`magus graph open`).[^app-graph]
+- [Graph Explorer](https://eli.gladman.cc/magus/console/) navigates targets, spells, and their dependency graph (`magus graph export --open`).[^app-graph]
 - [Log Viewer](https://eli.gladman.cc/magus/console/) reads or streams any past run's captured output (`magus query output <ref> --open`).[^app-logs]
 - [Activity Trail](https://eli.gladman.cc/magus/console/) shows recent MCP calls, agent-command observations, background jobs, and config changes.[^app-activity]
 

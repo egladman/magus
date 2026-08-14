@@ -13,6 +13,23 @@ import (
 // evalFixtureDir holds the rendered permutations the skill-eval harness measures.
 const evalFixtureDir = "../../evals/fixtures"
 
+// updateEvalFixtures re-renders the fixture trees instead of asserting against them.
+//
+// This test is the fixtures' generator, because nothing else can be. `magus agent
+// install` writes one permutation - simple - and the harness runs the two as
+// separate working directories, so the full tree is not recoverable from an
+// install. Nor is it recoverable from the simple tree's <name>-full twins: the
+// twin carries the right BODY under the wrong name, with a description that
+// announces itself as a twin, so folding twins onto plain names produces
+// something that looks right until you read the frontmatter. The same call the
+// assertion compares against therefore writes the file.
+//
+// An environment variable rather than a test flag, and that is forced: the
+// go-test op runs `go test ./...`, so a forwarded `-update-...` flag reaches
+// every package's test binary and every one of them rejects it as undefined.
+// The whole run fails before this test can act on it.
+func updateEvalFixtures() bool { return os.Getenv("MAGUS_UPDATE_EVAL_FIXTURES") != "" }
+
 // TestEvalFixturesMatchTheEmbeddedSkills gates the one generated tree in this
 // repo that nothing regenerated.
 //
@@ -21,80 +38,74 @@ const evalFixtureDir = "../../evals/fixtures"
 // the evals project, not as outputs of any target, so no generate step rewrites
 // them and no drift check looked at them - and they went stale exactly the way
 // an ungated generated tree does. Found on main: the committed full fixture for
-// magus-buzz still advertised `magus buzz --workspace`, a flag that had been
+// magus-buzz-write still advertised `magus buzz --workspace`, a flag that had been
 // removed, because a skill edit landed without a re-render.
 //
 // A stale fixture is worse here than in most places. The harness exists to
 // answer whether a permutation changes a model's behavior; measuring text the
 // binary no longer produces answers that question about a skill nobody ships.
 //
-// This compares against exactly what the catalog renders for each skill and
-// variant - same render, same stamp - so the fix when it fails is the install
-// command in the message rather than a hand edit. Deliberately the CANONICAL
-// per-skill render (EmbeddedSkills + Render), not RenderedSkills' install-time
-// list: a simple install's <name>-full twin is byte-identical to the full
-// fixture already covered here under its plain name, so fixturing it again
-// under a second name would duplicate maintenance without adding any new
-// behavior for the eval harness to measure.
+// Each tree is compared against RenderedSkills for its variant - what an install
+// of that variant would write, twins and all - rather than a per-skill render.
+// The two trees are working directories a model is pointed at, so what has to be
+// faithful is the whole directory, including the fact that a simple install
+// leaves a <name>-full twin beside each skill and a full install does not.
 func TestEvalFixturesMatchTheEmbeddedSkills(t *testing.T) {
-	defs, err := agentSkills.EmbeddedSkills()
-	require.NoError(t, err)
-
 	for _, v := range []agent.Variant{agent.VariantFull, agent.VariantSimple} {
-		skills := make([]agent.AgentSkill, 0, len(defs))
-		for _, def := range defs {
-			skill, err := agentSkills.Render(def, v)
-			require.NoError(t, err)
-			skills = append(skills, skill)
-		}
+		skills, err := agentSkills.RenderedSkills(v)
+		require.NoError(t, err)
 
+		shipped := make(map[string]bool, len(skills))
 		for _, skill := range skills {
+			shipped[skill.Name] = true
+			// A twin is stamped with ITS variant, not the tree's: inside a simple
+			// install the twin is the full body and says so.
+			want := agentSkills.StampSkill(agentSkills.RenderSkill(skill), skill.Variant)
 			path := filepath.Join(evalFixtureDir, v.String(), ".claude", "skills", skill.Name, "SKILL.md")
-			got, err := os.ReadFile(path)
-			if !assert.NoErrorf(t, err, "%s permutation of %s has no committed fixture; re-render with:\n"+
-				"  magus agent install --dir evals/fixtures/%s .claude/skills --force%s",
-				v, skill.Name, v, simpleFlag(v)) {
+			if updateEvalFixtures() {
+				require.NoError(t, os.MkdirAll(filepath.Dir(path), 0o755))
+				require.NoError(t, os.WriteFile(path, want, 0o644))
 				continue
 			}
-			want := agentSkills.StampSkill(agentSkills.RenderSkill(skill), v)
+			got, err := os.ReadFile(path)
+			if !assert.NoErrorf(t, err, "%s permutation of %s has no committed fixture; re-render with:\n%s",
+				v, skill.Name, rerenderHint()) {
+				continue
+			}
 			assert.Equalf(t, string(want), string(got),
 				"the committed %s fixture for %s is not what this binary renders.\n"+
-					"Re-render rather than hand-editing it:\n"+
-					"  magus agent install --dir evals/fixtures/%s .claude/skills --force%s",
-				v, skill.Name, v, simpleFlag(v))
+					"Re-render rather than hand-editing it:\n%s",
+				v, skill.Name, rerenderHint())
 		}
 
 		// The reverse direction: a skill that was renamed or dropped leaves its
 		// fixture behind, and the harness would go on measuring a body that no
 		// longer ships.
-		shipped := make(map[string]bool, len(skills))
-		for _, s := range skills {
-			shipped[s.Name] = true
-		}
 		entries, err := os.ReadDir(filepath.Join(evalFixtureDir, v.String(), ".claude", "skills"))
 		require.NoError(t, err)
 		for _, e := range entries {
-			if !e.IsDir() {
+			if !e.IsDir() || shipped[e.Name()] {
 				continue
 			}
-			// A simple install also writes each skill's <name>-full twin, so a
-			// fixture tree re-rendered with the command in the messages above
-			// legitimately holds them. They are byte-identical to the full
-			// fixtures already checked under the plain name, so they are
-			// tolerated here rather than fixtured and compared twice.
-			if agent.IsFullTwinName(e.Name()) {
+			stale := filepath.Join(evalFixtureDir, v.String(), ".claude", "skills", e.Name())
+			if updateEvalFixtures() {
+				// The generator owns its deletions too. A rename that only ADDED the
+				// new tree would leave the old skill in the corpus, and nothing would
+				// report it: a drift check compares what a generator declares against
+				// what it wrote, and an extra directory is in neither set.
+				require.NoError(t, os.RemoveAll(stale))
 				continue
 			}
-			assert.Truef(t, shipped[e.Name()],
-				"evals/fixtures/%s holds %s, which this binary does not ship; delete the directory or restore the skill",
-				v, e.Name())
+			assert.Failf(t, "stale eval fixture",
+				"evals/fixtures/%s holds %s, which this binary does not ship; re-render with:\n%s",
+				v, e.Name(), rerenderHint())
 		}
 	}
 }
 
-func simpleFlag(v agent.Variant) string {
-	if v.Simple() {
-		return " --simple"
-	}
-	return ""
+// rerenderHint names the command that rebuilds the fixture trees. Both, always:
+// they are one corpus rendered two ways, and refreshing half of it is how the
+// pair stops being comparable.
+func rerenderHint() string {
+	return "  MAGUS_UPDATE_EVAL_FIXTURES=1 magus run go::go-test . -- -run TestEvalFixturesMatchTheEmbeddedSkills"
 }

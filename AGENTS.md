@@ -13,14 +13,14 @@ If the magus-* skills are installed (.claude/skills/, .opencode/skills/, or
 .agents/skills/), load the matching skill BEFORE acting - at the moment, not
 after something breaks:
 
-| before you                                                 | load          |
-| ---------------------------------------------------------- | ------------- |
-| git commit, git add, git stash/reset, read a diff          | magus-vcs     |
-| build, test, lint, format, or generate anything            | magus-run     |
-| grep for what exists, depends on, or uses X                | magus-query   |
-| answer "how does magus X" from memory                      | magus-docs    |
-| summarize what merged or landed recently                   | magus-changes |
-| edit an installed magus-* skill, or write a workspace rule | magus-adapt   |
+| before you                                                 | load                  |
+| ---------------------------------------------------------- | --------------------- |
+| git commit, git add, git stash/reset, read a diff          | magus-vcs-hygiene     |
+| build, test, lint, format, or generate anything            | magus-run             |
+| grep for what exists, depends on, or uses X                | magus-query           |
+| answer "how does magus X" from memory                      | magus-docs-lookup     |
+| summarize what merged or landed recently                   | magus-change-summary  |
+| edit an installed magus-* skill, or write a workspace rule | magus-workspace-rules |
 
 Query before grepping. The committed MAGUS.md lists every project, target,
 and the graph's routing table.
@@ -76,7 +76,7 @@ drift to `magus graph verify` and is erased by the next `magus agent install
 --force`. Rules specific to THIS workspace go in a local magus-local-development skill
 beside them, which install and verify both leave alone. If one exists, read it
 alongside the shipped skills; it overrides nothing, so report a conflict rather
-than picking a side. The magus-adapt skill carries the method.
+than picking a side. The magus-workspace-rules skill carries the method.
 
 The optional handoff journal (`magus memory` / `magus_memory`) is user-owned,
 outside the repo, and shared across worktrees. It is not automatic memory:

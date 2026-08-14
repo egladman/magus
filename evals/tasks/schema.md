@@ -6,13 +6,13 @@ predicate names from `evals/lib/constraints.mjs` with their arguments.
 
 ```yaml
 id: vcs-classify-before-reading
-skill: magus-vcs
+skill: magus-vcs-hygiene
 smoke: true
 prompt: |
   Tell me what changed on this branch.
 constraints:
   - fn: usedSkill
-    args: [magus-vcs]
+    args: [magus-vcs-hygiene]
   - fn: classifiedBeforeReadingDiff
     args: []
   - fn: neverRan

@@ -2,19 +2,18 @@
 title: magus-buzz-review
 description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance."
 tags: [agents, skills, magus-buzz-review]
-skill_full_bytes: 20249
-skill_simple_bytes: 15125
+skill_full_bytes: 20279
+skill_simple_bytes: 15155
 ---
 
 # magus-buzz-review
 
-Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance. Use when asked to review, audit, or critique a .buzz file or change, or when a finding needs to say whether it holds anywhere Buzz runs (UPSTREAM), only under gopherbuzz (GOPHERBUZZ), or runs here but not upstream (PORTABILITY). Fans out the three lenses via the Agent tool and merges the results, the same shape go-review-ultra uses for Go. Does NOT cover magusfile/target/spell contracts - caching, ctx.needs, wards, charms; use magus-buzz for those.
+Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance. Use when asked to review, audit, or critique a .buzz file or change, or when a finding needs to say whether it holds anywhere Buzz runs (UPSTREAM), only under gopherbuzz (GOPHERBUZZ), or runs here but not upstream (PORTABILITY). Fans out the three lenses via the Agent tool and merges the results, the same shape go-review-ultra uses for Go. Does NOT cover magusfile/target/spell contracts - caching, ctx.needs, wards, charms; use magus-buzz-write for those.
 
 Install it, rather than copying from this page:
 
 ```sh
-magus agent install .claude/skills            # the full form below
-magus agent install .claude/skills --simple   # the short form below
+magus agent install .claude/skills   # writes both forms below
 ```
 
 An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
@@ -30,25 +29,25 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `e6100e60aac2` |
+| `skill-content` | `99f5ac7ac873` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
 
 ## Full form
 
-The default: every mechanical step spelled out, plus the rationale for each.
+Every mechanical step spelled out, plus the rationale for each. Installed as the `<name>-full` twin: loaded by name rather than always, so a reader who needs the long form can ask for it without every session carrying it.
 
 ````markdown
 # Reviewing Buzz code
 
-magus-buzz teaches how to WRITE Buzz. This is for REVIEWING it - a magusfile, a
+magus-buzz-write teaches how to WRITE Buzz. This is for REVIEWING it - a magusfile, a
 spell, or a standalone `.buzz` script - across three lenses run in parallel,
 the same fan-out-and-merge shape go-review-ultra uses for Go.
 
 Do not use this for magusfile/target/spell CONTRACTS: caching, `ctx.needs`,
 wards, op kinds, charms, what makes something a command vs a service. That is
-magus-buzz's territory and it already covers it; restating it here would only
+magus-buzz-write's territory and it already covers it; restating it here would only
 drift out of sync with it. This skill covers the LANGUAGE underneath those
 contracts: is the code idiomatic, is it correct, does it run where the author
 thinks it runs.
@@ -169,7 +168,7 @@ What reads as Buzz house style versus what merely parses.
 - **A magusfile carrying logic that wants a test is a finding.** A
   magusfile is declarative configuration; a test of it tests your
   configuration, not your logic. The fix is moving that logic into a
-  spell or a sibling module - see magus-buzz's "Test what you write".
+  spell or a sibling module - see magus-buzz-write's "Test what you write".
 
 ## Lens: skeptic and correctness
 
@@ -367,16 +366,16 @@ times instead of once.
 ## What this skill does not do
 
 - Magusfile/target/spell contracts - caching, `ctx.needs`, wards, charms, what
-  makes an op a service. Use magus-buzz.
+  makes an op a service. Use magus-buzz-write.
 - Write code or apply fixes. Output is a merged findings report.
-- Teach Buzz syntax from scratch. Use magus-buzz for that, and point a reader
+- Teach Buzz syntax from scratch. Use magus-buzz-write for that, and point a reader
   there when a finding needs the "how do I write it correctly" answer rather
   than "here is what's wrong".
 ````
 
-## Short form (`--simple`)
+## Short form
 
-The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for when to prefer which.
+The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for the difference.
 
 <details>
 <summary>Show the short form</summary>
@@ -384,12 +383,12 @@ The enumeration dropped, the judgment kept - for the most capable readers, not t
 ````markdown
 # Reviewing Buzz code
 
-magus-buzz teaches how to WRITE Buzz. This is for REVIEWING it - a magusfile, a
+magus-buzz-write teaches how to WRITE Buzz. This is for REVIEWING it - a magusfile, a
 spell, or a standalone `.buzz` script - across three lenses run in parallel.
 
 Do not use this for magusfile/target/spell CONTRACTS: caching, `ctx.needs`,
 wards, op kinds, charms, what makes something a command vs a service. That is
-magus-buzz's territory. This skill covers the LANGUAGE underneath those
+magus-buzz-write's territory. This skill covers the LANGUAGE underneath those
 contracts: is the code idiomatic, is it correct, does it run where the author
 thinks it runs.
 
@@ -488,7 +487,7 @@ That is the fixture doing its job.
   literal was clearly intended. Authority: UPSTREAM (both forms and the
   distinction are upstream Buzz).
 - **A magusfile carrying logic that wants a test is a finding.** The fix is moving that logic into a
-  spell or a sibling module - see magus-buzz's "Test what you write".
+  spell or a sibling module - see magus-buzz-write's "Test what you write".
 
 ## Lens: skeptic and correctness
 
@@ -637,9 +636,9 @@ scope open-ended.
 ## What this skill does not do
 
 - Magusfile/target/spell contracts - caching, `ctx.needs`, wards, charms, what
-  makes an op a service. Use magus-buzz.
+  makes an op a service. Use magus-buzz-write.
 - Write code or apply fixes. Output is a merged findings report.
-- Teach Buzz syntax from scratch. Use magus-buzz for that, and point a reader
+- Teach Buzz syntax from scratch. Use magus-buzz-write for that, and point a reader
   there when a finding needs the "how do I write it correctly" answer rather
   than "here is what's wrong".
 ````

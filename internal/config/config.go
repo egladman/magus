@@ -421,6 +421,55 @@ type Knowledge struct {
 	// one-shot CLI never auto-indexes); throttled and idle-gated so it never delays
 	// your own work. Set disabled to opt out.
 	SymbolIndexing SymbolIndexingConfig `json:"symbol_indexing" yaml:"symbol_indexing"`
+	// Notes declares where this workspace keeps its human-authored notes (see
+	// NotesConfig). Empty (the default) means no notes store at all and every part of the
+	// feature is inert.
+	Notes NotesConfig `json:"notes" yaml:"notes"`
+}
+
+// NotesConfig declares where human-authored notes live. There are two locations because
+// there are two audiences, and the pair is one half of a 2x2 the whole knowledge surface
+// turns on:
+//
+//	                    the team sees it        only you see it
+//	a person wrote it   notes.shared            notes.private
+//	an agent wrote it   (deliberately nothing)  magus memory
+//
+// The empty cell is the design, not a gap: an agent's derived claims are never pushed at
+// the team, which is the same rule the guard enforces by refusing agent writes to either
+// notes location.
+//
+// A note is prose a PERSON wrote about the code, anchored to graph entities but derived
+// from none of them - the one node class magus cannot regenerate, because its only
+// provenance is the author. Both locations are DECLARED rather than assumed: magus judges
+// writes to them, and a rule fired on a guessed location would act on a workspace that
+// never opted in.
+type NotesConfig struct {
+	// Shared is the workspace-relative directory holding notes the TEAM has: committed,
+	// so git attributes each one to whoever wrote it and review sees every change.
+	// Empty disables it entirely - no shard, no verification, no guard rule.
+	//
+	// It must stay inside the workspace. That is not a restriction so much as what the
+	// word means here: a note outside the checkout is not shared with anyone.
+	Shared string `json:"shared" yaml:"shared"`
+	// Private is a SECOND notes location, yours rather than the team's, and it may sit
+	// anywhere on disk - a vault, a scratch directory, somewhere outside any repository.
+	//
+	// It is a separate key rather than a looser Path because the two carry different
+	// TRUST, and one key would have silently collapsed the difference. A note under Path
+	// is committed, so git attributes it, review sees it, and the shard holding it is safe
+	// to share. A personal note has none of that: no attribution is possible outside the
+	// repo, nobody reviewed it, and it is on one machine. Presenting the two identically
+	// would leave a reader unable to tell "the team agreed this" from "someone wrote this
+	// in their vault".
+	//
+	// Consequences that follow from that and are enforced rather than documented: its
+	// shard is never exported to the remote cache (the same rule @memory lives under, for
+	// the same reason - private content must not leak into a shared cache), and its nodes
+	// carry a scope attr so the distinction is visible wherever they surface.
+	//
+	// Agents still may not write here. That is the point: it is the vault case.
+	Private string `json:"private" yaml:"private"`
 }
 
 // SymbolIndexingConfig tunes daemon background symbol auto-indexing (see

@@ -79,20 +79,20 @@ naming a destination, not writing new instructions.
   `magus affected ci` as the final gate before handing work back; spell-op
   granularity (`go::go-test`) when one op is genuinely needed; fetching a
   failure's captured output by ref.
-- `magus-vcs`: triage changed files against declared target outputs -
+- `magus-vcs-hygiene`: triage changed files against declared target outputs -
   generated files are regenerated, never hand-edited, never worth reading a
   diff of, and committed alongside the sources that produced them.
-- `magus-architecture`: ground refactoring proposals in graph evidence -
+- `magus-architecture-review`: ground refactoring proposals in graph evidence -
   hotspots, affinity (undeclared coupling), blast radius, symbol fan-in,
   CODEOWNERS - and verify impact with `magus graph diff`.
-- `magus-memory`: a user-owned handoff journal over CLI, MCP, and console. Each
+- `magus-handoff-journal`: a user-owned handoff journal over CLI, MCP, and console. Each
   entry points to something magus can reopen; it is not automatic agent memory.
   Use named decisions and plans when a later person needs the why, then verify
   stale or malformed entries instead of silently carrying them forward.
-- `magus-docs`: navigate magus's own documentation to answer a how-does-magus-do-X
+- `magus-docs-lookup`: navigate magus's own documentation to answer a how-does-magus-do-X
   question instead of guessing - the doc URL and section scheme, the in-page
   navigation axes, and when to reach for it over the workspace graph.
-- `magus-adapt`: put workspace-specific rules somewhere that survives - a local
+- `magus-workspace-rules`: put workspace-specific rules somewhere that survives - a local
   skill beside the installed set, never an edit to an installed one - with the
   stamp format that keeps a rule's evidence and expiry attached to it, and the
   test for when a rule has outgrown one workspace and belongs upstream.
@@ -116,7 +116,7 @@ duplicated line in every session:
   a name magus does not ship - `magus-local-development` by convention. `magus agent
   install` writes only the names it ships and `magus graph verify` grades only
   those, so a local skill is neither overwritten nor reported as drift, and no
-  configuration is needed to make a host find it. The `magus-adapt` skill
+  configuration is needed to make a host find it. The `magus-workspace-rules` skill
   carries the stamp format and the rest of the method; when a local rule turns
   out to be true everywhere, it graduates upstream as a pull request against
   `cmd/magus/skills/`, or as an issue quoting the stamped rule.
@@ -223,8 +223,8 @@ So `--simple` also writes an always-full twin beside each skill, named
 `<skill>-full`:
 
 ```text
-.claude/skills/magus-vcs/SKILL.md        # the simple form
-.claude/skills/magus-vcs-full/SKILL.md   # the full form, byte-identical to a default install
+.claude/skills/magus-vcs-hygiene/SKILL.md        # the simple form
+.claude/skills/magus-vcs-hygiene-full/SKILL.md   # the full form, byte-identical to a default install
 ```
 
 Point a delegated or smaller model at the `-full` name and it gets exactly what
@@ -434,13 +434,43 @@ yours. One that arrived in a cloned repository is a stranger's code your host
 may run, the same standing risk as that repo's `Makefile` or git hooks, and
 older than agents. Read it before you run it.
 
-A command is denied on either of two independent triggers. It cannot be UNDONE,
-or it has an EXACT WORKING EQUIVALENT. The second is not about danger: a raw
-`go test` is harmless and reversible, and it is denied because magus does the
-same thing plus caching, sandboxing, and affected tracking, so the deny costs the
-caller nothing. Where no equivalent exists the rule must only advise - magus has
-no raw-text search, which is why a repo-wide `grep` is explained rather than
-blocked, and why an earlier attempt to deny it had to be reverted.
+A call is denied on any of three independent triggers. It cannot be UNDONE, it
+has an EXACT WORKING EQUIVALENT, or it breaks a PROVENANCE GUARANTEE.
+
+The second is not about danger: a raw `go test` is harmless and reversible, and
+it is denied because magus does the same thing plus caching, sandboxing, and
+affected tracking, so the deny costs the caller nothing. Where no equivalent
+exists the rule must only advise - magus has no raw-text search, which is why a
+repo-wide `grep` is explained rather than blocked, and why an earlier attempt to
+deny it had to be reverted.
+
+The third exists for exactly one rule and was added rather than smuggled in,
+because a doctrine that held at two triggers should not grow a third quietly.
+The two above judge the WRITE - whether it can be taken back, whether it was
+redundant. This one judges what the write does to the CORPUS: **the artifact's
+value depends on a guarantee about who authored it, and undoing the write does
+not restore the guarantee.**
+
+Its only instance is a write into a declared notes store. A note is the one
+thing in the knowledge graph that is not derived from the workspace - a doc
+comes from markdown, a rationale from a comment, a symbol from an index, an
+author from git, and deleting the graph and rebuilding recovers every one of
+them. A note's content originates with a person, nothing in the repository
+corroborates it later, and no rebuild recovers it. So one agent-written note
+does not damage that note; it damages a reader's ability to trust ANY note
+without checking blame, and a note of uncertain authorship is not a weaker note
+but a worthless one.
+
+Note what this trigger deliberately does NOT license. It is not "the file is
+important", and it is not a general provenance rule: source files carry
+authorship too, and writing them is the job. It applies only where the artifact
+has no other corroboration, which is what makes authorship its entire value.
+
+Two limits stated plainly. The guard is not a security boundary, so this is a
+habit rail and not a guarantee - the gate that holds is a check on the
+pull-request path. And on a host with no pre-write file hook the deny arrives
+after the write has landed; Cursor's template records that as `deny=human`
+rather than claiming a parity it does not have.
 
 - `deny`, with a `reason` written for the model:
   - destructive whole-tree VCS operations (`git stash`, `git reset --hard`,
@@ -466,6 +496,28 @@ blocked, and why an earlier attempt to deny it had to be reverted.
     status with the last stage's, so `magus affected ci | tail` reports tail's
     success and a failing gate reads as exit 0. `magus query output <ref>` is the
     one exemption - a raw captured tool log has no schema to project.
+  - writing into the workspace's declared notes store
+    (`knowledge.notes.shared`). Notes are human-authored by design: agents read
+    them and never write them, for the provenance reason above. The reason names
+    both alternatives - `magus memory put` for a workspace decision an agent MAY
+    record, and `magus notes edit` for a person to write the note themselves.
+    The opt-in is the key committed to the repository's own `magus.yaml`, and
+    the rule is armed from that moment - before the store holds a single note,
+    because otherwise an agent could author the store's FIRST note and the deny
+    would switch on only afterwards. A declaration made anywhere else (an
+    explicit `--config`, user-global config) is in effect in every workspace on
+    the machine, so it arms this rule only where the store already exists;
+    otherwise a setting made once would deny writes in repositories that never
+    opted in.
+  - an IN-PLACE stream edit (`sed -i`, `sed --in-place`). The flag is not
+    portable and the two spellings destroy each other's work: GNU reads `sed -i
+'s/x/y/' f` as an edit, BSD and macOS read that same script as the backup
+    suffix, and the portable-looking `sed -i '' ...` makes GNU edit nothing. The
+    command that worked where it was written mangles the file on the next
+    machine, and it does it by writing, so the damage lands before anyone reads
+    a diff. Every host driving this guard has a structured editor tool that
+    applies an exact replacement and reports what changed. Reading with sed is
+    untouched; only `-i` is refused.
   - running magus from a COPY of the workspace in a temp or scratchpad directory
     (`cd /tmp/... && magus ...`, including via a variable assigned earlier on the
     same line). The verdict would describe a tree nobody ships: generated files
@@ -487,12 +539,16 @@ blocked, and why an earlier attempt to deny it had to be reverted.
     runs.)
 - `pass`: everything else.
 
-`magus hook --path <file>` is the one rule that is not a heuristic. It
-classifies the path against every target's DECLARED outputs, so it knows
-definitively which files a target regenerates. It ADVISES rather than blocks -
-see the rule above - and says nothing on any uncertainty, since an advisory
-fired on a guess trains the reader to ignore it. Wire it to your host's
-file-editing tool, not its shell tool.
+`magus hook --path <file>` judges a file path rather than a command. Two of its
+rules are definitive rather than heuristic, because both read DECLARATIONS: the
+generated-output rule classifies the path against every target's declared
+outputs, and the notes rule against the declared notes store. The first
+ADVISES, because a hand-edited generated file is wasteful rather than
+destructive; the second DENIES, on the provenance trigger above. Both say
+nothing on any uncertainty,
+since a rule fired on a guess trains the reader to ignore it, and a DENY fired
+on a guess blocks real work. Wire this to your host's file-editing tool, not its
+shell tool.
 
 That verdict is the whole contract. The command arrives however your host can
 produce it: as arguments, as raw stdin, or extracted from a JSON event on
@@ -605,11 +661,17 @@ binary, and `filePath` is the field its edit tools carry. `opencode debug config
 confirms a plugin in `~/.config/opencode/plugins/` is loaded.
 
 Cursor has no pre-write file hook - its documented events are `beforeReadFile`
-(blocks) and `afterFileEdit` (fires after the write) - and under this rule that
-no longer matters. The declared-output rule only ever explains, so reporting
-after the write is the intended behavior on every host, not a Cursor concession.
-What differs between hosts is the CHANNEL the explanation travels on: injected
+(blocks) and `afterFileEdit` (fires after the write). For an ADVISE that costs
+nothing: the declared-output rule only ever explains, so reporting after the
+write is the intended behavior on every host, not a Cursor concession, and what
+differs between hosts is only the CHANNEL the explanation travels on - injected
 context where the host has one, stderr prose where it does not.
+
+For a DENY on the path surface it costs the block itself. `afterFileEdit` fires
+once the write has landed, so Cursor can report the verdict to the person but
+cannot prevent the edit. That is a real coverage gap rather than a channel
+difference, and the template records it as `deny=human` instead of claiming a
+parity Cursor does not have.
 
 Cursor did shape one thing genuinely: its `advise` on a shell command collapses
 to a plain allow, because it delivers `agent_message` only on a denial. Those
@@ -665,7 +727,7 @@ one you do not.
         "hooks": [
           {
             "type": "command",
-            "command": "MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; [ -x \"$MAGUS_BIN\" ] || exit 0; jq -r '.tool_input.file_path' | \"$MAGUS_BIN\" hook --path -o 'template={{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{end}}'",
+            "command": "MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; [ -x \"$MAGUS_BIN\" ] || exit 0; jq -r '.tool_input.file_path' | \"$MAGUS_BIN\" hook --path -o 'template={{if eq .decision \"deny\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"permissionDecision\":\"deny\",\"permissionDecisionReason\":{{toJson .reason}}}}{{else if eq .decision \"advise\"}}{\"hookSpecificOutput\":{\"hookEventName\":\"PreToolUse\",\"additionalContext\":{{toJson .context}}}}{{end}}'",
             "timeout": 10
           }
         ]
@@ -676,7 +738,12 @@ one you do not.
 ```
 
 The template renders the host's response dialect and emits nothing on a `pass`.
-The `--path` hook only ever denies, so it needs no `advise` arm.
+Both matchers carry both arms. That is not symmetry for its own sake: the
+`--path` config above previously rendered only the deny arm, so every advisory
+it produced - the declared-output rule included - was silently dropped by any
+config copied from here, while the shipped `magus-guard-path.sh` had the
+opposite gap and dropped denials. A template missing an arm does not fail
+loudly; it renders empty, which every host reads as allow.
 
 ## Hook templates
 
@@ -779,7 +846,7 @@ overrides and execs it, so there is one implementation to reason about.
 # (not delivered). It is machine-read by the host-parity gate, which fails the
 # build when a decision or surface exists in the guard contract that some host
 # was never asked about. Keep it true to what HOST_RESPONSE actually renders.
-# magus-guard-template: 3
+# magus-guard-template: 4
 # magus-guard-coverage: schema=1 host=claude-code,codex surface=command deny=model advise=model pass=none
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}` and
@@ -788,6 +855,7 @@ overrides and execs it, so there is one implementation to reason about.
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
 [ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
+[ -n "$GUARD_MAGUS_BIN" ] || { [ -x ./magus ] && GUARD_MAGUS_BIN=./magus; }
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 [ -n "$GUARD_UNAVAILABLE_RESPONSE" ] || GUARD_UNAVAILABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard."}}'
 [ -n "$GUARD_FAILED_RESPONSE" ] || GUARD_FAILED_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: the magus binary was found but could not judge this command, so its deny and advise rules are unenforced right now. It is probably too old for the hook subcommand, or cannot load this workspace - run magus hook by hand to see the error, then rebuild or update it to restore the guard."}}'
@@ -886,7 +954,7 @@ editing a generated file is wasteful, not destructive.
 # surface advises and never denies, so HOST_RESPONSE below renders only the
 # advise arm. If magus ever denies on this surface, this file drops it, and the
 # gate is what turns that into a build failure rather than a silent gap.
-# magus-guard-template: 3
+# magus-guard-template: 4
 # magus-guard-coverage: schema=1 host=claude-code,codex surface=path deny=none advise=model pass=none
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}`
@@ -894,7 +962,8 @@ editing a generated file is wasteful, not destructive.
 [ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.file_path'
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
-[ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
+[ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
+[ -n "$GUARD_MAGUS_BIN" ] || { [ -x ./magus ] && GUARD_MAGUS_BIN=./magus; }
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
 if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
@@ -1019,10 +1088,11 @@ needing three files to install a guard is how a guard ends up not installed.
 # the two lines say exactly where: an advise on a shell command is delivered
 # nowhere (Cursor sends nothing on an allow), and an advise on a file write
 # reaches the person via stderr but never the model.
-# magus-guard-template: 3
+# magus-guard-template: 4
 # magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=none pass=none
 # magus-guard-coverage: schema=1 host=cursor surface=path deny=none advise=human pass=none
 
+[ -n "$GUARD_MAGUS_BIN" ] || { [ -x ./magus ] && GUARD_MAGUS_BIN=./magus; }
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
 event=$(cat)
@@ -1033,16 +1103,19 @@ case "$event" in
     if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
         exit 0
     fi
-    # -o name prints the bare decision word, which is all this needs. magus
-    # re-roots the absolute path Cursor sends onto the workspace itself.
-    verdict=$(printf '%s' "$event" | jq -r '.file_path' | "$GUARD_MAGUS_BIN" hook --path --agent-name cursor -o name 2>/dev/null)
-    [ "$verdict" = "advise" ] || exit 0
+    # Ask for the MESSAGE, not the bare decision word. Several rules judge this
+    # surface now, so a hardcoded explanation here would report the wrong one -
+    # it used to say "that file is a DECLARED OUTPUT" whatever had actually
+    # fired. The template renders the deny reason or the advise context, and
+    # nothing at all for a pass. magus re-roots the absolute path Cursor sends
+    # onto the workspace itself.
+    verdict=$(printf '%s' "$event" | jq -r '.file_path' | "$GUARD_MAGUS_BIN" hook --path --agent-name cursor \
+        -o 'template={{if eq .decision "deny"}}{{.reason}}{{else if eq .decision "advise"}}{{.context}}{{end}}' 2>/dev/null)
+    [ -n "$verdict" ] || exit 0
     # Cursor surfaces a non-blocking hook's stderr, so the message goes there as
-    # prose rather than as a verdict it would not read.
-    printf '%s\n' \
-        "magus: that file is a DECLARED OUTPUT of a magus target - it is generated." \
-        "The edit you just made will be overwritten by the next run of its producing target." \
-        "Change the SOURCE instead, then regenerate and commit both together." \
+    # prose rather than as a verdict it would not read. A deny cannot block here
+    # - afterFileEdit fires after the write - so it is reported as what it is.
+    printf '%s\n' "magus: $verdict" \
         "Cursor has no pre-write hook, so this could only be reported after the fact." >&2
     exit 0
     ;;
@@ -1097,7 +1170,7 @@ Save to `~/.config/opencode/plugins/` or `.opencode/plugins/`; confirm with `ope
 // context-injection arm. That is what the two declarations below record, and
 // they are machine-read by the host-parity gate - see the longer note in
 // magus-guard-command.sh.
-// magus-guard-template: 3
+// magus-guard-template: 4
 // magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=human pass=none
 // magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=human pass=none
 //
@@ -1106,6 +1179,7 @@ Save to `~/.config/opencode/plugins/` or `.opencode/plugins/`; confirm with `ope
 // brew, asdf, ~/.local/bin), set GUARD_MAGUS_BIN to an absolute path. That name
 // deliberately avoids the MAGUS_* space, which is magus's own config surface.
 
+import { existsSync } from "node:fs";
 import type { Plugin } from "@opencode-ai/plugin";
 
 /** The verdict schema this plugin understands; a bump means re-read the docs. */
@@ -1153,7 +1227,7 @@ function argString(args: unknown, keys: readonly string[]): string {
 }
 
 export const MagusGuard: Plugin = async () => {
-  const magus = process.env.GUARD_MAGUS_BIN ?? "magus";
+  const magus = process.env.GUARD_MAGUS_BIN ?? (existsSync("./magus") ? "./magus" : "magus");
 
   /**
    * Runs one `magus hook` invocation and returns its raw stdout, or null when the

@@ -17,7 +17,7 @@ import (
 // TestLocalSkillNameIsReserved keeps magus out of the one name a workspace is
 // told it owns.
 //
-// The magus-adapt skill teaches workspaces to put their own rules in a skill
+// The magus-workspace-rules skill teaches workspaces to put their own rules in a skill
 // magus does not ship, and names magus-local-development as the convention. Shipping a
 // skill by that name later would not conflict loudly: install --force writes
 // the shipped body straight over the workspace's file, on every machine, at
@@ -83,6 +83,64 @@ func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 	stale := strings.Replace(string(body), "skill-content: "+catalog.contentDigest, "skill-content: 000000000000", 1)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".agents/skills", anchorSkillRel), []byte(stale), 0o644))
 	assert.True(t, catalog.CheckStatuses(dir)[0].Stale)
+}
+
+// TestStaleSkillDirsReportsAndPruneRemovesOnlyWhatMagusWrote pins the deletion half of the
+// install contract, its opt-in, and the limit on it.
+//
+// Renaming a skill used to leave the old directory installed forever - still
+// stamped, still loaded by the host, still teaching whatever it said the day it
+// was orphaned - because install owned its writes and nothing owned its
+// deletions. Pruning closes that. The stamp is what keeps it safe: a
+// hand-authored skill sits in the same folder (magus-skill-authoring here, a
+// workspace's own magus-local-development in a consuming repo) and is not
+// magus's to delete no matter how absent it is from the catalog.
+func TestStaleSkillDirsReportsAndPruneRemovesOnlyWhatMagusWrote(t *testing.T) {
+	catalog := testCatalog(t)
+	dir := t.TempDir()
+	dest := ".agents/skills"
+	_, err := catalog.WriteSkillTree(dir, dest, false, VariantSimple)
+	require.NoError(t, err)
+
+	// An orphan from an earlier release: magus wrote it, so magus may remove it.
+	orphan := filepath.Join(dir, dest, "magus-retired")
+	require.NoError(t, os.MkdirAll(orphan, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(orphan, "SKILL.md"),
+		catalog.StampSkill([]byte("---\nname: magus-retired\n---\n\n# gone\n"), VariantSimple), 0o644))
+
+	// A hand-authored skill beside it, and a directory that is not a skill at all.
+	handAuthored := filepath.Join(dir, dest, "magus-local-development")
+	require.NoError(t, os.MkdirAll(handAuthored, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(handAuthored, "SKILL.md"),
+		[]byte("---\nname: magus-local-development\n---\n\n# local rules\n"), 0o644))
+	notASkill := filepath.Join(dir, dest, "notes")
+	require.NoError(t, os.MkdirAll(notASkill, 0o755))
+
+	// Detection first, and it must not delete: an install that did not ask for a
+	// prune still reports what is stale, so the orphan stays visible.
+	stale, err := catalog.StaleSkillDirs(dir, dest)
+	require.NoError(t, err)
+	assert.Equal(t, []string{filepath.Join(dest, "magus-retired")}, stale)
+	assert.DirExists(t, orphan, "detecting a stale skill must not remove it")
+
+	removed, err := catalog.PruneSkillTree(dir, dest)
+	require.NoError(t, err)
+	assert.Equal(t, []string{filepath.Join(dest, "magus-retired")}, removed)
+
+	assert.NoDirExists(t, orphan)
+	assert.DirExists(t, handAuthored, "an unstamped skill is not magus's to delete")
+	assert.DirExists(t, notASkill, "a directory with no SKILL.md is not a skill")
+	assert.FileExists(t, filepath.Join(dir, dest, anchorSkillRel), "a shipped skill survives its own prune")
+
+	// Both variants count as shipped, so pruning a simple install does not eat the
+	// twins it just wrote.
+	assert.DirExists(t, filepath.Join(dir, dest, FullTwinName(skillSources[0].name)))
+
+	// Nothing installed at all is not an error: install prunes unconditionally, and
+	// a first install has nothing to prune.
+	removed, err = catalog.PruneSkillTree(dir, "never/installed")
+	require.NoError(t, err)
+	assert.Empty(t, removed)
 }
 
 // TestWriteSkillTreeRejectsPathEscape guards S-3: the guard rejected an
@@ -164,14 +222,14 @@ func TestCatalogSkillTarIsByteStable(t *testing.T) {
 
 func TestCatalogSkillBytesByName(t *testing.T) {
 	catalog := testCatalog(t)
-	body, err := catalog.SkillBytes("magus-architecture", VariantFull)
+	body, err := catalog.SkillBytes("magus-architecture-review", VariantFull)
 	require.NoError(t, err)
-	assert.Contains(t, string(body), "name: magus-architecture")
+	assert.Contains(t, string(body), "name: magus-architecture-review")
 	assert.Contains(t, string(body), "skill-content: "+catalog.contentDigest)
 
-	ultra, err := catalog.SkillBytes("magus-delegate-ultra", VariantFull)
+	ultra, err := catalog.SkillBytes("magus-delegate-multi-agent", VariantFull)
 	require.NoError(t, err)
-	assert.Contains(t, string(ultra), "name: magus-delegate-ultra")
+	assert.Contains(t, string(ultra), "name: magus-delegate-multi-agent")
 
 	_, err = catalog.SkillBytes("does-not-exist", VariantFull)
 	assert.ErrorContains(t, err, "unknown skill")
@@ -179,9 +237,9 @@ func TestCatalogSkillBytesByName(t *testing.T) {
 
 func TestDelegateUltraVariantsKeepTheSameSafetyContract(t *testing.T) {
 	catalog := NewCatalog(os.DirFS(filepath.Join("..", "..", "cmd", "magus")), "", 7)
-	full, err := catalog.SkillBytes("magus-delegate-ultra", VariantFull)
+	full, err := catalog.SkillBytes("magus-delegate-multi-agent", VariantFull)
 	require.NoError(t, err)
-	simple, err := catalog.SkillBytes("magus-delegate-ultra", VariantSimple)
+	simple, err := catalog.SkillBytes("magus-delegate-multi-agent", VariantSimple)
 	require.NoError(t, err)
 
 	for _, body := range [][]byte{full, simple} {
@@ -373,9 +431,9 @@ func validateActionPipe(pipe *parse.PipeNode) error {
 // would let a simple install look current against a source its sibling outgrew.
 func TestStampNamesTheVariantButSharesTheDigest(t *testing.T) {
 	catalog := testCatalog(t)
-	full, err := catalog.SkillBytes("magus-vcs", VariantFull)
+	full, err := catalog.SkillBytes("magus-vcs-hygiene", VariantFull)
 	require.NoError(t, err)
-	simple, err := catalog.SkillBytes("magus-vcs", VariantSimple)
+	simple, err := catalog.SkillBytes("magus-vcs-hygiene", VariantSimple)
 	require.NoError(t, err)
 
 	assert.Contains(t, string(full), "skill-variant: full")

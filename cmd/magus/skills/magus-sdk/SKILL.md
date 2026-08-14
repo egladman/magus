@@ -220,7 +220,7 @@ naming:
    `spells` would put an unrelated concern (bytecode framing) behind the
    public API. Contrast with a package that has no doc comment, one importer,
    and nothing it exports that would need to stay exported after a merge -
-   that shape (see the magus-architecture skill's table) is the accidental
+   that shape (see the magus-architecture-review skill's table) is the accidental
    kind.
 
 Do not paper over a genuine gap with a workaround the reader did not ask for.

@@ -208,7 +208,7 @@ a per-op span, is a pure Go change at
       user-visible churn. Pick the replacement against the naming rules already
       in place: no noun-plus-preposition, reuse a prior-art term rather than
       inventing one.
-- [ ] **Teach the `magus-docs` skill the search endpoint.** So an agent can
+- [ ] **Teach the `magus-docs-lookup` skill the search endpoint.** So an agent can
       query raw/undocumented JSON results instead of guessing a URL. The skills
       are embedded in the binary, so this rides along with the tag or waits for
       the next one.
@@ -284,7 +284,7 @@ Broken in public first, polish second.
 - [ ] **Let the graph-kind toggle work offline, now that two demo graphs are
       committed.** `switchGraphKind` is live-only by construction: it refetches
       from the daemon with `?flavor=targets`, so on a static snapshot the toggle is
-      disabled with a hint pointing at `magus graph open --live`
+      disabled with a hint pointing at `magus graph export --open --follow`
       (`console/src/console/graph/main.ts:2262`, `:2276`). That was correct when
       the only static graph was the knowledge one - there was genuinely nothing to
       switch TO.
@@ -297,7 +297,7 @@ Broken in public first, polish second.
       expressed intent to honor, so defaulting to the knowledge graph is right.
       The gap is that a visitor at the empty state has no route to the target graph
       unless they know to type `#demo&flavor=targets`, which is the link
-      `magus graph open` writes but nothing on the page advertises.
+      `magus graph export --open` writes but nothing on the page advertises.
 - [ ] **The pnpm scripts are doing orchestration that belongs in a magusfile.**
       `console/package.json` has grown into shell scripting inside JSON:
       `copy-static` is one line that mkdir -p's five directories, runs eight `cp`
@@ -482,7 +482,7 @@ Broken in public first, polish second.
 - [ ] **No count affordance, which is what makes agents reach for `grep -c`.**
       `magus graph stats` reports god nodes, connectivity, orphans, and doc
       coverage, but not population per kind, so the only way to get "how many
-      targets are there" is to count lines of `-o name`. The magus-architecture
+      targets are there" is to count lines of `-o name`. The magus-architecture-review
       skill was doing exactly that, and its own bad example is how the habit
       spreads. Now uses `-o json | jq length`, which is at least consuming a
       contract, but the real fix is for magus to answer the question directly -

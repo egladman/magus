@@ -416,7 +416,7 @@ the rule:
 - `catalog_fingerprint` identifies the binary, not the graph, so two builds of one
   source produced different values and a regeneration that changed no node and no edge
   still rewrote the file and failed CI with the fingerprint as the entire diff. It is
-  excluded from `graph export --static` for that reason.
+  excluded from `graph export --reproducible` for that reason.
 - The `@runtime` shard put locally observed diagnostics into `MAGUS.md`'s anchor
   ranking, so the committed index depended on which codes that machine had tripped.
   `Routing()` now excludes runtime edges.
