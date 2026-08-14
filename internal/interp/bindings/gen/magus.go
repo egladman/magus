@@ -210,6 +210,11 @@ func buzzValueMagusProjectEntry(v types.ProjectEntry) vm.Value {
 		itemsManifests[indexManifests] = vm.StrValue(v.Manifests[indexManifests])
 	}
 	out.MapSet("manifests", vm.ListValue(itemsManifests))
+	itemsLockfiles := make([]vm.Value, len(v.Lockfiles))
+	for indexLockfiles := range v.Lockfiles {
+		itemsLockfiles[indexLockfiles] = vm.StrValue(v.Lockfiles[indexLockfiles])
+	}
+	out.MapSet("lockfiles", vm.ListValue(itemsLockfiles))
 	return out
 }
 

@@ -27,11 +27,16 @@ a JSON tool to unwrap it: the envelope already says what is about to run and
 whether it is a write. An explicit flag still wins, because a wrapper that
 passed one meant it.
 
---agent-name, --session, and --event are attribution, not policy. They record who
-produced the observation on the activity event, and the verdict never reads
-them. All three are optional and unvalidated, including the host name, which
-is an opaque label the caller chooses rather than a set magus knows: a magus
-that enumerated hosts would need a release per host, and a wrapper that
+--observe records a path the agent merely REACHED, without judging it. No rule
+applies to a read, so the verdict is always pass and the activity event
+previews as observed rather than as a guard decision. Which of a host's tools
+only look is the wrapper's knowledge, never magus's.
+
+--agent-name, --session, --transcript, and --event are attribution, not policy.
+They record who produced the observation on the activity event, and the verdict
+never reads them. All are optional and unvalidated, including the host name,
+which is an opaque label the caller chooses rather than a set magus knows: a
+magus that enumerated hosts would need a release per host, and a wrapper that
 cannot extract a session id must still be able to get a verdict.
 
 ## Options
@@ -42,11 +47,17 @@ cannot extract a session id must still be able to get a verdict.
 **--event** *string*
 : The host's hook event name (e.g. PreToolUse)
 
+**--observe**
+: Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass
+
 **--path**
 : Judge the input as a file path an edit is about to write, not as a shell command
 
 **--session** *string*
 : The host's own session id for this invocation
+
+**--transcript** *string*
+: Path to the host's own log of this session, recorded as a pointer; magus never opens it
 
 ## Examples
 
@@ -60,6 +71,12 @@ printf '%s' 'go build ./...' | magus hook
 
 ```sh
 printf '%s' 'MAGUS.md' | magus hook --path
+```
+
+*Record a path an agent read, without judging it*
+
+```sh
+printf '%s' 'internal/cache/output.go' | magus hook --observe
 ```
 
 *Machine-readable verdict*
