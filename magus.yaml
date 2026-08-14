@@ -25,6 +25,17 @@ sandbox:
 
 cache:
   remote:
+    # Trust set for the shared remote cache (wired via magus.cache.remote in the
+    # magusfile). A remote artifact is replayed only if signed by one of these
+    # Ed25519 public keys. The matching secret seed lives in CI as the
+    # MAGUS_CACHE_SIGNING_KEY secret (only trusted pushes hold it), so a developer
+    # laptop or a fork PR cannot publish artifacts that replay here. Keep prior
+    # keys listed during a rotation (overlap, then drop the old one).
+    #
+    # The same value must be set as the MAGUS_CACHE_PUBLIC_KEY repository variable:
+    # ci.yaml hands it to MAGUS_CACHE_REMOTE_TRUSTED_KEYS, which REPLACES this list
+    # rather than adding to it, and it is also what wires the backend at all. The two
+    # disagreeing means CI and a laptop trust different keys, silently.
     trusted_keys:
       - "4VhfiMjDLmoVolYdjgPHwpHjw9+aGnoHe87P6V3inAk="
 
