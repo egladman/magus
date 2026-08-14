@@ -207,7 +207,7 @@ type InsightReport struct {
 // every WorkspaceRepository to carry analytics it may have no history to compute.
 //
 // It exists so both entry points agree on ONE vocabulary. The CLI declared this
-// shape privately and the Buzz surface could not see it, so `magus\insight_report`
+// shape privately and the Buzz surface could not see it, so `magus\insight`
 // forked a whole magus - a process spawn, a second workspace load, a JSON encode and
 // a Buzz-side parse - to reach methods the calling process already had.
 //

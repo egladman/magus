@@ -1,25 +1,50 @@
 ---
-name: magus-delegate-ultra
-description: "Plan and execute potentially expensive multi-agent work in a magus workspace as an acceptance-criteria loop, using affected shard plans and knowledge-graph evidence to assign collision-resistant edit units, coordinate nested delegation, and choose cost-appropriate effort tiers. Use ONLY when the user names this skill, or asks in their own words for the work to be SPLIT ACROSS AGENTS - \"fan this out\", \"run these in parallel\", \"use several subagents\", \"spin up an agent per package\". Wanting the work faster, sooner, or more thorough is NOT that request: those are asks about the outcome, and this skill is a choice about the method, with a real cost. Never auto-trigger it on ordinary implementation."
+name: magus-delegate-multi-agent
+description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the units cannot collide, bound fan-out depth, and match each unit's model to the work it needs. Use when a change needs several disjoint groups of files edited, when an audit or review covers a tree, or when the user says \"fan this out\" or \"spin up an agent per package\" - you do not need to be asked. Do NOT fan out one coherent edit just because it invalidates many projects: a shard plan partitions VALIDATION, not editing, so it can veto a fan-out but never license one."
 license: GPL-3.0-or-later
 compatibility: any-agent
 metadata:
   source: magus
   agent-skill-version: 37
   knowledge-schema-version: 9
-  skill-content: 4a69fc6d84e4
+  skill-content: 430a06d637fe
   skill-variant: simple
 ---
 
-# Cost-aware graph delegation
+# Delegating work across agents
 
-This skill is an explicit opt-in to potentially expensive multi-agent work. Use it only when the user
-names it or asks for the work to be split across agents. Wanting it faster or more
-thorough is not that request.
+Count the WRITE SETS your change needs - the distinct groups of files that must be
+edited - not the projects a change invalidates. That distinction decides everything
+here, and getting it backwards is the standard way fan-out goes wrong: a one-line
+edit in a central package invalidates half the workspace and is still one unit of
+editing.
 
-The root agent owns the goal, global budget, delegation topology, integration,
-and final verification. If the graph supports only one coherent edit unit, keep
-the work local.
+`magus affected <target> --plan` partitions VALIDATION - which targets to run,
+grouped for runner balance. It is not an edit assignment and not a proof of write
+isolation (the section below is what establishes that). So it can veto a fan-out
+and never license one: one shard means keep the work local; several shards mean the
+testing parallelizes, and whether the editing does is still your question to answer.
+
+Before any edits exist there is no diff to plan, so the shard plan is empty and
+proves nothing. Finding the candidate paths IS the partitioning work, and it is
+done with the graph:
+
+```sh
+magus refs <symbol> --occurrences -o json   # every edit site, column-precise
+magus explain <node>                        # one node's edges and blast radius
+magus affected ci --plan --stdin            # plan PROPOSED paths, before editing
+```
+
+You do not need to be asked.
+
+Fan-out is not inherently expensive. Say what a
+round will cost when the user is deciding, and prefer the smallest fan-out that
+covers the work.
+
+Delegate when the units are genuinely independent. If the graph supports only one
+coherent edit unit, keep the work local - fanning out one unit adds coordination
+and buys nothing. The root agent owns the goal, the budget, the topology,
+integration, and final verification, and never delegates those.
 
 ## Run the graph-engineering loop
 
@@ -29,13 +54,34 @@ delegate, observe, evaluate, course-correct, integrate. A worker is not complete
 until its criteria and assigned validation pass; the root agent decides whether
 the top-level goal is complete.
 
-## Set one global spend and topology boundary
+## Set one topology boundary
 
 Before spawning, state one compact budget: maximum simultaneously active agents,
-effort tier per unit, whether isolated worktrees are available, and whether
-nested delegation is allowed. Use the smallest useful fan-out. Unless the user
-sets another cap, allow at most three active workers across the entire agent tree.
-Ask before exceeding the cap.
+effort tier per unit, whether isolated worktrees are available, and how deep
+delegation may nest. Unless the user sets another cap, allow at most three active
+workers across the entire agent tree, and ask before exceeding it.
+
+A worker may delegate again. What it may not do is delegate without shrinking the
+problem. Three rules give it a
+definitive end:
+
+- **Every level narrows.** A child's scope is a strict subset of its parent's. A
+  worker that would hand on its whole unit should do the work instead.
+- **Depth is capped.** Two levels below the root by default: root delegates units,
+  a unit may delegate parts, and those parts do the work. Say so if you need more.
+- **Every unit carries acceptance criteria down with it.** A child inherits its
+  parent's criteria plus its own. A unit nobody can evaluate is a unit that cannot
+  end, which is what makes depth dangerous rather than the nesting itself.
+- **A unit that fails its criteria twice is not re-delegated.** The root does it
+  locally, or serializes it behind whatever keeps breaking it.
+- **Whatever the parent does not delegate, the parent still owns.** A strict subset
+  leaks by construction: split "no caller of X remains" into per-project units and
+  the callers in no project belong to nobody, so every unit passes and the goal is
+  unmet. Carry a remainder row at each level and close it explicitly.
+
+Pick the model that FITS the unit. That is the whole rule, and it runs both ways:
+a mechanical rename does not need the strongest model available, and an ambiguous
+API boundary does not get the cheapest one because it looked like less work.
 
 Map work to provider capabilities without assuming model names:
 
@@ -164,4 +210,4 @@ As units finish:
 Prefer fewer proven-independent units over
 wide fan-out and conflict repair.
 
-<!-- generated by: magus agent install; agent-skill-version: 37; knowledge-schema-version: 9; skill-content: 4a69fc6d84e4; skill-variant: simple; do not edit, re-run to update -->
+<!-- generated by: magus agent install; agent-skill-version: 37; knowledge-schema-version: 9; skill-content: 430a06d637fe; skill-variant: simple; do not edit, re-run to update -->

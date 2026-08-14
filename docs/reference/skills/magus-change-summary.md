@@ -1,20 +1,21 @@
 ---
-title: magus-changes
+title: magus-change-summary
 description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question."
-tags: [agents, skills, magus-changes]
+tags: [agents, skills, magus-change-summary]
+aliases:
+  - reference/skills/magus-changes
 skill_full_bytes: 5137
 skill_simple_bytes: 3916
 ---
 
-# magus-changes
+# magus-change-summary
 
 Summarize what changed in a magus workspace, write it up, or answer a granular diff question. Use for "what's been merged lately?", "catch me up since last week", "add this to the CHANGELOG", and "what exactly did this branch change?" Covers three outputs: a short evidence-backed brief, a Keep a Changelog entry in the repo's existing shape, and per-question diff commands. Always answer through magus surfaces (graph diff, describe file, affected --impact/--explain) rather than reading a raw diff; do not infer features from commit subjects alone.
 
 Install it, rather than copying from this page:
 
 ```sh
-magus agent install .claude/skills            # the full form below
-magus agent install .claude/skills --simple   # the short form below
+magus agent install .claude/skills   # writes both forms below
 ```
 
 An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
@@ -30,14 +31,14 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `4a69fc6d84e4` |
+| `skill-content` | `430a06d637fe` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
 
 ## Full form
 
-The default: every mechanical step spelled out, plus the rationale for each.
+Every mechanical step spelled out, plus the rationale for each. Installed as the `<name>-full` twin: loaded by name rather than always, so a reader who needs the long form can ask for it without every session carrying it.
 
 ````markdown
 # Recent changes in a magus workspace
@@ -166,9 +167,9 @@ merge. The table above answers what the change did. Reading a raw diff to work o
 what a change affects is the work these verbs already did.
 ````
 
-## Short form (`--simple`)
+## Short form
 
-The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for when to prefer which.
+The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for the difference.
 
 <details>
 <summary>Show the short form</summary>

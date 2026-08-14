@@ -266,7 +266,7 @@ func writeUnreferencedSection(b *md.Builder, u types.UnreferencedOutput) {
 		}
 		b.Table([]string{"Kind", "Source", "Symbol"}, []md.Align{md.Left, md.Left, md.Left}, rows)
 		if len(u.Symbols) > len(shown) {
-			b.Paragraphf("_Showing %d of %d. Read `magus\\insightReport` for the full list._", len(shown), len(u.Symbols))
+			b.Paragraphf("_Showing %d of %d. Read `magus\\insight` for the full list._", len(shown), len(u.Symbols))
 		}
 	}
 	switch u.Answer.Verdict {

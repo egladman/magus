@@ -206,7 +206,7 @@ func TestInsightIsServedInProcess(t *testing.T) {
 	a := &fakeAnalyzer{}
 	ctx := types.WithWorkspace(t.Context(), a)
 
-	report, err := MagusInsightReport(ctx, nil)
+	report, err := MagusInsight(ctx, nil)
 	require.NoError(t, err, "a workspace that analyses answers here, with no subprocess")
 	assert.Equal(t, "hot", report.Hotspots.Definition)
 	assert.Equal(t, 500, a.got.Commits, "the window the removed subcommand defaulted to")
@@ -219,7 +219,7 @@ func TestInsightIsServedInProcess(t *testing.T) {
 func TestInsightNeedsAWorkspace(t *testing.T) {
 	t.Parallel()
 
-	_, err := MagusInsightReport(t.Context(), nil)
+	_, err := MagusInsight(t.Context(), nil)
 	require.Error(t, err, "no workspace on the context is an error, not a fork")
 }
 
@@ -238,7 +238,7 @@ func TestInsightRejectsAnUnknownOption(t *testing.T) {
 		{"commits": "not a number"},
 		{"since": 90.0},
 	} {
-		_, err := MagusInsightReport(ctx, opts)
+		_, err := MagusInsight(ctx, opts)
 		assert.Error(t, err, "opts %v must be reported, not ignored", opts)
 	}
 }
@@ -251,14 +251,14 @@ func TestInsightMapsTheOptionsItTakes(t *testing.T) {
 	a := &fakeAnalyzer{}
 	ctx := types.WithWorkspace(t.Context(), a)
 	// A Buzz number arrives as float64; an int is what a Go caller would pass.
-	_, err := MagusInsightReport(ctx, map[string]any{"commits": 42.0, "since": "90d"})
+	_, err := MagusInsight(ctx, map[string]any{"commits": 42.0, "since": "90d"})
 	require.NoError(t, err)
 	assert.Equal(t, 42, a.got.Commits)
 	assert.Equal(t, "90d", a.got.Since)
 
 	// int64 is what a Buzz integer literal actually arrives as; float64 above covers
 	// a Buzz float. A decoder handling only float64 rejects `{commits = 50}` outright.
-	_, err = MagusInsightReport(ctx, map[string]any{"commits": int64(50)})
+	_, err = MagusInsight(ctx, map[string]any{"commits": int64(50)})
 	require.NoError(t, err, "a Buzz integer arrives as int64")
 	assert.Equal(t, 50, a.got.Commits)
 }

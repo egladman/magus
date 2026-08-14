@@ -1,20 +1,21 @@
 ---
-title: magus-buzz
+title: magus-buzz-write
 description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in."
-tags: [agents, skills, magus-buzz]
-skill_full_bytes: 8161
-skill_simple_bytes: 6763
+tags: [agents, skills, magus-buzz-write]
+aliases:
+  - reference/skills/magus-buzz
+skill_full_bytes: 8168
+skill_simple_bytes: 6770
 ---
 
-# magus-buzz
+# magus-buzz-write
 
 Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in. Use when writing or debugging a magusfile target, a spell, or a .buzz file, and when a one-off script is needed in a magus workspace - Buzz is already installed with the whole magus host surface (fs, http, json, yaml, template, vcs, ...), so it needs no dependency install. Also use when Buzz syntax surprises you: namespace access is a backslash, object literals use `=`, and `magus buzz` runs upstream-strict (no top-level control flow, every argument after the first must be labeled).
 
 Install it, rather than copying from this page:
 
 ```sh
-magus agent install .claude/skills            # the full form below
-magus agent install .claude/skills --simple   # the short form below
+magus agent install .claude/skills   # writes both forms below
 ```
 
 An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
@@ -30,14 +31,14 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `4a69fc6d84e4` |
+| `skill-content` | `430a06d637fe` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
 
 ## Full form
 
-The default: every mechanical step spelled out, plus the rationale for each.
+Every mechanical step spelled out, plus the rationale for each. Installed as the `<name>-full` twin: loaded by name rather than always, so a reader who needs the long form can ask for it without every session carrying it.
 
 ````markdown
 # Writing Buzz
@@ -93,7 +94,7 @@ This file teaches the fundamentals and nothing more. Escalate deliberately:
 | question | where |
 | --- | --- |
 | what modules exist, what a method takes and RETURNS | `magus describe module <name>` - the authority, generated from the bindings |
-| how a feature works, concepts, guides, worked examples | the magus-docs skill - the documentation is written and searchable |
+| how a feature works, concepts, guides, worked examples | the magus-docs-lookup skill - the documentation is written and searchable |
 | what THIS workspace declares (targets, spells, projects) | the magus-query skill |
 
 Anything of substance - error sets, fibers, generics, the full stdlib, sandbox
@@ -259,9 +260,9 @@ script re-runs from scratch every time, a target replays from cache.
 Reviewing existing Buzz code rather than writing new code: use magus-buzz-review.
 ````
 
-## Short form (`--simple`)
+## Short form
 
-The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for when to prefer which.
+The enumeration dropped, the judgment kept - for the most capable readers, not the least; the bar under the heading above shows by how much. This is the always-loaded primary. Both are hand-authored from one source body; see [Agents](../../guides/integrations/agents.md) for the difference.
 
 <details>
 <summary>Show the short form</summary>
@@ -317,7 +318,7 @@ Escalate deliberately:
 | question | where |
 | --- | --- |
 | what modules exist, what a method takes and RETURNS | `magus describe module <name>` - the authority, generated from the bindings |
-| how a feature works, concepts, guides, worked examples | the magus-docs skill - the documentation is written and searchable |
+| how a feature works, concepts, guides, worked examples | the magus-docs-lookup skill - the documentation is written and searchable |
 | what THIS workspace declares (targets, spells, projects) | the magus-query skill |
 
 Error sets, fibers, generics, the full stdlib and sandbox behavior are all

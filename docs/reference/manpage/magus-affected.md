@@ -38,6 +38,9 @@ history to find the commit that introduced a regression.
 
 ## Options
 
+**-b** *string*
+: Short for --base
+
 **--base** *string*
 : Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)
 
@@ -46,6 +49,12 @@ history to find the commit that introduced a regression.
 
 **--depth** *int*
 : With --graph: cap displayed depth (0 = unlimited)
+
+**--detach**
+: Hand the run to the daemon and return immediately; follow it with magus status --watch
+
+**--detail**
+: With --plan: add per-shard detail - the invocation, its spells, the files it declares it writes, and the skills its work routes to
 
 **--dry-run**
 : Print what would run without executing
@@ -65,17 +74,35 @@ history to find the commit that introduced a regression.
 **--max-shards** *int* (default: 8)
 : With --plan: maximum CI shards (-1 = unlimited)
 
+**--no-cache**
+: Force a fresh run even on a cache hit; still refreshes the entry
+
+**--no-default-charms**
+: Ignore magus.yaml default_charms for this run
+
 **--null**
 : With --stdin: expect NUL-separated paths and double-NUL between batches
+
+**--open**
+: Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)
 
 **--plan**
 : Emit a provider-neutral JSON CI shard plan for the affected set
 
+**--race** *string*
+: Run the same target repeatedly to surface order-dependent failures
+
 **--stdin**
 : Read changed file paths from stdin instead of running a VCS diff
 
+**--step**
+: Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)
+
 **--target** *string* (default: test)
 : With --bisect: magus target to bisect
+
+**--timeout** *duration*
+: Abort if the run has not finished within this duration (e.g. 5m, 1h30m)
 
 **--upstream**
 : With --graph: show dependents instead of dependencies
@@ -164,5 +191,5 @@ magus affected --bisect ./apps/myapp
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-memory**(1)](magus-memory.md), [**magus-server**(1)](magus-server.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-hook**(1)](magus-hook.md), [**magus-notify**(1)](magus-notify.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-server**(1)](magus-server.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-hook**(1)](magus-hook.md), [**magus-notify**(1)](magus-notify.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

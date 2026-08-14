@@ -94,6 +94,7 @@ flag affected/step
 flag affected/target
 flag affected/timeout
 flag affected/upstream
+flag affected/wait
 flag agent/dir
 flag agent/force
 flag agent/global
@@ -155,6 +156,7 @@ flag run/shard
 flag run/step
 flag run/timeout
 flag run/upstream
+flag run/wait
 flag server/foreground
 flag status/W
 flag status/c

@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2168,
-  "edge_count": 5582,
+  "edge_count": 5623,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -4881,7 +4881,7 @@
       "attrs": {
         "role": "doc",
         "section": "reference",
-        "tags": "cli,magus memory,handoff,journal,notes,agents",
+        "tags": "cli,magus memory,handoff,journal,agents",
         "title": "magus memory"
       }
     },
@@ -5085,8 +5085,8 @@
       "attrs": {
         "role": "doc",
         "section": "reference",
-        "tags": "agents,skills,magus-architecture",
-        "title": "magus-architecture"
+        "tags": "agents,skills,magus-architecture-review",
+        "title": "magus-architecture-review"
       }
     },
     {
@@ -5109,8 +5109,8 @@
       "attrs": {
         "role": "doc",
         "section": "reference",
-        "tags": "agents,skills,magus-buzz",
-        "title": "magus-buzz"
+        "tags": "agents,skills,magus-buzz-write",
+        "title": "magus-buzz-write"
       }
     },
     {
@@ -5121,8 +5121,8 @@
       "attrs": {
         "role": "doc",
         "section": "reference",
-        "tags": "agents,skills,magus-changes",
-        "title": "magus-changes"
+        "tags": "agents,skills,magus-change-summary",
+        "title": "magus-change-summary"
       }
     },
     {
@@ -5145,8 +5145,8 @@
       "attrs": {
         "role": "doc",
         "section": "reference",
-        "tags": "agents,skills,magus-delegate-ultra",
-        "title": "magus-delegate-ultra"
+        "tags": "agents,skills,magus-delegate-multi-agent",
+        "title": "magus-delegate-multi-agent"
       }
     },
     {
@@ -5157,8 +5157,8 @@
       "attrs": {
         "role": "doc",
         "section": "reference",
-        "tags": "agents,skills,magus-docs",
-        "title": "magus-docs"
+        "tags": "agents,skills,magus-docs-lookup",
+        "title": "magus-docs-lookup"
       }
     },
     {
@@ -5169,8 +5169,8 @@
       "attrs": {
         "role": "doc",
         "section": "reference",
-        "tags": "agents,skills,magus-memory",
-        "title": "magus-memory"
+        "tags": "agents,skills,magus-handoff-journal",
+        "title": "magus-handoff-journal"
       }
     },
     {
@@ -5217,8 +5217,8 @@
       "attrs": {
         "role": "doc",
         "section": "reference",
-        "tags": "agents,skills,magus-vcs",
-        "title": "magus-vcs"
+        "tags": "agents,skills,magus-vcs-hygiene",
+        "title": "magus-vcs-hygiene"
       }
     },
     {
@@ -5229,8 +5229,8 @@
       "attrs": {
         "role": "doc",
         "section": "reference",
-        "tags": "agents,skills,magus-adapt",
-        "title": "magus-adapt"
+        "tags": "agents,skills,magus-workspace-rules",
+        "title": "magus-workspace-rules"
       }
     },
     {
@@ -34447,6 +34447,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-affected.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-affected.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-affected.md",
       "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "extracted",
@@ -34671,6 +34679,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-agent.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-agent.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-agent.md",
       "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "extracted",
@@ -34895,6 +34911,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-buzz.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-buzz.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-buzz.md",
       "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "extracted",
@@ -35112,6 +35136,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-clean.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-clean.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-clean.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -35343,6 +35375,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-completion.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-completion.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-completion.md",
       "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "extracted",
@@ -35560,6 +35600,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-config.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-config.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-config.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -35791,6 +35839,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-describe.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-describe.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-describe.md",
       "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "extracted",
@@ -36008,6 +36064,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-doctor.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-doctor.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-doctor.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -36239,6 +36303,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-explain.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-explain.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-explain.md",
       "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "extracted",
@@ -36456,6 +36528,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-graph.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-graph.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-graph.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -36687,6 +36767,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-hook.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-hook.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-hook.md",
       "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "extracted",
@@ -36904,6 +36992,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-init.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-init.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-init.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -37135,6 +37231,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-ls.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-ls.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-ls.md",
       "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "extracted",
@@ -37352,6 +37456,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-man.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-man.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-man.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -37583,6 +37695,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-memory.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-memory.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-memory.md",
       "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "extracted",
@@ -38040,6 +38160,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-notify.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-notify.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-notify.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -38279,6 +38407,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-path.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-path.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-path.md",
       "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "extracted",
@@ -38496,6 +38632,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-query.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-query.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-query.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -38727,6 +38871,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-refs.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-refs.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-refs.md",
       "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "extracted",
@@ -38944,6 +39096,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-run.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-run.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-run.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -39175,6 +39335,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-self.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-self.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-self.md",
       "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "extracted",
@@ -39392,6 +39560,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-server.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-server.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-server.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -39623,6 +39799,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-status.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-status.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-status.md",
       "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "extracted",
@@ -39840,6 +40024,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-vcs.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-vcs.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-vcs.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -40071,6 +40263,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-version.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-version.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-version.md",
       "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "extracted",
@@ -40288,6 +40488,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-watch.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-watch.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-watch.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -40519,6 +40727,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus-where.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-where.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-where.md",
       "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "extracted",
@@ -40736,6 +40952,14 @@
     {
       "source": "doc:docs/reference/manpage/magus-x.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus-x.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus-x.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -40975,6 +41199,14 @@
     },
     {
       "source": "doc:docs/reference/manpage/magus.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/manpage/magus.md"
+    },
+    {
+      "source": "doc:docs/reference/manpage/magus.md",
       "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "extracted",
@@ -41103,6 +41335,14 @@
     },
     {
       "source": "doc:docs/reference/skills/index.md",
+      "target": "doc:docs/reference/skills/magus-architecture-review.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/skills/index.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/index.md",
       "target": "doc:docs/reference/skills/magus-buzz-review.md",
       "relation": "references",
       "confidence": "extracted",
@@ -41111,7 +41351,47 @@
     },
     {
       "source": "doc:docs/reference/skills/index.md",
+      "target": "doc:docs/reference/skills/magus-buzz-write.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/skills/index.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/index.md",
+      "target": "doc:docs/reference/skills/magus-change-summary.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/skills/index.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/index.md",
       "target": "doc:docs/reference/skills/magus-context-audit.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/skills/index.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/index.md",
+      "target": "doc:docs/reference/skills/magus-delegate-multi-agent.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/skills/index.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/index.md",
+      "target": "doc:docs/reference/skills/magus-docs-lookup.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/skills/index.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/index.md",
+      "target": "doc:docs/reference/skills/magus-handoff-journal.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -41136,6 +41416,22 @@
     {
       "source": "doc:docs/reference/skills/index.md",
       "target": "doc:docs/reference/skills/magus-sdk.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/skills/index.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/index.md",
+      "target": "doc:docs/reference/skills/magus-vcs-hygiene.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/skills/index.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/index.md",
+      "target": "doc:docs/reference/skills/magus-workspace-rules.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -41280,6 +41576,14 @@
     {
       "source": "doc:docs/reference/skills/magus-handoff-journal.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-handoff-journal.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-handoff-journal.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -41887,6 +42191,14 @@
     },
     {
       "source": "doc:evals/fixtures/full/.claude/skills/magus-handoff-journal/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-handoff-journal/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-handoff-journal/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-query.md",
       "relation": "references",
       "confidence": "inferred",
@@ -42135,6 +42447,14 @@
     },
     {
       "source": "doc:evals/fixtures/simple/.claude/skills/magus-handoff-journal-full/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-handoff-journal-full/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-handoff-journal-full/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-query.md",
       "relation": "references",
       "confidence": "inferred",
@@ -42144,6 +42464,14 @@
     {
       "source": "doc:evals/fixtures/simple/.claude/skills/magus-handoff-journal/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-handoff-journal/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-handoff-journal/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-notes.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,

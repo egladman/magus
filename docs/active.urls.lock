@@ -118,6 +118,7 @@ concepts/spells/typescript/
 concepts/targets/
 concepts/targets/ci/
 concepts/telemetry/
+concepts/terminal/
 concepts/volatility/
 concepts/wards/
 concepts/workspace-providers/
@@ -573,6 +574,7 @@ tags/import/
 tags/inferred/
 tags/inputs/
 tags/install/
+tags/interactive/
 tags/interpreter/
 tags/journal/
 tags/json-patch/
@@ -611,6 +613,7 @@ tags/monorepo/
 tags/naming/
 tags/needs/
 tags/node/
+tags/notifications/
 tags/nx/
 tags/oci/
 tags/onboarding/
@@ -623,6 +626,7 @@ tags/ownership/
 tags/passthrough/
 tags/path/
 tags/permissions/
+tags/picker/
 tags/platform/
 tags/podman/
 tags/policy/
@@ -685,6 +689,7 @@ tags/token/
 tags/toolchain/
 tags/tools/
 tags/troubleshooting/
+tags/tty/
 tags/typescript/
 tags/upgrade/
 tags/uv/
