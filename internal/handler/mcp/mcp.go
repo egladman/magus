@@ -12,7 +12,6 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	mcplib "github.com/mark3labs/mcp-go/mcp"
@@ -194,15 +193,12 @@ func registerTools(srv *server.MCPServer, opts Options, log *slog.Logger, origin
 	for _, t := range tools {
 		byName[t.Name()] = t
 	}
-	// rotateCount is shared across every tool's wrap closure so a rotate fires once
-	// per rotateEvery appends across the whole server, not per tool. See wrap.
-	rotateCount := new(atomic.Uint64)
 	for _, d := range Registry {
 		t, ok := byName[d.Name]
 		if !ok {
 			panic(fmt.Sprintf("mcp: registry entry %q has no SpellDriver implementation", d.Name))
 		}
-		srv.AddTool(buildMCPTool(d), wrap(log, originFn, trailDir, withSecrets, tel, rotateCount, adapt(t)))
+		srv.AddTool(buildMCPTool(d), wrap(log, originFn, trailDir, withSecrets, tel, adapt(t)))
 	}
 	// The loop above only checks Registry -> driver; a driver built into allMCPTools but
 	// missing its own Registry entry would otherwise mount nowhere, silently, with no
@@ -236,7 +232,7 @@ func unregisteredDrivers(tools []spells.Driver, reg []ToolDescriptor) []string {
 // both sides of the exchange captured as content-addressed blobs - and records
 // the call to the magus.mcp.tool.* metric family (attributed by tool + outcome
 // only; never by argument values or result content). A nil tel is a no-op.
-func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailDir string, withSecrets func(context.Context) context.Context, tel observability.Provider, rotateCount *atomic.Uint64, fn handlerFn) server.ToolHandlerFunc {
+func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailDir string, withSecrets func(context.Context) context.Context, tel observability.Provider, fn handlerFn) server.ToolHandlerFunc {
 	return func(ctx context.Context, req mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		o := originFn(ctx)
 		agentID := o.Agent
@@ -310,16 +306,6 @@ func wrap(log *slog.Logger, originFn func(context.Context) origin.Origin, trailD
 			reqLog.InfoContext(ctx, "[AGENT] tool done", slog.Duration("duration", dur))
 		}
 		trail.Append(ctx, trailDir, ev)
-		// Boot-time rotate alone lets a long-lived daemon's trail grow unbounded, so drive a
-		// rotate off the append count: every rotateEvery calls across the whole server, the trail
-		// is trimmed back to its cap. The counter is caller-side state, keeping trail stateless. Run
-		// it off the request path: the boundary call rewrites up to maxEvents lines, and keeping
-		// that rare cost out of the tool response's latency is worth a goroutine per call (all but
-		// the boundary one return immediately on the count check). The atomic increment is
-		// evaluated on THIS goroutine, so each call still gets a distinct count.
-		if trailDir != "" {
-			go trail.RotateOnCount(trailDir, rotateCount.Add(1))
-		}
 		if tel != nil {
 			// INPUT = the serialized tool arguments; OUTPUT = the response text length
 			// (same bytes captured above). Attribute by tool + outcome only to keep

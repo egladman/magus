@@ -46,19 +46,15 @@ const (
 const refHexLen = 16
 
 // maxEvents caps the trail: Rotate keeps the most recent maxEvents events and garbage-collects
-// blobs no kept event references. Rotate runs at daemon start and thereafter every rotateEvery
-// appends (via RotateOnCount) - not on every append - so a long-lived daemon's trail stays
-// bounded without a rewrite per write.
+// blobs no kept event references. Rotate runs at daemon start and thereafter on the daemon's
+// rotate-activities schedule - never per append, because the trail is stateless and lock-free by
+// design (append is a bare POSIX append; there is no long-lived handle to hang a count on), so a
+// write-triggered rotate would have to re-scan the whole file per write.
+//
+// The overshoot between scheduled runs is therefore bounded by the SCHEDULE, not by a counter.
+// That is the honest shape: a counter can only ever bound the one producer that owns it, and the
+// producers that most need bounding - short-lived agent hooks - have nowhere to keep one.
 const maxEvents = 10000
-
-// rotateEvery is how many recorded events trigger the next Rotate. The trail is stateless and
-// lock-free by design (append is a bare POSIX append; there is no long-lived handle to hang a
-// count on), so the write-triggered rotate cannot count inside Append without re-scanning the
-// whole file per write. Instead RotateOnCount lets the caller - which already increments a counter
-// per append - drive the rotate, keeping the policy and its maxEvents sibling in one place. This
-// bounds the trail at roughly maxEvents + rotateEvery events between rotates; 512 keeps the rewrite
-// rare relative to tool-call traffic.
-const rotateEvery = 512
 
 // Kind names an action's source; the values map to the magus.activity.v1 Kind enum at the wire.
 // Readable strings on disk, like the journal's status strings. It is a NAMED string (not a bare string)
@@ -437,29 +433,37 @@ func ReadRecent(base string, limit int) ([]Event, error) {
 	return out, nil
 }
 
-// Rotate keeps the last maxEvents events and deletes blobs that no kept event references. Called
-// at daemon start and, thereafter, by RotateOnCount. Best-effort: any error leaves the trail
-// as-is, and it only rewrites when the file exceeds the cap. It takes no lock, so a concurrent
-// Append racing the read-rewrite window can be dropped - acceptable for a best-effort governance
-// trail, and the price of keeping the trail lock-free.
+// Rotate keeps the last maxEvents events and deletes blobs that no kept event references.
+// Best-effort: any error leaves the trail as-is, and it only rewrites when the file exceeds the
+// cap. It takes no lock, so a concurrent Append racing the read-rewrite window can be dropped -
+// acceptable for a best-effort governance trail, and the price of keeping the trail lock-free.
+//
+// It is CHEAP to call on a trail that is already small (see minEventBytes), which is what lets the
+// daemon's maintenance schedule be the single owner of rotation. There used to be a second,
+// write-triggered path - a RotateOnCount the MCP handler drove off its own append counter - and it
+// covered exactly one producer: an agent hook is a short-lived process with nowhere to keep a
+// counter, so hook-fed trails were never write-bounded at all and relied on a 30-day sweep. One
+// trigger that every producer shares beats two that disagree about who is covered.
 func Rotate(base string) { rotate(base, maxEvents) }
 
-// RotateOnCount rotates iff n - the caller's running append count (the value returned by its
-// atomic increment) - lands on a rotateEvery boundary. Passing the count keeps the trail itself
-// stateless: the counter lives with the producer, not here. n == 0 never rotates, so a stray zero
-// cannot force a rewrite before the first real append. It is the write-triggered rotate, distinct
-// from the boot-time Rotate.
-func RotateOnCount(base string, n uint64) {
-	if n != 0 && n%rotateEvery == 0 {
-		Rotate(base)
-	}
-}
+// minEventBytes is a floor on one serialized event line, used to skip the read entirely when the
+// file is too small to hold maxEvents of them. It is a SOUND bound rather than a guess: Ts, Kind,
+// Actor, Action and Outcome have no omitempty, so even an all-empty event marshals to about 65
+// bytes plus a newline. Rounding down to 64 keeps the check conservative - it can only ever decide
+// to look when it did not need to, never to skip when it did.
+const minEventBytes = 64
 
 func rotate(base string, max int) {
 	if base == "" {
 		return
 	}
 	path := eventsPath(base)
+	// A stat before the read is what makes a frequent schedule affordable. Without it, every
+	// check reads the whole trail - fine at a 30-day cadence, wasteful at an hourly one, and
+	// worst exactly when the file has grown large enough to matter.
+	if info, err := os.Stat(path); err == nil && info.Size() < int64(max)*minEventBytes {
+		return
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return

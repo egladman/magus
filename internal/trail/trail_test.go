@@ -300,20 +300,15 @@ func TestRotate_ExportedWrapperUnderCapKeepsAll(t *testing.T) {
 	}
 }
 
-func TestRotateOnCount_RotatesOnlyOnBoundary(t *testing.T) {
+// TestRotate_TrimsAnOverCapTrail is what the deleted RotateOnCount test used to cover: that a
+// rotate actually trims, and to the right window. It reaches Rotate directly now, because the
+// daemon's maintenance schedule is the only thing that triggers one - there is no longer a
+// write-driven path, and the counter that drove it belonged to a single producer.
+func TestRotate_TrimsAnOverCapTrail(t *testing.T) {
 	dir := t.TempDir()
-	seeded := seedEvents(t, dir, maxEvents+5) // over the cap so a rotate is observable
+	seedEvents(t, dir, maxEvents+5) // over the cap so a rotate is observable
 
-	// A zero count and any non-boundary count leave the over-cap trail untouched: no rotate fired.
-	for _, n := range []uint64{0, 1, rotateEvery - 1, rotateEvery + 1} {
-		RotateOnCount(dir, n)
-		got, err := ReadRecent(dir, maxEvents+100)
-		require.NoError(t, err)
-		require.Len(t, got, len(seeded), "RotateOnCount(%d) must not rotate off a boundary", n)
-	}
-
-	// A boundary count fires the rotate, trimming to the newest maxEvents events.
-	RotateOnCount(dir, rotateEvery)
+	Rotate(dir)
 	got, err := ReadRecent(dir, maxEvents+100)
 	require.NoError(t, err)
 	require.Len(t, got, maxEvents)
@@ -322,8 +317,36 @@ func TestRotateOnCount_RotatesOnlyOnBoundary(t *testing.T) {
 	require.Equal(t, Event{Ts: 6, Kind: KindMCPToolCall, Actor: "a", Action: "t", Outcome: OutcomeOK}, got[len(got)-1])
 }
 
-func TestRotateOnCount_EmptyBaseIsNoop(t *testing.T) {
-	RotateOnCount("", rotateEvery) // must not panic
+// TestRotate_SkipsTheReadWhenTheFileIsTooSmall pins the stat fast path, which is what makes an
+// hourly schedule affordable: a trail too small to hold maxEvents events is not read at all.
+//
+// The bound must stay SOUND rather than approximate - it may only skip when trimming is
+// impossible - so this asserts the arithmetic that makes it so: a full cap's worth of the
+// smallest event magus can serialize still exceeds the threshold, meaning no reachable trail is
+// ever skipped while over cap.
+func TestRotate_SkipsTheReadWhenTheFileIsTooSmall(t *testing.T) {
+	dir := t.TempDir()
+	Append(t.Context(), dir, Event{Ts: 1, Action: "a"})
+
+	info, err := os.Stat(eventsPath(dir))
+	require.NoError(t, err)
+	require.Less(t, info.Size(), int64(maxEvents)*minEventBytes, "a one-event trail is below the skip threshold")
+
+	Rotate(dir)
+	got, err := ReadRecent(dir, 10)
+	require.NoError(t, err)
+	require.Len(t, got, 1, "the fast path must leave a small trail exactly as it found it")
+
+	// The floor is not a guess: the smallest event that can reach the file - every
+	// no-omitempty field empty - must still be at least minEventBytes, or the skip could
+	// fire on a trail that genuinely needed trimming.
+	line, err := json.Marshal(Event{})
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(line)+1, minEventBytes, "minEventBytes must not exceed the smallest serializable event line")
+}
+
+func TestRotate_EmptyBaseIsNoop(t *testing.T) {
+	Rotate("") // must not panic
 }
 
 func TestReadRecent_SkipsCorruptLines(t *testing.T) {

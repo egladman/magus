@@ -635,8 +635,17 @@ event, preserving the host session over telemetry.
 
 Events live alongside the rest of the local trail at
 `<cache-dir>/activity/events.jsonl`; their blobs live under
-`<cache-dir>/activity/blobs`. They follow the trail's existing bounded
-retention (10,000 newest events, with unreferenced blobs collected on rotate).
+`<cache-dir>/activity/blobs`. They follow the trail's bounded retention (10,000
+newest events, with unreferenced blobs collected on rotate) - but that bound is
+applied by the daemon's hourly `rotate-activities` maintenance job, so it holds
+only while a daemon runs. A hook writes to the trail whether or not one does,
+so if you wire hooks and never run `magus server start`, nothing trims what they
+write. Retention is a daemon-provided property, not a property of the file.
+
+Rotation keeps the newest events across ALL kinds, so a high-volume producer
+shortens the window for every other kind rather than only its own. That is the
+real cost of observing reads, and the reason the section above says to leave it
+off unless you want it.
 Commands and paths are intentionally retained because they are the evidence
 needed to improve adoption, so do not put credentials or other secrets in a
 command line. The authenticated Activity view is the supported way to inspect
