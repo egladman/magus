@@ -1,4 +1,4 @@
-// Package testsprawl defines an analyzer that reports a Go test file whose name
+// Package testlayout defines an analyzer that reports a Go test file whose name
 // narrows the name of a source file in the same directory.
 //
 // It catches test sprawl: rather than adding cases to resolver_test.go, someone
@@ -16,7 +16,7 @@
 // It is not hermetic: sourceNames reads the directory, so a driver caching
 // results against declared package inputs (go vet's unitchecker) can replay a
 // stale verdict after you add or remove a sibling file.
-package testsprawl
+package testlayout
 
 import (
 	"fmt"
@@ -28,11 +28,27 @@ import (
 	"golang.org/x/tools/go/analysis"
 )
 
+// externalPackageMessage names the fix for a test that sits outside the package it
+// tests. It says what to do rather than what is wrong, because the wrong thing here
+// compiles and passes - only a reader ever objects.
+func externalPackageMessage(pkg string) string {
+	inner := strings.TrimSuffix(pkg, "_test")
+	return "test file declares `package " + pkg + "`; put it in `package " + inner +
+		"` with the code it tests. If that closes an import cycle - the test needs a package " +
+		"that imports " + inner + " back - move the test to the package that already sits above " +
+		"both, or keep the external package with a //nolint:testlayout naming the cycle."
+}
+
 const doc = `check that a test file's name does not narrow a source file's name
 
 X_test.go accompanies X.go. When there is no X.go but some prefix of X names a
 source file - resolver_edge_cases_test.go against resolver.go - the test file
-has narrowed an existing name, and its cases belong in that file's test file.`
+has narrowed an existing name, and its cases belong in that file's test file.
+
+It also reports a test file in an external test package (package foo_test). A test
+belongs in the package it tests; the external package is reserved for the case where
+an in-package test would close an import cycle, and that case is worth a //nolint
+naming the cycle rather than a silent convention.`
 
 // conventional lists test filenames that have no source counterpart by design,
 // with the number of uses each has in the Go standard library. Every entry is
@@ -89,7 +105,7 @@ type Options struct {
 func New(opts Options) (*analysis.Analyzer, error) {
 	for _, pattern := range opts.Allow {
 		if _, err := filepath.Match(pattern, "probe"); err != nil {
-			return nil, fmt.Errorf("testsprawl: allow pattern %q: %w", pattern, err)
+			return nil, fmt.Errorf("testlayout: allow pattern %q: %w", pattern, err)
 		}
 	}
 
@@ -108,7 +124,7 @@ func newAnalyzer(opts Options) *analysis.Analyzer {
 		exempt: slices.Concat(conventional, opts.Allow),
 	}
 
-	return &analysis.Analyzer{Name: "testsprawl", Doc: doc, Run: l.run}
+	return &analysis.Analyzer{Name: "testlayout", Doc: doc, Run: l.run}
 }
 
 type linter struct {
@@ -134,7 +150,19 @@ func (l linter) run(pass *analysis.Pass) (any, error) {
 		path := tf.Name()
 
 		name := filepath.Base(path)
-		if !strings.HasSuffix(name, "_test.go") || l.exempted(name) {
+		if !strings.HasSuffix(name, "_test.go") {
+			continue
+		}
+
+		// The package rule runs before the exemption list, which is about FILE NAMES
+		// that have no source counterpart by design. Where a test file lives in the
+		// package tree is a different question from what it is called, and an
+		// export_test.go is not licence to sit outside the package.
+		if strings.HasSuffix(f.Name.Name, "_test") {
+			pass.Report(analysis.Diagnostic{Pos: f.Package, Message: externalPackageMessage(f.Name.Name)})
+		}
+
+		if l.exempted(name) {
 			continue
 		}
 

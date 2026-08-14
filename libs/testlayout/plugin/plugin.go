@@ -1,32 +1,32 @@
-// Package plugin adapts testsprawl to golangci-lint's module plugin system.
+// Package plugin adapts testlayout to golangci-lint's module plugin system.
 //
-// Separate from the analyzer so that testsprawl itself carries no golangci-lint
+// Separate from the analyzer so that testlayout itself carries no golangci-lint
 // dependency and stays usable under go vet or singlechecker. Nothing calls into
 // this package: `golangci-lint custom` blank-imports it, and the init below is
 // the whole contract.
 package plugin
 
 import (
-	"github.com/egladman/magus/libs/testsprawl"
+	"github.com/egladman/magus/libs/testlayout"
 	"github.com/golangci/plugin-module-register/register"
 	"golang.org/x/tools/go/analysis"
 )
 
 func init() {
-	register.Plugin("testsprawl", newPlugin)
+	register.Plugin("testlayout", newPlugin)
 }
 
-// newPlugin builds the plugin from its linters.settings.custom.testsprawl.settings
-// block. It decodes into [testsprawl.Options] directly rather than into a copy
+// newPlugin builds the plugin from its linters.settings.custom.testlayout.settings
+// block. It decodes into [testlayout.Options] directly rather than into a copy
 // declared here: a parallel struct plus a field-by-field transpose is a place
 // where adding an option compiles clean while silently ignoring the user's yaml.
 func newPlugin(raw any) (register.LinterPlugin, error) {
-	opts, err := register.DecodeSettings[testsprawl.Options](raw)
+	opts, err := register.DecodeSettings[testlayout.Options](raw)
 	if err != nil {
 		return nil, err
 	}
 
-	analyzer, err := testsprawl.New(opts)
+	analyzer, err := testlayout.New(opts)
 	if err != nil {
 		return nil, err
 	}

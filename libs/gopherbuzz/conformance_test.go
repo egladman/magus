@@ -1,4 +1,4 @@
-package buzz_test
+package buzz_test //nolint:testlayout // in-package would close a cycle: gopherbuzz/std imports gopherbuzz
 
 // This file automates the "strict superset of upstream" claim in README.md and
 // the UpstreamRef pin in version.go. Nothing previously ran the upstream

@@ -5903,10 +5903,10 @@
       }
     },
     {
-      "id": "doc:libs/testsprawl/readme.md",
+      "id": "doc:libs/testlayout/readme.md",
       "kind": "doc",
-      "label": "libs/testsprawl/readme.md",
-      "source": "libs/testsprawl/readme.md",
+      "label": "libs/testlayout/readme.md",
+      "source": "libs/testlayout/readme.md",
       "attrs": {
         "role": "readme"
       }
@@ -6713,10 +6713,10 @@
       }
     },
     {
-      "id": "file:libs/testsprawl/magusfile.buzz",
+      "id": "file:libs/testlayout/magusfile.buzz",
       "kind": "file",
-      "label": "libs/testsprawl/magusfile.buzz",
-      "source": "libs/testsprawl/magusfile.buzz",
+      "label": "libs/testlayout/magusfile.buzz",
+      "source": "libs/testlayout/magusfile.buzz",
       "attrs": {
         "language": "buzz"
       }
@@ -11773,77 +11773,77 @@
       "source": "libs/gopherbuzz/std/testing.buzz:60"
     },
     {
-      "id": "function:libs/testsprawl/magusfile.buzz:build",
+      "id": "function:libs/testlayout/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "libs/testsprawl/magusfile.buzz:91",
+      "source": "libs/testlayout/magusfile.buzz:91",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/testsprawl/magusfile.buzz:ci",
+      "id": "function:libs/testlayout/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
-      "source": "libs/testsprawl/magusfile.buzz:95",
+      "source": "libs/testlayout/magusfile.buzz:95",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/testsprawl/magusfile.buzz:format",
+      "id": "function:libs/testlayout/magusfile.buzz:format",
       "kind": "function",
       "label": "format",
-      "source": "libs/testsprawl/magusfile.buzz:72",
+      "source": "libs/testlayout/magusfile.buzz:72",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/testsprawl/magusfile.buzz:generate",
+      "id": "function:libs/testlayout/magusfile.buzz:generate",
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.",
-      "source": "libs/testsprawl/magusfile.buzz:51",
+      "source": "libs/testlayout/magusfile.buzz:51",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/testsprawl/magusfile.buzz:index_generate",
+      "id": "function:libs/testlayout/magusfile.buzz:index_generate",
       "kind": "function",
       "label": "index_generate",
       "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/testsprawl/magusfile.buzz:64",
+      "source": "libs/testlayout/magusfile.buzz:64",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/testsprawl/magusfile.buzz:lint",
+      "id": "function:libs/testlayout/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "go-vet only, as in libs/diagnostics. Deliberately NOT golangci-lint: this module is what a custom golangci-lint binary is built FROM, and linting it with a binary that carries it is a bootstrap nobody needs.",
-      "source": "libs/testsprawl/magusfile.buzz:90",
+      "source": "libs/testlayout/magusfile.buzz:90",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/testsprawl/magusfile.buzz:preflight",
+      "id": "function:libs/testlayout/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "libs/testsprawl/magusfile.buzz:48",
+      "source": "libs/testlayout/magusfile.buzz:48",
       "attrs": {
         "exported": "true"
       }
     },
     {
-      "id": "function:libs/testsprawl/magusfile.buzz:test",
+      "id": "function:libs/testlayout/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "libs/testsprawl/magusfile.buzz:92",
+      "source": "libs/testlayout/magusfile.buzz:92",
       "attrs": {
         "exported": "true"
       }
@@ -12236,7 +12236,7 @@
       "id": "function:magusfile.buzz:lint_build",
       "kind": "function",
       "label": "lint_build",
-      "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. golangci-lint compiles plugins in rather than loading them at runtime, so an in-repo rule only runs through a binary built here.  The build runs in libs/testsprawl because `golangci-lint custom` reads .custom-gcl.yml from its working directory and takes no config flag. That file lives with the linter it declares; `destination: ../..` puts the binary back at the root, where .golangci.yml and lint expect it.  No declared outputs, for go-",
+      "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. golangci-lint compiles plugins in rather than loading them at runtime, so an in-repo rule only runs through a binary built here.  The build runs in libs/testlayout because `golangci-lint custom` reads .custom-gcl.yml from its working directory and takes no config flag. That file lives with the linter it declares; `destination: ../..` puts the binary back at the root, where .golangci.yml and lint expect it.  No declared outputs, for go-",
       "source": "magusfile.buzz:1805",
       "attrs": {
         "exported": "true"
@@ -18321,10 +18321,10 @@
       }
     },
     {
-      "id": "project:libs/testsprawl",
+      "id": "project:libs/testlayout",
       "kind": "project",
-      "label": "libs/testsprawl",
-      "source": "libs/testsprawl",
+      "label": "libs/testlayout",
+      "source": "libs/testlayout",
       "attrs": {
         "engine": "buzz",
         "target_count": "8"
@@ -19402,78 +19402,78 @@
       }
     },
     {
-      "id": "target:libs/testsprawl:build",
+      "id": "target:libs/testlayout:build",
       "kind": "target",
       "label": "build",
-      "source": "libs/testsprawl",
+      "source": "libs/testlayout",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/testsprawl:ci",
+      "id": "target:libs/testlayout:ci",
       "kind": "target",
       "label": "ci",
       "doc": "The anchor `magus affected ci` keys off; fans out lint/build/test after format.",
-      "source": "libs/testsprawl",
+      "source": "libs/testlayout",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/testsprawl:format",
+      "id": "target:libs/testlayout:format",
       "kind": "target",
       "label": "format",
-      "source": "libs/testsprawl",
+      "source": "libs/testlayout",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/testsprawl:generate",
+      "id": "target:libs/testlayout:generate",
       "kind": "target",
       "label": "generate",
       "doc": "Regenerates MAGUS.md and fails on drift.",
-      "source": "libs/testsprawl",
+      "source": "libs/testlayout",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/testsprawl:index-generate",
+      "id": "target:libs/testlayout:index-generate",
       "kind": "target",
       "label": "index-generate",
       "doc": "Renders MAGUS.md (target catalog plus graph) from this magusfile.",
-      "source": "libs/testsprawl",
+      "source": "libs/testlayout",
       "attrs": {
         "declared_as": "index_generate",
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/testsprawl:lint",
+      "id": "target:libs/testlayout:lint",
       "kind": "target",
       "label": "lint",
       "doc": "go-vet only, as in libs/diagnostics.",
-      "source": "libs/testsprawl",
+      "source": "libs/testlayout",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/testsprawl:preflight",
+      "id": "target:libs/testlayout:preflight",
       "kind": "target",
       "label": "preflight",
-      "source": "libs/testsprawl",
+      "source": "libs/testlayout",
       "attrs": {
         "engine": "buzz"
       }
     },
     {
-      "id": "target:libs/testsprawl:test",
+      "id": "target:libs/testlayout:test",
       "kind": "target",
       "label": "test",
-      "source": "libs/testsprawl",
+      "source": "libs/testlayout",
       "attrs": {
         "engine": "buzz"
       }
@@ -19906,11 +19906,11 @@
     },
     {
       "source": "charm:rw",
-      "target": "target:libs/testsprawl:generate",
+      "target": "target:libs/testlayout:generate",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
       "source": "charm:rw",
@@ -48793,116 +48793,116 @@
       "provenance": "libs/gopherbuzz/std/testing.buzz"
     },
     {
-      "source": "file:libs/testsprawl/magusfile.buzz",
-      "target": "function:libs/testsprawl/magusfile.buzz:build",
+      "source": "file:libs/testlayout/magusfile.buzz",
+      "target": "function:libs/testlayout/magusfile.buzz:build",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl/magusfile.buzz"
+      "provenance": "libs/testlayout/magusfile.buzz"
     },
     {
-      "source": "file:libs/testsprawl/magusfile.buzz",
-      "target": "function:libs/testsprawl/magusfile.buzz:ci",
+      "source": "file:libs/testlayout/magusfile.buzz",
+      "target": "function:libs/testlayout/magusfile.buzz:ci",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl/magusfile.buzz"
+      "provenance": "libs/testlayout/magusfile.buzz"
     },
     {
-      "source": "file:libs/testsprawl/magusfile.buzz",
-      "target": "function:libs/testsprawl/magusfile.buzz:format",
+      "source": "file:libs/testlayout/magusfile.buzz",
+      "target": "function:libs/testlayout/magusfile.buzz:format",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl/magusfile.buzz"
+      "provenance": "libs/testlayout/magusfile.buzz"
     },
     {
-      "source": "file:libs/testsprawl/magusfile.buzz",
-      "target": "function:libs/testsprawl/magusfile.buzz:generate",
+      "source": "file:libs/testlayout/magusfile.buzz",
+      "target": "function:libs/testlayout/magusfile.buzz:generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl/magusfile.buzz"
+      "provenance": "libs/testlayout/magusfile.buzz"
     },
     {
-      "source": "file:libs/testsprawl/magusfile.buzz",
-      "target": "function:libs/testsprawl/magusfile.buzz:index_generate",
+      "source": "file:libs/testlayout/magusfile.buzz",
+      "target": "function:libs/testlayout/magusfile.buzz:index_generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl/magusfile.buzz"
+      "provenance": "libs/testlayout/magusfile.buzz"
     },
     {
-      "source": "file:libs/testsprawl/magusfile.buzz",
-      "target": "function:libs/testsprawl/magusfile.buzz:lint",
+      "source": "file:libs/testlayout/magusfile.buzz",
+      "target": "function:libs/testlayout/magusfile.buzz:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl/magusfile.buzz"
+      "provenance": "libs/testlayout/magusfile.buzz"
     },
     {
-      "source": "file:libs/testsprawl/magusfile.buzz",
-      "target": "function:libs/testsprawl/magusfile.buzz:preflight",
+      "source": "file:libs/testlayout/magusfile.buzz",
+      "target": "function:libs/testlayout/magusfile.buzz:preflight",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl/magusfile.buzz"
+      "provenance": "libs/testlayout/magusfile.buzz"
     },
     {
-      "source": "file:libs/testsprawl/magusfile.buzz",
-      "target": "function:libs/testsprawl/magusfile.buzz:test",
+      "source": "file:libs/testlayout/magusfile.buzz",
+      "target": "function:libs/testlayout/magusfile.buzz:test",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl/magusfile.buzz"
+      "provenance": "libs/testlayout/magusfile.buzz"
     },
     {
-      "source": "file:libs/testsprawl/magusfile.buzz",
+      "source": "file:libs/testlayout/magusfile.buzz",
       "target": "import:../../spells/golang/gomod",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "libs/testsprawl/magusfile.buzz"
+      "provenance": "libs/testlayout/magusfile.buzz"
     },
     {
-      "source": "file:libs/testsprawl/magusfile.buzz",
+      "source": "file:libs/testlayout/magusfile.buzz",
       "target": "import:../../tools/drift",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "libs/testsprawl/magusfile.buzz"
+      "provenance": "libs/testlayout/magusfile.buzz"
     },
     {
-      "source": "file:libs/testsprawl/magusfile.buzz",
+      "source": "file:libs/testlayout/magusfile.buzz",
       "target": "import:fs",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "libs/testsprawl/magusfile.buzz"
+      "provenance": "libs/testlayout/magusfile.buzz"
     },
     {
-      "source": "file:libs/testsprawl/magusfile.buzz",
+      "source": "file:libs/testlayout/magusfile.buzz",
       "target": "import:magus",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "libs/testsprawl/magusfile.buzz"
+      "provenance": "libs/testlayout/magusfile.buzz"
     },
     {
-      "source": "file:libs/testsprawl/magusfile.buzz",
+      "source": "file:libs/testlayout/magusfile.buzz",
       "target": "import:magus/spell/go",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "libs/testsprawl/magusfile.buzz"
+      "provenance": "libs/testlayout/magusfile.buzz"
     },
     {
-      "source": "file:libs/testsprawl/magusfile.buzz",
+      "source": "file:libs/testlayout/magusfile.buzz",
       "target": "import:magus/spell/markdown",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
-      "provenance": "libs/testsprawl/magusfile.buzz"
+      "provenance": "libs/testlayout/magusfile.buzz"
     },
     {
       "source": "file:libs/textsearch/magusfile.buzz",
@@ -59844,84 +59844,84 @@
       "provenance": "libs/gopherbuzz"
     },
     {
-      "source": "project:libs/testsprawl",
-      "target": "doc:libs/testsprawl/readme.md",
+      "source": "project:libs/testlayout",
+      "target": "doc:libs/testlayout/readme.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl/readme.md"
+      "provenance": "libs/testlayout/readme.md"
     },
     {
-      "source": "project:libs/testsprawl",
-      "target": "file:libs/testsprawl/magusfile.buzz",
+      "source": "project:libs/testlayout",
+      "target": "file:libs/testlayout/magusfile.buzz",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl/magusfile.buzz"
+      "provenance": "libs/testlayout/magusfile.buzz"
     },
     {
-      "source": "project:libs/testsprawl",
-      "target": "target:libs/testsprawl:build",
+      "source": "project:libs/testlayout",
+      "target": "target:libs/testlayout:build",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "project:libs/testsprawl",
-      "target": "target:libs/testsprawl:ci",
+      "source": "project:libs/testlayout",
+      "target": "target:libs/testlayout:ci",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "project:libs/testsprawl",
-      "target": "target:libs/testsprawl:format",
+      "source": "project:libs/testlayout",
+      "target": "target:libs/testlayout:format",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "project:libs/testsprawl",
-      "target": "target:libs/testsprawl:generate",
+      "source": "project:libs/testlayout",
+      "target": "target:libs/testlayout:generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "project:libs/testsprawl",
-      "target": "target:libs/testsprawl:index-generate",
+      "source": "project:libs/testlayout",
+      "target": "target:libs/testlayout:index-generate",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "project:libs/testsprawl",
-      "target": "target:libs/testsprawl:lint",
+      "source": "project:libs/testlayout",
+      "target": "target:libs/testlayout:lint",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "project:libs/testsprawl",
-      "target": "target:libs/testsprawl:preflight",
+      "source": "project:libs/testlayout",
+      "target": "target:libs/testlayout:preflight",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "project:libs/testsprawl",
-      "target": "target:libs/testsprawl:test",
+      "source": "project:libs/testlayout",
+      "target": "target:libs/testlayout:test",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
       "source": "project:libs/textsearch",
@@ -62817,7 +62817,7 @@
     },
     {
       "source": "target:docs:index-generate",
-      "target": "file:libs/testsprawl/magusfile.buzz",
+      "target": "file:libs/testlayout/magusfile.buzz",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
@@ -63872,172 +63872,172 @@
       "provenance": "libs/gopherbuzz"
     },
     {
-      "source": "target:libs/testsprawl:build",
+      "source": "target:libs/testlayout:build",
       "target": "op:go:go-build",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:build",
+      "source": "target:libs/testlayout:build",
       "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:build",
-      "target": "target:libs/testsprawl:format",
+      "source": "target:libs/testlayout:build",
+      "target": "target:libs/testlayout:format",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:ci",
-      "target": "target:libs/testsprawl:build",
+      "source": "target:libs/testlayout:ci",
+      "target": "target:libs/testlayout:build",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:ci",
-      "target": "target:libs/testsprawl:lint",
+      "source": "target:libs/testlayout:ci",
+      "target": "target:libs/testlayout:lint",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:ci",
-      "target": "target:libs/testsprawl:test",
+      "source": "target:libs/testlayout:ci",
+      "target": "target:libs/testlayout:test",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:format",
-      "target": "doc:libs/testsprawl/readme.md",
+      "source": "target:libs/testlayout:format",
+      "target": "doc:libs/testlayout/readme.md",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:format",
+      "source": "target:libs/testlayout:format",
       "target": "op:go:go-fmt",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:format",
+      "source": "target:libs/testlayout:format",
       "target": "op:go:go-mod-tidy",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:format",
+      "source": "target:libs/testlayout:format",
       "target": "op:markdown:dprint",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:format",
+      "source": "target:libs/testlayout:format",
       "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:format",
+      "source": "target:libs/testlayout:format",
       "target": "spell:markdown",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:format",
-      "target": "target:libs/testsprawl:generate",
+      "source": "target:libs/testlayout:format",
+      "target": "target:libs/testlayout:generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:generate",
-      "target": "target:libs/testsprawl:index-generate",
+      "source": "target:libs/testlayout:generate",
+      "target": "target:libs/testlayout:index-generate",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:generate",
-      "target": "target:libs/testsprawl:preflight",
+      "source": "target:libs/testlayout:generate",
+      "target": "target:libs/testlayout:preflight",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:lint",
+      "source": "target:libs/testlayout:lint",
       "target": "op:go:go-vet",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:lint",
+      "source": "target:libs/testlayout:lint",
       "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:lint",
-      "target": "target:libs/testsprawl:format",
+      "source": "target:libs/testlayout:lint",
+      "target": "target:libs/testlayout:format",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:test",
+      "source": "target:libs/testlayout:test",
       "target": "op:go:go-test",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:test",
+      "source": "target:libs/testlayout:test",
       "target": "spell:go",
       "relation": "uses",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
-      "source": "target:libs/testsprawl:test",
-      "target": "target:libs/testsprawl:format",
+      "source": "target:libs/testlayout:test",
+      "target": "target:libs/testlayout:format",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "libs/testsprawl"
+      "provenance": "libs/testlayout"
     },
     {
       "source": "target:libs/textsearch:ci",

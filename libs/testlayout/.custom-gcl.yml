@@ -16,10 +16,10 @@ version: v2.12.2
 destination: ../..
 
 plugins:
-  # testsprawl reports a test file whose name narrows a source file's name.
+  # testlayout reports a test file whose name narrows a source file's name.
   # Local `path` rather than a proxy `version` on purpose - the module lives in
   # this repo, so a rule change is exercised by the very commit that makes it,
   # with no tag-then-consume round trip.
-  - module: github.com/egladman/magus/libs/testsprawl
-    import: github.com/egladman/magus/libs/testsprawl/plugin
+  - module: github.com/egladman/magus/libs/testlayout
+    import: github.com/egladman/magus/libs/testlayout/plugin
     path: .

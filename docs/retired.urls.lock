@@ -18,6 +18,12 @@ development/projects/website/
 development/gopherbuzz/
 development/projects/gopherbuzz/
 
+# libs/testsprawl became libs/testlayout when the linter grew a second rule and its
+# name stopped describing what it checks. A project page is generated per project, so
+# the rename retires the old URL the same way the ones above did.
+development/libs-testsprawl/
+development/projects/libs-testsprawl/
+
 # retired when libs/diag was renamed libs/diagnostics. Retired rather than
 # redirected, matching the development/gopherbuzz precedent above: a project page
 # under /development/ is derived from the project's directory name, so the old

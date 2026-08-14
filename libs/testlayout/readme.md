@@ -1,4 +1,4 @@
-# testsprawl
+# testlayout
 
 A Go analyzer that reports a test file whose name **narrows** the name of a source
 file beside it.
@@ -71,13 +71,13 @@ version: "2"
 
 linters:
   enable:
-    - testsprawl
+    - testlayout
   settings:
     custom:
-      testsprawl:
+      testlayout:
         type: module
         description: reports a test file whose name narrows a source file's name
-        original-url: github.com/egladman/magus/libs/testsprawl
+        original-url: github.com/egladman/magus/libs/testlayout
         settings:
           # Extra exempt globs, filepath.Match against the base name. A malformed
           # glob fails at config load and names the pattern.
@@ -95,13 +95,13 @@ build a binary carrying this one. `.custom-gcl.yml` in this directory declares i
 and `golangci-lint custom` reads that file from its working directory:
 
 ```bash
-cd libs/testsprawl && golangci-lint custom
+cd libs/testlayout && golangci-lint custom
 ```
 
 `destination: ../..` writes `./custom-gcl` at the workspace root, which reads
 `.golangci.yml` exactly as the stock binary does. `magus run lint` does both steps.
 
-Once `testsprawl` appears in `.golangci.yml` the stock binary can no longer read
+Once `testlayout` appears in `.golangci.yml` the stock binary can no longer read
 it, so every lint entry point has to move to `./custom-gcl`.
 
 One binary carries every in-repo plugin, so a second linter is another entry in
@@ -113,12 +113,12 @@ The analyzer has no golangci-lint dependency, so `singlechecker` and `go vet`
 tools work too:
 
 ```go
-singlechecker.Main(testsprawl.Analyzer)
+singlechecker.Main(testlayout.Analyzer)
 ```
 
 `Analyzer` is the default configuration and exposes no flags. To set `allow` or
 `unpaired` outside golangci-lint, build your own with
-`testsprawl.New(testsprawl.Options{...})`, which errors on a malformed glob.
+`testlayout.New(testlayout.Options{...})`, which errors on a malformed glob.
 
 ## Not hermetic
 

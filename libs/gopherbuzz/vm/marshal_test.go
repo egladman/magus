@@ -1,4 +1,4 @@
-package vm_test
+package vm_test //nolint:testlayout // in-package would close a cycle: gopherbuzz imports gopherbuzz/vm
 
 import (
 	"testing"

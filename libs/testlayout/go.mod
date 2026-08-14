@@ -1,4 +1,4 @@
-module github.com/egladman/magus/libs/testsprawl
+module github.com/egladman/magus/libs/testlayout
 
 go 1.26
 
