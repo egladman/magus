@@ -181,6 +181,11 @@ func ResolveCacheDir(root string, opts ...Option) (string, error) {
 	return resolveCacheDir(root, cfg), nil
 }
 
+// CacheKeyVersion is the hashing-recipe version this binary computes cache keys
+// with. Two keys from different recipes are not comparable, which is what makes a
+// mismatch worth reporting rather than treating as changed inputs.
+const CacheKeyVersion = cache.KeyVersion
+
 // OutputDescriptor is a stored target execution's identity and outcome - the caller-facing
 // projection of [cache.OutputDescriptor], the metadata behind a target-output ref.
 // Field tags match [cache.OutputDescriptor]'s exactly, so embedding this in a CLI JSON
@@ -206,6 +211,7 @@ type OutputDescriptor struct {
 	Spell     string   `json:"spell,omitempty"`      // spell::op filter that selected the definition
 	ExtraArgs []string `json:"extra_args,omitempty"` // trailing args forwarded after --
 	VCSName   string   `json:"vcs,omitempty"`        // provider Revision came from: git, hg, jj
+	Platform  string   `json:"platform,omitempty"`   // GOOS/GOARCH the run executed on
 }
 
 func newOutputDescriptor(d cache.OutputDescriptor) OutputDescriptor {
@@ -214,7 +220,7 @@ func newOutputDescriptor(d cache.OutputDescriptor) OutputDescriptor {
 		Failed: d.Failed, ErrMsg: d.ErrMsg, TimestampMs: d.TimestampMs, DurationMs: d.DurationMs,
 		Key: d.Key, KeyVersion: d.KeyVersion, Attempt: d.Attempt, MagusVersion: d.MagusVersion,
 		Revision: d.Revision, Dirty: d.Dirty,
-		Spell: d.Spell, ExtraArgs: d.ExtraArgs, VCSName: d.VCSName,
+		Spell: d.Spell, ExtraArgs: d.ExtraArgs, VCSName: d.VCSName, Platform: d.Platform,
 	}
 }
 

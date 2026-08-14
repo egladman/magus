@@ -363,6 +363,7 @@ reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
 reference/codes/outputref/MGS8003/
+reference/codes/outputref/MGS8004/
 reference/codes/race/
 reference/codes/race/MGS4001/
 reference/codes/race/MGS4002/
@@ -501,6 +502,7 @@ tags/bounds/
 tags/breaking-changes/
 tags/build/
 tags/buzz/
+tags/cache-key/
 tags/cache/
 tags/cargo/
 tags/changed-files/
@@ -635,6 +637,7 @@ tags/onboarding/
 tags/opencode/
 tags/operations/
 tags/os/
+tags/output-ref/
 tags/output-refs/
 tags/output/
 tags/outputs/
@@ -669,6 +672,7 @@ tags/release/
 tags/remote-cache/
 tags/repl/
 tags/replay/
+tags/reproduce/
 tags/rfc-6902/
 tags/ruff/
 tags/run/

@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2181,
-  "edge_count": 5705,
+  "node_count": 2182,
+  "edge_count": 5711,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -966,7 +966,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "184",
+        "dir_files": "185",
         "dir_languages": "markdown"
       }
     },
@@ -996,7 +996,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "81",
+        "dir_files": "82",
         "dir_languages": "markdown"
       }
     },
@@ -1046,7 +1046,7 @@
       "label": "docs/reference/codes/outputref",
       "source": "docs/reference/codes/outputref",
       "attrs": {
-        "dir_files": "4",
+        "dir_files": "5",
         "dir_languages": "markdown"
       }
     },
@@ -4377,6 +4377,20 @@
         "section": "reference",
         "tags": "MGS8003,output refs,query,flags",
         "title": "MGS8003: malformed output ref"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/outputref/MGS8004.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/outputref/MGS8004.md",
+      "source": "docs/reference/codes/outputref/MGS8004.md",
+      "attrs": {
+        "diagnostic": "MGS7002",
+        "role": "doc",
+        "section": "reference",
+        "tags": "output-ref,reproduce,cache-key,platform,diagnostics",
+        "title": "MGS8004: output ref was produced on a different machine",
+        "unknown_codes": "MGS8004"
       }
     },
     {
@@ -22220,6 +22234,14 @@
     },
     {
       "source": "dir:docs/reference/codes/outputref",
+      "target": "doc:docs/reference/codes/outputref/MGS8004.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/outputref/MGS8004.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/outputref",
       "target": "doc:docs/reference/codes/outputref/README.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -33881,6 +33903,46 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/outputref/MGS8003.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/outputref/MGS8004.md",
+      "target": "diagnostic:MGS8001",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/outputref/MGS8004.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/outputref/MGS8004.md",
+      "target": "diagnostic:MGS8003",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/outputref/MGS8004.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/outputref/MGS8004.md",
+      "target": "doc:docs/concepts/cache/output-refs.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/outputref/MGS8004.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/outputref/MGS8004.md",
+      "target": "doc:docs/reference/codes/outputref/MGS8001.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/outputref/MGS8004.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/outputref/MGS8004.md",
+      "target": "doc:docs/reference/codes/outputref/MGS8003.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/outputref/MGS8004.md"
     },
     {
       "source": "doc:docs/reference/codes/outputref/README.md",

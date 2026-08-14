@@ -141,7 +141,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : When false (or 0), replay cache hits but never write new entries, locally or to a remote (default: true). Equivalent magus.yaml key: **cache.write.enabled**.
 
 **MAGUS_CACHE_INCLUDE_OS_ENABLED**
-: When false (or 0), the host OS is left out of every cache key (default: true). Equivalent magus.yaml key: **cache.include.os.enabled**.
+: When true, the host OS keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay (default: false). Equivalent magus.yaml key: **cache.include.os.enabled**.
 
 **MAGUS_CACHE_INCLUDE_ARCH_ENABLED**
 : When false (or 0), the host architecture is left out of every cache key (default: true). Equivalent magus.yaml key: **cache.include.arch.enabled**.

@@ -102,6 +102,11 @@ type OutputDescriptor struct {
 	Spell     string   `json:"spell,omitempty"`      // spell::op filter that selected the definition
 	ExtraArgs []string `json:"extra_args,omitempty"` // trailing args forwarded after --
 	VCSName   string   `json:"vcs,omitempty"`        // provider Revision came from: git, hg, jj
+	// Platform is GOOS/GOARCH, the same string readManifest and importArtifact
+	// refuse a mismatch on. Recorded unconditionally, NOT gated on the
+	// cache.include.os/arch settings: those govern what keys a build, while this
+	// explains a refusal the guards perform regardless of them.
+	Platform string `json:"platform,omitempty"`
 }
 
 // AmbiguousRefError is returned by output lookup when a ref (or prefix) matches more

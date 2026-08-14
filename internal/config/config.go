@@ -235,10 +235,10 @@ type CacheIncludeFlag struct {
 func (c Cache) WriteEnabled() bool { return c.Write.Enabled == nil || *c.Write.Enabled }
 
 // IncludeOS reports whether the host OS keys every entry.
-func (c Cache) IncludeOS() bool { return c.Include.OS.Enabled == nil || *c.Include.OS.Enabled }
+func (c Cache) IncludeOS() bool { return c.Include.OS.Enabled != nil && *c.Include.OS.Enabled }
 
 // IncludeArch reports whether the host architecture keys every entry.
-func (c Cache) IncludeArch() bool { return c.Include.Arch.Enabled == nil || *c.Include.Arch.Enabled }
+func (c Cache) IncludeArch() bool { return c.Include.Arch.Enabled != nil && *c.Include.Arch.Enabled }
 
 // CacheRemote holds settings that apply only to a remote cache backend (wired via
 // magus.cache.remote in the magusfile). The backend binding is code, so it stays
@@ -529,7 +529,7 @@ func EnvVarDocs() []EnvVarDoc {
 	return []EnvVarDoc{
 		{"MAGUS_CACHE_DIR", "cache.dir", "", "Override the default cache location (.magus/ in the workspace root)"},
 		{"MAGUS_CACHE_WRITE_ENABLED", "cache.write.enabled", "true", "When false (or 0), replay cache hits but never write new entries, locally or to a remote"},
-		{"MAGUS_CACHE_INCLUDE_OS_ENABLED", "cache.include.os.enabled", "true", "When false (or 0), the host OS is left out of every cache key"},
+		{"MAGUS_CACHE_INCLUDE_OS_ENABLED", "cache.include.os.enabled", "false", "When true, the host OS keys every cache entry; off by default because a manifest guard already refuses a cross-platform replay"},
 		{"MAGUS_CACHE_INCLUDE_ARCH_ENABLED", "cache.include.arch.enabled", "true", "When false (or 0), the host architecture is left out of every cache key"},
 		{"MAGUS_CACHE_SIZE_MB", "cache.size_mb", "0", "Cache disk usage cap in MB (binary, 1<<20); 0 means unlimited"},
 		{"MAGUS_CACHE_REMOTE_INSECURE", "cache.remote.insecure", "false", "Disable remote-cache signature verification (accept/produce unsigned artifacts); for trusted single-repo CI only"},

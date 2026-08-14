@@ -131,7 +131,7 @@ Override the default cache location (.magus/ in the workspace root). Equivalent 
 When false (or 0), replay cache hits but never write new entries, locally or to a remote (default: true). Equivalent magus.yaml key: \fBcache.write.enabled\fR.
 .TP
 \fBMAGUS_CACHE_INCLUDE_OS_ENABLED\fR
-When false (or 0), the host OS is left out of every cache key (default: true). Equivalent magus.yaml key: \fBcache.include.os.enabled\fR.
+When true, the host OS keys every cache entry; off by default because a manifest guard already refuses a cross\-platform replay (default: false). Equivalent magus.yaml key: \fBcache.include.os.enabled\fR.
 .TP
 \fBMAGUS_CACHE_INCLUDE_ARCH_ENABLED\fR
 When false (or 0), the host architecture is left out of every cache key (default: true). Equivalent magus.yaml key: \fBcache.include.arch.enabled\fR.

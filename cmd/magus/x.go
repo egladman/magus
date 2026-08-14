@@ -8,6 +8,8 @@ import (
 	"log/slog"
 	"os"
 	"regexp"
+	"runtime"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -389,23 +391,7 @@ func reproduceRef(ctx context.Context, root, ref string, step bool) error {
 			interactive.Emit(os.Stderr, fmt.Sprintf(
 				"ref %s reproduces exactly here: same cache key, so this replays the recorded run", ref))
 		default:
-			interactive.Emit(os.Stderr, fmt.Sprintf(
-				"ref %s was produced from different inputs (key %s, yours %s), so this runs the target rather than replaying it",
-				ref, shortRev(d.Key), shortRev(live)))
-			// Only when the PROVIDERS agree. A git SHA and an hg node id are both 40
-			// hex, so comparing across providers renders a confident answer to a
-			// question that was never asked.
-			if d.Revision != "" {
-				name, head, _ := m.CurrentRevision(ctx)
-				switch {
-				case d.VCSName != "" && name != "" && d.VCSName != name:
-					interactive.Emit(os.Stderr, fmt.Sprintf(
-						"it was recorded under %s and this workspace resolves to %s, so the two revisions are not comparable", d.VCSName, name))
-				case head != "" && head != d.Revision:
-					interactive.Emit(os.Stderr, fmt.Sprintf(
-						"it was recorded at %s and you are at %s", shortRev(d.Revision), shortRev(head)))
-				}
-			}
+			reportForeignMachine(ctx, m, ref, d)
 		}
 	}
 
@@ -434,9 +420,66 @@ func reproduceRef(ctx context.Context, root, ref string, step bool) error {
 	return m.Run(ctx, targets, opts...)
 }
 
+// elide keeps a value inside the aligned column, trimming from the LEFT because the
+// distinguishing part of a describe-style version is its tail.
+func elide(v string) string {
+	const max = 22
+	if len(v) <= max {
+		return v
+	}
+	return "..." + v[len(v)-(max-3):]
+}
+
 func shortRev(r string) string {
 	if len(r) > 12 {
 		return r[:12]
 	}
 	return r
+}
+
+// reportForeignMachine explains WHY a ref will not replay, naming each differing
+// field and both values.
+//
+// "different inputs" is true and useless: the reader already knows it did not
+// replay, and what they need is which of the handful of possible causes it was.
+// Only differing fields are printed, so the rows that appear are the diagnosis.
+func reportForeignMachine(ctx context.Context, m *magus.Magus, ref string, d magus.OutputDescriptor) {
+	type row struct{ field, recorded, here string }
+	var rows []row
+	add := func(field, recorded, here string) {
+		// Both sides must be known: a field missing from either is unrecorded, not
+		// different, and reporting it as a difference invents a cause.
+		if recorded != "" && here != "" && recorded != here {
+			rows = append(rows, row{field, recorded, here})
+		}
+	}
+
+	add("platform", d.Platform, runtime.GOOS+"/"+runtime.GOARCH)
+	if d.KeyVersion != 0 && d.KeyVersion != magus.CacheKeyVersion {
+		rows = append(rows, row{"key recipe", strconv.Itoa(d.KeyVersion), strconv.Itoa(magus.CacheKeyVersion)})
+	}
+	add("magus", d.MagusVersion, version)
+	vcsName, head, _ := m.CurrentRevision(ctx)
+	add("vcs", d.VCSName, vcsName)
+	// Revisions only when the PROVIDERS agree: a git SHA and an hg node id are both
+	// 40 hex, so comparing across them answers a question nobody asked.
+	if d.VCSName == "" || vcsName == "" || d.VCSName == vcsName {
+		add("revision", shortRev(d.Revision), shortRev(head))
+	}
+
+	var b strings.Builder
+	fmt.Fprintf(&b, "ref %s was produced on a different machine, so this runs the target rather than replaying it\n", ref)
+	for _, r := range rows {
+		fmt.Fprintf(&b, "  %-11s recorded %-22s here %s\n", r.field, elide(r.recorded), elide(r.here))
+	}
+	// The insight, not a restatement: source hashes agree across platforms, which is
+	// exactly why the key cannot catch this and the import guard has to.
+	if d.Platform != "" && d.Platform != runtime.GOOS+"/"+runtime.GOARCH {
+		b.WriteString("  sources hash identically across platforms, so the artifact would be refused on import\n")
+	}
+	if d.KeyVersion != 0 && d.KeyVersion != magus.CacheKeyVersion {
+		b.WriteString("  the two keys were computed by different recipes and can never match\n")
+	}
+
+	fmt.Fprintln(os.Stderr, types.DiagnosticErrorf(types.OutputRefForeignMachine, "%s", strings.TrimRight(b.String(), "\n")).Error())
 }

@@ -646,6 +646,7 @@ func (c *Cache) recordOutput(ctx context.Context, s Step, hash string, output []
 		Spell:       s.Spell,
 		ExtraArgs:   s.ExtraArgs,
 		VCSName:     s.VCSName,
+		Platform:    c.platform,
 	}
 	if runErr != nil {
 		d.ErrMsg = runErr.Error()
