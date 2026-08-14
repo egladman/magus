@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"cmp"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -20,6 +21,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/graph/dependency"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
@@ -672,8 +674,9 @@ func (m *Magus) Review(ctx context.Context, paths []string) (types.Review, error
 		out.SortForReview()
 		return out, nil
 	}
-	if g, gerr := m.KnowledgeGraphWithSymbols(ctx); gerr == nil {
-		impact.Enrich(res, impact.GraphStore(g))
+	graph, gerr := m.KnowledgeGraphWithSymbols(ctx)
+	if gerr == nil {
+		impact.Enrich(res, impact.GraphStore(graph))
 	} else {
 		out.Notes = append(out.Notes,
 			"changed-symbol reach and coverage skipped (no symbol index loaded): "+gerr.Error())
@@ -682,17 +685,37 @@ func (m *Magus) Review(ctx context.Context, paths []string) (types.Review, error
 	out.SeedProjects = res.SeedProjects
 	out.AffectedProjects = res.AffectedProjects
 
+	// Surface starts UNKNOWN everywhere and is only lowered to internal for a file the symbol
+	// index actually covered. Defaulting to internal would report every unindexed file as
+	// safe, which is the one wrong answer that costs something.
+	for i := range out.Files {
+		out.Files[i].Surface = types.ReviewSurfaceUnknown
+	}
 	for _, s := range res.ChangedSymbols {
 		f, ok := byPath[s.File]
 		if !ok {
 			continue
 		}
-		f.Symbols = append(f.Symbols, s)
+		sym := types.ReviewSymbol{ID: s.Symbol, Label: s.Label, RefCount: s.RefCount, FileCount: s.FileCount}
+		sym.ModuleAPI = exportedFromModule(s.File, s.Label)
+		if graph != nil {
+			sym.ExternalProjects, sym.ExternalFileCount = m.externalReferents(graph, s.Symbol, f.Project)
+		}
+		f.Symbols = append(f.Symbols, sym)
 		// Reach is the WIDEST file count among the file's changed symbols, not their sum: a
 		// file is as dangerous as its most-depended-on export, and summing would rank a file
 		// with many narrow symbols above one with a single load-bearing API.
 		if s.FileCount > f.Reach {
 			f.Reach = s.FileCount
+		}
+		// One symbol crossing a project boundary makes the whole file public surface: a
+		// reviewer needs to know the file contains something a consumer can see, and burying
+		// that because its neighbours are internal is how the signal gets missed.
+		switch {
+		case len(sym.ExternalProjects) > 0 || sym.ModuleAPI:
+			f.Surface = types.ReviewSurfacePublic
+		case f.Surface == types.ReviewSurfaceUnknown:
+			f.Surface = types.ReviewSurfaceInternal
 		}
 	}
 	for _, c := range res.ChangedFileCoverage {
@@ -704,6 +727,94 @@ func (m *Magus) Review(ctx context.Context, paths []string) (types.Review, error
 
 	out.SortForReview()
 	return out, nil
+}
+
+// exportedFromModule reports whether a symbol defined at path with the given label is
+// reachable from OUTSIDE the module - the boundary a semver bump is actually about.
+//
+// It is deliberately per-language and deliberately narrow. Go is the only language answered
+// here because Go states export in the language itself (an initial capital) and states
+// unreachability in the path (an `internal/` segment the toolchain enforces), so the answer
+// is a fact rather than a heuristic. Every other language returns false, which reads as "not
+// known to be module API" and never as "internal" - the caller keeps ExternalProjects, which
+// is language-neutral, and the surface stays honest about what was not checked.
+//
+// Adding a language here needs the same standard: a rule the toolchain ENFORCES, not a
+// convention it merely encourages. TypeScript's `export` keyword does not qualify, because
+// what a package actually publishes is decided by its entry points and its `exports` map,
+// which this signature cannot see.
+func exportedFromModule(path, label string) bool {
+	if !strings.HasSuffix(path, ".go") || label == "" {
+		return false
+	}
+	// `internal/` anywhere in the path makes the package unimportable outside the module,
+	// whatever the symbol's case. Checked on segments so a directory merely CONTAINING the
+	// word (say "internals/") is not mistaken for the enforced one.
+	for _, seg := range strings.Split(path, "/") {
+		if seg == "internal" {
+			return false
+		}
+	}
+	// A test file exports nothing a consumer can import.
+	if strings.HasSuffix(path, "_test.go") {
+		return false
+	}
+	r := rune(label[0])
+	return r >= 'A' && r <= 'Z'
+}
+
+// externalReferents reports which OTHER projects reference symbolID, and how many of its
+// referencing files sit outside owner. It is the semver-relevant half of the review: a symbol
+// used only inside its own project cannot break a consumer the workspace does not also
+// rebuild, and one used across a boundary can.
+//
+// Ownership is by directory containment, longest project path first, which is the same rule
+// ClassifyFiles uses - so a file in a nested project is attributed to the nested one rather
+// than to the root, and a nested project consuming its parent's symbol reads as external.
+//
+// A file owned by nothing is NOT counted as external. It affects no target and rebuilds
+// nothing, so calling it a downstream consumer would inflate the surface with paths that
+// cannot break.
+func (m *Magus) externalReferents(g *knowledge.Graph, symbolID, owner string) ([]string, int) {
+	refs, ok := g.Refs(symbolID)
+	if !ok {
+		return nil, 0
+	}
+	owners := slices.Clone(m.ws.All())
+	slices.SortFunc(owners, func(a, b *types.Project) int {
+		if c := cmp.Compare(len(b.Path), len(a.Path)); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Path, b.Path)
+	})
+	projectOf := func(path string) string {
+		for _, p := range owners {
+			if p.Path == "." || strings.HasPrefix(path, p.Path+"/") {
+				if p.Path != "." {
+					return p.Path
+				}
+				return "."
+			}
+		}
+		return ""
+	}
+
+	seen := map[string]bool{}
+	external := 0
+	for _, site := range refs.Refs {
+		proj := projectOf(site.File)
+		if proj == "" || proj == owner {
+			continue
+		}
+		external++
+		seen[proj] = true
+	}
+	projects := make([]string, 0, len(seen))
+	for p := range seen {
+		projects = append(projects, p)
+	}
+	slices.Sort(projects)
+	return projects, external
 }
 
 // Telemetry returns this workspace's observability provider (nil on an Inspect workspace,
