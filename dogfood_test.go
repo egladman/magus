@@ -50,6 +50,11 @@ const (
 var hookTemplates = []string{
 	"magus-guard-command.sh",
 	"magus-guard-path.sh",
+	// The one template that carries no verdict: it records a path an agent
+	// reached and judges nothing, so it declares no guard coverage and owes no
+	// parity row. See the note at the top of the file for why that absence is
+	// deliberate rather than a hole.
+	"magus-guard-observe.sh",
 	"codex-hooks.json",
 	"cursor-guard.sh",
 	"opencode-plugin.ts",

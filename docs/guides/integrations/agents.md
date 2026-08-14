@@ -646,23 +646,41 @@ inside a Magus target or Buzz execution path.
 #### Observing the tools that only look: `--observe`
 
 The templates below wire the tools that ACT: a shell command, a file write.
-A host's read and search tools act on nothing, so no guard rule applies to
-them - and wiring them to the plain hook is worse than leaving them out, because
-a read event carries a file path, so the write rules would advise "you are
-editing a declared output" at a file the agent merely opened.
+A host's read tool acts on nothing, so no guard rule applies to it - and wiring
+it to the plain hook is worse than leaving it out, because a read event carries
+a file path, so the write rules would advise "you are editing a declared output"
+at a file the agent merely opened.
+
+Search tools are deliberately OUT of scope. A search names a pattern and, at
+most, a directory to sweep; the pattern is the agent's query text, which this
+trail has no business keeping, and a repo-wide search names no subject at all.
+Recording a swept directory as a place the agent "reached" would also
+over-claim - it is not the same act as opening a file. What the observation
+answers is which files a session actually opened, and which it never did.
 
 `magus hook --observe` records the path as one the agent REACHED and judges
-nothing: no rule runs and the verdict is always `pass`. It needs no template,
-because everything the guard templates exist for - rendering a verdict, failing
-open when Magus cannot answer, retrying without attribution on an older binary -
-has nothing to do here. One matcher block is the whole integration:
+nothing: no rule runs and the verdict is always `pass`. Wire it through
+[`magus-guard-observe.sh`](#magus-guard-observesh), the same way you wire the
+guard templates:
 
 ```json
 {
-  "matcher": "<your host's read and search tools>",
-  "hooks": [{ "type": "command", "command": "magus hook --observe" }]
+  "matcher": "<your host's read tool>",
+  "hooks": [
+    {
+      "type": "command",
+      "command": "sh docs/guides/integrations/agents/magus-guard-observe.sh",
+      "timeout": 10
+    }
+  ]
 }
 ```
+
+Pipe the event through that script rather than into `magus hook --observe`
+directly. Magus reads a payload it does not recognize as an envelope as the
+literal text it is, so a search event - which carries a pattern and no file path
+- would be recorded whole, query text included, as the thing the agent reached.
+The script selects the path first and records nothing when there is none.
 
 `--observe` outranks `--path`, so a host whose read event carries a file path
 stays an observation rather than being judged as a write.
@@ -1052,6 +1070,111 @@ if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   exit 0
 fi
 printf '%s' "$verdict"
+```
+
+#### `magus-guard-observe.sh`
+
+The optional one, and the only template that carries no verdict. Wire it to the
+tools that merely look; see [Observing the tools that only look](#observing-the-tools-that-only-look---observe)
+for why it is off unless you ask for it.
+
+```sh
+#!/usr/bin/env sh
+# magus observe hook: records ONE path an agent reached, and judges nothing.
+#
+# This file is the source of truth. The docs site embeds it, magus's own
+# repository invokes it, and you can download it and do the same. POSIX sh, no
+# bashisms; nothing in it is magus-internal.
+#
+# Wire it to the tools that only LOOK - your host's read equivalent. The guard
+# templates beside this one handle the tools that ACT. Do not point a read tool
+# at those: a read event carries a file path, so the write rules would advise
+# "you are editing a declared output" at a file the agent merely opened.
+# --observe is what separates the two, and only this wrapper can set it,
+# because only it knows which of your host's tools look.
+#
+# Contract: reads the host's event as JSON on stdin, selects the path with jq,
+# and pipes it into `magus hook --observe`. It prints NOTHING and always exits
+# 0 - see the note on that below, which is load-bearing rather than tidy.
+# Override any of the variables below:
+#
+#   HOST_EVENT_PATH  dot-path to the read path inside your host's event
+#   HOST_SESSION_PATH  dot-path to the session id inside your host's event
+#   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
+#   GUARD_AGENT_NAME  the agent host name recorded alongside the observation
+#   GUARD_MAGUS_BIN  path to the binary, when it is not on PATH
+#
+# The defaults are Claude Code's event shape, matching its two siblings. A
+# different host overrides the dot-paths and passes its own GUARD_AGENT_NAME,
+# exactly as codex-hooks.json already does for the guard templates.
+#
+# NO magus-guard-coverage line, and that absence is deliberate rather than an
+# oversight: a coverage declaration states how much of a VERDICT a host can
+# carry on a guard surface, and this file carries no verdict on no surface. It
+# never denies, never advises, and cannot change what your host does next. The
+# parity gates ask that question only of artifacts that answer it.
+#
+# magus-guard-template: 3
+
+# NO `set -e`, deliberately, and neither sibling uses it either.
+#
+# Under `set -e` a jq that is missing (127) or handed a payload it cannot parse
+# aborts this script mid-way with jq's own message on stderr - on EVERY read.
+# Worse, a PreToolUse hook's exit status is not advisory on every host: some
+# treat a specific non-zero code as "block this tool call", so a malformed event
+# could stop the agent from reading anything at all. An optional record must
+# never be able to do that, so every failure below is swallowed and the script
+# ends at `exit 0` on all paths.
+
+[ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.file_path'
+[ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
+[ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
+[ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
+[ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
+
+# An absent observer is SILENT, where an absent guard is loud.
+#
+# The guard templates announce themselves when magus cannot be found, because an
+# unenforced deny rule is a safety fact the reader needs. Nothing is unenforced
+# here - there is no rule - so the same announcement would be a per-read
+# interruption reporting that an optional record was not written.
+if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+  exit 0
+fi
+
+# stdin is a pipe and can only be drained once, so the event is read into a
+# variable and selected from more than once. `// empty` keeps a host without one
+# of these fields at the empty string rather than the literal "null", and jq's
+# stderr is discarded because a payload this script cannot parse is a record it
+# will not write, not news for the person trying to read a file.
+#
+# The path is extracted rather than piping the whole event through, because a
+# payload magus does not recognize as an envelope is judged as the literal text
+# it is - and for a search that carries a pattern but no path, that would record
+# the entire event, query text included, as the thing the agent reached.
+event=$(cat)
+path=$(printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH // empty" 2>/dev/null)
+
+# Nothing to record is not a failure: a host event that names no path has no
+# reach to report, and inventing one would claim a file the host never named.
+# This gate comes BEFORE the remaining selections so the common no-op case - any
+# tool whose event carries no read path - costs one jq rather than three.
+[ -n "$path" ] || exit 0
+
+session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty" 2>/dev/null)
+transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty" 2>/dev/null)
+
+# A magus too old for --observe rejects the flag and exits non-zero. That is a
+# real state worth knowing about once, but not once per read, so it is reported
+# through the trail's own absence rather than through the session: if reads are
+# missing from `magus activity`, the binary is too old. Both streams are
+# discarded because a flag-parse error would otherwise reach the host as this
+# hook's response on every read.
+printf '%s' "$path" | "$GUARD_MAGUS_BIN" hook --observe \
+  --agent-name "$GUARD_AGENT_NAME" --session "$session" --transcript "$transcript" \
+  --event PreToolUse >/dev/null 2>&1
+
+exit 0
 ```
 
 #### `codex-hooks.json`

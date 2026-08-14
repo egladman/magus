@@ -154,6 +154,8 @@ func hookUsage(w io.Writer) {
 	fmt.Fprintln(w, "  --agent-name <name>   agent host this invocation came from (attribution")
 	fmt.Fprintln(w, "                        only; the verdict never reads it)")
 	fmt.Fprintln(w, "  --session <id>        the host's own session id, recorded on the event")
+	fmt.Fprintln(w, "  --transcript <path>   the host's own log of this session, recorded as a")
+	fmt.Fprintln(w, "                        pointer; magus never opens it")
 	fmt.Fprintln(w, "  --event <name>        the host's hook event name (e.g. PreToolUse)")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Global display flags (-o, -s, -q, -v, --tee) are accepted; see `magus -h`.")
@@ -401,6 +403,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// a verdict; erroring here would block a tool call over metadata.
 	host := fset.String("agent-name", "", "Name of the agent host this invocation came from, recorded on the activity event")
 	session := fset.String("session", "", "The host's own session id for this invocation, recorded on the activity event")
+	transcript := fset.String("transcript", "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
 	event := fset.String("event", "", "The host's hook event name (e.g. PreToolUse), recorded on the activity event")
 	// The whole display set, not a hand-rolled -o: this command used to define
 	// its own output flag and so silently lacked -s, -q, -v and --tee. That gap
@@ -422,7 +425,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	}
 
 	input, hasInput := readGuardInput(in)
-	who := hookAttribution{Host: *host, Session: *session, Event: *event}
+	who := hookAttribution{Host: *host, Session: *session, Transcript: *transcript, Event: *event}
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
@@ -491,7 +494,16 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			verdict.Context = v.Context
 		}
 	}
-	appendHookActivity(ctx, input, who, tool, verdict)
+	// An observation is not a judgment, and the trail already knows the difference: an
+	// AgentCommand with no Decision previews as "observed" rather than "guard: <decision>".
+	// Recording the pass verdict here would have every read claim the guard ran and cleared
+	// it, which is exactly the conflation --observe exists to remove. The WIRE verdict is
+	// unchanged - a host still needs a decision it can parse, and "pass" is the true one.
+	record := verdict
+	if *observe {
+		record.Decision, record.Reason, record.Context = "", "", ""
+	}
+	appendHookActivity(ctx, input, who, tool, record)
 	if err := writeGuardVerdict(out, opts, verdict); err != nil {
 		return err
 	}
@@ -799,8 +811,12 @@ type hookEnvelope struct {
 //
 // That division is the whole design: only the wrapper knows that its host calls a read
 // "Read" or "read_file", and mapping those names here would be a per-host branch, so the
-// next change to any host would mean a magus release. TestNoHostSpecificBehaviorInCode
-// enforces this; the matcher in a host's own config is where the host's vocabulary lives.
+// next change to any host would mean a magus release. The matcher in a host's own config is
+// where the host's vocabulary lives.
+//
+// Nothing MECHANICALLY enforces this particular case, which is why it is written down here.
+// TestNoHostSpecificBehaviorInCode matches host NAMES, so a switch over "Read"/"Bash" - a
+// per-host branch in everything but spelling - passes it untouched.
 const (
 	hookToolCommand = "shell.command"
 	hookToolWrite   = "file.write"

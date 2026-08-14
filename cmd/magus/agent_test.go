@@ -1153,11 +1153,18 @@ func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
 	require.Len(t, events, 1)
 	got := events[0]
 	assert.Equal(t, "file.read", got.Action, "a reach is recorded under its own label, not as a write")
-	assert.Equal(t, "guard: pass", got.Preview)
+
+	// "observed", not "guard: pass". The trail already distinguishes the two, and recording
+	// a verdict here would have every read claim the guard ran and cleared it - the exact
+	// conflation --observe exists to remove. The wire verdict the host reads is still pass.
+	assert.Equal(t, "observed", got.Preview)
 
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"schema_version":1,"tool":"file.read","path":"AGENTS.md"}`, string(body))
+	body, err = trail.ReadBlob(dir, got.ResponseRef)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"schema_version":1,"decision":""}`, string(body))
 }
 
 // TestHookCmd_ObserveOutranksPath holds the precedence the wrapper depends on: a host whose
@@ -1198,6 +1205,32 @@ func TestHookCmd_RecordsTranscriptPath(t *testing.T) {
 	body, err := trail.ReadBlob(dir, got.RequestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"schema_version":1,"session":"s1","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"shell.command","command":"ls"}`, string(body))
+}
+
+// TestHookCmd_TranscriptFlagRecordsThePointer covers the FLAG path, which is the one the
+// shipped observe template actually uses. That template extracts the path with jq and pipes
+// plain text rather than the whole event, so nothing about the envelope is available to it -
+// without the flag the transcript link exists only for hosts that pipe raw JSON, which is
+// none of the ones magus ships a template for.
+func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+	var out bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader("internal/trail/trail.go"), &out,
+		[]string{"--observe", "--agent-name", "claude-code", "--session", "s9", "--transcript", "/tmp/t.jsonl", "--event", "PreToolUse", "-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	got := events[0]
+	assert.Equal(t, "file.read", got.Action)
+	assert.Equal(t, "s9", got.Session)
+
+	body, err := trail.ReadBlob(dir, got.RequestRef)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"schema_version":1,"host":"claude-code","session":"s9","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"file.read","path":"internal/trail/trail.go"}`, string(body))
 }
 
 // TestHookCmd_ObserveWithNoInputRecordsNothing: a wrapper whose host event carried no path
