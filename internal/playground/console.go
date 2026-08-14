@@ -60,8 +60,11 @@ type ExecResult struct {
 	Clear bool
 }
 
-// commands is the completable command set (also the `help` ordering source).
-var commands = []string{"help", "ls", "targets", "graph", "run", "eval", "version", "clear", "about"}
+// commands is the completable command set: this console's own verbs plus every
+// real magus subcommand, read from the command registry (see cli.go). The list
+// used to be hand-written here and named nine things, of which three were not
+// magus subcommands at all and most of magus was missing.
+var commands = completableCommands()
 
 func NewConsole(info BuildInfo) *Console { return &Console{info: info} }
 
@@ -120,6 +123,13 @@ func (s *Console) Exec(ctx context.Context, line string) ExecResult {
 	case "version":
 		out = append(out, s.version()...)
 	default:
+		// A real magus subcommand is explained rather than evaluated. Handing
+		// `doctor` to Buzz reported `undefined: doctor`, which answers a question
+		// about Buzz scope that the reader did not ask.
+		if lines := explainCLI(cmd); lines != nil {
+			out = append(out, lines...)
+			break
+		}
 		out = append(out, s.eval(ctx, trimmed)...) // a bare line is a Buzz expression
 	}
 	return ExecResult{Lines: out}
@@ -140,13 +150,17 @@ func (s *Console) Complete(line string) (replacement string, listing []Line) {
 		cmd := line[:sp]
 		base = strings.TrimLeft(line[sp+1:], " ")
 		prefix = cmd + " "
-		if cmd != "run" {
-			return line, nil
-		}
-		for _, t := range s.parsed.Targets {
-			if strings.HasPrefix(t.Key, base) {
-				candidates = append(candidates, t.Key)
+		switch {
+		case cmd == "run" && !strings.HasPrefix(base, "-"):
+			for _, t := range s.parsed.Targets {
+				if strings.HasPrefix(t.Key, base) {
+					candidates = append(candidates, t.Key)
+				}
 			}
+		default:
+			// Declared flags are knowable without a workspace; a positional would
+			// be a guess at a path or ref this page cannot see.
+			candidates = completeCLI(cmd, base)
 		}
 	}
 
@@ -197,6 +211,9 @@ func (s *Console) help() []Line {
 		`  <b>about</b>         what this is`,
 		``,
 		`<span class="muted">a bare line is evaluated as Buzz. tab completes; ↑↓ recall history.</span>`,
+		``,
+		`<span class="muted">magus subcommands (type one for what it does; this page cannot run them)</span>`,
+		`  ` + esc(strings.Join(cliCommands(), "  ")),
 	}, "\n")}}
 }
 
