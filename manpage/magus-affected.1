@@ -47,9 +47,6 @@ Hand the run to the daemon and return immediately; follow it with magus status \
 \fB\-\-detail\fR
 With \-\-plan: add per\-shard detail \- the invocation, its spells, the files it declares it writes, and the skills its work routes to
 .TP
-\fB\-\-dry\-run\fR
-Print what would run without executing
-.TP
 \fB\-\-explain\fR \fIstring\fR
 Show why <project> is in the affected set instead of executing
 .TP
@@ -58,6 +55,9 @@ With \-\-bisect: known\-good commit SHA (auto\-detected from history when empty)
 .TP
 \fB\-\-graph\fR
 Render the dependency graph for the affected scope instead of executing
+.TP
+\fB\-\-impact\fR
+Report the blast radius of the changeset (read\-only; runs nothing)
 .TP
 \fB\-\-max\-parallel\-budget\fR \fIint\fR
 With \-\-plan: cross\-shard concurrency cap; 0 = unlimited
@@ -77,7 +77,7 @@ With \-\-stdin: expect NUL\-separated paths and double\-NUL between batches
 \fB\-\-open\fR
 Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)
 .TP
-\fB\-\-plan\fR
+\fB\-\-plan\fR \fIstring\fR
 Emit a provider\-neutral JSON CI shard plan for the affected set
 .TP
 \fB\-\-race\fR \fIstring\fR

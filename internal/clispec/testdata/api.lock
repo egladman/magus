@@ -77,10 +77,10 @@ flag affected/bisect
 flag affected/depth
 flag affected/detach
 flag affected/detail
-flag affected/dry-run
 flag affected/explain
 flag affected/good
 flag affected/graph
+flag affected/impact
 flag affected/max-parallel-budget
 flag affected/max-shards
 flag affected/no-cache

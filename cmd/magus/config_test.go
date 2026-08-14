@@ -152,11 +152,7 @@ var affectedOnlyFlags = map[string]string{
 	"good":                "pairs with --bisect",
 	"target":              "pairs with --bisect",
 
-	// A GLOBAL flag that only this command's page declares. Listed here rather than
-	// deleted because removing it would drop --dry-run from affected's man page,
-	// and both commands do accept it; it is the registry entry that is odd, not the
-	// behaviour.
-	"dry-run": "global flag, declared on affected's page only",
+	"impact": "mode selector: reports the changeset's blast radius instead of running",
 }
 
 // TestRunAffectedFlagParity ensures that `magus run` and `magus affected`

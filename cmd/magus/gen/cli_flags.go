@@ -23,14 +23,14 @@ const (
 	FlagAffectedDetach = "detach"
 	// affected: --detail
 	FlagAffectedDetail = "detail"
-	// affected: --dry-run
-	FlagAffectedDryRun = "dry-run"
 	// affected: --explain
 	FlagAffectedExplain = "explain"
 	// affected: --good
 	FlagAffectedGood = "good"
 	// affected: --graph
 	FlagAffectedGraph = "graph"
+	// affected: --impact
+	FlagAffectedImpact = "impact"
 	// affected: --max-parallel-budget
 	FlagAffectedMaxParallelBudget = "max-parallel-budget"
 	// affected: --max-shards
@@ -371,41 +371,25 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 
 // AffectedFlags are the flags declared for `magus affected`.
 type AffectedFlags struct {
-	DryRun            bool          // --dry-run
-	Base              string        // --base, -b
-	Stdin             bool          // --stdin
-	Null              bool          // --null
-	NoCache           bool          // --no-cache
-	NoDefaultCharms   bool          // --no-default-charms
-	Detach            bool          // --detach
-	Wait              bool          // --wait
-	Open              bool          // --open
-	Step              bool          // --step
-	Race              string        // --race
-	Timeout           time.Duration // --timeout
-	Graph             bool          // --graph
-	Upstream          bool          // --upstream
-	Depth             int           // --depth
-	Explain           string        // --explain
-	Plan              bool          // --plan
-	MaxShards         int           // --max-shards
-	MaxParallelBudget int           // --max-parallel-budget
-	Detail            bool          // --detail
-	Bisect            string        // --bisect
-	Good              string        // --good
-	Target            string        // --target
-}
-
-// AffectedDefaults carries the defaults `magus affected` resolves at runtime (config, a
-// package constant) rather than declaring as a literal.
-type AffectedDefaults struct {
-	MaxShards int // --max-shards
+	Base            string        // --base, -b
+	Stdin           bool          // --stdin
+	Null            bool          // --null
+	NoCache         bool          // --no-cache
+	NoDefaultCharms bool          // --no-default-charms
+	Detach          bool          // --detach
+	Wait            bool          // --wait
+	Open            bool          // --open
+	Step            bool          // --step
+	Race            string        // --race
+	Timeout         time.Duration // --timeout
+	Graph           bool          // --graph
+	Upstream        bool          // --upstream
+	Depth           int           // --depth
 }
 
 // BindAffected registers `magus affected`'s flags on fs and returns the destination.
-func BindAffected(fs *flag.FlagSet, d AffectedDefaults) *AffectedFlags {
+func BindAffected(fs *flag.FlagSet) *AffectedFlags {
 	var f AffectedFlags
-	fs.BoolVar(&f.DryRun, FlagAffectedDryRun, false, "Print what would run without executing")
 	fs.StringVar(&f.Base, FlagAffectedBase, "", "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)")
 	fs.StringVar(&f.Base, FlagAffectedB, "", "Short for --base")
 	fs.BoolVar(&f.Stdin, FlagAffectedStdin, false, "Read changed file paths from stdin instead of running a VCS diff")
@@ -421,11 +405,64 @@ func BindAffected(fs *flag.FlagSet, d AffectedDefaults) *AffectedFlags {
 	fs.BoolVar(&f.Graph, FlagAffectedGraph, false, "Render the dependency graph for the affected scope instead of executing")
 	fs.BoolVar(&f.Upstream, FlagAffectedUpstream, false, "With --graph: show dependents instead of dependencies")
 	fs.IntVar(&f.Depth, FlagAffectedDepth, 0, "With --graph: cap displayed depth (0 = unlimited)")
-	fs.StringVar(&f.Explain, FlagAffectedExplain, "", "Show why <project> is in the affected set instead of executing")
-	fs.BoolVar(&f.Plan, FlagAffectedPlan, false, "Emit a provider-neutral JSON CI shard plan for the affected set")
+	return &f
+}
+
+// AffectedImpactFlags are the flags declared for `magus affected impact`.
+type AffectedImpactFlags struct {
+	Impact bool   // --impact
+	Base   string // --base, -b
+}
+
+// BindAffectedImpact registers `magus affected impact`'s flags on fs and returns the destination.
+func BindAffectedImpact(fs *flag.FlagSet) *AffectedImpactFlags {
+	var f AffectedImpactFlags
+	fs.BoolVar(&f.Impact, FlagAffectedImpact, false, "Report the blast radius of the changeset (read-only; runs nothing)")
+	fs.StringVar(&f.Base, FlagAffectedBase, "", "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)")
+	fs.StringVar(&f.Base, FlagAffectedB, "", "Short for --base")
+	return &f
+}
+
+// AffectedPlanFlags are the flags declared for `magus affected plan`.
+type AffectedPlanFlags struct {
+	Base              string // --base, -b
+	Stdin             bool   // --stdin
+	Null              bool   // --null
+	MaxShards         int    // --max-shards
+	MaxParallelBudget int    // --max-parallel-budget
+	Detail            bool   // --detail
+}
+
+// AffectedPlanDefaults carries the defaults `magus affected plan` resolves at runtime (config, a
+// package constant) rather than declaring as a literal.
+type AffectedPlanDefaults struct {
+	MaxShards         int // --max-shards
+	MaxParallelBudget int // --max-parallel-budget
+}
+
+// BindAffectedPlan registers `magus affected plan`'s flags on fs and returns the destination.
+func BindAffectedPlan(fs *flag.FlagSet, d AffectedPlanDefaults) *AffectedPlanFlags {
+	var f AffectedPlanFlags
+	fs.StringVar(&f.Base, FlagAffectedBase, "", "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)")
+	fs.StringVar(&f.Base, FlagAffectedB, "", "Short for --base")
+	fs.BoolVar(&f.Stdin, FlagAffectedStdin, false, "Read changed file paths from stdin instead of running a VCS diff")
+	fs.BoolVar(&f.Null, FlagAffectedNull, false, "With --stdin: expect NUL-separated paths and double-NUL between batches")
 	fs.IntVar(&f.MaxShards, FlagAffectedMaxShards, d.MaxShards, "With --plan: maximum CI shards (-1 = unlimited)")
-	fs.IntVar(&f.MaxParallelBudget, FlagAffectedMaxParallelBudget, 0, "With --plan: cross-shard concurrency cap; 0 = unlimited")
+	fs.IntVar(&f.MaxParallelBudget, FlagAffectedMaxParallelBudget, d.MaxParallelBudget, "With --plan: cross-shard concurrency cap; 0 = unlimited")
 	fs.BoolVar(&f.Detail, FlagAffectedDetail, false, "With --plan: add per-shard detail - the invocation, its spells, the files it declares it writes, and the skills its work routes to")
+	return &f
+}
+
+// AffectedBisectFlags are the flags declared for `magus affected bisect`.
+type AffectedBisectFlags struct {
+	Bisect string // --bisect
+	Good   string // --good
+	Target string // --target
+}
+
+// BindAffectedBisect registers `magus affected bisect`'s flags on fs and returns the destination.
+func BindAffectedBisect(fs *flag.FlagSet) *AffectedBisectFlags {
+	var f AffectedBisectFlags
 	fs.StringVar(&f.Bisect, FlagAffectedBisect, "", "Drive VCS bisect to find the commit that broke <project>")
 	fs.StringVar(&f.Good, FlagAffectedGood, "", "With --bisect: known-good commit SHA (auto-detected from history when empty)")
 	fs.StringVar(&f.Target, FlagAffectedTarget, "test", "With --bisect: magus target to bisect")

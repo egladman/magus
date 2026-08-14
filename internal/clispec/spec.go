@@ -68,10 +68,12 @@ const (
 	FlagInt      FlagKind = "int"
 	FlagDuration FlagKind = "duration"
 
-	// FlagCustom is a flag whose value type is the command's own: a repeatable
-	// flag.Value like `magus watch --ignore` or `magus memory put --ref`.
+	// FlagCustom is a flag this package declares but does not bind: a repeatable
+	// flag.Value like `magus watch --ignore`, or a MODE SELECTOR like `magus
+	// affected --plan`, which is read straight from argv before any FlagSet
+	// exists because it chooses which FlagSet to build.
 	//
-	// DECLARED here, BOUND by hand. The command keeps its fs.Var call, and the
+	// DECLARED here, BOUND by hand (or by nothing). The command keeps its fs.Var call, and the
 	// generator emits only the name constant - no struct field and no second
 	// binding, which would be a "flag redefined" panic. What the declaration buys
 	// is documentation: --ignore, --ref and --reference were each bound by a
@@ -104,6 +106,20 @@ type Flag struct {
 	// Default should still carry the documented value (usually the config default),
 	// because the man page has to print something and printing 0 would be a lie.
 	DefaultAtBind bool
+
+	// Modes lists the sub-modes that accept this flag; empty means the command's
+	// base invocation.
+	//
+	// `magus affected` is one command with four parses: the run itself, --plan,
+	// --impact and --bisect. They are not a base set plus extras - each binds its
+	// own set, overlapping the others (--base is accepted by three of them,
+	// --max-shards only by --plan). Declared as one merged list, a generated
+	// binder for the base parse would accept --max-shards and ignore it, turning
+	// a caught mistake into a silent one.
+	//
+	// A flag accepted by several modes lists them, so it is still DECLARED once.
+	// The generator emits one binder per mode.
+	Modes []string
 
 	// AliasOf names the flag this one is a second spelling of: --test is AliasOf
 	// "t", -b is AliasOf "base". Both names stay real flags and both keep their own

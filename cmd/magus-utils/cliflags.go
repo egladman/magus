@@ -59,13 +59,57 @@ func runCLIFlags(args []string) error {
 	b.WriteString(")\n")
 
 	for _, c := range clispec.All {
-		writeBinder(&b, c.Name, c.Flags)
+		for _, mode := range modesOf(c.Flags) {
+			name := c.Name
+			if mode != "" {
+				name += " " + mode
+			}
+			writeBinder(&b, name, c.Name, flagsForMode(c.Flags, mode))
+		}
 		for _, child := range c.Children {
-			writeBinder(&b, c.Name+" "+child.Name, child.Flags)
+			writeBinder(&b, c.Name+" "+child.Name, c.Name+" "+child.Name, child.Flags)
 		}
 	}
 
 	return emit.Go(*out, b.Bytes())
+}
+
+// modesOf lists the distinct sub-modes declared across a command's flags, base
+// ("") first. A command whose flags declare no Modes yields just the base, so it
+// keeps a single binder.
+func modesOf(flags []clispec.Flag) []string {
+	out := []string{""}
+	seen := map[string]bool{"": true}
+	for _, f := range flags {
+		for _, m := range f.Modes {
+			if !seen[m] {
+				seen[m] = true
+				out = append(out, m)
+			}
+		}
+	}
+	return out
+}
+
+// flagsForMode selects the flags one mode accepts: those declaring it, plus (for
+// the base) those declaring no mode at all.
+func flagsForMode(flags []clispec.Flag, mode string) []clispec.Flag {
+	var out []clispec.Flag
+	for _, f := range flags {
+		if len(f.Modes) == 0 {
+			if mode == "" {
+				out = append(out, f)
+			}
+			continue
+		}
+		for _, m := range f.Modes {
+			if m == mode {
+				out = append(out, f)
+				break
+			}
+		}
+	}
+	return out
 }
 
 // writeBinder emits the typed struct and the Bind function for one command.
@@ -76,7 +120,11 @@ func runCLIFlags(args []string) error {
 // buy nothing. The field names are derived from the flag names, so the struct is the
 // flag list: adding a flag to the registry adds a field, and removing one breaks
 // every read of it at compile time instead of leaving a silently-always-false bool.
-func writeBinder(b *bytes.Buffer, command string, flags []clispec.Flag) {
+// binder names the emitted type and function ("affected plan"); constCommand
+// names the command whose constants its flags resolve to ("affected"). They
+// differ only for a sub-mode: a mode binds a subset of ONE command's flags, so
+// --base is a single FlagAffectedBase however many modes accept it.
+func writeBinder(b *bytes.Buffer, command, constCommand string, flags []clispec.Flag) {
 	if len(flags) == 0 {
 		return
 	}
@@ -128,7 +176,7 @@ func writeBinder(b *bytes.Buffer, command string, flags []clispec.Flag) {
 		}
 		for _, name := range g.names {
 			fmt.Fprintf(b, "\tfs.%sVar(&f.%s, %s, %s, %q)\n",
-				bindMethod(g.primary.Kind), g.field, "Flag"+goIdent(command)+goIdent(name), def, docFor(flags, name))
+				bindMethod(g.primary.Kind), g.field, "Flag"+goIdent(constCommand)+goIdent(name), def, docFor(flags, name))
 		}
 	}
 	b.WriteString("\treturn &f\n}\n")
