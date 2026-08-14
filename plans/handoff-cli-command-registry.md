@@ -5,7 +5,12 @@ working there and keep pushing there.
 
 - Branch: `improve-terminal` ([PR #52](https://github.com/egladman/magus/pull/52))
 - Worktree: `.claude/worktrees/improve-terminal-insight`
-- 55 commits ahead of `origin/main`, rebased onto `df1eb5a15`
+- 63 commits ahead of `origin/main`, based on `df1eb5a15`, UNPUSHED
+
+The branch now carries THREE subjects, which is worth knowing before you review
+it: the CLI command registry (below), the CI cache-signing fix, and the agents
+guide split merged in from `feat/frosty-diffie-660151`. Splitting them is much
+cheaper before the push than after.
 
 The original ask was "fix the MGS1020 failure". That is fixed in the first
 commit. Everything after it came out of one thesis: the CLI's flags were
@@ -15,12 +20,53 @@ already shipping when this started.
 
 ## State
 
-Feature complete for the registry work. Local `magus run test .` and `magus run
-lint .` are both GREEN uncached, and lint includes the `GOOS=js GOARCH=wasm`
-compile gate.
+Feature complete for the registry work. `magus affected ci --no-default-charms`
+is GREEN across every project as of `2f5d9a28e`, tree clean afterward, so
+`generate` found no drift as a pure gate.
 
-CI is NOT verified past `f6e3cfc7d`. The last several commits have only been
-tested locally. Watch the run before merging.
+CI is NOT verified past `f6e3cfc7d` - nothing since has been pushed. The last CI
+run (`fab95557a`, run 31815786600) failed in `magus plan` on four drifted
+`libs/*/MAGUS.md`; `b5695d3d6` commits exactly those four, so that specific
+failure is fixed, but only a push proves it.
+
+**`magus report` has not run on this branch in a long time.** The job is gated
+on `needs.plan.result == 'success'`, and `plan` has been red, so it SKIPS rather
+than fails - which is why the "magus report is red" item further down was stale.
+When `plan` goes green the report job executes for the first time in a while.
+
+## The CI cache was replaying UNSIGNED artifacts
+
+Not part of the registry work; found while chasing the stale report item, fixed
+in `9cb13ae1c`.
+
+`ci.yaml` set `MAGUS_CACHE_REMOTE_INSECURE: 'true'` workflow-wide. Two things
+were wrong at once:
+
+- The magusfile wires the remote cache on `trusted_keys OR insecure`, and
+  `vars.MAGUS_CACHE_PUBLIC_KEY` is unset, so the trust set was empty and the
+  INSECURE FLAG WAS THE ONLY THING TURNING THE CACHE ON.
+- `remoteCacheSigningOpts` (magus.go) returns `WithInsecureRemote()` BEFORE it
+  reads a trust set, so the `trusted_keys` in `magus.yaml` were never consulted.
+
+So the workspace shipped a trust anchor that verified nothing. The flag is gone
+from `ci.yaml`; with the variable unset the cache is simply not wired, which is
+no error and no remote hits rather than a break.
+
+`gh secret list` shows no `MAGUS_CACHE_SIGNING_KEY`, so the public key in
+`magus.yaml` is ORPHANED - no seed exists to sign with. Turning verification on
+for real needs a fresh keypair, which needs a human: the runbook is in
+`docs/concepts/cache/remote.md` ("Runbook: turning it on for a GitHub
+repository").
+
+`1c7afa78f` makes that runbook possible without the seed touching disk:
+`magus config cache key generate -o template='{{.seed}}'` puts the seed alone on
+stdout (warnings to stderr, no trailing newline, since `gh secret set` stores
+stdin verbatim), and `--tee` is REFUSED on that subcommand because it writes
+structured output to a file.
+
+Note the template field names are the `-o json` tags: `{{.seed}}`, not
+`{{.Seed}}`. The Go-field spelling fails at runtime, and it is an easy thing to
+write into a doc without executing.
 
 ## What shipped
 
@@ -69,9 +115,38 @@ history matters most in. `advice-test` sweeps the new directory too.
 - `describe -e` meant `--explain` under one noun and `--evaluated` under
   another. Splitting the nouns into real commands dissolved it.
 
+## The agents guide split, merged in
+
+`2f5d9a28e` merges `feat/frosty-diffie-660151` (3 commits, based on the same
+`df1eb5a15`). That branch is still checked out in the
+`agent-guard-harness-evolution-92bc5f` worktree and is now fully contained here,
+so it is safe to delete.
+
+The merge driver settled all 20 generated files by keeping the current version;
+regenerating afterwards needs TWO passes, because `generate` rewrites docs and
+the knowledge graph then indexes those docs. Four source conflicts, all resolved
+toward frosty.
+
+The one that mattered: `agents.md` had edits on BOTH sides, and taking frosty's
+whole file could have dropped this branch's. It did not, because both branches
+had independently corrected the same thing - the removed `--agents-md` flag -
+and frosty's `227a5655a` is exactly that fix. Verified before dropping the
+monolith: `--agents-md` appears nowhere in frosty's tree, and `cursor.md` plus
+`skills.md` carry the "magus never writes it, you paste the block" wording.
+
+Backup tags `backup/pre-frosty-improve-terminal` and `backup/pre-frosty-frosty`
+still exist; delete them once the merge is trusted.
+
 ## Open: needs a decision
 
-**1. ci.yaml's `report` job is red, on this branch and on `main`.**
+**1. STALE - see State above.** ci.yaml's `report` job is not red, it is
+skipped, because `plan` gates it. Kept because the root-cause analysis below was
+also wrong and is worth not repeating: the claim that
+`MAGUS_CACHE_REMOTE_INSECURE` CAUSES the "no trust set is declared" error does
+not reproduce, and cannot - the insecure branch returns before that error is
+reachable. The real defect was the opposite one, above: the flag suppressed
+verification entirely. The repro one-liner below no longer compiles (BZZ1006),
+which is a fair sign it had not been re-run.
 
 Not caused by this work - `main` at `df1eb5a15` fails identically. Root cause is
 pinned. Reproduce:
