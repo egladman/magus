@@ -107,12 +107,6 @@ flag buzz/no-autoload
 flag buzz/t
 flag buzz/test
 flag clean/cache
-flag describe/against
-flag describe/cache
-flag describe/e
-flag describe/evaluated
-flag describe/explain
-flag describe/no-default-charms
 flag explain/global
 flag explain/refresh
 flag hook/agent-name

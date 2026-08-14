@@ -83,18 +83,22 @@ const (
 	FlagBuzzTest = "test"
 	// clean: --cache
 	FlagCleanCache = "cache"
-	// describe: --against
-	FlagDescribeAgainst = "against"
-	// describe: --cache
-	FlagDescribeCache = "cache"
-	// describe: --e
-	FlagDescribeE = "e"
-	// describe: --evaluated
-	FlagDescribeEvaluated = "evaluated"
-	// describe: --explain
-	FlagDescribeExplain = "explain"
-	// describe: --no-default-charms
-	FlagDescribeNoDefaultCharms = "no-default-charms"
+	// describe projects: --e
+	FlagDescribeProjectsE = "e"
+	// describe projects: --evaluated
+	FlagDescribeProjectsEvaluated = "evaluated"
+	// describe spells: --versions
+	FlagDescribeSpellsVersions = "versions"
+	// describe target: --against
+	FlagDescribeTargetAgainst = "against"
+	// describe target: --cache
+	FlagDescribeTargetCache = "cache"
+	// describe target: --e
+	FlagDescribeTargetE = "e"
+	// describe target: --explain
+	FlagDescribeTargetExplain = "explain"
+	// describe target: --no-default-charms
+	FlagDescribeTargetNoDefaultCharms = "no-default-charms"
 	// explain: --global
 	FlagExplainGlobal = "global"
 	// explain: --refresh
@@ -283,25 +287,47 @@ const (
 	FlagWatchNull = "null"
 )
 
-// DescribeFlags are the flags declared for `magus describe`.
-type DescribeFlags struct {
-	Explain         bool   // --explain
-	E               bool   // -e
-	Evaluated       bool   // --evaluated
+// DescribeTargetFlags are the flags declared for `magus describe target`.
+type DescribeTargetFlags struct {
+	Explain         bool   // --explain, -e
 	Cache           bool   // --cache
 	Against         string // --against
 	NoDefaultCharms bool   // --no-default-charms
 }
 
-// BindDescribe registers `magus describe`'s flags on fs and returns the destination.
-func BindDescribe(fs *flag.FlagSet) *DescribeFlags {
-	var f DescribeFlags
-	fs.BoolVar(&f.Explain, FlagDescribeExplain, false, "For a target ref with charms: show the per-charm argv trace (base then each charm)")
-	fs.BoolVar(&f.E, FlagDescribeE, false, "Short for --explain on a target ref, and for --evaluated on a project listing")
-	fs.BoolVar(&f.Evaluated, FlagDescribeEvaluated, false, "For projects: print workspace-rooted globs, effective claims, and per-target policies")
-	fs.BoolVar(&f.Cache, FlagDescribeCache, false, "For a target ref: show its live cache key, the ref a run would print, and the component classes behind it")
-	fs.StringVar(&f.Against, FlagDescribeAgainst, "", "With --cache: diff the live key inputs against the stored lines behind an output ref")
-	fs.BoolVar(&f.NoDefaultCharms, FlagDescribeNoDefaultCharms, false, "With --cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)")
+// BindDescribeTarget registers `magus describe target`'s flags on fs and returns the destination.
+func BindDescribeTarget(fs *flag.FlagSet) *DescribeTargetFlags {
+	var f DescribeTargetFlags
+	fs.BoolVar(&f.Explain, FlagDescribeTargetExplain, false, "For a ref with charms: show the per-charm argv trace (base then each charm)")
+	fs.BoolVar(&f.Explain, FlagDescribeTargetE, false, "Short for --explain")
+	fs.BoolVar(&f.Cache, FlagDescribeTargetCache, false, "Show the live cache key, the ref a run would print, and the component classes behind it")
+	fs.StringVar(&f.Against, FlagDescribeTargetAgainst, "", "With --cache: diff the live key inputs against the stored lines behind an output `ref`")
+	fs.BoolVar(&f.NoDefaultCharms, FlagDescribeTargetNoDefaultCharms, false, "With --cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)")
+	return &f
+}
+
+// DescribeProjectsFlags are the flags declared for `magus describe projects`.
+type DescribeProjectsFlags struct {
+	Evaluated bool // --evaluated, -e
+}
+
+// BindDescribeProjects registers `magus describe projects`'s flags on fs and returns the destination.
+func BindDescribeProjects(fs *flag.FlagSet) *DescribeProjectsFlags {
+	var f DescribeProjectsFlags
+	fs.BoolVar(&f.Evaluated, FlagDescribeProjectsEvaluated, false, "Print workspace-rooted globs, effective claims, and per-target policies")
+	fs.BoolVar(&f.Evaluated, FlagDescribeProjectsE, false, "Short for --evaluated")
+	return &f
+}
+
+// DescribeSpellsFlags are the flags declared for `magus describe spells`.
+type DescribeSpellsFlags struct {
+	Versions bool // --versions
+}
+
+// BindDescribeSpells registers `magus describe spells`'s flags on fs and returns the destination.
+func BindDescribeSpells(fs *flag.FlagSet) *DescribeSpellsFlags {
+	var f DescribeSpellsFlags
+	fs.BoolVar(&f.Versions, FlagDescribeSpellsVersions, false, "Probe each spell's tools and report the versions that would key a run")
 	return &f
 }
 

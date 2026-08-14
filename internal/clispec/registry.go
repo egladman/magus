@@ -91,13 +91,48 @@ spells that fire, the charm-applied command, and any per-target policy. Add a ch
 and --explain (e.g. "lint:rw --explain") to see each charm reshape the command one
 step at a time.`,
 	Usage: "magus describe <noun> [<name>] [flags]",
-	Flags: []Flag{
-		{Name: "explain", Kind: FlagBool, Doc: "For a target ref with charms: show the per-charm argv trace (base then each charm)"},
-		{Name: "e", Kind: FlagBool, Doc: "Short for --explain on a target ref, and for --evaluated on a project listing"},
-		{Name: "evaluated", Kind: FlagBool, Doc: "For projects: print workspace-rooted globs, effective claims, and per-target policies"},
-		{Name: "cache", Kind: FlagBool, Doc: "For a target ref: show its live cache key, the ref a run would print, and the component classes behind it"},
-		{Name: "against", Kind: FlagString, Doc: "With --cache: diff the live key inputs against the stored lines behind an output ref"},
-		{Name: "no-default-charms", Kind: FlagBool, Doc: "With --cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)"},
+	// The nouns are separate commands, each with its own flags. They were one
+	// merged list on the parent, which is why -e had to be documented as "short
+	// for --explain on a target ref, and for --evaluated on a project listing":
+	// two different flags sharing a spelling because there was one namespace for
+	// all the nouns. Split, each -e is an ordinary alias of the flag beside it.
+	Children: []Command{
+		{Name: "targets", Short: "List every target the workspace defines"},
+		{
+			Name:  "target",
+			Short: "Detail one target ref: its dispatch plan, globs, spells and policy",
+			Flags: []Flag{
+				{Name: "explain", Kind: FlagBool, Doc: "For a ref with charms: show the per-charm argv trace (base then each charm)"},
+				{Name: "e", Kind: FlagBool, AliasOf: "explain", Doc: "Short for --explain"},
+				{Name: "cache", Kind: FlagBool, Doc: "Show the live cache key, the ref a run would print, and the component classes behind it"},
+				{Name: "against", Kind: FlagString, Doc: "With --cache: diff the live key inputs against the stored lines behind an output `ref`"},
+				{Name: "no-default-charms", Kind: FlagBool, Doc: "With --cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)"},
+			},
+		},
+		{
+			Name:  "projects",
+			Short: "List the workspace's projects",
+			Flags: []Flag{
+				{Name: "evaluated", Kind: FlagBool, Doc: "Print workspace-rooted globs, effective claims, and per-target policies"},
+				{Name: "e", Kind: FlagBool, AliasOf: "evaluated", Doc: "Short for --evaluated"},
+			},
+		},
+		{
+			Name:  "spells",
+			Short: "List the spells the workspace resolves",
+			Flags: []Flag{
+				// Bound by the command and declared nowhere until now, so no man page
+				// listed it.
+				{Name: "versions", Kind: FlagBool, Doc: "Probe each spell's tools and report the versions that would key a run"},
+			},
+		},
+		{Name: "charms", Short: "List charms and the targets that declare them"},
+		{Name: "workspaces", Short: "List the workspaces registered in config"},
+		{Name: "modules", Short: "List the Buzz host modules a magusfile can import"},
+		{Name: "mcp-tools", Short: "List the tools the MCP server exposes"},
+		{Name: "tools", Short: "List the external tools the workspace's spells require"},
+		{Name: "file", Short: "Classify paths as generated output, declared source, maintained, or unclaimed"},
+		{Name: "graph", Short: "Emit the target catalog and dependency graph"},
 	},
 	Examples: []Example{
 		{"List every target", "magus describe targets"},
