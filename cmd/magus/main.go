@@ -216,10 +216,21 @@ func hasDetachFlag(args []string) bool {
 // resolveProfile returns the work profile for a subcommand; defaults to "needs everything".
 func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	switch sub {
-	case "help", "version", "buzz":
-		// buzz is a standalone Buzz runner (and `buzz lsp` a stdio language server);
-		// both analyze source text directly, needing no workspace, config, or daemon.
+	case "help", "version":
+		// Neither reads a workspace, a config, or a daemon: one prints text compiled
+		// into the binary, the other a stamp.
 		return dispatchProfile{}
+	case "buzz":
+		// buzz is a standalone Buzz runner (and `buzz lsp` a stdio language server), so
+		// it needs no workspace RESOLUTION and is never forwarded to a daemon. It does
+		// need the config: a script run inside a workspace gets that workspace on its
+		// context (see buzzCmd), and opening one reads magus.yaml and the MAGUS_* env -
+		// the remote cache's trust set among them. Listed as config-free while it opened
+		// a workspace anyway, it opened it against DEFAULTS, so a wired remote backend
+		// came up with no trust set and the load failed with a message naming the very
+		// setting the environment had set. That was invisible locally, where the trust
+		// set is not what the yaml is consulted for, and fatal in CI.
+		return dispatchProfile{needsConfig: true}
 	case "completion", "self", "man":
 		return dispatchProfile{needsConfig: true}
 	case "agent":
