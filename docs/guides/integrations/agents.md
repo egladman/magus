@@ -579,19 +579,34 @@ the stable fields Magus needs for usage analysis:
   "schema_version": 1,
   "host": "claude-code",
   "session": "abc123",
+  "transcript": "/path/to/your/host/session.jsonl",
   "event": "PreToolUse",
-  "tool": "Bash",
+  "tool": "shell.command",
   "command": "magus run test ."
 }
 ```
 
 For a file-edit hook, `path` replaces `command`. The response contains the
 same schema version plus `decision` (`pass`, `advise`, or `deny`) and, where
-applicable, the guard's `reason` or `context`. The Activity event uses the
-host's tool name as `action`, a host-provided agent/session identifier as
-`actor` when one exists, and the workspace root. The command itself remains in
-the request blob rather than the list row, so the Activity view can group and
-scan safely while an operator can inspect the exact invocation when needed.
+applicable, the guard's `reason` or `context`.
+
+`tool` is one of Magus's OWN labels - `shell.command`, `file.write`,
+`file.read` - chosen by which flags the wrapper passed, never a host's tool
+name. Magus does not know that your host calls its shell tool `Bash`, and it
+must not: mapping host vocabularies here would mean a Magus release every time
+any host renamed a tool. The matcher in your own hook config is where your
+host's names live. The same label is the Activity event's `action`.
+
+`transcript` is your host's own log of the session, when its event supplies a
+path to one. It is a POINTER and nothing more: `session` is what groups a
+session's events together, `transcript` is what you follow to read the rest,
+and Magus never opens the file. That division is what lets the trail stay a
+record of paths and timings while the expensive, sensitive detail stays where
+your host already put it.
+
+The command itself remains in the request blob rather than the list row, so the
+Activity view can group and scan safely while an operator can inspect the exact
+invocation when needed.
 
 `host` and `session` are also carried on the event row itself, not only in the
 blob, so a view can group a page of observations by host without fetching a
@@ -627,6 +642,37 @@ needed to improve adoption, so do not put credentials or other secrets in a
 command line. The authenticated Activity view is the supported way to inspect
 them; there is no new network exporter, scoring system, or instrumentation
 inside a Magus target or Buzz execution path.
+
+#### Observing the tools that only look: `--observe`
+
+The templates below wire the tools that ACT: a shell command, a file write.
+A host's read and search tools act on nothing, so no guard rule applies to
+them - and wiring them to the plain hook is worse than leaving them out, because
+a read event carries a file path, so the write rules would advise "you are
+editing a declared output" at a file the agent merely opened.
+
+`magus hook --observe` records the path as one the agent REACHED and judges
+nothing: no rule runs and the verdict is always `pass`. It needs no template,
+because everything the guard templates exist for - rendering a verdict, failing
+open when Magus cannot answer, retrying without attribution on an older binary -
+has nothing to do here. One matcher block is the whole integration:
+
+```json
+{
+  "matcher": "<your host's read and search tools>",
+  "hooks": [{ "type": "command", "command": "magus hook --observe" }]
+}
+```
+
+`--observe` outranks `--path`, so a host whose read event carries a file path
+stays an observation rather than being judged as a write.
+
+This is OFF unless you wire it, and that is deliberate rather than an oversight.
+Read events vastly outnumber writes, and the trail is one bounded record shared
+with the rest of your activity history (10,000 newest events), so turning this on
+trades audit retention for reach detail. Wire it when you want to see where a
+session actually went - which files it kept returning to, which it never opened -
+and leave it off for ordinary work, where the acting tools are the whole story.
 
 ### Parity across hosts
 

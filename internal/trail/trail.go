@@ -144,18 +144,28 @@ type Event struct {
 // invocation, the latter a file-edit invocation. Host integrations may omit identity fields when
 // their hook event does not expose them; the event remains attributable to the generic "agent"
 // actor rather than pretending to know more than the host supplied.
+// Transcript is the host's own record of the session this observation came from, as an
+// absolute path on the machine that produced it. It is a POINTER, never content: the trail
+// stays a record of paths and timings, and a reader who wants what was actually said opens
+// the transcript themselves. That division is what lets the trail carry a whole session's
+// reach cheaply while the expensive, sensitive detail stays where the host already put it.
+//
+// It travels beside Session rather than replacing it: the id is what groups the events, and
+// the path is what a reader follows to see the rest. A host that exposes no transcript sends
+// none, exactly as with the other identity fields.
 type AgentCommand struct {
-	Actor     string
-	Workspace string
-	Host      string
-	Session   string
-	Event     string
-	Tool      string
-	Command   string
-	Path      string
-	Decision  string
-	Reason    string
-	Context   string
+	Actor      string
+	Workspace  string
+	Host       string
+	Session    string
+	Transcript string
+	Event      string
+	Tool       string
+	Command    string
+	Path       string
+	Decision   string
+	Reason     string
+	Context    string
 }
 
 const agentCommandSchemaVersion = 1
@@ -164,6 +174,7 @@ type agentCommandRequest struct {
 	SchemaVersion int    `json:"schema_version"`
 	Host          string `json:"host,omitempty"`
 	Session       string `json:"session,omitempty"`
+	Transcript    string `json:"transcript,omitempty"`
 	Event         string `json:"event,omitempty"`
 	Tool          string `json:"tool,omitempty"`
 	Command       string `json:"command,omitempty"`
@@ -201,6 +212,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		SchemaVersion: agentCommandSchemaVersion,
 		Host:          command.Host,
 		Session:       command.Session,
+		Transcript:    command.Transcript,
 		Event:         command.Event,
 		Tool:          command.Tool,
 		Command:       command.Command,

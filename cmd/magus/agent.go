@@ -149,6 +149,8 @@ func hookUsage(w io.Writer) {
 	fmt.Fprintln(w, "Flags:")
 	fmt.Fprintln(w, "  --path                judge the input as a file path an edit is about to")
 	fmt.Fprintln(w, "                        write, not as a shell command")
+	fmt.Fprintln(w, "  --observe             record the path as one the agent REACHED and judge")
+	fmt.Fprintln(w, "                        nothing; wire it to the tools that only look")
 	fmt.Fprintln(w, "  --agent-name <name>   agent host this invocation came from (attribution")
 	fmt.Fprintln(w, "                        only; the verdict never reads it)")
 	fmt.Fprintln(w, "  --session <id>        the host's own session id, recorded on the event")
@@ -385,6 +387,12 @@ type guardVerdict struct {
 func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
 	fset := flag.NewFlagSet("hook", flag.ContinueOnError)
 	asPath := fset.Bool("path", false, "Judge the input as a FILE PATH an edit is about to write, not as a shell command: editing a declared target output is advised against")
+	// Observation, not policy. A wrapper sets this for a tool that only LOOKS - no rule
+	// judges a read, so running the write rules over one would only ever manufacture a
+	// false advisory about editing a file the agent opened read-only. Which of a host's
+	// tools merely look is the wrapper's knowledge, never magus's: see the tool-label
+	// constants and TestNoHostSpecificBehaviorInCode.
+	observe := fset.Bool("observe", false, "Record the input as a path the agent REACHED, without judging it: no rule applies and the verdict is always pass")
 	// Attribution, not policy: these name WHO produced the observation, and the
 	// guard's verdict never reads them. Every one is optional and unvalidated -
 	// including the host name, which is an opaque label the caller chooses rather
@@ -426,45 +434,54 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		if who.Session == "" {
 			who.Session = req.Who.Session
 		}
+		if who.Transcript == "" {
+			who.Transcript = req.Who.Transcript
+		}
 		if who.Event == "" {
 			who.Event = req.Who.Event
 		}
 	}
-	verdict := guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
-	if *asPath {
-		if hasInput {
-			// The generated-output rule is definitive (it reads declared globs), so it
-			// speaks first; the memory nudge is a heuristic on the filename and only
-			// fills the silence it leaves.
-			context := adviseGeneratedWrite(ctx, input.Value)
-			// The notes rule DENIES, so it is checked before the advisories: a verdict
-			// that blocks is not something to fall through to. It sits after the
-			// generated-output rule only because a path cannot honestly be both, and if
-			// it somehow were, the regeneration answer is the more actionable one.
-			if context == "" {
-				if reason := denyNotesWrite(input.Value); reason != "" {
-					verdict.Decision = "deny"
-					verdict.Reason = reason
-				}
-			}
-			if verdict.Decision == "pass" && context == "" {
-				context = adviseInstalledSkillWrite(input.Value)
-			}
-			if verdict.Decision == "pass" && context == "" {
-				context = adviseMemoryWrite(input.Value)
-			}
-			if verdict.Decision == "pass" && context != "" {
-				verdict.Decision = "advise"
-				verdict.Context = context
-			}
-		}
-		appendHookActivity(ctx, input, who, true, verdict)
-		if err := writeGuardVerdict(out, opts, verdict); err != nil {
-			return err
-		}
-		return enforceVerdict(opts, verdict)
+	tool := hookToolCommand
+	switch {
+	case *observe:
+		tool = hookToolRead
+	case *asPath:
+		tool = hookToolWrite
 	}
-	if hasInput {
+	verdict := guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
+	switch {
+	case !hasInput:
+		// Nothing arrived on stdin. The verdict stays pass and the append below no-ops.
+	case *observe:
+		// No rule judges a read or a search, so none is run: the observation IS the whole
+		// contribution. Running the write rules here would only ever manufacture a false
+		// advisory about editing a file the agent opened read-only.
+	case *asPath:
+		// The generated-output rule is definitive (it reads declared globs), so it
+		// speaks first; the memory nudge is a heuristic on the filename and only
+		// fills the silence it leaves.
+		context := adviseGeneratedWrite(ctx, input.Value)
+		// The notes rule DENIES, so it is checked before the advisories: a verdict
+		// that blocks is not something to fall through to. It sits after the
+		// generated-output rule only because a path cannot honestly be both, and if
+		// it somehow were, the regeneration answer is the more actionable one.
+		if context == "" {
+			if reason := denyNotesWrite(input.Value); reason != "" {
+				verdict.Decision = "deny"
+				verdict.Reason = reason
+			}
+		}
+		if verdict.Decision == "pass" && context == "" {
+			context = adviseInstalledSkillWrite(input.Value)
+		}
+		if verdict.Decision == "pass" && context == "" {
+			context = adviseMemoryWrite(input.Value)
+		}
+		if verdict.Decision == "pass" && context != "" {
+			verdict.Decision = "advise"
+			verdict.Context = context
+		}
+	default:
 		switch v := evaluateBashGuard(input.Value); {
 		case v.Deny != "":
 			verdict.Decision = "deny"
@@ -474,7 +491,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			verdict.Context = v.Context
 		}
 	}
-	appendHookActivity(ctx, input, who, false, verdict)
+	appendHookActivity(ctx, input, who, tool, verdict)
 	if err := writeGuardVerdict(out, opts, verdict); err != nil {
 		return err
 	}
@@ -768,11 +785,27 @@ func readGuardInput(in io.Reader) (guardInput, bool) {
 type hookEnvelope struct {
 	HookEventName string `json:"hook_event_name"`
 	SessionID     string `json:"session_id"`
-	ToolInput     struct {
+	// TranscriptPath is the host's own log of this session. Recorded as a pointer so a
+	// session id in the activity view leads somewhere; magus never reads the file.
+	TranscriptPath string `json:"transcript_path"`
+	ToolInput      struct {
 		Command  string `json:"command"`
 		FilePath string `json:"file_path"`
 	} `json:"tool_input"`
 }
+
+// The tool labels recorded on an activity event. They are magus's OWN vocabulary, chosen by
+// which flags the wrapper passed - never a host's tool name.
+//
+// That division is the whole design: only the wrapper knows that its host calls a read
+// "Read" or "read_file", and mapping those names here would be a per-host branch, so the
+// next change to any host would mean a magus release. TestNoHostSpecificBehaviorInCode
+// enforces this; the matcher in a host's own config is where the host's vocabulary lives.
+const (
+	hookToolCommand = "shell.command"
+	hookToolWrite   = "file.write"
+	hookToolRead    = "file.read"
+)
 
 // decodeHookEnvelope pulls the thing to judge out of a host's hook payload, reporting
 // whether the input was an envelope at all.
@@ -787,6 +820,10 @@ type hookEnvelope struct {
 // question, so the envelope decides that too: a caller that pipes real JSON should not
 // also have to know which flag its shape implies.
 //
+// The envelope cannot tell a read from a write on its own - both arrive carrying a
+// file_path - so it does not try. --observe is what separates them, and only the wrapper
+// can set it, because only the wrapper knows which of its host's tools merely look.
+//
 // Anything that is not an object with a usable tool_input is left alone and judged as the
 // literal text it is - the bare-command form keeps working exactly as before.
 func decodeHookEnvelope(raw string) (hookRequest, bool) {
@@ -797,7 +834,11 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 	if err := json.Unmarshal([]byte(raw), &env); err != nil {
 		return hookRequest{}, false
 	}
-	req := hookRequest{Who: hookAttribution{Session: env.SessionID, Event: env.HookEventName}}
+	req := hookRequest{Who: hookAttribution{
+		Session:    env.SessionID,
+		Transcript: env.TranscriptPath,
+		Event:      env.HookEventName,
+	}}
 	switch {
 	case env.ToolInput.Command != "":
 		req.Value = env.ToolInput.Command
@@ -822,9 +863,10 @@ type hookRequest struct {
 // discover which agent host started it. It travels beside the input rather than
 // inside guardInput because the guard's verdict must never depend on it.
 type hookAttribution struct {
-	Host    string
-	Session string
-	Event   string
+	Host       string
+	Session    string
+	Transcript string
+	Event      string
 }
 
 type hookActivityLocation struct {
@@ -838,7 +880,7 @@ type hookActivityLocationKey struct{}
 // trail used by MCP and daemon actions. It deliberately runs before rendering the guard response:
 // the host may choose not to execute a denied command, and a pre-hook never learns the eventual
 // exit status. An audit failure must therefore be invisible to both the verdict and the command.
-func appendHookActivity(ctx context.Context, input guardInput, who hookAttribution, asPath bool, verdict guardVerdict) {
+func appendHookActivity(ctx context.Context, input guardInput, who hookAttribution, tool string, verdict guardVerdict) {
 	if input.Value == "" {
 		return
 	}
@@ -846,25 +888,22 @@ func appendHookActivity(ctx context.Context, input guardInput, who hookAttributi
 	if location.base == "" {
 		return
 	}
-	tool := "shell.command"
-	if asPath {
-		tool = "file.write"
-	}
 	command := trail.AgentCommand{
-		Actor:     "agent",
-		Workspace: location.workspace,
-		Host:      who.Host,
-		Session:   who.Session,
-		Event:     who.Event,
-		Tool:      tool,
-		Decision:  verdict.Decision,
-		Reason:    verdict.Reason,
-		Context:   verdict.Context,
+		Actor:      "agent",
+		Workspace:  location.workspace,
+		Host:       who.Host,
+		Session:    who.Session,
+		Transcript: who.Transcript,
+		Event:      who.Event,
+		Tool:       tool,
+		Decision:   verdict.Decision,
+		Reason:     verdict.Reason,
+		Context:    verdict.Context,
 	}
-	if asPath {
-		command.Path = input.Value
-	} else {
+	if tool == hookToolCommand {
 		command.Command = input.Value
+	} else {
+		command.Path = input.Value
 	}
 	trail.AppendAgentCommand(ctx, location.base, command)
 }
