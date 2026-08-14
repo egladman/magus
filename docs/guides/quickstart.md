@@ -164,18 +164,19 @@ pass. It parses the shell rather than pattern-matching it, so a command cannot
 evade the guard by adding an environment prefix or a shell indirection:
 
 ```sh
-magus hook -- go test ./...                 # deny: magus run test covers this
-magus hook -- env -u GOROOT go test ./...   # deny: same command, prefix peeled
-magus hook -- magus run test                # pass
+printf '%s' 'go test ./...' | magus hook -o name               # deny: magus run test covers this
+printf '%s' 'env -u GOROOT go test ./...' | magus hook -o name # deny: same command, prefix peeled
+printf '%s' 'magus run test' | magus hook -o name              # pass
 ```
 
-It denies on three triggers: what cannot be undone (whole-tree VCS operations),
-what WRITES into the working tree (codegen, formatters, build output), and what
-has an exact magus equivalent. Everything else it explains or ignores.
+It denies on four triggers: what cannot be undone (whole-tree VCS operations),
+what WRITES into the working tree (codegen, formatters, build output), what has
+an exact magus equivalent, and what breaks a provenance guarantee (a note).
+Everything else it explains or ignores.
 
-Wire it into your host with the ready-made scripts (Claude Code, Codex, Cursor,
-opencode, Amp, Zed are all covered):
-[Agents: guard hooks](integrations/agents.md#guard-hooks).
+Wire it into your host with the ready-made scripts:
+[The guard](integrations/agents/guard.md), with a setup page per host behind
+[Agents](integrations/agents.md).
 
 Point it at a real binary. If the guard cannot find one it says so loudly, and
 `magus doctor`'s **guard binary** check names the binary a hook would run and

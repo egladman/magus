@@ -26,10 +26,12 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"regexp"
 	"sort"
 	"strings"
 	"testing"
 
+	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/agent"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
@@ -40,7 +42,101 @@ const (
 	dogfoodedHookConfig = ".claude/settings.json"
 	hookGuideDoc        = "docs/guides/integrations/agents.md"
 	hookTemplateDir     = "docs/guides/integrations/agents"
+
+	// rootMagusfile carries skills_generate's declared outputs, which decide both
+	// what `magus describe file` calls generated and what EnsureMergeDriver writes
+	// into .gitattributes.
+	rootMagusfile = "magusfile.buzz"
+	// embeddedSkillDir is the shipped set: one directory per skill magus installs.
+	embeddedSkillDir = "cmd/magus/skills"
 )
+
+// handAuthoredSkills live beside the installed ones and are NOT written by
+// `magus agent install`. Both are tracked through explicit .gitignore negations,
+// and magus-workspace-rules tells readers to put local rules in exactly this
+// shape, so a declaration that claims them tells an author the one file they are
+// supposed to edit is generated - and hands it to the regenerating merge driver
+// on a conflict.
+var handAuthoredSkills = []string{"magus-skill-authoring", "magus-local-development"}
+
+// skillOutputGlob matches the declared-output patterns in skills_generate. The
+// install calls in the same body name a bare destination directory with no
+// trailing pattern, so they cannot match.
+var skillOutputGlob = regexp.MustCompile(`"(\.(?:claude|agents|opencode)/skills/[^"]+)"`)
+
+// TestSkillsGenerateDeclaresEveryShippedSkill keeps the declared outputs in step
+// with what magus actually installs, in both directions.
+//
+// The declaration used to be `.claude/skills/**` and friends, which was one line
+// per destination and wrong in a way nothing caught: it claimed the hand-authored
+// skills too. Naming the shipped skills instead is correct but goes stale on its
+// own, so this is the gate that makes adding a skill fail here rather than ship an
+// installed file magus calls hand-editable.
+func TestSkillsGenerateDeclaresEveryShippedSkill(t *testing.T) {
+	body, err := os.ReadFile(rootMagusfile)
+	require.NoError(t, err, "read %s", rootMagusfile)
+
+	var globs []string
+	for _, m := range skillOutputGlob.FindAllStringSubmatch(string(body), -1) {
+		globs = append(globs, m[1])
+	}
+	require.NotEmpty(t, globs, "%s declares no installed-skill outputs", rootMagusfile)
+
+	entries, err := os.ReadDir(embeddedSkillDir)
+	require.NoError(t, err, "read %s", embeddedSkillDir)
+
+	matched := func(path string) bool {
+		for _, g := range globs {
+			if ok, _ := doublestar.Match(g, path); ok {
+				return true
+			}
+		}
+		return false
+	}
+
+	dests := []string{".claude/skills", ".agents/skills", ".opencode/skills"}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		for _, dest := range dests {
+			// The primary and its always-full twin, in every destination install writes.
+			for _, name := range []string{entry.Name(), agent.FullTwinName(entry.Name())} {
+				path := dest + "/" + name + "/SKILL.md"
+				assert.True(t, matched(path),
+					"%s ships %s, but no declared output in %s covers %s.\n"+
+						"An undeclared installed skill classifies as hand-editable source, and the merge\n"+
+						"driver stops covering it. Add the pattern to skills_generate.",
+					embeddedSkillDir, entry.Name(), rootMagusfile, path)
+			}
+		}
+	}
+
+	for _, name := range handAuthoredSkills {
+		for _, dest := range dests {
+			path := dest + "/" + name + "/SKILL.md"
+			assert.False(t, matched(path),
+				"%s declares %s as a generated output, but magus never writes it.\n"+
+					"describe file will call it generated and the path guard will warn an author off it.",
+				rootMagusfile, path)
+		}
+	}
+}
+
+// templatePage names the page each template is embedded in. The guide is a hub
+// with a page per host rather than one long page, so a template is embedded
+// where its reader already is - and the map is what keeps "embedded somewhere"
+// from degrading into "embedded nowhere anyone looks".
+//
+// The two generic sh templates share a page because two hosts share the files;
+// Cursor's and OpenCode's are self-contained and sit with their host.
+var templatePage = map[string]string{
+	"magus-guard-command.sh": "docs/guides/integrations/agents/guard-templates.md",
+	"magus-guard-path.sh":    "docs/guides/integrations/agents/guard-templates.md",
+	"codex-hooks.json":       "docs/guides/integrations/agents/codex.md",
+	"cursor-guard.sh":        "docs/guides/integrations/agents/cursor.md",
+	"opencode-plugin.ts":     "docs/guides/integrations/agents/opencode.md",
+}
 
 // hookTemplates are the artifacts a reader installs. The directory also holds
 // the project's own scaffolding (package.json, tsconfig.json, biome.json, the
@@ -113,9 +209,12 @@ func TestDogfoodedHookInvokesTheTemplate(t *testing.T) {
 // failing on anything unrecognized. Adding tooling here costs one line; adding a
 // host without one costs a silently unguarded integration.
 var templateDirScaffolding = map[string]bool{
-	"package.json":            true,
-	"tsconfig.json":           true,
-	"biome.json":              true,
+	"package.json":  true,
+	"tsconfig.json": true,
+	"biome.json":    true,
+	// Formats this directory's guide pages. It exists because the parent docs
+	// project may not write here (MGS3001), not because a reader installs it.
+	"dprint.json":             true,
 	"pnpm-lock.yaml":          true,
 	"magusfile.buzz":          true,
 	"opencode-plugin.test.ts": true,
@@ -405,7 +504,9 @@ func normalizeHost(s string) string {
 // its full text, so rewording a header does not silently drop a check.
 func parityTableRows(t *testing.T, guide string) map[string]map[string]string {
 	t.Helper()
-	_, section, found := strings.Cut(guide, "### Parity across hosts")
+	// Cut on the heading text rather than its level: the section moved up a level
+	// when the guide became a hub, and a heading level is not what this gate is about.
+	_, section, found := strings.Cut(guide, "Parity across hosts")
 	require.True(t, found, "%s has no 'Parity across hosts' section; the parity table is the human half of this gate", hookGuideDoc)
 
 	var header []string
@@ -460,13 +561,17 @@ func splitTableRow(line string) []string {
 
 // TestHookTemplatesAreEmbeddedInTheGuide keeps the docs site explorable without
 // a transclusion feature: every template is embedded verbatim, and an edit to
-// one that is not mirrored into the guide fails here.
+// one that is not mirrored into its page fails here.
 func TestHookTemplatesAreEmbeddedInTheGuide(t *testing.T) {
-	guide, err := os.ReadFile(hookGuideDoc)
-	require.NoError(t, err, "read %s", hookGuideDoc)
-	doc := string(guide)
-
 	for _, name := range hookTemplates {
+		page, ok := templatePage[name]
+		require.True(t, ok,
+			"%s is shipped but templatePage says nothing about where it is embedded, "+
+				"so a reader browsing the docs site has no way to reach it", name)
+		guide, err := os.ReadFile(page)
+		require.NoError(t, err, "read %s", page)
+		doc := string(guide)
+
 		body, err := os.ReadFile(filepath.Join(hookTemplateDir, name))
 		require.NoError(t, err, "every template in hookTemplates must exist")
 
@@ -484,8 +589,8 @@ func TestHookTemplatesAreEmbeddedInTheGuide(t *testing.T) {
 			}
 		}
 		assert.Empty(t, missing,
-			"%s embeds %s incompletely: the lines below are in the template but not in the guide.\n"+
+			"%s embeds %s incompletely: the lines below are in the template but not on that page.\n"+
 				"Re-copy the template into its code block - a reader exploring the docs site must see\n"+
-				"what they would download.", hookGuideDoc, name)
+				"what they would download.", page, name)
 	}
 }

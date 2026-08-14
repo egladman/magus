@@ -322,9 +322,20 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
+// Scope dprint by ARGV, not by its config, for the same reason the root project does:
+// dprint DISCOVERS a nested dprint.json and formats that subtree under its own config,
+// and neither this project's `includes` nor an exclude prunes it. Since the guard-hook
+// templates' project under guides/integrations/agents grew Markdown pages of its own,
+// a bare run here reached them - the parent target writing into a descendant project,
+// which magus rejects as MGS3001. That project formats its own pages.
+//
+// Keep this list in step with dprint.json's `includes` (minus that one directory); the
+// excludes there still apply, so the generated trees stay out.
 export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
-    markdown["dprint"](ctx);
+    markdown["dprint"](ctx, {"args": ["./*.md", "./concepts/**/*.md", "./guides/*.md",
+        "./guides/integrations/*.md", "./migrating/**/*.md", "./reference/**/*.md",
+        "./setup/**/*.md"]});
 }
 
 // conventions holds the prose corpus to the conventions page it publishes: no shell prompt
