@@ -28,14 +28,17 @@ clone would settle silently, and why resolve exists as the bulk counterpart.
 .PP
 resolve works on git, Mercurial and Jujutsu. Only \-\-against is git\-only: merge the
 base in yourself on the others, then run resolve.
-.SH OPTIONS
+.SS vcs add options
 .RS
 .TP
-\fB\-\-against\fR \fIstring\fR
-Merge this ref first, then settle what it conflicts with (vcs resolve)
-.TP
 \fB\-\-untracked\fR
-Also stage undeclared files (vcs add)
+Also stage undeclared files
+.RE
+.SS vcs resolve options
+.RS
+.TP
+\fB\-\-against\fR \fIref\fR
+Merge this `ref` first, then settle what it conflicts with
 .RE
 .SH SUBCOMMANDS
 .RS

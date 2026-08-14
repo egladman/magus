@@ -834,14 +834,27 @@ clone would settle silently, and why resolve exists as the bulk counterpart.
 
 resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
 base in yourself on the others, then run resolve.`,
-	Flags: []Flag{
-		{Name: "against", Kind: FlagString, Doc: "Merge this ref first, then settle what it conflicts with (vcs resolve)"},
-		{Name: "untracked", Kind: FlagBool, Doc: "Also stage undeclared files (vcs add)"},
-	},
+	// No parent Flags: neither flag belongs to `magus vcs`, which takes none of
+	// its own. They were declared here with the owning subcommand named in the doc
+	// text ("(vcs resolve)", "(vcs add)") because a child could not carry flags,
+	// which put them in one merged Options section on the man page and made a
+	// generated binder for either child bind both.
 	Usage: "magus vcs <add|resolve|merge-driver> [flags]",
 	Children: []Command{
-		{Name: "add", Short: "Stage a change the way this workspace's declarations say it should be staged"},
-		{Name: "resolve", Short: "Settle an in-progress merge's conflicted generated files, then regenerate once"},
+		{
+			Name:  "add",
+			Short: "Stage a change the way this workspace's declarations say it should be staged",
+			Flags: []Flag{
+				{Name: "untracked", Kind: FlagBool, Doc: "Also stage undeclared files"},
+			},
+		},
+		{
+			Name:  "resolve",
+			Short: "Settle an in-progress merge's conflicted generated files, then regenerate once",
+			Flags: []Flag{
+				{Name: "against", Kind: FlagString, Doc: "Merge this `ref` first, then settle what it conflicts with"},
+			},
+		},
 		{Name: "merge-driver", Short: "The per-file merge driver git and hg invoke; you do not run this by hand"},
 	},
 	Examples: []Example{

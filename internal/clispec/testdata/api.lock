@@ -166,8 +166,6 @@ flag status/socket
 flag status/symbols
 flag status/watch
 flag status/workspace
-flag vcs/against
-flag vcs/untracked
 flag watch/backend
 flag watch/debounce
 flag watch/initial

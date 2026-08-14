@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -100,9 +101,9 @@ func vcsResolveUsage(w io.Writer) {
 // vcsResolveCmd classifies every conflicted path, settles the generated ones in bulk,
 // regenerates once, and records the result.
 func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string) error {
-	var against string
+	var rf *gen.VCSResolveFlags
 	pos, err := cmdParse("vcs resolve", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&against, "against", "", "merge `ref` first, then settle what it conflicts with")
+		rf = gen.BindVCSResolve(fs)
 		fs.Usage = func() { vcsResolveUsage(os.Stderr) }
 	})
 	if err != nil {
@@ -131,8 +132,8 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 		return fmt.Errorf("vcs resolve: %s cannot report conflicts; resolve this merge by hand", res.Name)
 	}
 
-	if against != "" {
-		undo, err := startMergeAgainst(ctx, m.Root(), res, against)
+	if rf.Against != "" {
+		undo, err := startMergeAgainst(ctx, m.Root(), res, rf.Against)
 		if err != nil {
 			return err
 		}
@@ -144,8 +145,8 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 		return fmt.Errorf("vcs resolve: %w", err)
 	}
 	if len(conflicts) == 0 {
-		if against != "" {
-			fmt.Printf("vcs resolve: %s merged with no conflicts; conclude it with `git commit`\n", against)
+		if rf.Against != "" {
+			fmt.Printf("vcs resolve: %s merged with no conflicts; conclude it with `git commit`\n", rf.Against)
 			return nil
 		}
 		fmt.Println("vcs resolve: nothing to resolve; no conflicted paths")
@@ -473,9 +474,9 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	// --dry-run is the GLOBAL config flag, not a local one: it already means
 	// "show me what would happen" on every other command, and redefining it here
 	// panics the FlagSet anyway.
-	var untracked bool
+	var af *gen.VCSAddFlags
 	pos, err := cmdParse("vcs add", args, func(fs *flag.FlagSet) {
-		fs.BoolVar(&untracked, "untracked", false, "Also stage undeclared files")
+		af = gen.BindVCSAdd(fs)
 		fs.Usage = func() { vcsAddUsage(os.Stderr) }
 	})
 	if err != nil {
@@ -569,7 +570,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	}
 
 	stage := slices.Concat(sources, outputs)
-	if untracked || explicit {
+	if af.Untracked || explicit {
 		stage = append(stage, undeclared...)
 	}
 	slices.Sort(stage)
@@ -582,7 +583,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 		}
 		verdict.Staged, dropped = staged, gone
 	}
-	return emitStaging(verdict, dropped, untracked, globalCfg.DryRun)
+	return emitStaging(verdict, dropped, af.Untracked, globalCfg.DryRun)
 }
 
 // workspaceRelPaths turns the paths you typed into workspace-relative ones.

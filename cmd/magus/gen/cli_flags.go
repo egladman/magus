@@ -259,10 +259,10 @@ const (
 	FlagStatusWatch = "watch"
 	// status: --workspace
 	FlagStatusWorkspace = "workspace"
-	// vcs: --against
-	FlagVCSAgainst = "against"
-	// vcs: --untracked
-	FlagVCSUntracked = "untracked"
+	// vcs add: --untracked
+	FlagVCSAddUntracked = "untracked"
+	// vcs resolve: --against
+	FlagVCSResolveAgainst = "against"
 	// watch: --backend
 	FlagWatchBackend = "backend"
 	// watch: --debounce
@@ -607,17 +607,27 @@ func BindClean(fs *flag.FlagSet) *CleanFlags {
 	return &f
 }
 
-// VCSFlags are the flags declared for `magus vcs`.
-type VCSFlags struct {
-	Against   string // --against
-	Untracked bool   // --untracked
+// VCSAddFlags are the flags declared for `magus vcs add`.
+type VCSAddFlags struct {
+	Untracked bool // --untracked
 }
 
-// BindVCS registers `magus vcs`'s flags on fs and returns the destination.
-func BindVCS(fs *flag.FlagSet) *VCSFlags {
-	var f VCSFlags
-	fs.StringVar(&f.Against, FlagVCSAgainst, "", "Merge this ref first, then settle what it conflicts with (vcs resolve)")
-	fs.BoolVar(&f.Untracked, FlagVCSUntracked, false, "Also stage undeclared files (vcs add)")
+// BindVCSAdd registers `magus vcs add`'s flags on fs and returns the destination.
+func BindVCSAdd(fs *flag.FlagSet) *VCSAddFlags {
+	var f VCSAddFlags
+	fs.BoolVar(&f.Untracked, FlagVCSAddUntracked, false, "Also stage undeclared files")
+	return &f
+}
+
+// VCSResolveFlags are the flags declared for `magus vcs resolve`.
+type VCSResolveFlags struct {
+	Against string // --against
+}
+
+// BindVCSResolve registers `magus vcs resolve`'s flags on fs and returns the destination.
+func BindVCSResolve(fs *flag.FlagSet) *VCSResolveFlags {
+	var f VCSResolveFlags
+	fs.StringVar(&f.Against, FlagVCSResolveAgainst, "", "Merge this `ref` first, then settle what it conflicts with")
 	return &f
 }
 
