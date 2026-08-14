@@ -886,6 +886,11 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate);
     ctx.writesFiles("**/gen/mocks/*.go");
     proc\exec("go", ["tool", "mockery"]);
+    // mockery's testify template emits no `var _ Iface = (*Mock)(nil)`, so a mock that
+    // went stale still compiles and fails only at a use site - which, for mocks published
+    // to downstream consumers, is somebody else's build. This writes those assertions
+    // into each mocks package from the same .mockery.yaml that listed the interfaces.
+    proc\exec("go", ["run", "./cmd/magus-utils", "mockassert"]);
 }
 
 // Reinstalls the agent skills from their embedded sources in cmd/magus/skills.
