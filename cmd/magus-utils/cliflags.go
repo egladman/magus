@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
-	"sort"
+	"slices"
 	"strings"
 	"time"
+
+	"github.com/samber/lo"
 
 	"github.com/egladman/magus/internal/generate/emit"
 	"github.com/egladman/magus/internal/manpage"
@@ -50,7 +52,7 @@ func runCLIFlags(args []string) error {
 			lines = append(lines, constsFor(c.Name+" "+child.Name, child.Flags, seen)...)
 		}
 	}
-	sort.Strings(lines)
+	slices.Sort(lines)
 	for _, l := range lines {
 		b.WriteString(l)
 	}
@@ -306,18 +308,22 @@ var initialisms = map[string]string{
 // goIdent turns a command or flag name into an exported Go identifier fragment:
 // "no-default-charms" becomes "NoDefaultCharms", "graph deps" becomes "GraphDeps".
 //
-// Case is preserved after the first rune, so the one-character flags -c and -C
-// would collide; constsFor's panic catches that at generate time rather than
-// emitting one constant for two flags.
+// Splitting and casing come from lo, already a direct dependency, rather than from
+// a hand-rolled FieldsFunc: lo.Words also breaks on case and digit boundaries, and
+// lo.Capitalize is x/text's English titler, so the only thing left to supply is the
+// initialism lookup those cannot know.
+//
+// lo.Capitalize lowercases the rest of each word, so the one-character flags -c and
+// -C collapse to the same fragment; constsFor's panic catches that at generate time
+// rather than emitting one constant for two flags.
 func goIdent(s string) string {
 	var b strings.Builder
-	for _, part := range strings.FieldsFunc(s, func(r rune) bool { return r == '-' || r == ' ' || r == '_' }) {
+	for _, part := range lo.Words(s) {
 		if up, ok := initialisms[strings.ToLower(part)]; ok {
 			b.WriteString(up)
 			continue
 		}
-		b.WriteString(strings.ToUpper(part[:1]))
-		b.WriteString(part[1:])
+		b.WriteString(lo.Capitalize(part))
 	}
 	return b.String()
 }
