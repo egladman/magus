@@ -37,7 +37,7 @@ updated binary is written to <dir>/magus (or magus.exe on Windows) instead.`,
 				{Name: "force", Kind: FlagBool, Doc: "Allow downgrades and re-installs of the current version"},
 				{Name: "dry-run", Kind: FlagBool, Doc: "Verify everything but do not replace the running binary"},
 				{Name: "yes", Kind: FlagBool, Doc: "Skip interactive confirmation"},
-				{Name: "y", Kind: FlagBool, Doc: "Short for --yes"},
+				{Name: "y", Kind: FlagBool, AliasOf: "yes", Doc: "Short for --yes"},
 			},
 			Examples: []Example{
 				{"Update to the latest release", "magus self update"},

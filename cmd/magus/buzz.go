@@ -42,25 +42,20 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 		return lspCmd(ctx, args[1:])
 	}
 
-	var eval string
-	var test bool
-	var embedded bool
-	var noAutoload bool
-	var workDir string
+	// Bound from the command registry rather than declared here. The -t/--test pair
+	// is ONE switch, which a generated binder can only express because the registry
+	// marks the second AliasOf the first; modelled as two flags they would get two
+	// destinations and the shorthand would parse and then do nothing.
+	var bf *gen.BuzzFlags
 	rest, err := cmdParse("buzz", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&eval, gen.FlagBuzzE, "", "execute `code` given on the command line instead of a file")
-		fs.BoolVar(&test, gen.FlagBuzzT, false, "run the file's `test \"...\" {}` blocks and report pass/fail")
-		fs.BoolVar(&test, gen.FlagBuzzTest, false, "alias for -t")
-		fs.BoolVar(&embedded, gen.FlagBuzzEmbedded, false, "relax upstream strictness (top-level statements, optional arg labels) to match the magusfile engine")
-		fs.BoolVar(&noAutoload, gen.FlagBuzzNoAutoload, false, "start the REPL without executing the magusfile")
-		fs.StringVar(&workDir, gen.FlagBuzzC, "", "working directory for the REPL's import resolution (default: cwd)")
+		bf = gen.BindBuzz(fs)
 		fs.Usage = buzzUsage
 	})
 	if err != nil {
 		return err
 	}
-	isRepl := eval == "" && !test && len(rest) == 0
-	if !isRepl && (noAutoload || workDir != "") {
+	isRepl := bf.E == "" && !bf.Test && len(rest) == 0
+	if !isRepl && (bf.NoAutoload || bf.C != "") {
 		return usagef("magus buzz: --%s and -%s apply to the REPL, not to a script, -%s, or -%s",
 			gen.FlagBuzzNoAutoload, gen.FlagBuzzC, gen.FlagBuzzE, gen.FlagBuzzT)
 	}
@@ -73,10 +68,10 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	// --embedded is a no-op on this path: a REPL is top-level statements by nature,
 	// so the session is always embedded regardless of the flag.
 	if isRepl && stdinIsTerminal() {
-		return buzzRepl(ctx, workDir, noAutoload)
+		return buzzRepl(ctx, bf.C, bf.NoAutoload)
 	}
 
-	code, name, err := buzzSource(eval, rest)
+	code, name, err := buzzSource(bf.E, rest)
 	if err != nil {
 		return err
 	}
@@ -114,7 +109,7 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	// --embedded opts into the relaxations the magusfile engine uses, so a magus
 	// module like the docs generator (render) can be run or tested here.
 	var opts []buzz.Option
-	if embedded {
+	if bf.Embedded {
 		opts = append(opts, buzz.WithEmbedded())
 	}
 	sess := buzz.NewSession(ctx, opts...)
@@ -148,7 +143,7 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, w)
 		}
 	}
-	if test {
+	if bf.Test {
 		return runBuzzTests(ctx, sess, name)
 	}
 	// Like upstream's Run flavor and cmd/buzz, an entry script's `main` runs once

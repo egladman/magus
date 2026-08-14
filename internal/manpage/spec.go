@@ -68,6 +68,18 @@ type Flag struct {
 	// time.Duration, matching Kind. A nil Default means the kind's zero value.
 	Default any
 
+	// AliasOf names the flag this one is a second spelling of: --test is AliasOf
+	// "t", -b is AliasOf "base". Both names stay real flags and both keep their own
+	// help line; what the alias does NOT get is its own value.
+	//
+	// This is the difference between documenting a shorthand and binding one. The
+	// hand-written CLI binds a pair to ONE variable, so -t and --test are the same
+	// switch. Modelled as two independent flags, a generated binder gave them two
+	// destinations, and setting one left the other false - the shorthand parsed and
+	// then did nothing. Every generated struct field is a GROUP: the primary plus
+	// its aliases, bound to a single address.
+	AliasOf string
+
 	// No Enum field, deliberately. Every closed-set value in this CLI belongs to
 	// the GLOBAL -o flag, which this registry does not model (see Flags above), and
 	// no per-command flag has one - the string flags here take refs, paths, commit

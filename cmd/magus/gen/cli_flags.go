@@ -276,7 +276,7 @@ const (
 // DescribeFlags are the flags declared for `magus describe`.
 type DescribeFlags struct {
 	Explain         bool   // --explain
-	E               bool   // --e
+	E               bool   // -e
 	Evaluated       bool   // --evaluated
 	Cache           bool   // --cache
 	Against         string // --against
@@ -336,10 +336,9 @@ func BindRun(fs *flag.FlagSet) *RunFlags {
 // AffectedFlags are the flags declared for `magus affected`.
 type AffectedFlags struct {
 	DryRun            bool          // --dry-run
-	Base              string        // --base
+	Base              string        // --base, -b
 	Stdin             bool          // --stdin
 	Null              bool          // --null
-	B                 string        // --b
 	NoCache           bool          // --no-cache
 	NoDefaultCharms   bool          // --no-default-charms
 	Detach            bool          // --detach
@@ -366,9 +365,9 @@ func BindAffected(fs *flag.FlagSet) *AffectedFlags {
 	var f AffectedFlags
 	fs.BoolVar(&f.DryRun, FlagAffectedDryRun, false, "Print what would run without executing")
 	fs.StringVar(&f.Base, FlagAffectedBase, "", "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)")
+	fs.StringVar(&f.Base, FlagAffectedB, "", "Short for --base")
 	fs.BoolVar(&f.Stdin, FlagAffectedStdin, false, "Read changed file paths from stdin instead of running a VCS diff")
 	fs.BoolVar(&f.Null, FlagAffectedNull, false, "With --stdin: expect NUL-separated paths and double-NUL between batches")
-	fs.StringVar(&f.B, FlagAffectedB, "", "Short for --base")
 	fs.BoolVar(&f.NoCache, FlagAffectedNoCache, false, "Force a fresh run even on a cache hit; still refreshes the entry")
 	fs.BoolVar(&f.NoDefaultCharms, FlagAffectedNoDefaultCharms, false, "Ignore magus.yaml default_charms for this run")
 	fs.BoolVar(&f.Detach, FlagAffectedDetach, false, "Hand the run to the daemon and return immediately; follow it with magus status --watch")
@@ -555,10 +554,8 @@ func BindWatch(fs *flag.FlagSet) *WatchFlags {
 
 // StatusFlags are the flags declared for `magus status`.
 type StatusFlags struct {
-	Watch     time.Duration // --watch
-	W         time.Duration // --W
-	Compact   bool          // --compact
-	C         bool          // --c
+	Watch     time.Duration // --watch, -W
+	Compact   bool          // --compact, -c
 	Symbols   bool          // --symbols
 	Socket    string        // --socket
 	Probe     string        // --probe
@@ -569,9 +566,9 @@ type StatusFlags struct {
 func BindStatus(fs *flag.FlagSet) *StatusFlags {
 	var f StatusFlags
 	fs.DurationVar(&f.Watch, FlagStatusWatch, 0, "Poll and reprint at this interval (minimum 15s; 0 means one-shot)")
-	fs.DurationVar(&f.W, FlagStatusW, 0, "Short for --watch")
+	fs.DurationVar(&f.Watch, FlagStatusW, 0, "Short for --watch")
 	fs.BoolVar(&f.Compact, FlagStatusCompact, false, "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)")
-	fs.BoolVar(&f.C, FlagStatusC, false, "Short for --compact")
+	fs.BoolVar(&f.Compact, FlagStatusC, false, "Short for --compact")
 	fs.BoolVar(&f.Symbols, FlagStatusSymbols, false, "Include the expensive symbol-index freshness scan")
 	fs.StringVar(&f.Socket, FlagStatusSocket, "", "Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir")
 	fs.StringVar(&f.Probe, FlagStatusProbe, "", "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)")
@@ -635,19 +632,18 @@ func BindServer(fs *flag.FlagSet) *ServerFlags {
 
 // BuzzFlags are the flags declared for `magus buzz`.
 type BuzzFlags struct {
-	E          string // --e
-	T          bool   // --t
-	Test       bool   // --test
+	E          string // -e
+	Test       bool   // -t, --test
 	Embedded   bool   // --embedded
 	NoAutoload bool   // --no-autoload
-	C          string // --C
+	C          string // -C
 }
 
 // BindBuzz registers `magus buzz`'s flags on fs and returns the destination.
 func BindBuzz(fs *flag.FlagSet) *BuzzFlags {
 	var f BuzzFlags
-	fs.StringVar(&f.E, FlagBuzzE, "", "Execute code given on the command line instead of a file")
-	fs.BoolVar(&f.T, FlagBuzzT, false, "Run the file's test \"...\" {} blocks and report pass/fail")
+	fs.StringVar(&f.E, FlagBuzzE, "", "Execute `code` given on the command line instead of a file")
+	fs.BoolVar(&f.Test, FlagBuzzT, false, "Run the file's test \"...\" {} blocks and report pass/fail")
 	fs.BoolVar(&f.Test, FlagBuzzTest, false, "Alias for -t")
 	fs.BoolVar(&f.Embedded, FlagBuzzEmbedded, false, "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine")
 	fs.BoolVar(&f.NoAutoload, FlagBuzzNoAutoload, false, "Start the REPL without executing the magusfile")
@@ -732,8 +728,7 @@ type SelfUpdateFlags struct {
 	BinDir  string // --bin-dir
 	Force   bool   // --force
 	DryRun  bool   // --dry-run
-	Yes     bool   // --yes
-	Y       bool   // --y
+	Yes     bool   // --yes, -y
 }
 
 // BindSelfUpdate registers `magus self update`'s flags on fs and returns the destination.
@@ -745,7 +740,7 @@ func BindSelfUpdate(fs *flag.FlagSet) *SelfUpdateFlags {
 	fs.BoolVar(&f.Force, FlagSelfUpdateForce, false, "Allow downgrades and re-installs of the current version")
 	fs.BoolVar(&f.DryRun, FlagSelfUpdateDryRun, false, "Verify everything but do not replace the running binary")
 	fs.BoolVar(&f.Yes, FlagSelfUpdateYes, false, "Skip interactive confirmation")
-	fs.BoolVar(&f.Y, FlagSelfUpdateY, false, "Short for --yes")
+	fs.BoolVar(&f.Yes, FlagSelfUpdateY, false, "Short for --yes")
 	return &f
 }
 

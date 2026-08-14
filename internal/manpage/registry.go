@@ -241,7 +241,7 @@ history to find the commit that introduced a regression.`,
 		{Name: "base", Kind: FlagString, Doc: "Override base ref for the VCS diff (default: MAGUS_VCS_BASE_REF or per-VCS built-in)"},
 		{Name: "stdin", Kind: FlagBool, Doc: "Read changed file paths from stdin instead of running a VCS diff"},
 		{Name: "null", Kind: FlagBool, Doc: "With --stdin: expect NUL-separated paths and double-NUL between batches"},
-		{Name: "b", Kind: FlagString, Doc: "Short for --base"},
+		{Name: "b", Kind: FlagString, AliasOf: "base", Doc: "Short for --base"},
 		{Name: "no-cache", Kind: FlagBool, Doc: "Force a fresh run even on a cache hit; still refreshes the entry"},
 		{Name: "no-default-charms", Kind: FlagBool, Doc: "Ignore magus.yaml default_charms for this run"},
 		{Name: "detach", Kind: FlagBool, Doc: "Hand the run to the daemon and return immediately; follow it with magus status --watch"},
@@ -532,9 +532,9 @@ snapshot on its own line for log capture.`,
 	Usage: "magus status [flags]",
 	Flags: []Flag{
 		{Name: "watch", Kind: FlagDuration, Doc: "Poll and reprint at this interval (minimum 15s; 0 means one-shot)"},
-		{Name: "W", Kind: FlagDuration, Doc: "Short for --watch"},
+		{Name: "W", Kind: FlagDuration, AliasOf: "watch", Doc: "Short for --watch"},
 		{Name: "compact", Kind: FlagBool, Doc: "Single-line, densely-packed snapshot for sidebar/multiplexer use (text output only)"},
-		{Name: "c", Kind: FlagBool, Doc: "Short for --compact"},
+		{Name: "c", Kind: FlagBool, AliasOf: "compact", Doc: "Short for --compact"},
 		{Name: "symbols", Kind: FlagBool, Doc: "Include the expensive symbol-index freshness scan"},
 		{Name: "socket", Kind: FlagString, Doc: "Adopt server address as unix:// URL or bare path; default: auto-detect from MAGUS_DAEMON_SOCKET or scan sock dir"},
 		{Name: "probe", Kind: FlagString, Doc: "Exec-probe mode: liveness or readiness (exit 0 healthy, 1 unhealthy; ignores --watch/--compact)"},
@@ -951,9 +951,13 @@ magus does not. The most common one is "argument N must be labeled".
 code in this ecosystem is tested. The lsp subcommand speaks the Language
 Server Protocol over stdio for an editor integration.`,
 	Flags: []Flag{
-		{Name: "e", Kind: FlagString, Doc: "Execute code given on the command line instead of a file"},
+		// Backticks are load-bearing: flag.UnquoteUsage reads the quoted word as the
+		// value's name, so this renders `-e code` rather than `-e string`. The
+		// hand-written binding had them and the registry copy did not, which is the
+		// kind of difference two lists drift into when only their names are compared.
+		{Name: "e", Kind: FlagString, Doc: "Execute `code` given on the command line instead of a file"},
 		{Name: "t", Kind: FlagBool, Doc: `Run the file's test "..." {} blocks and report pass/fail`},
-		{Name: "test", Kind: FlagBool, Doc: "Alias for -t"},
+		{Name: "test", Kind: FlagBool, AliasOf: "t", Doc: "Alias for -t"},
 		{Name: "embedded", Kind: FlagBool, Doc: "Relax upstream strictness (top-level statements, optional argument labels) to match the magusfile engine"},
 		{Name: "no-autoload", Kind: FlagBool, Doc: "Start the REPL without executing the magusfile"},
 		{Name: "C", Kind: FlagString, Doc: "Working directory for the REPL's import resolution (default: cwd)"},

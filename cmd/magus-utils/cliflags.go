@@ -78,19 +78,115 @@ func writeBinder(b *bytes.Buffer, command string, flags []manpage.Flag) {
 	if len(flags) == 0 {
 		return
 	}
+	groups := groupAliases(command, flags)
+
 	typeName := goIdent(command) + "Flags"
 	fmt.Fprintf(b, "\n// %sFlags are the flags declared for `magus %s`.\ntype %s struct {\n", goIdent(command), command, typeName)
-	for _, f := range flags {
-		fmt.Fprintf(b, "\t%s %s // --%s\n", goIdent(f.Name), goType(f.Kind), f.Name)
+	for _, g := range groups {
+		fmt.Fprintf(b, "\t%s %s // %s\n", g.field, goType(g.primary.Kind), g.spellings())
 	}
 	b.WriteString("}\n\n")
 
 	fmt.Fprintf(b, "// Bind%s registers `magus %s`'s flags on fs and returns the destination.\nfunc Bind%s(fs *flag.FlagSet) *%s {\n\tvar f %s\n", goIdent(command), command, goIdent(command), typeName, typeName)
-	for _, f := range flags {
-		fmt.Fprintf(b, "\tfs.%sVar(&f.%s, %s, %s, %q)\n",
-			bindMethod(f.Kind), goIdent(f.Name), "Flag"+goIdent(command)+goIdent(f.Name), flagDefaultLiteral(f), f.Doc)
+	for _, g := range groups {
+		for _, name := range g.names {
+			fmt.Fprintf(b, "\tfs.%sVar(&f.%s, %s, %s, %q)\n",
+				bindMethod(g.primary.Kind), g.field, "Flag"+goIdent(command)+goIdent(name), flagDefaultLiteral(g.primary), docFor(flags, name))
+		}
 	}
 	b.WriteString("\treturn &f\n}\n")
+}
+
+// aliasGroup is one destination and every flag name that writes to it.
+type aliasGroup struct {
+	primary manpage.Flag
+	names   []string // primary first, then its aliases, in declaration order
+	field   string
+}
+
+// spellings renders the group's names as a struct-field comment: "--watch, -W".
+func (g aliasGroup) spellings() string {
+	out := make([]string, 0, len(g.names))
+	for _, n := range g.names {
+		out = append(out, dashes(n)+n)
+	}
+	return strings.Join(out, ", ")
+}
+
+// dashes picks the prefix a name is actually invoked with. Go's flag package
+// accepts either, but a one-character flag is written -c everywhere in this CLI's
+// help and docs, and the generated comment should read the way the flag is typed.
+func dashes(name string) string {
+	if len(name) == 1 {
+		return "-"
+	}
+	return "--"
+}
+
+// groupAliases folds each Flag.AliasOf into its primary, so the binder emits one
+// destination per group rather than one per name.
+//
+// Order is the declaration order of the primaries; an alias never introduces a
+// group. A dangling or mistyped AliasOf is a panic rather than a silent extra
+// field, because the failure it would otherwise produce is a shorthand that parses
+// and does nothing - the exact bug this concept was added to prevent.
+func groupAliases(command string, flags []manpage.Flag) []aliasGroup {
+	index := make(map[string]manpage.Flag, len(flags))
+	for _, f := range flags {
+		index[f.Name] = f
+	}
+
+	var groups []aliasGroup
+	at := make(map[string]int, len(flags))
+	for _, f := range flags {
+		if f.AliasOf != "" {
+			continue
+		}
+		at[f.Name] = len(groups)
+		groups = append(groups, aliasGroup{primary: f, names: []string{f.Name}})
+	}
+	for _, f := range flags {
+		if f.AliasOf == "" {
+			continue
+		}
+		primary, ok := index[f.AliasOf]
+		if !ok {
+			panic(fmt.Sprintf("cliflags: %s --%s is AliasOf %q, which it does not declare", command, f.Name, f.AliasOf))
+		}
+		if primary.AliasOf != "" {
+			panic(fmt.Sprintf("cliflags: %s --%s aliases --%s, which is itself an alias", command, f.Name, f.AliasOf))
+		}
+		if primary.Kind != f.Kind {
+			panic(fmt.Sprintf("cliflags: %s --%s is %s but aliases --%s, which is %s", command, f.Name, f.Kind, f.AliasOf, primary.Kind))
+		}
+		i := at[f.AliasOf]
+		groups[i].names = append(groups[i].names, f.Name)
+	}
+
+	// The field is named for the LONGEST spelling in the group, which is the one
+	// written to be read: a group of {t, test} yields Test, not T. Naming it after
+	// the primary instead would hand the reader f.T at every use site purely because
+	// the short form happens to be the one the help text treats as canonical.
+	for i, g := range groups {
+		longest := g.names[0]
+		for _, n := range g.names {
+			if len(n) > len(longest) {
+				longest = n
+			}
+		}
+		groups[i].field = goIdent(longest)
+	}
+	return groups
+}
+
+// docFor returns the help text declared for one flag name.
+func docFor(flags []manpage.Flag, name string) string {
+	for _, f := range flags {
+		if f.Name == name {
+			return f.Doc
+		}
+	}
+	return ""
 }
 
 func goType(k manpage.FlagKind) string {
