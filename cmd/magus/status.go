@@ -42,7 +42,6 @@ func bindStatus(f **gen.StatusFlags) func(*flag.FlagSet) {
 			fmt.Fprintln(os.Stderr, "\nFlags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
 		}
-
 	}
 }
 
