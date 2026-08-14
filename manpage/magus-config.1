@@ -22,6 +22,66 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 \fB\-\-global\fR
 Write to the global config ($XDG_CONFIG_HOME/magus/magus.yaml)
 .RE
+.SS config history passed options
+.RS
+.TP
+\fB\-\-commit\fR \fIstring\fR
+Commit the run was at
+.TP
+\fB\-\-history\fR \fIstring\fR
+Path to the history JSON to write (default: configured history_path)
+.TP
+\fB\-\-ref\fR \fIstring\fR
+Ref the run was on (git branch, hg named branch, jj bookmark)
+.TP
+\fB\-\-status\fR \fIstring\fR (default: passed)
+How the run came out: passed or failed
+.TP
+\fB\-\-target\fR \fIstring\fR (default: ci)
+Target that ran
+.RE
+.SS config history import options
+.RS
+.TP
+\fB\-\-history\fR \fIstring\fR
+Path to the history JSON to write (default: configured history_path)
+.RE
+.SS config cache prune options
+.RS
+.TP
+\fB\-\-dry\-run\fR
+Print what would be removed without deleting anything
+.TP
+\fB\-\-keep\-last\fR \fIint\fR
+Keep only the newest N entries, evict the rest (\-\-remote only)
+.TP
+\fB\-\-older\-than\fR \fIduration\fR
+Remove entries older than this duration (e.g. 168h = 7 days)
+.TP
+\fB\-\-remote\fR
+Prune the configured remote backend instead of the local cache
+.RE
+.SS config cache export options
+.RS
+.TP
+\fB\-\-to\fR \fIstring\fR
+Write the archive to this file (default: stdout)
+.RE
+.SS config mcp token generate options
+.RS
+.TP
+\fB\-\-force\fR
+Overwrite an existing token (rotation)
+.RE
+.SS config mcp connector create options
+.RS
+.TP
+\fB\-\-expires\fR \fIstring\fR
+Lifetime: a duration like 90d or 48h, or "never" (default 90d)
+.TP
+\fB\-\-name\fR \fIstring\fR
+Name for this connector token (default: connector\-N)
+.RE
 .SH SUBCOMMANDS
 .RS
 .TP

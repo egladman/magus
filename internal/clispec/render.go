@@ -80,11 +80,10 @@ func renderCommandRoff(command Command, date, version string) []byte {
 	if command.HasFlags() {
 		writeFlagsRoff(w, command.Name, command.BindFlags, "Options")
 	}
-	for _, child := range command.Children {
-		if child.HasFlags() {
-			writeFlagsRoff(w, command.Name+" "+child.Name, child.BindFlags, command.Name+" "+child.Name+" options")
-		}
-	}
+	// Recursive: config nests four levels, so a one-level walk rendered
+	// `config set options` and silently dropped `config cache prune options` and
+	// `config mcp connector create options`.
+	writeChildFlagsRoff(w, command.Name, command.Children)
 	if len(command.Children) > 0 {
 		w.SH("Subcommands")
 		w.Indent()
@@ -114,6 +113,18 @@ func renderCommandRoff(command Command, date, version string) []byte {
 	}
 	writeSeeAlsoRoff(w, &buf, command.Name)
 	return buf.Bytes()
+}
+
+// writeChildFlagsRoff emits an options section for every descendant that
+// declares flags, naming each by its full path.
+func writeChildFlagsRoff(w *Writer, path string, children []Command) {
+	for _, child := range children {
+		sub := path + " " + child.Name
+		if child.HasFlags() {
+			writeFlagsRoff(w, sub, child.BindFlags, sub+" options")
+		}
+		writeChildFlagsRoff(w, sub, child.Children)
+	}
 }
 
 func writeFlagsRoff(w *Writer, name string, build func(*flag.FlagSet), heading string) {

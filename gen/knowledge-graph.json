@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2168,
-  "edge_count": 5623,
+  "node_count": 2170,
+  "edge_count": 5630,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -1718,6 +1718,16 @@
       "attrs": {
         "dir_files": "7",
         "dir_languages": "buzz,markdown"
+      }
+    },
+    {
+      "id": "dir:plans",
+      "kind": "dir",
+      "label": "plans",
+      "source": "plans",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
       }
     },
     {
@@ -5921,6 +5931,15 @@
       "source": "libs/testlayout/readme.md",
       "attrs": {
         "role": "readme"
+      }
+    },
+    {
+      "id": "doc:plans/handoff-cli-command-registry.md",
+      "kind": "doc",
+      "label": "plans/handoff-cli-command-registry.md",
+      "source": "plans/handoff-cli-command-registry.md",
+      "attrs": {
+        "role": "doc"
       }
     },
     {
@@ -24028,6 +24047,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/gopherbuzz/std/testing.buzz"
+    },
+    {
+      "source": "dir:plans",
+      "target": "doc:plans/handoff-cli-command-registry.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "plans/handoff-cli-command-registry.md"
     },
     {
       "source": "dir:schema",
@@ -42710,6 +42737,46 @@
       "provenance": "libs/gopherbuzz/std/README.md"
     },
     {
+      "source": "doc:plans/handoff-cli-command-registry.md",
+      "target": "diagnostic:MGS1020",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "plans/handoff-cli-command-registry.md"
+    },
+    {
+      "source": "doc:plans/handoff-cli-command-registry.md",
+      "target": "diagnostic:MGS1022",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "plans/handoff-cli-command-registry.md"
+    },
+    {
+      "source": "doc:plans/handoff-cli-command-registry.md",
+      "target": "diagnostic:MGS3006",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "plans/handoff-cli-command-registry.md"
+    },
+    {
+      "source": "doc:plans/handoff-cli-command-registry.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "plans/handoff-cli-command-registry.md"
+    },
+    {
+      "source": "doc:plans/handoff-cli-command-registry.md",
+      "target": "spell:buzz",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "plans/handoff-cli-command-registry.md"
+    },
+    {
       "source": "doc:schema/README.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
       "relation": "references",
@@ -58941,6 +59008,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "internal"
+    },
+    {
+      "source": "project:.",
+      "target": "dir:plans",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "plans"
     },
     {
       "source": "project:.",

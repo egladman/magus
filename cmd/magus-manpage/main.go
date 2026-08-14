@@ -182,6 +182,23 @@ func renderMainMD() []byte {
 	return m.bytes()
 }
 
+// writeChildFlagsMD emits an options block for every descendant declaring flags.
+func writeChildFlagsMD(m *mdBuf, path string, children []iclispec.Command) {
+	for _, child := range children {
+		sub := path + " " + child.Name
+		if child.HasFlags() {
+			fs := flag.NewFlagSet(sub, flag.ContinueOnError)
+			child.BindFlags(fs)
+			m.h3(sub + " options")
+			fs.VisitAll(func(f *flag.Flag) {
+				typeName, _ := flag.UnquoteUsage(f)
+				m.def(flagLabelMD(f.Name, typeName, f.DefValue), mdEsc(f.Usage))
+			})
+		}
+		writeChildFlagsMD(m, sub, child.Children)
+	}
+}
+
 func renderCommandMD(seg iclispec.Command) []byte {
 	var m mdBuf
 	desc := seg.Description
@@ -221,18 +238,8 @@ func renderCommandMD(seg iclispec.Command) []byte {
 		})
 	}
 
-	for _, child := range seg.Children {
-		if !child.HasFlags() {
-			continue
-		}
-		fs := flag.NewFlagSet(seg.Name+" "+child.Name, flag.ContinueOnError)
-		child.BindFlags(fs)
-		m.h3(seg.Name + " " + child.Name + " options")
-		fs.VisitAll(func(f *flag.Flag) {
-			typeName, _ := flag.UnquoteUsage(f)
-			m.def(flagLabelMD(f.Name, typeName, f.DefValue), mdEsc(f.Usage))
-		})
-	}
+	// Recursive, matching the roff renderer: config nests four levels deep.
+	writeChildFlagsMD(&m, seg.Name, seg.Children)
 
 	if len(seg.Children) > 0 {
 		m.h2("Subcommands")
