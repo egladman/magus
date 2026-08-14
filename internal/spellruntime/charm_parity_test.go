@@ -13,7 +13,7 @@
 // or internal/spellruntime internals for a test's benefit, adding a non-upstream
 // ValueToAny to gopherbuzz's vm, or copying host's ~30-line marshaller in here.
 // Leave it external, and leave the name saying what it guards.
-package spellruntime_test
+package spellruntime
 
 import (
 	"context"
@@ -22,7 +22,6 @@ import (
 
 	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/spellruntime"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/std"
@@ -47,10 +46,10 @@ func TestCharmBuzzParityWithHost(t *testing.T) {
 		defer s.Close()
 		// charm.buzz imports magus/spell for the Charm/PatchOp object types; register
 		// the same bundle the runtime does so the import resolves in this bare session.
-		s.SetModuleDecls(spellruntime.SpellModulePath, strings.Join([]string{
-			spellruntime.TargetModuleSource, spellruntime.PatchOpSource, spellruntime.CharmTypeSource, spellruntime.CommandSource,
+		s.SetModuleDecls(SpellModulePath, strings.Join([]string{
+			TargetModuleSource, PatchOpSource, CharmTypeSource, CommandSource,
 		}, "\n"))
-		require.NoError(t, s.Exec(ctx, spellruntime.CharmModuleSource), "load charm.buzz")
+		require.NoError(t, s.Exec(ctx, CharmModuleSource), "load charm.buzz")
 		require.NoError(t, s.Exec(ctx, "final __r = "+expr+";"), "eval %s", expr)
 		return bindinggen.ValueToAny(s.GetGlobal("__r"))
 	}

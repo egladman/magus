@@ -1,9 +1,8 @@
-package spellruntime_test
+package spellruntime
 
 import (
 	"testing"
 
-	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/egladman/magus/spells"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -15,7 +14,7 @@ import (
 // adapter unwrapped it this decoded as absent - silently, which is exactly the failure
 // a bare string invited and the enum was meant to end.
 func TestBuiltinSpellsDecodeVersionKeyFromEnum(t *testing.T) {
-	reg := spellruntime.Builtins()
+	reg := Builtins()
 
 	goSpell, ok := reg["go"]
 	require.True(t, ok, "go spell not registered")
