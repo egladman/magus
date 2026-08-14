@@ -1,0 +1,127 @@
+// rows.ts - flattens the parsed file/hunk tree into ONE array of fixed-height rows, which is
+// what makes the stream virtualizable.
+//
+// The flattening is the whole performance design. A virtualizer has to answer "which rows are
+// on screen" in constant time, and it can only do that if every row is the same height and
+// addressable by index. So: no wrapping (a long line scrolls horizontally instead, which is
+// what a diff reader wants anyway), one line per row, and the file and hunk headers occupy
+// rows of their own rather than being containers that would nest the geometry.
+//
+// It is pure and separate from the renderer because the split-view pairing below is exactly
+// the kind of index arithmetic that is wrong until it is tested.
+
+import type { DiffFile, DiffLine, Hunk } from "./parse";
+
+export type ViewMode = "unified" | "split";
+
+// Row is one rendered line of the stream. `file` and `hunk` rows are the headings; `line` is
+// unified content; `pair` is split content, where either side may be absent because an
+// add-only or delete-only run has nothing to sit opposite it.
+export type Row =
+  | { readonly kind: "file"; readonly file: DiffFile }
+  | { readonly kind: "hunk"; readonly file: DiffFile; readonly hunk: Hunk }
+  | { readonly kind: "line"; readonly file: DiffFile; readonly line: DiffLine }
+  | {
+      readonly kind: "pair";
+      readonly file: DiffFile;
+      readonly left: DiffLine | null;
+      readonly right: DiffLine | null;
+    };
+
+// buildRows flattens files into the row array for one view mode.
+export function buildRows(files: readonly DiffFile[], mode: ViewMode): Row[] {
+  const rows: Row[] = [];
+  for (const file of files) {
+    rows.push({ kind: "file", file });
+    for (const hunk of file.hunks) {
+      rows.push({ kind: "hunk", file, hunk });
+      if (mode === "split") pushSplit(rows, file, hunk);
+      else for (const line of hunk.lines) rows.push({ kind: "line", file, line });
+    }
+  }
+  return rows;
+}
+
+// pushSplit zips a hunk into two columns.
+//
+// The rule that matters: a run of deletions immediately followed by a run of additions is a
+// REPLACEMENT, and the two runs must sit side by side so the reader can compare them. Emitting
+// each line on its own row as it arrives would stack the old block above the new one - which
+// is the unified view, printed in two columns, and useless.
+//
+// So deletions buffer instead of emitting, and flush against the additions that follow.
+function pushSplit(rows: Row[], file: DiffFile, hunk: Hunk): void {
+  let dels: DiffLine[] = [];
+  let adds: DiffLine[] = [];
+
+  const flush = (): void => {
+    // Zip to the LONGER run, so the shorter side pads with nulls rather than truncating.
+    // Taking the shorter length here silently drops the tail of an uneven replacement.
+    const n = Math.max(dels.length, adds.length);
+    for (let i = 0; i < n; i++) {
+      rows.push({ kind: "pair", file, left: dels[i] ?? null, right: adds[i] ?? null });
+    }
+    dels = [];
+    adds = [];
+  };
+
+  for (const line of hunk.lines) {
+    if (line.kind === "del") {
+      // An addition already buffered means the previous replacement is over and a new run
+      // has started; flush before buffering, or the two get zipped together.
+      if (adds.length > 0) flush();
+      dels.push(line);
+      continue;
+    }
+    if (line.kind === "add") {
+      adds.push(line);
+      continue;
+    }
+    // Context and meta belong to both sides, so they close any pending replacement and then
+    // occupy one full-width row.
+    flush();
+    rows.push({ kind: "pair", file, left: line, right: line });
+  }
+  flush();
+}
+
+// hunkRowIndexes lists the row index of every hunk heading, in order. It is what `[` and `]`
+// step through, computed once per build rather than by scanning the array on each keypress.
+export function hunkRowIndexes(rows: readonly Row[]): number[] {
+  const out: number[] = [];
+  rows.forEach((row, i) => {
+    if (row.kind === "hunk") out.push(i);
+  });
+  return out;
+}
+
+// fileRowIndexes lists the row index of every file heading, in order - what the sidebar jumps
+// to, indexed the same way as the files array it was built from.
+export function fileRowIndexes(rows: readonly Row[]): number[] {
+  const out: number[] = [];
+  rows.forEach((row, i) => {
+    if (row.kind === "file") out.push(i);
+  });
+  return out;
+}
+
+// nextIndexAfter returns the first entry of `sorted` strictly greater than `from`, or the last
+// entry when there is none - so `]` at the end of the stream holds still instead of wrapping
+// to the top, which reads as a scroll bug rather than as navigation.
+export function nextIndexAfter(sorted: readonly number[], from: number): number | null {
+  const last = sorted[sorted.length - 1];
+  if (last === undefined) return null;
+  for (const i of sorted) if (i > from) return i;
+  return last;
+}
+
+// prevIndexBefore is nextIndexAfter's mirror, clamping at the first entry.
+export function prevIndexBefore(sorted: readonly number[], from: number): number | null {
+  const first = sorted[0];
+  if (first === undefined) return null;
+  for (let k = sorted.length - 1; k >= 0; k--) {
+    const i = sorted[k];
+    if (i !== undefined && i < from) return i;
+  }
+  return first;
+}

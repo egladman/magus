@@ -1,0 +1,229 @@
+/* diff.css - the Review surface: a sidebar and a virtualized hunk stream.
+ *
+ * Every rule here exists because the virtualizer needs it, not for decoration. The row height
+ * is fixed and MUST equal ROW_HEIGHT in main.ts: the scroll geometry is computed from that
+ * constant rather than measured, so a divergence shows up as rows sliding out of the viewport.
+ * Nothing wraps, for the same reason - a wrapped line is a variable-height row and the whole
+ * constant-time position calculation collapses.
+ *
+ * There is no PF component for a diff stream, so these are authored classes under the
+ * console-diff-* area (see PATTERNFLY.md). PF is still used for everything that HAS a
+ * component: the toolbar, the labels, the empty state.
+ */
+
+.console-diff-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 18%) 1fr;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* The empty state replaces the stream rather than sitting beside it: a reader with nothing to
+ * review has no use for an empty sidebar and an empty toolbar. */
+.console-diff-layout[data-empty] .console-diff-sidebar,
+.console-diff-layout[data-empty] .console-diff-toolbar,
+.console-diff-layout[data-empty] .console-diff-scroll {
+  display: none;
+}
+
+.console-diff-layout:not([data-empty]) .console-diff-empty {
+  display: none;
+}
+
+.console-diff-layout[data-empty] {
+  grid-template-columns: 1fr;
+}
+
+.console-diff-sidebar {
+  overflow-y: auto;
+  border-inline-end: 1px solid var(--pf-t--global--border--color--default);
+  padding: var(--pf-t--global--spacer--sm);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.console-diff-sidebar__item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+  padding: 2px var(--pf-t--global--spacer--xs);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: start;
+  color: inherit;
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.console-diff-sidebar__item:hover {
+  background: var(--pf-t--global--background--color--secondary--hover);
+}
+
+/* The path truncates from the START: the tail of a path is what distinguishes two files in a
+ * monorepo, and clipping it leaves a column of identical prefixes. */
+.console-diff-sidebar__path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: start;
+}
+
+.console-diff-sidebar__counts {
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--xs);
+  color: var(--pf-t--global--text--color--subtle);
+  white-space: nowrap;
+}
+
+.console-diff-main {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+  min-width: 0;
+}
+
+.console-diff-toolbar {
+  padding-block: var(--pf-t--global--spacer--xs);
+}
+
+.console-diff-toolbar__stats {
+  display: flex;
+  gap: var(--pf-t--global--spacer--xs);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* The scroll container owns BOTH axes: vertical for the stream, horizontal for long lines.
+ * Overflow on an inner element would clip rows against the virtualizer's transform. */
+.console-diff-scroll {
+  overflow: auto;
+  min-height: 0;
+  position: relative;
+  outline: none;
+}
+
+.console-diff-scroll:focus-visible {
+  outline: 2px solid var(--console-accent);
+  outline-offset: -2px;
+}
+
+/* The spacer holds the FULL scroll height (rows x ROW_HEIGHT) while the DOM holds one screen.
+ * This is what makes the scrollbar honest about a ten-thousand-line diff. */
+.console-diff-spacer {
+  position: relative;
+  width: 100%;
+}
+
+/* The window is translated to the first rendered row each frame. position:absolute takes it
+ * out of flow so the transform never reflows the spacer. */
+.console-diff-window {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  will-change: transform;
+}
+
+.console-diff-row {
+  display: flex;
+  align-items: center;
+  height: 20px; /* MUST equal ROW_HEIGHT in main.ts */
+  line-height: 20px;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--sm);
+  white-space: pre;
+  min-width: max-content; /* long lines extend the scroll width rather than wrapping */
+}
+
+.console-diff-row[data-kind="add"] {
+  background: var(--pf-t--global--background--color--status--success--default);
+}
+
+.console-diff-row[data-kind="del"] {
+  background: var(--pf-t--global--background--color--status--danger--default);
+}
+
+.console-diff-row--file {
+  gap: var(--pf-t--global--spacer--xs);
+  padding-inline: var(--pf-t--global--spacer--sm);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-block: 1px solid var(--pf-t--global--border--color--default);
+  font-family: var(--pf-t--global--font--family--body);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.console-diff-row__path {
+  font-family: var(--pf-t--global--font--family--mono);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+}
+
+.console-diff-row--hunk {
+  color: var(--pf-t--global--text--color--subtle);
+  background: var(--pf-t--global--background--color--secondary--default);
+  padding-inline: var(--pf-t--global--spacer--sm);
+}
+
+/* The gutters are a fixed character width so the code column starts at the same x on every
+ * row. tabular-nums keeps a 4-digit line number from being wider than a 4-digit one in a
+ * proportional-figure font. */
+.console-diff-row__gutter {
+  flex: 0 0 auto;
+  width: 5ch;
+  padding-inline-end: var(--pf-t--global--spacer--xs);
+  text-align: end;
+  color: var(--pf-t--global--text--color--subtle);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.console-diff-row__marker {
+  flex: 0 0 auto;
+  width: 2ch;
+  text-align: center;
+  user-select: none;
+}
+
+.console-diff-row__text {
+  flex: 1 1 auto;
+}
+
+/* Split view: two equal columns that scroll together, divided down the middle. */
+.console-diff-row--pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+.console-diff-row__side {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.console-diff-row__side[data-side="right"] {
+  border-inline-start: 1px solid var(--pf-t--global--border--color--default);
+}
+
+.console-diff-row__side[data-kind="add"] {
+  background: var(--pf-t--global--background--color--status--success--default);
+}
+
+.console-diff-row__side[data-kind="del"] {
+  background: var(--pf-t--global--background--color--status--danger--default);
+}
+
+/* An absent side is a filled cell, not a gap: the two columns must stay aligned row for row. */
+.console-diff-row__side[data-kind="empty"] {
+  background: var(--pf-t--global--background--color--disabled--default);
+}
+
+.console-diff-empty {
+  place-self: center;
+  padding: var(--pf-t--global--spacer--2xl);
+}

@@ -171,6 +171,7 @@ const SURFACES: Launchable[] = [
   },
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
   { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
+  { pageId: "diff", label: "Review", hint: "Read what you have changed but not committed" },
   { pageId: "notes", label: "Notes", hint: "What people wrote about this workspace" },
   { pageId: "actions", label: "Actions", hint: "Every console action and its shortcut" },
   { pageId: "settings", label: "Settings", hint: "Console settings and keybindings" },
@@ -181,7 +182,7 @@ const SURFACES: Launchable[] = [
 // (internal/service/console KnownSurfaces): the daemon serves the console shell for exactly these
 // paths (SPA fallback), so the boot router below opens exactly these from the path. Keep the two
 // lists in step.
-const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity", "notes"];
+const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity", "notes", "diff"];
 
 // consoleSurfaceFromPath returns the surface a /console/<surface>/ entry path names, or null when
 // the page did not boot on such a path (the bare console root, or any non-surface path). It keys on
@@ -1698,6 +1699,17 @@ export function startConsole(
       title: "Notes",
       bundle: "notes/notes.js",
       css: "logs/logs.css",
+    }),
+  );
+  // Review authors its own sheet rather than reusing logs.css: the hunk stream is virtualized
+  // against a fixed row height, so its geometry rules are part of the scroll math and must not
+  // drift with another surface's typography.
+  register(
+    moduleSurface({
+      id: "diff",
+      title: "Review",
+      bundle: "diff/diff.js",
+      css: "diff/diff.css",
     }),
   );
   // Actions is registered from the shell bundle (not a lazy surface bundle) - it is a thin, static
