@@ -106,8 +106,6 @@ export function initHeroTerminal(): void {
     body.insertBefore(el, line);
   }
 
-  input.value = PRETYPED;
-
   // Shrink-wrap the field to its own text so the block cursor, which is the next
   // flex item, sits immediately after it. Exact because the line is monospace.
   // Without this the input is flex: 1 and the cursor is pushed to the far right.
@@ -116,6 +114,84 @@ export function initHeroTerminal(): void {
   }
   sizeInput();
   input.addEventListener("input", sizeInput);
+
+  // The prompt fills itself in rather than arriving whole, because the line is
+  // the only thing on the page claiming this box is live and a static string
+  // does not make that claim. A fixed interval would undercut it again: an even
+  // beat reads as a machine printing, not as someone typing. So the gap between
+  // keystrokes jitters, opens up at word boundaries, and occasionally stalls.
+  // Measured at about 1.5s start to finish - this is the page's one moving
+  // part, and it should be over before it turns into decoration.
+  const TYPE_LEAD_MS = 250;
+  const TYPE_BASE_MS = 30;
+
+  // The delay BEFORE the given character is typed, so a space slows the
+  // keystroke that follows it rather than the one that produced it.
+  //
+  // The constants are picked against the length of PRETYPED, not in the
+  // abstract: 27 characters at these odds runs about 1.5s in the median and
+  // stays under 2s at the 95th percentile. Lengthening PRETYPED without
+  // lowering the base is what would make this drag.
+  function keystrokeDelay(next: string): number {
+    let ms = TYPE_BASE_MS * (0.55 + Math.random() * 1.1);
+    // A word boundary is where a typist thinks and where the eye catches up.
+    if (next === " ") ms += 50 + Math.random() * 70;
+    // Roughly one keystroke in sixteen hesitates. Uniform jitter alone still
+    // reads as even, because noise with no shape averages back out to a beat.
+    if (Math.random() < 0.06) ms += 70 + Math.random() * 130;
+    return ms;
+  }
+
+  let typeTimer = 0;
+  function finishTyping(): void {
+    window.clearTimeout(typeTimer);
+    document.removeEventListener("visibilitychange", finishIfHidden);
+    input.value = PRETYPED;
+    sizeInput();
+  }
+
+  function typePrompt(): void {
+    let i = 0;
+    function step(): void {
+      i += 1;
+      input.value = PRETYPED.slice(0, i);
+      sizeInput();
+      if (i < PRETYPED.length) {
+        typeTimer = window.setTimeout(step, keystrokeDelay(PRETYPED.charAt(i)));
+      }
+    }
+    typeTimer = window.setTimeout(step, TYPE_LEAD_MS);
+  }
+
+  // A hidden tab clamps setTimeout to roughly 1Hz, so a page opened in a
+  // background tab would still be spelling the line out one character a second
+  // by the time the visitor switched to it. Hold the animation until the tab is
+  // actually being looked at, and if they leave part-way through, give them the
+  // finished line rather than a half-typed one to come back to.
+  function finishIfHidden(): void {
+    if (document.visibilityState === "hidden") finishTyping();
+  }
+
+  function beginTyping(): void {
+    if (document.visibilityState !== "visible") {
+      document.addEventListener("visibilitychange", beginTyping, { once: true });
+      return;
+    }
+    document.addEventListener("visibilitychange", finishIfHidden);
+    typePrompt();
+  }
+
+  // Typing into a field that is still typing itself would fight the visitor for
+  // the caret and interleave two strings, so the first real interaction hands
+  // the line over whole. Pointer, focus and key each count as intent.
+  term.addEventListener("pointerdown", finishTyping, { once: true });
+  input.addEventListener("focus", finishTyping, { once: true });
+  input.addEventListener("keydown", finishTyping, { once: true });
+
+  // Motion is the whole point here, so honoring the reduced-motion preference
+  // means skipping to the finished line rather than slowing it down.
+  if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) finishTyping();
+  else beginTyping();
 
   function run(src: string): void {
     const buzz = window.buzz;
