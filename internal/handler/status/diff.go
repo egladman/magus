@@ -1,0 +1,137 @@
+package status
+
+import (
+	"context"
+	"errors"
+	"log/slog"
+	"net/http"
+	"strings"
+
+	"github.com/egladman/magus/internal/handler"
+	"github.com/egladman/magus/internal/service/console"
+	"github.com/egladman/magus/types"
+)
+
+// diffSource is the narrow consumer contract the diff handler needs from the console
+// service: the working tree's uncommitted unified diff. It is satisfied by *console.Service;
+// the handler package holds no concrete service, matching insightSource above.
+type diffSource interface {
+	WorkingDiff(ctx context.Context, paths []string) (string, error)
+}
+
+// reviewSource is the annotation half, kept a SEPARATE interface from diffSource because the
+// two routes have genuinely different costs and a caller should be able to mount the cheap
+// one without the expensive one.
+type reviewSource interface {
+	Review(ctx context.Context, paths []string) (types.Review, error)
+}
+
+// ReviewHandler serves GET /api/v1/review: the changed files annotated with what the
+// workspace knows - role (generated or not), owning project, changed-symbol reach, observed
+// coverage - in the order magus recommends reading them.
+//
+// It is the differentiated half of the review surface and a SECOND round trip on purpose.
+// /api/v1/diff returns the patch in milliseconds; this one loads the symbol shards and walks
+// a reverse closure. Folding them together would hold the whole diff behind the slowest
+// overlay for no reading benefit.
+//
+// The caller passes the paths it is actually reviewing, repeated as `path`. That is not an
+// optimization: re-deriving the changed set here would race an edit made since the patch was
+// read and annotate a file the reader cannot see.
+type ReviewHandler struct {
+	handler.Base
+	src reviewSource
+}
+
+// NewReviewHandler returns the GET /api/v1/review handler reading from src.
+func NewReviewHandler(src reviewSource, log *slog.Logger) *ReviewHandler {
+	h := &ReviewHandler{src: src}
+	h.Base = handler.New(h.serve, log)
+	return h
+}
+
+func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
+	if !allowGet(w, r) {
+		return
+	}
+	paths := scopePaths(r)
+	if len(paths) == 0 {
+		// No paths is a caller BUG, not an empty review: annotating nothing would render as
+		// "this change touches nothing", which is the most misleading answer available.
+		http.Error(w, "review requires at least one path parameter", http.StatusBadRequest)
+		return
+	}
+	out, err := h.src.Review(r.Context(), paths)
+	if err != nil {
+		if errors.Is(err, console.ErrNoWorkspace) {
+			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "review error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, out)
+}
+
+// DiffHandler serves GET /api/v1/diff: the working tree's uncommitted changes as one unified
+// patch, for the console's review surface.
+//
+// The patch ships as TEXT rather than as a parsed file/hunk tree, and that split is the
+// design rather than a shortcut. A unified patch is the one interchange format every backend
+// and every forge already emits, so a reader written against it works unchanged on a patch
+// this route produced and on one fetched from a provider later. Parsing it here would fork
+// that reader in two and make the provider case the odd one out.
+//
+// Optional `path` query parameters scope the diff, repeated once per path. Absent, the whole
+// repository is diffed. A service with no workspace yields 503, not 500 - the same posture
+// the insight route takes, because "no workspace yet" is a state the console renders rather
+// than an error it reports.
+type DiffHandler struct {
+	handler.Base
+	src diffSource
+}
+
+// NewDiffHandler returns the GET /api/v1/diff handler reading from src.
+func NewDiffHandler(src diffSource, log *slog.Logger) *DiffHandler {
+	h := &DiffHandler{src: src}
+	h.Base = handler.New(h.serve, log)
+	return h
+}
+
+// diffResponse is the wire shape. Patch carries the whole unified body; Clean says the tree
+// had nothing to review, which is DISTINCT from an empty patch the reader failed to parse -
+// a console that cannot tell those apart renders "no changes" over a bug.
+type diffResponse struct {
+	Patch string `json:"patch"`
+	Clean bool   `json:"clean"`
+}
+
+func (h *DiffHandler) serve(w http.ResponseWriter, r *http.Request) {
+	if !allowGet(w, r) {
+		return
+	}
+	patch, err := h.src.WorkingDiff(r.Context(), scopePaths(r))
+	if err != nil {
+		if errors.Is(err, console.ErrNoWorkspace) {
+			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "diff error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	writeJSON(w, diffResponse{Patch: patch, Clean: strings.TrimSpace(patch) == ""})
+}
+
+// scopePaths reads the repeated `path` query parameter, dropping empties so a stray `?path=`
+// scopes to nothing rather than to the empty pathspec - which every backend reads as "the
+// whole repository", the opposite of what the caller asked for.
+func scopePaths(r *http.Request) []string {
+	raw := r.URL.Query()["path"]
+	paths := make([]string, 0, len(raw))
+	for _, p := range raw {
+		if p = strings.TrimSpace(p); p != "" {
+			paths = append(paths, p)
+		}
+	}
+	return paths
+}

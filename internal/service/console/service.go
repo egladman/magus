@@ -55,6 +55,8 @@ type Service struct {
 	knowledgeGraphFn func(ctx context.Context, withSymbols bool) (*knowledge.Graph, error)
 	describeGraphFn  func() types.TargetGraphOutput
 	insightFn        func(ctx context.Context) (types.InsightView, error)
+	workingDiffFn    func(ctx context.Context, paths []string) (string, error)
+	reviewFn         func(ctx context.Context, paths []string) (types.Review, error)
 }
 
 // Option customizes a Service. The With* options inject test seams and the explicit
@@ -87,6 +89,18 @@ func WithDescribeGraphFn(fn func() types.TargetGraphOutput) Option {
 // drive the cache without a real workspace or git history.
 func WithInsightFn(fn func(ctx context.Context) (types.InsightView, error)) Option {
 	return func(s *Service) { s.insightFn = fn }
+}
+
+// WithWorkingDiffFn replaces the VCS call behind WorkingDiff. Tests pass a canned patch so
+// the review surface can be driven without a repository.
+func WithWorkingDiffFn(fn func(ctx context.Context, paths []string) (string, error)) Option {
+	return func(s *Service) { s.workingDiffFn = fn }
+}
+
+// WithReviewFn replaces the annotation join behind Review. Tests pass canned annotations so
+// the review surface can be driven without a symbol index or a coverage run.
+func WithReviewFn(fn func(ctx context.Context, paths []string) (types.Review, error)) Option {
+	return func(s *Service) { s.reviewFn = fn }
 }
 
 // WithInsightTTL overrides how long an assembled InsightView is reused before the git-log
@@ -272,6 +286,42 @@ func (s *Service) Graph(ctx context.Context, flavor, sel string) (types.Knowledg
 		}
 		return g.Output(), nil
 	}
+}
+
+// WorkingDiff returns the working tree's uncommitted changes as one unified patch, scoped to
+// paths when non-empty. It backs the console's review surface.
+//
+// Deliberately NOT cached, unlike Insight beside it. The insight lenses fold a bounded
+// git-log scan that costs the same answer for minutes at a time; a working diff is the thing
+// the reader is editing RIGHT NOW, and a review surface showing a diff from thirty seconds
+// ago is worse than one that takes another few milliseconds. The backend's own diff is fast
+// because it reads the index, not history.
+func (s *Service) WorkingDiff(ctx context.Context, paths []string) (string, error) {
+	if s.workingDiffFn != nil {
+		return s.workingDiffFn(ctx, paths)
+	}
+	if s.magus == nil {
+		return "", ErrNoWorkspace
+	}
+	return s.magus.WorkingDiff(ctx, paths)
+}
+
+// Review annotates a changed-path set: role, owning project, changed-symbol reach, coverage,
+// and the blast radius, ordered by what magus recommends reading first.
+//
+// It is a SECOND round trip on purpose, and the split is the performance design. WorkingDiff
+// above is a index read and returns in milliseconds; this one loads the knowledge graph with
+// its symbol shards and computes a reverse closure. Folding them into one route would hold
+// the whole diff behind the slowest overlay, so the console paints the patch from the first
+// call and decorates it when this one lands. A reader is scrolling code either way.
+func (s *Service) Review(ctx context.Context, paths []string) (types.Review, error) {
+	if s.reviewFn != nil {
+		return s.reviewFn(ctx, paths)
+	}
+	if s.magus == nil {
+		return types.Review{}, ErrNoWorkspace
+	}
+	return s.magus.Review(ctx, paths)
 }
 
 // knowledgeGraph resolves the workspace graph, honoring the test seam. withSymbols loads

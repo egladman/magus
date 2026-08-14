@@ -30,6 +30,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -602,6 +603,108 @@ func (m *Magus) SetGraphObserver(o types.Observer) {
 }
 
 func (m *Magus) VCSOptions() types.VCSOptions { return m.ws.VCSOptions }
+
+// WorkingDiff returns the working tree's uncommitted changes as the backend's own unified
+// diff, scoped to paths when non-empty and repository-wide otherwise. Empty when the tree
+// is clean.
+//
+// It is the SELF-REVIEW half of the review surface: what you are about to commit, before
+// any provider is involved. The committed-range half (base..head, a pull request) is a
+// different question and deliberately not folded in here - a range diff has to name two
+// revisions, and answering both through one signature would make the common case carry
+// arguments it never uses.
+//
+// Every backend already implements DirtyDiff, so this is VCS-agnostic without a per-backend
+// branch. The bytes are NOT identical across backends and are not meant to be: git, hg, and
+// jj each emit their native diff header, and a wrapper that reconciled them would be lying
+// about what ran. A reader parses the unified body, which they do share.
+//
+// A workspace with no VCS is not an error - it is a clean tree with nothing to review - so
+// an unresolvable backend yields "" rather than failing the caller.
+func (m *Magus) WorkingDiff(ctx context.Context, paths []string) (string, error) {
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil || res.VCS == nil {
+		return "", nil
+	}
+	return res.VCS.DirtyDiff(ctx, m.ws.Root, paths)
+}
+
+// Review annotates a changed-path set with what the workspace already knows about each file:
+// whether it is generated, which project owns it, how widely its changed symbols are
+// referenced, and what coverage was observed on it.
+//
+// It is a JOIN, not a computation. Every input already exists - ClassifyFiles reads the same
+// declared globs `magus describe file` reads, and impact.Compute/Enrich are what `magus
+// affected --impact` prints. Assembling them here rather than in the console keeps one
+// definition of review order (types.Review.SortForReview), so a Buzz advisor writing a
+// pull-request comment ranks files the same way the console scrolls them.
+//
+// EVERY overlay is best-effort and degrades to a Note rather than an error. A workspace with
+// no symbol index still gets roles and ownership, which is most of the value; failing the
+// whole review because coverage was never run would make the useful part unreachable. A
+// reader must be able to tell "nothing depends on this" from "nothing was measured", which is
+// what Notes is for.
+func (m *Magus) Review(ctx context.Context, paths []string) (types.Review, error) {
+	out := types.Review{Base: "working"}
+
+	entries, err := m.ClassifyFiles(ctx, paths)
+	if err != nil {
+		return types.Review{}, err
+	}
+	byPath := make(map[string]*types.ReviewFile, len(entries))
+	out.Files = make([]types.ReviewFile, 0, len(entries))
+	for _, e := range entries {
+		out.Files = append(out.Files, types.ReviewFile{
+			Path: e.Path, Project: e.Project, Role: e.Role, Hint: e.Hint,
+		})
+	}
+	for i := range out.Files {
+		byPath[out.Files[i].Path] = &out.Files[i]
+	}
+
+	// The blast radius and the symbol/coverage overlays. Computed from the SAME path set
+	// rather than from a fresh VCS diff, so the annotations describe exactly the files the
+	// caller is reviewing - re-diffing here would race an edit made since the patch was read
+	// and annotate a file the reader cannot see.
+	res, ierr := impact.ComputeFromPaths(ctx, m, paths)
+	if ierr != nil {
+		out.Notes = append(out.Notes, "blast radius unavailable: "+ierr.Error())
+		out.SortForReview()
+		return out, nil
+	}
+	if g, gerr := m.KnowledgeGraphWithSymbols(ctx); gerr == nil {
+		impact.Enrich(res, impact.GraphStore(g))
+	} else {
+		out.Notes = append(out.Notes,
+			"changed-symbol reach and coverage skipped (no symbol index loaded): "+gerr.Error())
+	}
+	out.Notes = append(out.Notes, res.Notes...)
+	out.SeedProjects = res.SeedProjects
+	out.AffectedProjects = res.AffectedProjects
+
+	for _, s := range res.ChangedSymbols {
+		f, ok := byPath[s.File]
+		if !ok {
+			continue
+		}
+		f.Symbols = append(f.Symbols, s)
+		// Reach is the WIDEST file count among the file's changed symbols, not their sum: a
+		// file is as dangerous as its most-depended-on export, and summing would rank a file
+		// with many narrow symbols above one with a single load-bearing API.
+		if s.FileCount > f.Reach {
+			f.Reach = s.FileCount
+		}
+	}
+	for _, c := range res.ChangedFileCoverage {
+		if f, ok := byPath[c.File]; ok {
+			cov := c.Coverage
+			f.Coverage = &cov
+		}
+	}
+
+	out.SortForReview()
+	return out, nil
+}
 
 // Telemetry returns this workspace's observability provider (nil on an Inspect workspace,
 // which builds no cache and no provider). When several Magus instances were opened with a

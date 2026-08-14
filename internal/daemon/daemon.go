@@ -256,6 +256,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			outputStore := cache.NewOutputStore(opts.Magus.CacheDir())
 			eventsH := status.NewEventsHandler(svc, opts.Build, nil, inv, 0, 0, log)
 			insightH := status.NewInsightHandler(svc, log)
+			diffH := status.NewDiffHandler(svc, log)
+			reviewH := status.NewReviewHandler(svc, log)
 			outputsH := viewer.NewOutputsHandler(outputStore, log)
 			outputH := viewer.NewOutputHandler(outputStore, log)
 
@@ -270,6 +272,14 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// run-outcome volatility lens, all under the single "volatility" key of InsightView.
 			// Plain JSON over the same /api guards as the rest.
 			bridgeMux.Handle("/api/v1/insight", cors(insightH))
+			// Review surface: the working tree's uncommitted changes as one unified patch.
+			// Loopback-only, alongside the other /api reads - deliberately NOT added to the LAN
+			// share subset below, because a working diff is unreviewed source and a share link
+			// is handed to a phone.
+			bridgeMux.Handle("/api/v1/diff", cors(diffH))
+			// The annotation half: role, blast radius, changed-symbol reach, coverage. Split
+			// from /api/v1/diff because it is far more expensive - see ReviewHandler.
+			bridgeMux.Handle("/api/v1/review", cors(reviewH))
 			// Run browser: the log viewer's tree lists prior runs (/api/v1/outputs) and loads any one's
 			// verbatim captured output (/api/v1/output?ref=). The store is constructed off the cache dir
 			// per request (a shallow keep-last-K scan), matching the other read-only /api JSON routes.
