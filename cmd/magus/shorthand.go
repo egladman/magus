@@ -6,6 +6,8 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+
+	"github.com/egladman/magus/cmd/magus/gen"
 )
 
 // shorthandName is the de facto short name for magus. Every shipped completion
@@ -25,8 +27,7 @@ func installShorthandCmd(args []string) error {
 	bindDisplayFlags(fs)
 	fs.SetOutput(os.Stderr)
 	fs.Usage = installShorthandUsage
-	dir := fs.String("dir", "", "directory for the shorthand (default: the running binary's directory)")
-	force := fs.Bool("force", false, "replace an existing file at the shorthand path")
+	sf := gen.BindSelfInstallShorthand(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
@@ -43,7 +44,7 @@ func installShorthandCmd(args []string) error {
 	if runtime.GOOS == "windows" {
 		name += ".exe"
 	}
-	linkDir := *dir
+	linkDir := sf.Dir
 	if linkDir == "" {
 		linkDir = filepath.Dir(target)
 	}
@@ -54,7 +55,7 @@ func installShorthandCmd(args []string) error {
 			fmt.Printf("%s already points at %s\n", linkPath, target)
 			return nil
 		}
-		if !*force {
+		if !sf.Force {
 			return fmt.Errorf("%s already exists (use --force to replace it)", linkPath)
 		}
 		if err := os.Remove(linkPath); err != nil {

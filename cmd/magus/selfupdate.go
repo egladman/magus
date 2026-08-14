@@ -7,6 +7,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"net/http"
 	"os"
@@ -106,27 +107,14 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 		fmt.Fprintln(os.Stderr, "Flags:")
 		fs.PrintDefaults()
 	}
-	var (
-		checkOnly bool
-		targetVer string
-		binDir    string
-		force     bool
-		dryRun    bool
-		yes       bool
-	)
-	fs.BoolVar(&checkOnly, "check", false, "print whether an update is available and exit")
-	fs.StringVar(&targetVer, "version", "", "install a specific release tag (e.g. v0.4.2)")
-	fs.StringVar(&binDir, "bin-dir", "", "install the updated binary into this directory instead of replacing in place")
-	fs.BoolVar(&force, "force", false, "allow downgrades and re-installs of the current version")
-	fs.BoolVar(&dryRun, "dry-run", false, "verify everything but do not replace the running binary")
-	fs.BoolVar(&yes, "yes", false, "skip interactive confirmation")
-	fs.BoolVar(&yes, "y", false, "skip interactive confirmation")
+	// -y and --uf.Yes are one switch, which the registry expresses with AliasOf.
+	uf := gen.BindSelfUpdate(fs)
 	if err := fs.Parse(args); err != nil {
 		return err
 	}
 
-	if targetVer != "" && !strings.HasPrefix(targetVer, "v") {
-		targetVer = "v" + targetVer
+	if uf.Version != "" && !strings.HasPrefix(uf.Version, "v") {
+		uf.Version = "v" + uf.Version
 	}
 
 	opts := activeOpts()
@@ -142,46 +130,46 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 	// revoked learns about it here and nowhere else.
 	opts.Keys = opts.Keys.Without(idx.Revoked)
 
-	rel, err := selfupdate.SelectRelease(idx, targetVer)
+	rel, err := selfupdate.SelectRelease(idx, uf.Version)
 	if err != nil {
 		return err
 	}
 
-	if checkOnly {
+	if uf.Check {
 		selfupdate.PrintUpdateStatus(rel.Version, version)
 		return nil
 	}
 
 	// Downgrade/freeze protection.
-	// --version is an explicit request; allow downgrade only with --version or --force.
+	// --version is an explicit request; allow downgrade only with --version or --uf.Force.
 	// Without --version (auto-latest), never silently downgrade.
 	if version == "unknown" {
 		// Dev build: there is no running version to compare against, so
 		// auto-latest could silently install anything, including an older
 		// release mislabeled by a compromised or stale index. Require an
 		// explicit choice instead of guessing.
-		if !force && targetVer == "" {
+		if !uf.Force && uf.Version == "" {
 			return errors.New(
 				"running build is unversioned (dev build): refusing to auto-select a release\n" +
-					"  use --version to install a specific release, or --force to proceed anyway",
+					"  use --version to install a specific release, or --uf.Force to proceed anyway",
 			)
 		}
-	} else if !force {
+	} else if !uf.Force {
 		switch selfupdate.Compare(rel.Version, version) {
 		case 0:
-			return fmt.Errorf("already running %s (use --force to reinstall)", version)
+			return fmt.Errorf("already running %s (use --uf.Force to reinstall)", version)
 		case -1:
-			if targetVer == "" {
+			if uf.Version == "" {
 				// Auto-latest is below running: refuse unconditionally unless forced.
 				return fmt.Errorf(
 					"index advertises %s but you are running %s - refusing downgrade\n"+
-						"  use --version %s to install a specific older release, or --force to override",
+						"  use --version %s to install a specific older release, or --uf.Force to override",
 					rel.Version, version, rel.Version,
 				)
 			}
-			// Explicit --version downgrade: still require --force.
+			// Explicit --version downgrade: still require --uf.Force.
 			return fmt.Errorf(
-				"target %s is older than current %s (use --force to allow downgrade)",
+				"target %s is older than current %s (use --uf.Force to allow downgrade)",
 				rel.Version, version,
 			)
 		}
@@ -212,19 +200,19 @@ func selfUpdateCmd(ctx context.Context, args []string) error {
 		return fmt.Errorf("tarball verification failed: %w", err)
 	}
 
-	targetPath, err := selfupdate.ResolveTargetPath(binDir)
+	targetPath, err := selfupdate.ResolveTargetPath(uf.BinDir)
 	if err != nil {
 		return err
 	}
 
-	if dryRun {
+	if uf.DryRun {
 		fmt.Printf("dry-run: would install magus %s -> %s\n", manifest.Version, targetPath)
 		return nil
 	}
 
-	if !yes {
+	if !uf.Yes {
 		if !tty.StdinIsTerminal() {
-			return errors.New("non-interactive terminal: use --yes / -y to confirm the update")
+			return errors.New("non-interactive terminal: use --uf.Yes / -y to confirm the update")
 		}
 		fmt.Printf("Install magus %s -> %s? [y/N] ", manifest.Version, targetPath)
 		var answer string
