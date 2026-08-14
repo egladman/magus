@@ -54,7 +54,7 @@ in a fresh session have the same problem: a repo they cannot yet trust their
 guesses about. magus gives them the same fix. Query the
 [knowledge graph](docs/concepts/knowledge.md) instead of grepping, run
 [targets](docs/concepts/targets.md) instead of raw tools, and let `magus affected ci`
-prove what a change touched. For agents, see [Agents](docs/guides/agents.md).
+prove what a change touched. For agents, see [Agents](docs/guides/integrations/agents.md).
 
 ## Who this is for
 
@@ -449,11 +449,11 @@ That hookup is what magus is. The build, test, lint, format, and cache scripts t
 
 magus treats an AI agent and a new teammate as the same kind of user: someone who cannot yet trust their guesses about the repo. It ships an agent surface built on the knowledge graph, so an agent asks magus instead of grepping and guessing.
 
-- **Installable skills** teach an agent to query the graph, run work through targets, and triage generated files. For Codex, install both its Agent Skills and the managed always-on guidance: `magus agent install .agents/skills --agents-md`. Claude Code uses `.claude/skills`; see [Agents](docs/guides/agents.md) for the full host setup.
+- **Installable skills** teach an agent to query the graph, run work through targets, and triage generated files. For Codex, run `magus agent install .agents/skills` and paste the always-on `AGENTS.md` block it prints. Claude Code uses `.claude/skills`; there is a setup page per host behind [Agents](docs/guides/integrations/agents.md).
 - **The committed `MAGUS.md`** is a routing index, regenerated from the graph, that points an agent at the exact query for a given question.
 - **The MCP server** the daemon exposes lets an agent call magus tools directly over the protocol rather than shelling out.[^mcp]
 
-Full detail, including which tools exist and how to connect, is on the [Agents](docs/guides/agents.md) page.
+Full detail, including which tools exist and how to connect, is on the [Agents](docs/guides/integrations/agents.md) page.
 
 ## Documentation
 

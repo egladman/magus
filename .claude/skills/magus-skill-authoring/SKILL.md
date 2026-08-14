@@ -161,7 +161,9 @@ Rules:
   `{{else}}` arm, not evidence the ceiling has been reached.
 - `TestEveryEmbeddedSkillHasBothPermutations` fails for any skill whose
   permutations are byte-identical, so a skill with no marked rationale is
-  caught rather than silently making `--simple` a lie for that one.
+  caught rather than silently making the simple permutation a lie for that one.
+  (There is no `--simple` flag any more: install always writes the simple form
+  as the primary plus a `<name>-full` twin.)
 
 ## 4. Breadcrumbs are load-bearing
 
