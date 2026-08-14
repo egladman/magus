@@ -361,8 +361,8 @@ export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > Drift
 export extern fun doctor(args: [str], opts: {str: any} = {<str: any>}) > DoctorReport !> any;
 export extern fun fatal(msg: str = "") > void;
 export extern fun hasCharm(name: str) > bool;
+export extern fun insight(opts: {str: any} = {<str: any>}) > InsightReport !> any;
 export extern fun insightMarkdown(opts: {str: any} = {<str: any>}) > str !> any;
-export extern fun insightReport(opts: {str: any} = {<str: any>}) > InsightReport !> any;
 export extern fun ls() > Projects !> any;
 export extern fun project(config: any, opts: any = null) > void;
 export extern fun projectGraph() > Graph !> any;

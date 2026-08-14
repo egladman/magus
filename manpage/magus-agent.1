@@ -32,8 +32,8 @@ Overwrite existing installed skill files (agent install)
 \fB\-\-global\fR
 Allow absolute destination paths in write mode (agent install)
 .TP
-\fB\-\-simple\fR
-Install the shorter curated permutation of each skill (agent install)
+\fB\-\-prune\fR
+Also remove installed skills this binary no longer ships; without it they are reported and left in place, and only skills magus wrote are ever candidates (agent install)
 .TP
 \fB\-\-tar\fR
 Stream a tar archive to stdout instead of writing files (agent install)
@@ -58,6 +58,12 @@ magus agent install .claude/skills
 .PP
 .EX
 magus agent install .claude/skills --force
+.EE
+.PP
+\fIRefresh, and drop skills this version no longer ships\fR
+.PP
+.EX
+magus agent install .claude/skills --force --prune
 .EE
 .PP
 \fIInstall anywhere via tar\fR
@@ -92,6 +98,7 @@ magus agent sample
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
 \fBmagus\-memory\fR(1),
+\fBmagus\-notes\fR(1),
 \fBmagus\-server\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),
