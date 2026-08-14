@@ -135,7 +135,11 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{Name: "step", Kind: FlagBool, Doc: "Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)"},
 		{Name: "race", Kind: FlagString, Doc: "Run the same target repeatedly to surface order-dependent failures"},
 		{Name: "timeout", Kind: FlagDuration, Doc: "Abort if the run has not finished within this duration (e.g. 5m, 1h30m)"},
-		{Name: "shard", Kind: FlagInt, Doc: "This run's shard index within a CI matrix; paired with --n-shards"},
+		// A STRING, not an int: the shard id is passed through as a label (it reaches
+		// RecordShardTotal as text and defaults from MAGUS_SHARD), and the man page
+		// documented it as an int for as long as the two lists were written apart.
+		// The drift test compared names only, so a type could disagree indefinitely.
+		{Name: "shard", Kind: FlagString, Doc: "This run's shard index within a CI matrix; paired with --n-shards"},
 		{Name: "n-shards", Kind: FlagInt, Doc: "Total shard count for this CI matrix run; paired with --shard"},
 		{Name: "no-volatility-retry", Kind: FlagBool, Doc: "Disable volatility auto-retry for this run"},
 	},

@@ -43,13 +43,19 @@ type Command struct {
 
 // FlagKind is the value type a flag binds, and so which flag.FlagSet method
 // registers it.
-type FlagKind int
+//
+// A defined STRING rather than an iota int, matching the boundary enums elsewhere
+// in this module. An iota kind needs a generated String() before it can be printed,
+// read or diffed, and until it has one every error about a flag renders its type as
+// a bare integer. Spelling the value is the whole of what a Stringer would have
+// added, so the type is its own representation and there is nothing to keep in sync.
+type FlagKind string
 
 const (
-	FlagBool FlagKind = iota
-	FlagString
-	FlagInt
-	FlagDuration
+	FlagBool     FlagKind = "bool"
+	FlagString   FlagKind = "string"
+	FlagInt      FlagKind = "int"
+	FlagDuration FlagKind = "duration"
 )
 
 // Flag is one command-specific flag.
@@ -111,6 +117,12 @@ func bindFlags(fs *flag.FlagSet, flags []Flag) {
 			fs.Int(f.Name, defaultOf[int](f.Default), f.Doc)
 		case FlagDuration:
 			fs.Duration(f.Name, defaultOf[time.Duration](f.Default), f.Doc)
+		default:
+			// No silent fallback. An unset or misspelled Kind used to land on the
+			// string case, which binds a flag that parses but never means what it
+			// says; this is static in-repo data bound by every man-page and drift
+			// test, so a panic here fails generation rather than shipping.
+			panic("manpage: flag --" + f.Name + " has unknown kind " + string(f.Kind))
 		}
 	}
 }

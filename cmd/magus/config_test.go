@@ -13,7 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/generate/godecl"
+	"github.com/egladman/magus/internal/manpage"
 )
 
 func TestRunConfigView_Text(t *testing.T) {
@@ -135,6 +135,28 @@ var affectedOnlyFlags = map[string]string{
 	"b":     "short for --base",
 	"stdin": "reads changed paths from a pipe (watch loop); `magus run` takes explicit project paths",
 	"null":  "pairs with --stdin",
+
+	// The sub-modes. These select a different command path rather than configure
+	// the run, and each is documented on affected's page because that is where a
+	// reader meets it. They were absent from this map while the comparison read
+	// run.go and affected.go as SOURCE: the scan looked only inside the affected
+	// function, so everything bound by affectedPlan, affectedImpact and bisect was
+	// invisible to it. Comparing the documented surfaces instead makes them visible,
+	// which is the point - they are exceptions, not omissions.
+	"explain":             "mode selector: reports why a project is in the set instead of running",
+	"plan":                "mode selector: emits a CI shard plan for the affected set",
+	"max-shards":          "pairs with --plan",
+	"max-parallel-budget": "pairs with --plan",
+	"detail":              "pairs with --plan",
+	"bisect":              "mode selector: drives VCS bisect over the diff, which `magus run` has no notion of",
+	"good":                "pairs with --bisect",
+	"target":              "pairs with --bisect",
+
+	// A GLOBAL flag that only this command's page declares. Listed here rather than
+	// deleted because removing it would drop --dry-run from affected's man page,
+	// and both commands do accept it; it is the registry entry that is odd, not the
+	// behaviour.
+	"dry-run": "global flag, declared on affected's page only",
 }
 
 // TestRunAffectedFlagParity ensures that `magus run` and `magus affected`
@@ -148,10 +170,9 @@ var affectedOnlyFlags = map[string]string{
 func TestRunAffectedFlagParity(t *testing.T) {
 	_, thisFile, _, ok := runtime.Caller(0)
 	require.True(t, ok, "runtime.Caller failed")
-	dir := filepath.Dir(thisFile)
 
-	runFlags := collectFlagNames(t, filepath.Join(dir, "run.go"), "runTarget")
-	affectedFlags := collectFlagNames(t, filepath.Join(dir, "affected.go"), "affected")
+	runFlags := registryFlagNames(t, "run")
+	affectedFlags := registryFlagNames(t, "affected")
 
 	// Stale exception check: every entry in an exception map must correspond
 	// to a flag that actually exists in the owning file.
@@ -181,27 +202,29 @@ func TestRunAffectedFlagParity(t *testing.T) {
 	}
 }
 
-// collectFlagNames returns the flags bound inside funcName, as a set.
+// registryFlagNames returns the flags one command declares, as a set.
 //
-// The AST walking lives in internal/generate/godecl, shared with the generators. This
-// file grew its own copy, and because that copy read only the named function while
-// magus binds flags across several, anything built on it reported three false
-// positives for every real finding.
-//
-// FlagNamesIn, not FlagNames: this test compares what each COMMAND binds, and
-// affected.go also binds flags in affectedPlan and affectedImpact, which are sub-modes
-// rather than part of affected's own surface.
-func collectFlagNames(t *testing.T, file, funcName string) map[string]struct{} {
+// Read from the command registry rather than parsed out of the Go source. The
+// source scan this replaced walked run.go and affected.go for fs.Bool-style calls,
+// which was the only way to ask "what does this command bind" while each command
+// bound its own list by hand. Both now bind from the registry via a generated
+// binder, so there is nothing to scrape - and a scan would find zero and pass
+// vacuously if it were not for its own emptiness check.
+func registryFlagNames(t *testing.T, command string) map[string]struct{} {
 	t.Helper()
-	parsed, err := godecl.Parse(file)
-	require.NoError(t, err, "parse %s", file)
-	names := godecl.FlagNamesIn(parsed, funcName)
-	require.NotEmpty(t, names, "function %q bound no flags in %s", funcName, file)
-	out := make(map[string]struct{}, len(names))
-	for _, n := range names {
-		out[n] = struct{}{}
+	for _, c := range manpage.All {
+		if c.Name != command {
+			continue
+		}
+		require.NotEmpty(t, c.Flags, "command %q declares no flags", command)
+		out := make(map[string]struct{}, len(c.Flags))
+		for _, f := range c.Flags {
+			out[f.Name] = struct{}{}
+		}
+		return out
 	}
-	return out
+	t.Fatalf("command %q is not in the man-page registry", command)
+	return nil
 }
 
 // subtract returns a copy of flags with all keys in exceptions removed.

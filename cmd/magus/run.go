@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 	"time"
 
@@ -42,8 +41,6 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 
 	// Parsed before the run, not after it: a typo'd verb used to build the whole
 	// project and only then exit 2 on something checkable up front.
-	var detach *bool
-	var wait *bool
 	var chain chainPlan
 	if chained {
 		var proceed bool
@@ -73,40 +70,19 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 
 	flagArgs, extraArgs := splitOnDashDash(rest)
 
-	var (
-		timeout           *time.Duration
-		shardID           *string
-		nShards           *int
-		noVolatilityRetry *bool
-		raceFlag          *string
-		graphView         *bool
-		upstream          *bool
-		graphDepth        *int
-		step              *bool
-		openViewer        *bool
-		noCache           *bool
-
-		noDefaultCharms *bool
-	)
+	// Bound from the command registry, not declared here: the man page's copy of
+	// this list and this one used to be written separately and reconciled by a test.
+	// The two env-var defaults below are applied after binding, because they are a
+	// property of THIS process rather than of the documented flag.
+	var rf *gen.RunFlags
 	projectArgs, err := cmdParse("run "+targetName, flagArgs, func(fs *flag.FlagSet) {
-		timeout = fs.Duration("timeout", 0, "Abort if not finished within this duration (e.g. 5m, 1h30m); 0 = no limit")
-		shardID = fs.String("shard", os.Getenv("MAGUS_SHARD"), "Shard ID within this CI matrix run (e.g. \"0\"); enables ci.shard.total reporting")
-		var nShardsDefault int
-		if s := os.Getenv("MAGUS_N_SHARDS"); s != "" {
-			nShardsDefault, _ = strconv.Atoi(s)
-		}
-		nShards = fs.Int("n-shards", nShardsDefault, "Total shard count for this CI matrix run; paired with --shard")
-		noVolatilityRetry = fs.Bool("no-volatility-retry", false, "Disable volatility auto-retry for this run (used by magus affected --bisect)")
-		raceFlag = fs.String("race", "", raceFormatHelp)
-		graphView = fs.Bool("graph", false, "Render the dependency graph for the selected scope instead of executing")
-		upstream = fs.Bool("upstream", false, "With --graph: show dependents instead of dependencies")
-		graphDepth = fs.Int("depth", 0, "With --graph: cap displayed depth (0 = unlimited)")
-		step = fs.Bool("step", false, "Pause before each subprocess for interactive stepping (requires TTY; implies --concurrency=1)")
-		noDefaultCharms = fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
-		openViewer = fs.Bool("open", false, "Open this run in the browser log viewer and stream to it as it goes, over an ephemeral loopback server (127.0.0.1); the link and data never leave your machine")
-		noCache = fs.Bool("no-cache", false, "Force a fresh run even on a cache hit; still refreshes the entry (unlike a skip_cache target, which never snapshots)")
-		detach = fs.Bool("detach", false, "Hand this run to the daemon and return immediately; it prints an invocation id that magus query invocation reads")
-		wait = fs.Bool("wait", false, "With --detach, block until the run finishes and exit with its status")
+		rf = gen.BindRun(fs)
+		// The shard pair defaults from the environment CI sets, so a matrix job
+		// need not repeat itself on every magus call. Applied by seeding the bound
+		// value (an explicit flag still wins, since parsing runs after this) and
+		// mirroring it into DefValue so -h reports what the flag will actually do.
+		envDefault(fs, gen.FlagRunShard, os.Getenv("MAGUS_SHARD"))
+		envDefault(fs, gen.FlagRunNShards, os.Getenv("MAGUS_N_SHARDS"))
 		fs.Usage = func() {
 			fmt.Fprintf(os.Stderr, "Usage: magus run %s [flags] [project...] [-- <extra args>]\n", rawTarget)
 			fmt.Fprintln(os.Stderr, "")
@@ -124,11 +100,11 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if err != nil {
 		return err
 	}
-	if wait != nil && *wait && (detach == nil || !*detach) {
+	if rf.Wait && !rf.Detach {
 		return usagef("magus run: --wait applies to --detach; a plain run already blocks until it finishes")
 	}
-	if detach != nil && *detach {
-		return detachToDaemon(ctx, root, append([]string{"run"}, withoutDetachFlag(origArgs)...), wait != nil && *wait)
+	if rf.Detach {
+		return detachToDaemon(ctx, root, append([]string{"run"}, withoutDetachFlag(origArgs)...), rf.Wait)
 	}
 	// -s deliberately suppresses the usual target progress. That is useful to an
 	// agent, but a person otherwise has no positive signal that a slow invocation
@@ -145,22 +121,22 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 			clihint.QueryOutput.With("<ref>")))
 	}
 
-	if *step && !isInteractiveTTY() {
+	if rf.Step && !isInteractiveTTY() {
 		fmt.Fprintln(os.Stderr, "magus: --step requires an interactive terminal")
 		return errSilent{exitCode: 2}
 	}
 
-	if *timeout > 0 {
+	if rf.Timeout > 0 {
 		var cancel context.CancelFunc
-		ctx, cancel = withTimeout(ctx, *timeout, "run:"+targetName)
+		ctx, cancel = withTimeout(ctx, rf.Timeout, "run:"+targetName)
 		defer cancel()
 	}
 
-	if *step && !isInteractiveTTY() {
+	if rf.Step && !isInteractiveTTY() {
 		fmt.Fprintln(os.Stderr, "magus: --step requires an interactive terminal")
 		return errSilent{exitCode: 2}
 	}
-	if *step {
+	if rf.Step {
 		ctx = withStepGate(ctx)
 	}
 
@@ -168,14 +144,14 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 		return fmt.Errorf("spell-qualified syntax (e.g. %q) is not supported for the ci target", rawTarget)
 	}
 
-	if *graphView {
+	if rf.Graph {
 		ws, err := inspectWorkspace(ctx, root)
 		if err != nil {
 			return err
 		}
 		return renderWorkspaceGraph(ctx, ws, graphRenderOptions{
-			Upstream: *upstream,
-			Depth:    *graphDepth,
+			Upstream: rf.Upstream,
+			Depth:    rf.Depth,
 			Spell:    spellFilter,
 			Roots:    projectArgs,
 			Target:   targetName,
@@ -228,7 +204,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// Surface the active charms up front, next to the projects header, so the run's
 	// state ("here's what's in effect") is visible before any work - and so a missing
 	// default charm (e.g. rw not applied) is obvious rather than silent.
-	charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, *noDefaultCharms)
+	charms := withDefaultCharms(parsedTarget.Charms, globalCfg.DefaultCharms, rf.NoDefaultCharms)
 	m.LogCharms(ctx, strings.Join(charms, ","))
 	m.LogCache(ctx)
 	if len(targets) == 0 {
@@ -269,10 +245,10 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if len(charms) > 0 {
 		runOpts = append(runOpts, magus.WithCharms(charms...))
 	}
-	if *noVolatilityRetry {
+	if rf.NoVolatilityRetry {
 		runOpts = append(runOpts, magus.WithNoVolatilityRetry())
 	}
-	race, err := resolveRace(*raceFlag)
+	race, err := resolveRace(rf.Race)
 	if err != nil {
 		return err
 	}
@@ -282,10 +258,10 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	case race.Enabled:
 		runOpts = append(runOpts, magus.WithRace())
 	}
-	if *step {
+	if rf.Step {
 		runOpts = append(runOpts, magus.WithStep())
 	}
-	if *noCache {
+	if rf.NoCache {
 		runOpts = append(runOpts, magus.WithNoCache())
 	}
 	if rw != nil {
@@ -303,7 +279,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	if targetName == "ci" {
 		trigger = journal.TriggerCI
 	}
-	liveBC, stopLive := beginLive(ctx, *openViewer)
+	liveBC, stopLive := beginLive(ctx, rf.Open)
 	defer stopLive()
 	// An adopted run (dispatched by the daemon) also feeds the daemon's live-run registry,
 	// carried on ctx; a plain CLI run has no sink, so this is empty there.
@@ -321,11 +297,11 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	} else {
 		err = m.Run(invCtx, targets, runOpts...)
 	}
-	if *timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
-		return fmt.Errorf("run %s: timed out after %s", targetName, *timeout)
+	if rf.Timeout > 0 && errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("run %s: timed out after %s", targetName, rf.Timeout)
 	}
-	if rw != nil && *shardID != "" && *nShards > 0 {
-		_ = rw.RecordShardTotal(*shardID, *nShards, time.Since(startedAt))
+	if rw != nil && rf.Shard != "" && rf.NShards > 0 {
+		_ = rw.RecordShardTotal(rf.Shard, rf.NShards, time.Since(startedAt))
 	}
 	if reportedRunErr(err) {
 		return errSilent{exitCode: 1}
@@ -629,6 +605,23 @@ func emitRunResult(ctx context.Context, m *magus.Magus, opts OutputOptions, targ
 		})
 	}
 	return emitFormatted(opts, out)
+}
+
+// envDefault seeds a bound flag from an environment variable, leaving it alone when
+// the variable is unset. DefValue is updated too, so `-h` shows the value the flag
+// would take rather than the registry's zero.
+func envDefault(fs *flag.FlagSet, name, value string) {
+	if value == "" {
+		return
+	}
+	f := fs.Lookup(name)
+	if f == nil {
+		return
+	}
+	if err := f.Value.Set(value); err != nil {
+		return
+	}
+	f.DefValue = value
 }
 
 // detachFlagName is the one flag these helpers act on; it is named once so the two that
