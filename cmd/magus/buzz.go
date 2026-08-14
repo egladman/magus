@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"path/filepath"
 
@@ -92,8 +93,19 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	// Best-effort: outside a workspace, or when one fails to load, the script still runs
 	// and the workspace-reading members raise as before. A standalone script that touches
 	// none of them must not be blocked by a magusfile it never asked about.
+	//
+	// The load error is LOGGED rather than discarded. Silently dropping it made the two
+	// absences indistinguishable at the point a reader sees them: MGS1022 says "no
+	// workspace on the context" either way, so a script inside a workspace that simply
+	// failed to load reads as a script that was never in one, and the advice it gives
+	// ("fork instead") is then wrong. This is not hypothetical - it is what a green
+	// local run and a red CI run of the same script looked like, with nothing in
+	// between to tell them apart.
 	if m, lerr := loadMagus(ctx, root); lerr == nil && m != nil {
 		ctx = types.WithWorkspace(ctx, m)
+	} else if lerr != nil {
+		slog.Warn("workspace not attached to this script; its workspace-reading members will raise MGS1022",
+			slog.String("error", lerr.Error()))
 	}
 
 	// Default is strict (upstream Buzz parity, what the buzz spell's `run` op forks).
