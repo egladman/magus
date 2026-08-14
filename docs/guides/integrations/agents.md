@@ -1124,7 +1124,7 @@ for why it is off unless you ask for it.
 # never denies, never advises, and cannot change what your host does next. The
 # parity gates ask that question only of artifacts that answer it.
 #
-# magus-guard-template: 3
+# magus-guard-template: 4
 
 # NO `set -e`, deliberately, and neither sibling uses it either.
 #
