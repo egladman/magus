@@ -2,7 +2,7 @@
 // query or named view, so a magus CLI command can print a clickable "view this in
 // the Graph Explorer" line as a COMPLEMENTARY aid alongside its normal output.
 //
-// The link reproduces `magus graph open --live` (cmd/magus/graph_open.go,
+// The link reproduces `magus graph export --open --follow` (cmd/magus/graph_open.go,
 // graphOpenLive) under the daemon-origin grammar: the ORIGIN names which daemon,
 // and the page is served by that daemon from its own loopback /console/graph/. So
 // the link is http://<host>/console/graph/#<directives>, where <host> is the

@@ -1,4 +1,4 @@
-package buzz_test
+package buzz_test //nolint:testlayout // in-package would close a cycle: gopherbuzz/std imports gopherbuzz
 
 import (
 	"bufio"

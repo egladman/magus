@@ -2,6 +2,7 @@ package knowledge
 
 import (
 	"testing"
+	"time"
 
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -48,9 +49,9 @@ func TestAssembleVCSAuthorshipOff(t *testing.T) {
 
 func TestAssembleVCS(t *testing.T) {
 	entries := []types.KnowledgeVCS{
-		{Path: "b.buzz", LastCommit: "beef", LastUnix: 1_700_000_000, Commits: 3},
-		{Path: "a.buzz", LastCommit: "cafe", LastUnix: 1_600_000_000, LastAuthor: "Ada", Commits: 1},
-		{Path: "gone.buzz", LastCommit: "dead", LastUnix: 1, Commits: 9}, // no file node -> dropped
+		{Path: "b.buzz", LastCommit: "beef", LastModified: time.Date(2023, 11, 14, 0, 0, 0, 0, time.UTC), Commits: 3},
+		{Path: "a.buzz", LastCommit: "cafe", LastModified: time.Date(2020, 9, 13, 0, 0, 0, 0, time.UTC), LastAuthor: "Ada", Commits: 1},
+		{Path: "gone.buzz", LastCommit: "dead", LastModified: time.Unix(1, 0).UTC(), Commits: 9}, // no file node -> dropped
 	}
 	known := map[string]bool{"a.buzz": true, "b.buzz": true}
 

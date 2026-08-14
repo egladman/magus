@@ -14,9 +14,9 @@ func TestCommandRender(t *testing.T) {
 		{"with one arg", QueryOutput.With("out1a2b3c"), "magus query output out1a2b3c"},
 		{"with two args", QueryOutput.With("out1a2b3c", "--open"), "magus query output out1a2b3c --open"},
 		{"single-token head", Status.Head(), "status"},
-		{"multi-token head", GraphOpen.Head(), "graph"},
+		{"multi-token head", GraphExport.Head(), "graph"},
 		{"single-token leaf", Status.Leaf(), "status"},
-		{"multi-token leaf", GraphOpen.Leaf(), "open"},
+		{"multi-token leaf", GraphExport.Leaf(), "export"},
 		{"deep leaf", MCPTokenGenerate.Leaf(), "generate"},
 	}
 	for _, c := range cases {
@@ -30,7 +30,7 @@ func TestCommandRender(t *testing.T) {
 // the drift test in cmd/magus keeps walking the full set.
 func TestAllRegistered(t *testing.T) {
 	declared := []Command{
-		Run, QueryOutput, QueryInvocation, GraphOpen, GraphExport, GraphStats, GraphBuild,
+		Run, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
 		ServerStart, ServerStop, ServerJob, Status, Watch, Affected,
 		DescribeTargets, DescribeProject, Ls, LsTargets, Where, Refs, MCPTokenGenerate,
 		SelfUpdate, SelfRefresh, SelfRegistry,

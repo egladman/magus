@@ -571,19 +571,19 @@
           "reads_files": [
             {
               "project": ".",
-              "glob": "libs/testsprawl/.custom-gcl.yml"
+              "glob": "libs/testlayout/.custom-gcl.yml"
             },
             {
               "project": ".",
-              "glob": "libs/testsprawl/go.mod"
+              "glob": "libs/testlayout/go.mod"
             },
             {
               "project": ".",
-              "glob": "libs/testsprawl/go.sum"
+              "glob": "libs/testlayout/go.sum"
             },
             {
               "project": ".",
-              "glob": "libs/testsprawl/**/*.go"
+              "glob": "libs/testlayout/**/*.go"
             }
           ],
           "reads_secrets": false
@@ -618,11 +618,11 @@
           "reads_files": [
             {
               "project": ".",
-              "glob": "libs/testsprawl/.custom-gcl.yml"
+              "glob": "libs/testlayout/.custom-gcl.yml"
             },
             {
               "project": ".",
-              "glob": "libs/testsprawl/**/*.go"
+              "glob": "libs/testlayout/**/*.go"
             },
             {
               "project": ".",
@@ -1628,8 +1628,8 @@
       ]
     },
     {
-      "path": "libs/testsprawl",
-      "name": "libs/testsprawl",
+      "path": "libs/testlayout",
+      "name": "libs/testlayout",
       "engine": "buzz",
       "nodes": [
         {
@@ -1681,7 +1681,7 @@
           ],
           "reads_files": [
             {
-              "project": "libs/testsprawl",
+              "project": "libs/testlayout",
               "glob": "**/*.md"
             }
           ],

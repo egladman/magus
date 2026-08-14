@@ -320,7 +320,7 @@ a standalone browser page that renders the captured output with collapsible sect
 status badges, in-page search, ANSI color, and copy. A "Copy command" button hands back
 a `magus query output` one-liner (per section too), so you can pass an exact slice to an agent,
 and a pretty/raw toggle shows the exact captured bytes. It is the log analog of
-[`magus graph open`](../knowledge.md): the ref and the output both ride the link fragment
+[`magus graph export --open`](../knowledge.md): the ref and the output both ride the link fragment
 (`#ref=...&data=...`, gzipped then base64url-encoded), decoded in your browser. The
 fragment is never sent to any server, so nothing about the run - not even its ref - ever
 leaves your machine.

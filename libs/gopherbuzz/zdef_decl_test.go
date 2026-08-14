@@ -1,9 +1,8 @@
-package buzz_test
+package buzz
 
 import (
 	"testing"
 
-	"github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -19,12 +18,12 @@ zdef("libm", "double sqrt(double x); double pow(double base, double exp);");
 final a = sqrt(4.0);
 final b = pow(2.0, exp: 3.0);
 `
-	prog, err := buzz.ParseEmbedded(src)
+	prog, err := ParseEmbedded(src)
 	require.NoError(t, err)
 	// Compiles without "undefined: sqrt/pow" — the checker pre-declared them and
 	// the compiler lowered the zdef into global bindings. A labeled FFI arg
 	// (exp: 3.0) must also be accepted (labels are ignored, written order kept).
-	chunk, err := buzz.CompileWith(prog, buzz.CompileOptions{})
+	chunk, err := CompileWith(prog, CompileOptions{})
 	require.NoError(t, err)
 	want := map[string]bool{"sqrt": false, "pow": false}
 	for _, e := range chunk.Exports {
@@ -48,9 +47,9 @@ fun openLib() > any {
     return zdef("libm", "double sqrt(double x);");
 }
 `
-	prog, err := buzz.ParseEmbedded(src)
+	prog, err := ParseEmbedded(src)
 	require.NoError(t, err)
-	chunk, err := buzz.CompileWith(prog, buzz.CompileOptions{})
+	chunk, err := CompileWith(prog, CompileOptions{})
 	require.NoError(t, err)
 	for _, e := range chunk.Exports {
 		assert.NotEqualf(t, "sqrt", e, "zdef inside a function must not declare globals; got export %q", e)

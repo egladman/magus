@@ -1,4 +1,4 @@
-package magus_test
+package magus
 
 // magus is agent-host agnostic, and this test is the only thing that enforces it.
 // The rule was written down twice - in docs/guides/integrations/agents.md ("magus

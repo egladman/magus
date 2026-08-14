@@ -53,14 +53,21 @@ fun env(name: str) > str { return os\env(name) ?? ""; }
 // one question a red or green run raises - is this result trustworthy, or does this target
 // flap? Silent when nothing is flagged, matching every advisor in ../advice.
 fun volatilitySection() > str !> any {
-    final flagged = magus\insight(["volatility", "-o", "name"], opts: {"quiet": true, "allow_failure": true});
-    if (!flagged.ok or flagged.stdout.trim() == "") { return ""; }
-    final detail = magus\insight(["volatility", "-o", "text"], opts: {"quiet": true, "allow_failure": true});
-    if (!detail.ok) { return ""; }
+    // One typed read of the loaded workspace. This used to shell out twice - once for
+    // `-o name` to decide whether to render anything, and again for `-o text` to get the
+    // prose - and both answers are fields on the same report.
+    final report = magus\insight([]);
+    var flagged = "";
+    foreach (t in report.volatility.targets) {
+        if (t.volatile) {
+            flagged = flagged + "{t.project}:{t.target}  score {t.score}  pass {t.pass}  fail {t.fail}\n";
+        }
+    }
+    if (flagged == "") { return ""; }
     return "\n## Volatile targets\n\n"
         + "These targets' pass/fail records flap, so a result from one of them is weak "
         + "evidence either way. Stabilize them before trusting a red run.\n\n"
-        + "```\n" + detail.stdout.trim() + "\n```\n";
+        + "```\n" + flagged.trim() + "\n```\n";
 }
 
 fun main() > void !> any {

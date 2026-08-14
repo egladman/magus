@@ -2,7 +2,7 @@
 # workspace's graph carried in a URL fragment (private: a fragment is never sent
 # to the server). --print emits the URL instead of launching a browser, so it is
 # testable headlessly.
-exec magus graph open --print
+exec magus graph export --open --print
 stdout 'https://eli\.gladman\.cc/magus/console/graph/#data='
 # the fragment is gzip+base64url (starts with the gzip magic H4sI in base64url)
 stdout '#data=H4sI'
@@ -11,19 +11,22 @@ stdout '#data=H4sI'
 exists .magus/knowledge/manifest.json
 
 # --url points the same fragment at a self-hosted mirror (base gets one slash).
-exec magus graph open --print --url http://localhost:9999/graph/
+exec magus graph export --open --print --url http://localhost:9999/graph/
 stdout 'http://localhost:9999/graph/#data=H4sI'
 
 # a base URL without a trailing slash still yields exactly one slash before #.
-exec magus graph open --print --url http://localhost:9999/graph
+exec magus graph export --open --print --url http://localhost:9999/graph
 stdout 'http://localhost:9999/graph/#data='
 ! stdout 'graph//#data'
 
-# open is discoverable from the graph home and its usage explains privacy and
-# advertises both delivery modes (fragment + loopback --serve).
+# --open is discoverable from export's own usage, which explains privacy and
+# advertises both delivery modes (fragment + loopback --serve). It is a flag now,
+# not a subcommand, so the graph home no longer lists it.
 exec magus graph -h
-stderr 'open'
-exec magus graph open -h
+! stderr 'open '
+exec magus graph export -h
+stderr '--open'
+exec magus graph export --open -h
 stderr 'never leaves your machine'
 stderr '--serve'
 

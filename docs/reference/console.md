@@ -118,7 +118,7 @@ permission prompt in Chrome when you first connect the explorer.
 
 Safari blocks fetch requests from an HTTPS page to `http://127.0.0.1` (mixed
 content). The console will not work in Safari's live mode. Use
-`magus graph open --serve` instead, which runs an ephemeral loopback server
+`magus graph export --open --serve` instead, which runs an ephemeral loopback server
 with a matching same-origin response and opens the graph via a `#src=` fragment
 that is served directly.
 
@@ -166,12 +166,12 @@ disabled.
 
 ## Live mode pairing
 
-`magus graph open --live` opens the explorer connected to the running daemon.
+`magus graph export --open --follow` opens the explorer connected to the running daemon.
 
 ### How to pair
 
 1. Start the daemon: `magus server start`
-2. Run `magus graph open --live` (or `--live --print` to copy the URL)
+2. Run `magus graph export --open --follow` (or `--follow --print` to copy the URL)
 3. The explorer shows a `live: <workspace>` badge and updates within seconds of file changes
 
 The link is served from the daemon's own loopback origin, e.g.
@@ -182,7 +182,7 @@ the token rides the fragment). The page:
 - Consumes the token and strips it from the URL via `history.replaceState`
 - Stores the token in sessionStorage (tab lifetime) unless you tick "Remember this workspace", which moves it to localStorage
 
-Zero-arg default: a plain `magus graph open` with no flags checks if the daemon is running. If it is, it automatically picks `--live`. Otherwise it falls back to the `#data=` fragment.
+Zero-arg default: a plain `magus graph export --open` with no flags checks if the daemon is running. If it is, it automatically picks `--follow`. Otherwise it falls back to the `#data=` fragment.
 
 ### Two-state model
 
@@ -197,11 +197,11 @@ The explorer has exactly two source states:
 
 ### Safari limitation
 
-Safari blocks fetch requests from an HTTPS page to `http://127.0.0.1` (mixed content). Live mode cannot connect in Safari. Use `magus graph open --serve` instead: it runs an ephemeral loopback server and opens the graph via a `#src=` fragment that is compatible with Safari's same-origin restriction.
+Safari blocks fetch requests from an HTTPS page to `http://127.0.0.1` (mixed content). Live mode cannot connect in Safari. Use `magus graph export --open --serve` instead: it runs an ephemeral loopback server and opens the graph via a `#src=` fragment that is compatible with Safari's same-origin restriction.
 
 ### Target graph in live mode
 
-`magus graph open --live --targets` opens the live target dependency graph:
+`magus graph export --open --follow --targets` opens the live target dependency graph:
 `http://127.0.0.1:7391/console/graph/#token=<bearer>&flavor=targets`
 
 ### Affected view
@@ -255,17 +255,17 @@ complete network permission, in one line.
    fetch is refused by the same `connect-src` for any host that is not this
    site or your loopback. Both loaders already handle a fetch failure
    gracefully (a status message, not a crash); use `#data=` (a local file,
-   drag-and-drop, or `magus graph open`'s default fragment) or a loopback
-   source (`magus graph open --serve` / `--live`) instead.
+   drag-and-drop, or `magus graph export --open`'s default fragment) or a loopback
+   source (`magus graph export --open --serve` / `--follow`) instead.
 
 ### Claim: your graph never appears in any network request
 
-When you use `magus graph open`, your graph travels in the URL **fragment**
+When you use `magus graph export --open`, your graph travels in the URL **fragment**
 (the part after `#`). Browsers never include fragments in HTTP requests -
 that's the HTTP standard, not our promise.
 
 1. Open DevTools (`F12`) -> **Network** tab. Tick **Preserve log**.
-2. Load your graph: run `magus graph open` in your workspace, or drag a
+2. Load your graph: run `magus graph export --open` in your workspace, or drag a
    `graph.json` onto the [console's Graph Explorer](https://eli.gladman.cc/magus/console/).
 3. Read the request list. Every row is a `GET` for a static file from this
    site's own origin (or, in live mode, your own loopback address). Click any

@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/file"
 	"gopkg.in/yaml.v3"
 )
 
@@ -424,26 +425,16 @@ func marshalRecord(r Record) []byte {
 	return []byte(b.String())
 }
 
-// writeAtomic writes via a temp file in the same directory then renames over the target,
-// so a crash mid-write leaves either the old file or the new one whole, never a partial.
+// writeAtomic writes data to path, atomically and durably.
+//
+// It delegates rather than reimplementing the temp-file-and-rename dance, because the
+// obvious hand-rolled version gets two things wrong and both are silent. It does not fsync
+// before the rename, so a crash can make the rename durable while the bytes are not -
+// leaving a truncated file behind a comment promising that cannot happen. And
+// os.CreateTemp creates 0600, which the rename carries through, so entries end up
+// owner-only when the surrounding files are not.
 func writeAtomic(path string, data []byte) error {
-	dir := filepath.Dir(path)
-	tmp, err := os.CreateTemp(dir, ".*.tmp")
-	if err != nil {
-		return fmt.Errorf("memory: write %s: %w", filepath.Base(path), err)
-	}
-	tmpName := tmp.Name()
-	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("memory: write %s: %w", filepath.Base(path), err)
-	}
-	if err := tmp.Close(); err != nil {
-		_ = os.Remove(tmpName)
-		return fmt.Errorf("memory: write %s: %w", filepath.Base(path), err)
-	}
-	if err := os.Rename(tmpName, path); err != nil {
-		_ = os.Remove(tmpName)
+	if err := file.WriteFileAtomic(path, data, 0o644); err != nil {
 		return fmt.Errorf("memory: write %s: %w", filepath.Base(path), err)
 	}
 	return nil

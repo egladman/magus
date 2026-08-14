@@ -1,4 +1,4 @@
-package magus_test
+package magus
 
 import (
 	"os"

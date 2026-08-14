@@ -1,89 +1,88 @@
-package vm_test
+package vm
 
 import (
 	"context"
 	"testing"
 	"time"
 
-	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestValueConstructorsAndPredicates(t *testing.T) {
-	noop := func(_ context.Context, _ []vm.Value) (vm.Value, error) { return vm.NullValue(), nil }
+	noop := func(_ context.Context, _ []Value) (Value, error) { return NullValue(), nil }
 
 	t.Run("IntValue", func(t *testing.T) {
-		v := vm.IntValue(42)
+		v := IntValue(42)
 		assert.True(t, v.IsInt())
 		assert.Equal(t, "int", v.Kind())
 	})
 	t.Run("FloatValue", func(t *testing.T) {
-		v := vm.FloatValue(3.14)
+		v := FloatValue(3.14)
 		assert.True(t, v.IsFloat())
 		assert.Equal(t, "double", v.Kind())
 	})
 	t.Run("BoolValue true", func(t *testing.T) {
-		v := vm.BoolValue(true)
+		v := BoolValue(true)
 		assert.True(t, v.IsBool())
 		assert.Equal(t, "bool", v.Kind())
 	})
 	t.Run("BoolValue false", func(t *testing.T) {
-		v := vm.BoolValue(false)
+		v := BoolValue(false)
 		assert.True(t, v.IsBool())
 		assert.Equal(t, "bool", v.Kind())
 	})
 	t.Run("StrValue", func(t *testing.T) {
-		v := vm.StrValue("hello")
+		v := StrValue("hello")
 		assert.True(t, v.IsStr())
 		assert.Equal(t, "str", v.Kind())
 	})
 	t.Run("ListValue", func(t *testing.T) {
-		v := vm.ListValue(nil)
+		v := ListValue(nil)
 		assert.True(t, v.IsList())
 		assert.Equal(t, "list", v.Kind())
 	})
 	t.Run("NewMap", func(t *testing.T) {
-		v := vm.NewMap()
+		v := NewMap()
 		assert.True(t, v.IsMap())
 		assert.Equal(t, "map", v.Kind())
 	})
 	t.Run("NullValue", func(t *testing.T) {
-		v := vm.NullValue()
+		v := NullValue()
 		assert.True(t, v.IsNull())
 		assert.Equal(t, "null", v.Kind())
 	})
 	t.Run("DirectValue", func(t *testing.T) {
-		v := vm.DirectValue("myfn", noop)
+		v := DirectValue("myfn", noop)
 		assert.True(t, v.IsDirect())
 		assert.Equal(t, "direct", v.Kind())
 	})
 }
 
 func TestValueAsInt(t *testing.T) {
-	assert.Equal(t, int64(99), vm.IntValue(99).AsInt())
+	assert.Equal(t, int64(99), IntValue(99).AsInt())
 }
 
 func TestValueAsIntNegative(t *testing.T) {
-	assert.Equal(t, int64(-7), vm.IntValue(-7).AsInt())
+	assert.Equal(t, int64(-7), IntValue(-7).AsInt())
 }
 
 func TestValueAsFloat(t *testing.T) {
-	assert.Equal(t, 2.718, vm.FloatValue(2.718).AsFloat())
+	assert.Equal(t, 2.718, FloatValue(2.718).AsFloat())
 }
 
 func TestValueAsBool(t *testing.T) {
-	assert.True(t, vm.BoolValue(true).AsBool())
-	assert.False(t, vm.BoolValue(false).AsBool())
+	assert.True(t, BoolValue(true).AsBool())
+	assert.False(t, BoolValue(false).AsBool())
 }
 
 func TestValueAsString(t *testing.T) {
-	assert.Equal(t, "world", vm.StrValue("world").AsString())
+	assert.Equal(t, "world", StrValue("world").AsString())
 }
 
 func TestValueListItems(t *testing.T) {
-	items := []vm.Value{vm.IntValue(1), vm.IntValue(2), vm.IntValue(3)}
-	got := vm.ListValue(items).ListItems()
+	items := []Value{IntValue(1), IntValue(2), IntValue(3)}
+	got := ListValue(items).ListItems()
 	require.Len(t, got, 3)
 	for i, item := range got {
 		assert.Equalf(t, int64(i+1), item.AsInt(), "ListItems()[%d].AsInt()", i)
@@ -91,17 +90,17 @@ func TestValueListItems(t *testing.T) {
 }
 
 func TestValueListItemsNil(t *testing.T) {
-	got := vm.ListValue(nil).ListItems()
+	got := ListValue(nil).ListItems()
 	assert.Nil(t, got, "ListItems() on nil-backed list")
 }
 
 func TestValueString(t *testing.T) {
-	assert.Equal(t, "null", vm.NullValue().String())
-	assert.Equal(t, "true", vm.BoolValue(true).String())
-	assert.Equal(t, "false", vm.BoolValue(false).String())
-	assert.Equal(t, "42", vm.IntValue(42).String())
-	assert.Equal(t, "hi", vm.StrValue("hi").String())
-	assert.Equal(t, "[1, 2]", vm.ListValue([]vm.Value{vm.IntValue(1), vm.IntValue(2)}).String())
+	assert.Equal(t, "null", NullValue().String())
+	assert.Equal(t, "true", BoolValue(true).String())
+	assert.Equal(t, "false", BoolValue(false).String())
+	assert.Equal(t, "42", IntValue(42).String())
+	assert.Equal(t, "hi", StrValue("hi").String())
+	assert.Equal(t, "[1, 2]", ListValue([]Value{IntValue(1), IntValue(2)}).String())
 }
 
 // TestValueStringCircular is the regression for String recursing into a
@@ -114,8 +113,8 @@ func TestValueString(t *testing.T) {
 // TestDispatchRejectsCycleWithMemo) since a regression here is unsafe to call
 // inline.
 func TestValueStringCircular(t *testing.T) {
-	items := make([]vm.Value, 1)
-	l := vm.ListValue(items)
+	items := make([]Value, 1)
+	l := ListValue(items)
 	items[0] = l // l[0] == l: the same cycle list.append(l) would create
 
 	done := make(chan string, 1)
@@ -135,13 +134,13 @@ func TestValueRawEqual(t *testing.T) {
 	// buzz_unsafe their num is 0 and any two same-tag heap values compare equal.
 	// Use Equal (see TestValueEqual) for heap and language-level equality.
 	// Scalars with same tag and payload must be equal.
-	assert.True(t, vm.IntValue(5).RawEqual(vm.IntValue(5)))
-	assert.False(t, vm.IntValue(5).RawEqual(vm.IntValue(6)))
-	assert.True(t, vm.NullValue().RawEqual(vm.NullValue()))
-	assert.True(t, vm.BoolValue(true).RawEqual(vm.BoolValue(true)))
-	assert.False(t, vm.BoolValue(true).RawEqual(vm.BoolValue(false)))
+	assert.True(t, IntValue(5).RawEqual(IntValue(5)))
+	assert.False(t, IntValue(5).RawEqual(IntValue(6)))
+	assert.True(t, NullValue().RawEqual(NullValue()))
+	assert.True(t, BoolValue(true).RawEqual(BoolValue(true)))
+	assert.False(t, BoolValue(true).RawEqual(BoolValue(false)))
 	// Different types are not raw-equal even for the same numeric payload.
-	assert.False(t, vm.IntValue(0).RawEqual(vm.NullValue()))
+	assert.False(t, IntValue(0).RawEqual(NullValue()))
 }
 
 // TestValueEqual pins down Buzz `==` semantics as exposed by Value.Equal. This
@@ -151,34 +150,34 @@ func TestValueEqual(t *testing.T) {
 	// String content equality, including a string built at runtime (not a
 	// compile-time literal) versus a literal of the same content.
 	built := string([]byte{'b'})
-	assert.True(t, vm.StrValue(built).Equal(vm.StrValue("b")))
-	assert.True(t, vm.StrValue("hello").Equal(vm.StrValue("hello")))
-	assert.False(t, vm.StrValue("a").Equal(vm.StrValue("b")))
+	assert.True(t, StrValue(built).Equal(StrValue("b")))
+	assert.True(t, StrValue("hello").Equal(StrValue("hello")))
+	assert.False(t, StrValue("a").Equal(StrValue("b")))
 
 	// int/float numeric coercion, matching the == operator.
-	assert.True(t, vm.IntValue(1).Equal(vm.FloatValue(1.0)))
-	assert.True(t, vm.FloatValue(2.0).Equal(vm.IntValue(2)))
-	assert.False(t, vm.IntValue(1).Equal(vm.FloatValue(1.5)))
-	assert.False(t, vm.IntValue(1).Equal(vm.IntValue(2)))
+	assert.True(t, IntValue(1).Equal(FloatValue(1.0)))
+	assert.True(t, FloatValue(2.0).Equal(IntValue(2)))
+	assert.False(t, IntValue(1).Equal(FloatValue(1.5)))
+	assert.False(t, IntValue(1).Equal(IntValue(2)))
 
 	// null and bool scalars.
-	assert.True(t, vm.NullValue().Equal(vm.NullValue()))
-	assert.True(t, vm.BoolValue(true).Equal(vm.BoolValue(true)))
-	assert.False(t, vm.BoolValue(true).Equal(vm.BoolValue(false)))
-	assert.False(t, vm.NullValue().Equal(vm.IntValue(0)))
+	assert.True(t, NullValue().Equal(NullValue()))
+	assert.True(t, BoolValue(true).Equal(BoolValue(true)))
+	assert.False(t, BoolValue(true).Equal(BoolValue(false)))
+	assert.False(t, NullValue().Equal(IntValue(0)))
 
 	// Lists compare by reference identity: two distinct values with equal
 	// content are NOT equal, but a value is equal to itself.
-	l1 := vm.ListValue([]vm.Value{vm.IntValue(1)})
-	l2 := vm.ListValue([]vm.Value{vm.IntValue(1)})
+	l1 := ListValue([]Value{IntValue(1)})
+	l2 := ListValue([]Value{IntValue(1)})
 	assert.False(t, l1.Equal(l2), "distinct content-equal lists must not be Equal")
 	assert.True(t, l1.Equal(l1), "a list value must be Equal to itself")
 
 	// Maps compare by reference identity too.
-	m1 := vm.NewMap()
-	m1.MapSet("a", vm.IntValue(1))
-	m2 := vm.NewMap()
-	m2.MapSet("a", vm.IntValue(1))
+	m1 := NewMap()
+	m1.MapSet("a", IntValue(1))
+	m2 := NewMap()
+	m2.MapSet("a", IntValue(1))
 	assert.False(t, m1.Equal(m2), "distinct content-equal maps must not be Equal")
 	assert.True(t, m1.Equal(m1), "a map value must be Equal to itself")
 }
@@ -188,15 +187,15 @@ func TestValueEqual(t *testing.T) {
 // target a passed function value refers to by matching it against the exports
 // it handed out.
 func TestValueEqualFunctionIdentity(t *testing.T) {
-	noop := func(_ context.Context, _ []vm.Value) (vm.Value, error) { return vm.NullValue(), nil }
+	noop := func(_ context.Context, _ []Value) (Value, error) { return NullValue(), nil }
 
 	// A function value equals itself, so host code can match a callable it
 	// handed out earlier against one a script passes back.
-	fnA := vm.DirectValue("a", noop)
+	fnA := DirectValue("a", noop)
 	assert.True(t, fnA.Equal(fnA), "a function value equals itself")
 
 	// Two distinct function values are never equal, even with the same name and
 	// underlying Go func: identity, not structure, for heap kinds.
-	fnB := vm.DirectValue("a", noop)
+	fnB := DirectValue("a", noop)
 	assert.False(t, fnA.Equal(fnB), "distinct function values are not equal")
 }

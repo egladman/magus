@@ -61,7 +61,6 @@ var (
 	Run              = cmd("run")
 	QueryOutput      = cmd("query", "output")
 	QueryInvocation  = cmd("query", "invocation")
-	GraphOpen        = cmd("graph", "open")
 	GraphExport      = cmd("graph", "export")
 	GraphStats       = cmd("graph", "stats")
 	GraphBuild       = cmd("graph", "build")
@@ -87,7 +86,7 @@ var (
 // All is every canonical command referenced in output, for the drift test to
 // walk. Keep new Command values registered here.
 var All = []Command{
-	Run, QueryOutput, QueryInvocation, GraphOpen, GraphExport, GraphStats, GraphBuild,
+	Run, QueryOutput, QueryInvocation, GraphExport, GraphStats, GraphBuild,
 	ServerStart, ServerStop, ServerJob, Status, Watch, Affected,
 	DescribeTargets, DescribeProject, Ls, LsTargets, Where, Refs, MCPTokenGenerate,
 	SelfUpdate, SelfRefresh, SelfRegistry,

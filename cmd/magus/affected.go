@@ -11,12 +11,14 @@ import (
 	"log/slog"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"slices"
 	"strings"
 	"syscall"
 	"time"
 
 	"github.com/egladman/magus"
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/graph/url"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
@@ -114,7 +116,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		step            *bool
 		raceFlag        *string
 		noDefaultCharms *bool
-		live            *bool
+		openViewer      *bool
 		noCache         *bool
 		detach          *bool
 	)
@@ -134,7 +136,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 		step = fs.Bool("step", false, "Pause before each subprocess for interactive stepping (requires TTY; implies --concurrency=1; not compatible with --stdin)")
 		raceFlag = fs.String("race", "", raceFormatHelp)
 		noDefaultCharms = fs.Bool("no-default-charms", false, "Ignore magus.yaml default_charms for this run")
-		live = fs.Bool("live", false, "Print a local log-viewer link and stream this run's output to it live over an ephemeral loopback server (127.0.0.1); the link and data never leave your machine")
+		openViewer = fs.Bool("open", false, "Open this run in the browser log viewer and stream to it as it goes, over an ephemeral loopback server (127.0.0.1); the link and data never leave your machine")
 		noCache = fs.Bool("no-cache", false, "Force a fresh run even on a cache hit; still refreshes the entry (unlike a skip_cache target, which never snapshots)")
 		detach = fs.Bool("detach", false, "Hand this run to the daemon and return immediately; watch it with magus status --watch")
 		fs.Usage = func() {
@@ -342,7 +344,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// The client's cwd (carried on ctx for an adopted affected run), not the daemon's
 	// process cwd, so the invocation's journal records where the user actually ran.
 	cwd := clientCwd(ctx)
-	liveBC, stopLive := beginLive(ctx, *live)
+	liveBC, stopLive := beginLive(ctx, *openViewer)
 	defer stopLive()
 	// An adopted affected run (dispatched by the daemon) also feeds the daemon's live-run
 	// registry, carried on ctx; a plain CLI run has no sink, so this is empty there.
@@ -421,11 +423,58 @@ type planOutput struct {
 	MaxParallel int         `json:"max_parallel"`
 	Source      string      `json:"source"`
 	Matrix      []planShard `json:"matrix"`
+	// Detail is keyed by shard id and present only under --detail.
+	//
+	// A SIBLING of Matrix rather than fields on its entries, and that is a hard
+	// constraint rather than a preference: the matrix is consumed as a GitHub Actions
+	// job matrix (`fromJSON(needs.plan.outputs.matrix)`), where every key in an entry
+	// becomes a job DIMENSION. Adding spells or write globs there would multiply the
+	// job count or fail the workflow outright, so the detail hangs beside it and
+	// the matrix keeps the exact two keys the workflow dereferences.
+	Detail map[string]shardDetail `json:"detail,omitempty"`
 }
 
 type planShard struct {
 	Shard    string `json:"shard"`
 	Projects string `json:"projects"`
+}
+
+// shardDetail is what each shard actually DOES: the invocation, what it runs, and what it
+// writes. The plan has always known which projects may run concurrently - the hard half -
+// while saying nothing about their content, leaving any reader to infer it from paths.
+//
+// Every field is JOINED from declarations magus already holds; none of it is new analysis.
+// It is plain plan metadata and reads that way for a person, which is why only the one
+// genuinely agent-shaped part is nested under Agents rather than spread through it.
+type shardDetail struct {
+	// Command is the invocation this shard is, spelled the way a person would run it.
+	Command string `json:"command"`
+	// Spells say what the shard will actually execute, so the environment it needs can
+	// be checked before it starts rather than after it fails.
+	Spells []string `json:"spells,omitempty"`
+	// Writes is the collision surface: the declared output globs of every project in
+	// the shard. This is the field that earns the briefing. Two shards are safe to run
+	// together exactly when these do not overlap, and magus is the only party that knows
+	// them: whoever splits the work up otherwise hands out units and hopes.
+	Writes []string `json:"writes,omitempty"`
+	// Exclusive marks a shard holding a project that refuses to run beside anything.
+	Exclusive bool `json:"exclusive,omitempty"`
+	// Agents is the only agent-specific part, kept in its own object so the rest reads as
+	// what it is: ordinary plan metadata a person wants too.
+	Agents *shardAgents `json:"agents,omitempty"`
+}
+
+// shardAgents is the one part of a shard record that is specific to an agent reader, kept
+// in its own object for that reason. Everything beside it is ordinary plan metadata: this
+// plan exists to fan CI jobs across runners, and it long predates anything agentic. That an
+// agent can use the same record is a consequence of the record being correct, not a
+// feature added for one.
+type shardAgents struct {
+	// Skills names the skills this shard's work routes to; Why states the derivation.
+	// Derived rather than declared so it cannot drift from what the shard does - and
+	// stated, because a routing decision an agent cannot audit is one it should not trust.
+	Skills []string `json:"skills"`
+	Why    []string `json:"why,omitempty"`
 }
 
 // affectedPlan emits a provider-neutral JSON shard plan for the affected set of a
@@ -449,11 +498,19 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	// the plan reflects what `magus affected <target>` would run rather than a
 	// hardcoded "ci". A target is required — magus favors explicitness, and a silent
 	// default is the footgun this mode used to have (it ignored the target entirely).
+	// Leading positionals after the target are project filters, the same grammar
+	// `magus run <target> <projects>` already uses - so there is nothing new to learn, and
+	// no flag invented for something the CLI already spells one way.
 	var target string
+	var only []string
 	flagArgs := planless
 	if len(planless) > 0 && !strings.HasPrefix(planless[0], "-") {
 		target = planless[0]
 		flagArgs = planless[1:]
+		for len(flagArgs) > 0 && !strings.HasPrefix(flagArgs[0], "-") {
+			only = append(only, flagArgs[0])
+			flagArgs = flagArgs[1:]
+		}
 	}
 	if target == "" {
 		return fmt.Errorf("magus affected --plan: a target is required (e.g. `%s`); run `%s` to list available targets",
@@ -467,6 +524,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		baseStr          string
 		stdin            *bool
 		null             *bool
+		briefing         *bool
 	)
 	if _, err := cmdParse("affected "+target+" --plan", flagArgs, func(fs *flag.FlagSet) {
 		maxShards = fs.Int("max-shards", globalCfg.CI.MaxShards, "Maximum CI shards (-1 = unlimited)")
@@ -475,6 +533,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		fs.StringVar(&baseStr, "b", "", "Short for --base")
 		stdin = fs.Bool("stdin", false, "Read one set of changed file paths from stdin instead of a VCS diff")
 		null = fs.Bool("null", false, "With --stdin: expect NUL-separated paths")
+		briefing = fs.Bool("detail", false, "Add per-shard detail: the invocation, its spells, the files it declares it writes, and the skills its work routes to")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus affected <target> --plan [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -519,6 +578,18 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
+	if len(only) > 0 {
+		if plan.Shards, err = filterShards(ctx, m, plan.Shards, only); err != nil {
+			return err
+		}
+		// The concurrency ceiling describes the plan being emitted, not the one it was
+		// filtered from. Left alone it advertised room for six parallel jobs in a plan
+		// carrying two, which a CI provider reads as a promise about this matrix.
+		if plan.MaxParallel > len(plan.Shards) {
+			plan.MaxParallel = len(plan.Shards)
+		}
+	}
+
 	totalProjects := 0
 	for _, s := range plan.Shards {
 		totalProjects += len(s.ProjectPaths)
@@ -538,6 +609,12 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	}
 	for i, s := range plan.Shards {
 		out.Matrix[i] = planShard{Shard: s.ID, Projects: strings.Join(s.ProjectPaths, " ")}
+	}
+	if *briefing {
+		out.Detail, err = planDetail(ctx, m, target, plan.Shards)
+		if err != nil {
+			return err
+		}
 	}
 
 	b, err := json.MarshalIndent(out, "", "  ")
@@ -926,4 +1003,166 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 		}
 	}
 	return nil
+}
+
+// planDetail joins the shard partition against what magus already declares about each
+// project, producing one detail record per shard.
+//
+// This is assembly, not analysis. The plan knew which projects may run concurrently; the
+// project list knows each one's spell, declared outputs, and exclusivity; the skills are
+// derived from those two. Nothing here inspects a file or runs a target.
+func planDetail(ctx context.Context, m *magus.Magus, target string, shards []types.Shard) (map[string]shardDetail, error) {
+	projects, err := m.ListProjects(ctx)
+	if err != nil {
+		return nil, err
+	}
+	byPath := make(map[string]types.ProjectEntry, len(projects.Projects))
+	for _, p := range projects.Projects {
+		byPath[p.Path] = p
+	}
+
+	// Per-TARGET writes as well as project-wide ones. A project that declares its outputs
+	// per target - ctx.writesFiles(...) - has an EMPTY project-level Outputs, so a
+	// project-only join reported this workspace's root shard as writing nothing while it
+	// rewrites MAGUS.md and gen/*.json. A collision surface that omits the busiest writer
+	// is worse than none: it reads as a cleared shard.
+	writesByProject := map[string][]string{}
+	if graph, gerr := m.TargetGraph(ctx); gerr == nil {
+		for _, proj := range graph.Projects {
+			for _, node := range proj.Nodes {
+				for _, ref := range node.WritesFiles {
+					owner := ref.Project
+					if owner == "" {
+						owner = proj.Path
+					}
+					writesByProject[proj.Path] = appendUnique(writesByProject[proj.Path], joinProjectGlob(owner, ref.Glob))
+				}
+			}
+		}
+	}
+
+	out := make(map[string]shardDetail, len(shards))
+	for _, s := range shards {
+		b := shardDetail{Command: "magus run " + target + " " + strings.Join(s.ProjectPaths, " ")}
+		for _, path := range s.ProjectPaths {
+			p, ok := byPath[path]
+			if !ok {
+				continue // a shard naming a project the workspace no longer lists: nothing to say
+			}
+			b.Spells = appendUnique(b.Spells, p.Spells...)
+			if p.Spell != "" {
+				b.Spells = appendUnique(b.Spells, p.Spell)
+			}
+			// Project-relative as declared, rooted at the project, so two briefings can be
+			// compared for overlap without the reader re-deriving where each one sits.
+			for _, g := range p.Outputs {
+				b.Writes = appendUnique(b.Writes, joinProjectGlob(path, g))
+			}
+			b.Writes = appendUnique(b.Writes, writesByProject[path]...)
+			b.Exclusive = b.Exclusive || p.Exclusive
+		}
+		skills, why := shardSkills(b)
+		b.Agents = &shardAgents{Skills: skills, Why: why}
+		out[s.ID] = b
+	}
+	return out, nil
+}
+
+// shardSkills derives the agent skills a shard's work routes to, and says why.
+//
+// Derived from what the shard DOES rather than declared in a table, so it cannot drift
+// from the shard it describes - a second copy of the routing table would rot the first
+// time a project changed spells. Each reason is returned alongside, because a routing
+// decision an agent cannot audit is one it should not act on.
+func shardSkills(b shardDetail) (skills, why []string) {
+	// The always-full twin, not the primary. The primary entry is the curated shorter
+	// permutation, a bet that the reader who INSTALLED it can re-derive the steps it drops.
+	// A record like this is read by someone who did not make that bet and would inherit it
+	// with no say, so the twin is the name that survives being passed along.
+	skills = append(skills, agent.FullTwinName("magus-run"))
+	why = append(why, "magus-run: the shard is a target invocation, and the raw language tool would bypass the cache and the affected set")
+	if len(b.Writes) > 0 {
+		skills = append(skills, agent.FullTwinName("magus-vcs-hygiene"))
+		why = append(why, "magus-vcs-hygiene: this shard declares outputs, so its run leaves generated files that must be classified before they are committed or reverted")
+	}
+	why = append(why, "variant: each skill is named as its always-full twin, because the reader of this record is not the session that chose the install")
+	if b.Exclusive {
+		why = append(why, "exclusive: a project here refuses to run beside anything, so this shard must not be handed out concurrently with another")
+	}
+	return skills, why
+}
+
+// joinProjectGlob roots a project-relative declared glob at the project, leaving an
+// already-rooted or workspace-level glob alone.
+func joinProjectGlob(project, glob string) string {
+	if project == "" || project == "." || strings.HasPrefix(glob, project+"/") {
+		return glob
+	}
+	return project + "/" + glob
+}
+
+// appendUnique appends each value not already present, preserving order.
+func appendUnique(dst []string, values ...string) []string {
+	for _, v := range values {
+		if v != "" && !slices.Contains(dst, v) {
+			dst = append(dst, v)
+		}
+	}
+	return dst
+}
+
+// filterShards narrows a plan to the named projects, INTERSECTING them with the affected
+// set rather than replacing it.
+//
+// The distinction is the whole point: `magus run ci docs` runs docs whether or not the diff
+// touched it, while this answers "of the work this change actually implies, give me the
+// docs part". Splitting a large affected set into units wants the second; the first would
+// hand out work the change never justified.
+//
+// Shard IDs are preserved rather than renumbered, so a filtered plan can be read against
+// the unfiltered one it came from; a shard left empty simply drops out.
+//
+// A name that matches no project in the WORKSPACE is an error, because it is a typo and
+// silently planning nothing is how a typo turns into "the change affected nothing". A name
+// that is a real project but outside the affected set is not an error - that is the honest
+// empty answer, and it is the question being asked.
+func filterShards(ctx context.Context, m *magus.Magus, shards []types.Shard, only []string) ([]types.Shard, error) {
+	projects, err := m.ListProjects(ctx)
+	if err != nil {
+		return nil, err
+	}
+	known := make(map[string]bool, len(projects.Projects))
+	for _, p := range projects.Projects {
+		known[p.Path] = true
+	}
+	want := make(map[string]bool, len(only))
+	for _, name := range only {
+		clean := strings.TrimSuffix(filepath.ToSlash(strings.TrimSpace(name)), "/")
+		if !known[clean] {
+			return nil, fmt.Errorf("magus affected --plan: no project %q in this workspace; run `%s` to list them", name, clihint.Ls)
+		}
+		want[clean] = true
+	}
+
+	return filterShardPaths(shards, want), nil
+}
+
+// filterShardPaths is the pure half of filterShards: the intersection itself, with the
+// workspace lookup and its typo check left to the caller.
+func filterShardPaths(shards []types.Shard, want map[string]bool) []types.Shard {
+	out := make([]types.Shard, 0, len(shards))
+	for _, sh := range shards {
+		kept := make([]string, 0, len(sh.ProjectPaths))
+		for _, path := range sh.ProjectPaths {
+			if want[path] {
+				kept = append(kept, path)
+			}
+		}
+		if len(kept) == 0 {
+			continue
+		}
+		sh.ProjectPaths = kept
+		out = append(out, sh)
+	}
+	return out
 }

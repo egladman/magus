@@ -1,9 +1,8 @@
-package spellruntime_test
+package spellruntime
 
 import (
 	"testing"
 
-	"github.com/egladman/magus/internal/spellruntime"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -12,7 +11,7 @@ import (
 // asymmetry is the whole reason readiness is keyed by TOOL rather than by spell:
 // a spell-scoped probe would make a Dockerfile lint wait on a service it never uses.
 func TestDockerReadinessIsScopedToTheDaemonBackedTool(t *testing.T) {
-	d, ok := spellruntime.Builtins()["docker"]
+	d, ok := Builtins()["docker"]
 	require.True(t, ok, "docker spell not registered")
 
 	tool, ok := d.Tools["docker"]
@@ -30,7 +29,7 @@ func TestDockerReadinessIsScopedToTheDaemonBackedTool(t *testing.T) {
 // Every op resolves its probe through the bin it already declares, so no op restates
 // which tool it uses.
 func TestReadinessResolvesThroughOpBin(t *testing.T) {
-	d := spellruntime.Builtins()["docker"]
+	d := Builtins()["docker"]
 	for name, op := range d.Ops {
 		gated := d.Tools[op.Command.Bin].Ready.Bin != ""
 		if op.Bin == "docker" {
@@ -42,7 +41,7 @@ func TestReadinessResolvesThroughOpBin(t *testing.T) {
 // A spell that declares nothing behaves exactly as before.
 func TestSpellsWithoutReadinessAreUngated(t *testing.T) {
 	for _, name := range []string{"go", "rust", "typescript"} {
-		s, ok := spellruntime.Builtins()[name]
+		s, ok := Builtins()[name]
 		require.True(t, ok, name)
 		for tool, tl := range s.Tools {
 			assert.Empty(t, tl.Ready.Bin,

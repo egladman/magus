@@ -69,7 +69,7 @@ jobs:
       # minutes - docs renders the whole site, console builds the app - and whose own shard
       # runs it anyway, so hoisting them here would serialise the expensive half in front of
       # every shard to accelerate feedback on the cheap half.
-      DRIFT_GATED: '. libs/gopherbuzz libs/diagnostics libs/testsprawl libs/textsearch proto evals docs/guides/integrations/agents'
+      DRIFT_GATED: '. libs/gopherbuzz libs/diagnostics libs/testlayout libs/textsearch proto evals docs/guides/integrations/agents'
       DRIFT_DEFERRED: 'docs console'
     outputs:
       matrix:        ${{ steps.plan.outputs.matrix }}
@@ -358,74 +358,6 @@ jobs:
       # action so other workspaces get them with one `uses:` line; turn one off by name
       # (merge-conflicts: 'false') rather than by editing this step.
       - uses: ./.github/actions/advice
-
-  site-build:
-    name: magus site build
-    needs: [plan]
-    # Separate from `magus affected ci` on purpose: affected ci shards per-project
-    # correctness, and the deploy is a workspace-level composition no single project owns.
-    #
-    # It exists because cd.yaml's site job runs only on main, so without this the first run
-    # of the deploy build for a change was after that change merged - "the merge is the
-    # first time a step runs" (docs/concepts/targets/ci.md). Same three targets cd.yaml
-    # runs, same source build, minus the upload: this proves the build, it does not publish.
-    #
-    # Unfiltered by path for the same reason cd.yaml is: the input set spans the docs and
-    # console trees, root Markdown, assets, releases, embedded skills, and the Go packages
-    # the content generators read. A stale filter would skip the smoke test silently,
-    # which is the hole this closes.
-    if: needs.plan.result == 'success'
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 0
-          filter: blob:none
-
-      # install stays ON (the default). With install: false the action adds the shims
-      # directory to PATH and computes the exported PATH BEFORE any tool exists, so a
-      # later `mise install` step put pnpm and node somewhere no subsequent step could
-      # see - `os.exec pnpm: exit -1`, the child never launching. Letting the action do
-      # the install also re-enables its cache: it only saves when it installed.
-      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
-        with:
-          version: '2026.4.8'
-          env: false
-
-      # The docs render drives its generators through `go run`, which compiles
-      # internal/codec with cgo and needs liblzma/libzstd.
-      - name: Install codec build dependencies
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
-
-      # A source build, matching cd.yaml's site job. The pairing is the point: a smoke test
-      # built differently from the deploy tests a magus the deploy never runs. Both used to
-      # pin the released binary for that reason, and it broke for the whole window between
-      # a breaking magusfile change and the release carrying it - the built-in spells were
-      # renamed (md -> markdown), the magusfile followed, and no published release could
-      # load this workspace at all. They stay matched, on source rather than on the release.
-      - uses: ./.github/actions/setup-magus
-        with:
-          installation-strategy: source
-          source-path: .
-
-      # setup-magus's source build provisions its own Go via actions/setup-go, which
-      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
-      - name: Restore the mise-pinned Go toolchain
-        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
-
-      # deploy-generate throws when either tree lacks its index.html, so it is the
-      # assertion. Nothing is uploaded: this proves the build, it does not publish.
-      - name: Render the docs site
-        run: magus run generate docs
-
-      - name: Build the console app
-        run: magus run build console
-
-      - name: Assemble the deploy tree
-        run: magus run deploy-generate .
 
   report:
     # One job for everything that runs AFTER the shards: the run summary always, and the

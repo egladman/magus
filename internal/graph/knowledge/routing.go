@@ -15,7 +15,7 @@ var routingKindOrder = []string{
 	types.KindProject, types.KindTarget, types.KindSpell, types.KindOp,
 	types.KindTool, types.KindCharm, types.KindModule, types.KindMethod, types.KindDiagnostic,
 	types.KindDoc, types.KindDir, types.KindFile, types.KindFunction, types.KindImport,
-	types.KindRationale, types.KindAuthor, types.KindOwner,
+	types.KindRationale, types.KindOwner,
 }
 
 // maxAnchors caps how many high-degree anchor nodes a routing row lists.
@@ -26,13 +26,16 @@ const maxAnchors = 3
 // targets. Degree (in + out) is the cheap "how connected / how central" proxy the
 // plan calls god nodes; ties break by ID so the summary is deterministic.
 //
-// Runtime edges are excluded from the ranking and from EdgeCount, so MAGUS.md - which
-// is committed and drift-gated - does not rank on which diagnostics THIS machine
-// tripped. `magus graph stats` keeps them on purpose: an interactive query wants local
-// context, so its EdgeCount and god nodes differ from these.
+// Two inputs are excluded because MAGUS.md is committed and drift-gated. Runtime edges,
+// so the table does not rank on which diagnostics THIS machine tripped. And git history -
+// the author kind and its `authored` edges - because that varies by COMMIT: a contributor
+// appearing under a second identity moved the author count and rewrote a committed file
+// that no source change had touched. Degree is what makes the second one subtle, since
+// authored edges also decide which nodes each row lists as anchors.
 //
-// That buys independence from run history, NOT from the machine. @vcs author edges and
-// the @docs/@buzz filesystem walks still feed this table wherever they are enabled.
+// `magus graph stats` keeps both on purpose: an interactive query wants local context, so
+// its EdgeCount and god nodes differ from these. Independence from the MACHINE is still not
+// claimed - the @docs/@buzz filesystem walks feed this table.
 func (g *Graph) Routing() types.KnowledgeRouting {
 	type scored struct {
 		label string
@@ -47,7 +50,7 @@ func (g *Graph) Routing() types.KnowledgeRouting {
 	deg := make(map[string]int, len(g.nodes))
 	edgeCount := 0
 	for _, e := range g.edges {
-		if e.Provenance == ProvenanceRuntime {
+		if e.Provenance == ProvenanceRuntime || e.Relation == types.RelationAuthored {
 			continue
 		}
 		edgeCount++
@@ -56,6 +59,9 @@ func (g *Graph) Routing() types.KnowledgeRouting {
 	}
 
 	for id, n := range g.nodes {
+		if n.Kind == types.KindAuthor {
+			continue
+		}
 		s := scored{label: n.Label, deg: deg[id], id: id}
 		byKind[n.Kind] = append(byKind[n.Kind], s)
 		if n.Kind == types.KindTarget {

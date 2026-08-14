@@ -61,9 +61,22 @@ stdin pass-path.json
 exec sh $GUARD_TEMPLATES/magus-guard-path.sh
 ! stdout .
 
-# case: path/deny unreachable - the path surface advises and never denies, which is
-# why magus-guard-path.sh declares deny=none. If magus ever denies on this surface,
-# the coverage gate fails first and this case becomes writable.
+# case: path/deny
+# The notes store is the one rule that denies on this surface, and it fires only where a
+# workspace DECLARES one - so this runs in a subdirectory that does, leaving every other
+# case judged against a tree with no notes store at all.
+#
+# This case is why the deny arm exists. Before it, HOST_RESPONSE rendered only `advise`,
+# so a deny produced EMPTY stdout while magus exited 2, and the tail below read
+# empty-plus-nonzero as a broken guard and exited 0 - which every host takes as allow. The
+# rule looked enforced and blocked nothing.
+cd notes-ws
+stdin $WORK/deny-path.json
+exec sh $GUARD_TEMPLATES/magus-guard-path.sh
+stdout '"permissionDecision":"deny"'
+stdout 'NOTES store'
+stdout 'magus memory put'
+cd $WORK
 
 # --- cursor-guard.sh: one file, both events, a different response dialect -----
 
@@ -107,7 +120,10 @@ exec sh $GUARD_TEMPLATES/magus-guard-command.sh
 stdout 'magus guard is NOT running'
 
 # The path template stays silent by default: for most hosts an empty response means
-# allow, and this surface only ever advises.
+# allow. That is the deliberate trade - this surface can now DENY, so failing open here
+# means an unavailable guard lets a notes write through, and announcing it on every file
+# edit was judged the worse noise. GUARD_FAILED_RESPONSE is the opt-in for a host that
+# would rather hear about it.
 stdin advise-path.json
 exec sh $GUARD_TEMPLATES/magus-guard-path.sh
 ! stdout .
@@ -128,6 +144,30 @@ stdout '"permission":"allow"'
 {"session_id": "s1", "tool_name": "Write", "tool_input": {"file_path": "AGENTS.md"}}
 -- pass-path.json --
 {"session_id": "s1", "tool_name": "Write", "tool_input": {"file_path": "README.md"}}
+-- deny-path.json --
+{"session_id": "s1", "tool_name": "Write", "tool_input": {"file_path": "notes/team-conventions.md"}}
+-- notes-ws/magus.yaml --
+knowledge:
+  notes:
+    shared: notes
+-- notes-ws/magusfile.buzz --
+import "magus";
+
+magus\project({
+    "sources": ["*.md", "notes/**/*.md"],
+    "no_language": "fixture workspace: only the guard's view of a declared notes store matters here",
+});
+-- notes-ws/notes/team-conventions.md --
+---
+magus:
+    id: team-conventions
+    title: How this team works
+    anchors:
+        - kind: project
+          target: .
+---
+
+Prose a person wrote.
 -- cursor-shell-deny.json --
 {"command": "git stash", "cwd": ".", "sandbox": false}
 -- cursor-shell-pass.json --

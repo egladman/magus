@@ -4,9 +4,9 @@ import { must, errMessage } from "../../lib/guards";
 // The page is DATA-AGNOSTIC (like /playground): it renders whatever node-link
 // graph it is handed, in priority order:
 //   1. a `#data=` URL fragment (gzip + base64url of the JSON) - the private path
-//      written by `magus graph open`. A fragment is never sent in an HTTP request,
+//      written by `magus graph export --open`. A fragment is never sent in an HTTP request,
 //      so the user's graph never leaves their machine.
-//   2. a `#src=` address to fetch the JSON from - a `magus graph open --serve`
+//   2. a `#src=` address to fetch the JSON from - a `magus graph export --open --serve`
 //      loopback (127.0.0.1) or any CORS-enabled URL (e.g. a committed graph.json's
 //      raw link). The same `#src=` the playground uses.
 //   3. a file the visitor drops or picks (a graph.json they exported themselves).
@@ -401,7 +401,7 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
       setStatus("Could not decode the graph in the link (" + errMessage(e) + ").", true);
     }
   }
-  // #src= fetches the JSON from an address: a loopback server (`magus graph open
+  // #src= fetches the JSON from an address: a loopback server (`magus graph export --open
   // --serve`, 127.0.0.1 - private) or any CORS-enabled URL (e.g. a committed
   // graph.json's raw link). The same #src= the playground uses.
   if (params.src) {
@@ -420,10 +420,10 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
       return { data: await r.json(), source: loopback ? "loopback" : "remote" };
     } catch (e) {
       let hint = "";
-      if (loopback) hint = " Is `magus graph open --serve` still running?";
+      if (loopback) hint = " Is `magus graph export --open --serve` still running?";
       else if (localhostHost)
         hint =
-          " The policy allows 127.0.0.1/[::1], not the `localhost` hostname: use `magus graph open --serve` or edit the URL to use 127.0.0.1.";
+          " The policy allows 127.0.0.1/[::1], not the `localhost` hostname: use `magus graph export --open --serve` or edit the URL to use 127.0.0.1.";
       setStatus("Could not fetch the graph from that URL (" + errMessage(e) + ")." + hint, true);
     }
   }
@@ -438,7 +438,7 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
       // Two demos ship, both generated from THIS workspace by the root graph-generate
       // target: the knowledge graph and the target graph. Selected by the same fragment
       // param the CLI writes (cmd/magus/graph_open.go appends flavor=targets), so
-      // `magus graph open` and a hand-typed #demo&flavor=targets land on the same data.
+      // `magus graph export --open` and a hand-typed #demo&flavor=targets land on the same data.
       const wantsTargets = params.flavor === "targets";
       setStatus(
         wantsTargets ? "Loading the magus demo target graph..." : "Loading the magus demo graph...",
@@ -2240,11 +2240,12 @@ function syncLayoutToggle() {
 // static title attributes so the initial render and syncGraphKindToggle agree.
 const GRAPHKIND_TITLES: Record<GraphFlavor, string> = {
   targets:
-    "The target graph: targets and what they depend on. Switch requires a live workspace (magus graph open --live).",
+    "The target graph: targets and what they depend on. Switch requires a live workspace (magus graph export --open --follow).",
   knowledge:
-    "The full code graph: projects, targets, spells, modules, files, docs. Switch requires a live workspace (magus graph open --live).",
+    "The full code graph: projects, targets, spells, modules, files, docs. Switch requires a live workspace (magus graph export --open --follow).",
 };
-const GRAPHKIND_LIVE_HINT = "Connect a live workspace to switch graphs: magus graph open --live";
+const GRAPHKIND_LIVE_HINT =
+  "Connect a live workspace to switch graphs: magus graph export --open --follow";
 
 // syncGraphKindToggle updates the graph-source toggle group's selected state and
 // each button's disabled/title to match graphFlavor and live-mode availability.
@@ -2273,7 +2274,7 @@ async function switchGraphKind(kind: "targets" | "knowledge") {
   if (kind === graphFlavor || switchingGraphKind) return;
   if (!liveHost) {
     setStatus(
-      "To switch between the target and knowledge graphs, open a live workspace: magus graph open --live",
+      "To switch between the target and knowledge graphs, open a live workspace: magus graph export --open --follow",
       true,
     );
     syncGraphKindToggle();
@@ -2879,7 +2880,7 @@ function askQuestion(view: string) {
     const aff = window._liveAffectedIds;
     if (!aff || !aff.size) {
       setStatus(
-        "affected view: requires live mode (magus graph open --live) with a computed diff.",
+        "affected view: requires live mode (magus graph export --open --follow) with a computed diff.",
         true,
       );
       return;
@@ -4438,8 +4439,8 @@ async function bootLive() {
   if (params.data || params.src) return false;
 
   // The graph is a SEPARATE bundle from the shell, so the shell's adoptDaemonOrigin() does not
-  // set THIS bundle's own-origin flag. Run it here too so a daemon-origin link from `magus graph open
-  // --live` (which carries a #token but no #port) is recognized as own-origin and daemonAttach adopts
+  // set THIS bundle's own-origin flag. Run it here too so a daemon-origin link from `magus graph export --open
+  // --follow` (which carries a #token but no #port) is recognized as own-origin and daemonAttach adopts
   // location.host. It is a no-op for a #port attach (which needs no origin adoption) and for a cold,
   // token-less visit. The shell may have already stripped the #token from the URL; getLiveToken() reads
   // the stashed copy, so adoption still fires.
@@ -4460,7 +4461,7 @@ async function bootLive() {
   liveToken = getLiveToken();
   if (!liveToken) {
     setStatus(
-      "live mode: no token found. Re-run magus graph open --live to get a fresh link.",
+      "live mode: no token found. Re-run magus graph export --open --follow to get a fresh link.",
       true,
     );
     document.body.classList.add("graph-empty");

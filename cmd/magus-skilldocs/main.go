@@ -88,7 +88,45 @@ func run(outDir, srcDir string) error {
 			return err
 		}
 	}
-	return emit.File(filepath.Join(outDir, "index.md"), []byte(renderIndex(full, simple)))
+	if err := emit.File(filepath.Join(outDir, "index.md"), []byte(renderIndex(full, simple))); err != nil {
+		return err
+	}
+	return prune(outDir, full)
+}
+
+// prune deletes pages for skills this binary no longer ships.
+//
+// A generator that owns its writes but not its deletions cannot rename anything.
+// Renaming a skill wrote the new page and left the old one - still published,
+// still linked from nothing, still describing a skill nobody can install - and no
+// gate reported it, because a drift check compares a generator's DECLARED outputs
+// against what it wrote and an extra file is in neither set. The magus-docs
+// generator has a test for exactly this orphan; this one had neither the test nor
+// the pruning.
+//
+// Scoped to the pages this generator emits (<skill>.md plus index.md) rather than
+// to the whole directory, so a hand-written page dropped in here is not collateral.
+func prune(outDir string, shipped []agent.AgentSkill) error {
+	keep := make(map[string]bool, len(shipped)+1)
+	keep["index.md"] = true
+	for _, s := range shipped {
+		keep[s.Name+".md"] = true
+	}
+	entries, err := os.ReadDir(outDir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || keep[name] || !strings.HasPrefix(name, "magus-") || !strings.HasSuffix(name, ".md") {
+			continue
+		}
+		if err := os.Remove(filepath.Join(outDir, name)); err != nil {
+			return fmt.Errorf("remove stale skill page %s: %w", name, err)
+		}
+		fmt.Fprintf(os.Stderr, "magus-skilldocs: removed stale page %s\n", name)
+	}
+	return nil
 }
 
 // renderSkill writes one skill's page: what it is for, then both permutations
@@ -104,24 +142,33 @@ func renderSkill(cat *agent.Catalog, full, simple agent.AgentSkill) string {
 	// The two byte counts are stated as FACTS; the SSG turns them into a percentage
 	// and a <progress> bar (engine/meta.buzz:insertSizeRatio). Presentation is the
 	// renderer's job, and a generated page hands it data rather than markup.
-	fmt.Fprintf(&b, "---\ntitle: %s\ndescription: %q\ntags: [agents, skills, %s]\n"+
+	var aliases string
+	// A renamed skill keeps its old page URL working. The rename is recorded on the
+	// catalog row rather than in a redirect list beside the site, so the page that
+	// carries the redirect is generated from the same fact that caused it.
+	for _, old := range agent.FormerNames(full.Name) {
+		aliases += fmt.Sprintf("aliases:\n  - reference/skills/%s\n", old)
+	}
+	fmt.Fprintf(&b, "---\ntitle: %s\ndescription: %q\ntags: [agents, skills, %s]\n%s"+
 		"skill_full_bytes: %d\nskill_simple_bytes: %d\n---\n\n",
-		full.Name, firstSentence(full.Description), full.Name, len(full.Body), len(simple.Body))
+		full.Name, firstSentence(full.Description), full.Name, aliases, len(full.Body), len(simple.Body))
 	fmt.Fprintf(&b, "# %s\n\n", full.Name)
 	fmt.Fprintf(&b, "%s\n\n", full.Description)
 	fmt.Fprintf(&b, "Install it, rather than copying from this page:\n\n")
-	fmt.Fprintf(&b, "```sh\nmagus agent install .claude/skills            # the full form below\nmagus agent install .claude/skills --simple   # the short form below\n```\n\n")
+	fmt.Fprintf(&b, "```sh\nmagus agent install .claude/skills   # writes both forms below\n```\n\n")
 	fmt.Fprintf(&b, "An installed copy carries a provenance stamp, so `magus graph verify` can tell "+
 		"you when a magus upgrade has made it stale. Text copied from this page carries none.\n\n")
 
 	writeStampTable(&b, cat, full)
 
-	b.WriteString("## Full form\n\nThe default: every mechanical step spelled out, plus the rationale for each.\n\n")
+	b.WriteString("## Full form\n\nEvery mechanical step spelled out, plus the rationale for each. Installed as the " +
+		"`<name>-full` twin: loaded by name rather than always, so a reader who needs the long " +
+		"form can ask for it without every session carrying it.\n\n")
 	writeFenced(&b, full.Body)
-	fmt.Fprintf(&b, "## Short form (`--simple`)\n\nThe enumeration dropped, the judgment kept - for the most "+
-		"capable readers, not the least; the bar under the heading above shows by how much. Both are "+
-		"hand-authored from one source body; see "+
-		"[Agents](../../guides/integrations/agents.md) for when to prefer which.\n\n")
+	fmt.Fprintf(&b, "## Short form\n\nThe enumeration dropped, the judgment kept - for the most "+
+		"capable readers, not the least; the bar under the heading above shows by how much. This is "+
+		"the always-loaded primary. Both are hand-authored from one source body; see "+
+		"[Agents](../../guides/integrations/agents.md) for the difference.\n\n")
 	b.WriteString("<details>\n<summary>Show the short form</summary>\n\n")
 	writeFenced(&b, simple.Body)
 	b.WriteString("\n</details>\n")
@@ -131,7 +178,7 @@ func renderSkill(cat *agent.Catalog, full, simple agent.AgentSkill) string {
 // writeFenced wraps body in a code fence LONGER than any backtick run inside it.
 //
 // A fixed three-backtick fence is broken here, and it shipped that way: every skill
-// body contains its own fenced examples (18 of them in magus-buzz), and Markdown
+// body contains its own fenced examples (18 of them in magus-buzz-write), and Markdown
 // fences do not nest - the body's first ```sh closed the wrapper, so most of the page
 // rendered as live Markdown instead of verbatim text. CommonMark closes a fence only
 // on a run at least as long as the opener, so measuring the longest run and adding
@@ -164,9 +211,10 @@ func renderIndex(full, simple []agent.AgentSkill) string {
 	b.WriteString("tags: [agents, skills, reference]\npage_type: overview\n---\n\n")
 	b.WriteString("# Agent skills\n\n")
 	b.WriteString("These are the skills `magus agent install` writes, reproduced verbatim from the\n")
-	b.WriteString("bodies embedded in the binary. Each ships in two hand-authored permutations: the\n")
-	b.WriteString("default carries the rationale behind each step, and `--simple` withholds it.\n")
-	b.WriteString("See [Agents](../../guides/integrations/agents.md) for how to choose.\n\n")
+	b.WriteString("bodies embedded in the binary. Each ships in two hand-authored permutations, and\n")
+	b.WriteString("install writes both: the short form is the always-loaded primary, and the full form\n")
+	b.WriteString("is its `<name>-full` twin, loaded by name when a reader needs the rationale.\n")
+	b.WriteString("See [Agents](../../guides/integrations/agents.md) for the difference.\n\n")
 
 	var tf, ts int
 	b.WriteString("| skill | full | short | saved | what it is for |\n| --- | --- | --- | --- | --- |\n")

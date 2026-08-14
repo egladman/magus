@@ -154,7 +154,7 @@ func TestAgentInstallNeverWritesAgentsMD(t *testing.T) {
 
 	before := dirSnapshot(t, dir)
 	out := captureStderr(t, func() {
-		printAgentInstallNextSteps(dir, []string{".claude/skills/magus-query/SKILL.md"}, agent.VariantFull)
+		printAgentInstallNextSteps(dir, []string{".claude/skills/magus-query/SKILL.md"}, nil, agent.VariantFull)
 	})
 
 	assert.Contains(t, out, "magus does not write AGENTS.md")
@@ -328,12 +328,12 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git restore .", deny: true},
 		// A path-scoped revert advises now: discarding a file because you did not
 		// hand-edit it is the most common wrong reflex about generated output.
-		{command: "git restore cmd/magus/agent.go", context: "magus-vcs"},
+		{command: "git restore cmd/magus/agent.go", context: "magus-vcs-hygiene"},
 		{command: "git checkout -- gen/", context: "role=output"},
 		{command: "git checkout HEAD -- docs/gen", context: "role=output"},
 		{command: "git clean -fd", deny: true},
 		{command: "git clean -n"},
-		{command: "git commit -m 'x'", context: "magus-vcs"},
+		{command: "git commit -m 'x'", context: "magus-vcs-hygiene"},
 		// Push, not commit: committing mid-mess is ordinary, publishing is the
 		// moment the work stops being yours alone.
 		{command: "git push origin HEAD", context: "magus affected ci"},
@@ -346,8 +346,8 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git add .", deny: true},
 		{command: "git add -u", deny: true},
 		// Deliberate staging is still only advised - that IS the replacement.
-		{command: "git add cmd/magus/agent.go", context: "magus-vcs"},
-		{command: "git add docs/gen/index.html src/main.go", context: "magus-vcs"},
+		{command: "git add cmd/magus/agent.go", context: "magus-vcs-hygiene"},
+		{command: "git add docs/gen/index.html src/main.go", context: "magus-vcs-hygiene"},
 		// A raw tool denies only when a registered spell renders that exact base
 		// command and verb. Unsupported runners remain available: a guard funnels
 		// capability Magus has, never removes capability it does not.
@@ -367,7 +367,7 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// alternation inside a quoted argument. Peeling must not reintroduce this -
 		// splitting the line into segments does, which is why peeling substitutes.
 		{command: `grep -n "golangci-lint\|mockery|gofmt" cmd/`},
-		{command: "git commit -m 'stop using git add -A'", context: "magus-vcs"},
+		{command: "git commit -m 'stop using git add -A'", context: "magus-vcs-hygiene"},
 		{command: "grep -rn 'go test' docs/", context: "knowledge graph"},
 		// Still caught in every real command position.
 		{command: "cd /repo && go test ./...", deny: true},
@@ -752,7 +752,7 @@ func TestGuardAdversarial(t *testing.T) {
 		{"magus affected", "magus affected ci"},
 
 		// DESTRUCTIVE GIT COMMANDS AS PROSE. These denied until the git rules moved
-		// onto the parser, and the cost was concrete: writing the magus-vcs skill -
+		// onto the parser, and the cost was concrete: writing the magus-vcs-hygiene skill -
 		// the document whose entire subject is these commands - through a heredoc
 		// was blocked twice in one session.
 		{"stash named in a heredoc", "cat <<'EOF' > s.md\nNever run git stash here.\nEOF"},
@@ -949,7 +949,7 @@ func TestAdviseInstalledSkillWrite(t *testing.T) {
 	installed := write(".claude/skills/magus-run/SKILL.md", "---\nname: magus-run\nmetadata:\n  source: magus\n---\n\n# Running work\n")
 	got := adviseInstalledSkillWrite(installed)
 	assert.Contains(t, got, "INSTALLED skill")
-	assert.Contains(t, got, "magus-adapt")
+	assert.Contains(t, got, "magus-workspace-rules")
 
 	// A workspace's own skill lives in the same directory and must draw silence:
 	// telling an author their hand-written file is generated is worse than
@@ -960,7 +960,7 @@ func TestAdviseInstalledSkillWrite(t *testing.T) {
 	// Not a skill file, not in a skill directory, and not there at all.
 	assert.Empty(t, adviseInstalledSkillWrite(write(".claude/skills/magus-run/README.md", "source: magus")))
 	assert.Empty(t, adviseInstalledSkillWrite(write("docs/SKILL.md", "source: magus")))
-	assert.Empty(t, adviseInstalledSkillWrite(filepath.Join(dir, ".claude", "skills", "magus-vcs", "SKILL.md")))
+	assert.Empty(t, adviseInstalledSkillWrite(filepath.Join(dir, ".claude", "skills", "magus-vcs-hygiene", "SKILL.md")))
 }
 
 func TestHookCmd(t *testing.T) {
@@ -991,7 +991,7 @@ func TestHookCmd(t *testing.T) {
 	got := run("git stash", "-o", "json")
 	assert.Contains(t, got, `"decision": "deny"`)
 	assert.Contains(t, got, `"schema_version": 1`)
-	assert.Contains(t, got, "magus-vcs")
+	assert.Contains(t, got, "magus-vcs-hygiene")
 
 	// A template renders a host dialect; pass renders empty, deny fills it.
 	tpl := `template={{if eq .decision "deny"}}{"permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}{{end}}`
@@ -1317,13 +1317,198 @@ func TestDecodeHookEnvelope(t *testing.T) {
 // reachable and correct while the process exited 0, so a host read success and ran the
 // command anyway: the guard looked installed and enforced nothing.
 func TestEnforceVerdictBlocksOnlyDeny(t *testing.T) {
-	err := enforceVerdict(guardVerdict{Decision: "deny", Reason: "no"})
+	text := OutputOptions{Format: FormatText}
+	err := enforceVerdict(text, guardVerdict{Decision: "deny", Reason: "no"})
 	require.Error(t, err, "a deny must exit non-zero or it blocks nothing")
 	var silent errSilent
 	require.ErrorAs(t, err, &silent)
 	assert.Equal(t, guardDenyExitCode, silent.exitCode)
 
-	assert.NoError(t, enforceVerdict(guardVerdict{Decision: "advise", Context: "fyi"}),
+	assert.NoError(t, enforceVerdict(text, guardVerdict{Decision: "advise", Context: "fyi"}),
 		"advice teaches and must never block")
-	assert.NoError(t, enforceVerdict(guardVerdict{Decision: "pass"}))
+	assert.NoError(t, enforceVerdict(text, guardVerdict{Decision: "pass"}))
+
+	// The exit code is the enforcement and does not depend on the rendering: a structured
+	// consumer that got a zero status would be told the same lie in a different shape.
+	require.Error(t, enforceVerdict(OutputOptions{Format: FormatJSON}, guardVerdict{Decision: "deny", Reason: "no"}))
+}
+
+// TestGuardDenyPrintsItsReasonOnce: text mode already renders the full reason to stdout, and
+// every guard template this repo ships reads the verdict from stdout - one discards stderr
+// outright - so an unconditional stderr copy reached nobody who lacked another channel and
+// simply printed a kilobyte-plus reason twice to a terminal. A structured format renders no
+// prose, so there stderr is the only readable channel and keeps it.
+func TestGuardDenyPrintsItsReasonOnce(t *testing.T) {
+	deny := guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "deny", Reason: "because"}
+
+	var stdout bytes.Buffer
+	require.NoError(t, writeGuardVerdict(&stdout, OutputOptions{Format: FormatText}, deny))
+	assert.Equal(t, 1, strings.Count(stdout.String(), "because"), "stdout renders the reason once")
+	assert.Empty(t, captureStderr(t, func() {
+		_ = enforceVerdict(OutputOptions{Format: FormatText}, deny)
+	}), "and stderr must not repeat what stdout just said")
+
+	assert.Contains(t, captureStderr(t, func() {
+		_ = enforceVerdict(OutputOptions{Format: FormatJSON}, deny)
+	}), "because", "a structured format renders no prose, so stderr carries it")
+}
+
+// TestDenyNotesWrite covers the only deny on the path surface. The negative cases matter
+// more than the positive one: this rule blocks work, so it must be silent in every
+// workspace that did not opt in by DECLARING a store.
+func TestDenyNotesWrite(t *testing.T) {
+	root := t.TempDir()
+	// A workspace magus.FindRoot can resolve, so the rule reaches its real decision
+	// rather than bailing out on a missing workspace and passing for the wrong reason.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// scratch\n"), 0o644))
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(root))
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	saved := globalCfg.Knowledge.Notes.Shared
+	t.Cleanup(func() { globalCfg.Knowledge.Notes.Shared = saved })
+
+	// Nothing declared: the feature is off, so nothing is judged and nothing is guessed.
+	globalCfg.Knowledge.Notes.Shared = ""
+	for _, path := range []string{"notes/a.md", filepath.Join(root, "notes", "a.md"), "internal/foo.go"} {
+		assert.Empty(t, denyNotesWrite(path),
+			"with no declared store, %q must pass - a deny fired on a guess blocks work in a workspace that never opted in", path)
+	}
+
+	globalCfg.Knowledge.Notes.Shared = "notes"
+	// The store must exist to be defended - see TestDenyNotesWriteRequiresTheStoreToExist.
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "notes", "nested"), 0o755))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "team", "notes"), 0o755))
+
+	for _, path := range []string{"notes/a.md", "./notes/a.md", filepath.Join(root, "notes", "a.md"), "  notes/nested/b.md  "} {
+		reason := denyNotesWrite(path)
+		require.NotEmpty(t, reason, "expected a deny for %q", path)
+		assert.Contains(t, reason, "NOTES store", "the reason names what was blocked")
+		assert.Contains(t, reason, "magus memory put", "and routes the agent somewhere it MAY write")
+		assert.Contains(t, reason, "magus notes edit", "and says how a person writes it instead")
+	}
+
+	// A path outside the declared store is untouched, including one that merely looks
+	// like it (notes-archive shares the prefix but is a different directory).
+	for _, path := range []string{"internal/foo.go", "docs/notes.md", "notes-archive/a.md", "../outside/a.md"} {
+		assert.Empty(t, denyNotesWrite(path), "%q is not in the declared store", path)
+	}
+
+	// The exclusion follows the declaration, not the name.
+	globalCfg.Knowledge.Notes.Shared = "team/notes"
+	assert.Empty(t, denyNotesWrite("notes/a.md"), "a different directory named notes is not the store")
+	assert.NotEmpty(t, denyNotesWrite("team/notes/a.md"))
+}
+
+// TestDenyNotesWriteRequiresTheStoreToExist closes the hole a user-global config opens.
+// magus reads config from an explicit --config path or $XDG_CONFIG_HOME before the
+// workspace, so one global `knowledge.notes.path` would declare a store in every
+// workspace. A declaration nobody acted on must defend nothing.
+// TestDenyNotesWriteIgnoresAForeignDeclaration: the merged config carries settings from
+// outside this repo (user-global, an explicit --config anywhere on disk), so a `notes.shared`
+// set once on a machine is "declared" in every workspace on it. Acting on that alone would
+// deny writes in repositories that never adopted the policy, so a declaration this repo did
+// not make is backed by the on-disk store or it defends nothing.
+func TestDenyNotesWriteIgnoresAForeignDeclaration(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// scratch\n"), 0o644))
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(root))
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	saved := globalCfg.Knowledge.Notes.Shared
+	t.Cleanup(func() { globalCfg.Knowledge.Notes.Shared = saved })
+	globalCfg.Knowledge.Notes.Shared = "notes"
+
+	// No magus.yaml here, so the declaration can only have come from elsewhere on the
+	// machine. This repo never opted in.
+	assert.Empty(t, denyNotesWrite("notes/a.md"),
+		"a declaration this repo did not make must not deny writes in it")
+
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "notes"), 0o755))
+	assert.NotEmpty(t, denyNotesWrite("notes/a.md"),
+		"a store that exists on disk is defended whoever declared it")
+}
+
+// TestDenyNotesWriteDefendsAnEmptyDeclaredStore is the regression guard for the hole that
+// dogfooding found on 2026-08-13: with the key declared and no note yet written, a direct
+// file write to notes/<name>.md PASSED.
+//
+// The gate was "the directory exists", on the reasoning that a person creates the store by
+// writing the first note, so an agent could never bring it into being. The reverse held.
+// An agent could author the store's FIRST note - the single entry with nothing beside it to
+// look wrong against - and the deny would switch on immediately afterwards, defending the
+// forgery it had just let through. The opt-in is the committed key, not the directory.
+func TestDenyNotesWriteDefendsAnEmptyDeclaredStore(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"), []byte("// scratch\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"),
+		[]byte("knowledge:\n  notes:\n    shared: notes\n"), 0o644))
+	cwd, err := os.Getwd()
+	require.NoError(t, err)
+	require.NoError(t, os.Chdir(root))
+	t.Cleanup(func() { _ = os.Chdir(cwd) })
+
+	saved := globalCfg.Knowledge.Notes.Shared
+	t.Cleanup(func() { globalCfg.Knowledge.Notes.Shared = saved })
+	globalCfg.Knowledge.Notes.Shared = "notes"
+
+	require.NoDirExists(t, filepath.Join(root, "notes"), "the store has no files yet - that is the case under test")
+	assert.NotEmpty(t, denyNotesWrite("notes/first.md"),
+		"a repo that committed the key is defended before its first note exists, or an agent writes that first note")
+	assert.NotEmpty(t, denyNotesWrite(filepath.Join(root, "notes", "nested", "deep.md")))
+
+	// Still scoped: declaring a notes store does not defend the rest of the repo.
+	assert.Empty(t, denyNotesWrite("internal/foo.go"))
+}
+
+// TestGuardDeniesAuthoringANote closes the surface the path rule cannot see. `magus notes
+// edit` can take prose on stdin, which is a COMMAND rather than a file write, so without
+// this an agent could author a note through a boundary that is supposed to be about who is
+// writing rather than which surface they reached for.
+func TestGuardDeniesAuthoringANote(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		"magus notes edit team-conventions",
+		"printf 'prose' | magus notes edit team-conventions --anchor project:.",
+		"cat body.md | ./magus notes edit foo",
+	} {
+		v := evaluateBashGuard(cmd)
+		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
+		assert.Contains(t, v.Deny, "magus memory put", "the reason routes to the store an agent MAY write")
+	}
+	// Reading is untouched: the boundary is on authorship, not on access.
+	for _, cmd := range []string{"magus notes ls", "magus notes get foo", "magus notes verify"} {
+		assert.Empty(t, evaluateBashGuard(cmd).Deny, "%q only reads", cmd)
+	}
+}
+
+// TestGuardDeniesInPlaceSed: `-i` is the one sed flag that WRITES, and the two
+// implementations read each other's spelling as garbage - GNU takes `sed -i 's/x/y/' f` as
+// an edit while BSD reads that script as the backup suffix, and `sed -i ”` inverts it. A
+// command that worked where it was written mangles the file on the next machine, and it has
+// already written by the time anyone looks. Reading with sed is untouched.
+func TestGuardDeniesInPlaceSed(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		"sed -i 's/a/b/' f.go",
+		"sed -i '' 's/a/b/' f.go",
+		"sed -i.bak s/a/b/ f",
+		"sed --in-place=.bak s/a/b/ f",
+		"cat x | sed -i s/a/b/ y",
+		"find . -name '*.go' -exec sed -i 's/a/b/' {} +",
+	} {
+		v := evaluateBashGuard(cmd)
+		assert.NotEmpty(t, v.Deny, "expected a deny for %q", cmd)
+	}
+	for _, cmd := range []string{
+		"sed -n '1,5p' f.go",
+		"sed 's/a/b/' in.txt",
+		"cat f | sed -e 's/a/b/'",
+		"echo x | sed s/x/y/",
+	} {
+		assert.Empty(t, evaluateBashGuard(cmd).Deny, "%q only reads: sed is not the problem, writing in place is", cmd)
+	}
 }

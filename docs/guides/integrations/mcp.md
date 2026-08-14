@@ -145,7 +145,7 @@ Or `MAGUS_MCP_ADDRESS=127.0.0.1:9000`.
 
 The endpoint requires a **bearer token**, and accepts two kinds:
 
-- **The cli token** - a single, retrievable secret the daemon generates on first start and stores `0600` at `$XDG_STATE_HOME/magus/mcp_token` (`~/.local/state/magus/mcp_token`). magus's own commands reuse it (for example `graph open --live`). The secret never reaches the daemon log, so retrieve it with `magus config mcp token print`.
+- **The cli token** - a single, retrievable secret the daemon generates on first start and stores `0600` at `$XDG_STATE_HOME/magus/mcp_token` (`~/.local/state/magus/mcp_token`). magus's own commands reuse it (for example `graph export --open --follow`). The secret never reaches the daemon log, so retrieve it with `magus config mcp token print`.
 - **Connector tokens** - named, hashed-at-rest, expiring secrets you mint per external client (a Claude connector, an IDE). Only their SHA-256 is stored, so a connector token is shown once at creation and can never be re-displayed; rotate by minting a new one.
 
 Every `/mcp` request must carry `Authorization: Bearer <token>` with either kind; requests without a valid token get `401 Unauthorized`. Manage them with:

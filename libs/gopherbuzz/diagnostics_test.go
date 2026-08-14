@@ -1,4 +1,4 @@
-package buzz_test
+package buzz
 
 import (
 	"context"
@@ -8,20 +8,19 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/libs/diagnostics"
-	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestSession_Diagnostics_Clean(t *testing.T) {
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s := NewSession(context.Background(), WithEmbedded())
 	got := s.Diagnostics(`fun add(a: int, b: int) > int { return a + b; }`)
 	assert.Empty(t, got, "a well-formed program should report no diagnostics")
 }
 
 func TestSession_Diagnostics_MultipleTypeErrors(t *testing.T) {
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s := NewSession(context.Background(), WithEmbedded())
 	// Two independent undefined references: the checker accumulates, so both must
 	// come back (the point of Diagnostics over Exec, which stops at the first).
 	got := s.Diagnostics("var a: int = missingOne;\nvar b: int = missingTwo;")
@@ -36,7 +35,7 @@ func TestSession_Diagnostics_MultipleTypeErrors(t *testing.T) {
 }
 
 func TestSession_Diagnostics_ParseError(t *testing.T) {
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s := NewSession(context.Background(), WithEmbedded())
 	// A parse failure yields exactly one diagnostic (checking cannot proceed) with
 	// a recovered position and the "buzz: line L:C:" prefix stripped.
 	got := s.Diagnostics("var x: int = ;")
@@ -50,13 +49,13 @@ func TestSession_Diagnostics_ParseError(t *testing.T) {
 // TestSession_Diagnostics_UnusedImport reproduces the gap this fix closes: upstream
 // Buzz warns on an unused import, gopherbuzz previously said nothing at all.
 func TestSession_Diagnostics_UnusedImport(t *testing.T) {
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s := NewSession(context.Background(), WithEmbedded())
 	s.SetNativeModule("unused/mod", vm.NewMap())
 
 	got := s.Diagnostics(`import "unused/mod";`)
 
 	require.Len(t, got, 1, "an import never referenced should produce exactly one diagnostic")
-	assert.Equal(t, buzz.SeverityWarning, got[0].Severity, "unused import must be a WARNING, not an error")
+	assert.Equal(t, SeverityWarning, got[0].Severity, "unused import must be a WARNING, not an error")
 	assert.Equal(t, diagnostics.Code("BZZ3001"), got[0].Code)
 	assert.Contains(t, got[0].Msg, "unused/mod")
 }
@@ -65,7 +64,7 @@ func TestSession_Diagnostics_UnusedImport(t *testing.T) {
 // module (`mod.field`) counts as use, same as backslash access - gopherbuzz accepts
 // both, unlike upstream, which only has the backslash form.
 func TestSession_Diagnostics_ImportUsedViaDotAccess(t *testing.T) {
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s := NewSession(context.Background(), WithEmbedded())
 	mod := vm.NewMap()
 	mod.MapSet("answer", vm.IntValue(42))
 	s.SetNativeModule("example/demo", mod)
@@ -77,7 +76,7 @@ func TestSession_Diagnostics_ImportUsedViaDotAccess(t *testing.T) {
 // TestSession_Diagnostics_ImportUsedViaBackslashAccess is the DotAccess test's sibling
 // for the normal namespace-access form.
 func TestSession_Diagnostics_ImportUsedViaBackslashAccess(t *testing.T) {
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s := NewSession(context.Background(), WithEmbedded())
 	mod := vm.NewMap()
 	mod.MapSet("answer", vm.IntValue(42))
 	s.SetNativeModule("example/demo", mod)
@@ -90,7 +89,7 @@ var x = demo\answer;`)
 // TestSession_Diagnostics_AliasedImportUsed verifies usage is tracked under the
 // ALIAS, not the module's own path basename.
 func TestSession_Diagnostics_AliasedImportUsed(t *testing.T) {
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s := NewSession(context.Background(), WithEmbedded())
 	mod := vm.NewMap()
 	mod.MapSet("answer", vm.IntValue(42))
 	s.SetNativeModule("example/demo", mod)
@@ -101,7 +100,7 @@ var x = d\answer;`)
 }
 
 func TestSession_Diagnostics_AliasedImportUnused(t *testing.T) {
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s := NewSession(context.Background(), WithEmbedded())
 	s.SetNativeModule("example/demo", vm.NewMap())
 
 	got := s.Diagnostics(`import "example/demo" as d;`)
@@ -122,7 +121,7 @@ func TestSession_Diagnostics_AliasedImportUnused(t *testing.T) {
 // whose non-aliased form also flat-merges (see NonAliasedFileImportNeverWarnsUnused)
 // and can't reach `ns\Type{...}` resolution at all without it.
 func TestSession_Diagnostics_ImportUsedOnlyInObjectLiteralType(t *testing.T) {
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s := NewSession(context.Background(), WithEmbedded())
 	s.SetNativeModule("lib", vm.NewMap())
 	s.SetModuleDecls("lib", `export object Foo { n: int = 0 }`)
 
@@ -137,7 +136,7 @@ final f = lib\Foo{ n = 7 };
 // sibling of the object-literal case above: `v: lib\Foo` with the type never
 // constructed.
 func TestSession_Diagnostics_ImportUsedOnlyInTypeAnnotation(t *testing.T) {
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s := NewSession(context.Background(), WithEmbedded())
 	s.SetNativeModule("lib", vm.NewMap())
 	s.SetModuleDecls("lib", `export object Foo { n: int = 0 }`)
 
@@ -163,7 +162,7 @@ func TestSession_Diagnostics_NonAliasedFileImportNeverWarnsUnused(t *testing.T) 
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib.buzz"), []byte(`export object Foo { n: int = 0 }`), 0644))
 
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s := NewSession(context.Background(), WithEmbedded())
 	s.SetIncludeDirs([]string{dir})
 
 	// "lib" (the import's namespace binding) is never written as lib\... or lib....;
@@ -180,7 +179,7 @@ final f = Foo{ n = 7 };
 // check would mean tracking each flattened symbol individually - a broader "unused
 // local" question, not "unused import".
 func TestSession_Diagnostics_FlatImportNeverWarnsUnused(t *testing.T) {
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s := NewSession(context.Background(), WithEmbedded())
 	s.SetNativeModule("unused/mod", vm.NewMap())
 
 	got := s.Diagnostics(`import "unused/mod" as _;`)
@@ -193,7 +192,7 @@ func TestSession_Diagnostics_SelectiveImportNeverWarnsUnused(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "lib.buzz"), []byte(`export fun pub() > int { return 1; }`), 0644))
 
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s := NewSession(context.Background(), WithEmbedded())
 	s.SetIncludeDirs([]string{dir})
 
 	got := s.Diagnostics(`import pub from "lib";`)
@@ -205,7 +204,7 @@ func TestSession_Diagnostics_SelectiveImportNeverWarnsUnused(t *testing.T) {
 // by a line not typed yet - upstream Buzz gates its own unused_import warning on the
 // same flavor check (Parser.zig: `self.flavor != .Repl`).
 func TestSession_Diagnostics_ReplSuppressesUnusedImportWarning(t *testing.T) {
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded(), buzz.WithREPL())
+	s := NewSession(context.Background(), WithEmbedded(), WithREPL())
 	s.SetNativeModule("unused/mod", vm.NewMap())
 
 	got := s.Diagnostics(`import "unused/mod";`)

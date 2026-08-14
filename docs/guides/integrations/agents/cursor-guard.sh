@@ -23,10 +23,14 @@
 #   - A denial carries BOTH user_message (shown to you) and agent_message (sent
 #     to the model); neither is delivered on an allow, so `advise` collapses to a
 #     plain allow here. Those nudges live in the installed skills instead.
-#   - There is NO pre-write file hook, and it does not matter: magus advises on
-#     generated files rather than blocking them, so reporting after the write is
-#     the intended behavior everywhere, not a Cursor concession. What Cursor
-#     shaped is only the CHANNEL - stderr prose here, injected context elsewhere.
+#   - There is NO pre-write file hook. For an advise that costs nothing: magus
+#     advises on generated files rather than blocking them, so reporting after
+#     the write is the intended behavior everywhere, and what Cursor shaped is
+#     only the CHANNEL - stderr prose here, injected context elsewhere. For a
+#     DENY it costs the block itself: afterFileEdit fires once the write has
+#     landed, so the verdict arrives as a warning to the person and the file is
+#     already changed. That is a real coverage gap, recorded as deny=human
+#     below rather than papered over.
 #
 # Both calls pass --agent-name cursor so the observation magus records says which host
 # produced it. Neither Cursor event carries a session id, so none is sent; that
@@ -37,10 +41,17 @@
 # the two lines say exactly where: an advise on a shell command is delivered
 # nowhere (Cursor sends nothing on an allow), and an advise on a file write
 # reaches the person via stderr but never the model.
-# magus-guard-template: 3
+# magus-guard-template: 4
 # magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=none pass=none
-# magus-guard-coverage: schema=1 host=cursor surface=path deny=none advise=human pass=none
+# magus-guard-coverage: schema=1 host=cursor surface=path deny=human advise=human pass=none
 
+# Prefer the workspace's own ./magus over PATH. A repository that builds magus, or pins a
+# newer one than is installed, keeps its RULES in that binary - and an older PATH copy does
+# not fail loudly when it lacks them. It does not recognize the config key that ARMS a rule,
+# warns about an unknown field, and returns pass: silent non-enforcement at exit 0. Measured
+# 2026-08-13, when a write into a declared notes store was allowed by a binary that predated
+# the knowledge.notes key while `magus doctor` reported the guard as fine.
+[ -n "$GUARD_MAGUS_BIN" ] || { [ -x ./magus ] && GUARD_MAGUS_BIN=./magus; }
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
 event=$(cat)
@@ -51,16 +62,19 @@ case "$event" in
 	if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
 		exit 0
 	fi
-	# -o name prints the bare decision word, which is all this needs. magus
-	# re-roots the absolute path Cursor sends onto the workspace itself.
-    verdict=$(printf '%s' "$event" | jq -r '.file_path' | "$GUARD_MAGUS_BIN" hook --path --agent-name cursor -o name 2>/dev/null)
-	[ "$verdict" = "advise" ] || exit 0
+	# Ask for the MESSAGE, not the bare decision word. Several rules judge this
+	# surface now, so a hardcoded explanation here would report the wrong one -
+	# it used to say "that file is a DECLARED OUTPUT" whatever had actually
+	# fired. The template renders the deny reason or the advise context, and
+	# nothing at all for a pass. magus re-roots the absolute path Cursor sends
+	# onto the workspace itself.
+	verdict=$(printf '%s' "$event" | jq -r '.file_path' | "$GUARD_MAGUS_BIN" hook --path --agent-name cursor \
+		-o 'template={{if eq .decision "deny"}}{{.reason}}{{else if eq .decision "advise"}}{{.context}}{{end}}' 2>/dev/null)
+	[ -n "$verdict" ] || exit 0
 	# Cursor surfaces a non-blocking hook's stderr, so the message goes there as
-	# prose rather than as a verdict it would not read.
-	printf '%s\n' \
-		"magus: that file is a DECLARED OUTPUT of a magus target - it is generated." \
-		"The edit you just made will be overwritten by the next run of its producing target." \
-		"Change the SOURCE instead, then regenerate and commit both together." \
+	# prose rather than as a verdict it would not read. A deny cannot block here
+	# - afterFileEdit fires after the write - so it is reported as what it is.
+	printf '%s\n' "magus: $verdict" \
 		"Cursor has no pre-write hook, so this could only be reported after the fact." >&2
 	exit 0
 	;;

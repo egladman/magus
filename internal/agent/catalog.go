@@ -96,7 +96,7 @@ type AgentSkill struct {
 //
 // Measured 2026-07-31 across the ten shipped skills: simple came out 20.3%
 // smaller than full, on 137 full-only branches against only 28 {{else}} arms.
-// The most prose-heavy simple forms are magus-run (82.6% prose) and magus-vcs
+// The most prose-heavy simple forms are magus-run (82.6% prose) and magus-vcs-hygiene
 // (91.0% prose). The headroom is in the wording of the shared text, not in the
 // tables. An earlier version of this comment blamed the tables; that was wrong,
 // and it pointed authors at the one part of the page they should not touch.
@@ -154,21 +154,12 @@ func (v Variant) Simple() bool { return v == VariantSimple }
 // constant and a String case rather than a new pair of markers.
 func (v Variant) Is(name string) bool { return v.String() == name }
 
-// VariantOf maps a --simple boolean to a Variant, so the CLI does not spell the
-// conditional at every call site.
-func VariantOf(simple bool) Variant {
-	if simple {
-		return VariantSimple
-	}
-	return VariantFull
-}
-
 // applyVariant renders body for v. The body is a text/template, so a permutation
 // is an ordinary {{if}} branch and a malformed one is a parse or execute error
 // rather than text that silently survives into an installed file.
 //
 // A skill body that needs to SHOW template syntax (magus-run documents the
-// `-o template` flag, magus-buzz documents mustache) escapes it as a string
+// `-o template` flag, magus-buzz-write documents mustache) escapes it as a string
 // constant: {{"{{.Field}}"}}. That applies inside fenced code blocks too - the
 // template engine does not know what Markdown is.
 func applyVariant(name, body string, v Variant) (string, error) {
@@ -221,22 +212,45 @@ type skillSource struct {
 	name        string
 	description string
 	bodyPath    string
+	// compat(until: the published docs no longer serve a page per skill under a
+	// stable URL - observe by checking whether reference/skills/<name>/ still
+	// appears in the released llms.txt): names this skill shipped under before.
+	//
+	// A rename breaks two different things, and this fixes only one of them. An
+	// installed skill's DIRECTORY is pruned and rewritten, so a host picks the new
+	// name up on the next install; a published doc URL is a link someone else
+	// wrote, and nothing on their end re-runs. So the old names live here rather
+	// than in a hand-kept redirect list beside the site: the rename is a fact
+	// about the skill, and the page that carries the redirect is generated from
+	// exactly this row.
+	formerNames []string
+}
+
+// FormerNames returns the names a skill previously shipped under, oldest first,
+// or nil for one that has never been renamed.
+func FormerNames(name string) []string {
+	for _, s := range skillSources {
+		if s.name == name {
+			return s.formerNames
+		}
+	}
+	return nil
 }
 
 var skillSources = []skillSource{
-	{name: "magus-adapt", description: "Adapt magus's installed agent surface to THIS workspace without breaking it. Use when repeated friction is not covered by a shipped skill, when tempted to edit an installed magus-* SKILL.md (they are stamped: `magus graph verify` reports the edit as drift and the next `magus agent install --force` erases it), and when deciding whether a workspace rule should graduate upstream as a pull request or an issue. Workspace-specific rules belong in a local magus-local-development skill, stamped with their evidence and a retire-when condition.", bodyPath: "skills/magus-adapt/SKILL.md"},
-	{name: "magus-architecture", description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. Use when suggesting directory structure, package layout, or module boundaries, when deciding where new code belongs, when assessing the blast radius or risk of a refactor, or when asked where a magus workspace's coupling and churn concentrate.", bodyPath: "skills/magus-architecture/SKILL.md"},
-	{name: "magus-buzz", description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in. Use when writing or debugging a magusfile target, a spell, or a .buzz file, and when a one-off script is needed in a magus workspace - Buzz is already installed with the whole magus host surface (fs, http, json, yaml, template, vcs, ...), so it needs no dependency install. Also use when Buzz syntax surprises you: namespace access is a backslash, object literals use `=`, and `magus buzz` runs upstream-strict (no top-level control flow, every argument after the first must be labeled).", bodyPath: "skills/magus-buzz/SKILL.md"},
-	{name: "magus-buzz-review", description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance. Use when asked to review, audit, or critique a .buzz file or change, or when a finding needs to say whether it holds anywhere Buzz runs (UPSTREAM), only under gopherbuzz (GOPHERBUZZ), or runs here but not upstream (PORTABILITY). Fans out the three lenses via the Agent tool and merges the results, the same shape go-review-ultra uses for Go. Does NOT cover magusfile/target/spell contracts - caching, ctx.needs, wards, charms; use magus-buzz for those.", bodyPath: "skills/magus-buzz-review/SKILL.md"},
-	{name: "magus-changes", description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question. Use for \"what's been merged lately?\", \"catch me up since last week\", \"add this to the CHANGELOG\", and \"what exactly did this branch change?\" Covers three outputs: a short evidence-backed brief, a Keep a Changelog entry in the repo's existing shape, and per-question diff commands. Always answer through magus surfaces (graph diff, describe file, affected --impact/--explain) rather than reading a raw diff; do not infer features from commit subjects alone.", bodyPath: "skills/magus-changes/SKILL.md"},
+	{name: "magus-workspace-rules", description: "Adapt magus's installed agent surface to THIS workspace without breaking it. Use when repeated friction is not covered by a shipped skill, when tempted to edit an installed magus-* SKILL.md (they are stamped: `magus graph verify` reports the edit as drift and the next `magus agent install --force` erases it), and when deciding whether a workspace rule should graduate upstream as a pull request or an issue. Workspace-specific rules belong in a local magus-local-development skill, stamped with their evidence and a retire-when condition.", bodyPath: "skills/magus-workspace-rules/SKILL.md", formerNames: []string{"magus-adapt"}},
+	{name: "magus-architecture-review", description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. Use when suggesting directory structure, package layout, or module boundaries, when deciding where new code belongs, when assessing the blast radius or risk of a refactor, or when asked where a magus workspace's coupling and churn concentrate.", bodyPath: "skills/magus-architecture-review/SKILL.md", formerNames: []string{"magus-architecture"}},
+	{name: "magus-buzz-write", description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in. Use when writing or debugging a magusfile target, a spell, or a .buzz file, and when a one-off script is needed in a magus workspace - Buzz is already installed with the whole magus host surface (fs, http, json, yaml, template, vcs, ...), so it needs no dependency install. Also use when Buzz syntax surprises you: namespace access is a backslash, object literals use `=`, and `magus buzz` runs upstream-strict (no top-level control flow, every argument after the first must be labeled).", bodyPath: "skills/magus-buzz-write/SKILL.md", formerNames: []string{"magus-buzz"}},
+	{name: "magus-buzz-review", description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance. Use when asked to review, audit, or critique a .buzz file or change, or when a finding needs to say whether it holds anywhere Buzz runs (UPSTREAM), only under gopherbuzz (GOPHERBUZZ), or runs here but not upstream (PORTABILITY). Fans out the three lenses via the Agent tool and merges the results, the same shape go-review-ultra uses for Go. Does NOT cover magusfile/target/spell contracts - caching, ctx.needs, wards, charms; use magus-buzz-write for those.", bodyPath: "skills/magus-buzz-review/SKILL.md"},
+	{name: "magus-change-summary", description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question. Use for \"what's been merged lately?\", \"catch me up since last week\", \"add this to the CHANGELOG\", and \"what exactly did this branch change?\" Covers three outputs: a short evidence-backed brief, a Keep a Changelog entry in the repo's existing shape, and per-question diff commands. Always answer through magus surfaces (graph diff, describe file, affected --impact/--explain) rather than reading a raw diff; do not infer features from commit subjects alone.", bodyPath: "skills/magus-change-summary/SKILL.md", formerNames: []string{"magus-changes"}},
 	{name: "magus-context-audit", description: "Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. Use after changing a guard rule, a denied command, or a documented workflow; before shipping a change to the agent surface; and when an agent has been behaving inconsistently or ignoring a rule. This is a lens over INSTRUCTIONS, not over code: it reports ranked findings for a human to act on and never edits anything itself.", bodyPath: "skills/magus-context-audit/SKILL.md"},
-	{name: "magus-delegate-ultra", description: "Plan and execute potentially expensive multi-agent work in a magus workspace as an acceptance-criteria loop, using affected shard plans and knowledge-graph evidence to assign collision-resistant edit units, coordinate nested delegation, and choose cost-appropriate effort tiers. Use ONLY when the user names this skill, or asks in their own words for the work to be SPLIT ACROSS AGENTS - \"fan this out\", \"run these in parallel\", \"use several subagents\", \"spin up an agent per package\". Wanting the work faster, sooner, or more thorough is NOT that request: those are asks about the outcome, and this skill is a choice about the method, with a real cost. Never auto-trigger it on ordinary implementation.", bodyPath: "skills/magus-delegate-ultra/SKILL.md"},
-	{name: "magus-docs", description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL. Use when you need authoritative magus behavior (a CLI flag, a spell op, a diagnostic code, a config key, a stdlib module) and the workspace graph cannot give it. Do NOT use for facts about THIS workspace (use magus-query) or to run work (use magus-run).", bodyPath: "skills/magus-docs/SKILL.md"},
-	{name: "magus-memory", description: "Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions. It is not automatic agent memory; add an entry only when a later person needs to reopen the linked graph/query/output/doc evidence. Verify malformed, stale, and broken-linked entries before relying on them.", bodyPath: "skills/magus-memory/SKILL.md"},
+	{name: "magus-delegate-multi-agent", description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the units cannot collide, bound fan-out depth, and match each unit's model to the work it needs. Use when a change needs several disjoint groups of files edited, when an audit or review covers a tree, or when the user says \"fan this out\" or \"spin up an agent per package\" - you do not need to be asked. Do NOT fan out one coherent edit just because it invalidates many projects: a shard plan partitions VALIDATION, not editing, so it can veto a fan-out but never license one.", bodyPath: "skills/magus-delegate-multi-agent/SKILL.md", formerNames: []string{"magus-delegate-ultra"}},
+	{name: "magus-docs-lookup", description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL. Use when you need authoritative magus behavior (a CLI flag, a spell op, a diagnostic code, a config key, a stdlib module) and the workspace graph cannot give it. Do NOT use for facts about THIS workspace (use magus-query) or to run work (use magus-run).", bodyPath: "skills/magus-docs-lookup/SKILL.md", formerNames: []string{"magus-docs"}},
+	{name: "magus-handoff-journal", description: "Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions. It is not automatic agent memory; add an entry only when a later person needs to reopen the linked graph/query/output/doc evidence. Verify malformed, stale, and broken-linked entries before relying on them.", bodyPath: "skills/magus-handoff-journal/SKILL.md", formerNames: []string{"magus-memory"}},
 	{name: "magus-query", description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). Use INSTEAD of Grep or Glob in a repo with magusfile.buzz whenever the question is what exists, what depends on what, where something is used, or how two entities relate - a graph answer is verified against declared sources, a grep hit is a guess.", bodyPath: "skills/magus-query/SKILL.md"},
 	{name: "magus-run", description: "Run builds, tests, lints, and codegen through magus targets. Use BEFORE typing go test, go build, npm test, npx, eslint, prettier, pytest, tsc, cargo, or any other raw language tool in a repo with magusfile.buzz at the root - a target covers the work, and the raw tool bypasses the cache, the sandbox, and affected tracking. Also use when a magus target fails and you need its captured output, and for the final pre-commit gate (magus affected ci).", bodyPath: "skills/magus-run/SKILL.md"},
-	{name: "magus-sdk", description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them. Use when someone wants to call Open/Inspect/Run from their own Go program, embed magus's workspace model in another tool, or asks \"can I use magus without the binary\". Also use to audit the SDK surface itself - whether a type is exported, a concept is reachable without the CLI, and whether a package boundary is deliberate or accidental. Do NOT use for CLI usage (magus-run, magus-query) or for editing magus's own source (magus-architecture).", bodyPath: "skills/magus-sdk/SKILL.md"},
-	{name: "magus-vcs", description: "Safe git operations in a magus workspace (any repo with magusfile.buzz at the root). Use IMMEDIATELY before git commit, git add, git stash, git reset, git checkout, or git clean, and when reading git status or a diff - especially one touching MAGUS.md, gen/ trees, lockfiles, or other generated files. Classifies every changed path as generated output vs source (magus describe file), gives the commit checklist, and settles merge conflicts in generated files by regenerating. Do NOT stash or reset the whole tree to verify a build; load this skill first.", bodyPath: "skills/magus-vcs/SKILL.md"},
+	{name: "magus-sdk", description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them. Use when someone wants to call Open/Inspect/Run from their own Go program, embed magus's workspace model in another tool, or asks \"can I use magus without the binary\". Also use to audit the SDK surface itself - whether a type is exported, a concept is reachable without the CLI, and whether a package boundary is deliberate or accidental. Do NOT use for CLI usage (magus-run, magus-query) or for editing magus's own source (magus-architecture-review).", bodyPath: "skills/magus-sdk/SKILL.md"},
+	{name: "magus-vcs-hygiene", description: "Safe git operations in a magus workspace (any repo with magusfile.buzz at the root). Use IMMEDIATELY before git commit, git add, git stash, git reset, git checkout, or git clean, and when reading git status or a diff - especially one touching MAGUS.md, gen/ trees, lockfiles, or other generated files. Classifies every changed path as generated output vs source (magus describe file), gives the commit checklist, and settles merge conflicts in generated files by regenerating. Do NOT stash or reset the whole tree to verify a build; load this skill first.", bodyPath: "skills/magus-vcs-hygiene/SKILL.md", formerNames: []string{"magus-vcs"}},
 }
 
 // Catalog binds the skill source assets embedded by the application to the
@@ -445,6 +459,85 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool, v Variant) ([]str
 	}
 	return written, nil
 }
+
+// StaleSkillDirs returns the installed skill directories under <dir>/<dest> that
+// magus wrote and this binary no longer ships, as <dest>-relative paths.
+//
+// Detection is separate from removal, and both halves matter. A generator that owns
+// its writes but not its deletions leaves a mess that outlives every reason for it:
+// renaming a skill leaves the old directory installed, still stamped, still loaded
+// by the host, still teaching whatever it said the day it was orphaned. Nothing
+// reported it either - a drift gate compares the files a generator DECLARES against
+// what it wrote, and an extra file is in neither set. This is what makes it
+// reportable; PruneSkillTree is what acts on it, and only when asked.
+//
+// The stamp is the authority on what is a candidate at all, and that is the whole
+// safety story: magus considers only files it can prove it wrote. A directory with
+// no SKILL.md, or a SKILL.md without the generated footer, is someone's
+// hand-authored skill sitting in the same folder (magus-skill-authoring and a
+// workspace's own magus-local-development both live there) and is never a candidate
+// even though the catalog does not name it.
+func (c *Catalog) StaleSkillDirs(dir, dest string) ([]string, error) {
+	skills, err := c.RenderedSkills(VariantSimple)
+	if err != nil {
+		return nil, err
+	}
+	// Both variants, so a tree installed under either one is judged by what the
+	// catalog SHIPS rather than by which permutation last wrote it.
+	shipped := make(map[string]bool, len(skills)*2)
+	for _, s := range skills {
+		shipped[s.Name] = true
+		shipped[FullTwinName(s.Name)] = true
+	}
+
+	root := filepath.Join(dir, dest)
+	entries, err := os.ReadDir(root)
+	if err != nil {
+		if os.IsNotExist(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("agent install: read %s: %w", root, err)
+	}
+	var stale []string
+	for _, e := range entries {
+		if !e.IsDir() || shipped[e.Name()] {
+			continue
+		}
+		body, err := os.ReadFile(filepath.Join(root, e.Name(), "SKILL.md"))
+		if err != nil || !bytes.Contains(body, []byte(generatedSkillMarker)) {
+			continue // not ours to delete
+		}
+		stale = append(stale, filepath.Join(dest, e.Name()))
+	}
+	return stale, nil
+}
+
+// PruneSkillTree removes the stale skill directories under <dir>/<dest> and returns
+// what it removed.
+//
+// Never a side effect of installing. Install writes files it can name in advance;
+// this deletes files the caller has not seen, chosen by a rule that lives in a
+// binary they may have just upgraded. Those are different enough acts that the
+// second one asks - so install reports what is stale and names this, and a person
+// decides. The stamp makes the deletion safe; it does not make it expected.
+func (c *Catalog) PruneSkillTree(dir, dest string) ([]string, error) {
+	stale, err := c.StaleSkillDirs(dir, dest)
+	if err != nil {
+		return nil, err
+	}
+	for _, rel := range stale {
+		if err := os.RemoveAll(filepath.Join(dir, rel)); err != nil {
+			return nil, fmt.Errorf("agent install: remove %s: %w", rel, err)
+		}
+	}
+	return stale, nil
+}
+
+// generatedSkillMarker is the substring of the footer that proves magus wrote a
+// SKILL.md. Deliberately the version-free prefix: a file this binary is about to
+// delete was written by SOME magus, usually an older one, so matching the current
+// version would make pruning fail exactly when it is needed.
+const generatedSkillMarker = "generated by: magus agent install"
 
 func (c *Catalog) agentsSectionBegin() string {
 	// "re-run to update" would be a lie now: re-running install PRINTS this block,

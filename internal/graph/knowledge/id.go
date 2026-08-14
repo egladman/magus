@@ -62,6 +62,50 @@ func authorID(name string) string { return types.KindAuthor + ":" + name }
 
 func symbolID(key string) string { return types.KindSymbol + ":" + key }
 
+// noteID mints a note's node ID, namespaced by scope.
+//
+// The two stores share a name space on disk - nothing stops a private note being called
+// the same thing as a shared one - so an unqualified ID would let them collide. Node
+// merging is first-writer-wins, and shared is assembled first, so the collision would not
+// error: the private note would silently vanish and its edges would be re-attributed to
+// the team's note of the same name. The CLI already refuses that ambiguity for a reader;
+// assembly must not resolve it the other way in silence.
+func noteID(scope, name string) string {
+	if scope == ScopePrivate {
+		return types.KindNote + ":" + ScopePrivate + "/" + name
+	}
+	return types.KindNote + ":" + name
+}
+
+// AnchorNodeID renders one note anchor as the node ID the graph mints for it, or "" for a
+// kind with no node form. scope is the scope of the ANCHORING note, because a note-to-note
+// anchor names a note in the SAME store: a private note referring to "auth" means its own,
+// not the team's.
+//
+// One home for a mapping with three callers across two process phases - assembly (which
+// turns an anchor into an edge), resolution (which asks whether an anchor still names
+// something live), and the console handler. Two hand-kept copies existed and had already
+// diverged on exactly the case a reader is least likely to notice: the resolver's copy took
+// no scope, so it looked up a private note's note-anchor in the SHARED namespace, reported
+// it dangling, and told the author to re-anchor a note that was never broken - while
+// assembly had minted the edge correctly all along.
+func AnchorNodeID(kind, target, scope string) string {
+	switch kind {
+	case "symbol":
+		return symbolID(target)
+	case "file":
+		return fileID(target)
+	case "project":
+		return projectID(target)
+	case "target":
+		return target // already a fully-formed target id
+	case "note":
+		return noteID(scope, target)
+	default:
+		return ""
+	}
+}
+
 // sanitize normalizes free-form repo text (labels, docs, provenance) before it
 // enters the graph: strip
 // control characters (which would corrupt MAGUS.md, MCP responses, and agent
@@ -180,6 +224,23 @@ var runtimeAttrs = []string{
 // and silently un-strip a key. Mirrors IsRuntimeShard.
 func IsRuntimeAttr(key string) bool { return slices.Contains(runtimeAttrs, key) }
 
+// historyAttrs enumerates every attr whose value is a function of the COMMIT GRAPH rather
+// than of the tree: the per-file git metadata, the directory churn roll-up, and the prose
+// staleness derived from both. Kept honest by TestHistoryAttrsCoverWhatGitDerives.
+var historyAttrs = []string{
+	attrVCSLastCommit, attrVCSLastModified, attrVCSLastAuthor, attrVCSCommits,
+	AttrDirCommits, AttrStaleness, AttrOutrunDays,
+}
+
+// IsHistoryAttr reports whether an attr key is derived from git history, so a reproducible
+// export can drop it.
+//
+// Distinct from IsRuntimeAttr because the failure is different. An observed attr varies by
+// MACHINE; these vary by COMMIT, which is worse for a checked-in artifact: committing
+// anything moves the churn, so the file invalidates itself and the drift gate fires on the
+// very commit that regenerated it.
+func IsHistoryAttr(key string) bool { return slices.Contains(historyAttrs, key) }
+
 // Directory aggregate keys. These roll up from a directory's files (transitively) so a
 // dir node reads as a subsystem summary - the granularity agent memory anchors to and
 // dir-level coupling/churn queries read against. All are deterministic and OS-agnostic
@@ -219,6 +280,15 @@ const (
 // "some test references this symbol"; absence means none do (a coverage-independent
 // signal, since a symbol can be exercised transitively without a direct test reference).
 const AttrTestRefs = "test_refs"
+
+// AttrDefEndLine is the 1-based last line of a symbol's definition body, pairing with the
+// node's Source ("<path>:<line>") to bound the exact lines the symbol occupies.
+//
+// Source alone points a reader at a definition; the pair lets a consumer FINGERPRINT one,
+// which is what separates "this symbol still exists" from "this symbol still exists and
+// still says what a note about it claims". Omitted when the indexer emits no enclosing
+// range, which is the honest answer rather than a guessed extent.
+const AttrDefEndLine = "def_end_line"
 
 // AttrLanguage and AttrSymbolKind are the attrs a symbol (and, for language, a file) node
 // carries from its index. Named because they are read from four places across two files

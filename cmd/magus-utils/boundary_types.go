@@ -78,7 +78,7 @@ var boundaryTypes = []boundaryType{
 	{Name: "DoctorCheck", Type: reflect.TypeFor[types.DoctorCheck](), RuntimeObject: true},
 	{Name: "DoctorSummary", Type: reflect.TypeFor[types.DoctorSummary](), RuntimeObject: true},
 	{Name: "DoctorReport", Type: reflect.TypeFor[types.DoctorReport](), RuntimeObject: true},
-	// magus.insightReport's bundle, leaf-first. Element names are not uniform on purpose:
+	// magus.insight's bundle, leaf-first. Element names are not uniform on purpose:
 	// *Entry only where the bare noun collides with the bundle's own name. These are
 	// public Buzz names magusfiles annotate with, so do not tidy them.
 	{Name: "Node", Type: reflect.TypeFor[types.Node](), RuntimeObject: true},

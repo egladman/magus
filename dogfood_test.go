@@ -1,4 +1,4 @@
-package magus_test
+package magus
 
 // Dogfooding checks: assertions that this repository actually uses what it publishes.
 //

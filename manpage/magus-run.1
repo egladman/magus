@@ -20,14 +20,38 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 \fB\-\-depth\fR \fIint\fR
 With \-\-graph: cap displayed depth (0 = unlimited)
 .TP
-\fB\-\-dry\-run\fR
-Print what would run without executing
+\fB\-\-detach\fR
+Hand the run to the daemon and return immediately; follow it with magus status \-\-watch
 .TP
 \fB\-\-graph\fR
 Render the dependency graph for the selected scope instead of executing
 .TP
+\fB\-\-n\-shards\fR \fIint\fR
+Total shard count for this CI matrix run; paired with \-\-shard
+.TP
 \fB\-\-no\-cache\fR
 Force a fresh run even on a cache hit; still refreshes the entry
+.TP
+\fB\-\-no\-default\-charms\fR
+Ignore magus.yaml default_charms for this run
+.TP
+\fB\-\-no\-volatility\-retry\fR
+Disable volatility auto\-retry for this run
+.TP
+\fB\-\-open\fR
+Open this run in the browser log viewer and stream to it as it goes (loopback; never leaves your machine)
+.TP
+\fB\-\-race\fR \fIstring\fR
+Run the same target repeatedly to surface order\-dependent failures
+.TP
+\fB\-\-shard\fR \fIint\fR
+This run's shard index within a CI matrix; paired with \-\-n\-shards
+.TP
+\fB\-\-step\fR
+Pause before each subprocess for interactive stepping (needs a TTY; implies \-\-concurrency=1)
+.TP
+\fB\-\-timeout\fR \fIduration\fR
+Abort if the run has not finished within this duration (e.g. 5m, 1h30m)
 .TP
 \fB\-\-upstream\fR
 With \-\-graph: show dependents instead of dependencies
@@ -127,7 +151,6 @@ magus run build -o jsonl --tee build.jsonl
 \fBmagus\-x\fR(1),
 \fBmagus\-where\fR(1),
 \fBmagus\-affected\fR(1),
-\fBmagus\-insight\fR(1),
 \fBmagus\-graph\fR(1),
 \fBmagus\-query\fR(1),
 \fBmagus\-explain\fR(1),
@@ -140,6 +163,7 @@ magus run build -o jsonl --tee build.jsonl
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
 \fBmagus\-memory\fR(1),
+\fBmagus\-notes\fR(1),
 \fBmagus\-server\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),

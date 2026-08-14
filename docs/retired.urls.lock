@@ -18,6 +18,12 @@ development/projects/website/
 development/gopherbuzz/
 development/projects/gopherbuzz/
 
+# libs/testsprawl became libs/testlayout when the linter grew a second rule and its
+# name stopped describing what it checks. A project page is generated per project, so
+# the rename retires the old URL the same way the ones above did.
+development/libs-testsprawl/
+development/projects/libs-testsprawl/
+
 # retired when libs/diag was renamed libs/diagnostics. Retired rather than
 # redirected, matching the development/gopherbuzz precedent above: a project page
 # under /development/ is derived from the project's directory name, so the old
@@ -196,7 +202,7 @@ reference/manpage/magus-tail/
 
 # Renamed to testsprawl before its first tag. "Orphan" means "no owner" everywhere else
 # here (locks, graph nodes, blobs) and this rule reports the opposite: a test file that
-# HAS an owner and narrows its name. Now at development/libs-testsprawl/. Not aliased -
+# HAS an owner and narrows its name. Now at development/libs-testlayout/. Not aliased -
 # the module was never published and the page was a day old.
 development/libs-orphanator/
 
@@ -211,3 +217,15 @@ reference/buzz/encoding/
 # declaring page when the platform notes were folded into setup.
 tags/macos/
 tags/windows/
+tags/analysis/
+tags/hotspots/
+tags/symbols/
+tags/volatility/
+
+# Each skill page tags itself with its own name, so renaming a skill retires its
+# tag page. Not aliased, unlike the skill pages themselves: a tag page is an
+# index the site generates from the tags in use, with no source file to carry a
+# redirect, and the successor index is one URL over at the new name.
+tags/magus-buzz/
+tags/magus-memory/
+tags/magus-vcs/

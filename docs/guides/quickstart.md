@@ -131,23 +131,21 @@ you install outside the working tree:
 magus agent install --tar | tar -xf - -C ~/.config/opencode/skills
 ```
 
-### `--simple`: the short permutation
+### Two permutations, both installed
 
-Every skill ships in two hand-authored permutations from one source body:
+Every skill ships in two hand-authored permutations from one source body, and
+install writes both. There is no flag to pick between them.
 
-```sh
-magus agent install .claude/skills --simple
-```
+The primary entry is the SHORT form: the enumeration dropped, the judgment kept,
+for the most capable readers - the ones that can re-derive the steps from the
+tool surface but not which failures are silent. It is the one always loaded, so
+it is the one whose size every session pays for.
 
-The default spells out every mechanical step and the rationale for each.
-`--simple` drops the enumeration and keeps the judgment, for the MOST capable
-readers - the ones that can re-derive the steps from the tool surface but not
-which failures are silent. Prefer the full form for any model you have not
-measured, and when onboarding a human to the same conventions.
-
-`--simple` also writes an always-full `<skill>-full` twin beside each skill.
-When you delegate to a smaller model, hand it that name: it gets what a default
-install would have given it, without the top-level choice deciding for it.
+Beside it goes an always-full `<skill>-full` twin, loaded only when asked for by
+name. Reach for that name when you hand work to a smaller model, or when you
+want the rationale behind a step yourself. The short form bets its reader can
+re-derive what it drops; the twin is there for every reader who did not make
+that bet.
 
 Both permutations share ONE content digest, so they version together: a magus
 upgrade makes both stale at once, never one silently. Check with:

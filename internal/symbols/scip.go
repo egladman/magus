@@ -250,6 +250,14 @@ func ParseIndex(ctx context.Context, data []byte, projectPath, declaredLanguage 
 				// slices) wins the Source; later defs still add their defines edge.
 				if a.sym.Source == "" {
 					a.sym.Source = docPath + ":" + strconv.Itoa(line)
+					// The body's extent, from the same occurrence, so the pair bounds the
+					// definition. EnclosingSourceRange (not the EnclosingRange field) for
+					// the reason given at sortedEnclosing: scip-go emits only the
+					// deprecated packed form. Absent for indexers that emit no enclosing
+					// range, and 0 is how that says so.
+					if r, ok := occ.EnclosingSourceRange(); ok && r.End.Line >= 0 {
+						a.sym.DefEndLine = int(r.End.Line) + 1
+					}
 				}
 			} else {
 				r := a.refs[docPath]

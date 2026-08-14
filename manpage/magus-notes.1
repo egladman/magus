@@ -1,0 +1,98 @@
+.TH MAGUS-NOTES 1 "" "magus" "magus Manual"
+.SH NAME
+magus\-notes \- Human\-authored notes committed to the repository
+.SH SYNOPSIS
+.B magus
+.RI "notes <ls|get|edit|verify> [flags]"
+.SH DESCRIPTION
+Read the workspace's human\-authored notes.
+.PP
+A note carries knowledge whose only provenance is a person: something no
+extractor could derive from the tree, and that no rebuild would recover. That
+is what separates it from the two things it is NOT. Documentation describes the
+system for a reader and lives in the docs tree. A NOTE/WHY/TODO comment marks
+one location in one file. A note attaches to graph ENTITIES \- a symbol, a file,
+a project, a target, another note \- and may span several at once, which is how
+it can record something like "these two caches must be invalidated together"
+that no single comment could hold.
+.PP
+Anchors are required, and they name node IDs rather than positions. A symbol
+anchor survives the code moving file and line and breaks only on a rename or a
+deletion, which is exactly when the note should be re\-read; a line number would
+break on the next edit above it with nothing to detect.
+.PP
+There is no put. Notes are written by a person in their own editor and
+committed under their own name, which is what makes git attribution meaningful
+and what keeps the store worth trusting. Set knowledge.notes.path in magus.yaml
+to declare where they live; with nothing declared the feature is inert.
+.SH SUBCOMMANDS
+.RS
+.TP
+\fBls\fR
+Show notes and any repair warnings
+.TP
+\fBget\fR
+Show one note
+.TP
+\fBedit\fR
+Open one note in $VISUAL or $EDITOR
+.TP
+\fBverify\fR
+Check malformed notes and anchors that no longer resolve
+.RE
+.SH EXAMPLES
+\fIList every note\fR
+.PP
+.EX
+magus notes ls
+.EE
+.PP
+\fIRead one note\fR
+.PP
+.EX
+magus notes get cache-invalidation-pairing
+.EE
+.PP
+\fIWrite or revise one\fR
+.PP
+.EX
+magus notes edit cache-invalidation-pairing
+.EE
+.PP
+\fICheck every anchor still resolves\fR
+.PP
+.EX
+magus notes verify
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-graph\fR(1),
+\fBmagus\-query\fR(1),
+\fBmagus\-explain\fR(1),
+\fBmagus\-path\fR(1),
+\fBmagus\-refs\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-clean\fR(1),
+\fBmagus\-vcs\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-memory\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-buzz\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-man\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-agent\fR(1),
+\fBmagus\-hook\fR(1),
+\fBmagus\-notify\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

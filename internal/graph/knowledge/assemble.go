@@ -66,6 +66,20 @@ type Inputs struct {
 	// VCSAuthorship includes the author nodes + authored edges in the @vcs shard
 	// (knowledge.vcs.authorship, default on). False keeps only the per-file vcs_* attrs.
 	VCSAuthorship bool
+	// NotesPath is the workspace-relative directory holding human-authored notes
+	// (knowledge.notes.path), empty when the workspace declares none. It is not a source
+	// of nodes here - it EXCLUDES one: the docs walk indexes every .md in the tree, so
+	// without this a notes store becomes kind:doc nodes and stops being distinguishable
+	// from documentation.
+	NotesPath string
+	// Notes carries the workspace's human-authored notes with their anchors already
+	// resolved to node IDs (empty unless knowledge.notes.path is declared). Committed to
+	// the repo, so deterministic and remote-shareable - the opposite of @memory.
+	Notes []types.KnowledgeNote
+	// PrivateNotes are the reader's own notes (knowledge.notes.personal), which may live
+	// outside any repository. Same shape and same anchors as Notes; different trust, and a
+	// shard that is never remote-exported.
+	PrivateNotes []types.KnowledgeNote
 	// Coverage carries per-file statement coverage parsed from the local Go coverage
 	// profile (empty unless a profile is present). Like Runtime/Timings it is observed,
 	// not extracted, so it lands in the isolated @coverage shard - folding a coverage
@@ -113,7 +127,7 @@ func AssembleShards(in Inputs) []Shard {
 	// built one. See the split at the @dirs pass below, which is where it used to leak.
 	symbolPaths := map[string]bool{}
 	if in.Root != "" {
-		if d := assembleDocs(in.Root, in.Spells, in.Graph.Projects); len(d.Nodes) > 0 {
+		if d := assembleDocs(in.Root, in.Spells, in.Graph.Projects, in.NotesPath); len(d.Nodes) > 0 {
 			for _, n := range d.Nodes {
 				pathToNode[n.Source] = n.ID
 			}
@@ -147,6 +161,18 @@ func AssembleShards(in Inputs) []Shard {
 		// (VCS metadata for a file the graph does not model) is dropped, no phantom.
 		if v := assembleVCS(in.VCS, fileNodePaths, in.VCSAuthorship); len(v.Nodes) > 0 {
 			shards = append(shards, v)
+		}
+		// Notes last among the path-bearing shards: their file nodes are already present,
+		// so @vcs can attribute them, and their anchors point at nodes the earlier passes
+		// minted.
+		known := knownNodeIDs(shards, in.Graph)
+		if n := assembleNotes(in.Notes, known, SharedNotesShardName, ScopeShared); len(n.Nodes) > 0 {
+			shards = append(shards, n)
+		}
+		// Personal notes anchor into the same workspace entities but land in their own,
+		// never-exported shard - see PrivateNotesShardName.
+		if n := assembleNotes(in.PrivateNotes, known, PrivateNotesShardName, ScopePrivate); len(n.Nodes) > 0 {
+			shards = append(shards, n)
 		}
 	}
 	// The runtime shard carries both non-deterministic inputs: emits edges from
@@ -241,6 +267,11 @@ func AssembleShards(in Inputs) []Shard {
 			}
 		}
 	}
+	// Prose staleness runs LAST, over the finished shard set: it needs a doc or note from
+	// one shard, its subject from another, and the git dates from the VCS input. No-op
+	// when VCS history is unavailable, which is the default.
+	annotateProseStaleness(shards, vcsByPath(in.VCS))
+
 	return shards
 }
 

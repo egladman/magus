@@ -1,4 +1,4 @@
-package magus_test
+package magus
 
 // A source-level check over the Buzz this repository ships, in the spirit of
 // cmd/magus's TestEveryCommandBindsDisplayFlags: a text scan, because the thing

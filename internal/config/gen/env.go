@@ -247,6 +247,12 @@ func ApplyEnv(cfg *config.Config, getenv func(string) string) {
 			cfg.Knowledge.SymbolIndexing.MinIntervalSeconds = n
 		}
 	}
+	if v := getenv("MAGUS_KNOWLEDGE_NOTES_SHARED"); v != "" {
+		cfg.Knowledge.Notes.Shared = v
+	}
+	if v := getenv("MAGUS_KNOWLEDGE_NOTES_PRIVATE"); v != "" {
+		cfg.Knowledge.Notes.Private = v
+	}
 	if v := getenv("MAGUS_SECRET_INTERACTIVE_TIMEOUT"); v != "" {
 		if d, err := time.ParseDuration(v); err == nil {
 			cfg.Secret.Interactive = d

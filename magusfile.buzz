@@ -886,6 +886,11 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(types_generate);
     ctx.writesFiles("**/gen/mocks/*.go");
     proc\exec("go", ["tool", "mockery"]);
+    // mockery's testify template emits no `var _ Iface = (*Mock)(nil)`, so a mock that
+    // went stale still compiles and fails only at a use site - which, for mocks published
+    // to downstream consumers, is somebody else's build. This writes those assertions
+    // into each mocks package from the same .mockery.yaml that listed the interfaces.
+    proc\exec("go", ["run", "./cmd/magus-utils", "mockassert"]);
 }
 
 // Reinstalls the agent skills from their embedded sources in cmd/magus/skills.
@@ -947,7 +952,7 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
     fs\mkdirAll("gen");
     // The knowledge graph (nodes/links). No dedicated binding for `graph export`, so
     // magus.cmd is the documented escape hatch.
-    final knowledge = magus\cmd("graph", args: ["export", "--static", "-o", "json"], opts: {"quiet": true}).stdout;
+    final knowledge = magus\cmd("graph", args: ["export", "--reproducible", "-o", "json"], opts: {"quiet": true}).stdout;
     fs\writeFile(fs\join("gen", "knowledge-graph.json"), knowledge);
     // The target graph ({definition, projects}), the same bytes as
     // `magus describe graph -o json`, which is what the explorer's target adapter reads.
@@ -961,7 +966,15 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
 // under the `gha` charm; that branch was unreachable (nothing set
 // MAGUS_INSIGHT_OUTPUT_PATH or ran this target in CI) and was removed.
 export fun postflight(ctx: magus\Context, args: [str]) > void !> any {
-    magus\log.info(magus\insight(["report", "--workspace"]).stdout);
+    // A summary built from the typed report rather than the Markdown `magus insight report
+    // --workspace` used to render. This target only ever logged that document locally, so
+    // the counts are what a reader was actually skimming for; the full rendering lives in
+    // the console and the MCP tool, which read the same values.
+    final r = magus\insight([]);
+    magus\log.info("hotspots: {r.hotspots.files.len()} file(s) ranked by churn against complexity");
+    magus\log.info("ownership: {r.ownership.projects.len()} project(s) attributed");
+    magus\log.info("affinity: {r.affinity.pairs.len()} coupled project pair(s)");
+    magus\log.info("volatility: {r.volatility.targets.len()} target(s) with recorded run history");
 }
 
 // Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd).
@@ -1538,7 +1551,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         if (deliver) { vcs\cmd(["tag", m["prefix"] + "v" + v]); }
         // Only a Go module is required by the root's go.mod; a library in another
         // language is tag-only, so there is nothing to repoint.
-        // "Go module" used to imply "the root's go.mod requires it". libs/testsprawl
+        // "Go module" used to imply "the root's go.mod requires it". libs/testlayout
         // breaks that: `golangci-lint custom` compiles it into a binary and magus
         // never imports it, so there is no require line to repoint. Ask go.mod
         // directly instead of inferring from the manifest. rewriteRequire still
@@ -1662,7 +1675,7 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // aim them at. Every .buzz here imports "magus"/"magus/spell" and uses embedding-only
 // constructs, so a non-embedded parse rejects all 62 of them; that is by design, not
 // drift. What they were meant to protect is already covered: spells/examples/**
-// by TestExamplesParseAndRecord (ParseEmbedded), every spell source by buzz-test's glob
+// by TestSpellExamplesParseAndRecord in internal/dry (ParseEmbedded), every spell source by buzz-test's glob
 // below, and every magusfile by doctor's magusfile-syntax check. Reviving them means first
 // having standalone Buzz and pinning `buzz` in mise.toml, which is not the case today.
 //
@@ -1742,7 +1755,7 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     // that failure on the next spell someone adds, so match every source instead and let a
     // new spell be covered by existing.
     //
-    // spells/examples/** is excluded because TestExamplesParseAndRecord already parses all
+    // spells/examples/** is excluded because internal/dry's TestSpellExamplesParseAndRecord parses all
     // 48 of them, and they are illustrative sources that do not have to resolve host modules.
     foreach (spell in fs\glob("spells/**/*.buzz")) {
         if (spell.value.startsWith("spells/examples/")) { continue; }
@@ -1780,7 +1793,7 @@ export fun build(ctx: magus\Context, args: [str])  > void {
 // golangci-lint compiles plugins in rather than loading them at runtime, so an
 // in-repo rule only runs through a binary built here.
 //
-// The build runs in libs/testsprawl because `golangci-lint custom` reads
+// The build runs in libs/testlayout because `golangci-lint custom` reads
 // .custom-gcl.yml from its working directory and takes no config flag. That file
 // lives with the linter it declares; `destination: ../..` puts the binary back at
 // the root, where .golangci.yml and lint expect it.
@@ -1790,9 +1803,9 @@ export fun build(ctx: magus\Context, args: [str])  > void {
 // declaring it would name an untrackable path. Same consequence too - a read-only
 // run leaves no binary, so a fresh worktree needs this again.
 export fun lint_build(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("libs/testsprawl/.custom-gcl.yml", "libs/testsprawl/go.mod",
-                   "libs/testsprawl/go.sum", "libs/testsprawl/**/*.go");
-    proc\exec("golangci-lint", ["custom"], "libs/testsprawl");
+    ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/go.mod",
+                   "libs/testlayout/go.sum", "libs/testlayout/**/*.go");
+    proc\exec("golangci-lint", ["custom"], "libs/testlayout");
 }
 
 // Formats and builds the linter first, then golangci-lint, go vet, markdownlint, and
@@ -1819,10 +1832,10 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // NOT go["golangci-lint"], which runs the stock binary off PATH and cannot see
     // an in-repo linter. That op existed to get the linter version into the cache
     // key; readsFiles does it by content instead. Its .custom-gcl.yml pins the
-    // golangci-lint release and the testsprawl globs cover the rule, while
+    // golangci-lint release and the testlayout globs cover the rule, while
     // `--version` on a custom binary carries a build timestamp that moves every
     // rebuild.
-    ctx.readsFiles("libs/testsprawl/.custom-gcl.yml", "libs/testsprawl/**/*.go");
+    ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/**/*.go");
     proc\exec("./custom-gcl", ["run"]);
     go["go-vet"](ctx);
     // Compile the browser playground for wasm. COMPILE only, to /dev/null: TinyGo

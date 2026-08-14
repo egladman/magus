@@ -42,10 +42,10 @@ magus refs <symbol>         # where an ingested code symbol is defined and refer
 magus graph stats           # god nodes, orphans, doc coverage
 magus graph export -o json  # the whole graph as node-link JSON
 magus graph diff base.json  # what this branch changed vs an exported baseline
-magus graph open            # explore it visually in your browser (data stays local)
+magus graph export --open            # explore it visually in your browser (data stays local)
 ```
 
-Prefer a picture? `magus graph open` launches the interactive [Graph
+Prefer a picture? `magus graph export --open` launches the interactive [Graph
 Explorer](../console/) seeded with your own workspace - a force-directed, searchable
 view of the same graph. Your data never leaves your machine: it rides in the URL
 fragment (or a local loopback server with `--serve`), never reaching the site. This
@@ -214,7 +214,7 @@ doc`), so from a project you reach its README and design notes as contextual doc
 
 ## Graph Explorer
 
-`magus graph open` opens the graph in an interactive, force-directed
+`magus graph export --open` opens the graph in an interactive, force-directed
 [Graph Explorer](../console/) in your browser - **privately**. Your graph never
 leaves your machine: by default it rides in the link's URL `#fragment` (which
 browsers never send to a server), and `--serve` instead hands it to the page from
@@ -222,10 +222,10 @@ an ephemeral `127.0.0.1` loopback server that serves once and stops. The hosted
 page is static; it decodes or fetches the graph locally.
 
 ```sh
-magus graph open           # default: gzip'd into the URL fragment (small/medium graphs)
-magus graph open --serve   # loopback server (no size limit; serves once, then stops)
-magus graph open --print   # print the URL instead of opening a browser
-magus graph open --url <base>   # point at a self-hosted mirror of the explorer
+magus graph export --open           # default: gzip'd into the URL fragment (small/medium graphs)
+magus graph export --open --serve   # loopback server (no size limit; serves once, then stops)
+magus graph export --open --print   # print the URL instead of opening a browser
+magus graph export --open --url <base>   # point at a self-hosted mirror of the explorer
 ```
 
 ### Open your target graph
@@ -234,10 +234,10 @@ To open the **target dependency graph** (the `magus\needs` DAG, not the
 knowledge graph) in the same explorer:
 
 ```sh
-magus graph open --targets                # whole workspace
-magus graph open --targets .              # scope to root project
-magus graph open --targets docs        # scope to one project by path
-magus graph open --targets --print        # print the URL instead of opening
+magus graph export --open --targets                # whole workspace
+magus graph export --open --targets .              # scope to root project
+magus graph export --open --targets docs        # scope to one project by path
+magus graph export --open --targets --print        # print the URL instead of opening
 ```
 
 The `--targets` path always uses the URL fragment (no loopback server); it is
@@ -414,7 +414,7 @@ same declaration that made the project symbol-capable. A document that names its
 language still wins, since one index may legitimately span several.
 
 Symbol shards can dwarf the domain graph, so they are **lazily loaded**: the default
-`magus query`/`magus graph stats`/`magus graph open`/warm graph never touch them. They load only when a query is
+`magus query`/`magus graph stats`/`magus graph export --open`/warm graph never touch them. They load only when a query is
 symbol-seeded - `kind:symbol`, a `symbol:` ID,
 `relation:defines`/`references`/`calls`, or the `refs` verb. `magus refs <symbol>` lists a symbol's definition and every
 referencing file (`magus_refs` over MCP, paginated). At very large scale a derived
@@ -502,6 +502,117 @@ re-runs only when one of those actually moves - never on the query path. A non-g
 workspace or a git error simply yields no shard. Because the `vcs_*` attrs vary by commit,
 `magus graph diff` strips them from both sides, so a file node is not reported as changed just
 because its last commit moved - the diff stays structural.
+
+## Human-authored notes
+
+Everything else in the graph is DERIVED from the workspace: a doc from markdown, a
+rationale from a comment, a symbol from an index, an author from git history. Delete the
+graph, rebuild it, and all of that comes back.
+
+A note is the exception. Its content originates with a person, nothing in the repository
+corroborates it, and no rebuild recovers it. That single property is why the store looks
+the way it does.
+
+### Where a note goes, and what that means
+
+There are two independent questions - who wrote it, and who can read it - and together
+they make a grid magus fills in three of four ways:
+
+|                       | the team sees it        | only you see it |
+| --------------------- | ----------------------- | --------------- |
+| **a person wrote it** | `knowledge.notes.shared`| `knowledge.notes.private` |
+| **an agent wrote it** | *nothing, deliberately* | `magus memory`  |
+
+The empty cell is the design rather than a gap. An agent's derived claims are never pushed
+at the team, which is the same rule the guard enforces by refusing agent writes to either
+notes location - on the file surface AND on the command surface, so it holds however the
+write is spelled.
+
+```yaml
+knowledge:
+  notes:
+    shared: notes        # a directory IN the repo: committed, so git records who wrote each note
+    private: ~/vault     # a directory anywhere: only this machine has it, and nothing attributes it
+```
+
+One sentence each, and the whole surface follows from them:
+
+- **`notes.shared`** - a person wrote it, the team has it, git says who. Must live inside
+  the checkout; outside it there is no commit to attribute a note to and no review to have
+  seen it, so "shared" would be a claim the location cannot back.
+- **`notes.private`** - a person wrote it, only this machine has it, nothing attributes it.
+  May live anywhere, including outside any repository. Its shard is **never** exported to
+  the remote cache, which is what makes an out-of-repo location safe to support at all.
+- **`magus memory`** - an agent wrote it, only this machine has it, and every entry cites a
+  ref a later reader can re-run.
+
+Every note node carries a `scope` attr (`shared` or `private`), so a reader can always tell
+which of the two they are looking at without knowing which shard it came from.
+
+### What a note looks like, and living in a vault
+
+Everything magus stores sits under one `magus:` frontmatter key. Nothing outside it belongs
+to magus, and nothing inside it belongs to anyone else:
+
+```yaml
+---
+tags: [architecture, cache]   # yours (or Obsidian's); magus never reads or rewrites these
+aliases: [pairing]            # yours
+magus:                        # magus's, all of it
+  id: cache-pairing           # optional, stable identity - survives moving or renaming the file
+  title: The two caches invalidate together
+  anchors:
+    - kind: symbol            # survives the code moving file and line; breaks on rename or delete
+      target: "m internal/cache/Store#Put()."
+    - kind: file              # a path, when no single symbol covers it
+      target: internal/cache/cache.go
+---
+
+Nothing in the code says these must be cleared together.
+```
+
+**That key is also the opt-in.** A file with no `magus:` block is not a magus note, no
+matter what else is in it. This is what makes pointing `notes.private` at an Obsidian vault
+work: a vault of a few thousand files contributes only the handful you actually anchored,
+and the rest are read past in silence rather than reported as malformed notes.
+
+Three consequences worth knowing:
+
+- **magus never rewrites your other frontmatter.** When it records an anchor fingerprint it
+  replaces the `magus:` block and leaves every other key, and their order, exactly as they
+  were.
+- **`id` is what survives a reorganization.** Without it a note is identified by its path,
+  so renaming the file in Obsidian - which rewrites your `[[wikilinks]]` and knows nothing
+  about magus - changes the note's identity and dangles anchors pointing at it. magus
+  stamps an `id` on every note it creates; add one by hand to a vault note you intend to
+  keep. Notes are looked up by id first, then by path.
+- **Nested folders are walked**, dot-directories (`.obsidian`, `.trash`) are skipped, and a
+  scan stops at 5,000 markdown files and says so rather than silently loading half a vault.
+
+`symbol`, `file`, `project`, `target`, and `note` are the whole set. There is deliberately
+no line-anchored kind: a node ID is checkable, so its breakage is reportable, while a line
+number changes on the next edit above it with nothing to detect. Anchor as narrowly as the
+knowledge allows - a coarse anchor is more durable, and multiple anchors are how a note
+records something no single comment could hold ("these two caches must be invalidated
+together").
+
+### Staying honest
+
+`magus notes verify` answers two questions per anchor:
+
+- **Does it still resolve?** A renamed or deleted subject reports `dangling-anchor`, with
+  the coarser anchor it degrades to. Nothing is ever re-pointed at a guess.
+- **Did the content change?** A stored fingerprint of the anchored definition detects the
+  more common and more dangerous case - the code still exists and quietly stopped saying
+  what the note claims. The fingerprint ignores whitespace, so reformatting is free, and
+  reacts to tokens, so a real edit is loud.
+
+Recording that fingerprint is a deliberate human act: `magus notes edit` stamps it, because
+the person just had the note and its subject in front of them. Verify only ever reports.
+
+Retrieval uses the same idea one level up. Prose whose subject has moved on without it
+ranks below prose that kept up, and the match carries `outrun_days` so the weight is
+visible rather than silent.
 
 ## Exporting to external tools
 

@@ -1,6 +1,6 @@
 //go:build !buzz_safe && !buzz_unsafe
 
-package buzz_test
+package buzz
 
 import (
 	"context"
@@ -8,7 +8,6 @@ import (
 	"sort"
 	"testing"
 
-	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 )
 
@@ -18,7 +17,7 @@ import (
 func TestHeapProfileAcrossManyPrograms(t *testing.T) {
 	before := vm.ReadHeapStats().Objects
 	for i := range 200 {
-		s := buzz.NewSession(context.Background())
+		s := NewSession(context.Background())
 		src := fmt.Sprintf(`
 fun work() > str {
     var parts = mut [<str>];

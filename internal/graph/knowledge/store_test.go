@@ -49,44 +49,6 @@ func readManifest(t *testing.T, cacheDir string) manifest {
 	return m
 }
 
-// TestInputFingerprintRetainsSkippedShard: a shard produced from an expensive input carries
-// an input fingerprint. When the caller SKIPS producing it (absent from the build) but the
-// input is unchanged, Sync reuses it from disk instead of pruning it - the mechanism that
-// lets the git scan be skipped without a bespoke cache file. A changed input drops it.
-func TestInputFingerprintRetainsSkippedShard(t *testing.T) {
-	cacheDir := filepath.Join(t.TempDir(), ".magus")
-	store := NewStore(cacheDir, false, 0, nil, nil)
-	ctx := context.Background()
-
-	vcs := Shard{Name: "@vcs", Nodes: []types.KnowledgeNode{
-		{ID: "file:a.go", Kind: types.KindFile, Source: "a.go", Attrs: map[string]string{"vcs_last_author": "Ada"}},
-	}}
-	fp := fingerprintShardContent(vcs)
-
-	// Build 1: produce @vcs, keyed by input fingerprint "head1".
-	g1, err := store.Sync(ctx, []Shard{vcs}, map[string]string{"@vcs": fp}, map[string]string{"@vcs": "head1"}, false)
-	require.NoError(t, err)
-	n, ok := g1.node("file:a.go")
-	require.True(t, ok)
-	assert.Equal(t, "Ada", n.Attrs["vcs_last_author"])
-	assert.Equal(t, "head1", readManifest(t, cacheDir).Shards["@vcs"].InputFingerprint)
-
-	// Build 2: @vcs SKIPPED (absent from the build), input unchanged -> reused from disk.
-	g2, err := store.Sync(ctx, nil, nil, map[string]string{"@vcs": "head1"}, false)
-	require.NoError(t, err)
-	n2, ok := g2.node("file:a.go")
-	require.True(t, ok, "the skipped-but-fresh @vcs shard is reused from disk")
-	assert.Equal(t, "Ada", n2.Attrs["vcs_last_author"])
-	assert.FileExists(t, store.shardPath("@vcs"))
-
-	// Build 3: @vcs SKIPPED, but the input CHANGED -> not reused (the caller was expected
-	// to rebuild it, so a stale shard is dropped rather than served).
-	g3, err := store.Sync(ctx, nil, nil, map[string]string{"@vcs": "head2"}, false)
-	require.NoError(t, err)
-	_, ok = g3.node("file:a.go")
-	assert.False(t, ok, "a changed input drops the stale shard")
-}
-
 func TestBuildPersistsAndReloads(t *testing.T) {
 	cacheDir, in := buildFixture(t)
 	g1 := build(t, cacheDir, BuildOptions{}, in)
@@ -422,7 +384,7 @@ func TestLoadMergesShardsInStableOrder(t *testing.T) {
 		shards = append(shards, sh)
 		fps[name] = fingerprintShardContent(sh)
 	}
-	_, err := store.Sync(ctx, shards, fps, nil, false)
+	_, err := store.Sync(ctx, shards, fps, false)
 	require.NoError(t, err)
 
 	// Load repeatedly from the SAME on-disk store; every read must agree.
@@ -447,54 +409,6 @@ func TestLoadMergesShardsInStableOrder(t *testing.T) {
 	// shard by name wins, which is what makes the result predictable to a reader
 	// rather than an artifact of whatever the map happened to yield.
 	assert.Equal(t, "shard-00.go", want, "the lowest-named shard should win a first-writer-wins merge")
-}
-
-// The same hazard on the Sync path, which is the one a cold CI runner takes. Sync
-// merges freshly-built shards from a SLICE (always ordered), but it also RETAINS
-// input-fingerprinted shards the caller skipped, reading them back from disk - and
-// that second loop ranged the manifest map. A shard reused from disk is the normal
-// case for anything expensive to rebuild, so this path is not exotic.
-func TestSyncMergesRetainedShardsInStableOrder(t *testing.T) {
-	cacheDir := filepath.Join(t.TempDir(), ".magus")
-	ctx := context.Background()
-
-	const shardCount = 12
-	all := make([]Shard, 0, shardCount)
-	fps := map[string]string{}
-	inputFPs := map[string]string{}
-	for i := range shardCount {
-		name := fmt.Sprintf("@r%02d", i)
-		sh := Shard{Name: name, Nodes: []types.KnowledgeNode{
-			{ID: "file:shared.go", Kind: types.KindFile, Source: fmt.Sprintf("retained-%02d.go", i)},
-		}}
-		all = append(all, sh)
-		fps[name] = fingerprintShardContent(sh)
-		inputFPs[name] = "input-head" // unchanged input => reused from disk next time
-	}
-
-	// Build once so every shard is persisted with its input fingerprint.
-	_, err := NewStore(cacheDir, false, 0, nil, nil).Sync(ctx, all, fps, inputFPs, false)
-	require.NoError(t, err)
-
-	// Now Sync with NO shards supplied but the same input fingerprints: every shard is
-	// retained and re-merged from disk, which is the loop under test.
-	var want string
-	for i := range 25 {
-		g, err := NewStore(cacheDir, false, 0, nil, nil).Sync(ctx, nil, nil, inputFPs, false)
-		require.NoError(t, err)
-		n, ok := g.node("file:shared.go")
-		require.True(t, ok, "retained node missing on iteration %d", i)
-		if i == 0 {
-			want = n.Source
-			continue
-		}
-		assert.Equal(t, want, n.Source,
-			"iteration %d disagreed: retained-shard merge order is not stable", i)
-		if t.Failed() {
-			break
-		}
-	}
-	assert.Equal(t, "retained-00.go", want, "the lowest-named retained shard should win")
 }
 
 // BenchmarkStoreLoad measures a warm read of an already-built graph.
@@ -543,7 +457,7 @@ func BenchmarkStoreSync(b *testing.B) {
 		cacheDir := filepath.Join(b.TempDir(), ".magus")
 		store := NewStore(cacheDir, false, 0, nil, nil)
 		b.StartTimer()
-		if _, err := store.Sync(context.Background(), shards, nil, nil, false); err != nil {
+		if _, err := store.Sync(context.Background(), shards, nil, false); err != nil {
 			b.Fatal(err)
 		}
 	}

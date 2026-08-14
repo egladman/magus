@@ -228,7 +228,7 @@ var DoctorSummarySource string
 //go:embed gen/types/doctorreport.buzz
 var DoctorReportSource string
 
-// The magus.insightReport bundle, declared leaf-first: every lens (hotspots, affinity,
+// The magus.insight bundle, declared leaf-first: every lens (hotspots, affinity,
 // ownership, trend, volatility) plus the knowledge-graph axis, as typed values rather
 // than a Markdown report to scrape. Order matters - a struct-valued field mirrors as its
 // Buzz name and that name must already be declared.

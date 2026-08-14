@@ -23,6 +23,7 @@ Start the daemon with `magus server start`. See [the console reference](../conso
 | [JobService](job.md) | 5 | `magus.job.v1` |
 | [MemoryService](memory.md) | 5 | `magus.memory.v1` |
 | [MetricsService](metrics.md) | 2 | `magus.metrics.v1` |
+| [NotesService](notes.md) | 2 | `magus.notes.v1` |
 | [StatusService](status.md) | 2 | `magus.status.v1` |
 | [TokenService](token.md) | 2 | `magus.token.v1` |
 | [ToolService](tool.md) | 1 | `magus.tool.v1` |

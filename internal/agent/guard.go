@@ -63,7 +63,14 @@ var guardSurfaces = []string{"command", "path"}
 // still passing the old spelling degrades rather than breaks - the retry that
 // version 2 added drops attribution and keeps the verdict - so an unbumped
 // copy loses the activity trail's host label, not its guard.
-const GuardTemplateVersion = 3
+//
+// 4: two changes, neither released before this. The path surface learned to render a
+// deny arm - it handled only advise, so a deny rendered EMPTY while magus exited 2, and
+// both scripts read empty-output-plus-nonzero as a broken guard and exit 0, which every
+// host takes as allow. And the templates now resolve ./magus before PATH: an older PATH
+// binary does not fail when it lacks a rule, it reads the config key that ARMS the rule
+// as unknown and answers pass, so the guard enforces nothing at exit 0.
+const GuardTemplateVersion = 4
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

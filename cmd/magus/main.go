@@ -23,6 +23,7 @@
 //	magus doctor                        validate the workspace
 //	magus config <subcommand>           view or update magus configuration
 //	magus memory <subcommand>           manage the durable handoff journal
+//	magus notes <subcommand>            read the workspace's human-authored notes
 //	magus server <start|stop>            manage the persistent daemon (MCP starts alongside it)
 //	magus completion <shell>            print a shell completion script
 //	magus init [flags]                  bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)
@@ -672,8 +673,6 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return whereCmd(ctx, root, subArgs)
 	case "affected":
 		return affected(ctx, root, rc, subArgs)
-	case "insight":
-		return insightCmd(ctx, root, subArgs)
 	case "query":
 		return queryCmd(ctx, root, subArgs)
 	case "explain":
@@ -698,6 +697,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return configCmd(ctx, root, globalCfg, subArgs)
 	case "memory":
 		return memoryCmd(ctx, root, subArgs)
+	case "notes":
+		return notesCmd(ctx, root, subArgs)
 	case "server":
 		return serverCmd(ctx, root, subArgs)
 	case "mcp":
@@ -717,7 +718,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	case "self":
 		return selfCmd(ctx, root, subArgs)
 	case "buzz":
-		return buzzCmd(ctx, subArgs)
+		return buzzCmd(ctx, root, subArgs)
 	default:
 		fmt.Fprintf(os.Stderr, "magus: unknown subcommand %q\n", sub)
 		if suggestion := interactive.SuggestNearest(sub, knownSubcommands); suggestion != "" {

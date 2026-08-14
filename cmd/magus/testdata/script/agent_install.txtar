@@ -2,11 +2,11 @@
 exec magus agent install .claude/skills
 exists .claude/skills/magus-query/SKILL.md
 exists .claude/skills/magus-run/SKILL.md
-exists .claude/skills/magus-vcs/SKILL.md
-exists .claude/skills/magus-architecture/SKILL.md
-exists .claude/skills/magus-delegate-ultra/SKILL.md
+exists .claude/skills/magus-vcs-hygiene/SKILL.md
+exists .claude/skills/magus-architecture-review/SKILL.md
+exists .claude/skills/magus-delegate-multi-agent/SKILL.md
 grep 'name: magus-query' .claude/skills/magus-query/SKILL.md
-grep 'name: magus-delegate-ultra' .claude/skills/magus-delegate-ultra/SKILL.md
+grep 'name: magus-delegate-multi-agent' .claude/skills/magus-delegate-multi-agent/SKILL.md
 grep 'agent-skill-version: \d' .claude/skills/magus-query/SKILL.md
 
 # several destinations in one call; the destination is the caller's choice
@@ -42,6 +42,29 @@ stderr 'already exists'
 exec magus agent install .claude/skills --force
 exists .claude/skills/magus-query/SKILL.md
 
+# a skill this binary no longer ships is REPORTED, not removed: pruning is opt-in,
+# because install writes files it can name and a prune deletes ones the caller has
+# not seen. Both copies below are stamped, so both are magus's to delete - only the
+# flag decides whether it does.
+mkdir .claude/skills/magus-retired
+cp .claude/skills/magus-query/SKILL.md .claude/skills/magus-retired/SKILL.md
+env MAGUS_HINTS_ENABLED=true
+exec magus agent install .claude/skills --force
+stderr 'still in place.*Remove them with --prune'
+exists .claude/skills/magus-retired/SKILL.md
+
+# a hand-authored skill carries no stamp, so it is never a candidate either way
+mkdir .claude/skills/magus-local-development
+cp mine.md .claude/skills/magus-local-development/SKILL.md
+exec magus agent install .claude/skills --force --prune -v
+stderr 'removed skill this binary no longer ships'
+# nothing stale after a prune, so the hint stays silent - it is not a banner
+! stderr 'Remove them with --prune'
+env MAGUS_HINTS_ENABLED=false
+! exists .claude/skills/magus-retired/SKILL.md
+exists .claude/skills/magus-local-development/SKILL.md
+cmp .claude/skills/magus-local-development/SKILL.md mine.md
+
 # absolute destinations are refused unless --global is set; --tar is the supported
 # way to install skills outside the working tree
 ! exec magus agent install /tmp/abs/skills
@@ -73,6 +96,15 @@ stdout 'pass'
 git stash
 -- pass-command.txt --
 git status
+-- mine.md --
+---
+name: magus-local-development
+description: "workspace rules I wrote myself"
+---
+
+# Local rules
+
+magus never wrote this file and never deletes it.
 -- theirs.md --
 # My agents notes
 

@@ -29,7 +29,7 @@ _magus_complete() {
     cur="${COMP_WORDS[COMP_CWORD]}"
 
 # magus-utils:subcommands:begin
-    local subcommands="ls describe run x where affected query explain path refs graph insight watch status clean vcs doctor config memory server buzz completion man init agent hook notify self version help"
+    local subcommands="ls describe run x where affected query explain path refs graph watch status clean vcs doctor config memory notes server buzz completion man init agent hook notify self version help"
 # magus-utils:subcommands:end
     local nouns="spell charm target project workspace module mcp-tool"
     local lenses="hotspots affinity ownership trend unreferenced report"
@@ -42,7 +42,7 @@ _magus_complete() {
     # outputs; `value` reads what the target returned.
     local chain_verbs="outputs file value"
     local chain_actions="contents export"
-    local run_flags="--dry-run --graph --upstream --depth --timeout --shard --n-shards --no-volatility-retry --race --step --no-default-charms --live --no-cache --then"
+    local run_flags="--dry-run --graph --upstream --depth --timeout --shard --n-shards --no-volatility-retry --race --step --no-default-charms --open --no-cache --then"
     local affected_flags="--dry-run --base --stdin --null --graph --upstream --depth --explain --plan --max-shards --max-parallel-budget --bisect --good --target --timeout --step --race"
     local graph_deps_flags="--upstream --depth --spell --target"
     local graph_export_flags="--refresh"

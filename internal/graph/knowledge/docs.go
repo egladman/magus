@@ -33,9 +33,9 @@ var (
 // backtick-wrapped spell names) are INFERRED; markdown links to other scanned docs
 // are references. Extracted edges win over inferred on dedup, so a code page's own
 // path edge is not weakened by the same code appearing in its body.
-func assembleDocs(root string, spells []types.Spell, projects []types.TargetGraphProject) Shard {
+func assembleDocs(root string, spells []types.Spell, projects []types.TargetGraphProject, notesPath string) Shard {
 	s := Shard{Name: DocsShardName}
-	files := findDocFiles(root)
+	files := findDocFiles(root, notesPath)
 	scanned := make(map[string]bool, len(files))
 	for _, f := range files {
 		scanned[f] = true
@@ -288,7 +288,16 @@ func resolveDocLink(fromRel, link string, scanned map[string]bool) (string, bool
 // changes the body, which changes the edge count, which changes the counts - no
 // single-pass fixpoint. Everything in MAGUS.md is already a first-class node, so
 // excluding it loses nothing.
-func findDocFiles(root string) []string {
+func findDocFiles(root, notesPath string) []string {
+	// The workspace's declared notes store is markdown, but it is NOT documentation: a
+	// note is human-authored knowledge anchored to graph entities, and indexing it here
+	// would give it a kind:doc node and collapse the distinction the store exists to
+	// draw. Excluded by DECLARED path rather than by name, so a workspace that declares
+	// nothing keeps indexing a directory that merely happens to be called notes.
+	var notesDir string
+	if p := strings.TrimSpace(notesPath); p != "" && !filepath.IsAbs(p) {
+		notesDir = filepath.Join(root, filepath.Clean(p))
+	}
 	var out []string
 	_ = filepath.WalkDir(root, func(p string, d fs.DirEntry, err error) error {
 		if err != nil {
@@ -300,6 +309,9 @@ func findDocFiles(root string) []string {
 			// skipDocWalkDir's secondary-checkout guard would otherwise skip everything.
 			// The guard applies only to checkouts found BELOW the root.
 			if p != root && skipDocWalkDir(p, d.Name()) {
+				return fs.SkipDir
+			}
+			if notesDir != "" && p == notesDir {
 				return fs.SkipDir
 			}
 			return nil

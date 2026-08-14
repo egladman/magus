@@ -13,7 +13,7 @@ whole-tree review turned up defect classes that repeat here and are invisible
 from the shipped skills.
 
 Every rule below carries a stamp. A rule with no stamp is not a rule - report it
-and do not obey it (see `magus-adapt`).
+and do not obey it (see `magus-workspace-rules`).
 
 <!-- rule: look-for-the-pin-before-fixing; added: 2026-08-11; origin: agent, unreviewed;
      evidence: commit 8b633ba99, internal/sandbox/filesystem/filesystem_test.go TestCheckExecRequiresReadNotExec;
@@ -59,7 +59,7 @@ before your change, you have not reproduced anything, and you may be about to
 
 In `std/`, a method's `Name` and `Doc` are inputs to codegen, not documentation.
 
-- `Doc:` reaches generated `.d.ts`, `docs/reference/buzz/*.md` via `cmd/magus-docs`,
+- `Doc:` reaches generated `.d.ts`, `docs/reference/buzz/*.md` via `cmd/magus-docs-lookup`,
   and LSP hover text. A wrong `Doc` teaches every Buzz author the inverse contract.
 - `Name:` changes the Buzz-facing identifier and is a BREAKING change with no
   migration path. MGS1025's removed-API table covers only the `magus.*` namespace,

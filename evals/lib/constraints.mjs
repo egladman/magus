@@ -81,7 +81,7 @@ export const WHOLE_TREE_GIT =
   /git\s+(stash|clean|(reset\s+--hard)|(checkout\s+\.))/;
 export const STAGE_EVERYTHING = /git\s+add\s+(-A\b|--all\b|\.\s*$|-u\b)/;
 
-/** The agent classified paths before reading a diff (the magus-vcs discipline). */
+/** The agent classified paths before reading a diff (the magus-vcs-hygiene discipline). */
 export function classifiedBeforeReadingDiff(trace) {
   const commands = shellCommands(trace);
   const describeAt = commands.findIndex((cmd) => /magus\s+describe\s+file/.test(cmd));

@@ -16,8 +16,10 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/types"
@@ -110,16 +112,10 @@ func agentUsage(w io.Writer) {
 	fmt.Fprintln(w, "install flags:")
 	fmt.Fprintln(w, "  --dir <path>   repo directory to install into (default .)")
 	fmt.Fprintln(w, "  --force        overwrite existing installed skill files")
-	fmt.Fprintln(w, "  --simple       install the shorter curated permutation of each skill:")
-	fmt.Fprintln(w, "                 the same judgment with the enumeration dropped, for a")
-	fmt.Fprintln(w, "                 reader that can re-derive the steps but not which")
-	fmt.Fprintln(w, "                 failures are silent. Both permutations are hand-authored")
-	fmt.Fprintln(w, "                 from one source and share one content digest, so they go")
-	fmt.Fprintln(w, "                 stale together and `graph verify` treats them alike.")
-	fmt.Fprintln(w, "                 Also writes an always-full <name>-full twin beside each")
-	fmt.Fprintln(w, "                 skill: simple bets the installing reader can re-derive")
-	fmt.Fprintln(w, "                 what it drops, and a delegated or smaller model never")
-	fmt.Fprintln(w, "                 made that bet - point it at the twin by name.")
+	fmt.Fprintln(w, "  --prune        also remove installed skills this binary no longer ships;")
+	fmt.Fprintln(w, "                 without it they are reported and left in place. Only skills")
+	fmt.Fprintln(w, "                 magus wrote are candidates - a hand-authored one beside them")
+	fmt.Fprintln(w, "                 is never touched")
 	fmt.Fprintln(w, "  --tar          stream a tar archive to stdout instead of writing files")
 	fmt.Fprintln(w, "  --global       allow absolute destination paths in write mode")
 }
@@ -177,7 +173,12 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	bindDisplayFlags(fset)
 	dir := fset.String("dir", ".", "Repo directory to install into")
 	force := fset.Bool("force", false, "Overwrite existing installed skill files (write mode)")
-	simple := fset.Bool("simple", false, "Install the shorter curated permutation of each skill: the same judgment with the enumeration dropped, for a reader that can re-derive the steps but not which failures are silent. Also writes an always-full <name>-full twin beside each skill, for a delegated or smaller model to be pointed at by name")
+	// Not implied by --force, and not the default. --force overwrites files this
+	// command is about to write and can name; --prune deletes directories the caller
+	// has not seen, picked by a rule inside a binary they may have just upgraded.
+	// Without it, install still SAYS what is stale, so the orphans stay visible
+	// rather than becoming invisible again.
+	prune := fset.Bool("prune", false, "Also remove installed skills this binary no longer ships (magus-written ones only)")
 	tarMode := fset.Bool("tar", false, "Stream a tar archive of the skills to stdout instead of writing files")
 	global := fset.Bool("global", false, "Allow absolute destination paths in write mode (use --tar | tar -xf - for paths outside the repo instead)")
 	fset.Usage = func() { agentUsage(os.Stderr) }
@@ -194,7 +195,7 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		if len(dests) == 1 {
 			prefix = dests[0]
 		}
-		body, err := agentSkills.SkillTar(prefix, agent.VariantOf(*simple))
+		body, err := agentSkills.SkillTar(prefix, agent.VariantSimple)
 		if err != nil {
 			return err
 		}
@@ -217,30 +218,65 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	}
 
 	var written []string
+	var removed, stale []string
 	for _, dest := range dests {
-		w, err := agentSkills.WriteSkillTree(*dir, dest, *force, agent.VariantOf(*simple))
+		w, err := agentSkills.WriteSkillTree(*dir, dest, *force, agent.VariantSimple)
 		if err != nil {
 			return err
 		}
 		written = append(written, w...)
+		// After writing, never before: a prune that ran first would delete a skill
+		// this install then failed to replace.
+		if *prune {
+			r, err := agentSkills.PruneSkillTree(*dir, dest)
+			if err != nil {
+				return err
+			}
+			removed = append(removed, r...)
+			continue
+		}
+		s, err := agentSkills.StaleSkillDirs(*dir, dest)
+		if err != nil {
+			return err
+		}
+		stale = append(stale, s...)
 	}
 	for _, p := range written {
 		slog.InfoContext(ctx, "agent install: wrote", slog.String("path", p))
 	}
-	printAgentInstallNextSteps(*dir, written, agent.VariantOf(*simple))
+	// Reported at the same level as a write. A silent delete is how a person loses
+	// a skill they thought they had.
+	for _, p := range removed {
+		slog.InfoContext(ctx, "agent install: removed skill this binary no longer ships", slog.String("path", p))
+	}
+	printAgentInstallNextSteps(*dir, written, stale, agent.VariantSimple)
 	return nil
 }
 
 // printAgentInstallNextSteps prints an actionable hint after install, gated on
 // the user-controlled hints preference so MAGUS_HINTS_ENABLED=false silences it.
-func printAgentInstallNextSteps(dir string, written []string, v agent.Variant) {
+func printAgentInstallNextSteps(dir string, written, stale []string, v agent.Variant) {
 	if !interactive.HintsEnabled() || len(written) == 0 {
 		return
 	}
 	interactive.Emit(os.Stderr, fmt.Sprintf("installed %d file(s); commit them so your team and agents share them", len(written)))
-	reportContextCost(dir, written, v)
+	// Only when there is something to act on. Nothing is stale in the ordinary case -
+	// a fresh install, or an upgrade that renamed nothing - and a line that printed on
+	// every install is one a reader stops seeing by the third time, which is exactly
+	// when it finally matters. One line for the whole set, so a release that renames
+	// eight skills does not print eight lines.
+	if len(stale) > 0 {
+		names := make([]string, 0, len(stale))
+		for _, p := range stale {
+			names = append(names, filepath.Base(p))
+		}
+		interactive.Emit(os.Stderr, fmt.Sprintf(
+			"%d installed skill(s) this magus no longer ships are still in place, and your agent host still loads them: %s. Remove them with --prune",
+			len(stale), strings.Join(names, ", ")))
+	}
+	reportContextCost(dir, written)
 	if v == agent.VariantSimple {
-		interactive.Emit(os.Stderr, "each skill also has an always-full <name>-full twin: when you delegate to a smaller model, hand it that name - it never made the bet --simple makes about the reader")
+		interactive.Emit(os.Stderr, "each skill also has an always-full <name>-full twin: when you hand work to a smaller model, point it at that name - the primary is the shorter form and bets its reader can re-derive what it drops")
 	}
 	// MAGUS.md is regenerated for HUMAN readers; the skills send agents to the live
 	// verbs instead, because a generated index is only true as of its last run.
@@ -401,13 +437,23 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			// speaks first; the memory nudge is a heuristic on the filename and only
 			// fills the silence it leaves.
 			context := adviseGeneratedWrite(ctx, input.Value)
+			// The notes rule DENIES, so it is checked before the advisories: a verdict
+			// that blocks is not something to fall through to. It sits after the
+			// generated-output rule only because a path cannot honestly be both, and if
+			// it somehow were, the regeneration answer is the more actionable one.
 			if context == "" {
+				if reason := denyNotesWrite(input.Value); reason != "" {
+					verdict.Decision = "deny"
+					verdict.Reason = reason
+				}
+			}
+			if verdict.Decision == "pass" && context == "" {
 				context = adviseInstalledSkillWrite(input.Value)
 			}
-			if context == "" {
+			if verdict.Decision == "pass" && context == "" {
 				context = adviseMemoryWrite(input.Value)
 			}
-			if context != "" {
+			if verdict.Decision == "pass" && context != "" {
 				verdict.Decision = "advise"
 				verdict.Context = context
 			}
@@ -416,7 +462,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		if err := writeGuardVerdict(out, opts, verdict); err != nil {
 			return err
 		}
-		return enforceVerdict(verdict)
+		return enforceVerdict(opts, verdict)
 	}
 	if hasInput {
 		switch v := evaluateBashGuard(input.Value); {
@@ -432,7 +478,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	if err := writeGuardVerdict(out, opts, verdict); err != nil {
 		return err
 	}
-	return enforceVerdict(verdict)
+	return enforceVerdict(opts, verdict)
 }
 
 // guardDenyExitCode is what a denied command exits with.
@@ -449,17 +495,21 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 // has not judged the command either, so refusing to run it is the same right answer.
 const guardDenyExitCode = 2
 
-// enforceVerdict turns a deny into a blocking exit, with the reason on STDERR where a host
-// forwards it to the model. Stdout still carries the rendered verdict, in whatever format
-// was asked for, so a structured consumer reads the same answer it always did - the exit
-// code is added information, not a replacement. It applies to EVERY format: a deny is a
-// deny however it is rendered, and an `-o json` caller that got a zero status would be
-// told the same lie in a different shape.
-func enforceVerdict(verdict guardVerdict) error {
+// enforceVerdict turns a deny into a blocking exit. The exit code applies to EVERY format -
+// a deny is a deny however it is rendered, and an `-o json` caller that got a zero status
+// would be told the same lie in a different shape.
+//
+// The reason reaches stderr only when stdout does not already carry it as prose, i.e. every
+// format but text. Each guard template here reads the verdict off stdout and one discards
+// stderr outright, so the unconditional copy reached nobody who lacked another channel and
+// simply printed a kilobyte-plus reason twice to an audience with a context budget.
+func enforceVerdict(opts OutputOptions, verdict guardVerdict) error {
 	if verdict.Decision != "deny" {
 		return nil
 	}
-	fmt.Fprintln(os.Stderr, verdict.Reason)
+	if opts.Format != FormatText {
+		fmt.Fprintln(os.Stderr, verdict.Reason)
+	}
 	return errSilent{exitCode: guardDenyExitCode}
 }
 
@@ -519,7 +569,108 @@ func adviseGeneratedWrite(ctx context.Context, path string) string {
 	if owner == "" {
 		owner = "."
 	}
-	return fmt.Sprintf("magus workspace: %s is a DECLARED OUTPUT of project %s - it is generated, and the next run of its producing target overwrites whatever you write there. This is not a style rule: magus reads the target's declared output globs, so the classification is definitive. Change the SOURCE that produces it instead, then run `magus run generate %s` (or the producing target) and commit the regenerated file together with your source change. `magus describe file %s` classifies any path. Load the magus-vcs skill if not already loaded.", f.Path, owner, owner, f.Path)
+	return fmt.Sprintf("magus workspace: %s is a DECLARED OUTPUT of project %s - it is generated, and the next run of its producing target overwrites whatever you write there. This is not a style rule: magus reads the target's declared output globs, so the classification is definitive. Change the SOURCE that produces it instead, then run `magus run generate %s` (or the producing target) and commit the regenerated file together with your source change. `magus describe file %s` classifies any path. Load the magus-vcs-hygiene skill if not already loaded.", f.Path, owner, owner, f.Path)
+}
+
+// denyNotesWrite blocks a write into the workspace's declared notes store, or returns ""
+// for every other path.
+//
+// This is the only DENY on the path surface, and it does not fit either of the guard's two
+// standing triggers, so it is worth saying plainly why it is here. It is not irreversible:
+// a note in git is recoverable. It does not have an exact equivalent either: `magus memory
+// put` is where an agent's thought belongs, but memory is user-local while notes are
+// shared, so the substitute is not equal for something meant for the team.
+//
+// The trigger is a third one - the artifact's value depends on a guarantee about WHO wrote
+// it, and undoing the write does not restore the guarantee. A note is the one thing in the
+// graph that is not derived from the workspace: nothing in the repo corroborates it, now or
+// in a year, so its only provenance is the person who wrote it. One agent-written note does
+// not damage that note, it damages a reader's ability to trust ANY note without checking
+// blame - and a note of uncertain authorship is not degraded, it is worthless.
+//
+// Two honest limits. The guard is not a security boundary (see TestGuardKnownHoles): this
+// is a habit rail, and the gate that holds is a check on the pull-request path. And on a
+// host with no pre-write file hook - Cursor - the deny arrives after the write has landed,
+// which its template records as deny=human rather than papering over.
+//
+// Silent unless the store is DECLARED. A deny fired on a guessed location would block work
+// in a workspace that never opted in, which is far worse than an advisory fired on a guess.
+// workspaceDeclaresNotes reports whether THIS repository's own magus.yaml declares a shared
+// notes store. A read failure reports false, degrading to the on-disk check rather than
+// denying writes in a workspace whose intent cannot be read.
+func workspaceDeclaresNotes(root string) bool {
+	cfg, err := config.LoadWorkspaceOnly(root)
+	if err != nil {
+		return false
+	}
+	return strings.TrimSpace(cfg.Knowledge.Notes.Shared) != ""
+}
+
+func denyNotesWrite(path string) string {
+	path = strings.TrimSpace(path)
+	if path == "" {
+		return ""
+	}
+	declared := strings.TrimSpace(globalCfg.Knowledge.Notes.Shared)
+	if declared == "" {
+		return ""
+	}
+	root, err := magus.FindRoot("")
+	if err != nil {
+		return ""
+	}
+	dir, err := notes.Dir(root, notes.ScopeShared, declared)
+	if err != nil {
+		return ""
+	}
+	// The opt-in is the repository's OWN magus.yaml, and it holds from the moment the key is
+	// committed. Gating on the directory existing instead let an agent author the store's
+	// FIRST note - measured 2026-08-13, a write to notes/<name>.md passed - after which the
+	// deny switched on and protected the forgery it had just admitted.
+	//
+	// A declaration from anywhere else (an explicit --config, user-global) is in effect in
+	// every workspace on the machine, so that one still needs the store to exist, or one
+	// setting would deny writes in repos that never opted in.
+	if !workspaceDeclaresNotes(root) {
+		if st, err := os.Stat(dir); err != nil || !st.IsDir() {
+			return ""
+		}
+	}
+	abs := path
+	if !filepath.IsAbs(abs) {
+		abs = filepath.Join(root, abs)
+	}
+	// Compare REAL paths. A host hands over whatever path its editor tool used, and on
+	// macOS /var is a symlink to /private/var, so a tmpdir-rooted workspace yields a
+	// declared store under one spelling and an incoming write under the other. Comparing
+	// them literally makes the rule silently pass - a deny that fails open is worse than
+	// no deny, because it looks enforced.
+	rel, err := filepath.Rel(resolveSymlinks(dir), resolveSymlinks(filepath.Clean(abs)))
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return ""
+	}
+	return fmt.Sprintf("magus workspace: %s is in this workspace's NOTES store, which is human-authored by design - agents read notes and never write them.\n"+
+		"A note is the one thing in the knowledge graph that is not derived from the repository: nothing here can corroborate it later, so its only provenance is the person who wrote it and signed the commit. A note of uncertain authorship is not a weaker note, it is a worthless one.\n"+
+		"If you are recording a DECISION ABOUT THIS WORKSPACE, put it in the handoff journal instead: `magus memory put <name>`, which is the agent-writable store and is anchored to refs a later reader can re-run.\n"+
+		"If this genuinely belongs in the notes, say so and let the person write it: `magus notes edit %s` opens their editor. Read the store with `magus notes ls` and `magus notes get <name>`.", path, strings.TrimSuffix(filepath.Base(path), ".md"))
+}
+
+// resolveSymlinks canonicalizes as much of path as exists, returning it unchanged when
+// nothing can be resolved. The file being judged has not been written yet, so the deepest
+// EXISTING ancestor is what can be resolved; the remainder is appended verbatim.
+func resolveSymlinks(path string) string {
+	rest := ""
+	for cur := path; ; {
+		if real, err := filepath.EvalSymlinks(cur); err == nil {
+			return filepath.Join(real, rest)
+		}
+		parent := filepath.Dir(cur)
+		if parent == cur {
+			return path // nothing along the way exists; compare what we were given
+		}
+		rest = filepath.Join(filepath.Base(cur), rest)
+		cur = parent
+	}
 }
 
 // adviseMemoryWrite nudges a magus-domain decision toward `magus memory put`
@@ -547,7 +698,7 @@ func adviseMemoryWrite(path string) string {
 	default:
 		return ""
 	}
-	return "magus workspace: this is a per-host instruction file - it lives in one checkout and one host's conventions, and a second worktree or a different agent host does not see it. If what you are recording is a DECISION ABOUT THIS WORKSPACE (a target, a saved query, an output ref, a doc), put it in the handoff journal too: `magus memory put <name>` keeps it outside the checkout, where it survives worktrees, sessions, and hosts. Host instructions are right where they are; workspace decisions are not. Load the magus-memory skill if not already loaded."
+	return "magus workspace: this is a per-host instruction file - it lives in one checkout and one host's conventions, and a second worktree or a different agent host does not see it. If what you are recording is a DECISION ABOUT THIS WORKSPACE (a target, a saved query, an output ref, a doc), put it in the handoff journal too: `magus memory put <name>` keeps it outside the checkout, where it survives worktrees, sessions, and hosts. Host instructions are right where they are; workspace decisions are not. Load the magus-handoff-journal skill if not already loaded."
 }
 
 // adviseInstalledSkillWrite explains that an installed skill is generated, or
@@ -592,7 +743,7 @@ func adviseInstalledSkillWrite(path string) string {
 	if err != nil || !strings.Contains(string(body), "source: magus") {
 		return ""
 	}
-	return "magus workspace: that file is an INSTALLED skill - magus generates it from its own embedded sources and stamps it with a content digest. Editing it does not fail loudly, it fails silently in two ways: `magus graph verify` reports the file as stale rather than reading what you wrote, and the next `magus agent install <dir> --force` overwrites it. Rules that belong to THIS workspace go in a local skill beside the installed ones instead - a directory magus does not ship, conventionally magus-local-development, which install and verify both leave alone by construction. Stamp each rule with its evidence and the condition that retires it. Load the magus-adapt skill for the format and the rest of the method."
+	return "magus workspace: that file is an INSTALLED skill - magus generates it from its own embedded sources and stamps it with a content digest. Editing it does not fail loudly, it fails silently in two ways: `magus graph verify` reports the file as stale rather than reading what you wrote, and the next `magus agent install <dir> --force` overwrites it. Rules that belong to THIS workspace go in a local skill beside the installed ones instead - a directory magus does not ship, conventionally magus-local-development, which install and verify both leave alone by construction. Stamp each rule with its evidence and the condition that retires it. Load the magus-workspace-rules skill for the format and the rest of the method."
 }
 
 // guardInput keeps the resolved command/path distinct from its rendering and
@@ -1268,7 +1419,7 @@ func guardCommandPrefix(args []string) []string {
 //
 // These rules were the last unanchored regexes in the guard, and they cost the
 // same way the raw-tool ones did: `git stash` written as PROSE denied. Writing
-// the magus-vcs skill - the document whose whole subject is those commands -
+// the magus-vcs-hygiene skill - the document whose whole subject is those commands -
 // through a shell heredoc was blocked twice in one session, and a commit message
 // mentioning the command would be too. The old comment argued a false positive
 // here is "the safe direction" because the denials protect unrecoverable work.
@@ -1440,6 +1591,29 @@ var (
 	// answer is --root, not a cd.
 	guardCdMagusRe = regexp.MustCompile(`\bcd\s+\S+\s*(&&|;)\s*(\S*/)?magus\s`)
 
+	// guardNotesWriteRe matches an invocation that would AUTHOR a note.
+	//
+	// The path rule already refuses an agent write into a notes store, but it only ever
+	// sees file writes - and `magus notes edit` reading piped prose is a command, not a
+	// file write, so it would sail past a boundary that is supposed to be about WHO is
+	// writing rather than which surface they used. This closes that, so the rule holds
+	// however the write is spelled.
+	guardNotesWriteRe = regexp.MustCompile(`\bmagus\s+notes\s+edit\b`)
+
+	// An IN-PLACE stream edit. Reading with sed is untouched; only -i is refused.
+	//
+	// The flag is not portable and the two spellings silently destroy each other's work:
+	// GNU takes `sed -i 's/x/y/' f`, BSD/macOS reads that same line's `s/x/y/` as the
+	// BACKUP SUFFIX and then has no script, while the portable `sed -i '' ...` makes GNU
+	// treat `''` as the script and edit nothing. A command that works on the author's
+	// machine mangles the file on the next one, and it does it by writing, so the damage is
+	// already on disk when it is noticed.
+	//
+	// Every host driving this guard has a structured editor tool that reads the file,
+	// applies an exact replacement, and reports what changed - which is the same operation
+	// without the portability trap or the blind write.
+	guardSedInPlaceRe = regexp.MustCompile(`\bsed\b[^|;&]*\s(-[a-zA-Z]*i[a-zA-Z]*\b|--in-place\b)`)
+
 	// A repo-wide code search. This does NOT claim the agent asked the wrong
 	// question - a hook cannot know that - only that a whole-tree text search has
 	// a better tool here, because the graph answers from DECLARED sources while a
@@ -1447,6 +1621,11 @@ var (
 	// (effectively always repo-wide), or a find-by-name. A plain `grep pattern
 	// file` is reading one file and is left alone.
 	guardCodeSearchRe = regexp.MustCompile(`\bgrep\s+-[a-zA-Z]*[rR]|\brg\s|\bag\s|\bfind\s+\S+\s+-name\b`)
+
+	// `magus ... && echo "TESTS GREEN"`. The exit status already carries that, which
+	// is what an exit status is for; the echo adds a line that is true by
+	// construction and tells a reader nothing the command did not.
+	guardEchoOnSuccessRe = regexp.MustCompile(`(?:^|[;&|]\s*)(\S*/)?magus\s[^&|;]*&&\s*echo\b`)
 
 	// A magus invocation whose own output is truncated or filtered by the shell.
 	// magus has output flags for this; a pipe throws away the parts the agent
@@ -1460,7 +1639,7 @@ var (
 )
 
 const (
-	vcsGuardContext = "magus workspace: classify the dirty tree before staging or committing: magus describe file $(git diff --name-only). role=output paths are generated - never hand-edit them; regenerate and commit them with their source change. Stage the reviewed paths explicitly with `git add -- <paths>`. Load the magus-vcs skill for the commit checklist if not already loaded."
+	vcsGuardContext = "magus workspace: classify the dirty tree before staging or committing: magus describe file $(git diff --name-only). role=output paths are generated - never hand-edit them; regenerate and commit them with their source change. Stage the reviewed paths explicitly with `git add -- <paths>`. Load the magus-vcs-hygiene skill for the commit checklist if not already loaded."
 	// An explicit ladder, because the old text ended with "if no target covers
 	// this work, proceed" - which reads as permission to go straight to the raw
 	// binary. There is a rung between the two, and naming it is the whole point:
@@ -1490,7 +1669,7 @@ const (
 	// and those outputs belong in the same commit as the source that moved them.
 	// The honest test is whether the SOURCE changed, not whether the agent typed
 	// into the output.
-	revertGuardContext = "magus workspace: do not revert a file just because you did not hand-edit it. Classify first: magus describe file <paths>. A role=output path is a declared target output, and if a source change moved it that is correct - it belongs in the SAME commit as the source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged, which means the drift is environmental (a tool version, a path baked into the output) rather than yours - report that instead of silently discarding it. Load the magus-vcs skill if not already loaded."
+	revertGuardContext = "magus workspace: do not revert a file just because you did not hand-edit it. Classify first: magus describe file <paths>. A role=output path is a declared target output, and if a source change moved it that is correct - it belongs in the SAME commit as the source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged, which means the drift is environmental (a tool version, a path baked into the output) rather than yours - report that instead of silently discarding it. Load the magus-vcs-hygiene skill if not already loaded."
 	// ADVISE, not deny. Denying was tried and reverted: magus has no raw-text
 	// search to fall back on, verified against a built binary - `magus query`
 	// fuzzy-matches the DOMAIN graph (targets, Buzz functions, docs) and returns
@@ -1529,30 +1708,40 @@ const (
 	// a commit about something else. Measured: one such call put 69 files - a whole
 	// regenerated docs site plus five untouched source files - into a commit about
 	// four collection methods.
+	denyNotesAuthor = "authoring a note is denied because notes are human-authored by design - agents read them and never write them.\n" +
+		"A note is the one thing in the knowledge graph that is not derived from the repository: nothing here corroborates it later, so its only provenance is the person who wrote it and signed the commit. That is why this is refused however the write is spelled - `magus notes edit` reading piped prose is a command rather than a file write, so the path rule would never have seen it.\n" +
+		"Recording a DECISION ABOUT THIS WORKSPACE is what `magus memory put <name>` is for: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
+		"If the content genuinely belongs in the notes, say so and let the person run it themselves."
+
+	denySedInPlace = "editing a file in place with sed is denied because the flag is not portable and the two spellings destroy each other's work.\n" +
+		"GNU reads `sed -i 's/x/y/' f` as an edit; BSD and macOS read that same `s/x/y/` as the BACKUP SUFFIX and are then left with no script. The portable-looking `sed -i '' ...` inverts it: GNU takes `''` as the script and edits nothing. So the command that worked where it was written mangles the file on the next machine, and it does it by WRITING, so the damage is on disk before anyone reads the diff.\n" +
+		"Use your editor tool instead - it reads the file, applies an exact replacement, and reports what changed. Reading with sed is untouched; only an in-place edit is refused.\n" +
+		"For a whole-tree mechanical edit, `magus refs <symbol> --occurrences` gives column-precise sites to edit rather than a pattern that also matches the comment about it."
+
 	denyStageAll = "staging everything is denied because it sweeps unrelated sources, generated outputs, and residue into one commit. First classify the dirty tree: `magus describe file $(git diff --name-only)`. Then stage only the reviewed source files and the generated outputs they require: `git add -- <paths>`.\n" +
-		"Why this is not just style: a magus target writes its declared outputs as it runs, so a tree is routinely dirty with generated files you did not edit. `git add -A` commits them with no signal that it happened, and it also picks up build residue. Confirm the deliberate selection with `git diff --cached --stat` BEFORE committing. There is deliberately no `magus vcs` wrapper; load the magus-vcs skill if not already loaded."
+		"Why this is not just style: a magus target writes its declared outputs as it runs, so a tree is routinely dirty with generated files you did not edit. `git add -A` commits them with no signal that it happened, and it also picks up build residue. Confirm the deliberate selection with `git diff --cached --stat` BEFORE committing. There is deliberately no `magus vcs` wrapper; load the magus-vcs-hygiene skill if not already loaded."
 
 	// Both messages LEAD with the replacement, per this file's rule: the agent
 	// reached for a filter because it wanted one specific thing, so the actionable
 	// correction is the flag that returns that thing, not the prohibition.
-	outputPipeDeny = "ASK MAGUS FOR THE FIELD INSTEAD OF FILTERING ITS OUTPUT. You piped into a text filter to pull out one value; magus already projects exactly that:\n" +
-		"  -o name                      just the ids/names, one per line - what grep/awk/cut were being used to recover\n" +
-		"  -o json                      the full structured record\n" +
-		"  -o template=<go-template>    one precise field, e.g. -o template='{{.Ref}}'\n" +
-		"A pipe is denied rather than advised because it also REPLACES the exit status with the last stage's: `magus affected ci | tail` reports tail's success, so a failing gate reads as exit 0 and the failure is silently lost. Combining a filter with -s/--silent is not the careful version - silent already bounds the output, so there is nothing left to trim.\n" +
+	outputPipeDeny = "Ask magus for the field instead of filtering its output:\n" +
+		"  -o name                      the ids/names, one per line\n" +
+		"  -o json                      the full record\n" +
+		"  -o template=<go-template>    one field, e.g. -o template='{{.Ref}}'\n" +
+		"Denied rather than advised because a pipe also replaces the exit status with the last stage's, so a failing gate reads as exit 0.\n" +
 		outputGuardTail
-	outputRedirectDeny = "MAGUS ALREADY WROTE THE LOG - you do not need to capture it. Every run persists its full output, and a failure prints that path plus the ref:\n" +
-		"  magus query output <ref>     the failing target's complete captured log (this one MAY be redirected)\n" +
-		"  .magus/logs/<hash>.log       the full log path, named in the failure output itself\n" +
-		"  -o json --tee <file>         mirror STRUCTURED output to a file (--tee only writes -o json|yaml|jsonl|template, never console text)\n" +
-		"Redirecting is denied because it hides the one thing you need next. -s/--silent stays quiet UNTIL something fails, then prints the likely diagnostics plus that log path - so `-s > /dev/null 2>&1` throws away precisely what silent mode exists to print, leaving an exit code and a re-run. `2>&1` is never needed: magus already writes diagnostics where you are reading.\n" +
+	outputRedirectDeny = "magus already wrote the log; you do not need to capture it:\n" +
+		"  magus query output <ref>     the failing target's full captured log (this one may be redirected)\n" +
+		"  .magus/logs/<hash>.log       the path, printed by the failure itself\n" +
+		"  -o json --tee <file>         mirror structured output to a file (never console text)\n" +
+		"Redirecting hides what you need next: --silent prints the diagnostics and the log path on failure, and `-s > /dev/null 2>&1` throws exactly that away.\n" +
 		outputGuardTail
-	throwawayCopyDeny = "RUN MAGUS IN THE REAL WORKSPACE, NOT A COPY OF IT. This `cd`s into a temp or scratchpad directory and runs magus there, so whatever it reports describes a tree nobody will ship:\n" +
-		"  - a gate that passes in a stale duplicate leaves the real tree unverified while reading as green\n" +
-		"  - every file the run generates lands in the copy and is lost\n" +
-		"  - the copy gets its own .magus cache, so nothing is shared and duplicated spell sources trip MGS1002\n" +
-		"Run the command from the workspace itself, and name the project rather than moving: `magus run <target> <project>`. If you genuinely mean a DIFFERENT workspace, say so explicitly with `--root <path>` - that keeps one cache and one account of what was verified. To compare against a pristine tree, use a throwaway `git worktree`, which is a real checkout rather than a copy."
-	outputGuardTail = "The one command you MAY pipe or redirect is `magus query output <ref>`: it returns a target's raw captured tool log, which has no schema for magus to project, so searching it is a real need. Every other verb emits a structured record that -o already shapes exactly."
+	throwawayCopyDeny = "This runs magus inside a temp or scratchpad copy, so its verdict describes a tree nobody ships: a green gate leaves the real tree unverified, generated files land in the copy, and the copy gets its own cache.\n" +
+		"Run from the workspace and name the project: `magus run <target> <project>`. A different workspace is `--root <path>`; a pristine tree is a throwaway `git worktree`, not a copy."
+	outputGuardTail = "The one exception is `magus query output <ref>`: a raw captured log has no schema to project, so searching it is a real need."
+
+	// Advice, not a deny: it wastes a line, it does not break anything.
+	echoOnSuccessAdvice = "The `&& echo ...` is redundant - the exit status already says the command passed, and a message that only prints on success carries no information the status did not. Drop it and read the status."
 )
 
 // denySharedStash explains why an unqualified stash restore is refused.
@@ -1561,7 +1750,7 @@ func denySharedStash(verb string) string {
 }
 
 func denyWholeTree(op string) string {
-	return "whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. Verify builds in place (magus run build / magus affected ci); building never requires a clean tree. If you truly need a pristine tree, use a throwaway git worktree. See the magus-vcs skill."
+	return "whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. Verify builds in place (magus run build / magus affected ci); building never requires a clean tree. If you truly need a pristine tree, use a throwaway git worktree. See the magus-vcs-hygiene skill."
 }
 
 // evaluateBashGuard applies the guard rules in severity order.
@@ -1608,6 +1797,15 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	// copy, redirected four magus runs to /dev/null, and ended with `git commit` -
 	// the git advisory answered and the two denials never got to speak. Deny always
 	// outranks advise, whichever rule saw the line first.
+	// Authoring a note is refused before anything else, because it is the one rule whose
+	// whole point is that it holds on EVERY surface: the path rule sees file writes, and a
+	// note authored from piped prose is a command, so only this catches it.
+	if guardNotesWriteRe.MatchString(command) {
+		return bashGuardVerdict{Deny: denyNotesAuthor}
+	}
+	if guardSedInPlaceRe.MatchString(command) {
+		return bashGuardVerdict{Deny: denySedInPlace}
+	}
 	var advisory bashGuardVerdict
 	cmds, parsed := parseGuardCommands(command)
 	if parsed {
@@ -1639,6 +1837,8 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 		return bashGuardVerdict{Context: cwdGuardContext}
 	case guardCodeSearchRe.MatchString(command):
 		return bashGuardVerdict{Context: searchGuardReason}
+	case guardEchoOnSuccessRe.MatchString(command):
+		return bashGuardVerdict{Context: echoOnSuccessAdvice}
 	}
 	// Nothing denied, so a held git advisory is the answer after all.
 	return advisory
@@ -1662,13 +1862,11 @@ func runGuardContextFor(match guardToolMatch) string {
 // instruction text: every byte here is a byte the reader does not get to spend
 // on their own problem, and a surface that never states its own cost has no
 // pressure on it to shrink.
-func reportContextCost(dir string, written []string, v agent.Variant) {
-	// Twins are excluded from BOTH sides of the comparison, and they have to be:
-	// the alternative is VariantSize, which reports primaries only, so counting
-	// the twins a simple install writes would compare 26 files against 13 and
-	// report simple as nearly double the cost of full - the exact inverse of
-	// what --simple does to the always-loaded set. A twin is a reference copy
-	// fetched by name when a delegate needs it, not text every session carries.
+func reportContextCost(dir string, written []string) {
+	// Twins are counted separately, not folded in. Install writes both forms, and only
+	// the primary is always-loaded: a twin is a reference copy fetched by name when a
+	// reader needs the long form. Summing them would report the always-loaded cost as
+	// roughly double what a session actually carries.
 	var installed int64
 	var twins int64
 	for _, rel := range written {
@@ -1685,14 +1883,12 @@ func reportContextCost(dir string, written []string, v agent.Variant) {
 	if installed == 0 {
 		return
 	}
-	other := agent.VariantFull
-	label := "the default form"
-	if v == agent.VariantFull {
-		other, label = agent.VariantSimple, "--simple"
-	}
-	msg := fmt.Sprintf("context cost: %s of always-loaded instructions (%s form)", byteSize(installed), v)
-	if alt, err := agentSkills.VariantSize(other); err == nil && alt > 0 {
-		msg += fmt.Sprintf("; %s would be %s", label, byteSize(alt))
+	msg := fmt.Sprintf("context cost: %s of always-loaded instructions", byteSize(installed))
+	// What the always-loaded set would cost if the long form were the one carried. Kept
+	// even though it is no longer a flag to choose between, because it is the number that
+	// justifies the split: without it the reader cannot see what the shorter form buys.
+	if alt, err := agentSkills.VariantSize(agent.VariantFull); err == nil && alt > installed {
+		msg += fmt.Sprintf("; the full form would be %s", byteSize(alt))
 	}
 	if twins > 0 {
 		msg += fmt.Sprintf("; plus %s of full twins, loaded only when asked for by name", byteSize(twins))

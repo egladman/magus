@@ -66,3 +66,20 @@ cache:
 # why requireIndexOfFrom() in docs/render.buzz stays - a capability probe runs on every
 # binary, and it is what turns the hang into a sentence on the ones this cannot reach.
 required_version: ">= 0.4.0"
+
+# The workspace's human-authored notes, and the git history the graph needs to tell when
+# prose has fallen behind what it describes.
+#
+# notes.path is DECLARED rather than assumed because magus judges writes to it: a deny
+# fired on a guessed location would block work in a workspace that never opted in. It must
+# stay inside the checkout - that is what makes git attribute a note to whoever wrote it,
+# and what keeps the @notes shard safe to share.
+#
+# vcs.enabled is what makes staleness measurable at all. Without it there are no author
+# nodes and no last-modified dates, so prose staleness is unmeasured (which ranks as
+# neutral, never as fresh).
+knowledge:
+  notes:
+    shared: notes
+  vcs:
+    enabled: true

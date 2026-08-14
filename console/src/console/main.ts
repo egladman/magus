@@ -171,6 +171,7 @@ const SURFACES: Launchable[] = [
   },
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
   { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
+  { pageId: "notes", label: "Notes", hint: "What people wrote about this workspace" },
   { pageId: "actions", label: "Actions", hint: "Every console action and its shortcut" },
   { pageId: "settings", label: "Settings", hint: "Console settings and keybindings" },
 ];
@@ -180,7 +181,7 @@ const SURFACES: Launchable[] = [
 // (internal/service/console KnownSurfaces): the daemon serves the console shell for exactly these
 // paths (SPA fallback), so the boot router below opens exactly these from the path. Keep the two
 // lists in step.
-const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity"];
+const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity", "notes"];
 
 // consoleSurfaceFromPath returns the surface a /console/<surface>/ entry path names, or null when
 // the page did not boot on such a path (the bare console root, or any non-surface path). It keys on
@@ -1685,6 +1686,17 @@ export function startConsole(
       id: "activity",
       title: "Activity Trail",
       bundle: "activity/activity.js",
+      css: "logs/logs.css",
+    }),
+  );
+  // Notes reuses logs.css rather than authoring its own: it renders on PF components plus the
+  // shared console-render-* frame the log viewer and the trail already load, so a third sheet
+  // would be a copy of rules that are already there.
+  register(
+    moduleSurface({
+      id: "notes",
+      title: "Notes",
+      bundle: "notes/notes.js",
       css: "logs/logs.css",
     }),
   );
