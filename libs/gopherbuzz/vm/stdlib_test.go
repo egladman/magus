@@ -1,9 +1,8 @@
-package vm_test
+package vm
 
 import (
 	"testing"
 
-	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"github.com/stretchr/testify/suite"
@@ -12,12 +11,12 @@ import (
 // StdlibSuite shares a fresh env with the stdlib registered across all cases.
 type StdlibSuite struct {
 	suite.Suite
-	e *vm.Env
+	e *Env
 }
 
 func (s *StdlibSuite) SetupTest() {
-	s.e = vm.NewEnv()
-	vm.RegisterStdlib(s.e)
+	s.e = NewEnv()
+	RegisterStdlib(s.e)
 }
 
 func TestStdlibSuite(t *testing.T) {
@@ -26,7 +25,7 @@ func TestStdlibSuite(t *testing.T) {
 
 func (s *StdlibSuite) TestRegisterStdlibNoPanic() {
 	// SetupTest already called RegisterStdlib without panicking.
-	assert.NotPanics(s.T(), func() { vm.RegisterStdlib(vm.NewEnv()) })
+	assert.NotPanics(s.T(), func() { RegisterStdlib(NewEnv()) })
 }
 
 func (s *StdlibSuite) TestRegisterStdlibPopulatesNames() {

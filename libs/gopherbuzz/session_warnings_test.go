@@ -1,11 +1,10 @@
-package buzz_test
+package buzz
 
 import (
 	"context"
 	"testing"
 
 	"github.com/egladman/magus/libs/diagnostics"
-	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -18,7 +17,7 @@ import (
 // unsafe to call after a real run. Warnings() must expose the SAME warning
 // compileShared already computed for this Exec, without re-resolving anything.
 func TestSession_Warnings_VisibleAfterExec(t *testing.T) {
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s := NewSession(context.Background(), WithEmbedded())
 	s.SetNativeModule("unused/mod", vm.NewMap())
 
 	err := s.Exec(context.Background(), `import "unused/mod";`)
@@ -26,7 +25,7 @@ func TestSession_Warnings_VisibleAfterExec(t *testing.T) {
 
 	got := s.Warnings()
 	require.Len(t, got, 1, "the unused import should surface as exactly one warning")
-	assert.Equal(t, buzz.SeverityWarning, got[0].Severity)
+	assert.Equal(t, SeverityWarning, got[0].Severity)
 	assert.Equal(t, diagnostics.Code("BZZ3001"), got[0].Code)
 	assert.Contains(t, got[0].Msg, "unused/mod")
 }
@@ -37,7 +36,7 @@ func TestSession_Warnings_VisibleAfterExec(t *testing.T) {
 // time), so accumulating would grow the slice unbounded over a long-lived session's
 // life.
 func TestSession_Warnings_LastCompileNotAccumulated(t *testing.T) {
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s := NewSession(context.Background(), WithEmbedded())
 	s.SetNativeModule("unused/mod", vm.NewMap())
 
 	require.NoError(t, s.Exec(context.Background(), `import "unused/mod";`))
@@ -50,7 +49,7 @@ func TestSession_Warnings_LastCompileNotAccumulated(t *testing.T) {
 // TestSession_Warnings_NilBeforeAnyCompile pins the zero-cost/zero-value contract: a
 // session that never compiles anything pays nothing beyond the nil slice.
 func TestSession_Warnings_NilBeforeAnyCompile(t *testing.T) {
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s := NewSession(context.Background(), WithEmbedded())
 	assert.Nil(t, s.Warnings())
 }
 
@@ -58,7 +57,7 @@ func TestSession_Warnings_NilBeforeAnyCompile(t *testing.T) {
 // same "[CODE] buzz: line L:C: ...\n  see: <url>" shape typeError.Error() already
 // uses for hard errors, so a printed warning reads consistently with them.
 func TestDiagnostic_String_MatchesErrorRenderStyle(t *testing.T) {
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded())
+	s := NewSession(context.Background(), WithEmbedded())
 	s.SetNativeModule("unused/mod", vm.NewMap())
 	require.NoError(t, s.Exec(context.Background(), `import "unused/mod";`))
 
@@ -74,7 +73,7 @@ func TestDiagnostic_String_MatchesErrorRenderStyle(t *testing.T) {
 // reports no warnings through the Exec path either, matching Diagnostics' existing
 // REPL suppression (checkShared gates both on s.repl).
 func TestSession_Warnings_ReplSuppressed(t *testing.T) {
-	s := buzz.NewSession(context.Background(), buzz.WithEmbedded(), buzz.WithREPL())
+	s := NewSession(context.Background(), WithEmbedded(), WithREPL())
 	s.SetNativeModule("unused/mod", vm.NewMap())
 
 	require.NoError(t, s.Exec(context.Background(), `import "unused/mod";`))

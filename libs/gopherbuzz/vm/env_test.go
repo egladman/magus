@@ -1,21 +1,20 @@
-package vm_test
+package vm
 
 import (
 	"testing"
 
-	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestNewEnvNotNil(t *testing.T) {
-	e := vm.NewEnv()
+	e := NewEnv()
 	require.NotNil(t, e, "NewEnv() returned nil")
 }
 
 func TestEnvDefineGetRoundTrip(t *testing.T) {
-	e := vm.NewEnv()
-	e.Define("x", vm.IntValue(42))
+	e := NewEnv()
+	e.Define("x", IntValue(42))
 	v, ok := e.Get("x")
 	require.True(t, ok, "Get('x') ok = false, want true")
 	assert.True(t, v.IsInt(), "Get('x') IsInt()")
@@ -23,16 +22,16 @@ func TestEnvDefineGetRoundTrip(t *testing.T) {
 }
 
 func TestEnvGetMissingReturnsFalse(t *testing.T) {
-	e := vm.NewEnv()
+	e := NewEnv()
 	_, ok := e.Get("notdefined")
 	assert.False(t, ok, "Get on undefined name returned ok=true, want false")
 }
 
 func TestEnvMultipleDefinesAccumulateInNames(t *testing.T) {
-	e := vm.NewEnv()
-	e.Define("a", vm.IntValue(1))
-	e.Define("b", vm.StrValue("hello"))
-	e.Define("c", vm.BoolValue(true))
+	e := NewEnv()
+	e.Define("a", IntValue(1))
+	e.Define("b", StrValue("hello"))
+	e.Define("c", BoolValue(true))
 
 	names := e.Names()
 	assert.Len(t, names, 3, "Names() len")
@@ -43,18 +42,18 @@ func TestEnvMultipleDefinesAccumulateInNames(t *testing.T) {
 }
 
 func TestEnvSlotsGrowWithDefine(t *testing.T) {
-	e := vm.NewEnv()
+	e := NewEnv()
 	assert.Empty(t, e.Slots(), "Slots() initial len")
-	e.Define("x", vm.IntValue(1))
+	e.Define("x", IntValue(1))
 	assert.Len(t, e.Slots(), 1, "Slots() after 1 define")
-	e.Define("y", vm.IntValue(2))
+	e.Define("y", IntValue(2))
 	assert.Len(t, e.Slots(), 2, "Slots() after 2 defines")
 }
 
 func TestEnvRedefineUpdatesSlot(t *testing.T) {
-	e := vm.NewEnv()
-	e.Define("v", vm.IntValue(1))
-	e.Define("v", vm.IntValue(99))
+	e := NewEnv()
+	e.Define("v", IntValue(1))
+	e.Define("v", IntValue(99))
 
 	// Re-defining should update the existing slot, not add a new one.
 	assert.Len(t, e.Slots(), 1, "Slots() after redefine")

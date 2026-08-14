@@ -1,13 +1,12 @@
 //go:build !buzz_safe && !buzz_unsafe
 
-package buzz_test
+package buzz
 
 import (
 	"context"
 	"strings"
 	"testing"
 
-	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -46,7 +45,7 @@ grow();
 	// could be satisfied by the other's samples.
 	vm.ResetHeapStats()
 
-	s := buzz.NewSession(context.Background())
+	s := NewSession(context.Background())
 	_, err := s.Eval(context.Background(), src)
 	require.NoError(t, err)
 
@@ -71,7 +70,7 @@ grow();
 func TestHeapHotSitesNamesOnlyRealLines(t *testing.T) {
 	vm.ResetHeapStats()
 
-	s := buzz.NewSession(context.Background())
+	s := NewSession(context.Background())
 	_, err := s.Eval(context.Background(), `
 fun churn() > int {
     var xs = mut [<str>];
