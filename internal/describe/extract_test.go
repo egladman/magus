@@ -299,17 +299,18 @@ func TestRemovedContextMethods(t *testing.T) {
 // TestSpellOps pins the per-target spell extraction: bracket (`go["go-test"]`) and
 // dotted (`md.prettier(`) op calls are captured and grouped by spell, in call
 // order, but only for handles a spell import brought into scope — a host call
-// (os.exec) or a call on a non-spell identifier is dropped.
+// (proc.exec) or a call on a non-spell identifier is dropped.
 func TestSpellOps(t *testing.T) {
 	g := Extract(`import "magus/spell/go";
 import "magus/spell/md";
 import "os";
+import "proc";
 export fun format(ctx: magus\Context, args: [str]) > void { go["go-fmt"](); }
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
     go["golangci-lint"](); go["go-vet"](); go["golangci-lint"](); md.markdownlint();
 }
-export fun scan(ctx: magus\Context, args: [str]) > void { os.exec("trivy", []); other["x"](); }
+export fun scan(ctx: magus\Context, args: [str]) > void { proc.exec("trivy", []); other["x"](); }
 `)
 	lint, _ := nodeByName(g, "lint")
 	want := []types.TargetSpellUse{
@@ -320,7 +321,7 @@ export fun scan(ctx: magus\Context, args: [str]) > void { os.exec("trivy", []); 
 	assert.Equal(t, []string{"format"}, lint.Dependencies, "the identifier edge resolves to the exported target")
 	// scan only calls a host module and an unknown identifier: no spell ops.
 	scan, _ := nodeByName(g, "scan")
-	assert.Empty(t, scan.Spells, "os.exec is host, other[] is not a spell")
+	assert.Empty(t, scan.Spells, "proc.exec is host, other[] is not a spell")
 }
 
 // TestSpellOpsThroughHelper pins helper-following: a target that factors its spell
@@ -367,7 +368,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
 func TestSpellOpsIgnoresStringLiterals(t *testing.T) {
 	g := Extract(`import "magus/spell/go";
 export fun help(ctx: magus\Context, args: [str]) > void {
-    os.exec("echo", ["run go.fmt() then go[\"go-test\"]() yourself"]);
+    proc.exec("echo", ["run go.fmt() then go[\"go-test\"]() yourself"]);
     go["go-build"]();
 }
 `)
@@ -396,7 +397,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(goBuild); }
 // AST body and drop the magus.needs edge that follows it.
 func TestBraceInString(t *testing.T) {
 	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
-    os.exec("sh", ["-c", "echo }"]);
+    proc.exec("sh", ["-c", "echo }"]);
     ctx.needs(fmt);
 }
 export fun fmt(ctx: magus\Context, args: [str]) > void { go["x"](); }

@@ -97,7 +97,10 @@ const SURFACE_ACCENTS: Record<string, string> = {
   activity: "--console-rust", // terracotta: warm history trail
   logs: "--console-indigo", // restrained indigo: cool, reading captured output
   graph: "--console-slate", // steel blue: nodes and connections
-  actions: "--console-gold", // ochre yellow: energy (the lightning bolt)
+  // Clay, not one of the greens: the greens in this palette already mean "live/healthy" (moss on the
+  // dashboard), and a note is not a status. A warm earth tone reads as something a person left behind.
+  notes: "--console-clay", // soft terracotta: human prose, warm and hand-placed
+  actions: "--console-gold", // ochre yellow: the warm, worn key-cap tone of a keyboard
   settings: "--console-stone", // neutral gray: utility
 };
 
@@ -105,9 +108,11 @@ const SURFACE_ACCENTS: Record<string, string> = {
 // currentColor, round caps). It is used for BOTH the small tinted-tile icon and the large corner
 // watermark, so a card's two marks match. Keyed by pageId; a surface with no entry falls back to a
 // neutral square. A single inner element per animated icon carries data-motion="<kind>": on card hover
-// the SMALL icon plays ONE in-character micro-motion (gear turns, gauge needle sweeps, node pulses,
-// waveform breathes, bolt flickers) - see the @keyframes in console.css, all one-shot and reduced-
-// motion gated; the watermark reuses the same markup but never animates (the motion CSS is icon-scoped).
+// the SMALL icon plays ONE in-character micro-motion (gauge needle sweeps, node pulses, waveform
+// breathes, spacebar presses) - see the @keyframes in console.css, all one-shot and reduced-motion gated;
+// the watermark reuses the same markup but never animates (the motion CSS is icon-scoped). Two glyphs
+// animate WHOLE and so hook the icon slot instead (buildLauncher sets it): the gear turns, and the note
+// settles - a note's page and its prose have to move as one thing or it tears.
 const SURFACE_ICONS: Record<string, string> = {
   // Log viewer: stacked text lines.
   logs: '<path d="M4 5h16M4 10h10M4 15h13M4 19h7"/>',
@@ -119,8 +124,18 @@ const SURFACE_ICONS: Record<string, string> = {
     '<path d="M3 21h18"/><rect x="5" y="11" width="4" height="8" rx="1"/><rect data-motion="bars" x="10" y="6" width="4" height="13" rx="1"/><rect x="15" y="14" width="4" height="5" rx="1"/>',
   // Activity: a waveform; it breathes on hover.
   activity: '<path data-motion="wave" d="M3 12h3l2-5 3 10 3-8 2 3h5"/>',
-  // Actions: a lightning bolt; it flickers on hover.
-  actions: '<path data-motion="bolt" d="M13 2L4 14h6l-1 8 9-12h-6z"/>',
+  // Notes: a page of prose lying ASKEW - the one glyph in this set that is not square to the grid,
+  // because a note is the one thing in the graph a person put there by hand. The tilt is the whole
+  // idea; drawn upright it is just the generic document icon and says "file", not "someone wrote
+  // this". The folded corner and two short lines survive down to 16px. The motion rides the icon
+  // SLOT (like the gear) rather than an inner element: the page and its prose must settle together.
+  notes:
+    '<path d="M13.6 3.1 7.4 4.8a2 2 0 0 0-1.4 2.45l3 11a2 2 0 0 0 2.45 1.4l6.8-1.85a2 2 0 0 0 1.4-2.45L17.2 6.6z"/><path d="m13.6 3.1 1 3.6 3.6-1"/><path d="m10.5 11.8 5-1.35"/><path d="m11.4 15.1 3.4-.9"/>',
+  // Shortcuts: a keyboard. It replaced a lightning bolt, which stood for "energy" back when this card
+  // was called Actions; against the new name a bolt reads as "fast", which is the Palette's job, not
+  // this surface's. The spacebar presses on hover. (Key is still the "actions" pageId - see main.ts.)
+  actions:
+    '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01"/><path data-motion="press" d="M8.5 14h7"/>',
   // Settings: a proper cog (not the sun-like spoked glyph); the whole icon turns on hover.
   settings:
     '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
@@ -168,11 +183,13 @@ export function buildLauncher(
     card.setAttribute("tabindex", "0");
     card.setAttribute("aria-label", "Open " + s.label);
     // The representative glyph, drawn in the card's hue. Decorative (the accessible name is the card's
-    // aria-label), so aria-hidden. The gear's whole glyph turns on hover, so its motion hook rides the
-    // icon slot; the other surfaces mark a single inner element (data-motion, in SURFACE_ICONS).
+    // aria-label), so aria-hidden. The gear and the note animate as a WHOLE glyph on hover, so their
+    // motion hook rides the icon slot; the other surfaces mark a single inner element (data-motion, in
+    // SURFACE_ICONS).
     const icon = document.createElement("span");
     icon.className = "console-launcher-card__icon";
     if (s.pageId === "settings") icon.dataset.motion = "gear";
+    if (s.pageId === "notes") icon.dataset.motion = "settle";
     icon.innerHTML =
       '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
       'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +

@@ -221,6 +221,25 @@
 /* The focus-ring toggle group is the same 2-way control, sized like the theme toggle above. */
 .console-settings-focusring { width: auto; align-items: center; }
 
+/* Install: a status line and, only where the browser can actually be prompted, the Install button. The
+   button is hidden rather than disabled in every other state - the line above it already says what to do
+   instead, and a permanently greyed button invites a click that can do nothing. align-items keeps the
+   button at its natural width instead of stretching it across the column. */
+.console-settings-install {
+  display: flex; flex-direction: column; align-items: flex-start;
+  gap: var(--pf-t--global--spacer--md);
+}
+.console-settings-install__status {
+  margin: 0; max-width: 60ch;
+  font-size: var(--pf-t--global--font--size--body--sm);
+  color: var(--pf-t--global--text--color--subtle);
+}
+/* Installed is the one state that is good news rather than an instruction, so it reads at full contrast
+   instead of as a muted helper line. */
+.console-settings-install[data-state="installed"] .console-settings-install__status {
+  color: var(--pf-t--global--text--color--regular);
+}
+
 /* Backup: the export/import controls stack, with the action rows wrapping on a narrow pane. */
 .console-settings-io { display: flex; flex-direction: column; gap: var(--pf-t--global--spacer--md); }
 .console-settings-io__actions { display: flex; flex-wrap: wrap; gap: var(--pf-t--global--spacer--sm); }

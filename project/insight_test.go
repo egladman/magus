@@ -40,6 +40,57 @@ func TestFileHotspots(t *testing.T) {
 	assert.Equal(t, 2, out[0].Authors)
 }
 
+// TestFileHotspotsFollowsRenames is the regression this lineage work exists for.
+// The scan is NEWEST-FIRST, and the same file lives under three names across it:
+// old.go -> mid.go -> new.go. Attributed by path string it is three files of one or
+// two commits each, every one of them ranked below a quieter file with four. Followed
+// as one lineage it is a single four-commit hotspot, which is what it actually is.
+func TestFileHotspotsFollowsRenames(t *testing.T) {
+	scan := []ScannedCommit{
+		{Author: "ada", Date: day(9), Files: []string{"new.go"}},
+		{Author: "lin", Date: day(7), Files: []string{"new.go"}, Renames: [][2]string{{"mid.go", "new.go"}}},
+		{Author: "ada", Date: day(5), Files: []string{"mid.go"}, Renames: [][2]string{{"old.go", "mid.go"}}},
+		{Author: "ada", Date: day(3), Files: []string{"old.go"}},
+		{Author: "ada", Date: day(1), Files: []string{"quiet.go"}},
+	}
+	out := FileHotspots(scan, func(string) int { return 1 })
+
+	byPath := map[string]types.FileHotspot{}
+	for _, f := range out {
+		byPath[f.Path] = f
+	}
+	require.Contains(t, byPath, "new.go")
+	assert.NotContains(t, byPath, "old.go", "an earlier name is folded away, not ranked separately")
+	assert.NotContains(t, byPath, "mid.go")
+
+	got := byPath["new.go"]
+	assert.Equal(t, 4, got.Commits, "every commit under every name counts once, against the final name")
+	assert.Equal(t, 2, got.Authors, "authors merge across the lineage too")
+	assert.Equal(t, 2, got.Moves, "three names means it moved twice")
+	assert.Equal(t, day(9), got.LastCommit)
+	assert.Equal(t, "new.go", out[0].Path, "and it now outranks the file it was losing to")
+}
+
+// TestFileHotspotsExcludesDeleted keeps unfixable rows out of a "fix this first"
+// ranking, and pins the restore case: deleted then re-added is LIVE, because the scan
+// is newest-first and the add is the more recent verdict.
+func TestFileHotspotsExcludesDeleted(t *testing.T) {
+	scan := []ScannedCommit{
+		{Author: "ada", Date: day(9), Files: []string{"restored.go"}},
+		{Author: "ada", Date: day(7), Files: []string{"gone.go", "restored.go"}, Deleted: []string{"gone.go", "restored.go"}},
+		{Author: "ada", Date: day(5), Files: []string{"gone.go", "restored.go", "live.go"}},
+	}
+	out := FileHotspots(scan, func(string) int { return 1 })
+
+	paths := map[string]bool{}
+	for _, f := range out {
+		paths[f.Path] = true
+	}
+	assert.False(t, paths["gone.go"], "a deleted file is not a refactoring target")
+	assert.True(t, paths["live.go"])
+	assert.True(t, paths["restored.go"], "re-added after the delete, so it is live again")
+}
+
 func TestAffinity(t *testing.T) {
 	out := Affinity(scanFixture())
 	require.Len(t, out, 1)

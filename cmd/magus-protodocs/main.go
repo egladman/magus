@@ -478,7 +478,7 @@ func renderService(a api, s service) string {
 		if m.Doc != "" {
 			fmt.Fprintf(&b, "%s\n\n", m.Doc)
 		}
-		fmt.Fprintf(&b, "`POST /%s.%s/%s` - %s.\n\n", s.Package, s.Name, m.Name, m.kind())
+		fmt.Fprintf(&b, "`POST /%s.%s/%s`: %s.\n\n", s.Package, s.Name, m.Name, m.kind())
 		fmt.Fprintf(&b, "Takes `%s`, returns `%s`.\n\n", leaf(m.Input), leaf(m.Output))
 	}
 

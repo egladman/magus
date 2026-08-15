@@ -96,6 +96,12 @@ message FileHotspot {
   int32 score = 4;
   int32 authors = 5;
   google.protobuf.Timestamp last_commit = 6;
+  // How many times the file changed path inside the window. commits and moves are
+  // different kinds of churn - one is the contents being rewritten, the other is the
+  // file being moved around - and a reader wants both, because a file doing both at
+  // once is a stronger signal than either count alone. Not derivable from path, which
+  // carries only the name the file ends under.
+  int32 moves = 7;
 }
 
 // AffinityOutput reports projects that change together (temporal coupling).

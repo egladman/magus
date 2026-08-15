@@ -23,7 +23,7 @@ tags:
 
 An Nx repo already has a project model: `nx.json`, a `project.json` (or an
 inferred target set) per project, and a dependency graph Nx computes from the
-source. A [workspace provider](../../concepts/workspace-providers.md) lets magus
+source. A [workspace provider](../../concepts/workspace/providers.md) lets magus
 adopt that model instead of asking the repo to carry a magusfile per project.
 
 Nx keeps doing the work. Every target magus runs shells out to Nx, so nothing gets
@@ -252,7 +252,7 @@ the redaction guarantee covers.
 
 - [`spells/experimental/nx/spell.buzz`](https://github.com/egladman/magus/blob/main/spells/experimental/nx/spell.buzz):
   the spell this guide copies, and the only source of truth for it
-- [Workspace providers](../../concepts/workspace-providers.md): the mechanism
+- [Workspace providers](../../concepts/workspace/providers.md): the mechanism
 - [Secrets](../../concepts/secrets.md): how a provided project reaches a
   credential without a magusfile body
 - [Sandbox model](../../concepts/sandbox.md): the env allowlist a provided

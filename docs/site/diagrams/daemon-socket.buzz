@@ -1,0 +1,58 @@
+// site/diagrams/daemon-socket.buzz - the local path into the daemon: a CLI invocation over the
+// unix socket, and the shared state the socket dispatches into. The HTTP surface is a
+// separate figure (daemon-http); this one is deliberately silent about it, because the two
+// entry points share only the state at the far right.
+namespace daemonSocket;
+
+import "../libs/diagram/diagram" as _;
+
+export fun daemonSocketDiagram() > Diagram {
+    return Diagram{
+        id = "daemon-socket",
+        eyebrow = "magus daemon",
+        title = "How a local command reaches the daemon",
+        desc = "The magus CLI dispatches over a private unix domain socket into the "
+            + "concurrency pool, the workspace registry, the run registry and the service "
+            + "registry. Sharing a graph spawns a separate short-lived loopback server.",
+        width = 960,
+        height = 560,
+        nodes = [
+            Node{ id = "cli", label = "magus CLI", sub = "run, status, query",
+                  tag = "shell", role = "external", x = 32, y = 176, w = 160, h = 64 },
+            Node{ id = "sock", anchor = "internal/proc", label = "Unix socket", sub = "0700, internal/proc",
+                  tag = "ipc", role = "focal", x = 320, y = 176, w = 200, h = 64 },
+
+            Node{ id = "pool", label = "Concurrency pool", x = 640, y = 88, w = 200, h = 64 },
+            Node{ id = "ws", anchor = "internal/graph", label = "Workspace registry", sub = "graph, SCIP, cache",
+                  role = "store", x = 640, y = 176, w = 200, h = 64 },
+            Node{ id = "runs", label = "Run registry", sub = "live runs",
+                  role = "store", x = 640, y = 264, w = 200, h = 64 },
+            Node{ id = "svc", label = "Service registry", sub = "host services",
+                  role = "store", x = 640, y = 352, w = 200, h = 64 },
+
+            // --open is the destination flag; --serve only changes how the graph is handed
+            // over (a loopback server rather than a URL fragment), so naming --serve alone
+            // would describe the transport and omit the command.
+            Node{ id = "serve", anchor = "internal/share", label = "Loopback server", sub = "graph export --open",
+                  role = "optional", x = 320, y = 400, w = 200, h = 64 },
+        ],
+        // The fan out of the socket runs top to bottom, so the bends run outermost-first:
+        // the connector traveling furthest turns earliest, which is what keeps the runs to
+        // the pool and the workspace registry from crossing.
+        edges = [
+            Edge{ src = "cli", dst = "sock", label = "dispatch" },
+
+            Edge{ src = "sock", dst = "pool", srcSlot = 1, srcSlots = 4, bend = 560 },
+            Edge{ src = "sock", dst = "ws", srcSlot = 2, srcSlots = 4, bend = 592 },
+            Edge{ src = "sock", dst = "runs", srcSlot = 3, srcSlots = 4, bend = 576 },
+            Edge{ src = "sock", dst = "svc", srcSlot = 4, srcSlots = 4, bend = 544 },
+
+            Edge{ src = "cli", dst = "serve", label = "spawns", dashed = true,
+                  srcSide = "bottom", dstSide = "top" },
+        ],
+        legend = [
+            LegendItem{ role = "store", label = "shared daemon state" },
+            LegendItem{ role = "optional", label = "spawned on demand" },
+        ],
+    };
+}

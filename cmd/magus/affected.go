@@ -24,7 +24,6 @@ import (
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
@@ -246,6 +245,11 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
 	// default_charms (e.g. rw) silently did NOT apply to `affected`, unlike `run`.
 	charms := withDefaultCharms(parsed.Charms, globalCfg.DefaultCharms, af.NoDefaultCharms)
+	// Same as `magus run`: an affected ci run goes through RunCI and loses the write
+	// charms, so the header has to say so.
+	if target == "ci" {
+		charms = magus.CharmsForCI(charms)
+	}
 	m.LogCharms(ctx, strings.Join(charms, ","))
 	m.LogCache(ctx)
 	if len(targets) == 0 {
@@ -408,8 +412,8 @@ type planOutput struct {
 }
 
 type planShard struct {
-	Shard    string `json:"shard"`
-	Projects string `json:"projects"`
+	Shard    string `json:"shard"    yaml:"shard"`
+	Projects string `json:"projects" yaml:"projects"`
 }
 
 // shardDetail is what each shard actually DOES: the invocation, what it runs, and what it
@@ -580,15 +584,35 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		}
 	}
 
-	b, err := json.MarshalIndent(out, "", "  ")
+	// --plan went through json.MarshalIndent directly and so ignored -o entirely:
+	// `-o yaml` printed JSON, in both flag positions. Route it through the shared
+	// renderer like every other structured command.
+	//
+	// FormatText maps to JSON rather than to a prose rendering, because the plan has
+	// no prose rendering to fall back on - the default output IS the machine-readable
+	// document, and a workflow that pipes `--plan` without -o must keep getting it.
+	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stdout.Write(b); err != nil {
-		return err
+	switch opts.Format {
+	case outputText, outputJSON:
+		return emitFormatted(OutputOptions{Format: outputJSON}, out)
+	case outputName:
+		w, cleanup, err := outputDst()
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cleanup() }()
+		for _, s := range out.Matrix {
+			if _, err := fmt.Fprintln(w, s.Shard); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return emitFormatted(opts, out)
 	}
-	_, err = os.Stdout.Write([]byte{'\n'})
-	return err
 }
 
 func readAffectedPlanPaths(r io.Reader, null bool) ([]string, error) {

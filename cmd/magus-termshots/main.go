@@ -1,14 +1,13 @@
 // Command magus-termshots renders magus's interactive terminal surfaces to SVG
 // for the documentation.
 //
-// It is the deterministic sibling of `magus run tapes`, which drives VHS to
-// record a real shell into a GIF. Both are right, for different subjects. The
+// It is the deterministic sibling of magus-termcast, which records a real
+// session through a pseudo-terminal. Both are right, for different subjects. The
 // core loop is a sequence of commands anyone can type, so recording it for real
 // is the truthful thing to do. The surfaces here are conditions - a run stalled
 // on another process's lock, a target that failed, a prompt waiting on a
 // choice - and staging those in a real shell reliably enough to record is
-// painful, while a GIF is binary, varies between recordings, and so can never
-// be drift-gated.
+// painful.
 //
 // So these are rendered instead of recorded: the frames come from driving the
 // REAL Zone, Notifier and picker through the terminal emulator, so the escape
@@ -26,6 +25,7 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
@@ -58,18 +58,30 @@ func render() (map[string]string, error) {
 	out := map[string]string{}
 	for _, s := range []struct {
 		name string
-		fn   func() (string, error)
+		fn   func(screen.Theme) (string, error)
 	}{
 		{"terminal-run-band.svg", runBand},
 		{"terminal-lock-waiting.svg", lockWaiting},
 		{"terminal-failure-prompt.svg", failurePrompt},
 		{"terminal-picker.svg", picker},
 	} {
-		svg, err := s.fn()
-		if err != nil {
-			return nil, fmt.Errorf("%s: %w", s.name, err)
+		// Every surface ships in both palettes: an SVG referenced by <img> is its
+		// own document and cannot read the page's theme, so the page picks the file
+		// rather than the picture adapting itself. The unsuffixed name stays the
+		// dark one, which is what every existing reference already points at.
+		for _, v := range []struct {
+			suffix string
+			theme  screen.Theme
+		}{
+			{"", screen.DarkTheme},
+			{"-light", screen.LightTheme},
+		} {
+			svg, err := s.fn(v.theme)
+			if err != nil {
+				return nil, fmt.Errorf("%s%s: %w", s.name, v.suffix, err)
+			}
+			out[strings.TrimSuffix(s.name, ".svg")+v.suffix+".svg"] = svg
 		}
-		out[s.name] = svg
 	}
 	return out, nil
 }
@@ -95,7 +107,7 @@ func newTerminal() (*screen.Screen, *tty.Zone) {
 
 // runBand: ordinary output scrolling past a band that does not move. The
 // property the whole design rests on, and the one a still picture shows best.
-func runBand() (string, error) {
+func runBand(t screen.Theme) (string, error) {
 	s, z := newTerminal()
 	band := z.Acquire(5)
 
@@ -108,12 +120,12 @@ func runBand() (string, error) {
 	}); err != nil {
 		return "", err
 	}
-	return s.SVG(screen.SVGOptions{}), nil
+	return s.SVG(screen.SVGOptions{Theme: t}), nil
 }
 
 // lockWaiting: the one run event that earns a notification. A pinned condition,
 // not a toast - it stays until the lock clears, because the wait is unbounded.
-func lockWaiting() (string, error) {
+func lockWaiting(t screen.Theme) (string, error) {
 	s := screen.New(cols, rows)
 	z := tty.NewZone(s, tty.FixedProbe(cols, rows))
 	n := tty.NewNotifier(z, 2)
@@ -127,7 +139,7 @@ func lockWaiting() (string, error) {
 	if err := n.Pin("lock", "waiting on the workspace lock held by pid 4211 - wait, or stop it", tty.SGRYellow); err != nil {
 		return "", err
 	}
-	return s.SVG(screen.SVGOptions{}), nil
+	return s.SVG(screen.SVGOptions{Theme: t}), nil
 }
 
 // failurePrompt: failures held past the summary so they can be acted on, with
@@ -138,7 +150,7 @@ func lockWaiting() (string, error) {
 // emits and missed the selection marker entirely once the band grew one, while
 // the drift gate - which compares the renderer to itself - stayed green
 // throughout.
-func failurePrompt() (string, error) {
+func failurePrompt(t screen.Theme) (string, error) {
 	s := screen.New(cols, rows)
 	h := cache.NewPrettyHandlerFor(s, slog.LevelInfo, tty.FixedProbe(cols, rows), demoClock())
 
@@ -190,7 +202,7 @@ func failurePrompt() (string, error) {
 	if _, err := hint.Set(cache.FailureHint()); err != nil {
 		return "", err
 	}
-	return s.SVG(screen.SVGOptions{}), nil
+	return s.SVG(screen.SVGOptions{Theme: t}), nil
 }
 
 // demoClock is a fixed clock that reports one plausible elapsed time.
@@ -222,7 +234,7 @@ func event(msg string, attrs ...slog.Attr) slog.Record {
 
 // picker: the interactive chooser, drawn in place with the highlight on the row
 // a click or Enter would take.
-func picker() (string, error) {
+func picker(t screen.Theme) (string, error) {
 	s := screen.New(cols, rows)
 	fmt.Fprint(s, "$ magus x\n")
 
@@ -237,5 +249,5 @@ func picker() (string, error) {
 	if !view.Paint(frame) {
 		return "", fmt.Errorf("the picker block does not fit %dx%d", cols, rows)
 	}
-	return s.SVG(screen.SVGOptions{}), nil
+	return s.SVG(screen.SVGOptions{Theme: t}), nil
 }

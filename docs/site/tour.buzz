@@ -55,7 +55,7 @@ export fun renderPlayground(site: Site) > void !> any {
     final outDir = "playground";
     final root = climbFromDir(outDir);
     html = html.replace("<!-- site-nav -->", renderSiteNav(root, "playground", true, site.config));
-    // Default (non-home) CSP meta - site.csp, not site.cspHome: the playground never
+    // Default CSP meta - site.csp, not site.cspBadges: the playground never
     // loads an external image and holds the reader's own source, so it takes the
     // tighter img-src, not the badge hosts. playground.html's own <!-- csp -->
     // placeholder is also what CSP_INLINE_SCRIPT_SOURCES reads to compute site.csp, so

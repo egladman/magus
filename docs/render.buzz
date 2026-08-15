@@ -11,6 +11,7 @@ import "proc";
 import "fs";
 import "io";
 import "os";
+import "proc";
 import "std";
 import "serialize";
 import "time";
@@ -69,6 +70,8 @@ import "site/sections" as _;
 import "site/tags" as _;
 import "site/tour" as _;
 import "site/development" as _;
+import "site/landing" as _;
+import "site/download" as _;
 // The concrete site configuration (base URL, title, nav, generated-tree names) - the only
 // site/-specific value the composition root injects so the engine stays generic.
 import "site/config" as _;
@@ -190,9 +193,9 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
         }
     }
     // Computed once so every page threads a stable string instead of recomputing per
-    // page. See Site.csp/Site.cspHome and computeCSP for which pages get which.
+    // page. See Site.csp/Site.cspBadges and computeCSP for which pages get which.
     site.csp = computeCSP(CSP_IMG_SRC_DEFAULT);
-    site.cspHome = computeCSP(CSP_IMG_SRC_HOME);
+    site.cspBadges = computeCSP(CSP_IMG_SRC_BADGES);
     // gen/ is NOT wiped and rebuilt: outDir is created if missing, every render below
     // overwrites in place, and pruneStaleOutputs() (near the end, once every write is
     // known) deletes only the leftovers whose source is gone - a renamed page, a deleted
@@ -204,7 +207,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
 
     // Copy static assets the root README references (images, badges). Scoped delete-
     // then-recopy: cp -r alone wouldn't drop a since-deleted source image, so the copied
-    // files are cleared first. Preserve the committed esbuild outputs (mermaid.js,
+    // files are cleared first. Preserve the committed esbuild output (hljs.js),
     // hljs.js) - they live in gen/assets, not site.root/assets, so a blind wipe would
     // delete them on `serve` (which re-renders without rebuilding bundles); generate
     // rebuilds them afterward anyway.
@@ -216,7 +219,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // files, drop the rest", which the find invocation stated as a double negative.
     fs\mkdirAll(site.outDir + "/assets");
     foreach (name in fs\listDir(site.outDir + "/assets")) {
-        if (name != "mermaid.js" and name != "hljs.js") {
+        if (name != "hljs.js") {
             fs\removeAll(site.outDir + "/assets/" + name);
         }
     }
@@ -245,8 +248,8 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
 
     // Bundle + minify the client assets with esbuild (pinned in mise.toml). Two outputs:
     // theme.js (head-critical, no imports so no bundle) and main.js (the deferred bundle
-    // of every feature module). mermaid is a lazy dynamic import() of the same-origin
-    // gen/assets/mermaid.js bundle (built by build-mermaid); esbuild leaves dynamic
+    // of every feature module). hljs is a lazy dynamic import() of the same-origin
+    // gen/assets/hljs.js bundle (built by build-hljs); esbuild leaves dynamic
     // imports external. CSS is minified per-file, not bundled. Pinned esbuild ->
     // byte-stable output, so the drift gate holds.
     esbuild(["src/styles/site.css", "--minify", "--outfile=" + site.outDir + "/site.css"]);
@@ -295,6 +298,11 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // the collect* passes above: those read each page's markdown off disk, and a
     // synthesized page has no file behind its srcRel marker.
     collectSectionIndexes(site);
+    // Same contract for the /development/ section, and it needs its own pass because that
+    // section's navigation points both ways: the landing (README.md) lists its children and
+    // each child links back to the landing, so neither can be registered at render time
+    // without the other having rendered first. See collectDevelopmentPages.
+    collectDevelopmentPages(site);
     // Pre-walk, and after the synthesized overviews join docPages: a tag chip renders during the
     // walk and has to know whether its /tags/<slug>/ destination will be written.
     collectTagIndex(site);
@@ -307,6 +315,10 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // only at release-cut time (cmd/magus-utils cut), not here.
     loadReleases(site);
 
+    // The front door, then the README as the /development/ landing. renderLanding writes
+    // gen/index.html; renderRoot writes gen/development/index.html. Both stay ahead of the
+    // glossary render below, which aggregates the term references every page contributes.
+    renderLanding(site);
     renderRoot(site);
     walk("", site);
     // glossary.md last: it aggregates the cross-references collected across the whole walk
@@ -343,6 +355,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     writeOffline(site);
     renderSearchPage(site);
     renderTourPage(site);
+    renderDownloadPage(site);
     writeManifest(site);
 
     // llms.txt: the index an AI agent reads to discover pages and fetch each one's Markdown
@@ -364,7 +377,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     pruneStaleOutputs(site);
 
     // writeSiteManifest is NOT called here: generate() (magusfile.buzz) still writes
-    // gen/assets/mermaid.js and hljs.js - both served assets - AFTER site_render returns,
+    // gen/assets/hljs.js - a served asset - AFTER site_render returns,
     // so computing the manifest here would miss them. generate() calls
     // render.writeSiteManifest(site) once every write to gen/ is done.
 
@@ -414,4 +427,16 @@ export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: T
 fun generateJsBundles() > void !> any {
     proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     proc\exec("pnpm", ["run", "build"], ".", {});
+}
+
+// site_diagrams writes the committed light/dark SVG pair for the magusfile's
+// diagrams-generate target, forwarding to engine/page, which owns the registry import.
+export fun site_diagrams(dir: str) > void !> any {
+    writeDiagramPair(dir);
+}
+
+// site_diagram_drift forwards the diagram-to-code check, for the same reason
+// site_diagrams does: engine/page owns the single import of the registry.
+export fun site_diagram_drift(root: str, sourceGlobs: [str]) > [str] !> any {
+    return diagramDrift(root, sourceGlobs);
 }

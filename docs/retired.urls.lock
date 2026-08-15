@@ -213,8 +213,13 @@ development/libs-orphanator/
 modules/encoding/
 reference/buzz/encoding/
 
-# Tag pages are generated from the tags a doc declares. These two lost their last
-# declaring page when the platform notes were folded into setup.
+# A tag earns a page only when more than one page carries it (tags.buzz's count > 1).
+# These two lost their second declaring page twice over: the platform notes were folded
+# into setup, and docs/download.md became the hand-built site/download.buzz, whose tags
+# live in its search record rather than the tag index. Each fell to a single page
+# (setup/macos/ and setup/windows/ respectively) and stopped generating. Retired rather
+# than aliased: a tag page listing one link is worse than the guide it would have pointed
+# at, and that guide is what search already returns.
 tags/macos/
 tags/windows/
 tags/analysis/

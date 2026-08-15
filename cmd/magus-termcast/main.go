@@ -93,28 +93,48 @@ func main() {
 	}
 
 	if b, err := os.ReadFile(showCapture); err == nil {
-		svg, rerr := renderShowcase(string(b))
-		if rerr != nil {
-			fmt.Fprintf(os.Stderr, "magus-termcast: %v\n", rerr)
-			os.Exit(1)
+		for _, v := range themeVariants {
+			svg, rerr := renderShowcase(string(b), v.theme)
+			if rerr != nil {
+				fmt.Fprintf(os.Stderr, "magus-termcast: %v\n", rerr)
+				os.Exit(1)
+			}
+			write(variantPath(showSVG, v.suffix), svg)
 		}
-		if werr := os.WriteFile(showSVG, []byte(svg), 0o644); werr != nil {
-			fmt.Fprintf(os.Stderr, "magus-termcast: write %s: %v\n", showSVG, werr)
-			os.Exit(1)
-		}
-		fmt.Fprintf(os.Stderr, "magus-termcast: wrote %s (%d bytes)\n", showSVG, len(svg))
 	}
 
-	svg, err := renderFile(capturePath)
-	if err != nil {
-		fmt.Fprintf(os.Stderr, "magus-termcast: %v\n", err)
+	for _, v := range themeVariants {
+		svg, err := renderFile(capturePath, v.theme)
+		if err != nil {
+			fmt.Fprintf(os.Stderr, "magus-termcast: %v\n", err)
+			os.Exit(1)
+		}
+		write(variantPath(*out, v.suffix), svg)
+	}
+}
+
+// Every recording ships in both palettes: an SVG referenced by <img> is its own
+// document and cannot read the page's theme, so the page picks the file rather
+// than the picture adapting itself. The unsuffixed name stays the dark one,
+// which is what every existing reference already points at.
+var themeVariants = []struct {
+	suffix string
+	theme  screen.Theme
+}{
+	{"", screen.DarkTheme},
+	{"-light", screen.LightTheme},
+}
+
+func variantPath(path, suffix string) string {
+	return strings.TrimSuffix(path, ".svg") + suffix + ".svg"
+}
+
+func write(path, svg string) {
+	if err := os.WriteFile(path, []byte(svg), 0o644); err != nil {
+		fmt.Fprintf(os.Stderr, "magus-termcast: write %s: %v\n", path, err)
 		os.Exit(1)
 	}
-	if err := os.WriteFile(*out, []byte(svg), 0o644); err != nil {
-		fmt.Fprintf(os.Stderr, "magus-termcast: write %s: %v\n", *out, err)
-		os.Exit(1)
-	}
-	fmt.Fprintf(os.Stderr, "magus-termcast: wrote %s (%d bytes)\n", *out, len(svg))
+	fmt.Fprintf(os.Stderr, "magus-termcast: wrote %s (%d bytes)\n", path, len(svg))
 }
 
 // materialize writes the demo workspace out of the committed txtar and makes it
@@ -170,9 +190,9 @@ func materialize(dir string) error {
 // recordSession runs the session script on a real pseudo-terminal and saves what
 // it printed.
 //
-// Opt-in, like `magus run tapes`, and for the same reason: it needs a provisioned
-// toolchain and a couple of minutes, and it is the half of this command that
-// cannot be reproduced. CI renders from the committed capture and never runs this.
+// Opt-in: it needs a provisioned toolchain and a couple of minutes, and it is the
+// half of this command that cannot be reproduced. CI renders from the committed
+// capture and never runs this.
 func recordSession() error {
 	res, err := run.Exec(context.Background(), "bash", []string{sessionPath}, run.ExecOptions{
 		TTY:     true,
@@ -261,26 +281,22 @@ func stripSGR(s string) string {
 	return b.String()
 }
 
-func renderFile(path string) (string, error) {
+func renderFile(path string, theme screen.Theme) (string, error) {
 	capture, err := os.ReadFile(path)
 	if err != nil {
 		return "", fmt.Errorf("read capture: %w (re-record with -record)", err)
 	}
-	return render(string(capture))
+	return render(string(capture), theme)
 }
 
 // render replays the capture through the terminal emulator, snapshotting the
 // screen after each command, and animates the snapshots.
-func render(capture string) (string, error) {
+func render(capture string, theme screen.Theme) (string, error) {
 	frames, err := replay(capture)
 	if err != nil {
 		return "", err
 	}
-	holds := make([]float64, len(frames))
-	for i := range frames {
-		holds[i] = hold(i, len(frames))
-	}
-	return screen.Animate(frames, holds, screen.SVGOptions{})
+	return screen.Animate(frames, corePace.holds(frames), screen.SVGOptions{Theme: theme})
 }
 
 // replay produces one frame per command: the terminal as it stood when that
@@ -340,16 +356,55 @@ func split(capture string) []string {
 	return segs
 }
 
-// hold returns how long a frame stays up, in seconds.
+// Frame pacing, in seconds. A reading pace, not a measurement: the capture is a
+// byte stream with no timings in it, and a frame-accurate replay of a run that
+// finishes in 281ms would be unreadable.
 //
-// A reading pace, not a measurement: the capture is a byte stream with no
-// timings in it, and a frame-accurate replay of a run that finishes in 281ms
-// would be unreadable anyway. The last frame is held longest because it carries
-// the payoff - the narrowed affected set - and because a loop that snaps back
-// the instant the point lands reads as a glitch.
-func hold(i, n int) float64 {
+// Not a flat hold, which is the obvious version and reads as a slideshow: every
+// beat identical leaves the eye no rhythm to ride. A frame adding two lines is
+// taken in at a glance, and holding it as long as one adding twenty stalls the
+// sequence, so the dwell scales with what the frame actually adds.
+type pace struct {
+	base    float64 // a frame that adds nothing still needs a beat
+	perLine float64 // each added line of output buys a little dwell
+	max     float64 // past this a dense frame stalls the loop, which repeats anyway
+	last    float64 // the payoff frame; a loop that snaps back the instant the point lands reads as a glitch
+}
+
+var (
+	corePace = pace{base: 0.28, perLine: 0.028, max: 0.85, last: 1.3}
+
+	// A higher floor, because the showcase's interactive beats move a highlight
+	// rather than adding output: line count understates what they ask the reader
+	// to find, and locating a cursor takes longer than reading one more line.
+	showcasePace = pace{base: 0.42, perLine: 0.028, max: 0.95, last: 1.5}
+)
+
+func (p pace) hold(i, n, added int) float64 {
 	if i == n-1 {
-		return 4.5
+		return p.last
 	}
-	return 2.5
+	return min(p.base+p.perLine*float64(added), p.max)
+}
+
+// holds paces a whole recording, scaling each frame by what it adds over its
+// predecessor. The first frame is measured against an empty screen.
+func (p pace) holds(frames []*screen.Screen) []float64 {
+	out := make([]float64, len(frames))
+	for i := range frames {
+		grew := frames[i].LastUsedRow() + 1
+		if i > 0 {
+			grew = added(frames[i-1], frames[i])
+		}
+		out[i] = p.hold(i, len(frames), grew)
+	}
+	return out
+}
+
+// added reports how many lines of output cur shows that prev did not, counting
+// what scrolled off the top as well as what appeared at the bottom - a frame
+// that filled the screen and pushed the earlier output away added all of it.
+func added(prev, cur *screen.Screen) int {
+	n := (cur.LastUsedRow() - prev.LastUsedRow()) + (cur.Scrolled() - prev.Scrolled())
+	return max(n, 0)
 }

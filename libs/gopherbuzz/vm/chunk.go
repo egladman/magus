@@ -122,6 +122,24 @@ func (c *Chunk) AddFun(child *Chunk) int32 {
 	return int32(len(c.Funs) - 1)
 }
 
+// branchTargets returns the set of in-chunk instruction indices some branch can land
+// on. Any pass that rewrites an instruction into OpNop must consult it: a jump into a
+// Nop silently skips whatever the rewritten sequence was supposed to do.
+func branchTargets(code []Instr) map[int]bool {
+	var targets map[int]bool
+	for _, ins := range code {
+		switch ins.Op {
+		case OpJump, OpJumpFalse, OpJumpTrue, OpJumpFalsePeek, OpJumpTruePeek,
+			OpJumpIfNull, OpIterNext, OpTryBegin:
+			if targets == nil {
+				targets = make(map[int]bool)
+			}
+			targets[int(ins.A)] = true
+		}
+	}
+	return targets
+}
+
 // FoldConsts performs a single-pass constant-folding optimization on chunk's
 // instruction stream. It replaces sequences like:
 //
@@ -129,12 +147,24 @@ func (c *Chunk) AddFun(child *Chunk) int32 {
 //
 // Only integer arithmetic is folded; floating-point is left to the VM to
 // preserve NaN/Inf semantics correctly. The pass is O(n) and allocation-free.
+//
+// Folding must not swallow a branch target. `a ?? 0 + 1` compiles the coalesce's
+// jump to land on the `1`, which is also the middle of a foldable triple; folding it
+// to a constant plus two OpNops left the non-null path jumping onto a Nop, so the
+// operator never ran and `(a ?? 0) + 1` evaluated to `a`. Same guard FusePeephole
+// applies for the same reason.
 func FoldConsts(c *Chunk) {
 	code := c.Code
 	n := len(code)
+	targets := branchTargets(code)
 	for i := 0; i+2 < n; i++ {
 		a, b, op := code[i], code[i+1], code[i+2]
 		if a.Op != OpLoadConst || b.Op != OpLoadConst {
+			continue
+		}
+		// i itself may be a target: the fold leaves a real instruction there. i+1 and
+		// i+2 become OpNop, so a jump into either would skip the operator.
+		if targets[i+1] || targets[i+2] {
 			continue
 		}
 		lv := c.Consts[a.A]
@@ -219,17 +249,7 @@ func FusePeephole(c *Chunk) {
 	code := c.Code
 	n := len(code)
 	// Collect every in-chunk branch destination once; used by both passes.
-	var targets map[int]bool
-	for _, ins := range code {
-		switch ins.Op {
-		case OpJump, OpJumpFalse, OpJumpTrue, OpJumpFalsePeek, OpJumpTruePeek,
-			OpJumpIfNull, OpIterNext, OpTryBegin:
-			if targets == nil {
-				targets = make(map[int]bool)
-			}
-			targets[int(ins.A)] = true
-		}
-	}
+	targets := branchTargets(code)
 
 	// Pass 1: GetLocal;LoadConst;<cmp>;JumpFalse → OpCmpLC.
 	// Covers the canonical while/for loop condition (i < N, i >= lo, etc.).

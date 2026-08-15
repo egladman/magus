@@ -89,6 +89,12 @@ type FileHotspot struct {
 	Score      int       `json:"score"                 yaml:"score"` // commits × complexity
 	Authors    int       `json:"authors"               yaml:"authors"`
 	LastCommit time.Time `json:"last_commit,omitempty" yaml:"last_commit,omitempty"`
+	// Moves is how many times the file changed path inside the window: the count of
+	// distinct names its history folded in, minus the one it ends under. A file that
+	// keeps changing address is churning architecturally rather than just textually,
+	// which is a different thing to know than its edit count and is not derivable
+	// from Path alone.
+	Moves int `json:"moves,omitempty" yaml:"moves,omitempty"`
 }
 
 // AffinityOutput reports projects that change together (temporal coupling). Hidden

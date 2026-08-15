@@ -1,0 +1,58 @@
+// site/diagrams/dogfood.buzz - magus builds magus, and the two ways CI runs it against
+// this commit's magusfile.
+//
+// The figure is about a deliberate asymmetry, not a build loop. Nearly every job builds
+// the magus THIS commit defines and runs it here, so a magusfile change that needs an
+// unreleased feature is exercised by the very commit introducing it - there is no
+// release-first ordering problem. Exactly one job pins the last release instead. That one
+// is allowed to go red: it is a compatibility signal, not a gate, and breaking it on
+// purpose is sometimes the correct outcome.
+//
+// An earlier version of this diagram drew the build as a three-node cycle. That was true
+// and useless: it showed the bootstrap without showing why there are two lanes.
+namespace dogfood;
+
+import "../libs/diagram/diagram" as _;
+
+export fun dogfoodDiagram() > Diagram {
+    return Diagram{
+        id = "dogfood",
+        eyebrow = "development",
+        title = "magus builds magus, then runs the last release at it too",
+        desc = "Almost every CI job builds magus from the commit under test and runs it "
+            + "against that commit's magusfile, so a change can rely on a feature that has "
+            + "not shipped. One audit job instead runs the pinned previous release against "
+            + "the same magusfile; it is advisory, and a failure reports a breaking change "
+            + "rather than blocking the branch.",
+        width = 960,
+        height = 560,
+        zones = [
+            Zone{ label = "blocking: the binary this commit defines", x = 272, y = 104, w = 656, h = 152 },
+            Zone{ label = "advisory: the last release, same magusfile", x = 272, y = 320, w = 656, h = 152 },
+        ],
+        nodes = [
+            Node{ id = "commit", label = "This commit", sub = "magusfile + Go source",
+                  x = 32, y = 264, w = 192, h = 56 },
+
+            Node{ id = "fromsource", label = "Built from source", sub = "setup-magus source-path",
+                  x = 304, y = 152, w = 248, h = 64 },
+            Node{ id = "gates", label = "Every gate", sub = "lint, build, test, ci",
+                  role = "focal", x = 616, y = 152, w = 280, h = 64 },
+
+            Node{ id = "pinned", label = "Last release", sub = "setup-magus git-ref",
+                  role = "external", x = 304, y = 368, w = 248, h = 64 },
+            Node{ id = "compat", label = "audit compat", sub = "red is a signal, not a stop",
+                  role = "optional", x = 616, y = 368, w = 280, h = 64 },
+        ],
+        edges = [
+            Edge{ src = "commit", dst = "fromsource", srcSlot = 1, srcSlots = 2, bend = 264 },
+            Edge{ src = "commit", dst = "pinned", srcSlot = 2, srcSlots = 2, bend = 280 },
+            Edge{ src = "fromsource", dst = "gates", label = "must pass" },
+            Edge{ src = "pinned", dst = "compat", label = "may fail", kind = "accent" },
+        ],
+        legend = [
+            LegendItem{ role = "focal", label = "blocks the branch" },
+            LegendItem{ role = "optional", label = "advisory only" },
+        ],
+    };
+}

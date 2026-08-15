@@ -4,6 +4,11 @@
 // ({ el, update, destroy }) and each heading deep-links its glossary term.
 //
 //   - Hotspots:   churn x complexity, the prime refactoring targets (project nodes).
+//   - Hotspot files: the same lens at the granularity you can act on, plus a move count.
+//     Churn follows a file's LINEAGE (project.FileHotspots folds every name it went by onto
+//     the one it ends under), so a renamed file ranks once with its whole history rather
+//     than several times with a slice each, and deleted files are absent - they are history,
+//     not something to go fix.
 //   - Affinity:   co-change pairs; hidden (undeclared) coupling flagged.
 //   - Ownership:  primary-author share, bus-factor-1 and stale flags.
 //   - Trend:      per-project rising/cooling delta.
@@ -15,6 +20,7 @@
 
 import type {
   DashboardState,
+  FileHotspotView,
   HotspotNodeView,
   AffinityPairView,
   OwnershipRowView,
@@ -56,6 +62,78 @@ const hotspotCols: Column<HotspotNodeView>[] = [
   },
   { key: "last", label: "Last commit", text: (r) => r.lastCommit, sort: (r) => r.lastCommit },
 ];
+
+// The per-FILE ranking. Score leads because it is the number the CLI ranks by and it is sent
+// rather than derived, so this table and `magus insight` agree even if the weighting changes.
+// Moves earns a column of its own: a file that keeps changing address is churning
+// architecturally, and that is invisible in a commit count.
+const hotspotFileCols: Column<FileHotspotView>[] = [
+  { key: "path", label: "File", text: (r) => r.path, sort: (r) => r.path },
+  {
+    key: "score",
+    label: "Score",
+    numeric: true,
+    text: (r) => fmtCount(r.score),
+    sort: (r) => r.score,
+  },
+  {
+    key: "commits",
+    label: "Edits",
+    numeric: true,
+    text: (r) => fmtCount(r.commits),
+    sort: (r) => r.commits,
+  },
+  {
+    key: "complexity",
+    label: "Complexity",
+    numeric: true,
+    text: (r) => fmtCount(r.complexity),
+    sort: (r) => r.complexity,
+  },
+  {
+    key: "moves",
+    label: "Moves",
+    numeric: true,
+    // A dash, not a 0: most files never move, and a column of zeroes would draw the eye to
+    // the ordinary case instead of the handful that kept changing address.
+    text: (r) => (r.moves > 0 ? fmtCount(r.moves) : "-"),
+    sort: (r) => r.moves,
+  },
+  {
+    key: "authors",
+    label: "Authors",
+    numeric: true,
+    text: (r) => fmtCount(r.authors),
+    sort: (r) => r.authors,
+  },
+  { key: "last", label: "Last commit", text: (r) => r.lastCommit, sort: (r) => r.lastCommit },
+];
+
+function hotspotFilesTile(): Tile {
+  const card = new Card("insight-hotspot-files", "Hotspot files", {
+    term: "Hotspot",
+    label: "hotspots",
+    note: "churn x complexity, per file",
+  });
+  const table = new SortableTable<FileHotspotView>(hotspotFileCols, {
+    sortKey: "score",
+    emptyText: "No file hotspots in the window.",
+  });
+  card.body.append(table.el);
+  return {
+    el: card.el,
+    update(s: DashboardState) {
+      if (!s.insight) return;
+      const moved = s.insight.hotspotFiles.filter((f) => f.moves > 0).length;
+      card.setNote(
+        `${s.insight.hotspotFiles.length} files, ${s.insight.commits} commits` +
+          (moved > 0 ? `, ${moved} moved` : ""),
+      );
+      table.setRows(s.insight.hotspotFiles);
+    },
+    destroy() {},
+  };
+}
 
 function hotspotsTile(): Tile {
   const card = new Card("insight-hotspots", "Hotspots", {
@@ -318,6 +396,13 @@ export function insightSection(onRefresh: () => void): { el: HTMLElement; tiles:
     ),
   );
 
-  const tiles = [hotspotsTile(), affinityTile(), ownershipTile(), trendTile(), volatilityTile()];
+  const tiles = [
+    hotspotsTile(),
+    hotspotFilesTile(),
+    affinityTile(),
+    ownershipTile(),
+    trendTile(),
+    volatilityTile(),
+  ];
   return { el: band, tiles };
 }

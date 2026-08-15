@@ -352,6 +352,6 @@ magus's, and the advisors say so rather than failing silently.
 
 - [CI checkout](ci.md): clone depth, and why magus deepens a shallow clone rather than
   guessing.
-- [CI providers](../../concepts/ci-providers.md): what a provider spell supplies.
+- [CI providers](../../concepts/ci/providers.md): what a provider spell supplies.
 - [Remote cache](../../concepts/cache/remote.md): the cache model behind the wiring above.
 - [Pull request advice](pr-advice.md): every advisor, and how to turn each one off.

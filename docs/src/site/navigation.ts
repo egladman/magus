@@ -39,4 +39,33 @@ export function initNav(): void {
   right.addEventListener("click", function (e: Event) {
     if (e.target instanceof Element && e.target.closest(".nav-links a")) setOpen(false);
   });
+
+  // Grouped sections are Pico <details> dropdowns, which is what makes them work without any
+  // JavaScript - but <details> has no notion of "dismiss", so an opened group would otherwise
+  // stay open until clicked again. These three handlers give it the dismissal a menu is
+  // expected to have, and every one degrades to the plain native behaviour if this script
+  // never runs.
+  const groups = (): HTMLDetailsElement[] =>
+    Array.from(document.querySelectorAll<HTMLDetailsElement>(".nav-links details.dropdown"));
+  const closeGroups = (except?: Element | null): void => {
+    for (const g of groups()) if (g !== except) g.open = false;
+  };
+  // Opening one closes the others, so two panels can never overlap.
+  for (const g of groups()) {
+    g.addEventListener("toggle", function () {
+      if (g.open) closeGroups(g);
+    });
+  }
+  document.addEventListener("click", function (e: MouseEvent) {
+    const t = e.target as Element | null;
+    if (!(t instanceof Element) || !t.closest(".nav-links details.dropdown")) closeGroups();
+  });
+  document.addEventListener("keydown", function (e: KeyboardEvent) {
+    if (e.key === "Escape") closeGroups();
+  });
+  // Following a link inside a group closes it, matching what the menu links already do.
+  right.addEventListener("click", function (e: Event) {
+    if (e.target instanceof Element && e.target.closest(".nav-links details.dropdown a"))
+      closeGroups();
+  });
 }

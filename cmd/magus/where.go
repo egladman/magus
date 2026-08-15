@@ -102,7 +102,7 @@ func whereCmd(ctx context.Context, root string, args []string) error {
 		}
 	}
 	if patternCount > 1 {
-		return fmt.Errorf("magus where: conflicting pattern flags - use only one of --filter, --glob, --regex, --literal")
+		return fmt.Errorf("magus where: conflicting pattern flags; use only one of --filter, --glob, --regex, --literal")
 	}
 
 	ws, err := inspectWorkspace(ctx, root)

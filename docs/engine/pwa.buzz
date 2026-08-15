@@ -22,12 +22,17 @@ export fun writeManifest(site: Site) > void !> any {
     // Buzz interpolates { ... } in strings, so JSON braces are escaped as \{ \}
     // (see gopherbuzz/testdata/54_raw_string.buzz).
     // Icons: favicon-32 + apple-touch-icon are the legacy set; icon-192/512 target
-    // Android/Windows install prompts; icon-512-maskable carries a solid #13171f background
-    // so the mark stays in the safe zone for circular crops.
+    // Android/Windows install prompts; icon-512-maskable holds the mark inside the 80% safe
+    // circle for the crops a launcher applies.
+    //
+    // The docs and the console share ONE mark, the mascot's hat, and differ only in color:
+    // the docs take the staff-orb amber, the console the skin teal. Those sit near
+    // complementary, so the two installed apps are unmistakable side by side while staying
+    // one family. See assets/icon.svg for the palette reasoning.
     //
     // background_color is the splash-screen fill while the app boots. The manifest spec has
     // no light/dark variant (unlike theme-color in the HTML head), so one value must read in
-    // both schemes: #13171f matches the dark background, giving dark users a seamless splash
+    // both schemes: #2a2e34 is the icon's own ground, giving dark users a seamless splash
     // and light users a brief on-brand flash instead of a blinding white one.
     final body = "\{\n"
         + "  \"name\": \"" + site.config.title + "\",\n"
@@ -39,11 +44,11 @@ export fun writeManifest(site: Site) > void !> any {
         + "  \"scope\": \"" + basePath + "\",\n"
         + "  \"display\": \"standalone\",\n"
         + "  \"categories\": [\"developer\", \"utilities\"],\n"
-        + "  \"background_color\": \"#13171f\",\n"
+        + "  \"background_color\": \"#2a2e34\",\n"
         // theme_color tints the installed app's title/status bar. Match the dark canvas, not
         // an accent: the identity is earthy, never blue, and a neutral dark frame reads in
         // both schemes.
-        + "  \"theme_color\": \"#13171f\",\n"
+        + "  \"theme_color\": \"#2a2e34\",\n"
         + "  \"icons\": [\n"
         + "    \{ \"src\": \"" + basePath + "assets/favicon-32.png\", \"sizes\": \"32x32\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"
         + "    \{ \"src\": \"" + basePath + "assets/apple-touch-icon.png\", \"sizes\": \"180x180\", \"type\": \"image/png\", \"purpose\": \"any\" \},\n"

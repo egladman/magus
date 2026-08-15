@@ -194,7 +194,7 @@ type Service struct {
 // fork/render/cache path reads the op uniformly. Command.Bin may be empty, for a no-op
 // marker op.
 //
-// In-VM spell logic is not an op kind: a remote cache backend is a separate contract
+// In-VM spell logic is not an op kind: a remote cache provider is a separate contract
 // magus invokes by name, and other custom logic belongs in a magusfile target body.
 //
 // Capture makes the op's magusfile method return the {stdout, stderr, code, ok} record

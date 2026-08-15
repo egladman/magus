@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -183,11 +184,12 @@ func TestWriteManagedHookPreservesUserContent(t *testing.T) {
 	assert.Contains(t, s, gitHookBegin, "the managed section is appended")
 }
 
-// TestParseChangesByCommit verifies the NUL-delimited `git log --name-only` parse:
-// a NUL line opens a commit (hash, author, date); following non-empty lines are files.
+// TestParseChangesByCommit verifies the NUL-delimited `git log -M --name-status` parse:
+// a NUL line opens a commit (hash, author, date); following non-empty lines are one
+// status-prefixed entry each.
 func TestParseChangesByCommit(t *testing.T) {
-	out := "\x00abc123\x00Ada\x002026-06-20T10:00:00Z\n\napi/main.go\napi/util.go\n" +
-		"\x00def456\x00Babbage\x002026-06-19T09:00:00Z\n\nweb/app.ts\n"
+	out := "\x00abc123\x00Ada\x002026-06-20T10:00:00Z\n\nM\tapi/main.go\nA\tapi/util.go\n" +
+		"\x00def456\x00Babbage\x002026-06-19T09:00:00Z\n\nD\tweb/app.ts\n"
 
 	got := parseChangesByCommit(out)
 	require.Len(t, got, 2)
@@ -195,11 +197,47 @@ func TestParseChangesByCommit(t *testing.T) {
 	assert.Equal(t, "abc123", got[0].ID)
 	assert.Equal(t, "Ada", got[0].Author)
 	assert.Equal(t, time.Date(2026, 6, 20, 10, 0, 0, 0, time.UTC), got[0].Date.UTC())
-	assert.Equal(t, []string{"api/main.go", "api/util.go"}, got[0].Files)
+	assert.Equal(t, []types.FileChange{
+		{Path: "api/main.go", Status: types.ChangeModified},
+		{Path: "api/util.go", Status: types.ChangeAdded},
+	}, got[0].Files)
 
 	assert.Equal(t, "def456", got[1].ID)
 	assert.Equal(t, "Babbage", got[1].Author)
-	assert.Equal(t, []string{"web/app.ts"}, got[1].Files)
+	assert.Equal(t, []types.FileChange{{Path: "web/app.ts", Status: types.ChangeDeleted}}, got[1].Files)
+}
+
+// TestParseChangesByCommitRename is the case -M exists for: a rename arrives as ONE
+// entry carrying both names, so churn can follow the file instead of splitting across
+// the two paths. A copy is deliberately NOT lineage - both files survive it, so
+// crediting the new path with the old one's history would attribute edits it never
+// received - and it is recorded as a plain add.
+func TestParseChangesByCommitRename(t *testing.T) {
+	out := "\x00abc123\x00Ada\x002026-06-20T10:00:00Z\n\n" +
+		"R096\tinternal/old.go\tinternal/new.go\n" +
+		"C075\tinternal/new.go\tinternal/copy.go\n"
+
+	got := parseChangesByCommit(out)
+	require.Len(t, got, 1)
+	require.Len(t, got[0].Files, 2)
+
+	assert.Equal(t, types.FileChange{
+		Path: "internal/new.go", PrevPath: "internal/old.go", Status: types.ChangeRenamed,
+	}, got[0].Files[0], "a rename carries both names")
+	assert.Equal(t, types.FileChange{
+		Path: "internal/copy.go", Status: types.ChangeAdded,
+	}, got[0].Files[1], "a copy is an add, with no lineage back to its source")
+}
+
+// TestParseChangesByCommitMalformed pins that an unreadable entry is SKIPPED rather
+// than guessed at: a rename line missing its second path has no usable destination,
+// and inventing one would attribute churn to a file that does not exist.
+func TestParseChangesByCommitMalformed(t *testing.T) {
+	out := "\x00abc123\x00Ada\x002026-06-20T10:00:00Z\n\nR100\tonly/one/path.go\nM\tgood.go\n"
+
+	got := parseChangesByCommit(out)
+	require.Len(t, got, 1)
+	assert.Equal(t, []types.FileChange{{Path: "good.go", Status: types.ChangeModified}}, got[0].Files)
 }
 
 // TestParseChangesByCommitEmpty covers a commit that touched no files and a bad date.

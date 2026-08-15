@@ -6,6 +6,7 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strconv"
 	"strings"
@@ -22,6 +23,17 @@ type ScannedCommit struct {
 	Date     time.Time
 	Files    []string // workspace-relative paths that fell inside the workspace
 	Projects []string // distinct projects the commit touched, sorted
+	// Renames carries {before, after} for every path this commit moved, already
+	// workspace-relative. It is the lineage edge: FileHotspots walks these to fold a
+	// file's churn onto the name it ends the window under, instead of ranking each
+	// name it has been through as a separate, quieter file. A pair is dropped unless
+	// BOTH sides fall inside the workspace, since a half-resolved chain would
+	// silently reattribute churn to a path the caller cannot open.
+	Renames [][2]string
+	// Deleted is the subset of Files this commit removed. Kept separate rather than
+	// inferred from the filesystem: a path missing from disk today says nothing about
+	// WHEN it went, and a file deleted and later restored must not read as deleted.
+	Deleted []string
 }
 
 // Scan reads recent history (scoped to dir) and attributes each commit's files to
@@ -56,11 +68,35 @@ func Scan(ctx context.Context, w *types.Workspace, dir string, commits int, sinc
 	for _, c := range changes {
 		sc := ScannedCommit{Author: c.Author, Date: c.Date}
 		projSet := map[string]struct{}{}
-		for _, f := range workspaceRelative(prefix, normalizeFiles(c.Files)) {
+		paths := make([]string, 0, len(c.Files))
+		for _, ch := range c.Files {
+			paths = append(paths, ch.Path)
+		}
+		for _, f := range workspaceRelative(prefix, normalizeFiles(paths)) {
 			sc.Files = append(sc.Files, f)
 			if p, ok := idx.projectForFile(f); ok {
 				projSet[p] = struct{}{}
 			}
+		}
+		// Both sides through the same prefix strip the paths above take, so a rename
+		// whose old name sat outside the scanned subtree is dropped rather than
+		// pointing lineage at a path no lens can resolve.
+		for _, ch := range c.Files {
+			if ch.Status == types.ChangeDeleted {
+				if p, ok := scanRelative(prefix, ch.Path); ok {
+					sc.Deleted = append(sc.Deleted, p)
+				}
+				continue
+			}
+			if ch.PrevPath == "" {
+				continue
+			}
+			prev, okPrev := scanRelative(prefix, ch.PrevPath)
+			cur, okCur := scanRelative(prefix, ch.Path)
+			if !okPrev || !okCur {
+				continue
+			}
+			sc.Renames = append(sc.Renames, [2]string{prev, cur})
 		}
 		sc.Projects = make([]string, 0, len(projSet))
 		for p := range projSet {
@@ -107,6 +143,49 @@ func (c *counter) primary() (string, int) {
 	return best, bestN
 }
 
+// scanRelative applies to ONE path the same normalization the bulk path list gets:
+// slash-normalized, trimmed, and stripped of the VCS-root prefix. It exists because
+// normalizeFiles sorts and dedupes, which is right for a set of paths and destroys
+// the ordering a rename pair depends on. Reports false when the path falls outside
+// the scanned subtree, or is empty.
+func scanRelative(prefix, path string) (string, bool) {
+	p := strings.TrimSpace(filepath.ToSlash(path))
+	if p == "" {
+		return "", false
+	}
+	if prefix != "" {
+		rel, ok := strings.CutPrefix(p, prefix)
+		if !ok {
+			return "", false
+		}
+		p = rel
+	}
+	return p, p != ""
+}
+
+// renameChains resolves every historical path in the scan to the name its file ends
+// the window under. The scan is newest-first, so by the time a rename's OLD name is
+// seen its NEW name has already been folded: resolving the new side first and
+// pointing the old side at that result collapses a chain of any length in one pass,
+// with no fixpoint loop and no risk of cycling on a path that was renamed away and
+// later reused.
+func renameChains(scan []ScannedCommit) map[string]string {
+	canon := map[string]string{}
+	for _, c := range scan {
+		for _, r := range c.Renames {
+			prev, cur := r[0], r[1]
+			if to, ok := canon[cur]; ok {
+				cur = to
+			}
+			if prev == cur {
+				continue
+			}
+			canon[prev] = cur
+		}
+	}
+	return canon
+}
+
 // aggCounters tallies per project (or per file when byFile) across the scan.
 func aggCounters(scan []ScannedCommit, byFile bool) map[string]*counter {
 	m := map[string]*counter{}
@@ -145,14 +224,61 @@ func ProjectStats(scan []ScannedCommit) map[string]ProjectStat {
 
 // FileHotspots ranks files by churn × complexity (the canonical hotspot score).
 // complexity maps a workspace-relative path to its complexity proxy.
+//
+// Churn is attributed along LINEAGE, not by path string: every name a file went by
+// in the window folds onto the name it ends under, so a file renamed three times
+// ranks once with its whole history rather than four times with a quarter each. That
+// is what makes the ranking answer "what keeps getting rewritten" - the thing, not
+// the path - and it is why a file's move count is worth reporting beside its edits.
+//
+// A file whose last event was a delete is left OUT. The ranking exists to point at
+// what to fix first, and a deleted file is not a refactoring target; including it
+// would seat a long tail of unfixable zero-complexity rows above real ones.
 func FileHotspots(scan []ScannedCommit, complexity func(rel string) int) []types.FileHotspot {
-	counters := aggCounters(scan, true)
+	canon := renameChains(scan)
+	resolve := func(p string) string {
+		if to, ok := canon[p]; ok {
+			return to
+		}
+		return p
+	}
+	counters := map[string]*counter{}
+	names := map[string]map[string]struct{}{}
+	// The scan is newest-first, so the FIRST event seen for a name is its most recent
+	// one. Recording only that verdict is what lets a file deleted and later restored
+	// read as live: the restore is seen first and settles the question.
+	gone := map[string]bool{}
+	seen := map[string]bool{}
+	for _, c := range scan {
+		for _, f := range c.Deleted {
+			if k := resolve(f); !seen[k] {
+				seen[k], gone[k] = true, true
+			}
+		}
+		for _, f := range c.Files {
+			k := resolve(f)
+			if !seen[k] {
+				seen[k] = true
+			}
+			cc := counters[k]
+			if cc == nil {
+				cc = &counter{}
+				counters[k] = cc
+				names[k] = map[string]struct{}{}
+			}
+			cc.add(c.Author, c.Date)
+			names[k][f] = struct{}{}
+		}
+	}
 	out := make([]types.FileHotspot, 0, len(counters))
 	for f, c := range counters {
+		if gone[f] {
+			continue
+		}
 		cx := complexity(f)
 		out = append(out, types.FileHotspot{
 			Path: f, Commits: c.commits, Complexity: cx, Score: c.commits * cx,
-			Authors: len(c.authors), LastCommit: c.last,
+			Authors: len(c.authors), LastCommit: c.last, Moves: len(names[f]) - 1,
 		})
 	}
 	slices.SortFunc(out, func(a, b types.FileHotspot) int {

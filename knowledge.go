@@ -988,8 +988,12 @@ func aggregateFileHistory(changes []types.CommitChange, prefix string) []types.K
 	for _, c := range changes {
 		short := ShortRevision(c.ID)
 		modified := c.Date.UTC()
-		for _, f := range c.Files {
-			f = filepath.ToSlash(strings.TrimSpace(f))
+		for _, ch := range c.Files {
+			// The @vcs shard describes files as they are NOW, so a rename's Path (the
+			// name after the commit) is the only side that can match a node. PrevPath
+			// is lineage, which FileHotspots reassembles; here it would name a path
+			// that no longer exists.
+			f := filepath.ToSlash(strings.TrimSpace(ch.Path))
 			if prefix != "" {
 				rel, ok := strings.CutPrefix(f, prefix)
 				if !ok {

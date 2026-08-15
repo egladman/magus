@@ -1,0 +1,138 @@
+// site/diagrams/all.buzz - the registry every consumer reads. Two of them exist: the magusfile
+// target that writes the committed light/dark pair for GitHub, and the site render that
+// inlines the CSS-variable copy into a docs page. Both go through this list so a new
+// diagram is added in exactly one place.
+namespace diagrams;
+
+import "fs";
+import "../libs/diagram/diagram" as _;
+import "site/diagrams/daemon-http" as _;
+import "site/diagrams/daemon-socket" as _;
+import "site/diagrams/daemon-jobs" as _;
+import "site/diagrams/daemon-share" as _;
+import "site/diagrams/ci-pipeline" as _;
+import "site/diagrams/ci-providers" as _;
+import "site/diagrams/image-build" as _;
+import "site/diagrams/dogfood" as _;
+import "site/diagrams/project-reference" as _;
+import "site/diagrams/volatility" as _;
+import "site/diagrams/commit-generated" as _;
+
+export fun allDiagrams() > [Diagram] {
+    return [
+        daemonHttpDiagram(),
+        daemonSocketDiagram(),
+        daemonJobsDiagram(),
+        daemonShareDiagram(),
+        ciPipelineDiagram(),
+        ciProvidersDiagram(),
+        imageBuildDiagram(),
+        dogfoodDiagram(),
+        projectReferenceDiagram(),
+        volatilityDiagram(),
+        commitGeneratedDiagram(),
+    ];
+}
+
+// renderAll returns the inline, theme-following SVG for each diagram, keyed by id, ready
+// for inlineDiagrams. Throws on the first diagram that fails validation, which is what
+// makes a crooked figure fail the docs build rather than ship.
+export fun renderAll() > {str: str} !> any {
+    final byId: mut {str: str} = mut {<str: str>};
+    foreach (d in allDiagrams()) {
+        byId[d.id] = renderSvg(d, cssVarPalette());
+    }
+    return byId;
+}
+
+// writeStandalonePair writes the committed light/dark SVG files for every diagram into
+// dir. These exist for GitHub: a README image is loaded through <img>, which makes it a
+// separate document with no access to the page's CSS variables, so the palette has to be
+// baked in and a second file is the only way to offer a dark one.
+//
+// Naming follows the terminal recordings already in assets/gen: the unsuffixed file is
+// dark and carries the <img> fallback, `-light` is the prefers-color-scheme: light source.
+export fun writeStandalonePair(dir: str) > void !> any {
+    fs\mkdirAll(dir);
+    foreach (d in allDiagrams()) {
+        fs\writeFile(dir + "/diagram-" + d.id + ".svg", renderSvg(d, darkPalette()));
+        fs\writeFile(dir + "/diagram-" + d.id + "-light.svg", renderSvg(d, lightPalette()));
+    }
+}
+
+// inlinePageDiagrams swaps any diagram reference on a page for the inline SVG. Guarded on
+// the page mentioning one first: renderAll walks every figure in the registry, and a docs
+// build renders hundreds of pages that reference none.
+export fun inlinePageDiagrams(html: str) > str !> any {
+    if (html.indexOf("<!--diagram:") == null and html.indexOf("diagram-") == null) {
+        return html;
+    }
+    return inlineDiagrams(html, renderAll());
+}
+
+// BackrefMarker is the token a source file uses to point back at a diagram, as in
+//
+//     // magus:diagram daemon-http - this is the box the figure calls "Guard".
+//
+// Deliberately NOT parsed as a comment. The marker is unique enough to find with a plain
+// substring scan, so this works identically in Go, Buzz, TypeScript, YAML or anything
+// else without declaring a comment syntax per language: whatever precedes the token is
+// the host language's comment opener, and nothing here needs to know what it is.
+final BackrefMarker = "magus:diagram ";
+
+// verifyAnchors checks both directions of the diagram-to-code link and returns one message
+// per break, empty when they agree.
+//
+// Forward: every anchor a diagram declares must still resolve to a path in the tree. This
+// is the half that catches the common rot - a package renamed or deleted while the figure
+// keeps naming it.
+//
+// Reverse: every magus:diagram marker in the sources must name a diagram that exists. This
+// is the half that catches a diagram being renamed or dropped while call sites still point
+// at it. Neither half asserts the figure's SHAPE is right; that stays a human judgment.
+export fun verifyAnchors(root: str, sourceGlobs: [str]) > [str] !> any {
+    final findings: mut [str] = mut [<str>];
+
+    foreach (d in allDiagrams()) {
+        foreach (n in d.nodes) {
+            if (n.anchor != "" and fs\exists(root + "/" + n.anchor) == false) {
+                findings.append("diagram \"{d.id}\": node \"{n.id}\" anchors {n.anchor}, which no longer exists");
+            }
+        }
+    }
+
+    final known: mut [str] = mut [<str>];
+    foreach (d in allDiagrams()) { known.append(d.id); }
+
+    foreach (pattern in sourceGlobs) {
+        foreach (path in fs\glob(root + "/" + pattern)) {
+            final body = fs\readFile(path.value);
+            if (body.indexOf(BackrefMarker) == null) { continue; }
+            foreach (id in markedIds(body)) {
+                var found = false;
+                foreach (k in known) {
+                    if (k == id) { found = true; }
+                }
+                if (found == false) {
+                    findings.append("{path.value}: marks diagram \"{id}\", which no diagram declares");
+                }
+            }
+        }
+    }
+    return findings;
+}
+
+// markedIds pulls each id following a marker. The id runs to the first space or end of
+// line, so a marker may carry a trailing note explaining what the box is called.
+fun markedIds(body: str) > [str] {
+    final ids: mut [str] = mut [<str>];
+    foreach (line in body.split("\n")) {
+        final at = line.indexOf(BackrefMarker);
+        if (at == null) { continue; }
+        var rest = line.sub(at! + BackrefMarker.len()).trim();
+        final space = rest.indexOf(" ");
+        if (space != null) { rest = rest.sub(0, len: space!); }
+        if (rest != "") { ids.append(rest); }
+    }
+    return ids;
+}

@@ -3,7 +3,7 @@
 // calls each one explicitly, in a fixed order (below). Every init guards on the
 // presence of its own DOM targets, so running them all on every page is safe and
 // cheap. esbuild bundles this to gen/main.js; the heavy CDN libraries the
-// syntax-highlight and mermaid modules pull in stay lazy dynamic import()s, which
+// the syntax-highlight module pulls in stay lazy dynamic import()s, which
 // esbuild leaves as external runtime imports.
 //
 // Modules are imported with .js specifiers even though the sources are .ts: that is
@@ -19,11 +19,12 @@ import { initConsoleSettings } from "../ui/console-settings.js";
 import { initAnchors } from "./anchors.js";
 import { initCodeCopy } from "./code-copy.js";
 import { initSyntaxHighlight } from "./syntax-highlight.js";
-import { initMermaid } from "./mermaid.js";
-import { initHomeHeading } from "./home-heading.js";
+import { initDiagramZoom } from "./diagram-zoom.js";
 import { initBackToTop } from "./back-to-top.js";
 import { initPrefetch } from "./prefetch.js";
 import { initRunExample } from "./run-example.js";
+import { initHeroTerminal } from "./hero-terminal.js";
+import { initInstallPlatform } from "./install-platform.js";
 import { initGlossaryTerms } from "./glossary-terms.js";
 import { initKeyboardHelp } from "./keyboard-help.js";
 import { initAnnouncement } from "./announcement.js";
@@ -32,6 +33,8 @@ import { initOfflineBadge } from "./offline-badge.js";
 import { initServiceWorker } from "./service-worker-register.js";
 
 initNav();
+
+initDiagramZoom();
 initTocToggle();
 initScrollSpy();
 initSearch();
@@ -41,11 +44,12 @@ initConsoleSettings(); // the gear settings panel on the console apps (no-op on 
 initAnchors();
 initCodeCopy();
 initSyntaxHighlight();
-initMermaid();
-initHomeHeading();
+initDiagramZoom();
 initBackToTop();
 initPrefetch();
 initRunExample();
+initHeroTerminal(); // landing page only; no-op elsewhere
+initInstallPlatform(); // install page only; no-op elsewhere
 initGlossaryTerms();
 initKeyboardHelp();
 initAnnouncement();

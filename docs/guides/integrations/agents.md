@@ -90,17 +90,7 @@ is the one spelling to read, to write, and to quote back. What a project arg
 prints is what a project arg takes, so a path out of any magus command pastes
 straight back into the next one.
 
-```mermaid
-flowchart LR
-  subgraph IN["accepted as input"]
-    B["pkg/api<br/>workspace-relative"]
-    C["./pkg/api, ../api<br/>relative to the cwd"]
-    E["a bare .<br/>the cwd's project"]
-  end
-  IN --> P{{"parse"}}
-  P --> R["one project reference<br/>path: pkg/api"]
-  R --> H["every output<br/>pkg/api"]
-```
+<!--diagram:project-reference-->
 
 | form              | means                                                            |
 | ----------------- | ---------------------------------------------------------------- |

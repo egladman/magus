@@ -16,7 +16,7 @@ Package `magus.status.v1`, defined in `proto/magus/status/v1/status.proto`. Part
 
 GetStatus returns the current snapshot.
 
-`POST /magus.status.v1.StatusService/GetStatus` - unary.
+`POST /magus.status.v1.StatusService/GetStatus`: unary.
 
 Takes `GetStatusRequest`, returns `GetStatusResponse`.
 
@@ -24,7 +24,7 @@ Takes `GetStatusRequest`, returns `GetStatusResponse`.
 
 StreamStatus pushes a fresh snapshot whenever the pool changes (or on a heartbeat), so a dashboard reflects what is running without polling.
 
-`POST /magus.status.v1.StatusService/StreamStatus` - server streaming.
+`POST /magus.status.v1.StatusService/StreamStatus`: server streaming.
 
 Takes `StreamStatusRequest`, returns `StreamStatusResponse`.
 

@@ -355,13 +355,35 @@ type IgnoredFileReporter interface {
 	IgnoredFiles(ctx context.Context, dir string, paths []string) ([]string, error)
 }
 
+// ChangeStatus is what a commit did to one path. It exists so churn attribution can
+// tell a rename from a delete-plus-add: without that distinction a file's history
+// splits across every name it ever had, and each fragment ranks as a separate,
+// quieter file than the one thing actually being rewritten.
+type ChangeStatus string
+
+const (
+	ChangeAdded    ChangeStatus = "added"
+	ChangeModified ChangeStatus = "modified"
+	ChangeDeleted  ChangeStatus = "deleted"
+	ChangeRenamed  ChangeStatus = "renamed"
+)
+
+// FileChange is one path a commit touched. Path is the name AFTER the commit;
+// PrevPath is set only on a rename and carries the name before it, which is the
+// edge a reader follows to reassemble a file's lineage.
+type FileChange struct {
+	Path     string
+	PrevPath string
+	Status   ChangeStatus
+}
+
 // CommitChange reduces one commit to who made it, when, and the repo-relative
 // paths it touched: the input to churn attribution (no message or diff content).
 type CommitChange struct {
 	ID     string
 	Author string
 	Date   time.Time
-	Files  []string
+	Files  []FileChange
 }
 
 // ChurnReporter is an optional capability for VCSDriver implementations that can
@@ -373,6 +395,10 @@ type ChurnReporter interface {
 	// first, each reduced to its author, date, and touched repo-relative paths.
 	// since, when non-empty, is a backend-native lower bound on the commit date
 	// (a git approxidate / RFC3339); commits still caps the result.
+	//
+	// A backend that cannot detect renames reports them as a delete and an add,
+	// which costs lineage but stays correct: PrevPath is simply never set, and
+	// FileHotspots then ranks the two names separately rather than wrongly.
 	ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]CommitChange, error)
 }
 

@@ -14,6 +14,13 @@
 
 :root {
   --pico-font-size: 106.25%;
+  /* The gap between a dropdown trigger and its panel, set ONCE for every dropdown on the site.
+     Pico derives this from --pico-outline-width (its panel rule is margin-top:
+     var(--pico-outline-width)), but that token also sets focus-ring thickness everywhere, so
+     raising it to float the panel would fatten every focus outline on the site. Own the value
+     here instead and apply it to Pico's own selector below, so a menu that reads as attached
+     but independent is the default for any dropdown we add later, not a per-menu tweak. */
+  --site-dropdown-offset: 0.58rem;
   /* Shared width for the app-like tool pages (search, playground editor) so they
      occupy the same screen real estate instead of one being 78rem and the other
      full-bleed. Wider than the prose container, but still capped. */
@@ -26,6 +33,31 @@
      mismatch. Reserving the gutter unconditionally keeps both measurements
      consistent, so those overlays stop overshooting into horizontal scroll. */
   scrollbar-gutter: stable;
+
+  /* Diagram tokens, consumed by the inlined SVGs lib/diagram.buzz emits. Each one
+     forwards a Pico variable rather than restating a color, so one block covers light,
+     dark and the manual theme toggle: Pico has already resolved which it is by the time
+     these are read. An <img>-loaded copy of the same SVG cannot see any of this and falls
+     back to the hardcoded palette baked into the file - that is the whole reason the
+     standalone pair exists. */
+  --magus-diagram-paper: var(--pico-background-color);
+  --magus-diagram-surface: var(--pico-code-background-color);
+  --magus-diagram-ink: var(--pico-color);
+  --magus-diagram-muted: var(--pico-muted-color);
+  --magus-diagram-soft: var(--pico-muted-color);
+  --magus-diagram-rule: var(--pico-muted-border-color);
+  --magus-diagram-accent: var(--pico-primary);
+  --magus-diagram-accent-tint: color-mix(in srgb, var(--pico-primary) 8%, transparent);
+  --magus-diagram-link: var(--pico-primary);
+}
+
+/* An inlined diagram scales with the prose column instead of its authored pixel width.
+   The SVG carries width/height for the standalone case; here the viewBox does the work. */
+.magus-diagram {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
 }
 
 /* Second, independent layer against the same class of bug: the mobile TOC
@@ -157,6 +189,51 @@ body {
   color: var(--pico-primary);
 }
 
+/* Applied to Pico's own panel selector so every dropdown gets it, present and future. */
+details.dropdown > summary + ul {
+  margin-top: var(--site-dropdown-offset);
+}
+
+/* Grouped sections are Pico's own nav dropdown (details.dropdown inside <nav>), and Pico
+   already handles the chevron, the panel, its positioning and its theming - none of that is
+   reimplemented here.
+
+   The ONE thing it cannot know is that this site styles nav links more compactly than Pico's
+   default: the rule above trades Pico's --pico-nav-link-spacing-vertical for 0.2rem plus a
+   negative block margin, to get the tight hover pill. Pico sizes its dropdown summary from its
+   OWN spacing (measured 42.5px against these links' effective 25.5px), so the group sat 17px
+   taller and off the baseline. Restate the summary in the same two terms the links use, and
+   the rest of the dropdown stays Pico's.
+
+   Removing the height override also fixed the panel overlapping the trigger, which had looked
+   like a separate positioning bug: Pico's offset was right all along and was only landing
+   inside the summary because the summary was the wrong height. */
+.site-header .nav-links details.dropdown > summary {
+  height: calc(1rem * var(--pico-line-height) + 0.2rem * 2);
+  padding: 0.2rem 0.5rem;
+  margin: -0.2rem 0;
+  background: none;
+  border: none;
+  border-radius: var(--pico-border-radius);
+  color: var(--pico-primary);
+}
+/* The nav summary carries a -0.2rem block margin (to match this site's compact links), so it
+   hangs that far below the box the panel is positioned against and eats exactly that much of
+   the gap. Add it back rather than hardcoding a second offset - the site-wide value above stays
+   the single source of truth, and this line says only what is peculiar to the nav. */
+.site-header .nav-links details.dropdown > summary + ul {
+  margin-top: calc(var(--site-dropdown-offset) + 0.2rem);
+}
+
+.site-header .nav-links details.dropdown > summary:hover,
+.site-header .nav-links details.dropdown > summary:focus-visible {
+  background: var(--pico-card-sectioning-background-color);
+}
+/* A group whose child is the current page wears the same quiet pill its sibling links wear. */
+.site-header .nav-links details.dropdown[data-section-current] > summary {
+  background: color-mix(in srgb, var(--pico-primary-focus) 65%, transparent);
+}
+
 /* Right cluster of the top bar: the section links (collapsible on mobile) plus the
    always-visible theme toggle. */
 .nav-right {
@@ -239,6 +316,38 @@ body {
   }
   .js .nav-right.nav-open .nav-links { display: block; }
   .js .nav-links li { display: block; margin: 0; } /* stack one per row */
+  /* Groups become an ACCORDION here, not a flyout. On the wide bar a group opens an absolutely
+     positioned panel beside its neighbors, which is right there and wrong inside this popup:
+     measured at 420px, the panel floated over the items beneath it and made Community and
+     Console unreachable while a group was open. Static positioning lets an open group push the
+     rest of the menu down instead, so everything stays reachable with one thumb. */
+  .js .nav-links details.dropdown { display: block; }
+  /* Full width so the row is tappable end to end, and a flex row so Pico's float:right
+     chevron becomes a flex item instead of wrapping to a line of its own - which is exactly
+     what it did once the summary spanned the menu. space-between parks it on the trailing
+     edge, where a disclosure arrow belongs in a stacked menu. */
+  .js .nav-links details.dropdown > summary {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+  }
+  /* Pico paints dropdown items with --pico-dropdown-color, the body text color, because in a
+     floating panel they are menu rows rather than nav links. Inline in this accordion they sit
+     directly among the blue section links, so measured rgb(43,48,56) against their siblings'
+     rgb(31,107,176) just read as two kinds of link. Match them here only - on the wide bar the
+     panel really is a floating menu and Pico's own color is right there. */
+  .js .nav-links details.dropdown > ul a { color: var(--pico-primary); }
+  .js .nav-links details.dropdown > ul {
+    position: static;
+    inset: auto;
+    min-width: 0;
+    margin: 0;
+    padding: 0 0 0.15rem 0.7rem; /* indent the children so the grouping still reads */
+    background: none;
+    border: none;
+    box-shadow: none;
+  }
   /* Popup heading, matching .toc-title: uppercase, muted, tracked. text-transform
      renders the plain "Menu" markup as "MENU" - same treatment the TOC sheet uses. */
   .js .nav-links .nav-menu-label {
@@ -274,10 +383,25 @@ body {
   .no-js .nav-links { flex-wrap: wrap; justify-content: flex-end; }
 }
 
-/* Small hat mark beside the "magus" wordmark in the nav. */
+/* The brand lockup must never break across lines. It sits a fraction of a pixel from
+   overflowing its own shrink-wrapped box (mark + space + wordmark came to 88.85px inside an
+   88.8px content box), so without this the hat wraps onto the line above the word - which is
+   what it did, and it is not a width the artwork can be tuned out of. */
+.site-header ul a.contrast {
+  white-space: nowrap;
+}
+
+/* Small hat mark beside the "magus" wordmark in the nav. Inline SVG on currentColor, so it
+   takes the wordmark's color in both themes.
+
+   The width is COMPUTED from the viewBox ratio (875/766) rather than left as `auto`. That is
+   not a preference: `width: auto` on an inline <svg> does not scale from the height the way it
+   does on an <img>, it resolves to the element's own width attribute - 875px - so the box was
+   full-width and the wordmark wrapped to the next line. Keep the two in step if the artwork's
+   viewBox ever changes. */
 .brand-mark {
   height: 1.5em;
-  width: auto;
+  width: calc(1.5em * 875 / 766);
   vertical-align: -0.35em;
 }
 
@@ -682,15 +806,6 @@ body {
   }
 }
 
-/* Center mermaid diagrams within their container (mermaid-init.js wraps each in
-   <div class="mermaid">); let the inline max-width scale the SVG cleanly. */
-.mermaid {
-  display: flex;
-  justify-content: center;
-}
-.mermaid > svg {
-  height: auto;
-}
 
 /* Offset in-page anchor jumps so a targeted heading clears the sticky header
    instead of hiding behind it. */
@@ -704,14 +819,22 @@ article :is(h2, h3, h4, h5, h6) {
    last line of longer body prose to avoid orphans/short widows, which pays off most
    on long-form blog paragraphs but is harmless on terse docs. Both fall back to
    normal wrapping on browsers that lack them. One global policy, no per-section
-   split - the classless-Pico way. */
+   split - the classless-Pico way.
+
+   The two card classes are named because their markup is <span>, not <p>: a card
+   is a single anchor, so its title and body cannot be block elements the element
+   selectors above would reach. They follow the same rule the tag they stand in
+   for would have got. */
 h1, h2, h3, h4, h5, h6,
 .related-card-title,
+.landing-card-title,
 blockquote {
   text-wrap: balance;
 }
 article p,
-article li {
+article li,
+article dd,
+.landing-card-body {
   text-wrap: pretty;
 }
 
@@ -1198,10 +1321,15 @@ article li {
    elsewhere", the same glyph Open-in-Playground uses, so the two arrows stay readable as one system -
    right means "another page here", up-right means "a new tab". Muted, since it annotates the label
    rather than competing with it. */
+/* The "opens in a new tab" marker. A bare diagonal arrow reads as "scroll" or "expand" as
+   readily as "leaves this site"; the box-with-an-arrow-leaving-it is the established glyph for
+   an external destination, so it says the one thing it is there to say. Sized in em so it
+   tracks the link text, and drawn on currentColor so it themes with it. */
 .ext-arrow {
   display: inline-block;
-  font-size: 0.85em;
-  vertical-align: 0.05em;
+  width: 0.8em;
+  height: 0.8em;
+  vertical-align: -0.05em;
   opacity: 0.7;
 }
 
@@ -1282,8 +1410,11 @@ article li {
 }
 .code-copy {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  /* Inset past the stage's own padding so the button's hover and focus ring land inside
+     the figure's tinted panel rather than straddling its edge. Written as that padding
+     plus a gap, so the two stay in step. */
+  top: calc(0.75rem + 0.5rem);
+  right: calc(0.9rem + 0.5rem);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -1458,37 +1589,6 @@ a code {
   font-weight: 600;
 }
 
-/* Reverse-chronological listing on /blog/. Each entry stacks title + date + one-
-   line description; hover raises the title (no background flash) to keep the list
-   dense. Layout comes from the ul; no per-post card so 10 posts stay browsable. */
-.blog-index {
-  list-style: none;
-  padding: 0;
-  margin: 1rem 0 0;
-}
-.blog-index li {
-  /* Pico sets list-style-type: square on li itself, which out-specifies the
-     ul's list-style:none - clear it here so entries don't sprout a marker. */
-  list-style: none;
-  padding: 0.75rem 0;
-  border-top: 1px solid var(--pico-muted-border-color);
-}
-.blog-index li:last-child {
-  border-bottom: 1px solid var(--pico-muted-border-color);
-}
-.blog-index-title {
-  font-weight: 600;
-}
-.blog-index-date {
-  color: var(--pico-muted-color);
-  margin-left: 0.5rem;
-  font-variant-numeric: tabular-nums;
-}
-.blog-index-desc {
-  margin: 0.25rem 0 0;
-  color: var(--pico-muted-color);
-}
-
 /* Post byline under the <h1>: date, author, and permalink on one muted line,
    set just below the title so it reads as the post's metadata. */
 .blog-post-meta {
@@ -1552,45 +1652,105 @@ a code {
   color: var(--pico-color);
 }
 
-/* Floating back-to-top button (JS-injected by back-to-top.js). Hidden until
-   scroll passes ~400px; smooth-scrolls (respects prefers-reduced-motion). Sits
-   in the bottom-right safe area so it stays clear of the mobile TOC sheet. */
-.back-to-top {
+/* Floating control stack (JS-injected by floating-actions.js), bottom-right safe
+   area; the .sw-toast takes the bottom-left so the two never overlap.
+   column-reverse, so append order runs bottom-up: back-to-top takes the corner and
+   keeps it, and a control revealed later rises above it instead of displacing the
+   one the reader is aiming at. */
+.floating-actions {
   position: fixed;
   right: max(1rem, env(safe-area-inset-right));
   bottom: max(1rem, env(safe-area-inset-bottom));
   z-index: 40;
-  width: 2.5rem;
-  height: 2.5rem;
-  /* Square (rounded) corners, matching the TOC / theme / nav toggle buttons -
-     was a full circle (border-radius: 50%). */
-  border-radius: var(--pico-border-radius);
-  padding: 0;
-  display: inline-flex;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+
+/* Both floating controls share the nav cluster's icon-button treatment. Each is
+   hidden by default and revealed by its own scroll-position rule below.
+   Styled the way Pico styles its own button variants: by setting the three
+   variables its base button rule paints from, never background/border/color
+   directly. Pico's .secondary and .outline are built exactly this way, and a
+   variant that assigns properties instead is the thing that fights the framework -
+   Pico's :hover reassigns these same variables, so a property set here would have
+   to out-specify it, while a value set here is simply the one Pico reads.
+   No Pico variant fits a floating control: .outline forces a transparent
+   background, and this has to stay opaque over the prose it covers. */
+.back-to-top,
+.keyboard-help-trigger {
+  --pico-background-color: var(--pico-card-background-color);
+  --pico-border-color: var(--pico-muted-border-color);
+  --pico-color: var(--pico-muted-color);
+  /* Derive the box from the glyph (0.4rem around an 18px icon) rather than fixing
+     width/height, so this stays the same size as the nav cluster - menu, reference,
+     settings gear - which is sized the same way. A literal square drifts the moment
+     either side's icon changes. */
+  padding: 0.4rem;
+  /* Pico gives every <button> a form-element bottom margin, and on a fixed element
+     anchored by `bottom` that margin lifts the button a full --pico-spacing above
+     the corner it is supposed to sit in. .nav-toggle and #settings-btn zero it for
+     the same reason. */
+  margin: 0;
   align-items: center;
   justify-content: center;
-  background: var(--pico-card-background-color);
-  color: var(--pico-primary);
-  border: 1px solid var(--pico-muted-border-color);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  /* Light enough to keep the 1px border legible as a border. A heavier shadow
+     smears a dark halo along the bottom edge and the border stops reading. */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  /* display:none rather than a hidden-but-laid-out box: a hidden control must take
+     no room in the column, or the stack reserves a gap for a button that is not
+     there and the visible one floats off the corner. */
+  display: none;
   opacity: 0;
   transform: translateY(0.5rem);
-  pointer-events: none;
   transition: opacity 0.15s ease, transform 0.15s ease;
 }
-/* Semi-opaque at rest so it sits lightly over the content it floats above; it
-   comes to full opacity on hover/focus when the reader reaches for it. */
-.back-to-top.visible {
-  opacity: 0.65;
-  transform: translateY(0);
-  pointer-events: auto;
+
+/* Reveal rules. The back-to-top earns its place as soon as the top is far away;
+   the shortcuts button waits for the foot of the page, where a reader out of
+   content is the most likely to be looking for somewhere to go. Gating it on
+   .past-fold too keeps it off pages short enough to be their own bottom. */
+.floating-actions.past-fold .back-to-top,
+.floating-actions.past-fold.at-end .keyboard-help-trigger {
+  display: inline-flex;
+  /* Next frame, so the element has a layout box to animate from. */
+  animation: floating-action-in 0.15s ease forwards;
 }
-.back-to-top.visible:hover,
-.back-to-top.visible:focus-visible {
-  opacity: 1;
+@keyframes floating-action-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Tint border + glyph primary, exactly like the nav icon buttons. Restating the
+   background is what holds it opaque: Pico's plain-button :hover reassigns all
+   three variables (to a filled primary), so leaving this one out would let the
+   hover state paint over the prose behind it.
+   Do NOT reach for var(--pico-color) here, the way .nav-toggle/.ref-trigger do -
+   that is Pico's output variable, reassigned per variant and state, so reading it
+   returns whatever the last variant wrote: --pico-primary-hover under .outline,
+   but --pico-primary-inverse (white) on a filled button, which paints a blank
+   white tile with an invisible glyph. Name the input token instead. */
+.back-to-top:hover,
+.back-to-top:focus-visible,
+.back-to-top:active,
+.keyboard-help-trigger:hover,
+.keyboard-help-trigger:focus-visible,
+.keyboard-help-trigger:active {
+  --pico-background-color: var(--pico-card-background-color);
+  --pico-border-color: var(--pico-primary-hover);
+  --pico-color: var(--pico-primary-hover);
 }
 @media (prefers-reduced-motion: reduce) {
-  .back-to-top { transition: none; }
+  .back-to-top,
+  .keyboard-help-trigger {
+    transition: none;
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* "Related" card grid near the foot of a docs page (built by relatedFor() in the
@@ -1766,7 +1926,7 @@ a code {
   .page-nav,
   .page-provenance,
   .site-footer,
-  .back-to-top,
+  .floating-actions,
   .related,
   .search-results,
   .skip-link,
@@ -2460,13 +2620,6 @@ a code {
   font-style: italic;
 }
 
-/* Mermaid source: with JS off, we show the raw DSL plus a caption identifying
-   it. With JS on, mermaid-init.js replaces the <pre> with the rendered SVG, so
-   the caption should disappear. .js gates the caption off (mermaid-init.js
-   runs regardless of whether it fully renders the SVG; even if the CDN fails,
-   users have JS on and expect the diagram surface). */
-.js .mermaid-src-caption { display: none; }
-.mermaid-src-caption { display: block; margin-top: 0.25rem; }
 
 /* Admonitions / callouts. Author with GitHub-alert syntax:
      > [!NOTE]
@@ -2549,13 +2702,25 @@ a code {
 /* Keyboard-shortcut help overlay - a native <dialog> so the browser handles
    focus trap + backdrop + Esc-to-close. Pico gives <dialog> a card look; we
    just scope the inner width. */
-.shortcut-help[open] {
+/* The card is the <article>, not the <dialog>: Pico makes the dialog itself a
+   full-viewport flex centering container. Sizing and framing the dialog instead
+   puts a border around the whole screen, and its max-width is dead on arrival
+   against Pico's min-width:100% (min always beats max), which is how this overlay
+   came to render ~2x the width it declares. */
+.shortcut-help[open] article {
   max-width: 22rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
   border: 1px solid var(--pico-muted-border-color);
   border-radius: var(--pico-border-radius);
-  padding: 0;
 }
+/* Pico bleeds a dialog header to the card edges with a negative margin sized to
+   cancel the article's padding. This article sets its own padding to zero and each
+   section pads itself, so there is nothing to cancel and that margin would hang the
+   header off the top of the card. */
 .shortcut-help header {
+  margin: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2563,16 +2728,13 @@ a code {
   border-bottom: 1px solid var(--pico-muted-border-color);
 }
 .shortcut-help header h2 { margin: 0; font-size: 1rem; }
+/* Pico's .close supplies the glyph, the centering and the dim/hover states. It
+   sizes itself against a stock article's padding, which this header replaces, so
+   the only thing left to say is that the margins meant for that layout are not
+   wanted here. */
 .shortcut-close {
-  background: transparent;
-  border: 0;
-  font-size: 1.25rem;
-  line-height: 1;
-  padding: 0.1rem 0.4rem;
-  color: var(--pico-muted-color);
-  cursor: pointer;
+  margin: 0;
 }
-.shortcut-close:hover { color: var(--pico-primary); }
 .shortcut-help dl {
   margin: 0;
   padding: 0.75rem 0.9rem;
@@ -2584,13 +2746,29 @@ a code {
 }
 .shortcut-help dt { margin: 0; }
 .shortcut-help dd { margin: 0; color: var(--pico-muted-color); }
+/* Pico's kbd is deliberately inverted - it paints --pico-code-kbd-background-color
+   (= --pico-color) behind --pico-code-kbd-color (= --pico-background-color), so
+   the chip flips with the color scheme on its own. Retune BOTH tokens to keep
+   that pairing coherent while lightening the chip; setting `background` alone
+   inverts only half of it and leaves white glyphs on a white chip. */
 .shortcut-help kbd {
+  --pico-code-kbd-background-color: var(--pico-card-sectioning-background-color);
+  --pico-code-kbd-color: var(--pico-color);
   font-family: inherit;
   font-size: 0.85rem;
   padding: 0.05rem 0.4rem;
   border: 1px solid var(--pico-muted-border-color);
   border-radius: var(--pico-border-radius);
-  background: var(--pico-card-sectioning-background-color);
+}
+/* Pico blurs the page behind a modal via --pico-modal-overlay-backdrop-filter,
+   default blur(0.375rem) (~6px), which reads as a heavy frosted pane; the site's
+   own overlays, .ref-backdrop and .toc-backdrop, dim without blurring at all.
+   Retune Pico's variable rather than setting backdrop-filter here: Pico applies
+   the filter to the dialog ELEMENT, not to ::backdrop, so a filter declared on
+   the pseudo-element is a second blur stacked on top of Pico's rather than a
+   replacement for it. */
+.shortcut-help {
+  --pico-modal-overlay-backdrop-filter: blur(2px);
 }
 .shortcut-help::backdrop { background: rgba(0, 0, 0, 0.35); }
 
@@ -2724,3 +2902,1302 @@ a code {
   font-size: 0.8rem;
   color: var(--pico-muted-color);
 }
+
+
+/* ===========================================================================
+   Landing page (gen/index.html, body.site-landing - see site/landing.buzz)
+   ---------------------------------------------------------------------------
+   The front door is a layout rather than an article, so it opts out of the
+   .container's reading measure and the <article> card that every docs page
+   renders inside. Everything below is scoped under .site-landing so no docs
+   page can pick it up by accident.
+   =========================================================================== */
+
+/* The article wrapper renderPage always emits carries a card background, a
+   border and a reading measure. On the landing it would draw a box around the
+   whole page, so it is flattened to a plain block; the sections inside supply
+   their own rhythm. */
+.site-landing main > article,
+.site-landing main > .with-toc article {
+  background: none;
+  border: 0;
+  box-shadow: none;
+  padding: 0;
+  margin: 0;
+  max-width: none;
+}
+
+.site-landing .landing-section {
+  margin: var(--landing-section-gap) 0 0;
+}
+
+.landing-h2 {
+  font-size: clamp(1.35rem, 1.1rem + 1.1vw, 1.9rem);
+  margin-bottom: 0.5rem;
+}
+
+/* The page's two rhythm values, both derived from Pico's own spacing scale rather
+   than invented: the gap between a section's heading block and its content, and
+   the gap between one section and the next. Everything reads from these, so the
+   vertical rhythm cannot drift a section at a time. */
+.site-landing {
+  --landing-lead-gap: calc(var(--pico-block-spacing-vertical) * 1.75);
+  --landing-section-gap: calc(var(--pico-block-spacing-vertical) * 5);
+}
+
+.landing-section-lede {
+  color: var(--pico-muted-color);
+  max-width: var(--landing-measure, 42rem);
+  margin-bottom: var(--landing-lead-gap);
+}
+
+/* A lede is a subtitle, so .landing-h2 sits tight against it. "Where to next" has
+   no lede and its cards were butting into the heading. State the relationship -
+   a heading followed DIRECTLY by content restores the gap the lede would have
+   occupied - instead of special-casing that one section. */
+.landing-h2 + .landing-cards {
+  margin-top: var(--landing-lead-gap);
+}
+
+/* ---- Hero ---------------------------------------------------------------
+   One column on mobile (copy, then terminal), two side by side once there is
+   room. The terminal is the wider of the two: it is the demonstration, and a
+   transcript squeezed narrower than its longest line wraps into nonsense. */
+/* One measure for every run of prose on this page. It was five (46, 62, 68, 74
+   and none), so paragraphs shared a left edge and stopped in five different
+   places, which reads as broken rather than as a margin. Prose does not want to
+   fill a 1450px container; the space beside it is for the mascot, the console
+   shot and the provider tabs. */
+.site-landing {
+  /* In rem, not ch. A reading measure wants ch, but this value also has to line a
+     heading's left edge up with the paragraph under it, and `ch` resolves against the
+     element's OWN font size: 68ch on an h2 at 1.9rem computed to 1440px against the
+     body's 728px, so every heading hung a long way left of its own text. One unit
+     everything resolves identically. 42rem is that same 68-character measure at body
+     size.
+
+     Now pinned to 700px rather than 42rem, because 700 is a rung of Pico's own container
+     ladder (510 / 700 / 950 / 1200 / 1450 - the .container max-widths at each breakpoint)
+     and 42rem resolved to 714px against Pico's responsive root size. 14px off a rung reads
+     as a mistake rather than a choice, which is most of what made the page feel unsettled.
+     Same measure to within 2%; the character count is unchanged in any way a reader
+     notices. */
+  --landing-measure: 700px;
+
+  /* The second rung, 950, is Pico's container width at its 1024 breakpoint. It exists for
+     ONE block: the numbered card row under "What makes it different". Three cards on the
+     700 measure come out 222px each, which is too narrow for a title plus a paragraph;
+     at 950 they are 305px. Pico's own landing works exactly this way - most of its content
+     sits on a 950 wrapper inside a 1200 container - so a second rung is normal here, not a
+     deviation. What is NOT normal is a heading on one rung and its content on another, so
+     anything that takes this width takes it for the whole section. */
+  --landing-wide: 950px;
+}
+
+/* ONE width for the whole page. Every block in a section - prose, card grid, terminal
+   frame, tab card, screenshot, the three-panel output row - sits on the reading measure and
+   centers on the same axis, so the page has a single left edge from top to bottom.
+   There used to be a second, wider rung here. It is gone deliberately: two rungs meant
+   headings sat on one and their content on the other, so a title was inset 125px from the
+   block it named, and the eye tracked an edge that moved every few sections. A ladder is
+   only worth having if something needs a rung, and nothing here did except the hero, which
+   opts out by not being a .landing-section at all. */
+/* The one block on the wide rung: the numbered card row, and nothing else. Three cards on
+   the 700 measure are 222px each, too narrow for a title plus a paragraph; at 950 they are
+   305px. The heading and the prose above it stay on the measure and stay centered, exactly
+   as every other section on the page - a wider card row centered under narrower text is an
+   ordinary breakout, and matching the section to the cards instead made this one section
+   start 125px left of every other one. */
+.site-landing .landing-section > .landing-cards:not(.landing-cards-compact),
+.site-landing .landing-section > .landing-shot {
+  max-width: var(--landing-wide);
+  margin-inline: auto;
+}
+
+.site-landing .landing-section > .landing-cards,
+.site-landing .landing-section > .landing-pair,
+.site-landing .landing-section > .landing-tabs,
+.site-landing .landing-section > .landing-tabs-triple,
+.site-landing .landing-section > .term {
+  max-width: var(--landing-measure);
+  margin-inline: auto;
+}
+
+
+/* The text column is CENTERED in the container, not flush left inside it. The cards,
+   the tab card, the verb list and the hero all span the container; prose cannot
+   (71rem is ~120 characters a line), so it holds a measure. Left-aligned, that measure
+   put every paragraph hard against the left edge with a wide empty gutter on the right
+   and nothing lining up with the full-width blocks above and below it. Centered, the
+   text sits on the container's axis like everything else and the leftover space reads
+   as a margin.
+
+   Headings take the same column, or a full-width h2 would sit over an indented
+   paragraph and the mismatch would just move. */
+.landing-section > .landing-h2,
+.landing-section > .landing-section-lede,
+.landing-section > .landing-humans-body,
+.landing-section > .landing-pair-summary-title,
+.landing-section > .landing-support,
+.landing-section > .landing-verbs,
+.landing-float-prose {
+  margin-inline: auto;
+}
+.landing-section > .landing-h2,
+.landing-section > .landing-pair-summary-title,
+.landing-section > .landing-verbs {
+  max-width: var(--landing-measure, 42rem);
+}
+
+/* The one deliberate exception to "layout comes from Pico". The hero is a headline beside
+   a terminal, not N equal columns, so it wants an asymmetric split and a LATER breakpoint
+   than the framework's 768: measured at an 800px viewport, Pico's grid gave it two ~340px
+   columns and clipped the transcript mid-line. It holds its columns until 1024 and stacks
+   below that. Every other multi-column block on this page uses `class="grid"` and reflows
+   with the rest of the site; if you are adding one, do that instead of copying this. */
+.landing-hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 2.5rem;
+  align-items: center;
+  margin: 1rem 0 0;
+}
+@media (min-width: 1024px) {
+  .landing-hero {
+    grid-template-columns: minmax(0, 5fr) minmax(0, 6fr);
+    gap: 3rem;
+    margin-top: 2rem;
+  }
+}
+
+/* The wordmark above the headline, set in the same monospace as the terminal so
+   the two read as one object. */
+.landing-eyebrow {
+  font-family: var(--pico-font-family-monospace);
+  font-size: 0.85rem;
+  letter-spacing: 0.18em;
+  text-transform: uppercase;
+  color: var(--pico-primary);
+  margin-bottom: 0.75rem;
+}
+.landing-eyebrow::before {
+  content: "$ ";
+  opacity: 0.55;
+}
+
+.landing-title {
+  font-size: clamp(1.75rem, 1.1rem + 2.4vw, 2.6rem);
+  line-height: 1.15;
+  letter-spacing: -0.02em;
+  /* Pico gives an h1 a typographic top margin, which here opens a gap between the
+     wordmark and the headline it belongs to. They are one unit. */
+  margin-top: 0;
+  margin-bottom: 1rem;
+}
+
+/* ---- The rotating headline ----------------------------------------------
+   Six taglines cycling in the <h1>, with NO JavaScript: the whole effect is one
+   keyframe animation plus a per-item negative delay, so it runs before main.js
+   loads, survives it failing to load, and adds nothing to the CSP.
+   (CSS cannot randomize, so this is a fixed continuous cycle rather than a
+   different line per page load - that would need script.)
+
+   The items are stacked in a single grid cell rather than positioned absolutely,
+   so the <h1> reserves the height of the TALLEST line once and nothing below it
+   moves as the cycle runs. Keep the lines within two rendered lines of each other
+   or that reserved box opens a visible gap under the short ones.
+
+   The pace is deliberately slow: ten seconds a line, eighty for a full turn. A
+   headline that changes while you are still reading it is an animation demo, not
+   a headline - the line should have been sitting there long enough that you are
+   not sure whether it moved.
+
+   INVARIANT: the keyframe percentages and the nth-child delays below are computed
+   for exactly TWELVE items (100/12 = 8.33% each, 10s apiece). Adding or removing a
+   line in landing.buzz means recomputing both. */
+.landing-rotator {
+  display: grid;
+  align-items: start;
+}
+
+.landing-rotate {
+  grid-area: 1 / 1;
+  opacity: 0;
+  /* will-change keeps the transform on its own layer so the rise cannot judder
+     against the rest of the page repainting. */
+  will-change: opacity, transform;
+  animation: landing-rotate 120s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+}
+
+/* Held opaque for its own slot. The swap is a short rise rather than a plain
+   crossfade: the incoming line comes up into place and the outgoing one lifts
+   away, which reads as deliberate where a symmetric fade reads as a dissolve.
+   Kept small (a third of an em) and fast - the movement is there to give the
+   change an edge, not to be noticed as an animation. */
+@keyframes landing-rotate {
+  0% {
+    opacity: 0;
+    transform: translateY(0.32em);
+  }
+  0.5% {
+    opacity: 1;
+    transform: translateY(0);
+    animation-timing-function: cubic-bezier(0.16, 0.84, 0.44, 1);
+  }
+  7.7% {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  8.33% {
+    opacity: 0;
+    transform: translateY(-0.28em);
+  }
+  100% {
+    opacity: 0;
+    transform: translateY(0.32em);
+  }
+}
+
+/* Negative delays start every item mid-cycle, one slot apart, so all eight share
+   one animation and one timeline instead of needing eight keyframe blocks. */
+.landing-rotate:nth-child(2) { animation-delay: -10s; }
+.landing-rotate:nth-child(3) { animation-delay: -20s; }
+.landing-rotate:nth-child(4) { animation-delay: -30s; }
+.landing-rotate:nth-child(5) { animation-delay: -40s; }
+.landing-rotate:nth-child(6) { animation-delay: -50s; }
+.landing-rotate:nth-child(7) { animation-delay: -60s; }
+.landing-rotate:nth-child(8) { animation-delay: -70s; }
+.landing-rotate:nth-child(9) { animation-delay: -80s; }
+.landing-rotate:nth-child(10) { animation-delay: -90s; }
+.landing-rotate:nth-child(11) { animation-delay: -100s; }
+.landing-rotate:nth-child(12) { animation-delay: -110s; }
+
+/* A headline that will not hold still is a real accessibility problem, not a
+   taste one. Under a reduced-motion preference the cycle stops entirely on the
+   first line - which is also the only one exposed to assistive tech (the rest
+   carry aria-hidden), so the heading reads the same either way. */
+@media (prefers-reduced-motion: reduce) {
+  .landing-rotate {
+    animation: none;
+    opacity: 0;
+    transform: none;
+  }
+  .landing-rotate:first-child {
+    opacity: 1;
+  }
+}
+
+.landing-lede {
+  font-size: 1.05rem;
+  line-height: 1.6;
+  max-width: 46ch;
+  margin-bottom: 0.85rem;
+}
+
+.landing-sub {
+  color: var(--pico-muted-color);
+  font-size: 0.95rem;
+  max-width: 46ch;
+  margin-bottom: 1.75rem;
+}
+
+/* ---- Call to action ------------------------------------------------------
+   Plain anchors styled as buttons rather than Pico's role="button", so the
+   primary/secondary/quiet trio stays a single set of rules and none of them
+   inherit the underline treatment prose links get. */
+.landing-cta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.6rem;
+}
+
+.landing-btn {
+  display: inline-block;
+  padding: 0.6rem 1.15rem;
+  border: 1px solid var(--pico-primary);
+  border-radius: var(--pico-border-radius);
+  color: var(--pico-primary);
+  font-weight: 600;
+  font-size: 0.95rem;
+  text-decoration: none;
+  background: none;
+  transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
+}
+.landing-btn:hover,
+.landing-btn:focus-visible {
+  background: var(--pico-primary);
+  color: var(--pico-primary-inverse);
+  text-decoration: none;
+}
+.landing-btn-primary {
+  background: var(--pico-primary);
+  color: var(--pico-primary-inverse);
+}
+.landing-btn-primary:hover,
+.landing-btn-primary:focus-visible {
+  background: var(--pico-primary-hover);
+  border-color: var(--pico-primary-hover);
+}
+/* ---- The terminal frame --------------------------------------------------
+   Deliberately theme-INDEPENDENT: a terminal is dark in either theme, and the
+   alternative is a second palette to keep in sync across theme.css's three
+   blocks (light, OS-dark, forced-dark) for a component that gains nothing from
+   it. The variables are declared on .term itself so both the hero transcript
+   and the magusfile listing share one definition. */
+.term {
+  --term-bg: #12161d;
+  --term-chrome: #1b212b;
+  --term-fg: #cbd5df;
+  --term-muted: #7d8894;
+  --term-prompt: #64c1cd;
+  --term-ok: #7fc48d;
+  --term-border: rgba(255, 255, 255, 0.09);
+
+  background: var(--term-bg);
+  border: 1px solid var(--term-border);
+  border-radius: 10px;
+  overflow: hidden;
+  /* A soft lift off the page. Kept subtle so the panel reads as inset content
+     rather than a floating dialog. */
+  box-shadow: 0 12px 32px rgba(10, 14, 20, 0.18);
+}
+
+/* The title bar: three dots and a name. Decorative chrome, so the dots are
+   aria-hidden in the markup and carry no meaning here. */
+.term-bar {
+  display: flex;
+  align-items: center;
+  gap: 0.7rem;
+  padding: 0.55rem 0.85rem;
+  background: var(--term-chrome);
+  border-bottom: 1px solid var(--term-border);
+}
+.term-dots {
+  display: inline-flex;
+  gap: 0.4rem;
+}
+.term-dots i {
+  width: 0.65rem;
+  height: 0.65rem;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.16);
+}
+.term-name {
+  font-family: var(--pico-font-family-monospace);
+  font-size: 0.78rem;
+  color: var(--term-muted);
+}
+
+/* The transcript. overflow-x rather than wrapping: a wrapped column of aligned
+   timings stops being a transcript. The line-height is deliberately tighter than
+   the site's prose measure - terminal output is set solid, and at prose leading
+   the blank separator lines read as double-spacing rather than as gaps between
+   three separate commands. */
+.term-body {
+  margin: 0;
+  padding: 1rem 1.1rem 1.15rem;
+  background: none;
+  border: 0;
+  color: var(--term-fg);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  overflow-x: auto;
+  white-space: pre;
+  /* No ligatures. A coding font renders "--dry-run" with the double hyphen fused
+     into one long dash, which is the one thing a transcript must not do: the whole
+     claim here is that this is the literal command you would type. */
+  font-variant-ligatures: none;
+}
+.term-body code {
+  background: none;
+  color: inherit;
+  padding: 0;
+  font-size: inherit;
+}
+
+/* The color spans are INLINE on purpose. They were display:block, which under
+   white-space:pre meant every line broke twice - once for the block, once for the
+   newline already in the source - and the transcript came out double-spaced,
+   reading as a styled list rather than as terminal output. The <pre> does the line
+   breaking; these only carry color. */
+.term-prompt {
+  color: var(--term-prompt);
+  user-select: none;
+}
+.term-cmd {
+  color: #e8edf2;
+  font-weight: 600;
+}
+.term-ok {
+  color: var(--term-ok);
+}
+.term-muted {
+  color: var(--term-muted);
+}
+
+/* Block cursor after the last line. It blinks because the hero terminal is a
+   real prompt and nothing else says so. The native caret will not do: a hairline
+   bar that appears only once the field has focus tells you nothing beforehand.
+   Eased, bottoming out at 0.12 rather than 0, so it pulses instead of strobing. */
+.term-cursor {
+  display: inline-block;
+  width: 0.62rem;
+  height: 1.15rem;
+  background: var(--term-prompt);
+  opacity: 0.85;
+  vertical-align: -0.22rem;
+  animation: term-cursor-blink 1.3s ease-in-out infinite;
+}
+@keyframes term-cursor-blink {
+  0%, 40% { opacity: 0.85; }
+  52%, 88% { opacity: 0.12; }
+  100% { opacity: 0.85; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .term-cursor { animation: none; }
+}
+
+/* The magusfile listing reuses the frame, but it is a FILE rather than a
+   transcript, and that difference decides the palette. A terminal is dark in
+   either theme because a terminal is dark; a source listing is a document and
+   should follow the reader's theme like every other code block on the site.
+   Leaving it on the terminal palette was an actual bug, not just a preference:
+   the --syn-* token colors are theme-aware, so in light mode highlight.js was
+   painting dark tokens onto the hard-coded dark background.
+
+   Re-theming is one override block because .term declares its palette as custom
+   properties on itself - that is what they are for. */
+.term-plain {
+  --term-bg: var(--syntax-panel-bg);
+  --term-chrome: var(--pico-card-sectioning-background-color);
+  --term-fg: var(--pico-code-color);
+  --term-muted: var(--pico-muted-color);
+  --term-prompt: var(--pico-primary);
+  --term-border: var(--pico-card-border-color);
+  box-shadow: none;
+}
+
+/* The traffic lights are drawn in translucent white, which is invisible on a
+   light panel. All they did here was indent the filename by an unexplained
+   amount. A file listing is not a window, so it does not get window furniture,
+   and the name starts where the code below it starts: the bar takes .term-body's
+   horizontal padding so the two left edges line up. */
+.term-plain .term-dots {
+  display: none;
+}
+.term-plain .term-bar {
+  padding-left: 1.1rem;
+  padding-right: 1.1rem;
+}
+
+/* ---- Card grids ---------------------------------------------------------- */
+.landing-cards {
+}
+
+.landing-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 1.15rem 1.25rem 1.3rem;
+  background: var(--pico-card-background-color);
+  border: 1px solid var(--pico-card-border-color);
+  border-radius: var(--pico-border-radius);
+  color: inherit;
+  text-decoration: none;
+  transition: border-color 0.15s ease, transform 0.15s ease;
+}
+.landing-card:hover,
+.landing-card:focus-visible {
+  border-color: var(--pico-primary);
+  text-decoration: none;
+  transform: translateY(-2px);
+}
+
+/* The step number on the three "what it does" cards. Monospace and faint: it
+   orders the three ideas without competing with the titles. */
+.landing-card-mark {
+  font-family: var(--pico-font-family-monospace);
+  font-size: 0.75rem;
+  letter-spacing: 0.12em;
+  color: var(--pico-muted-color);
+  opacity: 0.7;
+}
+
+.landing-card-title {
+  font-weight: 650;
+  font-size: 1.02rem;
+  color: var(--pico-h3-color, var(--pico-color));
+}
+
+.landing-card-body {
+  font-size: 0.9rem;
+  line-height: 1.55;
+  color: var(--pico-muted-color);
+}
+.landing-card-body code {
+  font-size: 0.85em;
+}
+
+.landing-cards-compact .landing-card {
+  padding: 1rem 1.1rem 1.1rem;
+}
+/* A committed screenshot, regenerated by hacks/screenshots.sh. Captured at 2x, so the
+   intrinsic width is double what it renders at; width/height are on the img so the row
+   is reserved before it loads and the page does not jump. */
+.landing-shot {
+  margin: 1.5rem 0 0;
+}
+.landing-shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  border: 1px solid var(--pico-card-border-color);
+  border-radius: var(--pico-border-radius);
+}
+/* The caption belongs to the screenshot, so it takes the screenshot's width rather than
+   the prose measure. With the measure it rendered 714px centered under a 1200px image,
+   inset 243px from both edges, which reads as a stray paragraph rather than a label for
+   the thing above it. A caption is not body copy; it is part of the figure. */
+.landing-shot figcaption {
+  margin: 0.6rem 0 0;
+  font-size: 0.85rem;
+  color: var(--pico-muted-color);
+}
+
+/* ---- Provider tabs -------------------------------------------------------
+   Radio inputs and labels, no script. The inputs and the panels have to be
+   siblings for the ~ combinator to reach across, so the whole thing is one flex
+   row: labels sit inline, panels take a full row and are reordered below them.
+   Panels are matched by nth-of-type, which counts sections only.
+
+   The container is Pico's own <article> + <header> card rather than a hand-rolled
+   box: Pico already draws the border, radius, shadow and sectioning bar, so the
+   tabs and their panel read as one component and nothing here re-invents card
+   chrome that the framework ships.
+
+   The inputs stay in the layout (clipped, not display:none) so they keep their
+   place in the tab order and focus lands where the label is. */
+.landing-tabs {
+  margin: 1.5rem 0 0;
+}
+/* Pico's article>header already draws the sectioning bar, border and top radii, so
+   the strip needs layout only. */
+.landing-tabs > header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.15rem;
+  padding-bottom: 0;
+}
+.landing-tabs input[type="radio"] {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+  pointer-events: none;
+}
+.landing-tabs label {
+  margin: 0;
+  padding: 0.45rem 0.95rem;
+  border: var(--pico-border-width) solid transparent;
+  border-bottom: 0;
+  border-radius: var(--pico-border-radius) var(--pico-border-radius) 0 0;
+  font-family: var(--pico-font-family-monospace);
+  font-size: 0.78rem;
+  line-height: 1.4;
+  color: var(--pico-muted-color);
+  cursor: pointer;
+  user-select: none;
+}
+.landing-tabs label:hover {
+  color: var(--pico-color);
+}
+/* The selected tab takes the card's own background so it reads as cut out of the
+   header and joined to the panel below it. */
+.landing-tabs input[type="radio"]:checked + label {
+  background: var(--pico-card-background-color);
+  border-color: var(--pico-card-border-color);
+  color: var(--pico-color);
+}
+.landing-tabs input[type="radio"]:focus-visible + label {
+  outline: 2px solid var(--pico-primary-focus);
+  outline-offset: -2px;
+}
+/* :has() rather than the ~ sibling combinator: the inputs live in <header> now, so
+   no combinator reaches the panels from them. */
+.landing-tabpanel {
+  display: none;
+}
+.landing-tabs:has(#ci-tab-neutral:checked) .landing-tabpanel:nth-of-type(1),
+.landing-tabs:has(#ci-tab-gha:checked) .landing-tabpanel:nth-of-type(2),
+.landing-tabs:has(#ci-tab-glab:checked) .landing-tabpanel:nth-of-type(3),
+.landing-tabs:has(#os-tab-unix:checked) .landing-tabpanel:nth-of-type(1),
+.landing-tabs:has(#os-tab-windows:checked) .landing-tabpanel:nth-of-type(2),
+.landing-tabs:has(#os-tab-mise:checked) .landing-tabpanel:nth-of-type(3),
+.landing-tabs:has(#os-tab-container:checked) .landing-tabpanel:nth-of-type(4) {
+  display: block;
+}
+
+/* The install page's panels are markdown, so they carry ordinary prose rather than the
+   terminal frames the CI panels use. Trim the leading margin the first block would
+   otherwise inherit, so a panel starts flush against its tab strip. */
+#install-tabs .landing-tabpanel > :first-child {
+  margin-top: 0;
+}
+.landing-tab-note {
+  max-width: var(--landing-measure, 42rem);
+  margin: 0 0 0.75rem;
+  color: var(--pico-muted-color);
+  font-size: 0.92rem;
+}
+.landing-tabpanel .term + .landing-tab-note {
+  margin-top: 1rem;
+}
+
+/* Three renderings of one command, side by side. auto-fit rather than a fixed three,
+   so the row drops to two and then one as the container narrows instead of squeezing
+   three unreadable columns of monospace. Each frame keeps .term-body's overflow-x, so
+   a long line scrolls inside its own panel rather than widening the page. */
+/* Stretch, not start. These three frames are one answer rendered three ways, so they
+   are a set and a set has one bottom edge. Sized to their own content they came out
+   217 / 197 / 257 tall, which read as three unrelated boxes that happened to land in a
+   row. The grid default does the work; `start` was making each panel shrink-wrap. */
+.landing-tabs-triple {
+  margin: 1.25rem 0 0;
+}
+.landing-tabs-triple .term {
+  min-width: 0;
+}
+
+.landing-tabs-triple .term-body {
+  font-size: 0.78rem;
+}
+
+/* ---- The verb list -------------------------------------------------------
+   A two-column definition list: the command, then what it answers. It collapses
+   to stacked pairs on a narrow screen, where a monospace command and its gloss
+   cannot share a line legibly. */
+.landing-verbs {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  gap: 0.35rem 1.5rem;
+  margin: 0;
+  border-top: 1px solid var(--pico-muted-border-color);
+  padding-top: 1.25rem;
+}
+@media (min-width: 640px) {
+  .landing-verbs {
+    grid-template-columns: max-content minmax(0, 1fr);
+    align-items: baseline;
+    gap: 0.75rem 2rem;
+  }
+}
+.landing-verbs dt {
+  margin: 0;
+}
+.landing-verbs dt code {
+  white-space: nowrap;
+}
+.landing-verbs dd {
+  margin: 0 0 0.75rem;
+  color: var(--pico-muted-color);
+  font-size: 0.92rem;
+}
+@media (min-width: 640px) {
+  .landing-verbs dd {
+    margin-bottom: 0;
+  }
+}
+
+/* The closing section carries the page's own bottom margin, since .site-landing
+   drops the <article> padding that would otherwise provide it. */
+.site-landing .landing-next {
+  margin-bottom: 3.5rem;
+}
+
+/* Respect a reduced-motion preference: the card lift is the only transform on
+   the page, and it is decoration. */
+@media (prefers-reduced-motion: reduce) {
+  .landing-card,
+  .landing-btn {
+    transition: none;
+  }
+  .landing-card:hover,
+  .landing-card:focus-visible {
+    transform: none;
+  }
+}
+
+/* The "built for humans" section is a claim about intent rather than a feature,
+   so it reads as prose at a comfortable measure instead of joining the card grid
+   above it - a card would file it next to the features and flatten the point. */
+.landing-humans-body {
+  max-width: var(--landing-measure, 42rem);
+  color: var(--pico-muted-color);
+}
+
+/* The column the mascot floats inside. A float only shortens line boxes within its
+   own containing block, so the measure lives here and the paragraphs give theirs up
+   to it - otherwise the float sits in the gutter beside the text and shapes nothing.
+
+   The clearfix below also makes this a containment boundary: the last paragraph's
+   bottom margin stops here instead of reaching the block after it, which left the
+   cards butted flat against the text. The wrapper owns that spacing, from the same
+   --landing-lead-gap every other heading-to-content gap on the page uses. */
+.landing-float-prose {
+  max-width: var(--landing-measure, 42rem);
+  margin-bottom: var(--landing-lead-gap);
+}
+.landing-float-prose .landing-humans-body,
+.landing-float-prose .landing-section-lede {
+  max-width: none;
+}
+/* The asset is cropped to the mascot, so its box is what you see. It used to carry
+   278px of empty canvas on the left and 229px on the right - a third of its width -
+   which meant every margin here was measured from an edge the reader could not see,
+   and the 49px difference between the two sides made it look mis-centered no matter
+   what the CSS said.
+
+   Wide screens float him into the prose. Deliberately NOT shape-outside: it ties the
+   text wrap to an image's alpha channel, and a browser holding an older copy of that
+   file under the same name computes a shape from the OLD artwork - which is how text
+   ended up running straight across the mascot here. Cropped to its content, the box
+   is the silhouette anyway, and the line breaks measured identical either way. A
+   plain float cannot go stale. */
+.landing-mascot {
+  float: right;
+  width: 30%;
+  max-width: 12rem;
+  min-width: 6.5rem;
+  margin: 0.25rem 0 0.75rem 1.75rem;
+}
+.landing-mascot img {
+  display: block;
+  width: 100%;
+  height: auto;
+}
+
+/* Below the float breakpoint he stops being a float and becomes an illustration
+   BETWEEN the first paragraph and the rest, never between the heading and its own
+   opening sentence. Wedged up there he pushed the argument 261px down - 28% of a
+   phone viewport - so the reader met a picture before a single word of the section
+   they had just been promised. Modest and centered: a mascot competing with the
+   sentence he illustrates has won the wrong contest. */
+@media (max-width: 899px) {
+  .landing-float-prose {
+    display: flex;
+    flex-direction: column;
+  }
+  .landing-float-prose > p {
+    order: 3;
+  }
+  .landing-float-prose > p:first-of-type {
+    order: 1;
+  }
+  .landing-mascot {
+    order: 2;
+    float: none;
+    width: 60%;
+    max-width: 13rem;
+    margin: 0.5rem auto 1.5rem;
+  }
+}
+
+/* Keep the float from escaping into the next section. */
+.landing-float-prose::after {
+  content: "";
+  display: block;
+  clear: both;
+}
+
+/* ---- The live hero terminal (hero-terminal.ts) ---------------------------
+   Everything below styles state that only exists once the bundle has run. The
+   server-rendered transcript needs none of it, so a page with JavaScript off
+   renders exactly as before and nothing here applies. */
+
+/* The prompt line the script appends under the transcript. It has to sit flush
+   in the output - a visible input box would read as a form in the middle of a
+   terminal - so the field is stripped of every default and inherits the
+   transcript's own type. */
+.term-input-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5ch;
+}
+
+.term-input {
+  flex: 1;
+  max-width: var(--landing-measure, 42rem);
+  margin-bottom: 1rem;
+}
+
+/* The sponsor line closes that section rather than opening a banner, and the
+   placement is the argument: it lands after the page has finished promising that
+   nothing is gated, so the offer reads as optional support for work already
+   given away rather than as a tier being sold. Muted and small on purpose - it
+   is the least important thing on the page. */
+.landing-support {
+  max-width: var(--landing-measure, 42rem);
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--pico-muted-border-color);
+  font-size: 0.9rem;
+  color: var(--pico-muted-color);
+}
+
+/* The adoption guarantee is a long argument that most visitors do not need to
+   read, but the ones who DO need it are the ones deciding whether to spend
+   engineering time here - so it cannot simply be cut. Native <details>: no
+   JavaScript, keyboard accessible, and findable by in-page search in browsers
+   that expand on find. The summary is written as the question a wary reader is
+   already asking, and the lede above states the answer, so a visitor who never
+   opens this still gets the promise. */
+.landing-details {
+  max-width: 68ch;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  padding: 0.85rem 1.1rem;
+  margin-bottom: 0;
+}
+.landing-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--pico-color);
+}
+.landing-details[open] > summary {
+  margin-bottom: 1rem;
+}
+.landing-details-body p:last-child {
+  margin-bottom: 0;
+}
+
+/* ---- The live hero terminal (hero-terminal.ts) ---------------------------
+   Everything below styles state that only exists once the bundle has run. The
+   server-rendered transcript needs none of it, so a page with JavaScript off
+   renders exactly as before and nothing here applies. */
+
+/* The prompt line the script appends under the transcript. It has to sit flush
+   in the output - a visible input box would read as a form in the middle of a
+   terminal - so the field is stripped of every default and inherits the
+   transcript's own type. */
+.term-input-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5ch;
+  flex-wrap: wrap;
+  position: relative;
+}
+
+/* The cursor hero-terminal.ts moves down onto the prompt, as a plain flex item
+   after the input. It was absolutely positioned at a ch offset, which broke the
+   moment the line wrapped: at tablet width the row is two lines tall and the
+   cursor anchored to the bottom of the box, so it drew on the wrong line. In
+   flow it cannot do that. hero-terminal.ts shrink-wraps the input to its value
+   so the cursor lands right after the text. On focus the native caret takes over. */
+.term-input-line > .term-cursor {
+  flex: 0 0 auto;
+  /* vertical-align does nothing to a flex item, and baseline alignment puts an
+     empty box's baseline at its bottom edge, which lifts it clear of the text and
+     stretches the row. Center it against the line instead. */
+  align-self: center;
+  pointer-events: none;
+}
+
+/* Pico sizes inputs with `input:not([type=checkbox], ...)`, which is one class
+   and one element more specific than `.term-input`, so its vertical padding and
+   bottom margin won: the prompt row measured 70px inside a terminal whose lines
+   are 21.7px. Reset it from a selector that actually outranks Pico's, or the
+   prompt sits a line and a half below the transcript it belongs to. */
+.term-input-line > input.term-input {
+  height: auto;
+  min-height: 0;
+  padding: 0;
+  margin: 0;
+  line-height: inherit;
+}
+/* Same story for the "$": Pico gives every label a bottom margin, which was the
+   last 6px holding the prompt row off the transcript's line height. */
+.term-input-line > label.term-prompt {
+  margin: 0;
+}
+.term-input-line:has(.term-input:focus) > .term-cursor {
+  opacity: 0;
+  animation: none;
+}
+
+.term-input {
+  /* width is set inline by hero-terminal.ts from the value length; shrink-wrapping
+     is what lets the cursor sit right after the text instead of at the far right. */
+  flex: 0 1 auto;
+  max-width: 100%;
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: var(--term-fg);
+  font-family: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  caret-color: var(--term-prompt);
+  height: auto;
+}
+.term-input:focus,
+.term-input:focus-visible {
+  outline: none;
+  border: 0;
+  box-shadow: none;
+  background: none;
+}
+
+.term-err {
+  color: #e8938d;
+}
+
+/* Live, the transcript scrolls instead of growing the hero without bound. The
+   height is only imposed once it is interactive; the static version is short and
+   sized by its own content. */
+.term[data-hero-terminal="live"] .term-body {
+  max-height: min(64vh, 34rem);
+  overflow-y: auto;
+}
+/* The static transcript is shorter than the live one, so hydration used to shrink
+   the hero a moment after load. Floor it at the same height it will settle at. */
+.term[data-hero-terminal] .term-body {
+  min-height: min(46vh, 22rem);
+}
+
+/* ---- Collapsed search, landing page only --------------------------------
+   A docs page wants the search field wide and obvious - someone who got there
+   is usually looking for something. The landing page is the opposite: a wide
+   input sitting directly under the nav is the first thing a visitor sees, and
+   it asks a question they have not formed yet while pushing the hero down.
+
+   So here it starts short and opens to its full width on focus. :focus-within
+   rather than a script-toggled class - clicking the field focuses it, which IS
+   the interaction, so this costs no JavaScript and works before main.js has
+   even loaded. Scoped to .site-landing so no other page inherits it. */
+.site-landing .search-wrap {
+  max-width: 14rem;
+  transition: max-width 0.22s ease;
+}
+.site-landing .search-wrap:focus-within {
+  max-width: 100%;
+}
+
+/* The / and Cmd-K hints are absolutely positioned, so hiding them costs no
+   reflow. At the collapsed width they crowd the placeholder and advertise
+   shortcuts for a field that is not open yet. */
+.site-landing .search-wrap:not(:focus-within) .search-hint {
+  opacity: 0;
+  transition: opacity 0.15s ease;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .site-landing .search-wrap,
+  .site-landing .search-wrap .search-hint {
+    transition: none;
+  }
+}
+
+/* Collapsing is a desktop affordance: it buys hero space on a wide screen. On a phone
+   the field is the only thing on its row, so a half-width input just looks broken, and
+   the shortcut hints should read the same as every docs page rather than appearing only
+   after a tap. Same 900px the rest of the landing layout keys off. */
+@media (max-width: 899px) {
+  .site-landing .search-wrap {
+    max-width: 100%;
+  }
+  .site-landing .search-wrap:not(:focus-within) .search-hint {
+    opacity: 1;
+  }
+}
+
+/* The adoption guarantee reads as prose at a comfortable measure. It is an
+   argument, not a feature, and a card grid would file it next to the features
+   and flatten it. */
+.landing-promise-body {
+  max-width: 68ch;
+  margin-bottom: 1rem;
+}
+
+/* The sponsor line closes that section rather than opening a banner, and the
+   placement is the argument: it lands after the page has finished promising that
+   nothing is gated, so the offer reads as optional support for work already
+   given away rather than as a tier being sold. Muted and small on purpose - it
+   is the least important thing on the page. */
+.landing-support {
+  max-width: 62ch;
+  margin-top: 1.25rem;
+  padding-top: 1.25rem;
+  border-top: 1px solid var(--pico-muted-border-color);
+  font-size: 0.9rem;
+  color: var(--pico-muted-color);
+}
+
+/* The adoption guarantee is a long argument that most visitors do not need to
+   read, but the ones who DO need it are the ones deciding whether to spend
+   engineering time here - so it cannot simply be cut. Native <details>: no
+   JavaScript, keyboard accessible, and findable by in-page search in browsers
+   that expand on find. The summary is written as the question a wary reader is
+   already asking, and the lede above states the answer, so a visitor who never
+   opens this still gets the promise. */
+.landing-details {
+  max-width: 68ch;
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: var(--pico-border-radius);
+  padding: 0.85rem 1.1rem;
+  margin-bottom: 0;
+}
+.landing-details > summary {
+  cursor: pointer;
+  font-weight: 600;
+  color: var(--pico-color);
+}
+.landing-details[open] > summary {
+  margin-bottom: 1rem;
+}
+.landing-details-body p:last-child {
+  margin-bottom: 0;
+}
+
+
+/* A code block and the prose explaining it are two blocks, not one: the <pre>
+   carries no bottom margin of its own, so without this they touch. Stated as the
+   relationship (a terminal frame followed by anything) rather than patched onto
+   the one section where it showed up. */
+.site-landing .term + * {
+  margin-top: var(--landing-lead-gap);
+}
+
+/* Spell and charm are a pair - one names a tool, the other modifies a run - and
+   they read as a pair. Two columns once there is room; stacked before that,
+   because a half-width column of body text on a tablet is worse than a full one. */
+.landing-pair {
+}
+.landing-pair-title {
+  font-size: 1.05rem;
+  margin-bottom: 0.4rem;
+}
+.landing-pair-body {
+  color: var(--pico-muted-color);
+  margin-bottom: 0;
+}
+
+/* The heading over the paragraph that closes the pair. It signals the two columns
+   are being drawn together rather than a third point starting, which is what the
+   bare paragraph read as. */
+.landing-pair-summary-title {
+  font-size: 1.05rem;
+  margin-top: var(--landing-lead-gap);
+  margin-bottom: 0.4rem;
+}
+.site-landing .landing-pair + .landing-pair-summary-title + * {
+  margin-top: 0;
+}
+
+/* A card grid followed by prose needs the section's own rhythm between them; the
+   grid has no bottom margin of its own. Same relationship-shaped rule as the
+   terminal frame above, for the same reason.
+
+   The tab card, the three-panel output row and the screenshot figure are the same
+   shape of block and were missing from this list, so each of them sat at a measured
+   gap of ZERO against the paragraph underneath - the prose started on the pixel the
+   frame ended. Three separate reports of "it's cuddled up against it" were all this
+   one omission. Listed here rather than given margins of their own, so there stays a
+   single place that answers "what separates a block from the prose after it". */
+.site-landing .landing-cards + *,
+.site-landing .landing-tabs + *,
+.site-landing .landing-tabs-triple + *,
+.site-landing .landing-shot + *,
+.site-landing .landing-pair + * {
+  margin-top: var(--landing-lead-gap);
+}
+
+/* The paragraph after the spell/charm pair belongs to BOTH of them, so it runs the
+   full width underneath rather than continuing either column. Without this it reads
+   as a third thing crammed against the second. */
+.site-landing .landing-pair + .landing-humans-body {
+  max-width: none;
+}
+
+/* Install page (site/download.buzz). It borrows the landing's hero rhythm and section
+   primitives, so the only rules here are the ones where "one command, centered" differs
+   from "headline beside a terminal". */
+
+/* The landing hero is a Pico .grid: two children, so two columns at 768 and one below.
+   The install page's hero has a single child and does not carry the .grid class, so it is
+   an ordinary block and needs no column rules at all - just a centered, measure-capped
+   column. It previously overrode grid-template-columns and justify-items, which stopped
+   meaning anything the moment .landing-hero handed its columns to the framework. */
+.download-hero {
+  grid-template-columns: minmax(0, 1fr);
+  justify-items: center;
+  text-align: center;
+  margin-top: 3rem;
+}
+.download-hero .landing-intro {
+  margin-inline: auto;
+  max-width: var(--landing-measure, 42rem);
+}
+
+/* The command block is the page. It sits left-aligned inside the centered column, because
+   a shell transcript centered line by line is unreadable. */
+.download-command {
+  margin: 2rem 0 1rem;
+  text-align: left;
+}
+.download-command pre {
+  margin: 0;
+}
+
+/* The routes this page does not print, one row, small. They are links to guides that
+   already exist rather than four more copies of an install instruction. */
+.download-routes {
+  margin-top: 2.5rem;
+  font-size: 0.9rem;
+}
+.download-route-sep {
+  opacity: 0.45;
+  padding: 0 0.15rem;
+}
+
+/* Diagram zoom (diagram-zoom.js). Deliberately the same shell as .shortcut-help above -
+   a native <dialog> Pico gives a card look, a flex header with a "times" close button -
+   so the site has one overlay treatment rather than one per feature. Only the stage,
+   which the shortcut overlay has no equivalent of, is specific here. */
+.magus-diagram-figure {
+  position: relative;
+  margin: 0 0 var(--pico-typography-spacing-vertical, 1rem);
+}
+/* Same metrics as the playground's .file-bar buttons, which this control copies its
+   markup from: inline-flex so the glyph and label sit on one line, width auto to escape
+   Pico's full-width default, and an em-sized icon so it tracks the button's font-size.
+   Copying the markup without these rules rendered a full-size SVG stacked over the
+   label. */
+.diagram-expand {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  width: auto;
+  margin: 0;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--pico-background-color);
+  color: var(--pico-muted-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: 4px;
+  /* Chrome, not content: out of the way until the figure is hovered or focused. */
+  opacity: 0;
+  transition: opacity 0.15s ease-in-out;
+}
+.diagram-expand .btn-icon {
+  width: 0.95em;
+  height: 0.95em;
+  flex: 0 0 auto;
+}
+.magus-diagram-figure:hover .diagram-expand,
+.diagram-expand:focus-visible {
+  opacity: 1;
+}
+
+/* Every rule here is scoped to .diagram-dialog on purpose. The shortcut overlay
+   (.shortcut-help) is a small card and Pico's defaults suit it exactly; a diagram needs
+   the opposite and must not drag the other overlays along with it.
+
+   The override that matters is on the ARTICLE, not the dialog: Pico sets
+   `dialog > article { max-width: 510px }`, so capping the dialog at 96vw left the figure
+   squeezed into a 510px box and cut off. */
+/* Nothing is overridden on the <dialog> itself. Pico already makes it a fixed,
+   full-viewport flex container that centers the article and paints the backdrop; setting
+   width: 100vw on top of that overflowed past the reserved scrollbar gutter and pushed
+   the card's right edge - and the close button with it - off screen. Only the article's
+   510px cap ever needed changing.
+
+   Percentages, not vw, for the same reason: they resolve against the dialog, which is
+   already the visible area. */
+.diagram-dialog[open] > article {
+  position: relative;
+  max-width: none;
+  width: 96%;
+  max-height: 94%;
+  margin: 0;
+  padding: 0;
+  /* Column so the header keeps its height and the stage takes everything left over.
+     overflow hidden, not Pico's auto: the stage pans by transform, and scrollbars
+     would fight the drag. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* With the heading hidden there is nothing for the close button to sit beside, and a
+   full-width bar with a rule under it reads as an empty strip. Float the button in the
+   corner instead and give the whole box to the figure. */
+.diagram-dialog header {
+  /* Pico bleeds article>header past the card with negative horizontal margins so it can
+     span edge to edge. Absolutely positioned, that margin just pushes the button outside
+     the card, which is what left the close control hanging off the corner. */
+  margin: 0;
+  position: absolute;
+  /* Inset, not flush: at 0,0 the button sits on the card's edge and reads as floating
+     outside it. */
+  /* Inset past the stage's own padding so the button's hover and focus ring land inside
+     the figure's tinted panel rather than straddling its edge. Written as that padding
+     plus a gap, so the two stay in step. */
+  top: calc(0.75rem + 0.5rem);
+  right: calc(0.9rem + 0.5rem);
+  z-index: 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+/* The figure renders its own eyebrow and title inside the SVG, so repeating the heading
+   in the chrome reads as a second title. Keep it in the DOM but out of view: it is the
+   dialog's accessible name, which the close button alone would not supply. */
+.diagram-dialog header h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.diagram-close {
+  width: auto;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.1rem 0.4rem;
+  color: var(--pico-muted-color);
+  cursor: pointer;
+}
+.diagram-close:hover { color: var(--pico-primary); }
+.diagram-stage {
+  flex: 1;
+  /* min-height 0 or the flex child refuses to shrink and the figure overflows. */
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 0.75rem 0.9rem;
+  /* transform-origin center so wheel zoom grows about the middle, not a corner. */
+  transform-origin: center center;
+  cursor: grab;
+  touch-action: none;
+  overflow: hidden;
+}
+.diagram-stage:active { cursor: grabbing; }
+/* Fill the stage rather than a fraction of the viewport: the stage is already the
+   viewport minus the header, and vh units here double-counted that chrome. */
+.diagram-stage > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;}

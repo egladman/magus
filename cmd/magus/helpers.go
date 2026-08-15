@@ -293,7 +293,7 @@ func splitOnThen(args []string) (before, after []string, found bool) {
 // rather than nagging.
 func hintCanonicalSpelling(t types.Target) {
 	if t.Declared != "" {
-		interactive.Emit(os.Stderr, fmt.Sprintf("target %q is canonically %q - both work, %q is what magus reports", t.Declared, t.Name, t.Name))
+		interactive.Emit(os.Stderr, fmt.Sprintf("target %q is canonically %q; both work, %q is what magus reports", t.Declared, t.Name, t.Name))
 	}
 	for _, c := range t.DeclaredCharms {
 		interactive.Emit(os.Stderr, fmt.Sprintf("charm %q is canonically %q", c, types.Normalize(c)))

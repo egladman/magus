@@ -22,6 +22,53 @@ export fun semverSortKey(name: str) > str {
     return key;
 }
 
+// isVersionTag reports whether a git tag names a release: "v" followed by three
+// dot-separated numeric parts, with an optional -prerelease/+build suffix on the
+// last one ("v0.3.0", "v1.0.0-rc.1"). Anything else is some other kind of tag.
+//
+// This exists because a `v*` refspec is NOT a version filter, and reading it as one
+// shipped a real bug: a tag called "verified-refinements" matched the glob, sorted
+// newest by creation date, and became site.releases[0]. That is the value the
+// announcement bar prints AND the value __MAGUS_VERSION__ expands to, so the
+// published install instructions read `VERSION=verified-refinements` and every
+// download URL on the setup page pointed at a release that does not exist.
+export fun isVersionTag(name: str) > bool {
+    if (name.startsWith("v") == false) { return false; }
+    final parts = name.sub(1).split(".");
+    if (parts.len() < 3) { return false; }
+    var i = 0;
+    while (i < 3) {
+        var p = parts[i];
+        // Only the last of the three may carry a -prerelease or +build suffix.
+        if (i == 2) {
+            final dash = p.indexOf("-");
+            if (dash != null) { p = p.sub(0, dash!); }
+            final plus = p.indexOf("+");
+            if (plus != null) { p = p.sub(0, plus!); }
+        }
+        if (p.len() == 0) { return false; }
+        var j = 0;
+        while (j < p.len()) {
+            final b = p.byte(j);
+            if (b < 48 or b > 57) { return false; }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return true;
+}
+
+test "isVersionTag accepts release tags and rejects everything else" {
+    assert\equal(isVersionTag("v0.3.0"), true, "a plain release tag");
+    assert\equal(isVersionTag("v1.10.2"), true, "multi-digit parts");
+    assert\equal(isVersionTag("v1.0.0-rc.1"), true, "a prerelease suffix");
+    assert\equal(isVersionTag("verified-refinements"), false, "the tag that caused this");
+    assert\equal(isVersionTag("v0.3"), false, "too few parts");
+    assert\equal(isVersionTag("0.3.0"), false, "no leading v");
+    assert\equal(isVersionTag("vendor"), false, "a word starting with v");
+    assert\equal(isVersionTag("v0.x.0"), false, "a non-numeric part");
+}
+
 // sortNamesSemverDesc sorts release filenames newest-first. Selection sort; O(n^2)
 // fine for ~10-20 releases. Mirrors Go's compareSemver in cmd/magus-utils/release.go.
 export fun sortNamesSemverDesc(names: [str]) > [str] {

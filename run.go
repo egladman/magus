@@ -180,6 +180,18 @@ func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) 
 	return m.executeStages(ctx, stages, TargetLabel(targets, ""), o)
 }
 
+// CharmsForCI returns charms with the write-granting ones removed, which is what a ci
+// run actually executes under. Exported because the CLI has to print the same set it
+// runs: the run header used to report the charms as RESOLVED, before RunCI stripped
+// them, so `magus run ci` announced "charms: rw" and then ran read-only. Whoever reads
+// that header is checking exactly this, so both sides read it from here.
+func CharmsForCI(charms []string) []string {
+	return slices.DeleteFunc(slices.Clone(charms), func(s string) bool {
+		n := types.Normalize(s)
+		return n == types.CharmReadWrite || n == types.CharmRelock
+	})
+}
+
 // RunCI runs the ci target(s) with write mode forced off. "ci" is an ordinary
 // magusfile-defined target; magus keeps it only as the affected-set anchor,
 // not a hardcoded preflight...test chain. The magusfile composes the pipeline
@@ -189,10 +201,7 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 	// Both write-granting charms come off: rw so check-only targets stay check-only,
 	// and relock so a ci run verifies the committed dependency state rather than
 	// re-resolving it against whatever the registry serves today.
-	o.Charms = slices.DeleteFunc(slices.Clone(o.Charms), func(s string) bool {
-		n := types.Normalize(s)
-		return n == types.CharmReadWrite || n == types.CharmRelock
-	})
+	o.Charms = CharmsForCI(o.Charms)
 
 	// ci is the one target that must not silently no-op when undefined. Ordinary
 	// targets fan out and skip projects that lack them, but ci is the anchor that
@@ -893,7 +902,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		if m.cache != nil {
 			m.cache.LogDryBanner(ctx)
 		} else {
-			fmt.Println("dry run - commands shown, not executed")
+			fmt.Println("dry run: commands shown, not executed")
 		}
 		planned := 0
 		for _, st := range stages {

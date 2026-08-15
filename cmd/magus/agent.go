@@ -268,7 +268,7 @@ func printAgentInstallNextSteps(dir string, written, stale []string, v agent.Var
 	}
 	// MAGUS.md is regenerated for HUMAN readers; the skills send agents to the live
 	// verbs instead, because a generated index is only true as of its last run.
-	interactive.Emit(os.Stderr, "regenerate MAGUS.md for human readers:  magus describe graph -o markdown  (the skills send agents to the live verbs - magus describe targets, magus ls)")
+	interactive.Emit(os.Stderr, "regenerate MAGUS.md for human readers:  magus describe graph -o markdown  (the skills send agents to the live verbs: magus describe targets, magus ls)")
 	interactive.Emit(os.Stderr, "safety: consider a line in your repo's agent instruction file so parallel agents cannot wipe each other's work:")
 	interactive.Emit(os.Stderr, "  \""+vcsSafetyRule+"\"")
 	interactive.Emit(os.Stderr, "starter AGENTS.md you can own and tweak (prints, never writes):  magus agent sample")
@@ -290,7 +290,7 @@ func printAgentsBlockToPaste(dir string) {
 		}
 		verb = "your AGENTS.md has an older copy: replace it BETWEEN the markers and leave the rest of the file alone"
 	}
-	interactive.Emit(os.Stderr, "magus does not write AGENTS.md - that file is yours. If your agent host reads it, "+verb+":")
+	interactive.Emit(os.Stderr, "magus does not write AGENTS.md. That file is yours. If your agent host reads it, "+verb+":")
 	fmt.Fprint(os.Stderr, "\n"+agentSkills.AgentsBlock()+"\n")
 }
 
@@ -550,7 +550,7 @@ func adviseGeneratedWrite(ctx context.Context, path string) string {
 	if owner == "" {
 		owner = "."
 	}
-	return fmt.Sprintf("magus workspace: %s is a DECLARED OUTPUT of project %s - it is generated, and the next run of its producing target overwrites whatever you write there. This is not a style rule: magus reads the target's declared output globs, so the classification is definitive. Change the SOURCE that produces it instead, then run `magus run generate %s` (or the producing target) and commit the regenerated file together with your source change. `magus describe file %s` classifies any path. Load the magus-vcs-hygiene skill if not already loaded.", f.Path, owner, owner, f.Path)
+	return fmt.Sprintf("magus workspace: %s is a DECLARED OUTPUT of project %s: it is generated, and the next run of its producing target overwrites whatever you write there. This is not a style rule: magus reads the target's declared output globs, so the classification is definitive. Change the SOURCE that produces it instead, then run `magus run generate %s` (or the producing target) and commit the regenerated file together with your source change. `magus describe file %s` classifies any path. Load the magus-vcs-hygiene skill if not already loaded.", f.Path, owner, owner, f.Path)
 }
 
 // denyNotesWrite blocks a write into the workspace's declared notes store, or returns ""

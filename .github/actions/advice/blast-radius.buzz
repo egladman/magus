@@ -127,6 +127,12 @@ fun main() > void !> any {
     var argv = mut ["deps"];
     foreach (p in reached) { argv.append(p); }
     argv.append("-o");
+    // Mermaid, deliberately, even though the docs site no longer uses it anywhere: this
+    // renders in a GitHub pull-request comment, which GitHub draws server-side. The Buzz
+    // renderer at libs/diagram cannot serve this consumer - a comment is per-PR ephemeral
+    // content with nowhere to host a generated .svg, and this repo already ruled out
+    // bot-pushing generated files to a branch. Same reason `magus graph -o mermaid` stays:
+    // it is data serialized for a renderer we do not control, not a diagram we draw.
     argv.append("mermaid");
     final drawn = magus\cmd("graph", args: argv, opts: {"quiet": true, "allow_failure": true});
     var diagram = "";

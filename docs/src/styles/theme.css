@@ -15,7 +15,7 @@
      text is an off-white (#cfd6dd); accents are lightened and DESATURATED so
      they don't vibrate on the dark field.
    Pico resolves color at use-time, so overriding its variables here restyles
-   every classless component (and mermaid, which reads these live) for free.
+   every classless component for free.
    Load order is Pico -> theme.css -> site.css; selectors mirror Pico's own so
    the later source position wins without an !important anywhere. */
 

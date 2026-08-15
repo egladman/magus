@@ -16,7 +16,7 @@ Package `magus.token.v1`, defined in `proto/magus/token/v1/token.proto`. Part of
 
 ListTokens returns every connector token plus the active share token (if any), each described by a prefix-only fingerprint - never the secret bytes.
 
-`POST /magus.token.v1.TokenService/ListTokens` - unary.
+`POST /magus.token.v1.TokenService/ListTokens`: unary.
 
 Takes `ListTokensRequest`, returns `ListTokensResponse`.
 
@@ -24,7 +24,7 @@ Takes `ListTokensRequest`, returns `ListTokensResponse`.
 
 RevokeToken removes a connector token or the share token by identifier. Revoking the share token also closes its LAN listener. The cli token is not revocable here.
 
-`POST /magus.token.v1.TokenService/RevokeToken` - unary.
+`POST /magus.token.v1.TokenService/RevokeToken`: unary.
 
 Takes `RevokeTokenRequest`, returns `RevokeTokenResponse`.
 

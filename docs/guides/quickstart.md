@@ -207,7 +207,7 @@ failing when a config points at a template file that is stale or missing.
 | querying the knowledge graph    | [Knowledge](../concepts/knowledge.md)                                |
 | a diagnostic code you hit       | [Diagnostics](../reference/diagnostics.md)                           |
 | running the daemon and console  | [Daemon](integrations/daemon.md), [Console](../reference/console.md) |
-| CI wiring                       | [CI providers](../concepts/ci-providers.md)                          |
+| CI wiring                       | [CI providers](../concepts/ci/providers.md)                          |
 | when something is wrong         | [Debugging](debugging.md), [FAQ](../reference/faq.md)                |
 
 Every flag and target set differs per workspace and magus version, so trust

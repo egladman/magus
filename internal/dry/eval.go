@@ -334,5 +334,5 @@ func testBlockNote(src string) string {
 	if n > 1 {
 		blocks = "test blocks"
 	}
-	return fmt.Sprintf("note: %d %s declared but not run here - `test` bodies execute under `magus buzz -t <file>`, not in the playground.\n", n, blocks)
+	return fmt.Sprintf("note: %d %s declared but not run here; `test` bodies execute under `magus buzz -t <file>`, not in the playground.\n", n, blocks)
 }

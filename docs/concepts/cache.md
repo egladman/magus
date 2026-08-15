@@ -593,20 +593,7 @@ would duplicate something the build already produces.
 Both follow the same rule applied to different starting conditions: **is the
 generator already required to build?** Ask that first.
 
-```mermaid
-flowchart TD
-    S[a target generates a file] --> P{pure function of<br/>its committed sources?}
-    P -- "no: records the commit,<br/>the clock, or the network" --> R[do not commit it]
-    P -- yes --> B{is the generator already<br/>required to build?}
-    B -- yes --> R
-    B -- no --> C{does anything read it<br/>without running the build?<br/>module zip, IDE, code browser}
-    C -- yes --> K[commit it]
-    C -- no --> Z{large, or does it churn<br/>on every commit?}
-    Z -- yes --> R
-    Z -- no --> K
-    K --> KG[gate: plain `magus run generate`<br/>fails when the tree changes]
-    R --> RG[gate: CI builds it on the<br/>path that publishes it]
-```
+<!--diagram:commit-generated-->
 
 The first question is the one that decides it outright. A file recording its own
 commit cannot be committed and stay correct, whatever the other answers are - that
@@ -723,10 +710,11 @@ output simply describes a commit that is no longer the one it sits in.
 A committed generated file must be a **pure function of its committed sources**.
 Anything else in its inputs - the clock, the machine, the branch, the commit -
 turns "regenerate and diff" from a correctness check into noise. magus's drift
-gate assumes that purity, which is why the `tapes` target here is deliberately
-kept out of the `generate` umbrella: it screen-records the CLI, so its bytes are
-never the same twice and a drift gate over it would fail every run by
-construction.
+gate assumes that purity, which is why the `termcast-record` target here is
+deliberately kept out of the `generate` umbrella: it records a live session, so
+its bytes are never the same twice and a drift gate over it would fail every run
+by construction. Rendering that committed capture IS pure, so
+`termcast-generate` sits inside the umbrella and is gated.
 
 ## On disk: just files
 
@@ -784,7 +772,7 @@ evicts entries older than a cutoff. To force a clean rebuild of specific project
 
 Everything above is local to one machine. A [remote cache](cache/remote.md) shares
 these exact artifacts across CI runners: on a **local** miss magus asks the remote
-backend for the artifact keyed by the same `(projectPath, hash)`, and if found
+provider for the artifact keyed by the same `(projectPath, hash)`, and if found
 imports it into the local store so the ordinary hit path replays it - no rebuild.
 After a genuine build, magus uploads the artifact so the next machine hits.
 
@@ -794,7 +782,7 @@ are identical - the remote layer only moves those bytes between machines. On top
 that it adds a **signed trust model**: because a replayed artifact injects files
 into a consumer's build, every remote artifact is verified against an Ed25519 trust
 set before it is allowed to replay, and an unsigned or untrusted one falls back to a
-local build. That trust boundary, the backend contract, and CI wiring are covered
+local build. That trust boundary, the provider contract, and CI wiring are covered
 in full in [remote-cache.md](cache/remote.md); this page's model is what it builds
 on.
 

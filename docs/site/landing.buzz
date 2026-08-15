@@ -1,0 +1,590 @@
+// site/landing.buzz - the front door (gen/index.html). The repository README used to
+// render here, which meant the first thing a visitor read was "Why magus exists" - an
+// argument that only lands once you already know what magus IS. The README now renders as
+// the /development/ contributor landing (see renderRoot); this page eases into the tool.
+//
+// Hand-written HTML rather than a Markdown source, for the same reason /tour/ is: the page
+// is a layout (a terminal frame, a card grid, a command table), not prose with headings.
+// It goes through the shared renderPage() pipeline, so it carries the same nav, footer,
+// theme, search record and CSP as every other page.
+namespace landing;
+
+import "fs";
+import "io";
+import "markdown";
+import "serialize";
+import "template";
+// Term linking: the landing gets the same glossary popovers and code cross-references
+// every docs page gets. Both maskers skip fenced <pre>, so the transcript and the
+// magusfile listing are left alone.
+import "lib/text" as _;
+import "lib/url" as _;
+import "lib/glossary" as _;
+import "engine/meta" as _;
+import "engine/types" as _;
+import "engine/route" as _;
+import "engine/page" as _;
+
+// TERMINAL_SESSION is the hero's transcript: `magus run ci` cold, the identical command
+// warm, and `magus affected ci` after one edit. Three commands is the whole pitch - the
+// second proves the cache, the third proves the affected set - and it is the same loop the
+// README's recorded GIF walks through, so the two cannot tell different stories.
+//
+// Written out rather than captured from a live run on purpose: a real capture is dated the
+// moment a target is renamed, and its timings would move the rendered bytes every build,
+// which the drift gate reads as generator non-determinism. The shape is real; the seconds
+// are round.
+//
+// Classed spans, not ANSI: the terminal's color comes from site.css, so it follows the
+// reader's light/dark theme instead of baking one palette into the markup.
+final TERMINAL_SESSION = `<span class="term-prompt">$</span> <span class="term-cmd">magus affected ci --dry-run</span>
+<span class="term-muted">projects: apps/web (1 of 7)
+base: git diff vs origin/main
+charms: rw
+cache: local (read+write)
+dry run: commands shown, not executed</span>
+<span class="term-ok">[dry]</span> apps/web
+  magus run ci apps/web
+  <span class="term-cmd">$ pnpm install --frozen-lockfile</span>
+  <span class="term-cmd">$ pnpm run typecheck</span>
+  <span class="term-cmd">$ pnpm exec biome check src</span>
+  <span class="term-cmd">$ pnpm run test</span>
+<span class="term-muted">summary: dry run, 1 target would run</span><span class="term-cursor" aria-hidden="true"></span>`;
+
+
+// recentPosts renders up to three of the newest blog posts as cards, or "" when the
+// blog is empty.
+//
+// It reads the posts' frontmatter directly rather than using site.blogPosts, and the
+// reason is ordering: walkBlog fills that list well after renderLanding runs, so at
+// this point it is empty. Reading here keeps the landing independent of where the
+// blog sits in the render sequence, which is worth more than the few lines saved by
+// sharing - a "recent posts" block that silently renders nothing because a step moved
+// is exactly the kind of failure nothing would catch.
+//
+// fs.list returns sorted names and the files are date-prefixed (YYYY-MM-DD-slug.md),
+// so walking the list backwards is newest-first without parsing a date to sort on.
+fun recentPosts(site: Site) > str !> any {
+    final dir = site.root + "/" + site.blog;
+    if (isDirectory(dir) == false) { return ""; }
+    var names: mut [str] = mut [<str>];
+    foreach (name in fs\listDir(dir)) {
+        if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
+            names.append(name);
+        }
+    }
+    if (names.len() == 0) { return ""; }
+
+    var cards = "";
+    var shown = 0;
+    var i = names.len() - 1;
+    while (i >= 0 and shown < 3) {
+        final name = names[i];
+        i = i - 1;
+        final f = io\File.open(dir + "/" + name, io\FileMode.read);
+        final md = f.readAll();
+        f.close();
+        final fm = serialize\jsonDecode(markdown\frontmatter(md));
+        // A draft is marked in frontmatter and must not surface here; the blog index
+        // makes the same call, so the two cannot disagree about what is published.
+        if (fm.q("draft").boolean() == true) { continue; }
+        var title = fm.q("title").stringValue();
+        if (title == "") { title = deriveTitle(md, name); }
+        final desc = fm.q("description").stringValue();
+        final url = site.blog + "/" + blogURLPath(name) + "/";
+        cards = cards
+            + "        <a class=\"landing-card\" href=\"" + url + "\">"
+            + "<span class=\"landing-card-title\">" + escapeAttr(title) + "</span>"
+            + "<span class=\"landing-card-body\">" + escapeAttr(desc) + "</span></a>\n";
+        shown = shown + 1;
+    }
+    if (cards == "") { return ""; }
+    return "  <section class=\"landing-section\">\n"
+        + "    <h2 class=\"landing-h2\">Recent writing</h2>\n"
+        + "    <p class=\"landing-section-lede\">Why things are the way they are, at more length than a documentation page should go to.</p>\n"
+        + "    <div class=\"grid landing-cards landing-cards-compact\">\n" + cards
+        + "    </div>\n"
+        + "  </section>\n\n";
+}
+
+// renderLanding writes gen/index.html. srcRel is LANDING_SRC, the synthetic source path
+// every "is this the home page" test in renderPage keys off; it maps to the empty clean
+// URL, so the chrome resolves at gen's root and no breadcrumb is drawn.
+//
+// Every link here is relative and points at a page this render also writes - the asset
+// gate proves that, and the orphan gate walks outward from exactly this page, so the four
+// sections below are what make the rest of the site reachable at all.
+export fun renderLanding(site: Site) > void !> any {
+    var html = template\render(`  <section class="landing-hero">
+    <div class="landing-intro">
+      <p class="landing-eyebrow">magus</p>
+      <h1 class="landing-title landing-rotator">
+        <span class="landing-rotate">Made to be debuggable at 2am.</span>
+        <span class="landing-rotate" aria-hidden="true">No magic. Just commands.</span>
+        <span class="landing-rotate" aria-hidden="true">Debug your code, not your build tool.</span>
+        <span class="landing-rotate" aria-hidden="true">It calls your tools. It does not replace them.</span>
+        <span class="landing-rotate" aria-hidden="true">It tells you the plan is bad, then runs it anyway.</span>
+        <span class="landing-rotate" aria-hidden="true">Everything it knows, handed over. The call stays yours.</span>
+        <span class="landing-rotate" aria-hidden="true">Agents grep faster. Guessing faster is still guessing.</span>
+        <span class="landing-rotate" aria-hidden="true">A build tool should be boring. Exciting means it moved under you.</span>
+        <span class="landing-rotate" aria-hidden="true">One layer between you and the command. Not five.</span>
+        <span class="landing-rotate" aria-hidden="true">Explicit by design, debuggable by consequence.</span>
+        <span class="landing-rotate" aria-hidden="true">No generated boilerplate. No inherited toil.</span>
+        <span class="landing-rotate" aria-hidden="true">Offline is not a degraded mode.</span>
+      </h1>
+      <p class="landing-lede">magus is a task orchestrator: it builds, tests and lints the projects in a repository, works out which ones a change reached, and calls the tools you already run instead of replacing them. One project or two hundred, in whatever languages you already use. It caches what those tools produce, so the same work never runs twice. Ask it what it is going to do and it prints the exact command, arguments and all. When something breaks (and something always breaks), the error comes from <em>your</em> tool, not from ours.</p>
+      <p class="landing-sub">One binary, <a href="https://choosealicense.com/licenses/gpl-3.0/">GPL-3.0</a>, on Linux, macOS and Windows, whatever languages your repository holds. No account, no paid tier, and nowhere to phone home: magus runs no hosted service, and the OpenTelemetry exporter stays off until you point it at a collector of your own.</p>
+      <div class="landing-cta">
+        <a class="landing-btn landing-btn-primary" href="download/">Install magus</a>
+        <a class="landing-btn" href="tour/">Take the tour</a>
+      </div>
+    </div>
+    <div class="term" data-hero-terminal role="img" aria-label="A terminal session. magus affected ci --dry-run reports that one of four projects is affected, then lists the exact commands it would run in it: pnpm install, pnpm run typecheck, pnpm exec biome check, pnpm run test.">
+      <div class="term-bar">
+        <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+      </div>
+      <pre class="term-body">{{{session}}}</pre>
+    </div>
+  </section>
+
+  <section class="landing-section">
+    <h2 class="landing-h2">What makes it different</h2>
+    <div class="landing-float-prose">
+      <figure class="landing-mascot">
+      <picture>
+      <source srcset="assets/gopher.webp" type="image/webp">
+      <img src="assets/gopher.png" width="1110" height="1042" loading="lazy" decoding="async" alt="The magus mascot: a gopher in a wizard's hat and robe, a staff in one hand and a small cube offered in the open palm of the other.">
+      </picture>
+      </figure>
+      <p class="landing-section-lede">Affected sets and a build cache are settled ground, and I am not trying to reinvent them. There is no new idea on this page. The work went into refining old ones and then stopping: nothing here invents vocabulary for something that already has a name, and nothing here hands you a second way to do what one verb already does. What is rarer than a new idea is a build tool you can still follow six months in. Boring is the point, because boring means consistent, and inconsistency is where footguns come from: every arbitrary pattern and special case is one more thing you have to remember instead of derive.</p>
+      <p class="landing-section-lede landing-lede-cont">It also runs where you are standing. <code>magus run test</code> from inside a project works on that project, the way Make has behaved since 1976 and most command-line tools have since, and the way an agent already expects when it walks up the tree looking for its own instructions. Context is not a feature anybody had to invent; it is the default behavior of a command line, and it survived fifty years because it is right.</p>
+      <p class="landing-humans-body">Which is why a project here is its path, and has no second name. Give it one and you have created a mapping: something has to store it, keep every entry unique, and update it each time a directory moves. Allow arbitrary characters in that name and you have also decided, permanently, what quoting every command in your repository needs. None of it was a problem anyone had before the naming scheme invented it, and the tool that invented it then hands you the ceremony for living with it: name the project every time, because it can no longer work out the one thing the shell already knew, which is where you were standing when you asked.</p>
+    </div>
+    <div class="grid landing-cards">
+      <a class="landing-card" href="concepts/wards/">
+        <span class="landing-card-mark" aria-hidden="true">01</span>
+        <span class="landing-card-title">It assumes you have a reason</span>
+        <span class="landing-card-body">The moment worth designing for is not your first day. It is the day you know the tool well and need it to do something it never anticipated - and understanding it better does not help, because understanding was never what was missing. magus tells you what will run and what it thinks is wrong with the plan, then runs what you asked for.</span>
+      </a>
+      <a class="landing-card" href="concepts/charms/">
+        <span class="landing-card-mark" aria-hidden="true">02</span>
+        <span class="landing-card-title">Nothing is implicit</span>
+        <span class="landing-card-body">Every run states its own setup first: the projects, the charms in effect, the cache mode. <code>--dry-run</code> prints the exact command. Modifiers are additive - what you named plus the workspace default, nothing else - so there is no precedence order to reverse-engineer when a value is not what you expected.</span>
+      </a>
+      <a class="landing-card" href="concepts/knowledge/">
+        <span class="landing-card-mark" aria-hidden="true">03</span>
+        <span class="landing-card-title">It has a knowledge graph</span>
+        <span class="landing-card-body">A build tool already has to know every project, input and output, or builds break. magus hands that back as a graph you can query. Nothing has to scan your repository to rediscover what the build already declared.</span>
+      </a>
+    </div>
+  </section>
+
+  <section class="landing-section landing-humans">
+    <h2 class="landing-h2">Built for humans. Agents welcome.</h2>
+      <p class="landing-section-lede">A tool for people who do this for a living. It assumes you know what you are doing.</p>
+      <p class="landing-humans-body">Every tool that boxes you in was built by someone who believed they had enumerated the cases. Nobody can. The moment you need the one thing they did not anticipate, the answer is that you cannot do that here - and then you are stuck, and so is whoever you escalate to. So the constraints here live where they can be enforced, in the sandbox and the content-addressed cache, rather than in a schema that has to predict you. What is left is a real language with an escape hatch, because sooner or later you need one. It can hand you everything it knows and tell you what it thinks; it cannot make the call for you, and it should not try. A tool you stand this close to has no business being a walled garden.</p>
+      <p class="landing-humans-body">None of which makes the enforcement soft. What is enforced is enforced by the engine and cannot be talked past: <code>ci</code> strips the write charms before it dispatches, so the pipeline cannot mutate your tree even when someone explicitly asks for <code>ci:rw</code>. That is a rule magus keeps, not a convention a plugin author might remember to honor. The freedom is in what you are allowed to want, not in whether the rules apply to you.</p>
+      <p class="landing-humans-body">Easy and permissive are not opposites, whatever the tools that claim to solve everything for you have taught you to expect. Something can meet a person on their first day and still not pen in the one who has been doing this for fifteen years. You get both by informing rather than deciding: the newcomer does what it told them, and the veteran reads the same output and does something else with it.</p>
+      <p class="landing-humans-body">It was not designed for agents, which is worth saying plainly given how much tooling now is. They drive it well anyway, and that is a side effect: an interface legible to a person is legible to them.</p>
+      <p class="landing-humans-body">Nothing that makes it drivable was invented for a model. <code>--output</code> is a global flag, so any command will hand back <code>json</code>, <code>yaml</code>, a bare list of names, or one field through a Go template, and nobody has to shred a screen of text to get a value out of it. <code>--dry-run</code> prints the exact argument vector before anything runs. A verb means the same thing everywhere it appears, and an error magus raises itself carries a code you can look up. A command line has owed you all of that since long before anything else was reading its output on your behalf. A tool that only got there once machines started reading it was late rather than clever, and giving that old obligation a new name does not make it a new idea.</p>
+      <p class="landing-humans-body">So an agent gets exactly what you get, out of the same flags, for the same reason. What it does not get is a say in the design. The day the graph is shaped for a model first is the day this took a wrong turn, and the damage would not announce itself: output tuned for a reader who never gets tired and never gets confused quietly stops being output a person can follow, and you would find that out at 2am.</p>
+  </section>
+
+  <section class="landing-section">
+    <h2 class="landing-h2">What ships for agents, and what does not</h2>
+    <p class="landing-section-lede">Twelve skills, compiled into the binary, installed with one command into <code>.claude/skills</code>, <code>.agents/skills</code>, <code>.opencode/skills</code>, or anywhere else your shell can reach. They teach the tool: how to run a target, query the graph, read a diff, resolve a generated-file conflict. Documentation with a table of contents, not a plugin reaching into your repository.</p>
+    <p class="landing-humans-body">What it will not do is write your <code>AGENTS.md</code>. That file is yours, and an installer that edits a file you own leaves bytes you did not write and cannot audit, so <code>magus agent install</code> prints the block for you to paste and only mentions it when yours is missing or stale. The whole command is a data generator: it writes to stdout, and you decide where it lands.</p>
+    <p class="landing-humans-body">The skills are one shared body installed identically everywhere, which means they cannot know that a target here is slow, that a directory is off limits, or that one command keeps going wrong in this repository. That part is yours. It lives in your tree, it is not version-controlled into magus, and it is meant to be rewritten as you learn - the same way you would maintain any other note to the next person. A skill that claimed to know your workspace would be lying about where the knowledge came from.</p>
+    <p class="landing-humans-body">There is also a guard: <code>magus hook</code> takes one proposed command or file path and returns deny, advise, or pass, so an agent can be told no before it runs something rather than after. And a daemon-hosted MCP endpoint, which I will describe accurately rather than enthusiastically: it works, it is bearer-gated over loopback, and it is the piece of this surface I am least sure earns its place. If it is removed it will go through the same <a href="concepts/compatibility/">compatibility contract</a> as anything else, but do not build on it expecting it to be load-bearing forever.</p>
+    <p class="landing-humans-body">None of this is the reason the graph exists, and it is worth repeating that the day it becomes the reason is the day something went wrong. <a href="guides/agents/">Pointing an agent at it</a> has the full list.</p>
+  </section>
+
+  <section class="landing-section">
+    <h2 class="landing-h2">What you write</h2>
+    <p class="landing-section-lede">A <code>magusfile.buzz</code> at each project root. Every exported function is a runnable target. It is typed, so a misspelled op is a compile error rather than a failure twenty minutes into CI.</p>
+    <div class="term term-plain">
+      <div class="term-bar">
+        <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="term-name" data-nolink>magusfile.buzz</span>
+      </div>
+      <pre class="term-body" data-magus-run="true" data-magus-recorder="true"><code class="language-buzz">import "magus";
+import "magus/spell/go";
+
+magus&#92;project(\{ "spells": [go] \});
+
+// every exported function is a runnable target
+export fun build(ctx: magus&#92;Context, args: [str]) &gt; void \{ go["go-build"](ctx); \}
+export fun test(ctx: magus&#92;Context, args: [str])  &gt; void \{ go["go-test"](ctx); \}
+export fun lint(ctx: magus&#92;Context, args: [str])  &gt; void \{ go["golangci-lint"](ctx); \}
+
+// read-only by default. format:rw writes, format:relock re-resolves go.mod
+export fun format(ctx: magus&#92;Context, args: [str]) &gt; void \{
+    go["go-fmt"](ctx);
+    go["go-mod-tidy"](ctx);
+\}
+
+export fun ci(ctx: magus&#92;Context, args: [str]) &gt; void \{
+    ctx.needs(build, test, lint, format);
+\}</code></pre>
+    </div>
+    <div class="grid landing-pair">
+      <div>
+        <h3 class="landing-pair-title">A spell names a tool</h3>
+        <p class="landing-pair-body">A spell is not an abstraction over your toolchain, it is a name for it. <code>go["go-build"]</code> runs <code>go build</code>; the spell decides the arguments and nothing else. It supplies the operations a target can call, named after the thing they run, so reading a magusfile tells you which binaries will be invoked.</p>
+      </div>
+      <div>
+        <h3 class="landing-pair-title">A charm modifies a run</h3>
+        <p class="landing-pair-body">A charm says in what manner. <code>rw</code> turns a check into a write, so <code>format</code> reports by default and <code>format:rw</code> rewrites. <code>relock</code> is separate because re-resolving dependencies is a different risk from reformatting a file.</p>
+        <p class="landing-pair-body">Underneath it is an <a href="concepts/charms/">RFC 6902 JSON Patch</a> over the command's argument vector, so a charm can replace an argument, remove one, or insert at a position - not merely append a flag. The SET you name is additive and stacks (<code>format:rw,relock</code>), and every run prints the set in effect before it starts; what each one does to the argv is as precise as it needs to be.</p>
+      </div>
+    </div>
+    <h3 class="landing-pair-summary-title">Together they are the whole model</h3>
+    <p class="landing-humans-body">Neither invents behavior your tools do not have. That is deliberate: a tool that abstracts your toolchain away leaves you helpless the first time it breaks, and it breaks eventually. This one expects you to keep the knowledge you already have and hands it straight back when something goes wrong, rather than standing between you and the answer. Adopting it should not cost you anything you already know.</p>
+    <p class="landing-humans-body">It also will not write code for you. Boilerplate a tool generates into your repository is toil you inherit: now you have to know whether you may edit it, what breaks when you do, and whether the next version overwrites it. magus scaffolds one magusfile with <code>magus init</code> and never touches it again, and nothing it writes into your tree has to exist for a build to run.</p>
+  </section>
+
+  <section class="landing-section">
+    <h2 class="landing-h2">What you type</h2>
+    <p class="landing-section-lede">Every verb answers one question and stops. Four words carry the whole surface - target, spell, charm, op - so a new capability never earns a new subcommand, and the CLI does not grow into a dialect you have to keep relearning.</p>
+    <dl class="landing-verbs">
+      <dt><code>magus ls</code></dt><dd>which projects exist</dd>
+      <dt><code>magus run test</code></dt><dd>run a target, cache the result</dd>
+      <dt><code>magus affected ci</code></dt><dd>the pipeline, over only what your diff reaches</dd>
+      <dt><code>magus query kind:spell</code></dt><dd>what the graph knows</dd>
+      <dt><code>magus describe file &lt;path&gt;</code></dt><dd>is this generated, and by what</dd>
+    </dl>
+
+    <h3 class="landing-pair-summary-title">The flags are the same everywhere too</h3>
+    <p class="landing-humans-body">They are global, not per-command, which is the part that makes them worth learning once. Each one answers a different question about a run you have not committed to yet: what would happen, how much do I want to see, and who is going to read the output.</p>
+    <dl class="landing-verbs">
+      <dt><code>--dry-run</code></dt><dd>print the exact argument vector and stop</dd>
+      <dt><code>--output</code></dt><dd><code>json</code>, <code>yaml</code>, <code>name</code>, or a Go template</dd>
+      <dt><code>-v</code> / <code>-vv</code> / <code>-vvv</code></dt><dd>detail, then live tool output, then tracing</dd>
+      <dt><code>--silent</code></dt><dd>errors only, with the failing log's path</dd>
+      <dt><code>--no-cache</code></dt><dd>run it again for real, then refresh the entry</dd>
+      <dt><code>--explain</code> / <code>--impact</code></dt><dd>why is this project affected, and what does my diff reach</dd>
+    </dl>
+
+    <h3 class="landing-pair-summary-title">One command, whichever shape you need it in</h3>
+    <p class="landing-humans-body">The same question, asked three ways. Nothing here is a second code path bolted on for scripts: it is one command with one answer, rendered for whoever is reading. The template fields are the <code>-o json</code> keys, so you find a field name by running the command rather than by reading source.</p>
+    <div class="landing-tabs-triple">
+      <div class="term term-plain">
+        <div class="term-bar">
+          <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="term-name" data-nolink>magus ls targets apps/api</span>
+        </div>
+        <pre class="term-body"><code>project: apps/api (3 targets)
+  generate  regenerates the client from the schema.
+  lint      [buf: buf-lint]
+  ci        [needs: generate, lint]</code></pre>
+      </div>
+      <div class="term term-plain">
+        <div class="term-bar">
+          <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="term-name" data-nolink>magus ls targets apps/api -o name</span>
+        </div>
+        <pre class="term-body"><code>ci
+generate
+lint</code></pre>
+      </div>
+      <div class="term term-plain">
+        <div class="term-bar">
+          <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+          <span class="term-name" data-nolink>magus ls targets apps/api -o json</span>
+        </div>
+        <pre class="term-body"><code class="language-json">\{
+  "workspace": "/home/dev/src/acme",
+  "count": 1,
+  "projects": [
+    \{
+      "path": "apps/api",
+      "name": "api",
+      "count": 3,
+      "targets": [
+        \{ "name": "generate", "reads_secrets": false \},
+        \{ "name": "lint", "reads_secrets": false \},
+        \{ "name": "ci", "dependencies": ["generate", "lint"] \}
+      ]
+    \}
+  ]
+\}</code></pre>
+      </div>
+    </div>
+    <p class="landing-humans-body">The magusfile that produced those targets is typed, so the mistakes land at the right time. <code>export fun ci(ctx: magus&#92;Context, args: [str]) &gt; void</code> is a signature the checker enforces, and a misspelled op is a compile error before anything runs rather than a failure twenty minutes into a pipeline.</p>
+  </section>
+
+  <section class="landing-section">
+    <h2 class="landing-h2">An error you have to read twice is a bad error</h2>
+    <p class="landing-section-lede">One you have to interpret is worse. The bar is that you read it once, understand what happened, and know what to do next: no ambiguity to resolve, nothing to look up, nobody to ask. An error that fails that test has handed its job to the reader.</p>
+    <p class="landing-humans-body">So a diagnostic magus raises itself carries a code and a page of its own, saying what tripped it and how to get past it. There are sixty-odd of them and the number keeps going up, which is the point rather than a milestone - <a href="reference/codes/">the whole catalogue is here</a>.</p>
+    <p class="landing-humans-body">What does not get a code is the error your tool produced. A compiler's complaint, a non-zero exit, a stack trace out of the interpreter: those reach you as they were written, and putting a magus number on someone else's message would be inventing a diagnostic rather than reporting one. So the rule is narrower than "everything is documented", and more useful: if magus is the one objecting, it owes you a code and a page. If it is your tool objecting, it owes you the message unedited.</p>
+    <p class="landing-humans-body">The documentation was written before the announcement rather than after it. Two hundred-odd hand-written pages render into more than five hundred alongside the generated reference, and the generated ones say so: every page produced by a generator carries an auto-generated tag, because you deserve to know when the source of truth is code rather than prose. A page pretending to be hand-written is a page that makes you doubt the others.</p>
+    <p class="landing-humans-body">None of that is thoroughness for its own sake. It is that nothing here should depend on me being around. If the errors and the documentation are good enough, someone can pick this up, work out exactly how it behaves, and improve it without asking me anything at all. I would like this to be able to have a life that does not require me in it.</p>
+  </section>
+
+  <section class="landing-section">
+    <h2 class="landing-h2">The graph is a byproduct, not a product</h2>
+    <p class="landing-section-lede">Every few months there is a new name for this and a new tool to go with it: graph engineering, context engineering, fanning work out across subagents. The tactics keep changing and the same requirement sits under all of them, which is a model of your repository you can actually trust. Most of what ships to provide one is a third-party observer: it scans from the outside and infers the structure, and an inference can be wrong in ways nothing warns you about.</p>
+    <p class="landing-humans-body">magus is not observing your repository. It is the thing that builds it, so it already has to know every project, every target's declared inputs and outputs, and what a diff reaches. Get any of that wrong and builds break, loudly, today. The graph is that same knowledge handed back to you, and every run checks it. A scan can only happen to agree.</p>
+    <p class="landing-humans-body">Knowing is the easy half. A graph nobody can put a question to is a data structure, not an answer, and collecting more of it does not help. So every verb is a question with a plain answer: what depends on this, is this file generated and by what, where is this symbol used, what does my diff touch. If it cannot be asked in one command and read in one screen, it does not earn its place.</p>
+    <p class="landing-humans-body">One of those verbs is not like the others, and the difference is worth stating rather than glossing. Symbols come from a <a href="https://github.com/sourcegraph/scip">SCIP</a> index, and magus does not contain an indexer. The <code>scip</code> op forks the one your language already has - <code>scip-go</code>, <code>scip-typescript</code>, <code>scip-python</code>, <code>rust-analyzer</code> - and magus reads what it emits. So that layer really is a second index: it is as fresh as its last run and no fresher, it is the one part of the graph a scan produced rather than the build, and if the indexer is not installed you do not get it. Everything else on this page - projects, targets, declared inputs and outputs, what a diff reaches - is the build's own bookkeeping and needs nothing installed to be true.</p>
+  </section>
+
+  <section class="landing-section">
+    <h2 class="landing-h2">Everything gets a reference. It is not a random id.</h2>
+    <p class="landing-section-lede">Every run prints one, on success and on failure alike, and it keeps working long after the terminal is gone. The reference is the content-addressed cache key with its tail cut off, so it is not an identifier magus made up and wrote down: the same inputs produce the same reference on your laptop, on a colleague's, and on CI. A reference from a CI log is a reference you can resolve at home.</p>
+    <p class="landing-humans-body">Which is what makes a failure tractable. A failing target does not just say what went wrong; it hands you the reference for the output, the exact command to read it, and the exact command to run it again.</p>
+    <div class="term term-plain">
+      <div class="term-bar">
+        <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="term-name" data-nolink>magus run ci-shard .</span>
+      </div>
+      <pre class="term-body"><code>[fail] magus ci-shard:rw (ran, 2.8s)
+  cause: serialize.jsonDecode: invalid character 'o' in literal null
+  output: outb513e99c9eea
+  inspect: magus query output outb513e99c9eea
+  reproduce: magus run ci-shard:rw .</code></pre>
+    </div>
+    <p class="landing-humans-body">That reference resolves days later, to the exact captured bytes, or to a record with <code>-o json</code>, or into a browser log viewer with <code>--open</code>. <code>--attempts</code> lists every stored execution behind it, because a flaky target has a history rather than a result. And <code>--publish</code> uploads one run's output to the remote cache as a signed bundle so a colleague can resolve the same reference you are looking at; failing runs are never shared automatically, because a stack trace from your machine is yours until you decide otherwise.</p>
+    <p class="landing-humans-body">None of this is an audit log and none of it is a security feature; nothing here is trying to catch anyone. It answers the two questions you actually ask after the fact, both otherwise guesswork: what did that command really run, and why did this rebuild when I did not change anything.</p>
+    <div class="term term-plain">
+      <div class="term-bar">
+        <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="term-name" data-nolink>magus query invocation invmsnkhkml1</span>
+      </div>
+      <pre class="term-body"><code>command: magus run lint apps/web
+cwd:     ~/src/acme
+started: 2026-08-10 14:30:49 (3.488s)
+status:  pass
+
+secrets: no credential was resolved during this run
+
+events:  19
+  14:30:49  started
+  14:30:51  exec      pnpm install --frozen-lockfile
+  14:30:51  exec      pnpm run typecheck
+  14:30:52  exec      pnpm run biome
+  14:30:53  result    pass</code></pre>
+    </div>
+    <p class="landing-humans-body">The second question is the one a cache normally cannot answer. A content-addressed cache decides by hashing its inputs, so "why did this run again" has an exact answer, and magus will show you the key broken into the parts that composed it. One digest differs from last time; that is the input that changed.</p>
+    <div class="term term-plain">
+      <div class="term-bar">
+        <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+        <span class="term-name" data-nolink>magus query output out840a2b0bbffb --meta</span>
+      </div>
+      <pre class="term-body"><code>target:  lint:rw
+status:  pass (1.843s)
+inv:     invmsnkhkml1  (magus run lint apps/web)
+key:     840a2b0bbffb9be6...553bfe4d (keyVersion 5)
+rev:     9f3c1d7a4b2e (dirty: uncommitted changes at capture time;
+         the revision alone may not reproduce it)
+
+key components:
+  os               b6d8d425bd8a  1 line
+  arch             f67e9ac7c9ea  1 line
+  projectPath      6495552683f0  1 line
+  target           b8e6454d1495  1 line
+  charm            2c5d84332584  1 line
+  src              200bc8e89b6e  10 lines
+  spellDefVersion  cbb77e117681  1 line
+  tool             fb3166df8e7d  3 lines</code></pre>
+    </div>
+    <p class="landing-humans-body">Two lines there are worth pointing at. <code>rev</code> says the tree was dirty and that the revision alone may not reproduce the result, rather than printing a commit hash and letting you assume it would. And <code>secrets</code> reports that nothing was resolved, because the useful thing to know is whether a run touched a credential at all, which is a question about how your build behaves and not an accusation about who ran it.</p>
+  </section>
+
+  <section class="landing-section">
+    <h2 class="landing-h2">There is a GUI. You never have to open it.</h2>
+    <p class="landing-section-lede">It is called the Console, and the name is overloaded enough to be worth pinning down: this is a graphical app in your browser, not a terminal. Some tools use the word for the terminal itself. magus is CLI-first and stays that way; the Console reads the same daemon and adds nothing you cannot already get from a prompt.</p>
+    <p class="landing-humans-body">It is optional by design, and I mean that as someone who lives in a terminal and runs his editor in one. The CLI is the product. magus is fully featured with a browser never involved, and nothing in the console is a place where work happens only there.</p>
+    <p class="landing-humans-body">A GUI earns its place at the things a terminal is bad at. A dependency graph is the obvious one: you can print it, and you will still want to look at it. The rest is for what you are curious about, not what you do all day. A dashboard of daemon health and running targets is frankly an older idea, a remnant of a different era of continuous integration, and it is still pleasant to leave open on a spare screen when you want half an eye on things.</p>
+    <p class="landing-humans-body">It cannot quietly become a dependency, and that is structural rather than a promise: the binary serves no HTML. The pages are a separate static site. Over loopback the daemon exposes read-only views, one bearer-gated job service for maintenance work such as reindexing the graph, and the MCP endpoint - and the whole schema is published as <a href="reference/api/">reference documentation</a>, so that is checkable rather than something you take from me. Your data does not leave the machine.</p>
+    <figure class="landing-shot">
+      <img src="assets/screenshots/console-dashboard.png" width="2560" height="1640" loading="lazy" decoding="async" alt="The magus console dashboard: a workspace switcher, an all-clear banner reading five targets running and nothing failing, counters for failing, running and queued, and a live activity list of magus run commands with their durations.">
+      <figcaption>The dashboard, running on the synthesized demo data rather than a real daemon - which is also what you get if you open it without installing anything.</figcaption>
+    </figure>
+    <p class="landing-humans-body"><a href="console/">Open the live demo</a> - no install and no daemon; it runs on synthesized activity so you can see all four apps before deciding whether you want any of them.</p>
+  </section>
+
+  <section class="landing-section">
+    <h2 class="landing-h2">Version control, and the toil around it</h2>
+    <p class="landing-section-lede">Git is the one everyone has, and it is not the only one magus speaks. There are backends for Mercurial and Jujutsu as well, with the caveat stated plainly: git is what gets exercised daily, and the other two will have rough edges I have not hit yet. None of the three is reimplemented here. Each backend drives that system's own command, so what you get back is what <code>git</code>, <code>hg</code> or <code>jj</code> said, and magus has no opinion it could quietly substitute.</p>
+    <p class="landing-humans-body">The part worth having either way is what happens around a merge. Generated files conflict constantly and resolving them by hand is the wrong move every time, because the answer is not a merge of two outputs - it is whatever the generator produces from the merged source. <code>magus vcs resolve</code> settles the conflicted generated files and regenerates once. <code>magus vcs add</code> stages a change the way this workspace's own declarations say it should be staged, so nobody has to remember which paths are outputs.</p>
+    <p class="landing-humans-body">The same knowledge answers the question you actually have on a pull request: what does this change reach, and is something else in flight about to make me rebase. magus can post that as advice on the pull request itself - blast radius, generated-file drift, a conflict you are heading toward - and it says nothing at all when it has nothing to say.</p>
+  </section>
+
+  <section class="landing-section">
+    <h2 class="landing-h2">Your CI provider is a detail</h2>
+    <p class="landing-section-lede">magus fans work out across runners without knowing whose runners they are. <code>magus affected ci --plan</code> emits a provider-neutral matrix: which projects a change reached, split into shards. It will not drop into a provider untouched, and nobody should pretend otherwise. Every provider wants that same information in its own shape, so something has to reshape it, and the interesting question is what that something is allowed to be.</p>
+    <p class="landing-humans-body">Here it is magus. Structured output is not a flag you bolt on for scripting: <a href="reference/cli/"><code>--output</code></a> is global, so it works on every command, and it takes <code>json</code>, <code>yaml</code>, <code>name</code>, or a Go template, and the transform itself is Buzz, the same language your magusfile is already written in. No <code>jq</code> in your pipeline, no <code>sed</code> holding your CI together, no shelling out to a text tool to fix up a data structure that was structured when it left. Switch the tab to see the same plan land in a different provider.</p>
+
+    <article class="landing-tabs">
+      <header>
+        <input type="radio" name="ci-provider" id="ci-tab-neutral" checked>
+        <label for="ci-tab-neutral">Neutral</label>
+        <input type="radio" name="ci-provider" id="ci-tab-gha">
+        <label for="ci-tab-gha">GitHub Actions</label>
+        <input type="radio" name="ci-provider" id="ci-tab-glab">
+        <label for="ci-tab-glab">GitLab CI</label>
+      </header>
+
+      <section class="landing-tabpanel">
+        <p class="landing-tab-note">What magus emits. No provider knows about this shape, and that is deliberate: it is the answer, before anyone has an opinion about how to spell it.</p>
+        <div class="term term-plain">
+          <div class="term-bar">
+            <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="term-name" data-nolink>magus affected ci --plan --max-shards 3</span>
+          </div>
+          <pre class="term-body"><code class="language-json">\{
+  "count": 3,
+  "max_parallel": 3,
+  "source": "git diff vs origin/main",
+  "matrix": [
+    \{ "shard": "0", "projects": ". apps/api libs/schema" \},
+    \{ "shard": "1", "projects": "apps/web libs/ui" \},
+    \{ "shard": "2", "projects": "services/worker libs/testing" \}
+  ]
+\}</code></pre>
+        </div>
+      </section>
+
+      <section class="landing-tabpanel">
+        <p class="landing-tab-note">Actions wants <code>key=value</code> lines written to <code>$GITHUB_OUTPUT</code>, with the matrix as a JSON string it will parse back out with <code>fromJSON</code>. That is the glue, and here is all of it. <code>gha</code> is not a declared thing you register anywhere: a charm is a name you attach to a run, and the target decides what it means.</p>
+        <div class="term term-plain">
+          <div class="term-bar">
+            <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="term-name" data-nolink>magusfile.buzz</span>
+          </div>
+          <pre class="term-body"><code class="language-buzz">export fun ci_shard(ctx: magus&#92;Context, args: [str]) &gt; void \{
+    if (proc&#92;stdinIsTerminal()) \{ throw "ci-shard: pipe a plan in"; \}
+    final plan = serialize&#92;jsonDecode(io.stdin.readAll());
+
+    var include = mut [];
+    foreach (row in plan.q("matrix").listValue()) \{
+        include.append(\{
+            "shard"    = row.q("shard").stringValue(),
+            "projects" = row.q("projects").stringValue(),
+        \});
+    \}
+    final block = "matrix=" + serialize&#92;jsonEncode(\{"include" = include\}) + "&#92;n"
+        + "count=" + plan.q("count").integerValue() + "&#92;n"
+        + "max_parallel=" + plan.q("max_parallel").integerValue() + "&#92;n";
+
+    // Without the charm this only previews. The charm is the whole difference.
+    if (!ctx.has_charm("gha")) \{ magus&#92;info(block); return; \}
+    fs&#92;writeFile(os&#92;env("GITHUB_OUTPUT"), block);
+\}</code></pre>
+        </div>
+        <div class="term term-plain">
+          <div class="term-bar">
+            <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="term-name" data-nolink>magus affected ci --plan | magus run ci-shard:gha</span>
+          </div>
+          <pre class="term-body"><code class="language-ini">matrix=\{"include":[\{"shard":"0","projects":". apps/api libs/schema"\},\{"shard":"1","projects":"apps/web libs/ui"\},\{"shard":"2","projects":"services/worker libs/testing"\}]\}
+count=3
+max_parallel=3</code></pre>
+        </div>
+        <p class="landing-tab-note">The workflow reads them back, and these three lines are the only ones that know whose runners these are.</p>
+        <div class="term term-plain">
+          <div class="term-bar">
+            <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="term-name" data-nolink>.github/workflows/ci.yaml</span>
+          </div>
+          <pre class="term-body"><code class="language-yaml">max-parallel: $\{\{ fromJSON(needs.plan.outputs.max_parallel) \}\}
+matrix:      $\{\{ fromJSON(needs.plan.outputs.matrix) \}\}</code></pre>
+        </div>
+      </section>
+
+      <section class="landing-tabpanel">
+        <p class="landing-tab-note">GitLab wants <code>parallel:matrix</code>, a list of variable sets. Different shape, same plan, and the transform is a dozen lines of Buzz you keep in your own repository.</p>
+        <div class="term term-plain">
+          <div class="term-bar">
+            <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="term-name" data-nolink>ci-shard-gitlab.buzz</span>
+          </div>
+          <pre class="term-body"><code class="language-buzz">final plan = serialize&#92;jsonDecode(io.stdin.readAll());
+var yaml = "shard:\n  parallel:\n    matrix:\n";
+foreach (row in plan.q("matrix").listValue()) \{
+    yaml = yaml + "      - SHARD: \"" + row.q("shard").stringValue() + "\"\n"
+                + "        PROJECTS: \"" + row.q("projects").stringValue() + "\"\n";
+\}
+std&#92;print(yaml);</code></pre>
+        </div>
+        <div class="term term-plain">
+          <div class="term-bar">
+            <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
+            <span class="term-name" data-nolink>magus affected ci --plan | magus buzz ci-shard-gitlab.buzz</span>
+          </div>
+          <pre class="term-body"><code class="language-yaml">shard:
+  parallel:
+    matrix:
+      - SHARD: "0"
+        PROJECTS: ". apps/api libs/schema"
+      - SHARD: "1"
+        PROJECTS: "apps/web libs/ui"
+      - SHARD: "2"
+        PROJECTS: "services/worker libs/testing"</code></pre>
+        </div>
+      </section>
+    </article>
+
+    <p class="landing-humans-body">Nothing in magus is compiled against a provider. GitHub Actions and GitLab CI are spells, written in Buzz, and moving between them changes a spell and a workflow file rather than anything about how your build works. Git was meant to be distributed; a great deal of tooling has quietly made one host load-bearing anyway, and the last few years have been a reminder of what that costs when the host has a bad week.</p>
+  </section>
+
+  <section class="landing-section">
+    <h2 class="landing-h2">Add what you need. Keep what you write.</h2>
+    <p class="landing-section-lede">There is no CI provider compiled into the binary. GitHub Actions, GitLab, S3 - none of that lives in the Go source. They are <a href="concepts/spells/">spells</a>, written in Buzz, and magus loads them from your own workspace as readily as from its own.</p>
+    <p class="landing-humans-body">That boundary is the point: the thing you are most likely to need to change is the thing you can change without touching magus at all. Adding a tool, a provider or an op is not a pull request you have to get merged and then wait for a release to use. Write the <a href="guides/authoring-spells/">spell</a>, keep it in your repository, bind it. If it turns out to be useful to other people, contribute it back; if it is specific to your company, never do.</p>
+    <p class="landing-humans-body">There is a failure mode this avoids by construction. When the extension point is "write code that runs the tool", every plugin author ends up re-solving the same problems - caching, environment, failure handling, secret redaction - and solving each of them slightly differently, so the ecosystem accumulates the same footguns once per plugin and everyone downstream maintains the consequences of a leak they did not write. A spell does not run anything. It declares a command: a binary, its arguments, which charms modify it, which secrets it needs. Running that declaration - caching it, sandboxing it, applying the charms, capturing and redacting the output - is the engine's job, and it happens identically for every spell ever written.</p>
+    <p class="landing-humans-body">The same holds for the browser apps. The daemon speaks protobuf and the whole schema is published as <a href="reference/api/">reference documentation</a>, so the console is one possible front end rather than the front end. If you want your own dashboard, everything needed to build it is already written down.</p>
+    <p class="landing-humans-body">That boundary is a licensing one too, which is worth being precise about because magus is <a href="https://github.com/egladman/magus/blob/HEAD/LICENSE">GPL-3.0-or-later</a> and people reasonably assume the worst. A spell is a Buzz file that lives in your repository and that magus reads and runs, the way make reads a Makefile and a shell runs a script. It is your work. It is not part of magus, it is not linked into anything, and nothing in the license asks you to publish it. Keep the spell that wires up your company's internal artifact store closed forever. That is the intended use, not a loophole.</p>
+    <p class="landing-humans-body">What the license does reach is magus's own source. Change that and pass the result on, and whoever you passed it to is owed the same freedoms and the same source you had. The obligation attaches to handing it on, not to editing it. A patch you build and run inside your own company and never distribute is yours as well. The practical point is that you are unlikely to need one, because the extension point was deliberately put outside the binary.</p>
+  </section>
+
+{{{recent}}}  <section class="landing-section landing-next">
+    <h2 class="landing-h2">Where to next</h2>
+    <p class="landing-section-lede">Three, in order. The first is the only one you need today.</p>
+    <div class="grid landing-cards landing-cards-compact">
+      <a class="landing-card" href="guides/getting-started/">
+        <span class="landing-card-mark" aria-hidden="true">01</span>
+        <span class="landing-card-title">Install it and run something</span>
+        <span class="landing-card-body">One signed binary, verified, then a magusfile and your first cached target. Half an hour, and nothing to uninstall if you change your mind.</span>
+      </a>
+      <a class="landing-card" href="documentation/">
+        <span class="landing-card-mark" aria-hidden="true">02</span>
+        <span class="landing-card-title">Read the parts you need</span>
+        <span class="landing-card-body">Concepts when you want the model, guides when you want a recipe, and the full command and configuration reference when you want the exact answer.</span>
+      </a>
+      <a class="landing-card" href="development/">
+        <span class="landing-card-mark" aria-hidden="true">03</span>
+        <span class="landing-card-title">Look inside it</span>
+        <span class="landing-card-body">Why magus exists, how it is put together, and how to build and test the repository. Where to start if you want to change something.</span>
+      </a>
+    </div>
+    <p class="landing-humans-body">Already working with an agent? <a href="guides/agents/">Pointing an agent at it</a> covers the structured output, the installed skills and the graph queries it can use, and what it deliberately does not get.</p>
+  </section>
+`, {"session": TERMINAL_SESSION, "recent": recentPosts(site)});
+
+    // Same cross-linking the docs corpus gets: auto-link the first mention of each
+    // glossary term (definition baked into the popover) and link inline-code domain
+    // references to their reference pages. Root-relative, so "" is both this page's
+    // clean directory and the base relativePath resolves from.
+    final linkRes = linkGlossaryTerms(html, site.glossaryTerms, relativePath("", "glossary/"));
+    html = linkRes.html;
+    site.addTermRefs(linkRes.linked, "index.html");
+    html = linkCodeEntities(html, site.codeEntities, "");
+
+    // Title is the wordmark: renderPage renders the landing's <title> as bare "magus"
+    // rather than "<title> - magus", so passing anything else here would only show up in
+    // the search result heading.
+    final title = "magus";
+    final desc = site.config.description;
+    final doc = renderPage(title, desc, html, LANDING_SRC, "", "", "", mut [], site);
+    fs\writeFile(site.outDir + "/index.html", doc);
+    // The plain-text body the search index carries. The HTML above is mostly layout, so
+    // indexing it verbatim would fill a result snippet with markup rather than the words
+    // someone would actually search for.
+    site.addRecord("index.html", title, desc,
+        "magus task orchestrator monorepo polyglot build test lint affected set "
+        + "content-addressed cache knowledge graph magusfile buzz typed targets spells "
+        + "single binary install setup tour playground");
+}

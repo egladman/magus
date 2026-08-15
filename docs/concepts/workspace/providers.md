@@ -1,5 +1,6 @@
 ---
 title: Workspace providers
+aliases: [concepts/workspace-providers]
 description: Let a spell supply the workspace's project set by asking the tool that already owns it - nx, gradle, pnpm, cargo - so a repo needs no magusfile per project.
 tags:
   [
@@ -18,11 +19,11 @@ tags:
 
 > [!NOTE]
 > This mechanism is new scaffolding, and its contract may still change. The
-> [Nx integration](../guides/integrations/nx.md) is the experiment exercising
+> [Nx integration](../../guides/integrations/nx.md) is the experiment exercising
 > it; nothing about it is settled yet.
 
 A magus workspace normally learns its projects from the tree: a directory with a
-magusfile is a project (see [workspace.md](workspace.md)). That rule assumes the
+magusfile is a project (see [workspace.md](../workspace.md)). That rule assumes the
 repo's project structure is magus's to declare.
 
 Often it is not. An nx, gradle, pnpm, cargo or bazel repo already has a project
@@ -152,7 +153,7 @@ fun build(target: Target) > Command {
 export fun mgs_listTargets() > any { return {"build": build, "test": test, "lint": lint}; }
 ```
 
-This is the one place the [op-naming rule](spells.md#naming-operations) bends,
+This is the one place the [op-naming rule](../spells.md#naming-operations) bends,
 and a provider spell's doc comment should say so: an op key is normally the
 tool's own command, but here it is what makes a magusfile-less project runnable.
 
@@ -175,14 +176,14 @@ stays the only place a `ci` target can live - a spell's `ci` op only reaches
 projects that have none.
 
 A provided project also has no magusfile body to call `magus\secret.read`
-from; a `Command`'s [`secrets` field](secrets.md) is how it reaches a
+from; a `Command`'s [`secrets` field](../secrets.md) is how it reaches a
 credential instead.
 
 ## Precedence
 
 1. **A magusfile wins.** A directory that declares itself keeps its own
    definition, and the provider's configuration for it is ignored with
-   [MGS1024](../reference/codes/magusfile/MGS1024.md). This is what makes a
+   [MGS1024](../../reference/codes/magusfile/MGS1024.md). This is what makes a
    gradual migration work: convert projects to real magusfiles one at a time.
 2. **The first provider wired owns a path.** Several providers may be wired (an
    nx repo with a cargo workspace inside it); wiring order is the tiebreak.
@@ -190,7 +191,7 @@ credential instead.
    applied after the fold.
 
 A path magus cannot accept fails the load with
-[MGS1023](../reference/codes/magusfile/MGS1023.md) instead of being skipped: a
+[MGS1023](../../reference/codes/magusfile/MGS1023.md) instead of being skipped: a
 dropped project is a target that no longer exists, with nothing on screen to say
 why. The rules it must pass are in that page.
 
@@ -225,9 +226,9 @@ constant, and a constant pins one answer forever.
 
 ## See also
 
-- [Nx](../guides/integrations/nx.md): the experimental integration that exercises
+- [Nx](../../guides/integrations/nx.md): the experimental integration that exercises
   this mechanism, with the spell to copy and the manual setup it needs
-- [Workspace and projects](workspace.md): how discovery works without a provider
-- [Spells](spells.md): the contract a provider spell is written against
-- [CI providers](ci-providers.md) and [Remote caching](cache/remote.md): the two
+- [Workspace and projects](../workspace.md): how discovery works without a provider
+- [Spells](../spells.md): the contract a provider spell is written against
+- [CI providers](../ci/providers.md) and [Remote caching](../cache/remote.md): the two
   sibling extension points

@@ -6,6 +6,7 @@ import "fs";
 import "os";
 
 
+import "proc";
 // The skill-eval harness. Measures whether an installed skill actually changes
 // agent behaviour, per permutation and per model, instead of leaving that to
 // judgement. Live model runs are opt-in: `ci` is lint-only so `magus affected ci`

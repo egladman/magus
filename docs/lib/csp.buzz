@@ -64,13 +64,14 @@ export final CSP_INLINE_SCRIPT_SOURCES = ["playground.html"];
 // allowance at all.
 export final CSP_IMG_SRC_DEFAULT = "'self' data:";
 
-// CSP_IMG_SRC_HOME extends CSP_IMG_SRC_DEFAULT with the two hosts the README's status
-// badges load from (github.com Actions badge, pkg.go.dev reference badge). Only the home
-// page embeds them, so only its CSP (Site.cspHome) passes this value.
-export final CSP_IMG_SRC_HOME = CSP_IMG_SRC_DEFAULT + " https://github.com https://pkg.go.dev";
+// CSP_IMG_SRC_BADGES extends CSP_IMG_SRC_DEFAULT with the two hosts the README's status
+// badges load from (github.com Actions badge, pkg.go.dev reference badge). Only the page
+// rendered FROM the README embeds them - /development/, not the site root - so only its
+// CSP (Site.cspBadges) passes this value.
+export final CSP_IMG_SRC_BADGES = CSP_IMG_SRC_DEFAULT + " https://github.com https://pkg.go.dev";
 
 // computeCSP builds one page's Content-Security-Policy meta content (see Site.csp/
-// Site.cspHome for which pages get which img-src). default-src is 'self', not 'none':
+// Site.cspBadges for which pages get which img-src). default-src is 'self', not 'none':
 // manifest-src, the same-origin <link rel=prefetch> hover-warm, and the service worker
 // registration all fall back to default-src (via worker-src -> child-src), and 'none'
 // would break the service worker outright. 'self' is the minimal fallback that keeps
@@ -85,7 +86,7 @@ export final CSP_IMG_SRC_HOME = CSP_IMG_SRC_DEFAULT + " https://github.com https
 //     attr rather than an external sheet; CSP has no hash-source for style ATTRIBUTES
 //     (only style-src-attr's not-yet-universal 'unsafe-hashes'), so a per-block hash
 //     scheme would leave the attribute case uncovered anyway.
-//   - img-src: imgSrc verbatim (CSP_IMG_SRC_HOME only for the home page's two live
+//   - img-src: imgSrc verbatim (CSP_IMG_SRC_BADGES only for the README page's two live
 //     status badges, which vendoring would make permanently stale; every other page,
 //     notably graph/playground, stays same-origin-only).
 //   - connect-src: 'self' plus loopback wildcards - the browser-enforced form of the
@@ -159,8 +160,8 @@ test "computeCSP's img-src is exactly the caller's imgSrc argument - the per-pag
     assert\equal(withDefault.indexOf("github.com") != null, false, "default img-src never carries the badge hosts");
     assert\equal(withDefault.indexOf("pkg.go.dev") != null, false, "default img-src never carries the badge hosts");
 
-    final withHome = computeCSP(CSP_IMG_SRC_HOME);
-    assert\equal(withHome.indexOf("img-src 'self' data: https://github.com https://pkg.go.dev;") != null, true, "home img-src carries both badge hosts, verbatim");
+    final withBadges = computeCSP(CSP_IMG_SRC_BADGES);
+    assert\equal(withBadges.indexOf("img-src 'self' data: https://github.com https://pkg.go.dev;") != null, true, "badge img-src carries both badge hosts, verbatim");
 }
 
 test "cspForRedirectStub is scoped tighter than computeCSP and hashes exactly the given script" {

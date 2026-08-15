@@ -38,6 +38,8 @@ import {
 import { LICENSE_TEXT } from "./license";
 import { buildTokensSection } from "./tokens";
 import { buildMemorySection } from "./memory";
+import { buildInstallSection } from "./install";
+import type { InstallStore } from "../../lib/install";
 import {
   buildSettingsEnvelope,
   type LayoutSettings,
@@ -59,10 +61,14 @@ const REPO_URL = "https://github.com/egladman/magus";
 // live keymap cell the console reads - so a commit writes the same bindings the console honors. presets
 // (optional) are the "start from a preset" seeds: applying one stages that preset's full binding set
 // into the draft, which the operator then edits and Saves like any other change.
+// install is the shell's install-prompt store (lib/install.ts). It is a DEP rather than a module
+// singleton imported here because the offer it holds is captured at shell boot, long before this surface
+// mounts - the shell owns it, this surface only renders it.
 export interface SettingsDeps {
   keybindings: KeybindingsDeps;
   presets?: Record<string, Keymap>;
   presetList?: { id: string; label: string }[];
+  install: InstallStore;
 }
 
 // A config surface has nothing to find in the shared search box, so it opts out.
@@ -950,6 +956,11 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   // Tokens (access control) and memory (the records agents write) are DISTINCT concerns, so each owns
   // its own tab - Access and Memory - and hides independently. (tabs is const-declared below; onDenied
   // only fires after an async RPC, so it is initialized by then.)
+  // Install is LIVE too, for a different reason: it acts on the browser, not on console state. There is
+  // nothing to persist, nothing to diff, and nothing Reset could undo, so it stays out of the staged
+  // model and applies the moment it is clicked.
+  const installSection = buildInstallSection(deps.install);
+
   const tokensSection = buildTokensSection(resolveDaemonHost(), {
     onDenied: () => tabs.setHidden("access", true),
   });
@@ -969,6 +980,11 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
       panel: buildStackedPanel(
         buildSection("General", generalForm),
         buildSection("Appearance", themeBody),
+        buildSection(
+          "Install",
+          installSection.el,
+          "Install the console as an app on this device. This acts on your browser, so it applies immediately rather than staging above.",
+        ),
         buildSection(
           "Keybindings",
           keybindingsContent,
@@ -1009,6 +1025,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   return () => {
     disposeProfile();
     editor.destroy();
+    installSection.destroy();
     tokensSection?.destroy();
     memorySection?.destroy();
   };

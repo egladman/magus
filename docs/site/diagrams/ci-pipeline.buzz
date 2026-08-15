@@ -1,0 +1,55 @@
+// site/diagrams/ci-pipeline.buzz - the steps a ci target composes.
+//
+// Drawn as a fan-out, NOT a chain. `ci` is one `ctx.needs(...)` call, so the steps are
+// independent by default and order exists only where a step declares an edge of its own
+// (test depends on build, so build runs first because build says so, not because ci does).
+// An earlier version of this figure drew a six-long sequence, which read as magus owning a
+// fixed pipeline - the exact thing the surrounding page says it does not do.
+namespace ciPipeline;
+
+import "../libs/diagram/diagram" as _;
+
+export fun ciPipelineDiagram() > Diagram {
+    return Diagram{
+        id = "ci-pipeline",
+        eyebrow = "targets",
+        title = "ci declares steps, not an order",
+        desc = "A ci target names its steps in a single needs call, so they are independent "
+            + "and run in parallel. Order comes from edges the steps themselves declare, "
+            + "such as test depending on build. magus enforces none of this list.",
+        width = 960,
+        height = 480,
+        nodes = [
+            Node{ id = "cmd", label = "magus affected ci", role = "focal",
+                  x = 392, y = 88, w = 176, h = 56 },
+
+            Node{ id = "preflight", label = "preflight", x = 32, y = 224, w = 176, h = 56 },
+            Node{ id = "generate", label = "generate", x = 272, y = 224, w = 176, h = 56 },
+            Node{ id = "format", label = "format", x = 512, y = 224, w = 176, h = 56 },
+            Node{ id = "lint", label = "lint", x = 752, y = 224, w = 176, h = 56 },
+
+            Node{ id = "build", label = "build", x = 152, y = 340, w = 176, h = 56 },
+            Node{ id = "test", label = "test", x = 392, y = 340, w = 176, h = 56 },
+            Node{ id = "security", label = "security", x = 632, y = 340, w = 176, h = 56 },
+        ],
+        // Slots run left to right across the trigger's lower edge, and the bends step
+        // outward-first: the connector traveling furthest turns highest, so no descending
+        // leg has to cross a bus segment belonging to a nearer one.
+        edges = [
+            Edge{ src = "cmd", dst = "preflight", srcSide = "bottom", dstSide = "top",
+                  srcSlot = 1, srcSlots = 7, bend = 156 },
+            Edge{ src = "cmd", dst = "build", srcSide = "bottom", dstSide = "top",
+                  srcSlot = 2, srcSlots = 7, bend = 168 },
+            Edge{ src = "cmd", dst = "generate", srcSide = "bottom", dstSide = "top",
+                  srcSlot = 3, srcSlots = 7, bend = 180 },
+            Edge{ src = "cmd", dst = "test", srcSide = "bottom", dstSide = "top",
+                  srcSlot = 4, srcSlots = 7, bend = 192 },
+            Edge{ src = "cmd", dst = "format", srcSide = "bottom", dstSide = "top",
+                  srcSlot = 5, srcSlots = 7, bend = 184 },
+            Edge{ src = "cmd", dst = "security", srcSide = "bottom", dstSide = "top",
+                  srcSlot = 6, srcSlots = 7, bend = 172 },
+            Edge{ src = "cmd", dst = "lint", srcSide = "bottom", dstSide = "top",
+                  srcSlot = 7, srcSlots = 7, bend = 160 },
+        ],
+    };
+}

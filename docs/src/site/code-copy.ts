@@ -1,7 +1,7 @@
 // code-copy.js - add a copy-to-clipboard button to each code block.
 //
 // goldmark emits code blocks as <pre><code>...</code></pre>. This wraps each one
-// (except mermaid diagram sources, which the mermaid module replaces) in a
+// in a
 // positioned .code-block and drops a small button in the top-right corner;
 // copyFeedback (lib/clipboard.js) wires the copy + check-confirmation. No-ops
 // where the Clipboard API is unavailable.
@@ -17,7 +17,6 @@ export function initCodeCopy(): void {
     '<path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path></svg>';
 
   document.querySelectorAll("pre > code").forEach((code) => {
-    if (code.classList.contains("language-mermaid")) return;
     const pre = code.parentElement;
     if (!pre) return;
     // Runnable blocks (run-example.js) get their own top action bar with Run +

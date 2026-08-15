@@ -10,26 +10,36 @@ import "engine/types" as _;
 // not a docs page.
 export fun magusConfig() > Config {
     final nav = mut [<NavLink>];
-    nav.append(NavLink{ suffix = "index.html", label = "Home", key = "home" });
+    // NO "Home" entry: the brand lockup beside it already links to index.html, so a Home link
+    // spends a nav slot on a destination the user can already reach from the thing next to it.
+    //
+    // Four top-level items, grouped by what someone is trying to DO rather than by what kind of
+    // page it is. Documentation and Console stay flat because each is a single destination and
+    // burying a primary one behind a menu costs a click for nothing.
     nav.append(NavLink{ suffix = "documentation/", label = "Documentation", key = "documentation" });
-    nav.append(NavLink{ suffix = "blog/", label = "Blog", key = "blog" });
-    nav.append(NavLink{ suffix = "setup/", label = "Setup", key = "setup" });
-    nav.append(NavLink{ suffix = "tour/", label = "Tour", key = "tour" });
-    nav.append(NavLink{ suffix = "playground/", label = "Playground", key = "playground" });
-    // Contributing was two clicks deep under /development/, which is the right depth for a
-    // project nobody contributes to and the wrong one for a project that wants contributors.
-    nav.append(NavLink{ suffix = "development/contributing/", label = "Contribute", key = "contributing" });
+    // Everything for someone who has not run magus yet, in the order they would meet it.
+    final start = mut [<NavLink>];
+    start.append(NavLink{ suffix = "setup/", label = "Setup", key = "setup" });
+    start.append(NavLink{ suffix = "tour/", label = "Tour", key = "tour" });
+    start.append(NavLink{ suffix = "playground/", label = "Playground", key = "playground" });
+    nav.append(NavLink{ label = "Get started", key = "start", children = start });
+    // The project around the tool rather than the tool itself. Contributing was two clicks deep
+    // under /development/, which is the right depth for a project nobody contributes to and the
+    // wrong one for a project that wants contributors; it keeps its promotion here.
+    final community = mut [<NavLink>];
+    community.append(NavLink{ suffix = "blog/", label = "Blog", key = "blog" });
+    community.append(NavLink{ suffix = "development/contributing/", label = "Contribute", key = "contributing" });
+    nav.append(NavLink{ label = "Community", key = "community", children = community });
     nav.append(NavLink{ suffix = "console/", label = "Console", key = "console", blank = true });
     return Config{
         baseURL = "https://eli.gladman.cc/magus/",
         title = "magus",
-        description = "magus is a fast, cross-platform task orchestrator for polyglot (mono)repos. Single binary, code as configuration, statically typed.",
+        description = "magus is a fast, cross-platform task orchestrator for polyglot (mono)repos. Single binary, programmable targets, statically typed.",
         repoURL = "https://github.com/egladman/magus",
         navLinks = nav,
         generatorDirs = mut ["node_modules", "gen", "src", "tour"],
         generatorFiles = mut ["MAGUS.md"],
         // pico is same-origin (no CDN); offline/ is the navigation fallback. The heavy
-        // mermaid bundle is omitted - it caches lazily on first use.
         precacheAssets = mut [
             "search-index.json",
             "playground/wasm_exec.js",

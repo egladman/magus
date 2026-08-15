@@ -1461,7 +1461,7 @@ func (r *runner) checkStaleSockets() types.DoctorCheck {
 		return types.DoctorCheck{
 			Name:    "sockets",
 			Status:  types.DoctorFail,
-			Message: fmt.Sprintf("%d live daemon sockets - multiple daemons running", len(live)),
+			Message: fmt.Sprintf("%d live daemon sockets: multiple daemons running", len(live)),
 			Details: details,
 		}
 	}

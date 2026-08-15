@@ -78,7 +78,7 @@ func (r *runner) checkReadinessProbes(projects []*types.Project) types.DoctorChe
 		if err := exec.CommandContext(context.Background(), g.probe.Bin, g.probe.Args...).Run(); err != nil {
 			down++
 			status = types.DoctorFail
-			details = append(details, fmt.Sprintf("%s: %s NOT ready - `%s` failed", g.spell, g.tool, g.cmd))
+			details = append(details, fmt.Sprintf("%s: %s NOT ready: `%s` failed", g.spell, g.tool, g.cmd))
 			continue
 		}
 		details = append(details, fmt.Sprintf("%s: %s ready (`%s`)", g.spell, g.tool, g.cmd))

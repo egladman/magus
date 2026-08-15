@@ -10,6 +10,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/interactive/screen"
 )
 
 // TestShotsUpToDate is the drift gate every generated file in this repo carries.
@@ -48,12 +50,13 @@ func TestShotsAreDeterministic(t *testing.T) {
 
 // TestShotsAreNotBlank guards the failure mode a picture cannot show you: every
 // surface here stands down without a terminal, so a probe that stopped
-// answering would render four empty frames and the gate would happily pin them.
+// answering would render empty frames and the gate would happily pin them.
 func TestShotsAreNotBlank(t *testing.T) {
 	t.Parallel()
 	shots, err := render()
 	require.NoError(t, err)
-	require.Len(t, shots, 4)
+	// Four surfaces, each in both palettes.
+	require.Len(t, shots, 8)
 
 	for name, svg := range shots {
 		assert.Contains(t, svg, "<text ", "%s drew no text at all", name)
@@ -76,7 +79,7 @@ func TestShotsAreNotBlank(t *testing.T) {
 // Asserting against cache.FailureHint rather than a literal here is the point:
 // a copy of the text in the test would reintroduce exactly what it is guarding.
 func TestFailurePromptShotShowsTheRealHint(t *testing.T) {
-	svg, err := failurePrompt()
+	svg, err := failurePrompt(screen.DarkTheme)
 	if err != nil {
 		t.Fatalf("failurePrompt: %v", err)
 	}

@@ -156,17 +156,9 @@ magus\project({
 		// Preserves the hand-authored Unreleased section in place; caching a prior
 		// file would overwrite a later edit that is intentionally outside releases/.
 		"changelog-generate": {"skip_cache": "preserves a hand-authored Unreleased section; a replay would overwrite a later edit"},
-        // Screen-records the CLI, so the bytes it writes are never the same twice
-        // (real target durations land in the frames). Caching would replay a GIF
-        // recorded against different code, which is the one thing a demo must not
-        // do. Deliberately NOT named *-generate: `generate` globs that suffix and
-        // drift-gates it, and a non-reproducible artifact under a drift gate fails
-        // every CI run by construction. See the tapes target below.
-        "tapes": {"skip_cache": "screen-records the CLI, so its bytes differ every run and a replay would show different code"},
-        // Same reasoning as tapes: it runs a real session, so real durations and
-        // output refs land in the capture and no two runs agree. Only the RENDER
-        // downstream of it (termcast-generate) is reproducible enough to cache
-        // and to gate.
+        // Runs a real session, so real durations and output refs land in the
+        // capture and no two runs agree. Only the RENDER downstream of it
+        // (termcast-generate) is reproducible enough to cache and to gate.
         "termcast-record": {"skip_cache": "records a real session, so its bytes differ every run and a replay would show different code"},
         "termcast-showcase": {"skip_cache": "drives a live interactive session, so its bytes differ every run"},
     },
@@ -1144,46 +1136,13 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// Records every VHS tape in tapes/ into assets/gen/. Each tape drives a real magus
-// binary through a real terminal, so the GIFs are documentation that cannot quietly
-// go stale the way a pasted transcript does - re-record and the drift is visible.
-//
-// Opt-in, never wired into `generate` or `ci`: a render takes tens of seconds, needs
-// vhs (and the ttyd/ffmpeg it pulls in) on PATH, and produces a different file every
-// time. Run it when the CLI's output actually changes, then commit the result.
-//
-// The GIFs are declared outputs all the same, so `magus describe file` reports them
-// as generated and the agent guard warns on a hand-edit - the same treatment
-// assets/coverage.svg gets.
-export fun tapes(ctx: magus\Context, args: [str]) > void !> any {
-    // Declared, or the tapes and the script that stages their workspace would be
-    // unclaimed: `magus describe file tapes/core-loop.tape` reported no owner, so
-    // editing a tape invalidated nothing and told a reader it affected no target.
-    ctx.readsFiles("tapes/*.tape", "tapes/demo-init.sh", "tapes/demo.txtar");
-    ctx.writesFiles("assets/gen/*.gif");
-    // try/catch, not a sentinel: proc.which RAISES when the tool is absent, so the check
-    // cannot be forgotten and the helpful message stays where it was.
-    try {
-        proc\which("vhs");
-    } catch (e) {
-        throw "tapes: vhs not found on PATH; install it with `brew install vhs` "
-            + "(see tapes/README.md)";
-    }
-    foreach (tape in fs\glob("tapes/*.tape")) {
-        magus\log.info("recording {tape.value}");
-        proc\exec("vhs", [tape.value], ".", {});
-    }
-}
-
 // Re-records tapes/core-loop.capture: the raw bytes a real magus prints to a real
 // pseudo-terminal, driven by tapes/core-loop.session.sh.
 //
-// Opt-in and NOT named *_generate, for the same reason `tapes` is not: a session
-// is not byte-reproducible, so a drift gate over it would be red by construction.
-// The difference from `tapes` is where the unreproducible part stops. A GIF is
-// unreproducible all the way to the artifact a reader sees, so nothing about it
-// can be gated; a capture is unreproducible only up to the bytes, and RENDERING
-// those bytes is arithmetic - which is what termcast_generate gates.
+// Opt-in and NOT named *_generate: `generate` globs that suffix and drift-gates
+// what it finds, and a session is not byte-reproducible, so the gate would be red
+// by construction. The unreproducibility stops at the bytes, though - RENDERING
+// them is arithmetic, which is what termcast_generate gates instead.
 //
 // Run it when magus's output changes, commit the capture, and let the render
 // follow in the same commit.
@@ -1199,9 +1158,9 @@ export fun termcast_record(ctx: magus\Context, args: [str]) > void !> any {
 // Renders tapes/core-loop.capture into the README's animated SVG.
 //
 // Deterministic - it replays committed bytes through the terminal emulator and
-// emits text - so unlike the GIF it can be drift-gated, and is. That gate is the
-// point: the GIF it replaces went stale without anything noticing, to where the
-// README's alt text described a project count magus no longer reported.
+// emits text - so it can be drift-gated, and is. That gate is the point: a
+// recording nothing checks goes stale in silence, until the README's alt text is
+// describing a project count magus no longer reports.
 // Re-records tapes/showcase.capture: a real INTERACTIVE session, driven by real
 // keystrokes, showing the surfaces a transcript cannot - the pinned band, the
 // failure tree beside its captured output, the picker searching the graph.
@@ -2282,8 +2241,9 @@ fun missing_input(path: str, project: str) > str {
 // is `ctx.needs(ctx.glob("*-generate", "!deploy-generate"))`: the suffix would otherwise
 // enrol a full tree copy in every `magus run generate`, to satisfy a drift gate over output
 // that is deliberately gitignored. Before negation existed the only remedy was to avoid the
-// name - which is what the `tapes` target above still records, and what this target was first
-// called (build-site). Renaming around a matcher hides the reason at both ends: the glob does
+// name - which is what termcast-record and termcast-showcase above still do, and what this
+// target was first called (build-site). Renaming around a matcher hides the reason at both
+// ends: the glob does
 // not say what it is missing, and the target does not say why it is called something else.
 // "!deploy-generate" says it once, where it applies.
 //

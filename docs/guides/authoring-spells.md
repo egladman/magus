@@ -9,7 +9,7 @@ tags:
     provider,
     contract,
     buzz,
-    cache backend,
+    cache provider,
     ci provider,
     secret provider,
     extending,
@@ -25,7 +25,7 @@ There are **two kinds**, and picking the right one first saves rewriting the fil
 
 |          | Toolchain spell                                                            | Provider spell                                                           |
 | -------- | -------------------------------------------------------------------------- | ------------------------------------------------------------------------ |
-| Answers  | "how do I build/test/lint this kind of project?"                           | "how do I reach this backend?"                                           |
+| Answers  | "how do I build/test/lint this kind of project?"                           | "how do I reach this provider?"                                          |
 | Declares | `mgs_listTargets` returning named [operations](../concepts/operations.md)  | handler ops returning data                                               |
 | Bound by | listing it in `magus\project({"spells": [...]})`                           | `magus\cache.remote()`, `magus\ci.provider()`, `magus\secret.provider()` |
 | Runs     | as part of a target, cached                                                | when the subsystem asks, never cached                                    |
@@ -59,7 +59,7 @@ So there are two shapes, and you do not get to choose - the imports choose for y
 | Imported as | `import "magus/spell/go"`            | `import "spells/onepassword"` (a path) |
 | Examples    | `go`, `docker`, `cosign`, `markdown` | `github-actions`, `onepassword`        |
 
-Almost every provider is workspace-local, because reaching a backend means `proc\exec` or
+Almost every provider is workspace-local, because reaching a provider means `proc\exec` or
 `http`. That is expected, not a downgrade: `spells/github/actions` backs this repo's own
 remote cache that way.
 
@@ -225,7 +225,7 @@ Three subsystems accept one, and each detects its ops by name:
 | Subsystem                                   | Selected with                    | Ops                                                                                |
 | ------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------- |
 | [Remote cache](../concepts/cache/remote.md) | `magus\cache.remote(<spell>)`    | `enabled` (optional), `get_artifact`, `put_artifact`, `prune` (optional)           |
-| [CI provider](../concepts/ci-providers.md)  | `magus\ci.provider(<spell>)`     | `enabled`, `group_start`, `group_end`, `annotate`, `quote_prefixes` - all optional |
+| [CI provider](../concepts/ci/providers.md)  | `magus\ci.provider(<spell>)`     | `enabled`, `group_start`, `group_end`, `annotate`, `quote_prefixes` - all optional |
 | [Secrets](../concepts/secrets.md)           | `magus\secret.provider(<spell>)` | `resolve_secret`                                                                   |
 
 A secret provider is the smallest of the three, and the whole contract is one op:
@@ -249,7 +249,7 @@ export fun resolve_secret(target: Target, cb: fun(any)) > str {
 ```
 
 **Make your failures teach.** This is the difference between a provider people adopt and
-one they abandon: someone wiring a backend for the first time hits "not installed", "not
+one they abandon: someone wiring a provider for the first time hits "not installed", "not
 authenticated", or "wrong path", and a message naming which one and what to type is worth
 more than any amount of documentation. Use `opts.allow_failure` to classify the exit rather
 than raising a bare status:
