@@ -845,7 +845,24 @@ func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
 		if graph != nil {
 			sym.ExternalProjects, sym.ExternalFileCount = m.externalReferents(graph, s.Symbol, f.Project)
 		}
-		f.Symbols = append(f.Symbols, sym)
+		// Drop the locals. SCIP indexes every binding, so a changed function contributes its
+		// parameters and temporaries - `signal0`, `headers1`, `body0` - and on a real file they
+		// were roughly two thirds of the payload this surface serves to every MCP client. A
+		// symbol that nothing references and that leaves neither the project nor the module
+		// cannot change how anyone reads the diff, so carrying it costs an agent's context and
+		// buys nothing.
+		//
+		// The exports are kept even at zero references, and that is the whole reason this is a
+		// conjunction rather than `RefCount == 0`: a NEWLY ADDED public function has no
+		// referents yet and is precisely the thing a reviewer must see.
+		//
+		// Only the APPEND is skipped. The reach and surface updates below still run for a
+		// local, because a file whose changed symbols are all locals was still COVERED by the
+		// index - and reporting its surface as unknown would say nobody looked when somebody
+		// did.
+		if sym.RefCount > 0 || sym.FileCount > 0 || sym.ModuleAPI || len(sym.ExternalProjects) > 0 {
+			f.Symbols = append(f.Symbols, sym)
+		}
 		// Reach is the WIDEST file count among the file's changed symbols, not their sum: a
 		// file is as dangerous as its most-depended-on export, and summing would rank a file
 		// with many narrow symbols above one with a single load-bearing API.
