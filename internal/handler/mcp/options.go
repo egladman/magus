@@ -57,9 +57,9 @@ type Options struct {
 	StatusBase types.StatusBase
 
 	// ReviewSessions is the daemon's shared review-session store, the SAME one the console's
-	// /api/v1/review routes use. Sharing it is what makes pairing work: the person opens a
-	// review in the console and the agent joins the session they started, rather than each
-	// side holding a private opinion of the changeset.
+	// /api/v1/diff and /api/v1/diff/session routes use. Sharing it is what makes pairing work:
+	// the person opens a diff in the console and the agent joins the session they started,
+	// rather than each side holding a private opinion of the changeset.
 	//
 	// Nil disables magus_diff, which is the honest state for a daemon with no workspace.
 	ReviewSessions *diff.Store

@@ -821,9 +821,9 @@ func MagusDescribeFile(ctx context.Context, paths []string, opts map[string]any)
 	return runMagusJSON[types.FileReport](ctx, "describe", append([]string{"file"}, paths...), opts)
 }
 
-// MagusReview implements magus\review: the annotated changeset, in reading order.
+// MagusReview implements magus\diff: the annotated changeset, in reading order.
 //
-// It shells out to `magus review` rather than reimplementing the join, which is the whole
+// It shells out to `magus diff` rather than reimplementing the join, which is the whole
 // point of exposing it here - a Buzz advisor writing a pull-request comment and the console
 // surface then rank files by the SAME definition (types.Diff.SortForReading), and a change to
 // that order reaches both without either being edited.
