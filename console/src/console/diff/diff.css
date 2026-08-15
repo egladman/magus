@@ -506,3 +506,25 @@
   font-size: var(--pf-t--global--font--size--sm);
   margin-block-start: var(--pf-t--global--spacer--sm);
 }
+
+/* Reduced motion.
+ *
+ * The surface animates in two places: the scroll container smooth-scrolls on hunk and file
+ * navigation, and PatternFly transitions its labels. A reader who has asked the OS for less
+ * motion has asked for exactly that to stop, and a whole diff sliding past on every `[` is
+ * the symptom they turned it off to avoid. The JS honours this too (prefersReducedMotion in
+ * main.ts) because scrollTo's behavior option is not governed by CSS. */
+@media (prefers-reduced-motion: reduce) {
+  .console-diff-scroll {
+    scroll-behavior: auto;
+  }
+
+  .console-diff-layout *,
+  .console-diff-layout *::before,
+  .console-diff-layout *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}

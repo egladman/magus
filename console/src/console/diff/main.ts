@@ -106,8 +106,23 @@ function label(text: string, modifier?: string, title?: string): HTMLElement {
   return el;
 }
 
+// The marker is the NON-COLOUR channel for add and delete. Colour alone fails WCAG 1.4.1 and
+// fails anyone with a colour vision deficiency, and a diff is exactly the case where the two
+// states must be told apart to be read at all.
 function markerFor(kind: string): string {
   return kind === "add" ? "+" : kind === "del" ? "-" : " ";
+}
+
+// A screen reader announcing "+" reads it as "plus", which is not what the row means. The
+// visible glyph stays; this is what assistive tech is given instead.
+function kindLabel(kind: string): string {
+  return kind === "add" ? "added line" : kind === "del" ? "removed line" : "context line";
+}
+
+// prefersReducedMotion reports the OS-level request for less animation. Read live rather than
+// cached: the setting can change mid-session, and matchMedia is cheap.
+function prefersReducedMotion(): boolean {
+  return globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
 }
 
 function gutter(n: number | null): HTMLElement {
@@ -148,9 +163,18 @@ export function activate(host: HTMLElement): () => void {
 
   const rail = h("div", "console-diff-rail");
   rail.setAttribute("aria-label", "Agent suggestions");
+  // An interruption nobody is told about does not exist to a screen-reader user, and one
+  // announced on every repaint is unusable. polite + atomic announces the suggestion once,
+  // when it lands, without interrupting whatever is being read.
+  rail.setAttribute("aria-live", "polite");
+  rail.setAttribute("aria-atomic", "true");
 
   const scroll = h("div", "console-diff-scroll");
   scroll.tabIndex = 0;
+  // A grid rather than a list: rows have cells (gutters, marker, text) and the surface is
+  // two-dimensionally navigable. aria-rowcount is set on every paint from the true row total.
+  scroll.setAttribute("role", "grid");
+  scroll.setAttribute("aria-label", "Changed lines");
   const spacer = h("div", "console-diff-spacer");
   const windowEl = h("div", "console-diff-window");
   spacer.append(windowEl);
@@ -251,12 +275,12 @@ export function activate(host: HTMLElement): () => void {
     if (row.kind === "line") {
       const el = h("div", "console-diff-row");
       el.dataset.kind = row.line.kind;
-      el.append(
-        gutter(row.line.oldLine),
-        gutter(row.line.newLine),
-        h("span", "console-diff-row__marker", markerFor(row.line.kind)),
-        h("span", "console-diff-row__text", row.line.text),
-      );
+      const marker = h("span", "console-diff-row__marker", markerFor(row.line.kind));
+      // The glyph is for eyes; the label is for ears. Announcing "plus" would be noise.
+      marker.setAttribute("aria-hidden", "true");
+      const text = h("span", "console-diff-row__text", row.line.text);
+      text.setAttribute("aria-label", `${kindLabel(row.line.kind)}: ${row.line.text}`);
+      el.append(gutter(row.line.oldLine), gutter(row.line.newLine), marker, text);
       return el;
     }
     const el = h("div", "console-diff-row console-diff-row--pair");
@@ -295,12 +319,23 @@ export function activate(host: HTMLElement): () => void {
     const first = Math.max(0, Math.floor(top / ROW_HEIGHT) - OVERSCAN);
     const last = Math.min(total, Math.ceil((top + height) / ROW_HEIGHT) + OVERSCAN);
 
+    // Virtualization is invisible to assistive tech unless the grid says how big it really
+    // is: rows outside the window are not in the DOM, so a screen reader would otherwise
+    // report the OVERSCAN-sized slice as the whole diff. aria-rowcount carries the true
+    // total, and each row carries its ABSOLUTE 1-based position below.
+    scroll.setAttribute("aria-rowcount", String(total));
+
     const frag = document.createDocumentFragment();
     for (let i = first; i < last; i++) {
       const row = state.rows[i];
       if (!row) continue;
       const el = renderRow(row, i);
       el.dataset.row = String(i);
+      // The absolute index, NOT the position within the rendered window. Using the window
+      // position is the classic virtualization bug: it announces "row 1 of 10,000" at every
+      // scroll offset, which is worse than silence because it sounds like an answer.
+      el.setAttribute("role", "row");
+      el.setAttribute("aria-rowindex", String(i + 1));
       if (i === state.cursor) el.dataset.cursor = "";
       frag.append(el);
     }
@@ -616,7 +651,9 @@ export function activate(host: HTMLElement): () => void {
 
   const scrollToRow = (i: number): void => {
     state.cursor = i;
-    scroll.scrollTo({ top: i * ROW_HEIGHT, behavior: "smooth" });
+    // Smooth scrolling is motion, and for a reader who has asked the OS for less of it, a
+    // whole diff sliding past on every `[` is the symptom they turned it off to avoid.
+    scroll.scrollTo({ top: i * ROW_HEIGHT, behavior: prefersReducedMotion() ? "auto" : "smooth" });
     const row = state.rows[i];
     if (row && row.kind !== "file") {
       const path = row.kind === "hunk" ? row.hunk : null;
