@@ -358,14 +358,30 @@ func (v TargetGraphOutput) BuzzObject() BuzzObject {
 	}
 }
 
-func (v FileEntry) BuzzObject() BuzzObject {
+func (v FileClaim) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"path":     v.Path,
-		"project":  v.Project,
-		"role":     v.Role,
-		"outputOf": v.OutputOf,
-		"sourceOf": v.SourceOf,
-		"hint":     v.Hint,
+		"project": v.Project,
+		"target":  v.Target,
+		"role":    v.Role,
+		"glob":    v.Glob,
+		"paths":   v.Paths,
+	}
+}
+
+func (v FileEntry) BuzzObject() BuzzObject {
+	itemsClaims := make([]any, len(v.Claims))
+	for indexClaims := range v.Claims {
+		itemsClaims[indexClaims] = v.Claims[indexClaims].BuzzObject()
+	}
+	return BuzzObject{
+		"path":      v.Path,
+		"project":   v.Project,
+		"role":      v.Role,
+		"outputOf":  v.OutputOf,
+		"sourceOf":  v.SourceOf,
+		"claims":    itemsClaims,
+		"dependsOn": v.DependsOn,
+		"hint":      v.Hint,
 	}
 }
 
@@ -374,10 +390,15 @@ func (v FileReport) BuzzObject() BuzzObject {
 	for indexFiles := range v.Files {
 		itemsFiles[indexFiles] = v.Files[indexFiles].BuzzObject()
 	}
+	itemsOverlaps := make([]any, len(v.Overlaps))
+	for indexOverlaps := range v.Overlaps {
+		itemsOverlaps[indexOverlaps] = v.Overlaps[indexOverlaps].BuzzObject()
+	}
 	return BuzzObject{
 		"definition": v.Definition,
 		"count":      v.Count,
 		"files":      itemsFiles,
+		"overlaps":   itemsOverlaps,
 	}
 }
 

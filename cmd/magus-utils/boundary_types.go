@@ -71,6 +71,8 @@ var boundaryTypes = []boundaryType{
 	{Name: "TargetGraphNode", Type: reflect.TypeFor[types.TargetGraphNode](), RuntimeObject: true},
 	{Name: "TargetGraphProject", Type: reflect.TypeFor[types.TargetGraphProject](), RuntimeObject: true},
 	{Name: "TargetGraph", Type: reflect.TypeFor[types.TargetGraphOutput](), RuntimeObject: true},
+	// Leaf first: FileEntry.claims and FileReport.overlaps are both [FileClaim].
+	{Name: "FileClaim", Type: reflect.TypeFor[types.FileClaim](), RuntimeObject: true},
 	{Name: "FileEntry", Type: reflect.TypeFor[types.FileEntry](), RuntimeObject: true},
 	{Name: "FileReport", Type: reflect.TypeFor[types.FileReport](), RuntimeObject: true},
 	// Not a RuntimeObject: it reaches Buzz through a thrown error, not a return.

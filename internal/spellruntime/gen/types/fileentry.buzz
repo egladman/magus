@@ -11,5 +11,7 @@ export object FileEntry {
     role: str = "",
     outputOf: [str] = [],
     sourceOf: [str] = [],
+    claims: [FileClaim] = [],
+    dependsOn: [str] = [],
     hint: str = "",
 }

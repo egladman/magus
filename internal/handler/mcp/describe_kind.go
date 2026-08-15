@@ -180,7 +180,7 @@ func (t *describeFileTool) Invoke(ctx context.Context, req spells.InvokeRequest)
 	if err != nil {
 		return spells.InvokeResponse{}, err
 	}
-	return spells.InvokeResponse{Data: types.FileReport{Definition: types.FileDefinition, Count: len(files), Files: files}}, nil
+	return spells.InvokeResponse{Data: types.NewFileReport(files)}, nil
 }
 
 var _ spells.Driver = (*describeFileTool)(nil)

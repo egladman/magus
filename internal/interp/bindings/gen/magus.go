@@ -724,6 +724,20 @@ func buzzValueMagusImpactResult(v types.ImpactResult) vm.Value {
 	return out
 }
 
+func buzzValueMagusFileClaim(v types.FileClaim) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("target", vm.StrValue(v.Target))
+	out.MapSet("role", vm.StrValue(v.Role))
+	out.MapSet("glob", vm.StrValue(v.Glob))
+	itemsPaths := make([]vm.Value, len(v.Paths))
+	for indexPaths := range v.Paths {
+		itemsPaths[indexPaths] = vm.StrValue(v.Paths[indexPaths])
+	}
+	out.MapSet("paths", vm.ListValue(itemsPaths))
+	return out
+}
+
 func buzzValueMagusFileEntry(v types.FileEntry) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StrValue(v.Path))
@@ -739,6 +753,16 @@ func buzzValueMagusFileEntry(v types.FileEntry) vm.Value {
 		itemsSourceOf[indexSourceOf] = vm.StrValue(v.SourceOf[indexSourceOf])
 	}
 	out.MapSet("sourceOf", vm.ListValue(itemsSourceOf))
+	itemsClaims := make([]vm.Value, len(v.Claims))
+	for indexClaims := range v.Claims {
+		itemsClaims[indexClaims] = buzzValueMagusFileClaim(v.Claims[indexClaims])
+	}
+	out.MapSet("claims", vm.ListValue(itemsClaims))
+	itemsDependsOn := make([]vm.Value, len(v.DependsOn))
+	for indexDependsOn := range v.DependsOn {
+		itemsDependsOn[indexDependsOn] = vm.StrValue(v.DependsOn[indexDependsOn])
+	}
+	out.MapSet("dependsOn", vm.ListValue(itemsDependsOn))
 	out.MapSet("hint", vm.StrValue(v.Hint))
 	return out
 }
@@ -752,6 +776,11 @@ func buzzValueMagusFileReport(v types.FileReport) vm.Value {
 		itemsFiles[indexFiles] = buzzValueMagusFileEntry(v.Files[indexFiles])
 	}
 	out.MapSet("files", vm.ListValue(itemsFiles))
+	itemsOverlaps := make([]vm.Value, len(v.Overlaps))
+	for indexOverlaps := range v.Overlaps {
+		itemsOverlaps[indexOverlaps] = buzzValueMagusFileClaim(v.Overlaps[indexOverlaps])
+	}
+	out.MapSet("overlaps", vm.ListValue(itemsOverlaps))
 	return out
 }
 

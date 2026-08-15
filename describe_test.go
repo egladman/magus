@@ -885,6 +885,7 @@ func TestClassifyFiles_PerTargetOutputs(t *testing.T) {
 		Project:  ".",
 		Role:     "output",
 		OutputOf: []string{"."},
+		Claims:   []types.FileClaim{{Project: ".", Target: "generate", Role: "output", Glob: "GEN.md"}},
 		Hint:     out[0].Hint,
 	}, out[0])
 	assert.Contains(t, out[0].Hint, "generated")
@@ -933,4 +934,122 @@ export fun render(ctx: magus\Context, args: [str]) > void {
 	assert.Contains(t, entries[0].SourceOf, "site",
 		"site declares skills/note.md via a cross-project ctx.readsFiles, so it must appear in source_of; "+
 			"without it magus vcs add calls site's regenerated output MGS4005 and tells the author not to commit it")
+}
+
+// TestClassifyFiles_Claims pins the per-declaration facts, which are what a caller
+// handing paths to concurrent authors needs and what output_of/source_of cannot
+// say: WHICH target declared each path, the glob it matched, and - for a
+// cross-project write - the project that DECLARED it rather than the tree it lands
+// in. It also pins the two dependency edges a cross-project ref creates, in
+// opposite directions.
+func TestClassifyFiles_Claims(t *testing.T) {
+	root := t.TempDir()
+	// Three projects, because a target may not both read from and write into one
+	// other project (MGS1012): site reads skills and writes dist.
+	files := map[string]string{
+		"skills/note.md":        "# a source another project renders\n",
+		"skills/magusfile.buzz": "export fun build(ctx: magus\\Context, args: [str]) > void {}\n",
+		"dist/magusfile.buzz":   "export fun build(ctx: magus\\Context, args: [str]) > void {}\n",
+		"site/magusfile.buzz": `import "project/../skills" as skills;
+import "project/../dist" as dist;
+export fun render(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles(skills.file("note.md"));
+    ctx.writesFiles("gen/*.html");
+}
+export fun publish(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles(dist.file("index.html"));
+}
+export fun stamp(ctx: magus\Context, args: [str]) > void {
+    ctx.modifiesExistingFiles("README.md");
+}
+`,
+	}
+	for rel, body := range files {
+		abs := filepath.Join(root, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
+	}
+
+	ws, err := Inspect(context.Background(), root)
+	require.NoError(t, err, "Inspect")
+	paths := []string{"skills/note.md", "dist/index.html", "skills/magusfile.buzz", "site/gen/a.html", "site/gen/b.html", "site/README.md"}
+	entries, err := ws.ClassifyFiles(context.Background(), paths)
+	require.NoError(t, err, "ClassifyFiles")
+	require.Len(t, entries, len(paths))
+	byPath := map[string]types.FileEntry{}
+	for _, f := range entries {
+		byPath[f.Path] = f
+	}
+
+	for _, tc := range []struct {
+		name      string
+		path      string
+		role      string
+		claims    []types.FileClaim
+		dependsOn []string
+		hint      string // substring, when the hint is part of what the case pins
+	}{
+		{
+			// No depends_on: a cross-project READ gives the edge to the reader, so it
+			// shows up on site's files below, not here.
+			name:   "cross-project read is a source claim of the READING target",
+			path:   "skills/note.md",
+			role:   "source",
+			claims: []types.FileClaim{{Project: "site", Target: "render", Role: "source", Glob: "skills/note.md"}},
+		},
+		{
+			// The file lands in dist, so output_of says dist; only site's magusfile
+			// can regenerate it, so the claim says site.
+			name:      "cross-project write is claimed by the WRITER, not the owner",
+			path:      "dist/index.html",
+			role:      "output",
+			claims:    []types.FileClaim{{Project: "site", Target: "publish", Role: "output", Glob: "dist/index.html"}},
+			dependsOn: []string{"site"},
+		},
+		{
+			name:   "a project-wide glob carries no target",
+			path:   "skills/magusfile.buzz",
+			role:   "source",
+			claims: []types.FileClaim{{Project: "skills", Role: "source", Glob: "skills/magusfile.buzz"}},
+		},
+		{
+			name:      "a per-target write glob names its target",
+			path:      "site/gen/a.html",
+			role:      "output",
+			claims:    []types.FileClaim{{Project: "site", Target: "render", Role: "output", Glob: "site/gen/*.html"}},
+			dependsOn: []string{"skills"},
+		},
+		{
+			// An in-place edit is neither an output nor a project-wide source, so the
+			// role stays unclaimed - but without the claim the only write set that
+			// names the file would be invisible, and the default hint would tell the
+			// reader nothing declares it.
+			name:      "an in-place edit is claimed, and the hint stops calling it undeclared",
+			path:      "site/README.md",
+			role:      "unclaimed",
+			claims:    []types.FileClaim{{Project: "site", Target: "stamp", Role: "update", Glob: "site/README.md"}},
+			dependsOn: []string{"skills"},
+			hint:      "edits it in place",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := byPath[tc.path]
+			assert.Equal(t, tc.claims, got.Claims, "claims")
+			assert.Equal(t, tc.dependsOn, got.DependsOn, "depends_on")
+			assert.Equal(t, tc.role, got.Role, "role")
+			if tc.hint != "" {
+				assert.Contains(t, got.Hint, tc.hint, "hint")
+			}
+		})
+	}
+
+	assert.Equal(t, []types.FileClaim{{
+		Project: "site", Target: "render", Role: "output", Glob: "site/gen/*.html",
+		Paths: []string{"site/gen/a.html", "site/gen/b.html"},
+	}}, types.NewFileReport(entries).Overlaps,
+		"one ctx.writesFiles glob covers both html paths, and that is the collision fact - "+
+			"the same declaration regenerates them, so two authors editing one each are editing one write set")
+
+	assert.Equal(t, []string{"dist"}, byPath["dist/index.html"].OutputOf,
+		"output_of stays the tree the file lands in, whatever the claim says about who writes it")
 }

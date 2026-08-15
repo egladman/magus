@@ -60,12 +60,22 @@ export object ExecResult {
     ok: bool = false,
 }
 
+export object FileClaim {
+    project: str = "",
+    target: str = "",
+    role: str = "",
+    glob: str = "",
+    paths: [str] = [],
+}
+
 export object FileEntry {
     path: str = "",
     project: str = "",
     role: str = "",
     outputOf: [str] = [],
     sourceOf: [str] = [],
+    claims: [FileClaim] = [],
+    dependsOn: [str] = [],
     hint: str = "",
 }
 
@@ -73,6 +83,7 @@ export object FileReport {
     definition: str = "",
     count: int = 0,
     files: [FileEntry] = [],
+    overlaps: [FileClaim] = [],
 }
 
 export object ModuleFieldEntry {

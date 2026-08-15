@@ -959,11 +959,12 @@ func appendUniq(s []string, v string) []string {
 
 // ClassifyFiles classifies workspace-relative paths against every project's
 // declared source and output globs (the same workspace-rooted globs baseStep
-// feeds the cache), plus directory containment for ownership. It is pure
-// declaration lookup - no target evaluation, no VCS - so it is cheap enough to
-// run over a whole dirty tree. An absolute path is re-rooted onto the workspace;
-// a path outside it (or matching nothing) reports as unclaimed. ctx bounds the
-// walk so classifying a large path list stays cancellable.
+// feeds the cache), plus directory containment for ownership, and reports each
+// matching declaration individually (FileEntry.Claims) with the target that made
+// it. It is pure declaration lookup - no target evaluation, no VCS - so it is
+// cheap enough to run over a whole dirty tree. An absolute path is re-rooted onto
+// the workspace; a path outside it (or matching nothing) reports as unclaimed.
+// ctx bounds the walk so classifying a large path list stays cancellable.
 func (m *Magus) ClassifyFiles(ctx context.Context, paths []string) ([]types.FileEntry, error) {
 	all := m.ws.All()
 	// Longest project path first, so nested projects claim ownership before ".".
@@ -998,11 +999,13 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 	for _, p := range owners {
 		if p.Path == "." || path == p.Path || strings.HasPrefix(path, p.Path+"/") {
 			entry.Project = p.Path
+			entry.DependsOn = slices.Clone(p.DependsOn)
 			break
 		}
 	}
 	for _, p := range all {
 		step := m.baseStep(p)
+		entry.Claims = append(entry.Claims, matchedClaims(p, step.Sources, path)...)
 		// AllOutputs, not step.Outputs: the cache view is scoped to one target's
 		// project-wide globs, so a file declared only by a per-target ctx.writesFiles
 		// (the root MAGUS.md) or written in by another project would report as a
@@ -1056,10 +1059,72 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 	case types.IsMagusMaintained(path):
 		entry.Role = "maintained"
 		entry.Hint = "magus maintains this outside any target's globs: it invalidates no cache key, but magus wrote it and expects it committed - regenerate it rather than hand-editing, and never ignore it"
+	// Only an in-place edit reaches here with a claim: ctx.modifiesExistingFiles is
+	// deliberately neither an output nor a project-wide source, so the role stays
+	// unclaimed - but the default hint below says no project declares the path, and
+	// that sentence would send someone to ignore a file a target rewrites.
+	case len(entry.Claims) > 0:
+		entry.Hint = "no declared glob matches, but a target edits it in place (ctx.modifiesExistingFiles): magus neither replays nor cleans it, and the claims below name the target that rewrites it"
 	default:
 		entry.Hint = "no project declares this path: it invalidates no cache key and affects no target; check your VCS ignore rules before committing it"
 	}
 	return entry
+}
+
+// matchedClaims returns every declaration of p that names path: the project-wide
+// output globs and the source globs the cache step already rooted (magusfiles
+// included), plus the per-target ctx.writesFiles, ctx.readsFiles, and
+// ctx.modifiesExistingFiles refs, each rooted at the project its glob is relative
+// to and attributed to the target that declared it.
+//
+// Deliberately does NOT read p.InboundOutputs. An inbound glob is another project's
+// ctx.writesFiles ref re-filed on the tree it lands in, and the caller walks every
+// project, so reading it here would report one declaration twice - the second time
+// without the target name that makes it actionable.
+func matchedClaims(p *types.Project, sources []string, path string) []types.FileClaim {
+	type claimKey struct{ target, role, glob string }
+	seen := make(map[claimKey]bool)
+	var out []types.FileClaim
+	add := func(target, role, glob string) {
+		k := claimKey{target, role, glob}
+		if seen[k] {
+			return
+		}
+		seen[k] = true
+		if ok, _ := doublestar.Match(glob, path); ok {
+			out = append(out, types.FileClaim{Project: p.Path, Target: target, Role: role, Glob: glob})
+		}
+	}
+	// A same-project ref carries no project of its own; a cross-project one is
+	// relative to the tree it names.
+	owner := func(refProject string) string {
+		if refProject == "" {
+			return p.Path
+		}
+		return refProject
+	}
+	for _, glob := range p.Outputs {
+		add("", "output", joinGlob(p.Path, glob))
+	}
+	for _, t := range slices.Sorted(maps.Keys(p.TargetOutputs)) {
+		for _, ref := range p.TargetOutputs[t] {
+			add(t, "output", joinGlob(owner(ref.Project), ref.Glob))
+		}
+	}
+	for _, glob := range sources {
+		add("", "source", glob)
+	}
+	for _, t := range slices.Sorted(maps.Keys(p.TargetInputs)) {
+		for _, ref := range p.TargetInputs[t] {
+			add(t, "source", joinGlob(owner(ref.Project), ref.Glob))
+		}
+	}
+	for _, t := range slices.Sorted(maps.Keys(p.TargetUpdates)) {
+		for _, ref := range p.TargetUpdates[t] {
+			add(t, "update", joinGlob(owner(ref.Project), ref.Glob))
+		}
+	}
+	return out
 }
 
 // matchAnyGlob reports whether path matches any of the workspace-rooted
