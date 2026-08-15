@@ -62,12 +62,15 @@ func NewStore(stateDir string) *Store {
 // over them would reset every mark in a file on any edit near the top, which is the exact
 // behaviour this exists to avoid.
 func HunkDigest(path string, lines []string) string {
+	// hash.Hash.Write is documented never to return an error, so the returns are discarded
+	// explicitly rather than checked - a branch that cannot be taken is untestable, and
+	// pretending otherwise would put unreachable error handling in a hot path.
 	h := sha256.New()
-	h.Write([]byte(path))
-	h.Write([]byte{0})
+	_, _ = h.Write([]byte(path))
+	_, _ = h.Write([]byte{0})
 	for _, l := range lines {
-		h.Write([]byte(l))
-		h.Write([]byte{'\n'})
+		_, _ = h.Write([]byte(l))
+		_, _ = h.Write([]byte{'\n'})
 	}
 	return hex.EncodeToString(h.Sum(nil))[:16]
 }

@@ -627,6 +627,9 @@ func (m *Magus) VCSOptions() types.VCSOptions { return m.ws.VCSOptions }
 func (m *Magus) WorkingDiff(ctx context.Context, paths []string) (string, error) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {
+		//nolint:nilerr // a workspace with no VCS has nothing to review, which is a clean
+		// tree rather than a failure; erroring would make the review surface unopenable in
+		// exactly the workspaces where it has least to say.
 		return "", nil
 	}
 	tracked, err := res.VCS.DirtyDiff(ctx, m.ws.Root, paths)
@@ -640,9 +643,8 @@ func (m *Magus) WorkingDiff(ctx context.Context, paths []string) (string, error)
 	// depend on.
 	untracked, uerr := m.untrackedPatch(ctx, res.VCS, paths)
 	if uerr != nil || untracked == "" {
-		// An untracked file that cannot be read is left out rather than failing the review:
-		// the tracked half is still worth showing, and a permission error on one scratch file
-		// must not make the whole changeset unreadable.
+		//nolint:nilerr // the tracked half is still worth showing: a permission error on one
+		// scratch file must not make the whole changeset unreadable.
 		return tracked, nil
 	}
 	if tracked == "" {
@@ -779,9 +781,13 @@ func (m *Magus) Review(ctx context.Context, paths []string) (types.Review, error
 	// and annotate a file the reader cannot see.
 	res, ierr := impact.ComputeFromPaths(ctx, m, paths)
 	if ierr != nil {
+		// Every overlay is best-effort and degrades to a Note. Roles and ownership are most
+		// of the value and are already computed; failing the whole review because a blast
+		// radius could not be walked would make the useful part unreachable, and the Note is
+		// what keeps the absence visible rather than silent.
 		out.Notes = append(out.Notes, "blast radius unavailable: "+ierr.Error())
 		out.SortForReview()
-		return out, nil
+		return out, nil //nolint:nilerr // reported as a Note, see above
 	}
 	graph, gerr := m.KnowledgeGraphWithSymbols(ctx)
 	if gerr == nil {
