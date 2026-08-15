@@ -31,6 +31,7 @@ import {
 import {
   parseHash,
   daemonAttach,
+  adoptDaemonOrigin,
   validateLoopbackHost,
   consumeLiveToken,
   createDaemonTransport,
@@ -334,6 +335,12 @@ export function activate(host: HTMLElement): () => void {
   function load(): void {
     const params = parseHash();
     consumeLiveToken(params);
+    // adoptDaemonOrigin, not just consumeLiveToken. Each surface is its own esbuild bundle, so
+    // lib/daemon's "did we adopt this origin" flag is PER-BUNDLE state: the shell setting it
+    // does not make it true in here, and daemonAttach then returns null on a console served by
+    // that very daemon. Without this the surface works only after the dashboard has persisted a
+    // host to localStorage, which is why it looked fine.
+    adoptDaemonOrigin();
     const linked = daemonAttach(params);
     const remembered = daemonCell.get();
     const daemonHost = linked ?? (remembered ? validateLoopbackHost(remembered) : null);
