@@ -369,16 +369,25 @@ export interface PlanLayout {
   readonly back: ReadonlySet<number>;
 }
 
-// layoutPlan places the units with the graph explorer's layered (Sugiyama-style) layout - the same
+// Placeable is the least layoutPlan needs: ids, and the pairs between them. Widened from PlanModel
+// when the derived run plan became this surface's second source - both models place through this
+// one pass, so the two tenants cannot drift into two different drawings of the same shape.
+export interface Placeable {
+  readonly nodes: readonly { readonly id: string }[];
+  readonly edges: readonly { readonly from: string; readonly to: string }[];
+}
+
+// layoutPlan places the nodes with the graph explorer's layered (Sugiyama-style) layout - the same
 // pure, deterministic, dependency-free pass the DAG modes there use. Reused rather than rewritten:
 // a delegation plan IS a layered DAG (a unit sits to the right of its parent and of everything it
-// depends on), and that module already solves cycle-breaking, longest-path layering, barycentric
-// crossing reduction, and long-edge routing.
+// depends on), and so is a resolved run plan (a target sits to the right of what it needs), and
+// that module already solves cycle-breaking, longest-path layering, barycentric crossing reduction,
+// and long-edge routing.
 //
-// Both edge kinds feed the layering, which is the honest reading: a child cannot start before its
-// parent delegated it, and a dependent cannot start before its dependency finished. The KINDS stay
-// distinct in the drawing, not in the placement.
-export function layoutPlan(model: PlanModel): PlanLayout {
+// Both of the ledger's edge kinds feed the layering, which is the honest reading: a child cannot
+// start before its parent delegated it, and a dependent cannot start before its dependency
+// finished. The KINDS stay distinct in the drawing, not in the placement.
+export function layoutPlan(model: Placeable): PlanLayout {
   const nodes: GNode[] = model.nodes.map((n) => ({
     id: n.id,
     kind: "unit",

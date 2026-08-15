@@ -1,16 +1,19 @@
 // main-dom.test.ts - the Plan surface's mount. document/window are registered globally by
 // test-setup.mjs (node --import), so this runs under node:test like the other *-dom tests. The
-// model it draws is covered next door in ledger.test.ts.
+// models it draws are covered next door in ledger.test.ts and run.test.ts.
 //
-// What is pinned HERE is what a reader ends up looking at, and specifically the three things a
+// What is pinned HERE is what a reader ends up looking at, and specifically the four things a
 // later refactor would most plausibly break:
 //
-//   - The EMPTY STATES stay apart. "No daemon", "the daemon has no ledger route", and "the plan is
-//     empty" are three different facts, and only one of them means nothing was delegated. This
-//     branch's daemon serves no /api/v1/ledger at all, so the middle one is what everybody sees
-//     first - it has to name the route rather than showing a blank plan.
-//   - The DRAWING IS NOT THE ACCESSIBLE SURFACE. The stage is aria-hidden and the unit list beside
-//     it carries the same units with their states in words.
+//   - The EMPTY STATES stay apart. Per source: "no daemon", "the daemon has no route", and "the
+//     plan is empty" are three different facts, and only the last means no work exists. This
+//     branch's daemon serves NEITHER route, so the middle one is what everybody sees first - it has
+//     to name the route rather than showing a blank plan.
+//   - WHICH SOURCE OPENS is decided by the data. A ledger with rows means an orchestration is in
+//     flight and Declared opens; anything else hands the surface to Run, which is what a person
+//     doing plain work came for. An explicit pick then sticks - the poll must not overrule it.
+//   - The DRAWING IS NOT THE ACCESSIBLE SURFACE. The stage is aria-hidden and the node list beside
+//     it carries the same nodes with their states in words.
 //   - FOCUS IS NEVER TAKEN. Mounting and polling must leave the caret where it was; only an
 //     explicit navigation command moves it.
 
@@ -44,20 +47,72 @@ async function settle(turns = 12): Promise<void> {
   for (let i = 0; i < turns; i++) await new Promise((r) => setTimeout(r, 0));
 }
 
-// serveLedger points the surface at a daemon whose ONLY answer is the ledger response given here.
-// Every other request (the status RPC, the run feed) is refused, which is what a daemon that is not
+// serve points the surface at a daemon that answers only the routes named here. Everything else
+// (the status RPC, the run feed, the route left out) is refused, which is what a daemon that is not
 // there looks like from the browser, and which the surface must survive without blanking the plan.
-function serveLedger(reply: () => unknown): void {
+function serve(routes: { ledger?: () => unknown; plan?: (url: string) => unknown }): void {
   setDefaultHost(HOST);
   globalThis.fetch = ((input: RequestInfo | URL) => {
     const url = String(input instanceof Request ? input.url : input);
-    if (url.includes("/api/v1/ledger")) return Promise.resolve(reply() as Response);
+    if (url.includes("/api/v1/ledger") && routes.ledger) {
+      return Promise.resolve(routes.ledger() as Response);
+    }
+    if (url.includes("/api/v1/plan") && routes.plan) {
+      return Promise.resolve(routes.plan(url) as Response);
+    }
     return Promise.reject(new Error("stub: no network"));
   }) as typeof fetch;
 }
 
+function serveLedger(reply: () => unknown): void {
+  serve({ ledger: reply });
+}
+
 function ok(units: unknown[]): () => unknown {
   return () => ({ ok: true, status: 200, json: () => Promise.resolve({ units }) });
+}
+
+// okPlan answers /api/v1/plan with a run-plan body in the contract's shape.
+function okPlan(body: Record<string, unknown>): () => unknown {
+  return () => ({ ok: true, status: 200, json: () => Promise.resolve(body) });
+}
+
+// The run plan every drawing test reads: build waits on generate, test waits on build.
+//
+// .:build is RUNNING and still carries a ref, which is the wire's actual behaviour rather than a
+// convenience: a node's ref is its most recent captured output regardless of state, so a running
+// node hands back the PREVIOUS run's log. A fixture where running implied no ref would let the
+// mislabelling this pins for pass unnoticed.
+const RUN_BODY = {
+  target: "ci",
+  anchor: "running",
+  nodes: [
+    { id: ".:generate", project: ".", target: "generate", state: "pass", ref: "out1a2b3c" },
+    { id: ".:build", project: ".", target: "build", state: "running", ref: "out7g8h9i" },
+    { id: "console:test", project: "console", target: "test", state: "idle", ref: "" },
+  ],
+  edges: [
+    { from: ".:generate", to: ".:build" },
+    { from: ".:build", to: "console:test" },
+  ],
+};
+
+// pickSource clicks a source toggle, which is also what retires the auto rule: from here on the
+// reader has chosen and the poll may not move them.
+function pickSource(host: HTMLElement, source: "declared" | "run"): void {
+  host.querySelector<HTMLElement>(`.console-plan-source [data-source="${source}"]`)?.click();
+}
+
+function pressed(host: HTMLElement, source: "declared" | "run"): string {
+  return (
+    host
+      .querySelector(`.console-plan-source [data-source="${source}"]`)
+      ?.getAttribute("aria-pressed") ?? ""
+  );
+}
+
+function summaryText(host: HTMLElement): string {
+  return host.querySelector(".console-plan-summary")?.textContent ?? "";
 }
 
 // mount builds the surface into a fresh host and hands back the teardown. EVERY caller must run it:
@@ -89,11 +144,14 @@ test("with no daemon configured it says that, rather than showing an empty plan"
 
 // The case every reader on this branch hits: the endpoint lands with the sibling branch, so until
 // then the route 404s. A blank plan here would read as "nothing was delegated", which is the one
-// wrong answer that costs something - they stop looking.
+// wrong answer that costs something - they stop looking. Reached by asking for Declared, because a
+// ledger with no rows is exactly the case that hands the surface to Run.
 test("a daemon with no ledger route names the missing endpoint", async () => {
   serveLedger(() => ({ ok: false, status: 404 }));
   const { host, teardown } = mount();
   try {
+    await settle();
+    pickSource(host, "declared");
     await settle();
     assert.equal(phase(host), "empty");
     assert.match(text(host), /No delegation ledger endpoint/);
@@ -108,6 +166,8 @@ test("a served but empty ledger is a different sentence from a missing one", asy
   const { host, teardown } = mount();
   try {
     await settle();
+    pickSource(host, "declared");
+    await settle();
     assert.equal(phase(host), "empty");
     assert.match(text(host), /Nothing delegated/);
     assert.doesNotMatch(text(host), /No delegation ledger endpoint/);
@@ -120,6 +180,8 @@ test("a read that fails for any other reason blames neither the plan nor the dae
   serveLedger(() => ({ ok: false, status: 500 }));
   const { host, teardown } = mount();
   try {
+    await settle();
+    pickSource(host, "declared");
     await settle();
     assert.match(text(host), /Could not read the delegation ledger/);
     assert.match(text(host), /HTTP 500/);
@@ -273,4 +335,336 @@ test("teardown empties the host", async () => {
   assert.ok(host.querySelector(".console-plan-layout"));
   teardown();
   assert.equal(host.childElementCount, 0);
+});
+
+// ---- which source opens ----------------------------------------------------
+
+// The rule, and the reason for it: a ledger with rows means an orchestration is in flight, which is
+// the more specific answer to "what is happening here". Everything else belongs to the person doing
+// plain work.
+test("a ledger with rows keeps the declared view", async () => {
+  serve({ ledger: ok([{ id: "root" }]), plan: okPlan(RUN_BODY) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    assert.equal(pressed(host, "declared"), "true");
+    assert.equal(pressed(host, "run"), "false");
+    assert.match(host.querySelector(".console-plan-list__item")?.textContent ?? "", /root/);
+  } finally {
+    teardown();
+  }
+});
+
+test("an empty ledger hands the surface to the run plan", async () => {
+  serve({ ledger: ok([]), plan: okPlan(RUN_BODY) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    assert.equal(pressed(host, "run"), "true");
+    assert.equal(phase(host), "ready");
+    assert.equal(host.querySelectorAll(".console-plan-node").length, 3);
+  } finally {
+    teardown();
+  }
+});
+
+// This is the state of this branch: neither route is served. The run plan is still what opens,
+// because a secondary endpoint that is missing has no business taking the surface over.
+test("a ledger route that is not there hands the surface to the run plan too", async () => {
+  serve({ ledger: () => ({ ok: false, status: 404 }), plan: okPlan(RUN_BODY) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    assert.equal(pressed(host, "run"), "true");
+    assert.equal(host.querySelectorAll(".console-plan-node").length, 3);
+  } finally {
+    teardown();
+  }
+});
+
+// The auto rule answers a question once. After the reader has answered it themselves, a poll four
+// seconds later must not overrule them - which is the bug the latch exists to prevent.
+test("an explicit pick survives the poll", async () => {
+  serve({ ledger: ok([]), plan: okPlan(RUN_BODY) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    assert.equal(pressed(host, "run"), "true");
+    pickSource(host, "declared");
+    await settle();
+    assert.equal(pressed(host, "declared"), "true");
+    assert.match(text(host), /Nothing delegated/);
+  } finally {
+    teardown();
+  }
+});
+
+// ---- the run plan ----------------------------------------------------------
+
+test("the run plan draws one node per target and one list row per target", async () => {
+  serve({ ledger: ok([]), plan: okPlan(RUN_BODY) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    assert.equal(host.querySelectorAll(".console-plan-node").length, 3);
+    assert.equal(host.querySelectorAll(".console-plan-list__item").length, 3);
+    assert.equal(host.querySelectorAll(".console-plan-edge").length, 2);
+    const states = [...host.querySelectorAll<SVGElement>(".console-plan-node")].map(
+      (n) => n.dataset.state,
+    );
+    assert.deepEqual(states.sort(), ["idle", "pass", "running"]);
+    // The whole node is labelled project:target, which is the id the contract gives it.
+    assert.match(host.querySelector(".console-plan-list__id")?.textContent ?? "", /\.:generate/);
+  } finally {
+    teardown();
+  }
+});
+
+// no_return belongs to the delegation ledger alone. An engine that resolved a DAG knows what
+// happened to every node in it, so there is nothing here for that state to describe.
+test("the run view invents no no-return, in the overview or on a node", async () => {
+  serve({ ledger: ok([]), plan: okPlan(RUN_BODY) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    assert.doesNotMatch(summaryText(host), /no-return/);
+    assert.equal(host.querySelectorAll('.console-plan-node[data-state="no_return"]').length, 0);
+  } finally {
+    teardown();
+  }
+});
+
+// The first thing a reader needs is whether they are watching work happen or reading a record of
+// work that finished, so the line leads with it.
+test("the overview leads with how the view is anchored", async () => {
+  serve({ ledger: ok([]), plan: okPlan(RUN_BODY) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    assert.equal(
+      summaryText(host),
+      "following the running ci - 3 targets - 1 running, 1 pass - 0 fail",
+    );
+    assert.equal(
+      host.querySelector(".console-plan-summary")?.getAttribute("aria-live"),
+      "polite",
+      "the overview is the live region; the list rebuilt on a four-second poll is not",
+    );
+  } finally {
+    teardown();
+  }
+});
+
+test("a daemon with no run plan route names the missing endpoint", async () => {
+  serve({ ledger: ok([]), plan: () => ({ ok: false, status: 404 }) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    assert.equal(phase(host), "empty");
+    assert.match(text(host), /No run plan endpoint/);
+    assert.match(text(host), /lights up when the daemon serves \/api\/v1\/plan/);
+  } finally {
+    teardown();
+  }
+});
+
+// Served-but-empty on the FOLLOWING read means the daemon had nothing to anchor to. That is a
+// different fact from a missing route, and the sentence has to say so.
+test("a served but empty run plan says nothing has run, not that the route is missing", async () => {
+  serve({ ledger: ok([]), plan: okPlan({ target: "ci", anchor: "default", nodes: [] }) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    assert.equal(phase(host), "empty");
+    assert.match(text(host), /Nothing has run here yet/);
+    assert.doesNotMatch(text(host), /No run plan endpoint/);
+  } finally {
+    teardown();
+  }
+});
+
+// ---- the target override ---------------------------------------------------
+
+// The default read names NO target: the daemon picks the anchor and the view follows the live run.
+// Sending one by accident would silently turn a live view into a browse of a fixed target.
+test("the default read names no target, and the override is what adds one", async () => {
+  const asked: string[] = [];
+  serve({
+    ledger: ok([]),
+    plan: (url) => {
+      asked.push(url);
+      return okPlan(RUN_BODY)();
+    },
+  });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    assert.deepEqual(asked, ["http://127.0.0.1:7391/api/v1/plan"]);
+    const input = host.querySelector<HTMLInputElement>(".console-plan-target input");
+    assert.ok(input, "the override is offered in run mode");
+    if (input) {
+      input.value = "build";
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    await settle();
+    assert.equal(asked.at(-1), "http://127.0.0.1:7391/api/v1/plan?target=build");
+  } finally {
+    teardown();
+  }
+});
+
+// The console holds no list of the workspace's targets, so any sentence it wrote itself would be a
+// guess. The daemon named what it could not resolve; that is what reaches the screen.
+test("an unknown target shows the daemon's own message, verbatim", async () => {
+  serve({
+    ledger: ok([]),
+    plan: (url) =>
+      url.includes("target=")
+        ? {
+            ok: false,
+            status: 400,
+            text: () => Promise.resolve('{"error":"unknown target \\"cli\\"; did you mean ci?"}'),
+          }
+        : okPlan(RUN_BODY)(),
+  });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    const input = host.querySelector<HTMLInputElement>(".console-plan-target input");
+    if (input) {
+      input.value = "cli";
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    await settle();
+    assert.equal(phase(host), "empty");
+    assert.match(text(host), /unknown target "cli"; did you mean ci\?/);
+  } finally {
+    teardown();
+  }
+});
+
+// An override that RESOLVES but covers nothing is not the same fact as nothing having run at all.
+test("an override that matches no target gets its own sentence", async () => {
+  serve({
+    ledger: ok([]),
+    plan: (url) =>
+      url.includes("target=")
+        ? okPlan({ target: "docs", anchor: "explicit", nodes: [] })()
+        : okPlan(RUN_BODY)(),
+  });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    const input = host.querySelector<HTMLInputElement>(".console-plan-target input");
+    if (input) {
+      input.value = "docs";
+      input.dispatchEvent(new Event("change", { bubbles: true }));
+    }
+    await settle();
+    assert.match(text(host), /No targets answer to docs here\./);
+    assert.doesNotMatch(text(host), /Nothing has run here yet/);
+  } finally {
+    teardown();
+  }
+});
+
+// The override is not the entry point, so it is not offered where it would mean nothing.
+test("the target override belongs to the run view alone", async () => {
+  serve({ ledger: ok([{ id: "root" }]), plan: okPlan(RUN_BODY) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    assert.equal(host.querySelector<HTMLElement>(".console-plan-target")?.hidden, true);
+    pickSource(host, "run");
+    await settle();
+    assert.equal(host.querySelector<HTMLElement>(".console-plan-target")?.hidden, false);
+  } finally {
+    teardown();
+  }
+});
+
+// ---- the detail sheet ------------------------------------------------------
+
+test("selecting a target shows its project, its target and a link to its captured output", async () => {
+  serve({ ledger: ok([]), plan: okPlan(RUN_BODY) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    host.querySelector<HTMLElement>(".console-plan-list__item")?.click();
+    const detail = host.querySelector(".console-plan-detail");
+    assert.match(detail?.textContent ?? "", /generate/);
+    assert.match(detail?.textContent ?? "", /out1a2b3c/);
+    const link = detail?.querySelector("a");
+    assert.match(link?.getAttribute("href") ?? "", /^\.\.\/logs\/#/);
+    assert.match(
+      link?.getAttribute("href") ?? "",
+      /ref=out1a2b3c/,
+      "the deep link carries the ref the log viewer opens",
+    );
+    assert.match(
+      link?.getAttribute("href") ?? "",
+      /port=7391/,
+      "and this daemon's port, so the viewer re-attaches here rather than wherever it was last",
+    );
+  } finally {
+    teardown();
+  }
+});
+
+// A node's ref is its most recent captured output INDEPENDENT of its state, so a running target
+// links to the run BEFORE this one. Wording that link as this run's log would send a reader looking
+// for live output into a finished log without telling them - the one misreading on this surface
+// that a plausible-looking screen actively causes.
+test("the output link is worded as the last log, never as this run's", async () => {
+  serve({ ledger: ok([]), plan: okPlan(RUN_BODY) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    const rows = [...host.querySelectorAll<HTMLElement>(".console-plan-list__item")];
+    rows.find((r) => r.dataset.id === ".:build")?.click();
+    const detail = host.querySelector(".console-plan-detail");
+    const copy = detail?.textContent ?? "";
+    assert.match(copy, /Last output/);
+    assert.match(copy, /Open the last log/);
+    assert.match(copy, /out7g8h9i/, "a running node still carries the previous run's ref");
+    // And the gap is stated in words on the one state where it is a whole run wide.
+    assert.match(copy, /running now, so the log above is from its previous run/);
+  } finally {
+    teardown();
+  }
+});
+
+// A node that has not run has nothing to open, and a dead link is worse than no link.
+test("a target with no captured output offers no link", async () => {
+  serve({ ledger: ok([]), plan: okPlan(RUN_BODY) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    const rows = [...host.querySelectorAll<HTMLElement>(".console-plan-list__item")];
+    rows.find((r) => r.dataset.id === "console:test")?.click();
+    const detail = host.querySelector(".console-plan-detail");
+    assert.match(detail?.textContent ?? "", /console/);
+    assert.equal(detail?.querySelector("a"), null);
+    assert.doesNotMatch(detail?.textContent ?? "", /Open in log viewer/);
+  } finally {
+    teardown();
+  }
+});
+
+test("the run drawing is hidden from assistive tech and the target list is its twin", async () => {
+  serve({ ledger: ok([]), plan: okPlan(RUN_BODY) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    assert.equal(
+      host.querySelector(".console-plan-stage__svg")?.getAttribute("aria-hidden"),
+      "true",
+    );
+    assert.equal(
+      host.querySelector(".console-plan-tree")?.getAttribute("aria-label"),
+      "Plan targets",
+    );
+  } finally {
+    teardown();
+  }
 });
