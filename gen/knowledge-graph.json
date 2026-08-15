@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2197,
-  "edge_count": 5736,
+  "node_count": 2209,
+  "edge_count": 5777,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -1124,7 +1124,7 @@
       "label": "docs/site",
       "source": "docs/site",
       "attrs": {
-        "dir_files": "7",
+        "dir_files": "9",
         "dir_languages": "buzz"
       }
     },
@@ -6424,6 +6424,24 @@
       }
     },
     {
+      "id": "file:docs/site/download.buzz",
+      "kind": "file",
+      "label": "docs/site/download.buzz",
+      "source": "docs/site/download.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:docs/site/landing.buzz",
+      "kind": "file",
+      "label": "docs/site/landing.buzz",
+      "source": "docs/site/landing.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
       "id": "file:docs/site/public.buzz",
       "kind": "file",
       "label": "docs/site/public.buzz",
@@ -8193,7 +8211,7 @@
       "kind": "function",
       "label": "build",
       "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.",
-      "source": "console/magusfile.buzz:146",
+      "source": "console/magusfile.buzz:147",
       "attrs": {
         "exported": "true"
       }
@@ -8203,7 +8221,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps.",
-      "source": "console/magusfile.buzz:195",
+      "source": "console/magusfile.buzz:196",
       "attrs": {
         "exported": "true"
       }
@@ -8213,14 +8231,14 @@
       "kind": "function",
       "label": "install",
       "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
-      "source": "console/magusfile.buzz:77"
+      "source": "console/magusfile.buzz:78"
     },
     {
       "id": "function:console/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.",
-      "source": "console/magusfile.buzz:164",
+      "source": "console/magusfile.buzz:165",
       "attrs": {
         "exported": "true"
       }
@@ -8229,7 +8247,7 @@
       "id": "function:console/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "console/magusfile.buzz:69",
+      "source": "console/magusfile.buzz:70",
       "attrs": {
         "exported": "true"
       }
@@ -8239,7 +8257,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits the dependency tree against the npm advisory database.  --prod, not the whole tree, and that is the whole design. An unscoped audit reports the dev toolchain too - today a stylelint -> table -> ajv -> fast-uri advisory - which never reaches a browser and cannot be fixed from here. A gate that fails on something you cannot act on is a gate that gets muted, which is how six stale skip_cache workarounds happened. This fails only on what actually ships.  It is NOT folded into lint: lint is cache",
-      "source": "console/magusfile.buzz:188",
+      "source": "console/magusfile.buzz:189",
       "attrs": {
         "exported": "true"
       }
@@ -8249,7 +8267,7 @@
       "kind": "function",
       "label": "test",
       "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and renders a line-coverage badge from the run.  The suite runs Node THREE times on purpose and that split is load-bearing: happy-dom installs localStorage/sessionStorage as getter-only, and several tests stub them by assignment, so applying the DOM setup globally (one --import for everything) breaks them. Unifying the runs was tried and reverted.  Which is why the figure needs lcov.mergePercent rather than lc",
-      "source": "console/magusfile.buzz:122",
+      "source": "console/magusfile.buzz:123",
       "attrs": {
         "exported": "true"
       }
@@ -8619,7 +8637,7 @@
       "kind": "function",
       "label": "conventionAnchorsIn",
       "doc": "conventionAnchorsIn returns the convention sections this page can actually send a reader to, read off the hints injectConventionHints already placed in the content.  Reading the INJECTED markup rather than re-deriving which markers the page has is what keeps the two from drifting: whatever the hints link to is exactly what the drawer carries, by construction, so adding a fourth hint kind needs no change here.",
-      "source": "docs/engine/nav.buzz:296",
+      "source": "docs/engine/nav.buzz:332",
       "attrs": {
         "exported": "true"
       }
@@ -8629,7 +8647,7 @@
       "kind": "function",
       "label": "keepConventionSections",
       "doc": "keepConventionSections is keepGlossarySections one heading level up: the conventions page is H2 sections where the glossary is H3 entries, so a section runs from its own <h2 id=\"> to the next one. Order is preserved.",
-      "source": "docs/engine/nav.buzz:268",
+      "source": "docs/engine/nav.buzz:304",
       "attrs": {
         "exported": "true"
       }
@@ -8639,13 +8657,13 @@
       "kind": "function",
       "label": "keepGlossarySections",
       "doc": "keepGlossarySections keeps only the <h3 id=\"...\"> term blocks whose anchor is in keep, in document order, and drops everything else. Same scan injectBacklinks uses: a term block runs from its own <h3 id=\"> to the next <h3 id=\"> or <h2>.",
-      "source": "docs/engine/nav.buzz:241"
+      "source": "docs/engine/nav.buzz:277"
     },
     {
       "id": "function:docs/engine/nav.buzz:loadReferenceContent",
       "kind": "function",
       "label": "loadReferenceContent",
-      "source": "docs/engine/nav.buzz:231",
+      "source": "docs/engine/nav.buzz:267",
       "attrs": {
         "exported": "true"
       }
@@ -8655,7 +8673,7 @@
       "kind": "function",
       "label": "refDocHtml",
       "doc": "refDocHtml renders one docs/*.md to content HTML and templatizes its root-relative links.",
-      "source": "docs/engine/nav.buzz:222",
+      "source": "docs/engine/nav.buzz:258",
       "attrs": {
         "exported": "true"
       }
@@ -8665,7 +8683,7 @@
       "kind": "function",
       "label": "renderAnnouncementBar",
       "doc": "renderAnnouncementBar renders a dismissible strip announcing the newest shipped release, or \"\" when none has shipped. The version comes from loadReleases (releases/*.yaml), so it is drift-stable; announcement.js hides it once the reader dismisses that version and re-shows it on the next release.",
-      "source": "docs/engine/nav.buzz:400",
+      "source": "docs/engine/nav.buzz:436",
       "attrs": {
         "exported": "true"
       }
@@ -8685,7 +8703,7 @@
       "kind": "function",
       "label": "renderReferenceDrawer",
       "doc": "renderReferenceDrawer shows the page ITS vocabulary, not the whole glossary.  The drawer used to inline all 47 terms on every page, identically. A reference panel that is the same everywhere answers no question you had on the page you are reading - it is a second copy of /glossary/ that happens to slide out. Scoping it to the terms this page actually uses is what makes opening it worth doing.  pageTerms is the forward-built map (see Site): it is complete before the walk starts, so the first page rendered ge",
-      "source": "docs/engine/nav.buzz:324",
+      "source": "docs/engine/nav.buzz:360",
       "attrs": {
         "exported": "true"
       }
@@ -8705,7 +8723,7 @@
       "kind": "function",
       "label": "renderSiteFooter",
       "doc": "renderSiteFooter renders the shared one-line attribution footer: root-relative site links (Search, /public/ files) reachable from every page, then absolute GitHub/Buzz links. The License link points at the pinned site.metaBranch. root is the prefix back to gen/'s root, so the site links resolve at any depth.",
-      "source": "docs/engine/nav.buzz:381",
+      "source": "docs/engine/nav.buzz:417",
       "attrs": {
         "exported": "true"
       }
@@ -8735,14 +8753,14 @@
       "kind": "function",
       "label": "injectDemoCallout",
       "doc": "injectDemoCallout inserts the \"Interactive demo\" callout after a page's intro (the first </p>), deep-linking href (a tour card). A distinct component (its own teal identity), not a link or a button - it signals \"there is a runnable demonstration of this concept.\"",
-      "source": "docs/engine/page.buzz:545"
+      "source": "docs/engine/page.buzz:600"
     },
     {
       "id": "function:docs/engine/page.buzz:pageOrder",
       "kind": "function",
       "label": "pageOrder",
       "doc": "pageOrder reads one sibling's frontmatter `order:`. Orders start at 1; absent reads as 0 from .integer(), which is why 0 counts as unordered rather than first.",
-      "source": "docs/engine/page.buzz:163"
+      "source": "docs/engine/page.buzz:171"
     },
     {
       "id": "function:docs/engine/page.buzz:render404",
@@ -8759,7 +8777,7 @@
       "kind": "function",
       "label": "renderFile",
       "doc": "Render one docs/*.md file to a sibling *.html under gen. rel is relative to the docs/ subtree; srcRel (site.docs/rel) is magus/-relative for the footer/edit link.",
-      "source": "docs/engine/page.buzz:559",
+      "source": "docs/engine/page.buzz:614",
       "attrs": {
         "exported": "true"
       }
@@ -8769,7 +8787,7 @@
       "kind": "function",
       "label": "renderPage",
       "doc": "srcRel is the page's source path relative to magus/ (e.g. \"docs/spells.md\"), driving the commit footer and \"Suggest an edit\" link. description is resolved (frontmatter, else derived, else site default), always non-empty so the meta tag fires. canonUrl is the clean gen-root URL (\"\" for home). pager is the prev/next nav (may be \"\").",
-      "source": "docs/engine/page.buzz:239",
+      "source": "docs/engine/page.buzz:247",
       "attrs": {
         "exported": "true"
       }
@@ -8779,21 +8797,21 @@
       "kind": "function",
       "label": "renderPager",
       "doc": "renderPager builds the prev/next links among a page's siblings - the other rendered docs in the same source directory (README/index and underscore fixtures excluded). \"\" when there is no sibling on either side. rel is docs-relative (e.g. \"modules/fs.md\").  Ordered by frontmatter `order:`, falling back to filename. Filename order alone was an accident presented as a sequence: on concepts/targets.md it produced \"Previous: Spells, Next: Telemetry\" purely because s < t < t, implying a reading path that did not",
-      "source": "docs/engine/page.buzz:182"
+      "source": "docs/engine/page.buzz:190"
     },
     {
       "id": "function:docs/engine/page.buzz:renderPagerLink",
       "kind": "function",
       "label": "renderPagerLink",
       "doc": "renderPagerLink renders one prev/next card, reading the sibling's source so it credits the same title (frontmatter title, else first H1) the sibling page renders with.",
-      "source": "docs/engine/page.buzz:142"
+      "source": "docs/engine/page.buzz:150"
     },
     {
       "id": "function:docs/engine/page.buzz:renderRoot",
       "kind": "function",
       "label": "renderRoot",
-      "doc": "Render the repo's top-level README.md as the landing page (index.html). Links like href=\"docs/X\" (repo-root-relative) resolve from gen/index.html as href=\"X\", so strip the docs/ prefix.",
-      "source": "docs/engine/page.buzz:477",
+      "doc": "Render the repo's top-level README.md as the /development/ landing (README_URL). It is the same document GitHub shows on the repository front page - the full pitch, the architecture, and how to build and test the tree - so it is the contributor section's overview rather than the site's front door; site/landing.buzz owns gen/index.html.  Links like href=\"docs/X\" are repo-root-relative, which is what GitHub needs. From gen/development/index.html the docs tree is one level up, so the prefix is rewritten to \"..",
+      "source": "docs/engine/page.buzz:514",
       "attrs": {
         "exported": "true"
       }
@@ -8803,14 +8821,14 @@
       "kind": "function",
       "label": "substituteVersionTokens",
       "doc": "substituteVersionTokens swaps __MAGUS_VERSION__ for the latest release version WITH the leading \"v\" (e.g. \"v0.1.0\"), read from releases/*.yaml via loadReleases - the single source of truth (do NOT read git tags). Run before render AND before the md is written back as index.md, so the page and its \"View source\" copy agree. No-op when no release has shipped (the token stays literal, prompting a cut).",
-      "source": "docs/engine/page.buzz:536"
+      "source": "docs/engine/page.buzz:591"
     },
     {
       "id": "function:docs/engine/page.buzz:writeOffline",
       "kind": "function",
       "label": "writeOffline",
       "doc": "writeOffline writes gen/offline/index.html - shown by the service worker when a navigation fails (network down, no cached copy). Like render404 it uses root-absolute asset paths, since its URL depth differs from the rest of the site. Playground is called out because it is precached and fully functional offline.",
-      "source": "docs/engine/page.buzz:89",
+      "source": "docs/engine/page.buzz:93",
       "attrs": {
         "exported": "true"
       }
@@ -8870,7 +8888,7 @@
       "kind": "function",
       "label": "buildServiceWorker",
       "doc": "buildServiceWorker bundles src/site/service-worker.ts to gen/service-worker.js with esbuild, injecting the cache version and precache list via --define. The version is a digest of the precached assets' own digests, so it changes exactly when a cached asset does (and is byte-stable otherwise) - and that byte change is the signal a browser uses to fetch the new worker.",
-      "source": "docs/engine/pwa.buzz:70",
+      "source": "docs/engine/pwa.buzz:75",
       "attrs": {
         "exported": "true"
       }
@@ -8890,7 +8908,7 @@
       "kind": "function",
       "label": "climb",
       "doc": "climb builds n repetitions of \"../\".",
-      "source": "docs/engine/route.buzz:28",
+      "source": "docs/engine/route.buzz:49",
       "attrs": {
         "exported": "true"
       }
@@ -8900,7 +8918,7 @@
       "kind": "function",
       "label": "climbFromDir",
       "doc": "climbFromDir returns the \"../\" prefix from a gen-relative directory back to gen's root, one \"../\" per segment (\"console/dashboard\" -> \"../../\"). App pages derive their nav prefix from their output location so it can't drift from the write path.",
-      "source": "docs/engine/route.buzz:38",
+      "source": "docs/engine/route.buzz:59",
       "attrs": {
         "exported": "true"
       }
@@ -8910,7 +8928,7 @@
       "kind": "function",
       "label": "isGenerated",
       "doc": "isGenerated reports whether a doc page is machine-generated. The generators overwrite fixed docs/ subtrees wholesale: buzz/modules/, spells/*.md (but the spells.md landing is hand-written), and manpage/, plus config.md. srcRel is the docs/-prefixed path. A path convention because the generated .md carries no frontmatter marker.",
-      "source": "docs/engine/route.buzz:13",
+      "source": "docs/engine/route.buzz:14",
       "attrs": {
         "exported": "true"
       }
@@ -8920,7 +8938,7 @@
       "kind": "function",
       "label": "newCleanDirectory",
       "doc": "newCleanDirectory gives a docs page's clean directory (its clean URL minus the trailing slash), the \"new dir\" arg the link rewriter needs. Reads site state (blog dir via cleanURL), so it lives here; the pure oldFlatDirectory counterpart is in lib/html.",
-      "source": "docs/engine/route.buzz:61",
+      "source": "docs/engine/route.buzz:82",
       "attrs": {
         "exported": "true"
       }
@@ -8929,7 +8947,7 @@
       "id": "function:docs/engine/route.buzz:outputName",
       "kind": "function",
       "label": "outputName",
-      "source": "docs/engine/route.buzz:21",
+      "source": "docs/engine/route.buzz:42",
       "attrs": {
         "exported": "true"
       }
@@ -8939,7 +8957,7 @@
       "kind": "function",
       "label": "rootPrefix",
       "doc": "rootPrefix returns the relative path from a page back up to gen/'s root (\"\" for spells.html, \"../../\" for codes/sandbox/X.html), so shared nav and theme.js resolve at any page depth and the site works under a project subpath.",
-      "source": "docs/engine/route.buzz:70",
+      "source": "docs/engine/route.buzz:91",
       "attrs": {
         "exported": "true"
       }
@@ -8949,7 +8967,7 @@
       "kind": "function",
       "label": "sitePathPrefix",
       "doc": "sitePathPrefix returns the root-absolute URL path prefix: the path component of baseURL (\"https://host/magus/\" -> \"/magus/\"), or \"/\" when baseURL is unset. Used only where depth is unpredictable (404, SW offline fallback, PWA manifest/worker); other pages use the depth-relative rootPrefix. One definition so the derivation isn't copy-pasted.",
-      "source": "docs/engine/route.buzz:46",
+      "source": "docs/engine/route.buzz:67",
       "attrs": {
         "exported": "true"
       }
@@ -9181,8 +9199,8 @@
       "id": "function:docs/lib/csp.buzz:computeCSP",
       "kind": "function",
       "label": "computeCSP",
-      "doc": "computeCSP builds one page's Content-Security-Policy meta content (see Site.csp/ Site.cspHome for which pages get which img-src). default-src is 'self', not 'none': manifest-src, the same-origin <link rel=prefetch> hover-warm, and the service worker registration all fall back to default-src (via worker-src -> child-src), and 'none' would break the service worker outright. 'self' is the minimal fallback that keeps them working without opening any directive wider than same-origin. Every directive the site nee",
-      "source": "docs/lib/csp.buzz:98",
+      "doc": "computeCSP builds one page's Content-Security-Policy meta content (see Site.csp/ Site.cspBadges for which pages get which img-src). default-src is 'self', not 'none': manifest-src, the same-origin <link rel=prefetch> hover-warm, and the service worker registration all fall back to default-src (via worker-src -> child-src), and 'none' would break the service worker outright. 'self' is the minimal fallback that keeps them working without opening any directive wider than same-origin. Every directive the site n",
+      "source": "docs/lib/csp.buzz:99",
       "attrs": {
         "exported": "true"
       }
@@ -9192,7 +9210,7 @@
       "kind": "function",
       "label": "cspForRedirectStub",
       "doc": "cspForRedirectStub builds the CSP a plain alias redirect page needs - distinct from the site-wide policy because a stub (aliasStub) loads no stylesheet, image, or external script; its only content is one inline <script> that differs per stub, so it cannot share the site-wide hash list. script is the exact text redirectScript(rel) (lib/html.buzz) produces, so the hash always matches what ships.",
-      "source": "docs/lib/csp.buzz:120",
+      "source": "docs/lib/csp.buzz:121",
       "attrs": {
         "exported": "true"
       }
@@ -9369,27 +9387,27 @@
       "kind": "function",
       "label": "acceptable",
       "doc": "acceptable reports whether needle matched at pos (length n) in searchable is a whole word (non-word boundaries) that does not overlap an already-placed insertion.",
-      "source": "docs/lib/glossary.buzz:173"
+      "source": "docs/lib/glossary.buzz:184"
     },
     {
       "id": "function:docs/lib/glossary.buzz:applyLinks",
       "kind": "function",
       "label": "applyLinks",
-      "source": "docs/lib/glossary.buzz:213"
+      "source": "docs/lib/glossary.buzz:224"
     },
     {
       "id": "function:docs/lib/glossary.buzz:cleanConfigCell",
       "kind": "function",
       "label": "cleanConfigCell",
       "doc": "cleanConfigCell trims a markdown table cell and drops its backticks (env-var underscores are kept - they are part of the name, not markdown).",
-      "source": "docs/lib/glossary.buzz:352"
+      "source": "docs/lib/glossary.buzz:363"
     },
     {
       "id": "function:docs/lib/glossary.buzz:cleanDef",
       "kind": "function",
       "label": "cleanDef",
       "doc": "cleanDef reduces a glossary definition paragraph to a short plain-text blurb for the popover: cut the trailing \"See ...\" cross-link, unwrap [text](url) to text, drop backticks.",
-      "source": "docs/lib/glossary.buzz:449"
+      "source": "docs/lib/glossary.buzz:460"
     },
     {
       "id": "function:docs/lib/glossary.buzz:glossarySlug",
@@ -9402,11 +9420,18 @@
       }
     },
     {
+      "id": "function:docs/lib/glossary.buzz:hasNoLinkAttr",
+      "kind": "function",
+      "label": "hasNoLinkAttr",
+      "doc": "Both maskers key off the tag NAME, so a <span> reads as prose no matter what it holds. That split \"magusfile.buzz\" in a code panel's title bar into two popovers, one on \"magusfile\" and one on \"buzz\", because neither linker has a term for the filename and both had a term for its halves. data-nolink marks an element whose text is a literal - a filename, a command line - rather than prose to be read.",
+      "source": "docs/lib/glossary.buzz:124"
+    },
+    {
       "id": "function:docs/lib/glossary.buzz:injectBacklinks",
       "kind": "function",
       "label": "injectBacklinks",
       "doc": "injectBacklinks appends each term's \"referenced on\" fragment (byAnchor[anchor], a caller-built HTML string) at the END of that term's section on the glossary page - just before the next <h3>/<h2> heading, so it sits below the definition. The glossary is rendered after the full walk, so byAnchor holds the complete cross-reference set. Pure string surgery; anchors with no fragment are left untouched.",
-      "source": "docs/lib/glossary.buzz:397",
+      "source": "docs/lib/glossary.buzz:408",
       "attrs": {
         "exported": "true"
       }
@@ -9429,7 +9454,7 @@
       "kind": "function",
       "label": "linkCodeEntities",
       "doc": "linkCodeEntities links the first occurrence of each entity's match string (inside inline code or prose, never a fenced <pre> block) to its reference page, baking the summary into data-def and the kind into data-kind for the shared popover (glossary-terms.js). entities MUST be longest-match-first; pageDir is the linking page's clean gen-root dir (for the href).",
-      "source": "docs/lib/glossary.buzz:325",
+      "source": "docs/lib/glossary.buzz:336",
       "attrs": {
         "exported": "true"
       }
@@ -9439,7 +9464,7 @@
       "kind": "function",
       "label": "linkGlossaryTerms",
       "doc": "linkGlossaryTerms links the first linkable occurrence of each term (terms MUST be ordered longest-first so multi-word terms win over their substrings) to relToGlossary + \"#\" + anchor, and records which anchors were linked. A page carrying the \"<!-- magus-noglossary -->\" opt-out marker is returned verbatim (marker stripped) with nothing linked.",
-      "source": "docs/lib/glossary.buzz:263",
+      "source": "docs/lib/glossary.buzz:274",
       "attrs": {
         "exported": "true"
       }
@@ -9456,14 +9481,14 @@
       "kind": "function",
       "label": "maskLinkable",
       "doc": "maskLinkable returns html the SAME LENGTH, with every byte outside linkable text replaced by a space and the linkable text lowercased. Non-linkable = inside a tag (< .. >), an HTML comment, or a skip container (pre/a/headings, plus inline code when skipInlineCode). A native indexOf then lands only in linkable text, so the ONE interpreted pass over the page is this build - not one scan per term, which is the difference between a fast render and a ten-minute one. Emits per-run pieces (not per char) so allocat",
-      "source": "docs/lib/glossary.buzz:141"
+      "source": "docs/lib/glossary.buzz:150"
     },
     {
       "id": "function:docs/lib/glossary.buzz:parseConfigRow",
       "kind": "function",
       "label": "parseConfigRow",
       "doc": "parseConfigRow parses a config.md table row \"| `key` | `ENV` | `--flag` | type |\" into a dotted config key and a one-line popover summary (its type, how to set it via flag/env). Returns ok=false for the header, the separator, and any non-dotted key.",
-      "source": "docs/lib/glossary.buzz:360",
+      "source": "docs/lib/glossary.buzz:371",
       "attrs": {
         "exported": "true"
       }
@@ -9473,7 +9498,7 @@
       "kind": "function",
       "label": "parseGlossary",
       "doc": "parseGlossary reads the glossary Markdown into terms: each \"### Term\" H3 becomes a GlossaryTerm with its goldmark anchor and a one-line definition (the paragraph under the heading, cross-link and markup stripped). Returned longest-first for matching.",
-      "source": "docs/lib/glossary.buzz:487",
+      "source": "docs/lib/glossary.buzz:498",
       "attrs": {
         "exported": "true"
       }
@@ -9483,7 +9508,7 @@
       "kind": "function",
       "label": "requireIndexOfFrom",
       "doc": "applyLinks wraps the first acceptable occurrence of each token (tokens/opens/keys are parallel and longest-first) in open ... </a>, matching natively on the masked `searchable` and inserting into html right-to-left so earlier positions never shift. Returns the linked html and the keys linked (longest-first). If masking changed the length (a non-ASCII case fold, not expected in these docs), it returns html unlinked rather than misplace a link. requireIndexOfFrom fails fast when the running magus predates str",
-      "source": "docs/lib/glossary.buzz:202",
+      "source": "docs/lib/glossary.buzz:213",
       "attrs": {
         "exported": "true"
       }
@@ -9507,7 +9532,7 @@
       "kind": "function",
       "label": "sortEntitiesLongestFirst",
       "doc": "sortEntitiesLongestFirst orders entities by descending match length, so linkCodeEntities tries \"magus affected ci\" before \"magus affected\". Selection sort; the catalogs are small.",
-      "source": "docs/lib/glossary.buzz:298",
+      "source": "docs/lib/glossary.buzz:309",
       "attrs": {
         "exported": "true"
       }
@@ -9517,14 +9542,14 @@
       "kind": "function",
       "label": "sortLongestFirst",
       "doc": "sortLongestFirst returns terms ordered by descending term length, so linkGlossaryTerms matches a multi-word term before any of its substring terms. Selection sort; the term set is small (a few dozen).",
-      "source": "docs/lib/glossary.buzz:461"
+      "source": "docs/lib/glossary.buzz:472"
     },
     {
       "id": "function:docs/lib/glossary.buzz:spaces",
       "kind": "function",
       "label": "spaces",
       "doc": "spaces returns n space bytes, built by doubling (O(log n) concats) so masking a large protected region stays cheap.",
-      "source": "docs/lib/glossary.buzz:128"
+      "source": "docs/lib/glossary.buzz:137"
     },
     {
       "id": "function:docs/lib/glossary.buzz:tagNameLower",
@@ -9538,7 +9563,7 @@
       "kind": "function",
       "label": "unwrapLinks",
       "doc": "unwrapLinks turns each markdown \"[text](url)\" into just \"text\".",
-      "source": "docs/lib/glossary.buzz:426"
+      "source": "docs/lib/glossary.buzz:437"
     },
     {
       "id": "function:docs/lib/html.buzz:aliasStub",
@@ -10133,21 +10158,21 @@
       "kind": "function",
       "label": "esbuild",
       "doc": "esbuild runs the pinned esbuild binary with an exact argv.  proc\\exec, not os\\execute([\"sh\", \"-c\", ...]): the shell form spawned a second process per call purely to parse a string this code had just finished building, and every path went through it as an interpolated command-line token rather than an argument. It also swallowed failures - os\\execute RETURNS the exit code, and none of these calls read it, so a broken bundle wrote nothing and the render carried on to fail later somewhere else. proc\\exec raise",
-      "source": "docs/render.buzz:95"
+      "source": "docs/render.buzz:98"
     },
     {
       "id": "function:docs/render.buzz:generateJsBundles",
       "kind": "function",
       "label": "generateJsBundles",
       "doc": "generateJsBundles builds the committed browser bundles that import npm packages. pnpm is pinned by package.json and pnpm-lock.yaml, and --frozen-lockfile runs every time rather than behind an isDir check: an interrupted install leaves a node_modules that exists but is incomplete, and the guard read that as ready and fed esbuild a half tree. See the install() note in magusfile.buzz.",
-      "source": "docs/render.buzz:414"
+      "source": "docs/render.buzz:427"
     },
     {
       "id": "function:docs/render.buzz:site_conventions",
       "kind": "function",
       "label": "site_conventions",
       "doc": "site_publish is the cacheable publication unit used by docs:site-generate. Keep every output that belongs to the completed site in this one phase: the page tree, pnpm-backed vendor bundles, the integrity manifest, and (only for rw) the URL ledger. site_conventions re-exports the gates check for the magusfile. engine/gates is flat-imported here, and a flat import does not RE-export, so the magusfile cannot reach conventionsCheck through this module without a wrapper.",
-      "source": "docs/render.buzz:398",
+      "source": "docs/render.buzz:411",
       "attrs": {
         "exported": "true"
       }
@@ -10156,7 +10181,7 @@
       "id": "function:docs/render.buzz:site_publish",
       "kind": "function",
       "label": "site_publish",
-      "source": "docs/render.buzz:402",
+      "source": "docs/render.buzz:415",
       "attrs": {
         "exported": "true"
       }
@@ -10166,7 +10191,7 @@
       "kind": "function",
       "label": "site_render",
       "doc": "site_render rebuilds gen/ from ../docs and the root README. Pure function of git history (footers) and the source tree - reproducible and gate-stable.",
-      "source": "docs/render.buzz:142",
+      "source": "docs/render.buzz:145",
       "attrs": {
         "exported": "true"
       }
@@ -10176,14 +10201,14 @@
       "kind": "function",
       "label": "walk",
       "doc": "Recursively walk docs/ (the render reads its co-located markdown; the SSG's own root children - gen/, src/, tour/, node_modules/, MAGUS.md - are skipped at the root).",
-      "source": "docs/render.buzz:114"
+      "source": "docs/render.buzz:117"
     },
     {
       "id": "function:docs/render.buzz:walkBlog",
       "kind": "function",
       "label": "walkBlog",
       "doc": "walkBlog visits every blog/*.md post (skipping index.md and _underscored fixtures) in fs.list's sorted order, so the walk is deterministic. Posts are flat: no nested subdirs under blog/.",
-      "source": "docs/render.buzz:102"
+      "source": "docs/render.buzz:105"
     },
     {
       "id": "function:docs/site/config.buzz:magusConfig",
@@ -10196,32 +10221,49 @@
       }
     },
     {
+      "id": "function:docs/site/development.buzz:collectDevelopmentPages",
+      "kind": "function",
+      "label": "collectDevelopmentPages",
+      "doc": "collectDevelopmentPages registers EVERY /development/ page in docPages before anything renders, the same pre-walk contract collectDocPages and collectSectionIndexes hold.  Registering at render time (which is what renderDevelopmentPage used to do) cannot work here, because the section's two navigation directions point at each other: the landing's \"In this section\" list is built from its children, and every child's list is built from the landing that governs it. Whichever rendered second was the only one wit",
+      "source": "docs/site/development.buzz:64",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:docs/site/development.buzz:projectCatalog",
       "kind": "function",
       "label": "projectCatalog",
       "doc": "projectCatalog renders one project's target catalog as Markdown from the TYPED graph (TargetGraphProject) rather than by capturing `describe graph -o markdown` from a subprocess. Building it here means the page is assembled from the same in-process data the CLI renders, with no fork, no stdout to re-parse, and compile-checked field access on every node.  A Mermaid block draws the run order from each node's declared dependencies, so the arrows are the real ctx.needs edges and not a hand-maintained picture.",
-      "source": "docs/site/development.buzz:145"
+      "source": "docs/site/development.buzz:190"
     },
     {
       "id": "function:docs/site/development.buzz:projectLabel",
       "kind": "function",
       "label": "projectLabel",
       "doc": "projectLabel is the display name for a workspace-relative project path. The root project's path is \".\", which reads as nothing at all in a URL, a card, or a graph node; every render site here goes through this so they cannot disagree.",
-      "source": "docs/site/development.buzz:86"
+      "source": "docs/site/development.buzz:126"
+    },
+    {
+      "id": "function:docs/site/development.buzz:projectPageDesc",
+      "kind": "function",
+      "label": "projectPageDesc",
+      "doc": "projectPageDesc is one project page's description. Same reason as the constants above: two passes, one string.",
+      "source": "docs/site/development.buzz:30"
     },
     {
       "id": "function:docs/site/development.buzz:registerDevPage",
       "kind": "function",
       "label": "registerDevPage",
       "doc": "registerDevPage adds a synthesized /development/ page to docPages, the corpus every navigation helper walks. addRecord alone only feeds the search index, so without this these pages were reachable by search and invisible to Related, the section list, and the subtree.  The landing page is the section's overview, so it anchors the others rather than listing itself.",
-      "source": "docs/site/development.buzz:24"
+      "source": "docs/site/development.buzz:41"
     },
     {
       "id": "function:docs/site/development.buzz:renderDevelopment",
       "kind": "function",
       "label": "renderDevelopment",
-      "doc": "renderDevelopment writes the /development/ section: one themed page per project rendering its target catalog and run-order graph, plus a /development/ landing linking to them and showing how the projects depend on each other. Retired /development/projects/ URLs redirect to the flattened locations.  The project set comes from magus itself (magus.ls, annotated `> Projects` for compile-checked field access), NOT from scanning the filesystem for MAGUS.md files. The scan it replaced looked only at site.root and",
-      "source": "docs/site/development.buzz:223",
+      "doc": "renderDevelopment writes the /development/ section BELOW its landing: one themed page per project rendering its target catalog and run-order graph, the Contributing guide, and a /development/projects/ index linking to the project pages and showing how they depend on each other. Retired /development/projects/<slug> URLs redirect to the flattened locations.  The section LANDING is not written here - /development/ is the repository README, which renderRoot writes. That is why this file no longer carries a buil",
+      "source": "docs/site/development.buzz:274",
       "attrs": {
         "exported": "true"
       }
@@ -10230,29 +10272,62 @@
       "id": "function:docs/site/development.buzz:renderDevelopmentPage",
       "kind": "function",
       "label": "renderDevelopmentPage",
-      "doc": "renderDevelopmentPage renders one /development/ page from markdown through the shared renderPage() pipeline (nav, TOC, theme, search index). url ends in \"/\"; srcRel uses the \"<dir>/_index.md\" marker so rootPrefix/renderBreadcrumb derive the right depth and trail.",
-      "source": "docs/site/development.buzz:39"
+      "doc": "renderDevelopmentPage renders one /development/ page from markdown through the shared renderPage() pipeline (nav, TOC, theme, search index). url ends in \"/\"; srcRel uses the \"<dir>/_index.md\" marker so rootPrefix/renderBreadcrumb derive the right depth and trail. collectDevelopmentPages has already registered it.",
+      "source": "docs/site/development.buzz:85"
     },
     {
       "id": "function:docs/site/development.buzz:renderDevelopmentPageRaw",
       "kind": "function",
       "label": "renderDevelopmentPageRaw",
-      "doc": "renderDevelopmentPageRaw is renderDevelopmentPage for bodies already in final HTML (the /development/ landing). It skips renderContentHTML - whose link-rewrite strips the trailing slash off relative links - so card hrefs like \"magus/\" stay slash-terminated and resolve without a directory redirect. searchText is the plain text to index, since the HTML carries no useful prose.",
-      "source": "docs/site/development.buzz:60"
+      "doc": "renderDevelopmentPageRaw is renderDevelopmentPage for bodies already in final HTML (the /development/projects/ landing). It skips renderContentHTML - whose link-rewrite strips the trailing slash off relative links - so card hrefs like \"../magus/\" stay slash-terminated and resolve without a directory redirect. searchText is the plain text to index, since the HTML carries no useful prose.",
+      "source": "docs/site/development.buzz:101"
     },
     {
       "id": "function:docs/site/development.buzz:slugifyProject",
       "kind": "function",
       "label": "slugifyProject",
       "doc": "slugifyProject turns a workspace-relative project path into one URL segment: \"libs/gopherbuzz\" -> \"libs-gopherbuzz\". Nested projects are the reason this exists -- the previous shallow scan never produced a path with a separator in it.  split/join, not replace: str.replace substitutes only the FIRST match, so a two-separator path (\"cmd/magus/starter\") kept the rest and the \"one segment\" this promises became a directory tree - /development/cmd-magus/starter/ - plus a Mermaid node id with slashes still in it.",
-      "source": "docs/site/development.buzz:79"
+      "source": "docs/site/development.buzz:119"
     },
     {
       "id": "function:docs/site/development.buzz:workspaceDependencies",
       "kind": "function",
       "label": "workspaceDependencies",
       "doc": "workspaceDependencies renders how the PROJECTS relate, as Markdown. The per-project pages answer \"what can I run here\"; this answers \"what does changing it reach\", which no page showed before.  It reads magus.projectGraph()'s typed view: nodes already in topological order (so the table IS a valid build order, sorted by nobody here), each node's direct dependencies, and its blast radius - the count of projects a change can transitively affect, which is the number that tells a contributor whether an edit is c",
-      "source": "docs/site/development.buzz:98"
+      "source": "docs/site/development.buzz:143"
+    },
+    {
+      "id": "function:docs/site/download.buzz:renderDownloadPage",
+      "kind": "function",
+      "label": "renderDownloadPage",
+      "doc": "renderDownloadPage writes gen/download/index.html.  Every link is relative and resolves one level up, since the page sits at download/ rather than at gen's root: the asset gate proves each target exists, so a renamed setup guide fails the build here rather than 404ing for a reader mid-install.",
+      "source": "docs/site/download.buzz:51",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/site/download.buzz:routeLinks",
+      "kind": "function",
+      "label": "routeLinks",
+      "source": "docs/site/download.buzz:35"
+    },
+    {
+      "id": "function:docs/site/landing.buzz:recentPosts",
+      "kind": "function",
+      "label": "recentPosts",
+      "doc": "recentPosts renders up to three of the newest blog posts as cards, or \"\" when the blog is empty.  It reads the posts' frontmatter directly rather than using site.blogPosts, and the reason is ordering: walkBlog fills that list well after renderLanding runs, so at this point it is empty. Reading here keeps the landing independent of where the blog sits in the render sequence, which is worth more than the few lines saved by sharing - a \"recent posts\" block that silently renders nothing because a step moved is",
+      "source": "docs/site/landing.buzz:67"
+    },
+    {
+      "id": "function:docs/site/landing.buzz:renderLanding",
+      "kind": "function",
+      "label": "renderLanding",
+      "doc": "renderLanding writes gen/index.html. srcRel is LANDING_SRC, the synthetic source path every \"is this the home page\" test in renderPage keys off; it maps to the empty clean URL, so the chrome resolves at gen's root and no breadcrumb is drawn.  Every link here is relative and points at a page this render also writes - the asset gate proves that, and the orphan gate walks outward from exactly this page, so the four sections below are what make the rest of the site reachable at all.",
+      "source": "docs/site/landing.buzz:117",
+      "attrs": {
+        "exported": "true"
+      }
     },
     {
       "id": "function:docs/site/public.buzz:loadReleases",
@@ -10269,7 +10344,7 @@
       "kind": "function",
       "label": "renderPublic",
       "doc": "renderPublic writes /public/ - one ordinary page listing the machine-readable endpoints this site serves. It used to be four nested Apache-mod_autoindex listings (public/, public/atom/, public/release/, public/release/<ver>/) whose columns promised more than the site delivers: the per-version pages tabulated artifact names, sizes, and checksums for files that are hosted on GitHub and were never served from here, so each one rendered a directory listing of an empty directory. Releases now link to the GitHub",
-      "source": "docs/site/public.buzz:167",
+      "source": "docs/site/public.buzz:176",
       "attrs": {
         "exported": "true"
       }
@@ -10279,7 +10354,17 @@
       "kind": "function",
       "label": "artifactDesc",
       "doc": "artifactDesc describes a release artifact from its filename and platform, over the standard release asset set.",
-      "source": "docs/site/release.buzz:57",
+      "source": "docs/site/release.buzz:104",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/site/release.buzz:isVersionTag",
+      "kind": "function",
+      "label": "isVersionTag",
+      "doc": "isVersionTag reports whether a git tag names a release: \"v\" followed by three dot-separated numeric parts, with an optional -prerelease/+build suffix on the last one (\"v0.3.0\", \"v1.0.0-rc.1\"). Anything else is some other kind of tag.  This exists because a `v*` refspec is NOT a version filter, and reading it as one shipped a real bug: a tag called \"verified-refinements\" matched the glob, sorted newest by creation date, and became site.releases[0]. That is the value the announcement bar prints AND the value",
+      "source": "docs/site/release.buzz:35",
       "attrs": {
         "exported": "true"
       }
@@ -10299,7 +10384,7 @@
       "kind": "function",
       "label": "sortNamesSemverDesc",
       "doc": "sortNamesSemverDesc sorts release filenames newest-first. Selection sort; O(n^2) fine for ~10-20 releases. Mirrors Go's compareSemver in cmd/magus-utils/release.go.",
-      "source": "docs/site/release.buzz:27",
+      "source": "docs/site/release.buzz:74",
       "attrs": {
         "exported": "true"
       }
@@ -11314,7 +11399,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "ci is LINT ONLY, deliberately. Live runs need credentials that CI does not have, and a keyless environment must not fail this gate.  security is NOT wired in here either, and that is the same judgment the audit gate makes about a finding it cannot act on. Every high in this tree is transitive through promptfoo (mathjs, sharp, drizzle-orm) - packages this project does not depend on directly and cannot upgrade without overriding another tool's dependency graph. Attempting it cascades into a rollup build the c",
-      "source": "evals/magusfile.buzz:87",
+      "source": "evals/magusfile.buzz:88",
       "attrs": {
         "exported": "true"
       }
@@ -11324,14 +11409,14 @@
       "kind": "function",
       "label": "install",
       "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. A canceled install can leave a node_modules directory that exists but is incomplete, so isDir alone is not a valid readiness check.",
-      "source": "evals/magusfile.buzz:34"
+      "source": "evals/magusfile.buzz:35"
     },
     {
       "id": "function:evals/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint validates every task file against the schema and checks that each named constraint predicate exists. No network, no API key.",
-      "source": "evals/magusfile.buzz:46",
+      "source": "evals/magusfile.buzz:47",
       "attrs": {
         "exported": "true"
       }
@@ -11340,7 +11425,7 @@
       "id": "function:evals/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "evals/magusfile.buzz:28",
+      "source": "evals/magusfile.buzz:29",
       "attrs": {
         "exported": "true"
       }
@@ -11350,7 +11435,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits what actually ships against the npm advisory database. See console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the .npmrc cooling period is the stronger half of this.",
-      "source": "evals/magusfile.buzz:72",
+      "source": "evals/magusfile.buzz:73",
       "attrs": {
         "exported": "true"
       }
@@ -15545,6 +15630,22 @@
       "id": "import:site/development",
       "kind": "import",
       "label": "site/development",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
+      "id": "import:site/download",
+      "kind": "import",
+      "label": "site/download",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
+      "id": "import:site/landing",
+      "kind": "import",
+      "label": "site/landing",
       "attrs": {
         "diagnostic": "MGS7001"
       }
@@ -23058,6 +23159,22 @@
     },
     {
       "source": "dir:docs/site",
+      "target": "file:docs/site/download.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/download.buzz"
+    },
+    {
+      "source": "dir:docs/site",
+      "target": "file:docs/site/landing.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/landing.buzz"
+    },
+    {
+      "source": "dir:docs/site",
       "target": "file:docs/site/public.buzz",
       "relation": "contains",
       "confidence": "extracted",
@@ -26206,6 +26323,14 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "README.md"
+    },
+    {
+      "source": "doc:README.md",
+      "target": "doc:docs/reference/manpage/magus-init.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "README.md"
     },
     {
@@ -45362,6 +45487,14 @@
     },
     {
       "source": "file:docs/engine/route.buzz",
+      "target": "import:assert",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/engine/route.buzz"
+    },
+    {
+      "source": "file:docs/engine/route.buzz",
       "target": "import:engine/types",
       "relation": "imports",
       "confidence": "inferred",
@@ -46115,6 +46248,14 @@
     {
       "source": "file:docs/lib/glossary.buzz",
       "target": "function:docs/lib/glossary.buzz:glossarySlug",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/lib/glossary.buzz"
+    },
+    {
+      "source": "file:docs/lib/glossary.buzz",
+      "target": "function:docs/lib/glossary.buzz:hasNoLinkAttr",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -47242,6 +47383,22 @@
     },
     {
       "source": "file:docs/render.buzz",
+      "target": "import:site/download",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/render.buzz"
+    },
+    {
+      "source": "file:docs/render.buzz",
+      "target": "import:site/landing",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/render.buzz"
+    },
+    {
+      "source": "file:docs/render.buzz",
       "target": "import:site/public",
       "relation": "imports",
       "confidence": "inferred",
@@ -47322,6 +47479,14 @@
     },
     {
       "source": "file:docs/site/development.buzz",
+      "target": "function:docs/site/development.buzz:collectDevelopmentPages",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/development.buzz"
+    },
+    {
+      "source": "file:docs/site/development.buzz",
       "target": "function:docs/site/development.buzz:projectCatalog",
       "relation": "contains",
       "confidence": "extracted",
@@ -47331,6 +47496,14 @@
     {
       "source": "file:docs/site/development.buzz",
       "target": "function:docs/site/development.buzz:projectLabel",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/development.buzz"
+    },
+    {
+      "source": "file:docs/site/development.buzz",
+      "target": "function:docs/site/development.buzz:projectPageDesc",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -47465,6 +47638,190 @@
       "provenance": "docs/site/development.buzz"
     },
     {
+      "source": "file:docs/site/download.buzz",
+      "target": "function:docs/site/download.buzz:renderDownloadPage",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/download.buzz"
+    },
+    {
+      "source": "file:docs/site/download.buzz",
+      "target": "function:docs/site/download.buzz:routeLinks",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/download.buzz"
+    },
+    {
+      "source": "file:docs/site/download.buzz",
+      "target": "import:engine/page",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/download.buzz"
+    },
+    {
+      "source": "file:docs/site/download.buzz",
+      "target": "import:engine/route",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/download.buzz"
+    },
+    {
+      "source": "file:docs/site/download.buzz",
+      "target": "import:engine/types",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/download.buzz"
+    },
+    {
+      "source": "file:docs/site/download.buzz",
+      "target": "import:fs",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/download.buzz"
+    },
+    {
+      "source": "file:docs/site/download.buzz",
+      "target": "import:io",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/download.buzz"
+    },
+    {
+      "source": "file:docs/site/download.buzz",
+      "target": "import:lib/url",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/download.buzz"
+    },
+    {
+      "source": "file:docs/site/download.buzz",
+      "target": "import:template",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/download.buzz"
+    },
+    {
+      "source": "file:docs/site/landing.buzz",
+      "target": "function:docs/site/landing.buzz:recentPosts",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/landing.buzz"
+    },
+    {
+      "source": "file:docs/site/landing.buzz",
+      "target": "function:docs/site/landing.buzz:renderLanding",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/landing.buzz"
+    },
+    {
+      "source": "file:docs/site/landing.buzz",
+      "target": "import:engine/meta",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/landing.buzz"
+    },
+    {
+      "source": "file:docs/site/landing.buzz",
+      "target": "import:engine/page",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/landing.buzz"
+    },
+    {
+      "source": "file:docs/site/landing.buzz",
+      "target": "import:engine/route",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/landing.buzz"
+    },
+    {
+      "source": "file:docs/site/landing.buzz",
+      "target": "import:engine/types",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/landing.buzz"
+    },
+    {
+      "source": "file:docs/site/landing.buzz",
+      "target": "import:fs",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/landing.buzz"
+    },
+    {
+      "source": "file:docs/site/landing.buzz",
+      "target": "import:io",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/landing.buzz"
+    },
+    {
+      "source": "file:docs/site/landing.buzz",
+      "target": "import:lib/glossary",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/landing.buzz"
+    },
+    {
+      "source": "file:docs/site/landing.buzz",
+      "target": "import:lib/text",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/landing.buzz"
+    },
+    {
+      "source": "file:docs/site/landing.buzz",
+      "target": "import:lib/url",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/landing.buzz"
+    },
+    {
+      "source": "file:docs/site/landing.buzz",
+      "target": "import:markdown",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/landing.buzz"
+    },
+    {
+      "source": "file:docs/site/landing.buzz",
+      "target": "import:serialize",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/landing.buzz"
+    },
+    {
+      "source": "file:docs/site/landing.buzz",
+      "target": "import:template",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/landing.buzz"
+    },
+    {
       "source": "file:docs/site/public.buzz",
       "target": "function:docs/site/public.buzz:loadReleases",
       "relation": "contains",
@@ -47579,6 +47936,14 @@
     {
       "source": "file:docs/site/release.buzz",
       "target": "function:docs/site/release.buzz:artifactDesc",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/release.buzz"
+    },
+    {
+      "source": "file:docs/site/release.buzz",
+      "target": "function:docs/site/release.buzz:isVersionTag",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -55818,6 +56183,14 @@
     },
     {
       "source": "function:docs/lib/glossary.buzz:maskLinkable",
+      "target": "function:docs/lib/glossary.buzz:hasNoLinkAttr",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/lib/glossary.buzz"
+    },
+    {
+      "source": "function:docs/lib/glossary.buzz:maskLinkable",
       "target": "function:docs/lib/glossary.buzz:isSkipContainer",
       "relation": "calls",
       "confidence": "extracted",
@@ -56129,6 +56502,38 @@
       "provenance": "docs/render.buzz"
     },
     {
+      "source": "function:docs/site/development.buzz:collectDevelopmentPages",
+      "target": "function:docs/site/development.buzz:projectLabel",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/development.buzz"
+    },
+    {
+      "source": "function:docs/site/development.buzz:collectDevelopmentPages",
+      "target": "function:docs/site/development.buzz:projectPageDesc",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/development.buzz"
+    },
+    {
+      "source": "function:docs/site/development.buzz:collectDevelopmentPages",
+      "target": "function:docs/site/development.buzz:registerDevPage",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/development.buzz"
+    },
+    {
+      "source": "function:docs/site/development.buzz:collectDevelopmentPages",
+      "target": "function:docs/site/development.buzz:slugifyProject",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/development.buzz"
+    },
+    {
       "source": "function:docs/site/development.buzz:renderDevelopment",
       "target": "function:docs/site/development.buzz:projectCatalog",
       "relation": "calls",
@@ -56139,6 +56544,14 @@
     {
       "source": "function:docs/site/development.buzz:renderDevelopment",
       "target": "function:docs/site/development.buzz:projectLabel",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/development.buzz"
+    },
+    {
+      "source": "function:docs/site/development.buzz:renderDevelopment",
+      "target": "function:docs/site/development.buzz:projectPageDesc",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -56177,22 +56590,6 @@
       "provenance": "docs/site/development.buzz"
     },
     {
-      "source": "function:docs/site/development.buzz:renderDevelopmentPage",
-      "target": "function:docs/site/development.buzz:registerDevPage",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/site/development.buzz"
-    },
-    {
-      "source": "function:docs/site/development.buzz:renderDevelopmentPageRaw",
-      "target": "function:docs/site/development.buzz:registerDevPage",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/site/development.buzz"
-    },
-    {
       "source": "function:docs/site/development.buzz:workspaceDependencies",
       "target": "function:docs/site/development.buzz:projectLabel",
       "relation": "calls",
@@ -56207,6 +56604,22 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/site/development.buzz"
+    },
+    {
+      "source": "function:docs/site/download.buzz:renderDownloadPage",
+      "target": "function:docs/site/download.buzz:routeLinks",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/download.buzz"
+    },
+    {
+      "source": "function:docs/site/landing.buzz:renderLanding",
+      "target": "function:docs/site/landing.buzz:recentPosts",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/landing.buzz"
     },
     {
       "source": "function:docs/site/release.buzz:sortNamesSemverDesc",
@@ -64632,6 +65045,22 @@
     {
       "source": "target:docs:site-generate",
       "target": "file:docs/site/development.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "file:docs/site/download.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "file:docs/site/landing.buzz",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,

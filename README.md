@@ -75,12 +75,14 @@ prove what a change touched. For agents, see [Agents](docs/guides/integrations/a
 
 If any of these is your week, the rest of this page is worth your time:
 
-- **You run more than one language in one repo**, and your task runner was built
-  for one of them.
+- **You came back to your own project after three months** and cannot remember
+  which command is the real one.
 - **Your CI runs everything on every commit**, you know most of it was pointless,
   and you cannot prove which part.
 - **You inherited the build.** Whoever wrote it has gone, and you need to change
   one step without discovering what else it fed.
+- **You run more than one language in one repo**, and your task runner was built
+  for one of them.
 - **Your agent greps and guesses.** It is fast, it is confident, and it is wrong
   in ways that take longer to catch than to fix.
 - **You have a `.env` full of tokens** you keep meaning to clean up, in a shell
@@ -121,12 +123,25 @@ anywhere sensible to attach an error explaining them, and the repair is to
 upgrade the runtime you adopted the tool to pin. That boundary is stated as a
 rule in [Scope](docs/scope.md), not as a preference.
 
+### If you only have one project
+
+Most of what is above does not depend on having several. A target's cache key is
+built from that target's own declared inputs, so a warm re-run skips work in a
+one-project repo exactly as it does in this repository's ten. The knowledge graph
+indexes symbols, docs and generated files, not just the edges between projects.
+One vocabulary is worth more on your own, not less, because there is nobody else
+to ask what the build step was called.
+
+What does thin out is the affected set. With one project, "what did this change
+reach" has only one answer, and the shard planning behind `magus affected ci` has
+nothing to plan. That is the part that starts paying when you split out a second
+project, which is also why `magus init` scaffolds exactly one and expects to be
+right for a while.
+
 ### Who it is not for
 
 Stated plainly, because a list of strengths on its own is advertising:
 
-- **One project, one language.** Use that language's own tooling. magus earns
-  its place between projects; with one, it is ceremony.
 - **You need a build farm.** There is no remote execution. magus caches results
   and shares them; it does not run your work on someone else's machine.
 - **You want your toolchain versions installed for you.** magus compares what
