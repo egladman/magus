@@ -34,13 +34,14 @@
 # Coverage declaration, machine-read by the host-parity gate - see the longer
 # note in magus-guard-command.sh. It records what HOST_RESPONSE RENDERS, not
 # which rules currently fire, so deny=model is true the moment the arm exists.
-# magus-guard-template: 5
+# magus-guard-template: 6
 # magus-guard-coverage: schema=1 host=claude-code,codex surface=path deny=model advise=model pass=none
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}`
 # and the first one would terminate a ${...} expansion.
 [ -n "$HOST_EVENT_PATH" ] || HOST_EVENT_PATH='tool_input.file_path'
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
+[ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
 [ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
 [ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
 # Prefer the workspace's own ./magus over PATH. A repository that builds magus, or pins a
@@ -64,6 +65,7 @@ fi
 # string rather than the literal "null".
 event=$(cat)
 session=$(printf '%s' "$event" | jq -r ".$HOST_SESSION_PATH // empty")
+transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty")
 
 # Attribution is BEST EFFORT; the verdict is not. --agent-name and --session postdate the current magus
 # release, and an older binary rejects the unknown flag outright - printing usage to stdout and
@@ -79,7 +81,7 @@ guard() {
 # trail. Emptiness alone cannot tell the cases apart either, because a pass renders empty
 # on purpose. Both together can: a rejected flag prints its usage to STDERR and leaves
 # stdout empty, while any real verdict that is not a pass leaves something on stdout.
-verdict=$(guard --agent-name "$GUARD_AGENT_NAME" --session "$session" 2>/dev/null)
+verdict=$(guard --agent-name "$GUARD_AGENT_NAME" --session "$session" --transcript "$transcript" 2>/dev/null)
 status=$?
 if [ "$status" -ne 0 ] && [ -z "$verdict" ]; then
   verdict=$(guard 2>/dev/null)

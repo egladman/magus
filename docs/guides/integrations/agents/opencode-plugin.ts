@@ -20,7 +20,7 @@
 // context-injection arm. That is what the two declarations below record, and
 // they are machine-read by the host-parity gate - see the longer note in
 // magus-guard-command.sh.
-// magus-guard-template: 5
+// magus-guard-template: 6
 // magus-guard-coverage: schema=1 host=opencode surface=command deny=model advise=human pass=none
 // magus-guard-coverage: schema=1 host=opencode surface=path deny=model advise=human pass=none
 //

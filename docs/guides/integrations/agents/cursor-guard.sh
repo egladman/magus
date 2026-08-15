@@ -41,7 +41,7 @@
 # the two lines say exactly where: an advise on a shell command is delivered
 # nowhere (Cursor sends nothing on an allow), and an advise on a file write
 # reaches the person via stderr but never the model.
-# magus-guard-template: 5
+# magus-guard-template: 6
 # magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=none pass=none
 # magus-guard-coverage: schema=1 host=cursor surface=path deny=human advise=human pass=none
 
