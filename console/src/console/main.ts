@@ -1768,8 +1768,9 @@ export function startConsole(
     }),
   );
   // Plan authors its own sheet for the same reason Diff does: the stage is a laid-out node/edge
-  // drawing with its own geometry, and PF has no component for one. It also exports setVisible, so
-  // its poll stops while its pane is backgrounded.
+  // drawing with its own geometry, and PF has no component for one. Its activate() hands back a
+  // per-mount controller carrying setVisible, so each pane's poll stops on its own while that pane
+  // is backgrounded.
   register(
     moduleSurface({
       id: "plan",

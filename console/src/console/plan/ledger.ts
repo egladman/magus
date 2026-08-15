@@ -16,9 +16,9 @@
 import { authHeaders } from "../../lib/daemon";
 import { layoutLayered, LAYERED_COL_W, LAYERED_ROW_H } from "../graph/layout";
 import type { GLink, GNode } from "../graph/types";
-// Type-only, so esbuild erases it: the row shape stays in lockstep with the drawer that defines it
-// without this bundle importing the drawer for it. The VALUE side (runningRows/recentRows) is
-// imported by main.ts, where the protobuf cost it carries is already being paid.
+// The row shape stays in lockstep with the drawer that defines it without this module pulling the
+// drawer's protobuf in behind it. The VALUE side (runningRows/recentRows) is imported by main.ts,
+// where that cost is already being paid.
 import type { ActivityRow } from "../activityDrawer";
 
 // ---- states ----------------------------------------------------------------
@@ -84,7 +84,10 @@ export interface DelegationUnit {
   readonly updated?: string;
 }
 
-function str(v: unknown): string {
+// str is the one string coercion both of the surface's parsers read the wire through - the ledger's
+// units here, the run plan's nodes in run.ts - so a field that is not a string becomes "" in exactly
+// one way rather than two that could drift.
+export function str(v: unknown): string {
   return typeof v === "string" ? v : "";
 }
 
@@ -369,9 +372,9 @@ export interface PlanLayout {
   readonly back: ReadonlySet<number>;
 }
 
-// Placeable is the least layoutPlan needs: ids, and the pairs between them. Widened from PlanModel
-// when the derived run plan became this surface's second source - both models place through this
-// one pass, so the two tenants cannot drift into two different drawings of the same shape.
+// Placeable is the least layoutPlan needs: ids, and the pairs between them. Every model the surface
+// draws - the declared ledger, the resolved run plan - places through this one pass, so the tenants
+// cannot drift into two different drawings of the same shape.
 export interface Placeable {
   readonly nodes: readonly { readonly id: string }[];
   readonly edges: readonly { readonly from: string; readonly to: string }[];

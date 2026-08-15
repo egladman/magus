@@ -27,10 +27,11 @@
 //     beside it is the accessible twin - the same split the graph explorer makes between its canvas
 //     and its node cloud, for the same reason: a laid-out drawing has no reading order.
 //  3. IT POLLS ONLY WHILE IT IS ON SCREEN, and it refreshes the instant it comes back, so a pane
-//     that was hidden never shows a stale plan on its first frame.
+//     that was hidden never shows a stale plan on its first frame. On screen is a PER-PANE fact, so
+//     the switch that carries it hangs off the mount rather than off the module.
 //
 // Like the activity trail and notes it has no standalone page: activate(host) builds into a console
-// host and returns a teardown.
+// host and returns the controller for that mount.
 
 import { createClient } from "@connectrpc/connect";
 import { StatusService, type Status } from "../../gen/magus/status/v1/status_pb";
@@ -48,7 +49,13 @@ import { h } from "../view";
 // finished run, all as one shape). Imported rather than re-derived so this surface joins against the
 // same rows the drawer shows - a second projection would be a second answer to "what is running".
 // The protobuf its Status read pulls in is a cost this bundle pays anyway for its own live read.
-import { recentRows, runningRows, type ActivityRow, type RunDescriptor } from "../activityDrawer";
+import {
+  parseDescriptors,
+  recentRows,
+  runningRows,
+  type ActivityRow,
+  type RunDescriptor,
+} from "../activityDrawer";
 import {
   buildPlan,
   joinRuns,
@@ -86,17 +93,93 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 // at the other stage's defs.
 let instanceSeq = 0;
 
-// Every mounted instance, so the module-level setVisible the console calls (via moduleSurface) can
-// reach all of them. The bundle is imported once and mounted per pane, so this is the only place
-// that knows how many copies are live.
-const mounted = new Set<{ setVisible(visible: boolean): void }>();
+// ---- the shared commands ---------------------------------------------------
 
-// setVisible is the console's own contract (page.ts): true when this surface's pane is the focused
-// one in the active tab, false when it is backgrounded. A backgrounded plan stops polling - a plan
-// nobody is looking at is not a reason to talk to the daemon - and refreshes immediately when it
-// comes back, so what returns to the screen is never the picture from before it was hidden.
-export function setVisible(visible: boolean): void {
-  for (const m of mounted) m.setVisible(visible);
+// PlanCommands is what a command DOES to one mount. Named rather than closed over so the shared
+// registration below has something to dispatch AT.
+interface PlanCommands {
+  next(): void;
+  prev(): void;
+  reload(): void;
+  clearSelection(): void;
+  toggleSource(): void;
+}
+
+// The Plan commands are ONE set of ids however many panes are open: the console's registry is keyed
+// by id, so a second mount's registration REPLACES the first's rather than adding to it. They are
+// therefore registered once, for as long as at least one mount is live, and dispatch to whichever
+// mount the console last made visible - the focused pane. Registering per instance is the shape that
+// looks right and is not: with two Plan panes open, closing EITHER unregistered the ids for both,
+// and the command bar then offered no Plan commands at all while a Plan pane was still on screen.
+const COMMANDS: readonly {
+  readonly id: string;
+  readonly label: string;
+  readonly keys: readonly string[];
+  readonly run: (c: PlanCommands) => void;
+}[] = [
+  {
+    id: "plan.unit.next",
+    label: "Plan: next unit",
+    keys: ["j", "ArrowDown"],
+    run: (c) => c.next(),
+  },
+  {
+    id: "plan.unit.prev",
+    label: "Plan: previous unit",
+    keys: ["k", "ArrowUp"],
+    run: (c) => c.prev(),
+  },
+  {
+    id: "plan.refresh",
+    label: "Plan: reload",
+    keys: ["r"],
+    run: (c) => c.reload(),
+  },
+  {
+    id: "plan.select.clear",
+    label: "Plan: clear the selected unit",
+    keys: ["Escape"],
+    run: (c) => c.clearSelection(),
+  },
+  // No key: the two single letters left are worth more to a reader who is stepping through nodes
+  // than to a switch they make once a session, and the toggle itself is a real focusable button.
+  {
+    id: "plan.source.toggle",
+    label: "Plan: switch between the declared and run plans",
+    keys: [],
+    run: (c) => c.toggleSource(),
+  },
+];
+
+// Every live mount, and the one a shared command is addressed to.
+const live = new Set<PlanCommands>();
+let focusedMount: PlanCommands | null = null;
+
+// attachCommands registers the shared ids on the FIRST mount and returns the detach that
+// unregisters them on the LAST, so one pane closing while another is open leaves the commands where
+// they are.
+function attachCommands(c: PlanCommands): () => void {
+  live.add(c);
+  focusedMount ??= c;
+  if (live.size === 1) {
+    for (const cmd of COMMANDS) {
+      registerCommand({
+        id: cmd.id,
+        label: cmd.label,
+        group: "Plan",
+        run: () => {
+          if (focusedMount) cmd.run(focusedMount);
+        },
+      });
+    }
+  }
+  return () => {
+    live.delete(c);
+    // The commands outlive this mount, so they need somewhere to point. Any surviving mount will
+    // do: the console corrects it with the next setVisible.
+    if (focusedMount === c) focusedMount = live.values().next().value ?? null;
+    if (live.size === 0) for (const cmd of COMMANDS) unregisterCommand(cmd.id);
+  };
 }
 
 function svgEl<K extends keyof SVGElementTagNameMap>(
@@ -195,43 +278,78 @@ function runDrawn(model: RunPlanModel): Drawn {
   };
 }
 
+// deadline is the signal one read runs under: the read's own abort (a teardown, or a newer read
+// superseding this one) OR the cap above, whichever fires first. Both halves are needed - a timeout
+// alone keeps a torn-down pane talking to the daemon, and an abort alone lets a read that never
+// answers hold the next tick's place forever.
+function deadline(signal: AbortSignal): AbortSignal {
+  return AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]);
+}
+
+// why is what a failed read contributes to the sentence a reader sees. An aborted or timed-out read
+// arrives as a DOMException whose message says which of the two it was, and that distinction is the
+// whole reason the reason is carried.
+function why(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+// Feeds is one tick of both activity feeds: the rows, and why they are short when a read failed.
+// The reason is carried rather than folded into an empty list because the detail sheet has to tell
+// "nothing is attributed to this unit" apart from "the feeds it would be attributed FROM did not
+// answer" - the first is a fact about the plan, the second is a fact about the daemon.
+interface Feeds {
+  readonly rows: ActivityRow[];
+  readonly unread: string; // "" when both feeds answered
+}
+
 // fetchStatus reads one Status frame for the running half of the join (pool slots and lock holders).
-// Resolves undefined on any failure so a blip leaves the plan standing with no runs on it rather
-// than throwing into the poll timer.
-async function fetchStatus(host: string): Promise<Status | undefined> {
+// Never throws, so a blip leaves the plan standing with no runs on it rather than throwing into the
+// poll timer - but it says what went wrong, because an unread feed and an empty one look identical
+// on screen otherwise.
+async function fetchStatus(
+  host: string,
+  signal: AbortSignal,
+): Promise<{ status?: Status; failed: string }> {
   try {
     const client = createClient(StatusService, createDaemonTransport(host, getLiveToken()));
-    return (await client.getStatus({})).status;
-  } catch {
-    return undefined;
+    const resp = await client.getStatus({}, { signal: deadline(signal) });
+    return { status: resp.status, failed: "" };
+  } catch (e) {
+    return { failed: why(e) };
   }
 }
 
 // fetchRuns reads the daemon's retained run descriptors - the same feed the drawer's RECENT section
-// and the log viewer's run browser read. Null (not []) on failure, so "could not read" stays
+// and the log viewer's run browser read - through the drawer's own parser, so a malformed row is
+// dropped here exactly as it is there. Null (not []) on failure, so "could not read" stays
 // distinguishable from "nothing has run".
-async function fetchRuns(host: string): Promise<RunDescriptor[] | null> {
+async function fetchRuns(
+  host: string,
+  signal: AbortSignal,
+): Promise<{ runs: RunDescriptor[] | null; failed: string }> {
   try {
     const res = await fetch("http://" + host + "/api/v1/outputs", {
       headers: authHeaders(),
       cache: "no-store",
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal: deadline(signal),
     });
-    if (!res.ok) return null;
-    const body = (await res.json()) as { outputs?: RunDescriptor[] };
-    return Array.isArray(body.outputs) ? body.outputs : [];
-  } catch {
-    return null;
+    if (!res.ok) return { runs: null, failed: "HTTP " + res.status };
+    return { runs: parseDescriptors(await res.json()), failed: "" };
+  } catch (e) {
+    return { runs: null, failed: why(e) };
   }
 }
 
 // activityRows reads both feeds for one tick and returns them as one list, running first. They are
 // fetched together and fail independently: a status read that fails must not blank a run list that
-// answered.
-async function activityRows(host: string): Promise<ActivityRow[]> {
-  const [status, runs] = await Promise.all([fetchStatus(host), fetchRuns(host)]);
+// answered, so both reasons are kept rather than the first one winning.
+async function activityRows(host: string, signal: AbortSignal): Promise<Feeds> {
+  const [status, runs] = await Promise.all([fetchStatus(host, signal), fetchRuns(host, signal)]);
   const now = Date.now();
-  return [...runningRows(status, now), ...(runs ? recentRows(runs, now) : [])];
+  return {
+    rows: [...runningRows(status.status, now), ...(runs.runs ? recentRows(runs.runs, now) : [])],
+    unread: [status.failed, runs.failed].filter(Boolean).join("; "),
+  };
 }
 
 interface Refs {
@@ -241,6 +359,10 @@ interface Refs {
   tree: HTMLElement;
   list: HTMLElement;
   stage: SVGSVGElement;
+  // The stage's two layers, carried rather than re-queried per paint: buildScaffold appends them, so
+  // a render that could not find them would mean the scaffold it was handed is not this one.
+  edgeLayer: SVGGElement;
+  nodeLayer: SVGGElement;
   detail: HTMLElement;
   emptyTitle: HTMLElement;
   emptyBody: HTMLElement;
@@ -372,6 +494,8 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
     tree,
     list,
     stage,
+    edgeLayer,
+    nodeLayer,
     detail,
     emptyTitle,
     emptyBody,
@@ -413,7 +537,24 @@ function pathField(dl: HTMLElement, label: string, paths: readonly string[]): vo
   dl.append(dd);
 }
 
-export function activate(host: HTMLElement): () => void {
+// PlanInstance is what ONE mount hands back: its teardown, and its own visibility switch. Visibility
+// belongs to the instance and not to the module because the console drives it per PANE (tileView's
+// applyVisibility calls each pane's controller). A module-level export cannot tell two mounts of
+// this bundle apart, so backgrounding one pane silenced the poll in a pane that was still on screen,
+// and unhiding either restarted both.
+export interface PlanInstance {
+  deactivate(): void;
+  setVisible(visible: boolean): void;
+}
+
+export function activate(host: HTMLElement): PlanInstance {
+  // Per-bundle, not per-page: lib/daemon's origin-adoption flag is module state, so the shell having
+  // adopted this origin does not make it adopted in here. Without it the surface works only after
+  // some other surface has persisted a host, which is the shape of bug that looks fine on the
+  // developer's machine. Called ONCE per mount, per its own contract - it consumes the token out of
+  // the hash, so a call per refresh would be asking a question that has already been answered.
+  adoptDaemonOrigin();
+
   const markerBase = "console-plan-arrow-" + ++instanceSeq;
   const refs = buildScaffold(host, markerBase);
   const controller = new AbortController();
@@ -436,8 +577,12 @@ export function activate(host: HTMLElement): () => void {
   // The host the last read resolved, kept so the detail can build a log-viewer deep link without
   // re-resolving it mid-render.
   let lastHost: string | null = null;
+  // Why the last activity read came up short, "" when both feeds answered. The detail sheet reads it
+  // so an unread feed cannot masquerade as a unit nothing has been attributed to.
+  let feedsUnread = "";
   let selected: string | null = null;
   let painted = ""; // the signature of the plan currently on screen
+  let paintedDetail = ""; // and of the detail sheet beside it
 
   // --- painting -------------------------------------------------------------
 
@@ -492,13 +637,48 @@ export function activate(host: HTMLElement): () => void {
     refs.emptyBody.textContent = body;
   };
 
-  // signature is what decides whether the plan on screen still matches the plan in hand. The list
-  // is rebuilt only when it changes, so a poll that returns the same plan cannot destroy the button
-  // a reader has focused - the surface repaints around them, not under them.
+  // signature is what decides whether the plan on screen still matches the plan in hand. The list is
+  // rebuilt only when it changes, so a poll that returns the same plan cannot destroy the button a
+  // reader has focused - the surface repaints around them, not under them.
+  //
+  // It covers everything the list ROW draws, meta included. Leaving meta out made the signature a
+  // near-match rather than a match: a unit whose tier changed under an unchanged state drew the same
+  // signature, and the row went on reading the old tier until something else moved.
   const signature = (d: Drawn): string =>
-    d.nodes.map((n) => [n.id, n.state, n.depth, n.readOnly].join(":")).join("|") +
+    d.nodes.map((n) => [n.id, n.state, n.depth, n.readOnly, n.meta.join("/")].join(":")).join("|") +
     "#" +
     d.edges.map((e) => e.kind + ":" + e.from + ">" + e.to).join("|");
+
+  // detailSignature is the same guard for the sheet on the right, and it needs its own because the
+  // sheet draws from the SELECTED node rather than from the drawn list: everything in it can change
+  // while the plan's own signature holds still, and it holds the surface's only link. A repaint that
+  // rebuilds an unchanged sheet takes the focus off "Open the last log" with it, so the sheet is
+  // rebuilt only when what it says has actually changed.
+  const detailSignature = (): string => {
+    if (!selected) return source + ":none";
+    if (source === "run") {
+      const n = runModel.byId.get(selected);
+      return n
+        ? "run:" + JSON.stringify([n.id, n.state, n.rawState, n.project, n.target, n.ref, lastHost])
+        : "run:gone";
+    }
+    const n = model.byId.get(selected);
+    if (!n) return "declared:gone";
+    const runs = (join.byUnit.get(n.id) ?? []).map((r) => [r.id, r.title, r.detail, r.outcome]);
+    return (
+      "declared:" +
+      JSON.stringify([
+        n.id,
+        n.state,
+        n.rawState,
+        n.parent,
+        n.danglingParent,
+        n.unit,
+        runs,
+        feedsUnread,
+      ])
+    );
+  };
 
   const renderList = (): void => {
     const items = drawn.nodes.map((n) => {
@@ -527,9 +707,6 @@ export function activate(host: HTMLElement): () => void {
   const renderStage = (): void => {
     const layout = layoutPlan(drawn);
     refs.stage.setAttribute("viewBox", layout.viewBox);
-    const edgeLayer = refs.stage.querySelector(".console-plan-edges");
-    const nodeLayer = refs.stage.querySelector(".console-plan-nodes");
-    if (!edgeLayer || !nodeLayer) return;
 
     const paths = drawn.edges.map((e, i) => {
       const a = layout.at.get(e.from);
@@ -552,7 +729,7 @@ export function activate(host: HTMLElement): () => void {
       );
       return path;
     });
-    edgeLayer.replaceChildren(...paths);
+    refs.edgeLayer.replaceChildren(...paths);
 
     const nodes = drawn.nodes.map((n) => {
       const at = layout.at.get(n.id) ?? { x: 0, y: 0 };
@@ -589,7 +766,7 @@ export function activate(host: HTMLElement): () => void {
       }
       return g;
     });
-    nodeLayer.replaceChildren(...nodes);
+    refs.nodeLayer.replaceChildren(...nodes);
   };
 
   const renderDeclaredDetail = (): void => {
@@ -634,11 +811,19 @@ export function activate(host: HTMLElement): () => void {
     const runsBox = h("div", "console-plan-detail__runs");
     runsBox.append(h("h3", "console-plan-detail__runshead", "Runs"));
     if (!runs.length) {
+      // Two different facts, and only one of them is about the plan. The feeds not answering means
+      // nothing can be attributed to ANY unit right now; the feeds answering with nothing means the
+      // attribution itself does not exist yet. Reporting the first as the second would blame the
+      // ledger for a daemon that is not talking.
       runsBox.append(
         h(
           "p",
           "console-plan-detail__hint",
-          "No runs are attributed to this unit. Nothing stamps a unit onto the activity feeds yet, so this stays empty until something does.",
+          feedsUnread
+            ? "The activity feeds could not be read (" +
+                feedsUnread +
+                "), so nothing can be attributed to this unit right now."
+            : "No runs are attributed to this unit. Nothing stamps a unit onto the activity feeds yet, so this stays empty until something does.",
         ),
       );
     } else {
@@ -684,11 +869,9 @@ export function activate(host: HTMLElement): () => void {
     if (n.rawState && n.rawState !== n.state) {
       field(dl, "Served state", n.rawState + " (unrecognized, shown as idle)");
     }
-    // The ref is the node's most recent captured output INDEPENDENT of the state beside it: a
-    // RUNNING target carries the ref from the run BEFORE this one, because the run in flight has
-    // captured nothing yet. The wire does that on purpose - there is always something to open - but
-    // it means nothing here may word the link as this run's log. A reader who clicks expecting live
-    // output and gets the previous run has been lied to by the label, so the label says "last".
+    // Worded "last", never "this run's": a node's ref is its most recent captured output
+    // INDEPENDENT of the state beside it, so a running target links to the run before this one.
+    // run.ts's RunPlanNode.ref carries the reason the wire does that.
     if (n.ref) {
       field(dl, "Last output ref", n.ref);
       dl.append(h("dt", "console-plan-detail__label", "Last output"));
@@ -722,7 +905,8 @@ export function activate(host: HTMLElement): () => void {
   };
 
   // syncSelection repaints only what the selection changed - the aria-current on one list row and
-  // the data-selected on one node - so choosing a unit never rebuilds the list under the caret.
+  // the data-selected on one node - so choosing a unit never rebuilds the list under the caret. The
+  // detail sheet goes through its signature for the same reason.
   const syncSelection = (): void => {
     for (const b of refs.list.querySelectorAll<HTMLElement>(".console-plan-list__item")) {
       if (b.dataset.id === selected) b.setAttribute("aria-current", "true");
@@ -732,6 +916,9 @@ export function activate(host: HTMLElement): () => void {
       if (g.dataset.id === selected) g.dataset.selected = "";
       else delete g.dataset.selected;
     }
+    const sig = detailSignature();
+    if (sig === paintedDetail) return;
+    paintedDetail = sig;
     renderDetail();
   };
 
@@ -739,18 +926,24 @@ export function activate(host: HTMLElement): () => void {
   // reader cannot see would leave the detail sheet describing a node that is not on the screen.
   const drawnOrder = (): string[] => drawn.nodes.map((n) => n.id);
 
-  const select = (id: string | null, focusRow = false): void => {
+  const select = (id: string | null): void => {
     selected = id && drawn.nodes.some((n) => n.id === id) ? id : null;
     syncSelection();
-    if (!focusRow || !selected) return;
+  };
+
+  // selectRow is select plus the focus move, and it is its own function rather than a flag on
+  // select: focus moves ONLY because a NAVIGATION asked for it - a key, or a click on the drawn
+  // node - so the two call sites that move the caret say which they are by name. Nothing on a poll
+  // tick, and nothing on mount, calls this one.
+  const selectRow = (id: string | null): void => {
+    select(id);
+    if (!selected) return;
     // Matched by walking the rows rather than by an attribute selector: a unit id is an agent's
     // free text, so building a selector out of it is a quoting bug waiting for the first id with a
     // quote in it.
     const btn = [...refs.list.querySelectorAll<HTMLElement>(".console-plan-list__item")].find(
       (b) => b.dataset.id === selected,
     );
-    // Focus moves ONLY because a navigation command asked for it. Nothing on a poll tick, and
-    // nothing on mount, ever calls this.
     btn?.focus();
     btn?.scrollIntoView({ block: "nearest" });
   };
@@ -761,7 +954,7 @@ export function activate(host: HTMLElement): () => void {
     const at = selected ? order.indexOf(selected) : -1;
     const next = at < 0 ? (delta > 0 ? 0 : order.length - 1) : at + delta;
     if (next < 0 || next >= order.length) return;
-    select(order[next] ?? null, true);
+    selectRow(order[next] ?? null);
   };
 
   // render paints whatever the caller has already put in `drawn`, plus the two lines only the
@@ -793,12 +986,53 @@ export function activate(host: HTMLElement): () => void {
 
   // --- loading --------------------------------------------------------------
 
+  // Every read is stamped with the generation it opened in and the source it was opened FOR, and it
+  // may paint only while BOTH still hold. The pair is the guard: the generation catches a poll that
+  // has been overtaken - a four-second cadence over a slow daemon answers out of order - and the
+  // source catches a reader who switched tenants while a read was in flight. Without the second, a
+  // ledger that answers after the switch to Run repaints the run view with declared nodes, which is
+  // exactly how a no_return, the one state a run plan can never have, would arrive on one.
+  interface Read {
+    readonly gen: number;
+    readonly source: PlanSource;
+    readonly signal: AbortSignal;
+  }
+
+  let generation = 0;
+  let reading: AbortController | null = null;
+
+  // stopReading retires whatever is in flight: the abort ends the request, and the bumped generation
+  // means a response already on its way in can no longer paint. The abort is not tidiness - switching
+  // source or naming a target starts a read that must win, and leaving the old one running has the
+  // daemon answering a question nobody is waiting for while the answer that matters queues behind it.
+  const stopReading = (): void => {
+    generation++;
+    reading?.abort();
+    reading = null;
+  };
+
+  // beginRead retires whatever is in flight and opens the next one.
+  const beginRead = (forSource: PlanSource): Read => {
+    stopReading();
+    const ac = new AbortController();
+    reading = ac;
+    return {
+      gen: generation,
+      source: forSource,
+      signal: AbortSignal.any([controller.signal, ac.signal]),
+    };
+  };
+
+  // fresh reports whether a read's answer may still be painted.
+  const fresh = (r: Read): boolean => !disposed && r.gen === generation && r.source === source;
+
   // blank clears what is drawn before an empty state replaces it, so a plan that WAS on screen does
   // not survive underneath a sentence saying there is none - and so switching source cannot leave
   // the other tenant's nodes selectable behind the empty panel.
   const blank = (): void => {
     drawn = NOTHING_DRAWN;
     painted = "";
+    paintedDetail = "";
     selected = null;
     renderList();
     renderStage();
@@ -822,11 +1056,13 @@ export function activate(host: HTMLElement): () => void {
   };
 
   const refreshDeclared = async (daemonHost: string): Promise<void> => {
-    const [read, rows] = await Promise.all([
-      loadLedger(daemonHost, controller.signal),
-      activityRows(daemonHost),
+    const token = beginRead("declared");
+    const [read, feeds] = await Promise.all([
+      loadLedger(daemonHost, deadline(token.signal)),
+      activityRows(daemonHost, token.signal),
     ]);
-    if (disposed) return;
+    if (!fresh(token)) return;
+    feedsUnread = feeds.unread;
     if (read.kind === "absent") {
       if (settleSource(false)) return refreshRun(daemonHost);
       blank();
@@ -853,7 +1089,7 @@ export function activate(host: HTMLElement): () => void {
     }
     if (settleSource(read.units.length > 0)) return refreshRun(daemonHost);
     model = buildPlan(read.units);
-    join = joinRuns(model, rows);
+    join = joinRuns(model, feeds.rows);
     if (!model.nodes.length) {
       blank();
       showEmpty(
@@ -869,8 +1105,9 @@ export function activate(host: HTMLElement): () => void {
   };
 
   const refreshRun = async (daemonHost: string): Promise<void> => {
-    const read = await loadRunPlan(daemonHost, targetOverride, controller.signal);
-    if (disposed) return;
+    const token = beginRead("run");
+    const read = await loadRunPlan(daemonHost, targetOverride, deadline(token.signal));
+    if (!fresh(token)) return;
     if (read.kind === "absent") {
       blank();
       showEmpty(
@@ -928,14 +1165,12 @@ export function activate(host: HTMLElement): () => void {
   };
 
   const refresh = async (): Promise<void> => {
-    // Per-bundle, not per-page: lib/daemon's origin-adoption flag is module state, so the shell
-    // having adopted this origin does not make it adopted in here. Without this the surface works
-    // only after some other surface has persisted a host, which is the shape of bug that looks fine
-    // on the developer's machine.
-    adoptDaemonOrigin();
     const daemonHost = resolveDaemonHost();
     lastHost = daemonHost;
     if (!daemonHost) {
+      // No read to start, and any read still out belongs to the daemon that just went away: retiring
+      // it here is what stops it painting a plan over "not connected".
+      stopReading();
       blank();
       showEmpty(
         "No daemon connected",
@@ -980,7 +1215,7 @@ export function activate(host: HTMLElement): () => void {
       // Clicking a node moves focus to its row in the accessible twin: the picture is where the
       // eye is, but the list is where the keyboard lives, and leaving them apart strands a reader
       // who switches between them mid-read.
-      if (g?.dataset.id) select(g.dataset.id, true);
+      if (g?.dataset.id) selectRow(g.dataset.id);
     },
     { signal: controller.signal },
   );
@@ -1016,57 +1251,32 @@ export function activate(host: HTMLElement): () => void {
     { signal: controller.signal },
   );
 
+  // What a shared command does to THIS mount. Registration is module-wide (see attachCommands) so
+  // that two Plan panes share one set of ids, but the work is always addressed to one mount.
+  const commands: PlanCommands = {
+    next: () => step(1),
+    prev: () => step(-1),
+    reload: () => void refresh(),
+    clearSelection: () => select(null),
+    toggleSource: () => chooseSource(source === "declared" ? "run" : "declared"),
+  };
   // Commands, so every action appears in the command bar and the Actions surface and can be
   // rebound - a private keydown table would give none of that. The single-letter keys are bound on
   // THIS surface's root rather than as global chords (the diff surface's refinement of the graph
   // explorer's global GRAPH_KEYMAP): a bare "j" must not step through a plan while someone is
-  // typing in another surface.
-  const COMMANDS: { id: string; label: string; run: () => void; keys: string[] }[] = [
-    {
-      id: "plan.unit.next",
-      label: "Plan: next unit",
-      run: () => step(1),
-      keys: ["j", "ArrowDown"],
-    },
-    {
-      id: "plan.unit.prev",
-      label: "Plan: previous unit",
-      run: () => step(-1),
-      keys: ["k", "ArrowUp"],
-    },
-    {
-      id: "plan.refresh",
-      label: "Plan: reload",
-      run: () => void refresh(),
-      keys: ["r"],
-    },
-    {
-      id: "plan.select.clear",
-      label: "Plan: clear the selected unit",
-      run: () => select(null),
-      keys: ["Escape"],
-    },
-    // No key: the two single letters left are worth more to a reader who is stepping through nodes
-    // than to a switch they make once a session, and the toggle itself is a real focusable button.
-    {
-      id: "plan.source.toggle",
-      label: "Plan: switch between the declared and run plans",
-      run: () => chooseSource(source === "declared" ? "run" : "declared"),
-      keys: [],
-    },
-  ];
-  for (const c of COMMANDS)
-    registerCommand({ id: c.id, label: c.label, group: "Plan", run: c.run });
+  // typing in another surface. The keydown goes to the mount it happened IN, not to the focused
+  // one - a keystroke belongs to the pane it was typed into.
+  const detachCommands = attachCommands(commands);
   const byKey = new Map<string, () => void>();
-  for (const c of COMMANDS) for (const k of c.keys) byKey.set(k, c.run);
+  for (const c of COMMANDS) for (const k of c.keys) byKey.set(k, () => c.run(commands));
 
   refs.root.addEventListener(
     "keydown",
     (e) => {
       if (e.metaKey || e.ctrlKey || e.altKey) return;
       const t = e.target;
-      // Never eat a keystroke meant for a field. There is none on this surface today; there is no
-      // reason for the guard to arrive with the first one.
+      // Never eat a keystroke meant for a field: the target override is one, and "r" typed into it
+      // would otherwise reload the plan instead of naming a target.
       if (t instanceof HTMLInputElement || t instanceof HTMLTextAreaElement) return;
       const run = byKey.get(e.key);
       if (!run) return;
@@ -1076,8 +1286,21 @@ export function activate(host: HTMLElement): () => void {
     { signal: controller.signal },
   );
 
-  const instance = {
+  paintSource();
+  renderTargetOptions();
+  syncSelection();
+  void refresh();
+  startPolling();
+
+  return {
+    // setVisible is the console's own contract (page.ts): true when THIS pane is the focused one in
+    // the active tab, false when it is backgrounded. A backgrounded plan stops polling - a plan
+    // nobody is looking at is not a reason to talk to the daemon - and refreshes immediately when it
+    // comes back, so what returns to the screen is never the picture from before it was hidden.
     setVisible(v: boolean): void {
+      // Recorded before the early return: a pane that mounts already focused is told setVisible(true)
+      // with nothing to change, and it still has to be the mount the shared commands act on.
+      if (v) focusedMount = commands;
       if (v === visible) return;
       visible = v;
       if (v) {
@@ -1087,21 +1310,12 @@ export function activate(host: HTMLElement): () => void {
         stopPolling();
       }
     },
-  };
-  mounted.add(instance);
-
-  paintSource();
-  renderTargetOptions();
-  renderDetail();
-  void refresh();
-  startPolling();
-
-  return () => {
-    disposed = true;
-    stopPolling();
-    mounted.delete(instance);
-    controller.abort();
-    for (const c of COMMANDS) unregisterCommand(c.id);
-    host.replaceChildren();
+    deactivate(): void {
+      disposed = true;
+      stopPolling();
+      detachCommands();
+      controller.abort();
+      host.replaceChildren();
+    },
   };
 }

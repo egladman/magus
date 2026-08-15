@@ -310,27 +310,21 @@ test("a 501 is absent too - an unimplemented route is a missing one", async () =
 
 // The console holds no list of the workspace's targets, so anything it wrote here itself would be a
 // guess. The daemon named what it could not resolve, and that sentence is what a reader can act on.
+// The route writes it with http.Error, so the body IS the message: plain text, taken verbatim.
 test("a 400 is an unknown target, carrying the daemon's own words", async () => {
   const read = await stubFetch(
     () => ({
       ok: false,
       status: 400,
-      text: () => Promise.resolve('{"error":"unknown target \\"cli\\"; did you mean ci?"}'),
+      text: () =>
+        Promise.resolve('  unknown target "cli"; run `magus describe targets` to list them\n'),
     }),
     () => loadRunPlan("127.0.0.1:7391", "cli"),
   );
   assert.deepEqual(read, {
     kind: "unknown-target",
-    detail: 'unknown target "cli"; did you mean ci?',
+    detail: 'unknown target "cli"; run `magus describe targets` to list them',
   });
-});
-
-test("a 400 whose body is plain text keeps the text verbatim", async () => {
-  const read = await stubFetch(
-    () => ({ ok: false, status: 400, text: () => Promise.resolve("  no such target: cli\n") }),
-    () => loadRunPlan("127.0.0.1:7391", "cli"),
-  );
-  assert.deepEqual(read, { kind: "unknown-target", detail: "no such target: cli" });
 });
 
 test("a 400 with no body is still an unknown target, just with nothing to quote", async () => {

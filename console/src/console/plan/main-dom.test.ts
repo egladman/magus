@@ -2,25 +2,30 @@
 // test-setup.mjs (node --import), so this runs under node:test like the other *-dom tests. The
 // models it draws are covered next door in ledger.test.ts and run.test.ts.
 //
-// What is pinned HERE is what a reader ends up looking at, and specifically the four things a
-// later refactor would most plausibly break:
+// What is pinned HERE is what a reader ends up looking at, and specifically the things a later
+// refactor would most plausibly break:
 //
 //   - The EMPTY STATES stay apart. Per source: "no daemon", "the daemon has no route", and "the
-//     plan is empty" are three different facts, and only the last means no work exists. This
-//     branch's daemon serves NEITHER route, so the middle one is what everybody sees first - it has
-//     to name the route rather than showing a blank plan.
+//     plan is empty" are three different facts, and only the last means no work exists. No daemon
+//     serves the delegation ledger yet, so the middle one is what a reader who asks for Declared
+//     meets - it has to name the route rather than showing a blank plan.
 //   - WHICH SOURCE OPENS is decided by the data. A ledger with rows means an orchestration is in
 //     flight and Declared opens; anything else hands the surface to Run, which is what a person
 //     doing plain work came for. An explicit pick then sticks - the poll must not overrule it.
 //   - The DRAWING IS NOT THE ACCESSIBLE SURFACE. The stage is aria-hidden and the node list beside
 //     it carries the same nodes with their states in words.
 //   - FOCUS IS NEVER TAKEN. Mounting and polling must leave the caret where it was; only an
-//     explicit navigation command moves it.
+//     explicit navigation command moves it. That includes a repaint: a poll that returns the same
+//     plan must not rebuild the element a reader is standing on.
+//   - A MOUNT IS ITS OWN SURFACE. Two panes can hold two Plan surfaces, so a read that answers late
+//     must not paint over a source the reader has since switched, hiding one pane must not silence
+//     the other, and closing one must not take the shared commands away from the one still open.
 
 import assert from "node:assert/strict";
 import { test, beforeEach, afterEach } from "node:test";
 import { setDefaultHost } from "../../lib/settings";
-import { activate } from "./main";
+import { dispatchCommand, listCommands } from "../commands";
+import { activate, type PlanInstance } from "./main";
 
 const HOST = "127.0.0.1:7391";
 
@@ -47,10 +52,14 @@ async function settle(turns = 12): Promise<void> {
   for (let i = 0; i < turns; i++) await new Promise((r) => setTimeout(r, 0));
 }
 
-// serve points the surface at a daemon that answers only the routes named here. Everything else
-// (the status RPC, the run feed, the route left out) is refused, which is what a daemon that is not
-// there looks like from the browser, and which the surface must survive without blanking the plan.
-function serve(routes: { ledger?: () => unknown; plan?: (url: string) => unknown }): void {
+// serve points the surface at a daemon that answers only the routes named here. Everything else is
+// refused, which is what a daemon that is not there looks like from the browser, and which the
+// surface must survive without blanking the plan.
+function serve(routes: {
+  ledger?: () => unknown;
+  plan?: (url: string) => unknown;
+  feeds?: boolean; // answer BOTH activity feeds - the status RPC and the run descriptors
+}): void {
   setDefaultHost(HOST);
   globalThis.fetch = ((input: RequestInfo | URL) => {
     const url = String(input instanceof Request ? input.url : input);
@@ -59,6 +68,23 @@ function serve(routes: { ledger?: () => unknown; plan?: (url: string) => unknown
     }
     if (url.includes("/api/v1/plan") && routes.plan) {
       return Promise.resolve(routes.plan(url) as Response);
+    }
+    if (routes.feeds && url.includes("StatusService")) {
+      // A Connect unary response in the transport's JSON codec, carrying an EMPTY frame: what these
+      // tests need from the status read is only that it SUCCEEDED, so there is no frame to build.
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        headers: new Headers({ "content-type": "application/json" }),
+        json: () => Promise.resolve({}),
+      } as unknown as Response);
+    }
+    if (routes.feeds && url.includes("/api/v1/outputs")) {
+      return Promise.resolve({
+        ok: true,
+        status: 200,
+        json: () => Promise.resolve({ outputs: [] }),
+      } as unknown as Response);
     }
     return Promise.reject(new Error("stub: no network"));
   }) as typeof fetch;
@@ -79,10 +105,8 @@ function okPlan(body: Record<string, unknown>): () => unknown {
 
 // The run plan every drawing test reads: build waits on generate, test waits on build.
 //
-// .:build is RUNNING and still carries a ref, which is the wire's actual behaviour rather than a
-// convenience: a node's ref is its most recent captured output regardless of state, so a running
-// node hands back the PREVIOUS run's log. A fixture where running implied no ref would let the
-// mislabelling this pins for pass unnoticed.
+// .:build is RUNNING and still carries a ref (run.ts's RunPlanNode.ref says why the wire does that).
+// A fixture where running implied no ref would let the mislabelling this pins for pass unnoticed.
 const RUN_BODY = {
   target: "ci",
   anchor: "running",
@@ -115,12 +139,14 @@ function summaryText(host: HTMLElement): string {
   return host.querySelector(".console-plan-summary")?.textContent ?? "";
 }
 
-// mount builds the surface into a fresh host and hands back the teardown. EVERY caller must run it:
-// activate starts a poll interval, and an interval nobody clears keeps the test process alive.
-function mount(): { host: HTMLElement; teardown: () => void } {
+// mount builds the surface into a fresh host and hands back its controller. EVERY caller must run
+// the teardown: activate starts a poll interval, and an interval nobody clears keeps the test
+// process alive.
+function mount(): { host: HTMLElement; instance: PlanInstance; teardown: () => void } {
   const host = document.createElement("div");
   document.body.append(host);
-  return { host, teardown: activate(host) };
+  const instance = activate(host);
+  return { host, instance, teardown: () => instance.deactivate() };
 }
 
 function phase(host: HTMLElement): string {
@@ -142,10 +168,11 @@ test("with no daemon configured it says that, rather than showing an empty plan"
   }
 });
 
-// The case every reader on this branch hits: the endpoint lands with the sibling branch, so until
-// then the route 404s. A blank plan here would read as "nothing was delegated", which is the one
-// wrong answer that costs something - they stop looking. Reached by asking for Declared, because a
-// ledger with no rows is exactly the case that hands the surface to Run.
+// The case every reader hits against a daemon that does not serve the delegation ledger - which is
+// every daemon today, the route being the one half of this surface that has no handler yet. A blank
+// plan here would read as "nothing was delegated", which is the one wrong answer that costs
+// something: they stop looking. Reached by asking for Declared, because a ledger with no rows is
+// exactly the case that hands the surface to Run.
 test("a daemon with no ledger route names the missing endpoint", async () => {
   serveLedger(() => ({ ok: false, status: 404 }));
   const { host, teardown } = mount();
@@ -288,7 +315,6 @@ test("the next-unit key selects a unit and focuses its row", async () => {
     const first = host.querySelector<HTMLElement>(".console-plan-list__item");
     assert.equal(first?.getAttribute("aria-current"), "true");
     assert.equal(document.activeElement, first);
-    // And the detail sheet is now reading that unit rather than the pick-one hint.
     assert.match(host.querySelector(".console-plan-detail")?.textContent ?? "", /root/);
   } finally {
     teardown();
@@ -296,8 +322,8 @@ test("the next-unit key selects a unit and focuses its row", async () => {
 });
 
 test("selecting a unit shows its goal, checkpoint, tier, validation and owned paths", async () => {
-  serveLedger(
-    ok([
+  serve({
+    ledger: ok([
       {
         id: "root",
         goal: "render the ledger",
@@ -308,7 +334,8 @@ test("selecting a unit shows its goal, checkpoint, tier, validation and owned pa
         forbidden_paths: ["internal/"],
       },
     ]),
-  );
+    feeds: true,
+  });
   const { host, teardown } = mount();
   try {
     await settle();
@@ -320,9 +347,27 @@ test("selecting a unit shows its goal, checkpoint, tier, validation and owned pa
     assert.match(detail, /console:test/);
     assert.match(detail, /console\/src\/console\/plan\//);
     assert.match(detail, /internal\//);
-    // Nothing stamps a unit onto the activity feeds yet, and the surface says so rather than
-    // leaving a blank that reads as "this unit ran nothing".
+    // Both feeds answered and carried nothing for this unit: nothing stamps a unit onto them yet,
+    // and the surface says so rather than leaving a blank that reads as "this unit ran nothing".
     assert.match(detail, /No runs are attributed to this unit/);
+  } finally {
+    teardown();
+  }
+});
+
+// The other half of that sentence, and the reason it is two sentences. Feeds that did not answer
+// cannot attribute a run to ANY unit, which is a fact about the daemon; reporting it as the one
+// above would blame the ledger for a daemon that is not talking.
+test("a unit whose activity feeds could not be read says that instead", async () => {
+  serveLedger(ok([{ id: "root" }]));
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    host.querySelector<HTMLElement>(".console-plan-list__item")?.click();
+    const detail = host.querySelector(".console-plan-detail")?.textContent ?? "";
+    assert.match(detail, /The activity feeds could not be read/);
+    assert.match(detail, /stub: no network/, "and it carries what actually went wrong");
+    assert.doesNotMatch(detail, /No runs are attributed to this unit/);
   } finally {
     teardown();
   }
@@ -368,8 +413,9 @@ test("an empty ledger hands the surface to the run plan", async () => {
   }
 });
 
-// This is the state of this branch: neither route is served. The run plan is still what opens,
-// because a secondary endpoint that is missing has no business taking the surface over.
+// The ledger route is the one this tree does not serve, so this is what a reader meets today. The
+// run plan is still what opens, because a secondary endpoint that is missing has no business taking
+// the surface over.
 test("a ledger route that is not there hands the surface to the run plan too", async () => {
   serve({ ledger: () => ({ ok: false, status: 404 }), plan: okPlan(RUN_BODY) });
   const { host, teardown } = mount();
@@ -514,7 +560,8 @@ test("the default read names no target, and the override is what adds one", asyn
 });
 
 // The console holds no list of the workspace's targets, so any sentence it wrote itself would be a
-// guess. The daemon named what it could not resolve; that is what reaches the screen.
+// guess. The daemon named what it could not resolve; that is what reaches the screen. The body is
+// what the route actually sends - http.Error, so plain text, not a JSON envelope.
 test("an unknown target shows the daemon's own message, verbatim", async () => {
   serve({
     ledger: ok([]),
@@ -523,7 +570,8 @@ test("an unknown target shows the daemon's own message, verbatim", async () => {
         ? {
             ok: false,
             status: 400,
-            text: () => Promise.resolve('{"error":"unknown target \\"cli\\"; did you mean ci?"}'),
+            text: () =>
+              Promise.resolve('unknown target "cli"; run `magus describe targets` to list them\n'),
           }
         : okPlan(RUN_BODY)(),
   });
@@ -537,7 +585,7 @@ test("an unknown target shows the daemon's own message, verbatim", async () => {
     }
     await settle();
     assert.equal(phase(host), "empty");
-    assert.match(text(host), /unknown target "cli"; did you mean ci\?/);
+    assert.match(text(host), /unknown target "cli"; run `magus describe targets` to list them/);
   } finally {
     teardown();
   }
@@ -611,10 +659,9 @@ test("selecting a target shows its project, its target and a link to its capture
   }
 });
 
-// A node's ref is its most recent captured output INDEPENDENT of its state, so a running target
-// links to the run BEFORE this one. Wording that link as this run's log would send a reader looking
-// for live output into a finished log without telling them - the one misreading on this surface
-// that a plausible-looking screen actively causes.
+// A running target links to the run BEFORE this one (run.ts's RunPlanNode.ref). Wording that link
+// as this run's log would send a reader looking for live output into a finished log without telling
+// them - the one misreading on this surface that a plausible-looking screen actively causes.
 test("the output link is worded as the last log, never as this run's", async () => {
   serve({ ledger: ok([]), plan: okPlan(RUN_BODY) });
   const { host, teardown } = mount();
@@ -664,6 +711,176 @@ test("the run drawing is hidden from assistive tech and the target list is its t
       host.querySelector(".console-plan-tree")?.getAttribute("aria-label"),
       "Plan targets",
     );
+  } finally {
+    teardown();
+  }
+});
+
+// ---- one mount is not the other --------------------------------------------
+
+// The race the two-source design makes reachable: the ledger read is slow, the reader gives up on it
+// and switches to Run, and the ledger then answers. Its rows describe the OTHER tenant, so painting
+// them here would put declared nodes - a no-return among them, the one state a resolved run plan can
+// never contain - onto the run view, and the reader would have no way to tell.
+test("a ledger that answers after the switch to Run cannot paint the run view", async () => {
+  // Held open on purpose: this is the read that was already in flight when the reader switched.
+  const ledgerGate: { release: (r: unknown) => void } = { release: () => undefined };
+  const heldLedger = new Promise<unknown>((r) => {
+    ledgerGate.release = r;
+  });
+  setDefaultHost(HOST);
+  globalThis.fetch = ((input: RequestInfo | URL) => {
+    const url = String(input instanceof Request ? input.url : input);
+    if (url.includes("/api/v1/ledger")) return heldLedger as Promise<Response>;
+    if (url.includes("/api/v1/plan")) return Promise.resolve(okPlan(RUN_BODY)() as Response);
+    return Promise.reject(new Error("stub: no network"));
+  }) as typeof fetch;
+
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    pickSource(host, "run");
+    await settle();
+    assert.equal(pressed(host, "run"), "true");
+    assert.equal(host.querySelectorAll(".console-plan-node").length, 3);
+
+    ledgerGate.release({
+      ok: true,
+      status: 200,
+      json: () => Promise.resolve({ units: [{ id: "root", state: "no_return" }] }),
+    });
+    await settle();
+
+    assert.equal(pressed(host, "run"), "true", "a late ledger must not take the surface back");
+    assert.equal(
+      host.querySelectorAll('.console-plan-node[data-state="no_return"]').length,
+      0,
+      "the run view invents no no-return, and a late read from the other source cannot lend it one",
+    );
+    assert.doesNotMatch(summaryText(host), /no-return/);
+    assert.equal(host.querySelectorAll(".console-plan-node").length, 3);
+  } finally {
+    teardown();
+  }
+});
+
+// Visibility is per PANE - the console calls it on each pane's own controller - so one Plan pane
+// going quiet says nothing about another. A module-wide switch fanned every call out to every mount,
+// which showed up as the pane that came back ALSO refreshing the one that had not.
+test("hiding one Plan pane leaves the other alone", async () => {
+  let plans = 0;
+  serve({
+    ledger: ok([]),
+    plan: () => {
+      plans++;
+      return okPlan(RUN_BODY)();
+    },
+  });
+  const a = mount();
+  const b = mount();
+  try {
+    await settle();
+    a.instance.setVisible(false);
+    await settle();
+    const before = plans;
+    b.instance.setVisible(false);
+    b.instance.setVisible(true);
+    await settle();
+    assert.equal(plans - before, 1, "only the pane that came back reads the plan again");
+  } finally {
+    a.teardown();
+    b.teardown();
+  }
+});
+
+// The command ids are shared by every mount, so unregistering them per teardown took them away from
+// a pane that was still on screen - with two Plan panes open, closing either left the command bar
+// with no Plan commands at all.
+test("closing one Plan pane leaves the commands with the pane still open", async () => {
+  serve({ ledger: ok([]), plan: okPlan(RUN_BODY) });
+  const a = mount();
+  const b = mount();
+  try {
+    await settle();
+    // What the console does when it focuses b's pane: the shared commands now act on b.
+    b.instance.setVisible(true);
+    a.teardown();
+
+    assert.ok(
+      listCommands().some((c) => c.id === "plan.unit.next"),
+      "a Plan pane is still open, so its commands are still registered",
+    );
+    assert.equal(dispatchCommand("plan.unit.next"), true);
+    const rows = [...b.host.querySelectorAll<HTMLElement>(".console-plan-list__item")];
+    assert.equal(
+      rows[0]?.getAttribute("aria-current"),
+      "true",
+      "and the command acted on the pane the console made visible",
+    );
+  } finally {
+    b.teardown();
+  }
+});
+
+// And the last one out takes them with it, or the command bar keeps offering Plan commands that
+// dispatch into a torn-down surface.
+test("closing the last Plan pane unregisters the commands", async () => {
+  serve({ ledger: ok([]), plan: okPlan(RUN_BODY) });
+  const { teardown } = mount();
+  await settle();
+  assert.ok(listCommands().some((c) => c.id === "plan.refresh"));
+  teardown();
+  assert.equal(
+    listCommands().some((c) => c.id.startsWith("plan.")),
+    false,
+  );
+});
+
+// ---- repainting around the reader ------------------------------------------
+
+// The detail sheet holds this surface's only link, and the poll rebuilds the surface every four
+// seconds. Gating the sheet on the plan's signature was not enough: the sheet draws from the
+// SELECTED node, so it was rebuilt on every tick and took the focused anchor with it.
+test("a repaint that changes nothing leaves the focused output link where it is", async () => {
+  serve({ ledger: ok([]), plan: okPlan(RUN_BODY) });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    const rows = [...host.querySelectorAll<HTMLElement>(".console-plan-list__item")];
+    rows.find((r) => r.dataset.id === ".:build")?.click();
+    const link = host.querySelector<HTMLAnchorElement>(".console-plan-detail a");
+    assert.ok(link, "the running node offers its last log");
+    link?.focus();
+    assert.equal(document.activeElement, link);
+    host.querySelector<HTMLElement>(".console-plan-refresh")?.click();
+    await settle();
+    assert.equal(
+      document.activeElement,
+      link,
+      "a reader standing on the link must still be standing on it after a poll",
+    );
+  } finally {
+    teardown();
+  }
+});
+
+// The other half of the same gate: what a row SAYS is part of what decides a repaint. With meta left
+// out of the signature, a unit whose tier changed under an unchanged state kept drawing the old one.
+test("a changed tier repaints the row that carries it", async () => {
+  let reads = 0;
+  serve({
+    ledger: () => {
+      reads++;
+      return ok([{ id: "root", state: "running", tier: reads > 1 ? "sonnet" : "opus" }])();
+    },
+  });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    assert.match(host.querySelector(".console-plan-list__meta")?.textContent ?? "", /opus/);
+    host.querySelector<HTMLElement>(".console-plan-refresh")?.click();
+    await settle();
+    assert.match(host.querySelector(".console-plan-list__meta")?.textContent ?? "", /sonnet/);
   } finally {
     teardown();
   }

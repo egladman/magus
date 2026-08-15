@@ -9,9 +9,11 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { Status } from "../gen/magus/status/v1/status_pb";
 import {
   fmtMs,
+  parseDescriptors,
   recentRows,
   relAge,
   runningRows,
@@ -24,8 +26,11 @@ const NOW = 1_700_000_000_000;
 
 // ts builds a protobuf Timestamp for an epoch-ms instant. Cast through unknown because the generated
 // wrapper carries a $typeName the projection never reads.
-function ts(ms: number): never {
-  return { seconds: BigInt(Math.floor(ms / 1000)), nanos: (ms % 1000) * 1e6 } as unknown as never;
+function ts(ms: number): Timestamp {
+  return {
+    seconds: BigInt(Math.floor(ms / 1000)),
+    nanos: (ms % 1000) * 1e6,
+  } as unknown as Timestamp;
 }
 
 // status builds a minimal Status frame. Only pool.runningTargets and locks are read.
@@ -243,8 +248,8 @@ test("every row carries the phase-2 unit slot, unset until a delegation ledger f
   ];
   assert.equal(rows.length, 3);
   for (const r of rows) assert.equal(r.unit, undefined);
-  // The field is optional, so phase 2 populates it without touching any producer that does not know
-  // about units yet.
+  // The field is optional, so a producer can start stamping it without touching any producer that
+  // does not know about units yet.
   const tagged: ActivityRow = { ...rows[0], unit: "unit-3" };
   assert.equal(tagged.unit, "unit-3");
 });
@@ -252,4 +257,77 @@ test("every row carries the phase-2 unit slot, unset until a delegation ledger f
 test("summaryLine is what the live region announces", () => {
   assert.equal(summaryLine(0, 0), "0 running, 0 recent");
   assert.equal(summaryLine(3, 25), "3 running, 25 recent");
+});
+
+// ---- reading the feed ------------------------------------------------------
+
+// The rows above are only as honest as what reaches them, and what reaches them is a JSON body from
+// the network. A cast promises the shape; this is what checks it.
+test("parseDescriptors drops a row whose timestamp is not a number", () => {
+  const runs = parseDescriptors({
+    outputs: [
+      {
+        ref: "good",
+        project: "svc",
+        target: "build",
+        failed: false,
+        timestamp_ms: NOW,
+        duration_ms: 12,
+      },
+      {
+        ref: "null-ts",
+        project: "svc",
+        target: "build",
+        failed: false,
+        timestamp_ms: null,
+        duration_ms: 12,
+      },
+      {
+        ref: "nan-dur",
+        project: "svc",
+        target: "build",
+        failed: false,
+        timestamp_ms: NOW,
+        duration_ms: Number.NaN,
+      },
+    ],
+  });
+  assert.deepEqual(
+    runs.map((r) => r.ref),
+    ["good"],
+    "a NaN timestamp reaching the comparator leaves the WHOLE section in an order nobody promised",
+  );
+  // And the rows that survive render as numbers rather than as "NaNs".
+  assert.deepEqual(ids(recentRows(runs, NOW)), ["good"]);
+  assert.equal(recentRows(runs, NOW)[0]?.detail, "12ms - 0s");
+});
+
+// A row with no ref has no id and nothing to open, exactly as a ledger unit with no id has nothing
+// to hang an edge on.
+test("parseDescriptors drops a row with no ref", () => {
+  const runs = parseDescriptors({
+    outputs: [
+      { project: "svc", target: "build", failed: false, timestamp_ms: NOW, duration_ms: 1 },
+    ],
+  });
+  assert.deepEqual(runs, []);
+});
+
+// The string fields are COERCED rather than dropped: the drawer already renders a run with no
+// project as a bare target, so a missing one is a thinner row, not a lost one.
+test("parseDescriptors keeps a row whose strings are missing or wrong", () => {
+  const runs = parseDescriptors({
+    outputs: [{ ref: "r1", project: 7, failed: "yes", timestamp_ms: NOW, duration_ms: 0 }],
+  });
+  assert.equal(runs.length, 1);
+  assert.equal(runs[0]?.project, "");
+  assert.equal(runs[0]?.target, "");
+  assert.equal(runs[0]?.failed, false, "only a real true is a failure; a truthy string is not");
+});
+
+test("parseDescriptors reads anything that is not the documented shape as no rows", () => {
+  assert.deepEqual(parseDescriptors(null), []);
+  assert.deepEqual(parseDescriptors({}), []);
+  assert.deepEqual(parseDescriptors({ outputs: "nope" }), []);
+  assert.deepEqual(parseDescriptors({ outputs: [null, 3, "x"] }), []);
 });

@@ -41,6 +41,15 @@ const consoleLight = block(consoleCss, /:root\s*\{/, "console light");
 const consoleDark = block(consoleCss, /:root\.pf-v6-theme-dark\s*\{/, "console dark");
 const docsLight = block(docsCss, /:root:not\(\[data-theme="dark"\]\)\s*\{/, "docs light");
 const docsDark = block(docsCss, /\[data-theme="dark"\]\s*\{/, "docs dark");
+// The docs site declares its dark palette TWICE - once for an explicit [data-theme="dark"] and once
+// under @media (prefers-color-scheme: dark) for a reader who never picked - and the console compares
+// against the first. Guarding only that one leaves the second free to drift, which would show as the
+// docs rendering code differently depending on whether the reader had touched the theme toggle.
+const docsDarkAuto = block(
+  docsCss,
+  /:root:not\(\[data-theme="light"\]\)\s*\{/,
+  "docs dark (prefers-color-scheme)",
+);
 
 const TOKENS = ["comment", "keyword", "string", "number", "function"] as const;
 
@@ -64,6 +73,21 @@ test("console syntax palette matches the docs site's --syn-* tokens (dark)", () 
       got,
       want,
       `--console-syn-${token} (${got}) has drifted from docs --syn-${token} (${want})`,
+    );
+  }
+});
+
+// Asserted as the docs' own internal consistency rather than by comparing the console against both:
+// with the two docs blocks pinned to each other, a failure names WHICH pair drifted - the console
+// from the docs, or the docs from themselves - instead of leaving three values and no verdict.
+test("the docs site's two dark palettes agree with each other", () => {
+  for (const token of TOKENS) {
+    const explicit = value(docsDark, `syn-${token}`, "docs dark");
+    const auto = value(docsDarkAuto, `syn-${token}`, "docs dark (prefers-color-scheme)");
+    assert.equal(
+      auto,
+      explicit,
+      `docs --syn-${token} is ${auto} under prefers-color-scheme: dark and ${explicit} under [data-theme="dark"]`,
     );
   }
 });

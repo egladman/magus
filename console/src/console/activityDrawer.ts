@@ -34,10 +34,10 @@ import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import { StatusService, type Status } from "../gen/magus/status/v1/status_pb";
 import { authHeaders, createDaemonTransport, getLiveToken, resolveDaemonHost } from "../lib/daemon";
 
-// The refresh cadence, and the deadline one refresh gets. Deliberately NOT the operator's configured
-// refresh rate (lib/settings getPollMs, default 20s): that rate governs how often a dashboard redraws
-// aggregate counters, and a panel answering "what is happening right now" is stale at 20 seconds. The
-// dashboard's own activity tile made the same call for the same reason.
+// The refresh cadence, and the deadline each read inside one refresh gets. Deliberately NOT the
+// operator's configured refresh rate (lib/settings getPollMs, default 20s): that rate governs how
+// often a dashboard redraws aggregate counters, and a panel answering "what is happening right now"
+// is stale at 20 seconds. The dashboard's own activity tile made the same call for the same reason.
 const POLL_MS = 4000;
 const FETCH_TIMEOUT_MS = 4000;
 // How many finished runs the RECENT section lists. The feed returns everything the output store has
@@ -62,9 +62,9 @@ export interface ActivityRow {
   atMs: number;
   // "" while the answer is not known yet (everything RUNNING), "pass"/"fail" once it is.
   outcome: "" | "pass" | "fail";
-  // The delegation unit this row belongs to. Always absent today. Phase 2 introduces the delegation
-  // ledger and groups entries by unit; carrying the field now makes that a join rather than a change
-  // to every producer and every consumer at once.
+  // The delegation unit this row belongs to. The ledger and its join exist
+  // (plan/ledger.ts joinRuns); what is still missing is a producer that stamps
+  // the field - no run or trail event records its unit yet.
   unit?: string;
 }
 
@@ -82,6 +82,53 @@ export interface RunDescriptor {
   error?: string;
   timestamp_ms: number;
   duration_ms: number;
+}
+
+function str(v: unknown): string {
+  return typeof v === "string" ? v : "";
+}
+
+// finite is the number check the two timestamps go through: typeof alone lets NaN and Infinity past,
+// and both of those are numbers that ruin what they touch.
+function finite(v: unknown): number | null {
+  return typeof v === "number" && Number.isFinite(v) ? v : null;
+}
+
+// parseDescriptors normalizes the outputs feed the way plan/ledger.ts's parseUnits normalizes the
+// ledger: every field is the type it claims, so nothing downstream has to re-check. A cast alone
+// (`as { outputs?: RunDescriptor[] }`) checks nothing at all - it is a promise about a network
+// response, made by the code that reads it.
+//
+// Two things are DROPPED rather than coerced, and the drop is the point. A timestamp_ms that is not
+// a number reaches the section's comparator as NaN, and a comparator returning NaN leaves the order
+// undefined for EVERY row rather than just that one; a duration_ms that is not a number renders as
+// "NaNms". Neither can be repaired with a zero either - fmtMs and relAge read zero as "unknown", but
+// only after a run that genuinely reported nothing, which this is not. A row with no ref goes for
+// the reason parseUnits drops a unit with no id: it is the row's identity and there is nothing to
+// open without it.
+export function parseDescriptors(body: unknown): RunDescriptor[] {
+  const list = (body as { outputs?: unknown } | null)?.outputs;
+  if (!Array.isArray(list)) return [];
+  const out: RunDescriptor[] = [];
+  for (const raw of list) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const r = raw as Record<string, unknown>;
+    const ref = str(r.ref);
+    const timestampMs = finite(r.timestamp_ms);
+    const durationMs = finite(r.duration_ms);
+    if (!ref || timestampMs === null || durationMs === null) continue;
+    out.push({
+      ref,
+      project: str(r.project),
+      target: str(r.target),
+      inv: str(r.inv),
+      failed: r.failed === true,
+      error: str(r.error),
+      timestamp_ms: timestampMs,
+      duration_ms: durationMs,
+    });
+  }
+  return out;
 }
 
 // tsMillis converts a protobuf Timestamp to epoch milliseconds, or 0 when the field is absent. It is
@@ -174,6 +221,11 @@ export interface ActivityDrawer {
   open(): void;
   close(): void;
   toggle(): void;
+  // Remove the drawer for good: its timer, its two document listeners, and the panel itself. close()
+  // is not that - it hides a panel that is meant to be reopened, so the listeners stay. A shell that
+  // is going away needs this one, or every re-mount leaves another pointerdown/keydown pair on
+  // document holding a detached panel alive and toggling it.
+  destroy(): void;
 }
 
 // mountActivityDrawer builds the singleton drawer (hidden) once and returns its controller. The shell
@@ -217,44 +269,78 @@ export function mountActivityDrawer(): ActivityDrawer {
   document.body.append(panel);
 
   let open = false;
+  let destroyed = false;
   let timer: ReturnType<typeof setInterval> | null = null;
+  // The generation a read is stamped with. A read that resolves after a newer one started - or after
+  // the panel shut - is dropped rather than painted: the poll is four seconds and a slow daemon
+  // answers out of order, so without this the tick before last can repaint over the newest rows.
+  let generation = 0;
+  // The reads in flight, so shutting the panel stops them. A closed drawer is not a reason to keep
+  // the daemon answering, and it is the same rule the timer already follows.
+  let reading: AbortController | null = null;
+  // Every listener this drawer installs, the two on document included, removed together by
+  // destroy(). Not by close(): a hidden drawer still has to hear the button that reopens it.
+  const listeners = new AbortController();
+
+  // stopReading retires whatever is in flight - the abort ends the request, the bumped generation
+  // makes sure a response already on its way in cannot paint.
+  const stopReading = (): void => {
+    generation++;
+    reading?.abort();
+    reading = null;
+  };
 
   const setOpen = (v: boolean): void => {
-    if (v === open) return;
+    if (destroyed || v === open) return;
     open = v;
     panel.hidden = !v;
     panel.setAttribute("aria-hidden", v ? "false" : "true");
     if (v) {
       void refresh();
       timer = setInterval(() => void refresh(), POLL_MS);
-    } else if (timer) {
-      clearInterval(timer);
-      timer = null;
+    } else {
+      if (timer) {
+        clearInterval(timer);
+        timer = null;
+      }
+      stopReading();
     }
     // No focus() on open, and none on close: see the header comment. The panel is read, not entered.
   };
 
-  closeBtn.addEventListener("click", () => setOpen(false));
+  closeBtn.addEventListener("click", () => setOpen(false), { signal: listeners.signal });
 
   // Dismiss on an outside pointerdown or Escape. A click on any status-bar activity button
   // ([data-activity-toggle]) is that button's own toggle, so ignore it here to avoid closing then
   // immediately reopening (or vice versa). Same shape as share.ts's dismissal.
-  document.addEventListener("pointerdown", (e) => {
-    if (!open) return;
-    const t = e.target;
-    if (!(t instanceof Node)) return;
-    if (panel.contains(t)) return;
-    if (t instanceof Element && t.closest("[data-activity-toggle]")) return;
-    setOpen(false);
-  });
-  document.addEventListener("keydown", (e: KeyboardEvent) => {
-    if (e.key === "Escape" && open) setOpen(false);
-  });
+  document.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (!open) return;
+      const t = e.target;
+      if (!(t instanceof Node)) return;
+      if (panel.contains(t)) return;
+      if (t instanceof Element && t.closest("[data-activity-toggle]")) return;
+      setOpen(false);
+    },
+    { signal: listeners.signal },
+  );
+  document.addEventListener(
+    "keydown",
+    (e: KeyboardEvent) => {
+      if (e.key === "Escape" && open) setOpen(false);
+    },
+    { signal: listeners.signal },
+  );
 
   // refresh reads both feeds for one tick and repaints. The two are fetched together but fail
   // independently: a status read that fails must not blank a run list that answered, and vice versa,
   // so each section keeps its own honest empty state rather than sharing one "something went wrong".
   async function refresh(): Promise<void> {
+    // This tick supersedes whatever the last one is still waiting for - including when there is
+    // nothing to read, or a read still out from the daemon that just went away would paint rows
+    // over "not connected".
+    stopReading();
     const host = resolveDaemonHost();
     if (!host) {
       running.render([], "Not connected to a daemon.");
@@ -262,15 +348,32 @@ export function mountActivityDrawer(): ActivityDrawer {
       setSummary(0, 0);
       return;
     }
-    const [status, runs] = await Promise.all([fetchStatus(host), fetchRuns(host)]);
+    const ac = new AbortController();
+    reading = ac;
+    const gen = generation;
+    const [status, runs] = await Promise.all([
+      fetchStatus(host, ac.signal),
+      fetchRuns(host, ac.signal),
+    ]);
+    if (gen !== generation) return;
     const now = Date.now();
-    const runningList = runningRows(status, now);
-    const recentList = runs ? recentRows(runs, now) : [];
+    const runningList = runningRows(status.kind === "ok" ? status.status : undefined, now);
+    const recentList = runs.kind === "ok" ? recentRows(runs.runs, now) : [];
+    // The reason rides the empty line rather than being dropped: "could not read the daemon's
+    // status" is the same sentence whether the daemon went away, the token went stale, or the read
+    // ran out of time, and only the last of those is worth waiting through.
     running.render(
       runningList,
-      status ? "Nothing is running." : "Could not read the daemon's status.",
+      status.kind === "ok"
+        ? "Nothing is running."
+        : "Could not read the daemon's status: " + status.detail,
     );
-    recent.render(recentList, runs ? "No runs recorded yet." : "Could not read the run history.");
+    recent.render(
+      recentList,
+      runs.kind === "ok"
+        ? "No runs recorded yet."
+        : "Could not read the run history: " + runs.detail,
+    );
     setSummary(runningList.length, recentList.length);
   }
 
@@ -285,6 +388,14 @@ export function mountActivityDrawer(): ActivityDrawer {
     open: () => setOpen(true),
     close: () => setOpen(false),
     toggle: () => setOpen(!open),
+    destroy() {
+      if (destroyed) return;
+      // Shut it first, while setOpen still works: that is what clears the timer and aborts the reads.
+      setOpen(false);
+      destroyed = true;
+      listeners.abort();
+      panel.remove();
+    },
   };
 }
 
@@ -332,8 +443,8 @@ function buildSection(heading: string, initialEmpty: string): Section {
   };
 }
 
-// rowEl renders one row: the command in mono, its meta after, and - once phase 2 populates it - the
-// delegation unit it belongs to.
+// rowEl renders one row: the command in mono, its meta after, and - once a
+// producer stamps it - the delegation unit it belongs to.
 function rowEl(row: ActivityRow): HTMLElement {
   const li = document.createElement("li");
   li.className = "console-shell-activity__row";
@@ -360,33 +471,58 @@ function rowEl(row: ActivityRow): HTMLElement {
   return li;
 }
 
+// The two answers each read can give, in the shape plan/ledger.ts's LedgerRead uses: it came back,
+// or it did not and here is WHY. A bare undefined/null told the panel that something went wrong and
+// nothing else, which is the half of the answer a reader cannot act on.
+type StatusRead =
+  | { readonly kind: "ok"; readonly status: Status | undefined }
+  | { readonly kind: "unreadable"; readonly detail: string };
+
+type RunsRead =
+  | { readonly kind: "ok"; readonly runs: RunDescriptor[] }
+  | { readonly kind: "unreadable"; readonly detail: string };
+
+// why is what an exception contributes to the failure line. An aborted or timed-out read arrives as
+// a DOMException whose message says which of the two it was, and that distinction is the reason the
+// reason is carried at all.
+function why(e: unknown): string {
+  return e instanceof Error ? e.message : String(e);
+}
+
+// deadline is the signal one read runs under: the panel's own abort (a close, a destroy) OR the
+// four-second cap, whichever fires first. Both halves are needed - a timeout alone keeps a shut
+// drawer talking to the daemon, and an abort alone lets a read that never answers hold the poll's
+// place forever.
+function deadline(signal: AbortSignal): AbortSignal {
+  return AbortSignal.any([signal, AbortSignal.timeout(FETCH_TIMEOUT_MS)]);
+}
+
 // fetchStatus reads one Status frame over the typed StatusService, the unary counterpart to the
-// stream the dashboard subscribes to. Resolves undefined on any failure so a blip leaves an honest
-// empty state instead of throwing into the poll timer.
-async function fetchStatus(host: string): Promise<Status | undefined> {
+// stream the dashboard subscribes to. Never throws: a blip leaves an honest empty state naming the
+// failure instead of throwing into the poll timer.
+async function fetchStatus(host: string, signal: AbortSignal): Promise<StatusRead> {
   try {
     const client = createClient(StatusService, createDaemonTransport(host, getLiveToken()));
-    const resp = await client.getStatus({});
-    return resp.status;
-  } catch {
-    return undefined;
+    const resp = await client.getStatus({}, { signal: deadline(signal) });
+    return { kind: "ok", status: resp.status };
+  } catch (e) {
+    return { kind: "unreadable", detail: why(e) };
   }
 }
 
-// fetchRuns reads the daemon's retained run descriptors. Resolves null - not [] - on any failure, so
-// "could not read the history" stays distinguishable from "the history is empty"; the two mean very
-// different things to someone wondering why the panel is blank.
-async function fetchRuns(host: string): Promise<RunDescriptor[] | null> {
+// fetchRuns reads the daemon's retained run descriptors. "Could not read the history" stays
+// distinguishable from "the history is empty"; the two mean very different things to someone
+// wondering why the panel is blank.
+async function fetchRuns(host: string, signal: AbortSignal): Promise<RunsRead> {
   try {
     const res = await fetch("http://" + host + "/api/v1/outputs", {
       headers: authHeaders(),
       cache: "no-store",
-      signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
+      signal: deadline(signal),
     });
-    if (!res.ok) return null;
-    const body = (await res.json()) as { outputs?: RunDescriptor[] };
-    return Array.isArray(body.outputs) ? body.outputs : [];
-  } catch {
-    return null;
+    if (!res.ok) return { kind: "unreadable", detail: "HTTP " + res.status };
+    return { kind: "ok", runs: parseDescriptors(await res.json()) };
+  } catch (e) {
+    return { kind: "unreadable", detail: why(e) };
   }
 }

@@ -14,11 +14,12 @@
 // those it did, and the overview line LEADS with it, so a reader never has to wonder whether the
 // picture in front of them is live. Naming a target explicitly is an override, not the entry point.
 //
-// The endpoint lands with the sibling branch. Until then GET /api/v1/plan 404s, which is a
+// The daemon serves GET /api/v1/plan, but an OLDER one does not, and there it 404s. That is a
 // FIRST-CLASS outcome here rather than an error: loadRunPlan reports "absent" so the surface can
 // name the missing route instead of drawing an empty DAG, which would read as "nothing has run".
 
 import { authHeaders } from "../../lib/daemon";
+import { str } from "./ledger";
 
 // ---- states ----------------------------------------------------------------
 
@@ -107,10 +108,6 @@ export interface RunPlanModel {
   readonly edges: readonly RunPlanEdge[];
   readonly byId: ReadonlyMap<string, RunPlanNode>;
   readonly counts: Readonly<Record<RunState, number>>;
-}
-
-function str(v: unknown): string {
-  return typeof v === "string" ? v : "";
 }
 
 // parseRunPlan normalizes the response body into a model every later pass can be TOTAL over. It is
@@ -230,30 +227,14 @@ export function runPlanUrl(host: string, target: string): string {
 
 // unknownTargetDetail carries the daemon's OWN words for a 400 through to the screen. The console
 // does not hold the workspace's target list, so any sentence it wrote here itself would be a guess;
-// the daemon named what it could not resolve, and that is what a reader can act on. The body is
-// taken as JSON when it parses as one and verbatim otherwise, so a plain-text error is not lost.
+// the daemon named what it could not resolve, and that is what a reader can act on. The body IS the
+// message: the route writes it with http.Error, so it arrives as plain text and is used verbatim.
 async function unknownTargetDetail(res: Response): Promise<string> {
-  let text = "";
   try {
-    text = await res.text();
+    return (await res.text()).trim();
   } catch {
     return "";
   }
-  const trimmed = text.trim();
-  if (!trimmed) return "";
-  try {
-    const body: unknown = JSON.parse(trimmed);
-    if (typeof body === "object" && body !== null) {
-      const r = body as Record<string, unknown>;
-      for (const key of ["error", "message", "detail"]) {
-        const v = r[key];
-        if (typeof v === "string" && v.trim()) return v.trim();
-      }
-    }
-  } catch {
-    // Not JSON, so the body IS the message. Fall through to the raw text.
-  }
-  return trimmed;
 }
 
 // loadRunPlan reads GET /api/v1/plan under the same bearer + no-store rules as the ledger beside
