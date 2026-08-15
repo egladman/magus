@@ -12,7 +12,7 @@
 # -s -w -trimpath for a small, reproducible binary. For a smaller pure-Go,
 # multi-arch variant see Dockerfile.static.
 
-FROM golang:1.25 AS builder
+FROM golang:1.26 AS builder
 WORKDIR /src
 
 # inotify-tools for fs.watch. magus is pure Go (the gopherbuzz interpreter) with
