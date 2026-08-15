@@ -145,6 +145,7 @@ development/evals/
 development/gopherbuzz/
 development/libs-diag/
 development/libs-diagnostics/
+development/libs-diagram/
 development/libs-gopherbuzz/
 development/libs-orphanator/
 development/libs-testlayout/

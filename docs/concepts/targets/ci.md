@@ -30,17 +30,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void {
 
 We document this order; we don't enforce it. Chain steps with `magus\needs` where order matters (e.g. `test` depends on `build`).
 
-```mermaid
-flowchart TD
-    cmd["magus affected ci"] --> preflight
-    subgraph targets["Targets (composed in your magusfile)"]
-        preflight --> generate
-        generate --> format
-        format --> lint
-        lint --> build
-        build --> test
-    end
-```
+<!--diagram:ci-pipeline-->
 
 ## Common pitfalls
 

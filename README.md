@@ -288,118 +288,45 @@ projects a change reaches so you run no more than that.
 
 ## Architecture
 
-One process (`magus server start`) exposes the workspace through two standing listeners, one per audience, and every browser page is a separate static asset; the binary serves no HTML. A third listener is raised only on demand: "share to phone" opens a time-boxed LAN listener that serves the read-only console to a phone on the same network, then tears itself down. The diagram below is the whole system: the clients, the transports and their guards, the shared in-memory state, the background jobs and knowledge-graph pipeline that keep it warm, and how the browser console reaches (or does without) the daemon.
+One process (`magus server start`) exposes the workspace through two standing listeners, one per audience, and every browser page is a separate static asset; the binary serves no HTML. A third listener is raised only on demand: "share to phone" opens a time-boxed LAN listener that serves the read-only console to a phone on the same network, then tears itself down.
 
-```mermaid
-flowchart LR
-    cli(["Local CLI and shell<br/>magus run, status, query"])
-    agent(["AI agents<br/>Claude Code, Desktop, IDE"])
-    probe(["kubelet and scripts"])
-    vcs(["git hook / magus server sync"])
-    phone(["Phone on the LAN<br/>read-only console viewer"])
+Four figures, one subject each. They were one flowchart until it carried roughly thirty-five boxes, which is the point at which a diagram stops being read and starts being skipped.
 
-    subgraph pwa["Progressive web app - project: docs/ (static assets, loopback-locked, binary serves NO HTML)<br/>eli.gladman.cc/magus or self-hosted"]
-        dash["Dashboard"]
-        gexp["Graph Explorer"]
-        logs["Log Viewer"]
-        actv["Activity Trail"]
-    end
-    serve["Ephemeral loopback server<br/>graph export --open --serve (Safari fallback)"]
+### The HTTP surface
 
-    sources["Declared sources<br/>magusfiles, docs, buzz,<br/>SCIP index, git history, CODEOWNERS"]
-    gjson["Graph export -o json<br/>console graph demo data<br/>MAGUS.md (routing index)"]
+Agents and the console share one guarded front door: a DNS-rebind check, a bearer token and a CORS policy sit in front of `/mcp`, `/api/v1`, the Connect services and the share endpoint. The health endpoints are the deliberate exception, so a probe never needs a credential.
 
-    subgraph daemon["magus daemon - one process, magus server start (project: root Go module, cmd/magus + internal/*)"]
-        sock["Unix domain socket<br/>proc RPC, private 0700<br/>internal/proc"]
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/gen/diagram-daemon-http-light.svg">
+  <img alt="Clients reach the daemon's routes through a single guard; the health endpoints bypass it" src="docs/assets/gen/diagram-daemon-http.svg">
+</picture>
 
-        subgraph http["HTTP server on mcp.address, 127.0.0.1:7391<br/>internal/daemon, internal/handler/*, internal/httpx"]
-            guards{{"DNS-rebind + Bearer token + CORS<br/>internal/httpx, internal/auth"}}
-            mcpr["/mcp<br/>MCP Streamable HTTP + SSE<br/>internal/handler/mcp"]
-            apir["/api/v1<br/>graph, status, events, insight<br/>internal/handler/{graph,status}"]
-            conn["/magus.metrics.v1<br/>/magus.activity.v1 (Connect)<br/>internal/handler/{metrics,activity}"]
-            sharep["/api/v1/share (POST)<br/>loopback-only trigger + bearer<br/>internal/daemon, internal/share"]
-            health["/livez /readyz /healthz<br/>UNGUARDED"]
-        end
+### The local path
 
-        lan["Ephemeral LAN listener - on demand, time-boxed 15m<br/>read-only share token, same-origin console (CORS never engages)<br/>console static + status/events/insight/outputs + activity/metrics<br/>NO /mcp, NO share endpoint, NO mutating routes<br/>internal/share"]
+A CLI invocation never goes over HTTP. It dispatches across a private unix domain socket into the concurrency pool and the three registries the daemon keeps warm. Sharing a graph is the one case that spawns a separate short-lived loopback server.
 
-        subgraph jobs["Background jobs<br/>internal/file/watch, internal/proc"]
-            watch["File watchers<br/>graph invalidate + SSE"]
-            idx["SCIP auto-indexer"]
-            job["Graph-build job<br/>fire-and-forget, coalesced"]
-        end
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/gen/diagram-daemon-socket-light.svg">
+  <img alt="The magus CLI dispatching over a unix socket into the daemon's pool and registries" src="docs/assets/gen/diagram-daemon-socket.svg">
+</picture>
 
-        subgraph st["Shared daemon state<br/>internal/knowledge, cache, service, trail"]
-            pool[("Concurrency pool")]
-            ws[("Workspace registry<br/>warm knowledge graph, SCIP, cache")]
-            runs[("Run registry")]
-            svc[("Service registry")]
-            trail[("Activity trail")]
-            otel[("OTel provider")]
-        end
-    end
+### What keeps it warm
 
-    cli -->|"Unix socket: adopt run/affected, status"| sock
-    cli -->|spawns| serve
-    agent -->|"MCP over HTTP, bearer token"| guards
-    probe -->|httpGet| health
+File watchers, the SCIP auto-indexer and a coalesced graph-build job all exist to keep one thing current: the workspace registry, which holds the daemon's only warm copy of the knowledge graph.
 
-    dash -->|"status + events (SSE), metrics + activity, bearer"| guards
-    gexp -->|"graph + events (SSE), bearer"| guards
-    logs -->|"activity (Connect), bearer"| guards
-    actv -->|"activity (Connect), bearer"| guards
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/gen/diagram-daemon-jobs-light.svg">
+  <img alt="File watchers, the SCIP indexer and the graph-build job all writing into the workspace registry" src="docs/assets/gen/diagram-daemon-jobs.svg">
+</picture>
 
-    cli -.->|"snapshot: graph / output via URL fragment"| pwa
-    serve -.->|"graph blob (#src)"| gexp
+### Sharing to a phone
 
-    guards --> mcpr
-    guards --> apir
-    guards --> conn
-    guards --> sharep
-    dash -->|"share to phone, bearer"| guards
-    sharep -->|"mints read-only token, opens"| lan
-    phone -->|"same-origin, read-only share token"| lan
-    lan -->|"read-only views"| ws
-    health -.->|"reads status via"| sock
+The LAN listener is the only part of magus a second machine can reach. It is minted by a loopback-only endpoint, time-boxed to fifteen minutes, carries a read-only token, and serves no MCP, share or mutating route at all.
 
-    sock -->|"dispatch, concurrency"| pool
-    sock -->|"loaded workspaces"| ws
-    sock -->|"host shared services"| svc
-    mcpr -->|"query, describe, run"| ws
-    apir -->|"graph, events, insight"| ws
-    apir -->|"status: live runs"| runs
-    conn -->|"derived metrics"| otel
-    conn -->|"agent activity"| trail
-
-    vcs -->|"submit job, Unix socket"| sock
-    sock -->|"run background job"| job
-    job -->|"rebuild + reindex"| ws
-    watch -->|"invalidate warm graph"| ws
-    watch -->|"SSE graph event"| apir
-    idx -->|"refresh SCIP index"| ws
-    sources -->|"extract shards"| ws
-    ws -->|"graph export -o json"| gjson
-    gjson -.->|"offline graph (site default)"| gexp
-
-    classDef client fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a;
-    classDef site fill:#ccfbf1,stroke:#14b8a6,color:#134e4a;
-    classDef unix fill:#dcfce7,stroke:#22c55e,color:#14532d;
-    classDef httproute fill:#ffedd5,stroke:#f97316,color:#7c2d12;
-    classDef guard fill:#fee2e2,stroke:#ef4444,color:#7f1d1d;
-    classDef health fill:#fef9c3,stroke:#ca8a04,color:#713f12;
-    classDef store fill:#ede9fe,stroke:#8b5cf6,color:#4c1d95;
-    classDef job fill:#e0e7ff,stroke:#6366f1,color:#312e81;
-
-    class cli,agent,probe,vcs,phone client;
-    class dash,gexp,logs,serve,lan site;
-    class sock unix;
-    class mcpr,apir,conn,sharep httproute;
-    class guards guard;
-    class health health;
-    class pool,ws,runs,svc,trail,otel store;
-    class sources,gjson store;
-    class watch,idx,job job;
-```
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/gen/diagram-daemon-share-light.svg">
+  <img alt="A loopback endpoint minting a time-boxed read-only LAN listener for a phone" src="docs/assets/gen/diagram-daemon-share.svg">
+</picture>
 
 <details>
 <summary>How to read the diagram</summary>

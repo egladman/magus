@@ -89,19 +89,7 @@ Every magus command that names a project accepts the same two forms, and every
 command that prints one picks the form that suits its audience. Agents sit on
 both sides of that line.
 
-```mermaid
-flowchart LR
-  subgraph IN["accepted as input (interchangeable)"]
-    A["workspace://pkg/api"]
-    B["pkg/api"]
-    C["./pkg/api"]
-    D["workspace:// (root alias)"]
-  end
-  IN --> P{{"parse"}}
-  P --> R["one project reference<br/>path: pkg/api"]
-  R --> H["human output<br/>pkg/api"]
-  R --> M["machine output<br/>workspace://pkg/api"]
-```
+<!--diagram:project-reference-->
 
 The scheme is metadata, not content. It behaves like `https://` in a browser
 bar: present in the canonical reference, hidden when a human is reading.

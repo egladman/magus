@@ -33,6 +33,31 @@
      mismatch. Reserving the gutter unconditionally keeps both measurements
      consistent, so those overlays stop overshooting into horizontal scroll. */
   scrollbar-gutter: stable;
+
+  /* Diagram tokens, consumed by the inlined SVGs lib/diagram.buzz emits. Each one
+     forwards a Pico variable rather than restating a color, so one block covers light,
+     dark and the manual theme toggle: Pico has already resolved which it is by the time
+     these are read. An <img>-loaded copy of the same SVG cannot see any of this and falls
+     back to the hardcoded palette baked into the file - that is the whole reason the
+     standalone pair exists. */
+  --magus-diagram-paper: var(--pico-background-color);
+  --magus-diagram-surface: var(--pico-code-background-color);
+  --magus-diagram-ink: var(--pico-color);
+  --magus-diagram-muted: var(--pico-muted-color);
+  --magus-diagram-soft: var(--pico-muted-color);
+  --magus-diagram-rule: var(--pico-muted-border-color);
+  --magus-diagram-accent: var(--pico-primary);
+  --magus-diagram-accent-tint: color-mix(in srgb, var(--pico-primary) 8%, transparent);
+  --magus-diagram-link: var(--pico-primary);
+}
+
+/* An inlined diagram scales with the prose column instead of its authored pixel width.
+   The SVG carries width/height for the standalone case; here the viewBox does the work. */
+.magus-diagram {
+  display: block;
+  width: 100%;
+  height: auto;
+  max-width: 100%;
 }
 
 /* Second, independent layer against the same class of bug: the mobile TOC
@@ -781,15 +806,6 @@ details.dropdown > summary + ul {
   }
 }
 
-/* Center mermaid diagrams within their container (mermaid-init.js wraps each in
-   <div class="mermaid">); let the inline max-width scale the SVG cleanly. */
-.mermaid {
-  display: flex;
-  justify-content: center;
-}
-.mermaid > svg {
-  height: auto;
-}
 
 /* Offset in-page anchor jumps so a targeted heading clears the sticky header
    instead of hiding behind it. */
@@ -1394,8 +1410,11 @@ article dd,
 }
 .code-copy {
   position: absolute;
-  top: 0.5rem;
-  right: 0.5rem;
+  /* Inset past the stage's own padding so the button's hover and focus ring land inside
+     the figure's tinted panel rather than straddling its edge. Written as that padding
+     plus a gap, so the two stay in step. */
+  top: calc(0.75rem + 0.5rem);
+  right: calc(0.9rem + 0.5rem);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2601,13 +2620,6 @@ a code {
   font-style: italic;
 }
 
-/* Mermaid source: with JS off, we show the raw DSL plus a caption identifying
-   it. With JS on, mermaid-init.js replaces the <pre> with the rendered SVG, so
-   the caption should disappear. .js gates the caption off (mermaid-init.js
-   runs regardless of whether it fully renders the SVG; even if the CDN fails,
-   users have JS on and expect the diagram surface). */
-.js .mermaid-src-caption { display: none; }
-.mermaid-src-caption { display: block; margin-top: 0.25rem; }
 
 /* Admonitions / callouts. Author with GitHub-alert syntax:
      > [!NOTE]
@@ -4049,4 +4061,141 @@ a code {
 .download-route-sep {
   opacity: 0.45;
   padding: 0 0.15rem;
+/* Diagram zoom (diagram-zoom.js). Deliberately the same shell as .shortcut-help above -
+   a native <dialog> Pico gives a card look, a flex header with a "times" close button -
+   so the site has one overlay treatment rather than one per feature. Only the stage,
+   which the shortcut overlay has no equivalent of, is specific here. */
+.magus-diagram-figure {
+  position: relative;
+  margin: 0 0 var(--pico-typography-spacing-vertical, 1rem);
 }
+/* Same metrics as the playground's .file-bar buttons, which this control copies its
+   markup from: inline-flex so the glyph and label sit on one line, width auto to escape
+   Pico's full-width default, and an em-sized icon so it tracks the button's font-size.
+   Copying the markup without these rules rendered a full-size SVG stacked over the
+   label. */
+.diagram-expand {
+  position: absolute;
+  top: 0.4rem;
+  right: 0.4rem;
+  width: auto;
+  margin: 0;
+  padding: 0.2rem 0.7rem;
+  font-size: 0.72rem;
+  line-height: 1.3;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: var(--pico-background-color);
+  color: var(--pico-muted-color);
+  border: 1px solid var(--pico-muted-border-color);
+  border-radius: 4px;
+  /* Chrome, not content: out of the way until the figure is hovered or focused. */
+  opacity: 0;
+  transition: opacity 0.15s ease-in-out;
+}
+.diagram-expand .btn-icon {
+  width: 0.95em;
+  height: 0.95em;
+  flex: 0 0 auto;
+}
+.magus-diagram-figure:hover .diagram-expand,
+.diagram-expand:focus-visible {
+  opacity: 1;
+}
+
+/* Every rule here is scoped to .diagram-dialog on purpose. The shortcut overlay
+   (.shortcut-help) is a small card and Pico's defaults suit it exactly; a diagram needs
+   the opposite and must not drag the other overlays along with it.
+
+   The override that matters is on the ARTICLE, not the dialog: Pico sets
+   `dialog > article { max-width: 510px }`, so capping the dialog at 96vw left the figure
+   squeezed into a 510px box and cut off. */
+/* Nothing is overridden on the <dialog> itself. Pico already makes it a fixed,
+   full-viewport flex container that centres the article and paints the backdrop; setting
+   width: 100vw on top of that overflowed past the reserved scrollbar gutter and pushed
+   the card's right edge - and the close button with it - off screen. Only the article's
+   510px cap ever needed changing.
+
+   Percentages, not vw, for the same reason: they resolve against the dialog, which is
+   already the visible area. */
+.diagram-dialog[open] > article {
+  position: relative;
+  max-width: none;
+  width: 96%;
+  max-height: 94%;
+  margin: 0;
+  padding: 0;
+  /* Column so the header keeps its height and the stage takes everything left over.
+     overflow hidden, not Pico's auto: the stage pans by transform, and scrollbars
+     would fight the drag. */
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+/* With the heading hidden there is nothing for the close button to sit beside, and a
+   full-width bar with a rule under it reads as an empty strip. Float the button in the
+   corner instead and give the whole box to the figure. */
+.diagram-dialog header {
+  /* Pico bleeds article>header past the card with negative horizontal margins so it can
+     span edge to edge. Absolutely positioned, that margin just pushes the button outside
+     the card, which is what left the close control hanging off the corner. */
+  margin: 0;
+  position: absolute;
+  /* Inset, not flush: at 0,0 the button sits on the card's edge and reads as floating
+     outside it. */
+  /* Inset past the stage's own padding so the button's hover and focus ring land inside
+     the figure's tinted panel rather than straddling its edge. Written as that padding
+     plus a gap, so the two stay in step. */
+  top: calc(0.75rem + 0.5rem);
+  right: calc(0.9rem + 0.5rem);
+  z-index: 1;
+  padding: 0;
+  border: 0;
+  background: transparent;
+}
+/* The figure renders its own eyebrow and title inside the SVG, so repeating the heading
+   in the chrome reads as a second title. Keep it in the DOM but out of view: it is the
+   dialog's accessible name, which the close button alone would not supply. */
+.diagram-dialog header h2 {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+.diagram-close {
+  width: auto;
+  margin: 0;
+  background: transparent;
+  border: 0;
+  font-size: 1.25rem;
+  line-height: 1;
+  padding: 0.1rem 0.4rem;
+  color: var(--pico-muted-color);
+  cursor: pointer;
+}
+.diagram-close:hover { color: var(--pico-primary); }
+.diagram-stage {
+  flex: 1;
+  /* min-height 0 or the flex child refuses to shrink and the figure overflows. */
+  min-height: 0;
+  display: grid;
+  place-items: center;
+  padding: 0.75rem 0.9rem;
+  /* transform-origin centre so wheel zoom grows about the middle, not a corner. */
+  transform-origin: center center;
+  cursor: grab;
+  touch-action: none;
+  overflow: hidden;
+}
+.diagram-stage:active { cursor: grabbing; }
+/* Fill the stage rather than a fraction of the viewport: the stage is already the
+   viewport minus the header, and vh units here double-counted that chrome. */
+.diagram-stage > svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: 100%;
+  max-height: 100%;}

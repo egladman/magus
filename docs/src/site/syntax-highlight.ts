@@ -14,10 +14,9 @@ export function initSyntaxHighlight(): void {
   const blocks = document.querySelectorAll('pre > code[class*="language-"]');
   if (!blocks.length) return;
 
-  // Skip mermaid fences: mermaid-init.js turns those into diagrams.
   const work: Element[] = [];
   blocks.forEach((el) => {
-    if (!el.classList.contains("language-mermaid")) work.push(el);
+    work.push(el);
   });
   if (!work.length) return;
 

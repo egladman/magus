@@ -56,19 +56,20 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | diagnostic | 60+ | `magus query kind:diagnostic` | `MGS2001`, `MGS1022`, `MGS3003` |
 | doc | 300+ | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 100+ | `magus query kind:dir` | `docs/reference/buzz`, `docs/reference/manpage`, `docs/reference/codes/magusfile` |
-| file | 200+ | `magus query kind:file` | `magusfile.buzz`, `docs/render.buzz`, `docs/magusfile.buzz` |
+| file | 200+ | `magus query kind:file` | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz` |
 | function | 800+ | `magus query kind:function` | `tail`, `sign`, `renderContentHTML` |
-| import | 90+ | `magus query kind:import` | `magus`, `fs`, `std` |
+| import | 100+ | `magus query kind:import` | `magus`, `fs`, `std` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `WHY`, `NOTE` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
 | . | 43 | `magus query project:.` | `buzz-test`, `generate`, `lint` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
-| docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
+| docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents | 5 | `magus query project:docs/guides/integrations/agents` | `ci`, `format`, `lint` |
 | evals | 4 | `magus query project:evals` | `lint`, `preflight`, `ci` |
 | libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `generate` |
+| libs/diagram | 2 | `magus query project:libs/diagram` | `test`, `ci` |
 | libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `format`, `build`, `generate` |
 | libs/testlayout | 8 | `magus query project:libs/testlayout` | `format`, `build`, `generate` |
 | libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
@@ -145,7 +146,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `security` | security audits what actually ships against the npm advisory database. |
 | `ci` |  |
 | `build-playground` | build-playground rebuilds the WebAssembly interpreter the playground loads: the stock Go toolchain compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and Go's own wasm_exec.js glue is copied beside it. |
-| `build-mermaid` | build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into gen/assets/mermaid.js. |
+| `diagrams-generate` | diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/. |
 | `build-hljs` | build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js. |
 | `build-playground-editor` | build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js. |
 | `render` | render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks. |
@@ -187,6 +188,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `ci` | The anchor `magus affected ci` keys off; fans out lint/build/test after format. |
 | `preflight` |  |
 | `index-generate` | Renders MAGUS.md (target catalog plus graph) from this magusfile. |
+
+## Project: libs/diagram
+
+| Target | What it does |
+|---|---|
+| `ci` |  |
+| `test` | test runs the in-file test blocks. |
 
 ## Project: libs/gopherbuzz
 

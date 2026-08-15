@@ -150,27 +150,6 @@ export fun lazyImages(html: str) > str {
     return buf + rest;
 }
 
-// tagMermaid wraps each mermaid fence in a <div class="mermaid-src"> carrying a
-// no-JS caption (mermaid-init.js renders it to SVG when JS is on).
-export fun tagMermaid(html: str) > str {
-    final open = "<pre><code class=\"language-mermaid\">";
-    var buf = "";
-    var rest = html;
-    var idx = rest.indexOf(open);
-    while (idx != null) {
-        buf = buf + rest.sub(0, idx);
-        rest = rest.sub(idx);
-        final close = rest.indexOf("</code></pre>");
-        if (close == null) { return buf + rest; }
-        final block = rest.sub(0, close + 13);   // 13 = len("</code></pre>")
-        buf = buf + el("div", attr("class", "mermaid-src"),
-            block + el("span", attr("class", "noscript-inline mermaid-src-caption"),
-                "Diagram source - renders with JavaScript enabled."));
-        rest = rest.sub(close + 13);
-        idx = rest.indexOf(open);
-    }
-    return buf + rest;
-}
 
 // wrapTables wraps each <table> in a <figure class="table-scroll"> so a wide table
 // scrolls horizontally instead of overflowing on narrow screens. goldmark emits a bare
@@ -400,7 +379,7 @@ export fun stripMdFromLinkText(html: str) > str {
 // (href AND path-named link text), then the ordered content transforms. One choke point
 // so no transform gets applied on one path and forgotten on another.
 export fun renderContentHTML(rawHtml: str, oldDir: str, newDir: str) > str {
-    return wrapTables(tagMermaid(externalLinks(lazyImages(tagCodeTitle(tagVersionNote(tagAdmonition(tagRunnable(stripMdFromLinkText(rewriteLinks(rawHtml, oldDir, newDir))))))))));
+    return wrapTables(externalLinks(lazyImages(tagCodeTitle(tagVersionNote(tagAdmonition(tagRunnable(stripMdFromLinkText(rewriteLinks(rawHtml, oldDir, newDir)))))))));
 }
 
 test "stripMdFromLinkText drops a trailing .md from link text only" {
@@ -412,13 +391,6 @@ test "stripMdFromLinkText drops a trailing .md from link text only" {
         "edit README.md by hand", "prose .md that is not link text is untouched");
 }
 
-test "tagMermaid wraps a mermaid fence and passes other html through" {
-    assert\equal(tagMermaid("<pre><code class=\"language-mermaid\">graph</code></pre>"),
-        "<div class=\"mermaid-src\"><pre><code class=\"language-mermaid\">graph</code></pre>"
-        + "<span class=\"noscript-inline mermaid-src-caption\">Diagram source - renders with JavaScript enabled.</span></div>",
-        "wraps the fence");
-    assert\equal(tagMermaid("<p>hi</p>"), "<p>hi</p>", "non-mermaid unchanged");
-}
 
 test "wrapTables wraps each table in a scroll figure" {
     assert\equal(wrapTables("<table><tr><td>a</td></tr></table>"),

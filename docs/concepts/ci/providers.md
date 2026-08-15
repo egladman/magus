@@ -29,27 +29,7 @@ vendor's syntax. This is the same arrangement as [remote caching](../cache/remot
 the extension point is a spell so a provider magus has never heard of is
 something you write, not something you wait for.
 
-```mermaid
-flowchart LR
-  subgraph core["magus binary - names no CI system"]
-    run["run / cache<br/>a project failed"]
-    contract["Annotator contract<br/>internal/ci/annotate"]
-    quote["QuoteWith<br/>per-line, in Go"]
-  end
-
-  subgraph spell["provider spell - Buzz"]
-    ops["enabled, group_start,<br/>group_end, annotate"]
-    prefixes["quote_prefixes<br/>read once"]
-  end
-
-  vendor["CI system<br/>job log + pull request"]
-
-  run --> contract
-  contract -->|"generic verbs"| ops
-  ops -->|"vendor syntax"| vendor
-  prefixes -.->|"declared once"| quote
-  quote -->|"replayed output, de-fanged"| vendor
-```
+<!--diagram:ci-providers-->
 
 The dotted line is the one performance-shaped seam: quoting runs over every
 replayed line, so the spell declares its command prefixes once and magus does the

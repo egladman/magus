@@ -8,6 +8,7 @@ import "fs";
 import "io";
 import "os";
 import "template";
+import "../libs/diagram/diagram" as _;
 import "lib/text" as _;
 import "lib/html" as _;
 import "engine/path" as _;
@@ -114,7 +115,7 @@ fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, 
 //
 // split/join, not replace: str.replace substitutes only the FIRST match, so a
 // two-separator path ("cmd/magus/starter") kept the rest and the "one segment" this
-// promises became a directory tree - /development/cmd-magus/starter/ - plus a Mermaid
+// promises became a directory tree - /development/cmd-magus/starter/ - plus a
 // node id with slashes still in it.
 fun slugifyProject(name: str) > str {
     return name.split("/").join("-");
@@ -149,13 +150,14 @@ fun workspaceDependencies(graph: Graph) > str {
         + "depends on. Blast radius counts the projects a change here can reach, so it "
         + "is the cost of touching that project.\n\n"
         + "| project | depends on | blast radius |\n| --- | --- | --- |\n";
-    var edges = "";
+    final items: mut [LayeredItem] = mut [<LayeredItem>];
     foreach (n in nodes) {
         final label = projectLabel(n);
         final slug = slugifyProject(label);
         // A typed empty list, not `[]`: joining a bare list literal with the declared
         // [str] collapses the element type to any (see the note in projectCatalog).
         final deps = graph.dependsOn[n] ?? [<str>];
+        final itemDeps: mut [str] = mut [<str>];
         var depCell = "-";
         if (deps.len() > 0) {
             var parts = "";
@@ -165,17 +167,19 @@ fun workspaceDependencies(graph: Graph) > str {
                 parts = parts + "[`" + dLabel + "`](" + UP + slugifyProject(dLabel) + "/)";
                 // Edge direction matches the per-project run-order graphs: the arrow
                 // points from a dependency to what waits on it.
-                edges = edges + "    " + slugifyProject(dLabel) + "[\"" + dLabel + "\"] --> "
-                    + slug + "[\"" + label + "\"]\n";
+                itemDeps.append(slugifyProject(dLabel));
             }
             depCell = parts;
         }
         buf = buf + "| [`" + label + "`](" + UP + slug + "/) | " + depCell + " | "
             + "{graph.blastRadius[n] ?? 0}" + " |\n";
+        items.append(LayeredItem{ id = slug, label = label, deps = itemDeps });
     }
-    if (edges != "") {
-        buf = buf + "\n```mermaid\ngraph LR\n" + edges + "```\n";
-    }
+    // No figure here on purpose. A layered placement of THIS graph is unreadable: most
+    // projects are roots or wholly independent, so it draws a tall stack of disconnected
+    // boxes with a few edges wandering across empty canvas. The table above says the same
+    // thing in less space. The per-project run orders below are chains, which the same
+    // layout renders cleanly - the shape is what decides, not the fact that it is generated.
     return buf;
 }
 
@@ -185,7 +189,7 @@ fun workspaceDependencies(graph: Graph) > str {
 // data the CLI renders, with no fork, no stdout to re-parse, and compile-checked field
 // access on every node.
 //
-// A Mermaid block draws the run order from each node's declared dependencies, so the
+// An inline SVG figure draws the run order from each node's declared dependencies, so the
 // arrows are the real ctx.needs edges and not a hand-maintained picture.
 fun projectCatalog(proj: TargetGraphProject) > str {
     // No `?? []` guards below: TargetGraphOutput.BuzzObject normalizes every optional list to
@@ -235,14 +239,16 @@ fun projectCatalog(proj: TargetGraphProject) > str {
 
     // Run order. Only emitted when there is at least one edge - a flat list of
     // unconnected boxes tells a reader nothing.
-    var edges = "";
+    final items: mut [LayeredItem] = mut [<LayeredItem>];
+    var edgeCount = 0;
     foreach (n in nodes) {
-        foreach (d in n.dependencies) {
-            edges = edges + "    " + d + " --> " + n.name + "\n";
-        }
+        items.append(LayeredItem{ id = n.name, label = n.name, deps = n.dependencies });
+        edgeCount = edgeCount + n.dependencies.len();
     }
-    if (edges != "") {
-        buf = buf + "## Run order\n\n```mermaid\ngraph LR\n" + edges + "```\n";
+    if (edgeCount > 0) {
+        buf = buf + "## Run order\n"
+            + dependencyFigure("run-order-" + slugifyProject(proj.name),
+                "The order these targets run in", items);
     }
     return buf;
 }
@@ -318,13 +324,13 @@ export fun renderDevelopment(site: Site) > void !> any {
     }
 
     // The project-level view, rendered through the markdown pipeline for its table and
-    // Mermaid block and then spliced into the raw page. renderContentHTML is skipped
-    // for the same reason the page is raw at all: its link rewrite would strip the
+    // inline dependency figure and then spliced into the raw page. renderContentHTML is
+    // skipped for the same reason the page is raw at all: its link rewrite would strip the
     // trailing slash off every project href here.
     final depsMd = workspaceDependencies(site.graph);
     var depsSection = "";
     if (depsMd != "") {
-        depsSection = wrapTables(tagMermaid(markdown\toHtml(depsMd)));
+        depsSection = wrapTables(markdown\toHtml(depsMd));
     }
 
     // The projects index answers one question - what is in this workspace and what does
@@ -333,7 +339,7 @@ export fun renderDevelopment(site: Site) > void !> any {
     final devHtml = template\render(`<h1 id="projects">Projects</h1>
 <p>magus is built and tested by magus: this repository is itself a magus workspace, so the targets, spells, caching, and wards documented for your projects run this one too. Below is every project in it, drawn from the workspace's own graph rather than written by hand.</p>
 <h2 id="project-graphs">Project graphs</h2>
-<p>One card per magus project in this repository, each linking to that project's runnable targets and run-order graph - the same content as its committed <code>MAGUS.md</code>, rendered here with the site's theming, search, and live Mermaid diagrams.</p>
+<p>One card per magus project in this repository, each linking to that project's runnable targets and run-order graph - the same content as its committed <code>MAGUS.md</code>, rendered here with the site's theming, search, and inline dependency figures.</p>
     <div class="related-grid">
 {{{projectCards}}}    </div>
 {{{depsSection}}}`, {"projectCards": projectCards, "depsSection": depsSection});

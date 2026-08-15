@@ -514,20 +514,7 @@ would duplicate something the build already produces.
 Both follow the same rule applied to different starting conditions: **is the
 generator already required to build?** Ask that first.
 
-```mermaid
-flowchart TD
-    S[a target generates a file] --> P{pure function of<br/>its committed sources?}
-    P -- "no: records the commit,<br/>the clock, or the network" --> R[do not commit it]
-    P -- yes --> B{is the generator already<br/>required to build?}
-    B -- yes --> R
-    B -- no --> C{does anything read it<br/>without running the build?<br/>module zip, IDE, code browser}
-    C -- yes --> K[commit it]
-    C -- no --> Z{large, or does it churn<br/>on every commit?}
-    Z -- yes --> R
-    Z -- no --> K
-    K --> KG[gate: plain `magus run generate`<br/>fails when the tree changes]
-    R --> RG[gate: CI builds it on the<br/>path that publishes it]
-```
+<!--diagram:commit-generated-->
 
 The first question is the one that decides it outright. A file recording its own
 commit cannot be committed and stay correct, whatever the other answers are - that

@@ -1,10 +1,10 @@
 // assets-modules.d.ts - ambient types for the same-origin vendor bundles the
-// syntax-highlight and mermaid modules lazy-load at runtime.
+// the syntax-highlight module lazy-loads at runtime.
 //
-// Those modules do `import("./assets/hljs.js")` / `import("./assets/mermaid.js")`,
+// That module does `import("./assets/hljs.js")`,
 // paths that resolve relative to the emitted gen/main.js (where esbuild bundles
-// main.ts) - so gen/assets/hljs.js and gen/assets/mermaid.js, built separately by
-// `magus run build-hljs` / `build-mermaid` from src/vendor/*. They do not exist in
+// main.ts) - so gen/assets/hljs.js, built separately by
+// `magus run build-hljs` from src/vendor/*. It does not exist in
 // the src/ source tree, and esbuild deliberately leaves these dynamic imports as
 // external runtime imports. The bundles ship no declarations, so rather than a bare
 // `any` we hand-type the narrow slice each caller actually uses; the wildcard
@@ -40,11 +40,3 @@ declare module "*/assets/hljs.js" {
   export default hljs;
 }
 
-interface MermaidApi {
-  initialize(config: Record<string, unknown>): void;
-  run(opts: { nodes: Element[] }): Promise<void>;
-}
-declare module "*/assets/mermaid.js" {
-  const mermaid: MermaidApi;
-  export default mermaid;
-}

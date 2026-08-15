@@ -40,7 +40,6 @@ export fun magusConfig() > Config {
         generatorDirs = mut ["node_modules", "gen", "src", "tour"],
         generatorFiles = mut ["MAGUS.md"],
         // pico is same-origin (no CDN); offline/ is the navigation fallback. The heavy
-        // mermaid bundle is omitted - it caches lazily on first use.
         precacheAssets = mut [
             "search-index.json",
             "playground/wasm_exec.js",

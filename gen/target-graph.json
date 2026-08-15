@@ -1116,7 +1116,7 @@
             },
             {
               "project": ".",
-              "glob": "internal/knowledge/**/*.go"
+              "glob": "internal/graph/**/*.go"
             },
             {
               "project": ".",
@@ -1301,7 +1301,6 @@
             "preflight",
             "content-generate",
             "index-generate",
-            "build-mermaid",
             "build-hljs",
             "build-playground-editor",
             "build-playground",
@@ -1451,16 +1450,23 @@
           ]
         },
         {
-          "name": "build-mermaid",
-          "declared": "build_mermaid",
-          "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into gen/assets/mermaid.js.",
-          "dependencies": [
-            "preflight"
+          "name": "diagrams-generate",
+          "declared": "diagrams_generate",
+          "doc": "diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/.",
+          "reads_files": [
+            {
+              "project": "docs",
+              "glob": "site/diagrams/*.buzz"
+            },
+            {
+              "project": "docs",
+              "glob": "lib/diagram.buzz"
+            }
           ],
           "reads_secrets": false,
           "writes_files": [
             {
-              "glob": "gen/assets/mermaid.js"
+              "glob": "assets/gen/diagram-*.svg"
             }
           ]
         },
@@ -1690,6 +1696,31 @@
           "dependencies": [
             "lint",
             "build",
+            "test"
+          ],
+          "reads_secrets": false
+        }
+      ]
+    },
+    {
+      "path": "libs/diagram",
+      "name": "libs/diagram",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "test",
+          "doc": "test runs the in-file test blocks.",
+          "reads_files": [
+            {
+              "project": "libs/diagram",
+              "glob": "*.buzz"
+            }
+          ],
+          "reads_secrets": false
+        },
+        {
+          "name": "ci",
+          "dependencies": [
             "test"
           ],
           "reads_secrets": false

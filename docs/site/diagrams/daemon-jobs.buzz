@@ -1,0 +1,52 @@
+// site/diagrams/daemon-jobs.buzz - the background work that keeps the warm workspace honest.
+// Everything here converges on one node, which is the point: the file watchers, the SCIP
+// indexer and the graph-build job exist only to keep the workspace registry current, and
+// nothing else in the daemon writes to it.
+namespace daemonJobs;
+
+import "../libs/diagram/diagram" as _;
+
+export fun daemonJobsDiagram() > Diagram {
+    return Diagram{
+        id = "daemon-jobs",
+        eyebrow = "magus daemon",
+        title = "What keeps the warm workspace current",
+        desc = "File changes drive the watchers and the SCIP auto-indexer; a magus run "
+            + "queues a coalesced graph-build job. All three write into the workspace "
+            + "registry, which is the daemon's single warm copy of the knowledge graph.",
+        width = 960,
+        height = 440,
+        nodes = [
+            Node{ id = "fs", label = "Source files", sub = "magusfiles, code",
+                  tag = "input", role = "external", x = 32, y = 104, w = 160, h = 64 },
+            Node{ id = "cli", label = "magus run", sub = "any invocation",
+                  tag = "input", role = "external", x = 32, y = 264, w = 160, h = 64 },
+
+            Node{ id = "watch", anchor = "internal/file", label = "File watchers", sub = "internal/file/watch",
+                  tag = "job", x = 288, y = 88, w = 200, h = 64 },
+            Node{ id = "idx", label = "SCIP indexer", sub = "symbol index",
+                  tag = "job", x = 288, y = 176, w = 200, h = 64 },
+            Node{ id = "job", label = "Graph build", sub = "coalesced, async",
+                  tag = "job", x = 288, y = 264, w = 200, h = 64 },
+
+            Node{ id = "ws", anchor = "internal/graph", label = "Workspace registry", sub = "the warm graph",
+                  tag = "state", role = "focal", x = 624, y = 160, w = 200, h = 88 },
+        ],
+        edges = [
+            Edge{ src = "fs", dst = "watch", srcSlot = 1, srcSlots = 2, bend = 240 },
+            Edge{ src = "fs", dst = "idx", srcSlot = 2, srcSlots = 2, bend = 264 },
+            Edge{ src = "cli", dst = "job", label = "queues" },
+
+            Edge{ src = "watch", dst = "ws", label = "invalidate",
+                  dstSlot = 1, dstSlots = 3, bend = 560 },
+            Edge{ src = "idx", dst = "ws", label = "symbols",
+                  dstSlot = 2, dstSlots = 3, bend = 592 },
+            Edge{ src = "job", dst = "ws", label = "rebuild",
+                  dstSlot = 3, dstSlots = 3, bend = 544 },
+        ],
+        legend = [
+            LegendItem{ role = "external", label = "outside the daemon" },
+            LegendItem{ role = "focal", label = "the one warm copy" },
+        ],
+    };
+}

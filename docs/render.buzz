@@ -207,7 +207,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
 
     // Copy static assets the root README references (images, badges). Scoped delete-
     // then-recopy: cp -r alone wouldn't drop a since-deleted source image, so the copied
-    // files are cleared first. Preserve the committed esbuild outputs (mermaid.js,
+    // files are cleared first. Preserve the committed esbuild output (hljs.js),
     // hljs.js) - they live in gen/assets, not site.root/assets, so a blind wipe would
     // delete them on `serve` (which re-renders without rebuilding bundles); generate
     // rebuilds them afterward anyway.
@@ -219,7 +219,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // files, drop the rest", which the find invocation stated as a double negative.
     fs\mkdirAll(site.outDir + "/assets");
     foreach (name in fs\listDir(site.outDir + "/assets")) {
-        if (name != "mermaid.js" and name != "hljs.js") {
+        if (name != "hljs.js") {
             fs\removeAll(site.outDir + "/assets/" + name);
         }
     }
@@ -248,8 +248,8 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
 
     // Bundle + minify the client assets with esbuild (pinned in mise.toml). Two outputs:
     // theme.js (head-critical, no imports so no bundle) and main.js (the deferred bundle
-    // of every feature module). mermaid is a lazy dynamic import() of the same-origin
-    // gen/assets/mermaid.js bundle (built by build-mermaid); esbuild leaves dynamic
+    // of every feature module). hljs is a lazy dynamic import() of the same-origin
+    // gen/assets/hljs.js bundle (built by build-hljs); esbuild leaves dynamic
     // imports external. CSS is minified per-file, not bundled. Pinned esbuild ->
     // byte-stable output, so the drift gate holds.
     esbuild(["src/styles/site.css", "--minify", "--outfile=" + site.outDir + "/site.css"]);
@@ -377,7 +377,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     pruneStaleOutputs(site);
 
     // writeSiteManifest is NOT called here: generate() (magusfile.buzz) still writes
-    // gen/assets/mermaid.js and hljs.js - both served assets - AFTER site_render returns,
+    // gen/assets/hljs.js - a served asset - AFTER site_render returns,
     // so computing the manifest here would miss them. generate() calls
     // render.writeSiteManifest(site) once every write to gen/ is done.
 
@@ -427,4 +427,16 @@ export fun site_publish(root: str, docs: str, blog: str, outDir: str, targets: T
 fun generateJsBundles() > void !> any {
     proc\exec("pnpm", ["install", "--frozen-lockfile"], ".", {});
     proc\exec("pnpm", ["run", "build"], ".", {});
+}
+
+// site_diagrams writes the committed light/dark SVG pair for the magusfile's
+// diagrams-generate target, forwarding to engine/page, which owns the registry import.
+export fun site_diagrams(dir: str) > void !> any {
+    writeDiagramPair(dir);
+}
+
+// site_diagram_drift forwards the diagram-to-code check, for the same reason
+// site_diagrams does: engine/page owns the single import of the registry.
+export fun site_diagram_drift(root: str, sourceGlobs: [str]) > [str] !> any {
+    return diagramDrift(root, sourceGlobs);
 }

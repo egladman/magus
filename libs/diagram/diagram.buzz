@@ -1,0 +1,1232 @@
+// lib/diagram.buzz - declarative architecture diagrams rendered to SVG at build time.
+//
+// Diagrams are authored as data (nodes with explicit coordinates, edges with explicit
+// attach points) and emitted as SVG. There is no layout engine: placement is the author's
+// job, which is the same bargain the diagram-design skill makes and the reason its output
+// reads better than an auto-packed graph. What this module supplies is the design system -
+// tokens, type ramp, node treatments, orthogonal connectors - plus a validator that turns
+// the skill's non-negotiable rules into a build failure.
+//
+// Two palettes, one geometry. cssVarPalette() emits `var(--magus-diagram-*)` so an SVG
+// inlined into a docs page follows the site's manual theme toggle; lightPalette() and
+// darkPalette() resolve to hex for the standalone files GitHub loads through <img>, which
+// is its own document and can never read the page's CSS.
+namespace diagram;
+
+import "std";
+import "assert";
+
+// escapeSvg makes s safe as SVG text or as a double-quoted attribute value. lib/text has
+// an escapeAttr that does the same job, but importing it does not bind when this module is
+// reached through the magusfile's graph rather than run directly, and a renderer with no
+// cross-module dependency is worth more here than three deduplicated lines.
+fun escapeSvg(s: str) > str {
+    return s.replace("&", "&amp;").replace("\"", "&quot;").replace("<", "&lt;").replace(">", "&gt;");
+}
+
+// Grid is the hard rule from the design system: every authored coordinate, size and gap is
+// divisible by 4. Derived values (edge attach points, label masks) are rounded onto it.
+final Grid = 4;
+
+// Budgets. Exceeding one means the diagram is trying to be two diagrams.
+final MaxNodes = 9;
+final MaxEdges = 12;
+final MaxAccent = 2;
+
+// HeaderPad is the band a title reserves above the figure. Content keeps its authored
+// coordinates and the whole group is translated down by this much, so a diagram never has
+// to leave room for its own heading by hand - volatility once put its first node four
+// pixels under the title, and every other diagram was guessing at the clearance.
+final HeaderPad = 40;
+
+// Corner radius for connector bends. Clamped down when a segment is too short to seat it.
+final BendRadius = 8;
+
+// Palette carries the nine semantic roles every diagram draws from. Values are whatever the
+// SVG `fill`/`stroke` attributes accept, so a palette is either resolved hex or CSS vars.
+export object Palette {
+    paper: str = "",        // page ground, and the opaque mask under every node
+    surface: str = "",      // default node fill
+    ink: str = "",          // primary text
+    muted: str = "",        // secondary text, default connector stroke
+    soft: str = "",         // sublabels, connector labels
+    rule: str = "",         // hairlines, node and zone borders
+    accent: str = "",       // focal treatment, 2 elements max
+    accentTint: str = "",   // fill behind an accent border
+    link: str = "",         // external and over-the-wire connectors
+}
+
+// cssVarPalette drives the diagram from custom properties defined in site.css, which map
+// onto Pico's own variables. Only valid for an SVG inlined into the page; an <img>-loaded
+// SVG resolves these against nothing and falls back to the hardcoded light values.
+export fun cssVarPalette() > Palette {
+    final l = lightPalette();
+    return Palette{
+        paper      = "var(--magus-diagram-paper, " + l.paper + ")",
+        surface    = "var(--magus-diagram-surface, " + l.surface + ")",
+        ink        = "var(--magus-diagram-ink, " + l.ink + ")",
+        muted      = "var(--magus-diagram-muted, " + l.muted + ")",
+        soft       = "var(--magus-diagram-soft, " + l.soft + ")",
+        rule       = "var(--magus-diagram-rule, " + l.rule + ")",
+        accent     = "var(--magus-diagram-accent, " + l.accent + ")",
+        accentTint = "var(--magus-diagram-accent-tint, " + l.accentTint + ")",
+        link       = "var(--magus-diagram-link, " + l.link + ")",
+    };
+}
+
+// lightPalette and darkPalette mirror the site's Pico theme resolved to hex, for the
+// standalone .svg pair. Keep these in step with the --magus-diagram-* block in site.css:
+// a reader toggling the site theme sees the CSS vars, a reader on GitHub sees these.
+export fun lightPalette() > Palette {
+    return Palette{
+        paper = "#ffffff", surface = "#f3f4f6", ink = "#373c44", muted = "#646b79",
+        soft = "#7b8495", rule = "#dce3eb", accent = "#bc4c00",
+        accentTint = "rgba(188,76,0,0.08)", link = "#2e5aa8",
+    };
+}
+
+export fun darkPalette() > Palette {
+    return Palette{
+        paper = "#13171f", surface = "#1b1f29", ink = "#c2c7d0", muted = "#7b8495",
+        soft = "#6b7383", rule = "#202632", accent = "#f08a59",
+        accentTint = "rgba(240,138,89,0.10)", link = "#6a95d8",
+    };
+}
+
+// Node is one box. Role selects the fill/stroke treatment; sub and tag are optional and
+// render in mono, since they carry technical content (ports, packages, protocols).
+//
+// Roles: "default", "focal" (accent, 2 max per diagram), "store" (a persistent thing),
+// "external" (outside the boundary), "optional" (dashed), "decision" (a diamond; its
+// vertices are the only points on the shape, so it takes one connector per side).
+export object Node {
+    id: str = "",
+    label: str = "",
+    sub: str = "",
+    tag: str = "",
+    role: str = "default",
+    // Workspace-relative path this box claims to depict. Checked at build time: when the
+    // package is renamed or deleted the diagram fails rather than quietly describing a
+    // tree that no longer exists. Empty means the box depicts no single place in the code
+    // (an external actor, a decision), which is legitimate and not an omission.
+    anchor: str = "",
+    x: int = 0,
+    y: int = 0,
+    w: int = 160,
+    h: int = 56,
+}
+
+// Edge is one connector. Sides and slots are explicit because the design system forbids two
+// connectors sharing an attach point: slot k of n sits at k/(n+1) along the edge, so an
+// author declaring slot 1 of 2 and slot 2 of 2 gets them fanned without computing offsets.
+//
+// side: "auto" | "left" | "right" | "top" | "bottom". kind: "default" | "accent" | "link".
+// bend is the coordinate of the crossing segment (x for a horizontal route, y for a
+// vertical one); 0 means halfway between the two attach points.
+export object Edge {
+    src: str = "",
+    dst: str = "",
+    label: str = "",
+    kind: str = "default",
+    dashed: bool = false,
+    srcSide: str = "auto",
+    dstSide: str = "auto",
+    srcSlot: int = 1,
+    srcSlots: int = 1,
+    dstSlot: int = 1,
+    dstSlots: int = 1,
+    bend: int = 0,
+}
+
+// Zone is a labelled container drawn behind the nodes it groups. Zones are painted first,
+// so a connector label may overlap one safely.
+export object Zone {
+    label: str = "",
+    x: int = 0,
+    y: int = 0,
+    w: int = 0,
+    h: int = 0,
+}
+
+// LegendItem is one entry in the bottom strip. It names a node role rather than a color so
+// the swatch resolves through the palette: a literal hex here would light up white on the
+// dark variant, since the two palettes are rendered from the same authored source.
+export object LegendItem {
+    role: str = "default",
+    label: str = "",
+}
+
+// Diagram is the whole figure. id namespaces the SVG's marker ids: several diagrams inlined
+// into one page share a document id space, and duplicate marker ids silently repoint every
+// arrowhead at the first definition.
+export object Diagram {
+    id: str = "",
+    // Set by layered(): the node and edge budgets exist to stop a HAND-authored figure
+    // growing past what a reader can hold, and a graph computed from the workspace has no
+    // author to push back on. Every structural check still applies.
+    generated: bool = false,
+    title: str = "",
+    eyebrow: str = "",
+    desc: str = "",
+    width: int = 960,
+    height: int = 600,
+    zones: [Zone] = [<Zone>],
+    nodes: [Node] = [<Node>],
+    edges: [Edge] = [<Edge>],
+    legend: [LegendItem] = [<LegendItem>],
+}
+
+fun iabs(n: int) > int {
+    if (n < 0) { return 0 - n; }
+    return n;
+}
+
+fun isign(n: int) > int {
+    if (n > 0) { return 1; }
+    if (n < 0) { return 0 - 1; }
+    return 0;
+}
+
+fun imin(a: int, b: int) > int {
+    if (a < b) { return a; }
+    return b;
+}
+
+// snap rounds onto the 4px grid. Applied to derived geometry only; an authored coordinate
+// that misses the grid is a validation error rather than something to silently fix.
+fun snap(n: int) > int {
+    final r = n % Grid;
+    if (r == 0) { return n; }
+    if (r < 0) { return n - r; }
+    return n - r;
+}
+
+fun onGrid(n: int) > bool {
+    return n % Grid == 0;
+}
+
+// findNode returns the node with id, or null when the edge names something that is not
+// there. validate reports that; render treats it as unreachable.
+fun findNode(d: Diagram, id: str) > Node? {
+    foreach (n in d.nodes) {
+        if (n.id == id) { return n; }
+    }
+    return null;
+}
+
+fun isDecision(d: Diagram, id: str) > bool {
+    final n = findNode(d, id);
+    if (n == null) { return false; }
+    return n!.role == "decision";
+}
+
+// edgeSegments returns an edge's route as axis-aligned segments, each [x1, y1, x2, y2].
+// It mirrors connectorPath's branching exactly; the two must agree, or the overlap check
+// below is validating a route nobody draws.
+fun edgeSegments(d: Diagram, e: Edge) > [[int]] {
+    final geo = edgeGeometry(d, e);
+    final x1 = geo[0];
+    final y1 = geo[1];
+    final x2 = geo[2];
+    final y2 = geo[3];
+    if (e.bend == 0 and (x1 == x2 or y1 == y2)) {
+        return [[x1, y1, x2, y2]];
+    }
+    if (geo[4] == 1) {
+        var bx = e.bend;
+        if (bx == 0) { bx = snap(x1 + (x2 - x1) / 2); }
+        return [[x1, y1, bx, y1], [bx, y1, bx, y2], [bx, y2, x2, y2]];
+    }
+    var by = e.bend;
+    if (by == 0) { by = snap(y1 + (y2 - y1) / 2); }
+    return [[x1, y1, x1, by], [x1, by, x2, by], [x2, by, x2, y2]];
+}
+
+// segmentsOverlap reports whether two axis-aligned segments run along the SAME line and
+// share more than a point. Crossing at right angles is fine and common; running on top of
+// each other is what makes two connectors impossible to tell apart.
+fun segmentsOverlap(a: [int], b: [int]) > bool {
+    final aVert = a[0] == a[2];
+    final bVert = b[0] == b[2];
+    if (aVert != bVert) { return false; }
+    if (aVert) {
+        if (a[0] != b[0]) { return false; }
+        return overlapLen(a[1], a[3], b[1], b[3]) > 0;
+    }
+    if (a[1] != b[1]) { return false; }
+    return overlapLen(a[0], a[2], b[0], b[2]) > 0;
+}
+
+// overlapLen measures the shared extent of two 1-D spans, each given in either order.
+fun overlapLen(p1: int, p2: int, q1: int, q2: int) > int {
+    var lo1 = p1;
+    var hi1 = p2;
+    if (lo1 > hi1) { lo1 = p2; hi1 = p1; }
+    var lo2 = q1;
+    var hi2 = q2;
+    if (lo2 > hi2) { lo2 = q2; hi2 = q1; }
+    var lo = lo1;
+    if (lo2 > lo) { lo = lo2; }
+    var hi = hi1;
+    if (hi2 < hi) { hi = hi2; }
+    return hi - lo;
+}
+
+// overlappingConnectors reports each pair of edges that share a stroke line. Runs on
+// generated layouts too: automatic placement is exactly where this goes wrong unnoticed.
+fun overlappingConnectors(d: Diagram) > [str] {
+    final errs: mut [str] = mut [<str>];
+    var i = 0;
+    while (i < d.edges.len()) {
+        var j = i + 1;
+        while (j < d.edges.len()) {
+            final a = d.edges[i];
+            final b = d.edges[j];
+            var found = false;
+            foreach (sa in edgeSegments(d, a)) {
+                foreach (sb in edgeSegments(d, b)) {
+                    if (segmentsOverlap(sa, sb)) { found = true; }
+                }
+            }
+            if (found) {
+                errs.append("connectors {a.src}->{a.dst} and {b.src}->{b.dst} run along the same line; offset one of their bends");
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+    return errs;
+}
+
+// validate returns one message per broken rule, empty when the diagram is sound. These are
+// the design system's non-negotiables plus the structural ones a renderer cannot paper
+// over: an edge naming a missing node, two nodes occupying the same space, two connectors
+// landing on the same point of the same box.
+export fun validate(d: Diagram) > [str] {
+    final errs: mut [str] = mut [<str>];
+
+    if (d.id == "") { errs.append("diagram has no id; marker ids would collide when inlined"); }
+    if (d.generated == false and d.nodes.len() > MaxNodes) {
+        errs.append("{d.nodes.len()} nodes exceeds the budget of {MaxNodes}; split into overview plus detail");
+    }
+    if (d.generated == false and d.edges.len() > MaxEdges) {
+        errs.append("{d.edges.len()} edges exceeds the budget of {MaxEdges}; split into overview plus detail");
+    }
+
+    var accent = 0;
+    foreach (n in d.nodes) {
+        if (n.role == "focal") { accent = accent + 1; }
+        if (onGrid(n.x) == false or onGrid(n.y) == false or onGrid(n.w) == false or onGrid(n.h) == false) {
+            errs.append("node \"{n.id}\" is off the {Grid}px grid at {n.x},{n.y} {n.w}x{n.h}");
+        }
+        if (n.x < 0 or n.y < 0 or n.x + n.w > d.width or n.y + n.h > d.height) {
+            errs.append("node \"{n.id}\" falls outside the {d.width}x{d.height} viewBox");
+        }
+        // A tag chip, a name and a sublabel need 64px to stack without colliding.
+        if (n.tag != "" and n.sub != "" and n.h < 64) {
+            errs.append("node \"{n.id}\" stacks a tag, a name and a sublabel in {n.h}px; needs 64");
+        }
+        // Only a diamond's four vertices sit on the shape, so a fanned connector would
+        // attach to empty space beside it.
+        if (n.role == "decision" and (n.tag != "" or n.sub != "")) {
+            errs.append("decision \"{n.id}\" carries a tag or sublabel; a diamond has room for neither");
+        }
+    }
+    foreach (e in d.edges) {
+        if (e.kind == "accent") { accent = accent + 1; }
+    }
+    if (d.generated == false and accent > MaxAccent) {
+        errs.append("{accent} accent elements exceeds the budget of {MaxAccent}; the focal signal is gone");
+    }
+
+    foreach (z in d.zones) {
+        if (onGrid(z.x) == false or onGrid(z.y) == false or onGrid(z.w) == false or onGrid(z.h) == false) {
+            errs.append("zone \"{z.label}\" is off the {Grid}px grid");
+        }
+    }
+
+    var i = 0;
+    while (i < d.nodes.len()) {
+        var j = i + 1;
+        while (j < d.nodes.len()) {
+            final a = d.nodes[i];
+            final b = d.nodes[j];
+            if (a.id == b.id) { errs.append("duplicate node id \"{a.id}\""); }
+            if (a.x < b.x + b.w and b.x < a.x + a.w and a.y < b.y + b.h and b.y < a.y + a.h) {
+                errs.append("nodes \"{a.id}\" and \"{b.id}\" overlap");
+            }
+            j = j + 1;
+        }
+        i = i + 1;
+    }
+
+    foreach (e in d.edges) {
+        if (findNode(d, e.src) == null) { errs.append("edge from unknown node \"{e.src}\""); }
+        if (findNode(d, e.dst) == null) { errs.append("edge to unknown node \"{e.dst}\""); }
+        if (e.src == e.dst) { errs.append("edge from \"{e.src}\" to itself"); }
+        if (e.srcSlot < 1 or e.srcSlot > e.srcSlots) {
+            errs.append("edge {e.src}->{e.dst}: srcSlot {e.srcSlot} outside 1..{e.srcSlots}");
+        }
+        if (e.dstSlot < 1 or e.dstSlot > e.dstSlots) {
+            errs.append("edge {e.src}->{e.dst}: dstSlot {e.dstSlot} outside 1..{e.dstSlots}");
+        }
+        if (e.label.len() > 14) {
+            errs.append("edge {e.src}->{e.dst}: label \"{e.label}\" exceeds 14 characters");
+        }
+        if (isDecision(d, e.src) and e.srcSlots > 1) {
+            errs.append("edge {e.src}->{e.dst}: leaves decision \"{e.src}\" on a fanned slot, off the diamond");
+        }
+        if (isDecision(d, e.dst) and e.dstSlots > 1) {
+            errs.append("edge {e.src}->{e.dst}: enters decision \"{e.dst}\" on a fanned slot, off the diamond");
+        }
+    }
+
+    foreach (msg in sharedAttachPoints(d)) { errs.append(msg); }
+    foreach (msg in overlappingConnectors(d)) { errs.append(msg); }
+    return errs;
+}
+
+// sharedAttachPoints reports connectors that land on the same point of the same box. Two
+// edges may share a side, but only by declaring different slots of the same total.
+fun sharedAttachPoints(d: Diagram) > [str] {
+    final errs: mut [str] = mut [<str>];
+    final seen: mut [str] = mut [<str>];
+    foreach (e in d.edges) {
+        final a = attachKey(d, e, true);
+        final b = attachKey(d, e, false);
+        foreach (k in seen) {
+            if (k == a) { errs.append("two connectors share the attach point {a}; fan them with distinct slots"); }
+            if (k == b) { errs.append("two connectors share the attach point {b}; fan them with distinct slots"); }
+        }
+        seen.append(a);
+        seen.append(b);
+    }
+    return errs;
+}
+
+fun attachKey(d: Diagram, e: Edge, isFrom: bool) > str {
+    var n = e.dst;
+    var slot = e.dstSlot;
+    var slots = e.dstSlots;
+    if (isFrom) {
+        n = e.src;
+        slot = e.srcSlot;
+        slots = e.srcSlots;
+    }
+    final side = resolveSide(d, e, isFrom: isFrom);
+    return "{n}.{side}[{slot}/{slots}]";
+}
+
+// resolveSide turns "auto" into a concrete side by comparing box centers: the wider gap
+// wins, so two boxes side by side connect left-to-right rather than looping over the top.
+fun resolveSide(d: Diagram, e: Edge, isFrom: bool) > str {
+    var declared = e.dstSide;
+    if (isFrom) { declared = e.srcSide; }
+    if (declared != "auto") { return declared; }
+
+    final a = findNode(d, e.src);
+    final b = findNode(d, e.dst);
+    if (a == null or b == null) { return "right"; }
+    final ax = a!.x + a!.w / 2;
+    final ay = a!.y + a!.h / 2;
+    final bx = b!.x + b!.w / 2;
+    final by = b!.y + b!.h / 2;
+
+    if (iabs(bx - ax) >= iabs(by - ay)) {
+        if (bx >= ax) {
+            if (isFrom) { return "right"; }
+            return "left";
+        }
+        if (isFrom) { return "left"; }
+        return "right";
+    }
+    if (by >= ay) {
+        if (isFrom) { return "bottom"; }
+        return "top";
+    }
+    if (isFrom) { return "top"; }
+    return "bottom";
+}
+
+// attachPoint places connector k of n along a box edge at k/(n+1), snapped to the grid, so
+// connectors sharing a side stay independently traceable.
+fun attachPoint(n: Node, side: str, slot: int, slots: int) > [int] {
+    final fx = n.x + snap(n.w * slot / (slots + 1));
+    final fy = n.y + snap(n.h * slot / (slots + 1));
+    if (side == "left") { return [n.x, fy]; }
+    if (side == "right") { return [n.x + n.w, fy]; }
+    if (side == "top") { return [fx, n.y]; }
+    return [fx, n.y + n.h];
+}
+
+// connectorPath emits an orthogonal route with rounded bends. Diagonals are not
+// representable here by construction, which is how the "no diagonal connectors" rule is
+// enforced rather than merely documented.
+//
+// A horizontal route leaves and enters on the left/right sides and crosses on a vertical
+// segment at x = bend; a vertical route is the transpose. When the two points already share
+// an axis the route degenerates to a straight line and no bend is drawn.
+fun connectorPath(x1: int, y1: int, x2: int, y2: int, horizontal: bool, bend: int) > str {
+    // A shared axis collapses to a straight line only when no detour was asked for. A
+    // return leg (bottom to bottom, say) shares its y with its own source, and taking the
+    // shortcut there drew the connector straight through both boxes, where the nodes then
+    // painted over it.
+    if (bend == 0 and (x1 == x2 or y1 == y2)) {
+        return "M {x1} {y1} L {x2} {y2}";
+    }
+
+    if (horizontal) {
+        var bx = bend;
+        if (bx == 0) { bx = snap(x1 + (x2 - x1) / 2); }
+        // Clamp the radius so a short leg cannot make the two quarter-rounds overlap and
+        // bow the connector back on itself.
+        final r = imin(BendRadius, imin(iabs(bx - x1), imin(iabs(x2 - bx), iabs(y2 - y1) / 2)));
+        if (r <= 0) { return "M {x1} {y1} L {bx} {y1} L {bx} {y2} L {x2} {y2}"; }
+        final sx = isign(bx - x1);
+        final sy = isign(y2 - y1);
+        final sx2 = isign(x2 - bx);
+        return "M {x1} {y1}"
+            + " L {bx - sx * r} {y1}"
+            + " Q {bx} {y1} {bx} {y1 + sy * r}"
+            + " L {bx} {y2 - sy * r}"
+            + " Q {bx} {y2} {bx + sx2 * r} {y2}"
+            + " L {x2} {y2}";
+    }
+
+    var by = bend;
+    if (by == 0) { by = snap(y1 + (y2 - y1) / 2); }
+    final r = imin(BendRadius, imin(iabs(by - y1), imin(iabs(y2 - by), iabs(x2 - x1) / 2)));
+    if (r <= 0) { return "M {x1} {y1} L {x1} {by} L {x2} {by} L {x2} {y2}"; }
+    final sy = isign(by - y1);
+    final sx = isign(x2 - x1);
+    final sy2 = isign(y2 - by);
+    return "M {x1} {y1}"
+        + " L {x1} {by - sy * r}"
+        + " Q {x1} {by} {x1 + sx * r} {by}"
+        + " L {x2 - sx * r} {by}"
+        + " Q {x2} {by} {x2} {by + sy2 * r}"
+        + " L {x2} {y2}";
+}
+
+// nodeFill and nodeStroke implement the role-to-treatment table. Roles the table does not
+// name fall back to the default treatment rather than failing: validate is where an
+// unknown role should be caught, not the painter.
+fun nodeFill(role: str, p: Palette) > str {
+    if (role == "focal") { return p.accentTint; }
+    if (role == "store" or role == "external") { return p.paper; }
+    return p.surface;
+}
+
+fun nodeStroke(role: str, p: Palette) > str {
+    if (role == "focal") { return p.accent; }
+    if (role == "external" or role == "optional") { return p.soft; }
+    return p.rule;
+}
+
+fun edgeStroke(kind: str, p: Palette) > str {
+    if (kind == "accent") { return p.accent; }
+    if (kind == "link") { return p.link; }
+    return p.muted;
+}
+
+// renderSvg paints the diagram and throws a joined validation report when any rule is
+// broken, so a malformed diagram fails the docs build instead of shipping crooked.
+//
+// Paint order is load-bearing: zones, then connectors and their labels, then nodes, then
+// the legend. Connectors go under nodes so a stroke cannot cross a box face, and nodes go
+// over labels so a mask that strays onto a box is hidden rather than clipped mid-glyph.
+export fun renderSvg(d: Diagram, p: Palette) > str !> str {
+    final errs = validate(d);
+    if (errs.len() > 0) {
+        throw "diagram \"{d.id}\": " + errs.join("; ");
+    }
+
+    // A heading gets its own band and the content is translated beneath it, so authored
+    // coordinates describe the figure alone.
+    var pad = 0;
+    if (d.title != "" or d.eyebrow != "") { pad = HeaderPad; }
+    final total = d.height + pad;
+    var svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {d.width} {total}\""
+        + " width=\"{d.width}\" height=\"{total}\" role=\"img\""
+        + " aria-labelledby=\"{d.id}-title {d.id}-desc\" class=\"magus-diagram\">";
+    svg = svg + "<title id=\"{d.id}-title\">" + escapeSvg(d.title) + "</title>";
+    svg = svg + "<desc id=\"{d.id}-desc\">" + escapeSvg(d.desc) + "</desc>";
+    svg = svg + renderMarkers(d, p);
+    svg = svg + "<rect width=\"100%\" height=\"100%\" fill=\"{p.paper}\"/>";
+    svg = svg + renderHeader(d, p);
+    svg = svg + "<g transform=\"translate(0,{pad})\">";
+    foreach (z in d.zones) { svg = svg + renderZone(z, p); }
+    foreach (e in d.edges) { svg = svg + renderEdge(d, e, p); }
+    foreach (e in d.edges) { svg = svg + renderEdgeLabel(d, e, p); }
+    foreach (n in d.nodes) { svg = svg + renderNode(n, p); }
+    svg = svg + renderLegend(d, p);
+    svg = svg + "</g>";
+    return svg + "</svg>";
+}
+
+// renderMarkers defines one arrowhead per connector kind. All three are always emitted:
+// an arrowhead referencing a marker that was not defined renders as a bare line, and which
+// kinds a diagram uses is not worth tracking to save 200 bytes.
+fun renderMarkers(d: Diagram, p: Palette) > str {
+    var svg = "<defs>";
+    final kinds = ["default", "accent", "link"];
+    foreach (k in kinds) {
+        svg = svg + "<marker id=\"{d.id}-arrow-{k}\" markerWidth=\"8\" markerHeight=\"6\""
+            + " refX=\"7\" refY=\"3\" orient=\"auto\">"
+            + "<polygon points=\"0 0, 8 3, 0 6\" fill=\"" + edgeStroke(k, p) + "\"/></marker>";
+    }
+    return svg + "</defs>";
+}
+
+fun renderHeader(d: Diagram, p: Palette) > str {
+    var svg = "";
+    if (d.eyebrow != "") {
+        svg = svg + "<text x=\"32\" y=\"32\" fill=\"{p.soft}\" font-size=\"8\""
+            + " font-family=\"var(--pico-font-family-monospace, monospace)\" style=\"font-variant-ligatures:none\""
+            + " letter-spacing=\"0.18em\">" + escapeSvg(d.eyebrow.upper()) + "</text>";
+    }
+    if (d.title != "") {
+        svg = svg + "<text x=\"32\" y=\"60\" fill=\"{p.ink}\" font-size=\"20\" font-weight=\"600\""
+            + " font-family=\"var(--pico-font-family, sans-serif)\">"
+            + escapeSvg(d.title) + "</text>";
+    }
+    return svg;
+}
+
+fun renderZone(z: Zone, p: Palette) > str {
+    var svg = "<rect x=\"{z.x}\" y=\"{z.y}\" width=\"{z.w}\" height=\"{z.h}\" rx=\"8\""
+        + " fill=\"none\" stroke=\"{p.rule}\" stroke-width=\"1\" stroke-dasharray=\"4,4\"/>";
+    if (z.label != "") {
+        svg = svg + "<text x=\"{z.x + 12}\" y=\"{z.y + 20}\" fill=\"{p.soft}\" font-size=\"8\""
+            + " font-family=\"var(--pico-font-family-monospace, monospace)\" style=\"font-variant-ligatures:none\""
+            + " letter-spacing=\"0.14em\">" + escapeSvg(z.label.upper()) + "</text>";
+    }
+    return svg;
+}
+
+// renderDecision paints the diamond. The label sits on the centre line rather than the
+// stacked layout a box uses: a diamond's widest run is its middle, so a two-line stack
+// would push text out past the sloping sides.
+fun renderDecision(n: Node, p: Palette) > str {
+    final cx = n.x + n.w / 2;
+    final cy = n.y + n.h / 2;
+    final pts = "{cx},{n.y} {n.x + n.w},{cy} {cx},{n.y + n.h} {n.x},{cy}";
+    var svg = "<polygon points=\"" + pts + "\" fill=\"{p.paper}\"/>";
+    svg = svg + "<polygon points=\"" + pts + "\" fill=\"" + nodeFill("default", p) + "\""
+        + " stroke=\"" + nodeStroke("default", p) + "\" stroke-width=\"1\"/>";
+    svg = svg + "<text x=\"{cx}\" y=\"{cy + 4}\" fill=\"{p.ink}\" font-size=\"12\" font-weight=\"600\""
+        + " font-family=\"var(--pico-font-family, sans-serif)\" text-anchor=\"middle\">"
+        + escapeSvg(n.label) + "</text>";
+    return svg;
+}
+
+fun renderNode(n: Node, p: Palette) > str {
+    final cx = n.x + n.w / 2;
+    // A decision is a diamond inscribed in the node box, so its vertices land exactly on
+    // the box edge midpoints attachPoint already returns. Same mask-then-shape order as a
+    // box: the opaque under-layer stops a connector routed behind it showing through.
+    if (n.role == "decision") { return renderDecision(n, p); }
+    // An opaque mask under the styled box stops a connector routed behind the node from
+    // showing through a translucent fill such as accentTint.
+    var svg = "<rect x=\"{n.x}\" y=\"{n.y}\" width=\"{n.w}\" height=\"{n.h}\" rx=\"6\" fill=\"{p.paper}\"/>";
+    var dash = "";
+    if (n.role == "optional") { dash = " stroke-dasharray=\"4,3\""; }
+    svg = svg + "<rect x=\"{n.x}\" y=\"{n.y}\" width=\"{n.w}\" height=\"{n.h}\" rx=\"6\""
+        + " fill=\"" + nodeFill(n.role, p) + "\" stroke=\"" + nodeStroke(n.role, p) + "\""
+        + " stroke-width=\"1\"" + dash + "/>";
+
+    if (n.tag != "") {
+        final tw = snap(n.tag.len() * 6 + 12);
+        svg = svg + "<rect x=\"{n.x + 8}\" y=\"{n.y + 8}\" width=\"{tw}\" height=\"12\" rx=\"2\""
+            + " fill=\"none\" stroke=\"" + nodeStroke(n.role, p) + "\" stroke-width=\"0.8\"/>"
+            + "<text x=\"{n.x + 8 + tw / 2}\" y=\"{n.y + 17}\" fill=\"{p.soft}\" font-size=\"7\""
+            + " font-family=\"var(--pico-font-family-monospace, monospace)\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
+            + " letter-spacing=\"0.08em\">" + escapeSvg(n.tag.upper()) + "</text>";
+    }
+
+    // A tag chip occupies y+8 through y+20, so a tagged node stacks its text from the top;
+    // centering it there would sit the name on the chip. Untagged nodes center as usual,
+    // with the name nudged down when there is no sublabel to balance it.
+    var ny = n.y + n.h / 2;
+    if (n.tag != "") {
+        ny = n.y + 40;
+    } else {
+        if (n.sub == "") { ny = n.y + n.h / 2 + 4; }
+    }
+    svg = svg + "<text x=\"{cx}\" y=\"{ny}\" fill=\"{p.ink}\" font-size=\"12\" font-weight=\"600\""
+        + " font-family=\"var(--pico-font-family, sans-serif)\" text-anchor=\"middle\">"
+        + escapeSvg(n.label) + "</text>";
+    if (n.sub != "") {
+        svg = svg + "<text x=\"{cx}\" y=\"{ny + 16}\" fill=\"{p.soft}\" font-size=\"9\""
+            + " font-family=\"var(--pico-font-family-monospace, monospace)\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\">"
+            + escapeSvg(n.sub) + "</text>";
+    }
+    return svg;
+}
+
+fun renderEdge(d: Diagram, e: Edge, p: Palette) > str {
+    final geo = edgeGeometry(d, e);
+    var dash = "";
+    if (e.dashed) { dash = " stroke-dasharray=\"5,4\""; }
+    return "<path d=\"" + connectorPath(geo[0], geo[1], geo[2], geo[3], geo[4] == 1, e.bend) + "\""
+        + " fill=\"none\" stroke=\"" + edgeStroke(e.kind, p) + "\" stroke-width=\"1\"" + dash
+        + " marker-end=\"url(#{d.id}-arrow-{e.kind})\"/>";
+}
+
+// edgeGeometry resolves an edge to [x1, y1, x2, y2, horizontal]. Buzz has no tuple, and a
+// five-int list beats threading five result params through the painters.
+fun edgeGeometry(d: Diagram, e: Edge) > [int] {
+    final a = findNode(d, e.src);
+    final b = findNode(d, e.dst);
+    if (a == null or b == null) { return [0, 0, 0, 0, 1]; }
+    final fromSide = resolveSide(d, e, isFrom: true);
+    final toSide = resolveSide(d, e, isFrom: false);
+    final s = attachPoint(a!, fromSide, e.srcSlot, e.srcSlots);
+    final t = attachPoint(b!, toSide, e.dstSlot, e.dstSlots);
+    final horizontal = fromSide == "left" or fromSide == "right";
+    var h = 0;
+    if (horizontal) { h = 1; }
+    return [s[0], s[1], t[0], t[1], h];
+}
+
+// renderEdgeLabel places the label off the crossing segment with a 6px gap, never on the
+// stroke. Labels are painted before nodes, so one that strays onto a box is covered rather
+// than left sitting on the border as a fragment.
+fun renderEdgeLabel(d: Diagram, e: Edge, p: Palette) > str {
+    if (e.label == "") { return ""; }
+    final geo = edgeGeometry(d, e);
+    final x1 = geo[0];
+    final y1 = geo[1];
+    final x2 = geo[2];
+    final y2 = geo[3];
+    final w = snap(e.label.len() * 5 + 12);
+
+    // A straight vertical run has no horizontal segment to sit above, and the usual
+    // placement would center the opaque mask on the stroke, hiding the connector the label
+    // names. Put it beside the line instead, with the same 10px gap.
+    if (x1 == x2) {
+        final lx = x1 + 12 + w / 2;
+        final vy = snap(y1 + (y2 - y1) / 2);
+        return "<rect x=\"{lx - w / 2}\" y=\"{vy - 8}\" width=\"{w}\" height=\"12\" rx=\"2\" fill=\"{p.paper}\"/>"
+            + "<text x=\"{lx}\" y=\"{vy + 1}\" fill=\"{p.soft}\" font-size=\"8\""
+            + " font-family=\"var(--pico-font-family-monospace, monospace)\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
+            + " letter-spacing=\"0.06em\">" + escapeSvg(e.label.upper()) + "</text>";
+    }
+
+    // Center on the crossing segment: its midpoint is open canvas by construction, whereas
+    // the midpoint of the whole route can land inside either endpoint box.
+    var mx = 0;
+    var my = 0;
+    if (geo[4] == 1) {
+        mx = snap(x1 + (x2 - x1) / 2);
+        if (e.bend != 0) { mx = e.bend; }
+        my = snap(y1 + (y2 - y1) / 2);
+    } else {
+        my = snap(y1 + (y2 - y1) / 2);
+        if (e.bend != 0) { my = e.bend; }
+        mx = snap(x1 + (x2 - x1) / 2);
+    }
+    final ly = my - 14;
+
+    return "<rect x=\"{mx - w / 2}\" y=\"{ly - 8}\" width=\"{w}\" height=\"12\" rx=\"2\" fill=\"{p.paper}\"/>"
+        + "<text x=\"{mx}\" y=\"{ly + 1}\" fill=\"{p.soft}\" font-size=\"8\""
+        + " font-family=\"var(--pico-font-family-monospace, monospace)\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
+        + " letter-spacing=\"0.06em\">" + escapeSvg(e.label.upper()) + "</text>";
+}
+
+// renderLegend draws the strip below the figure. The design system puts it outside the
+// diagram area, so callers size the viewBox with 60px of room at the bottom.
+fun renderLegend(d: Diagram, p: Palette) > str {
+    if (d.legend.len() == 0) { return ""; }
+    final y = d.height - 32;
+    var svg = "<line x1=\"32\" y1=\"{y - 16}\" x2=\"{d.width - 32}\" y2=\"{y - 16}\""
+        + " stroke=\"{p.rule}\" stroke-width=\"0.8\"/>";
+    var x = 32;
+    foreach (item in d.legend) {
+        svg = svg + "<rect x=\"{x}\" y=\"{y - 8}\" width=\"10\" height=\"10\" rx=\"2\""
+            + " fill=\"" + nodeFill(item.role, p) + "\" stroke=\"" + nodeStroke(item.role, p)
+            + "\" stroke-width=\"0.8\"/>"
+            + "<text x=\"{x + 18}\" y=\"{y + 1}\" fill=\"{p.soft}\" font-size=\"8\""
+            + " font-family=\"var(--pico-font-family-monospace, monospace)\" style=\"font-variant-ligatures:none\""
+            + " letter-spacing=\"0.06em\">" + escapeSvg(item.label.upper()) + "</text>";
+        x = x + 160;
+    }
+    return svg;
+}
+
+// twoBox is the smallest sound diagram: two boxes on one row, one connector between them.
+// Tests mutate a copy of it so each one states only the rule it is about.
+fun twoBox() > Diagram {
+    return Diagram{
+        id = "t",
+        title = "Two boxes",
+        desc = "a and b",
+        width = 480,
+        height = 240,
+        nodes = [
+            Node{ id = "a", label = "A", x = 32, y = 112, w = 160, h = 56 },
+            Node{ id = "b", label = "B", x = 288, y = 112, w = 160, h = 56 },
+        ],
+        edges = [ Edge{ src = "a", dst = "b" } ],
+    };
+}
+
+test "a well-formed diagram validates clean" {
+    assert\equal(validate(twoBox()).len(), 0, "no findings on the reference diagram");
+}
+
+test "authored coordinates must sit on the grid" {
+    final d = twoBox();
+    final bad = Diagram{
+        id = d.id, width = d.width, height = d.height,
+        nodes = [ Node{ id = "a", label = "A", x = 33, y = 80, w = 160, h = 56 } ],
+    };
+    assert\equal(validate(bad).len(), 1, "x=33 is off the 4px grid");
+}
+
+test "overlapping nodes are a finding" {
+    final bad = Diagram{
+        id = "t", width = 480, height = 240,
+        nodes = [
+            Node{ id = "a", label = "A", x = 32, y = 112, w = 160, h = 56 },
+            Node{ id = "b", label = "B", x = 96, y = 112, w = 160, h = 56 },
+        ],
+    };
+    assert\equal(validate(bad).len(), 1, "b starts inside a");
+}
+
+test "an edge naming a missing node is a finding" {
+    final bad = Diagram{
+        id = "t", width = 480, height = 240,
+        nodes = [ Node{ id = "a", label = "A", x = 32, y = 112, w = 160, h = 56 } ],
+        edges = [ Edge{ src = "a", dst = "ghost" } ],
+    };
+    assert\equal(validate(bad).len(), 1, "ghost is not a node");
+}
+
+// The rule this pins is the one that makes a diagram unreadable rather than merely ugly:
+// two connectors landing on the same point of the same box cannot be told apart.
+test "two connectors on one attach point are a finding" {
+    final bad = Diagram{
+        id = "t", width = 640, height = 320,
+        nodes = [
+            Node{ id = "a", label = "A", x = 32, y = 112, w = 160, h = 56 },
+            Node{ id = "b", label = "B", x = 400, y = 112, w = 160, h = 56 },
+            Node{ id = "c", label = "C", x = 400, y = 224, w = 160, h = 56 },
+        ],
+        edges = [
+            Edge{ src = "a", dst = "b", srcSide = "right" },
+            Edge{ src = "a", dst = "c", srcSide = "right" },
+        ],
+    };
+    std\assert(validate(bad).len() > 0, message: "both edges leave a.right at slot 1 of 1");
+}
+
+test "fanning the same side with distinct slots validates clean" {
+    final good = Diagram{
+        id = "t", width = 640, height = 320,
+        nodes = [
+            Node{ id = "a", label = "A", x = 32, y = 112, w = 160, h = 56 },
+            Node{ id = "b", label = "B", x = 400, y = 112, w = 160, h = 56 },
+            Node{ id = "c", label = "C", x = 400, y = 224, w = 160, h = 56 },
+        ],
+        edges = [
+            Edge{ src = "a", dst = "b", srcSide = "right", srcSlot = 1, srcSlots = 2 },
+            Edge{ src = "a", dst = "c", srcSide = "right", srcSlot = 2, srcSlots = 2 },
+        ],
+    };
+    assert\equal(validate(good).len(), 0, "distinct slots on one side are fine");
+}
+
+test "attachPoint spreads slots along the edge" {
+    final n = Node{ id = "a", label = "A", x = 0, y = 0, w = 160, h = 60 };
+    final one = attachPoint(n, "right", 1, 2);
+    final two = attachPoint(n, "right", 2, 2);
+    assert\equal(one[0], 160, "both leave the right face");
+    assert\equal(two[0], 160, "both leave the right face");
+    std\assert(one[1] != two[1], message: "slot 1 of 2 and slot 2 of 2 are distinct points");
+}
+
+// Connectors are orthogonal by construction. A shared axis must degenerate to a straight
+// line rather than emit a bend, and a route across both axes must cross on a single
+// segment, which is what keeps a diagonal unrepresentable.
+test "a shared axis routes straight" {
+    assert\equal(connectorPath(0, 40, 200, 40, true, 0), "M 0 40 L 200 40", "same y");
+    assert\equal(connectorPath(40, 0, 40, 200, false, 0), "M 40 0 L 40 200", "same x");
+}
+
+test "a two-axis route bends on one crossing segment" {
+    final path = connectorPath(0, 0, 200, 120, true, 100);
+    std\assert(path.startsWith("M 0 0"), message: "starts at the source attach point");
+    std\assert(path.endsWith("L 200 120"), message: "ends at the destination attach point");
+    std\assert(path.indexOf("Q") != null, message: "corners are rounded, not mitred");
+}
+
+test "marker ids are namespaced by diagram id" {
+    final svg = renderSvg(twoBox(), lightPalette()) catch "threw";
+    std\assert(svg.indexOf("id=\"t-arrow-default\"") != null, message: "marker id carries the diagram id");
+    std\assert(svg.indexOf("url(#t-arrow-default)") != null, message: "the edge references it");
+}
+
+test "an invalid diagram fails the render rather than shipping crooked" {
+    final bad = Diagram{
+        id = "t", width = 480, height = 240,
+        nodes = [ Node{ id = "a", label = "A", x = 33, y = 80, w = 160, h = 56 } ],
+    };
+    final svg = renderSvg(bad, lightPalette()) catch "threw";
+    assert\equal(svg, "threw", "renderSvg throws on a validation finding");
+}
+
+// inlineDiagrams swaps a diagram reference in rendered HTML for the SVG itself, keyed by
+// diagram id. Inlining is what makes a diagram follow the site's manual theme toggle: an
+// <img>-loaded SVG is a separate document and can only ever see prefers-color-scheme.
+//
+// Two reference forms are recognized, because the two audiences need different markup.
+// A docs page carries `<!--diagram:id-->`, which GitHub renders as nothing and goldmark
+// passes through untouched. The README carries a real <picture> so GitHub shows the
+// committed pair, and the docs home page (which is the README) still gets the inline copy.
+export fun inlineDiagrams(html: str, svgById: {str: str}) > str {
+    var page = html;
+    foreach (id in svgById.keys()) {
+        final svg = svgById[id] ?? "";
+        final figure = "<figure class=\"magus-diagram-figure\">" + svg + "</figure>";
+        page = page.split("<!--diagram:" + id + "-->").join(figure);
+        page = replacePicture(page, "diagram-" + id + ".svg", figure);
+    }
+    return page;
+}
+
+// replacePicture rewrites each <picture> element whose markup mentions needle. Scanning for
+// the element bounds beats a regex here: the srcset and img inside carry attributes in no
+// fixed order, and a <picture> that does not mention the needle has to survive untouched.
+fun replacePicture(html: str, needle: str, replacement: str) > str {
+    var done = "";
+    var page = html;
+    var guard = 0;
+    while (guard < 64) {
+        final start = page.indexOf("<picture");
+        if (start == null) { return done + page; }
+        final rest = page.sub(start!);
+        final close = rest.indexOf("</picture>");
+        if (close == null) { return done + page; }
+        final element = rest.sub(0, len: close! + 10);
+        if (element.indexOf(needle) != null) {
+            return done + page.sub(0, len: start!) + replacement + rest.sub(close! + 10);
+        }
+        // Carry this one through and keep scanning. Returning on the first miss skipped
+        // every diagram that followed an unrelated <picture>, and the README opens with
+        // one: the hero terminal recording.
+        done = done + page.sub(0, len: start!) + element;
+        page = rest.sub(close! + 10);
+        guard = guard + 1;
+    }
+    return done + page;
+}
+
+test "a comment marker is replaced by the svg" {
+    final page = inlineDiagrams("<p>before</p>\n<!--diagram:x-->\n<p>after</p>", {"x": "<svg/>"});
+    std\assert(page.indexOf("<svg/>") != null, message: "the svg landed");
+    std\assert(page.indexOf("<!--diagram:x-->") == null, message: "the marker is gone");
+    std\assert(page.indexOf("<p>after</p>") != null, message: "surrounding content survives");
+}
+
+test "a picture element referencing the diagram is replaced whole" {
+    final markup = "<p>a</p><picture><source srcset=\"assets/gen/diagram-x-light.svg\">"
+        + "<img src=\"assets/gen/diagram-x.svg\" alt=\"x\"></picture><p>b</p>";
+    final page = inlineDiagrams(markup, {"x": "<svg/>"});
+    std\assert(page.indexOf("<picture") == null, message: "the whole element is replaced");
+    std\assert(page.indexOf("<img") == null, message: "the fallback img goes with it");
+    std\assert(page.indexOf("<svg/>") != null, message: "the svg landed");
+    std\assert(page.indexOf("<p>b</p>") != null, message: "surrounding content survives");
+}
+
+test "an unrelated picture is left alone" {
+    final markup = "<picture><img src=\"assets/gen/core-loop.svg\" alt=\"a recording\"></picture>";
+    assert\equal(inlineDiagrams(markup, {"x": "<svg/>"}), markup, "a terminal recording is not a diagram");
+}
+
+test "a diagram picture is found after an unrelated one" {
+    final markup = "<picture><img src=\"assets/gen/core-loop.svg\" alt=\"a recording\"></picture>"
+        + "<p>mid</p><picture><img src=\"docs/assets/gen/diagram-x.svg\" alt=\"x\"></picture>";
+    final page = inlineDiagrams(markup, {"x": "<svg/>"});
+    std\assert(page.indexOf("core-loop.svg") != null, message: "the recording survives");
+    std\assert(page.indexOf("diagram-x.svg") == null, message: "the diagram is replaced");
+    std\assert(page.indexOf("<p>mid</p>") != null, message: "content between them survives");
+}
+
+test "an explicit bend beats the shared-axis shortcut" {
+    // Both ends on y=224, detouring via y=288: a straight line here would run back through
+    // the boxes it connects.
+    final path = connectorPath(772, 224, 180, 224, false, 288);
+    std\assert(path.indexOf("288") != null, message: "the route reaches the declared bend");
+    std\assert(path != "M 772 224 L 180 224", message: "not the straight shortcut");
+}
+
+test "a shared axis with no bend still routes straight" {
+    assert\equal(connectorPath(0, 40, 200, 40, true, 0), "M 0 40 L 200 40", "unchanged");
+}
+
+// LayeredItem is one node handed to layered(): an id, its display label, and the ids it
+// depends on. Edges are declared by the dependent, matching how a dependency graph is
+// usually held.
+export object LayeredItem {
+    id: str = "",
+    label: str = "",
+    deps: [str] = [<str>],
+}
+
+// Layout constants for the generated form. Wider columns than an authored figure uses,
+// because a generated label is a project or target name nobody shortened for the picture.
+final LayerNodeW = 216;
+final LayerNodeH = 56;
+final LayerColGap = 72;
+final LayerRowGap = 24;
+final LayerTop = 64;
+
+// LayerMaxChars is what fits across a generated node at the 12px body size. A project
+// path longer than that is truncated from the FRONT: the tail (the project's own name) is
+// what distinguishes it, and "docs/guides/integrations/agents" overflowed its box.
+final LayerMaxChars = 32;
+
+fun fitLabel(label: str) > str {
+    if (label.len() <= LayerMaxChars) { return label; }
+    return "..." + label.sub(label.len() - LayerMaxChars + 3);
+}
+
+// layered turns a dependency DAG into a Diagram: rank by longest path from the roots, one
+// column per rank, and the ranks left to right so every edge points forward.
+//
+// This is the ONLY automatic placement in the module, and it is deliberately the dumbest
+// thing that works: no crossing minimisation, no barycentre passes. It exists because the
+// workspace's own dependency graph has no author to place it, and it stays honest by
+// staying small - callers cap the node count and fall back to the table above the figure.
+
+// LayerStaggers are the per-column offsets layered() tries, in order. A single fixed value
+// cannot guarantee anything: an attach point is `node.y + h * k/(n+1)`, so two nodes at
+// different y can still land on the same one once slot counts differ, and their stubs then
+// run along each other. Rather than pretend a formula settles it, lay the graph out and
+// ASK the validator, shifting the columns until it stops complaining.
+//
+// Bounded and deterministic: same input, same answer. If nothing is clean the last attempt
+// is returned and the caller drops the figure (see dependencyFigure) rather than drawing
+// connectors nobody can trace.
+final LayerStaggers = [4, 8, 12, 16, 20, 24];
+
+export fun layered(id: str, title: str, desc: str, items: [LayeredItem]) > Diagram {
+    var best = layoutWithStagger(id, title, desc, items, LayerStaggers[0]);
+    foreach (stagger in LayerStaggers) {
+        final attempt = layoutWithStagger(id, title, desc, items, stagger);
+        if (validate(attempt).len() == 0) { return attempt; }
+        best = attempt;
+    }
+    return best;
+}
+
+fun layoutWithStagger(id: str, title: str, desc: str, items: [LayeredItem], stagger: int) > Diagram {
+    final rank: mut {str: int} = mut {<str: int>};
+    foreach (it in items) { rank[it.id] = 0; }
+
+    // Longest-path ranking. Iterating once per node is enough for a DAG: each pass pushes
+    // every node at least one rank past its dependencies, so after n passes the deepest
+    // chain has settled. A cycle simply stops moving, which keeps this total.
+    var pass = 0;
+    while (pass < items.len()) {
+        foreach (it in items) {
+            foreach (dep in it.deps) {
+                final dr = rank[dep];
+                if (dr != null and dr! + 1 > (rank[it.id] ?? 0)) {
+                    rank[it.id] = dr! + 1;
+                }
+            }
+        }
+        pass = pass + 1;
+    }
+
+    var maxRank = 0;
+    foreach (it in items) {
+        if ((rank[it.id] ?? 0) > maxRank) { maxRank = rank[it.id] ?? 0; }
+    }
+
+    // Place each node at its rank's column, stacking in declaration order so the same
+    // graph always renders the same bytes.
+    final rowOf: mut {str: int} = mut {<str: int>};
+    final used: mut {int: int} = mut {<int: int>};
+    var maxRows = 0;
+    foreach (it in items) {
+        final r = rank[it.id] ?? 0;
+        final row = used[r] ?? 0;
+        rowOf[it.id] = row;
+        used[r] = row + 1;
+        if (row + 1 > maxRows) { maxRows = row + 1; }
+    }
+
+    final nodes: mut [Node] = mut [<Node>];
+    foreach (it in items) {
+        final r = rank[it.id] ?? 0;
+        final row = rowOf[it.id] ?? 0;
+        nodes.append(Node{
+            id = it.id,
+            label = fitLabel(it.label),
+            x = 32 + r * (LayerNodeW + LayerColGap),
+            // Each column sits `stagger` px lower than the last. Without a per-column
+            // offset, ranks share row positions, so one edge's arrival y equals another's
+            // departure y and their horizontal stubs run along the same line.
+            y = LayerTop + row * (LayerNodeH + LayerRowGap) + r * stagger,
+            w = LayerNodeW,
+            h = LayerNodeH,
+        });
+    }
+
+    // Fan the attach points: count each node's outgoing and incoming edges first, then
+    // hand out slots in order, so two edges never land on one point.
+    final outOf: mut {str: int} = mut {<str: int>};
+    final inOf: mut {str: int} = mut {<str: int>};
+    // Bound to locals first: `??` binds looser than `+`, so `m[k] ?? 0 + 1` reads as
+    // `m[k] ?? 1` and the counter sticks at one, which fans nothing.
+    foreach (it in items) {
+        foreach (dep in it.deps) {
+            final o = outOf[dep] ?? 0;
+            outOf[dep] = o + 1;
+            final i = inOf[it.id] ?? 0;
+            inOf[it.id] = i + 1;
+        }
+    }
+    // Vertical channels are allocated per COLUMN GAP, not per source node. Staggering
+    // within one node's own outgoing edges left two nodes in the same column handing out
+    // the same channel x, and their verticals then ran along each other.
+    final gapTotal: mut {int: int} = mut {<int: int>};
+    foreach (it in items) {
+        foreach (dep in it.deps) {
+            final r = rank[dep] ?? 0;
+            final n = gapTotal[r] ?? 0;
+            gapTotal[r] = n + 1;
+        }
+    }
+
+    final outSeen: mut {str: int} = mut {<str: int>};
+    final inSeen: mut {str: int} = mut {<str: int>};
+    final gapSeen: mut {int: int} = mut {<int: int>};
+    final edges: mut [Edge] = mut [<Edge>];
+    foreach (it in items) {
+        foreach (dep in it.deps) {
+            final osPrev = outSeen[dep] ?? 0;
+            final inPrev = inSeen[it.id] ?? 0;
+            final os = osPrev + 1;
+            final ins = inPrev + 1;
+            outSeen[dep] = os;
+            inSeen[it.id] = ins;
+
+            final depRank = rank[dep] ?? 0;
+            final chPrev = gapSeen[depRank] ?? 0;
+            final ch = chPrev + 1;
+            gapSeen[depRank] = ch;
+            final total = gapTotal[depRank] ?? 1;
+            final srcRight = 32 + depRank * (LayerNodeW + LayerColGap) + LayerNodeW;
+            edges.append(Edge{
+                src = dep, dst = it.id,
+                srcSide = "right", dstSide = "left",
+                srcSlot = os, srcSlots = outOf[dep] ?? 1,
+                dstSlot = ins, dstSlots = inOf[it.id] ?? 1,
+                bend = srcRight + snap(LayerColGap * ch / (total + 1)),
+            });
+        }
+    }
+
+    return Diagram{
+        id = id,
+        generated = true,
+        title = title,
+        desc = desc,
+        width = 64 + (maxRank + 1) * LayerNodeW + maxRank * LayerColGap,
+        height = LayerTop + maxRows * (LayerNodeH + LayerRowGap) + 32,
+        nodes = nodes,
+        edges = edges,
+    };
+}
+
+test "layered ranks a chain into one column per step" {
+    final d = layered("t", "chain", "a to c", [
+        LayeredItem{ id = "a", label = "A" },
+        LayeredItem{ id = "b", label = "B", deps = ["a"] },
+        LayeredItem{ id = "c", label = "C", deps = ["b"] },
+    ]);
+    assert\equal(validate(d).len(), 0, "a generated layout is structurally sound");
+    assert\equal(d.nodes.len(), 3, "every item placed");
+    assert\equal(d.edges.len(), 2, "every dependency drawn");
+    // Three ranks, so three distinct columns, left to right.
+    std\assert(d.nodes[0].x < d.nodes[1].x, message: "b sits right of a");
+    std\assert(d.nodes[1].x < d.nodes[2].x, message: "c sits right of b");
+}
+
+test "layered stacks independent roots in one column" {
+    final d = layered("t", "fan", "two roots into one sink", [
+        LayeredItem{ id = "a", label = "A" },
+        LayeredItem{ id = "b", label = "B" },
+        LayeredItem{ id = "sink", label = "Sink", deps = ["a", "b"] },
+    ]);
+    assert\equal(validate(d).len(), 0, "no overlap, no shared attach point");
+    assert\equal(d.nodes[0].x, d.nodes[1].x, "both roots share rank 0");
+    std\assert(d.nodes[0].y != d.nodes[1].y, message: "and are stacked, not overlapping");
+}
+
+test "layered exceeds the authored budgets without complaint" {
+    final items: mut [LayeredItem] = mut [<LayeredItem>];
+    var i = 0;
+    while (i < 14) {
+        items.append(LayeredItem{ id = "n{i}", label = "N{i}" });
+        i = i + 1;
+    }
+    final d = layered("t", "wide", "more nodes than a human should draw", items);
+    assert\equal(validate(d).len(), 0, "budgets are for hand-authored figures only");
+}
+
+// The regression this pins: distinct attach slots are NOT enough. Two connectors can leave
+// one box at different points and still turn onto the same crossing line, which is what put
+// overlapping vertical runs in the generated run-order figures.
+test "two connectors sharing a crossing line are a finding" {
+    final bad = Diagram{
+        id = "t", width = 640, height = 400,
+        nodes = [
+            Node{ id = "a", label = "A", x = 32, y = 160, w = 160, h = 64 },
+            Node{ id = "b", label = "B", x = 400, y = 256, w = 160, h = 64 },
+            Node{ id = "c", label = "C", x = 400, y = 336, w = 160, h = 64 },
+        ],
+        edges = [
+            Edge{ src = "a", dst = "b", srcSide = "right", srcSlot = 1, srcSlots = 2,
+                  dstSide = "left", bend = 296 },
+            Edge{ src = "a", dst = "c", srcSide = "right", srcSlot = 2, srcSlots = 2,
+                  dstSide = "left", bend = 296 },
+        ],
+    };
+    std\assert(validate(bad).len() > 0, message: "both verticals run down x=296");
+}
+
+test "offsetting one bend clears the overlap" {
+    final good = Diagram{
+        id = "t", width = 640, height = 400,
+        nodes = [
+            Node{ id = "a", label = "A", x = 32, y = 160, w = 160, h = 64 },
+            Node{ id = "b", label = "B", x = 400, y = 256, w = 160, h = 64 },
+            Node{ id = "c", label = "C", x = 400, y = 336, w = 160, h = 64 },
+        ],
+        edges = [
+            Edge{ src = "a", dst = "b", srcSide = "right", srcSlot = 1, srcSlots = 2,
+                  dstSide = "left", bend = 280 },
+            Edge{ src = "a", dst = "c", srcSide = "right", srcSlot = 2, srcSlots = 2,
+                  dstSide = "left", bend = 320 },
+        ],
+    };
+    assert\equal(validate(good).len(), 0, "distinct crossing lines are traceable");
+}
+
+// The generated path has to satisfy the same rule, and it is where the defect actually
+// shipped: a fan-out is the shape every run-order figure ends in.
+test "layered fans siblings onto distinct crossing lines" {
+    final d = layered("t", "fan out", "one root, three children", [
+        LayeredItem{ id = "root", label = "Root" },
+        LayeredItem{ id = "x", label = "X", deps = ["root"] },
+        LayeredItem{ id = "y", label = "Y", deps = ["root"] },
+        LayeredItem{ id = "z", label = "Z", deps = ["root"] },
+    ]);
+    assert\equal(validate(d).len(), 0, "no two generated connectors share a line");
+}

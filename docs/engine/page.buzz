@@ -6,6 +6,7 @@
 // render.buzz and every writer module; it sits below the writers that call it.
 namespace page;
 
+import "magus";
 import "markdown";
 import "fs";
 import "io";
@@ -18,7 +19,12 @@ import "lib/text" as _;
 import "lib/url" as _;
 import "lib/html" as _;
 import "lib/glossary" as _;
+import "../libs/diagram/diagram" as _;
 import "lib/conventions" as _;
+// The single importer of the diagram registry. A module imported by two different paths
+// binds only once: the second import resolves to nothing, with no error at the import
+// site, so everything downstream fails as an undefined symbol.
+import "site/diagrams/all" as diagrams;
 import "engine/meta" as _;
 import "engine/path" as _;
 import "engine/types" as _;
@@ -560,6 +566,9 @@ export fun renderRoot(site: Site) > void !> any {
     site.addTermRefs(linkRes.linked, README_URL);
     html = linkCodeEntities(html, site.codeEntities, pageDir);
     html = injectConventionHints(html, site.conventions, relativePath(pageDir, "conventions/"));
+    // The README ships <picture> so GitHub renders the committed pair; inlining swaps it
+    // for an SVG that reads the page's CSS variables and so follows the theme toggle.
+    html = diagrams\inlinePageDiagrams(html);
 
     final fm = serialize\jsonDecode(markdown\frontmatter(md));
     var title = fm.q("title").stringValue();
@@ -659,7 +668,8 @@ export fun renderFile(rel: str, site: Site) > void !> any {
     // conventions page itself is skipped - it defines them.
     if (rel != "conventions.md") {
         html = injectConventionHints(html, site.conventions, relativePath(newCleanDirectory(rel, site), "conventions/"));
-    }
+        html = diagrams\inlinePageDiagrams(html);
+        }
 
     // If a tour step demonstrates this concept, inject a "see the demo" callout after the
     // intro, deep-linking its tour card.
@@ -731,4 +741,41 @@ test "substituteVersionTokens is a no-op before any release has shipped" {
         releases = mut [<Release>],
     };
     assert\equal(substituteVersionTokens("install __MAGUS_VERSION__", s), "install __MAGUS_VERSION__", "token left literal with no releases");
+}
+
+// writeDiagramPair re-exports the standalone writer so the magusfile can reach it through
+// render.buzz. It lives behind this module because the registry may have exactly one
+// importer, and the site render is the consumer that cannot give it up.
+export fun writeDiagramPair(dir: str) > void !> any {
+    diagrams\writeStandalonePair(dir);
+}
+
+// diagramDrift re-exports the anchor check, alongside writeDiagramPair.
+export fun diagramDrift(root: str, sourceGlobs: [str]) > [str] !> any {
+    return diagrams\verifyAnchors(root, sourceGlobs);
+}
+
+// dependencyFigure renders a generated dependency DAG as inline SVG inside the page's
+// Markdown. Goldmark passes block-level HTML through untouched, so the figure lands in the
+// flow without a fenced block or a client-side renderer.
+//
+// Capped: past CapGeneratedNodes the layered placement produces a wall of boxes nobody can
+// read, and the table immediately above already carries the same relationships. Returning
+// "" there is a deliberate omission, not a failure.
+final CapGeneratedNodes = 24;
+
+export fun dependencyFigure(id: str, title: str, items: [LayeredItem]) > str {
+    if (items.len() == 0 or items.len() > CapGeneratedNodes) { return ""; }
+    final d = layered(id, title, title, items);
+    // A validation failure here means the layout produced something unreadable (crossing
+    // channels, overlapping runs). Dropping the figure is the right outcome, but SAY so:
+    // swallowing it silently is how eight run-order figures once vanished unnoticed.
+    final findings = validate(d);
+    if (findings.len() > 0) {
+        foreach (msg in findings) { magus\log.warn("skipped diagram {id}: " + msg); }
+        return "";
+    }
+    final svg = renderSvg(d, cssVarPalette()) catch "";
+    if (svg == "") { return ""; }
+    return "\n<figure class=\"magus-diagram-figure\">" + svg + "</figure>\n";
 }

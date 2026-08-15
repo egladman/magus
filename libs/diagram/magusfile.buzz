@@ -1,0 +1,36 @@
+// magusfile.buzz for the diagram renderer at libs/diagram - the Buzz library that turns a
+// declared figure into SVG, and the validator that refuses to draw an unreadable one.
+//
+// Registered as its own first-class project for the same reason libs/textsearch is: it is
+// shared SOURCE with its own test suite, and `magus affected ci` should run that suite when
+// the library changes rather than only when a consumer happens to be rebuilt.
+//
+//   magus run test libs/diagram   run the in-file test blocks
+//   magus run ci libs/diagram     test
+//
+// There is deliberately NO build target. The library ships no artifact; docs/ imports the
+// source directly (docs/site/diagrams/*.buzz and docs/engine/page.buzz), and the committed
+// SVG pair is written by the docs project's own diagrams-generate.
+//
+// It is NOT a spell. A spell adapts an external tool and hands a project type its ops; this
+// adapts nothing and is called as a library, so libs/ is the honest home.
+import "magus";
+import "magus/spell/buzz";
+
+magus\project({
+    "spells": [buzz],
+    // The renderer is one self-contained file; its tests live in it as `test "..."` blocks.
+    "sources": ["*.buzz"],
+});
+
+// test runs the in-file test blocks. --embedded because the suite calls module-private
+// helpers (connectorPath, attachPoint) directly rather than only the exported surface -
+// the routing rules are what break, and they are not reachable from outside.
+export fun test(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.readsFiles("*.buzz");
+    magus\cmd("buzz", args: ["-t", "--embedded", "diagram.buzz"]);
+}
+
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(test);
+}

@@ -1,0 +1,59 @@
+// site/diagrams/commit-generated.buzz - whether a generated file belongs in the repo.
+// Four questions, two outcomes. The accent sits on "commit it" because that is the answer
+// that costs something later: a committed artifact needs a drift gate to stay honest,
+// while a skipped one needs nothing.
+namespace commitGenerated;
+
+import "../libs/diagram/diagram" as _;
+
+export fun commitGeneratedDiagram() > Diagram {
+    return Diagram{
+        id = "commit-generated",
+        eyebrow = "cache",
+        title = "Whether a generated file belongs in the repo",
+        desc = "A generated file is committed only when it is a pure function of committed "
+            + "sources, is not already produced by the build, is read by something that "
+            + "never runs the build, and is neither large nor churning.",
+        width = 960,
+        height = 600,
+        nodes = [
+            Node{ id = "start", label = "A target writes a file", x = 368, y = 64, w = 224, h = 56 },
+            Node{ id = "pure", label = "pure function?", role = "decision",
+                  x = 408, y = 152, w = 144, h = 72 },
+            Node{ id = "needed", label = "build makes it?", role = "decision",
+                  x = 408, y = 256, w = 144, h = 72 },
+            Node{ id = "read", label = "read unbuilt?", role = "decision",
+                  x = 408, y = 360, w = 144, h = 72 },
+            Node{ id = "churn", label = "big or churns?", role = "decision",
+                  x = 408, y = 464, w = 144, h = 72 },
+
+            Node{ id = "skip", label = "Do not commit", sub = "CI builds it",
+                  x = 64, y = 360, w = 200, h = 64 },
+            Node{ id = "commit", label = "Commit it", sub = "generate is the gate",
+                  role = "focal", x = 696, y = 360, w = 200, h = 64 },
+        ],
+        // Three connectors converge on the left outcome and two on the right. Bends step
+        // outward with distance travelled so no descending leg crosses a nearer one's run.
+        edges = [
+            Edge{ src = "start", dst = "pure" },
+            Edge{ src = "pure", dst = "needed", label = "yes" },
+            Edge{ src = "needed", dst = "read", label = "no" },
+            Edge{ src = "read", dst = "churn", label = "no" },
+
+            Edge{ src = "pure", dst = "skip", label = "no",
+                  dstSlot = 1, dstSlots = 3, bend = 304 },
+            Edge{ src = "needed", dst = "skip", label = "yes",
+                  dstSlot = 2, dstSlots = 3, bend = 320 },
+            Edge{ src = "churn", dst = "skip", label = "yes",
+                  dstSlot = 3, dstSlots = 3, bend = 336 },
+
+            Edge{ src = "read", dst = "commit", label = "yes",
+                  dstSlot = 1, dstSlots = 2, bend = 624 },
+            Edge{ src = "churn", dst = "commit", label = "no",
+                  dstSlot = 2, dstSlots = 2, bend = 648 },
+        ],
+        legend = [
+            LegendItem{ role = "focal", label = "needs a drift gate" },
+        ],
+    };
+}

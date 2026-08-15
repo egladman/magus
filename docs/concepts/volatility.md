@@ -29,20 +29,7 @@ target's history:
 If the retry passes, the outcome is recorded as volatile and the run continues. If it
 fails again, magus flags a **suspected regression** and stops treating it as noise.
 
-```mermaid
-flowchart TD
-    F[target fails] --> E{volatility detection on?}
-    E -- no --> R[report failure]
-    E -- yes --> B{enough history?}
-    B -- "no (bootstrap)" --> RT[retry once]
-    B -- yes --> S{volatility rate > threshold,<br/>or project unaffected?}
-    S -- no --> REG[suspected regression]
-    S -- yes --> RT
-    RT --> P{retry passed?}
-    P -- yes --> FL[record volatile, continue]
-    P -- no --> REG
-    REG --> BIS[chase with --bisect]
-```
+<!--diagram:volatility-->
 
 ## When it is a real regression
 
