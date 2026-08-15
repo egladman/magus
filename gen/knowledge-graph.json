@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2183,
-  "edge_count": 5712,
+  "node_count": 2188,
+  "edge_count": 5728,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -1734,7 +1734,7 @@
       "label": "plans",
       "source": "plans",
       "attrs": {
-        "dir_files": "1",
+        "dir_files": "6",
         "dir_languages": "markdown"
       }
     },
@@ -6062,10 +6062,55 @@
       }
     },
     {
+      "id": "doc:plans/attention-requests-design-note.md",
+      "kind": "doc",
+      "label": "plans/attention-requests-design-note.md",
+      "source": "plans/attention-requests-design-note.md",
+      "attrs": {
+        "role": "doc"
+      }
+    },
+    {
+      "id": "doc:plans/delegation-and-diff-surface-execution-2026-08-15.md",
+      "kind": "doc",
+      "label": "plans/delegation-and-diff-surface-execution-2026-08-15.md",
+      "source": "plans/delegation-and-diff-surface-execution-2026-08-15.md",
+      "attrs": {
+        "role": "doc"
+      }
+    },
+    {
+      "id": "doc:plans/delegation-lessons-from-deepseek-harness.md",
+      "kind": "doc",
+      "label": "plans/delegation-lessons-from-deepseek-harness.md",
+      "source": "plans/delegation-lessons-from-deepseek-harness.md",
+      "attrs": {
+        "role": "doc"
+      }
+    },
+    {
+      "id": "doc:plans/delegation-surface-implementation-plan.md",
+      "kind": "doc",
+      "label": "plans/delegation-surface-implementation-plan.md",
+      "source": "plans/delegation-surface-implementation-plan.md",
+      "attrs": {
+        "role": "doc"
+      }
+    },
+    {
       "id": "doc:plans/handoff-cli-command-registry.md",
       "kind": "doc",
       "label": "plans/handoff-cli-command-registry.md",
       "source": "plans/handoff-cli-command-registry.md",
+      "attrs": {
+        "role": "doc"
+      }
+    },
+    {
+      "id": "doc:plans/stateless-mcp-design-note.md",
+      "kind": "doc",
+      "label": "plans/stateless-mcp-design-note.md",
+      "source": "plans/stateless-mcp-design-note.md",
       "attrs": {
         "role": "doc"
       }
@@ -24208,11 +24253,51 @@
     },
     {
       "source": "dir:plans",
+      "target": "doc:plans/attention-requests-design-note.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "plans/attention-requests-design-note.md"
+    },
+    {
+      "source": "dir:plans",
+      "target": "doc:plans/delegation-and-diff-surface-execution-2026-08-15.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "plans/delegation-and-diff-surface-execution-2026-08-15.md"
+    },
+    {
+      "source": "dir:plans",
+      "target": "doc:plans/delegation-lessons-from-deepseek-harness.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "plans/delegation-lessons-from-deepseek-harness.md"
+    },
+    {
+      "source": "dir:plans",
+      "target": "doc:plans/delegation-surface-implementation-plan.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "plans/delegation-surface-implementation-plan.md"
+    },
+    {
+      "source": "dir:plans",
       "target": "doc:plans/handoff-cli-command-registry.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "plans/handoff-cli-command-registry.md"
+    },
+    {
+      "source": "dir:plans",
+      "target": "doc:plans/stateless-mcp-design-note.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "plans/stateless-mcp-design-note.md"
     },
     {
       "source": "dir:schema",
@@ -26253,6 +26338,14 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "cmd/magus/skills/magus-change-summary/SKILL.md"
+    },
+    {
+      "source": "doc:cmd/magus/skills/magus-delegate-multi-agent/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "cmd/magus/skills/magus-delegate-multi-agent/SKILL.md"
     },
     {
       "source": "doc:cmd/magus/skills/magus-docs-lookup/SKILL.md",
@@ -42287,6 +42380,14 @@
       "provenance": "docs/reference/skills/magus-delegate-multi-agent.md"
     },
     {
+      "source": "doc:docs/reference/skills/magus-delegate-multi-agent.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-delegate-multi-agent.md"
+    },
+    {
       "source": "doc:docs/reference/skills/magus-docs-lookup.md",
       "target": "diagnostic:MGS2001",
       "relation": "documents",
@@ -42911,6 +43012,14 @@
       "provenance": "evals/fixtures/full/.claude/skills/magus-change-summary/SKILL.md"
     },
     {
+      "source": "doc:evals/fixtures/full/.claude/skills/magus-delegate-multi-agent/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/full/.claude/skills/magus-delegate-multi-agent/SKILL.md"
+    },
+    {
       "source": "doc:evals/fixtures/full/.claude/skills/magus-docs-lookup/SKILL.md",
       "target": "diagnostic:MGS2001",
       "relation": "documents",
@@ -43141,6 +43250,22 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "evals/fixtures/simple/.claude/skills/magus-change-summary/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-delegate-multi-agent-full/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-delegate-multi-agent-full/SKILL.md"
+    },
+    {
+      "source": "doc:evals/fixtures/simple/.claude/skills/magus-delegate-multi-agent/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "evals/fixtures/simple/.claude/skills/magus-delegate-multi-agent/SKILL.md"
     },
     {
       "source": "doc:evals/fixtures/simple/.claude/skills/magus-docs-lookup-full/SKILL.md",
@@ -43463,6 +43588,46 @@
       "provenance": "libs/gopherbuzz/std/README.md"
     },
     {
+      "source": "doc:plans/attention-requests-design-note.md",
+      "target": "doc:plans/stateless-mcp-design-note.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "plans/attention-requests-design-note.md"
+    },
+    {
+      "source": "doc:plans/delegation-and-diff-surface-execution-2026-08-15.md",
+      "target": "doc:plans/delegation-lessons-from-deepseek-harness.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "plans/delegation-and-diff-surface-execution-2026-08-15.md"
+    },
+    {
+      "source": "doc:plans/delegation-and-diff-surface-execution-2026-08-15.md",
+      "target": "doc:plans/delegation-surface-implementation-plan.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "plans/delegation-and-diff-surface-execution-2026-08-15.md"
+    },
+    {
+      "source": "doc:plans/delegation-lessons-from-deepseek-harness.md",
+      "target": "doc:plans/delegation-surface-implementation-plan.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "plans/delegation-lessons-from-deepseek-harness.md"
+    },
+    {
+      "source": "doc:plans/delegation-surface-implementation-plan.md",
+      "target": "doc:plans/delegation-lessons-from-deepseek-harness.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "plans/delegation-surface-implementation-plan.md"
+    },
+    {
       "source": "doc:plans/handoff-cli-command-registry.md",
       "target": "diagnostic:MGS1020",
       "relation": "documents",
@@ -43501,6 +43666,14 @@
       "confidence": "inferred",
       "score": 0.5,
       "provenance": "plans/handoff-cli-command-registry.md"
+    },
+    {
+      "source": "doc:plans/stateless-mcp-design-note.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "plans/stateless-mcp-design-note.md"
     },
     {
       "source": "doc:schema/README.md",
