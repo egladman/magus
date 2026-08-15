@@ -119,7 +119,7 @@ overrides and execs it, so there is one implementation to reason about.
 # (not delivered). It is machine-read by the host-parity gate, which fails the
 # build when a decision or surface exists in the guard contract that some host
 # was never asked about. Keep it true to what HOST_RESPONSE actually renders.
-# magus-guard-template: 4
+# magus-guard-template: 5
 # magus-guard-coverage: schema=1 host=claude-code,codex surface=command deny=model advise=model pass=none
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}` and
@@ -134,6 +134,14 @@ overrides and execs it, so there is one implementation to reason about.
 # warns about an unknown field, and returns pass: silent non-enforcement at exit 0. Measured
 # 2026-08-13, when a write into a declared notes store was allowed by a binary that predated
 # the knowledge.notes key while `magus doctor` reported the guard as fine.
+[ -n "$GUARD_MAGUS_BIN" ] || { [ -x ./magus ] && GUARD_MAGUS_BIN=./magus; }
+# Prefer the workspace's own ./magus over PATH, for the same reason its two siblings do - and
+# this file needs it MORE than they do, because it is silent by design. An older PATH copy
+# does not know --observe at all: it rejects the flag, prints its usage to a stream this
+# script discards, and exits non-zero into an `|| true` - so the observation is simply never
+# recorded, forever, with nothing anywhere saying so. Measured 2026-08-14 in magus's own
+# repository, where the wiring was correct, the binary was wrong, and the trail held 3252
+# events and not one read.
 [ -n "$GUARD_MAGUS_BIN" ] || { [ -x ./magus ] && GUARD_MAGUS_BIN=./magus; }
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 [ -n "$GUARD_UNAVAILABLE_RESPONSE" ] || GUARD_UNAVAILABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard."}}'
@@ -241,7 +249,7 @@ wasteful, not destructive.
 # Coverage declaration, machine-read by the host-parity gate - see the longer
 # note in magus-guard-command.sh. It records what HOST_RESPONSE RENDERS, not
 # which rules currently fire, so deny=model is true the moment the arm exists.
-# magus-guard-template: 4
+# magus-guard-template: 5
 # magus-guard-coverage: schema=1 host=claude-code,codex surface=path deny=model advise=model pass=none
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}`
@@ -337,7 +345,7 @@ surface, and this file carries no verdict on no surface.
 #   GUARD_AGENT_NAME  the agent host name recorded alongside the observation
 #   GUARD_MAGUS_BIN  path to the binary, when it is not on PATH
 #
-# magus-guard-template: 4
+# magus-guard-template: 5
 
 # NO `set -e`, deliberately. Under it a jq that is missing (127) or handed a
 # payload it cannot parse aborts mid-way on EVERY read, and a PreToolUse hook's

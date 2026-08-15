@@ -33,7 +33,7 @@
 # never denies, never advises, and cannot change what your host does next. The
 # parity gates ask that question only of artifacts that answer it.
 #
-# magus-guard-template: 4
+# magus-guard-template: 5
 
 # NO `set -e`, deliberately, and neither sibling uses it either.
 #
@@ -49,6 +49,14 @@
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
 [ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
+# Prefer the workspace's own ./magus over PATH, for the same reason its two siblings do - and
+# this file needs it MORE than they do, because it is silent by design. An older PATH copy
+# does not know --observe at all: it rejects the flag, prints its usage to a stream this
+# script discards, and exits non-zero into an `|| true` - so the observation is simply never
+# recorded, forever, with nothing anywhere saying so. Measured 2026-08-14 in magus's own
+# repository, where the wiring was correct, the binary was wrong, and the trail held 3252
+# events and not one read.
+[ -n "$GUARD_MAGUS_BIN" ] || { [ -x ./magus ] && GUARD_MAGUS_BIN=./magus; }
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 
 # An absent observer is SILENT, where an absent guard is loud.
