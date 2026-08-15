@@ -1987,7 +1987,18 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // `--version` on a custom binary carries a build timestamp that moves every
     // rebuild.
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/**/*.go");
-    proc\exec("./custom-gcl", ["run"]);
+    // The linter cache lives inside this checkout, not at the user-global default.
+    // golangci-lint (v2.12) keys package results by module-relative path + content,
+    // relocatable across checkouts - but each stored issue carries the ABSOLUTE file
+    // paths of whichever checkout analyzed the package first. Byte-identical sibling
+    // worktrees replay each other's entries, so a neighbor's suppressed findings
+    // resurface here as ../<sibling>/... paths that no ^-anchored exclusion in
+    // .golangci.yml matches - measured: 25 stdversion findings from a sibling failing
+    // a tree with zero of its own. A cold analysis per fresh worktree is the price.
+    final lintCache = magus\ls().workspace + "/.magus/golangci-lint";
+    os\withEnv({"GOLANGCI_LINT_CACHE": lintCache}, fun () > void !> any {
+        proc\exec("./custom-gcl", ["run"]);
+    });
     go["go-vet"](ctx);
     // Compile the browser playground for wasm. COMPILE only, to /dev/null: TinyGo
     // builds the shipped artifact, but that runs by hand and never in ci, so nothing
