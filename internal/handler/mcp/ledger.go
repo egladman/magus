@@ -32,19 +32,64 @@ func (t *ledgerTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells
 		return spells.InvokeResponse{Data: map[string]any{"units": units}}, nil
 
 	case "put":
-		stored, err := t.store.Put(types.DelegationUnit{
-			ID:             strings.TrimSpace(paramString(req.Params, "id", "")),
-			Parent:         strings.TrimSpace(paramString(req.Params, "parent", "")),
-			Goal:           paramString(req.Params, "goal", ""),
-			Checkpoint:     strings.TrimSpace(paramString(req.Params, "checkpoint", "")),
-			OwnedPaths:     strings.Fields(paramString(req.Params, "owned_paths", "")),
-			ForbiddenPaths: strings.Fields(paramString(req.Params, "forbidden_paths", "")),
-			DependsOn:      strings.Fields(paramString(req.Params, "depends_on", "")),
-			Tier:           strings.TrimSpace(paramString(req.Params, "tier", "")),
-			Validation:     paramString(req.Params, "validation", ""),
-			State:          types.DelegationState(strings.TrimSpace(paramString(req.Params, "state", ""))),
-			ReadOnly:       paramBool(req.Params, "read_only", false),
-		})
+		// A put updates only the fields it names. The second write of a unit's
+		// lifecycle (op=put id=u1 state=running) must not erase the declared
+		// row; presence with an empty value is an explicit clear.
+		id := strings.TrimSpace(paramString(req.Params, "id", ""))
+		unit := types.DelegationUnit{ID: id}
+		if id != "" {
+			existing, err := t.store.List()
+			if err != nil {
+				return spells.InvokeResponse{}, err
+			}
+			for _, u := range existing {
+				if u.ID == id {
+					unit = u
+					break
+				}
+			}
+		}
+		if v, ok := ledgerString(req.Params, "parent"); ok {
+			unit.Parent = strings.TrimSpace(v)
+		}
+		if v, ok := ledgerString(req.Params, "goal"); ok {
+			unit.Goal = v
+		}
+		if v, ok := ledgerString(req.Params, "checkpoint"); ok {
+			unit.Checkpoint = strings.TrimSpace(v)
+		}
+		if v, ok := ledgerList(req.Params, "owned_paths"); ok {
+			unit.OwnedPaths = v
+		}
+		if v, ok := ledgerList(req.Params, "forbidden_paths"); ok {
+			unit.ForbiddenPaths = v
+		}
+		if v, ok := ledgerList(req.Params, "depends_on"); ok {
+			unit.DependsOn = v
+		}
+		if v, ok := ledgerString(req.Params, "tier"); ok {
+			unit.Tier = strings.TrimSpace(v)
+		}
+		if v, ok := ledgerString(req.Params, "validation"); ok {
+			unit.Validation = v
+		}
+		if v, ok := ledgerString(req.Params, "state"); ok {
+			s := types.DelegationState(strings.TrimSpace(v))
+			switch s {
+			case types.StateDeclared, types.StateRunning, types.StatePass, types.StateFail, types.StateNoReturn:
+				unit.State = s
+			default:
+				return spells.InvokeResponse{}, errors.New("mcp: state must be one of declared, running, pass, fail, no_return")
+			}
+		}
+		if v, present := req.Params["read_only"]; present {
+			b, ok := v.(bool)
+			if !ok {
+				return spells.InvokeResponse{}, errors.New("mcp: read_only must be a boolean")
+			}
+			unit.ReadOnly = b
+		}
+		stored, err := t.store.Put(unit)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
@@ -66,6 +111,41 @@ func (t *ledgerTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells
 	default:
 		return spells.InvokeResponse{}, errors.New("mcp: ledger op must be one of list, put, clear")
 	}
+}
+
+// ledgerString distinguishes an absent key from an empty value, which is what
+// lets a put carry only the fields it means to change.
+func ledgerString(params map[string]any, key string) (string, bool) {
+	v, present := params[key]
+	if !present {
+		return "", false
+	}
+	s, ok := v.(string)
+	return s, ok
+}
+
+// ledgerList accepts the natural JSON array shape as well as the
+// space-separated string the descriptor schema forces on typed clients
+// (magus_describe_file's paths set the precedent). A client sending a real
+// array must not silently record nothing.
+func ledgerList(params map[string]any, key string) ([]string, bool) {
+	v, present := params[key]
+	if !present {
+		return nil, false
+	}
+	switch t := v.(type) {
+	case string:
+		return strings.Fields(t), true
+	case []any:
+		out := make([]string, 0, len(t))
+		for _, e := range t {
+			if s, ok := e.(string); ok && strings.TrimSpace(s) != "" {
+				out = append(out, strings.TrimSpace(s))
+			}
+		}
+		return out, true
+	}
+	return nil, false
 }
 
 var _ spells.Driver = (*ledgerTool)(nil)

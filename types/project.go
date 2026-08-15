@@ -10,11 +10,11 @@ import (
 
 // workspaceScheme is the URI scheme WorkspaceURI renders: "workspace://<path>".
 //
-// It is no longer the form to pipe back into a command - a bare
-// workspace-relative path is the only spelling magus teaches, and
-// internal/file.ResolveProject warns on the scheme when it parses one. Display
-// (the bare path) is what nearly every surface renders; WorkspaceURI is down to
-// two error wraps in magus.go. Do not reach for it for new output.
+// A bare workspace-relative path is the only spelling magus teaches;
+// internal/file.ResolveProject warns on the scheme when it parses one, and
+// nothing in magus renders it any more. Display (the bare path) is what every
+// surface emits; WorkspaceURI and WorkspaceRef exist for external callers not
+// yet migrated. Do not reach for them for new output.
 const workspaceScheme = "workspace://"
 
 // ProjectRef is the canonical project reference: holds the data once
@@ -242,6 +242,10 @@ type Project struct {
 	// TargetEnvAllow are per-target ctx.env declarations: env var NAMES whose process
 	// values fold into the cache key. See TargetGraphNode.EnvAllow.
 	TargetEnvAllow map[string][]string
+	// TargetObservations are per-target ctx.observes declarations: external facts the
+	// target's answer depends on, as "key=value", folded into the cache key. See
+	// TargetGraphNode.Observations.
+	TargetObservations map[string][]string
 	// InboundOutputs are output globs OTHER projects declare INTO this project's tree
 	// via ctx.writesFiles(<alias>.file(...)), keyed by the WRITING project's path. Globs are
 	// relative to THIS project's root, so they compose with Outputs directly - which is

@@ -41,9 +41,9 @@ type StatusReport struct {
 	PoolError string        `json:"pool_error,omitempty" yaml:"pool_error,omitempty"` // reason Pool is absent
 	// Pools is every live proc server found on this machine, one entry each, and is set
 	// only when there is more than one: Pool above is the first of them, so a single
-	// server would just be repeated here. Two servers used to produce no pool section at
-	// all - a "use --socket to select one" error stood in for it - which withheld exactly
-	// the capacity and in-use numbers the question was about.
+	// server would just be repeated here. Enumerating them is the point - a multi-server
+	// box must still report the capacity and in-use numbers, never an error demanding
+	// --socket.
 	Pools []StatusOutput `json:"pools,omitempty" yaml:"pools,omitempty"`
 	// Runs are the invocations the daemon is executing right now (adopted
 	// dispatches), each with its per-target execution state. Empty when nothing is

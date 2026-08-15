@@ -139,8 +139,8 @@ func TestResolveTargetsCwdScope(t *testing.T) {
 
 // TestResolveTargetsRootOverride proves a relative project arg is measured from the
 // workspace `--root` named, not from the cwd the caller happens to be standing in.
-// From outside the workspace, `.` used to fail with `project path "." escapes
-// workspace root from "../<dir>"` - the anchor was filepath.Rel's "../" answer.
+// The trap: filepath.Rel answers an outside cwd with a "../"-prefixed anchor, which
+// reads as an escape unless re-anchored at the root.
 func TestResolveTargetsRootOverride(t *testing.T) {
 	ws := &resolveWS{
 		root:     "/ws/b",

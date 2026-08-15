@@ -33,17 +33,18 @@ stdout '"dirty": false'
 stdout '"vcs": "git"'
 ! stdout 'patch_digest'
 
-# Dirty: the digest appears, 16 hex chars, and joins the revision in the citable token.
+# Dirty: the digest appears, 32 hex chars (internal/diff.PatchDigest's width), and
+# joins the revision in the citable token.
 cp src/a.new.txt src/a.txt
 exec magus vcs checkpoint
-stdout '^[0-9a-f]{40} main dirty [0-9a-f]{16}$'
+stdout '^[0-9a-f]{40} main dirty [0-9a-f]{32}$'
 
 exec magus vcs checkpoint -o name
-stdout '^[0-9a-f]{40}\+[0-9a-f]{16}$'
+stdout '^[0-9a-f]{40}\+[0-9a-f]{32}$'
 
 exec magus vcs checkpoint -o json
 stdout '"dirty": true'
-stdout '"patch_digest": "[0-9a-f]{16}"'
+stdout '"patch_digest": "[0-9a-f]{32}"'
 
 # The same tree read twice is the same answer: a digest that drifted on its own could not
 # tell two workers whether they saw the same tree.

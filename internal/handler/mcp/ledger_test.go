@@ -76,6 +76,38 @@ func TestLedgerTool(t *testing.T) {
 		assert.Empty(t, units(t, invoke(t, map[string]any{"op": "list"})))
 	})
 
+	t.Run("a lifecycle put touches only the fields it names", func(t *testing.T) {
+		invoke(t, map[string]any{
+			"op": "put", "id": "unit-life", "goal": "the declared goal",
+			"checkpoint": "abc123", "owned_paths": "internal/ledger", "tier": "opus",
+		})
+		resp := invoke(t, map[string]any{"op": "put", "id": "unit-life", "state": "pass"})
+		got, ok := resp.Data.(types.DelegationUnit)
+		require.True(t, ok)
+		assert.Equal(t, types.StatePass, got.State)
+		assert.Equal(t, "the declared goal", got.Goal, "state advance must not erase the row")
+		assert.Equal(t, "abc123", got.Checkpoint)
+		assert.Equal(t, []string{"internal/ledger"}, got.OwnedPaths)
+		assert.Equal(t, "opus", got.Tier)
+	})
+
+	t.Run("a json array of paths records paths, not nothing", func(t *testing.T) {
+		resp := invoke(t, map[string]any{
+			"op": "put", "id": "unit-arr", "owned_paths": []any{"a/b", "c d"},
+		})
+		got, ok := resp.Data.(types.DelegationUnit)
+		require.True(t, ok)
+		assert.Equal(t, []string{"a/b", "c d"}, got.OwnedPaths, "array elements are paths verbatim; only the string form splits on spaces")
+	})
+
+	t.Run("an unrecognized state is rejected, not stored", func(t *testing.T) {
+		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{
+			"op": "put", "id": "unit-bad", "state": "passed",
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no_return")
+	})
+
 	t.Run("put with no id is rejected", func(t *testing.T) {
 		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"op": "put", "goal": "nameless"}})
 		require.ErrorIs(t, err, ledger.ErrNoID)

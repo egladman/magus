@@ -67,7 +67,7 @@ func TestVCSCheckpointTool(t *testing.T) {
 		require.NoError(t, err)
 		got := resp.Data.(types.VCSCheckpoint)
 		assert.True(t, got.Dirty)
-		assert.Len(t, got.PatchDigest, 16)
+		assert.Len(t, got.PatchDigest, 32)
 	})
 
 	t.Run("parameters are ignored, not rejected", func(t *testing.T) {

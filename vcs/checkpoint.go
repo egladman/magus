@@ -46,15 +46,16 @@ func Checkpoint(ctx context.Context, dir string, res types.VCSResolution) (types
 	return cp, nil
 }
 
-// patchDigestLen is how much of the hash the digest keeps. 16 hex chars is 64 bits:
-// collision-free for comparing the handful of trees a delegation fans out across, and
-// short enough to sit in a ledger cell beside a revision.
-const patchDigestLen = 16
+// patchDigestBytes is how much of the hash the digest keeps: 16 bytes, rendered as
+// 32 hex chars - the width internal/diff.PatchDigest uses, which is the whole point
+// (see patchDigest below). Still short enough to sit in a ledger cell.
+const patchDigestBytes = 16
 
-// patchDigest fingerprints a patch: sha256 over the text, hex, first patchDigestLen
-// chars.
+// patchDigest fingerprints a patch: sha256 over the text, first patchDigestBytes
+// bytes, hex - 32 characters.
 //
-// The algorithm deliberately matches the review session's patch digest, so the two
+// The algorithm deliberately matches the review session's patch digest
+// (internal/diff.PatchDigest: hex over sum[:16], NOT 16 hex characters), so the two
 // identities stay comparable: a checkpoint recorded when work was handed out and a
 // review session opened over the same tree must produce the SAME string, or neither
 // can be used to check the other. It is reimplemented rather than shared because the
@@ -62,5 +63,5 @@ const patchDigestLen = 16
 // coupling; if they ever diverge, this is the site that has to move.
 func patchDigest(patch string) string {
 	sum := sha256.Sum256([]byte(patch))
-	return hex.EncodeToString(sum[:])[:patchDigestLen]
+	return hex.EncodeToString(sum[:patchDigestBytes])
 }

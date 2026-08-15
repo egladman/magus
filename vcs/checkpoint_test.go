@@ -61,7 +61,7 @@ func TestCheckpointDirtyTree(t *testing.T) {
 	first, err := Checkpoint(ctx, dir, res)
 	require.NoError(t, err)
 	assert.True(t, first.Dirty)
-	assert.Len(t, first.PatchDigest, patchDigestLen)
+	assert.Len(t, first.PatchDigest, 2*patchDigestBytes)
 	assert.Regexp(t, `^[0-9a-f]+$`, first.PatchDigest, "digest is lowercase hex")
 
 	again, err := Checkpoint(ctx, dir, res)
@@ -110,23 +110,24 @@ func TestCheckpointWithoutAResolvedVCS(t *testing.T) {
 	assert.Contains(t, err.Error(), "no VCS resolved")
 }
 
-// TestPatchDigest is the golden vector. The value is sha256("--- a/x\n+++ b/x\n") in hex,
-// truncated to 16 chars, computed independently of this package - so a change to the
-// algorithm (a different hash, a different width, hashing something other than the raw
-// patch text) fails here rather than silently producing identities that no longer match
-// the review session's.
+// TestPatchDigest is the golden vector. The value is the first 16 BYTES of
+// sha256("--- a/x\n+++ b/x\n") in hex - 32 characters, the exact shape
+// internal/diff.PatchDigest produces - computed independently of this package, so a
+// change to the algorithm (a different hash, a different width, hashing something
+// other than the raw patch text) fails here rather than silently producing
+// identities that no longer match the review session's.
 func TestPatchDigest(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		patch string
 		want  string
 	}{
-		{"fixed patch text", "--- a/x\n+++ b/x\n", "922dd52a81ff1c3d"},
-		{"empty patch", "", "e3b0c44298fc1c14"},
+		{"fixed patch text", "--- a/x\n+++ b/x\n", "922dd52a81ff1c3d456cb861de7ad959"},
+		{"empty patch", "", "e3b0c44298fc1c149afbf4c8996fb924"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			assert.Equal(t, tc.want, patchDigest(tc.patch))
-			assert.Len(t, patchDigest(tc.patch), patchDigestLen)
+			assert.Len(t, patchDigest(tc.patch), 2*patchDigestBytes)
 		})
 	}
 }

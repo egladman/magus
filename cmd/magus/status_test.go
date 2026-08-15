@@ -786,7 +786,7 @@ func TestBuildConfigStatusConcurrency(t *testing.T) {
 }
 
 // TestPrintStatusTextListsEveryProcServer proves the multi-server case renders as a list
-// with each server's slots, where it used to render nothing but a "use --socket" error.
+// with each server's slots rather than an error demanding --socket.
 func TestPrintStatusTextListsEveryProcServer(t *testing.T) {
 	f, err := os.CreateTemp(t.TempDir(), "status-*")
 	require.NoError(t, err)

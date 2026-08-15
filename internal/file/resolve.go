@@ -10,10 +10,10 @@ import (
 )
 
 // workspaceScheme is the RETIRED URI prefix a project reference may carry.
-// A bare workspace-relative path is the only spelling magus teaches now;
+// A bare workspace-relative path is the only spelling magus teaches;
 // ResolveProject still consumes the scheme, with a warning, so no caller
-// strips it by hand. types.WorkspaceRef is a separate const and still renders
-// the scheme on the way OUT - that surface is not retired by this one.
+// strips it by hand. The output half lives in types (WorkspaceURI, also
+// deprecated); magus itself no longer emits the scheme anywhere.
 const workspaceScheme = "workspace://"
 
 // resolveAmbiguous canonicalises input to a repo-relative, forward-slash path,
@@ -27,6 +27,8 @@ const workspaceScheme = "workspace://"
 // mode, silently mis-anchored and broke graph builds. Callers go through the
 // entry point named for the surface their string came from - ResolveDependsOn,
 // ResolveProject, or ResolveImport - so the mode is chosen by the name, once.
+// Only ResolveProject takes a ctx: it is the one that logs (the deprecation
+// warning above); the siblings gain one when they gain a reason.
 func resolveAmbiguous(input, anchor string) (string, error) {
 	in := filepath.ToSlash(input)
 	if in == "" {
@@ -91,8 +93,9 @@ func ResolveProject(ctx context.Context, input, anchor string) (string, error) {
 		// bare relative path with a stray "workspace:" segment.
 		//
 		// Observe dropping it is safe when the deprecation notes themselves have aged
-		// out: `grep -rn "workspace://" docs/ CONTRIBUTING.md cmd/magus/skills/` finds
-		// nothing. Today it finds exactly two, both saying the scheme is deprecated and
+		// out: `grep -rn --exclude-dir=gen "workspace://" docs/ CONTRIBUTING.md
+		// cmd/magus/skills/` finds nothing (docs/gen is rendered output and follows the
+		// sources). Today it finds exactly two, both saying the scheme is deprecated and
 		// a bare path replaced it - that pair IS the window this branch covers. The
 		// hits under types/ are a different thing: the OUTPUT rendering
 		// (types.WorkspaceRef), which this branch does not serve.
