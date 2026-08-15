@@ -114,7 +114,7 @@ type DiffChurn struct {
 // they are big, and plenty of projects are accelerating for good reasons.
 func (c DiffChurn) Rising() bool { return c.NotableRank() && c.ProjectTrend > 0 }
 
-// notableRankCutoff is how far down the hotspot ranking is still worth SHOWING.
+// NotableRankCutoff is how far down the hotspot ranking is still worth SHOWING.
 //
 // The rank itself is honest at any depth; rendering it is not. "Hotspot #1278" tells a reader
 // nothing except that a ranking exists, and a field that is usually meaningless is a field
@@ -222,7 +222,7 @@ func (f DiffFile) ReachOr(def int) int {
 // Generated reports whether reviewing this file's diff is reading generated output.
 func (f DiffFile) Generated() bool { return f.Role == DiffRoleOutput }
 
-// Review is the whole annotated changeset.
+// Diff is the whole annotated changeset.
 type Diff struct {
 	// Base is the ref the diff was taken against, or "working" for the uncommitted tree.
 	Base string `json:"base" yaml:"base"`

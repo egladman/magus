@@ -742,7 +742,7 @@ func statusLinePath(line string) string {
 	return strings.TrimSpace(s[i+1:])
 }
 
-// Review annotates a changed-path set with what the workspace already knows about each file:
+// Diff annotates a changed-path set with what the workspace already knows about each file:
 // whether it is generated, which project owns it, how widely its changed symbols are
 // referenced, and what coverage was observed on it.
 //

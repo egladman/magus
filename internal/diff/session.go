@@ -1,4 +1,4 @@
-// Package review holds the shared review session: the one object a console tab, an MCP
+// Package diff holds the shared diff session: the one object a console tab, an MCP
 // agent, and the CLI all read while a change is being reviewed.
 //
 // One object rather than three, because the daemon already multiplexes those transports over

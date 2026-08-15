@@ -39,7 +39,7 @@ func TestReplayThreadsReadsIntoTheWriteThatFollowed(t *testing.T) {
 // op=state response carried a live daemon bearer token, in exactly the shape below, because
 // the trail stored the command line verbatim.
 func TestReplayKeepsCredentialsOutOfTheTrail(t *testing.T) {
-	const token = "mgs_liveTokenThatMustNotEscape" //nolint:gosec // a fixture, not a credential
+	const token = "mgs_liveTokenThatMustNotEscape" // a fixture, not a credential
 	base := t.TempDir()
 	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: `T=` + token + ` curl -H "Authorization: Bearer $T" http://127.0.0.1:7391/mcp`})
 	record(t, base, AgentCommand{Session: "s1", Tool: toolShell, Command: "/usr/local/bin/psql --password=hunter2"})
