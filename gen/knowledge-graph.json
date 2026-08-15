@@ -17589,7 +17589,7 @@
       "id": "method:vcs.cmd",
       "kind": "method",
       "label": "vcs.cmd",
-      "doc": "Escape hatch: run the active VCS binary (git/hg/jj) with args, for something no method covers. Same result and raise semantics as magus.cmd and proc.exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd, unlike proc.exec's positional dir); opts.quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on v",
+      "doc": "Escape hatch: run the active VCS binary (git/hg/sl/jj) with args, for something no method covers. Same result and raise semantics as magus.cmd and proc.exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd, unlike proc.exec's positional dir); opts.quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch o",
       "attrs": {
         "buzz": "vcs\\cmd(args, [opts]) → ExecResult"
       }

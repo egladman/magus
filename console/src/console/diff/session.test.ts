@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { hunkDigest } from "./session";
 
-// The SAME golden vector internal/review/session_test.go asserts.
+// The SAME golden vector internal/diff/session_test.go asserts.
 //
 // If these two drift the feature silently half-works: a hunk the person marked read in the
 // browser still looks unread to an agent reading the same session, and neither side reports

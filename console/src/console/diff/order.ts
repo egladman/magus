@@ -39,7 +39,7 @@ export interface OrderedChangeset {
 // order applies the server's ranking and the generated split to a parsed patch.
 //
 // The server's order is authoritative and is NOT recomputed here. One definition of review
-// order (SortForReview) has to serve the console, the CLI, and a Buzz advisor writing a
+// order (SortForReading) has to serve the console, the CLI, and a Buzz advisor writing a
 // pull-request comment, and a second implementation in the browser would drift from it the
 // first time either changed.
 //

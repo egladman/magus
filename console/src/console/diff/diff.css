@@ -11,7 +11,8 @@
  * pnpm projects with separate bundles, and docs/package.json states the boundary outright
  * ("the console surfaces ... own their bundles now"). Extracting one shared palette both can
  * read is the right fix and is a bigger change than this one; until then, these two lists have
- * to be edited together. */
+ * to be edited together, and syntax-palette.test.ts (this directory) reads both files and
+ * fails the build if they stop agreeing. */
 :root {
   --console-diff-add: var(--pf-t--global--color--status--success--default, #3e8635);
   --console-diff-del: var(--pf-t--global--color--status--danger--default, #c9190b);
