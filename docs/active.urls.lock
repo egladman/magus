@@ -100,6 +100,7 @@ concepts/output-refs/
 concepts/remote-cache/
 concepts/sandbox/
 concepts/secrets/
+concepts/secrets/providers/
 concepts/services/
 concepts/spells/
 concepts/spells/bash/
@@ -681,6 +682,7 @@ tags/ruff/
 tags/run/
 tags/rust/
 tags/sandbox/
+tags/secret-provider/
 tags/secrets/
 tags/security/
 tags/self-update/

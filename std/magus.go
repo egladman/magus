@@ -38,8 +38,8 @@ var Magus = Module{
 	Doc: "Magus core primitives.\n\n" +
 		"Three provider namespaces are wired by the runtime rather than declared here, so " +
 		"they do not appear in the method list below: `magus\\cache.remote(<spell>)` selects " +
-		"a remote cache backend, `magus\\ci.provider(<spell>)` a CI provider, and " +
-		"`magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret backend and " +
+		"a remote cache provider, `magus\\ci.provider(<spell>)` a CI provider, and " +
+		"`magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret provider and " +
 		"the credentials read through it. Each takes an imported spell handle. " +
 		"`magus\\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback " +
 		"base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the " +
@@ -340,10 +340,10 @@ var Magus = Module{
 		},
 		{
 			Name: "cache",
-			Doc:  "Remote cache backend selection.",
+			Doc:  "Remote cache provider selection.",
 			Methods: []Method{{
 				Name:   "remote",
-				Doc:    "Select the remote cache backend, given an imported spell handle. Declared at the top level of the root magusfile.",
+				Doc:    "Select the remote cache provider, given an imported spell handle. Declared at the top level of the root magusfile.",
 				Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
 				Extern: true,
 			}},
@@ -360,17 +360,17 @@ var Magus = Module{
 		},
 		{
 			Name: "secret",
-			Doc:  "Secret backend selection, and the credentials read through it.",
+			Doc:  "Secret provider selection, and the credentials read through it.",
 			Methods: []Method{
 				{
 					Name:   "provider",
-					Doc:    "Select the secret backend, given an imported spell handle.",
+					Doc:    "Select the secret provider, given an imported spell handle.",
 					Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
 					Extern: true,
 				},
 				{
 					Name: "read",
-					Doc:  "Read a credential by reference through the selected backend. Unlike the selections, this is called from inside a target, so its failure IS something a caller can handle.",
+					Doc:  "Read a credential by reference through the selected provider. Unlike the selections, this is called from inside a target, so its failure IS something a caller can handle.",
 					Args: []Arg{{Name: "ref", Type: TypeString}},
 					// A magus-resolved value rather than a bare str, which is what lets
 					// magus recognise it and keep it out of logs and cache keys.

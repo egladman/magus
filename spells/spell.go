@@ -69,7 +69,7 @@ func (s *Spell) Name() string { return s.name }
 // Invoke implements Driver. A nil invoke func is a no-op. Fork-target
 // spells ignore req.Params and return no Data; function-op spells (Buzz ops
 // declared with "fn") receive req.Params and return their result as Data, the
-// channel the remote cache backend and other Go callers read. Charms (including
+// channel the remote cache provider and other Go callers read. Charms (including
 // the built-in "rw") ride on ctx; a target that cares reads them via HasCharm.
 func (s *Spell) Invoke(ctx context.Context, req InvokeRequest) (InvokeResponse, error) {
 	if s.invoke == nil {

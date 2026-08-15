@@ -66,7 +66,7 @@ magus\ci.provider(github);
 ```
 
 magus ships two: `spells/github/actions` (which also carries the Actions remote
-cache backend - one spell per vendor, two contracts) and `spells/gitlab/ci`.
+cache provider - one spell per vendor, two contracts) and `spells/gitlab/ci`.
 
 Wiring one unconditionally is the intended usage. A provider reports whether it
 is active, magus probes that once per run, and an inactive provider costs
@@ -165,7 +165,7 @@ What magus guarantees at the boundary:
 
 What magus does **not** guarantee: a spell has the full host module surface,
 including `proc\exec` and `http`. Loading a spell is trusting it, exactly as with a
-[remote cache backend](../cache/remote.md). Spells are not individually sandboxed;
+[remote cache provider](../cache/remote.md). Spells are not individually sandboxed;
 they run with the magus process's privileges, constrained only by the
 process-wide [sandbox](../sandbox.md) policy where that applies. If your build
 output can contain secrets, a hostile provider spell could exfiltrate them.

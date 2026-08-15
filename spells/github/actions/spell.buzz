@@ -1,4 +1,4 @@
-// GitHub integration spell for magus. Provides a remote cache backend over the
+// GitHub integration spell for magus. Provides a remote cache provider over the
 // GitHub Actions Cache, written as an ordinary magus spell. Wire it in a magusfile:
 //
 //   import "spells/github/actions" as github
@@ -34,7 +34,7 @@
 // everything GitHub-specific stays out of the Go tree.
 //
 // Auth and endpoint come from the runner environment:
-//   GITHUB_ACTIONS         — "true" only under GitHub Actions (gates the backend)
+//   GITHUB_ACTIONS         — "true" only under GitHub Actions (gates the provider)
 //   ACTIONS_RESULTS_URL    — cache service base URL (always ends in "/")
 //   ACTIONS_RUNTIME_TOKEN  — bearer token
 
@@ -51,17 +51,17 @@ import "std"
 // around it to supply the vendor. See CONTRIBUTING.md#naming.
 export fun mgs_getName() > str { return "github-actions"; }
 
-// A cache backend exports the well-known cache-contract functions below (enabled
+// A cache provider exports the well-known cache-contract functions below (enabled
 // / get_artifact / put_artifact), which the remote-cache subsystem detects by name
 // and invokes via magus\cache.remote(github). It declares no mgs_listTargets - a
-// cache backend contributes no operations a target could compose.
+// cache provider contributes no operations a target could compose.
 
-// in_actions is the one condition the whole backend gates on. A private predicate
+// in_actions is the one condition the whole provider gates on. A private predicate
 // rather than a call to enabled() because enabled is a spell OP - it takes the op
 // signature - so the internal guards below cannot reuse it directly.
 fun in_actions() > bool { return getenv("GITHUB_ACTIONS") == "true"; }
 
-// enabled gates the whole backend on running under GitHub Actions. The cache
+// enabled gates the whole provider on running under GitHub Actions. The cache
 // probes this once and skips fetch/push entirely when false, so wiring this spell
 // in a magusfile is a no-op everywhere except GHA - no remote calls, no exports.
 export fun enabled(target: Target, cb: fun(any)) > bool {
@@ -267,7 +267,7 @@ export fun quote_prefixes(target: Target, cb: fun(any)) > [str] {
 // --- Secret provider contract ------------------------------------------------
 //
 // Wired with magus\secret.provider(github): the third contract this one spell
-// carries, alongside the cache backend and the CI provider. magus calls one op,
+// carries, alongside the cache provider and the CI provider. magus calls one op,
 // resolve_secret, and passes the reference through without parsing it - the
 // reference format is this file's business. See docs/concepts/secrets.md.
 //
@@ -338,7 +338,7 @@ export fun resolve_secret(target: Target, cb: fun(any)) > Secret !> any {
 // could only ever be shown what they themselves supplied.
 //
 // So the rule a future branch must keep: a value sourced from anywhere OTHER than
-// this process's environment - a file, a keychain, a second backend - must not reach
+// this process's environment - a file, a keychain, a second provider - must not reach
 // this function, because for that value the invariant is false and the gate is all
 // that stands between it and a terminal.
 fun maskInRunnerLog(value: str) > void {
@@ -357,7 +357,7 @@ fun workflowEnv(name: str) > str {
         throw "github-actions: $" + name + " is not set, and GITHUB_ACTIONS is not "
             + "\"true\", so this is not an Actions runner. This provider resolves the "
             + "environment a workflow injects; select it only under Actions, and select "
-            + "a backend a workstation can reach for local runs.";
+            + "a provider a workstation can reach for local runs.";
     }
     throw "github-actions: $" + name + " is not set in this step's environment.\n"
         + "  An Actions secret is only readable through the workflow file - nothing\n"
@@ -407,7 +407,7 @@ fun oidcToken(audience: str) > str !> any {
         mut {"Authorization": "Bearer " + request_token, "Accept": "application/json"});
     if (res["status"] != 200) {
         // The status, deliberately without the body. Every other failure path in this
-        // file trims the backend's own stderr into the message, but this response body
+        // file trims the provider's own stderr into the message, but this response body
         // is the one that can CONTAIN a token, and an error string is the least
         // redacted thing magus handles - it has not been resolved yet, so nothing is
         // registered for redaction at the moment it is thrown.

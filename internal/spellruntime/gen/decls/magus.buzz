@@ -381,7 +381,7 @@ export object log {
     static extern fun warn(msg: str = "", fields: {str: str} = {<str: str>}) > void;
 }
 
-// Remote cache backend selection.
+// Remote cache provider selection.
 export object cache {
     static extern fun remote(spell: {str: any}) > void;
 }
@@ -391,7 +391,7 @@ export object ci {
     static extern fun provider(spell: {str: any}) > void;
 }
 
-// Secret backend selection, and the credentials read through it.
+// Secret provider selection, and the credentials read through it.
 export object secret {
     static extern fun endpoint(grant: any) > str !> any;
     static extern fun provider(spell: {str: any}) > void;

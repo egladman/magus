@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2209,
-  "edge_count": 5777,
+  "node_count": 2213,
+  "edge_count": 5793,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -864,7 +864,7 @@
       "label": "docs/concepts",
       "source": "docs/concepts",
       "attrs": {
-        "dir_files": "47",
+        "dir_files": "51",
         "dir_languages": "markdown"
       }
     },
@@ -879,10 +879,30 @@
       }
     },
     {
+      "id": "dir:docs/concepts/ci",
+      "kind": "dir",
+      "label": "docs/concepts/ci",
+      "source": "docs/concepts/ci",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
       "id": "dir:docs/concepts/knowledge",
       "kind": "dir",
       "label": "docs/concepts/knowledge",
       "source": "docs/concepts/knowledge",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/concepts/secrets",
+      "kind": "dir",
+      "label": "docs/concepts/secrets",
+      "source": "docs/concepts/secrets",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "markdown"
@@ -914,7 +934,7 @@
       "label": "docs/concepts/workspace",
       "source": "docs/concepts/workspace",
       "attrs": {
-        "dir_files": "1",
+        "dir_files": "2",
         "dir_languages": "markdown"
       }
     },
@@ -2504,10 +2524,22 @@
       }
     },
     {
-      "id": "doc:docs/concepts/ci-providers.md",
+      "id": "doc:docs/concepts/ci.md",
       "kind": "doc",
-      "label": "docs/concepts/ci-providers.md",
-      "source": "docs/concepts/ci-providers.md",
+      "label": "docs/concepts/ci.md",
+      "source": "docs/concepts/ci.md",
+      "attrs": {
+        "role": "doc",
+        "section": "concepts",
+        "tags": "ci,ci-provider,affected,remote-cache,sharding,annotations",
+        "title": "Running under CI"
+      }
+    },
+    {
+      "id": "doc:docs/concepts/ci/providers.md",
+      "kind": "doc",
+      "label": "docs/concepts/ci/providers.md",
+      "source": "docs/concepts/ci/providers.md",
       "attrs": {
         "role": "doc",
         "section": "concepts",
@@ -2633,6 +2665,18 @@
         "section": "concepts",
         "tags": "secrets,secret,credentials,provider,redaction,scrubbing,tokens,registry,ci",
         "title": "Secrets"
+      }
+    },
+    {
+      "id": "doc:docs/concepts/secrets/providers.md",
+      "kind": "doc",
+      "label": "docs/concepts/secrets/providers.md",
+      "source": "docs/concepts/secrets/providers.md",
+      "attrs": {
+        "role": "doc",
+        "section": "concepts",
+        "tags": "secrets,secret-provider,onepassword,vault,spells,extension",
+        "title": "Secret providers"
       }
     },
     {
@@ -2912,18 +2956,6 @@
       }
     },
     {
-      "id": "doc:docs/concepts/workspace-providers.md",
-      "kind": "doc",
-      "label": "docs/concepts/workspace-providers.md",
-      "source": "docs/concepts/workspace-providers.md",
-      "attrs": {
-        "role": "doc",
-        "section": "concepts",
-        "tags": "workspace-provider,projects,discovery,spells,extension,nx,monorepo,adoption",
-        "title": "Workspace providers"
-      }
-    },
-    {
       "id": "doc:docs/concepts/workspace.md",
       "kind": "doc",
       "label": "docs/concepts/workspace.md",
@@ -2945,6 +2977,18 @@
         "section": "concepts",
         "tags": "affected,vcs,git,changed-files,dependency-graph,ci,bisect,watch",
         "title": "Affected"
+      }
+    },
+    {
+      "id": "doc:docs/concepts/workspace/providers.md",
+      "kind": "doc",
+      "label": "docs/concepts/workspace/providers.md",
+      "source": "docs/concepts/workspace/providers.md",
+      "attrs": {
+        "role": "doc",
+        "section": "concepts",
+        "tags": "workspace-provider,projects,discovery,spells,extension,nx,monorepo,adoption",
+        "title": "Workspace providers"
       }
     },
     {
@@ -2988,7 +3032,7 @@
       "attrs": {
         "role": "doc",
         "section": "guides",
-        "tags": "spell,authoring,mgs,provider,contract,buzz,cache backend,ci provider,secret provider,extending",
+        "tags": "spell,authoring,mgs,provider,contract,buzz,cache provider,ci provider,secret provider,extending",
         "title": "Writing a spell"
       }
     },
@@ -12985,7 +13029,7 @@
       "id": "function:spells/aws/s3-cache/spell.buzz:enabled",
       "kind": "function",
       "label": "enabled",
-      "doc": "enabled gates the backend on having credentials and a bucket. The cache probes this once and skips fetch/push entirely when false — no remote calls.",
+      "doc": "enabled gates the provider on having credentials and a bucket. The cache probes this once and skips fetch/push entirely when false — no remote calls.",
       "source": "spells/aws/s3-cache/spell.buzz:213",
       "attrs": {
         "exported": "true"
@@ -13919,7 +13963,7 @@
       "id": "function:spells/github/actions/spell.buzz:enabled",
       "kind": "function",
       "label": "enabled",
-      "doc": "enabled gates the whole backend on running under GitHub Actions. The cache probes this once and skips fetch/push entirely when false, so wiring this spell in a magusfile is a no-op everywhere except GHA - no remote calls, no exports.",
+      "doc": "enabled gates the whole provider on running under GitHub Actions. The cache probes this once and skips fetch/push entirely when false, so wiring this spell in a magusfile is a no-op everywhere except GHA - no remote calls, no exports.",
       "source": "spells/github/actions/spell.buzz:67",
       "attrs": {
         "exported": "true"
@@ -13987,7 +14031,7 @@
       "id": "function:spells/github/actions/spell.buzz:in_actions",
       "kind": "function",
       "label": "in_actions",
-      "doc": "in_actions is the one condition the whole backend gates on. A private predicate rather than a call to enabled() because enabled is a spell OP - it takes the op signature - so the internal guards below cannot reuse it directly.",
+      "doc": "in_actions is the one condition the whole provider gates on. A private predicate rather than a call to enabled() because enabled is a spell OP - it takes the op signature - so the internal guards below cannot reuse it directly.",
       "source": "spells/github/actions/spell.buzz:62"
     },
     {
@@ -18016,7 +18060,7 @@
       "id": "module:magus",
       "kind": "module",
       "label": "magus",
-      "doc": "Magus core primitives.  Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\\cache.remote(<spell>)` selects a remote cache backend, `magus\\ci.provider(<spell>)` a CI provider, and `magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret backend and the credentials read through it. Each takes an imported spell handle. `magus\\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a CH"
+      "doc": "Magus core primitives.  Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\\cache.remote(<spell>)` selects a remote cache provider, `magus\\ci.provider(<spell>)` a CI provider, and `magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret provider and the credentials read through it. Each takes an imported spell handle. `magus\\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a"
     },
     {
       "id": "module:markdown",
@@ -20895,11 +20939,27 @@
     },
     {
       "source": "dir:docs/concepts",
+      "target": "dir:docs/concepts/ci",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/ci"
+    },
+    {
+      "source": "dir:docs/concepts",
       "target": "dir:docs/concepts/knowledge",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/concepts/knowledge"
+    },
+    {
+      "source": "dir:docs/concepts",
+      "target": "dir:docs/concepts/secrets",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/secrets"
     },
     {
       "source": "dir:docs/concepts",
@@ -20943,11 +21003,11 @@
     },
     {
       "source": "dir:docs/concepts",
-      "target": "doc:docs/concepts/ci-providers.md",
+      "target": "doc:docs/concepts/ci.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/concepts/ci-providers.md"
+      "provenance": "docs/concepts/ci.md"
     },
     {
       "source": "dir:docs/concepts",
@@ -21079,14 +21139,6 @@
     },
     {
       "source": "dir:docs/concepts",
-      "target": "doc:docs/concepts/workspace-providers.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/workspace-providers.md"
-    },
-    {
-      "source": "dir:docs/concepts",
       "target": "doc:docs/concepts/workspace.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -21118,12 +21170,28 @@
       "provenance": "docs/concepts/cache/tool-identity.md"
     },
     {
+      "source": "dir:docs/concepts/ci",
+      "target": "doc:docs/concepts/ci/providers.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/ci/providers.md"
+    },
+    {
       "source": "dir:docs/concepts/knowledge",
       "target": "doc:docs/concepts/knowledge/insight.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/concepts/knowledge/insight.md"
+    },
+    {
+      "source": "dir:docs/concepts/secrets",
+      "target": "doc:docs/concepts/secrets/providers.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/secrets/providers.md"
     },
     {
       "source": "dir:docs/concepts/spells",
@@ -21260,6 +21328,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/concepts/workspace/affected.md"
+    },
+    {
+      "source": "dir:docs/concepts/workspace",
+      "target": "doc:docs/concepts/workspace/providers.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/providers.md"
     },
     {
       "source": "dir:docs/engine",
@@ -26183,6 +26259,14 @@
     },
     {
       "source": "doc:README.md",
+      "target": "doc:docs/concepts/cache/remote.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "README.md"
+    },
+    {
+      "source": "doc:README.md",
       "target": "doc:docs/concepts/charms.md",
       "relation": "references",
       "confidence": "extracted",
@@ -26191,7 +26275,7 @@
     },
     {
       "source": "doc:README.md",
-      "target": "doc:docs/concepts/ci-providers.md",
+      "target": "doc:docs/concepts/ci/providers.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -26272,6 +26356,22 @@
     {
       "source": "doc:README.md",
       "target": "doc:docs/guides/integrations/agents.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "README.md"
+    },
+    {
+      "source": "doc:README.md",
+      "target": "doc:docs/guides/integrations/daemon.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "README.md"
+    },
+    {
+      "source": "doc:README.md",
+      "target": "doc:docs/guides/integrations/mcp.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -27486,36 +27586,84 @@
       "provenance": "docs/concepts/charms.md"
     },
     {
-      "source": "doc:docs/concepts/ci-providers.md",
+      "source": "doc:docs/concepts/ci.md",
       "target": "doc:docs/concepts/cache/remote.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/concepts/ci-providers.md"
+      "provenance": "docs/concepts/ci.md"
     },
     {
-      "source": "doc:docs/concepts/ci-providers.md",
+      "source": "doc:docs/concepts/ci.md",
+      "target": "doc:docs/concepts/ci/providers.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/ci.md"
+    },
+    {
+      "source": "doc:docs/concepts/ci.md",
+      "target": "doc:docs/concepts/targets/ci.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/ci.md"
+    },
+    {
+      "source": "doc:docs/concepts/ci.md",
+      "target": "doc:docs/guides/integrations/ci.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/ci.md"
+    },
+    {
+      "source": "doc:docs/concepts/ci.md",
+      "target": "doc:docs/guides/integrations/github-actions.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/ci.md"
+    },
+    {
+      "source": "doc:docs/concepts/ci.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/ci.md"
+    },
+    {
+      "source": "doc:docs/concepts/ci/providers.md",
+      "target": "doc:docs/concepts/cache/remote.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/ci/providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/ci/providers.md",
       "target": "doc:docs/concepts/sandbox.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/concepts/ci-providers.md"
+      "provenance": "docs/concepts/ci/providers.md"
     },
     {
-      "source": "doc:docs/concepts/ci-providers.md",
+      "source": "doc:docs/concepts/ci/providers.md",
       "target": "doc:docs/guides/authoring-spells.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/concepts/ci-providers.md"
+      "provenance": "docs/concepts/ci/providers.md"
     },
     {
-      "source": "doc:docs/concepts/ci-providers.md",
+      "source": "doc:docs/concepts/ci/providers.md",
       "target": "doc:docs/reference/buzz/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/concepts/ci-providers.md"
+      "provenance": "docs/concepts/ci/providers.md"
     },
     {
       "source": "doc:docs/concepts/compatibility.md",
@@ -28183,6 +28331,14 @@
     },
     {
       "source": "doc:docs/concepts/secrets.md",
+      "target": "doc:docs/concepts/secrets/providers.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/secrets.md"
+    },
+    {
+      "source": "doc:docs/concepts/secrets.md",
       "target": "doc:docs/guides/authoring-spells.md",
       "relation": "references",
       "confidence": "extracted",
@@ -28268,6 +28424,22 @@
       "confidence": "inferred",
       "score": 0.5,
       "provenance": "docs/concepts/secrets.md"
+    },
+    {
+      "source": "doc:docs/concepts/secrets/providers.md",
+      "target": "doc:docs/concepts/ci/providers.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/secrets/providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/secrets/providers.md",
+      "target": "doc:docs/guides/tips.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/secrets/providers.md"
     },
     {
       "source": "doc:docs/concepts/services.md",
@@ -28383,7 +28555,7 @@
     },
     {
       "source": "doc:docs/concepts/spells.md",
-      "target": "doc:docs/concepts/ci-providers.md",
+      "target": "doc:docs/concepts/ci/providers.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -28519,7 +28691,7 @@
     },
     {
       "source": "doc:docs/concepts/spells.md",
-      "target": "doc:docs/concepts/workspace-providers.md",
+      "target": "doc:docs/concepts/workspace/providers.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -29166,102 +29338,6 @@
       "provenance": "docs/concepts/wards.md"
     },
     {
-      "source": "doc:docs/concepts/workspace-providers.md",
-      "target": "diagnostic:MGS1023",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/concepts/workspace-providers.md"
-    },
-    {
-      "source": "doc:docs/concepts/workspace-providers.md",
-      "target": "diagnostic:MGS1024",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/concepts/workspace-providers.md"
-    },
-    {
-      "source": "doc:docs/concepts/workspace-providers.md",
-      "target": "doc:docs/concepts/cache/remote.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/workspace-providers.md"
-    },
-    {
-      "source": "doc:docs/concepts/workspace-providers.md",
-      "target": "doc:docs/concepts/ci-providers.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/workspace-providers.md"
-    },
-    {
-      "source": "doc:docs/concepts/workspace-providers.md",
-      "target": "doc:docs/concepts/secrets.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/workspace-providers.md"
-    },
-    {
-      "source": "doc:docs/concepts/workspace-providers.md",
-      "target": "doc:docs/concepts/spells.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/workspace-providers.md"
-    },
-    {
-      "source": "doc:docs/concepts/workspace-providers.md",
-      "target": "doc:docs/concepts/workspace.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/workspace-providers.md"
-    },
-    {
-      "source": "doc:docs/concepts/workspace-providers.md",
-      "target": "doc:docs/guides/integrations/nx.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/workspace-providers.md"
-    },
-    {
-      "source": "doc:docs/concepts/workspace-providers.md",
-      "target": "doc:docs/reference/codes/magusfile/MGS1023.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/workspace-providers.md"
-    },
-    {
-      "source": "doc:docs/concepts/workspace-providers.md",
-      "target": "doc:docs/reference/codes/magusfile/MGS1024.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/workspace-providers.md"
-    },
-    {
-      "source": "doc:docs/concepts/workspace-providers.md",
-      "target": "doc:docs/reference/manpage/magus-describe.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/concepts/workspace-providers.md"
-    },
-    {
-      "source": "doc:docs/concepts/workspace-providers.md",
-      "target": "doc:docs/reference/manpage/magus-ls.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/concepts/workspace-providers.md"
-    },
-    {
       "source": "doc:docs/concepts/workspace.md",
       "target": "diagnostic:MGS3005",
       "relation": "documents",
@@ -29327,7 +29403,7 @@
     },
     {
       "source": "doc:docs/concepts/workspace.md",
-      "target": "doc:docs/concepts/workspace-providers.md",
+      "target": "doc:docs/concepts/workspace/providers.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -29444,6 +29520,102 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/concepts/workspace/affected.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/providers.md",
+      "target": "diagnostic:MGS1023",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/workspace/providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/providers.md",
+      "target": "diagnostic:MGS1024",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/workspace/providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/providers.md",
+      "target": "doc:docs/concepts/cache/remote.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/providers.md",
+      "target": "doc:docs/concepts/ci/providers.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/providers.md",
+      "target": "doc:docs/concepts/secrets.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/providers.md",
+      "target": "doc:docs/concepts/spells.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/providers.md",
+      "target": "doc:docs/concepts/workspace.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/providers.md",
+      "target": "doc:docs/guides/integrations/nx.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/providers.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1023.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/providers.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1024.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace/providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/providers.md",
+      "target": "doc:docs/reference/manpage/magus-describe.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/workspace/providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace/providers.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/concepts/workspace/providers.md"
     },
     {
       "source": "doc:docs/conventions.md",
@@ -29639,7 +29811,7 @@
     },
     {
       "source": "doc:docs/documentation.md",
-      "target": "doc:docs/concepts/workspace-providers.md",
+      "target": "doc:docs/concepts/workspace.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -29647,7 +29819,7 @@
     },
     {
       "source": "doc:docs/documentation.md",
-      "target": "doc:docs/concepts/workspace.md",
+      "target": "doc:docs/concepts/workspace/providers.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -30135,7 +30307,7 @@
     },
     {
       "source": "doc:docs/guides/authoring-spells.md",
-      "target": "doc:docs/concepts/ci-providers.md",
+      "target": "doc:docs/concepts/ci/providers.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -31207,7 +31379,7 @@
     },
     {
       "source": "doc:docs/guides/integrations/github-actions.md",
-      "target": "doc:docs/concepts/ci-providers.md",
+      "target": "doc:docs/concepts/ci/providers.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -31335,7 +31507,7 @@
     },
     {
       "source": "doc:docs/guides/integrations/nx.md",
-      "target": "doc:docs/concepts/workspace-providers.md",
+      "target": "doc:docs/concepts/workspace/providers.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -31447,7 +31619,7 @@
     },
     {
       "source": "doc:docs/guides/quickstart.md",
-      "target": "doc:docs/concepts/ci-providers.md",
+      "target": "doc:docs/concepts/ci/providers.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -33975,7 +34147,7 @@
     },
     {
       "source": "doc:docs/reference/codes/magusfile/MGS1023.md",
-      "target": "doc:docs/concepts/workspace-providers.md",
+      "target": "doc:docs/concepts/workspace/providers.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -34007,7 +34179,7 @@
     },
     {
       "source": "doc:docs/reference/codes/magusfile/MGS1024.md",
-      "target": "doc:docs/concepts/workspace-providers.md",
+      "target": "doc:docs/concepts/workspace/providers.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,

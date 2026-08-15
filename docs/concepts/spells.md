@@ -114,7 +114,7 @@ fun nodeServe(target: Target) > Service {
 export fun mgs_listTargets() > any { return {"go-fmt": goFmt, "serve": nodeServe}; }
 ```
 
-**In-VM work is still not an op.** Custom logic magus neither forks nor blocks on (HTTP, signing, a remote cache backend's get/put) is not an op at all. A remote cache backend is a separate contract magus's core invokes by name (see [Remote caching](cache/remote.md)); any other one-off logic belongs in a magusfile target body written directly with the host modules (`proc\exec`, `http`, `crypto`).
+**In-VM work is still not an op.** Custom logic magus neither forks nor blocks on (HTTP, signing, a remote cache provider's get/put) is not an op at all. A remote cache provider is a separate contract magus's core invokes by name (see [Remote caching](cache/remote.md)); any other one-off logic belongs in a magusfile target body written directly with the host modules (`proc\exec`, `http`, `crypto`).
 
 ## Binding a spell to a project
 
@@ -161,7 +161,7 @@ The go/docker relationship is exactly this **co-binding**, not an import: both a
 
 Three magus APIs take a spell handle as an argument, and each is a magus call consuming a spell rather than a spell importing a spell:
 
-- `magus\cache.remote(github)` wires a **cache-backend** spell (e.g. `github-actions`, `aws-s3`) as the remote cache backend. See [Remote caching](cache/remote.md).
+- `magus\cache.remote(github)` wires a **cache-provider** spell (e.g. `github-actions`, `aws-s3`) as the remote cache provider. See [Remote caching](cache/remote.md).
 - `magus\ci.provider(github)` wires a **CI-provider** spell, which teaches magus one CI system's job-log structure: fold markers around a failure, and annotations that surface on a pull request. See [CI providers](ci/providers.md).
 - `magus\workspace.provider(nx)` wires a **workspace-provider** spell, which supplies the workspace's project set by asking the tool that already owns it (nx, gradle, pnpm, cargo), so a repo needs no magusfile per project. See [Workspace providers](workspace/providers.md).
 
@@ -186,7 +186,7 @@ Naming the op `golangci-lint` (not `lint`) and `go-fmt` (not `fmt`) says exactly
 
 **Handler: the same command in lowerCamelCase, with Go-style initialisms** (`go-fmt` → `goFmt`, `golangci-lint` → `golangCILint`, `ruff-check` → `ruffCheck`). The handler name is invisible to magus; it exists to tell the reader the exact binary.
 
-**Not every op is a CLI command.** A no-op marker (typescript's `preflight`) or a cache-backend verb (github/s3 `get-entry`) is not a tool invocation, so keep a descriptive name.
+**Not every op is a CLI command.** A no-op marker (typescript's `preflight`) or a cache-provider verb (github/s3 `get-entry`) is not a tool invocation, so keep a descriptive name.
 
 **Op keys are matched verbatim** (no kebab/case normalization, unlike target names), so a kebab key is reached by subscript in a magusfile: `go["go-build"](ctx)`, not `go.build(ctx)`. An op whose key is a valid identifier (`pytest`, `eslint`) can use dot: `py.pytest(ctx)`. Either way the first argument is the target's context - the `ctx` the target function received - and any options follow it: `go["go-build"](ctx, { "cwd": "." })`.
 
@@ -364,8 +364,8 @@ Read these spells under [`spells/`](https://github.com/egladman/magus/tree/HEAD/
 | Spell                                            | Role            | What it demonstrates                                                                                                                                                                               |
 | ------------------------------------------------ | --------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | [`buf`](../../spells/buf/spell.buzz)                | fork (built-in) | A **codegen producer**: `needs` (`.proto` + buf config) and `provides` (generated code), so editing a `.proto` reruns codegen and invalidates everything downstream of the generated files.        |
-| [`github-actions`](../../spells/github/actions/spell.buzz) | cache backend, CI provider, secret provider | One vendor, three contracts, each inert outside Actions. A **remote cache backend** over the GitHub Actions Cache API in pure Buzz (bearer auth, byte-level chunked upload/streamed download via the `http` byte primitives, wired with `magus\cache.remote`); a **CI provider** emitting the `::` workflow commands (`magus\ci.provider`); and a **secret provider** that mints OIDC tokens and masks resolved values in the runner's log (`magus\secret.provider`). |
-| [`aws-s3`](../../spells/aws/s3-cache/spell.buzz)  | cache backend   | A **remote cache backend** for S3/MinIO/R2/B2 that signs every request with **AWS SigV4** via `crypto`'s keyed-hash primitives.                                                                    |
+| [`github-actions`](../../spells/github/actions/spell.buzz) | cache provider, CI provider, secret provider | One vendor, three contracts, each inert outside Actions. A **remote cache provider** over the GitHub Actions Cache API in pure Buzz (bearer auth, byte-level chunked upload/streamed download via the `http` byte primitives, wired with `magus\cache.remote`); a **CI provider** emitting the `::` workflow commands (`magus\ci.provider`); and a **secret provider** that mints OIDC tokens and masks resolved values in the runner's log (`magus\secret.provider`). |
+| [`aws-s3`](../../spells/aws/s3-cache/spell.buzz)  | cache provider   | A **remote cache provider** for S3/MinIO/R2/B2 that signs every request with **AWS SigV4** via `crypto`'s keyed-hash primitives.                                                                    |
 
 ## See also
 

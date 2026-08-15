@@ -7,7 +7,7 @@ package spells
 // project.
 //
 // It is a CONTRACT FUNCTION, not an op, for the same reason the remote cache
-// backend's get_artifact/put_artifact are: the work happens in the VM (it shells out
+// provider's get_artifact/put_artifact are: the work happens in the VM (it shells out
 // to the foreign tool and shapes the answer) and it returns data rather than a
 // Command for magus to fork. The invoker reaches an exported function of this name
 // when no op matches, which is what makes one name enough. Hence Contract, not Op:

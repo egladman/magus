@@ -244,10 +244,10 @@ you adopt it, say so in the branch's `AGENTS.md` or `MAGUS.md`.
 
 ## Shared cache trust
 
-**Who may write the cache is a trust boundary.** The primary defense is Ed25519 signing: a consumer replays a remote artifact only if it carries a signature from a key in `cache.remote.trusted_keys`. Wiring a remote backend without a trust set is refused.
+**Who may write the cache is a trust boundary.** The primary defense is Ed25519 signing: a consumer replays a remote artifact only if it carries a signature from a key in `cache.remote.trusted_keys`. Wiring a remote provider without a trust set is refused.
 
 ```yaml
-# magus.yaml  -  bind the backend in magusfile.buzz via magus\cache.remote(github)
+# magus.yaml  -  bind the provider in magusfile.buzz via magus\cache.remote(github)
 cache:
   remote:
     trusted_keys:
@@ -261,4 +261,4 @@ A complementary defense is to open the cache **read-only on untrusted refs**: re
 MAGUS_CACHE_WRITE_ENABLED: ${{ github.event_name != 'pull_request' }}
 ```
 
-To set up a shared cache (GitHub Actions Cache, S3/MinIO/R2/B2, or your own backend) and generate signing keys, see [Remote caching](../cache/remote.md).
+To set up a shared cache (GitHub Actions Cache, S3/MinIO/R2/B2, or your own provider) and generate signing keys, see [Remote caching](../cache/remote.md).

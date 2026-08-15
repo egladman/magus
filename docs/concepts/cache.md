@@ -705,7 +705,7 @@ evicts entries older than a cutoff. To force a clean rebuild of specific project
 
 Everything above is local to one machine. A [remote cache](cache/remote.md) shares
 these exact artifacts across CI runners: on a **local** miss magus asks the remote
-backend for the artifact keyed by the same `(projectPath, hash)`, and if found
+provider for the artifact keyed by the same `(projectPath, hash)`, and if found
 imports it into the local store so the ordinary hit path replays it - no rebuild.
 After a genuine build, magus uploads the artifact so the next machine hits.
 
@@ -715,7 +715,7 @@ are identical - the remote layer only moves those bytes between machines. On top
 that it adds a **signed trust model**: because a replayed artifact injects files
 into a consumer's build, every remote artifact is verified against an Ed25519 trust
 set before it is allowed to replay, and an unsigned or untrusted one falls back to a
-local build. That trust boundary, the backend contract, and CI wiring are covered
+local build. That trust boundary, the provider contract, and CI wiring are covered
 in full in [remote-cache.md](cache/remote.md); this page's model is what it builds
 on.
 
