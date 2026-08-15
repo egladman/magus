@@ -297,6 +297,91 @@
   font-size: var(--pf-t--global--font--size--sm);
 }
 
+/* A comment sits in the stream, one row tall like everything else, so it scrolls with the code
+ * it is about and costs the virtualizer nothing special. Indented past the gutters so the diff
+ * text stays in one column and the remark reads as attached rather than as another line. */
+.console-diff-row--comment {
+  gap: var(--pf-t--global--spacer--xs);
+  padding-inline-start: 7ch;
+  /* Secondary, not the highlight token. Highlight is a saturated yellow that in dark mode
+   * dominated the screen and dropped the text's contrast - and it was fighting for attention
+   * with the diff itself, which is what the reader actually came for. The coloured left border
+   * already says "this is a remark, and this is who wrote it", so the fill only has to
+   * separate the row from the code around it. */
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-inline-start: 3px solid var(--console-accent);
+  color: var(--pf-t--global--text--color--regular);
+  font-family: var(--pf-t--global--font--family--body);
+  /* The body font is taller than the mono font at the same nominal size, so at the shared row
+   * height its text overflowed the box and collided with the next comment. The virtualizer's
+   * geometry is fixed and non-negotiable - every row is ROW_HEIGHT - so the TEXT has to fit
+   * the row rather than the row growing to fit the text. */
+  font-size: var(--pf-t--global--font--size--xs);
+  line-height: 20px;
+  overflow: hidden;
+}
+
+/* An agent's remark is tinted differently from the reader's own. Not decoration: in a paired
+ * review the first question about any comment is who said it, and the daemon stamps that from
+ * the transport, so the colour is reporting a fact rather than a claim. */
+.console-diff-row--comment[data-author="agent"] {
+  border-inline-start-color: var(--pf-t--global--icon--color--status--info--default);
+}
+
+.console-diff-row--comment[data-resolved] {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.console-diff-row__who {
+  flex: 0 0 auto;
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  font-size: var(--pf-t--global--font--size--xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.console-diff-row__comment {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The composer is PINNED to the scroll container rather than inserted into the virtualized
+ * window, because that window is replaced wholesale on every scroll frame - a composer living
+ * inside it would be destroyed mid-sentence. */
+.console-diff-composer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+  padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-block-start: 2px solid var(--console-accent);
+}
+
+.console-diff-composer__where {
+  flex: 0 0 auto;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  white-space: nowrap;
+}
+
+.console-diff-composer__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--pf-t--global--background--color--primary--default);
+  color: inherit;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  padding: 2px var(--pf-t--global--spacer--xs);
+  font: inherit;
+}
+
 /* A read hunk dims rather than hides: the reader marked it, they did not delete it, and a
  * collapsed one would make the scroll geometry depend on progress. */
 .console-diff-row--hunk[data-viewed] {

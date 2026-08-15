@@ -26,6 +26,7 @@
 import { parsePatch, type DiffFile, type FileStatus } from "./parse";
 import {
   buildRows,
+  byHunk,
   hunkRowIndexes,
   fileRowIndexes,
   nextIndexAfter,
@@ -211,6 +212,20 @@ export function activate(host: HTMLElement): () => void {
         el.append(label("read", "pf-m-green", "Marked read - press v to unmark"));
       return el;
     }
+    if (row.kind === "comment") {
+      const el = h("div", "console-diff-row console-diff-row--comment");
+      el.dataset.author = row.comment.author;
+      if (row.comment.resolved) el.dataset.resolved = "";
+      const who = h("span", "console-diff-row__who");
+      // The agent's own label when it gave one, else the role. Attribution is stamped by the
+      // daemon from the transport, so this is reporting who wrote it rather than repeating a
+      // claim the writer made about itself.
+      who.textContent = row.comment.author === "agent" ? row.comment.agent_name || "agent" : "you";
+      const body = h("span", "console-diff-row__comment", row.comment.body);
+      el.append(who, body);
+      if (row.comment.resolved) el.append(label("resolved", "pf-m-green"));
+      return el;
+    }
     if (row.kind === "line") {
       const el = h("div", "console-diff-row");
       el.dataset.kind = row.line.kind;
@@ -308,18 +323,23 @@ export function activate(host: HTMLElement): () => void {
     });
   };
 
-  const applySession = (s: ReviewSession): void => {
+  // applySession takes the daemon's copy as authoritative and re-lays the stream, because a
+  // comment - the human's or an agent's - is a ROW, so it changes the scroll geometry. Only
+  // repainting would leave the new remark invisible until the next unrelated rebuild.
+  const applySession = (s: ReviewSession, relayout = true): void => {
+    const before = (state.session?.comments ?? []).length;
     state.session = s;
     state.viewed = new Set(s.viewed ?? []);
     renderRail();
-    renderToolbar();
+    if (relayout && (s.comments ?? []).length !== before) void rebuild();
+    else renderToolbar();
   };
 
   // --- model rebuild --------------------------------------------------------
 
   const rebuild = async (): Promise<void> => {
     state.files = visibleFiles(state.changeset, state.showGenerated);
-    state.rows = buildRows(state.files, state.mode);
+    state.rows = buildRows(state.files, state.mode, byHunk(state.session?.comments ?? []));
     state.hunks = hunkRowIndexes(state.rows);
     state.fileRows = fileRowIndexes(state.rows);
     spacer.style.height = `${state.rows.length * ROW_HEIGHT}px`;
@@ -606,6 +626,72 @@ export function activate(host: HTMLElement): () => void {
     return best ?? state.hunks[0] ?? null;
   };
 
+  // comment opens a one-line composer pinned under the hunk the cursor is in.
+  //
+  // A prompt() would have been fewer lines and is the wrong shape: it steals focus from the
+  // page, cannot show WHICH hunk is being annotated, and gives an agent's reader no way to see
+  // the code they are remarking on while they type. The composer sits in the stream for the
+  // same reason the comments do.
+  const composeComment = (): void => {
+    const i = currentHunkRow();
+    if (i === null) return;
+    const row = state.rows[i];
+    if (!row || row.kind !== "hunk") return;
+
+    // One composer at a time; a second press re-focuses rather than stacking boxes.
+    const existing = scroll.querySelector<HTMLInputElement>(".console-diff-composer__input");
+    if (existing) {
+      existing.focus();
+      return;
+    }
+
+    const box = h("div", "console-diff-composer");
+    const where = h("span", "console-diff-composer__where");
+    where.textContent = `${row.file.path} hunk ${row.index + 1}`;
+    const input = h("input", "console-diff-composer__input");
+    input.type = "text";
+    input.placeholder =
+      "Say what is wrong, or what you had to work out. Enter to post, Esc to cancel.";
+    const close = (): void => {
+      box.remove();
+      scroll.focus();
+    };
+    input.addEventListener("keydown", (e) => {
+      // Stopped here so the surface's own single-letter keys do not fire while typing - a
+      // bare "v" in a comment must be the letter v.
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close();
+        return;
+      }
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const body = input.value.trim();
+      close();
+      if (!body) return;
+      sync({ op: "comment", path: row.file.path, hunk: row.index, body });
+    });
+    box.append(where, input);
+    // Pinned rather than inserted into the virtualized window: the window is replaced wholesale
+    // on every scroll frame, so a composer living in it would be destroyed mid-sentence.
+    scroll.append(box);
+    input.focus();
+  };
+
+  // resolveHere closes the first unresolved comment on the hunk the cursor is in. Either party
+  // may resolve - see the store - so this needs no author check.
+  const resolveHere = (): void => {
+    const i = currentHunkRow();
+    if (i === null) return;
+    const row = state.rows[i];
+    if (!row || row.kind !== "hunk") return;
+    const open = (state.session?.comments ?? []).find(
+      (c) => c.path === row.file.path && c.hunk === row.index && !c.resolved,
+    );
+    if (open) sync({ op: "resolve", id: open.id, on: true });
+  };
+
   const acceptSuggestion = (id?: string): void => {
     const pending = (state.session?.suggestions ?? []).filter((s) => !s.accepted && !s.declined);
     const target = id ? pending.find((s) => s.id === id) : pending[0];
@@ -708,6 +794,18 @@ export function activate(host: HTMLElement): () => void {
         if (p) sync({ op: "answer", id: p.id, on: false });
       },
       key: "x",
+    },
+    {
+      id: "review.comment",
+      label: "Review: comment on this hunk",
+      run: composeComment,
+      key: "c",
+    },
+    {
+      id: "review.comment.resolve",
+      label: "Review: resolve the comment here",
+      run: resolveHere,
+      key: "r",
     },
     {
       id: "review.overview",

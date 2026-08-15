@@ -11,16 +11,41 @@
 // the kind of index arithmetic that is wrong until it is tested.
 
 import type { DiffFile, DiffLine, Hunk } from "./parse";
+import type { ReviewComment } from "./session";
 
 export type ViewMode = "unified" | "split";
+
+// commentKey addresses a comment's anchor: a file plus the hunk's index WITHIN that file.
+//
+// Within-file rather than a global row index, because a global one changes meaning the moment
+// the generated group folds or the view mode switches - the same comment would slide onto a
+// different hunk. It is also the coordinate the session and an agent speak in, so a comment
+// written in the console and one written over MCP land in the same place.
+export function commentKey(path: string, hunk: number): string {
+  return `${path}\n${hunk}`;
+}
+
+// byHunk groups comments by their anchor so buildRows can interleave them in one pass rather
+// than scanning the whole list per hunk.
+export function byHunk(comments: readonly ReviewComment[]): Map<string, ReviewComment[]> {
+  const out = new Map<string, ReviewComment[]>();
+  for (const c of comments) {
+    const k = commentKey(c.path, c.hunk);
+    const at = out.get(k);
+    if (at) at.push(c);
+    else out.set(k, [c]);
+  }
+  return out;
+}
 
 // Row is one rendered line of the stream. `file` and `hunk` rows are the headings; `line` is
 // unified content; `pair` is split content, where either side may be absent because an
 // add-only or delete-only run has nothing to sit opposite it.
 export type Row =
   | { readonly kind: "file"; readonly file: DiffFile }
-  | { readonly kind: "hunk"; readonly file: DiffFile; readonly hunk: Hunk }
+  | { readonly kind: "hunk"; readonly file: DiffFile; readonly hunk: Hunk; readonly index: number }
   | { readonly kind: "line"; readonly file: DiffFile; readonly line: DiffLine }
+  | { readonly kind: "comment"; readonly file: DiffFile; readonly comment: ReviewComment }
   | {
       readonly kind: "pair";
       readonly file: DiffFile;
@@ -29,15 +54,28 @@ export type Row =
     };
 
 // buildRows flattens files into the row array for one view mode.
-export function buildRows(files: readonly DiffFile[], mode: ViewMode): Row[] {
+//
+// Comments are interleaved as rows of their own, directly under the hunk they annotate, rather
+// than floated beside the stream. That placement is the point: a remark read three inches from
+// the code it is about is a remark the reader has to hold in their head, and the whole reason
+// this surface exists is to stop asking them to do that. It costs the comment a row in the
+// virtualizer's geometry, which is exactly what makes it scroll with the code.
+export function buildRows(
+  files: readonly DiffFile[],
+  mode: ViewMode,
+  comments?: Map<string, ReviewComment[]>,
+): Row[] {
   const rows: Row[] = [];
   for (const file of files) {
     rows.push({ kind: "file", file });
-    for (const hunk of file.hunks) {
-      rows.push({ kind: "hunk", file, hunk });
+    file.hunks.forEach((hunk, index) => {
+      rows.push({ kind: "hunk", file, hunk, index });
+      for (const c of comments?.get(commentKey(file.path, index)) ?? []) {
+        rows.push({ kind: "comment", file, comment: c });
+      }
       if (mode === "split") pushSplit(rows, file, hunk);
       else for (const line of hunk.lines) rows.push({ kind: "line", file, line });
-    }
+    });
   }
   return rows;
 }

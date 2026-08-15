@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { parsePatch } from "./parse";
 import {
   buildRows,
+  byHunk,
+  commentKey,
   hunkRowIndexes,
   fileRowIndexes,
   nextIndexAfter,
@@ -129,6 +131,69 @@ test("split starts a new replacement when a deletion follows an addition", () =>
       ["a", "b"],
       ["c", "d"],
     ],
+  );
+});
+
+// A remark read three inches from the code it is about is a remark the reader has to hold in
+// their head. It belongs directly under its hunk, in the scroll geometry.
+test("a comment becomes a row directly under the hunk it annotates", () => {
+  const comments = [
+    { id: "c1", path: "x.ts", hunk: 0, author: "agent" as const, body: "look", resolved: false },
+  ];
+  const rows = buildRows(parsePatch(REPLACEMENT), "unified", byHunk(comments));
+  assert.deepEqual(
+    rows.map((r) => r.kind),
+    ["file", "hunk", "comment", "line", "line", "line", "line", "line", "line"],
+  );
+});
+
+test("comments land on their own hunk, not the first one", () => {
+  const patch = [
+    "diff --git a/a.ts b/a.ts",
+    "--- a/a.ts",
+    "+++ b/a.ts",
+    "@@ -1 +1 @@",
+    "-x",
+    "+y",
+    "@@ -9 +9 @@",
+    "-p",
+    "+q",
+    "",
+  ].join("\n");
+  const comments = [
+    { id: "c1", path: "a.ts", hunk: 1, author: "human" as const, body: "second", resolved: false },
+  ];
+  const rows = buildRows(parsePatch(patch), "unified", byHunk(comments));
+  const at = rows.findIndex((r) => r.kind === "comment");
+  const prevHunk = rows.slice(0, at).filter((r) => r.kind === "hunk").length;
+  assert.equal(prevHunk, 2, "the comment must follow the SECOND hunk header");
+});
+
+// The anchor is the hunk's index within its file. A global row index would slide the comment
+// onto a different hunk the moment the generated group folded.
+test("comment keys are per file and per hunk index", () => {
+  assert.notEqual(commentKey("a.ts", 0), commentKey("b.ts", 0));
+  assert.notEqual(commentKey("a.ts", 0), commentKey("a.ts", 1));
+});
+
+test("several comments on one hunk keep their order", () => {
+  const comments = [
+    { id: "c1", path: "x.ts", hunk: 0, author: "agent" as const, body: "first", resolved: false },
+    { id: "c2", path: "x.ts", hunk: 0, author: "human" as const, body: "reply", resolved: false },
+  ];
+  const rows = buildRows(parsePatch(REPLACEMENT), "unified", byHunk(comments));
+  const bodies = rows
+    .filter((r): r is Extract<Row, { kind: "comment" }> => r.kind === "comment")
+    .map((r) => r.comment.body);
+  assert.deepEqual(bodies, ["first", "reply"]);
+});
+
+test("no comments leaves the row shape untouched", () => {
+  const withNone = buildRows(parsePatch(REPLACEMENT), "unified", byHunk([]));
+  const without = buildRows(parsePatch(REPLACEMENT), "unified");
+  assert.deepEqual(
+    withNone.map((r) => r.kind),
+    without.map((r) => r.kind),
   );
 });
 
