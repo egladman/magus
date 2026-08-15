@@ -867,11 +867,13 @@ func magusfileGlobs(projectPath string) []string {
 	return out
 }
 
-func joinGlob(path, glob string) string {
-	if path == "." {
-		return glob
-	}
-	return path + "/" + glob
+// joinGlob roots a project-relative glob at the workspace for the cache step and the
+// describe surfaces. It is a named pass-through on purpose: nine call sites in this
+// package read as "join", and the rooting rule itself belongs in types, where
+// Project.DeclaredGlobs - the attribution mirror of these very lines - can share it.
+// See types.RootGlob for why the join is cleaned rather than concatenated.
+func joinGlob(projectPath, glob string) string {
+	return types.RootGlob(projectPath, glob)
 }
 
 // ExpandPath resolves the target pattern to concrete per-project targets; empty or "/" fans out to all.

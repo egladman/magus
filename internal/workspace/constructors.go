@@ -4,7 +4,9 @@ import (
 	"errors"
 	"fmt"
 	"maps"
+	"path"
 	"slices"
+	"strings"
 
 	semver "github.com/Masterminds/semver/v3"
 
@@ -49,9 +51,35 @@ func WithOutputs(paths ...string) ProjectOption {
 // resolved spells already contribute via their own Sources(). Use this when a
 // project's real inputs reach beyond what its spells claim - e.g. non-code
 // assets, sibling proto schemas, or docs a generator target reads.
+//
+// A glob may REACH OUT of the project ("../proto/**" from docs/); that is what makes
+// this the option for a sibling schema. types.RootGlob resolves the reach when the
+// glob is rooted at the workspace, so the cache key and affected attribution both see
+// "proto/**".
+//
+// Storing the path.Clean'd spelling is what keeps one glob one string. Every check
+// downstream compares declarations by string equality - Project.DeclaredGlobs dedups
+// that way, MGS1005 asks whether a per-target glob is already project-wide the same
+// way - and "./docs/**" and "docs/**" are one declaration, not two.
+//
+// A glob reaching PAST the workspace root is rejected here, where it is written, rather
+// than stored and ignored. The source walk starts at the workspace root and yields
+// workspace-relative paths, so a glob outside it can never match a file, never move a
+// cache key, and never mark this project affected - accepting one would record a
+// declaration magus has no way to honor.
 func WithSources(paths ...string) ProjectOption {
 	return func(p *types.Project) error {
-		p.Sources = append(p.Sources, paths...)
+		cleaned := make([]string, 0, len(paths))
+		for _, raw := range paths {
+			glob := path.Clean(raw)
+			rooted := types.RootGlob(p.Path, glob)
+			if rooted == ".." || strings.HasPrefix(rooted, "../") {
+				return fmt.Errorf("magus: project %q: source glob %q escapes the workspace root (it resolves to %q); "+
+					"a path outside the workspace can never key a cache entry", p.Path, raw, rooted)
+			}
+			cleaned = append(cleaned, glob)
+		}
+		p.Sources = append(p.Sources, cleaned...)
 		return nil
 	}
 }

@@ -56,12 +56,13 @@ func TestAffectedFromPathsHappyPath(t *testing.T) {
 // proto/ tree that project reads across a boundary while no project's directory
 // contains it.
 //
-// The reaching declaration is a per-target ctx.readsFiles ref rather than a "../"
-// source glob on purpose: an InputRef's Project is already resolved to a
-// workspace-relative path at load, which is the form the cache key is built from. A
-// literal "../proto/**" in Sources is stored raw and rooted by concatenation
-// everywhere (cache step included), so it matches nothing there either - attribution
-// claiming that one seeds would be claiming a key movement that does not happen.
+// The reaching declaration is a per-target ctx.readsFiles ref, which is the form whose
+// owner is resolved to a workspace-relative path at load. A project-wide "../proto/**"
+// source now says the same thing - types.RootGlob roots both by cleaning the join, so
+// the cache key and attribution move together either way; see the test below for that
+// spelling. It did not always: Sources were rooted by concatenation into
+// "api/../proto/**", which matches nothing, so attribution claiming that one seeds
+// would have been claiming a key movement that did not happen.
 func globWorkspace(t *testing.T, rootSources ...string) *types.Workspace {
 	t.Helper()
 	return &types.Workspace{
@@ -104,6 +105,30 @@ func TestSeedsForFileGlobRedirectsOutsideEveryTree(t *testing.T) {
 	seeds, declared := idx.seedsForFile("proto/order.proto")
 	assert.Equal(t, []string{"api"}, seeds, "the declaring project seeds, not the containment catch-all")
 	assert.True(t, declared)
+}
+
+// TestSeedsForFileProjectWideReachingGlobRedirects is the redirect above spelled the
+// other documented way: a project-wide "../proto/**" source instead of a per-target
+// ctx.readsFiles. Both are declarations of the same input and both must seed. Until the
+// rooting cleaned the join, only the InputRef form did - the source glob rooted to
+// "api/../proto/**", matched nothing, and left the file to the root catch-all, which is
+// exactly the undeclared-seeding hazard MGS1028 reports.
+func TestSeedsForFileProjectWideReachingGlobRedirects(t *testing.T) {
+	t.Parallel()
+	idx := newProjectIndex(&types.Workspace{
+		Root: "/fake",
+		Projects: map[string]*types.Project{
+			".": {Path: ".", Dir: "/fake", Spell: "go"},
+			"api": {
+				Path: "api", Dir: "/fake/api", Spell: "go",
+				Sources: []string{"**/*.go", "../proto/**"},
+			},
+		},
+	})
+
+	seeds, declared := idx.seedsForFile("proto/order.proto")
+	assert.Equal(t, []string{"api"}, seeds, "the project whose source glob reaches the file seeds it")
+	assert.True(t, declared, "a reaching source glob keys the file, so the rerun is backed by the cache")
 }
 
 // TestSeedsForFileUndeclaredKeepsTheCatchAll pins the fail-safe. The catch-all is

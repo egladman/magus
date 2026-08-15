@@ -307,6 +307,30 @@ func (p *Project) AllOutputs() []string {
 	return append(slices.Clone(p.Outputs), extra...)
 }
 
+// RootGlob roots a glob declared against projectPath at the WORKSPACE, which is the
+// frame every consumer of a declaration matches in: the cache walks from the workspace
+// root and yields workspace-relative paths, and DeclaredGlobs and `magus describe file`
+// compare against the same.
+//
+// It CLEANS the join rather than concatenating, and that is the whole point. A
+// project-wide source glob may legitimately reach out of its own tree ("../proto/**"
+// declared by docs/) - reaching across a boundary is what the affordance is FOR - and
+// plain concatenation leaves "docs/../proto/**", which matches nothing, because ".." is
+// an ordinary path segment to doublestar and no walked path ever contains one. That is
+// a declaration that keys nothing and attributes nothing while reading as supported:
+// an input that never invalidates. Cleaning resolves it to "proto/**", the spelling the
+// walk actually produces.
+//
+// A glob reaching PAST the workspace root is rejected where it is declared
+// (workspace.WithSources), not here: this is a pure path operation with one answer, and
+// only the declaration site can name the option that wrote it.
+func RootGlob(projectPath, glob string) string {
+	if projectPath == "" || projectPath == "." {
+		return path.Clean(glob)
+	}
+	return path.Clean(projectPath + "/" + glob)
+}
+
 // DeclaredGlobs is every glob this project declares, rooted at the WORKSPACE rather
 // than at the project: the project-wide Sources and AllOutputs, plus the per-target
 // ctx.readsFiles, ctx.writesFiles, and ctx.modifiesExistingFiles refs, each anchored
@@ -314,8 +338,16 @@ func (p *Project) AllOutputs() []string {
 //
 // It answers "does this project declare that path", which is the question affected
 // attribution asks before falling back to directory containment, and the one doctor
-// asks about the tree standing still. The rooting matches the cache step and
-// `magus describe file`, so all three agree on what a declaration covers.
+// asks about the tree standing still. The rooting goes through RootGlob, which is also
+// what the cache step and `magus describe file` root with, so the three agreeing is a
+// shared function rather than three parallel implementations that happened to match -
+// they did not: this one and the cache both concatenated, so a reaching "../" glob
+// resolved to a path neither could match, while the missing-dependency check joined the
+// same glob with filepath.Join and resolved it correctly.
+//
+// Dedup here is string equality on the ROOTED form, so two spellings that resolve to
+// one path collapse to one entry - a project-wide "../proto/**" and a per-target
+// ctx.readsFiles of proto's "**" are the same declaration and count once.
 //
 // Deliberately NOT the magusfile globs the cache step layers on top. Every project's
 // key carries the ROOT magusfile, so counting those here would make one magusfile
@@ -327,9 +359,7 @@ func (p *Project) DeclaredGlobs() []string {
 		if owner == "" {
 			owner = p.Path
 		}
-		if owner != "." {
-			glob = owner + "/" + glob
-		}
+		glob = RootGlob(owner, glob)
 		if !slices.Contains(out, glob) {
 			out = append(out, glob)
 		}

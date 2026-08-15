@@ -15,11 +15,28 @@ func TestWithOutputs(t *testing.T) {
 	assert.Equal(t, []string{"dist/**", "bin/**"}, p.Outputs)
 }
 
+// TestWithSources pins the STORED form. A glob is cleaned where it is written, so one
+// glob is one string however it was spelled, and a glob reaching into a sibling tree
+// keeps the reaching spelling that types.RootGlob resolves against this project.
 func TestWithSources(t *testing.T) {
-	p := &types.Project{Path: "."}
-	opt := WithSources("docs/**", "../proto/**/*.proto")
+	p := &types.Project{Path: "docs"}
+	opt := WithSources("./guides/**", "../proto/**/*.proto")
 	require.NoError(t, opt(p))
-	assert.Equal(t, []string{"docs/**", "../proto/**/*.proto"}, p.Sources)
+	assert.Equal(t, []string{"guides/**", "../proto/**/*.proto"}, p.Sources)
+	assert.Equal(t, "proto/**/*.proto", types.RootGlob(p.Path, p.Sources[1]),
+		"the reaching glob roots at the workspace, which is the frame the source walk yields")
+}
+
+// TestWithSourcesRejectsAWorkspaceEscape is the one reach that cannot be honored. The
+// walk starts at the workspace root, so nothing outside it is ever hashed; a glob that
+// still points there is stored as a declaration magus silently ignores, which is the
+// failure mode the reaching affordance exists to remove, not to reintroduce.
+func TestWithSourcesRejectsAWorkspaceEscape(t *testing.T) {
+	p := &types.Project{Path: "docs"}
+	err := WithSources("../../elsewhere/**")(p)
+	require.Error(t, err)
+	assert.ErrorContains(t, err, `source glob "../../elsewhere/**" escapes the workspace root`)
+	assert.Empty(t, p.Sources, "a rejected declaration stores nothing")
 }
 
 func TestWithExclusive(t *testing.T) {
