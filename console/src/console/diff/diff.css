@@ -1,3 +1,14 @@
+/* Local tokens.
+ *
+ * PatternFly ships status COLOUR tokens but no status BACKGROUND tokens, so the tint below is
+ * mixed here rather than named. Fallbacks match the ones overrides.css already uses. */
+:root {
+  --console-diff-add: var(--pf-t--global--color--status--success--default, #3e8635);
+  --console-diff-del: var(--pf-t--global--color--status--danger--default, #c9190b);
+  --console-diff-surface: var(--pf-t--global--background--color--primary--default, #ffffff);
+  --console-diff-panel: var(--pf-t--global--background--color--secondary--default, #f2f2f2);
+}
+
 /* diff.css - the Review surface: a sidebar and a virtualized hunk stream.
  *
  * Every rule here exists because the virtualizer needs it, not for decoration. The row height
@@ -20,6 +31,10 @@
 }
 
 .console-diff-sidebar {
+  /* The panels were all transparent, so sidebar, toolbar and stream read as one sheet with a
+     single hairline between them. The stream keeps the primary surface because that is where
+     the tints have to register; the chrome around it steps back onto secondary. */
+  background: var(--console-diff-panel);
   overflow-y: auto;
   border-inline-end: 1px solid var(--pf-t--global--border--color--default);
   padding: var(--pf-t--global--spacer--sm);
@@ -71,7 +86,14 @@
 }
 
 .console-diff-toolbar {
+  background: var(--console-diff-panel);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
   padding-block: var(--pf-t--global--spacer--xs);
+  padding-inline: var(--pf-t--global--spacer--sm);
+}
+
+.console-diff-scroll {
+  background: var(--console-diff-surface);
 }
 
 .console-diff-toolbar__stats {
@@ -122,12 +144,41 @@
   min-width: max-content; /* long lines extend the scroll width rather than wrapping */
 }
 
-.console-diff-row[data-kind="add"] {
-  background: var(--pf-t--global--background--color--status--success--default);
+/* Add and delete tint.
+ *
+ * These used to name --pf-t--global--background--color--status--{success,danger}--default,
+ * which PatternFly does not define: the declarations resolved to transparent, so a diff
+ * rendered as undifferentiated black text on white and the only thing separating an added
+ * line from a removed one was the +/- glyph. The COLOUR tokens below do exist, and every use
+ * carries a literal fallback the way overrides.css does.
+ *
+ * Mixed against the surface rather than hardcoded, so the tint follows the theme in both
+ * directions instead of needing a parallel dark palette.
+ *
+ * The accent bar is an inset box-shadow, NOT a border: the stream is virtualized against a
+ * fixed ROW_HEIGHT, and a border would grow the content box and drift rows out of alignment
+ * with the spacer. It is also the third channel after colour and the glyph. */
+.console-diff-row[data-kind="add"],
+.console-diff-row__side[data-kind="add"] {
+  background: color-mix(in srgb, var(--console-diff-add) 12%, var(--console-diff-surface));
+  box-shadow: inset 2px 0 0 var(--console-diff-add);
 }
 
-.console-diff-row[data-kind="del"] {
-  background: var(--pf-t--global--background--color--status--danger--default);
+.console-diff-row[data-kind="del"],
+.console-diff-row__side[data-kind="del"] {
+  background: color-mix(in srgb, var(--console-diff-del) 12%, var(--console-diff-surface));
+  box-shadow: inset 2px 0 0 var(--console-diff-del);
+}
+
+/* Dark needs a heavier mix: the same 12% over a dark surface is very nearly invisible. */
+:root.pf-v6-theme-dark .console-diff-row[data-kind="add"],
+:root.pf-v6-theme-dark .console-diff-row__side[data-kind="add"] {
+  background: color-mix(in srgb, var(--console-diff-add) 22%, var(--console-diff-surface));
+}
+
+:root.pf-v6-theme-dark .console-diff-row[data-kind="del"],
+:root.pf-v6-theme-dark .console-diff-row__side[data-kind="del"] {
+  background: color-mix(in srgb, var(--console-diff-del) 22%, var(--console-diff-surface));
 }
 
 .console-diff-row--file {
@@ -536,14 +587,11 @@
  * would compete with syntax meaning and with the accessibility work above. A wash keeps the
  * text contrast that the row already earned. */
 .console-diff-row__word {
-  background: var(--pf-t--global--color--highlight--100, rgb(255 214 0 / 28%));
   border-radius: 2px;
-}
-
-[data-kind="add"] .console-diff-row__word {
-  background: rgb(62 168 62 / 30%);
+  /* Sits ON TOP of the row tint, so it has to be materially stronger than it to read at all. */
+  background: color-mix(in srgb, var(--console-diff-add) 38%, transparent);
 }
 
 [data-kind="del"] .console-diff-row__word {
-  background: rgb(201 60 60 / 30%);
+  background: color-mix(in srgb, var(--console-diff-del) 38%, transparent);
 }
