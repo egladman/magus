@@ -35,6 +35,14 @@ export interface ReviewCoverage {
   readonly total_stmts: number;
 }
 
+export interface ReviewChurn {
+  readonly commits: number;
+  readonly authors?: number;
+  readonly score: number;
+  readonly rank?: number;
+  readonly project_trend?: number;
+}
+
 export interface ReviewFile {
   readonly path: string;
   readonly project?: string;
@@ -44,6 +52,7 @@ export interface ReviewFile {
   readonly symbols?: readonly ReviewSymbol[];
   readonly reach: number;
   readonly surface: ReviewSurface;
+  readonly churn?: ReviewChurn;
 }
 
 export interface Review {

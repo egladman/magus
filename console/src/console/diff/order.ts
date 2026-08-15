@@ -150,6 +150,25 @@ export function riskChips(a: ReviewFile | undefined): Chip[] {
     });
   }
 
+  // Churn: is this file being rewritten over and over? The rank is shown only when it is
+  // high enough to mean something - see types.ReviewChurn.notableRankCutoff. The cutoff is
+  // duplicated rather than shipped on the wire because it is a DISPLAY decision, and the two
+  // surfaces are allowed to disagree about presentation while agreeing about the data.
+  const ch = a.churn;
+  if (ch && ch.commits > 0) {
+    const notable = (ch.rank ?? 0) > 0 && (ch.rank ?? 0) <= 50;
+    const rising = notable && (ch.project_trend ?? 0) > 0;
+    const parts = [`${ch.commits} ${ch.commits === 1 ? "commit" : "commits"}`];
+    if ((ch.authors ?? 0) > 1) parts.push(`${ch.authors} authors`);
+    chips.push({
+      text: rising ? `${parts.join(", ")} and rising` : parts.join(", "),
+      tone: rising ? "danger" : notable ? "warn" : "neutral",
+      title: rising
+        ? `This file is among the workspace's most-changed (hotspot #${ch.rank}) and its project's churn is accelerating. Worth asking why it keeps changing rather than only whether this change is right.`
+        : `Changed in ${ch.commits} of the last commits scanned${notable ? ` - hotspot #${ch.rank}` : ""}.`,
+    });
+  }
+
   const cov = a.coverage;
   if (cov && cov.total_stmts > 0) {
     const pct = Math.round(cov.ratio * 100);

@@ -80,6 +80,54 @@ type ReviewSymbol struct {
 	ModuleAPI bool `json:"module_api,omitempty" yaml:"module_api,omitempty"`
 }
 
+// ReviewChurn is how often this file has been changing, and whether that is accelerating.
+//
+// It answers a question the diff itself cannot: not "is this change correct" but "is this file
+// being rewritten over and over". A file edited repeatedly is frequently a design problem
+// wearing a series of small fixes - the circle you notice only in hindsight, after the fifth
+// visit. Surfacing it AT review time is the whole point, because that is the one moment
+// somebody is already looking at the file and could still decide to fix the cause instead.
+//
+// Every field is a measurement over a bounded commit window, not a judgment. Rank is the
+// useful one to render: "third-hottest file in the workspace" means something to a reader in
+// a way a raw score never will.
+type ReviewChurn struct {
+	// Commits is how many commits in the window touched this file.
+	Commits int `json:"commits" yaml:"commits"`
+	// Authors is how many distinct people did. One author on a hot file is a bus-factor
+	// problem; many on a hot file is a coordination one. Both are worth knowing, neither is
+	// worth magus deciding.
+	Authors int `json:"authors,omitempty" yaml:"authors,omitempty"`
+	// Score is commits x complexity - the hotspot ranking's own metric.
+	Score int `json:"score" yaml:"score"`
+	// Rank is this file's 1-based position in the workspace's hotspot ranking; 0 when it did
+	// not rank at all, which is the common and unremarkable case.
+	Rank int `json:"rank,omitempty" yaml:"rank,omitempty"`
+	// ProjectTrend is the owning project's churn delta across the window's two halves.
+	// Positive is accelerating. It is PROJECT level because that is the granularity the trend
+	// lens measures; a file-level trend would be inventing precision the data does not have.
+	ProjectTrend int `json:"project_trend,omitempty" yaml:"project_trend,omitempty"`
+}
+
+// Rising reports whether this file is both hot and getting hotter - the combination worth
+// interrupting a reader for. Either signal alone is ordinary: plenty of files are hot because
+// they are big, and plenty of projects are accelerating for good reasons.
+func (c ReviewChurn) Rising() bool { return c.NotableRank() && c.ProjectTrend > 0 }
+
+// notableRankCutoff is how far down the hotspot ranking is still worth SHOWING.
+//
+// The rank itself is honest at any depth; rendering it is not. "Hotspot #1278" tells a reader
+// nothing except that a ranking exists, and a field that is usually meaningless is a field
+// they learn to skip - which then costs them the one time it says #3. The data stays whole and
+// the display is selective, the same trade the guard makes by explaining only what it is sure
+// of.
+const notableRankCutoff = 50
+
+// NotableRank reports whether this file ranks high enough for its position to be worth
+// showing. A file outside the cutoff still reports its commit count, which is the part that
+// remains meaningful on its own.
+func (c ReviewChurn) NotableRank() bool { return c.Rank > 0 && c.Rank <= notableRankCutoff }
+
 // ReviewFile is one changed file, annotated.
 type ReviewFile struct {
 	Path string `json:"path" yaml:"path"`
@@ -101,6 +149,10 @@ type ReviewFile struct {
 	// referenced from another project. It is the semver-relevant fact, and it is evidence
 	// rather than a verdict - see ReviewSurface.
 	Surface string `json:"surface" yaml:"surface"`
+	// Churn is how often this file has been changing, nil when no history lens was attached.
+	// Nil is DISTINCT from zero: "nobody measured" and "this file is quiet" are different
+	// facts, and a review that renders the first as the second is lying quietly.
+	Churn *ReviewChurn `json:"churn,omitempty" yaml:"churn,omitempty"`
 	// Reach is the widest FileCount among Symbols: how many files reference the most-referenced
 	// thing this file changed. It is the ranking key, and it is deliberately a COUNT OF FILES
 	// rather than of references - one file calling a function forty times is one file that
@@ -236,6 +288,48 @@ func (r Review) GeneratedCount() int {
 		}
 	}
 	return n
+}
+
+// AttachChurn folds the VCS-history lenses onto the review, in place.
+//
+// It is a separate step from building the review, and the caller supplies the lens data,
+// because the two have very different costs and very different freshness needs. The
+// annotations are cheap and must be current; the history lenses are a bounded git-log scan
+// that the daemon already caches for everyone. Computing them inside Review would either make
+// every review pay for a scan or bake a cache into a function that has no business owning one.
+// So the daemon passes its cached scan and the CLI passes a fresh one, and this is the single
+// definition of how the numbers land on a file either way.
+//
+// A file with no hotspot entry gets Churn only when its project has a trend, so "quiet file in
+// an accelerating project" is still expressible; a file with neither is left nil, because nil
+// is what says nobody measured.
+func (r Review) AttachChurn(files []FileHotspot, projects []TrendEntry) {
+	rank := make(map[string]int, len(files))
+	hot := make(map[string]FileHotspot, len(files))
+	for i, f := range files {
+		rank[f.Path] = i + 1 // 1-based: "third-hottest" reads, "index 2" does not
+		hot[f.Path] = f
+	}
+	trend := make(map[string]int, len(projects))
+	for _, p := range projects {
+		trend[p.Path] = p.Delta
+	}
+
+	for i := range r.Files {
+		f := &r.Files[i]
+		h, isHot := hot[f.Path]
+		d, hasTrend := trend[f.Project]
+		if !isHot && !hasTrend {
+			continue
+		}
+		f.Churn = &ReviewChurn{
+			Commits:      h.Commits,
+			Authors:      h.Authors,
+			Score:        h.Score,
+			Rank:         rank[f.Path],
+			ProjectTrend: d,
+		}
+	}
 }
 
 // SortForReview orders Files into the sequence magus recommends reading them in. It sorts in

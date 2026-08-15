@@ -157,6 +157,50 @@ test("risk chips state facts and name the API", () => {
   assert.match(chips[0]?.title ?? "", /Open/);
 });
 
+// The circling detector. Hot AND accelerating is the combination worth interrupting for;
+// either alone is ordinary.
+test("a hot, accelerating file reads as rising", () => {
+  const chips = riskChips(
+    ann("hot.go", { churn: { commits: 40, authors: 3, score: 900, rank: 2, project_trend: 12 } }),
+  );
+  const churn = chips.find((c) => c.text.includes("commit"));
+  assert.equal(churn?.text, "40 commits, 3 authors and rising");
+  assert.equal(churn?.tone, "danger");
+  assert.match(churn?.title ?? "", /why it keeps changing/);
+});
+
+// A deep rank is honest data and meaningless display - a field that is usually noise is a
+// field the reader learns to skip.
+test("a deeply ranked file reports its commits without the rank", () => {
+  const chips = riskChips(
+    ann("cold.go", { churn: { commits: 2, score: 4, rank: 1278, project_trend: 5 } }),
+  );
+  const churn = chips.find((c) => c.text.includes("commit"));
+  assert.equal(churn?.text, "2 commits");
+  assert.equal(churn?.tone, "neutral");
+  assert.doesNotMatch(churn?.title ?? "", /1278/);
+});
+
+test("a hot file in a cooling project is not rising", () => {
+  const chips = riskChips(
+    ann("hot.go", { churn: { commits: 30, score: 500, rank: 3, project_trend: -8 } }),
+  );
+  const churn = chips.find((c) => c.text.includes("commit"));
+  assert.doesNotMatch(churn?.text ?? "", /rising/);
+  assert.equal(churn?.tone, "warn");
+});
+
+test("one commit is singular", () => {
+  const chips = riskChips(ann("new.go", { churn: { commits: 1, score: 1 } }));
+  assert.equal(chips.find((c) => c.text.includes("commit"))?.text, "1 commit");
+});
+
+// Nil churn means nobody measured, which must not render as a quiet file.
+test("no churn data renders no churn chip", () => {
+  const chips = riskChips(ann("x.go", { reach: 3 }));
+  assert.equal(chips.filter((c) => c.text.includes("commit")).length, 0);
+});
+
 test("no annotation yields no chips rather than empty placeholders", () => {
   assert.deepEqual(riskChips(undefined), []);
 });

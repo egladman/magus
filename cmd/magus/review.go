@@ -55,6 +55,18 @@ func reviewCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	// The churn lenses, from a fresh scan. The daemon serves these from a warm cache; a
+	// one-shot CLI has none, so it pays the bounded git-log walk here. Best-effort: a
+	// workspace with no history simply reports no churn rather than failing the review.
+	// Files: true is required - without it the lens ranks PROJECTS and the per-file list is
+	// empty, so every file would silently report no churn.
+	if hot, herr := m.Hotspots(ctx, types.InsightOptions{Commits: reviewHistoryCommits, Files: true}); herr == nil {
+		var projects []types.TrendEntry
+		if tr, terr := m.Trend(ctx, types.InsightOptions{Commits: reviewHistoryCommits}); terr == nil {
+			projects = tr.Projects
+		}
+		rev.AttachChurn(hot.Files, projects)
+	}
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -85,6 +97,11 @@ func reviewUsage(w *os.File) {
 	fmt.Fprintln(w, "Flags:")
 	fmt.Fprintln(w, "  --generated   include the folded declared outputs")
 }
+
+// reviewHistoryCommits bounds the git-log walk the churn lenses do. 500 matches what the
+// daemon's insight scan uses, so the CLI and the console rank the same files the same way -
+// two different windows would report two different "hottest file" answers for one tree.
+const reviewHistoryCommits = 500
 
 // printReviewText renders the review in the house style: counts before lists, the evidence
 // beside the claim, plain ASCII.
@@ -170,6 +187,23 @@ func printReviewFile(f types.ReviewFile) {
 	}
 	if c := f.Coverage; c != nil && c.Total > 0 {
 		facts = append(facts, fmt.Sprintf("%d%% covered", int(c.Ratio*100+0.5)))
+	}
+	if ch := f.Churn; ch != nil && ch.Commits > 0 {
+		noun := "commits"
+		if ch.Commits == 1 {
+			noun = "commit"
+		}
+		churn := fmt.Sprintf("changed in %d %s", ch.Commits, noun)
+		if ch.Authors > 1 {
+			churn += fmt.Sprintf(" by %d people", ch.Authors)
+		}
+		if ch.NotableRank() {
+			churn += fmt.Sprintf(", hotspot #%d", ch.Rank)
+		}
+		if ch.Rising() {
+			churn += " AND RISING - worth asking why it keeps changing"
+		}
+		facts = append(facts, churn)
 	}
 	if f.Project != "" {
 		facts = append(facts, "in "+f.Project)

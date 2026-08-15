@@ -321,7 +321,22 @@ func (s *Service) Review(ctx context.Context, paths []string) (types.Review, err
 	if s.magus == nil {
 		return types.Review{}, ErrNoWorkspace
 	}
-	return s.magus.Review(ctx, paths)
+	rev, err := s.magus.Review(ctx, paths)
+	if err != nil {
+		return types.Review{}, err
+	}
+	// Fold on the churn lenses from the CACHED insight scan rather than a fresh one. This is
+	// the reason AttachChurn takes its data as an argument: the daemon already keeps a bounded
+	// git-log scan warm for the dashboard, so a review costs nothing extra to answer "is this
+	// file being rewritten over and over", which is the question a diff cannot answer and the
+	// one worth asking while somebody is still looking at the file.
+	//
+	// Best-effort, like every other overlay: a workspace with no history yields no churn, and
+	// the files stay nil rather than reporting a confident zero.
+	if view, ierr := s.Insight(ctx); ierr == nil {
+		rev.AttachChurn(view.Hotspots.Files, view.Trend.Projects)
+	}
+	return rev, nil
 }
 
 // knowledgeGraph resolves the workspace graph, honoring the test seam. withSymbols loads
