@@ -644,10 +644,11 @@ output simply describes a commit that is no longer the one it sits in.
 A committed generated file must be a **pure function of its committed sources**.
 Anything else in its inputs - the clock, the machine, the branch, the commit -
 turns "regenerate and diff" from a correctness check into noise. magus's drift
-gate assumes that purity, which is why the `tapes` target here is deliberately
-kept out of the `generate` umbrella: it screen-records the CLI, so its bytes are
-never the same twice and a drift gate over it would fail every run by
-construction.
+gate assumes that purity, which is why the `termcast-record` target here is
+deliberately kept out of the `generate` umbrella: it records a live session, so
+its bytes are never the same twice and a drift gate over it would fail every run
+by construction. Rendering that committed capture IS pure, so
+`termcast-generate` sits inside the umbrella and is gated.
 
 ## On disk: just files
 

@@ -170,9 +170,9 @@ func materialize(dir string) error {
 // recordSession runs the session script on a real pseudo-terminal and saves what
 // it printed.
 //
-// Opt-in, like `magus run tapes`, and for the same reason: it needs a provisioned
-// toolchain and a couple of minutes, and it is the half of this command that
-// cannot be reproduced. CI renders from the committed capture and never runs this.
+// Opt-in: it needs a provisioned toolchain and a couple of minutes, and it is the
+// half of this command that cannot be reproduced. CI renders from the committed
+// capture and never runs this.
 func recordSession() error {
 	res, err := run.Exec(context.Background(), "bash", []string{sessionPath}, run.ExecOptions{
 		TTY:     true,
