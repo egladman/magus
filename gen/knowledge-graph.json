@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2286,
-  "edge_count": 5827,
+  "node_count": 2287,
+  "edge_count": 5828,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -16680,6 +16680,15 @@
       "doc": "Fail with a CODED diagnostic instead of a bare string, so a caller can branch on the code: `catch (e) { if (e.code == \"ACME1001\") ... }`. code is yours to define and namespace - anything but the MGS prefix, which is magus's own. opts.cause is the error being wrapped, usually the value from an inner catch; it is appended to the message the way Go's %w renders one, and the failure it came from stays reachable underneath. opts.url is the page documenting the code, rendered as the `see:` line the CLI prints und",
       "attrs": {
         "buzz": "magus\\raise(code, message, [opts])"
+      }
+    },
+    {
+      "id": "method:magus.review",
+      "kind": "method",
+      "label": "magus.review",
+      "doc": "Read the working tree's uncommitted changes, annotated and ordered by what they can break: for each file the owning project, whether it is a declared `output` (generated - the source edit is the review), how widely its changed symbols are referenced (`reach`), whether it is public API `surface`, observed `coverage`, how often it has been changing (`churn`), and which agent sessions wrote it (`touches`). Files come back in the order magus recommends READING them - generated last whatever its reach, then wide",
+      "attrs": {
+        "buzz": "magus\\review([opts]) → Review"
       }
     },
     {
@@ -59477,6 +59486,13 @@
     {
       "source": "module:magus",
       "target": "method:magus.raise",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:magus",
+      "target": "method:magus.review",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1

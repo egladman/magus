@@ -192,6 +192,16 @@ var Magus = Module{
 			Impl:    MagusDescribeFile,
 		},
 		{
+			Name: "review",
+			Doc:  "Read the working tree's uncommitted changes, annotated and ordered by what they can break: for each file the owning project, whether it is a declared `output` (generated - the source edit is the review), how widely its changed symbols are referenced (`reach`), whether it is public API `surface`, observed `coverage`, how often it has been changing (`churn`), and which agent sessions wrote it (`touches`). Files come back in the order magus recommends READING them - generated last whatever its reach, then widest reach first - so a caller renders the list as given rather than sorting it again. Returns a typed Review envelope; branch on `role` and `surface` rather than grepping text. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.",
+			Args: []Arg{
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Review"}},
+			Raises:  true,
+			Impl:    MagusReview,
+		},
+		{
 			Name: "doctor",
 			Doc:  "Validate the workspace and return what every check found: {workspace, checks, summary}, each check {name, status, message, details} with status `ok`, `fail`, or `advice` (advice is worth knowing and never a gate). Annotate the result `> DoctorReport` for compile-checked field access. A caller branches on a check's status rather than grepping console text for the word fail. It does NOT raise when a check fails: doctor exits non-zero precisely when it has something to report, and raising would discard the report. Gate on `summary.fail` instead, which says more than an exit code does. It DOES raise when the underlying `magus doctor` subprocess itself cannot be launched or its output cannot be decoded - an infrastructure failure, not a check result. opts.root sets the global --root workspace; opts.dir runs it in another directory (relative to the target's, like proc.exec).",
 			Args: []Arg{
@@ -809,6 +819,20 @@ func buildInsightReport(ctx context.Context, a types.InsightAnalyzer, iopts type
 // a `magus buzz` script deciding whether a changed file is worth a human's attention.
 func MagusDescribeFile(ctx context.Context, paths []string, opts map[string]any) (types.FileReport, error) {
 	return runMagusJSON[types.FileReport](ctx, "describe", append([]string{"file"}, paths...), opts)
+}
+
+// MagusReview implements magus\review: the annotated changeset, in reading order.
+//
+// It shells out to `magus review` rather than reimplementing the join, which is the whole
+// point of exposing it here - a Buzz advisor writing a pull-request comment and the console
+// surface then rank files by the SAME definition (types.Review.SortForReview), and a change to
+// that order reaches both without either being edited.
+//
+// --generated is passed so the caller receives every file and decides what to fold. A CI
+// comment and a terminal reader want different things from the generated set, and a host
+// module that pre-filtered would make the wider answer unreachable.
+func MagusReview(ctx context.Context, opts map[string]any) (types.Review, error) {
+	return runMagusJSON[types.Review](ctx, "review", []string{"--generated"}, opts)
 }
 
 // runMagusJSON runs a nested magus subcommand and decodes its report into T.

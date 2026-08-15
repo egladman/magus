@@ -295,6 +295,53 @@ export object Graph {
     blastRadius: {str: int} = {},
 }
 
+export object ReviewSymbol {
+    id: str = "",
+    label: str = "",
+    refCount: int = 0,
+    fileCount: int = 0,
+    externalProjects: [str] = [],
+    externalFileCount: int = 0,
+    moduleAPI: bool = false,
+}
+
+export object ReviewTouch {
+    host: str = "",
+    session: str = "",
+    transcript: str = "",
+    read: [str] = [],
+    ran: [str] = [],
+}
+
+export object ReviewChurn {
+    commits: int = 0,
+    authors: int = 0,
+    score: int = 0,
+    rank: int = 0,
+    projectTrend: int = 0,
+}
+
+export object ReviewFile {
+    path: str = "",
+    project: str = "",
+    role: str = "",
+    hint: str = "",
+    coverage: ImpactCoverage? = null,
+    symbols: [ReviewSymbol] = [],
+    surface: str = "",
+    touches: [ReviewTouch] = [],
+    churn: ReviewChurn? = null,
+    reach: int = 0,
+}
+
+export object Review {
+    base: str = "",
+    files: [ReviewFile] = [],
+    seedProjects: [str] = [],
+    affectedProjects: [ImpactProject] = [],
+    notes: [str] = [],
+}
+
 export object TargetSpellUse {
     spell: str = "",
     ops: [str] = [],
@@ -369,6 +416,7 @@ export extern fun project(config: any, opts: any = null) > void;
 export extern fun projectGraph() > Graph !> any;
 export extern fun pry() > void;
 export extern fun raise(code: str, message: str, opts: {str: any} = {<str: any>}) > void !> any;
+export extern fun review(opts: {str: any} = {<str: any>}) > Review !> any;
 export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
 export extern fun targets(opts: {str: any} = {<str: any>}) > TargetGraph !> any;
 export extern fun where(dir: str) > str !> any;

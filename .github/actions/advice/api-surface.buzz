@@ -1,0 +1,161 @@
+// Comment when a pull request changes API surface: symbols reachable from outside the
+// project that defines them, or exported from the module entirely.
+//
+// This is the version-bump conversation, and it is the one a reviewer most often has too
+// late - after a release, from a consumer's bug report. magus can have it here because it
+// already knows who references what: the symbol index says which files use a changed symbol,
+// and project ownership says whether any of them sit across a boundary.
+//
+// It states EVIDENCE and never a verdict. magus does not claim a change is breaking, and the
+// distinction is not modesty: deciding that needs signature compatibility, which needs a
+// base-side symbol index magus does not keep (the shards describe the working tree, not
+// history) and language semantics magus does not model. A tool that guessed would be wrong in
+// exactly the cases that matter - an unchanged signature with changed behaviour, a widened
+// parameter type - and a breaking-change warning nobody trusts is worse than none at all. So
+// this reports who can SEE the thing you changed and lets the author decide the bump.
+//
+// It shares the ranking with the console's Review surface and `magus review` by construction:
+// all three read magus\review, so nobody maintains a second opinion about which files matter.
+//
+// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
+import "proc";
+import "advice";
+import "magus";
+import "std";
+
+final section = "api-surface";
+
+// dedupe preserves first-seen order. A project named by several changed symbols is one
+// consumer, not three.
+fun dedupe(values: [str]) > [str] {
+    var seen = mut {};
+    var kept = mut [];
+    foreach (v in values) {
+        if (v != "" and seen[v] == null) { seen[v] = true; kept.append(v); }
+    }
+    return kept;
+}
+
+// line renders one file's evidence from PRIMITIVES rather than from the host object.
+//
+// Split that way so the rendering is testable: a host object cannot be constructed inside a
+// `test` block, so a function taking one can only be exercised against a live workspace -
+// which is exactly the code most worth pinning. The object walking stays in main, thin enough
+// to read at a glance.
+//
+// Reach is stated in FILES rather than references, matching the review: one file calling a
+// function forty times is one file that breaks, and counting references would rank a hot loop
+// above a widely-used API.
+fun line(path: str, exports: [str], across: [str], reach: int) > str {
+    var text = "- `" + path + "`";
+    final api = dedupe(exports);
+    if (api.len() > 0) {
+        text = text + " exports " + api.join(", ");
+    }
+    final consumers = dedupe(across);
+    if (consumers.len() > 0) {
+        text = text + ", used by " + consumers.join(", ");
+    }
+    if (reach > 0) {
+        text = text + " (" + "{reach}" + " files reference its widest changed symbol)";
+    }
+    return text + "\n";
+}
+
+fun body(count: int, lines: [str]) > str {
+    var noun = " changed files touch";
+    if (count == 1) { noun = " changed file touches"; }
+    var text = "**" + "{count}" + noun + " API surface.**\n\n";
+    foreach (l in lines) { text = text + l; }
+    return text
+        + "\nThese symbols are reachable from outside the project that defines them, or "
+        + "exported from the module, so a consumer can see them. That is what a version bump "
+        + "is about.\n\n"
+        + "This is evidence, not a verdict: magus reports WHO can see what you changed and "
+        + "does not decide whether it broke. Deciding that needs signature compatibility "
+        + "against the base, which magus does not index.\n\n"
+        + "`magus review` shows the same ranking locally.\n";
+}
+
+fun main() > void !> any {
+    final repo = advice\env("REPO");
+    final pr = advice\env("PR_NUMBER");
+    final base = advice\env("PR_BASE");
+    final head = advice\env("PR_HEAD_SHA");
+    if (pr == "" and base == "" and head == "") {
+        std\print("api-surface: no PR context; nothing to advise");
+        return;
+    }
+    if (pr == "" or base == "" or head == "") {
+        throw "api-surface: PR_NUMBER, PR_BASE, and PR_HEAD_SHA must be set together";
+    }
+
+    if (advice\silenced(repo, pr: pr, name: section)) {
+        // Retract rather than leave the last finding frozen on the page.
+        advice\publish(repo, pr: pr, name: section, title: "", body: "");
+        std\print("api-surface: silenced by label");
+        return;
+    }
+
+    final review = magus\review();
+    var lines = mut [];
+    foreach (f in review.files) {
+        // Generated output is skipped even when it looks public. A regenerated binding file
+        // can export a great deal, and none of it is a decision anyone made in this pull
+        // request - the source change that produced it is the one to talk about.
+        if (f.surface != "public" or f.role == "output") { continue; }
+        var exports = mut [];
+        var across = mut [];
+        foreach (sym in f.symbols) {
+            if (sym.moduleAPI) { exports.append(sym.label); }
+            foreach (p in sym.externalProjects) { across.append(p); }
+        }
+        lines.append(line(f.path, exports: exports, across: across, reach: f.reach));
+    }
+
+    if (lines.len() == 0) {
+        // Publish an EMPTY body rather than skipping: a section that simply stops appearing
+        // leaves the previous push's finding frozen on the page, which reads as still true.
+        advice\publish(repo, pr: pr, name: section, title: "API surface", body: "");
+        std\print("api-surface: no public surface changed");
+        return;
+    }
+
+    advice\publish(repo, pr: pr, name: section,
+        title: "API surface ({lines.len()})", body: body(lines.len(), lines: lines));
+    std\print("api-surface: advised on " + "{lines.len()}" + " files");
+}
+
+
+test "a line names the export, the consumer, and the reach in files" {
+    final text = line("magus.go", exports: ["Open", "Close"], across: ["console"], reach: 43);
+    std\assert(text.indexOf("magus.go") != null, message: "names the file");
+    std\assert(text.indexOf("exports Open, Close") != null, message: "names the exports");
+    std\assert(text.indexOf("used by console") != null, message: "names the consuming project");
+    std\assert(text.indexOf("43 files reference") != null, message: "states reach in FILES");
+}
+
+test "a line with no exports and no consumers still names the file" {
+    final text = line("x.go", exports: [], across: [], reach: 0);
+    std\assert(text.indexOf("x.go") != null, message: "names the file");
+    std\assert(text.indexOf("exports") == null, message: "claims no exports it does not have");
+}
+
+test "dedupe keeps first-seen order and drops empties" {
+    final kept = dedupe(["web", "api", "web", ""]);
+    std\assert(kept.len() == 2, message: "web once, api once");
+    std\assert(kept[0] == "web", message: "first seen stays first");
+}
+
+test "body refuses to claim a break" {
+    final text = body(1, lines: [line("x.go", exports: ["A"], across: [], reach: 1)]);
+    std\assert(text.indexOf("evidence, not a verdict") != null, message: "states the limit");
+    std\assert(text.indexOf("breaking") == null, message: "never uses the word breaking");
+}
+
+test "body counts one file in the singular" {
+    final one = body(1, lines: ["- `a.go`\n"]);
+    std\assert(one.indexOf("1 changed file touches") != null, message: "singular");
+    final many = body(3, lines: ["- `a.go`\n"]);
+    std\assert(many.indexOf("3 changed files touch") != null, message: "plural");
+}
