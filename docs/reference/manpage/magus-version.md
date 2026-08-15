@@ -1,20 +1,52 @@
 ---
 title: magus version
-description: Print the magus version string, git commit hash, and build date for the currently installed binary.
-tags: [cli, magus version, version, build info, commit]
+description: Print the magus version string, git commit hash, and build date for the currently installed binary, plus the version reported by the daemon serving this workspace.
+tags: [cli, magus version, version, build info, commit, daemon]
 ---
 
 # magus-version
 
-Print version, commit, and build date
+Print the client and daemon versions
 
 ## Synopsis
 
-**magus** version
+**magus** version [flags]
 
 ## Description
 
 Print the magus version string, git commit hash, and build date.
+
+Two versions, because there can be two binaries: this one, and the daemon
+that has been serving the workspace since it was started. A daemon outlives
+the CLI that started it, so upgrading magus leaves the older code running
+until it is restarted - which is the case this command exists to show. The
+daemon line reads "not running" when nothing answers, and --client skips the
+probe entirely for a script that wants the build stamp with no daemon I/O.
+
+## Options
+
+**--client**
+: Print only this binary's version; skip the daemon probe entirely
+
+## Examples
+
+*Client and daemon*
+
+```sh
+magus version
+```
+
+*Just this binary, no daemon I/O*
+
+```sh
+magus version --client
+```
+
+*The bare version, for a CI pin comparison*
+
+```sh
+magus version -o name
+```
 
 ## See Also
 

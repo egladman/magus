@@ -1,9 +1,14 @@
 package main
 
 import (
+	"context"
 	"flag"
 	"fmt"
 	"os"
+	"time"
+
+	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/proc"
 )
 
 // version, commit, and buildDate are injected by the linker at build time:
@@ -36,16 +41,28 @@ type versionOutput struct {
 	// so `-o json` and `-o template` see one record shape either way.
 	BuiltBy string `json:"built_by"   yaml:"built_by"`
 	Engine  string `json:"engine"     yaml:"engine"`
+	// Daemon is the version the daemon serving this workspace reports, and is empty
+	// when none answered - no daemon running, or --client skipped the probe. Flat
+	// rather than a nested record so -o template reads it without a nil check.
+	Daemon string `json:"daemon" yaml:"daemon"`
 }
 
-func runVersion(args []string) error {
+// daemonProbeTimeout bounds the whole server half: socket discovery plus the status
+// round-trip. Far under proc's own 5s status deadline because `magus version` is a
+// scriptable command - an absent or wedged daemon must cost a blink, not seconds.
+const daemonProbeTimeout = 500 * time.Millisecond
+
+func runVersion(ctx context.Context, args []string) error {
+	var vf *gen.VersionFlags
 	// version is dispatched straight from main, so without cmdParse the global
 	// display flags are never bound and -o is silently inert in either position.
 	if _, err := cmdParse("version", args, func(fs *flag.FlagSet) {
+		vf = gen.BindVersion(fs)
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus version [flags]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Print the version, commit, and build date stamped into this binary.")
+			fmt.Fprintln(os.Stderr, "Print the version, commit, and build date stamped into this binary,")
+			fmt.Fprintln(os.Stderr, "plus the version of the daemon serving this workspace when one is running.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -58,6 +75,9 @@ func runVersion(args []string) error {
 		return err
 	}
 	out := versionOutput{Version: version, Commit: commit, BuildDate: buildDate, BuiltBy: builtBy, Engine: "buzz"}
+	if !vf.Client {
+		out.Daemon = probeDaemonVersion(ctx)
+	}
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -73,10 +93,52 @@ func runVersion(args []string) error {
 	if out.BuiltBy != "" {
 		fmt.Printf("built by: %s\n", out.BuiltBy)
 	}
+	if !vf.Client {
+		fmt.Println(daemonLine(out))
+	}
 	if hasVerboseFlag(args) {
 		fmt.Printf("engine: %s\n", out.Engine)
 	}
 	return nil
+}
+
+// probeDaemonVersion returns the version reported by the daemon serving this workspace,
+// or "" when none answered. Every failure is silent: a missing daemon is the ordinary
+// case, and the build stamp this command exists to print does not depend on one.
+//
+// The address resolves the way `server stop` and doctor resolve it, except that version
+// runs with no config loaded (its dispatch profile reads none), so the config branch is
+// always empty here and MAGUS_DAEMON_SOCKET or socket discovery decides.
+func probeDaemonVersion(ctx context.Context) string {
+	ctx, cancel := context.WithTimeout(ctx, daemonProbeTimeout)
+	defer cancel()
+
+	addr, err := resolveDaemonAddr(ctx, "")
+	if err != nil {
+		return ""
+	}
+	reply, err := proc.QueryStatus(ctx, addr)
+	if err != nil {
+		return ""
+	}
+	if reply.DaemonVersion == "" {
+		// A daemon predating the field still answered, so report the same sentinel an
+		// unstamped build carries rather than letting it read as "no daemon".
+		return "unknown"
+	}
+	return reply.DaemonVersion
+}
+
+// daemonLine renders the server half of the text form.
+func daemonLine(out versionOutput) string {
+	switch {
+	case out.Daemon == "":
+		return "daemon: not running"
+	case out.Daemon != out.Version:
+		return fmt.Sprintf("daemon: %s (differs from this client)", out.Daemon)
+	default:
+		return "daemon: " + out.Daemon
+	}
 }
 
 // hasVerboseFlag reports whether args contains -v or --verbose.

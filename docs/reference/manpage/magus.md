@@ -133,7 +133,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Manage the magus binary (update, install-shorthand). See [**magus-self**(1)](magus-self.md).
 
 **version**
-: Print version, commit, and build date. See [**magus-version**(1)](magus-version.md).
+: Print the client and daemon versions. See [**magus-version**(1)](magus-version.md).
 
 ## Environment
 

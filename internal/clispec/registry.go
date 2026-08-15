@@ -892,11 +892,26 @@ mgs_ contract stubbed, each function documented, and a runnable test block.`,
 
 var versionCommand = Command{
 	Name:        "version",
-	Short:       "Print version, commit, and build date",
-	Description: "Print the magus version string, git commit hash, and build date for the currently installed binary.",
-	Tags:        []string{"cli", "magus version", "version", "build info", "commit"},
-	Long:        `Print the magus version string, git commit hash, and build date.`,
-	Usage:       "magus version",
+	Short:       "Print the client and daemon versions",
+	Description: "Print the magus version string, git commit hash, and build date for the currently installed binary, plus the version reported by the daemon serving this workspace.",
+	Tags:        []string{"cli", "magus version", "version", "build info", "commit", "daemon"},
+	Long: `Print the magus version string, git commit hash, and build date.
+
+Two versions, because there can be two binaries: this one, and the daemon
+that has been serving the workspace since it was started. A daemon outlives
+the CLI that started it, so upgrading magus leaves the older code running
+until it is restarted - which is the case this command exists to show. The
+daemon line reads "not running" when nothing answers, and --client skips the
+probe entirely for a script that wants the build stamp with no daemon I/O.`,
+	Flags: []Flag{
+		{Name: "client", Kind: FlagBool, Doc: "Print only this binary's version; skip the daemon probe entirely"},
+	},
+	Usage: "magus version [flags]",
+	Examples: []Example{
+		{"Client and daemon", "magus version"},
+		{"Just this binary, no daemon I/O", "magus version --client"},
+		{"The bare version, for a CI pin comparison", "magus version -o name"},
+	},
 }
 
 // A subcommand that reaches the dispatcher but not All is documented nowhere on the machine.

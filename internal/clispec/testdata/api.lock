@@ -161,6 +161,7 @@ flag status/socket
 flag status/symbols
 flag status/watch
 flag status/workspace
+flag version/client
 flag watch/backend
 flag watch/debounce
 flag watch/ignore

@@ -315,6 +315,8 @@ const (
 	FlagVCSAddUntracked = "untracked"
 	// vcs resolve: --against
 	FlagVCSResolveAgainst = "against"
+	// version: --client
+	FlagVersionClient = "client"
 	// watch: --backend
 	FlagWatchBackend = "backend"
 	// watch: --debounce
@@ -1044,5 +1046,17 @@ func BindSelfInstallShorthand(fs *flag.FlagSet) *SelfInstallShorthandFlags {
 	var f SelfInstallShorthandFlags
 	fs.StringVar(&f.Dir, FlagSelfInstallShorthandDir, "", "Directory for the shorthand (default: the running binary's directory)")
 	fs.BoolVar(&f.Force, FlagSelfInstallShorthandForce, false, "Replace an existing file at the shorthand path")
+	return &f
+}
+
+// VersionFlags are the flags declared for `magus version`.
+type VersionFlags struct {
+	Client bool // --client
+}
+
+// BindVersion registers `magus version`'s flags on fs and returns the destination.
+func BindVersion(fs *flag.FlagSet) *VersionFlags {
+	var f VersionFlags
+	fs.BoolVar(&f.Client, FlagVersionClient, false, "Print only this binary's version; skip the daemon probe entirely")
 	return &f
 }
