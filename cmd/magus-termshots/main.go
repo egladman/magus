@@ -1,14 +1,13 @@
 // Command magus-termshots renders magus's interactive terminal surfaces to SVG
 // for the documentation.
 //
-// It is the deterministic sibling of `magus run tapes`, which drives VHS to
-// record a real shell into a GIF. Both are right, for different subjects. The
+// It is the deterministic sibling of magus-termcast, which records a real
+// session through a pseudo-terminal. Both are right, for different subjects. The
 // core loop is a sequence of commands anyone can type, so recording it for real
 // is the truthful thing to do. The surfaces here are conditions - a run stalled
 // on another process's lock, a target that failed, a prompt waiting on a
 // choice - and staging those in a real shell reliably enough to record is
-// painful, while a GIF is binary, varies between recordings, and so can never
-// be drift-gated.
+// painful.
 //
 // So these are rendered instead of recorded: the frames come from driving the
 // REAL Zone, Notifier and picker through the terminal emulator, so the escape
