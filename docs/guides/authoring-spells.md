@@ -225,7 +225,7 @@ Three subsystems accept one, and each detects its ops by name:
 | Subsystem                                   | Selected with                    | Ops                                                                                |
 | ------------------------------------------- | -------------------------------- | ---------------------------------------------------------------------------------- |
 | [Remote cache](../concepts/cache/remote.md) | `magus\cache.remote(<spell>)`    | `enabled` (optional), `get_artifact`, `put_artifact`, `prune` (optional)           |
-| [CI provider](../concepts/ci-providers.md)  | `magus\ci.provider(<spell>)`     | `enabled`, `group_start`, `group_end`, `annotate`, `quote_prefixes` - all optional |
+| [CI provider](../concepts/ci/providers.md)  | `magus\ci.provider(<spell>)`     | `enabled`, `group_start`, `group_end`, `annotate`, `quote_prefixes` - all optional |
 | [Secrets](../concepts/secrets.md)           | `magus\secret.provider(<spell>)` | `resolve_secret`                                                                   |
 
 A secret provider is the smallest of the three, and the whole contract is one op:

@@ -162,8 +162,8 @@ The go/docker relationship is exactly this **co-binding**, not an import: both a
 Three magus APIs take a spell handle as an argument, and each is a magus call consuming a spell rather than a spell importing a spell:
 
 - `magus\cache.remote(github)` wires a **cache-backend** spell (e.g. `github-actions`, `aws-s3`) as the remote cache backend. See [Remote caching](cache/remote.md).
-- `magus\ci.provider(github)` wires a **CI-provider** spell, which teaches magus one CI system's job-log structure: fold markers around a failure, and annotations that surface on a pull request. See [CI providers](ci-providers.md).
-- `magus\workspace.provider(nx)` wires a **workspace-provider** spell, which supplies the workspace's project set by asking the tool that already owns it (nx, gradle, pnpm, cargo), so a repo needs no magusfile per project. See [Workspace providers](workspace-providers.md).
+- `magus\ci.provider(github)` wires a **CI-provider** spell, which teaches magus one CI system's job-log structure: fold markers around a failure, and annotations that surface on a pull request. See [CI providers](ci/providers.md).
+- `magus\workspace.provider(nx)` wires a **workspace-provider** spell, which supplies the workspace's project set by asking the tool that already owns it (nx, gradle, pnpm, cargo), so a repo needs no magusfile per project. See [Workspace providers](workspace/providers.md).
 
 All three are extension points on purpose. magus itself knows neither a cache service's API, nor a CI system's log syntax, nor another build tool's project model, so supporting one it has never heard of is a spell you write rather than a release you wait for.
 

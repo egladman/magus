@@ -1,5 +1,6 @@
 ---
 title: CI providers
+aliases: [concepts/ci-providers]
 description: Teach magus your CI system's job-log structure with a provider spell - fold markers around failures and annotations that surface on a pull request - without magus itself knowing any vendor's syntax.
 tags:
   [
@@ -24,7 +25,7 @@ at all.
 
 magus emits that structure through a **provider spell**. The binary knows the
 generic shape - open a section, close it, raise a notice - and a spell knows one
-vendor's syntax. This is the same arrangement as [remote caching](cache/remote.md):
+vendor's syntax. This is the same arrangement as [remote caching](../cache/remote.md):
 the extension point is a spell so a provider magus has never heard of is
 something you write, not something you wait for.
 
@@ -164,9 +165,9 @@ What magus guarantees at the boundary:
 
 What magus does **not** guarantee: a spell has the full host module surface,
 including `proc\exec` and `http`. Loading a spell is trusting it, exactly as with a
-[remote cache backend](cache/remote.md). Spells are not individually sandboxed;
+[remote cache backend](../cache/remote.md). Spells are not individually sandboxed;
 they run with the magus process's privileges, constrained only by the
-process-wide [sandbox](sandbox.md) policy where that applies. If your build
+process-wide [sandbox](../sandbox.md) policy where that applies. If your build
 output can contain secrets, a hostile provider spell could exfiltrate them.
 
 ### Replayed output is quoted
@@ -191,7 +192,7 @@ Anything a spell _can_ answer, a spell does.
 ## Writing a provider
 
 > The shared spell contract, and the cache and secret provider variants alongside this
-> one, are in [Writing a spell](../guides/authoring-spells.md).
+> one, are in [Writing a spell](../../guides/authoring-spells.md).
 
 Start from `spells/gitlab/ci/spell.buzz` - it is the shorter of the two and
 exercises the parts of the contract GitHub does not (an id distinct from the
@@ -200,7 +201,7 @@ all).
 
 Reach for the host modules rather than reimplementing them: `strings\kebabCase`
 folds an id, `os\env` reads the runner environment, `std\print` writes a marker.
-Method names are `camelCase` even where the [module reference](../reference/buzz/index.md)
+Method names are `camelCase` even where the [module reference](../../reference/buzz/index.md)
 declares them otherwise, and namespace access is a backslash.
 
 Gate everything on `enabled()`. A provider that returns false outside its own

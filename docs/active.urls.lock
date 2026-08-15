@@ -86,6 +86,8 @@ concepts/cache/remote/
 concepts/cache/tool-identity/
 concepts/charms/
 concepts/ci-providers/
+concepts/ci/
+concepts/ci/providers/
 concepts/compatibility/
 concepts/concurrency/
 concepts/dependencies/
@@ -124,6 +126,7 @@ concepts/wards/
 concepts/workspace-providers/
 concepts/workspace/
 concepts/workspace/affected/
+concepts/workspace/providers/
 concurrency/
 config/
 console/
@@ -685,6 +688,7 @@ tags/semver/
 tags/service-op/
 tags/services/
 tags/setup/
+tags/sharding/
 tags/shared-services/
 tags/sharing/
 tags/shell/
