@@ -382,6 +382,33 @@
   font: inherit;
 }
 
+/* The story: who wrote this file and what they were reading when they did. Sits under the file
+ * heading, dimmer than a comment - it is context a reader may want, not something addressed to
+ * them, and it must not compete with the code or with an actual remark. */
+.console-diff-row--story {
+  gap: var(--pf-t--global--spacer--xs);
+  padding-inline-start: 7ch;
+  color: var(--pf-t--global--text--color--subtle);
+  font-family: var(--pf-t--global--font--family--body);
+  font-size: var(--pf-t--global--font--size--xs);
+  line-height: 20px;
+  overflow: hidden;
+  border-inline-start: 2px dotted var(--pf-t--global--border--color--subtle);
+}
+
+.console-diff-row__story {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-diff-row__transcript {
+  flex: 0 0 auto;
+  text-decoration: underline dotted;
+  cursor: help;
+}
+
 /* A read hunk dims rather than hides: the reader marked it, they did not delete it, and a
  * collapsed one would make the scroll geometry depend on progress. */
 .console-diff-row--hunk[data-viewed] {

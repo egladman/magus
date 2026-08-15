@@ -43,6 +43,14 @@ export interface ReviewChurn {
   readonly project_trend?: number;
 }
 
+export interface ReviewTouch {
+  readonly host?: string;
+  readonly session?: string;
+  readonly transcript?: string;
+  readonly read?: readonly string[];
+  readonly ran?: readonly string[];
+}
+
 export interface ReviewFile {
   readonly path: string;
   readonly project?: string;
@@ -53,6 +61,7 @@ export interface ReviewFile {
   readonly reach: number;
   readonly surface: ReviewSurface;
   readonly churn?: ReviewChurn;
+  readonly touches?: readonly ReviewTouch[];
 }
 
 export interface Review {

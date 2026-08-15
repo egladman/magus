@@ -11,7 +11,7 @@
 // the kind of index arithmetic that is wrong until it is tested.
 
 import type { DiffFile, DiffLine, Hunk } from "./parse";
-import type { ReviewComment } from "./session";
+import type { ReviewComment, ReviewTouch } from "./session";
 
 export type ViewMode = "unified" | "split";
 
@@ -46,6 +46,7 @@ export type Row =
   | { readonly kind: "hunk"; readonly file: DiffFile; readonly hunk: Hunk; readonly index: number }
   | { readonly kind: "line"; readonly file: DiffFile; readonly line: DiffLine }
   | { readonly kind: "comment"; readonly file: DiffFile; readonly comment: ReviewComment }
+  | { readonly kind: "story"; readonly file: DiffFile; readonly touch: ReviewTouch }
   | {
       readonly kind: "pair";
       readonly file: DiffFile;
@@ -64,10 +65,17 @@ export function buildRows(
   files: readonly DiffFile[],
   mode: ViewMode,
   comments?: Map<string, ReviewComment[]>,
+  touches?: Map<string, readonly ReviewTouch[]>,
 ): Row[] {
   const rows: Row[] = [];
   for (const file of files) {
     rows.push({ kind: "file", file });
+    // The story sits under the FILE heading rather than under a hunk, because that is the
+    // granularity the trail records: an agent wrote the file, and what it had read applies to
+    // the edit as a whole. Pinning it to one hunk would claim a precision the data lacks.
+    for (const touch of touches?.get(file.path) ?? []) {
+      rows.push({ kind: "story", file, touch });
+    }
     file.hunks.forEach((hunk, index) => {
       rows.push({ kind: "hunk", file, hunk, index });
       for (const c of comments?.get(commentKey(file.path, index)) ?? []) {

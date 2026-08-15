@@ -43,6 +43,7 @@ import {
   HttpError,
   type ReviewSession,
   type ReviewFile,
+  type ReviewTouch,
 } from "./session";
 import { registerCommand, unregisterCommand } from "../commands";
 import { resolveDaemonHost, parseHash, adoptDaemonOrigin } from "../../lib/daemon";
@@ -212,6 +213,27 @@ export function activate(host: HTMLElement): () => void {
         el.append(label("read", "pf-m-green", "Marked read - press v to unmark"));
       return el;
     }
+    if (row.kind === "story") {
+      const el = h("div", "console-diff-row console-diff-row--story");
+      const who = h("span", "console-diff-row__who");
+      who.textContent = row.touch.host || "agent";
+      const what = h("span", "console-diff-row__story");
+      // "after reading X, Y" is the whole sentence: it is what the agent was looking at when
+      // it decided to write this, which no forge can say. With no reads recorded the sentence
+      // stops at the author rather than inventing a reason.
+      const read = row.touch.read ?? [];
+      what.textContent =
+        read.length > 0 ? `wrote this after reading ${read.slice(0, 4).join(", ")}` : "wrote this";
+      el.append(who, what);
+      if (row.touch.transcript) {
+        const t = h("span", "console-diff-row__transcript", "transcript");
+        // A POINTER: magus never opens it, and neither does this - the path is shown so the
+        // reader can open their host's own log themselves.
+        t.title = row.touch.transcript;
+        el.append(t);
+      }
+      return el;
+    }
     if (row.kind === "comment") {
       const el = h("div", "console-diff-row console-diff-row--comment");
       el.dataset.author = row.comment.author;
@@ -339,7 +361,13 @@ export function activate(host: HTMLElement): () => void {
 
   const rebuild = async (): Promise<void> => {
     state.files = visibleFiles(state.changeset, state.showGenerated);
-    state.rows = buildRows(state.files, state.mode, byHunk(state.session?.comments ?? []));
+    // Touches come from the annotations, so the first paint has none and the stream gains the
+    // story rows when the review lands - the same two-phase shape everything else here uses.
+    const touches = new Map<string, readonly ReviewTouch[]>();
+    for (const f of state.session?.review?.files ?? []) {
+      if (f.touches?.length) touches.set(f.path, f.touches);
+    }
+    state.rows = buildRows(state.files, state.mode, byHunk(state.session?.comments ?? []), touches);
     state.hunks = hunkRowIndexes(state.rows);
     state.fileRows = fileRowIndexes(state.rows);
     spacer.style.height = `${state.rows.length * ROW_HEIGHT}px`;
