@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2289,
-  "edge_count": 5892,
+  "edge_count": 5893,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -44980,6 +44980,14 @@
     {
       "source": "doc:plans/diff-surface-implementation-handoff.md",
       "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "plans/diff-surface-implementation-handoff.md"
+    },
+    {
+      "source": "doc:plans/diff-surface-implementation-handoff.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
