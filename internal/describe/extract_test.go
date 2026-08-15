@@ -207,6 +207,44 @@ func TestExecOverrideAliasedIsDynamicExec(t *testing.T) {
 	assert.False(t, build.DynamicIO, "an aliased execution override is not a footprint error")
 }
 
+// TestObservesExtraction pins the static read of ctx.observes: literal (key, value)
+// pairs are canonicalized for the key, and anything the read cannot pair is a load
+// error rather than a silently dropped observation. Dropping one is the failure the
+// declaration exists to prevent - the target would key as though the external fact
+// were not there and replay a stale answer, which is exactly what it was reaching
+// past skip_cache to avoid.
+func TestObservesExtraction(t *testing.T) {
+	g := Extract(`export fun scan(ctx: magus\Context, args: [str]) > void {
+    ctx.observes("trivy-db", "2026-08-15");
+    ctx.observes("schema-rev", "a1b2c3");
+}
+`)
+	scan, ok := nodeByName(g, "scan")
+	require.True(t, ok, "scan must extract")
+	assert.Equal(t, []string{"trivy-db=2026-08-15", "schema-rev=a1b2c3"}, scan.Observations,
+		"accumulated in declaration order, canonicalized as key=value")
+	assert.False(t, scan.DynamicIO, "two literals are fully attributable")
+
+	// A probe cannot reach the key: the key is minted before the body runs, so a
+	// computed value would be an observation magus never sees.
+	computed := Extract(`export fun scan(ctx: magus\Context, args: [str]) > void {
+    ctx.observes("trivy-db", probe());
+}
+`)
+	c, _ := nodeByName(computed, "scan")
+	assert.True(t, c.DynamicIO, "a computed observation value must be rejected at load, not dropped")
+
+	// An unpaired key contributes nothing to the key while reading, in the source,
+	// like a target that declared its dependence on something.
+	odd := Extract(`export fun scan(ctx: magus\Context, args: [str]) > void {
+    ctx.observes("trivy-db");
+}
+`)
+	o, _ := nodeByName(odd, "scan")
+	assert.True(t, o.DynamicIO, "an unpaired observation key must be rejected, not silently ignored")
+	assert.Empty(t, o.Observations, "nothing to pair means nothing recorded")
+}
+
 // TestUnreachedIO pins orphan detection: a ctx.readsFiles/writesFiles reached from a target
 // body (directly or via a bare-call helper) is NOT flagged, while one in an
 // unreferenced helper or used as a value IS - it would never enter a cache key.

@@ -105,7 +105,15 @@ type Step struct {
 	// statically. Unlike EnvAllow, which names env vars whose PROCESS value is read, a
 	// derived override's value lives in the magusfile, so it is hashed directly.
 	ExecOverrides []string
-	Outputs       []string // globs snapshotted into cache and replayed on hit
+	// Observations are per-target ctx.observes declarations ("key=value"): facts OUTSIDE
+	// the tree that the target's answer depends on and no other key input can see - a
+	// vulnerability feed's id, a remote schema's revision. Hashed directly like
+	// ExecOverrides, since both halves are written in the magusfile; unlike
+	// ExecOverrides they change nothing about how the target runs, so they get their own
+	// line class rather than reusing exec:. The value is opaque here - magus compares it
+	// and never interprets it.
+	Observations []string
+	Outputs      []string // globs snapshotted into cache and replayed on hit
 	// RequiredOutputs is the subset of Outputs that must each match at least one file,
 	// rather than the whole set merely matching something. It carries the globs another
 	// project's build order depends on (a cross-project output), where producing nothing
@@ -377,6 +385,10 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			slog.Any("tool_versions", s.ToolVersions),
 			slog.Any("charms", s.Charms),
 			slog.Int("env_allow", len(s.EnvAllow)),
+			// Values, not a count, like tool_versions and unlike env_allow: an
+			// observation is a literal in a committed magusfile, and WHICH fact moved
+			// is the entire answer to "why did this rebuild".
+			slog.Any("observations", s.Observations),
 			slog.Bool("no_cache", s.NoCache),
 			slog.Bool("skip_replay", s.SkipReplay),
 		)

@@ -448,6 +448,62 @@ func TestDerivedOverridesChangeTheKey(t *testing.T) {
 	assert.NotEqual(t, derivedKey, otherKey, "two different derived values must key differently")
 }
 
+// TestObservationsChangeTheKey pins ctx.observes' whole reason to exist: a fact
+// outside the tree that the answer depends on has to move the key when it moves, and
+// leave it alone when it does not. Without the first half the target replays yesterday's
+// answer against today's world - the staleness skip_cache was forfeiting all caching to
+// avoid. Without the second half it is skip_cache with extra steps.
+func TestObservationsChangeTheKey(t *testing.T) {
+	root := t.TempDir()
+	c := &Cache{}
+	ctx := context.Background()
+
+	base := Step{ProjectPath: ".", WorkspaceRoot: root}
+	observed := base
+	observed.Observations = []string{"trivy-db=2026-08-14"}
+
+	plainKey, err := c.hashStep(ctx, &base)
+	require.NoError(t, err, "hashStep(base)")
+	observedKey, err := c.hashStep(ctx, &observed)
+	require.NoError(t, err, "hashStep(observed)")
+	assert.NotEqual(t, plainKey, observedKey,
+		"declaring an observation must key the step, or the declaration is inert")
+
+	// The point of the feature: the value moved, so the answer is stale, so this is a miss.
+	moved := base
+	moved.Observations = []string{"trivy-db=2026-08-15"}
+	movedKey, err := c.hashStep(ctx, &moved)
+	require.NoError(t, err, "hashStep(moved)")
+	assert.NotEqual(t, observedKey, movedKey,
+		"an observation that moves must miss, or the target reports yesterday's answer")
+
+	// The other half, and the reason this is not just skip_cache: unchanged replays.
+	same := base
+	same.Observations = []string{"trivy-db=2026-08-14"}
+	sameKey, err := c.hashStep(ctx, &same)
+	require.NoError(t, err, "hashStep(same)")
+	assert.Equal(t, observedKey, sameKey,
+		"an unchanged observation must replay, or observing costs the cache entirely")
+
+	// Sorted at hash time, so the order the magusfile declares them in cannot move the key.
+	forward := base
+	forward.Observations = []string{"a=1", "b=2"}
+	backward := base
+	backward.Observations = []string{"b=2", "a=1"}
+	forwardKey, err := c.hashStep(ctx, &forward)
+	require.NoError(t, err, "hashStep(forward)")
+	backwardKey, err := c.hashStep(ctx, &backward)
+	require.NoError(t, err, "hashStep(backward)")
+	assert.Equal(t, forwardKey, backwardKey, "declaration order must not move the key")
+
+	// An observation is its own key-input class, so `describe target --cache --against`
+	// names it rather than blaming a source file or an env variable.
+	_, lines, err := c.StepKey(ctx, &observed)
+	require.NoError(t, err, "StepKey(observed)")
+	assert.Contains(t, lines, "obs:trivy-db=2026-08-14",
+		"the observation must reach the persisted key inputs, or a rerun is unexplainable")
+}
+
 // buildSyntheticJSWorkspace creates nProjects JS project directories under a
 // temp root, each with nFilesEach source files (.ts, .js, package.json,
 // pnpm-lock.yaml). Used to measure glob expansion under realistic JS monorepo

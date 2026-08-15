@@ -320,6 +320,11 @@ func buzzValueMagusTargetGraphNode(v types.TargetGraphNode) vm.Value {
 		itemsEnvAllow[indexEnvAllow] = vm.StrValue(v.EnvAllow[indexEnvAllow])
 	}
 	out.MapSet("envAllow", vm.ListValue(itemsEnvAllow))
+	itemsObservations := make([]vm.Value, len(v.Observations))
+	for indexObservations := range v.Observations {
+		itemsObservations[indexObservations] = vm.StrValue(v.Observations[indexObservations])
+	}
+	out.MapSet("observations", vm.ListValue(itemsObservations))
 	return out
 }
 

@@ -158,6 +158,17 @@ func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string
 		}
 	}
 
+	// Its own class, immediately after env: an observation is a fact outside the tree,
+	// so a reader diffing two machines' key inputs wants it beside the other non-source
+	// classes rather than folded into one of them. Sorted like env and exec so
+	// declaration order cannot move the key. An empty set writes nothing, which is what
+	// lets this land without a KeyVersion bump.
+	obs := append([]string(nil), s.Observations...)
+	slices.Sort(obs)
+	for _, o := range obs {
+		writeLine("obs:", o)
+	}
+
 	execOv := append([]string(nil), s.ExecOverrides...)
 	slices.Sort(execOv)
 	for _, d := range execOv {

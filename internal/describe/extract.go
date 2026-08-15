@@ -261,6 +261,19 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 							for _, g := range globs {
 								node.EnvAllow = appendUniq(node.EnvAllow, g)
 							}
+						case "observes":
+							// (key, value) pairs, canonicalized the way withEnv canonicalizes
+							// its map so buildStep can fold them straight into the key. An odd
+							// literal count means a key whose value the static read could not
+							// pair - an observation in the source that contributes nothing to
+							// the key, which is the under-declaration this whole surface exists
+							// to reject - so trip the same guard a computed argument trips.
+							if len(globs)%2 != 0 {
+								flagDynamic(&node, kind)
+							}
+							for i := 0; i+1 < len(globs); i += 2 {
+								node.Observations = appendUniq(node.Observations, globs[i]+"="+globs[i+1])
+							}
 						case "modifiesExistingFiles":
 							for _, g := range globs {
 								node.ModifiesExistingFiles = appendUniq(node.ModifiesExistingFiles, types.UpdateRef{Glob: g})
@@ -435,7 +448,20 @@ func ctxCall(e *ast.CallExpr, name string) bool {
 // not-ctx-rooted rejection, and UnreachedIO all key off it, so adding a member cannot
 // leave one of the three behind.
 var ctxDeclNames = map[string]bool{
-	"readsFiles": true, "writesFiles": true, "modifiesExistingFiles": true, "envInputs": true, "withEnv": true, "withCwd": true,
+	"readsFiles": true, "writesFiles": true, "modifiesExistingFiles": true, "envInputs": true, "observes": true, "withEnv": true, "withCwd": true,
+}
+
+// CtxDeclNames returns the declaration members this static reader recognizes. Exported
+// for the drift test that holds it against the members the runtime actually binds: a
+// name here that no ctx offers would be collected from source and then fail at run time,
+// and one the runtime binds but this map omits is a declaration that never reaches a key.
+func CtxDeclNames() []string {
+	names := make([]string, 0, len(ctxDeclNames))
+	for n := range ctxDeclNames {
+		names = append(names, n)
+	}
+	slices.Sort(names)
+	return names
 }
 
 // ctxExecNames is the execution half of ctxDeclNames: the members that steer HOW an op

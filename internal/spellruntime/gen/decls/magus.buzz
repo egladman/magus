@@ -345,6 +345,7 @@ export object TargetGraphNode {
     modifiesExistingFiles: [UpdateRef] = [],
     execOverrides: [str] = [],
     envAllow: [str] = [],
+    observations: [str] = [],
 }
 
 export object TargetGraphProject {

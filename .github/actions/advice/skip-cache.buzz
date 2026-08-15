@@ -35,6 +35,11 @@ fun body(entries: [str]) > str {
         + "cache hit downstream. That is the right call for anything whose answer depends "
         + "on something magus cannot see (a clock, a network), and the wrong one for "
         + "work that is only slow.\n\n"
+        + "When the invisible input is a fact someone bumps by hand - a database id, a "
+        + "feed revision - `ctx.observes(\"key\", \"value\")` keys on that fact instead, so "
+        + "the target stays cacheable and a fact that moved is a miss. A fact that moves "
+        + "on its own still wants `skip_cache`: a stale literal would report a hit while "
+        + "claiming an observation that had already stopped holding.\n\n"
         + "The reason above is stored with the declaration, so this is only a nudge to "
         + "make sure it is the reason you meant.\n";
 }

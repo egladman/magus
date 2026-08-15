@@ -495,6 +495,7 @@ func buildCtx(tr *Tracer) vm.Value {
 	c.MapSet("readsFiles", fn("ctx.readsFiles", retNull))
 	c.MapSet("writesFiles", fn("ctx.writesFiles", retNull))
 	c.MapSet("modifiesExistingFiles", fn("ctx.modifiesExistingFiles", retNull))
+	c.MapSet("observes", fn("ctx.observes", retNull))
 	return c
 }
 

@@ -378,7 +378,7 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 				// describe.flagDynamic, which splits those execution overrides off as
 				// DynamicExec instead.
 				if n.DynamicIO {
-					return fmt.Errorf("%s: target %q: ctx.readsFiles/writesFiles/modifiesExistingFiles/envInputs take literal arguments on the target's OWN ctx; a computed value, or one reached through an alias (final c = ctx; c.readsFiles(..)), is invisible to the static read and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
+					return fmt.Errorf("%s: target %q: ctx.readsFiles/writesFiles/modifiesExistingFiles/envInputs/observes take literal arguments on the target's OWN ctx; a computed value, or one reached through an alias (final c = ctx; c.readsFiles(..)), is invisible to the static read and would risk a stale hit", types.ProjectDisplayName(p.Path, p.Name, p.Dir), n.Name)
 				}
 				// Every input, same-project or cross, flows through one loop. Resolve each
 				// to its owning project's workspace-relative path (a bare-literal glob's
@@ -475,6 +475,16 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					for _, e := range n.EnvAllow {
 						if !slices.Contains(p.TargetEnvAllow[n.Name], e) {
 							p.TargetEnvAllow[n.Name] = append(p.TargetEnvAllow[n.Name], e)
+						}
+					}
+				}
+				if len(n.Observations) > 0 {
+					if p.TargetObservations == nil {
+						p.TargetObservations = map[string][]string{}
+					}
+					for _, o := range n.Observations {
+						if !slices.Contains(p.TargetObservations[n.Name], o) {
+							p.TargetObservations[n.Name] = append(p.TargetObservations[n.Name], o)
 						}
 					}
 				}
@@ -1066,7 +1076,7 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 	case len(entry.Claims) > 0:
 		entry.Hint = "no declared glob matches, but a target edits it in place (ctx.modifiesExistingFiles): magus neither replays nor cleans it, and the claims below name the target that rewrites it"
 	default:
-		entry.Hint = "no project declares this path: it invalidates no cache key and affects no target; check your VCS ignore rules before committing it"
+		entry.Hint = "no project declares this path: it invalidates no cache key, but directory containment still seeds its owning project into the affected set, so touching it reruns work; declare it, or ignore it deliberately"
 	}
 	return entry
 }

@@ -248,7 +248,17 @@ type TargetGraphNode struct {
 	// env is genuinely derived from the environment stay cacheable instead of having to
 	// opt out of the cache entirely.
 	EnvAllow []string `json:"env_allow,omitempty" yaml:"env_allow,omitempty"`
-	// DynamicIO is set when a ctx.readsFiles/writesFiles/modifiesExistingFiles/envInputs call carries a
+	// Observations are the external facts this target declares via ctx.observes, as
+	// canonical "key=value" strings in declaration order (hash.go sorts a copy at hash
+	// time; nothing sorts the stored value). An observation is a fact the answer depends
+	// on that the tree does not contain - a vulnerability feed's id, a remote schema's
+	// revision - so the target can key on it instead of opting out of the cache with
+	// skip_cache. Both halves are literals, hashed directly as ExecOverrides are, which
+	// makes this ExecOverrides' mechanical twin; what differs is that an observation
+	// changes nothing about HOW the target runs, only what its answer is a function of.
+	// magus never interprets the value: it stores it, and a change is a miss.
+	Observations []string `json:"observations,omitempty" yaml:"observations,omitempty"`
+	// DynamicIO is set when a ctx.readsFiles/writesFiles/modifiesExistingFiles/envInputs/observes call carries a
 	// non-literal argument. A computed glob is invisible to this static read, so the load
 	// path rejects it loudly rather than silently caching an under-declared footprint.
 	// Not serialized: it is a load-time validation signal, not part of the graph.

@@ -330,6 +330,7 @@ func (v TargetGraphNode) BuzzObject() BuzzObject {
 		"modifiesExistingFiles": itemsModifiesExistingFiles,
 		"execOverrides":         v.ExecOverrides,
 		"envAllow":              v.EnvAllow,
+		"observations":          v.Observations,
 	}
 }
 
