@@ -4,33 +4,33 @@ import (
 	"log/slog"
 	"net/http"
 
+	"github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/handler"
 	json "github.com/egladman/magus/internal/json"
-	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/types"
 )
 
-// ReviewSessionHandler serves POST /api/v1/review/session: the human's half of a paired
+// DiffSessionHandler serves POST /api/v1/diff/session: the human's half of a paired
 // review - where they are looking, what they have read, and what they have said.
 //
-// Every write here is stamped ReviewAuthorHuman, because this route is only reachable from
+// Every write here is stamped DiffAuthorHuman, because this route is only reachable from
 // the console and the CLI. The agent's half lives on the MCP surface and is stamped
-// ReviewAuthorAgent there. Authorship is decided by WHICH ROUTE the write arrived on and
+// DiffAuthorAgent there. Authorship is decided by WHICH ROUTE the write arrived on and
 // never by the payload, which is what makes it unforgeable: an agent cannot reach this
 // handler, so it cannot post as the person.
 //
 // It is one route with an `op` rather than five, because these are all small mutations of one
 // object and a client applies them from one place - a keypress handler. Five routes would be
 // five fetch wrappers for no gain in clarity.
-type ReviewSessionHandler struct {
+type DiffSessionHandler struct {
 	handler.Base
-	sessions *review.Store
+	sessions *diff.Store
 	root     string
 }
 
-// NewReviewSessionHandler returns the POST /api/v1/review/session handler.
-func NewReviewSessionHandler(sessions *review.Store, root string, log *slog.Logger) *ReviewSessionHandler {
-	h := &ReviewSessionHandler{sessions: sessions, root: root}
+// NewDiffSessionHandler returns the POST /api/v1/diff/session handler.
+func NewDiffSessionHandler(sessions *diff.Store, root string, log *slog.Logger) *DiffSessionHandler {
+	h := &DiffSessionHandler{sessions: sessions, root: root}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
@@ -53,7 +53,7 @@ type reviewSessionRequest struct {
 	ID string `json:"id,omitempty"`
 }
 
-func (h *ReviewSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
+func (h *DiffSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
 		return
@@ -68,16 +68,16 @@ func (h *ReviewSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	var sess *types.ReviewSession
+	var sess *types.DiffSession
 	switch req.Op {
 	case "cursor":
-		sess = h.sessions.SetCursor(h.root, types.ReviewCursor{Path: req.Path, Hunk: req.Hunk})
+		sess = h.sessions.SetCursor(h.root, types.DiffCursor{Path: req.Path, Hunk: req.Hunk})
 	case "viewed":
 		sess = h.sessions.MarkViewed(h.root, req.Digest, req.On)
 	case "comment":
-		sess = h.sessions.AddComment(h.root, types.ReviewComment{
+		sess = h.sessions.AddComment(h.root, types.DiffComment{
 			Path: req.Path, Hunk: req.Hunk, Body: req.Body, Anchor: req.Anchor,
-		}, types.ReviewAuthorHuman)
+		}, types.DiffAuthorHuman)
 	case "resolve":
 		sess = h.sessions.ResolveComment(h.root, req.ID, req.On)
 	case "answer":
@@ -89,7 +89,7 @@ func (h *ReviewSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if sess == nil {
 		// No session attached yet. 409 rather than 404: the ROUTE exists and the workspace is
 		// fine, the client just has not read a review yet, and the fix is to fetch one.
-		http.Error(w, "no review session attached; GET /api/v1/review first", http.StatusConflict)
+		http.Error(w, "no review session attached; GET /api/v1/diff first", http.StatusConflict)
 		return
 	}
 	writeJSON(w, sess)

@@ -107,6 +107,7 @@ flag buzz/no-autoload
 flag buzz/t
 flag buzz/test
 flag clean/cache
+flag diff/generated
 flag explain/global
 flag explain/refresh
 flag hook/agent-name
@@ -136,7 +137,6 @@ flag query/secrets
 flag query/url
 flag refs/occurrences
 flag refs/refresh
-flag review/generated
 flag run/depth
 flag run/detach
 flag run/graph
@@ -171,6 +171,7 @@ subcommand clean
 subcommand completion
 subcommand config
 subcommand describe
+subcommand diff
 subcommand doctor
 subcommand explain
 subcommand graph
@@ -184,7 +185,6 @@ subcommand notify
 subcommand path
 subcommand query
 subcommand refs
-subcommand review
 subcommand run
 subcommand self
 subcommand server

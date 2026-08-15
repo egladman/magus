@@ -11,7 +11,7 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 )
 
-type fakeDiffSource struct {
+type fakePatchSource struct {
 	patch string
 	err   error
 	// gotPaths records what the handler passed through, so the scoping tests assert on the
@@ -19,16 +19,16 @@ type fakeDiffSource struct {
 	gotPaths []string
 }
 
-func (f *fakeDiffSource) WorkingDiff(_ context.Context, paths []string) (string, error) {
+func (f *fakePatchSource) WorkingDiff(_ context.Context, paths []string) (string, error) {
 	f.gotPaths = paths
 	return f.patch, f.err
 }
 
 func TestDiffHandler_ReturnsPatch(t *testing.T) {
-	src := &fakeDiffSource{patch: "--- a/x.go\n+++ b/x.go\n@@ -1 +1 @@\n-a\n+b\n"}
-	h := NewDiffHandler(src, nil)
+	src := &fakePatchSource{patch: "--- a/x.go\n+++ b/x.go\n@@ -1 +1 @@\n-a\n+b\n"}
+	h := NewPatchHandler(src, nil)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch", nil))
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", w.Code)
 	}
@@ -52,9 +52,9 @@ func TestDiffHandler_ReturnsPatch(t *testing.T) {
 // a trailing newline for an empty diff.
 func TestDiffHandler_CleanTreeIsFlaggedNotGuessed(t *testing.T) {
 	for _, patch := range []string{"", "\n", "  \n\t"} {
-		h := NewDiffHandler(&fakeDiffSource{patch: patch}, nil)
+		h := NewPatchHandler(&fakePatchSource{patch: patch}, nil)
 		w := httptest.NewRecorder()
-		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff", nil))
+		h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch", nil))
 		var out diffResponse
 		if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
 			t.Fatalf("want valid JSON for %q: %v", patch, err)
@@ -66,10 +66,10 @@ func TestDiffHandler_CleanTreeIsFlaggedNotGuessed(t *testing.T) {
 }
 
 func TestDiffHandler_ScopesToRepeatedPathParams(t *testing.T) {
-	src := &fakeDiffSource{}
-	h := NewDiffHandler(src, nil)
+	src := &fakePatchSource{}
+	h := NewPatchHandler(src, nil)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff?path=a.go&path=b.go", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch?path=a.go&path=b.go", nil))
 	if len(src.gotPaths) != 2 || src.gotPaths[0] != "a.go" || src.gotPaths[1] != "b.go" {
 		t.Errorf("want [a.go b.go], got %q", src.gotPaths)
 	}
@@ -78,37 +78,37 @@ func TestDiffHandler_ScopesToRepeatedPathParams(t *testing.T) {
 // An empty `path=` must scope to NOTHING, not to the empty pathspec - every backend reads
 // that as the whole repository, which is the opposite of what the caller asked for.
 func TestDiffHandler_EmptyPathParamDoesNotWidenScope(t *testing.T) {
-	src := &fakeDiffSource{}
-	h := NewDiffHandler(src, nil)
+	src := &fakePatchSource{}
+	h := NewPatchHandler(src, nil)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff?path=&path=+&path=real.go", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch?path=&path=+&path=real.go", nil))
 	if len(src.gotPaths) != 1 || src.gotPaths[0] != "real.go" {
 		t.Errorf("want only [real.go], got %q", src.gotPaths)
 	}
 }
 
 func TestDiffHandler_NoWorkspaceReturns503(t *testing.T) {
-	h := NewDiffHandler(&fakeDiffSource{err: console.ErrNoWorkspace}, nil)
+	h := NewPatchHandler(&fakePatchSource{err: console.ErrNoWorkspace}, nil)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch", nil))
 	if w.Code != http.StatusServiceUnavailable {
 		t.Errorf("want 503, got %d", w.Code)
 	}
 }
 
 func TestDiffHandler_ErrorReturns500(t *testing.T) {
-	h := NewDiffHandler(&fakeDiffSource{err: errors.New("git boom")}, nil)
+	h := NewPatchHandler(&fakePatchSource{err: errors.New("git boom")}, nil)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/diff/patch", nil))
 	if w.Code != http.StatusInternalServerError {
 		t.Errorf("want 500, got %d", w.Code)
 	}
 }
 
 func TestDiffHandler_RejectsNonGet(t *testing.T) {
-	h := NewDiffHandler(&fakeDiffSource{}, nil)
+	h := NewPatchHandler(&fakePatchSource{}, nil)
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/diff", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/api/v1/diff/patch", nil))
 	if w.Code != http.StatusMethodNotAllowed {
 		t.Errorf("want 405, got %d", w.Code)
 	}

@@ -11,6 +11,7 @@ describe
 describeFile
 describeModule
 diagnoseDrift
+diff
 doctor
 fatal
 hasCharm
@@ -27,7 +28,6 @@ project
 projectGraph
 pry
 raise
-review
 run
 secret
 secret.endpoint

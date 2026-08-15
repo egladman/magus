@@ -170,7 +170,7 @@ var Registry = []ToolDescriptor{
 		},
 	},
 	{
-		Name: string(ToolReview),
+		Name: string(ToolDiff),
 		Description: "Join the review session a person already has open and pair with them on it. " +
 			"op=state returns the whole session: every changed file annotated with its role (generated output vs source), " +
 			"how widely its changed symbols are referenced, whether it is public API surface, observed coverage, " +

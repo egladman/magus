@@ -12,18 +12,18 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// reviewCmd implements `magus review`: the working tree's changes, annotated and ordered by
+// diffCmd implements `magus review`: the working tree's changes, annotated and ordered by
 // what they can break.
 //
 // It is the TERMINAL client of the same annotation join the console's Review surface reads
 // and an agent joins over MCP. One computation, three transports - so a person reviewing in a
 // terminal and an agent pairing with them are looking at the same ranking rather than two
 // tools' opinions of one changeset.
-func reviewCmd(ctx context.Context, root string, args []string) error {
-	var rf *gen.ReviewFlags
+func diffCmd(ctx context.Context, root string, args []string) error {
+	var rf *gen.DiffFlags
 	rest, err := cmdParse("review", args, func(fs *flag.FlagSet) {
-		rf = gen.BindReview(fs)
-		fs.Usage = func() { reviewUsage(os.Stderr) }
+		rf = gen.BindDiff(fs)
+		fs.Usage = func() { diffUsage(os.Stderr) }
 	})
 	if err != nil {
 		return err
@@ -61,10 +61,10 @@ func reviewCmd(ctx context.Context, root string, args []string) error {
 			fmt.Println("clean: every change is committed")
 			return nil
 		}
-		return emitFormatted(opts, types.Review{Base: "working"})
+		return emitFormatted(opts, types.Diff{Base: "working"})
 	}
 
-	rev, err := m.Review(ctx, changedPathsFromPatch(patch))
+	rev, err := m.Diff(ctx, changedPathsFromPatch(patch))
 	if err != nil {
 		return err
 	}
@@ -73,16 +73,16 @@ func reviewCmd(ctx context.Context, root string, args []string) error {
 	// workspace with no history simply reports no churn rather than failing the review.
 	// Files: true is required - without it the lens ranks PROJECTS and the per-file list is
 	// empty, so every file would silently report no churn.
-	if hot, herr := m.Hotspots(ctx, types.InsightOptions{Commits: reviewHistoryCommits, Files: true}); herr == nil {
+	if hot, herr := m.Hotspots(ctx, types.InsightOptions{Commits: diffHistoryCommits, Files: true}); herr == nil {
 		var projects []types.TrendEntry
-		if tr, terr := m.Trend(ctx, types.InsightOptions{Commits: reviewHistoryCommits}); terr == nil {
+		if tr, terr := m.Trend(ctx, types.InsightOptions{Commits: diffHistoryCommits}); terr == nil {
 			projects = tr.Projects
 		}
 		rev.AttachChurn(hot.Files, projects)
 	}
 	// The agent trail: which sessions wrote each file and what they had read first. Empty when
 	// no guard hook is wired, which is the common case rather than a fault.
-	rev.AttachReplay(reviewTouches(m.Root(), m.CacheDir(), changedPathsFromPatch(patch)))
+	rev.AttachReplay(diffTouches(m.Root(), m.CacheDir(), changedPathsFromPatch(patch)))
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -96,10 +96,10 @@ func reviewCmd(ctx context.Context, root string, args []string) error {
 		}
 		return nil
 	}
-	return printReviewText(rev, rf.Generated)
+	return printDiffText(rev, rf.Generated)
 }
 
-func reviewUsage(w *os.File) {
+func diffUsage(w *os.File) {
 	fmt.Fprintln(w, "Usage: magus review [--generated] [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Read the working tree's uncommitted changes, ordered by what they can break.")
@@ -125,27 +125,27 @@ func reviewUsage(w *os.File) {
 	fmt.Fprintln(w, "  --generated   include the folded declared outputs")
 }
 
-// reviewHistoryCommits bounds the git-log walk the churn lenses do. 500 matches what the
+// diffHistoryCommits bounds the git-log walk the churn lenses do. 500 matches what the
 // daemon's insight scan uses, so the CLI and the console rank the same files the same way -
 // two different windows would report two different "hottest file" answers for one tree.
-const reviewHistoryCommits = 500
+const diffHistoryCommits = 500
 
-// reviewReplayEvents bounds the trail walk. Each event costs a small blob read, and a reader
+// diffReplayEvents bounds the trail walk. Each event costs a small blob read, and a reader
 // asking "what was this agent looking at" is asking about recent work by construction.
-const reviewReplayEvents = 2000
+const diffReplayEvents = 2000
 
-// reviewTouches adapts the trail's Touch to the review's - a rename across a boundary types
+// diffTouches adapts the trail's Touch to the review's - a rename across a boundary types
 // must not cross, since types imports nothing internal and the trail is internal.
-func reviewTouches(root, cacheDir string, paths []string) map[string][]types.ReviewTouch {
-	raw := trail.Replay(root, cacheDir, paths, reviewReplayEvents)
+func diffTouches(root, cacheDir string, paths []string) map[string][]types.DiffTouch {
+	raw := trail.Replay(root, cacheDir, paths, diffReplayEvents)
 	if len(raw) == 0 {
 		return nil
 	}
-	out := make(map[string][]types.ReviewTouch, len(raw))
+	out := make(map[string][]types.DiffTouch, len(raw))
 	for path, touches := range raw {
-		conv := make([]types.ReviewTouch, 0, len(touches))
+		conv := make([]types.DiffTouch, 0, len(touches))
 		for _, t := range touches {
-			conv = append(conv, types.ReviewTouch{
+			conv = append(conv, types.DiffTouch{
 				Host: t.Host, Session: t.Session, Transcript: t.Transcript, Read: t.Read, Ran: t.Ran,
 			})
 		}
@@ -154,10 +154,10 @@ func reviewTouches(root, cacheDir string, paths []string) map[string][]types.Rev
 	return out
 }
 
-// printReviewText renders the review in the house style: counts before lists, the evidence
+// printDiffText renders the review in the house style: counts before lists, the evidence
 // beside the claim, plain ASCII.
-func printReviewText(rev types.Review, showGenerated bool) error {
-	var primary, generated []types.ReviewFile
+func printDiffText(rev types.Diff, showGenerated bool) error {
+	var primary, generated []types.DiffFile
 	for _, f := range rev.Files {
 		if f.Generated() {
 			generated = append(generated, f)
@@ -190,7 +190,7 @@ func printReviewText(rev types.Review, showGenerated bool) error {
 	}
 
 	for _, f := range primary {
-		printReviewFile(f)
+		printDiffFile(f)
 	}
 
 	if len(generated) > 0 {
@@ -198,7 +198,7 @@ func printReviewText(rev types.Review, showGenerated bool) error {
 		if showGenerated {
 			fmt.Printf("generated (%d) - a target rewrites these; the source edit is the review\n", len(generated))
 			for _, f := range generated {
-				printReviewFile(f)
+				printDiffFile(f)
 			}
 		} else {
 			fmt.Printf("%d generated files folded. They are declared target outputs: reading one is\n", len(generated))
@@ -214,11 +214,11 @@ func printReviewText(rev types.Review, showGenerated bool) error {
 	return nil
 }
 
-func printReviewFile(f types.ReviewFile) {
+func printDiffFile(f types.DiffFile) {
 	fmt.Printf("  %s\n", f.Path)
 
 	var facts []string
-	if f.Surface == types.ReviewSurfacePublic {
+	if f.Surface == types.DiffSurfacePublic {
 		var api []string
 		var across []string
 		seen := map[string]bool{}

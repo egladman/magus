@@ -109,6 +109,54 @@ export object DriftResult {
     files: [Path] = [],
 }
 
+export object DiffSymbol {
+    id: str = "",
+    label: str = "",
+    refCount: int = 0,
+    fileCount: int = 0,
+    externalProjects: [str] = [],
+    externalFileCount: int = 0,
+    moduleAPI: bool = false,
+}
+
+export object DiffTouch {
+    host: str = "",
+    session: str = "",
+    transcript: str = "",
+    read: [str] = [],
+    ran: [str] = [],
+}
+
+export object DiffChurn {
+    commits: int = 0,
+    authors: int = 0,
+    score: int = 0,
+    rank: int = 0,
+    projectTrend: int = 0,
+}
+
+export object DiffFile {
+    path: str = "",
+    project: str = "",
+    role: str = "",
+    hint: str = "",
+    coverage: ImpactCoverage? = null,
+    symbols: [DiffSymbol] = [],
+    surface: str = "",
+    touches: [DiffTouch] = [],
+    churn: DiffChurn? = null,
+    noHistory: bool = false,
+    reach: int? = null,
+}
+
+export object Diff {
+    base: str = "",
+    files: [DiffFile] = [],
+    seedProjects: [str] = [],
+    affectedProjects: [ImpactProject] = [],
+    notes: [str] = [],
+}
+
 export object DoctorCheck {
     name: str = "",
     status: DoctorCheckStatus = DoctorCheckStatus.none,
@@ -295,54 +343,6 @@ export object Graph {
     blastRadius: {str: int} = {},
 }
 
-export object ReviewSymbol {
-    id: str = "",
-    label: str = "",
-    refCount: int = 0,
-    fileCount: int = 0,
-    externalProjects: [str] = [],
-    externalFileCount: int = 0,
-    moduleAPI: bool = false,
-}
-
-export object ReviewTouch {
-    host: str = "",
-    session: str = "",
-    transcript: str = "",
-    read: [str] = [],
-    ran: [str] = [],
-}
-
-export object ReviewChurn {
-    commits: int = 0,
-    authors: int = 0,
-    score: int = 0,
-    rank: int = 0,
-    projectTrend: int = 0,
-}
-
-export object ReviewFile {
-    path: str = "",
-    project: str = "",
-    role: str = "",
-    hint: str = "",
-    coverage: ImpactCoverage? = null,
-    symbols: [ReviewSymbol] = [],
-    surface: str = "",
-    touches: [ReviewTouch] = [],
-    churn: ReviewChurn? = null,
-    noHistory: bool = false,
-    reach: int? = null,
-}
-
-export object Review {
-    base: str = "",
-    files: [ReviewFile] = [],
-    seedProjects: [str] = [],
-    affectedProjects: [ImpactProject] = [],
-    notes: [str] = [],
-}
-
 export object TargetSpellUse {
     spell: str = "",
     ops: [str] = [],
@@ -407,6 +407,7 @@ export extern fun describe(args: [str], opts: {str: any} = {<str: any>}) > ExecR
 export extern fun describeFile(paths: [str], opts: {str: any} = {<str: any>}) > FileReport !> any;
 export extern fun describeModule(name: str = "") > [Module] !> any;
 export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
+export extern fun diff(opts: {str: any} = {<str: any>}) > Diff !> any;
 export extern fun doctor(args: [str], opts: {str: any} = {<str: any>}) > DoctorReport !> any;
 export extern fun fatal(msg: str = "") > void;
 export extern fun hasCharm(name: str) > bool;
@@ -417,7 +418,6 @@ export extern fun project(config: any, opts: any = null) > void;
 export extern fun projectGraph() > Graph !> any;
 export extern fun pry() > void;
 export extern fun raise(code: str, message: str, opts: {str: any} = {<str: any>}) > void !> any;
-export extern fun review(opts: {str: any} = {<str: any>}) > Review !> any;
 export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
 export extern fun targets(opts: {str: any} = {<str: any>}) > TargetGraph !> any;
 export extern fun where(dir: str) > str !> any;

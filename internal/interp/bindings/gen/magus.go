@@ -133,13 +133,13 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return buzzValueMagusFileReport(ret0), nil
 	}))
-	m.MapSet("review", vm.DirectValue("magus.review", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+	m.MapSet("diff", vm.DirectValue("magus.diff", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		opts := AnyMap(bzArgs, 0)
 		ret0, err := std.MagusReview(ctx, opts)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}
-		return buzzValueMagusReview(ret0), nil
+		return buzzValueMagusDiff(ret0), nil
 	}))
 	m.MapSet("doctor", vm.DirectValue("magus.doctor", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := StrSlice(bzArgs, 0)
@@ -768,7 +768,7 @@ func buzzValueMagusFileReport(v types.FileReport) vm.Value {
 	return out
 }
 
-func buzzValueMagusReviewSymbol(v types.ReviewSymbol) vm.Value {
+func buzzValueMagusDiffSymbol(v types.DiffSymbol) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("id", vm.StrValue(v.ID))
 	out.MapSet("label", vm.StrValue(v.Label))
@@ -784,7 +784,7 @@ func buzzValueMagusReviewSymbol(v types.ReviewSymbol) vm.Value {
 	return out
 }
 
-func buzzValueMagusReviewTouch(v types.ReviewTouch) vm.Value {
+func buzzValueMagusDiffTouch(v types.DiffTouch) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("host", vm.StrValue(v.Host))
 	out.MapSet("session", vm.StrValue(v.Session))
@@ -802,7 +802,7 @@ func buzzValueMagusReviewTouch(v types.ReviewTouch) vm.Value {
 	return out
 }
 
-func buzzValueMagusReviewChurn(v types.ReviewChurn) vm.Value {
+func buzzValueMagusDiffChurn(v types.DiffChurn) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("commits", vm.IntValue(int64(v.Commits)))
 	out.MapSet("authors", vm.IntValue(int64(v.Authors)))
@@ -812,7 +812,7 @@ func buzzValueMagusReviewChurn(v types.ReviewChurn) vm.Value {
 	return out
 }
 
-func buzzValueMagusReviewFile(v types.ReviewFile) vm.Value {
+func buzzValueMagusDiffFile(v types.DiffFile) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StrValue(v.Path))
 	out.MapSet("project", vm.StrValue(v.Project))
@@ -825,18 +825,18 @@ func buzzValueMagusReviewFile(v types.ReviewFile) vm.Value {
 	out.MapSet("coverage", optCoverage)
 	itemsSymbols := make([]vm.Value, len(v.Symbols))
 	for indexSymbols := range v.Symbols {
-		itemsSymbols[indexSymbols] = buzzValueMagusReviewSymbol(v.Symbols[indexSymbols])
+		itemsSymbols[indexSymbols] = buzzValueMagusDiffSymbol(v.Symbols[indexSymbols])
 	}
 	out.MapSet("symbols", vm.ListValue(itemsSymbols))
 	out.MapSet("surface", vm.StrValue(v.Surface))
 	itemsTouches := make([]vm.Value, len(v.Touches))
 	for indexTouches := range v.Touches {
-		itemsTouches[indexTouches] = buzzValueMagusReviewTouch(v.Touches[indexTouches])
+		itemsTouches[indexTouches] = buzzValueMagusDiffTouch(v.Touches[indexTouches])
 	}
 	out.MapSet("touches", vm.ListValue(itemsTouches))
 	optChurn := vm.Null
 	if v.Churn != nil {
-		optChurn = buzzValueMagusReviewChurn((*v.Churn))
+		optChurn = buzzValueMagusDiffChurn((*v.Churn))
 	}
 	out.MapSet("churn", optChurn)
 	out.MapSet("noHistory", vm.BoolValue(v.NoHistory))
@@ -848,12 +848,12 @@ func buzzValueMagusReviewFile(v types.ReviewFile) vm.Value {
 	return out
 }
 
-func buzzValueMagusReview(v types.Review) vm.Value {
+func buzzValueMagusDiff(v types.Diff) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("base", vm.StrValue(v.Base))
 	itemsFiles := make([]vm.Value, len(v.Files))
 	for indexFiles := range v.Files {
-		itemsFiles[indexFiles] = buzzValueMagusReviewFile(v.Files[indexFiles])
+		itemsFiles[indexFiles] = buzzValueMagusDiffFile(v.Files[indexFiles])
 	}
 	out.MapSet("files", vm.ListValue(itemsFiles))
 	itemsSeedProjects := make([]vm.Value, len(v.SeedProjects))

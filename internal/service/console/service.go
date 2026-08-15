@@ -57,7 +57,7 @@ type Service struct {
 	describeGraphFn  func() types.TargetGraphOutput
 	insightFn        func(ctx context.Context) (types.InsightView, error)
 	workingDiffFn    func(ctx context.Context, paths []string) (string, error)
-	reviewFn         func(ctx context.Context, paths []string) (types.Review, error)
+	diffFn           func(ctx context.Context, paths []string) (types.Diff, error)
 }
 
 // Option customizes a Service. The With* options inject test seams and the explicit
@@ -98,10 +98,10 @@ func WithWorkingDiffFn(fn func(ctx context.Context, paths []string) (string, err
 	return func(s *Service) { s.workingDiffFn = fn }
 }
 
-// WithReviewFn replaces the annotation join behind Review. Tests pass canned annotations so
+// WithDiffFn replaces the annotation join behind Review. Tests pass canned annotations so
 // the review surface can be driven without a symbol index or a coverage run.
-func WithReviewFn(fn func(ctx context.Context, paths []string) (types.Review, error)) Option {
-	return func(s *Service) { s.reviewFn = fn }
+func WithDiffFn(fn func(ctx context.Context, paths []string) (types.Diff, error)) Option {
+	return func(s *Service) { s.diffFn = fn }
 }
 
 // WithInsightTTL overrides how long an assembled InsightView is reused before the git-log
@@ -307,7 +307,7 @@ func (s *Service) WorkingDiff(ctx context.Context, paths []string) (string, erro
 	return s.magus.WorkingDiff(ctx, paths)
 }
 
-// Review annotates a changed-path set: role, owning project, changed-symbol reach, coverage,
+// Diff annotates a changed-path set: role, owning project, changed-symbol reach, coverage,
 // and the blast radius, ordered by what magus recommends reading first.
 //
 // It is a SECOND round trip on purpose, and the split is the performance design. WorkingDiff
@@ -315,16 +315,16 @@ func (s *Service) WorkingDiff(ctx context.Context, paths []string) (string, erro
 // its symbol shards and computes a reverse closure. Folding them into one route would hold
 // the whole diff behind the slowest overlay, so the console paints the patch from the first
 // call and decorates it when this one lands. A reader is scrolling code either way.
-func (s *Service) Review(ctx context.Context, paths []string) (types.Review, error) {
-	if s.reviewFn != nil {
-		return s.reviewFn(ctx, paths)
+func (s *Service) Diff(ctx context.Context, paths []string) (types.Diff, error) {
+	if s.diffFn != nil {
+		return s.diffFn(ctx, paths)
 	}
 	if s.magus == nil {
-		return types.Review{}, ErrNoWorkspace
+		return types.Diff{}, ErrNoWorkspace
 	}
-	rev, err := s.magus.Review(ctx, paths)
+	rev, err := s.magus.Diff(ctx, paths)
 	if err != nil {
-		return types.Review{}, err
+		return types.Diff{}, err
 	}
 	// Fold on the churn lenses from the CACHED insight scan rather than a fresh one. This is
 	// the reason AttachChurn takes its data as an argument: the daemon already keeps a bounded
@@ -338,30 +338,30 @@ func (s *Service) Review(ctx context.Context, paths []string) (types.Review, err
 		rev.AttachChurn(view.Hotspots.Files, view.Trend.Projects)
 	}
 	// The agent trail: which sessions wrote each file and what they had read first. Bounded by
-	// reviewReplayEvents rather than the whole history, because the question is about the
+	// diffReplayEvents rather than the whole history, because the question is about the
 	// change in front of the reader, not about the repository's whole past.
-	rev.AttachReplay(reviewTouches(s.magus.Root(), s.magus.CacheDir(), paths))
+	rev.AttachReplay(diffTouches(s.magus.Root(), s.magus.CacheDir(), paths))
 	return rev, nil
 }
 
-// reviewReplayEvents bounds the trail walk behind a review. Each event costs a small blob
+// diffReplayEvents bounds the trail walk behind a review. Each event costs a small blob
 // read, so this is the knob that keeps the replay join cheap; a reader asking "what was this
 // agent looking at" is asking about recent work by construction.
-const reviewReplayEvents = 2000
+const diffReplayEvents = 2000
 
-// reviewTouches adapts the trail's own Touch to the review's, which is a straight rename
+// diffTouches adapts the trail's own Touch to the review's, which is a straight rename
 // across a package boundary types must not cross - types imports nothing internal, and the
 // trail is internal.
-func reviewTouches(root, cacheDir string, paths []string) map[string][]types.ReviewTouch {
-	raw := trail.Replay(root, cacheDir, paths, reviewReplayEvents)
+func diffTouches(root, cacheDir string, paths []string) map[string][]types.DiffTouch {
+	raw := trail.Replay(root, cacheDir, paths, diffReplayEvents)
 	if len(raw) == 0 {
 		return nil
 	}
-	out := make(map[string][]types.ReviewTouch, len(raw))
+	out := make(map[string][]types.DiffTouch, len(raw))
 	for path, touches := range raw {
-		conv := make([]types.ReviewTouch, 0, len(touches))
+		conv := make([]types.DiffTouch, 0, len(touches))
 		for _, t := range touches {
-			conv = append(conv, types.ReviewTouch{
+			conv = append(conv, types.DiffTouch{
 				Host: t.Host, Session: t.Session, Transcript: t.Transcript, Read: t.Read, Ran: t.Ran,
 			})
 		}

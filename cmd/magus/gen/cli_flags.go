@@ -129,6 +129,8 @@ const (
 	FlagDescribeTargetExplain = "explain"
 	// describe target: --no-default-charms
 	FlagDescribeTargetNoDefaultCharms = "no-default-charms"
+	// diff: --generated
+	FlagDiffGenerated = "generated"
 	// explain: --global
 	FlagExplainGlobal = "global"
 	// explain: --refresh
@@ -237,8 +239,6 @@ const (
 	FlagRefsOccurrences = "occurrences"
 	// refs: --refresh
 	FlagRefsRefresh = "refresh"
-	// review: --generated
-	FlagReviewGenerated = "generated"
 	// run: --depth
 	FlagRunDepth = "depth"
 	// run: --detach
@@ -869,15 +869,15 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 	return &f
 }
 
-// ReviewFlags are the flags declared for `magus review`.
-type ReviewFlags struct {
+// DiffFlags are the flags declared for `magus diff`.
+type DiffFlags struct {
 	Generated bool // --generated
 }
 
-// BindReview registers `magus review`'s flags on fs and returns the destination.
-func BindReview(fs *flag.FlagSet) *ReviewFlags {
-	var f ReviewFlags
-	fs.BoolVar(&f.Generated, FlagReviewGenerated, false, "Include declared target outputs, which are folded away by default")
+// BindDiff registers `magus diff`'s flags on fs and returns the destination.
+func BindDiff(fs *flag.FlagSet) *DiffFlags {
+	var f DiffFlags
+	fs.BoolVar(&f.Generated, FlagDiffGenerated, false, "Include declared target outputs, which are folded away by default")
 	return &f
 }
 

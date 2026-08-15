@@ -1,7 +1,7 @@
 // session.ts - the console's client for the shared review session.
 //
-// Two fetches, split because they cost different amounts. /api/v1/diff is an index read that
-// returns the patch in milliseconds and is what paints the screen; /api/v1/review loads the
+// Two fetches, split because they cost different amounts. /api/v1/diff/patch is an index read that
+// returns the patch in milliseconds and is what paints the screen; /api/v1/diff loads the
 // symbol shards and walks a reverse closure, and is what decorates it. Waiting for the second
 // before showing the first would hold a readable diff behind an overlay nobody is looking at
 // yet.
@@ -12,14 +12,14 @@
 
 import { authHeaders } from "../../lib/daemon";
 
-// The wire shapes, mirroring types.Review and types.ReviewSession. Hand-written rather than
+// The wire shapes, mirroring types.Review and types.DiffSession. Hand-written rather than
 // generated because these ride the plain JSON /api routes rather than a Connect service, the
 // same as the insight and outputs readers beside them.
 
 export type ReviewRole = "source" | "output" | "maintained" | "unclaimed";
 export type ReviewSurface = "internal" | "public" | "unknown";
 
-export interface ReviewSymbol {
+export interface DiffSymbol {
   readonly id: string;
   readonly label?: string;
   readonly ref_count: number;
@@ -29,13 +29,13 @@ export interface ReviewSymbol {
   readonly module_api?: boolean;
 }
 
-export interface ReviewCoverage {
+export interface DiffCoverage {
   readonly ratio: number;
   readonly covered_stmts: number;
   readonly total_stmts: number;
 }
 
-export interface ReviewChurn {
+export interface DiffChurn {
   readonly commits: number;
   readonly authors?: number;
   readonly score: number;
@@ -43,7 +43,7 @@ export interface ReviewChurn {
   readonly project_trend?: number;
 }
 
-export interface ReviewTouch {
+export interface DiffTouch {
   readonly host?: string;
   readonly session?: string;
   readonly transcript?: string;
@@ -51,30 +51,30 @@ export interface ReviewTouch {
   readonly ran?: readonly string[];
 }
 
-export interface ReviewFile {
+export interface DiffAnnotation {
   readonly path: string;
   readonly project?: string;
   readonly role: ReviewRole;
   readonly hint?: string;
-  readonly coverage?: ReviewCoverage;
-  readonly symbols?: readonly ReviewSymbol[];
+  readonly coverage?: DiffCoverage;
+  readonly symbols?: readonly DiffSymbol[];
   // null when no symbol index was loaded, which is NOT zero: "nothing references this" and
   // "nobody looked" are different facts, and the ordering depends on this one.
   readonly reach: number | null;
   readonly surface: ReviewSurface;
-  readonly churn?: ReviewChurn;
-  readonly touches?: readonly ReviewTouch[];
+  readonly churn?: DiffChurn;
+  readonly touches?: readonly DiffTouch[];
 }
 
-export interface Review {
+export interface Diff {
   readonly base: string;
-  readonly files?: readonly ReviewFile[];
+  readonly files?: readonly DiffAnnotation[];
   readonly seed_projects?: readonly string[];
   readonly affected_projects?: readonly { path: string; seed: boolean }[];
   readonly notes?: readonly string[];
 }
 
-export interface ReviewComment {
+export interface DiffComment {
   readonly id: string;
   readonly path: string;
   readonly hunk: number;
@@ -84,7 +84,7 @@ export interface ReviewComment {
   readonly resolved: boolean;
 }
 
-export interface ReviewSuggestion {
+export interface DiffSuggestion {
   readonly id: string;
   readonly path: string;
   readonly hunk: number;
@@ -94,14 +94,14 @@ export interface ReviewSuggestion {
   readonly declined: boolean;
 }
 
-export interface ReviewSession {
+export interface DiffSession {
   readonly id: string;
   readonly base: string;
-  readonly review: Review;
+  readonly diff: Diff;
   readonly cursor: { path?: string; hunk: number };
   readonly viewed?: readonly string[];
-  readonly comments?: readonly ReviewComment[];
-  readonly suggestions?: readonly ReviewSuggestion[];
+  readonly comments?: readonly DiffComment[];
+  readonly suggestions?: readonly DiffSuggestion[];
 }
 
 export interface DiffResponse {
@@ -111,7 +111,7 @@ export interface DiffResponse {
 
 // fetchPatch reads the working tree's unified patch. Fast path, painted immediately.
 export async function fetchPatch(host: string, signal: AbortSignal): Promise<DiffResponse> {
-  const res = await fetch(`http://${host}/api/v1/diff`, { headers: authHeaders(), signal });
+  const res = await fetch(`http://${host}/api/v1/diff/patch`, { headers: authHeaders(), signal });
   if (!res.ok) throw new HttpError(res.status);
   return (await res.json()) as DiffResponse;
 }
@@ -125,11 +125,11 @@ export async function fetchSession(
   host: string,
   paths: readonly string[],
   signal: AbortSignal,
-): Promise<ReviewSession> {
+): Promise<DiffSession> {
   const q = paths.map((p) => `path=${encodeURIComponent(p)}`).join("&");
-  const res = await fetch(`http://${host}/api/v1/review?${q}`, { headers: authHeaders(), signal });
+  const res = await fetch(`http://${host}/api/v1/diff?${q}`, { headers: authHeaders(), signal });
   if (!res.ok) throw new HttpError(res.status);
-  return (await res.json()) as ReviewSession;
+  return (await res.json()) as DiffSession;
 }
 
 // SessionOp is one mutation of the human's half of the session. Every one of these is stamped
@@ -153,16 +153,16 @@ export async function mutate(
   host: string,
   op: SessionOp,
   signal: AbortSignal,
-): Promise<ReviewSession | null> {
+): Promise<DiffSession | null> {
   try {
-    const res = await fetch(`http://${host}/api/v1/review/session`, {
+    const res = await fetch(`http://${host}/api/v1/diff/session`, {
       method: "POST",
       headers: { ...authHeaders(), "Content-Type": "application/json" },
       body: JSON.stringify(op),
       signal,
     });
     if (!res.ok) return null;
-    return (await res.json()) as ReviewSession;
+    return (await res.json()) as DiffSession;
   } catch {
     return null;
   }
@@ -178,7 +178,7 @@ export class HttpError extends Error {
   }
 }
 
-// hunkDigest MUST match internal/review.HunkDigest byte for byte, or a mark made in the
+// hunkDigest MUST match internal/diff.HunkDigest byte for byte, or a mark made in the
 // console is invisible to the CLI and to an agent reading the same session.
 //
 // Path plus body, NUL-separated, each line newline-terminated; the hunk header is excluded

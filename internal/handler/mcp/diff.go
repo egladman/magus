@@ -5,15 +5,15 @@ import (
 	"errors"
 	"strings"
 
-	"github.com/egladman/magus/internal/review"
+	"github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
 
-// reviewTool is the AGENT's half of a paired review: read the shared session, say something
+// diffTool is the AGENT's half of a paired review: read the shared session, say something
 // about a hunk, and ask for the human's attention.
 //
-// It reads and writes the same *review.Store the console route does, which is the whole point
+// It reads and writes the same *diff.Store the console route does, which is the whole point
 // - three transports over one object, so an agent can see where the person is looking and be
 // useful about it instead of narrating blindly.
 //
@@ -31,14 +31,14 @@ import (
 // It also cannot mark a hunk viewed, for a quieter reason: "read" is a claim only the reader
 // can make, and an agent ticking it off would erase the human's own account of what they have
 // actually looked at.
-type reviewTool struct {
-	sessions *review.Store
+type diffTool struct {
+	sessions *diff.Store
 	root     string
 }
 
-func (t *reviewTool) Name() string { return ToolReview.String() }
+func (t *diffTool) Name() string { return ToolDiff.String() }
 
-func (t *reviewTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
+func (t *diffTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	if t.sessions == nil || t.root == "" {
 		return spells.InvokeResponse{}, errors.New("mcp: review sessions are unavailable (no workspace)")
 	}
@@ -66,11 +66,11 @@ func (t *reviewTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells
 		if body == "" || path == "" {
 			return spells.InvokeResponse{}, errors.New("mcp: comment needs path and body")
 		}
-		out := t.sessions.AddComment(t.root, types.ReviewComment{
+		out := t.sessions.AddComment(t.root, types.DiffComment{
 			Path: path,
 			Hunk: int(paramFloat(req.Params, "hunk", -1)),
 			Body: body,
-		}, types.ReviewAuthorAgent)
+		}, types.DiffAuthorAgent)
 		return spells.InvokeResponse{Data: out}, nil
 
 	case "suggest":
@@ -81,7 +81,7 @@ func (t *reviewTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells
 			// cannot say why it earned the reader's attention should not have been made.
 			return spells.InvokeResponse{}, errors.New("mcp: suggest needs path and reason")
 		}
-		out := t.sessions.Suggest(t.root, types.ReviewSuggestion{
+		out := t.sessions.Suggest(t.root, types.DiffSuggestion{
 			Path:      path,
 			Hunk:      int(paramFloat(req.Params, "hunk", -1)),
 			Reason:    reason,
@@ -102,4 +102,4 @@ func (t *reviewTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells
 	}
 }
 
-var _ spells.Driver = (*reviewTool)(nil)
+var _ spells.Driver = (*diffTool)(nil)

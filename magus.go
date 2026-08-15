@@ -749,7 +749,7 @@ func statusLinePath(line string) string {
 // It is a JOIN, not a computation. Every input already exists - ClassifyFiles reads the same
 // declared globs `magus describe file` reads, and impact.Compute/Enrich are what `magus
 // affected --impact` prints. Assembling them here rather than in the console keeps one
-// definition of review order (types.Review.SortForReview), so a Buzz advisor writing a
+// definition of review order (types.Diff.SortForReading), so a Buzz advisor writing a
 // pull-request comment ranks files the same way the console scrolls them.
 //
 // EVERY overlay is best-effort and degrades to a Note rather than an error. A workspace with
@@ -757,17 +757,17 @@ func statusLinePath(line string) string {
 // whole review because coverage was never run would make the useful part unreachable. A
 // reader must be able to tell "nothing depends on this" from "nothing was measured", which is
 // what Notes is for.
-func (m *Magus) Review(ctx context.Context, paths []string) (types.Review, error) {
-	out := types.Review{Base: "working"}
+func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
+	out := types.Diff{Base: "working"}
 
 	entries, err := m.ClassifyFiles(ctx, paths)
 	if err != nil {
-		return types.Review{}, err
+		return types.Diff{}, err
 	}
-	byPath := make(map[string]*types.ReviewFile, len(entries))
-	out.Files = make([]types.ReviewFile, 0, len(entries))
+	byPath := make(map[string]*types.DiffFile, len(entries))
+	out.Files = make([]types.DiffFile, 0, len(entries))
 	for _, e := range entries {
-		out.Files = append(out.Files, types.ReviewFile{
+		out.Files = append(out.Files, types.DiffFile{
 			Path: e.Path, Project: e.Project, Role: e.Role, Hint: e.Hint,
 		})
 	}
@@ -786,7 +786,7 @@ func (m *Magus) Review(ctx context.Context, paths []string) (types.Review, error
 		// radius could not be walked would make the useful part unreachable, and the Note is
 		// what keeps the absence visible rather than silent.
 		out.Notes = append(out.Notes, "blast radius unavailable: "+ierr.Error())
-		out.SortForReview()
+		out.SortForReading()
 		return out, nil //nolint:nilerr // reported as a Note, see above
 	}
 	graph, gerr := m.KnowledgeGraphWithSymbols(ctx)
@@ -814,7 +814,7 @@ func (m *Magus) Review(ctx context.Context, paths []string) (types.Review, error
 	// index actually covered. Defaulting to internal would report every unindexed file as
 	// safe, which is the one wrong answer that costs something.
 	for i := range out.Files {
-		out.Files[i].Surface = types.ReviewSurfaceUnknown
+		out.Files[i].Surface = types.DiffSurfaceUnknown
 	}
 	// Reach gets a measured baseline of zero ONLY when an index was loaded; otherwise it stays
 	// nil and Review.Ranked() reports that there was no ranking key. The flag is workspace-wide
@@ -831,7 +831,7 @@ func (m *Magus) Review(ctx context.Context, paths []string) (types.Review, error
 		if !ok {
 			continue
 		}
-		sym := types.ReviewSymbol{ID: s.Symbol, Label: s.Label, RefCount: s.RefCount, FileCount: s.FileCount}
+		sym := types.DiffSymbol{ID: s.Symbol, Label: s.Label, RefCount: s.RefCount, FileCount: s.FileCount}
 		sym.ModuleAPI = exportedFromModule(s.File, s.Label)
 		if graph != nil {
 			sym.ExternalProjects, sym.ExternalFileCount = m.externalReferents(graph, s.Symbol, f.Project)
@@ -849,9 +849,9 @@ func (m *Magus) Review(ctx context.Context, paths []string) (types.Review, error
 		// that because its neighbours are internal is how the signal gets missed.
 		switch {
 		case len(sym.ExternalProjects) > 0 || sym.ModuleAPI:
-			f.Surface = types.ReviewSurfacePublic
-		case f.Surface == types.ReviewSurfaceUnknown:
-			f.Surface = types.ReviewSurfaceInternal
+			f.Surface = types.DiffSurfacePublic
+		case f.Surface == types.DiffSurfaceUnknown:
+			f.Surface = types.DiffSurfaceInternal
 		}
 	}
 	for _, c := range res.ChangedFileCoverage {
@@ -861,7 +861,7 @@ func (m *Magus) Review(ctx context.Context, paths []string) (types.Review, error
 		}
 	}
 
-	out.SortForReview()
+	out.SortForReading()
 	return out, nil
 }
 
@@ -873,7 +873,7 @@ func (m *Magus) Review(ctx context.Context, paths []string) (types.Review, error
 // in the review is kept: that means the review does not know the file's project rather than
 // that the project was untouched, and dropping it would silently shrink the count on the
 // strength of an absence.
-func authorEditedProjects(seeds []string, files []types.ReviewFile) []string {
+func authorEditedProjects(seeds []string, files []types.DiffFile) []string {
 	authored := make(map[string]bool, len(seeds))
 	known := make(map[string]bool, len(seeds))
 	for _, f := range files {

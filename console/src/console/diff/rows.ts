@@ -11,7 +11,7 @@
 // the kind of index arithmetic that is wrong until it is tested.
 
 import type { DiffFile, DiffLine, Hunk } from "./parse";
-import type { ReviewComment, ReviewTouch } from "./session";
+import type { DiffComment, DiffTouch } from "./session";
 
 export type ViewMode = "unified" | "split";
 
@@ -27,8 +27,8 @@ export function commentKey(path: string, hunk: number): string {
 
 // byHunk groups comments by their anchor so buildRows can interleave them in one pass rather
 // than scanning the whole list per hunk.
-export function byHunk(comments: readonly ReviewComment[]): Map<string, ReviewComment[]> {
-  const out = new Map<string, ReviewComment[]>();
+export function byHunk(comments: readonly DiffComment[]): Map<string, DiffComment[]> {
+  const out = new Map<string, DiffComment[]>();
   for (const c of comments) {
     const k = commentKey(c.path, c.hunk);
     const at = out.get(k);
@@ -45,8 +45,8 @@ export type Row =
   | { readonly kind: "file"; readonly file: DiffFile }
   | { readonly kind: "hunk"; readonly file: DiffFile; readonly hunk: Hunk; readonly index: number }
   | { readonly kind: "line"; readonly file: DiffFile; readonly line: DiffLine }
-  | { readonly kind: "comment"; readonly file: DiffFile; readonly comment: ReviewComment }
-  | { readonly kind: "story"; readonly file: DiffFile; readonly touch: ReviewTouch }
+  | { readonly kind: "comment"; readonly file: DiffFile; readonly comment: DiffComment }
+  | { readonly kind: "story"; readonly file: DiffFile; readonly touch: DiffTouch }
   | {
       readonly kind: "pair";
       readonly file: DiffFile;
@@ -64,8 +64,8 @@ export type Row =
 export function buildRows(
   files: readonly DiffFile[],
   mode: ViewMode,
-  comments?: Map<string, ReviewComment[]>,
-  touches?: Map<string, readonly ReviewTouch[]>,
+  comments?: Map<string, DiffComment[]>,
+  touches?: Map<string, readonly DiffTouch[]>,
 ): Row[] {
   const rows: Row[] = [];
   for (const file of files) {

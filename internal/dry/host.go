@@ -281,7 +281,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("files", vm.ListValue(nil))
 		return res, nil
 	}))
-	m.MapSet("review", fn("magus.review", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("diff", fn("magus.diff", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("base", vm.StrValue(""))
 		res.MapSet("files", vm.ListValue(nil))

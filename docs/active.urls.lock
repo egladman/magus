@@ -409,6 +409,7 @@ reference/manpage/magus-clean/
 reference/manpage/magus-completion/
 reference/manpage/magus-config/
 reference/manpage/magus-describe/
+reference/manpage/magus-diff/
 reference/manpage/magus-doctor/
 reference/manpage/magus-explain/
 reference/manpage/magus-graph/
@@ -543,6 +544,7 @@ tags/desktop/
 tags/detach/
 tags/determinism/
 tags/diagnostics/
+tags/diff/
 tags/discovery/
 tags/docker/
 tags/docs/
@@ -673,6 +675,7 @@ tags/remote-cache/
 tags/repl/
 tags/replay/
 tags/reproduce/
+tags/review/
 tags/rfc-6902/
 tags/ruff/
 tags/run/

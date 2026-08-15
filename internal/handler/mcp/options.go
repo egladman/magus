@@ -9,7 +9,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/internal/review"
+	"github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/types"
 )
 
@@ -61,8 +61,8 @@ type Options struct {
 	// review in the console and the agent joins the session they started, rather than each
 	// side holding a private opinion of the changeset.
 	//
-	// Nil disables magus_review, which is the honest state for a daemon with no workspace.
-	ReviewSessions *review.Store
+	// Nil disables magus_diff, which is the honest state for a daemon with no workspace.
+	ReviewSessions *diff.Store
 }
 
 func (o Options) validate() error {

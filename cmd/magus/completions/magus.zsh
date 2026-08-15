@@ -60,7 +60,7 @@ _magus() {
                 'config:view or update magus configuration'
                 'memory:durable cross-session project memory (ls, get, put, delete, verify)'
                 'notes:human-authored notes committed to the repo (ls, get, edit, verify)'
-                'review:read uncommitted changes in the order they deserve attention, generated folded'
+                'diff:read uncommitted changes in the order they deserve attention, generated folded'
                 'server:manage the persistent daemon (start / stop / status; MCP starts with it)'
                 'buzz:run a Buzz script (Buzz stdlib + every magus host module)'
                 'completion:print a shell completion script (bash, zsh, fish)'

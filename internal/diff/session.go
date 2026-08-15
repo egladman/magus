@@ -15,7 +15,7 @@
 //     whose whole value is surviving an interruption. It is keyed by CONTENT DIGEST, so the
 //     mark survives a rebase that did not touch the hunk - which is the failing of every
 //     viewed-checkbox that resets on force-push.
-package review
+package diff
 
 import (
 	"crypto/sha256"
@@ -38,7 +38,7 @@ import (
 // twice returns the same session, which is what every client actually wants.
 type Store struct {
 	mu       sync.Mutex
-	sessions map[string]*types.ReviewSession
+	sessions map[string]*types.DiffSession
 	// viewedPath is where the digest set is persisted, empty to disable persistence (tests).
 	viewedPath string
 	nextID     int
@@ -48,7 +48,7 @@ type Store struct {
 // keeps everything in memory, which is what a test wants and what a workspace-less daemon
 // gets.
 func NewStore(stateDir string) *Store {
-	s := &Store{sessions: map[string]*types.ReviewSession{}}
+	s := &Store{sessions: map[string]*types.DiffSession{}}
 	if stateDir != "" {
 		s.viewedPath = filepath.Join(stateDir, "review", "viewed.json")
 	}
@@ -78,28 +78,28 @@ func HunkDigest(path string, lines []string) string {
 // Attach returns the session for root, creating it and adopting any persisted viewed set on
 // first use. review is the freshly computed annotated changeset; an existing session takes it
 // as an update, so a client that recomputes does not clobber the conversation.
-func (s *Store) Attach(root string, base string, rev types.Review) *types.ReviewSession {
+func (s *Store) Attach(root string, base string, rev types.Diff) *types.DiffSession {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
 	sess, ok := s.sessions[root]
 	if !ok {
 		s.nextID++
-		sess = &types.ReviewSession{
+		sess = &types.DiffSession{
 			ID:     fmt.Sprintf("rev%d", s.nextID),
 			Base:   base,
-			Cursor: types.ReviewCursor{Hunk: -1},
+			Cursor: types.DiffCursor{Hunk: -1},
 			Viewed: s.loadViewed(),
 		}
 		s.sessions[root] = sess
 	}
 	sess.Base = base
-	sess.Review = rev
+	sess.Diff = rev
 	return clone(sess)
 }
 
 // Get returns the session for root, or nil when none is attached.
-func (s *Store) Get(root string) *types.ReviewSession {
+func (s *Store) Get(root string) *types.DiffSession {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sess, ok := s.sessions[root]
@@ -112,15 +112,15 @@ func (s *Store) Get(root string) *types.ReviewSession {
 // SetCursor records where the HUMAN is looking. There is no agent equivalent on purpose: an
 // agent that could write this would be moving the reader's viewport, which is the one thing
 // the suggestion queue exists to prevent.
-func (s *Store) SetCursor(root string, c types.ReviewCursor) *types.ReviewSession {
-	return s.mutate(root, func(sess *types.ReviewSession) {
+func (s *Store) SetCursor(root string, c types.DiffCursor) *types.DiffSession {
+	return s.mutate(root, func(sess *types.DiffSession) {
 		sess.Cursor = c
 	})
 }
 
 // MarkViewed adds or removes a hunk digest from the human's progress set and persists it.
-func (s *Store) MarkViewed(root, digest string, viewed bool) *types.ReviewSession {
-	return s.mutate(root, func(sess *types.ReviewSession) {
+func (s *Store) MarkViewed(root, digest string, viewed bool) *types.DiffSession {
+	return s.mutate(root, func(sess *types.DiffSession) {
 		i := slices.Index(sess.Viewed, digest)
 		switch {
 		case viewed && i < 0:
@@ -136,9 +136,9 @@ func (s *Store) MarkViewed(root, digest string, viewed bool) *types.ReviewSessio
 
 // AddComment attaches a remark. author is stamped by the CALLER from the transport the write
 // arrived on - never from the request body - which is what stops an agent posting as the
-// human. See types.ReviewAuthor.
-func (s *Store) AddComment(root string, c types.ReviewComment, author types.ReviewAuthor) *types.ReviewSession {
-	return s.mutate(root, func(sess *types.ReviewSession) {
+// human. See types.DiffAuthor.
+func (s *Store) AddComment(root string, c types.DiffComment, author types.DiffAuthor) *types.DiffSession {
+	return s.mutate(root, func(sess *types.DiffSession) {
 		c.Author = author
 		c.ID = fmt.Sprintf("c%d", len(sess.Comments)+1)
 		sess.Comments = append(sess.Comments, c)
@@ -148,8 +148,8 @@ func (s *Store) AddComment(root string, c types.ReviewComment, author types.Revi
 // ResolveComment marks a comment resolved. Either party may resolve: a human closing an
 // agent's point and an agent closing its own after fixing it are both normal, and requiring
 // the author to do it would strand comments whose author has gone away.
-func (s *Store) ResolveComment(root, id string, resolved bool) *types.ReviewSession {
-	return s.mutate(root, func(sess *types.ReviewSession) {
+func (s *Store) ResolveComment(root, id string, resolved bool) *types.DiffSession {
+	return s.mutate(root, func(sess *types.DiffSession) {
 		for i := range sess.Comments {
 			if sess.Comments[i].ID == id {
 				sess.Comments[i].Resolved = resolved
@@ -160,9 +160,9 @@ func (s *Store) ResolveComment(root, id string, resolved bool) *types.ReviewSess
 }
 
 // Suggest enqueues an agent's request for attention. It does NOT move the cursor, and that
-// omission is the design - see types.ReviewSuggestion.
-func (s *Store) Suggest(root string, sug types.ReviewSuggestion) *types.ReviewSession {
-	return s.mutate(root, func(sess *types.ReviewSession) {
+// omission is the design - see types.DiffSuggestion.
+func (s *Store) Suggest(root string, sug types.DiffSuggestion) *types.DiffSession {
+	return s.mutate(root, func(sess *types.DiffSession) {
 		sug.ID = fmt.Sprintf("s%d", len(sess.Suggestions)+1)
 		sug.Accepted, sug.Declined = false, false
 		sess.Suggestions = append(sess.Suggestions, sug)
@@ -175,8 +175,8 @@ func (s *Store) Suggest(root string, sug types.ReviewSuggestion) *types.ReviewSe
 //
 // Declining is recorded rather than discarded so an agent can tell "not yet seen" from "seen
 // and declined" and stop repeating itself.
-func (s *Store) AnswerSuggestion(root, id string, accept bool) *types.ReviewSession {
-	return s.mutate(root, func(sess *types.ReviewSession) {
+func (s *Store) AnswerSuggestion(root, id string, accept bool) *types.DiffSession {
+	return s.mutate(root, func(sess *types.DiffSession) {
 		for i := range sess.Suggestions {
 			if sess.Suggestions[i].ID != id {
 				continue
@@ -184,7 +184,7 @@ func (s *Store) AnswerSuggestion(root, id string, accept bool) *types.ReviewSess
 			sess.Suggestions[i].Accepted = accept
 			sess.Suggestions[i].Declined = !accept
 			if accept {
-				sess.Cursor = types.ReviewCursor{Path: sess.Suggestions[i].Path, Hunk: sess.Suggestions[i].Hunk}
+				sess.Cursor = types.DiffCursor{Path: sess.Suggestions[i].Path, Hunk: sess.Suggestions[i].Hunk}
 			}
 			return
 		}
@@ -192,7 +192,7 @@ func (s *Store) AnswerSuggestion(root, id string, accept bool) *types.ReviewSess
 }
 
 // mutate applies fn under the lock and returns a copy, or nil when no session is attached.
-func (s *Store) mutate(root string, fn func(*types.ReviewSession)) *types.ReviewSession {
+func (s *Store) mutate(root string, fn func(*types.DiffSession)) *types.DiffSession {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	sess, ok := s.sessions[root]
@@ -206,7 +206,7 @@ func (s *Store) mutate(root string, fn func(*types.ReviewSession)) *types.Review
 // clone returns a deep-enough copy that a caller cannot mutate live session state through the
 // slices it was handed. The Review inside is treated as immutable (Attach replaces it whole),
 // so it rides along by reference rather than being copied per read.
-func clone(s *types.ReviewSession) *types.ReviewSession {
+func clone(s *types.DiffSession) *types.DiffSession {
 	out := *s
 	out.Viewed = slices.Clone(s.Viewed)
 	out.Comments = slices.Clone(s.Comments)

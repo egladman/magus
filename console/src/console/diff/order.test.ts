@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { order, visibleFiles, stats, riskChips } from "./order";
 import type { DiffFile } from "./parse";
-import type { ReviewFile, ReviewSession } from "./session";
+import type { DiffAnnotation, DiffSession } from "./session";
 
 function file(path: string, additions = 1, deletions = 0): DiffFile {
   return {
@@ -16,15 +16,15 @@ function file(path: string, additions = 1, deletions = 0): DiffFile {
   };
 }
 
-function ann(path: string, over: Partial<ReviewFile> = {}): ReviewFile {
+function ann(path: string, over: Partial<DiffAnnotation> = {}): DiffAnnotation {
   return { path, role: "source", reach: 0, surface: "unknown", ...over };
 }
 
-function session(files: ReviewFile[]): ReviewSession {
+function session(files: DiffAnnotation[]): DiffSession {
   return {
     id: "rev1",
     base: "working",
-    review: { base: "working", files },
+    diff: { base: "working", files },
     cursor: { hunk: -1 },
   };
 }

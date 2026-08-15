@@ -80,11 +80,11 @@ var boundaryTypes = []boundaryType{
 	// magus.review's bundle, leaf-first. A Buzz advisor annotating `> Review` gets
 	// compile-checked field access on the same shape the console and the CLI read, which is
 	// what keeps one definition of review order serving all three.
-	{Name: "ReviewSymbol", Type: reflect.TypeFor[types.ReviewSymbol](), RuntimeObject: true},
-	{Name: "ReviewChurn", Type: reflect.TypeFor[types.ReviewChurn](), RuntimeObject: true},
-	{Name: "ReviewTouch", Type: reflect.TypeFor[types.ReviewTouch](), RuntimeObject: true},
-	{Name: "ReviewFile", Type: reflect.TypeFor[types.ReviewFile](), RuntimeObject: true},
-	{Name: "Review", Type: reflect.TypeFor[types.Review](), RuntimeObject: true},
+	{Name: "DiffSymbol", Type: reflect.TypeFor[types.DiffSymbol](), RuntimeObject: true},
+	{Name: "DiffChurn", Type: reflect.TypeFor[types.DiffChurn](), RuntimeObject: true},
+	{Name: "DiffTouch", Type: reflect.TypeFor[types.DiffTouch](), RuntimeObject: true},
+	{Name: "DiffFile", Type: reflect.TypeFor[types.DiffFile](), RuntimeObject: true},
+	{Name: "Diff", Type: reflect.TypeFor[types.Diff](), RuntimeObject: true},
 	// Not a RuntimeObject: it reaches Buzz through a thrown error, not a return.
 	{Name: "Diagnostic", Type: reflect.TypeFor[types.Diagnostic]()},
 	{Name: "DoctorCheck", Type: reflect.TypeFor[types.DoctorCheck](), RuntimeObject: true},

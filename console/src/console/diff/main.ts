@@ -1,4 +1,4 @@
-// main.ts - the console's Review surface.
+// main.ts - the console's Diff surface.
 //
 // A magus review is not a text diff. The daemon already knows which changed files are
 // generated, how widely each changed symbol is referenced, whether any of it is public API,
@@ -41,9 +41,9 @@ import {
   mutate,
   hunkDigest,
   HttpError,
-  type ReviewSession,
-  type ReviewFile,
-  type ReviewTouch,
+  type DiffSession,
+  type DiffAnnotation,
+  type DiffTouch,
 } from "./session";
 import { registerCommand, unregisterCommand } from "../commands";
 import { resolveDaemonHost, parseHash, adoptDaemonOrigin } from "../../lib/daemon";
@@ -70,7 +70,7 @@ interface State {
   fileRows: number[];
   mode: ViewMode;
   cursor: number;
-  session: ReviewSession | null;
+  session: DiffSession | null;
   viewed: Set<string>;
   // digestByRow maps a hunk row index to its content digest, computed once per rebuild so a
   // keypress never awaits a hash.
@@ -173,7 +173,7 @@ export function activate(host: HTMLElement): () => void {
 
   // --- rendering ------------------------------------------------------------
 
-  const annotationFor = (path: string): ReviewFile | undefined => {
+  const annotationFor = (path: string): DiffAnnotation | undefined => {
     for (const o of state.changeset.primary) if (o.file.path === path) return o.annotation;
     for (const o of state.changeset.generated) if (o.file.path === path) return o.annotation;
     return undefined;
@@ -348,7 +348,7 @@ export function activate(host: HTMLElement): () => void {
   // applySession takes the daemon's copy as authoritative and re-lays the stream, because a
   // comment - the human's or an agent's - is a ROW, so it changes the scroll geometry. Only
   // repainting would leave the new remark invisible until the next unrelated rebuild.
-  const applySession = (s: ReviewSession, relayout = true): void => {
+  const applySession = (s: DiffSession, relayout = true): void => {
     const before = (state.session?.comments ?? []).length;
     state.session = s;
     state.viewed = new Set(s.viewed ?? []);
@@ -363,8 +363,8 @@ export function activate(host: HTMLElement): () => void {
     state.files = visibleFiles(state.changeset, state.showGenerated);
     // Touches come from the annotations, so the first paint has none and the stream gains the
     // story rows when the review lands - the same two-phase shape everything else here uses.
-    const touches = new Map<string, readonly ReviewTouch[]>();
-    for (const f of state.session?.review?.files ?? []) {
+    const touches = new Map<string, readonly DiffTouch[]>();
+    for (const f of state.session?.diff?.files ?? []) {
       if (f.touches?.length) touches.set(f.path, f.touches);
     }
     state.rows = buildRows(state.files, state.mode, byHunk(state.session?.comments ?? []), touches);
@@ -396,9 +396,9 @@ export function activate(host: HTMLElement): () => void {
   // ranked reports whether the server had a ranking key at all. False means every file's reach
   // is unmeasured, so the order is path order wearing a ranking's clothes - and this surface
   // says "Read these first", which is a claim it cannot keep in that state. Mirrors
-  // types.Review.Ranked; the server's order is still authoritative, this only labels it.
+  // types.Diff.Ranked; the server's order is still authoritative, this only labels it.
   const ranked = (): boolean =>
-    (state.session?.review?.files ?? []).some((f) => f.reach !== null && f.reach !== undefined);
+    (state.session?.diff?.files ?? []).some((f) => f.reach !== null && f.reach !== undefined);
 
   const UNRANKED_TITLE =
     "No symbol index, so there is no consequence to rank by. This is path order, not a ranking - build the index with `magus graph build` to order these by what they can break.";
@@ -504,7 +504,7 @@ export function activate(host: HTMLElement): () => void {
   };
 
   // The suggestion rail: an agent asking for attention. It renders as a peripheral affordance
-  // the reader accepts with one key and NEVER as a scroll - see types.ReviewSuggestion.
+  // the reader accepts with one key and NEVER as a scroll - see types.DiffSuggestion.
   const renderRail = (): void => {
     const pending = (state.session?.suggestions ?? []).filter((s) => !s.accepted && !s.declined);
     if (pending.length === 0) {
@@ -559,8 +559,8 @@ export function activate(host: HTMLElement): () => void {
         ),
       );
     if (s.untested > 0) box.append(line("measured untested", `${s.untested} files`));
-    const seeds = state.session?.review?.seed_projects ?? [];
-    const affected = state.session?.review?.affected_projects ?? [];
+    const seeds = state.session?.diff?.seed_projects ?? [];
+    const affected = state.session?.diff?.affected_projects ?? [];
     if (affected.length > 0) {
       box.append(
         line(
@@ -570,7 +570,7 @@ export function activate(host: HTMLElement): () => void {
         ),
       );
     }
-    for (const n of state.session?.review?.notes ?? []) {
+    for (const n of state.session?.diff?.notes ?? []) {
       const note = h("p", "console-diff-overview__note");
       note.textContent = n;
       box.append(note);
@@ -782,63 +782,63 @@ export function activate(host: HTMLElement): () => void {
   // while someone is typing in another surface.
   const COMMANDS: { id: string; label: string; run: () => void; key?: string }[] = [
     {
-      id: "review.hunk.next",
-      label: "Review: next hunk",
+      id: "diff.hunk.next",
+      label: "Diff: next hunk",
       run: () => step(1, state.hunks),
       key: "]",
     },
     {
-      id: "review.hunk.prev",
-      label: "Review: previous hunk",
+      id: "diff.hunk.prev",
+      label: "Diff: previous hunk",
       run: () => step(-1, state.hunks),
       key: "[",
     },
     {
-      id: "review.file.next",
-      label: "Review: next file",
+      id: "diff.file.next",
+      label: "Diff: next file",
       run: () => step(1, state.fileRows),
       key: "}",
     },
     {
-      id: "review.file.prev",
-      label: "Review: previous file",
+      id: "diff.file.prev",
+      label: "Diff: previous file",
       run: () => step(-1, state.fileRows),
       key: "{",
     },
-    { id: "review.viewed.toggle", label: "Review: mark hunk read", run: toggleViewed, key: "v" },
+    { id: "diff.viewed.toggle", label: "Diff: mark hunk read", run: toggleViewed, key: "v" },
     {
-      id: "review.generated.toggle",
-      label: "Review: fold or unfold generated files",
+      id: "diff.generated.toggle",
+      label: "Diff: fold or unfold generated files",
       run: () => void toggleGenerated(),
       key: ".",
     },
     {
-      id: "review.view.unified",
-      label: "Review: unified view",
+      id: "diff.view.unified",
+      label: "Diff: unified view",
       run: () => void setMode("unified"),
       key: "1",
     },
     {
-      id: "review.view.split",
-      label: "Review: split view",
+      id: "diff.view.split",
+      label: "Diff: split view",
       run: () => void setMode("split"),
       key: "2",
     },
     {
-      id: "review.view.toggle",
-      label: "Review: toggle split and unified",
+      id: "diff.view.toggle",
+      label: "Diff: toggle split and unified",
       run: () => void setMode(state.mode === "split" ? "unified" : "split"),
       key: "0",
     },
     {
-      id: "review.suggestion.accept",
-      label: "Review: go to the agent's suggestion",
+      id: "diff.suggestion.accept",
+      label: "Diff: go to the agent's suggestion",
       run: () => acceptSuggestion(),
       key: "g",
     },
     {
-      id: "review.suggestion.skip",
-      label: "Review: skip the agent's suggestion",
+      id: "diff.suggestion.skip",
+      label: "Diff: skip the agent's suggestion",
       run: () => {
         const p = (state.session?.suggestions ?? []).find((s) => !s.accepted && !s.declined);
         if (p) sync({ op: "answer", id: p.id, on: false });
@@ -846,26 +846,26 @@ export function activate(host: HTMLElement): () => void {
       key: "x",
     },
     {
-      id: "review.comment",
-      label: "Review: comment on this hunk",
+      id: "diff.comment",
+      label: "Diff: comment on this hunk",
       run: composeComment,
       key: "c",
     },
     {
-      id: "review.comment.resolve",
-      label: "Review: resolve the comment here",
+      id: "diff.comment.resolve",
+      label: "Diff: resolve the comment here",
       run: resolveHere,
       key: "r",
     },
     {
-      id: "review.overview",
-      label: "Review: changeset overview",
+      id: "diff.overview",
+      label: "Diff: changeset overview",
       run: toggleOverview,
       key: "Escape",
     },
   ];
   for (const c of COMMANDS)
-    registerCommand({ id: c.id, label: c.label, group: "Review", run: c.run });
+    registerCommand({ id: c.id, label: c.label, group: "Diff", run: c.run });
 
   const byKey = new Map(COMMANDS.filter((c) => c.key).map((c) => [c.key as string, c.run]));
   scroll.addEventListener(
@@ -913,7 +913,7 @@ export function activate(host: HTMLElement): () => void {
     if (!hp) {
       showEmpty(
         "No daemon connected",
-        "Review reads the working tree through a local daemon. Start one with `magus server start`.",
+        "Diff reads the working tree through a local daemon. Start one with `magus server start`.",
       );
       return;
     }

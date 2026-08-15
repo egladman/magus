@@ -22,6 +22,7 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/cache"
+	"github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/file/watch"
 	activityhandler "github.com/egladman/magus/internal/handler/activity"
 	graphhandler "github.com/egladman/magus/internal/handler/graph"
@@ -37,7 +38,6 @@ import (
 	"github.com/egladman/magus/internal/handler/trailrpc"
 	viewer "github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
-	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
@@ -257,18 +257,18 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			outputStore := cache.NewOutputStore(opts.Magus.CacheDir())
 			eventsH := status.NewEventsHandler(svc, opts.Build, nil, inv, 0, 0, log)
 			insightH := status.NewInsightHandler(svc, log)
-			diffH := status.NewDiffHandler(svc, log)
+			patchH := status.NewPatchHandler(svc, log)
 			// The daemon-wide session store, constructed by the caller so the console routes
-			// below and the magus_review MCP tool read the SAME object - that sharing is the
+			// below and the magus_diff MCP tool read the SAME object - that sharing is the
 			// pairing. A caller that supplied none gets a local one rather than a nil panic;
 			// pairing is then per-process, which is the honest degradation.
-			reviewSessions := opts.ReviewSessions
-			if reviewSessions == nil {
-				reviewSessions = review.NewStore(opts.Magus.CacheDir())
+			diffSessions := opts.ReviewSessions
+			if diffSessions == nil {
+				diffSessions = diff.NewStore(opts.Magus.CacheDir())
 			}
-			reviewRoot := opts.Magus.Root()
-			reviewH := status.NewReviewHandler(svc, reviewSessions, reviewRoot, log)
-			reviewSessionH := status.NewReviewSessionHandler(reviewSessions, reviewRoot, log)
+			diffRoot := opts.Magus.Root()
+			diffH := status.NewDiffHandler(svc, diffSessions, diffRoot, log)
+			diffSessionH := status.NewDiffSessionHandler(diffSessions, diffRoot, log)
 			outputsH := viewer.NewOutputsHandler(outputStore, log)
 			outputH := viewer.NewOutputHandler(outputStore, log)
 
@@ -287,14 +287,14 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// Loopback-only, alongside the other /api reads - deliberately NOT added to the LAN
 			// share subset below, because a working diff is unreviewed source and a share link
 			// is handed to a phone.
-			bridgeMux.Handle("/api/v1/diff", cors(diffH))
+			bridgeMux.Handle("/api/v1/diff/patch", cors(patchH))
 			// The annotation half: role, blast radius, changed-symbol reach, coverage. Split
-			// from /api/v1/diff because it is far more expensive - see ReviewHandler.
-			bridgeMux.Handle("/api/v1/review", cors(reviewH))
+			// from /api/v1/diff/patch because it is far more expensive - see DiffHandler.
+			bridgeMux.Handle("/api/v1/diff", cors(diffH))
 			// The human's half of a paired review. Reachable only from the console and the
 			// CLI, which is what lets it stamp every write as human without trusting the
 			// payload - an agent reaches the session through MCP, never through here.
-			bridgeMux.Handle("/api/v1/review/session", cors(reviewSessionH))
+			bridgeMux.Handle("/api/v1/diff/session", cors(diffSessionH))
 			// Run browser: the log viewer's tree lists prior runs (/api/v1/outputs) and loads any one's
 			// verbatim captured output (/api/v1/output?ref=). The store is constructed off the cache dir
 			// per request (a shallow keep-last-K scan), matching the other read-only /api JSON routes.

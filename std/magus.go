@@ -192,12 +192,12 @@ var Magus = Module{
 			Impl:    MagusDescribeFile,
 		},
 		{
-			Name: "review",
+			Name: "diff",
 			Doc:  "Read the working tree's uncommitted changes, annotated and ordered by what they can break: for each file the owning project, whether it is a declared `output` (generated - the source edit is the review), how widely its changed symbols are referenced (`reach`), whether it is public API `surface`, observed `coverage`, how often it has been changing (`churn`), and which agent sessions wrote it (`touches`). Files come back in the order magus recommends READING them - generated last whatever its reach, then widest reach first - so a caller renders the list as given rather than sorting it again. Returns a typed Review envelope; branch on `role` and `surface` rather than grepping text. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.",
 			Args: []Arg{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
-			Returns: []Ret{{Type: TypeAnyMap, Object: "Review"}},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Diff"}},
 			Raises:  true,
 			Impl:    MagusReview,
 		},
@@ -825,14 +825,14 @@ func MagusDescribeFile(ctx context.Context, paths []string, opts map[string]any)
 //
 // It shells out to `magus review` rather than reimplementing the join, which is the whole
 // point of exposing it here - a Buzz advisor writing a pull-request comment and the console
-// surface then rank files by the SAME definition (types.Review.SortForReview), and a change to
+// surface then rank files by the SAME definition (types.Diff.SortForReading), and a change to
 // that order reaches both without either being edited.
 //
 // --generated is passed so the caller receives every file and decides what to fold. A CI
 // comment and a terminal reader want different things from the generated set, and a host
 // module that pre-filtered would make the wider answer unreachable.
-func MagusReview(ctx context.Context, opts map[string]any) (types.Review, error) {
-	return runMagusJSON[types.Review](ctx, "review", []string{"--generated"}, opts)
+func MagusReview(ctx context.Context, opts map[string]any) (types.Diff, error) {
+	return runMagusJSON[types.Diff](ctx, "diff", []string{"--generated"}, opts)
 }
 
 // runMagusJSON runs a nested magus subcommand and decodes its report into T.

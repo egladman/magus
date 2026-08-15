@@ -24,7 +24,7 @@ var All = []Command{
 	configCommand,
 	memoryCommand,
 	notesCommand,
-	reviewCommand,
+	diffCommand,
 	serverCommand,
 	buzzCommand,
 	completionCommand,
@@ -1065,11 +1065,11 @@ the CLI is readable by an agent without either side learning a new format.`,
 	},
 }
 
-var reviewCommand = Command{
-	Name:        "review",
+var diffCommand = Command{
+	Name:        "diff",
 	Short:       "Read the working tree's changes in the order they deserve attention",
 	Description: "Report every uncommitted change annotated with what the workspace knows: whether it is generated, how widely its changed symbols are referenced, whether it is public API surface, and what coverage was observed.",
-	Tags:        []string{"cli", "magus review", "diff", "review", "changeset", "semver"},
+	Tags:        []string{"cli", "magus diff", "diff", "review", "changeset", "semver"},
 	Long: `Read the working tree's uncommitted changes, annotated and ordered.
 
 A changeset is not a list of files, it is a set of CONSEQUENCES, and a reader's
@@ -1090,7 +1090,7 @@ needs a base-side index magus does not keep and language semantics it does not
 model - it reports who can see the thing you changed and lets you decide.
 
 The console's Review surface reads the same annotations over the same session,
-and an agent can join that session through the magus_review MCP tool.`,
+and an agent can join that session through the magus_diff MCP tool.`,
 	Usage: "magus review [--generated] [flags]",
 	Flags: []Flag{
 		{Name: "generated", Kind: FlagBool, Doc: "Include declared target outputs, which are folded away by default"},

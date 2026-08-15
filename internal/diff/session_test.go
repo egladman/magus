@@ -1,4 +1,4 @@
-package review
+package diff
 
 import (
 	"os"
@@ -13,8 +13,8 @@ import (
 
 func TestAttachReturnsTheSameSessionForOneRoot(t *testing.T) {
 	s := NewStore("")
-	a := s.Attach("/w", "working", types.Review{Base: "working"})
-	b := s.Attach("/w", "working", types.Review{Base: "working"})
+	a := s.Attach("/w", "working", types.Diff{Base: "working"})
+	b := s.Attach("/w", "working", types.Diff{Base: "working"})
 	assert.Equal(t, a.ID, b.ID,
 		"two attaches to one workspace must share a session, or a console tab and an agent "+
 			"mark progress on different objects while both believe they are paired")
@@ -24,13 +24,13 @@ func TestAttachReturnsTheSameSessionForOneRoot(t *testing.T) {
 // conversation happening over it.
 func TestAttachUpdatesTheReviewWithoutClearingTheConversation(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Review{Files: []types.ReviewFile{{Path: "a.go"}}})
-	s.AddComment("/w", types.ReviewComment{Path: "a.go", Body: "look here"}, types.ReviewAuthorAgent)
+	s.Attach("/w", "working", types.Diff{Files: []types.DiffFile{{Path: "a.go"}}})
+	s.AddComment("/w", types.DiffComment{Path: "a.go", Body: "look here"}, types.DiffAuthorAgent)
 	s.MarkViewed("/w", "digest1", true)
 
-	got := s.Attach("/w", "working", types.Review{Files: []types.ReviewFile{{Path: "b.go"}}})
-	require.Len(t, got.Review.Files, 1)
-	assert.Equal(t, "b.go", got.Review.Files[0].Path, "the changeset must refresh")
+	got := s.Attach("/w", "working", types.Diff{Files: []types.DiffFile{{Path: "b.go"}}})
+	require.Len(t, got.Diff.Files, 1)
+	assert.Equal(t, "b.go", got.Diff.Files[0].Path, "the changeset must refresh")
 	assert.Len(t, got.Comments, 1, "comments must survive a recompute")
 	assert.Equal(t, []string{"digest1"}, got.Viewed, "progress must survive a recompute")
 }
@@ -68,7 +68,7 @@ func TestHunkDigestChangesWhenTheBodyDoes(t *testing.T) {
 
 func TestMarkViewedTogglesAndDeduplicates(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Review{})
+	s.Attach("/w", "working", types.Diff{})
 	s.MarkViewed("/w", "d1", true)
 	got := s.MarkViewed("/w", "d1", true)
 	assert.Equal(t, []string{"d1"}, got.Viewed, "marking twice must not duplicate")
@@ -80,12 +80,12 @@ func TestMarkViewedTogglesAndDeduplicates(t *testing.T) {
 func TestViewedStatePersistsAcrossStores(t *testing.T) {
 	dir := t.TempDir()
 	s1 := NewStore(dir)
-	s1.Attach("/w", "working", types.Review{})
+	s1.Attach("/w", "working", types.Diff{})
 	s1.MarkViewed("/w", "d1", true)
 	s1.MarkViewed("/w", "d2", true)
 
 	s2 := NewStore(dir)
-	got := s2.Attach("/w", "working", types.Review{})
+	got := s2.Attach("/w", "working", types.Diff{})
 	assert.ElementsMatch(t, []string{"d1", "d2"}, got.Viewed,
 		"a reader who is interrupted must not lose what they had already read")
 }
@@ -94,7 +94,7 @@ func TestCorruptViewedFileIsIgnoredRatherThanFatal(t *testing.T) {
 	dir := t.TempDir()
 	require.NoError(t, mkdirAllWrite(filepath.Join(dir, "review", "viewed.json"), "{not json"))
 	s := NewStore(dir)
-	got := s.Attach("/w", "working", types.Review{})
+	got := s.Attach("/w", "working", types.Diff{})
 	assert.Empty(t, got.Viewed, "a corrupt progress file must not stop a review from opening")
 }
 
@@ -102,21 +102,21 @@ func TestCorruptViewedFileIsIgnoredRatherThanFatal(t *testing.T) {
 // which is what stops an agent posting as the person.
 func TestCommentAuthorIsStampedNotClaimed(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Review{})
+	s.Attach("/w", "working", types.Diff{})
 	got := s.AddComment("/w",
-		types.ReviewComment{Path: "a.go", Body: "hi", Author: types.ReviewAuthorHuman},
-		types.ReviewAuthorAgent)
+		types.DiffComment{Path: "a.go", Body: "hi", Author: types.DiffAuthorHuman},
+		types.DiffAuthorAgent)
 	require.Len(t, got.Comments, 1)
-	assert.Equal(t, types.ReviewAuthorAgent, got.Comments[0].Author,
+	assert.Equal(t, types.DiffAuthorAgent, got.Comments[0].Author,
 		"a claimed author in the payload must never win over the transport's")
 }
 
 // The load-bearing rule of the whole paired design.
 func TestSuggestDoesNotMoveTheCursor(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Review{})
-	s.SetCursor("/w", types.ReviewCursor{Path: "where/i/was.go", Hunk: 2})
-	got := s.Suggest("/w", types.ReviewSuggestion{Path: "elsewhere.go", Hunk: 0, Reason: "3 callers"})
+	s.Attach("/w", "working", types.Diff{})
+	s.SetCursor("/w", types.DiffCursor{Path: "where/i/was.go", Hunk: 2})
+	got := s.Suggest("/w", types.DiffSuggestion{Path: "elsewhere.go", Hunk: 0, Reason: "3 callers"})
 
 	assert.Equal(t, "where/i/was.go", got.Cursor.Path,
 		"an agent suggesting must never move the reader's viewport")
@@ -127,9 +127,9 @@ func TestSuggestDoesNotMoveTheCursor(t *testing.T) {
 
 func TestAcceptingASuggestionIsWhatMovesTheCursor(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Review{})
-	s.SetCursor("/w", types.ReviewCursor{Path: "a.go", Hunk: 0})
-	s.Suggest("/w", types.ReviewSuggestion{Path: "b.go", Hunk: 3, Reason: "look"})
+	s.Attach("/w", "working", types.Diff{})
+	s.SetCursor("/w", types.DiffCursor{Path: "a.go", Hunk: 0})
+	s.Suggest("/w", types.DiffSuggestion{Path: "b.go", Hunk: 3, Reason: "look"})
 
 	got := s.AnswerSuggestion("/w", "s1", true)
 	assert.Equal(t, "b.go", got.Cursor.Path, "the human accepting is the only path to the viewport")
@@ -140,9 +140,9 @@ func TestAcceptingASuggestionIsWhatMovesTheCursor(t *testing.T) {
 // Declining is recorded, not discarded, so an agent can stop repeating itself.
 func TestDecliningIsRecordedAndLeavesTheCursorAlone(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Review{})
-	s.SetCursor("/w", types.ReviewCursor{Path: "a.go", Hunk: 0})
-	s.Suggest("/w", types.ReviewSuggestion{Path: "b.go", Hunk: 3, Reason: "look"})
+	s.Attach("/w", "working", types.Diff{})
+	s.SetCursor("/w", types.DiffCursor{Path: "a.go", Hunk: 0})
+	s.Suggest("/w", types.DiffSuggestion{Path: "b.go", Hunk: 3, Reason: "look"})
 
 	got := s.AnswerSuggestion("/w", "s1", false)
 	assert.Equal(t, "a.go", got.Cursor.Path)
@@ -152,8 +152,8 @@ func TestDecliningIsRecordedAndLeavesTheCursorAlone(t *testing.T) {
 
 func TestResolveComment(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Review{})
-	s.AddComment("/w", types.ReviewComment{Path: "a.go", Body: "x"}, types.ReviewAuthorAgent)
+	s.Attach("/w", "working", types.Diff{})
+	s.AddComment("/w", types.DiffComment{Path: "a.go", Body: "x"}, types.DiffAuthorAgent)
 	got := s.ResolveComment("/w", "c1", true)
 	assert.True(t, got.Comments[0].Resolved)
 }
@@ -162,15 +162,15 @@ func TestResolveComment(t *testing.T) {
 func TestMutatingAnUnattachedRootYieldsNil(t *testing.T) {
 	s := NewStore("")
 	assert.Nil(t, s.Get("/nope"))
-	assert.Nil(t, s.SetCursor("/nope", types.ReviewCursor{}))
+	assert.Nil(t, s.SetCursor("/nope", types.DiffCursor{}))
 	assert.Nil(t, s.MarkViewed("/nope", "d", true))
-	assert.Nil(t, s.Suggest("/nope", types.ReviewSuggestion{}))
+	assert.Nil(t, s.Suggest("/nope", types.DiffSuggestion{}))
 }
 
 // A handed-out session must not be a window into live state.
 func TestReturnedSessionsAreCopies(t *testing.T) {
 	s := NewStore("")
-	s.Attach("/w", "working", types.Review{})
+	s.Attach("/w", "working", types.Diff{})
 	got := s.MarkViewed("/w", "d1", true)
 	got.Viewed[0] = "tampered"
 	fresh := s.Get("/w")

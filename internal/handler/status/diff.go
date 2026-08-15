@@ -7,55 +7,55 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/handler"
-	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
 
-// diffSource is the narrow consumer contract the diff handler needs from the console
+// patchSource is the narrow consumer contract the diff handler needs from the console
 // service: the working tree's uncommitted unified diff. It is satisfied by *console.Service;
 // the handler package holds no concrete service, matching insightSource above.
-type diffSource interface {
+type patchSource interface {
 	WorkingDiff(ctx context.Context, paths []string) (string, error)
 }
 
-// reviewSource is the annotation half, kept a SEPARATE interface from diffSource because the
+// diffSource is the annotation half, kept a SEPARATE interface from patchSource because the
 // two routes have genuinely different costs and a caller should be able to mount the cheap
 // one without the expensive one.
-type reviewSource interface {
-	Review(ctx context.Context, paths []string) (types.Review, error)
+type diffSource interface {
+	Diff(ctx context.Context, paths []string) (types.Diff, error)
 }
 
-// ReviewHandler serves GET /api/v1/review: the changed files annotated with what the
+// DiffHandler serves GET /api/v1/diff: the changed files annotated with what the
 // workspace knows - role (generated or not), owning project, changed-symbol reach, observed
 // coverage - in the order magus recommends reading them.
 //
 // It is the differentiated half of the review surface and a SECOND round trip on purpose.
-// /api/v1/diff returns the patch in milliseconds; this one loads the symbol shards and walks
+// /api/v1/diff/patch returns the patch in milliseconds; this one loads the symbol shards and walks
 // a reverse closure. Folding them together would hold the whole diff behind the slowest
 // overlay for no reading benefit.
 //
 // The caller passes the paths it is actually reviewing, repeated as `path`. That is not an
 // optimization: re-deriving the changed set here would race an edit made since the patch was
 // read and annotate a file the reader cannot see.
-type ReviewHandler struct {
+type DiffHandler struct {
 	handler.Base
-	src      reviewSource
-	sessions *review.Store
+	src      diffSource
+	sessions *diff.Store
 	root     string
 }
 
-// NewReviewHandler returns the GET /api/v1/review handler reading from src. sessions and root
+// NewDiffHandler returns the GET /api/v1/diff handler reading from src. sessions and root
 // may be nil/empty, which serves a session-less review - the shape is identical, so a client
 // needs no branch for a daemon that is not pairing.
-func NewReviewHandler(src reviewSource, sessions *review.Store, root string, log *slog.Logger) *ReviewHandler {
-	h := &ReviewHandler{src: src, sessions: sessions, root: root}
+func NewDiffHandler(src diffSource, sessions *diff.Store, root string, log *slog.Logger) *DiffHandler {
+	h := &DiffHandler{src: src, sessions: sessions, root: root}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
 
-func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
+func (h *DiffHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if !allowGet(w, r) {
 		return
 	}
@@ -66,7 +66,7 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "review requires at least one path parameter", http.StatusBadRequest)
 		return
 	}
-	out, err := h.src.Review(r.Context(), paths)
+	out, err := h.src.Diff(r.Context(), paths)
 	if err != nil {
 		if errors.Is(err, console.ErrNoWorkspace) {
 			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
@@ -82,10 +82,10 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, h.sessions.Attach(h.root, out.Base, out))
 		return
 	}
-	writeJSON(w, types.ReviewSession{Base: out.Base, Review: out, Cursor: types.ReviewCursor{Hunk: -1}})
+	writeJSON(w, types.DiffSession{Base: out.Base, Diff: out, Cursor: types.DiffCursor{Hunk: -1}})
 }
 
-// DiffHandler serves GET /api/v1/diff: the working tree's uncommitted changes as one unified
+// PatchHandler serves GET /api/v1/diff/patch: the working tree's uncommitted changes as one unified
 // patch, for the console's review surface.
 //
 // The patch ships as TEXT rather than as a parsed file/hunk tree, and that split is the
@@ -98,14 +98,14 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 // repository is diffed. A service with no workspace yields 503, not 500 - the same posture
 // the insight route takes, because "no workspace yet" is a state the console renders rather
 // than an error it reports.
-type DiffHandler struct {
+type PatchHandler struct {
 	handler.Base
-	src diffSource
+	src patchSource
 }
 
-// NewDiffHandler returns the GET /api/v1/diff handler reading from src.
-func NewDiffHandler(src diffSource, log *slog.Logger) *DiffHandler {
-	h := &DiffHandler{src: src}
+// NewPatchHandler returns the GET /api/v1/diff/patch handler reading from src.
+func NewPatchHandler(src patchSource, log *slog.Logger) *PatchHandler {
+	h := &PatchHandler{src: src}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
@@ -118,7 +118,7 @@ type diffResponse struct {
 	Clean bool   `json:"clean"`
 }
 
-func (h *DiffHandler) serve(w http.ResponseWriter, r *http.Request) {
+func (h *PatchHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if !allowGet(w, r) {
 		return
 	}

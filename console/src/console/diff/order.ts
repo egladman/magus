@@ -12,20 +12,20 @@
 //     the changed files from a review.
 //
 //  2. CONSEQUENCE ORDER. Alphabetical order spends attention at random. The server already
-//     ranks files by what they can break (types.Review.SortForReview), and this applies that
+//     ranks files by what they can break (types.Diff.SortForReading), and this applies that
 //     ranking to the parsed patch so the stream scrolls in the same order the sidebar lists.
 //
 // Both degrade cleanly: with no annotations at all, every file is unknown-role and the order
 // falls back to the patch's own, which is exactly the plain diff viewer it started as.
 
 import type { DiffFile } from "./parse";
-import type { ReviewFile, ReviewSession } from "./session";
+import type { DiffAnnotation, DiffSession } from "./session";
 
 export interface OrderedFile {
   readonly file: DiffFile;
   // annotation is absent when the review has not landed yet (first paint) or when the daemon
   // could not classify the path. Callers must render without it rather than waiting for it.
-  readonly annotation?: ReviewFile;
+  readonly annotation?: DiffAnnotation;
 }
 
 export interface OrderedChangeset {
@@ -46,7 +46,7 @@ export interface OrderedChangeset {
 // A file in the patch that the review does not mention keeps its patch position at the END of
 // primary rather than being dropped. Dropping it would silently hide a real change because an
 // annotation was missing, which is the one failure mode a review must not have.
-export function order(files: readonly DiffFile[], session: ReviewSession | null): OrderedChangeset {
+export function order(files: readonly DiffFile[], session: DiffSession | null): OrderedChangeset {
   const byPath = new Map<string, DiffFile>();
   for (const f of files) byPath.set(f.path, f);
 
@@ -54,7 +54,7 @@ export function order(files: readonly DiffFile[], session: ReviewSession | null)
   const generated: OrderedFile[] = [];
   const placed = new Set<string>();
 
-  for (const a of session?.review?.files ?? []) {
+  for (const a of session?.diff?.files ?? []) {
     const file = byPath.get(a.path);
     if (!file) continue; // annotated but not in the patch (a path scoped out); nothing to show
     placed.add(a.path);
@@ -125,7 +125,7 @@ export interface Chip {
   readonly title: string;
 }
 
-export function riskChips(a: ReviewFile | undefined): Chip[] {
+export function riskChips(a: DiffAnnotation | undefined): Chip[] {
   if (!a) return [];
   const chips: Chip[] = [];
 
@@ -154,7 +154,7 @@ export function riskChips(a: ReviewFile | undefined): Chip[] {
   }
 
   // Churn: is this file being rewritten over and over? The rank is shown only when it is
-  // high enough to mean something - see types.ReviewChurn.notableRankCutoff. The cutoff is
+  // high enough to mean something - see types.DiffChurn.notableRankCutoff. The cutoff is
   // duplicated rather than shipped on the wire because it is a DISPLAY decision, and the two
   // surfaces are allowed to disagree about presentation while agreeing about the data.
   const ch = a.churn;

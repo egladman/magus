@@ -382,7 +382,7 @@ func (v FileReport) BuzzObject() BuzzObject {
 	}
 }
 
-func (v ReviewSymbol) BuzzObject() BuzzObject {
+func (v DiffSymbol) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"id":                v.ID,
 		"label":             v.Label,
@@ -394,7 +394,7 @@ func (v ReviewSymbol) BuzzObject() BuzzObject {
 	}
 }
 
-func (v ReviewChurn) BuzzObject() BuzzObject {
+func (v DiffChurn) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"commits":      v.Commits,
 		"authors":      v.Authors,
@@ -404,7 +404,7 @@ func (v ReviewChurn) BuzzObject() BuzzObject {
 	}
 }
 
-func (v ReviewTouch) BuzzObject() BuzzObject {
+func (v DiffTouch) BuzzObject() BuzzObject {
 	return BuzzObject{
 		"host":       v.Host,
 		"session":    v.Session,
@@ -414,7 +414,7 @@ func (v ReviewTouch) BuzzObject() BuzzObject {
 	}
 }
 
-func (v ReviewFile) BuzzObject() BuzzObject {
+func (v DiffFile) BuzzObject() BuzzObject {
 	var optCoverage any
 	if v.Coverage != nil {
 		optCoverage = (*v.Coverage).BuzzObject()
@@ -450,7 +450,7 @@ func (v ReviewFile) BuzzObject() BuzzObject {
 	}
 }
 
-func (v Review) BuzzObject() BuzzObject {
+func (v Diff) BuzzObject() BuzzObject {
 	itemsFiles := make([]any, len(v.Files))
 	for indexFiles := range v.Files {
 		itemsFiles[indexFiles] = v.Files[indexFiles].BuzzObject()
