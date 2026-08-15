@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2288,
-  "edge_count": 5890,
+  "node_count": 2289,
+  "edge_count": 5892,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -1734,7 +1734,7 @@
       "label": "plans",
       "source": "plans",
       "attrs": {
-        "dir_files": "1",
+        "dir_files": "2",
         "dir_languages": "markdown"
       }
     },
@@ -6071,6 +6071,15 @@
       "source": "libs/testlayout/readme.md",
       "attrs": {
         "role": "readme"
+      }
+    },
+    {
+      "id": "doc:plans/diff-surface-implementation-handoff.md",
+      "kind": "doc",
+      "label": "plans/diff-surface-implementation-handoff.md",
+      "source": "plans/diff-surface-implementation-handoff.md",
+      "attrs": {
+        "role": "doc"
       }
     },
     {
@@ -25223,6 +25232,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/gopherbuzz/std/testing.buzz"
+    },
+    {
+      "source": "dir:plans",
+      "target": "doc:plans/diff-surface-implementation-handoff.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "plans/diff-surface-implementation-handoff.md"
     },
     {
       "source": "dir:plans",
@@ -44959,6 +44976,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/gopherbuzz/std/README.md"
+    },
+    {
+      "source": "doc:plans/diff-surface-implementation-handoff.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "plans/diff-surface-implementation-handoff.md"
     },
     {
       "source": "doc:plans/handoff-cli-command-registry.md",
