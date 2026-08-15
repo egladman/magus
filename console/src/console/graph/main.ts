@@ -774,10 +774,13 @@ function switchLayout(mode: LayoutMode) {
   if (mode === "layered" || mode === "waves") {
     const ok = mode === "waves" ? applyWavesMode() : applyLayeredMode();
     if (!ok) {
-      // Scale guard fired: revert to force mode.
+      // Scale guard fired: revert to force mode. This is the one mode change the operator did
+      // not ask for, so it has to be announced; the status line is a live region and the layout
+      // toggle is not. Name the reason, not the new mode - the toggle already shows which won.
       layoutMode = "force";
       wavesMeta = null;
       syncLayoutToggle();
+      setStatus("too many nodes to lay out as " + mode + "; showing Force instead", true);
       // Clear fixed positions so the sim can move nodes, and any routes from
       // the dag pass so force mode never draws a stale curve.
       for (const n of graph.nodes) {
@@ -2240,10 +2243,6 @@ function syncLayoutToggle() {
   });
   const forceControls = document.querySelector<HTMLElement>(".console-graph-display__forces");
   if (forceControls) forceControls.hidden = layoutMode !== "force";
-  const modeIndicator = el("graph-mode-indicator");
-  if (modeIndicator) {
-    modeIndicator.textContent = "mode: " + layoutMode[0].toUpperCase() + layoutMode.slice(1);
-  }
 }
 
 // The graph-kind toggle group's per-kind titles when live. Mirrors scaffold.html's

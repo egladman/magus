@@ -286,15 +286,13 @@
       <!-- populated by renderViewCommand() -->
     </div>
 
-    <!-- Bottom status row: the mode indicator (Decision 3 - a persistent readout of the
-         active display mode, kept in sync by syncLayoutToggle so a mode switched by a
-         question chip's auto-switch (askQuestion) stays visible) on the left, and the
-         status/hint line filling the rest. Both live OUT of the canvas overlay so they
-         never obscure the graph; #graph-status is empty (display:none) unless there's
-         something to report (loading, a view result, or an error) - the mode label stays
-         visible either way. -->
+    <!-- Bottom status row: the status/hint line, OUT of the canvas overlay so it never
+         obscures the graph. Empty (display:none) unless there is something to report -
+         loading, a view result, an error, or a mode change the operator did not ask for
+         (switchLayout's scale-guard revert) - so the row costs nothing at rest.
+         role=status makes it the surface's live region: the DISPLAY MODE toggle shows
+         which layout is active but announces nothing when one changes on its own. -->
     <div class="console-graph-bottombar">
-      <p id="graph-mode-indicator" class="console-graph-bottombar__mode" aria-live="polite">mode: Force</p>
       <p id="graph-status" role="status">Loading graph...</p>
     </div>
 
