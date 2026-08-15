@@ -1865,3 +1865,51 @@ fun probe() > bool {
 }`)
 	assert.True(t, v.AsBool(), "hash returns the digest itself; .hex() renders it as 32 characters")
 }
+
+// TestParity_ConstFoldMustNotSwallowABranchTarget pins the bug behind a wrong answer that
+// looked like a precedence problem and was not: `(a ?? 0) + 1` returned `a`.
+//
+// The parse was always correct - `(a ?? 0) + 1` - and the coalesce's jump lands on the
+// `1`. That `1` is also the middle of a foldable `LoadConst; LoadConst; OpAdd` triple, and
+// FoldConsts rewrote the trailing two into OpNop without checking branch targets, so the
+// non-null path jumped onto a Nop and the operator never ran. Upstream Buzz evaluates
+// these to 6 and 15 (measured against ~/.local/bin/buzz).
+//
+// The multiplication case is the one that proves it is not arithmetic: a mis-associated
+// parse could yield 5 for the addition by coincidence, but nothing about `*` yields 5
+// except skipping the operator outright.
+func TestParity_ConstFoldMustNotSwallowABranchTarget(t *testing.T) {
+	add := evalParity(t, `
+fun probe() > int {
+    final a: int? = 5;
+    return (a ?? 0) + 1;
+}`)
+	assert.Equal(t, int64(6), add.AsInt(), "`(a ?? 0) + 1` with a non-null a")
+
+	mul := evalParity(t, `
+fun probe() > int {
+    final a: int? = 5;
+    return (a ?? 0) * 3;
+}`)
+	assert.Equal(t, int64(15), mul.AsInt(), "the operator runs, rather than being skipped")
+
+	// The unparenthesised form is the same expression: ?? binds tighter than +.
+	bare := evalParity(t, `
+fun probe() > int {
+    final a: int? = 5;
+    return a ?? 0 + 1;
+}`)
+	assert.Equal(t, int64(6), bare.AsInt(), "`a ?? 0 + 1` is `(a ?? 0) + 1`")
+
+	// The null path always worked; it must keep working, and folding is still allowed
+	// where no branch lands inside the triple.
+	null := evalParity(t, `
+fun probe() > int {
+    final a: int? = null;
+    return (a ?? 0) + 1;
+}`)
+	assert.Equal(t, int64(1), null.AsInt(), "the fall-through path is unchanged")
+
+	folded := evalParity(t, `fun probe() > int { return 2 + 3 * 4; }`)
+	assert.Equal(t, int64(14), folded.AsInt(), "constant folding still applies off a branch")
+}
