@@ -1,10 +1,8 @@
 #!/usr/bin/env bash
-# core-loop.session.sh - the script record-cast.py drives to produce the site's
-# terminal recording. Companion to core-loop.tape, not a replacement: the tape
-# renders a GIF for the README, this produces an asciicast for the web page.
-#
-# Same workspace either way (tapes/demo-init.sh), so the GIF and the cast cannot
-# tell different stories about the same tool.
+# core-loop.session.sh - the script cmd/magus-termcast drives to produce the
+# README's terminal recording. It runs against the workspace tapes/demo-init.sh
+# stages, the same one the interactive showcase uses, so the two recordings
+# cannot tell different stories about the same tool.
 #
 # Why a script rather than typing into a live shell: a recording has to be
 # reproducible enough to re-record after an output change without a human

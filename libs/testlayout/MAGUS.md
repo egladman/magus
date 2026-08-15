@@ -63,7 +63,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 44 | `magus query project:.` | `buzz-test`, `generate`, `lint` |
+| . | 43 | `magus query project:.` | `buzz-test`, `generate`, `lint` |
 | console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `generate` |
 | docs/guides/integrations/agents | 5 | `magus query project:docs/guides/integrations/agents` | `ci`, `format`, `lint` |
@@ -90,7 +90,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `config-generate` | Regenerates the CLI config-flag plumbing from internal/config/config.go. |
 | `postflight` | Renders the insight report (hotspots, affinity, ownership, trend) to stdout. |
 | `generate` | Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). |
-| `tapes` | Records every VHS tape in tapes/ into assets/gen/. |
 | `termcast-record` | Re-records tapes/core-loop.capture: the raw bytes a real magus prints to a real pseudo-terminal, driven by tapes/core-loop.session.sh. |
 | `termcast-showcase` | Renders tapes/core-loop.capture into the README's animated SVG. |
 | `release-build` | Builds one release binary for one platform. |

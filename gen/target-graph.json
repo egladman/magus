@@ -492,30 +492,6 @@
           "reads_secrets": false
         },
         {
-          "name": "tapes",
-          "doc": "Records every VHS tape in tapes/ into assets/gen/.",
-          "reads_files": [
-            {
-              "project": ".",
-              "glob": "tapes/*.tape"
-            },
-            {
-              "project": ".",
-              "glob": "tapes/demo-init.sh"
-            },
-            {
-              "project": ".",
-              "glob": "tapes/demo.txtar"
-            }
-          ],
-          "reads_secrets": false,
-          "writes_files": [
-            {
-              "glob": "assets/gen/*.gif"
-            }
-          ]
-        },
-        {
           "name": "termcast-record",
           "declared": "termcast_record",
           "doc": "Re-records tapes/core-loop.capture: the raw bytes a real magus prints to a real pseudo-terminal, driven by tapes/core-loop.session.sh.",
