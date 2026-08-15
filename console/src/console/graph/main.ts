@@ -78,6 +78,7 @@ import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from ".
 import { wireToolbarOverflow } from "../toolbar";
 import { persisted } from "../../lib/persist";
 import { attachHelpPopover } from "../../ui/help-popover";
+import { signal } from "../view";
 
 // Runtime-only globals the monolith stashes on window: the live-mode "affected" id set that
 // the SSE handler writes for the view code to read, and the PWA File Handling API entry point.
@@ -193,6 +194,10 @@ let sim: Simulation<GNode, GLink> | null = null;
 let zoomBehavior: ZoomBehavior<HTMLCanvasElement, unknown> | null = null; // the ONE d3-zoom instance (shared so centerOn stays in sync)
 let transform = zoomIdentity;
 let selected: string | null = null; // selected node id
+// docTitle is the node this explorer currently has selected, for the console to title its tab after
+// (page.ts's TitleSource). A Signal satisfies that shape structurally; the console only ever reads
+// and subscribes. Written in renderCard, the one place a selection is rendered.
+export const docTitle = signal<string | null>(null);
 let query = ""; // current search string (lowercased)
 let matchSet: Set<string> | null = null; // Set of node ids matching `query`/focus/lens, or null for "all"
 let hoverId: string | null = null;
@@ -769,10 +774,13 @@ function switchLayout(mode: LayoutMode) {
   if (mode === "layered" || mode === "waves") {
     const ok = mode === "waves" ? applyWavesMode() : applyLayeredMode();
     if (!ok) {
-      // Scale guard fired: revert to force mode.
+      // Scale guard fired: revert to force mode. This is the one mode change the operator did
+      // not ask for, so it has to be announced; the status line is a live region and the layout
+      // toggle is not. Name the reason, not the new mode - the toggle already shows which won.
       layoutMode = "force";
       wavesMeta = null;
       syncLayoutToggle();
+      setStatus("too many nodes to lay out as " + mode + "; showing Force instead", true);
       // Clear fixed positions so the sim can move nodes, and any routes from
       // the dag pass so force mode never draws a stale curve.
       for (const n of graph.nodes) {
@@ -1402,9 +1410,14 @@ function renderCard(id: string | null) {
     cardEl.innerHTML = "";
     cardEl.hidden = true;
     document.body.toggleAttribute("data-has-card", false);
+    docTitle.set(null); // nothing selected: the tab falls back to "Graph Explorer"
     return;
   }
   document.body.toggleAttribute("data-has-card", true);
+  // The selected node is what this surface has open, so the console names its tab after it. Driven
+  // from here rather than from selectNode's several assignment sites: the card is the ONE place a
+  // selection is rendered, so the tab cannot disagree with what the panel shows.
+  docTitle.set(n.label);
   const { out, inc } = incidentEdges(n.id);
   let html = "";
   html += '<p class="console-graph-card__section">Node details</p>';
@@ -2230,10 +2243,6 @@ function syncLayoutToggle() {
   });
   const forceControls = document.querySelector<HTMLElement>(".console-graph-display__forces");
   if (forceControls) forceControls.hidden = layoutMode !== "force";
-  const modeIndicator = el("graph-mode-indicator");
-  if (modeIndicator) {
-    modeIndicator.textContent = "mode: " + layoutMode[0].toUpperCase() + layoutMode.slice(1);
-  }
 }
 
 // The graph-kind toggle group's per-kind titles when live. Mirrors scaffold.html's
@@ -4560,6 +4569,9 @@ async function bootLive() {
 // page never calls it (the graph lives for the page's lifetime); the console's graph PageModule
 // calls it on deactivate.
 export function deactivate(): void {
+  // Forget the selected node: this module is a singleton the console re-activates on reopen, so a
+  // stale label left here would name the reopened tab after a node it is no longer showing.
+  docTitle.set(null);
   if (sim) sim?.stop();
   if (motionRaf) {
     cancelAnimationFrame(motionRaf);

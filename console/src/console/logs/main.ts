@@ -48,6 +48,7 @@ import { wireToolbarOverflow } from "../toolbar";
 import { persisted } from "../../lib/persist";
 import { logsZoomCell } from "../layoutPrefs";
 import { attachHelpPopover } from "../../ui/help-popover";
+import { signal } from "../view";
 
 // Per-activation teardown. The console caches surface modules and re-runs activate() on every
 // reopen, so anything init() binds to the DOCUMENT has to be droppable: without these, each
@@ -56,6 +57,12 @@ import { attachHelpPopover } from "../../ui/help-popover";
 // takes lifecycleAbort's signal. Null while the surface is not active.
 let lifecycleAbort: AbortController | null = null;
 let uninstallKeys: (() => void) | null = null;
+
+// docTitle is the run this viewer currently has open, for the console to title its tab after
+// (page.ts's TitleSource). A Signal satisfies that shape structurally, which is all the console
+// needs - it only ever reads and subscribes. Module-level, like the rest of the viewer's state, so
+// it survives the close/reopen cycle the console puts this cached module through.
+export const docTitle = signal<string | null>(null);
 
 // init() is invoked at the BOTTOM of this module (see the final line), after every shared state
 // field has initialized. The order matters: loadFromURL()'s setFilter() applies the #q= deep link,
@@ -398,6 +405,10 @@ function finishLoad(ref: string, statusMsg: string): void {
   state.currentRef = looksLikeRef(ref) ? ref : "";
   if (emptyEl) emptyEl.hidden = true;
   setRefIdentity(ref || "log", looksLikeRef(ref));
+  // The loaded run is this surface's open document, so the console names its tab after it (the
+  // ref is what a reader would call this log). Empty until something loads, which leaves the tab
+  // reading "Log Viewer".
+  docTitle.set(ref || null);
   // Resolve the Timeline button (and reset the mode if the new log has no timing) before
   // render() so a stale timeline=true from a previous log cannot try to plot a text log.
   updateTimelineControl();
@@ -664,6 +675,9 @@ export function activate(): void {
 // case) never open a stream, so the abort is a no-op then. The console's logs PageModule calls this;
 // the standalone page does not (the surface lives as long as the page).
 export function deactivate(): void {
+  // Forget the loaded run: this module is a singleton the console re-activates on reopen, so a
+  // stale ref left here would name the reopened tab after a log it is no longer showing.
+  docTitle.set(null);
   if (state.liveAbort) {
     state.liveAbort.abort();
     state.liveAbort = null;

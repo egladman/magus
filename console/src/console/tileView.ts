@@ -54,6 +54,12 @@ export interface TileDeps {
   surfaces: TileSurface[];
   mountSurface(pageId: string, host: HTMLElement): Promise<PageController<unknown, unknown> | null>;
   onLayoutChange(tree: Pane): void; // persist (the console writes it into the tab's layout)
+  // The FOCUSED pane's open document changed (page.ts's TitleSource), or focus moved to a pane
+  // showing a different one. A tab holds a whole tree of surfaces but the bar has room for one
+  // name, so the focused pane is the one that speaks for the tab - the same pane that already owns
+  // the shared status bar (applyVisibility). title is null when that pane has no document or has
+  // not mounted yet; pageId comes along so the console can fall back to that surface's own name.
+  onTitleChange?(title: string | null, pageId: string): void;
 }
 
 export interface TileView {
@@ -100,6 +106,13 @@ export function createTileView(deps: TileDeps): TileView {
   const mounting = new Set<string>(); // leaves whose async mount is in flight (dodge double-mount)
   let focusId: string = leaves(tree)[0]?.id ?? "";
   let tabVisible = false;
+  // The pane whose document title the console is currently subscribed to, the controller that
+  // subscription is against, and the unsubscribe. Exactly one is live at a time (see applyTitle).
+  // The CONTROLLER is tracked, not just the pane id: a pane mounts before its surface resolves, so
+  // the same id legitimately needs re-subscribing once its controller arrives.
+  let titledId = "";
+  let titledCtl: PageController<unknown, unknown> | null = null;
+  let titleUnsub: (() => void) | null = null;
 
   // A fresh, tree-unique id. The salt is per-tileView so ids minted this session never collide with
   // ids restored from a persisted tree (a different salt), and the counter keeps them distinct
@@ -223,6 +236,10 @@ export function createTileView(deps: TileDeps): TileView {
     for (const leaf of leaves(tree)) syncLeaf(leaf);
     applyFocus();
     applyVisibility();
+    // After a structural change (split, close, adopt, launcher pick) the focused pane may be a
+    // different one, or the same one now holding a different surface - either way the tab's name
+    // is re-derived here rather than at each of those call sites.
+    applyTitle();
   }
 
   // syncLeaf brings a pane's content in line with its leaf: an empty pane shows the launcher; a
@@ -260,6 +277,9 @@ export function createTileView(deps: TileDeps): TileView {
     }
     p.controller = controller;
     applyVisibility();
+    // The controller only exists now, so this is the first moment its docTitle can be read - the
+    // render() that queued this mount ran against a pane that had none yet.
+    applyTitle();
   }
 
   // renderLauncher paints the in-pane surface picker into an empty pane. Surfaces already open in
@@ -319,6 +339,34 @@ export function createTileView(deps: TileDeps): TileView {
     for (const [id, p] of panes) p.controller?.setVisible?.(tabVisible && id === focusId);
   }
 
+  // applyTitle keeps the console subscribed to the FOCUSED pane's document title and no other, so
+  // a background pane loading a different document cannot retitle the tab. Called on every focus
+  // move, mount and reconcile; the guard makes the repeats free.
+  //
+  // A pane whose surface has no docTitle still emits (null, pageId): that is what tells the console
+  // to put the surface's static name back after focus leaves a document-bearing pane.
+  function applyTitle(): void {
+    const p = panes.get(focusId);
+    const ctl = p?.controller ?? null;
+    if (focusId === titledId && ctl === titledCtl) return;
+    titleUnsub?.();
+    titleUnsub = null;
+    titledId = focusId;
+    titledCtl = ctl;
+    if (!p) {
+      deps.onTitleChange?.(null, "");
+      return;
+    }
+    const emit = (t: string | null): void => deps.onTitleChange?.(t, p.pageId);
+    const src = ctl?.docTitle;
+    if (!src) {
+      emit(null);
+      return;
+    }
+    emit(src.get());
+    titleUnsub = src.subscribe(emit);
+  }
+
   // setFocus changes the focused pane and refreshes the ring + status ownership. A no-op for an
   // unknown or unchanged id.
   function setFocus(id: string): void {
@@ -326,6 +374,7 @@ export function createTileView(deps: TileDeps): TileView {
     focusId = id;
     applyFocus();
     applyVisibility();
+    applyTitle();
   }
 
   function split(dir?: Split["dir"]): void {
@@ -466,6 +515,10 @@ export function createTileView(deps: TileDeps): TileView {
   }
 
   function deactivate(): void {
+    titleUnsub?.(); // drop the focused pane's title subscription before its surface goes away
+    titleUnsub = null;
+    titledId = "";
+    titledCtl = null;
     for (const p of panes.values()) p.controller?.deactivate();
     panes.clear();
     splitEls.clear();

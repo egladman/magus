@@ -14,7 +14,7 @@
 // console drives activate() itself. The log viewer and dashboard satisfy this; the graph explorer
 // does not yet.
 
-import type { PageController, PageModule, SearchProvider } from "./page";
+import type { PageController, PageModule, SearchProvider, TitleSource } from "./page";
 
 export interface StandaloneSurface {
   id: string; // registry id / pageId, e.g. "logs"
@@ -37,10 +37,15 @@ const noSearch: SearchProvider<null> = {
 // hidden. A surface that opens something with a lifetime (a live SSE stream, the graph's force
 // simulation) exports deactivate() to tear it down when its tab/pane closes; a purely static surface
 // omits it.
+// A surface that opens a DOCUMENT (the log viewer's run, the graph's selected node) also exports
+// docTitle, a live cell the console reads to title the tab after it. It is a module-level export,
+// not a per-activation return, because these bundles are module singletons: the same cell is there
+// across a close and reopen, so a restored tab is named the moment its surface re-activates.
 interface BootModule {
   activate(): void;
   setVisible?(visible: boolean): void;
   deactivate?(): void;
+  docTitle?: TitleSource;
 }
 
 // A surface that has NO standalone page to lift - its bundle builds its own DOM into the host. Used
@@ -129,6 +134,7 @@ export function standaloneSurface(s: StandaloneSurface): PageModule<null, null> 
         // A surface that writes the shared status bar (the dashboard) exports setVisible so it can go
         // quiet while backgrounded; static surfaces (logs/graph) do not, and this stays undefined.
         setVisible: mod.setVisible,
+        docTitle: mod.docTitle,
         // Tear down the surface's own lifetimes first (a live SSE stream, the graph's force simulation)
         // via its exported deactivate(), THEN detach its DOM - so closing a tab/pane leaves nothing
         // streaming or ticking in the background. A static surface exports no deactivate; the DOM detach

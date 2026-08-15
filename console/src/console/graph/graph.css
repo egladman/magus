@@ -248,25 +248,17 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
   cursor: pointer; font-size: inherit; line-height: 1.5; text-align: left;
 }
 .console-graph-legend__row:hover { background: color-mix(in srgb, var(--console-accent) 14%, transparent); }
-/* Bottom status row: the mode indicator (Decision 3 - a quiet persistent readout of the
-   active display mode, kept text-synced by syncLayoutToggle so it stays visible even when
-   a question chip's auto-switch (askQuestion) changed the mode) sits to the left of the
-   status/hint line, both below the canvas instead of floating over it. A slim flex row so
-   the mode label never grows or shrinks the status line's own box. */
+/* Bottom status row: holds the status/hint line below the canvas instead of floating over it.
+   Its only child hides when empty, so the row collapses to nothing at rest. */
 .console-graph-bottombar {
   display: flex; align-items: baseline; gap: 0.6rem;
   margin: 0.5rem 0 var(--pad);
 }
-.console-graph-bottombar__mode {
-  flex: 0 0 auto; margin: 0; padding: 0.1rem 0;
-  font-size: 0.72rem; line-height: 1.3;
-  color: var(--pf-t--global--text--color--subtle);
-}
 /* Status/hint line: a quiet in-flow line BENEATH the graph app (it used to float
    over the canvas, obscuring the graph). Empty by default -> hidden, so it never
-   sits as a persistent nag; it speaks up for loading, a view result, or an error.
-   flex:1 fills the rest of the bottom bar beside the mode label; the mode label
-   stays visible even when this collapses empty. */
+   sits as a persistent nag; it speaks up for loading, a view result, an error, or a
+   mode change the operator did not ask for. The bottom bar's only child, so hiding
+   it hides the whole row. */
 #graph-status {
   flex: 1 1 auto; margin: 0; padding: 0.4rem 0.7rem;
   font-size: 0.78rem; line-height: 1.45; color: var(--pf-t--global--text--color--subtle);

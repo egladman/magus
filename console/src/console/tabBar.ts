@@ -16,16 +16,80 @@ import { type Workspace } from "./tabs";
 import type { Persisted } from "../lib/persist";
 import { bind, scope } from "./view";
 
-// A tab as the bar renders it: identity, label, and whether it is the active surface.
+// A tab as the bar renders it: identity, the label it shows, an optional disambiguating hint
+// (see disambiguate), and whether it is the active surface.
 export interface TabView {
   id: string;
   title: string;
+  hint?: string;
   active: boolean;
+}
+
+// A title split into the part a tab shows and the part available to tell it from a same-named
+// sibling. A path-shaped document title ("src/console/main.ts") yields the basename as the label
+// and the directories above it as parents; anything else (a surface name, an output ref) is its
+// own label with no parents, so it never gets shortened into nonsense.
+interface TitleParts {
+  label: string;
+  parents: string[];
+}
+
+function splitTitle(title: string): TitleParts {
+  const segs = title.split("/").filter((s) => s !== "");
+  if (segs.length < 2) return { label: title, parents: [] };
+  return { label: segs[segs.length - 1], parents: segs.slice(0, -1) };
+}
+
+// disambiguate is the editor behaviour for same-named documents: two tabs both showing `main.ts`
+// are indistinguishable, so each grows the shortest run of parent directories that tells them
+// apart ("console/main.ts" vs "logs/main.ts" become the hints "console" and "logs"). The hint is
+// returned SEPARATELY from the label so the bar can render it dimmed beside the file name rather
+// than lengthening the name itself - the tab stays scannable at a glance.
+//
+// The depth is grown uniformly across a same-named group rather than minimised per tab: tabs that
+// disambiguate at the same depth line up visually, and a group where one member needed a deeper
+// path than its neighbour reads as arbitrary. Tabs whose label is unique get no hint at all, so
+// the common case (every tab showing a different thing) is unchanged.
+//
+// Two tabs on genuinely the same path exhaust their parents and keep identical hints - there is no
+// further information to show, and inventing one would lie.
+function disambiguate(parts: TitleParts[]): (string | undefined)[] {
+  const groups = new Map<string, number[]>();
+  for (let i = 0; i < parts.length; i++) {
+    const at = groups.get(parts[i].label);
+    if (at) at.push(i);
+    else groups.set(parts[i].label, [i]);
+  }
+  const hints: (string | undefined)[] = parts.map(() => undefined);
+  for (const idxs of groups.values()) {
+    if (idxs.length < 2) continue;
+    const maxDepth = Math.max(...idxs.map((i) => parts[i].parents.length));
+    for (let depth = 1; depth <= maxDepth; depth++) {
+      const suffixes = idxs.map((i) => parts[i].parents.slice(-depth).join("/"));
+      const distinct = new Set(suffixes).size === suffixes.length;
+      // Stop at the first depth that separates the group, or at the deepest available - past that
+      // there is nothing left to add and every extra segment is noise.
+      if (distinct || depth === maxDepth) {
+        idxs.forEach((i, n) => {
+          hints[i] = suffixes[n] || undefined;
+        });
+        break;
+      }
+    }
+  }
+  return hints;
 }
 
 // tabViews maps a Workspace to the per-tab view models the bar renders. Pure.
 export function tabViews(ws: Workspace): TabView[] {
-  return ws.tabs.map((t) => ({ id: t.id, title: t.title, active: t.id === ws.activeId }));
+  const parts = ws.tabs.map((t) => splitTitle(t.title));
+  const hints = disambiguate(parts);
+  return ws.tabs.map((t, i) => ({
+    id: t.id,
+    title: parts[i].label,
+    hint: hints[i],
+    active: t.id === ws.activeId,
+  }));
 }
 
 // Callbacks the console supplies: a tab became active (mount/show it), a tab closed (unmount it), a
@@ -180,6 +244,19 @@ export function createTabBar(ws: Persisted<Workspace>, cb: TabBarCallbacks): Tab
       label.className = "pf-v6-c-tabs__item-text";
       label.textContent = v.title;
       link.append(label);
+      // The disambiguating parent path (only present when a sibling tab shows the same name),
+      // dimmed and after the name - so the name is what you read and the hint is what you fall
+      // back on. Inside the link, so it is part of the tab's accessible name rather than a
+      // decoration a screen reader would skip.
+      if (v.hint) {
+        const hint = document.createElement("span");
+        hint.className = "console-tabbar__hint";
+        hint.textContent = v.hint;
+        link.append(hint);
+      }
+      // The full title as the hover tooltip: the label is a basename and may be elided, so this is
+      // where the whole path stays available without widening the tab.
+      link.title = v.hint ? v.hint + "/" + v.title : v.title;
       link.addEventListener("contextmenu", (ev) => {
         ev.preventDefault();
         openCtx(v.id, v.title, ev.clientX, ev.clientY);

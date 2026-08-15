@@ -4,7 +4,15 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { emptyWorkspace, openTab, closeTab, setActive, setLayout, type Workspace } from "./tabs";
+import {
+  emptyWorkspace,
+  openTab,
+  closeTab,
+  setActive,
+  setLayout,
+  renameTab,
+  type Workspace,
+} from "./tabs";
 import type { Pane } from "./tiling";
 
 const tab = (id: string, pageId = id) => ({ id, pageId, title: id });
@@ -101,4 +109,34 @@ test("setLayout does not mutate its input and no-ops on an unknown tab", () => {
   setLayout(ws, "a", leaf);
   assert.equal(ws.tabs[0].layout, undefined); // input untouched
   assert.equal(setLayout(ws, "zzz", leaf), ws); // unknown id returns the same reference
+});
+
+test("renameTab retitles one tab and leaves its siblings and the active id alone", () => {
+  const ws = openTab(openTab(emptyWorkspace, tab("a")), tab("b"));
+  const next = renameTab(ws, "a", "src/main.ts");
+  assert.equal(next.tabs.find((t) => t.id === "a")?.title, "src/main.ts");
+  assert.equal(next.tabs.find((t) => t.id === "b")?.title, "b");
+  assert.equal(next.activeId, ws.activeId);
+});
+
+test("renameTab keeps the rest of the tab (pageId, layout) intact", () => {
+  const leaf: Pane = { kind: "leaf", id: "a", pageId: "logs" };
+  const ws = setLayout(openTab(emptyWorkspace, tab("a", "logs")), "a", leaf);
+  const next = renameTab(ws, "a", "out-1234");
+  assert.equal(next.tabs[0].pageId, "logs");
+  assert.deepEqual(next.tabs[0].layout, leaf);
+});
+
+test("renameTab does not mutate its input", () => {
+  const ws = openTab(emptyWorkspace, tab("a"));
+  renameTab(ws, "a", "renamed");
+  assert.equal(ws.tabs[0].title, "a");
+});
+
+// The reducer feeds a persisted cell whose subscribers re-render, so a surface re-reporting the
+// document it already has open must not wake them: identity, not just deep equality, is the contract.
+test("renameTab returns the same reference for an unknown id or an unchanged title", () => {
+  const ws = openTab(emptyWorkspace, tab("a"));
+  assert.equal(renameTab(ws, "zzz", "whatever"), ws);
+  assert.equal(renameTab(ws, "a", "a"), ws);
 });
