@@ -360,7 +360,7 @@ type Maintenance struct {
 // VCS controls VCS-driven affected detection.
 type VCS struct {
 	Enabled *bool  `json:"enabled" yaml:"enabled"` // false = fall back to all projects; pointer distinguishes unset
-	Name    string `json:"name" yaml:"name"`       // pin VCS by name (git/hg/jj); empty = autodetect
+	Name    string `json:"name" yaml:"name"`       // pin VCS by name (git/hg/sl/jj); empty = autodetect
 	// BaseRef sets the default base ref. Per-VCS overrides use MAGUS_VCS_<NAME>_BASE_REF (dynamic; not a Config field).
 	BaseRef string `json:"base_ref" yaml:"base_ref"`
 }
@@ -540,7 +540,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_DRY_RUN", "dry_run", "false", "When 1 or true, print what would run without executing anything"},
 		{"MAGUS_DEFAULT_CHARMS", "default_charms", "", "Comma-separated charms applied to every magus run/x by default (e.g. rw); the ci anchor still strips rw, and --no-default-charms ignores them for one run"},
 		{"MAGUS_VCS_ENABLED", "vcs.enabled", "true", "Master switch for VCS-driven affected detection; false makes affected fall back to all projects"},
-		{"MAGUS_VCS_NAME", "vcs.name", "", "Pin the active VCS by name (git, hg, jj); empty autodetects from .git/.hg/.jj"},
+		{"MAGUS_VCS_NAME", "vcs.name", "", "Pin the active VCS by name (git, hg, sl, jj); empty autodetects from .git/.hg/.sl/.jj"},
 		{"MAGUS_VCS_BASE_REF", "vcs.base_ref", "", "Default base ref for the active VCS adapter, e.g. origin/main for git"},
 		{"MAGUS_VCS_<NAME>_BASE_REF", "", "", "Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs"},
 		{"MAGUS_DAEMON_SOCKET", "daemon.socket", "", "Runtime proc-server socket set by the daemon for forwarded child processes; unix:// URL or bare path"},

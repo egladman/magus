@@ -30,6 +30,7 @@ func TestResolveAutodetect(t *testing.T) {
 	t.Run(".git", func(t *testing.T) { assertAutodetect(t, ".git", "git") })
 	t.Run(".hg", func(t *testing.T) { assertAutodetect(t, ".hg", "hg") })
 	t.Run(".jj", func(t *testing.T) { assertAutodetect(t, ".jj", "jj") })
+	t.Run(".sl", func(t *testing.T) { assertAutodetect(t, ".sl", "sl") })
 }
 
 func TestResolveExplicitOverridesAutodetect(t *testing.T) {
@@ -88,8 +89,14 @@ func TestResolveBuiltinBaseRefs(t *testing.T) {
 	}
 
 	t.Run("git", func(t *testing.T) { assertBuiltinBase(t, "git", "origin/main") })
-	t.Run("hg", func(t *testing.T) { assertBuiltinBase(t, "hg", "tip") })
+	// hg's is the "default" branch, NOT tip: tip is whatever commit is newest locally,
+	// including your own, so it compared a branch against itself and affected built nothing.
+	t.Run("hg", func(t *testing.T) { assertBuiltinBase(t, "hg", "default") })
 	t.Run("jj", func(t *testing.T) { assertBuiltinBase(t, "jj", "trunk()") })
+	// Sapling's is the remote bookmark, not hg's "tip": Sapling has no branches, and tip
+	// names whatever commit is newest LOCALLY - including your own unpushed work, which
+	// would make `magus affected` compare a branch against itself.
+	t.Run("sl", func(t *testing.T) { assertBuiltinBase(t, "sl", "remote/main") })
 }
 
 func TestVCSClaims(t *testing.T) {
@@ -104,6 +111,7 @@ func TestVCSClaims(t *testing.T) {
 	t.Run("git", func(t *testing.T) { assertClaims(t, "git", []string{".git"}) })
 	t.Run("hg", func(t *testing.T) { assertClaims(t, "hg", []string{".hg"}) })
 	t.Run("jj", func(t *testing.T) { assertClaims(t, "jj", []string{".jj"}) })
+	t.Run("sl", func(t *testing.T) { assertClaims(t, "sl", []string{".sl"}) })
 }
 
 func TestDirtyGitPathScoped(t *testing.T) {
@@ -278,8 +286,10 @@ func TestFindCommitAndHistoryGit(t *testing.T) {
 
 func TestInstallableAndInstaller(t *testing.T) {
 	names := InstallableVCSes()
-	// git and hg implement MergeDriverInstaller; jj does not.
-	want := map[string]bool{"git": true, "hg": true}
+	// git, hg and sl implement MergeDriverInstaller; jj does not. Sapling registers the
+	// driver in .sl/config, the same [merge-patterns]/[merge-tools] pair hg writes to
+	// .hg/hgrc.
+	want := map[string]bool{"git": true, "hg": true, "sl": true}
 	require.Lenf(t, names, len(want), "Installable() = %v, want keys %v", names, want)
 	for _, n := range names {
 		assert.Truef(t, want[n], "Installable() returned unexpected %q", n)
@@ -568,6 +578,11 @@ func TestMetadataReportsRevisionAcrossBackends(t *testing.T) {
 				vcsTestRun(t, dir, "jj", "new")
 			},
 		},
+		{
+			name: "sl",
+			bin:  "sl",
+			init: func(t *testing.T, dir string) { slInitRepo(t, dir, map[string]string{"a.txt": "one\n"}) },
+		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, err := exec.LookPath(tc.bin); err != nil {
@@ -605,6 +620,7 @@ func TestMetadataReportsDirtyAcrossBackends(t *testing.T) {
 			vcsTestRun(t, dir, "hg", "add", "a.txt")
 			vcsTestRun(t, dir, "hg", "commit", "-m", "init", "-u", "test")
 		}},
+		{"sl", "sl", func(t *testing.T, dir string) { slInitRepo(t, dir, map[string]string{"a.txt": "one\n"}) }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			if _, err := exec.LookPath(tc.bin); err != nil {

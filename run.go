@@ -656,7 +656,8 @@ func toolVersionMode() string {
 //
 // executeStages resolves it ONCE per invocation and copies it onto every step, as
 // toolVersionsByProject does - probing per target would spawn a VCS subprocess per step.
-// The two returns are types.VCSMeta's Hash and IsDirty.
+// The revision and dirty returns are types.VCSMeta's ID and IsDirty. ("Hash" is git's word
+// alone - hg reports a node, jj a commit id - which is why the field is named ID.)
 func (m *Magus) CurrentRevision(ctx context.Context) (name, revision string, dirty bool) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {
@@ -1637,30 +1638,41 @@ func annotateVolatility(project, target, status string, rt *volatility.Runtime) 
 // without the rw charm) - then fails if it left uncommitted changes in dir, i.e. it
 // wrote when it should only have checked (the error points the user at the rw charm).
 // Skipped when dir has no VCS, so the guard never blocks a non-repo checkout.
-func verifyReadOnly(ctx context.Context, dir, target string, fn func() error) error {
+func (m *Magus) verifyReadOnly(ctx context.Context, dir, target string, fn func() error) error {
 	if err := fn(); err != nil {
 		return err
 	}
-	// Resolve the active VCS (git/hg/jj) rather than shelling out to git, so the
+	// Resolve the active VCS (git/hg/sl/jj) rather than shelling out to git, so the
 	// cleanliness gate works under any backend.
 	//
-	// The three outcomes below are deliberately not collapsed, following the rule
-	// this file already applies to a missing ci target: "definitely absent" and
-	// "could not tell" are different answers, and only the first is safe to read
-	// as a pass. A target reaches here only by declaring FailOnDrift, so it has
-	// explicitly asked to be checked; reporting "clean" when the check never ran
-	// would silently retract the guarantee it opted into.
-	res, err := vcs.Resolve(ctx, dir, "", types.VCSOptions{})
+	// Resolved from the WORKSPACE ROOT with the workspace's own options, matching every
+	// other vcs.Resolve call site in the tree. Resolving from the project dir - which this
+	// did - detects a backend only when the marker sits in that exact directory, because
+	// claimsExist stats the path it is given and does not walk up. A project nested below
+	// an .hg/.sl/.jj root therefore matched nothing, fell through to the default git
+	// driver, and the gate then failed with "git could not report working-tree status" on
+	// a perfectly healthy Mercurial workspace. Passing empty options compounded it by
+	// ignoring a configured vcs.name / vcs.enabled.
+	//
+	// The outcomes below are deliberately not collapsed, following the rule this file
+	// already applies to a missing ci target: "definitely absent" and "could not tell" are
+	// different answers, and only the first is safe to read as a pass. A target reaches
+	// here only by declaring FailOnDrift, so it has explicitly asked to be checked;
+	// reporting "clean" when the check never ran would silently retract that guarantee.
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil {
 		// Resolve fails only for an explicitly requested VCS that does not exist
 		// (MAGUS_VCS_NAME naming an unknown backend). That is misconfiguration, not
 		// an absent VCS, and silently skipping it would hide the typo forever.
 		return fmt.Errorf("%s: %s declares FailOnDrift but the VCS could not be resolved: %w", dir, target, err)
 	}
-	if res.VCS == nil {
-		// No VCS, or VCS explicitly disabled. There is genuinely nothing to diff
-		// against, so the check does not apply - this is the no-op that keeps magus
-		// usable outside a repository (a container build, an extracted tarball).
+	// VCS disabled, or NO backend claimed the root. The second half is what actually keeps
+	// magus usable outside a repository (a container build, an extracted tarball): Resolve
+	// never hands back a nil driver for that case - it falls back to git and reports
+	// VCSSourceDefault - so testing res.VCS alone promised a no-op that could not happen,
+	// and an unversioned tree hard-failed here instead. An explicitly requested backend is
+	// deliberately not covered: asking for one and not having it is worth failing over.
+	if res.VCS == nil || res.Source == types.VCSSourceDefault {
 		return nil
 	}
 	files, err := res.VCS.DirtyFiles(ctx, dir, []string{"."})
@@ -1683,7 +1695,7 @@ func (m *Magus) makeHandler(name string) TargetHandler {
 			run := func() error { return runTarget(ctx, p, name) }
 			pol := p.TargetPolicies[name]
 			if pol.FailOnDrift && !types.HasCharm(ctx, types.CharmReadWrite) {
-				return verifyReadOnly(ctx, p.Dir, name, run)
+				return m.verifyReadOnly(ctx, p.Dir, name, run)
 			}
 			return run()
 		}

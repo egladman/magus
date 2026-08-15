@@ -174,7 +174,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Master switch for VCS-driven affected detection; false makes affected fall back to all projects (default: true). Equivalent magus.yaml key: **vcs.enabled**.
 
 **MAGUS_VCS_NAME**
-: Pin the active VCS by name (git, hg, jj); empty autodetects from .git/.hg/.jj. Equivalent magus.yaml key: **vcs.name**.
+: Pin the active VCS by name (git, hg, sl, jj); empty autodetects from .git/.hg/.sl/.jj. Equivalent magus.yaml key: **vcs.name**.
 
 **MAGUS_VCS_BASE_REF**
 : Default base ref for the active VCS adapter, e.g. origin/main for git. Equivalent magus.yaml key: **vcs.base_ref**.

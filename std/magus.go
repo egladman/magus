@@ -1024,7 +1024,7 @@ func MagusDiagnoseDrift(ctx context.Context, outputs, inputs []string) (types.Dr
 		root = dir
 	}
 	files := make([]types.Path, 0, len(dirtyFiles))
-	for _, p := range statusPaths(v.Name(), dirtyFiles) {
+	for _, p := range dirtyFiles {
 		files = append(files, types.Path{Value: p, Base: root})
 	}
 	return types.DriftResult{
