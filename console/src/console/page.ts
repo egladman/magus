@@ -28,9 +28,27 @@ export interface PageController<S, Q> {
   // writes while hidden, or a background stream (e.g. the dashboard's) leaks into the active tab's
   // per-tab status bar. Optional: static surfaces need not implement it.
   setVisible?(visible: boolean): void;
-  // The surface's current state, for the console to inspect (title updates, etc.). Typed
-  // per surface via S; the console treats it opaquely.
+  // The document this surface currently has open, for the console to title the tab after
+  // (see TitleSource). A surface with no document concept omits it and keeps its static title.
+  readonly docTitle?: TitleSource;
+  // The surface's current state, for the console to inspect. Typed per surface via S; the
+  // console treats it opaquely.
   readonly state?: S;
+}
+
+// TitleSource is how a surface reports the document it currently has open, so the console can
+// title its tab after it the way a browser titles a tab after its page and an editor after its
+// file. Read-and-subscribe only: the surface owns the value, the console merely observes it, so
+// a title can never be pushed back into a surface that did not choose it.
+//
+// This is deliberately NOT view.ts's Signal (which also carries set) and deliberately structural:
+// each surface is its own bundle, so the Signal a surface hands over comes from that bundle's own
+// copy of view.ts. Nothing here depends on shared module identity, only on the shape.
+//
+// null means "no document open" - the console falls back to the surface's static PageModule.title.
+export interface TitleSource {
+  get(): string | null;
+  subscribe(fn: (title: string | null) => void): () => void; // returns an unsubscribe
 }
 
 // The console owns the one search input, its debounce, the #q= deep link, and the

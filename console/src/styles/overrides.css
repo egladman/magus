@@ -151,6 +151,15 @@
   position: fixed; min-width: 12rem; max-width: calc(100vw - 1rem);
   z-index: var(--pf-t--global--z-index--400); /* over the title bar and the two title-bar popovers (300) */
 }
+/* The disambiguating parent path on a tab whose name is shared with another open tab (tabBar.ts's
+   disambiguate). Smaller and in the subtle text colour so the document name still reads as the tab's
+   label and this reads as the footnote that tells two same-named tabs apart - the editor idiom.
+   PatternFly has no Tabs sub-part for it, which is why this is an app class. */
+.console-tabbar__hint {
+  margin-left: 0.4em;
+  font-size: var(--pf-t--global--font--size--xs);
+  color: var(--pf-t--global--text--color--subtle);
+}
 #console-appmenu {
   position: absolute; top: calc(100% + 0.25rem); right: 0.4rem; left: auto;
   min-width: 15rem; max-width: calc(100vw - 1rem);

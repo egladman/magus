@@ -8,7 +8,15 @@
 // opened. The four core lenses are real surfaces (logs/graph/dashboard/activity). The launcher
 // (home.ts) is NOT a tab - it is the outlet's empty state, shown whenever zero tabs are open.
 
-import { openTab, closeTab, setActive, setLayout, workspaceStore, type TabState } from "./tabs";
+import {
+  openTab,
+  closeTab,
+  setActive,
+  setLayout,
+  renameTab,
+  workspaceStore,
+  type TabState,
+} from "./tabs";
 import { createTabBar } from "./tabBar";
 import { buildLauncher, type Launchable } from "./home";
 import { standaloneSurface, moduleSurface } from "./standalone";
@@ -726,10 +734,49 @@ export function startConsole(
       surfaces: SURFACES,
       mountSurface,
       onLayoutChange: (tree) => ws.set(setLayout(ws.get(), tab.id, tree)),
+      onTitleChange: (title, pageId) => retitleTab(tab.id, title, pageId),
     });
     host.append(tile.el);
     mounts.set(tab.id, { host, status: makeStatusBar(), tile });
     show(tab.id); // visible + status attached before the tile's surfaces finish activating
+  }
+
+  // The window title while running as a dedicated app window (index.html?app=<id>), or null in the
+  // normal tabbed console. App mode has no workspace tab to carry the name, so retitleTab and
+  // syncWindowTitle branch on this.
+  let appModeTitle: string | null = null;
+
+  // retitleTab names a tab after the document its focused pane has open, falling back to that
+  // surface's own name once there is none - so closing a document, or moving focus to a pane that
+  // has none, restores "Log Viewer" rather than stranding the last file's name on the tab.
+  //
+  // Both the bar and the window title are derived from the workspace, so writing it here is the
+  // whole update: the bar re-renders through its own ws binding.
+  function retitleTab(id: string, docTitle: string | null, pageId: string): void {
+    const next = docTitle ?? registry.get(pageId)?.title ?? "";
+    // An empty pane (the in-pane launcher, pageId "") is not a thing to be named after; keeping the
+    // tab's current name is less jarring than blanking it while a surface is being picked.
+    if (next === "") return;
+    // App mode mounts its one surface DIRECTLY, bypassing the workspace, so there is no tab to
+    // rename - the window title is the whole naming surface there, and it still follows the
+    // document (a dedicated Log Viewer window naming itself after the run it holds).
+    if (appModeTitle !== null) appModeTitle = next;
+    else ws.set(renameTab(ws.get(), id, next));
+    syncWindowTitle();
+  }
+
+  // syncWindowTitle mirrors the active tab into document.title, so the browser tab, the installed
+  // PWA's window, and the OS task switcher all say what you are looking at - the other half of the
+  // behaviour, and the reason a tab-title change has to reach past the bar. With no tab active the
+  // console is on its launcher, so the title falls back to the document's own static name.
+  function syncWindowTitle(): void {
+    if (appModeTitle !== null) {
+      document.title = appModeTitle + " - magus";
+      return;
+    }
+    const cur = ws.get();
+    const active = cur.tabs.find((t) => t.id === cur.activeId);
+    document.title = active ? active.title + " - magus" : "magus console";
   }
 
   // Browser-history integration so the mobile back-gesture (and the back button) moves between the
@@ -790,6 +837,7 @@ export function startConsole(
     // second row on the launcher screen.
     document.documentElement.toggleAttribute("data-no-tabs", active == null);
     statusHost.replaceChildren(active ? active.status : launcherStatus);
+    syncWindowTitle();
     // Let a docked Reference panel re-read the now-active surface's help sections.
     document.dispatchEvent(new CustomEvent("console:activetab", { detail: { id } }));
     // Record this activation as a history entry so the browser back-gesture returns here (no-op until
@@ -1736,7 +1784,10 @@ export function startConsole(
   const appSurface = launchApp ? SURFACES.find((s) => s.pageId === launchApp) : undefined;
   if (appSurface && registry.has(appSurface.pageId)) {
     document.documentElement.dataset.appmode = appSurface.pageId;
-    document.title = appSurface.label + " - magus";
+    // Must be set before mount(): its show() titles the window, and would otherwise read the
+    // workspace, which has no tab for this surface.
+    appModeTitle = appSurface.label;
+    syncWindowTitle();
     mount({ id: "app-" + appSurface.pageId, pageId: appSurface.pageId, title: appSurface.label });
     return;
   }

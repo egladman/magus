@@ -75,6 +75,23 @@ export function setLayout(ws: Workspace, tabId: string, layout: Pane): Workspace
   };
 }
 
+// renameTab retitles a tab. This is the path a surface's open document takes to the tab bar: the
+// console calls it when the focused pane reports a new document (page.ts's TitleSource), so a tab
+// reads as what it is showing rather than as which surface it is - the editor/browser behaviour.
+// An unknown id or an unchanged title returns the INPUT unchanged, so a surface that re-reports the
+// same document cannot churn the persisted cell or wake its subscribers.
+//
+// The title is written into the tab itself rather than kept beside the workspace, so it persists:
+// a restored-but-not-yet-mounted tab shows the document it had when the console closed, exactly as
+// a restored browser tab keeps its last title until the page loads again.
+export function renameTab(ws: Workspace, id: string, title: string): Workspace {
+  if (!ws.tabs.some((t) => t.id === id && t.title !== title)) return ws;
+  return {
+    tabs: ws.tabs.map((t) => (t.id === id ? { ...t, title } : t)),
+    activeId: ws.activeId,
+  };
+}
+
 // workspaceStore is the durable cell the console binds to: read-modify-write it with the
 // reducers and re-render the bar. Because it is persisted, the tab set and active tab
 // come back on the next load.
