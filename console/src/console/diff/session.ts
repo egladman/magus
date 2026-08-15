@@ -58,7 +58,9 @@ export interface ReviewFile {
   readonly hint?: string;
   readonly coverage?: ReviewCoverage;
   readonly symbols?: readonly ReviewSymbol[];
-  readonly reach: number;
+  // null when no symbol index was loaded, which is NOT zero: "nothing references this" and
+  // "nobody looked" are different facts, and the ordering depends on this one.
+  readonly reach: number | null;
   readonly surface: ReviewSurface;
   readonly churn?: ReviewChurn;
   readonly touches?: readonly ReviewTouch[];

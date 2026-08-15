@@ -797,7 +797,17 @@ func (m *Magus) Review(ctx context.Context, paths []string) (types.Review, error
 			"changed-symbol reach and coverage skipped (no symbol index loaded): "+gerr.Error())
 	}
 	out.Notes = append(out.Notes, res.Notes...)
-	out.SeedProjects = res.SeedProjects
+	// SeedProjects is documented as "the ones the author actually edited", so a project whose
+	// only changed file is a declared output does not belong in it - the whole premise of the
+	// fold is that a regenerated file is a machine's restatement, not an edit. Counting it
+	// meant one line folded files and un-folded projects in the same breath: a background
+	// regeneration moved "3 projects edited" to 6 while the read list stayed byte-identical.
+	//
+	// AffectedProjects deliberately keeps the FULL closure over every changed path, generated
+	// included, because a regenerated output really does invalidate a downstream cache key.
+	// The two numbers answer different questions - who wrote something, and what has to run -
+	// and conflating them was the bug.
+	out.SeedProjects = authorEditedProjects(res.SeedProjects, out.Files)
 	out.AffectedProjects = res.AffectedProjects
 
 	// Surface starts UNKNOWN everywhere and is only lowered to internal for a file the symbol
@@ -805,6 +815,16 @@ func (m *Magus) Review(ctx context.Context, paths []string) (types.Review, error
 	// safe, which is the one wrong answer that costs something.
 	for i := range out.Files {
 		out.Files[i].Surface = types.ReviewSurfaceUnknown
+	}
+	// Reach gets a measured baseline of zero ONLY when an index was loaded; otherwise it stays
+	// nil and Review.Ranked() reports that there was no ranking key. The flag is workspace-wide
+	// rather than per-file because that is the granularity magus actually knows: it can tell
+	// whether an index loaded, not whether this particular path was in it.
+	if graph != nil {
+		for i := range out.Files {
+			zero := 0 // one pointer PER FILE: a shared one would raise every file's reach at once
+			out.Files[i].Reach = &zero
+		}
 	}
 	for _, s := range res.ChangedSymbols {
 		f, ok := byPath[s.File]
@@ -820,8 +840,9 @@ func (m *Magus) Review(ctx context.Context, paths []string) (types.Review, error
 		// Reach is the WIDEST file count among the file's changed symbols, not their sum: a
 		// file is as dangerous as its most-depended-on export, and summing would rank a file
 		// with many narrow symbols above one with a single load-bearing API.
-		if s.FileCount > f.Reach {
-			f.Reach = s.FileCount
+		if s.FileCount > f.ReachOr(-1) {
+			n := s.FileCount // a fresh pointer, never a write through the shared baseline
+			f.Reach = &n
 		}
 		// One symbol crossing a project boundary makes the whole file public surface: a
 		// reviewer needs to know the file contains something a consumer can see, and burying
@@ -842,6 +863,35 @@ func (m *Magus) Review(ctx context.Context, paths []string) (types.Review, error
 
 	out.SortForReview()
 	return out, nil
+}
+
+// authorEditedProjects narrows a seed set to the projects a PERSON changed something in.
+//
+// A seed whose every changed file is a declared output was not edited; a target rewrote it.
+// Keeping it made "N projects edited" count projects with nothing to read, which is
+// indefensible in the same sentence that folds those files away. A seed with no files at all
+// in the review is kept: that means the review does not know the file's project rather than
+// that the project was untouched, and dropping it would silently shrink the count on the
+// strength of an absence.
+func authorEditedProjects(seeds []string, files []types.ReviewFile) []string {
+	authored := make(map[string]bool, len(seeds))
+	known := make(map[string]bool, len(seeds))
+	for _, f := range files {
+		if f.Project == "" {
+			continue
+		}
+		known[f.Project] = true
+		if !f.Generated() {
+			authored[f.Project] = true
+		}
+	}
+	out := make([]string, 0, len(seeds))
+	for _, s := range seeds {
+		if authored[s] || !known[s] {
+			out = append(out, s)
+		}
+	}
+	return out
 }
 
 // exportedFromModule reports whether a symbol defined at path with the given label is

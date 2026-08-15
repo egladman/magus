@@ -21,11 +21,23 @@ import (
 // tools' opinions of one changeset.
 func reviewCmd(ctx context.Context, root string, args []string) error {
 	var rf *gen.ReviewFlags
-	if _, err := cmdParse("review", args, func(fs *flag.FlagSet) {
+	rest, err := cmdParse("review", args, func(fs *flag.FlagSet) {
 		rf = gen.BindReview(fs)
 		fs.Usage = func() { reviewUsage(os.Stderr) }
-	}); err != nil {
+	})
+	if err != nil {
 		return err
+	}
+	// REJECT a positional rather than ignoring it. review reads the working tree and nothing
+	// else, so `magus review main` has no meaning - but swallowing it prints a plausible list
+	// of the reader's OWN uncommitted edits under exit 0, and everyone arriving from `git diff
+	// <ref>` or `gh pr diff` types a ref first. An unknown FLAG already fails loudly here; an
+	// unknown positional failing silently is the same mistake with a worse blast radius,
+	// because the output looks like an answer.
+	if len(rest) > 0 {
+		return usagef("magus review: unexpected argument %q. review reads the working tree's "+
+			"uncommitted changes and takes no ref; for a committed range use `git diff %s`",
+			rest[0], rest[0])
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -91,12 +103,23 @@ func reviewUsage(w *os.File) {
 	fmt.Fprintln(w, "Usage: magus review [--generated] [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Read the working tree's uncommitted changes, ordered by what they can break.")
+	fmt.Fprintln(w, "It takes no ref: the subject is always the uncommitted tree.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Generated files - declared target outputs - are folded away: reading one is")
 	fmt.Fprintln(w, "reading a machine's restatement of a change made elsewhere, so the source edit")
-	fmt.Fprintln(w, "is the review. Each remaining file carries the evidence behind its rank: how")
-	fmt.Fprintln(w, "widely its changed symbols are referenced, whether they are public API surface,")
-	fmt.Fprintln(w, "and the coverage a prior run observed.")
+	fmt.Fprintln(w, "is the review.")
+	fmt.Fprintln(w, "")
+	// Name the ranking key exactly, and name what is NOT one. The previous wording listed
+	// reach, public surface, and coverage as "the evidence behind its rank"; only reach ranks,
+	// so a reader who saw a hot file sitting eighth concluded the ranking had weighed churn and
+	// dismissed it. Printing a number beside a rank it did not earn teaches the wrong model.
+	fmt.Fprintln(w, "The order is: declared outputs last, then the widest reach first - how many")
+	fmt.Fprintln(w, "files reference the most-referenced symbol the file changed. Reach needs a")
+	fmt.Fprintln(w, "symbol index; without one there is no ranking key at all, and review says so")
+	fmt.Fprintln(w, "at the top and falls back to path order rather than implying a ranking.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Public surface, coverage, churn, and the agent trail are CONTEXT printed")
+	fmt.Fprintln(w, "beside each file. None of them is a sort key.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
 	fmt.Fprintln(w, "  --generated   include the folded declared outputs")
@@ -148,10 +171,23 @@ func printReviewText(rev types.Review, showGenerated bool) error {
 		fmt.Printf(", %d generated folded", len(generated))
 	}
 	if n := len(rev.SeedProjects); n > 0 {
-		fmt.Printf("; %d projects edited, %d rebuild", n, len(rev.AffectedProjects))
+		// "rebuild" carried no noun and readers could not tell what the count was OF.
+		fmt.Printf("; %d projects edited, %d projects rebuild", n, len(rev.AffectedProjects))
 	}
 	fmt.Println()
 	fmt.Println()
+
+	// The ordering caveat prints BEFORE the list, and only this placement works. As a trailing
+	// note it arrived after the reader had already read the first entry as the most dangerous
+	// one, and it named the missing overlays rather than the missing order - so three separate
+	// readers concluded the ranking had considered churn and rejected it. Say the one thing
+	// that changes how the next twelve lines should be read, first.
+	if !rev.Ranked() && len(primary) > 1 {
+		fmt.Println("UNRANKED: no symbol index, so there is no consequence to rank by.")
+		fmt.Println("What follows is path order, not a ranking. Build the index with")
+		fmt.Println("`magus graph build` to order these by what they can break.")
+		fmt.Println()
+	}
 
 	for _, f := range primary {
 		printReviewFile(f)
@@ -206,15 +242,20 @@ func printReviewFile(f types.ReviewFile) {
 			facts = append(facts, "PUBLIC SURFACE")
 		}
 	}
-	if f.Reach > 0 {
+	if n := f.ReachOr(0); f.Reach != nil && n > 0 {
 		noun := "files"
-		if f.Reach == 1 {
+		if n == 1 {
 			noun = "file"
 		}
-		facts = append(facts, fmt.Sprintf("%d %s reference its widest changed symbol", f.Reach, noun))
+		facts = append(facts, fmt.Sprintf("%d %s reference its widest changed symbol", n, noun))
 	}
 	if c := f.Coverage; c != nil && c.Total > 0 {
 		facts = append(facts, fmt.Sprintf("%d%% covered", int(c.Ratio*100+0.5)))
+	}
+	// Said plainly, because an empty annotation row otherwise reads as "quiet file" when it
+	// means "magus has never seen this file before".
+	if f.NoHistory {
+		facts = append(facts, "NO HISTORY - nothing has exercised this yet")
 	}
 	if ch := f.Churn; ch != nil && ch.Commits > 0 {
 		noun := "commits"

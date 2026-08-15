@@ -142,11 +142,14 @@ export function riskChips(a: ReviewFile | undefined): Chip[] {
     });
   }
 
-  if (a.reach > 0) {
+  // An unmeasured reach shows no chip at all. A "0 referents" chip on an unindexed workspace
+  // would be a measurement magus never took.
+  const reach = a.reach;
+  if (reach !== null && reach > 0) {
     chips.push({
-      text: `${a.reach} referents`,
-      tone: a.reach >= 20 ? "danger" : a.reach >= 5 ? "warn" : "info",
-      title: `The most widely used symbol changed here is referenced from ${a.reach} files.`,
+      text: `${reach} referents`,
+      tone: reach >= 20 ? "danger" : reach >= 5 ? "warn" : "info",
+      title: `The most widely used symbol changed here is referenced from ${reach} files.`,
     });
   }
 

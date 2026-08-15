@@ -839,7 +839,12 @@ func buzzValueMagusReviewFile(v types.ReviewFile) vm.Value {
 		optChurn = buzzValueMagusReviewChurn((*v.Churn))
 	}
 	out.MapSet("churn", optChurn)
-	out.MapSet("reach", vm.IntValue(int64(v.Reach)))
+	out.MapSet("noHistory", vm.BoolValue(v.NoHistory))
+	optReach := vm.Null
+	if v.Reach != nil {
+		optReach = vm.IntValue(int64((*v.Reach)))
+	}
+	out.MapSet("reach", optReach)
 	return out
 }
 

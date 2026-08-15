@@ -31,7 +31,18 @@ type Touch struct {
 	// last handful is the context that explains the edit, and the whole session's reach is a
 	// different question with a different surface.
 	Read []string `json:"read,omitempty" yaml:"read,omitempty"`
-	// Ran are shell commands the session ran before the write, most recent first and capped.
+	// Ran are the PROGRAMS the session ran before the write, most recent first and capped -
+	// "go", "grep", "perl", not their arguments.
+	//
+	// Arguments are dropped, and that is the whole point of this field's shape. It used to
+	// carry the raw command line, which made the trail a verbatim record of everything an
+	// agent typed: an `op=state` response was observed carrying a live daemon bearer token in
+	// a `curl -H "Authorization: Bearer ..."`, plus multi-hundred-line heredocs and whole
+	// commit messages. Transcript one field up states the rule this broke - "A POINTER, never
+	// content ... the expensive and sensitive detail stays where the host already put it" -
+	// and a review payload is read by every MCP client, so an agent asked to summarise it
+	// reproduces whatever is in there. The program name is the part that explains the edit;
+	// anyone who needs the argument list opens the host's own transcript.
 	Ran []string `json:"ran,omitempty" yaml:"ran,omitempty"`
 }
 
@@ -130,8 +141,11 @@ func Replay(root, base string, paths []string, limit int) map[string][]Touch {
 				st.read = prependCapped(st.read, reqPath, replayReadCap)
 			}
 		case toolShell:
-			if req.Command != "" {
-				st.ran = prependCapped(st.ran, req.Command, replayRanCap)
+			// Reduced to the program at the point of INGEST, not at render: a redaction that
+			// happens on the way out leaves the raw text in memory for whatever else reads the
+			// touch, and every consumer then has to remember to redact.
+			if prog := commandProgram(req.Command); prog != "" {
+				st.ran = prependCapped(st.ran, prog, replayRanCap)
 			}
 		case toolWrite:
 			if reqPath == "" || !want[reqPath] {
@@ -161,6 +175,61 @@ func relativize(root, p string) string {
 		return p
 	}
 	return strings.TrimPrefix(strings.TrimPrefix(p, root), "/")
+}
+
+// commandProgram reduces a recorded command line to the program it invoked, dropping every
+// argument. See Touch.Ran for why the arguments cannot be kept.
+//
+// Leading VAR=value assignments are skipped rather than reported, because they are the single
+// likeliest place for a credential to sit - the observed leak was literally `T=<token> curl -H
+// "Authorization: Bearer $T"`, whose first token IS the secret. Only the shape a shell would
+// treat as an assignment counts, so a path that happens to contain "=" is still a program.
+//
+// A command this cannot read reduces to the empty string and is dropped. Reporting a
+// best-guess program for an unparseable line would put an invented fact in a provenance
+// record, and an admitted gap beats a low-confidence match here for the same reason it does
+// in the notes store.
+func commandProgram(cmd string) string {
+	for _, tok := range strings.Fields(cmd) {
+		if isEnvAssignment(tok) {
+			continue
+		}
+		if i := strings.LastIndexAny(tok, `/\`); i >= 0 {
+			tok = tok[i+1:]
+		}
+		if tok == "" {
+			continue
+		}
+		// A program name is short. Anything longer is not one, and truncating bounds what an
+		// odd invocation can push into the payload.
+		if len(tok) > commandProgramMax {
+			tok = tok[:commandProgramMax]
+		}
+		return tok
+	}
+	return ""
+}
+
+// commandProgramMax bounds a reported program name.
+const commandProgramMax = 32
+
+// isEnvAssignment reports the NAME=value shape a shell treats as an environment assignment
+// preceding the command, rather than any token containing "=".
+func isEnvAssignment(tok string) bool {
+	i := strings.IndexByte(tok, '=')
+	if i <= 0 {
+		return false
+	}
+	for j := 0; j < i; j++ {
+		c := tok[j]
+		switch {
+		case c == '_', c >= 'A' && c <= 'Z', c >= 'a' && c <= 'z':
+		case j > 0 && c >= '0' && c <= '9':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 // prependCapped puts v at the front and bounds the list, dropping a duplicate so a file read

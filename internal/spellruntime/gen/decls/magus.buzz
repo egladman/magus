@@ -331,7 +331,8 @@ export object ReviewFile {
     surface: str = "",
     touches: [ReviewTouch] = [],
     churn: ReviewChurn? = null,
-    reach: int = 0,
+    noHistory: bool = false,
+    reach: int? = null,
 }
 
 export object Review {

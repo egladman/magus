@@ -393,6 +393,16 @@ export function activate(host: HTMLElement): () => void {
 
   // --- chrome ---------------------------------------------------------------
 
+  // ranked reports whether the server had a ranking key at all. False means every file's reach
+  // is unmeasured, so the order is path order wearing a ranking's clothes - and this surface
+  // says "Read these first", which is a claim it cannot keep in that state. Mirrors
+  // types.Review.Ranked; the server's order is still authoritative, this only labels it.
+  const ranked = (): boolean =>
+    (state.session?.review?.files ?? []).some((f) => f.reach !== null && f.reach !== undefined);
+
+  const UNRANKED_TITLE =
+    "No symbol index, so there is no consequence to rank by. This is path order, not a ranking - build the index with `magus graph build` to order these by what they can break.";
+
   const renderToolbar = (): void => {
     const s = stats(state.changeset);
     const chips: HTMLElement[] = [
@@ -414,6 +424,9 @@ export function activate(host: HTMLElement): () => void {
         "Declared target outputs. Reviewing their diff is reading a machine's restatement of a change made elsewhere - read the source change instead. Press . to toggle.";
       g.addEventListener("click", () => void toggleGenerated());
       chips.push(g);
+    }
+    if (!ranked()) {
+      chips.push(label("unranked", "pf-m-orange", UNRANKED_TITLE));
     }
     if (s.publicSurface > 0) {
       chips.push(
@@ -553,7 +566,7 @@ export function activate(host: HTMLElement): () => void {
         line(
           "projects",
           `${seeds.length} edited, ${affected.length} rebuild`,
-          "The gap is downstream: projects that rebuild because they sit below one you edited",
+          "Edited counts projects a person changed a source file in; generated-only changes do not count as an edit. Rebuild is the full downstream closure over every changed path, generated included, because a regenerated output still invalidates a cache key.",
         ),
       );
     }
@@ -564,7 +577,16 @@ export function activate(host: HTMLElement): () => void {
     }
     const top = state.changeset.primary.slice(0, 5);
     if (top.length > 0) {
-      box.append(h("h3", "console-diff-overview__subtitle", "Read these first"));
+      // The heading is a CLAIM, so it changes when the ranking behind it is absent rather than
+      // asserting a priority the order does not carry.
+      if (ranked()) {
+        box.append(h("h3", "console-diff-overview__subtitle", "Read these first"));
+      } else {
+        box.append(h("h3", "console-diff-overview__subtitle", "First by path (unranked)"));
+        const why = h("p", "console-diff-overview__note");
+        why.textContent = UNRANKED_TITLE;
+        box.append(why);
+      }
       for (const o of top) {
         const r = h("button", "console-diff-overview__file");
         r.type = "button";

@@ -145,7 +145,9 @@ type ReviewTouch struct {
 	Session    string   `json:"session,omitempty"    yaml:"session,omitempty"`
 	Transcript string   `json:"transcript,omitempty" yaml:"transcript,omitempty"`
 	Read       []string `json:"read,omitempty"       yaml:"read,omitempty"`
-	Ran        []string `json:"ran,omitempty"        yaml:"ran,omitempty"`
+	// Ran are the PROGRAMS the session ran, never their arguments - see trail.Touch.Ran for
+	// the leak that shape exists to prevent. This payload is served to every MCP client.
+	Ran []string `json:"ran,omitempty" yaml:"ran,omitempty"`
 }
 
 // ReviewFile is one changed file, annotated.
@@ -176,11 +178,41 @@ type ReviewFile struct {
 	// Nil is DISTINCT from zero: "nobody measured" and "this file is quiet" are different
 	// facts, and a review that renders the first as the second is lying quietly.
 	Churn *ReviewChurn `json:"churn,omitempty" yaml:"churn,omitempty"`
+	// NoHistory reports that the history lens RAN and found this file in none of the commits
+	// it walked - a file added in this change, or one untouched for the whole window.
+	//
+	// It is a ranking signal because absence of history is not the same as absence of risk,
+	// and the ordering treated it as though it were. Every other annotation here is derived
+	// from a file's past, so a brand-new file collects no churn, no hotspot rank, no authors
+	// and no coverage, and sinks to the bottom on the strength of having no evidence. The one
+	// file in a real changeset whose tests did not compile was exactly that file. Nothing has
+	// exercised this code and nobody has reviewed it before, which is a reason to read it
+	// sooner rather than later.
+	//
+	// False when the lens did not run at all: that is "nobody looked", and it must not render
+	// as "this file has history".
+	NoHistory bool `json:"no_history,omitempty" yaml:"no_history,omitempty"`
 	// Reach is the widest FileCount among Symbols: how many files reference the most-referenced
 	// thing this file changed. It is the ranking key, and it is deliberately a COUNT OF FILES
 	// rather than of references - one file calling a function forty times is one file that
 	// breaks, and ranking by reference count would put a hot loop above a widely-used API.
-	Reach int `json:"reach" yaml:"reach"`
+	//
+	// NIL when no symbol index was loaded, and nil is DISTINCT from zero for the same reason
+	// Coverage and Churn are: "nothing references this" and "nobody looked" are different
+	// facts. It shipped as a plain int, so an unindexed workspace served `reach: 0` on every
+	// file - a valid-looking number that a fleet dashboard reads as "no change touches widely
+	// used code". ReviewSurfaceUnknown already refuses that collapse; this is the same refusal
+	// applied to the field the ordering actually turns on.
+	Reach *int `json:"reach" yaml:"reach"`
+}
+
+// ReachOr returns the reach, or def when it was not measured. For rendering and comparison
+// only - never use it to decide whether reach is KNOWN, which is what the nil is for.
+func (f ReviewFile) ReachOr(def int) int {
+	if f.Reach == nil {
+		return def
+	}
+	return *f.Reach
 }
 
 // Generated reports whether reviewing this file's diff is reading generated output.
@@ -338,10 +370,18 @@ func (r Review) AttachChurn(files []FileHotspot, projects []TrendEntry) {
 		trend[p.Path] = p.Delta
 	}
 
+	// The lens RAN if it produced any per-file entry at all. Without that check a workspace
+	// with no history at all would mark every file NoHistory, which is "nobody looked" wearing
+	// the label for "nothing has touched this".
+	lensRan := len(files) > 0
+
 	for i := range r.Files {
 		f := &r.Files[i]
 		h, isHot := hot[f.Path]
 		d, hasTrend := trend[f.Project]
+		if lensRan && !isHot {
+			f.NoHistory = true
+		}
 		if !isHot && !hasTrend {
 			continue
 		}
@@ -353,6 +393,12 @@ func (r Review) AttachChurn(files []FileHotspot, projects []TrendEntry) {
 			ProjectTrend: d,
 		}
 	}
+
+	// Re-sort, because this call is what makes NoHistory known: the review was ordered before
+	// any history existed, so leaving the old order would keep a ranking key magus now has out
+	// of the order it is supposed to drive. SortForReview is idempotent, so re-running it is
+	// the cheap way to keep ONE definition of review order rather than a second one here.
+	r.SortForReview()
 }
 
 // AttachReplay folds the agent trail onto the review, in place.
@@ -386,6 +432,12 @@ func (r Review) AttachReplay(byPath map[string][]ReviewTouch) {
 //     key and affect no target, so nothing downstream turns on them.
 //  4. Path, last, purely so the order is deterministic. It is a TIEBREAK and never a
 //     ranking: alphabetical order is what this exists to replace.
+//
+// A file whose reach was NOT MEASURED sorts above one measured at zero and below any measured
+// positive. Unknown is not zero: a measured zero is a promise that nothing references the file,
+// and an unmeasured file has made no promise. Ranking the two together is what let an
+// unindexed workspace render pure path order while the header still claimed a ranking - see
+// Ranked, which is how a caller is supposed to notice.
 func (r Review) SortForReview() {
 	rank := func(f ReviewFile) int {
 		switch f.Role {
@@ -397,12 +449,37 @@ func (r Review) SortForReview() {
 			return 1
 		}
 	}
+	// Measured-positive first, then unmeasured, then measured-zero. Encoded as a band so the
+	// three cases compare without special-casing nil at every comparison.
+	band := func(f ReviewFile) int {
+		switch {
+		case f.Reach == nil:
+			return 1
+		case *f.Reach > 0:
+			return 0
+		default:
+			return 2
+		}
+	}
 	slices.SortFunc(r.Files, func(a, b ReviewFile) int {
 		if ra, rb := rank(a), rank(b); ra != rb {
 			return ra - rb
 		}
-		if a.Reach != b.Reach {
-			return b.Reach - a.Reach // widest reach first
+		if ba, bb := band(a), band(b); ba != bb {
+			return ba - bb
+		}
+		if a.Reach != nil && b.Reach != nil && *a.Reach != *b.Reach {
+			return *b.Reach - *a.Reach // widest reach first
+		}
+		// A file magus has no history for reads BEFORE one it does, but only as a tiebreak:
+		// reach still decides whenever it is known, because "widely referenced" beats "new"
+		// as a reason to read something first. This is what stops a new file sinking under
+		// files whose only distinction is that they have a past. See ReviewFile.NoHistory.
+		if a.NoHistory != b.NoHistory {
+			if a.NoHistory {
+				return -1
+			}
+			return 1
 		}
 		switch {
 		case a.Path < b.Path:
@@ -412,4 +489,21 @@ func (r Review) SortForReview() {
 		}
 		return 0
 	})
+}
+
+// Ranked reports whether the ordering had a ranking key to work with at all.
+//
+// False means every file's reach is unmeasured, so SortForReview had nothing to sort on and
+// the result is path order wearing a ranking's clothes. Every renderer MUST say so before
+// showing the list. This is the check that was missing: the review already emitted a Note
+// about the absent symbol index, but it named the missing OVERLAYS (callers, coverage) and
+// never the missing ORDER, and it printed after the list - by which point the reader had
+// already formed the belief that the first file was the most dangerous one.
+func (r Review) Ranked() bool {
+	for _, f := range r.Files {
+		if f.Reach != nil {
+			return true
+		}
+	}
+	return false
 }

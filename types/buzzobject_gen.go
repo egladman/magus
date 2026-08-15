@@ -431,17 +431,22 @@ func (v ReviewFile) BuzzObject() BuzzObject {
 	if v.Churn != nil {
 		optChurn = (*v.Churn).BuzzObject()
 	}
+	var optReach any
+	if v.Reach != nil {
+		optReach = (*v.Reach)
+	}
 	return BuzzObject{
-		"path":     v.Path,
-		"project":  v.Project,
-		"role":     v.Role,
-		"hint":     v.Hint,
-		"coverage": optCoverage,
-		"symbols":  itemsSymbols,
-		"surface":  v.Surface,
-		"touches":  itemsTouches,
-		"churn":    optChurn,
-		"reach":    v.Reach,
+		"path":      v.Path,
+		"project":   v.Project,
+		"role":      v.Role,
+		"hint":      v.Hint,
+		"coverage":  optCoverage,
+		"symbols":   itemsSymbols,
+		"surface":   v.Surface,
+		"touches":   itemsTouches,
+		"churn":     optChurn,
+		"noHistory": v.NoHistory,
+		"reach":     optReach,
 	}
 }
 
