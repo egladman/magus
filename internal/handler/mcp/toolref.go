@@ -37,6 +37,8 @@ const (
 	ToolPath            ToolName = "magus_path"
 	ToolStats           ToolName = "magus_stats"
 	ToolDiff            ToolName = "magus_diff"
+	ToolVCSCheckpoint   ToolName = "magus_vcs_checkpoint"
+	ToolLedger          ToolName = "magus_ledger"
 )
 
 // allToolNames is every declared tool-name constant, for the drift test to walk.
@@ -47,4 +49,5 @@ var allToolNames = []ToolName{
 	ToolAffectedPlan, ToolConfigGet, ToolTailLog, ToolMemory,
 	ToolQuery, ToolOutput, ToolExplain, ToolRefs, ToolPath, ToolStats,
 	ToolDiff,
+	ToolVCSCheckpoint, ToolLedger,
 }

@@ -38,6 +38,7 @@ import (
 	"github.com/egladman/magus/internal/handler/trailrpc"
 	viewer "github.com/egladman/magus/internal/handler/viewer"
 	"github.com/egladman/magus/internal/httpx"
+	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
@@ -276,6 +277,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// live pool state, the output store for each node's last outcome and its ref - so
 			// it introduces no third notion of what ran.
 			planH := status.NewPlanHandler(svc, outputStore, opts.Magus.Root(), log)
+			ledgerH := status.NewLedgerHandler(ledger.NewStore(opts.Magus.CacheDir()), log)
 
 			bridgeMux := http.NewServeMux()
 			// The JSON /api/v1/status route is GONE: the typed StatusService Connect route
@@ -310,6 +312,10 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// this one names every target in the workspace, which a share link handed to a phone
 			// has no business enumerating.
 			bridgeMux.Handle("/api/v1/plan", cors(planH))
+			// Delegation ledger: the plan an orchestrating agent DECLARED, read straight off
+			// the store the magus_ledger MCP tool writes. Read-only here - the write door is
+			// the tool - and magus enforces none of it.
+			bridgeMux.Handle("/api/v1/ledger", cors(ledgerH))
 			// Wrap every /api/ route with rebind + header-only bearer auth.
 			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyBearer, bridgeMux)))
 

@@ -39,6 +39,12 @@ type StatusReport struct {
 	BuildInfo BuildInfo     `json:"build_info" yaml:"build_info"`
 	Pool      *StatusOutput `json:"pool,omitempty" yaml:"pool,omitempty"`
 	PoolError string        `json:"pool_error,omitempty" yaml:"pool_error,omitempty"` // reason Pool is absent
+	// Pools is every live proc server found on this machine, one entry each, and is set
+	// only when there is more than one: Pool above is the first of them, so a single
+	// server would just be repeated here. Enumerating them is the point - a multi-server
+	// box must still report the capacity and in-use numbers, never an error demanding
+	// --socket.
+	Pools []StatusOutput `json:"pools,omitempty" yaml:"pools,omitempty"`
 	// Runs are the invocations the daemon is executing right now (adopted
 	// dispatches), each with its per-target execution state. Empty when nothing is
 	// running or when reported by a process that is not the daemon.
@@ -148,8 +154,14 @@ type MCPEndpointStatus struct {
 type StatusConfig struct {
 	// DefaultCharms are the execution charms applied to every run (e.g. rw, cd, gha).
 	DefaultCharms []string `json:"default_charms,omitempty" yaml:"default_charms,omitempty"`
-	// Concurrency is the resolved cap on concurrent builds (0 = the min(NumCPU, 8) default).
+	// Concurrency is the CONFIGURED cap on concurrent builds; 0 means nothing was
+	// configured, not that no build may run.
 	Concurrency int `json:"concurrency,omitempty" yaml:"concurrency,omitempty"`
+	// ConcurrencyEffective is the width a run actually gets - Concurrency resolved through
+	// the default and the machine clamp (internal/cache.ResolveConcurrency). It is the
+	// number to budget against; Concurrency alone cannot be, because its common value is
+	// the one that means "ask someone else".
+	ConcurrencyEffective int `json:"concurrency_effective" yaml:"concurrency_effective"`
 	// Sandbox reports whether subprocess/spell sandboxing is enabled.
 	Sandbox bool `json:"sandbox" yaml:"sandbox"`
 }
@@ -277,11 +289,18 @@ type CacheStatus struct {
 
 // StatusOutput is the public shape of the live concurrency pool reported by `magus status`.
 type StatusOutput struct {
-	ParentPID      int                   `json:"parent_pid" yaml:"parent_pid"`
-	DaemonVersion  string                `json:"daemon_version,omitempty" yaml:"daemon_version,omitempty"`
-	Mode           string                `json:"mode,omitempty" yaml:"mode,omitempty"` // "daemon", "proc", or ""
-	Capacity       int                   `json:"capacity" yaml:"capacity"`
-	Running        int                   `json:"running" yaml:"running"`
+	ParentPID     int    `json:"parent_pid" yaml:"parent_pid"`
+	DaemonVersion string `json:"daemon_version,omitempty" yaml:"daemon_version,omitempty"`
+	Mode          string `json:"mode,omitempty" yaml:"mode,omitempty"` // "daemon", "proc", or ""
+	// Socket is the proc-server address this snapshot was read from, so a reader running
+	// more than one server can tell the entries apart and narrow with --socket.
+	Socket   string `json:"socket,omitempty" yaml:"socket,omitempty"`
+	Capacity int    `json:"capacity" yaml:"capacity"`
+	Running  int    `json:"running" yaml:"running"`
+	// Available is the free slots: Capacity minus Running, floored at zero. Carried as a
+	// number because the question it answers - how much work can I hand this box right
+	// now - should not require the reader to subtract.
+	Available      int                   `json:"available" yaml:"available"`
 	Queued         int                   `json:"queued" yaml:"queued"`
 	RunningTargets []StatusRunningTarget `json:"running_targets,omitempty" yaml:"running_targets,omitempty"`
 	Workspaces     []StatusWorkspace     `json:"workspaces,omitempty" yaml:"workspaces,omitempty"`

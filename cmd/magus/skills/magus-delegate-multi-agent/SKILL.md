@@ -74,8 +74,11 @@ the top-level goal is complete.{{end}}
 
 Before spawning, state one compact budget: maximum simultaneously active agents,
 effort tier per unit, whether isolated worktrees are available, and how deep
-delegation may nest. Unless the user sets another cap, allow at most three active
-workers across the entire agent tree, and ask before exceeding it.
+delegation may nest. Editing costs the workspace nothing; what contends is
+VALIDATION - the magus runs a unit triggers - so size that cap from the live
+pool (`magus status`) rather than a fixed number, and serialize validations
+that share a worktree even when their write sets are disjoint. Ask before
+exceeding the budget.
 
 A worker may delegate again. What it may not do is delegate without shrinking the
 problem{{if .Full}} - that is the shape that does not terminate, and the cost people
@@ -115,8 +118,10 @@ Map work to provider capabilities without assuming model names:
 | standard | isolated implementation with a clear contract and bounded project surface |
 | economy | mechanical edits, fixtures, docs, inventory, and read-only evidence gathering |
 
-If the host cannot select models or reasoning effort, keep its default. Never
-downgrade the root integration pass or final release gate.
+If the host cannot select models or reasoning effort, keep its default. Tool surface
+is a separate axis from tier: evidence gathering, scouting, and review get a
+read-only tool surface where the host offers one. Never downgrade the root
+integration pass or final release gate.
 
 Nested delegation is allowed when the host supports it, but it does not create a
 new budget or a private ownership map. Before a child spawns descendants, it must
@@ -154,24 +159,25 @@ task's symbols, files, and projects before producing a stdin plan.
 
 ## Prove that units do not collide
 
-Inspect the relevant target and projects:
+Classify the union of every unit's proposed paths in one call:
 
 ```sh
-magus describe target <target> -o json
-magus graph deps -o json
-magus_insight lens=affinity
-magus explain project:<path> -o json
+magus describe file <both units' paths>... -o json
 ```
 
-Use `magus path <a> <b>` for suspicious pairs and `magus refs <symbol>` when two
-units may touch the same API. Classify every proposed path with `magus describe
-file <path>...`; generated outputs have one integration owner and are never
-hand-edited by workers.
+Read the facts: `overlaps` lists each declaration covering more than one
+proposed path - a shared write set by construction; `claims[].target` names the
+target that regenerates a path (generated outputs have one integration owner,
+never hand-edited by workers); `depends_on` carries the owner's direct edges.
+Affinity stays with `magus_insight lens=affinity`, and `magus refs <symbol>`
+when two units may touch the same API{{if .Full}}; `magus path <a> <b>` settles
+a suspicious pair{{end}}. A read-only unit has no write set, so it is outside
+this analysis entirely.
 
 Two units may run together only when:
 
-- Their exact source write sets are disjoint.
-- Their declared outputs and generated trees do not overlap.
+- The combined classification reports no overlaps - source write sets and
+  declared outputs disjoint.
 - Neither consumes an API or generated artifact the other will change.
 - Shared manifests, lockfiles, schemas, workspace configuration, and agent
   instructions have one owner.
@@ -184,15 +190,27 @@ warning. When evidence is incomplete, reduce parallelism.
 
 ## Maintain the global delegation ledger
 
-Before spawning, record one row per unit and keep descendants in the same table:
-
-| Unit | Parent | Goal and acceptance criteria | Owned paths | Forbidden paths | Depends on | Tier | Validation | State |
-|---|---|---|---|---|---|---|---|---|
+Before spawning, record one row per unit - including the checkpoint it was handed
+(`magus vcs checkpoint -o name`: the revision, plus a dirty-patch digest when the
+tree is not clean) - and keep descendants in the same table:
+{{if .Full}}
+The same checkpoint is what a later incremental re-review diffs from (see the
+magus-change-summary skill) - review time and handoff time read the same object.
+{{end}}
+| Unit | Parent | Checkpoint | Goal and acceptance criteria | Owned paths | Forbidden paths | Depends on | Tier | Validation | State |
+|---|---|---|---|---|---|---|---|---|---|
 
 Every worker prompt must include its row, relevant graph evidence, and the global
 spawn rule. Require the worker to preserve unrelated changes, stay inside owned
 paths, avoid generated outputs, run only its assigned Magus target, and return
 changed paths, validation evidence, descendants it created, and unresolved risks.
+
+Owned and Forbidden paths are prompt text, not an enforced boundary - step 1 of
+Integrate and verify is where it is actually checked, against that checkpoint. A
+read-only unit carries an abbreviated row: no Owned paths, no Forbidden paths. Every
+row ends in pass, fail, or NO-RETURN, and the root writes which{{if .Full}}: silence
+is not a pass, and a worker that dies, stalls, or is killed is a different state
+from one that failed its criteria{{else}}: silence is not a pass{{end}}.
 
 {{if .Full}}Acceptance criteria must be observable. Prefer named tests, generated
 artifacts, diagnostics, API behavior, or specific review checks over phrases such
@@ -202,9 +220,9 @@ result independently.{{else}}Make acceptance criteria observable: named tests,
 artifacts, diagnostics, API behavior, or review checks. A delegating child must
 evaluate its descendants before reporting upward.{{end}}
 
-Do not create agents merely to wait, poll, or repeat discovery already owned by
-the root. Those jobs spend model budget without creating an independent edit
-unit.
+Run workers non-blocking by default, and block on one only when your next action
+requires its result. An agent spawned merely to wait, poll, or repeat discovery the
+root already owns is not an edit unit and spends budget for nothing.
 
 ## Observe through the correct control plane
 
@@ -230,13 +248,17 @@ update the ledger and ordering, then resume work that remains independent. Never
 guess a PID or signal from stale output; use current status and the host's normal
 process controls.{{else}}Re-plan when nesting, dependencies, ownership, failing
 criteria, locks, or services change. Update the ledger before resuming affected
-work, and never act on a guessed or stale PID.{{end}}
+work, and never act on a guessed or stale PID.{{end}} A running worker keeps the
+constraints it was handed: tightening them means cancel and respawn, not a message
+sent mid-flight.
 
 ## Integrate and verify
 
 As units finish:
 
-1. Compare reported paths and descendants with the ledger.
+1. Compare the ledger against the ACTUAL diff since each unit's checkpoint, not
+   the paths it reported (`magus graph diff --rev <revision>` for the domain; a
+   differing dirty digest means it saw a tree you are not diffing).
 2. Verify each unit's acceptance criteria and evidence before accepting it.
 3. Resolve cross-unit API changes centrally; never assign the same seam twice.
 4. Regenerate declared outputs once after source work converges.

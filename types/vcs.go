@@ -661,6 +661,45 @@ type StagingPlan struct {
 	URL     string `json:"url,omitempty" yaml:"url,omitempty"`
 }
 
+// VCSCheckpoint is the identity of the working state a piece of work was handed:
+// what was true in this tree, at this moment, in a form a ledger can record and a
+// later reader can act on.
+//
+// It RESOLVES AND RECORDS; it never MINTS. No tag, no stash, no ref, no file - a
+// checkpoint is a pure read, so nothing about it can be lost by not keeping it and
+// nothing about the tree changes by taking it. That is what makes it safe to take
+// one per delegated unit, and it is why this is a plain value with no id of its own:
+// an identity magus invented would be a fact only magus could confirm.
+//
+// Two things a reader can do with it. Revision feeds anything that takes a rev
+// (`magus graph diff --rev <rev>`). PatchDigest compares against another worker's:
+// equal digests mean the two saw the same uncommitted patch, which no revision alone
+// can tell you, because a dirty tree's revision is the same one everybody else has.
+type VCSCheckpoint struct {
+	// Revision is the resolved head revision id (VCSMeta.ID): git SHA, hg node, jj
+	// commit_id. Full, never abbreviated - it is meant to be fed back to a VCS.
+	Revision string `json:"revision" yaml:"revision"`
+	// Branch is the movable name pointing at Revision, or empty where the backend has
+	// none. VCSMeta.Ref's value under the name a caller recording a handoff writes;
+	// empty is ordinary (a detached HEAD, or jj's usual anonymous change), not an error.
+	Branch string `json:"branch,omitempty" yaml:"branch,omitempty"`
+	// Dirty reports uncommitted changes, on the vcs package's existing definition
+	// (VCSMeta.IsDirty, which for git is a non-empty `status --porcelain` and so counts
+	// untracked files too).
+	Dirty bool `json:"dirty" yaml:"dirty"`
+	// PatchDigest fingerprints the uncommitted patch, empty when the tree is clean.
+	//
+	// It covers exactly what the backend's DirtyDiff covers, which is TRACKED content
+	// against the checked-out revision. Untracked files make Dirty true and leave no
+	// mark here, so two trees differing only in untracked files share a digest. Stated
+	// rather than papered over: a digest that silently changed with build residue would
+	// answer "did we see the same tree" wrong in the commoner direction.
+	PatchDigest string `json:"patch_digest,omitempty" yaml:"patch_digest,omitempty"`
+	// VCS is the resolved backend name (git, hg, jj), so a reader knows whose revision
+	// syntax Revision is written in.
+	VCS string `json:"vcs,omitempty" yaml:"vcs,omitempty"`
+}
+
 // DriftResultRecord is the boundary mirror cmd/magus-utils types reflects over; see
 // CommitRecord for why it is separate from the type it mirrors.
 type DriftResultRecord struct {

@@ -9,4 +9,5 @@ export object FileReport {
     definition: str = "",
     count: int = 0,
     files: [FileEntry] = [],
+    overlaps: [FileClaim] = [],
 }

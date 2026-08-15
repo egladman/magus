@@ -987,6 +987,14 @@ not run it by hand; it is wired per clone, because a driver registration
 cannot be committed. That is also why a forge reports conflicts your own
 clone would settle silently, and why resolve exists as the bulk counterpart.
 
+checkpoint prints the identity of the working state right now - head revision,
+branch, whether the tree is dirty, and a digest of the uncommitted patch. Record
+one when you hand a piece of work out, so a later reader knows what that work was
+looking at. It RESOLVES AND RECORDS and never MINTS: no tag, no stash, no ref, no
+file, nothing changed anywhere, so a checkpoint nobody keeps has cost nothing.
+Feed the revision to anything that takes one; compare two digests to learn whether
+two workers saw the same uncommitted tree, which the revision alone cannot say.
+
 resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
 base in yourself on the others, then run resolve.`,
 	// No parent Flags: neither flag belongs to `magus vcs`, which takes none of
@@ -994,7 +1002,7 @@ base in yourself on the others, then run resolve.`,
 	// text ("(vcs resolve)", "(vcs add)") because a child could not carry flags,
 	// which put them in one merged Options section on the man page and made a
 	// generated binder for either child bind both.
-	Usage: "magus vcs <add|resolve|merge-driver> [flags]",
+	Usage: "magus vcs <add|resolve|checkpoint|merge-driver> [flags]",
 	Children: []Command{
 		{
 			Name:  "add",
@@ -1010,6 +1018,10 @@ base in yourself on the others, then run resolve.`,
 				{Name: "against", Kind: FlagString, Doc: "Merge this `ref` first, then settle what it conflicts with"},
 			},
 		},
+		{
+			Name:  "checkpoint",
+			Short: "Print the working state's identity, for recording what a delegated unit was handed; writes nothing",
+		},
 		{Name: "merge-driver", Short: "The per-file merge driver git and hg invoke; you do not run this by hand"},
 	},
 	Examples: []Example{
@@ -1017,6 +1029,8 @@ base in yourself on the others, then run resolve.`,
 		{"Classify the dirty tree, stage nothing", "magus vcs add --dry-run"},
 		{"Settle a conflicted merge", "magus vcs resolve"},
 		{"Merge the base in and settle it in one step", "magus vcs resolve --against origin/main"},
+		{"Record what a delegated unit was handed", "magus vcs checkpoint"},
+		{"The one citable token, for a ledger cell", "magus vcs checkpoint -o name"},
 	},
 }
 

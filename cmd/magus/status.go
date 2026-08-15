@@ -16,6 +16,7 @@ import (
 	"time"
 
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/interactive/tty"
 	"github.com/egladman/magus/internal/proc"
@@ -173,6 +174,7 @@ func buildStatusReport(ctx context.Context, socket string, symbols bool) types.S
 	report := types.StatusReport{
 		Telemetry: buildTelemetryStatus(globalCfg.Telemetry),
 		Cache:     buildCacheStatus(globalCfg.Cache),
+		Config:    buildConfigStatus(globalCfg),
 		Build: types.BuildStatus{
 			SelfUpdate: selfUpdateCompiled,
 		},
@@ -191,26 +193,51 @@ func buildStatusReport(ctx context.Context, socket string, symbols bool) types.S
 		// status remains a cheap operational snapshot rather than a second workspace scan.
 		report.SymbolIndexes = loadSymbolIndexStatus(ctx)
 	}
-	addr, err := resolveStatusSocket(ctx, socket)
+	addrs, err := resolveStatusSockets(ctx, socket)
 	if err != nil {
 		report.PoolError = err.Error()
 		return report
 	}
-	reply, err := proc.QueryStatus(ctx, addr)
-	if err != nil {
-		report.PoolError = fmt.Sprintf("query %s: %v", addr, err)
-		return report
-	}
-	applyStatusReply(&report, reply)
+	applyStatusPools(ctx, &report, addrs, proc.QueryStatus)
 	return report
 }
 
-func applyStatusReply(report *types.StatusReport, reply *proc.StatusReply) {
-	if reply == nil {
+// statusQuery fetches one proc server's snapshot. A seam, like probe.go's statusFunc, so
+// the multi-server assembly can be exercised without live sockets.
+type statusQuery func(ctx context.Context, addr string) (*proc.StatusReply, error)
+
+// applyStatusPools reads every proc server in addrs and folds them onto the report.
+//
+// The first one that answers (the stable daemon when it is up) becomes THE pool: every
+// renderer that shows a single pool - the grid, the compact line - reads it, and its shared
+// services are the ones reported. The rest ride along in Pools, which stays empty for the
+// single-server case so it never just repeats Pool. A server that died between discovery
+// and the query is dropped rather than failing the report; PoolError is set only when
+// nothing answered, so more than one server is reported, never refused.
+func applyStatusPools(ctx context.Context, report *types.StatusReport, addrs []string, query statusQuery) {
+	var pools []types.StatusOutput
+	var failed []string
+	for _, addr := range addrs {
+		reply, err := query(ctx, addr)
+		if err != nil {
+			failed = append(failed, fmt.Sprintf("query %s: %v", addr, err))
+			continue
+		}
+		out := statusOutputFromReply(reply)
+		out.Socket = addr
+		if len(pools) == 0 {
+			report.Services = reply.Services
+		}
+		pools = append(pools, *out)
+	}
+	if len(pools) == 0 {
+		report.PoolError = strings.Join(failed, "; ")
 		return
 	}
-	report.Pool = statusOutputFromReply(reply)
-	report.Services = reply.Services
+	report.Pool = &pools[0]
+	if len(pools) > 1 {
+		report.Pools = pools
+	}
 }
 
 // loadSymbolIndexStatus computes each symbol-capable project's SCIP index freshness,
@@ -261,7 +288,10 @@ func statusOutputFromReply(r *proc.StatusReply) *types.StatusOutput {
 		Mode:          r.Mode,
 		Capacity:      r.Capacity,
 		Running:       r.Running,
-		Queued:        r.Queued,
+		// Floored: a daemon whose capacity was clamped under load can report more running
+		// than capacity, and "-2 available" is worse than "0".
+		Available: max(0, r.Capacity-r.Running),
+		Queued:    r.Queued,
 	}
 	for _, c := range r.Calls {
 		out.RunningTargets = append(out.RunningTargets, types.StatusRunningTarget{
@@ -304,6 +334,18 @@ func buildCacheStatus(c config.Cache) types.CacheStatus {
 	return types.CacheStatus{Immutable: !c.WriteEnabled(), Dir: c.Dir, SizeMB: c.SizeMB}
 }
 
+// buildConfigStatus reports the resolved config a run executes under. ConcurrencyEffective
+// is resolved by the run path's own function so status cannot drift from the width a build
+// actually gets.
+func buildConfigStatus(c config.Config) types.StatusConfig {
+	return types.StatusConfig{
+		DefaultCharms:        c.DefaultCharms,
+		Concurrency:          c.Concurrency,
+		ConcurrencyEffective: cache.ResolveConcurrency(c.Concurrency),
+		Sandbox:              c.Sandbox.Enabled,
+	}
+}
+
 func printStatusText(w io.Writer, r types.StatusReport, useGrid bool, animFrame int) {
 	tw := tabwriter.NewWriter(w, 0, 0, 2, ' ', 0)
 	fmt.Fprintln(tw, "telemetry")
@@ -332,6 +374,10 @@ func printStatusText(w io.Writer, r types.StatusReport, useGrid bool, animFrame 
 	if r.Cache.SizeMB > 0 {
 		fmt.Fprintf(tw, "  size_mb\t%d\n", r.Cache.SizeMB)
 	}
+	fmt.Fprintln(tw, "")
+	fmt.Fprintln(tw, "concurrency")
+	fmt.Fprintf(tw, "  configured\t%s\n", intOrDef(r.Config.Concurrency, "(default)"))
+	fmt.Fprintf(tw, "  effective\t%d\n", r.Config.ConcurrencyEffective)
 	if global.verbose >= 1 {
 		fmt.Fprintln(tw, "")
 		fmt.Fprintln(tw, "build")
@@ -354,8 +400,8 @@ func printStatusText(w io.Writer, r types.StatusReport, useGrid bool, animFrame 
 				label = "daemon"
 			}
 			fmt.Fprintf(w, "%s pid %d\n", label, r.Pool.ParentPID)
-			fmt.Fprintf(w, "capacity: %d   running: %d   queued: %d\n",
-				r.Pool.Capacity, r.Pool.Running, r.Pool.Queued)
+			fmt.Fprintf(w, "capacity: %d   running: %d   available: %d   queued: %d\n",
+				r.Pool.Capacity, r.Pool.Running, r.Pool.Available, r.Pool.Queued)
 			if len(r.Pool.RunningTargets) == 0 {
 				if r.Pool.Running > 0 {
 					fmt.Fprintln(w, "local work active; detailed target data unavailable")
@@ -386,10 +432,26 @@ func printStatusText(w io.Writer, r types.StatusReport, useGrid bool, animFrame 
 		fmt.Fprintln(w, "\ndaemon: off")
 	}
 
+	printPoolServers(w, r.Pools)
 	printMCPEndpointStatus(w, r.MCPEndpoint)
 	printServiceStatus(w, r.Services)
 	printSymbolIndexStatus(w, r.SymbolIndexes)
 	printLockStatus(w, r.Locks)
+}
+
+// printPoolServers lists every live proc server when this machine is running more than
+// one, each with the slots it holds. One server is already rendered above as THE pool, so
+// the list would only repeat it and is omitted.
+func printPoolServers(w io.Writer, pools []types.StatusOutput) {
+	if len(pools) < 2 {
+		return
+	}
+	fmt.Fprintf(w, "\nproc servers (%d)\n", len(pools))
+	fmt.Fprintln(w, strings.Repeat("-", 60))
+	for _, p := range pools {
+		fmt.Fprintf(w, "  pid %-8d  %d/%d in use  %d available  %s\n",
+			p.ParentPID, p.Running, p.Capacity, p.Available, p.Socket)
+	}
 }
 
 // printServiceStatus renders shared services separately from the pool: the pool
@@ -604,13 +666,29 @@ func formatCompactRunningTarget(c types.StatusRunningTarget, showWS bool, now ti
 }
 
 func resolveStatusSocket(ctx context.Context, explicit string) (string, error) {
-	if explicit != "" {
-		return explicit, nil
-	}
-	if v := os.Getenv("MAGUS_DAEMON_SOCKET"); v != "" {
-		return v, nil
+	if addr := pinnedStatusSocket(explicit); addr != "" {
+		return addr, nil
 	}
 	return proc.DiscoverSocket(ctx)
+}
+
+// resolveStatusSockets resolves every proc server status reports on. A pinned socket
+// narrows to that one; otherwise every live server is reported, because each is a separate
+// pool and "which one did you mean" is not an answer to "how many slots are free".
+func resolveStatusSockets(ctx context.Context, explicit string) ([]string, error) {
+	if addr := pinnedStatusSocket(explicit); addr != "" {
+		return []string{addr}, nil
+	}
+	return proc.DiscoverSockets(ctx)
+}
+
+// pinnedStatusSocket returns the socket the caller named, by --socket or the environment,
+// or "" when neither pins one.
+func pinnedStatusSocket(explicit string) string {
+	if explicit != "" {
+		return explicit
+	}
+	return os.Getenv("MAGUS_DAEMON_SOCKET")
 }
 
 type leafEntry struct {
@@ -728,6 +806,7 @@ func poolHeader(pool *types.StatusOutput, numCPU int) string {
 		parts = append(parts, pool.DaemonVersion)
 	}
 	parts = append(parts, fmt.Sprintf("%d/%d running", pool.Running, pool.Capacity))
+	parts = append(parts, fmt.Sprintf("%d available", pool.Available))
 	parts = append(parts, fmt.Sprintf("%d cpu", numCPU))
 	out := strings.Join(parts, " · ")
 	if pool.Queued > 0 {

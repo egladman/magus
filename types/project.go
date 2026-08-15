@@ -1,17 +1,23 @@
 package types
 
 import (
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
 
+	"github.com/bmatcuk/doublestar/v4"
+
 	"github.com/egladman/magus/spells"
 )
 
-// workspaceScheme is the URI scheme every project reference renders as when
-// piped back into a command: "workspace://<path>". The scheme is metadata,
-// not display content, the same way "https://" is hidden in a browser bar -
-// human-facing output strips it via the Display form.
+// workspaceScheme is the URI scheme WorkspaceURI renders: "workspace://<path>".
+//
+// A bare workspace-relative path is the only spelling magus teaches;
+// internal/file.ResolveProject warns on the scheme when it parses one, and
+// nothing in magus renders it any more. Display (the bare path) is what every
+// surface emits; WorkspaceURI and WorkspaceRef exist for external callers not
+// yet migrated. Do not reach for them for new output.
 const workspaceScheme = "workspace://"
 
 // ProjectRef is the canonical project reference: holds the data once
@@ -45,10 +51,12 @@ func NewProjectRef(path, dir string) ProjectRef {
 	return r
 }
 
-// WorkspaceURI renders the project as a "workspace://<path>" reference -
-// the machine-readable form users pipe back into commands (magus run,
-// magus describe, magus query). An empty path is the workspace root, so
-// error messages and structured output never print a bare "." or "".
+// WorkspaceURI renders the project as a "workspace://<path>" reference. An
+// empty path is the workspace root, so a caller never prints a bare "." or "".
+//
+// Deprecated: the workspace:// spelling is retired; render the bare
+// workspace-relative path instead (Display or ProjectLabel). Magus no longer
+// emits this form itself.
 func (r ProjectRef) WorkspaceURI() string {
 	if r.Path == "" {
 		return workspaceScheme + "."
@@ -59,8 +67,8 @@ func (r ProjectRef) WorkspaceURI() string {
 // Display renders the project for human consumption: the bare path for
 // nested projects, the dir basename for the root (so a bare "." never
 // appears in logs or Mermaid labels), and "(workspace root)" as the final
-// fallback. Use this in every place a human reads the path; use WorkspaceURI
-// in every place the user is expected to copy it back into a command.
+// fallback. This is the canonical rendering: the bare workspace-relative path
+// is also what every project arg takes, so what magus prints pastes back in.
 func (r ProjectRef) Display() string {
 	if r.Path != "" && r.Path != "." {
 		return r.Path
@@ -84,6 +92,10 @@ func ProjectLabel(path, dir string) string {
 // WorkspaceRef is a convenience for the WorkspaceURI form when the caller
 // only has a path. The dir is intentionally absent: a URI is path-only, and
 // Display's dir-based root naming has no place in the machine-readable form.
+//
+// Deprecated: the workspace:// spelling is retired; render the bare
+// workspace-relative path instead (Display or ProjectLabel). Magus no longer
+// emits this form itself.
 func WorkspaceRef(path string) string {
 	return ProjectRef{Path: path}.WorkspaceURI()
 }
@@ -233,6 +245,10 @@ type Project struct {
 	// TargetEnvAllow are per-target ctx.env declarations: env var NAMES whose process
 	// values fold into the cache key. See TargetGraphNode.EnvAllow.
 	TargetEnvAllow map[string][]string
+	// TargetObservations are per-target ctx.observes declarations: external facts the
+	// target's answer depends on, as "key=value", folded into the cache key. See
+	// TargetGraphNode.Observations.
+	TargetObservations map[string][]string
 	// InboundOutputs are output globs OTHER projects declare INTO this project's tree
 	// via ctx.writesFiles(<alias>.file(...)), keyed by the WRITING project's path. Globs are
 	// relative to THIS project's root, so they compose with Outputs directly - which is
@@ -291,6 +307,125 @@ func (p *Project) AllOutputs() []string {
 	}
 	slices.Sort(extra)
 	return append(slices.Clone(p.Outputs), extra...)
+}
+
+// RootGlob roots a glob declared against projectPath at the WORKSPACE, which is the
+// frame every consumer of a declaration matches in: the cache walks from the workspace
+// root and yields workspace-relative paths, and DeclaredGlobs and `magus describe file`
+// compare against the same.
+//
+// It CLEANS the join rather than concatenating, and that is the whole point. A
+// project-wide source glob may legitimately reach out of its own tree ("../proto/**"
+// declared by docs/) - reaching across a boundary is what the affordance is FOR - and
+// plain concatenation leaves "docs/../proto/**", which matches nothing, because ".." is
+// an ordinary path segment to doublestar and no walked path ever contains one. That is
+// a declaration that keys nothing and attributes nothing while reading as supported:
+// an input that never invalidates. Cleaning resolves it to "proto/**", the spelling the
+// walk actually produces.
+//
+// A glob reaching PAST the workspace root is rejected where it is declared
+// (workspace.WithSources), not here: this is a pure path operation with one answer, and
+// only the declaration site can name the option that wrote it.
+func RootGlob(projectPath, glob string) string {
+	if projectPath == "" || projectPath == "." {
+		return path.Clean(glob)
+	}
+	return path.Clean(projectPath + "/" + glob)
+}
+
+// MatchesAnyGlob reports whether a workspace-relative path matches any of the
+// workspace-rooted globs - the question every consumer of [Project.DeclaredGlobs] asks,
+// so it lives beside the rooting rather than once per caller. It was three identical
+// helpers (affected attribution, doctor's standing check, `magus describe file`), which
+// is three places for the matcher family to drift from the cache's.
+//
+// It TOLERATES an unparsable pattern, which then matches nothing - the same thing the
+// cache walk does with one. Tolerance is the right default (a bad glob must not fail a
+// build that never depended on it) but it is silent, so the pattern is worth reporting
+// where the glob set is assembled: see [InvalidGlobs].
+func MatchesAnyGlob(globs []string, path string) bool {
+	for _, g := range globs {
+		if ok, _ := doublestar.Match(g, path); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// InvalidGlobs returns the globs doublestar cannot parse, deduplicated and in the order
+// given. It is what lets a caller SAY that a declaration matches nothing before it
+// silently matches nothing for the rest of the run: an unparsable glob declares an input
+// that can never key, and MGS1028 would then advise declaring a path that is already
+// declared - by a pattern that never matches it.
+//
+// The error is not returned with it because doublestar has only one (ErrBadPattern, with
+// no position), so the pattern itself is the whole of the information.
+func InvalidGlobs(globs []string) []string {
+	var bad []string
+	for _, g := range globs {
+		if !doublestar.ValidatePattern(g) && !slices.Contains(bad, g) {
+			bad = append(bad, g)
+		}
+	}
+	return bad
+}
+
+// DeclaredGlobs is every glob this project declares, rooted at the WORKSPACE rather
+// than at the project: the project-wide Sources and AllOutputs, plus the per-target
+// ctx.readsFiles, ctx.writesFiles, and ctx.modifiesExistingFiles refs, each anchored
+// on the project its glob is relative to. Sorted and deduplicated.
+//
+// It answers "does this project declare that path", which is the question affected
+// attribution asks before falling back to directory containment, and the one doctor
+// asks about the tree standing still. The rooting goes through RootGlob, which is also
+// what the cache step and `magus describe file` root with, so the three agreeing is a
+// shared function rather than three parallel implementations that happened to match -
+// they did not: this one and the cache both concatenated, so a reaching "../" glob
+// resolved to a path neither could match, while the missing-dependency check joined the
+// same glob with filepath.Join and resolved it correctly.
+//
+// Dedup here is string equality on the ROOTED form, so two spellings that resolve to
+// one path collapse to one entry - a project-wide "../proto/**" and a per-target
+// ctx.readsFiles of proto's "**" are the same declaration and count once.
+//
+// Deliberately NOT the magusfile globs the cache step layers on top. Every project's
+// key carries the ROOT magusfile, so counting those here would make one magusfile
+// edit read as a declaration by every project in the workspace - and attribution
+// would then seed all of them where directory containment seeds exactly one.
+func (p *Project) DeclaredGlobs() []string {
+	var out []string
+	add := func(owner, glob string) {
+		if owner == "" {
+			owner = p.Path
+		}
+		glob = RootGlob(owner, glob)
+		if !slices.Contains(out, glob) {
+			out = append(out, glob)
+		}
+	}
+	for _, glob := range p.Sources {
+		add(p.Path, glob)
+	}
+	for _, glob := range p.AllOutputs() {
+		add(p.Path, glob)
+	}
+	for _, refs := range p.TargetInputs {
+		for _, ref := range refs {
+			add(ref.Project, ref.Glob)
+		}
+	}
+	for _, refs := range p.TargetOutputs {
+		for _, ref := range refs {
+			add(ref.Project, ref.Glob)
+		}
+	}
+	for _, refs := range p.TargetUpdates {
+		for _, ref := range refs {
+			add(ref.Project, ref.Glob)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // AttachSpell associates spell with p without applying registration overrides.

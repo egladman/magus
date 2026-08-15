@@ -20,9 +20,10 @@ import (
 
 // vcsCmd implements `magus vcs <subcommand>`.
 //
-// All three verbs rest on one fact git does not have: which files are generated, and
+// Three of the verbs rest on one fact git does not have: which files are generated, and
 // which target rebuilds them. `add` classifies paths before staging, `resolve` settles a
-// conflicted merge, `merge-driver` is the per-file callback git invokes.
+// conflicted merge, `merge-driver` is the per-file callback git invokes. `checkpoint` is
+// the odd one out and rests on nothing: it reads the working state's identity back.
 //
 // `add` replaces the `git add -A` the agent guard denies: the guard infers intent from a
 // command STRING, while a magus verb gets the paths as arguments and classifies them
@@ -32,7 +33,7 @@ import (
 func vcsCmd(ctx context.Context, root string, rc runConfig, args []string) error {
 	if len(args) == 0 {
 		vcsUsage(os.Stderr)
-		return usagef("magus vcs: a subcommand is required (try: add, resolve)")
+		return usagef("magus vcs: a subcommand is required (try: add, resolve, checkpoint)")
 	}
 	verb, rest := splitVCSVerb(args)
 	switch verb {
@@ -40,13 +41,15 @@ func vcsCmd(ctx context.Context, root string, rc runConfig, args []string) error
 		return vcsAddCmd(ctx, root, rest)
 	case "resolve":
 		return vcsResolveCmd(ctx, root, rc, rest)
+	case "checkpoint":
+		return vcsCheckpointCmd(ctx, root, rest)
 	case "merge-driver":
 		return mergeDriverCmd(ctx, root, rest)
 	case "-h", "--help", "help":
 		vcsUsage(os.Stderr)
 		return nil
 	default:
-		return usagef("magus vcs: unknown subcommand %q (want add, resolve, or merge-driver)", verb)
+		return usagef("magus vcs: unknown subcommand %q (want add, resolve, checkpoint, or merge-driver)", verb)
 	}
 }
 
@@ -70,6 +73,7 @@ func vcsUsage(w io.Writer) {
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  add            stage a change the way this workspace's declarations say it should be staged")
 	fmt.Fprintln(w, "  resolve        settle an in-progress merge/rebase's conflicted generated files, then regenerate once")
+	fmt.Fprintln(w, "  checkpoint     print the identity of the working state right now; writes nothing")
 	fmt.Fprintln(w, "  merge-driver   the per-file merge driver git and hg invoke; you do not run this by hand")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Run `magus vcs <subcommand> -h` for its own flags.")
@@ -449,6 +453,106 @@ func unresolvedError(plan resolutionPlan) error {
 		return nil
 	}
 	return fmt.Errorf("%d conflict(s) still need you; resolve them, then `magus vcs add` and continue", len(plan.manual))
+}
+
+// ------------------------------------------------------------- vcs checkpoint
+
+func vcsCheckpointUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: magus vcs checkpoint [flags]")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Print the identity of the working state right now: the head revision, the")
+	fmt.Fprintln(w, "branch carrying it, whether the tree is dirty, and a digest of the")
+	fmt.Fprintln(w, "uncommitted patch.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "It RESOLVES AND RECORDS; it never MINTS. No tag, no stash, no ref, no file,")
+	fmt.Fprintln(w, "nothing changed anywhere - so taking one costs the tree nothing and one you")
+	fmt.Fprintln(w, "do not keep costs nothing either. Record it when you hand work out, so a")
+	fmt.Fprintln(w, "later reader knows what that work was looking at.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Feed the revision to anything that takes one (magus graph diff --rev <rev>).")
+	fmt.Fprintln(w, "Compare two digests to learn whether two workers saw the same uncommitted")
+	fmt.Fprintln(w, "tree, which the revision alone cannot tell you: a dirty tree's revision is")
+	fmt.Fprintln(w, "the same one everybody else has.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Flags:")
+	fmt.Fprintln(w, "  -o name    the citable token: the revision, or <revision>+<digest> when dirty")
+	fmt.Fprintln(w, "  -o json    the whole record (global flag; yaml, jsonl and template too)")
+}
+
+// vcsCheckpointCmd reads the working state's identity and prints it.
+func vcsCheckpointCmd(ctx context.Context, root string, args []string) error {
+	pos, err := cmdParse("vcs checkpoint", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() { vcsCheckpointUsage(os.Stderr) }
+	})
+	if err != nil {
+		return err
+	}
+	if len(pos) > 0 {
+		return usagef("vcs checkpoint: takes no arguments; it reports the whole workspace's working state (got %q)", pos[0])
+	}
+
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return err
+	}
+	// The RESOLVED workspace root, not the --root override, for the reason vcsAddCmd
+	// spells out: the override is empty unless you passed --root, and an empty dir sends
+	// every VCS call to the process cwd - which is a different repository the moment you
+	// run this from anywhere but the root.
+	wsRoot := ws.Root()
+	res, err := vcs.Resolve(ctx, wsRoot, "", ws.VCSOptions())
+	if err != nil {
+		return fmt.Errorf("vcs checkpoint: %w", err)
+	}
+	cp, err := vcs.Checkpoint(ctx, wsRoot, res)
+	if err != nil {
+		return err
+	}
+	return emitCheckpoint(cp)
+}
+
+// emitCheckpoint renders the checkpoint: the structured formats get the record, -o name
+// the one citable token, and the terminal the one-line reading of the same value.
+func emitCheckpoint(cp types.VCSCheckpoint) error {
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(opts, cp)
+	case outputName:
+		fmt.Println(checkpointToken(cp))
+		return nil
+	}
+	fmt.Println(checkpointLine(cp))
+	return nil
+}
+
+// checkpointToken is the single most citable thing about a checkpoint, for the one cell a
+// ledger gives it. A clean tree IS its revision. A dirty one is not - every worker on this
+// branch shares that revision - so the digest joins it, and the "+" marks the identity as
+// a revision PLUS uncommitted work rather than a revision anyone can check out.
+func checkpointToken(cp types.VCSCheckpoint) string {
+	if !cp.Dirty {
+		return cp.Revision
+	}
+	return cp.Revision + "+" + cp.PatchDigest
+}
+
+// checkpointLine is the human reading: "<rev> <branch> clean" or "<rev> <branch> dirty
+// <digest>". The field count is fixed through the dirty word, so a branchless revision (a
+// detached head, jj's usual anonymous change) renders "-" rather than collapsing the
+// column and silently shifting everything after it.
+func checkpointLine(cp types.VCSCheckpoint) string {
+	branch := cp.Branch
+	if branch == "" {
+		branch = "-"
+	}
+	if !cp.Dirty {
+		return fmt.Sprintf("%s %s clean", cp.Revision, branch)
+	}
+	return fmt.Sprintf("%s %s dirty %s", cp.Revision, branch, cp.PatchDigest)
 }
 
 // -------------------------------------------------------------------- vcs add

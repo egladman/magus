@@ -973,6 +973,81 @@ func (*runner) checkOutputOwnedByTwoTargets(projects []*types.Project) types.Doc
 	}
 }
 
+// checkUndeclaredSeedingFiles is MGS1028 standing still: committed files that no
+// project declares, yet that pull a project into the affected set the moment they are
+// touched, because directory containment seeds and the root project catches
+// everything else.
+//
+// ADVICE, never a failure, and the doctrine at types/doctor.go decides that rather
+// than taste: which files are build inputs is the workspace's judgement. A LICENSE
+// nobody's cache key reads is correctly undeclared, and a checker that failed on it
+// would be dictating a layout. What magus can say is that the seeding is happening -
+// the cost is real and invisible, and every entry here is either a declaration
+// somebody forgot or a rerun somebody is paying for on purpose.
+//
+// The affected-set diagnostic only ever sees one changeset; this is the whole tree
+// answered at once, so the fix can be made in one pass instead of one file per pull
+// request. Tracked files only: an untracked build product seeding a rerun is a
+// different problem (a missing ignore), and a fresh clone must not read differently
+// from a working one. A backend that cannot report tracked files skips the question
+// rather than guessing, the same way checkDeadOutputGlobs does.
+func (r *runner) checkUndeclaredSeedingFiles(projects []*types.Project) types.DoctorCheck {
+	const name = "undeclared seeding files"
+
+	res, err := vcs.Resolve(r.runCtx(), r.root, "", r.ws.VCSOptions())
+	if err != nil || res.VCS == nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no VCS to enumerate committed files with"}
+	}
+	tracked, ok := res.VCS.(types.TrackedFileReporter)
+	if !ok {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: res.Name + " cannot report tracked files"}
+	}
+	// "." is a pathspec for the whole tree, so this is one ls-files rather than one
+	// per candidate: the check has no candidate set until it has the file list.
+	files, err := tracked.TrackedFiles(r.runCtx(), r.root, []string{"."})
+	if err != nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "could not list tracked files: " + err.Error()}
+	}
+
+	var globs []string
+	for _, p := range projects {
+		globs = append(globs, p.DeclaredGlobs()...)
+	}
+	// A glob the matcher cannot parse matches nothing, so every file it was meant to
+	// cover reads as undeclared and this check advises declaring what is already
+	// declared. Tolerated (the cache walk tolerates it too) but named in the report,
+	// because the advice above is wrong for exactly those files.
+	var bad string
+	if invalid := types.InvalidGlobs(globs); len(invalid) > 0 {
+		bad = fmt.Sprintf("; %d declared glob(s) cannot be parsed and so match nothing: %s",
+			len(invalid), strings.Join(invalid, ", "))
+	}
+	var details []string
+	for _, f := range files {
+		f = filepath.ToSlash(f)
+		if types.IsMagusMaintained(f) {
+			continue // magus writes it; no project was ever going to declare it
+		}
+		if types.MatchesAnyGlob(globs, f) {
+			continue
+		}
+		details = append(details, f)
+	}
+	if len(details) == 0 {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "every committed file is declared by the project it seeds" + bad}
+	}
+	slices.Sort(details)
+	return types.DoctorCheck{
+		Name:   name,
+		Status: types.DoctorAdvice,
+		Message: fmt.Sprintf(
+			"%d committed file(s) seed a project by directory containment while no project declares them, so touching one reruns targets whose answer cannot have changed; "+
+				"declare the ones that are inputs in the owning project's sources (see %s)%s",
+			len(details), types.CodeURL(types.UndeclaredSeedingFile), bad),
+		Details: details,
+	}
+}
+
 // globOutputs expands one declared output glob against the project directory, returning
 // absolute paths.
 //

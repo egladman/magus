@@ -167,6 +167,106 @@ func TestAppendAgentCommand_PathUsesFallbackActorAndAction(t *testing.T) {
 	}, gotResponse)
 }
 
+// TestAppendAgentSpawn_RecordsHandedContext is the delegation-audit round trip: the event line
+// says who handed work to whom and which unit it belongs to, and the context itself is reachable
+// only through the blob - never inlined, because a delegation prompt is routinely kilobytes.
+func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
+	dir := t.TempDir()
+	handed := "unit: notes-store-6b\n\nAudit the notes store write boundary and report back."
+	AppendAgentSpawn(t.Context(), dir, AgentSpawn{
+		Workspace: "/repo/magus",
+		Host:      "claude-code",
+		Session:   "abc123",
+		Event:     "PreToolUse",
+		Tool:      "Task",
+		Child:     "Explore",
+		Context:   handed,
+	})
+
+	events, err := ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	event := events[0]
+
+	// Whole-struct assertion with the content-addressed and clock-dependent fields lifted out
+	// first, so a new field on Event cannot be silently dropped by this producer.
+	requestRef := event.RequestRef
+	event.Ts, event.RequestRef, event.RequestBytes = 0, "", 0
+	require.Equal(t, Event{
+		Kind:      KindAgentSpawn,
+		Actor:     "agent",
+		Host:      "claude-code",
+		Session:   "abc123",
+		Workspace: "/repo/magus",
+		Action:    "Explore",
+		Unit:      "notes-store-6b",
+		Outcome:   OutcomeOK,
+	}, event) // Preview included: the handed context belongs in the blob, never on the line.
+
+	request, err := ReadBlob(dir, requestRef)
+	require.NoError(t, err)
+	var gotRequest agentSpawnRequest
+	require.NoError(t, json.Unmarshal(request, &gotRequest))
+	require.Equal(t, agentSpawnRequest{
+		SchemaVersion: agentSpawnSchemaVersion,
+		Host:          "claude-code",
+		Session:       "abc123",
+		Event:         "PreToolUse",
+		Tool:          "Task",
+		Child:         "Explore",
+		Unit:          "notes-store-6b",
+		Context:       handed,
+	}, gotRequest)
+}
+
+func TestAppendAgentSpawn_RequiresContextAndFallsBackToAGenericAction(t *testing.T) {
+	dir := t.TempDir()
+	AppendAgentSpawn(t.Context(), dir, AgentSpawn{Host: "claude-code", Child: "Explore"})
+	events, err := ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Empty(t, events, "a spawn with no handed context has nothing to audit")
+
+	AppendAgentSpawn(t.Context(), dir, AgentSpawn{Context: "go and do the thing"})
+	events, err = ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	require.Equal(t, "agent", events[0].Actor)
+	require.Equal(t, "agent.spawn", events[0].Action, "an unlabelled callee still says a spawn happened")
+	require.Empty(t, events[0].Unit)
+}
+
+// TestUnitFromContext pins the cooperative correlation marker: present, absent, and every shape
+// of malformed or misplaced. A marker that is not the first non-blank line yields no unit, and
+// neither does a malformed one - never a wrong one. The whole contract is that an uncorrelated
+// spawn is the designed outcome.
+func TestUnitFromContext(t *testing.T) {
+	for name, tc := range map[string]struct {
+		context string
+		want    string
+	}{
+		"first line":           {"unit: MGS1021\nthen the work", "MGS1021"},
+		"indented":             {"  \tunit: feat/spawn-capture  \nrest", "feat/spawn-capture"},
+		"after leading blanks": {"\n  \n\nunit: a.b:c_d-1\n", "a.b:c_d-1"},
+		"first marker wins":    {"unit: one\nunit: two", "one"},
+		"absent":               {"just a prompt with no marker", ""},
+		"empty id":             {"unit:\nrest", ""},
+		"only whitespace id":   {"unit:   \nrest", ""},
+		"prose after the id":   {"unit: MGS1021 the notes one", ""},
+		"not at line start":    {"see unit: MGS1021 in the ledger", ""},
+		"wrong key":            {"units: MGS1021", ""},
+		"illegal characters":   {"unit: MGS1021!", ""},
+		// The reason the marker has to LEAD: both of these carry a well-formed marker that
+		// this handoff did not write - one quoted below the prompt's own opening line, one
+		// pushed out of the head by a pathological first line. A wrong join is worse than none.
+		"below the first line": {"do this\nunit: a.b:c_d-1\n", ""},
+		"past the head cap":    {strings.Repeat(" ", unitScanBytes) + "unit: MGS1021", ""},
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.want, unitFromContext(tc.context))
+		})
+	}
+}
+
 func TestWriteBlob_RoundTripAndDedup(t *testing.T) {
 	dir := t.TempDir()
 	ref, size := WriteBlob(t.Context(), dir, "mcp", []byte("payload one"))

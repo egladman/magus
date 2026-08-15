@@ -5,6 +5,7 @@ import (
 	"slices"
 	"testing"
 
+	"github.com/egladman/magus/internal/describe"
 	"github.com/egladman/magus/internal/interp/bindings"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/vm"
@@ -34,6 +35,67 @@ func TestMagusSurfaceMatchesBindings(t *testing.T) {
 	for _, k := range m.MapKeys() {
 		assert.True(t, slices.Contains(realTop, k), "playground magus.%s has no counterpart in the real bindings; remove it or it teaches a dead API", k)
 	}
+}
+
+// TestCtxDeclarationsMatchAcrossHosts is TestMagusSurfaceMatchesBindings one surface
+// down, over the ctx a target receives. Three places enumerate its members
+// independently - buildTargetContext, the magus\Exec refusal list beside it, and this
+// package's buildCtx - and each omission fails differently and quietly: an Exec that
+// does not know a member answers "no such member" instead of naming where to declare
+// it, and a dry host that does not bind one cannot trace a body that calls it. A
+// declaration that reaches the cache key while one of the two copies has never heard
+// of it is exactly the kind of half-wired that reads as done.
+func TestCtxDeclarationsMatchAcrossHosts(t *testing.T) {
+	// Not a fourth list: the members of the real ctx ARE the enumeration, and the two
+	// copies are measured against it. Dropped are the internal marker and the three
+	// v0.4 removal shims, which exist to raise a better error than either copy could.
+	notDeclarations := []string{"__magus_context", "inputs", "outputs", "updates"}
+	// Known absences, each a pre-existing gap this test documents rather than fixes -
+	// listing them is what keeps the rest of the surface gated instead of the whole
+	// check being deleted the first time it goes red.
+	//
+	// TODO: bind envInputs/withEnv/withCwd in buildCtx; a body calling one of them is
+	// untraceable in the playground today.
+	knownAbsentFromDry := []string{"envInputs", "withEnv", "withCwd"}
+	knownAbsentFromExec := []string{}
+
+	realCtx := bindings.TargetContextKeys()
+	require.NotEmpty(t, realCtx, "bindings.TargetContextKeys returned no members")
+
+	inDry := keySet(buildCtx(newTracer()))
+	inExec := map[string]bool{}
+	for _, k := range bindings.ExecRefusedKeys() {
+		inExec[k] = true
+	}
+	// withEnv/withCwd are chainable, so an Exec carries them as members rather than as
+	// refusals; they are declarations of nothing and belong in neither list.
+	inExec["withEnv"], inExec["withCwd"] = true, true
+
+	for _, decl := range realCtx {
+		if slices.Contains(notDeclarations, decl) {
+			continue
+		}
+		if !slices.Contains(knownAbsentFromDry, decl) {
+			assert.True(t, inDry[decl], "ctx.%s is bound by the real host but not by this package's buildCtx; a body calling it does not trace", decl)
+		}
+		if !slices.Contains(knownAbsentFromExec, decl) {
+			assert.True(t, inExec[decl], "ctx.%s is bound by the real host but a magus\\Exec does not know it; ctx.withEnv({}).%s(..) fails without naming where to declare it", decl, decl)
+		}
+	}
+
+	// And the fourth enumeration, from the other end: every name the static reader will
+	// collect off a magusfile has to be a member the runtime actually binds, or the
+	// magusfile declares something no ctx can answer.
+	for _, decl := range describe.CtxDeclNames() {
+		assert.Contains(t, realCtx, decl, "describe collects ctx.%s statically but the real ctx does not bind it", decl)
+	}
+
+	// The positive pin, stated separately so a future exclusion cannot quietly swallow
+	// it: observes reaches the cache key, so a host that has never heard of it is the
+	// under-declaration the declaration exists to prevent.
+	assert.Contains(t, realCtx, "observes", "the real ctx must bind observes")
+	assert.True(t, inDry["observes"], "buildCtx must bind observes")
+	assert.True(t, inExec["observes"], "a magus\\Exec must refuse observes")
 }
 
 func keySet(m vm.Value) map[string]bool {

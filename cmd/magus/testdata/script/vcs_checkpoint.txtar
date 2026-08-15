@@ -1,0 +1,98 @@
+# `magus vcs checkpoint` reports the identity of the working state and CHANGES NOTHING.
+#
+# The design law is the part worth a test: a checkpoint resolves and records, it never
+# mints. No tag, no stash, no ref, no file. That is what makes it safe to take one per
+# delegated unit, and it is invisible in the output - the only way to hold the line is to
+# assert on the repository after the command has run.
+#
+# The rest is the two forms a ledger uses. -o name is the single citable token: the
+# revision when clean (which anyone can check out), and revision+digest when dirty (which
+# nobody can, because the revision alone is the one every worker on the branch shares).
+
+exec git init
+exec git config user.email test@example.com
+exec git config user.name Test
+exec git config commit.gpgsign false
+exec git checkout -b main
+exec git add magus.yaml magusfile.buzz src/a.txt
+exec git commit -m initial
+
+# Clean: the one-liner names the revision, the branch, and the state. No digest, because
+# there is no patch to fingerprint.
+exec magus vcs checkpoint
+stdout '^[0-9a-f]{40} main clean$'
+
+# -o name on a clean tree IS the revision - a token another command can consume directly.
+exec magus vcs checkpoint -o name
+stdout '^[0-9a-f]{40}$'
+
+exec magus vcs checkpoint -o json
+stdout '"revision": "[0-9a-f]{40}"'
+stdout '"branch": "main"'
+stdout '"dirty": false'
+stdout '"vcs": "git"'
+! stdout 'patch_digest'
+
+# Dirty: the digest appears, 32 hex chars (internal/diff.PatchDigest's width), and
+# joins the revision in the citable token.
+cp src/a.new.txt src/a.txt
+exec magus vcs checkpoint
+stdout '^[0-9a-f]{40} main dirty [0-9a-f]{32}$'
+
+exec magus vcs checkpoint -o name
+stdout '^[0-9a-f]{40}\+[0-9a-f]{32}$'
+
+exec magus vcs checkpoint -o json
+stdout '"dirty": true'
+stdout '"patch_digest": "[0-9a-f]{32}"'
+
+# The same tree read twice is the same answer: a digest that drifted on its own could not
+# tell two workers whether they saw the same tree.
+exec magus vcs checkpoint -o name
+cp stdout first.txt
+exec magus vcs checkpoint -o name
+cmp stdout first.txt
+
+# A different patch is a different token.
+cp src/a.newer.txt src/a.txt
+exec magus vcs checkpoint -o name
+! cmp stdout first.txt
+
+# THE DESIGN LAW. Nothing was minted: no tag, no stash, no ref beyond the branch that
+# was already here, and the working tree is exactly as dirty as it was before.
+exec git tag -l
+! stdout .
+exec git stash list
+! stdout .
+exec git show-ref
+stdout '^[0-9a-f]{40} refs/heads/main$'
+! stdout 'refs/tags/'
+exec git status --porcelain
+stdout '^ M src/a\.txt$'
+! stdout '^\?\? '
+
+# It takes no arguments. Silently ignoring one would let `magus vcs checkpoint src/a.txt`
+# read as a path-scoped digest, which is a different and much narrower fact.
+! exec magus vcs checkpoint src/a.txt
+stderr 'takes no arguments'
+
+-- magus.yaml --
+concurrency: 2
+-- .gitignore --
+.magus/
+.gitignore
+*.new.txt
+*.newer.txt
+first.txt
+-- magusfile.buzz --
+import "magus";
+magus\project({
+    "name": "acme-root",
+    "sources": ["magusfile.buzz", "src/**"],
+});
+-- src/a.txt --
+source one
+-- src/a.new.txt --
+source two
+-- src/a.newer.txt --
+source three

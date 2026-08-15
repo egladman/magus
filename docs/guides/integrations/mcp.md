@@ -67,18 +67,18 @@ The daemon also serves `/livez`, `/readyz`, and `/healthz` on the same port. If 
 
 ## Available tools
 
-The daemon exposes 20 tools. This list is authoritative at the time of writing;
+The daemon exposes 22 tools. This list is authoritative at the time of writing;
 `magus describe mcp-tools` (or the `magus_describe` tool with `kind: mcp_tools`) prints
 the live set with full parameters, so trust that over this table if they ever differ.
 
 Discover:
 
-| Tool                  | Purpose                                                                                                                          |
-| --------------------- | -------------------------------------------------------------------------------------------------------------------------------- |
-| `magus_describe`      | Describe a concept and list its entities: spells, targets, projects, workspaces, mcp_tools (pass `name` for one entity's detail) |
-| `magus_describe_file` | Classify paths against declared globs: owning project, and output (generated) vs source                                          |
-| `magus_where`         | Resolve a fuzzy project name to its absolute path                                                                                |
-| `magus_config_get`    | Read the resolved workspace config (read-only)                                                                                   |
+| Tool                  | Purpose                                                                                                                             |
+| --------------------- | ----------------------------------------------------------------------------------------------------------------------------------- |
+| `magus_describe`      | Describe a concept and list its entities: spells, targets, projects, workspaces, mcp_tools (pass `name` for one entity's detail)    |
+| `magus_describe_file` | Classify paths against declared globs: owning project, per-target claims, dependency edges, and declarations covering several paths |
+| `magus_where`         | Resolve a fuzzy project name to its absolute path                                                                                   |
+| `magus_config_get`    | Read the resolved workspace config (read-only)                                                                                      |
 
 Run:
 
@@ -91,13 +91,14 @@ Run:
 
 Inspect:
 
-| Tool             | Purpose                                                                |
-| ---------------- | ---------------------------------------------------------------------- |
-| `magus_doctor`   | Validate workspace health (config, cache, cycles, tool availability)   |
-| `magus_status`   | Report telemetry/cache settings and the live proc-server pool state    |
-| `magus_tail_log` | Return the most recent captured build log for a project                |
-| `magus_output`   | Fetch one target execution's exact captured output by its `out...` ref |
-| `magus_insight`  | Lenses: hotspots, files, affinity, ownership, trend, unreferenced      |
+| Tool                   | Purpose                                                                                     |
+| ---------------------- | ------------------------------------------------------------------------------------------- |
+| `magus_doctor`         | Validate workspace health (config, cache, cycles, tool availability)                        |
+| `magus_status`         | Report telemetry/cache settings and the live proc-server pool state                         |
+| `magus_tail_log`       | Return the most recent captured build log for a project                                     |
+| `magus_output`         | Fetch one target execution's exact captured output by its `out...` ref                      |
+| `magus_insight`        | Lenses: hotspots, files, affinity, ownership, trend, unreferenced                           |
+| `magus_vcs_checkpoint` | Resolve the working state's identity: revision, branch, dirty, patch digest; writes nothing |
 
 Knowledge graph:
 
@@ -111,9 +112,10 @@ Knowledge graph:
 
 Memory and scratch:
 
-| Tool           | Purpose                                                                                               |
-| -------------- | ----------------------------------------------------------------------------------------------------- |
-| `magus_memory` | User-owned per-repo handoff journal: list/get/put/delete/verify named entries shared across worktrees |
+| Tool           | Purpose                                                                                                                  |
+| -------------- | ------------------------------------------------------------------------------------------------------------------------ |
+| `magus_memory` | User-owned per-repo handoff journal: list/get/put/delete/verify named entries shared across worktrees                    |
+| `magus_ledger` | The orchestrating agent's declared delegation plan (put/list/clear), recorded for humans to see; magus never enforces it |
 
 Config mutation is not exposed over MCP. Use the CLI for `magus config set` and related commands.
 

@@ -187,6 +187,11 @@ the `Step`. magus writes these lines, in this order, into one hash:
 - **`env:` lines** - each allow-listed environment variable name and its value,
   sorted, distinguishing unset from set-to-empty. A variable's value contributes to
   the key only if the spell opted it in.
+- **`obs:` lines** - each `ctx.observes(key, value)` declaration as `key=value`,
+  sorted. Its own class rather than a fold into `env:` or `exec:`, because an
+  observation names a fact outside the tree entirely and changes nothing about how
+  the target runs. A target declaring none writes no line, so an ordinary run
+  hashes unaffected.
 - **`exec:` lines** - per-op `ctx.withEnv`/`ctx.withCwd` execution overrides,
   sorted. Unlike `env:` lines, which read a variable's live process value at hash
   time, an override's value is fixed in the magusfile source itself, so it hashes
@@ -213,6 +218,7 @@ hashed line above yields a new key, and thus a new (empty) slot:
 - editing, adding, or removing a file matched by `needs`;
 - toggling the executable bit on a needed file;
 - changing the value of an allow-listed env var (or setting/unsetting it);
+- bumping a declared observation's value (`ctx.observes`);
 - an upstream dependency's key changing (transitive invalidation);
 - a spell definition change (`spellDefVersion`) or a tool-version bump;
 - applying or dropping a charm;
@@ -322,6 +328,79 @@ it is true, instead of once per consumer - the same reason a spell declares its
 
 Set `MAGUS_CACHE_TOOL_VERSION=off` to drop probes from keys, or `=workspace` to
 probe once per workspace instead of per project.
+
+### Facts outside the tree: `ctx.observes`
+
+A toolchain is not the only thing that lives outside the key. A vulnerability
+scan is keyed on the image and the tree, but its ANSWER also depends on the
+scanner's vulnerability database, which moves daily and belongs to no spell. A
+cache hit would report yesterday's CVEs against today's image.
+
+The blunt fix is `skip_cache`, and it is a bad trade: it forfeits caching forever
+to avoid staleness that only matters when the fact actually moved. `ctx.observes`
+makes the invisible input visible instead, so caching becomes correct rather than
+forbidden:
+
+```buzz
+export fun scan(ctx: magus\Context, args: [str]) > void {
+    ctx.observes("trivy-db", "2026-08-15");
+    trivy.scan(ctx);
+}
+```
+
+The value joins the key as its own `obs:` line. A value that moves is a miss; a
+value that holds still replays. magus never interprets it - it is a stamp to
+compare, so a version string, a digest, and a date are all equally good, and
+anything that changes when the fact changes will do. `describe target --cache`
+reports an `obs` class beside `src` and `env`, so a rerun names the external fact
+instead of blaming a file.
+
+**Name the key for the fact, not for the target that reads it.** The key is a
+label someone else meets in a rerun explanation, so scope it to whatever owns the
+fact - `trivy-db`, `npm-advisories`, `schema-rev` - and keep it identical
+everywhere that fact is observed. Two targets watching one feed writing one key
+is what makes an `obs:` line legible when two machines disagree.
+
+**Repeats accumulate; they never replace.** Every call in a body lands in the key.
+One key declared twice with the same value collapses to a single line; declared
+twice with two different values, both survive, so the key moves when either does.
+That is the same rule `ctx.withEnv` already follows, and it is the safe direction:
+keeping both over-invalidates, where picking a winner would drop a fact the target
+really does depend on.
+
+**It is observation, not verification.** The value is a cheap thing the magusfile
+already knows, stated where the target is declared. Real work - fetching the
+feed, scanning the image - belongs in the target BODY, where its cost is paid on
+a miss and skipped on a hit. That is also why both arguments must be literals: a
+target's key is computed before its body runs, so a value computed in the body
+could only reach the NEXT run's key, which is the staleness this exists to
+prevent. A computed argument is rejected at load rather than quietly accepted.
+
+**An observation is a claim someone maintains.** Both arguments are literals in
+the magusfile, and the magusfile is already a source of every target it declares
+(see [the cache key](#the-cache-key)), so editing the value was going to move the
+key either way. What the declaration adds is the NAME of the cause: a `src:` line
+says the magusfile changed, an `obs:` line says which fact changed and to what.
+Declare one for a fact a person deliberately bumps, where writing it down is the
+point.
+
+For a fact that moves on its own - a vulnerability database that refreshes
+nightly, a feed that publishes whenever it likes - a literal is a stamp nobody
+remembers to update, and a hit would then claim an observation that had already
+stopped holding. That is worse than the honest opt-out, so such a target keeps
+`skip_cache` until its value can be probed at key time.
+
+Three declarations, three different answers to "the answer depends on something
+that is not a source file":
+
+| The fact                               | Declare                           | Because                                                     |
+| -------------------------------------- | --------------------------------- | ----------------------------------------------------------- |
+| An environment variable's value        | `ctx.envInputs("CI")`             | Only the NAME is knowable statically; magus reads the value |
+| A fact outside the tree entirely       | `ctx.observes("trivy-db", "...")` | Magus cannot reach it, so the magusfile states it           |
+| Nothing - the target must never replay | `skip_cache` policy               | It signs, publishes, mutates, or never returns              |
+
+Reach for `skip_cache` only when replaying would be _wrong_, not when it would be
+_stale_. Staleness has a declaration now.
 
 ### Opting out and busting
 

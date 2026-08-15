@@ -1338,10 +1338,11 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	report := types.NewFileReport(files)
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, types.FileReport{Definition: types.FileDefinition, Count: len(files), Files: files})
+		return emitFormatted(opts, report)
 	case outputName:
 		for _, f := range files {
 			fmt.Printf("%s\t%s\n", f.Path, f.Role)
@@ -1363,10 +1364,31 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 		if len(f.SourceOf) > 0 {
 			fmt.Printf("  source_of: %v\n", f.SourceOf)
 		}
+		if len(f.DependsOn) > 0 {
+			fmt.Printf("  depends_on: %v\n", f.DependsOn)
+		}
+		for _, c := range f.Claims {
+			fmt.Printf("  declared: %-6s %s  %s\n", c.Role, claimLabel(c), c.Glob)
+		}
 		if f.Hint != "" {
 			fmt.Printf("  hint: %s\n", f.Hint)
 		}
 		fmt.Println()
 	}
+	if len(report.Overlaps) > 0 {
+		fmt.Println("declarations covering more than one of these paths:")
+		for _, c := range report.Overlaps {
+			fmt.Printf("  %-6s %-24s %-24s %s\n", c.Role, claimLabel(c), c.Glob, strings.Join(c.Paths, ", "))
+		}
+	}
 	return nil
+}
+
+// claimLabel spells a claim's declarer as the path:target ref the rest of the CLI
+// takes, or the bare project for a project-wide glob no single target owns.
+func claimLabel(c types.FileClaim) string {
+	if c.Target == "" {
+		return c.Project
+	}
+	return c.Project + ":" + c.Target
 }

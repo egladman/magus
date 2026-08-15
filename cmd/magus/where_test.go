@@ -44,37 +44,37 @@ func TestWhereNoMatch(t *testing.T) {
 
 func TestResolveProjectArg(t *testing.T) {
 	t.Run("all projects empty sentinel", func(t *testing.T) {
-		got, err := file.ResolveProject("", "web/studio")
+		got, err := file.ResolveProject(t.Context(), "", "web/studio")
 		require.NoError(t, err)
 		assert.Equal(t, "", got)
 	})
 	t.Run("all projects slash sentinel", func(t *testing.T) {
-		got, err := file.ResolveProject("/", "web/studio")
+		got, err := file.ResolveProject(t.Context(), "/", "web/studio")
 		require.NoError(t, err)
 		assert.Equal(t, "/", got)
 	})
 	t.Run("bare stays workspace-relative", func(t *testing.T) {
-		got, err := file.ResolveProject("api", "web/studio")
+		got, err := file.ResolveProject(t.Context(), "api", "web/studio")
 		require.NoError(t, err)
 		assert.Equal(t, "api", got)
 	})
 	t.Run("dot up resolves against cwd", func(t *testing.T) {
-		got, err := file.ResolveProject("../api", "web/studio")
+		got, err := file.ResolveProject(t.Context(), "../api", "web/studio")
 		require.NoError(t, err)
 		assert.Equal(t, "web/api", got)
 	})
 	t.Run("dot sibling resolves against cwd", func(t *testing.T) {
-		got, err := file.ResolveProject("./peer", "extensions/drape")
+		got, err := file.ResolveProject(t.Context(), "./peer", "extensions/drape")
 		require.NoError(t, err)
 		assert.Equal(t, "extensions/drape/peer", got)
 	})
 	t.Run("escape rejected", func(t *testing.T) {
-		_, err := file.ResolveProject("../../../foo", "a/b")
+		_, err := file.ResolveProject(t.Context(), "../../../foo", "a/b")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "escapes workspace root")
 	})
 	t.Run("absolute rejected", func(t *testing.T) {
-		_, err := file.ResolveProject("/etc", "web/studio")
+		_, err := file.ResolveProject(t.Context(), "/etc", "web/studio")
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "must be repo-relative")
 	})
@@ -96,5 +96,19 @@ func TestCwdAnchor(t *testing.T) {
 
 	t.Run("empty cwd falls back to dot", func(t *testing.T) {
 		assert.Equal(t, ".", cwdAnchor(root, ""))
+	})
+
+	// The --root regression. filepath.Rel answers a cwd outside the workspace with a
+	// "../"-prefixed path, which is not an anchor - every relative project ref then
+	// inherits the escape and `magus --root <ws> run build .` failed with
+	// `project path "." escapes workspace root from "../<dir>"`.
+	t.Run("cwd outside the workspace anchors at the root", func(t *testing.T) {
+		outside := filepath.Join(filepath.Dir(root), "elsewhere")
+		require.NoError(t, os.MkdirAll(outside, 0o755), "mkdir")
+		assert.Equal(t, ".", cwdAnchor(root, outside))
+	})
+
+	t.Run("cwd in the workspace parent anchors at the root", func(t *testing.T) {
+		assert.Equal(t, ".", cwdAnchor(root, filepath.Dir(root)))
 	})
 }

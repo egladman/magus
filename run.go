@@ -433,6 +433,9 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	step.ExecOverrides = append(step.ExecOverrides, p.TargetExecOverrides[target]...)
 	// Names, not values: hashStep reads each variable's process value at hash time.
 	step.EnvAllow = append(step.EnvAllow, p.TargetEnvAllow[target]...)
+	// ctx.observes: an external fact the answer depends on, keyed so the target stays
+	// cacheable rather than having to opt out with skip_cache.
+	step.Observations = append(step.Observations, p.TargetObservations[target]...)
 	for _, ref := range p.TargetUpdates[target] {
 		if g := joinGlob(ref.Project, ref.Glob); !slices.Contains(step.Sources, g) {
 			step.Sources = append(step.Sources, g)

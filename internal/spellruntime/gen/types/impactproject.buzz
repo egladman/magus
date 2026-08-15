@@ -9,6 +9,7 @@ export object ImpactProject {
     path: str = "",
     seed: bool = false,
     files: [str] = [],
+    undeclaredFiles: [str] = [],
     spells: [str] = [],
     targets: [str] = [],
 }

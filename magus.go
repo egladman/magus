@@ -384,13 +384,13 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 			if errors.Is(err, interp.ErrNoMagusfile) {
 				continue
 			}
-			return nil, fmt.Errorf("magus: %s: %w", types.WorkspaceRef(p.Path), err)
+			return nil, fmt.Errorf("magus: %s: %w", types.ProjectLabel(p.Path, p.Dir), err)
 		}
 		pctx := interp.WithProjectPath(ctx, p.Path)
 		for _, src := range srcs {
 			targets, err := interp.Parse(pctx, src)
 			if err != nil {
-				return nil, fmt.Errorf("magus: %s: %w", types.WorkspaceRef(p.Path), err)
+				return nil, fmt.Errorf("magus: %s: %w", types.ProjectLabel(p.Path, p.Dir), err)
 			}
 			for _, t := range targets {
 				customTargets[p.Path] = append(customTargets[p.Path], t.Key)
@@ -1025,6 +1025,11 @@ func (m *Magus) Where(dir string) (*types.Project, bool) {
 const BaseLastPassed = "last-passed"
 
 // Affected computes projects touched by VCS changes since base.
+//
+// Files that seeded a project by directory containment while it declares none of them
+// come back on [types.AffectedResult.UndeclaredBySeed]; reporting them (MGS1028) is the
+// caller's, because this is a library call and its caller owns whatever stream a person
+// is reading. The CLI reports it in cmd/magus/affected.go.
 func (m *Magus) Affected(ctx context.Context, base string) (*types.AffectedResult, error) {
 	base, err := m.resolveLastPassed(ctx, base)
 	if err != nil {
@@ -1095,7 +1100,9 @@ func (m *Magus) resolveLastPassed(ctx context.Context, base string) (string, err
 	return parent, nil
 }
 
-// AffectedFromPaths computes the affected set from an explicit file list.
+// AffectedFromPaths computes the affected set from an explicit file list. Undeclared
+// seeding files ride [types.AffectedResult.UndeclaredBySeed], the same as [Magus.Affected];
+// see it for who reports them.
 func (m *Magus) AffectedFromPaths(ctx context.Context, paths []string) (*types.AffectedResult, error) {
 	return project.AffectedFromPaths(ctx, m.ws, paths)
 }
@@ -1223,11 +1230,13 @@ func magusfileGlobs(projectPath string) []string {
 	return out
 }
 
-func joinGlob(path, glob string) string {
-	if path == "." {
-		return glob
-	}
-	return path + "/" + glob
+// joinGlob roots a project-relative glob at the workspace for the cache step and the
+// describe surfaces. It is a named pass-through on purpose: the call sites in this
+// package read as "join", and the rooting rule itself belongs in types, where
+// Project.DeclaredGlobs - the attribution mirror of these very lines - can share it.
+// See types.RootGlob for why the join is cleaned rather than concatenated.
+func joinGlob(projectPath, glob string) string {
+	return types.RootGlob(projectPath, glob)
 }
 
 // ExpandPath resolves the target pattern to concrete per-project targets; empty or "/" fans out to all.

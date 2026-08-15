@@ -63,20 +63,33 @@ const (
 	// fact the execution journal already records per invocation; this is what connects an
 	// agent's tool call to the credential it made spendable.
 	Kind_KIND_CREDENTIAL_GRANT Kind = 8
+	// An orchestrating agent handed work to a sub-agent. The request blob carries the CONTEXT
+	// that was handed over - the delegation's whole point, and routinely kilobytes, so only its
+	// ref rides the event. There is no response blob and no guard decision: a spawn is an
+	// observation, not a judged surface. OUTCOME_OK means the handoff was observed, NOT that the
+	// sub-agent later succeeded.
+	Kind_KIND_AGENT_SPAWN Kind = 9
+	// The console NotesService door onto the workspace's human-authored notes. The service has no
+	// write path - a note's whole value is the guarantee that a person wrote it - so every event
+	// under this kind is a READ, audited because this is the only door that can serve the PRIVATE
+	// note store, which lives outside any repository and which nothing else attributes.
+	Kind_KIND_NOTES Kind = 10
 )
 
 // Enum value maps for Kind.
 var (
 	Kind_name = map[int32]string{
-		0: "KIND_UNSPECIFIED",
-		1: "KIND_MCP_TOOL_CALL",
-		2: "KIND_JOB",
-		3: "KIND_CONFIG_CHANGE",
-		4: "KIND_TOKEN_LIFECYCLE",
-		5: "KIND_SANDBOX_DENIAL",
-		6: "KIND_MEMORY",
-		7: "KIND_AGENT_COMMAND",
-		8: "KIND_CREDENTIAL_GRANT",
+		0:  "KIND_UNSPECIFIED",
+		1:  "KIND_MCP_TOOL_CALL",
+		2:  "KIND_JOB",
+		3:  "KIND_CONFIG_CHANGE",
+		4:  "KIND_TOKEN_LIFECYCLE",
+		5:  "KIND_SANDBOX_DENIAL",
+		6:  "KIND_MEMORY",
+		7:  "KIND_AGENT_COMMAND",
+		8:  "KIND_CREDENTIAL_GRANT",
+		9:  "KIND_AGENT_SPAWN",
+		10: "KIND_NOTES",
 	}
 	Kind_value = map[string]int32{
 		"KIND_UNSPECIFIED":      0,
@@ -88,6 +101,8 @@ var (
 		"KIND_MEMORY":           6,
 		"KIND_AGENT_COMMAND":    7,
 		"KIND_CREDENTIAL_GRANT": 8,
+		"KIND_AGENT_SPAWN":      9,
+		"KIND_NOTES":            10,
 	}
 )
 
@@ -205,8 +220,16 @@ type ActivityEvent struct {
 	//
 	// They ride the EVENT rather than the request blob, which also carries them: a 200-row feed
 	// grouped by host must not cost 200 GetPayload calls.
-	Host          string `protobuf:"bytes,14,opt,name=host,proto3" json:"host,omitempty"`
-	Session       string `protobuf:"bytes,15,opt,name=session,proto3" json:"session,omitempty"`
+	Host    string `protobuf:"bytes,14,opt,name=host,proto3" json:"host,omitempty"`
+	Session string `protobuf:"bytes,15,opt,name=session,proto3" json:"session,omitempty"`
+	// The work-ledger unit this action belongs to, empty when the producer could not correlate
+	// one. Set today only by KIND_AGENT_SPAWN, and only when the handed context declared it: no
+	// host event names a magus unit, so the producer scans the delegation prompt for a documented
+	// marker line ("unit: <id>") instead. Correlation is COOPERATIVE - an orchestrator that wants
+	// the join writes the marker, and one that does not leaves this empty, which is a missing join
+	// rather than a wrong one. It rides the event rather than the blob for the same reason host and
+	// session do: joining a page of rows to a ledger must not cost a GetPayload per row.
+	Unit          string `protobuf:"bytes,16,opt,name=unit,proto3" json:"unit,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -342,6 +365,13 @@ func (x *ActivityEvent) GetHost() string {
 func (x *ActivityEvent) GetSession() string {
 	if x != nil {
 		return x.Session
+	}
+	return ""
+}
+
+func (x *ActivityEvent) GetUnit() string {
+	if x != nil {
+		return x.Unit
 	}
 	return ""
 }
@@ -629,7 +659,7 @@ var File_magus_activity_v1_activity_proto protoreflect.FileDescriptor
 
 const file_magus_activity_v1_activity_proto_rawDesc = "" +
 	"\n" +
-	" magus/activity/v1/activity.proto\x12\x11magus.activity.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1amagus/query/v1/query.proto\"\x93\x04\n" +
+	" magus/activity/v1/activity.proto\x12\x11magus.activity.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1egoogle/protobuf/duration.proto\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1amagus/query/v1/query.proto\"\xa7\x04\n" +
 	"\rActivityEvent\x12.\n" +
 	"\x04time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x04time\x12+\n" +
 	"\x04kind\x18\x02 \x01(\x0e2\x17.magus.activity.v1.KindR\x04kind\x12\x14\n" +
@@ -647,7 +677,8 @@ const file_magus_activity_v1_activity_proto_rawDesc = "" +
 	"\x0eresponse_bytes\x18\f \x01(\x03R\rresponseBytes\x12\x1c\n" +
 	"\tworkspace\x18\r \x01(\tR\tworkspace\x12\x12\n" +
 	"\x04host\x18\x0e \x01(\tR\x04host\x12\x18\n" +
-	"\asession\x18\x0f \x01(\tR\asession\"\x9f\x01\n" +
+	"\asession\x18\x0f \x01(\tR\asession\x12\x12\n" +
+	"\x04unit\x18\x10 \x01(\tR\x04unit\"\x9f\x01\n" +
 	"\rActivityQuery\x12-\n" +
 	"\x05kinds\x18\x01 \x03(\x0e2\x17.magus.activity.v1.KindR\x05kinds\x12\x16\n" +
 	"\x06actors\x18\x02 \x03(\tR\x06actors\x12\x18\n" +
@@ -666,7 +697,7 @@ const file_magus_activity_v1_activity_proto_rawDesc = "" +
 	"\x03ref\x18\x01 \x01(\tB\x1c\xbaH\x19r\x172\x15^[a-z]{2,8}[0-9a-f]+$R\x03ref\">\n" +
 	"\x12GetPayloadResponse\x12\x12\n" +
 	"\x04body\x18\x01 \x01(\fR\x04body\x12\x14\n" +
-	"\x05bytes\x18\x02 \x01(\x03R\x05bytes*\xd1\x01\n" +
+	"\x05bytes\x18\x02 \x01(\x03R\x05bytes*\xf7\x01\n" +
 	"\x04Kind\x12\x14\n" +
 	"\x10KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12KIND_MCP_TOOL_CALL\x10\x01\x12\f\n" +
@@ -676,7 +707,11 @@ const file_magus_activity_v1_activity_proto_rawDesc = "" +
 	"\x13KIND_SANDBOX_DENIAL\x10\x05\x12\x0f\n" +
 	"\vKIND_MEMORY\x10\x06\x12\x16\n" +
 	"\x12KIND_AGENT_COMMAND\x10\a\x12\x19\n" +
-	"\x15KIND_CREDENTIAL_GRANT\x10\b*E\n" +
+	"\x15KIND_CREDENTIAL_GRANT\x10\b\x12\x14\n" +
+	"\x10KIND_AGENT_SPAWN\x10\t\x12\x0e\n" +
+	"\n" +
+	"KIND_NOTES\x10\n" +
+	"*E\n" +
 	"\aOutcome\x12\x17\n" +
 	"\x13OUTCOME_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +

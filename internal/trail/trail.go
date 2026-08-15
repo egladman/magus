@@ -75,6 +75,21 @@ const (
 	// command, so its payload records the requested command or path and the guard's decision, never
 	// an invented exit status. MCP calls remain KindMCPToolCall because their wrapper sees completion.
 	KindAgentCommand Kind = "agent_command"
+	// KindAgentSpawn records that an orchestrating agent handed work to a sub-agent, and WHAT
+	// CONTEXT it handed over. It is the delegation sibling of KindAgentCommand: same producer (a
+	// pre-tool hook), same "observed, not executed" contract, but the thing observed is a context
+	// transfer rather than a command, so there is no verdict to record and the guard never judges
+	// one. The handed context lands in the request blob and only its REF rides the event, because
+	// a delegation prompt is routinely kilobytes.
+	//
+	// Correlation to a work-ledger unit is COOPERATIVE, not enforced. Nothing in the host event
+	// names a magus unit, and magus cannot infer one from prose, so the event's Unit is stamped
+	// only when the handed context carries the documented marker (see unitFromContext): its
+	// FIRST non-blank line reading "unit: <id>". An orchestrator that wants the join writes the
+	// marker; one that does not gets an event with an empty Unit, which is a missing join rather
+	// than a wrong one - and a "unit:" line quoted deeper in a prompt stamps nothing, because a
+	// wrong join is worse than none.
+	KindAgentSpawn Kind = "agent_spawn"
 	// KindMemory is the console MemoryService door onto the durable magus_memory files. Unlike the
 	// other kinds it audits READS too (List/Get), not just edits: the memory files are the agent's
 	// own handoff journal, so knowing when the operator inspected it is part of the governance story,
@@ -125,6 +140,7 @@ type Event struct {
 	Session       string `json:"session,omitempty"`       // the host's own session id, when its event carried one
 	Workspace     string `json:"workspace,omitempty"`     // repo-relative or absolute root the action pertained to; "" for daemon-wide (an MCP call is not bound to one workspace)
 	Action        string `json:"action"`                  // the specific action: a tool name, a job command, "connector.create"
+	Unit          string `json:"unit,omitempty"`          // work-ledger unit this action belongs to, when the producer could correlate one (KindAgentSpawn today); "" when uncorrelated
 	Outcome       string `json:"outcome"`                 // one of the Outcome* constants
 	Error         string `json:"error,omitempty"`         // error text when Outcome is OutcomeError
 	DurMs         int64  `json:"dur_ms,omitempty"`        // wall-clock, on call-shaped actions
@@ -250,6 +266,158 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		ResponseBytes: respBytes,
 		Preview:       preview,
 	})
+}
+
+// AgentSpawn is the normalized, host-independent observation that an orchestrating agent handed
+// work to a sub-agent. Child is whatever label the host's event supplied for the callee (a
+// sub-agent type, a task description, the spawning tool's name); Context is the text actually
+// handed over, which is the whole point of the record and the reason it goes to a blob.
+//
+// There is no Decision field, unlike AgentCommand: a spawn is not a guard surface. The handed
+// context is prose, not a command line, and judging it as one would deny a delegation for quoting
+// a denied command in its instructions.
+type AgentSpawn struct {
+	Actor     string
+	Workspace string
+	Host      string
+	Session   string
+	Event     string
+	Tool      string
+	Child     string
+	Context   string
+}
+
+const agentSpawnSchemaVersion = 1
+
+type agentSpawnRequest struct {
+	SchemaVersion int    `json:"schema_version"`
+	Host          string `json:"host,omitempty"`
+	Session       string `json:"session,omitempty"`
+	Event         string `json:"event,omitempty"`
+	Tool          string `json:"tool,omitempty"`
+	Child         string `json:"child,omitempty"`
+	Unit          string `json:"unit,omitempty"`
+	Context       string `json:"context"`
+}
+
+// AppendAgentSpawn records one delegation handoff and stores the handed context as a blob.
+//
+// Best-effort and error-free, like every other producer here: an audit write must never be able
+// to fail the delegation it observes.
+//
+// NOTE ON GROWTH: this producer runs in the short-lived hook process, which has no append counter
+// to drive RotateOnCount, so nothing it writes triggers a rotate - only the daemon's boot-time
+// Rotate bounds the trail. That was already true of AppendAgentCommand; it bites harder here
+// because a spawn blob is a whole delegation prompt rather than one command line.
+func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
+	if base == "" || spawn.Context == "" {
+		return
+	}
+	// A delegation prompt is free text an agent composed, and an orchestrator that pastes a
+	// connector token into a sub-agent's instructions is exactly the delegation worth auditing
+	// WITHOUT persisting the token. Redacted before the marker scan so a redaction can never
+	// invent or destroy a unit id after the fact.
+	spawn.Context = secret.RedactString(ctx, spawn.Context)
+	spawn.Child = secret.RedactString(ctx, spawn.Child)
+	unit := unitFromContext(spawn.Context)
+	request, _ := json.Marshal(agentSpawnRequest{
+		SchemaVersion: agentSpawnSchemaVersion,
+		Host:          spawn.Host,
+		Session:       spawn.Session,
+		Event:         spawn.Event,
+		Tool:          spawn.Tool,
+		Child:         spawn.Child,
+		Unit:          unit,
+		Context:       spawn.Context,
+	})
+	reqRef, reqBytes := WriteBlob(ctx, base, "spawn", request)
+
+	// The CHILD is the action, the way an MCP call's action is its tool name: it is the field a
+	// reader groups a page of delegations by. A host that supplied no label leaves the generic
+	// verb, so the row still says what happened.
+	action := spawn.Child
+	if action == "" {
+		action = "agent.spawn"
+	}
+	actor := spawn.Actor
+	if actor == "" {
+		actor = "agent"
+	}
+	Append(ctx, base, Event{
+		Ts:           time.Now().UnixMilli(),
+		Kind:         KindAgentSpawn,
+		Actor:        actor,
+		Host:         spawn.Host,
+		Session:      spawn.Session,
+		Workspace:    spawn.Workspace,
+		Action:       action,
+		Unit:         unit,
+		Outcome:      OutcomeOK,
+		RequestRef:   reqRef,
+		RequestBytes: reqBytes,
+	})
+}
+
+// unitScanBytes bounds the head of the handed context the marker may appear in. The marker
+// leads the prompt, so this is a cap on one pathological first line rather than a window to
+// search: it keeps a multi-megabyte single-line payload from being scanned at all.
+const unitScanBytes = 4096
+
+// unitFromContext returns the work-ledger unit a delegation prompt declares, or "" when it
+// declares none. THE MARKER CONTRACT, documented once here and in the host glue pages:
+//
+//	the FIRST non-blank line of the handed context, trimmed, reading exactly "unit: <id>"
+//
+// First line, not anywhere in the head: a delegation prompt routinely quotes things - a ledger
+// listing, a file, another agent's transcript - and a "unit: <id>" line lifted from any of them
+// would stamp the event with a unit that has nothing to do with this handoff. A marker an
+// orchestrator wrote is at the top, and a marker in quoted prose is not; the position is the
+// only thing that separates them. Leading blank lines are formatting and are skipped.
+//
+// The id is a bare token of letters, digits and -_./: - no spaces, at most unitMaxLen chars. That
+// charset is not decoration: Unit is exempt from event redaction (it is a correlation key matched
+// by exact string, and a masked one would silently break the join it exists to serve), so what
+// may land in it has to be too narrow to smuggle a credential through.
+//
+// Anything else - no marker, an empty id, an id carrying spaces or punctuation outside the set,
+// a marker below the first line - yields "". Correlation is cooperative: a missing join is the
+// designed outcome, never an error.
+func unitFromContext(handed string) string {
+	const unitMaxLen = 128
+	head := handed
+	if len(head) > unitScanBytes {
+		head = head[:unitScanBytes]
+	}
+	for _, line := range strings.Split(head, "\n") {
+		line = strings.TrimSpace(line)
+		if line == "" {
+			continue
+		}
+		rest, found := strings.CutPrefix(line, "unit:")
+		if !found {
+			return "" // the prompt leads with something else, so it declares no unit
+		}
+		id := strings.TrimSpace(rest)
+		if id == "" || len(id) > unitMaxLen || !validUnit(id) {
+			return ""
+		}
+		return id
+	}
+	return ""
+}
+
+// validUnit reports whether id is a bare identifier: letters, digits, and the separators a
+// ledger row or a branch-shaped unit name uses.
+func validUnit(id string) bool {
+	for _, c := range id {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case c == '-', c == '_', c == '.', c == '/', c == ':':
+		default:
+			return false
+		}
+	}
+	return true
 }
 
 func eventsPath(base string) string { return filepath.Join(base, dir, eventsFile) }
@@ -674,10 +842,12 @@ func validRef(ref string) bool {
 // redactEvent masks every free-text field on an event.
 //
 // The structural fields are deliberately left alone: Kind, Outcome, Actor, Host, Session,
-// Workspace and the blob refs are enumerated values, identities and content addresses, none of
-// which a credential can occupy, and all of which a reader filters on by exact match. Redacting
+// Workspace, Unit and the blob refs are enumerated values, identities and content addresses, none
+// of which a credential can occupy, and all of which a reader filters on by exact match. Redacting
 // them would break the activity view to protect nothing - the same reasoning that leaves slog
-// attribute KEYS alone in internal/secret.
+// attribute KEYS alone in internal/secret. Unit is the one of those derived from free text rather
+// than supplied by a caller, which is why its scanner restricts it to a bare-identifier charset
+// before it can reach this exemption.
 func redactEvent(ctx context.Context, e Event) Event {
 	e.Action = secret.RedactString(ctx, e.Action)
 	e.Error = secret.RedactString(ctx, e.Error)

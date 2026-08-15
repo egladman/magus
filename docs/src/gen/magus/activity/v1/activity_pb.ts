@@ -27,7 +27,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/activity/v1/activity.proto.
  */
 export const file_magus_activity_v1_activity: GenFile = /*@__PURE__*/
-  fileDesc("CiBtYWd1cy9hY3Rpdml0eS92MS9hY3Rpdml0eS5wcm90bxIRbWFndXMuYWN0aXZpdHkudjEihQMKDUFjdGl2aXR5RXZlbnQSKAoEdGltZRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJQoEa2luZBgCIAEoDjIXLm1hZ3VzLmFjdGl2aXR5LnYxLktpbmQSDQoFYWN0b3IYAyABKAkSDgoGYWN0aW9uGAQgASgJEisKB291dGNvbWUYBSABKA4yGi5tYWd1cy5hY3Rpdml0eS52MS5PdXRjb21lEg0KBWVycm9yGAYgASgJEisKCGR1cmF0aW9uGAcgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhMKC3JlcXVlc3RfcmVmGAggASgJEhQKDHJlc3BvbnNlX3JlZhgJIAEoCRIPCgdwcmV2aWV3GAogASgJEhUKDXJlcXVlc3RfYnl0ZXMYCyABKAMSFgoOcmVzcG9uc2VfYnl0ZXMYDCABKAMSEQoJd29ya3NwYWNlGA0gASgJEgwKBGhvc3QYDiABKAkSDwoHc2Vzc2lvbhgPIAEoCSKBAQoNQWN0aXZpdHlRdWVyeRImCgVraW5kcxgBIAMoDjIXLm1hZ3VzLmFjdGl2aXR5LnYxLktpbmQSDgoGYWN0b3JzGAIgAygJEg8KB2FjdGlvbnMYAyADKAkSJwoEdGltZRgEIAEoCzIZLm1hZ3VzLnF1ZXJ5LnYxLlRpbWVSYW5nZSJ6ChNMaXN0QWN0aXZpdHlSZXF1ZXN0Eh0KCXBhZ2Vfc2l6ZRgBIAEoBUIKukgHGgUY6AcoABISCgpwYWdlX3Rva2VuGAIgASgJEjAKBmZpbHRlchgDIAEoCzIgLm1hZ3VzLmFjdGl2aXR5LnYxLkFjdGl2aXR5UXVlcnkiYQoUTGlzdEFjdGl2aXR5UmVzcG9uc2USMAoGZXZlbnRzGAEgAygLMiAubWFndXMuYWN0aXZpdHkudjEuQWN0aXZpdHlFdmVudBIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkiPgoRR2V0UGF5bG9hZFJlcXVlc3QSKQoDcmVmGAEgASgJQhy6SBlyFzIVXlthLXpdezIsOH1bMC05YS1mXSskIjEKEkdldFBheWxvYWRSZXNwb25zZRIMCgRib2R5GAEgASgMEg0KBWJ5dGVzGAIgASgDKtEBCgRLaW5kEhQKEEtJTkRfVU5TUEVDSUZJRUQQABIWChJLSU5EX01DUF9UT09MX0NBTEwQARIMCghLSU5EX0pPQhACEhYKEktJTkRfQ09ORklHX0NIQU5HRRADEhgKFEtJTkRfVE9LRU5fTElGRUNZQ0xFEAQSFwoTS0lORF9TQU5EQk9YX0RFTklBTBAFEg8KC0tJTkRfTUVNT1JZEAYSFgoSS0lORF9BR0VOVF9DT01NQU5EEAcSGQoVS0lORF9DUkVERU5USUFMX0dSQU5UEAgqRQoHT3V0Y29tZRIXChNPVVRDT01FX1VOU1BFQ0lGSUVEEAASDgoKT1VUQ09NRV9PSxABEhEKDU9VVENPTUVfRVJST1IQAjLNAQoPQWN0aXZpdHlTZXJ2aWNlEl8KDExpc3RBY3Rpdml0eRImLm1hZ3VzLmFjdGl2aXR5LnYxLkxpc3RBY3Rpdml0eVJlcXVlc3QaJy5tYWd1cy5hY3Rpdml0eS52MS5MaXN0QWN0aXZpdHlSZXNwb25zZRJZCgpHZXRQYXlsb2FkEiQubWFndXMuYWN0aXZpdHkudjEuR2V0UGF5bG9hZFJlcXVlc3QaJS5tYWd1cy5hY3Rpdml0eS52MS5HZXRQYXlsb2FkUmVzcG9uc2VC0QEKFWNvbS5tYWd1cy5hY3Rpdml0eS52MUINQWN0aXZpdHlQcm90b1ABWkNnaXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy9hY3Rpdml0eS92MTthY3Rpdml0eXYxogIDTUFYqgIRTWFndXMuQWN0aXZpdHkuVjHKAhFNYWd1c1xBY3Rpdml0eVxWMeICHU1hZ3VzXEFjdGl2aXR5XFYxXEdQQk1ldGFkYXRh6gITTWFndXM6OkFjdGl2aXR5OjpWMWIGcHJvdG8z", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1_query]);
+  fileDesc("CiBtYWd1cy9hY3Rpdml0eS92MS9hY3Rpdml0eS5wcm90bxIRbWFndXMuYWN0aXZpdHkudjEikwMKDUFjdGl2aXR5RXZlbnQSKAoEdGltZRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASJQoEa2luZBgCIAEoDjIXLm1hZ3VzLmFjdGl2aXR5LnYxLktpbmQSDQoFYWN0b3IYAyABKAkSDgoGYWN0aW9uGAQgASgJEisKB291dGNvbWUYBSABKA4yGi5tYWd1cy5hY3Rpdml0eS52MS5PdXRjb21lEg0KBWVycm9yGAYgASgJEisKCGR1cmF0aW9uGAcgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEhMKC3JlcXVlc3RfcmVmGAggASgJEhQKDHJlc3BvbnNlX3JlZhgJIAEoCRIPCgdwcmV2aWV3GAogASgJEhUKDXJlcXVlc3RfYnl0ZXMYCyABKAMSFgoOcmVzcG9uc2VfYnl0ZXMYDCABKAMSEQoJd29ya3NwYWNlGA0gASgJEgwKBGhvc3QYDiABKAkSDwoHc2Vzc2lvbhgPIAEoCRIMCgR1bml0GBAgASgJIoEBCg1BY3Rpdml0eVF1ZXJ5EiYKBWtpbmRzGAEgAygOMhcubWFndXMuYWN0aXZpdHkudjEuS2luZBIOCgZhY3RvcnMYAiADKAkSDwoHYWN0aW9ucxgDIAMoCRInCgR0aW1lGAQgASgLMhkubWFndXMucXVlcnkudjEuVGltZVJhbmdlInoKE0xpc3RBY3Rpdml0eVJlcXVlc3QSHQoJcGFnZV9zaXplGAEgASgFQgq6SAcaBRjoBygAEhIKCnBhZ2VfdG9rZW4YAiABKAkSMAoGZmlsdGVyGAMgASgLMiAubWFndXMuYWN0aXZpdHkudjEuQWN0aXZpdHlRdWVyeSJhChRMaXN0QWN0aXZpdHlSZXNwb25zZRIwCgZldmVudHMYASADKAsyIC5tYWd1cy5hY3Rpdml0eS52MS5BY3Rpdml0eUV2ZW50EhcKD25leHRfcGFnZV90b2tlbhgCIAEoCSI+ChFHZXRQYXlsb2FkUmVxdWVzdBIpCgNyZWYYASABKAlCHLpIGXIXMhVeW2Etel17Miw4fVswLTlhLWZdKyQiMQoSR2V0UGF5bG9hZFJlc3BvbnNlEgwKBGJvZHkYASABKAwSDQoFYnl0ZXMYAiABKAMq9wEKBEtpbmQSFAoQS0lORF9VTlNQRUNJRklFRBAAEhYKEktJTkRfTUNQX1RPT0xfQ0FMTBABEgwKCEtJTkRfSk9CEAISFgoSS0lORF9DT05GSUdfQ0hBTkdFEAMSGAoUS0lORF9UT0tFTl9MSUZFQ1lDTEUQBBIXChNLSU5EX1NBTkRCT1hfREVOSUFMEAUSDwoLS0lORF9NRU1PUlkQBhIWChJLSU5EX0FHRU5UX0NPTU1BTkQQBxIZChVLSU5EX0NSRURFTlRJQUxfR1JBTlQQCBIUChBLSU5EX0FHRU5UX1NQQVdOEAkSDgoKS0lORF9OT1RFUxAKKkUKB091dGNvbWUSFwoTT1VUQ09NRV9VTlNQRUNJRklFRBAAEg4KCk9VVENPTUVfT0sQARIRCg1PVVRDT01FX0VSUk9SEAIyzQEKD0FjdGl2aXR5U2VydmljZRJfCgxMaXN0QWN0aXZpdHkSJi5tYWd1cy5hY3Rpdml0eS52MS5MaXN0QWN0aXZpdHlSZXF1ZXN0GicubWFndXMuYWN0aXZpdHkudjEuTGlzdEFjdGl2aXR5UmVzcG9uc2USWQoKR2V0UGF5bG9hZBIkLm1hZ3VzLmFjdGl2aXR5LnYxLkdldFBheWxvYWRSZXF1ZXN0GiUubWFndXMuYWN0aXZpdHkudjEuR2V0UGF5bG9hZFJlc3BvbnNlQtEBChVjb20ubWFndXMuYWN0aXZpdHkudjFCDUFjdGl2aXR5UHJvdG9QAVpDZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvYWN0aXZpdHkvdjE7YWN0aXZpdHl2MaICA01BWKoCEU1hZ3VzLkFjdGl2aXR5LlYxygIRTWFndXNcQWN0aXZpdHlcVjHiAh1NYWd1c1xBY3Rpdml0eVxWMVxHUEJNZXRhZGF0YeoCE01hZ3VzOjpBY3Rpdml0eTo6VjFiBnByb3RvMw", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp, file_magus_query_v1_query]);
 
 /**
  * ActivityEvent is one recorded action - the atom of the trail. The envelope (time, actor,
@@ -145,6 +145,19 @@ export type ActivityEvent = Message<"magus.activity.v1.ActivityEvent"> & {
    * @generated from field: string session = 15;
    */
   session: string;
+
+  /**
+   * The work-ledger unit this action belongs to, empty when the producer could not correlate
+   * one. Set today only by KIND_AGENT_SPAWN, and only when the handed context declared it: no
+   * host event names a magus unit, so the producer scans the delegation prompt for a documented
+   * marker line ("unit: <id>") instead. Correlation is COOPERATIVE - an orchestrator that wants
+   * the join writes the marker, and one that does not leaves this empty, which is a missing join
+   * rather than a wrong one. It rides the event rather than the blob for the same reason host and
+   * session do: joining a page of rows to a ledger must not cost a GetPayload per row.
+   *
+   * @generated from field: string unit = 16;
+   */
+  unit: string;
 };
 
 /**
@@ -367,6 +380,27 @@ export enum Kind {
    * @generated from enum value: KIND_CREDENTIAL_GRANT = 8;
    */
   CREDENTIAL_GRANT = 8,
+
+  /**
+   * An orchestrating agent handed work to a sub-agent. The request blob carries the CONTEXT
+   * that was handed over - the delegation's whole point, and routinely kilobytes, so only its
+   * ref rides the event. There is no response blob and no guard decision: a spawn is an
+   * observation, not a judged surface. OUTCOME_OK means the handoff was observed, NOT that the
+   * sub-agent later succeeded.
+   *
+   * @generated from enum value: KIND_AGENT_SPAWN = 9;
+   */
+  AGENT_SPAWN = 9,
+
+  /**
+   * The console NotesService door onto the workspace's human-authored notes. The service has no
+   * write path - a note's whole value is the guarantee that a person wrote it - so every event
+   * under this kind is a READ, audited because this is the only door that can serve the PRIVATE
+   * note store, which lives outside any repository and which nothing else attributes.
+   *
+   * @generated from enum value: KIND_NOTES = 10;
+   */
+  NOTES = 10,
 }
 
 /**

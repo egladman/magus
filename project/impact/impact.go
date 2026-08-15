@@ -229,6 +229,8 @@ func build(ctx context.Context, ws types.WorkspaceRepository, r *types.AffectedR
 			ap.Seed = true
 			ap.Files = slices.Clone(r.FilesBySeed[path])
 			slices.Sort(ap.Files)
+			ap.UndeclaredFiles = slices.Clone(r.UndeclaredBySeed[path])
+			slices.Sort(ap.UndeclaredFiles)
 		}
 		if p := ws.Get(path); p != nil {
 			ap.Spells = slices.Clone(p.Spells)

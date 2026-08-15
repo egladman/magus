@@ -397,6 +397,16 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		if who.Event == "" {
 			who.Event = req.Who.Event
 		}
+		if req.IsSpawn {
+			// A delegation carries no verdict, so it returns the pass every other
+			// non-finding does and never reaches the guard. Handled here rather than
+			// beside the two guard arms because the whole point is that nothing judges
+			// it: the handed context is prose, and a prompt that merely MENTIONS a
+			// denied command would otherwise block the delegation that describes it.
+			appendHookSpawn(ctx, req, who)
+			return writeGuardVerdict(out, opts,
+				guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"})
+		}
 	}
 	tool := hookToolCommand
 	switch {
@@ -726,9 +736,17 @@ type hookEnvelope struct {
 	// TranscriptPath is the host's own log of this session. Recorded as a pointer so a
 	// session id in the activity view leads somewhere; magus never reads the file.
 	TranscriptPath string `json:"transcript_path"`
+	ToolName       string `json:"tool_name"`
 	ToolInput      struct {
 		Command  string `json:"command"`
 		FilePath string `json:"file_path"`
+		// A delegation: the context an orchestrator is about to hand a sub-agent, plus
+		// whatever the host calls the callee. Field PATHS, not a host name - the same line
+		// the two fields above already draw. magus does not know which tool produces them
+		// and never switches on ToolName; a payload carrying a prompt IS a spawn.
+		Prompt       string `json:"prompt"`
+		Description  string `json:"description"`
+		SubagentType string `json:"subagent_type"`
 	} `json:"tool_input"`
 }
 
@@ -765,6 +783,12 @@ const (
 // file_path - so it does not try. --observe is what separates them, and only the wrapper
 // can set it, because only the wrapper knows which of its host's tools merely look.
 //
+// A payload carrying a PROMPT rather than either is a delegation handoff: it is RECORDED and
+// EXEMPT from judgment. No rule is evaluated against a prompt, so the guard never denies one -
+// there is no command and no path to judge, only a context transfer to note. It is tested last on
+// purpose, so that adding this branch cannot change the verdict on any payload the guard already
+// judged.
+//
 // Anything that is not an object with a usable tool_input is left alone and judged as the
 // literal text it is - the bare-command form keeps working exactly as before.
 func decodeHookEnvelope(raw string) (hookRequest, bool) {
@@ -785,6 +809,18 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.Value = env.ToolInput.Command
 	case env.ToolInput.FilePath != "":
 		req.Value, req.IsPath = env.ToolInput.FilePath, true
+	case env.ToolInput.Prompt != "":
+		req.Value, req.IsSpawn = env.ToolInput.Prompt, true
+		req.Tool = env.ToolName
+		// Most specific label first. A sub-agent TYPE names what was delegated to and repeats
+		// across spawns, so it groups a delegation feed; a description is per-spawn prose; the
+		// tool name is the last resort that at least says a spawn happened.
+		for _, label := range []string{env.ToolInput.SubagentType, env.ToolInput.Description, env.ToolName} {
+			if label != "" {
+				req.Child = label
+				break
+			}
+		}
 	default:
 		return hookRequest{}, false
 	}
@@ -792,11 +828,15 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 }
 
 // hookRequest is what a host's payload asked the guard to judge: the text, whether it is a
-// path rather than a command, and who reported it.
+// path rather than a command, and who reported it. A spawn asks for nothing to be judged - it
+// carries the handed context and the callee's label, and is recorded rather than evaluated.
 type hookRequest struct {
-	Value  string
-	IsPath bool
-	Who    hookAttribution
+	Value   string
+	IsPath  bool
+	IsSpawn bool
+	Tool    string
+	Child   string
+	Who     hookAttribution
 }
 
 // hookAttribution is what the host wrapper knows about itself and cannot be
@@ -847,6 +887,30 @@ func appendHookActivity(ctx context.Context, input guardInput, who hookAttributi
 		command.Path = input.Value
 	}
 	trail.AppendAgentCommand(ctx, location.base, command)
+}
+
+// appendHookSpawn records a delegation handoff into the same trail, so a person auditing the
+// activity log later can see WHAT CONTEXT an orchestrator handed a sub-agent, not merely that it
+// spawned one. Like appendHookActivity it is best-effort and cannot fail the tool call; unlike it
+// there is no verdict to record, because a spawn is not a guard surface.
+func appendHookSpawn(ctx context.Context, req hookRequest, who hookAttribution) {
+	if req.Value == "" {
+		return
+	}
+	location := hookActivityTrail(ctx)
+	if location.base == "" {
+		return
+	}
+	trail.AppendAgentSpawn(ctx, location.base, trail.AgentSpawn{
+		Actor:     "agent",
+		Workspace: location.workspace,
+		Host:      who.Host,
+		Session:   who.Session,
+		Event:     who.Event,
+		Tool:      req.Tool,
+		Child:     req.Child,
+		Context:   req.Value,
+	})
 }
 
 // hookActivityTrail resolves the local workspace cache because a hook runs as a short-lived
@@ -1605,7 +1669,7 @@ const (
 	// useless is the failure this text exists to prevent.
 	// Names the mechanism, because the fix is not "remember where you are" - it is
 	// that the project is an argument and never needs to be implied by the CWD.
-	cwdGuardContext = "magus workspace: magus is CWD-relative, and `cd` before a magus command is how the right command lands on the wrong project. Pass the project explicitly instead - `magus run <target> <project>`, `magus describe project <path>`, `magus affected ci` - so the command means the same thing from anywhere. Project paths are workspace-relative (`libs/foo`, or `workspace://libs/foo`; both parse). `magus where <name>` resolves a name to its path. Only a DIFFERENT workspace needs relocating, and that is `--root <path>`, not a cd."
+	cwdGuardContext = "magus workspace: magus is CWD-relative, and `cd` before a magus command is how the right command lands on the wrong project. Pass the project explicitly instead - `magus run <target> <project>`, `magus describe project <path>`, `magus affected ci` - so the command means the same thing from anywhere. Project paths are workspace-relative and written bare (`libs/foo`), which is why they mean the same project from any directory. `magus where <name>` resolves a name to its path. Only a DIFFERENT workspace needs relocating, and that is `--root <path>`, not a cd."
 
 	searchGuardReason = "this workspace has a knowledge graph, and a text match is a guess that misses generated, indirect, and cross-language references the graph knows about. Pick by what you are asking:\n" +
 		"  CODE SYMBOL (where is it defined / used):  magus refs <symbol>   -> definition file, every referencing file, exact lines\n" +

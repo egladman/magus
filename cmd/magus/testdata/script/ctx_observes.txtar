@@ -1,0 +1,80 @@
+# ctx.observes declares an EXTERNAL fact the answer depends on.
+#
+# The problem it exists for, from this repo's own magusfile: an image scan is keyed on
+# the image and the tree, but the ANSWER also depends on the scanner's vulnerability
+# database, which moves daily and is not an input magus can see. A cache hit would
+# report yesterday's CVEs against today's image. The only control that existed was
+# skip_cache, which forfeits caching forever to avoid the staleness.
+#
+# ctx.observes makes the invisible input visible instead: the observed value joins the
+# key, so a fact that moves is a miss and a fact that holds still replays. This script
+# pins the CLI-visible half of that - the declaration surviving parse, load and keying,
+# and showing up as its own explainable component. The key ARITHMETIC (moving the value
+# moves the key, an identical value does not) is pinned in
+# internal/cache.TestObservationsChangeTheKey, which can hold every other input fixed;
+# nothing here can, since a target's name and its magusfile's hash are in the same key.
+#
+# The values below are LITERALS, which is all the mechanism accepts today, and that is
+# why this stands in for converting the real image-scan target rather than being that
+# conversion. A scanner database that refreshes nightly needs a value probed at key
+# time; a hand-written date would report a hit while claiming an observation that
+# stopped holding days ago. See plans/ctx-observes-reconstruction.md.
+
+# An observation is its own key-input class, so "why did this rebuild" names the
+# external fact rather than blaming a source file or an environment variable.
+exec magus describe target scan . --cache
+stdout 'obs +[0-9a-f]{12} +1 line'
+
+# Two observations, one class, two lines: they accumulate rather than replace.
+exec magus describe target audit . --cache
+stdout 'obs +[0-9a-f]{12} +2 lines'
+
+# And a target that declares none has no such class. Observing is opt-in; nothing is
+# inferred, and an undeclared target keys exactly as it did before this existed.
+exec magus describe target plain . --cache
+! stdout 'obs +[0-9a-f]{12}'
+
+# The half that makes this better than skip_cache: an unchanged observation still
+# replays. If declaring one cost the cache, the declaration would be skip_cache with
+# extra steps.
+exec magus run scan:rw
+stderr '\(ran'
+exec magus run scan:rw
+stderr '\(cached'
+
+# A computed value is rejected at LOAD, loudly. It cannot reach the key - the key is
+# minted before the target body runs - so accepting one would key the step as though
+# nothing were observed, which is the exact staleness the declaration exists to
+# prevent. Quiet under-declaration is the worse failure, so this is a hard error.
+cp computed.buzz magusfile.buzz
+! exec magus ls
+stderr 'observes'
+
+-- magus.yaml --
+concurrency: 2
+-- magusfile.buzz --
+import "magus";
+import "proc";
+
+export fun scan(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.observes("trivy-db", "2026-08-15");
+    proc\exec("sh", ["-c", "true"]);
+}
+
+export fun audit(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.observes("trivy-db", "2026-08-15");
+    ctx.observes("npm-advisories", "r4412");
+    proc\exec("sh", ["-c", "true"]);
+}
+
+export fun plain(ctx: magus\Context, args: [str]) > void !> any {
+    proc\exec("sh", ["-c", "true"]);
+}
+-- computed.buzz --
+import "magus";
+
+fun probe() > str { return "2026-08-15"; }
+
+export fun scan(ctx: magus\Context, args: [str]) > void {
+    ctx.observes("trivy-db", probe());
+}

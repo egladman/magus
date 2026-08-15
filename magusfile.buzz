@@ -79,6 +79,28 @@ magus\project({
     // a worktree produced spurious diffs.
     "name": "magus",
     "spells": [go, buzz, markdown, bash],
+    // The tool configs the bound spells actually read, on top of the source globs those
+    // spells contribute. Every one of these changes what a target DOES while matching no
+    // spell glob, so before this list an edit to one produced a cache HIT: golangci-lint
+    // re-run under a new rule set, replaying the verdict from the old one. That is the
+    // silent half of under-declaration. The loud half was already visible - each of these
+    // still seeded the root project through directory containment, so touching one reran
+    // everything without keying anything (MGS1028).
+    //
+    // Deliberately NOT here: LICENSE (only release-build reads it, and that target is
+    // skip_cache, so declaring it would invalidate build/test/lint to key nothing) and
+    // .gitignore (no target reads it at all). Both keep seeding by containment, and
+    // doctor keeps saying so - an undeclared file is only wrong when it is an input.
+    "sources": [
+        ".golangci.yml",        // golangci-lint, via the go spell's lint op
+        ".mockery.yaml",        // drives `go tool mockery` in generate
+        ".markdownlintignore",  // markdownlint, via the markdown spell's lint op
+        "dprint-base.json",     // dprint.json extends it; the markdown spell declares only dprint.json
+        "mise.toml",            // pins the toolchain every op in this project runs under
+        "magus.yaml",           // charms, cache and sandbox policy every run resolves
+        "Dockerfile",           // image-build's amd64 variant
+        "Dockerfile.static",    // image-build's static multi-arch variant
+    ],
     "targets": {
         "watch": {"skip_cache": "blocks on a filesystem watch loop and never returns"},
         // serve blocks (a long-running dev-loop server), so it must never cache.
@@ -101,6 +123,9 @@ magus\project({
         // Keyed on the image and this tree, but the ANSWER also depends on trivy's
         // vulnerability database, which changes daily and is not an input magus can see.
         // A hit would report yesterday's CVEs against today's image.
+        // ctx.observes is the successor, and it is not usable here YET: it keys on a value
+        // the magusfile STATES, and nothing states trivy's DB id without probing for it,
+        // which cannot run before the key is minted. See plans/ctx-observes-reconstruction.md.
         "image-scan": {"skip_cache": "reads trivy's vulnerability database, which changes independently of this tree"},
         // A release must never replay a cached artifact (see cd.yaml's remote-cache
         // comment); each has a real side effect (dist/ output, or a signature over it)

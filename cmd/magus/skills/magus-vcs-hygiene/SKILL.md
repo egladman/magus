@@ -26,8 +26,11 @@ project and a role:
   derivation claiming to be its own product - which is why it needs its own role
   rather than a wider glob somewhere{{else}} - it is derived from the declared
   output globs, so no project can claim it{{end}}.
-- `unclaimed` - no project declares it and magus does not write it: it affects
-  no target. Check the VCS ignore rules (`git check-ignore -v <path>`){{if .Full}} - build residue should be
+- `unclaimed` - no project declares it and magus does not write it: it enters no
+  cache key, but directory containment still seeds its owning project, so touching
+  it reruns targets whose answer cannot have changed (MGS1028). Declaring it in the
+  owning project's `sources` fixes both halves{{if .Full}}; leaving it undeclared is right when
+  nothing reads it{{end}}. Check the VCS ignore rules (`git check-ignore -v <path>`){{if .Full}} - build residue should be
   ignored, and an unclaimed un-ignored file is at risk of being lost{{else}} - an unclaimed
   un-ignored file is at risk of being lost{{end}}.
 

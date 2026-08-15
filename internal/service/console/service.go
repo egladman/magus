@@ -12,6 +12,7 @@ import (
 	"time"
 
 	magus "github.com/egladman/magus"
+	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/proc"
@@ -187,9 +188,10 @@ func (s *Service) statusReport(ctx context.Context) types.StatusReport {
 		Build:          s.statusBase.Build,
 		ObservingSince: s.startedAt,
 		Config: types.StatusConfig{
-			DefaultCharms: s.config.DefaultCharms,
-			Concurrency:   s.config.Concurrency,
-			Sandbox:       s.config.Sandbox.Enabled,
+			DefaultCharms:        s.config.DefaultCharms,
+			Concurrency:          s.config.Concurrency,
+			ConcurrencyEffective: cache.ResolveConcurrency(s.config.Concurrency),
+			Sandbox:              s.config.Sandbox.Enabled,
 		},
 	}
 	addr, err := s.resolveStatusAddr(ctx)

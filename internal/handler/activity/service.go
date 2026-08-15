@@ -95,6 +95,7 @@ func (s *Service) ListActivity(_ context.Context, req *connect.Request[activityv
 			Session:       e.Session,
 			Workspace:     e.Workspace,
 			Action:        e.Action,
+			Unit:          e.Unit,
 			Outcome:       encodeOutcome(e.Outcome),
 			Error:         e.Error,
 			RequestRef:    e.RequestRef,
@@ -225,8 +226,12 @@ func encodeKind(k trail.Kind) activityv1.Kind {
 		return activityv1.Kind_KIND_SANDBOX_DENIAL
 	case trail.KindAgentCommand:
 		return activityv1.Kind_KIND_AGENT_COMMAND
+	case trail.KindAgentSpawn:
+		return activityv1.Kind_KIND_AGENT_SPAWN
 	case trail.KindMemory:
 		return activityv1.Kind_KIND_MEMORY
+	case trail.KindNotes:
+		return activityv1.Kind_KIND_NOTES
 	case trail.KindCredentialGrant:
 		return activityv1.Kind_KIND_CREDENTIAL_GRANT
 	default:
