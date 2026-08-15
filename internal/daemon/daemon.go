@@ -271,6 +271,11 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			diffSessionH := status.NewDiffSessionHandler(diffSessions, diffRoot, log)
 			outputsH := viewer.NewOutputsHandler(outputStore, log)
 			outputH := viewer.NewOutputHandler(outputStore, log)
+			// The DERIVED plan: the target DAG the engine computes for plain work. It reads
+			// the same two sources the console already trusts - the service for structure and
+			// live pool state, the output store for each node's last outcome and its ref - so
+			// it introduces no third notion of what ran.
+			planH := status.NewPlanHandler(svc, outputStore, opts.Magus.Root(), log)
 
 			bridgeMux := http.NewServeMux()
 			// The JSON /api/v1/status route is GONE: the typed StatusService Connect route
@@ -300,6 +305,11 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// per request (a shallow keep-last-K scan), matching the other read-only /api JSON routes.
 			bridgeMux.Handle("/api/v1/outputs", cors(outputsH))
 			bridgeMux.Handle("/api/v1/output", cors(outputH))
+			// Human run view: every plain run has a plan, and until now only an agent-declared
+			// one had a surface. Loopback only, like the diff routes and unlike /api/v1/outputs:
+			// this one names every target in the workspace, which a share link handed to a phone
+			// has no business enumerating.
+			bridgeMux.Handle("/api/v1/plan", cors(planH))
 			// Wrap every /api/ route with rebind + header-only bearer auth.
 			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyBearer, bridgeMux)))
 
