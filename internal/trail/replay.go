@@ -177,6 +177,47 @@ func relativize(root, p string) string {
 	return strings.TrimPrefix(strings.TrimPrefix(p, root), "/")
 }
 
+// ObservedCounts reports how many of each observed tool kind the trail holds, newest-first
+// within limit.
+//
+// It exists for one question a fleet cannot answer any other way: is the observer actually
+// RECORDING? An absent observer is silent by design - a per-read interruption would be worse -
+// so a hook that is wired but writing nothing looks exactly like an agent that read nothing,
+// and both look like a human wrote the file. This repository has already paid for that: 3252
+// events, not one read, correct wiring, and a green doctor, because the hook resolved a PATH
+// magus too old to know --observe.
+//
+// Counts rather than a verdict: what a healthy ratio looks like depends on the host, so the
+// caller decides. Reporting reads==0 beside commands>0 is the fact that matters.
+func ObservedCounts(base string, limit int) (reads, writes, shell int) {
+	events, err := ReadRecent(base, limit)
+	if err != nil {
+		return 0, 0, 0
+	}
+	for _, e := range events {
+		if e.Kind != KindAgentCommand || e.RequestRef == "" {
+			continue
+		}
+		raw, rerr := ReadBlob(base, e.RequestRef)
+		if rerr != nil {
+			continue
+		}
+		var req agentCommandRequest
+		if json.Unmarshal(raw, &req) != nil {
+			continue
+		}
+		switch req.Tool {
+		case toolRead:
+			reads++
+		case toolWrite:
+			writes++
+		case toolShell:
+			shell++
+		}
+	}
+	return reads, writes, shell
+}
+
 // commandProgram reduces a recorded command line to the program it invoked, dropping every
 // argument. See Touch.Ran for why the arguments cannot be kept.
 //
