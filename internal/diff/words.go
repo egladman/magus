@@ -31,7 +31,10 @@ func (s Span) Empty() bool { return s.End <= s.Start }
 //
 // This is a port of console/src/console/diff/words.ts, which stays the source of truth. The
 // two must agree exactly or the same changed line is highlighted differently in the browser
-// than in the terminal; TestEmphasizeMatchesTheConsoleImplementation pins that.
+// than in the terminal. TestEmphasizeMatchesTheConsoleImplementation checks THIS side against
+// vectors transcribed from words.ts as it stands on this branch and pinned as literals; it
+// does not run the TypeScript, so an edit over there does not fail the suite. Re-transcribe
+// when words.ts moves - nothing else will notice.
 //
 // BOUNDARY SEMANTICS: the scan compares RUNES and the returned offsets are BYTES. JavaScript
 // indexes by UTF-16 code unit, so scanning Go's bytes is not the same algorithm - "café"
@@ -75,19 +78,26 @@ func Emphasize(before, after string) (Span, Span) {
 	return span(bOff, p, bEnd), span(aOff, p, aEnd)
 }
 
+// EmphasisPair is one deleted line matched to the added line that replaced it, as positions in
+// the hunk body both were read from.
+type EmphasisPair struct {
+	Del int
+	Add int
+}
+
 // PairForEmphasis matches deleted lines to added lines inside one run of changes.
 //
 // Pairing is strictly positional and only within a run of equal length. An unequal run means
 // lines were added or removed rather than rewritten, and pairing across that boundary invents a
 // correspondence the patch does not contain - which would emphasise the wrong half of two
 // unrelated lines and read as a confident lie.
-func PairForEmphasis[T any](dels, adds []T) [][2]T {
+func PairForEmphasis(dels, adds []int) []EmphasisPair {
 	if len(dels) == 0 || len(dels) != len(adds) {
 		return nil
 	}
-	out := make([][2]T, 0, len(dels))
+	out := make([]EmphasisPair, 0, len(dels))
 	for i := range dels {
-		out = append(out, [2]T{dels[i], adds[i]})
+		out = append(out, EmphasisPair{Del: dels[i], Add: adds[i]})
 	}
 	return out
 }

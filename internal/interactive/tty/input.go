@@ -39,7 +39,7 @@ const (
 	// KeyCtrlU clears a line of input.
 	KeyCtrlU
 	// KeyPageUp and KeyPageDown page a bounded viewport. Appended rather than filed beside
-	// the arrows because these constants are iota-numbered and nothing may renumber them.
+	// the arrows so the constants above keep the values they already have.
 	KeyPageUp
 	KeyPageDown
 )

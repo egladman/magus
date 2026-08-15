@@ -293,8 +293,11 @@ func planClosure(index planTargets, projects []types.TargetGraphProject, anchor 
 		visit(planKey{p.Path, anchor})
 	}
 
-	nodes := make([]planNode, 0, len(queue))
-	edges := make([]planEdge, 0, len(queue))
+	// Empty rather than capacity-hinted: queue holds only the seeds at this point and the walk
+	// below grows it, so any hint taken from it would describe a plan this is not. Non-nil for
+	// the [] contract above.
+	nodes := []planNode{}
+	edges := []planEdge{}
 	drawn := map[planEdge]bool{}
 	draw := func(from, to planKey) {
 		e := planEdge{From: from.id(), To: to.id()}
@@ -417,10 +420,10 @@ func runningInvocations(pool *types.StatusOutput, root string) map[string]bool {
 	return out
 }
 
-// bareTarget drops a charm suffix ("build:rw" -> "build"). A cut rather than
-// types.ParseTarget because both sides of every join here are names the engine already
-// normalized, and a parse error would have to be swallowed into an empty name that silently
-// matches nothing.
+// bareTarget drops a charm suffix ("build:rw" -> "build"). The same cut as internal/cache's
+// bareTarget; unexported there, so duplicated. A cut rather than types.ParseTarget because
+// both sides of every join here are names the engine already normalized, and a parse error
+// would have to be swallowed into an empty name that silently matches nothing.
 func bareTarget(target string) string {
 	name, _, _ := strings.Cut(target, ":")
 	return name

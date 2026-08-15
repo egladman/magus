@@ -102,7 +102,7 @@ func overviewFrame(m *Model) string {
 	end := min(start+m.Height(), len(rows))
 	for i := start; i < end; i++ {
 		b.WriteString(gutter(i == m.OverviewCursor()))
-		b.WriteString(rows[i])
+		b.WriteString(rows[i].Rendered)
 		b.WriteString("\n")
 	}
 	for i := end - start; i < m.Height(); i++ {

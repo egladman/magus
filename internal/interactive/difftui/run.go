@@ -40,9 +40,10 @@ type Options struct {
 	Summary string
 }
 
-// defaultHeight is what an unmeasurable terminal is assumed to be. It cannot happen behind
-// the CLI's gate, which measures the same descriptor, and a viewer that drew nothing would
-// be indistinguishable from a hang.
+// defaultHeight is what a terminal that will not report its size is assumed to be. The CLI's
+// gate refuses a stdout that is not a terminal at all - the same descriptor this is drawn on -
+// so what reaches here is a terminal whose size query failed, and a viewer that drew nothing
+// would be indistinguishable from a hang.
 const defaultHeight = 24
 
 // Run draws the changeset and reads keys until the reader quits.
@@ -136,8 +137,8 @@ func apply(m *Model, ev tty.Event, sync Sync) (quit bool) {
 		case '{':
 			moved = m.PrevFile()
 		case 'v':
-			if digest, on, ok := m.ToggleViewed(); ok && sync != nil {
-				sync.SetViewed(digest, on)
+			if change, ok := m.ToggleViewed(); ok && sync != nil {
+				sync.SetViewed(change.Digest, change.On)
 			}
 		case '.':
 			m.ToggleGenerated()

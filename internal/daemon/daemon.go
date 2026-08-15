@@ -262,7 +262,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// below and the magus_diff MCP tool read the SAME object - that sharing is the
 			// pairing. A caller that supplied none gets a local one rather than a nil panic;
 			// pairing is then per-process, which is the honest degradation.
-			diffSessions := opts.ReviewSessions
+			diffSessions := opts.DiffSessions
 			if diffSessions == nil {
 				diffSessions = diff.NewStore(opts.Magus.CacheDir())
 			}
@@ -305,8 +305,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// per request (a shallow keep-last-K scan), matching the other read-only /api JSON routes.
 			bridgeMux.Handle("/api/v1/outputs", cors(outputsH))
 			bridgeMux.Handle("/api/v1/output", cors(outputH))
-			// Human run view: every plain run has a plan, and until now only an agent-declared
-			// one had a surface. Loopback only, like the diff routes and unlike /api/v1/outputs:
+			// Human run view: every plain run has a plan, and an agent-declared one is not the
+			// only shape worth showing. Loopback only, like the diff routes and unlike /api/v1/outputs:
 			// this one names every target in the workspace, which a share link handed to a phone
 			// has no business enumerating.
 			bridgeMux.Handle("/api/v1/plan", cors(planH))

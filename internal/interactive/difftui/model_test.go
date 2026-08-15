@@ -14,18 +14,19 @@ import (
 )
 
 // testFiles is the shape that exercises every boundary at once: a multi-hunk file, a
-// single-hunk file, and a generated file that is folded away by default.
+// single-hunk file, and a generated file that is folded away by default. Index is spelled out
+// because it is the coordinate talk is anchored by, and the caller supplies it from the patch.
 func testFiles() []File {
 	return []File{
 		{Path: "a.go", Facts: []string{"PUBLIC SURFACE", "in root"}, Hunks: []Hunk{
-			{Header: "@@ -1 +1 @@", Lines: []string{"-one", "+two"}, Digest: "da0"},
-			{Header: "@@ -9 +9 @@", Lines: []string{"-three", "+four"}, Digest: "da1"},
+			{Index: 0, Header: "@@ -1 +1 @@", Lines: []string{"-one", "+two"}, Digest: "da0"},
+			{Index: 1, Header: "@@ -9 +9 @@", Lines: []string{"-three", "+four"}, Digest: "da1"},
 		}},
 		{Path: "b.go", Hunks: []Hunk{
-			{Header: "@@ -2 +2 @@", Lines: []string{"+five"}, Digest: "db0"},
+			{Index: 0, Header: "@@ -2 +2 @@", Lines: []string{"+five"}, Digest: "db0"},
 		}},
 		{Path: "gen/out.json", Generated: true, Hunks: []Hunk{
-			{Header: "@@ -3 +3 @@", Lines: []string{"+six"}, Digest: "dg0"},
+			{Index: 0, Header: "@@ -3 +3 @@", Lines: []string{"+six"}, Digest: "dg0"},
 		}},
 	}
 }
@@ -121,21 +122,20 @@ func TestViewedTogglesOnHunksOnly(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: testFiles()})
 
-	_, _, ok := m.ToggleViewed()
+	_, ok := m.ToggleViewed()
 	assert.False(t, ok, "a file heading has no hunk to mark")
 
 	require.True(t, m.NextHunk())
-	digest, on, ok := m.ToggleViewed()
+	change, ok := m.ToggleViewed()
 	require.True(t, ok)
-	assert.Equal(t, "da0", digest)
-	assert.True(t, on)
+	assert.Equal(t, ViewedChange{Digest: "da0", On: true}, change)
 	assert.True(t, m.Viewed("da0"))
 	assert.Contains(t, rowTextFor(m, RowHunk, 0), "[x]")
 	assert.Contains(t, rowTextFor(m, RowFile, 0), "2 hunks, 1 read")
 
-	_, on, ok = m.ToggleViewed()
+	change, ok = m.ToggleViewed()
 	require.True(t, ok)
-	assert.False(t, on, "the second press unmarks it")
+	assert.False(t, change.On, "the second press unmarks it")
 	assert.False(t, m.Viewed("da0"))
 	assert.Contains(t, rowTextFor(m, RowHunk, 0), "[ ]")
 }
@@ -155,9 +155,10 @@ func TestOverviewEntersAndReturns(t *testing.T) {
 	m.ToggleOverview()
 	require.True(t, m.Overview())
 	assert.Equal(t, 0, m.OverviewCursor(), "it opens on the file being read")
-	require.Len(t, m.OverviewRows(), 3)
-	assert.Contains(t, m.OverviewRows()[0], "2 hunks, 0 read")
-	assert.Contains(t, m.OverviewRows()[2], "generated")
+	rows := m.OverviewRows()
+	require.Len(t, rows, 3)
+	assert.Equal(t, OverviewRow{Path: "a.go", Hunks: 2, Read: 0, Rendered: "a.go  2 hunks, 0 read"}, rows[0])
+	assert.True(t, rows[2].Generated)
 
 	m.OverviewMove(-4)
 	assert.Equal(t, 0, m.OverviewCursor(), "clamped at the top")
@@ -248,7 +249,8 @@ func TestLinkDecoratesOnlyTheFileHeading(t *testing.T) {
 	t.Parallel()
 	m := New(Input{Files: testFiles(), Link: func(p string) string { return "<" + p + ">" }})
 	assert.Contains(t, rowTextFor(m, RowFile, 0), "<a.go>")
-	assert.Contains(t, m.OverviewRows()[0], "<a.go>")
+	assert.Contains(t, m.OverviewRows()[0].Rendered, "<a.go>")
+	assert.Equal(t, "a.go", m.OverviewRows()[0].Path, "the decoration is in Rendered and nowhere else")
 	assert.NotContains(t, rowTextFor(m, RowHunk, 0), "<")
 }
 
@@ -294,7 +296,7 @@ func TestEmptyChangesetDrawsNothingAndRefusesEveryMove(t *testing.T) {
 	assert.False(t, m.PrevHunk())
 	assert.False(t, m.NextFile())
 	assert.False(t, m.PrevFile())
-	_, _, ok := m.ToggleViewed()
+	_, ok := m.ToggleViewed()
 	assert.False(t, ok)
 	m.ToggleOverview()
 	m.OverviewEnter()

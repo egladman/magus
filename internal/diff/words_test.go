@@ -70,10 +70,12 @@ func TestEmphasizeMatchesTheConsoleImplementation(t *testing.T) {
 }
 
 func TestPairForEmphasisIsPositionalAndOnlyWithinAnEqualRun(t *testing.T) {
-	assert.Equal(t, [][2]string{{"a", "x"}, {"b", "y"}},
-		PairForEmphasis([]string{"a", "b"}, []string{"x", "y"}))
+	// The inputs are line positions in a hunk body: two removed lines followed by the two that
+	// replaced them, which is the shape the run scanner hands over.
+	assert.Equal(t, []EmphasisPair{{Del: 0, Add: 2}, {Del: 1, Add: 3}},
+		PairForEmphasis([]int{0, 1}, []int{2, 3}))
 	// An unequal run means lines were added or removed rather than rewritten. Pairing across
 	// that would invent a correspondence the patch does not contain.
-	assert.Nil(t, PairForEmphasis([]string{"a"}, []string{"x", "y"}))
-	assert.Nil(t, PairForEmphasis([]string{}, []string{}))
+	assert.Nil(t, PairForEmphasis([]int{0}, []int{1, 2}))
+	assert.Nil(t, PairForEmphasis([]int{}, []int{}))
 }

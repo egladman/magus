@@ -199,7 +199,7 @@ var Magus = Module{
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Diff"}},
 			Raises:  true,
-			Impl:    MagusReview,
+			Impl:    MagusDiff,
 		},
 		{
 			Name: "doctor",
@@ -821,7 +821,7 @@ func MagusDescribeFile(ctx context.Context, paths []string, opts map[string]any)
 	return runMagusJSON[types.FileReport](ctx, "describe", append([]string{"file"}, paths...), opts)
 }
 
-// MagusReview implements magus\diff: the annotated changeset, in reading order.
+// MagusDiff implements magus\diff: the annotated changeset, in reading order.
 //
 // It shells out to `magus diff` rather than reimplementing the join, which is the whole
 // point of exposing it here - a Buzz advisor writing a pull-request comment and the console
@@ -831,7 +831,7 @@ func MagusDescribeFile(ctx context.Context, paths []string, opts map[string]any)
 // --generated is passed so the caller receives every file and decides what to fold. A CI
 // comment and a terminal reader want different things from the generated set, and a host
 // module that pre-filtered would make the wider answer unreachable.
-func MagusReview(ctx context.Context, opts map[string]any) (types.Diff, error) {
+func MagusDiff(ctx context.Context, opts map[string]any) (types.Diff, error) {
 	return runMagusJSON[types.Diff](ctx, "diff", []string{"--generated"}, opts)
 }
 

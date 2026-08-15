@@ -135,7 +135,7 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	}))
 	m.MapSet("diff", vm.DirectValue("magus.diff", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		opts := AnyMap(bzArgs, 0)
-		ret0, err := std.MagusReview(ctx, opts)
+		ret0, err := std.MagusDiff(ctx, opts)
 		if err != nil {
 			return vm.Null, HostError(err)
 		}

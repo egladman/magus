@@ -57,7 +57,11 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := diffTUIRefusal(rf, src, opts.Format, isInteractiveTTY()); err != nil {
+	term := diffTUITerm{
+		Reads:  isInteractiveTTY(),
+		Paints: tty.IsTerminalWriter(os.Stdout, tty.SystemProbe),
+	}
+	if err := diffTUIRefusal(rf, src, opts.Format, term); err != nil {
 		return err
 	}
 
@@ -119,6 +123,21 @@ func diffInputFromArgs(rest []string) (diffInput, error) {
 		"and pipe a patch in with `git diff %s | magus diff -`", arg, arg, arg)
 }
 
+// diffTUITerm is the terminal the viewer was handed, split by descriptor, because the viewer
+// uses two of them and one probe does not answer for both.
+type diffTUITerm struct {
+	// Reads is the shared interactive gate every stepping surface asks for: stdin and stderr
+	// are both terminals.
+	Reads bool
+	// Paints is stdout, which the viewer draws the changeset on. Reads never looks at it, and
+	// `magus diff --tui > file` is what fell through the gap: the flags passed, then
+	// tty.OpenInput refused with a bare error naming none of this.
+	Paints bool
+}
+
+// ok reports whether the viewer can have this terminal.
+func (t diffTUITerm) ok() bool { return t.Reads && t.Paints }
+
 // diffTUIRefusal reports why --tui cannot run under these flags, or nil when it can.
 //
 // Every refusal is LOUD and names plain `magus diff` as the way to get the same answer,
@@ -127,9 +146,9 @@ func diffInputFromArgs(rest []string) (diffInput, error) {
 // over, a watch loop and a keypress loop both own the same terminal, and -o json asked for
 // a machine-readable answer that a viewport cannot give.
 //
-// It takes interactive as an ARGUMENT rather than probing the terminal itself, which is
-// what makes the refusal matrix testable without a pty.
-func diffTUIRefusal(rf *gen.DiffFlags, src diffInput, format Format, interactive bool) error {
+// It takes the terminal as an ARGUMENT rather than probing it, which is what makes the
+// refusal matrix testable without a pty.
+func diffTUIRefusal(rf *gen.DiffFlags, src diffInput, format Format, term diffTUITerm) error {
 	if !rf.Tui {
 		return nil
 	}
@@ -142,7 +161,7 @@ func diffTUIRefusal(rf *gen.DiffFlags, src diffInput, format Format, interactive
 	if format != outputText {
 		return usagef("magus diff: --tui draws at a terminal, so it cannot be combined with -o %s", format)
 	}
-	if !interactive {
+	if !term.ok() {
 		// Not a usage error: the flags are fine and the terminal is not, so say which one and
 		// name the command that works here.
 		fmt.Fprintln(os.Stderr, "magus: diff --tui requires an interactive terminal; use `magus diff` instead")
@@ -338,6 +357,10 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths [
 	if err != nil {
 		return err
 	}
+	// Closed here rather than inside difftui: how a Sync gets its writes out - inline, or over a
+	// goroutine that has to be drained - is this file's business, and the viewer stays ignorant
+	// of it. Deferred before Run, so it also runs when the reader interrupts.
+	defer sync.close()
 	return difftui.Run(ctx, difftui.Options{
 		In:    os.Stdin,
 		Out:   os.Stdout,
@@ -351,8 +374,10 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths [
 			Unfolded:    showGenerated,
 			Link:        pathLinker(m.Root()),
 		},
-		Sync:    sync,
-		Summary: diffCountsLine(rev),
+		Sync: sync,
+		// The fold the session OPENS in. A reader who presses `.` changes what they are shown
+		// and not this line, which is the closest an up-front string gets to the truth.
+		Summary: diffCountsLine(rev, showGenerated),
 	})
 }
 
@@ -362,7 +387,7 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths [
 // already on it, so the terminal joining anywhere else would be a fourth opinion wearing the
 // same name. Without one there is nobody to pair with, so the changeset is computed here and
 // progress goes straight into the file the daemon's own store would have written.
-func attachDiffSession(ctx context.Context, m *magus.Magus, patch, base string, paths []string) (types.Diff, *types.DiffSession, difftui.Sync, error) {
+func attachDiffSession(ctx context.Context, m *magus.Magus, patch, base string, paths []string) (types.Diff, *types.DiffSession, diffSync, error) {
 	asOf := diff.PatchDigest(patch)
 	if b := dialDiffBridge(ctx, paths, asOf); b != nil {
 		return b.session.Diff, b.session, b, nil
@@ -394,11 +419,21 @@ func diffTUIFiles(rev types.Diff, parsed []diff.FileHunks) []difftui.File {
 	for _, f := range rev.Files {
 		file := difftui.File{Path: f.Path, Generated: f.Generated(), Facts: diffFileFacts(f)}
 		for _, h := range byPath[f.Path] {
-			file.Hunks = append(file.Hunks, difftui.Hunk{Header: h.Header, Lines: h.Lines, Digest: h.Digest})
+			file.Hunks = append(file.Hunks, difftui.Hunk{
+				Index: h.Index, Header: h.Header, Lines: h.Lines, Digest: h.Digest,
+			})
 		}
 		out = append(out, file)
 	}
 	return out
+}
+
+// diffSync is a difftui.Sync with a shutdown. The two implementations get their writes out
+// differently - one to a local file, one over a goroutine that has to be drained - and the
+// viewer must not have to know which it was handed.
+type diffSync interface {
+	difftui.Sync
+	close()
 }
 
 // diffStoreSync persists the reader's progress with no daemon in the picture. There is no
@@ -410,17 +445,28 @@ type diffStoreSync struct {
 
 func (diffStoreSync) SetCursor(types.DiffCursor) {}
 
+// SetViewed stays SYNCHRONOUS, unlike the bridge's: this is memory and a file under the cache
+// dir, so it costs a keypress nothing that a queue would win back.
 func (s diffStoreSync) SetViewed(digest string, on bool) {
 	s.store.MarkViewed(s.root, digest, on)
 }
 
+func (diffStoreSync) close() {}
+
 // diffBridge is the running daemon's session, reached over the same loopback routes the
 // console uses. The session it attached to travels with it, because a transport that could
 // hand back a session it had not attached would be a client of nothing.
+//
+// Writes leave on sends rather than on the caller's stack. Every one of them is provoked by a
+// KEYPRESS - a cursor move, a read mark - and posting inline put a network round trip between
+// the key and the screen moving, up to the full diffBridgeWrite deadline against a daemon that
+// had stopped answering.
 type diffBridge struct {
 	addr    string
 	token   string
 	session *types.DiffSession
+	sends   chan diffSessionOp
+	done    chan struct{}
 }
 
 // diffBridgeAttach bounds the GET that annotates and attaches. It is the expensive route -
@@ -428,10 +474,15 @@ type diffBridge struct {
 // is not a faster one, it is computing the same thing locally.
 const diffBridgeAttach = 10 * time.Second
 
-// diffBridgeWrite bounds a coordination write. Short, because it happens on a KEYPRESS: a
-// long timeout against a wedged daemon would put that whole delay between the reader pressing
-// a key and the screen moving.
+// diffBridgeWrite bounds a coordination write. Short, because a wedged daemon must not hold
+// the sender long enough for the queue behind it to overflow, and because it is also how long
+// quitting waits for the last mark to leave.
 const diffBridgeWrite = time.Second
+
+// diffBridgeQueue bounds the writes waiting to leave. Small on purpose: a backlog means the
+// daemon has stopped keeping up, and at that point the newest cursor is the only one worth
+// having - the ones behind it describe somewhere the reader no longer is.
+const diffBridgeQueue = 8
 
 // dialDiffBridge attaches to the daemon's session, or returns nil when there is nothing to
 // join - no token, no listener, a daemon with no workspace. Every one of those is an ordinary
@@ -476,6 +527,9 @@ func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridg
 		return nil
 	}
 	b.session = &sess
+	b.sends = make(chan diffSessionOp, diffBridgeQueue)
+	b.done = make(chan struct{})
+	go b.deliver()
 	return b
 }
 
@@ -493,12 +547,41 @@ type diffSessionOp struct {
 // carries the session's own cursor, and applying that would let another client move this
 // reader's viewport - which is the one thing the paired-review design forbids.
 func (b *diffBridge) SetCursor(c types.DiffCursor) {
-	b.post(diffSessionOp{Op: "cursor", Path: c.Path, Hunk: c.Hunk})
+	b.queue(diffSessionOp{Op: "cursor", Path: c.Path, Hunk: c.Hunk})
 }
 
 // SetViewed publishes a read mark, which the daemon persists for every client at once.
 func (b *diffBridge) SetViewed(digest string, on bool) {
-	b.post(diffSessionOp{Op: "viewed", Digest: digest, On: on})
+	b.queue(diffSessionOp{Op: "viewed", Digest: digest, On: on})
+}
+
+// queue hands one mutation to the sender, and DROPS it when the sender is behind. It never
+// blocks: the key loop is what calls it, and difftui.Sync promises best-effort delivery
+// precisely so a slow daemon costs the reader nothing.
+func (b *diffBridge) queue(op diffSessionOp) {
+	select {
+	case b.sends <- op:
+	default:
+	}
+}
+
+// deliver posts queued mutations one at a time, in order, until the queue is closed.
+func (b *diffBridge) deliver() {
+	defer close(b.done)
+	for op := range b.sends {
+		b.post(op)
+	}
+}
+
+// close stops the sender and gives what is already queued a bounded chance to leave: a mark
+// made on the last keypress should not be lost to the process exiting, and a daemon that has
+// stopped answering should not hold the shell either.
+func (b *diffBridge) close() {
+	close(b.sends)
+	select {
+	case <-b.done:
+	case <-time.After(diffBridgeWrite):
+	}
 }
 
 // post sends one mutation, best-effort. A coordination write that fails is a pairing that
@@ -596,11 +679,18 @@ func diffTouches(root, cacheDir string, paths []string) map[string][]types.DiffT
 // The interactive reader leaves this same line behind when it quits, which is why it is a
 // string rather than a print: a session that erased its viewport and printed nothing would
 // leave the scrollback with no record that a review happened at all.
-func diffCountsLine(rev types.Diff) string {
+// The fold state is threaded rather than assumed: the line said "folded" unconditionally, so
+// under --generated - where every one of them is printed right below it - the headline
+// contradicted the page it introduced.
+func diffCountsLine(rev types.Diff, showGenerated bool) string {
 	gen := rev.GeneratedCount()
 	line := fmt.Sprintf("%d files to read", len(rev.Files)-gen)
 	if gen > 0 {
-		line += fmt.Sprintf(", %d generated folded", gen)
+		state := "folded"
+		if showGenerated {
+			state = "shown"
+		}
+		line += fmt.Sprintf(", %d generated %s", gen, state)
 	}
 	if n := len(rev.SeedProjects); n > 0 {
 		// "rebuild" carried no noun and readers could not tell what the count was OF.
@@ -621,7 +711,7 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string)
 		}
 	}
 
-	fmt.Println(diffCountsLine(rev))
+	fmt.Println(diffCountsLine(rev, showGenerated))
 	fmt.Println()
 
 	// The ordering caveat prints BEFORE the list, and only this placement works. As a trailing
@@ -700,8 +790,8 @@ func printDiffFile(f types.DiffFile, link func(string) string) {
 
 // diffFileFacts is what magus knows about one changed file, one claim per line.
 //
-// Extracted from the printer so the interactive reader shows the SAME sentences: two
-// renderings of "12 files reference its widest changed symbol" would drift, and the drift
+// One definition for the printer and the interactive reader, so both show the SAME sentences:
+// two renderings of "12 files reference its widest changed symbol" would drift, and the drift
 // would be invisible until somebody compared two surfaces side by side.
 func diffFileFacts(f types.DiffFile) []string {
 	var facts []string

@@ -21,15 +21,18 @@ func TestDiffTUIRefusalMatrix(t *testing.T) {
 	workingTree := diffInput{kind: inputWorkingTree, label: "the working tree"}
 	stdin := diffInput{kind: inputStdin, label: "a patch on stdin"}
 	patchFile := diffInput{kind: inputFile, path: "x.patch", label: "the patch in x.patch"}
+	// The viewer needs BOTH descriptors, which is why the gate carries them separately: it
+	// reads stdin and paints stdout, and only one of those is what "interactive" used to mean.
+	atTerminal := diffTUITerm{Reads: true, Paints: true}
 
 	tests := []struct {
-		name        string
-		flags       gen.DiffFlags
-		src         diffInput
-		format      Format
-		interactive bool
-		wantMsg     string
-		wantStderr  string
+		name       string
+		flags      gen.DiffFlags
+		src        diffInput
+		format     Format
+		term       diffTUITerm
+		wantMsg    string
+		wantStderr string
 	}{
 		{
 			name:   "without --tui nothing here is refused",
@@ -38,56 +41,67 @@ func TestDiffTUIRefusalMatrix(t *testing.T) {
 			format: outputJSON,
 		},
 		{
-			name:        "--tui at a terminal over the working tree runs",
-			flags:       gen.DiffFlags{Tui: true},
-			src:         workingTree,
-			format:      outputText,
-			interactive: true,
+			name:   "--tui at a terminal over the working tree runs",
+			flags:  gen.DiffFlags{Tui: true},
+			src:    workingTree,
+			format: outputText,
+			term:   atTerminal,
 		},
 		{
-			name:        "--generated composes: it only sets the initial fold",
-			flags:       gen.DiffFlags{Tui: true, Generated: true},
-			src:         workingTree,
-			format:      outputText,
-			interactive: true,
+			name:   "--generated composes: it only sets the initial fold",
+			flags:  gen.DiffFlags{Tui: true, Generated: true},
+			src:    workingTree,
+			format: outputText,
+			term:   atTerminal,
 		},
 		{
-			name:        "a patch file has no working tree to coordinate over",
-			flags:       gen.DiffFlags{Tui: true},
-			src:         patchFile,
-			format:      outputText,
-			interactive: true,
-			wantMsg:     "--tui reads the working tree, so it cannot be combined with the patch in x.patch",
+			name:    "a patch file has no working tree to coordinate over",
+			flags:   gen.DiffFlags{Tui: true},
+			src:     patchFile,
+			format:  outputText,
+			term:    atTerminal,
+			wantMsg: "--tui reads the working tree, so it cannot be combined with the patch in x.patch",
 		},
 		{
-			name:        "stdin, same reason and named the same way",
-			flags:       gen.DiffFlags{Tui: true},
-			src:         stdin,
-			format:      outputText,
-			interactive: true,
-			wantMsg:     "--tui reads the working tree, so it cannot be combined with a patch on stdin",
+			name:    "stdin, same reason and named the same way",
+			flags:   gen.DiffFlags{Tui: true},
+			src:     stdin,
+			format:  outputText,
+			term:    atTerminal,
+			wantMsg: "--tui reads the working tree, so it cannot be combined with a patch on stdin",
 		},
 		{
-			name:        "--watch and --tui both own the terminal",
-			flags:       gen.DiffFlags{Tui: true, Watch: true},
-			src:         workingTree,
-			format:      outputText,
-			interactive: true,
-			wantMsg:     "--tui and --watch both drive the terminal",
+			name:    "--watch and --tui both own the terminal",
+			flags:   gen.DiffFlags{Tui: true, Watch: true},
+			src:     workingTree,
+			format:  outputText,
+			term:    atTerminal,
+			wantMsg: "--tui and --watch both drive the terminal",
 		},
 		{
-			name:        "a machine-readable format cannot be answered with a viewport",
-			flags:       gen.DiffFlags{Tui: true},
-			src:         workingTree,
-			format:      outputJSON,
-			interactive: true,
-			wantMsg:     "cannot be combined with -o json",
+			name:    "a machine-readable format cannot be answered with a viewport",
+			flags:   gen.DiffFlags{Tui: true},
+			src:     workingTree,
+			format:  outputJSON,
+			term:    atTerminal,
+			wantMsg: "cannot be combined with -o json",
 		},
 		{
 			name:       "no terminal names the command that works here",
 			flags:      gen.DiffFlags{Tui: true},
 			src:        workingTree,
 			format:     outputText,
+			wantStderr: "magus: diff --tui requires an interactive terminal; use `magus diff` instead\n",
+		},
+		{
+			// `magus diff --tui > file`. Every flag is fine and stdin is still a keyboard, so
+			// this is the one that used to pass the gate and then die inside tty.OpenInput with
+			// a bare error naming neither the flag nor the redirect.
+			name:       "a redirected stdout is refused here, not deep inside the viewer",
+			flags:      gen.DiffFlags{Tui: true},
+			src:        workingTree,
+			format:     outputText,
+			term:       diffTUITerm{Reads: true},
 			wantStderr: "magus: diff --tui requires an interactive terminal; use `magus diff` instead\n",
 		},
 	}
@@ -97,7 +111,7 @@ func TestDiffTUIRefusalMatrix(t *testing.T) {
 			flags := tc.flags
 			var err error
 			stderr := captureStderr(t, func() {
-				err = diffTUIRefusal(&flags, tc.src, tc.format, tc.interactive)
+				err = diffTUIRefusal(&flags, tc.src, tc.format, tc.term)
 			})
 			assert.Equal(t, tc.wantStderr, stderr)
 			if tc.wantMsg == "" && tc.wantStderr == "" {
@@ -131,16 +145,21 @@ func TestDiffTUIFilesJoinKeepsTheAnnotationOrder(t *testing.T) {
 		"+{\"a\":1}\n" +
 		"diff --git a/core.go b/core.go\n" +
 		"@@ -3 +3 @@\n" +
-		"+func F() {}\n"
+		"+func F() {}\n" +
+		"@@ -9 +9 @@\n" +
+		"+func G() {}\n"
 
 	files := diffTUIFiles(rev, diff.ParseHunks(patch))
 	require.Len(t, files, 2)
 	assert.Equal(t, "core.go", files[0].Path)
 	assert.False(t, files[0].Generated)
 	assert.Equal(t, []string{"12 files reference its widest changed symbol", "in root"}, files[0].Facts)
-	require.Len(t, files[0].Hunks, 1)
+	require.Len(t, files[0].Hunks, 2)
 	assert.Equal(t, "@@ -3 +3 @@", files[0].Hunks[0].Header)
 	assert.NotEmpty(t, files[0].Hunks[0].Digest, "the viewed set is keyed by this")
+	// The patch coordinate a comment is anchored by, carried rather than re-derived: dropping
+	// it here would hand the viewer a second hunk numbered zero.
+	assert.Equal(t, 1, files[0].Hunks[1].Index)
 
 	assert.Equal(t, "gen/out.json", files[1].Path)
 	assert.True(t, files[1].Generated)
@@ -158,6 +177,12 @@ func TestDiffCountsLineIsWhatTheReaderIsLeftWith(t *testing.T) {
 		AffectedProjects: []types.ImpactProject{{Path: "root"}, {Path: "docs"}},
 	}
 	assert.Equal(t, "2 files to read, 1 generated folded; 1 projects edited, 2 projects rebuild",
-		diffCountsLine(rev))
-	assert.Equal(t, "0 files to read", diffCountsLine(types.Diff{}))
+		diffCountsLine(rev, false))
+	// Under --generated the same files are printed right below this line, so calling them
+	// folded contradicts the page it introduces.
+	assert.Equal(t, "2 files to read, 1 generated shown; 1 projects edited, 2 projects rebuild",
+		diffCountsLine(rev, true))
+	assert.Equal(t, "0 files to read", diffCountsLine(types.Diff{}, false))
+	assert.Equal(t, "0 files to read", diffCountsLine(types.Diff{}, true),
+		"with nothing generated there is no clause either way")
 }

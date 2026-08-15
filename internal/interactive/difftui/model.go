@@ -23,6 +23,11 @@ import (
 // set is keyed by - the same one internal/diff computes, passed in rather than recomputed
 // so the CLI and the console mark the same hunk.
 type Hunk struct {
+	// Index is the hunk's position in the PATCH, which is the coordinate a comment and a
+	// suggestion are anchored by (see diff.Hunk.Index). Carried rather than taken from the
+	// position in Hunks, so a caller that ever hands over a subset cannot silently renumber
+	// every anchor in the file.
+	Index  int
 	Header string
 	Lines  []string
 	Digest string
@@ -154,6 +159,11 @@ func New(in Input) *Model {
 }
 
 // Rows returns every visible row, cursor included. The renderer windows it.
+//
+// The slice ALIASES the model's own, which rebuild refills in place: every toggle and every
+// cursor move rewrites what an earlier return value points at. Read it and drop it rather than
+// holding it. Copying instead would allocate the whole changeset on each of the frames a
+// keypress draws, which is the cost the reuse exists to avoid.
 func (m *Model) Rows() []Row { return m.rows }
 
 // CursorRow is the index into Rows of the row the cursor marks, or -1 when there is none.
@@ -232,7 +242,7 @@ func (m *Model) PrevHunk() bool {
 	return false
 }
 
-// NextFile moves to the next file's heading.
+// NextFile moves to the next file's heading. Reports whether it moved.
 func (m *Model) NextFile() bool {
 	if m.file+1 >= len(m.files) {
 		return false
@@ -241,7 +251,7 @@ func (m *Model) NextFile() bool {
 	return true
 }
 
-// PrevFile moves to the previous file's heading.
+// PrevFile moves to the previous file's heading. Reports whether it moved.
 func (m *Model) PrevFile() bool {
 	if m.file <= 0 {
 		return false
@@ -250,25 +260,31 @@ func (m *Model) PrevFile() bool {
 	return true
 }
 
+// ViewedChange is one flip of a read mark: the hunk it was made on, and which way it went.
+type ViewedChange struct {
+	Digest string
+	On     bool
+}
+
 // ToggleViewed flips the read mark on the hunk under the cursor and reports what changed,
 // so the caller can tell the session. ok is false on a file heading or a hunk with no
 // digest - there is nothing to key a mark by.
-func (m *Model) ToggleViewed() (digest string, on bool, ok bool) {
+func (m *Model) ToggleViewed() (change ViewedChange, ok bool) {
 	if m.hunk < 0 || len(m.files) == 0 {
-		return "", false, false
+		return ViewedChange{}, false
 	}
 	hunks := m.files[m.file].Hunks
 	if m.hunk >= len(hunks) {
-		return "", false, false
+		return ViewedChange{}, false
 	}
 	d := hunks[m.hunk].Digest
 	if d == "" {
-		return "", false, false
+		return ViewedChange{}, false
 	}
-	on = !m.viewed[d]
+	on := !m.viewed[d]
 	m.viewed[d] = on
 	m.rebuild()
-	return d, on, true
+	return ViewedChange{Digest: d, On: on}, true
 }
 
 // Viewed reports whether a digest is marked read.
@@ -312,10 +328,22 @@ func (m *Model) OverviewEnter() {
 	m.setCursor(m.overCursor, -1)
 }
 
-// OverviewRows renders the file list: what each file costs to read and how much of it is
-// already read.
-func (m *Model) OverviewRows() []string {
-	out := make([]string, 0, len(m.files))
+// OverviewRow is one file in the changeset overview. Rendered is the line the frame prints;
+// the fields beside it are what that line SAYS, so a caller reads the answer rather than
+// matching text out of it again.
+type OverviewRow struct {
+	// Path is undecorated. The link, when there is one, is in Rendered.
+	Path      string
+	Hunks     int
+	Read      int
+	Generated bool
+	Rendered  string
+}
+
+// OverviewRows is the file list: what each file costs to read and how much of it is already
+// read.
+func (m *Model) OverviewRows() []OverviewRow {
+	out := make([]OverviewRow, 0, len(m.files))
 	for i := range m.files {
 		f := &m.files[i]
 		n, read := len(f.Hunks), m.readCount(i)
@@ -323,7 +351,9 @@ func (m *Model) OverviewRows() []string {
 		if f.Generated {
 			line += ", generated"
 		}
-		out = append(out, line)
+		out = append(out, OverviewRow{
+			Path: f.Path, Hunks: n, Read: read, Generated: f.Generated, Rendered: line,
+		})
 	}
 	return out
 }
@@ -384,7 +414,7 @@ func (m *Model) rebuild() {
 			for li, l := range h.Lines {
 				m.rows = append(m.rows, Row{Kind: RowLine, File: i, Hunk: hi, Text: l, Emph: emph[li]})
 			}
-			m.rows = append(m.rows, m.talkRows(i, hi)...)
+			m.rows = append(m.rows, m.talkRows(i, hi, h)...)
 		}
 	}
 	m.locate()
@@ -392,8 +422,13 @@ func (m *Model) rebuild() {
 }
 
 // talkRows are the comments and pending suggestions anchored to one hunk.
-func (m *Model) talkRows(file, hunk int) []Row {
-	k := hunkRef{path: m.files[file].Path, hunk: hunk}
+//
+// Two coordinates, and they are not the same one: talk is addressed by the hunk's position in
+// the PATCH (h.Index, which is what the MCP surface validates a comment against), while a row
+// is addressed by where the hunk sits in this file's list, because that is what the cursor
+// walks. They coincide while the viewer is handed every hunk of every file.
+func (m *Model) talkRows(file, row int, h *Hunk) []Row {
+	k := hunkRef{path: m.files[file].Path, hunk: h.Index}
 	var out []Row
 	for _, c := range m.comments[k] {
 		who := string(c.Author)
@@ -408,11 +443,11 @@ func (m *Model) talkRows(file, hunk int) []Row {
 			if j == 0 {
 				text = fmt.Sprintf("  | %s: %s", who, line)
 			}
-			out = append(out, Row{Kind: RowComment, File: file, Hunk: hunk, Text: text})
+			out = append(out, Row{Kind: RowComment, File: file, Hunk: row, Text: text})
 		}
 	}
 	for _, s := range m.suggests[k] {
-		out = append(out, Row{Kind: RowSuggestion, File: file, Hunk: hunk,
+		out = append(out, Row{Kind: RowSuggestion, File: file, Hunk: row,
 			Text: "  > SUGGESTION: " + s.Reason})
 	}
 	return out
@@ -437,10 +472,9 @@ func lineEmphasis(lines []string) []diff.Span {
 	out := make([]diff.Span, len(lines))
 	var dels, adds []int
 	flush := func() {
-		for _, pair := range diff.PairForEmphasis(dels, adds) {
-			d, a := pair[0], pair[1]
-			before, after := diff.Emphasize(lines[d][1:], lines[a][1:])
-			out[d], out[a] = shiftPastMarker(before), shiftPastMarker(after)
+		for _, p := range diff.PairForEmphasis(dels, adds) {
+			before, after := diff.Emphasize(lines[p.Del][1:], lines[p.Add][1:])
+			out[p.Del], out[p.Add] = shiftPastMarker(before), shiftPastMarker(after)
 		}
 		dels, adds = nil, nil
 	}
