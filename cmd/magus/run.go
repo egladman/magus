@@ -164,7 +164,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 			return err
 		}
 		listTarget := types.Target{Path: parsedTarget.Path, Name: "ls"}
-		targets, source, err := resolveTargets(ws, listTarget, projectArgs, clientCwd(ctx))
+		targets, source, err := resolveTargets(ctx, ws, listTarget, projectArgs, clientCwd(ctx))
 		if err != nil {
 			return err
 		}
@@ -180,7 +180,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// ctx, not the daemon's process cwd. It scopes target resolution below and is recorded
 	// on the invocation's journal, so both agree with where the user actually ran.
 	cwd := clientCwd(ctx)
-	targets, source, err := resolveTargets(m, parsedTarget, projectArgs, cwd)
+	targets, source, err := resolveTargets(ctx, m, parsedTarget, projectArgs, cwd)
 	if err != nil {
 		return err
 	}
@@ -325,10 +325,10 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 // it anchors relative project args and the cwd-scope lookup. Resolving cwd-scope against the
 // daemon's own os.Getwd() is exactly the transposition that let a daemon adopt a run for an
 // unrelated workspace and pass it vacuously, so the cwd is threaded in rather than read here.
-func resolveTargets(ws types.WorkspaceRepository, t types.Target, projectArgs []string, cwd string) ([]types.Target, string, error) {
+func resolveTargets(ctx context.Context, ws types.WorkspaceRepository, t types.Target, projectArgs []string, cwd string) ([]types.Target, string, error) {
 	anchor := cwdAnchor(ws.Root(), cwd)
 	if t.Path != "" {
-		resolved, err := file.ResolveProject(t.Path, anchor)
+		resolved, err := file.ResolveProject(ctx, t.Path, anchor)
 		if err != nil {
 			return nil, "", err
 		}
@@ -339,7 +339,7 @@ func resolveTargets(ws types.WorkspaceRepository, t types.Target, projectArgs []
 	if len(projectArgs) > 0 {
 		var all []types.Target
 		for _, arg := range projectArgs {
-			resolved, err := file.ResolveProject(arg, anchor)
+			resolved, err := file.ResolveProject(ctx, arg, anchor)
 			if err != nil {
 				return nil, "", err
 			}
@@ -446,8 +446,16 @@ func projectLabelFor(m *magus.Magus, path string) string {
 }
 
 // cwdAnchor returns cwd as a slash path relative to root, the anchor for
-// resolving relative project args. It falls back to "." when cwd is empty or
-// cannot be made relative to root.
+// resolving relative project args. It falls back to "." - the workspace root -
+// when cwd is empty, cannot be made relative to root, or lies OUTSIDE it.
+//
+// That last case is what `--root <path>` selects: the caller is standing
+// somewhere else, and filepath.Rel happily hands back a "../.."-prefixed path,
+// which every relative project ref then inherits and fails the escape check on.
+// `magus --root <ws> run build .` reported `project path "." escapes workspace
+// root from "../<dir>"` for exactly that reason. A relative ref is measured from
+// the workspace the caller NAMED, so an outside cwd contributes nothing to it.
+// A cwd inside the workspace is untouched, which is every invocation without --root.
 func cwdAnchor(root, cwd string) string {
 	if cwd == "" {
 		return "."
@@ -459,7 +467,11 @@ func cwdAnchor(root, cwd string) string {
 	if err != nil {
 		return "."
 	}
-	return filepath.ToSlash(rel)
+	rel = filepath.ToSlash(rel)
+	if rel == ".." || strings.HasPrefix(rel, "../") {
+		return "."
+	}
+	return rel
 }
 
 // clientCwd returns the working directory that scopes this invocation. An adopted

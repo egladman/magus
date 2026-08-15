@@ -115,7 +115,7 @@ func TestResolveTargetsCwdScope(t *testing.T) {
 	}
 
 	t.Run("cwd inside a project scopes to it", func(t *testing.T) {
-		targets, source, err := resolveTargets(ws, types.Target{Name: "test"}, nil, "/ws/b/api")
+		targets, source, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, "/ws/b/api")
 		require.NoError(t, err)
 		assert.Equal(t, "cwd", source)
 		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}}, targets)
@@ -124,16 +124,53 @@ func TestResolveTargetsCwdScope(t *testing.T) {
 	t.Run("cwd outside every project fans out to all", func(t *testing.T) {
 		// A daemon's own cwd (unrelated to workspace B) must not scope B's run - it
 		// falls through to the full fan-out, not a mis-scoped or empty result.
-		targets, source, err := resolveTargets(ws, types.Target{Name: "test"}, nil, "/tmp/daemon-cwd")
+		targets, source, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, "/tmp/daemon-cwd")
 		require.NoError(t, err)
 		assert.Empty(t, source)
 		assert.Len(t, targets, 2)
 	})
 
 	t.Run("empty cwd fans out to all without touching Where", func(t *testing.T) {
-		targets, _, err := resolveTargets(ws, types.Target{Name: "test"}, nil, "")
+		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, "")
 		require.NoError(t, err)
 		assert.Len(t, targets, 2)
+	})
+}
+
+// TestResolveTargetsRootOverride proves a relative project arg is measured from the
+// workspace `--root` named, not from the cwd the caller happens to be standing in.
+// From outside the workspace, `.` used to fail with `project path "." escapes
+// workspace root from "../<dir>"` - the anchor was filepath.Rel's "../" answer.
+func TestResolveTargetsRootOverride(t *testing.T) {
+	ws := &resolveWS{
+		root:     "/ws/b",
+		projects: []string{".", "api"},
+		contains: map[string]string{"/ws/b/api": "api"},
+	}
+
+	t.Run("dot from outside means the workspace root project", func(t *testing.T) {
+		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, []string{"."}, "/ws/other")
+		require.NoError(t, err)
+		assert.Equal(t, []types.Target{{Path: ".", Name: "test"}}, targets)
+	})
+
+	t.Run("dot-relative from outside means the workspace root project", func(t *testing.T) {
+		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, []string{"./api"}, "/ws/other")
+		require.NoError(t, err)
+		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}}, targets)
+	})
+
+	// Unchanged: an inside cwd still anchors dot-relative refs at that cwd.
+	t.Run("dot from inside a project still means that project", func(t *testing.T) {
+		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, []string{"."}, "/ws/b/api")
+		require.NoError(t, err)
+		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}}, targets)
+	})
+
+	// An escape is still an escape: re-anchoring at the root does not widen what resolves.
+	t.Run("escape from outside is still rejected", func(t *testing.T) {
+		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, []string{"../up"}, "/ws/other")
+		require.ErrorContains(t, err, "escapes workspace root")
 	})
 }
 
@@ -141,7 +178,7 @@ func TestResolveTargetsCwdScope(t *testing.T) {
 // yields zero targets (which runTarget then turns into a loud failure, not a vacuous pass).
 func TestResolveTargetsEmptyWorkspace(t *testing.T) {
 	ws := &resolveWS{root: "/ws/empty", projects: nil, contains: nil}
-	targets, _, err := resolveTargets(ws, types.Target{Name: "test"}, nil, "/ws/empty")
+	targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, "/ws/empty")
 	require.NoError(t, err)
 	assert.Empty(t, targets, "an empty workspace resolves no targets; runTarget must fail loudly on this")
 }
