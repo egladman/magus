@@ -171,7 +171,7 @@ const SURFACES: Launchable[] = [
   },
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
   { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
-  { pageId: "diff", label: "Review", hint: "Read what you have changed but not committed" },
+  { pageId: "diff", label: "Diff", hint: "Read what you have changed but not committed" },
   { pageId: "notes", label: "Notes", hint: "What people wrote about this workspace" },
   { pageId: "actions", label: "Actions", hint: "Every console action and its shortcut" },
   { pageId: "settings", label: "Settings", hint: "Console settings and keybindings" },
@@ -1707,7 +1707,7 @@ export function startConsole(
   register(
     moduleSurface({
       id: "diff",
-      title: "Review",
+      title: "Diff",
       bundle: "diff/diff.js",
       css: "diff/diff.css",
     }),
