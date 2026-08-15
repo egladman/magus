@@ -113,7 +113,13 @@ const (
 	// rather than one per rule, because the resolution is the same in every case - fix
 	// the declaration the error names - and a caller branching on it wants "this grant
 	// is malformed", not which clause caught it. The message carries the specifics.
-	SecretGrantInvalid        DiagnosticCode = "MGS1027"
+	SecretGrantInvalid DiagnosticCode = "MGS1027"
+	// UndeclaredSeedingFile is a changed file no project declares that still pulled a
+	// project into the affected set through directory containment. It reruns targets
+	// while moving no cache key, so the work is real and its result was already
+	// correct - the expensive half of an under-declaration, with the silent half
+	// (nothing reruns when the file DOES matter) waiting behind it.
+	UndeclaredSeedingFile     DiagnosticCode = "MGS1028"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -184,7 +190,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	CrossDepOwnerUnknown, GoModReplaceDrift, MagusfileIsNotASpell, DeadOutputGlob,
 	SelfStalingOutput, OutputOwnedByTwoTargets, WorkspaceNeedsNewerMagus,
 	MagusfileOnlyMember, ProviderPathRejected, ProviderProjectShadowed,
-	MagusfileAPIRemoved, CacheableSecretRead, SecretGrantInvalid,
+	MagusfileAPIRemoved, CacheableSecretRead, SecretGrantInvalid, UndeclaredSeedingFile,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,

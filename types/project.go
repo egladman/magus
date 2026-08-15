@@ -1,6 +1,7 @@
 package types
 
 import (
+	"path"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -304,6 +305,58 @@ func (p *Project) AllOutputs() []string {
 	}
 	slices.Sort(extra)
 	return append(slices.Clone(p.Outputs), extra...)
+}
+
+// DeclaredGlobs is every glob this project declares, rooted at the WORKSPACE rather
+// than at the project: the project-wide Sources and AllOutputs, plus the per-target
+// ctx.readsFiles, ctx.writesFiles, and ctx.modifiesExistingFiles refs, each anchored
+// on the project its glob is relative to. Sorted and deduplicated.
+//
+// It answers "does this project declare that path", which is the question affected
+// attribution asks before falling back to directory containment, and the one doctor
+// asks about the tree standing still. The rooting matches the cache step and
+// `magus describe file`, so all three agree on what a declaration covers.
+//
+// Deliberately NOT the magusfile globs the cache step layers on top. Every project's
+// key carries the ROOT magusfile, so counting those here would make one magusfile
+// edit read as a declaration by every project in the workspace - and attribution
+// would then seed all of them where directory containment seeds exactly one.
+func (p *Project) DeclaredGlobs() []string {
+	var out []string
+	add := func(owner, glob string) {
+		if owner == "" {
+			owner = p.Path
+		}
+		if owner != "." {
+			glob = owner + "/" + glob
+		}
+		if !slices.Contains(out, glob) {
+			out = append(out, glob)
+		}
+	}
+	for _, glob := range p.Sources {
+		add(p.Path, glob)
+	}
+	for _, glob := range p.AllOutputs() {
+		add(p.Path, glob)
+	}
+	for _, refs := range p.TargetInputs {
+		for _, ref := range refs {
+			add(ref.Project, ref.Glob)
+		}
+	}
+	for _, refs := range p.TargetOutputs {
+		for _, ref := range refs {
+			add(ref.Project, ref.Glob)
+		}
+	}
+	for _, refs := range p.TargetUpdates {
+		for _, ref := range refs {
+			add(ref.Project, ref.Glob)
+		}
+	}
+	slices.Sort(out)
+	return out
 }
 
 // AttachSpell associates spell with p without applying registration overrides.

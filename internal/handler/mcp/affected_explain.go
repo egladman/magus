@@ -13,6 +13,10 @@ type describePath struct {
 	Seed  string   `json:"seed"`
 	Chain []string `json:"chain"`
 	Files []string `json:"files"`
+	// Undeclared is the subset of Files no project declares. An agent reading this to
+	// decide what to rerun needs the distinction: those files moved no cache key, so
+	// the seed is in the set by containment rather than by anything it is built from.
+	Undeclared []string `json:"undeclared,omitempty"`
 }
 
 type describeResult struct {
@@ -59,9 +63,10 @@ func (t *affectedExplainTool) Invoke(ctx context.Context, req spells.InvokeReque
 		paths := g.PathsFromSeeds(r.Seed, project)
 		for _, ap := range paths {
 			out.Paths = append(out.Paths, describePath{
-				Seed:  ap.Seed,
-				Chain: ap.Chain,
-				Files: r.FilesBySeed[ap.Seed],
+				Seed:       ap.Seed,
+				Chain:      ap.Chain,
+				Files:      r.FilesBySeed[ap.Seed],
+				Undeclared: r.UndeclaredBySeed[ap.Seed],
 			})
 		}
 	}

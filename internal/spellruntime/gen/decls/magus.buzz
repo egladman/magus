@@ -12,12 +12,14 @@ export object Affected {
     seed: [str] = [],
     filesBySeed: {str: [str]} = {},
     affected: [str] = [],
+    undeclaredBySeed: {str: [str]} = {},
 }
 
 export object ImpactProject {
     path: str = "",
     seed: bool = false,
     files: [str] = [],
+    undeclaredFiles: [str] = [],
     spells: [str] = [],
     targets: [str] = [],
 }

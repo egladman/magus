@@ -45,6 +45,10 @@ type ImpactProject struct {
 	Seed bool `json:"seed" yaml:"seed"`
 	// Files are the changed files inside this project, present only for seeds.
 	Files []string `json:"files,omitempty" yaml:"files,omitempty"`
+	// UndeclaredFiles is the subset of Files that no project declares: they seeded this
+	// project by directory containment alone, so they rerun its targets without moving
+	// a cache key. See types.AffectedResult.UndeclaredBySeed and MGS1028.
+	UndeclaredFiles []string `json:"undeclared_files,omitempty" yaml:"undeclared_files,omitempty"`
 	// Spells are the project's bound spells (its toolchains).
 	Spells []string `json:"spells,omitempty" yaml:"spells,omitempty"`
 	// Targets is the project's target vocabulary: the spell-contributed ops plus any

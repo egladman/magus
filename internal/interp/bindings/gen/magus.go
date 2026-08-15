@@ -388,6 +388,15 @@ func buzzValueMagusAffectedResult(v types.AffectedResult) vm.Value {
 		itemsAffected[indexAffected] = vm.StrValue(v.Affected[indexAffected])
 	}
 	out.MapSet("affected", vm.ListValue(itemsAffected))
+	mappedUndeclaredBySeed := vm.NewMap()
+	for keyUndeclaredBySeed, itemUndeclaredBySeed := range v.UndeclaredBySeed {
+		itemsUndeclaredBySeedValue := make([]vm.Value, len(itemUndeclaredBySeed))
+		for indexUndeclaredBySeedValue := range itemUndeclaredBySeed {
+			itemsUndeclaredBySeedValue[indexUndeclaredBySeedValue] = vm.StrValue(itemUndeclaredBySeed[indexUndeclaredBySeedValue])
+		}
+		mappedUndeclaredBySeed.MapSet(keyUndeclaredBySeed, vm.ListValue(itemsUndeclaredBySeedValue))
+	}
+	out.MapSet("undeclaredBySeed", mappedUndeclaredBySeed)
 	return out
 }
 
@@ -653,6 +662,11 @@ func buzzValueMagusImpactProject(v types.ImpactProject) vm.Value {
 		itemsFiles[indexFiles] = vm.StrValue(v.Files[indexFiles])
 	}
 	out.MapSet("files", vm.ListValue(itemsFiles))
+	itemsUndeclaredFiles := make([]vm.Value, len(v.UndeclaredFiles))
+	for indexUndeclaredFiles := range v.UndeclaredFiles {
+		itemsUndeclaredFiles[indexUndeclaredFiles] = vm.StrValue(v.UndeclaredFiles[indexUndeclaredFiles])
+	}
+	out.MapSet("undeclaredFiles", vm.ListValue(itemsUndeclaredFiles))
 	itemsSpells := make([]vm.Value, len(v.Spells))
 	for indexSpells := range v.Spells {
 		itemsSpells[indexSpells] = vm.StrValue(v.Spells[indexSpells])

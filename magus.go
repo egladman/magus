@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
+	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -625,8 +626,51 @@ func (m *Magus) Affected(ctx context.Context, base string) (*types.AffectedResul
 	if err != nil {
 		return nil, err
 	}
-	return project.Affected(ctx, m.ws, base)
+	r, err := project.Affected(ctx, m.ws, base)
+	if err != nil {
+		return nil, err
+	}
+	noteUndeclaredSeeds(r)
+	return r, nil
 }
+
+// noteUndeclaredSeeds reports MGS1028: changed files that seeded a project through
+// directory containment while no project declares them, so the run they cause moves
+// no cache key.
+//
+// interactive.Emit, not types.EmitDiagnostic, and that is not a style choice. The
+// run-scoped diagnostic sink is installed inside Run, AFTER the affected set has
+// already been computed, so a sink emission from here reaches nobody at all - and
+// this fires on `magus affected --impact` and the MCP handlers too, which never
+// enter Run. MGS1010 is emitted the same way, for the same reason. Emit dedupes by
+// message text, so a long-lived daemon says it once rather than on every request.
+func noteUndeclaredSeeds(r *types.AffectedResult) {
+	if len(r.UndeclaredBySeed) == 0 {
+		return
+	}
+	files := map[string]struct{}{}
+	for _, fs := range r.UndeclaredBySeed {
+		for _, f := range fs {
+			files[f] = struct{}{}
+		}
+	}
+	shown := slices.Sorted(maps.Keys(files))
+	// A changeset can be enormous; the first few name the shape of the problem and
+	// `magus describe file` is the surface that explains any one of them in full.
+	if len(shown) > undeclaredSeedHintCap {
+		shown = append(shown[:undeclaredSeedHintCap:undeclaredSeedHintCap],
+			fmt.Sprintf("and %d more", len(files)-undeclaredSeedHintCap))
+	}
+	interactive.Emit(os.Stderr, fmt.Sprintf(
+		"[%s] %d changed file(s) seed a project by directory containment while no project declares them, "+
+			"so the targets they rerun were already correct: %s. "+
+			"Declare them in the owning project's sources, or leave them undeclared deliberately (see %s)",
+		types.UndeclaredSeedingFile, len(files), strings.Join(shown, ", "),
+		types.CodeURL(types.UndeclaredSeedingFile)))
+}
+
+// undeclaredSeedHintCap bounds how many undeclared paths MGS1028 names inline.
+const undeclaredSeedHintCap = 5
 
 // resolveLastPassed translates [BaseLastPassed] into the commit the current branch last
 // passed at, and passes any other base through untouched.
@@ -692,7 +736,12 @@ func (m *Magus) resolveLastPassed(ctx context.Context, base string) (string, err
 
 // AffectedFromPaths computes the affected set from an explicit file list.
 func (m *Magus) AffectedFromPaths(ctx context.Context, paths []string) (*types.AffectedResult, error) {
-	return project.AffectedFromPaths(ctx, m.ws, paths)
+	r, err := project.AffectedFromPaths(ctx, m.ws, paths)
+	if err != nil {
+		return nil, err
+	}
+	noteUndeclaredSeeds(r)
+	return r, nil
 }
 
 func (m *Magus) limiter() *cache.Limiter {

@@ -108,3 +108,65 @@ func TestFilterShardPathsEmptyWhenNothingMatches(t *testing.T) {
 	got := filterShardPaths([]types.Shard{{ID: "0", ProjectPaths: []string{"docs"}}}, map[string]bool{"libs/foo": true})
 	assert.Empty(t, got)
 }
+
+// TestPrintImpactTextQualifiesUndeclaredSeeds pins the sentence this changed. "seeded by
+// 2 changed files" reads as two files the project is built from; when one of them is
+// declared by nobody, the line was claiming a keyed relationship that does not exist.
+// The count and the per-file marker both matter: the count sizes the waste, the marker
+// says which declaration is missing.
+func TestPrintImpactTextQualifiesUndeclaredSeeds(t *testing.T) {
+	out := captureStdout(t, func() {
+		require.NoError(t, printImpactText(&types.ImpactResult{
+			Base:             "origin/main",
+			ChangedFileCount: 2,
+			ChangedFiles:     []string{".golangci.yml", "main.go"},
+			SeedProjects:     []string{"."},
+			AffectedProjects: []types.ImpactProject{{
+				Path:            ".",
+				Seed:            true,
+				Files:           []string{".golangci.yml", "main.go"},
+				UndeclaredFiles: []string{".golangci.yml"},
+			}},
+		}))
+	})
+	assert.Contains(t, out, ". (seeded by 2 changed files, 1 declared by no project)")
+	assert.Contains(t, out, "    .golangci.yml (undeclared)")
+	assert.Contains(t, out, "    main.go\n", "a declared file carries no marker")
+}
+
+// TestPrintAffectedExplainTextMarksUndeclaredFiles: --explain answers "why did this
+// project run". A file that seeds by containment alone is a different answer to that
+// question than a declared source, and an unannotated list conflates them.
+func TestPrintAffectedExplainTextMarksUndeclaredFiles(t *testing.T) {
+	out := captureStdout(t, func() {
+		assert.True(t, printAffectedExplainText(affectedExplainOutput{
+			Project:  ".",
+			Affected: true,
+			Base:     "origin/main",
+			Paths: []affectedExplainPath{{
+				Seed:       ".",
+				Chain:      []string{"."},
+				Files:      []string{".golangci.yml", "main.go"},
+				Undeclared: []string{".golangci.yml"},
+			}},
+		}))
+	})
+	assert.Contains(t, out, "    .golangci.yml (undeclared: seeds by directory containment, keys nothing)")
+	assert.Contains(t, out, "    main.go\n", "a declared source keeps its bare line")
+}
+
+// TestPrintImpactTextStaysPlainWhenEverythingIsDeclared: the qualification is a finding,
+// so a workspace with nothing to report must read exactly as it did before.
+func TestPrintImpactTextStaysPlainWhenEverythingIsDeclared(t *testing.T) {
+	out := captureStdout(t, func() {
+		require.NoError(t, printImpactText(&types.ImpactResult{
+			Base:             "origin/main",
+			ChangedFileCount: 1,
+			ChangedFiles:     []string{"main.go"},
+			SeedProjects:     []string{"."},
+			AffectedProjects: []types.ImpactProject{{Path: ".", Seed: true, Files: []string{"main.go"}}},
+		}))
+	})
+	assert.Contains(t, out, ". (seeded by 1 changed file)")
+	assert.NotContains(t, out, "undeclared")
+}

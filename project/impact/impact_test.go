@@ -96,6 +96,34 @@ func TestCompute(t *testing.T) {
 				},
 			},
 		},
+		{
+			// A seed's file list mixes two kinds of file, and only one of them is a
+			// reason the project's answer could have changed. The report has to carry
+			// the split or the formatter cannot tell "12 changed files" from "12 files
+			// that reran this for nothing".
+			name: "undeclared files ride through onto the seed",
+			affected: &types.AffectedResult{
+				Base:             "origin/main",
+				Changed:          []string{".golangci.yml", "main.go"},
+				Seed:             []string{"."},
+				FilesBySeed:      map[string][]string{".": {"main.go", ".golangci.yml"}},
+				UndeclaredBySeed: map[string][]string{".": {".golangci.yml"}},
+				Affected:         []string{"."},
+			},
+			projects: map[string]*types.Project{".": {Path: "."}},
+			want: &types.ImpactResult{
+				Base:             "origin/main",
+				ChangedFileCount: 2,
+				ChangedFiles:     []string{".golangci.yml", "main.go"},
+				SeedProjects:     []string{"."},
+				AffectedProjects: []types.ImpactProject{{
+					Path:            ".",
+					Seed:            true,
+					Files:           []string{".golangci.yml", "main.go"},
+					UndeclaredFiles: []string{".golangci.yml"},
+				}},
+			},
+		},
 	}
 
 	for _, tt := range tests {

@@ -51,6 +51,116 @@ func TestAffectedFromPathsHappyPath(t *testing.T) {
 	assert.NotNil(t, r.FilesBySeed["web/studio"], "FilesBySeed missing web/studio: %v", r.FilesBySeed)
 }
 
+// globWorkspace lays down the shape glob-aware attribution is about: a root project
+// carrying whatever rootSources the case needs, one nested project of its own, and a
+// proto/ tree that project reads across a boundary while no project's directory
+// contains it.
+//
+// The reaching declaration is a per-target ctx.readsFiles ref rather than a "../"
+// source glob on purpose: an InputRef's Project is already resolved to a
+// workspace-relative path at load, which is the form the cache key is built from. A
+// literal "../proto/**" in Sources is stored raw and rooted by concatenation
+// everywhere (cache step included), so it matches nothing there either - attribution
+// claiming that one seeds would be claiming a key movement that does not happen.
+func globWorkspace(t *testing.T, rootSources ...string) *types.Workspace {
+	t.Helper()
+	return &types.Workspace{
+		Root: "/fake",
+		Projects: map[string]*types.Project{
+			".": {Path: ".", Dir: "/fake", Spell: "go", Sources: rootSources},
+			"api": {
+				Path: "api", Dir: "/fake/api", Spell: "go", Sources: []string{"**/*.go"},
+				TargetInputs: map[string][]types.InputRef{
+					"build": {{Project: "proto", Glob: "**/*.proto"}},
+				},
+			},
+		},
+	}
+}
+
+// TestSeedsForFileContainmentBeatsAReachingGlob pins the ordering rule, which is the
+// half of glob attribution that had to NOT change: the root's "**/*.go" genuinely
+// matches every nested Go file (magus's own root project declares exactly that), so a
+// rule that seeded every project whose globs match would add the root as a second seed
+// on every edit anywhere in the tree. Directory containment is the more specific claim
+// and stays the answer.
+func TestSeedsForFileContainmentBeatsAReachingGlob(t *testing.T) {
+	t.Parallel()
+	idx := newProjectIndex(globWorkspace(t, "**/*.go"))
+
+	seeds, declared := idx.seedsForFile("api/main.go")
+	assert.Equal(t, []string{"api"}, seeds, "a contained file seeds its own project only")
+	assert.True(t, declared, "api declares **/*.go, so the file keys something")
+}
+
+// TestSeedsForFileGlobRedirectsOutsideEveryTree is the redirect the seam exists for: a
+// file no project directory contains, that a project reads through a reaching glob,
+// seeds the project whose cache key it actually moves - not the root project that
+// merely sits above it.
+func TestSeedsForFileGlobRedirectsOutsideEveryTree(t *testing.T) {
+	t.Parallel()
+	idx := newProjectIndex(globWorkspace(t))
+
+	seeds, declared := idx.seedsForFile("proto/order.proto")
+	assert.Equal(t, []string{"api"}, seeds, "the declaring project seeds, not the containment catch-all")
+	assert.True(t, declared)
+}
+
+// TestSeedsForFileUndeclaredKeepsTheCatchAll pins the fail-safe. The catch-all is
+// load-bearing - a config nobody declares still changes what a build MEANS, and
+// seeding is the only reason editing one reruns anything - so it is REPORTED rather
+// than narrowed.
+func TestSeedsForFileUndeclaredKeepsTheCatchAll(t *testing.T) {
+	t.Parallel()
+	idx := newProjectIndex(globWorkspace(t, "**/*.go"))
+
+	seeds, declared := idx.seedsForFile(".golangci.yml")
+	assert.Equal(t, []string{"."}, seeds, "an undeclared root file still seeds the root project")
+	assert.False(t, declared, "nothing declares it, so it moved no cache key")
+}
+
+// TestSeedsForFileDeclaringClearsTheHazard is the other side of the one above, and
+// the reason MGS1028's fix line can be stated honestly: declaring the file is what
+// makes the seeding meaningful. Same path, same seed - now backed by a key.
+func TestSeedsForFileDeclaringClearsTheHazard(t *testing.T) {
+	t.Parallel()
+	idx := newProjectIndex(globWorkspace(t, "**/*.go", ".golangci.yml"))
+
+	seeds, declared := idx.seedsForFile(".golangci.yml")
+	assert.Equal(t, []string{"."}, seeds)
+	assert.True(t, declared, "the root now declares it, so the rerun is keyed")
+}
+
+// TestAffectedFromPathsSeparatesUndeclaredFiles carries the distinction out to the
+// result type: FilesBySeed says what seeded a project, UndeclaredBySeed says which of
+// those did it without moving a key. --impact and --explain both qualify their output
+// with it, so the two lists must not collapse into one.
+func TestAffectedFromPathsSeparatesUndeclaredFiles(t *testing.T) {
+	t.Parallel()
+
+	r, err := AffectedFromPaths(context.Background(), globWorkspace(t, "**/*.go"), []string{
+		"api/main.go",
+		".golangci.yml",
+		"LICENSE",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, []string{".", "api"}, r.Seed)
+	assert.Equal(t, []string{".golangci.yml", "LICENSE"}, r.FilesBySeed["."])
+	assert.Equal(t, []string{".golangci.yml", "LICENSE"}, r.UndeclaredBySeed["."])
+	assert.Empty(t, r.UndeclaredBySeed["api"], "a declared source is never undeclared")
+}
+
+// TestAffectedFromPathsUndeclaredIsNilWhenEverythingIsDeclared keeps the field a
+// signal rather than an always-present empty map: every consumer branches on its
+// length, and MGS1028 fires off exactly that test.
+func TestAffectedFromPathsUndeclaredIsNilWhenEverythingIsDeclared(t *testing.T) {
+	t.Parallel()
+
+	r, err := AffectedFromPaths(context.Background(), globWorkspace(t, "**/*.go"), []string{"api/main.go"})
+	require.NoError(t, err)
+	assert.Nil(t, r.UndeclaredBySeed)
+}
+
 // TestAffectedDisabledReturnsErrFallback verifies that MAGUS_VCS_ENABLED=false
 // causes Affected to return ErrAffectedFallback.
 func TestAffectedDisabledReturnsErrFallback(t *testing.T) {

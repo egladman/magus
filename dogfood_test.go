@@ -594,3 +594,53 @@ func TestHookTemplatesAreEmbeddedInTheGuide(t *testing.T) {
 				"what they would download.", page, name)
 	}
 }
+
+// rootSourcesBlock captures the root project's declared source globs: everything
+// between `"sources": [` and the closing bracket. One `"sources"` key exists in this
+// magusfile (the root project's), so the first match is it.
+var rootSourcesBlock = regexp.MustCompile(`(?s)"sources":\s*\[(.*?)\]`)
+
+// quotedString matches one glob inside that block, comments excluded by construction
+// (a trailing `// ...` carries no quotes).
+var quotedString = regexp.MustCompile(`"([^"]+)"`)
+
+// TestRootProjectDeclaresTheConfigsItsToolsRead is this repository declining to be the
+// example in its own diagnostic.
+//
+// Each path below changes what a root target DOES while matching no spell source glob,
+// so before they were declared an edit to one produced a cache HIT - golangci-lint
+// re-run under a new rule set, replaying the verdict computed under the old one - while
+// still seeding the root project through directory containment and rerunning everything
+// for nothing (MGS1028, and doctor's undeclared-seeding advice).
+//
+// Deliberately absent, and this test says so rather than leaving it to be rediscovered:
+// LICENSE is read only by release-build, which is skip_cache, so declaring it would
+// invalidate build/test/lint to key nothing; .gitignore is read by no target at all.
+// Both keep seeding by containment, correctly.
+func TestRootProjectDeclaresTheConfigsItsToolsRead(t *testing.T) {
+	body, err := os.ReadFile(rootMagusfile)
+	require.NoError(t, err, "read %s", rootMagusfile)
+
+	block := rootSourcesBlock.FindStringSubmatch(string(body))
+	require.Len(t, block, 2, "%s declares no project-wide sources", rootMagusfile)
+	var declared []string
+	for _, m := range quotedString.FindAllStringSubmatch(block[1], -1) {
+		declared = append(declared, m[1])
+	}
+
+	for path, reader := range map[string]string{
+		".golangci.yml":       "golangci-lint, through the go spell's lint op",
+		".mockery.yaml":       "`go tool mockery`, in the generate target",
+		".markdownlintignore": "markdownlint, through the markdown spell's lint op",
+		"dprint-base.json":    "dprint (dprint.json extends it; the spell declares only dprint.json)",
+		"mise.toml":           "every op in this project, through the toolchain it pins",
+		"magus.yaml":          "every run, through the charm/cache/sandbox policy it resolves",
+		"Dockerfile":          "image-build's amd64 variant",
+		"Dockerfile.static":   "image-build's static multi-arch variant",
+	} {
+		assert.Contains(t, declared, path,
+			"%s is read by %s but no root source glob names it, so editing it reruns every\n"+
+				"root target while keying none of them. Declare it in this magusfile's sources.",
+			path, reader)
+	}
+}

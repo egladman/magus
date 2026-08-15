@@ -727,7 +727,15 @@ func printImpactText(out *types.ImpactResult) error {
 			continue
 		}
 		seeded += len(p.Files)
-		fmt.Printf("  %s (seeded by %s)\n", p.Path, countLabel(len(p.Files), "changed file", "changed files"))
+		// "seeded by 12 changed files" reads as twelve files this project is built
+		// from. Some of them may be seeding it by directory containment alone, which
+		// is a rerun whose result was already correct - so the count says how many,
+		// and the listing below marks which.
+		label := countLabel(len(p.Files), "changed file", "changed files")
+		if n := len(p.UndeclaredFiles); n > 0 {
+			label += fmt.Sprintf(", %d declared by no project", n)
+		}
+		fmt.Printf("  %s (seeded by %s)\n", p.Path, label)
 		if len(p.Targets) > 0 {
 			fmt.Printf("    targets: %s\n", strings.Join(p.Targets, ", "))
 		}
@@ -736,6 +744,10 @@ func printImpactText(out *types.ImpactResult) error {
 			shown = shown[:impactFileCap]
 		}
 		for _, f := range shown {
+			if slices.Contains(p.UndeclaredFiles, f) {
+				fmt.Printf("    %s (undeclared)\n", f)
+				continue
+			}
 			fmt.Printf("    %s\n", f)
 		}
 		if extra := len(p.Files) - len(shown); extra > 0 {
@@ -876,6 +888,9 @@ type affectedExplainPath struct {
 	Seed  string   `json:"seed"  yaml:"seed"`
 	Chain []string `json:"chain" yaml:"chain"`
 	Files []string `json:"files" yaml:"files"`
+	// Undeclared is the subset of Files that no project declares - the ones whose
+	// answer to "why did this run" is directory containment rather than a cache key.
+	Undeclared []string `json:"undeclared,omitempty" yaml:"undeclared,omitempty"`
 }
 
 func affectedExplain(ctx context.Context, root, target, base string) error {
@@ -915,9 +930,10 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 		paths := g.PathsFromSeeds(r.Seed, target)
 		for _, ap := range paths {
 			out.Paths = append(out.Paths, affectedExplainPath{
-				Seed:  ap.Seed,
-				Chain: ap.Chain,
-				Files: r.FilesBySeed[ap.Seed],
+				Seed:       ap.Seed,
+				Chain:      ap.Chain,
+				Files:      r.FilesBySeed[ap.Seed],
+				Undeclared: r.UndeclaredBySeed[ap.Seed],
 			})
 		}
 	}
@@ -933,20 +949,8 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 	}
 
 	// text and wide
-	if !out.Affected {
-		fmt.Printf("%s is not affected (base: %s)\n", out.Project, out.Base)
+	if !printAffectedExplainText(out) {
 		return nil
-	}
-	fmt.Printf("%s\n", out.Project)
-	for _, ap := range out.Paths {
-		if len(ap.Chain) == 1 {
-			fmt.Printf("  changed files:\n")
-		} else {
-			fmt.Printf("  via %s:\n", strings.Join(ap.Chain, " -> "))
-		}
-		for _, f := range ap.Files {
-			fmt.Printf("    %s\n", f)
-		}
 	}
 
 	if res, err := vcs.Resolve(ctx, ws.Root(), "", ws.VCSOptions()); err == nil && res.VCS != nil {
@@ -959,6 +963,36 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 		}
 	}
 	return nil
+}
+
+// printAffectedExplainText renders the text and wide forms of `magus affected --explain`,
+// reporting whether the project is affected at all - the caller appends the VCS diff
+// hints only when it is. Split out for the same reason printImpactText is: the rendering
+// is a pure function of the result, and the I/O around it is not.
+func printAffectedExplainText(out affectedExplainOutput) bool {
+	if !out.Affected {
+		fmt.Printf("%s is not affected (base: %s)\n", out.Project, out.Base)
+		return false
+	}
+	fmt.Printf("%s\n", out.Project)
+	for _, ap := range out.Paths {
+		if len(ap.Chain) == 1 {
+			fmt.Printf("  changed files:\n")
+		} else {
+			fmt.Printf("  via %s:\n", strings.Join(ap.Chain, " -> "))
+		}
+		for _, f := range ap.Files {
+			// The marker answers the question the file list raises but cannot settle:
+			// whether this path is an input the seed is built from, or one that only
+			// happens to sit inside it.
+			if slices.Contains(ap.Undeclared, f) {
+				fmt.Printf("    %s (undeclared: seeds by directory containment, keys nothing)\n", f)
+				continue
+			}
+			fmt.Printf("    %s\n", f)
+		}
+	}
+	return true
 }
 
 // planDetail joins the shard partition against what magus already declares about each

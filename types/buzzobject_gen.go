@@ -172,12 +172,17 @@ func (v AffectedResult) BuzzObject() BuzzObject {
 	for keyFilesBySeed, itemFilesBySeed := range v.FilesBySeed {
 		mappedFilesBySeed[keyFilesBySeed] = itemFilesBySeed
 	}
+	mappedUndeclaredBySeed := make(map[string]any, len(v.UndeclaredBySeed))
+	for keyUndeclaredBySeed, itemUndeclaredBySeed := range v.UndeclaredBySeed {
+		mappedUndeclaredBySeed[keyUndeclaredBySeed] = itemUndeclaredBySeed
+	}
 	return BuzzObject{
-		"base":        v.Base,
-		"changed":     v.Changed,
-		"seed":        v.Seed,
-		"filesBySeed": mappedFilesBySeed,
-		"affected":    v.Affected,
+		"base":             v.Base,
+		"changed":          v.Changed,
+		"seed":             v.Seed,
+		"filesBySeed":      mappedFilesBySeed,
+		"affected":         v.Affected,
+		"undeclaredBySeed": mappedUndeclaredBySeed,
 	}
 }
 
@@ -742,11 +747,12 @@ func (v ImpactFileCoverage) BuzzObject() BuzzObject {
 
 func (v ImpactProject) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"path":    v.Path,
-		"seed":    v.Seed,
-		"files":   v.Files,
-		"spells":  v.Spells,
-		"targets": v.Targets,
+		"path":            v.Path,
+		"seed":            v.Seed,
+		"files":           v.Files,
+		"undeclaredFiles": v.UndeclaredFiles,
+		"spells":          v.Spells,
+		"targets":         v.Targets,
 	}
 }
 
