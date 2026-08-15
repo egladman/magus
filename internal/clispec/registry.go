@@ -24,6 +24,7 @@ var All = []Command{
 	configCommand,
 	memoryCommand,
 	notesCommand,
+	reviewCommand,
 	serverCommand,
 	buzzCommand,
 	completionCommand,
@@ -1061,6 +1062,43 @@ the CLI is readable by an agent without either side learning a new format.`,
 		{"List entries and warnings", "magus memory ls"},
 		{"Read one entry", "magus memory get release-checklist"},
 		{"Check the journal's health", "magus memory verify"},
+	},
+}
+
+var reviewCommand = Command{
+	Name:        "review",
+	Short:       "Read the working tree's changes in the order they deserve attention",
+	Description: "Report every uncommitted change annotated with what the workspace knows: whether it is generated, how widely its changed symbols are referenced, whether it is public API surface, and what coverage was observed.",
+	Tags:        []string{"cli", "magus review", "diff", "review", "changeset", "semver"},
+	Long: `Read the working tree's uncommitted changes, annotated and ordered.
+
+A changeset is not a list of files, it is a set of CONSEQUENCES, and a reader's
+attention is scarce. Alphabetical order spends it at random: it gives a
+regenerated lockfile the same weight as a signature change twelve packages
+depend on. This orders by what a change can BREAK.
+
+Generated files - declared target outputs - are folded away by default. Reading
+one is reading a machine's restatement of a change made somewhere else, so the
+source edit is the review. Pass --generated to see them anyway.
+
+Each file carries the evidence behind its rank: how many files reference the
+widest changed symbol it defines, whether any of those referents cross a project
+boundary or the module boundary (which is the question a version bump turns on),
+and the coverage a prior run observed. None of it is a verdict. magus does not
+claim a change is breaking - deciding that needs signature compatibility, which
+needs a base-side index magus does not keep and language semantics it does not
+model - it reports who can see the thing you changed and lets you decide.
+
+The console's Review surface reads the same annotations over the same session,
+and an agent can join that session through the magus_review MCP tool.`,
+	Usage: "magus review [--generated] [flags]",
+	Flags: []Flag{
+		{Name: "generated", Kind: FlagBool, Doc: "Include declared target outputs, which are folded away by default"},
+	},
+	Examples: []Example{
+		{"Read what you are about to commit", "magus review"},
+		{"Include the generated files too", "magus review --generated"},
+		{"Machine-readable, for a script or a Buzz advisor", "magus review -o json"},
 	},
 }
 

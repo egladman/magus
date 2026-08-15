@@ -136,6 +136,7 @@ flag query/secrets
 flag query/url
 flag refs/occurrences
 flag refs/refresh
+flag review/generated
 flag run/depth
 flag run/detach
 flag run/graph
@@ -183,6 +184,7 @@ subcommand notify
 subcommand path
 subcommand query
 subcommand refs
+subcommand review
 subcommand run
 subcommand self
 subcommand server

@@ -237,6 +237,8 @@ const (
 	FlagRefsOccurrences = "occurrences"
 	// refs: --refresh
 	FlagRefsRefresh = "refresh"
+	// review: --generated
+	FlagReviewGenerated = "generated"
 	// run: --depth
 	FlagRunDepth = "depth"
 	// run: --detach
@@ -864,6 +866,18 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 	fs.StringVar(&f.Type, FlagMemoryPutType, "", "Entry type: pointer, decision, or plan")
 	fs.StringVar(&f.Status, FlagMemoryPutStatus, "", "Lifecycle label, e.g. accepted, active, done, stale")
 	fs.StringVar(&f.Body, FlagMemoryPutBody, "", "Short why/caption, decision and plan only")
+	return &f
+}
+
+// ReviewFlags are the flags declared for `magus review`.
+type ReviewFlags struct {
+	Generated bool // --generated
+}
+
+// BindReview registers `magus review`'s flags on fs and returns the destination.
+func BindReview(fs *flag.FlagSet) *ReviewFlags {
+	var f ReviewFlags
+	fs.BoolVar(&f.Generated, FlagReviewGenerated, false, "Include declared target outputs, which are folded away by default")
 	return &f
 }
 

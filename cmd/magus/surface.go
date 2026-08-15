@@ -40,6 +40,7 @@ var subcommands = []subcommand{
 	{Name: "config", Short: "view or update magus configuration"},
 	{Name: "memory", Short: "durable cross-session project memory (ls, get, put, delete, verify)"},
 	{Name: "notes", Short: "human-authored notes committed to the repo (ls, get, edit, verify)"},
+	{Name: "review", Short: "read uncommitted changes in the order they deserve attention, generated folded"},
 	{Name: "server", Short: "manage the persistent daemon (start / stop / status; MCP starts with it)"},
 	{Name: "buzz", Short: "run a Buzz script (Buzz stdlib + every magus host module)"},
 	{Name: "completion", Short: "print a shell completion script (bash, zsh, fish)"},

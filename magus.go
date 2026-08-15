@@ -1,6 +1,7 @@
 package magus
 
 import (
+	"bytes"
 	"cmp"
 	"context"
 	"encoding/base64"
@@ -628,7 +629,115 @@ func (m *Magus) WorkingDiff(ctx context.Context, paths []string) (string, error)
 	if err != nil || res.VCS == nil {
 		return "", nil
 	}
-	return res.VCS.DirtyDiff(ctx, m.ws.Root, paths)
+	tracked, err := res.VCS.DirtyDiff(ctx, m.ws.Root, paths)
+	if err != nil {
+		return "", err
+	}
+	// A diff of tracked changes MISSES a brand-new file entirely, and a new file is the thing
+	// a reviewer most wants to see. Every backend's dirty-diff is tree-against-index by
+	// design - that is what a drift gate needs, and DirtyDiff must keep meaning exactly that -
+	// so the untracked half is composed here rather than by widening a contract other callers
+	// depend on.
+	untracked, uerr := m.untrackedPatch(ctx, res.VCS, paths)
+	if uerr != nil || untracked == "" {
+		// An untracked file that cannot be read is left out rather than failing the review:
+		// the tracked half is still worth showing, and a permission error on one scratch file
+		// must not make the whole changeset unreadable.
+		return tracked, nil
+	}
+	if tracked == "" {
+		return untracked, nil
+	}
+	// The newline between the halves is load-bearing. A patch whose last line is not
+	// newline-terminated - which is exactly what a diff ending in "\ No newline at end of
+	// file" produces - would otherwise have the first synthesized header glued onto it, so
+	// that header stops starting a line, every reader misses it, and the first untracked file
+	// silently disappears from the review while the rest show up fine. Measured: it ate
+	// exactly one new file and nothing reported an error.
+	if !strings.HasSuffix(tracked, "\n") {
+		return tracked + "\n" + untracked, nil
+	}
+	return tracked + untracked, nil
+}
+
+// untrackedPatch synthesizes a unified patch for files the VCS does not track yet: every line
+// is an addition against /dev/null, which is exactly how git renders a new file.
+//
+// Untracked paths are derived from two capabilities the backends already expose rather than
+// by parsing status output - DirtyFiles lists everything dirty, TrackedFiles says which of
+// those the VCS knows - so this stays backend-agnostic instead of learning git's porcelain
+// column format. A backend implementing neither yields no untracked half, which is the honest
+// degradation.
+func (m *Magus) untrackedPatch(ctx context.Context, driver types.VCSDriver, paths []string) (string, error) {
+	tracker, ok := driver.(types.TrackedFileReporter)
+	if !ok {
+		return "", nil
+	}
+	lines, err := driver.DirtyFiles(ctx, m.ws.Root, paths)
+	if err != nil || len(lines) == 0 {
+		return "", err
+	}
+	dirty := make([]string, 0, len(lines))
+	for _, l := range lines {
+		if p := statusLinePath(l); p != "" {
+			dirty = append(dirty, p)
+		}
+	}
+	if len(dirty) == 0 {
+		return "", nil
+	}
+	known, err := tracker.TrackedFiles(ctx, m.ws.Root, dirty)
+	if err != nil {
+		return "", err
+	}
+	isTracked := make(map[string]bool, len(known))
+	for _, p := range known {
+		isTracked[p] = true
+	}
+
+	var b strings.Builder
+	for _, p := range dirty {
+		if isTracked[p] {
+			continue
+		}
+		body, rerr := os.ReadFile(filepath.Join(m.ws.Root, p))
+		if rerr != nil {
+			continue // unreadable or already gone; see the note in WorkingDiff
+		}
+		if bytes.IndexByte(body, 0) >= 0 {
+			// A binary file gets git's own marker rather than a wall of mojibake.
+			fmt.Fprintf(&b, "diff --git a/%s b/%s\nnew file mode 100644\nBinary files /dev/null and b/%s differ\n", p, p, p)
+			continue
+		}
+		content := strings.TrimSuffix(string(body), "\n")
+		rows := strings.Split(content, "\n")
+		fmt.Fprintf(&b, "diff --git a/%s b/%s\nnew file mode 100644\n--- /dev/null\n+++ b/%s\n@@ -0,0 +1,%d @@\n", p, p, p, len(rows))
+		for _, r := range rows {
+			b.WriteString("+" + r + "\n")
+		}
+	}
+	return b.String(), nil
+}
+
+// statusLinePath strips a backend's status columns off one dirty-file line.
+//
+// Every backend prints "<status> <path>" with the status first and no spaces in it (git
+// porcelain "?? a/b.go", hg "? a/b.go", jj "A a/b.go"), so splitting on the last run of
+// leading non-space plus space recovers the path without knowing which backend wrote it. A
+// rename arrow ("R old -> new") keeps the NEW name, which is the file that exists on disk.
+func statusLinePath(line string) string {
+	s := strings.TrimSpace(line)
+	if s == "" {
+		return ""
+	}
+	if i := strings.Index(s, " -> "); i >= 0 {
+		return strings.TrimSpace(s[i+4:])
+	}
+	i := strings.IndexByte(s, ' ')
+	if i < 0 {
+		return s // no status column at all; the whole line is the path
+	}
+	return strings.TrimSpace(s[i+1:])
 }
 
 // Review annotates a changed-path set with what the workspace already knows about each file:

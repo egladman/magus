@@ -747,6 +747,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return memoryCmd(ctx, root, subArgs)
 	case "notes":
 		return notesCmd(ctx, root, subArgs)
+	case "review":
+		return reviewCmd(ctx, root, subArgs)
 	case "server":
 		return serverCmd(ctx, root, subArgs)
 	case "mcp":
