@@ -124,8 +124,15 @@ terminal, CI, and browser alike; (4) offline patch review with no daemon.
 
 ## Not verified
 
-- **`magus affected ci --no-default-charms` was not run.** Individual targets were: root
-  `test`, console `test`, console `lint`, and `generate` after every schema change.
+- **`magus affected ci --no-default-charms` WAS run, and does not pass cleanly here.** It
+  found two real things, both fixed and committed (`abd7dea6e`, `a829b8825`): the handoff note
+  changed `gen/knowledge-graph.json`, and the rename left five godoc/nolint findings. What
+  remains failing is the documented environmental leak - `magus run lint .` reports 25
+  findings from a SIBLING worktree, `../improve-terminal-insight`, all of them go1.27
+  `stdversion` errors in a file this branch never touched. Zero findings remain in this tree.
+  Re-check on a machine without that worktree before trusting the gate either way.
+- Root `test`, console `test`, and console `lint` are green, and `generate` was re-run after
+  every schema change.
 - The console changes were verified by tests and lint, **not by loading the surface in a
   browser**. The a11y attributes and the word emphasis have unit-level cover but no DOM test.
 - `--watch` compiles and is wired, but I did not sit in a watch loop and edit a file.
