@@ -1633,45 +1633,105 @@ a code {
   color: var(--pico-color);
 }
 
-/* Floating back-to-top button (JS-injected by back-to-top.js). Hidden until
-   scroll passes ~400px; smooth-scrolls (respects prefers-reduced-motion). Sits
-   in the bottom-right safe area so it stays clear of the mobile TOC sheet. */
-.back-to-top {
+/* Floating control stack (JS-injected by floating-actions.js), bottom-right safe
+   area; the .sw-toast takes the bottom-left so the two never overlap.
+   column-reverse, so append order runs bottom-up: back-to-top takes the corner and
+   keeps it, and a control revealed later rises above it instead of displacing the
+   one the reader is aiming at. */
+.floating-actions {
   position: fixed;
   right: max(1rem, env(safe-area-inset-right));
   bottom: max(1rem, env(safe-area-inset-bottom));
   z-index: 40;
-  width: 2.5rem;
-  height: 2.5rem;
-  /* Square (rounded) corners, matching the TOC / theme / nav toggle buttons -
-     was a full circle (border-radius: 50%). */
-  border-radius: var(--pico-border-radius);
-  padding: 0;
-  display: inline-flex;
+  display: flex;
+  flex-direction: column-reverse;
+  align-items: flex-end;
+  gap: 0.4rem;
+}
+
+/* Both floating controls share the nav cluster's icon-button treatment. Each is
+   hidden by default and revealed by its own scroll-position rule below.
+   Styled the way Pico styles its own button variants: by setting the three
+   variables its base button rule paints from, never background/border/color
+   directly. Pico's .secondary and .outline are built exactly this way, and a
+   variant that assigns properties instead is the thing that fights the framework -
+   Pico's :hover reassigns these same variables, so a property set here would have
+   to out-specify it, while a value set here is simply the one Pico reads.
+   No Pico variant fits a floating control: .outline forces a transparent
+   background, and this has to stay opaque over the prose it covers. */
+.back-to-top,
+.keyboard-help-trigger {
+  --pico-background-color: var(--pico-card-background-color);
+  --pico-border-color: var(--pico-muted-border-color);
+  --pico-color: var(--pico-muted-color);
+  /* Derive the box from the glyph (0.4rem around an 18px icon) rather than fixing
+     width/height, so this stays the same size as the nav cluster - menu, reference,
+     settings gear - which is sized the same way. A literal square drifts the moment
+     either side's icon changes. */
+  padding: 0.4rem;
+  /* Pico gives every <button> a form-element bottom margin, and on a fixed element
+     anchored by `bottom` that margin lifts the button a full --pico-spacing above
+     the corner it is supposed to sit in. .nav-toggle and #settings-btn zero it for
+     the same reason. */
+  margin: 0;
   align-items: center;
   justify-content: center;
-  background: var(--pico-card-background-color);
-  color: var(--pico-primary);
-  border: 1px solid var(--pico-muted-border-color);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2);
+  /* Light enough to keep the 1px border legible as a border. A heavier shadow
+     smears a dark halo along the bottom edge and the border stops reading. */
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.12);
+  /* display:none rather than a hidden-but-laid-out box: a hidden control must take
+     no room in the column, or the stack reserves a gap for a button that is not
+     there and the visible one floats off the corner. */
+  display: none;
   opacity: 0;
   transform: translateY(0.5rem);
-  pointer-events: none;
   transition: opacity 0.15s ease, transform 0.15s ease;
 }
-/* Semi-opaque at rest so it sits lightly over the content it floats above; it
-   comes to full opacity on hover/focus when the reader reaches for it. */
-.back-to-top.visible {
-  opacity: 0.65;
-  transform: translateY(0);
-  pointer-events: auto;
+
+/* Reveal rules. The back-to-top earns its place as soon as the top is far away;
+   the shortcuts button waits for the foot of the page, where a reader out of
+   content is the most likely to be looking for somewhere to go. Gating it on
+   .past-fold too keeps it off pages short enough to be their own bottom. */
+.floating-actions.past-fold .back-to-top,
+.floating-actions.past-fold.at-end .keyboard-help-trigger {
+  display: inline-flex;
+  /* Next frame, so the element has a layout box to animate from. */
+  animation: floating-action-in 0.15s ease forwards;
 }
-.back-to-top.visible:hover,
-.back-to-top.visible:focus-visible {
-  opacity: 1;
+@keyframes floating-action-in {
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Tint border + glyph primary, exactly like the nav icon buttons. Restating the
+   background is what holds it opaque: Pico's plain-button :hover reassigns all
+   three variables (to a filled primary), so leaving this one out would let the
+   hover state paint over the prose behind it.
+   Do NOT reach for var(--pico-color) here, the way .nav-toggle/.ref-trigger do -
+   that is Pico's output variable, reassigned per variant and state, so reading it
+   returns whatever the last variant wrote: --pico-primary-hover under .outline,
+   but --pico-primary-inverse (white) on a filled button, which paints a blank
+   white tile with an invisible glyph. Name the input token instead. */
+.back-to-top:hover,
+.back-to-top:focus-visible,
+.back-to-top:active,
+.keyboard-help-trigger:hover,
+.keyboard-help-trigger:focus-visible,
+.keyboard-help-trigger:active {
+  --pico-background-color: var(--pico-card-background-color);
+  --pico-border-color: var(--pico-primary-hover);
+  --pico-color: var(--pico-primary-hover);
 }
 @media (prefers-reduced-motion: reduce) {
-  .back-to-top { transition: none; }
+  .back-to-top,
+  .keyboard-help-trigger {
+    transition: none;
+    animation: none;
+    opacity: 1;
+    transform: none;
+  }
 }
 
 /* "Related" card grid near the foot of a docs page (built by relatedFor() in the
@@ -1847,7 +1907,7 @@ a code {
   .page-nav,
   .page-provenance,
   .site-footer,
-  .back-to-top,
+  .floating-actions,
   .related,
   .search-results,
   .skip-link,
@@ -2630,13 +2690,25 @@ a code {
 /* Keyboard-shortcut help overlay - a native <dialog> so the browser handles
    focus trap + backdrop + Esc-to-close. Pico gives <dialog> a card look; we
    just scope the inner width. */
-.shortcut-help[open] {
+/* The card is the <article>, not the <dialog>: Pico makes the dialog itself a
+   full-viewport flex centering container. Sizing and framing the dialog instead
+   puts a border around the whole screen, and its max-width is dead on arrival
+   against Pico's min-width:100% (min always beats max), which is how this overlay
+   came to render ~2x the width it declares. */
+.shortcut-help[open] article {
   max-width: 22rem;
+  width: 100%;
+  margin: 0;
+  padding: 0;
   border: 1px solid var(--pico-muted-border-color);
   border-radius: var(--pico-border-radius);
-  padding: 0;
 }
+/* Pico bleeds a dialog header to the card edges with a negative margin sized to
+   cancel the article's padding. This article sets its own padding to zero and each
+   section pads itself, so there is nothing to cancel and that margin would hang the
+   header off the top of the card. */
 .shortcut-help header {
+  margin: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -2644,16 +2716,13 @@ a code {
   border-bottom: 1px solid var(--pico-muted-border-color);
 }
 .shortcut-help header h2 { margin: 0; font-size: 1rem; }
+/* Pico's .close supplies the glyph, the centering and the dim/hover states. It
+   sizes itself against a stock article's padding, which this header replaces, so
+   the only thing left to say is that the margins meant for that layout are not
+   wanted here. */
 .shortcut-close {
-  background: transparent;
-  border: 0;
-  font-size: 1.25rem;
-  line-height: 1;
-  padding: 0.1rem 0.4rem;
-  color: var(--pico-muted-color);
-  cursor: pointer;
+  margin: 0;
 }
-.shortcut-close:hover { color: var(--pico-primary); }
 .shortcut-help dl {
   margin: 0;
   padding: 0.75rem 0.9rem;
@@ -2665,13 +2734,29 @@ a code {
 }
 .shortcut-help dt { margin: 0; }
 .shortcut-help dd { margin: 0; color: var(--pico-muted-color); }
+/* Pico's kbd is deliberately inverted - it paints --pico-code-kbd-background-color
+   (= --pico-color) behind --pico-code-kbd-color (= --pico-background-color), so
+   the chip flips with the colour scheme on its own. Retune BOTH tokens to keep
+   that pairing coherent while lightening the chip; setting `background` alone
+   inverts only half of it and leaves white glyphs on a white chip. */
 .shortcut-help kbd {
+  --pico-code-kbd-background-color: var(--pico-card-sectioning-background-color);
+  --pico-code-kbd-color: var(--pico-color);
   font-family: inherit;
   font-size: 0.85rem;
   padding: 0.05rem 0.4rem;
   border: 1px solid var(--pico-muted-border-color);
   border-radius: var(--pico-border-radius);
-  background: var(--pico-card-sectioning-background-color);
+}
+/* Pico blurs the page behind a modal via --pico-modal-overlay-backdrop-filter,
+   default blur(0.375rem) (~6px), which reads as a heavy frosted pane; the site's
+   own overlays, .ref-backdrop and .toc-backdrop, dim without blurring at all.
+   Retune Pico's variable rather than setting backdrop-filter here: Pico applies
+   the filter to the dialog ELEMENT, not to ::backdrop, so a filter declared on
+   the pseudo-element is a second blur stacked on top of Pico's rather than a
+   replacement for it. */
+.shortcut-help {
+  --pico-modal-overlay-backdrop-filter: blur(2px);
 }
 .shortcut-help::backdrop { background: rgba(0, 0, 0, 0.35); }
 
