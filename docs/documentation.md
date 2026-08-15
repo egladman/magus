@@ -93,6 +93,7 @@ Once the basics click, these cover running magus at scale and in CI.
 ## Coming from other tools
 
 - [Coming from Nx](migrating/from-nx.md) - a terminology map and porting sketch for teams migrating a workspace from Nx.
+- [Nx integration](guides/integrations/nx.md) - **experimental**: map an existing Nx workspace into magus with a [workspace provider](concepts/workspace-providers.md), keeping Nx as the thing that runs the work. Ships in no release; you copy a spell in by hand.
 
 ## Reference
 

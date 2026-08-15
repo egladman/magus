@@ -191,6 +191,7 @@ from-scratch walkthrough.
 
 ## See also
 
+- [Nx integration](../guides/integrations/nx.md): the other direction, and **experimental** - keep the Nx workspace as it is and let magus adopt its project set through a workspace provider. It ships in no release and is set up by hand.
 - [Getting started](../guides/getting-started.md): install to first `ci` pipeline, magus-native.
 - [Dependencies](../concepts/dependencies.md): the `magus\needs` / `depends_on` model this page's `dependsOn` row maps to.
 - [Remote caching](../concepts/cache/remote.md): the signed trust model behind the Nx Cloud comparison row.

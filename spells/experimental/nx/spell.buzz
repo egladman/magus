@@ -1,0 +1,86 @@
+// EXPERIMENTAL. Not shipped in the magus binary, not covered by any stability promise,
+// and liable to change or disappear without notice. Setup is manual: copy this file into
+// your own Nx repo and import it there - docs/guides/integrations/nx.md has the steps.
+//
+// Nx workspace provider: reports the Nx project graph as magus projects, and runs
+// each target by shelling out to `nx run <project>:<target>`.
+//
+// Op keys are magus LIFECYCLE names (build/test/lint/ci) instead of the tool's own
+// command, reversing the usual rule (see docs/concepts/spells.md). A provided
+// project has no magusfile, so a target name reaches it only when a bound spell
+// exposes an op of that name.
+import "magus/spell";
+import "os";
+import "proc";
+import "encoding/json";
+
+export fun mgs_getName() > str { return "nx"; }
+export fun mgs_getLanguage() > str { return "typescript"; }
+
+// For a provider spell this is read at WORKSPACE scope: the files that decide what
+// the projects ARE. It is also what invalidates the provider cache.
+export fun mgs_listRequiredGlobs() > [Path] {
+    return [Path{value = "nx.json"}, Path{value = "**/project.json"}, Path{value = "package.json"}];
+}
+
+export fun mgs_listIgnoreDirs() > [Path] {
+    return [Path{value = "node_modules", isDir = true}, Path{value = "dist", isDir = true}];
+}
+
+// No mgs_getVersionCommand: package.json and the lockfile are already declared
+// inputs, so an nx upgrade already misses every cache entry. A version probe
+// would only add a node startup per project per run on top of that.
+
+// The argv names no project: an op is resolved ONCE, before any project is
+// selected, so target.projectPath is not available here. What identifies the
+// project is the CWD - magus runs an op in the project's own directory, and
+// `nx build` there resolves to that project.
+
+// Builds the project nx infers from the working directory.
+fun build(target: Target) > Command { return Command{bin = "npx", args = ["--no-install", "nx", "build"]}; }
+// Tests the project nx infers from the working directory.
+fun test(target: Target) > Command  { return Command{bin = "npx", args = ["--no-install", "nx", "test"]}; }
+// Lints the project nx infers from the working directory.
+fun lint(target: Target) > Command  { return Command{bin = "npx", args = ["--no-install", "nx", "lint"]}; }
+// Chains lint, test and build so a provided project satisfies the ci anchor.
+fun ci(target: Target) > Command {
+    return Command{bin = "sh", args = ["-c", "npx --no-install nx lint && npx --no-install nx test && npx --no-install nx build"]};
+}
+
+export fun mgs_listTargets() > any {
+    return {"build": build, "test": test, "lint": lint, "ci": ci};
+}
+
+// list_projects is the workspace-provider contract magus invokes by name.
+export fun list_projects(target: Target, cb: fun(any)) > [Project] {
+    final io = {<str: any>};
+    cb(io);
+    final r = (io["root"] as? str) ?? "";
+
+    var projects = mut [<Project>];
+    // Belt and suspenders around the two exec calls below: NX_NO_CLOUD skips the
+    // cloud-onboarding prompt, NX_TUI and NX_INTERACTIVE keep nx from trying to
+    // draw a terminal UI while magus captures its output.
+    os\withEnv({"NX_NO_CLOUD": "true", "NX_TUI": "false", "NX_INTERACTIVE": "false"}, callback: fun() > void !> any {
+        // quiet, because this runs on the LOAD PATH of every magus command: proc.exec's
+        // default streams what it captures, so without it nx's JSON is echoed to the
+        // console before any command has printed its own output.
+        final listed = proc\exec("npx", args: ["--no-install", "nx", "show", "projects", "--json"], dir: r,
+            opts: {"quiet": true});
+        final names = json\parse(listed.stdout);
+
+        foreach (name in names as [str]) {
+            final shown = proc\exec("npx", args: ["--no-install", "nx", "show", "project", name, "--json"], dir: r,
+                opts: {"quiet": true});
+            final detail = json\parse(shown.stdout) as? {str: any};
+            projects.append(Project{
+                path   = ((detail?["root"]) as? str) ?? "",
+                name   = name,
+                spells = ["nx", "typescript"],
+                // sources are PROJECT-relative: "**/*.ts", never "libs/foo/**/*.ts".
+                sources = ["**/*"],
+            });
+        }
+    });
+    return projects;
+}

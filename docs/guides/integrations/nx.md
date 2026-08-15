@@ -1,10 +1,25 @@
 ---
 title: Nx
-description: Map an existing Nx workspace into magus with a workspace provider - nx keeps running the work, magus gets the project graph, the affected set, and the knowledge graph - without committing anything to the repo.
-tags: [nx, workspace-provider, monorepo, typescript, adoption, integration]
+description: An experiment that maps an existing Nx workspace into magus with a workspace provider - nx keeps running the work, magus gets the project graph, the affected set, and the knowledge graph - without committing anything to the repo.
+tags:
+  [
+    nx,
+    workspace-provider,
+    monorepo,
+    typescript,
+    adoption,
+    integration,
+    experimental,
+  ]
 ---
 
 # Nx
+
+> [!WARNING]
+> This integration is an experiment, not a supported feature. It exists to find
+> out whether driving an Nx workspace through magus is useful at all. It ships
+> in no magus release, setup is entirely manual, and it may change or be removed
+> without notice. Expect rough edges.
 
 An Nx repo already has a project model: `nx.json`, a `project.json` (or an
 inferred target set) per project, and a dependency graph Nx computes from the
@@ -18,13 +33,13 @@ coverage that magus derives from running the work.
 
 ## Nothing is committed to the repo
 
-The shim is four untracked files at the repo root plus magus's cache directory,
+The shim is three untracked files at the repo root plus magus's cache directory,
 and `.git/info/exclude` - which is per-clone and never committed - keeps them out
 of `git status`:
 
 ```text
 magusfile.buzz     wires the provider; the root project
-spells/nx.buzz     the provider spell below
+spells/nx.buzz     the provider spell, copied from the magus repository
 magus.yaml         sandbox env passthrough for NX_*/NODE_*/npm_config_* (see below)
 .magus/            magus's cache (relocate with MAGUS_CACHE_DIR to keep the tree cleaner)
 ```
@@ -44,107 +59,66 @@ project directory, which matters: Nx's default `inputs` include
 project directory would change every task hash on your machine and stop you
 hitting the shared cache.
 
-## The magusfile
+## Setup, by hand
+
+There is no installer and no built-in. magus ships nothing for Nx: what runs is a
+Buzz spell you copy into your own repo and import from a local magusfile.
+Updating it means copying the file again.
+
+The canonical source is
+[`spells/experimental/nx/spell.buzz`](https://github.com/egladman/magus/blob/main/spells/experimental/nx/spell.buzz)
+in the magus repository. Every step below runs at the root of your Nx workspace.
+
+**1. Copy the spell in.**
+
+```sh
+mkdir -p spells
+curl -fsSL -o spells/nx.buzz \
+  https://raw.githubusercontent.com/egladman/magus/main/spells/experimental/nx/spell.buzz
+```
+
+From a clone of the magus repository instead:
+
+```sh
+cp <magus-checkout>/spells/experimental/nx/spell.buzz spells/nx.buzz
+```
+
+**2. Write the magusfile that wires it.**
 
 ```buzz title="magusfile.buzz"
 import "magus";
 import "spells/nx";
 
 magus\workspace.provider(nx);
-
-// The root project. Nothing here runs Nx: the provider's projects carry that.
-export fun preflight(ctx: magus\Context, args: [str]) > void {}
 ```
 
-## The spell
+That is the whole file. It declares no targets of its own: every target in the
+workspace is an op of the provider spell, and an empty placeholder target would
+be a name, not a phase - it cannot fail and nothing depends on it.
 
-```buzz title="spells/nx.buzz"
-// Nx workspace provider: reports the Nx project graph as magus projects, and runs
-// each target by shelling out to `nx run <project>:<target>`.
-//
-// Op keys are magus LIFECYCLE names (build/test/lint/ci) instead of the tool's own
-// command, reversing the usual rule (see docs/concepts/spells.md). A provided
-// project has no magusfile, so a target name reaches it only when a bound spell
-// exposes an op of that name.
-import "magus/spell";
-import "os";
-import "json";
+**3. Write `magus.yaml`** with the [sandbox env
+passthrough](#sandbox-env-passthrough) below. It is load-bearing only when the
+sandbox is enabled.
 
-export fun mgs_getName() > str { return "nx"; }
-export fun mgs_getLanguage() > str { return "typescript"; }
+**4. Append the [`.git/info/exclude` block](#nothing-is-committed-to-the-repo)**
+above, so none of the three files reaches `git status`.
 
-// For a provider spell this is read at WORKSPACE scope: the files that decide what
-// the projects ARE. It is also what invalidates the provider cache.
-export fun mgs_listRequiredGlobs() > [Path] {
-    return [Path{value = "nx.json"}, Path{value = "**/project.json"}, Path{value = "package.json"}];
-}
+**5. Run magus.** `magus ls` should list your Nx projects; if it does not,
+[the mapping caveats](#three-things-to-know-about-the-mapping) below are where
+to start.
 
-export fun mgs_listIgnoreDirs() > [Path] {
-    return [Path{value = "node_modules", isDir = true}, Path{value = "dist", isDir = true}];
-}
+## Editing your copy
 
-// No mgs_getVersionCommand: package.json and the lockfile are already declared
-// inputs, so an nx upgrade already misses every cache entry. A version probe
-// would only add a node startup per project per run on top of that.
-
-// The argv names no project: an op is resolved ONCE, before any project is
-// selected, so target.projectPath is not available here. What identifies the
-// project is the CWD - magus runs an op in the project's own directory, and
-// `nx build` there resolves to that project.
-//
-// Builds the project nx infers from the working directory.
-fun build(target: Target) > Command { return Command{bin = "npx", args = ["--no-install", "nx", "build"]}; }
-// Tests the project nx infers from the working directory.
-fun test(target: Target) > Command  { return Command{bin = "npx", args = ["--no-install", "nx", "test"]}; }
-// Lints the project nx infers from the working directory.
-fun lint(target: Target) > Command  { return Command{bin = "npx", args = ["--no-install", "nx", "lint"]}; }
-// Chains lint, test and build so a provided project satisfies the ci anchor
-// magus affected ci looks for.
-fun ci(target: Target) > Command {
-    return Command{bin = "sh", args = ["-c", "npx --no-install nx lint && npx --no-install nx test && npx --no-install nx build"]};
-}
-
-export fun mgs_listTargets() > any {
-    return {"build": build, "test": test, "lint": lint, "ci": ci};
-}
-
-// list_projects is the workspace-provider contract magus invokes by name.
-export fun list_projects(target: Target, cb: fun(any)) > [Project] {
-    final io = {<str: any>};
-    cb(io);
-    final r = (io["root"] as? str) ?? "";
-
-    var projects = [<Project>];
-    // Belt and suspenders around the two exec calls below: NX_NO_CLOUD skips the
-    // cloud-onboarding prompt, NX_TUI and NX_INTERACTIVE keep nx from trying to
-    // draw a terminal UI while magus captures its output.
-    os\withEnv({"NX_NO_CLOUD": "true", "NX_TUI": "false", "NX_INTERACTIVE": "false"}, fun() > void {
-        final listed = proc\exec("npx", args: ["--no-install", "nx", "show", "projects", "--json"], dir: r);
-        final names = json\parse(listed.stdout);
-
-        foreach (name in names as [str]) {
-            final shown = proc\exec("npx", args: ["--no-install", "nx", "show", "project", name, "--json"], dir: r);
-            final detail = json\parse(shown.stdout) as? {str: any};
-            projects.append(Project{
-                path   = ((detail?["root"]) as? str) ?? "",
-                name   = name,
-                spells = ["nx", "typescript"],
-                // sources are PROJECT-relative: "**/*.ts", never "libs/foo/**/*.ts".
-                sources = ["**/*"],
-            });
-        }
-    });
-    return projects;
-}
-```
+The copy is yours: it is a workspace-local spell like any other, and magus
+invalidates the provider's cached answer when it changes.
 
 `ci` chains every target the base spell already exposes. Trim the chain to
 what every project in the repo actually declares - nx errors on a project
 that lacks one of the chained targets - or, if flavors diverge, split `ci`
 across separate provider spells, one per flavor.
 
-That is the smallest version that works. What it leaves out, in the order worth
-adding:
+The copy is the smallest version that works. What it leaves out, in the order
+worth adding:
 
 1. **Dependencies.** `nx graph --file=<path>` writes the project graph, whose
    `dependencies` map gives each project's in-workspace upstreams. Feed them to
@@ -165,7 +139,7 @@ npm 7+'s `npx` prefers the workspace-local `nx` over anything global. But when
 `--yes` and silently downloads the latest `nx` from the registry and runs
 that instead - the wrong version, none of the workspace's plugins.
 `--no-install` turns that into a loud failure: `npx` errors instead of
-guessing, which is why every `npx nx` call in the spell above carries it.
+guessing, which is why every `npx nx` call in the spell carries it.
 
 A globally installed `nx` delegates to the workspace-local version the same
 way a gradle wrapper delegates to the pinned gradle - so `nx` on PATH is also
@@ -175,8 +149,8 @@ workspace `nx` there at all: use `yarn nx` as the op's `bin` instead, in
 every `Command`.
 
 The mapping needs nx 16.3+. `nx show projects --json` and
-`nx show project --json`, both load-bearing in `list_projects` above, landed
-in that release.
+`nx show project --json`, both load-bearing in `list_projects`, landed in that
+release.
 
 ## Provider env hygiene
 
@@ -217,7 +191,7 @@ there already covers it.
 variable, so a missing passthrough entry fails loud - a broken nx run with a
 stripped-var notice in the log - rather than silently behaving differently.
 
-## Two things to know about the mapping
+## Three things to know about the mapping
 
 **The op relies on Nx inferring the project from the working directory.** magus
 runs an op in the project's own directory and an op's argv is fixed before any
@@ -277,6 +251,8 @@ the redaction guarantee covers.
 
 ## See also
 
+- [`spells/experimental/nx/spell.buzz`](https://github.com/egladman/magus/blob/main/spells/experimental/nx/spell.buzz):
+  the spell this guide copies, and the only source of truth for it
 - [Workspace providers](../../concepts/workspace-providers.md): the mechanism
 - [Secrets](../../concepts/secrets.md): how a provided project reaches a
   credential without a magusfile body
