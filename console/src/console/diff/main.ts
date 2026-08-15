@@ -1047,7 +1047,7 @@ export function activate(host: HTMLElement): () => void {
     try {
       const res = await fetchPatch(hp, controller.signal);
       if (res.clean) {
-        showEmpty("Nothing to review", "The working tree is clean - every change is committed.");
+        showEmpty("Nothing to read", "The working tree is clean - every change is committed.");
         return;
       }
       patch = res.patch;
@@ -1063,7 +1063,13 @@ export function activate(host: HTMLElement): () => void {
 
     const parsed = parsePatch(patch);
     if (parsed.length === 0) {
-      showEmpty("Nothing to review", "The daemon returned a patch this reader could not parse.");
+      // NOT an empty state: the daemon sent a patch and this reader failed on it. Titling that
+      // "nothing to read" tells someone their tree is clean when it is not, which is the one
+      // wrong answer that costs something - they stop looking.
+      showEmpty(
+        "Could not read the diff",
+        "The daemon returned a patch this reader could not parse.",
+      );
       return;
     }
 
