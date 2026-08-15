@@ -441,3 +441,56 @@ func TestParityGlobPathspecMatches(t *testing.T) {
 			"%s produced no diff for glob 'gen/**' while naming the file as dirty", b.name)
 	})
 }
+
+// Every churn reporter names the files a commit touched AND what it did to each. The status
+// half is what lets attribution tell a rename from a delete plus an add, and each backend
+// reaches it through a different log format - git tags every path, hg and sl group paths by
+// what happened to them, jj spells its statuses as words. Only a shared parser reads all
+// three, so a backend whose log stops matching that parser reports a commit with NO files:
+// no error, no diagnostic, just a churn heatmap that goes quiet. hg and sl shipped exactly
+// that when git's format gained the status column.
+func TestParityChangesByCommitReportsStatus(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		reporter, ok := b.drv.(types.ChurnReporter)
+		if !ok {
+			t.Skipf("%s does not implement ChurnReporter", b.name)
+		}
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"keep.txt": "one\n", "gone.txt": "two\n"})
+		writeRepoFile(t, dir, "keep.txt", "EDITED\n")
+		writeRepoFile(t, dir, "new.txt", "three\n")
+		addPath(t, b, dir, "new.txt")
+		removePath(t, b, dir, "gone.txt")
+		commitAll(t, b, dir, "edit one, add one, delete one")
+
+		changes, err := reporter.ChangesByCommit(t.Context(), dir, 1, "")
+		require.NoError(t, err, "ChangesByCommit")
+		require.Len(t, changes, 1, "%s: the limit must bound the result", b.name)
+
+		got := make(map[string]types.ChangeStatus, len(changes[0].Files))
+		for _, f := range changes[0].Files {
+			got[f.Path] = f.Status
+		}
+		assert.Equal(t, map[string]types.ChangeStatus{
+			"keep.txt": types.ChangeModified,
+			"new.txt":  types.ChangeAdded,
+			"gone.txt": types.ChangeDeleted,
+		}, got, "%s reported %v", b.name, changes[0].Files)
+	})
+}
+
+// removePath stops tracking one file. jj snapshots the working copy, so deleting it is the
+// whole operation there.
+func removePath(t *testing.T, b parityBackend, dir, path string) {
+	t.Helper()
+	switch b.name {
+	case "git":
+		vcsTestRun(t, dir, "git", "rm", "-q", "--", path)
+	case "hg":
+		vcsTestRun(t, dir, "hg", "rm", path)
+	case "sl":
+		vcsTestRun(t, dir, "sl", "rm", path)
+	case "jj":
+		require.NoError(t, os.Remove(filepath.Join(dir, filepath.FromSlash(path))))
+	}
+}

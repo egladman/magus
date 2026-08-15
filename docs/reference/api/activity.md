@@ -16,7 +16,7 @@ Package `magus.activity.v1`, defined in `proto/magus/activity/v1/activity.proto`
 
 ListActivity returns a page of recent events, newest first, narrowed by filter.
 
-`POST /magus.activity.v1.ActivityService/ListActivity` - unary.
+`POST /magus.activity.v1.ActivityService/ListActivity`: unary.
 
 Takes `ListActivityRequest`, returns `ListActivityResponse`.
 
@@ -24,7 +24,7 @@ Takes `ListActivityRequest`, returns `ListActivityResponse`.
 
 GetPayload returns a stored request or response body by its ref (from an ActivityEvent).
 
-`POST /magus.activity.v1.ActivityService/GetPayload` - unary.
+`POST /magus.activity.v1.ActivityService/GetPayload`: unary.
 
 Takes `GetPayloadRequest`, returns `GetPayloadResponse`.
 

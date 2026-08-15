@@ -375,20 +375,28 @@ func (v saplingVCS) DefaultRef(ctx context.Context, dir string) (string, error) 
 }
 
 // saplingChurnTemplate opens each commit with its NUL-separated hash, author and record
-// date, then lists that commit's files one per line - the same stream shape
-// parseChangesByCommit reads from git, minus git's leading NUL sentinel, which is supplied
-// here by the template's own leading \0.
-const saplingChurnTemplate = `\0{node}\0{author|person}\0{date|rfc3339date}\n{files % "{file}\n"}`
+// date, then lists that commit's files as git-shaped --name-status lines - the same stream
+// shape parseChangesByCommit reads from git, minus git's leading NUL sentinel, which is
+// supplied here by the template's own leading \0.
+//
+// Like Mercurial's, Sapling's template groups a commit's paths by what happened to them
+// rather than tagging each path, so the status letter comes from WHICH keyword emitted the
+// path. {files} would be shorter but carries no status, and a bare path is a line
+// parseNameStatus skips - churn would read as zero files touched, silently. The keywords do
+// not detect renames, which the ChurnReporter contract allows: a rename arrives as a delete
+// plus an add, costing lineage but staying correct.
+const saplingChurnTemplate = `\0{node}\0{author|person}\0{date|rfc3339date}\n` +
+	`{file_mods % "M\t{file}\n"}{file_adds % "A\t{file}\n"}{file_dels % "D\t{file}\n"}`
 
 // ChangesByCommit implements types.ChurnReporter. `-r` scopes the walk to the working
 // copy's ancestors so a repository with several heads cannot attribute churn from a line of
 // development this checkout is not on. `not merge()` keeps a merge's sprawling file list
 // from skewing edit-frequency attribution, matching git's --no-merges.
 //
-// The `.` pathspec limits which COMMITS appear, but NOT the files each one lists: `{files}`
-// is the changeset's whole file list, so a commit touching both root.txt and sub/a.txt
-// reports both even when the log runs in sub/. git's --name-only filters to the pathspec
-// and reports only sub/a.txt. Measured, and the difference matters: churn is attributed per
+// The `.` pathspec limits which COMMITS appear, but NOT the files each one lists: the
+// template's file keywords cover the changeset whole, so a commit touching both root.txt and
+// sub/a.txt reports both even when the log runs in sub/. git's --name-status filters to the
+// pathspec and reports only sub/a.txt. Measured, and the difference matters: churn is per
 // project, so the unfiltered list credits a nested workspace with edits made outside it.
 // The subtree filter is therefore applied here rather than left to the template.
 //
@@ -429,7 +437,7 @@ func (v saplingVCS) ChangesByCommit(ctx context.Context, dir string, commits int
 	for i := range changes {
 		kept := changes[i].Files[:0]
 		for _, f := range changes[i].Files {
-			if strings.HasPrefix(f, prefix) {
+			if strings.HasPrefix(f.Path, prefix) {
 				kept = append(kept, f)
 			}
 		}

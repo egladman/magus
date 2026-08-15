@@ -255,7 +255,7 @@ func TestSaplingChangesByCommitIsNewestFirst(t *testing.T) {
 	require.Len(t, changes, 2, "the limit must bound the result")
 	assert.False(t, changes[0].Date.Before(changes[1].Date),
 		"newest first: got %s then %s", changes[0].Date, changes[1].Date)
-	assert.Equal(t, []string{"a.txt"}, changes[0].Files)
+	assert.Equal(t, []types.FileChange{{Path: "a.txt", Status: types.ChangeModified}}, changes[0].Files)
 	assert.NotEmpty(t, changes[0].Author)
 
 	// since arrives as RFC 3339 with a numeric offset - that is what project.parseSince

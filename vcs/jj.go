@@ -477,13 +477,23 @@ func (v jjVCS) TrackedFiles(ctx context.Context, dir string, paths []string) ([]
 	return tracked, nil
 }
 
-// jjChurnTemplate emits one commit per line: a NUL sentinel, then the NUL-separated commit
-// id, author and committer date, then the commit's paths. jj has no multi-line file block
-// like git's --name-only, so the paths are joined and split back out below rather than fed
-// straight to parseChangesByCommit.
-const jjChurnTemplate = `commit_id ++ "\0" ++ author.name() ++ "\0" ++ ` +
-	`committer.timestamp().format("%Y-%m-%dT%H:%M:%S%:z") ++ "\0" ++ ` +
-	`diff.files().map(|f| f.path()).join("\t") ++ "\n"`
+// jjChurnTemplate emits the stream parseChangesByCommit reads: a NUL sentinel opening each
+// commit, then its NUL-separated id, author and committer date, then one git-shaped
+// --name-status line per file.
+//
+// jj names its statuses in words, so the template translates them to git's letters. The
+// four-way if is spelled out rather than derived from the word's first letter because
+// "removed" and "renamed" share one, and a delete read as a rename records the deleted path
+// as one that still exists.
+//
+// Source and target are always both emitted: for anything but a rename or a copy they are
+// the same path, and parseNameStatus reads only the first.
+const jjChurnTemplate = `"\0" ++ commit_id ++ "\0" ++ author.name() ++ "\0" ++ ` +
+	`committer.timestamp().format("%Y-%m-%dT%H:%M:%S%:z") ++ "\n" ++ ` +
+	`diff.files().map(|f| if(f.status() == "renamed", "R", ` +
+	`if(f.status() == "copied", "C", if(f.status() == "added", "A", ` +
+	`if(f.status() == "removed", "D", "M")))) ++ ` +
+	`"\t" ++ f.source().path() ++ "\t" ++ f.target().path()).join("\n") ++ "\n"`
 
 // ChangesByCommit implements types.ChurnReporter. `::@` is the ancestors of the working-copy
 // commit, and jj log is newest-first by default - unlike hg and sl, whose revset order is
@@ -515,23 +525,18 @@ func (v jjVCS) ChangesByCommit(ctx context.Context, dir string, commits int, sin
 	if err != nil {
 		return nil, fmt.Errorf("jj log: %w", err)
 	}
-	var changes []types.CommitChange
-	for _, line := range strings.Split(out, "\n") {
-		if strings.TrimSpace(line) == "" {
-			continue
-		}
-		f := strings.Split(line, "\x00")
-		if len(f) < 4 {
-			continue
-		}
-		c := types.CommitChange{ID: strings.TrimSpace(f[0]), Author: strings.TrimSpace(f[1])}
-		c.Date = parseWhen(f[2])
-		for _, p := range strings.Split(f[3], "\t") {
-			if p = strings.TrimSpace(p); p != "" && strings.HasPrefix(p, prefix) {
-				c.Files = append(c.Files, p)
+	changes := parseChangesByCommit(out)
+	if prefix == "" {
+		return changes, nil // dir IS the repository root; every file is in the subtree
+	}
+	for i := range changes {
+		kept := changes[i].Files[:0]
+		for _, f := range changes[i].Files {
+			if strings.HasPrefix(f.Path, prefix) {
+				kept = append(kept, f)
 			}
 		}
-		changes = append(changes, c)
+		changes[i].Files = kept
 	}
 	return changes, nil
 }

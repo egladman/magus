@@ -732,9 +732,18 @@ func (v hgVCS) IgnoredFiles(ctx context.Context, dir string, paths []string) ([]
 }
 
 // hgChurnTemplate opens each commit with its NUL-separated node, author and record date,
-// then lists that commit's files one per line - the stream shape parseChangesByCommit
-// reads, with the leading NUL sentinel supplied by the template itself.
-const hgChurnTemplate = `\0{node}\0{person(author)}\0{date|rfc3339date}\n{files % "{file}\n"}`
+// then lists that commit's files as git-shaped --name-status lines - the stream shape
+// parseChangesByCommit reads, with the leading NUL sentinel supplied by the template itself.
+//
+// Mercurial groups a changeset's paths by what happened to them instead of tagging each
+// path, so the status letter comes from WHICH keyword emitted the path rather than from the
+// path itself. {files} would be shorter but carries no status at all, and a bare path is a
+// line parseNameStatus skips - churn would read as zero files touched, silently.
+//
+// These keywords do not detect renames, which the ChurnReporter contract allows: a rename
+// arrives as a delete plus an add, costing lineage but staying correct.
+const hgChurnTemplate = `\0{node}\0{person(author)}\0{date|rfc3339date}\n` +
+	`{file_mods % "M\t{file}\n"}{file_adds % "A\t{file}\n"}{file_dels % "D\t{file}\n"}`
 
 // ChangesByCommit implements types.ChurnReporter. `-r` scopes the walk to the working
 // directory's ancestors so a repository with several heads cannot attribute churn from a
@@ -745,9 +754,10 @@ const hgChurnTemplate = `\0{node}\0{person(author)}\0{date|rfc3339date}\n{files 
 // follows the REVSET's order, and ancestors() is ascending - so without it `-l N` returns
 // the N OLDEST commits while the interface promises the newest.
 //
-// The `.` pathspec limits which COMMITS appear but NOT the files each lists: `{files}` is
-// the changeset's whole file list, so a commit touching both root.txt and sub/a.txt reports
-// both even when the log runs in sub/, where git's --name-only reports only sub/a.txt.
+// The `.` pathspec limits which COMMITS appear but NOT the files each lists: the template's
+// file keywords cover the changeset whole, so a commit touching both root.txt and sub/a.txt
+// reports both even when the log runs in sub/, where git's --name-status reports only
+// sub/a.txt.
 // Measured, and it matters because churn is attributed per project - the unfiltered list
 // credits a nested workspace with edits made outside it. Hence the subtree filter here.
 func (v hgVCS) ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]types.CommitChange, error) {
@@ -778,7 +788,7 @@ func (v hgVCS) ChangesByCommit(ctx context.Context, dir string, commits int, sin
 	for i := range changes {
 		kept := changes[i].Files[:0]
 		for _, f := range changes[i].Files {
-			if strings.HasPrefix(f, prefix) {
+			if strings.HasPrefix(f.Path, prefix) {
 				kept = append(kept, f)
 			}
 		}

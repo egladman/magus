@@ -17,7 +17,7 @@ import (
 // RegisterMagus builds the "magus" module map and returns it.
 // Magus core primitives.
 //
-// Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\cache.remote(<spell>)` selects a remote cache backend, `magus\ci.provider(<spell>)` a CI provider, and `magus\secret.provider(<spell>)` / `magus\secret.read(<ref>)` a secret backend and the credentials read through it. Each takes an imported spell handle. `magus\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the credential on the way upstream and the child never holds it. It takes an object with ref/host/header/prefix fields, declared in your own magusfile. For your own code, `read` is the ordinary choice. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI integration](../../guides/integrations/ci.md).
+// Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\cache.remote(<spell>)` selects a remote cache provider, `magus\ci.provider(<spell>)` a CI provider, and `magus\secret.provider(<spell>)` / `magus\secret.read(<ref>)` a secret provider and the credentials read through it. Each takes an imported spell handle. `magus\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the credential on the way upstream and the child never holds it. It takes an object with ref/host/header/prefix fields, declared in your own magusfile. For your own code, `read` is the ordinary choice. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI integration](../../guides/integrations/ci.md).
 //
 // `import "magus"` resolves in a `magus buzz` script as well as in a magusfile, and a script run inside a workspace reads that workspace: `ls`, `affected`, `projectGraph`, `where` and `insight` all answer in-process. Only the members that DECLARE into the workspace being loaded (`magus\project`, the provider selections above) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script - there is nothing for them to declare into. Run a script outside any workspace and the reading members raise it too, since there is no workspace to read. The nested-command methods (`cmd`, `run`, `describe`, `doctor`) work there either way and discover the workspace themselves.
 func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
@@ -333,6 +333,11 @@ func buzzValueMagusTargetGraphNode(v types.TargetGraphNode) vm.Value {
 		itemsEnvAllow[indexEnvAllow] = vm.StrValue(v.EnvAllow[indexEnvAllow])
 	}
 	out.MapSet("envAllow", vm.ListValue(itemsEnvAllow))
+	itemsObservations := make([]vm.Value, len(v.Observations))
+	for indexObservations := range v.Observations {
+		itemsObservations[indexObservations] = vm.StrValue(v.Observations[indexObservations])
+	}
+	out.MapSet("observations", vm.ListValue(itemsObservations))
 	return out
 }
 
@@ -396,6 +401,15 @@ func buzzValueMagusAffectedResult(v types.AffectedResult) vm.Value {
 		itemsAffected[indexAffected] = vm.StrValue(v.Affected[indexAffected])
 	}
 	out.MapSet("affected", vm.ListValue(itemsAffected))
+	mappedUndeclaredBySeed := vm.NewMap()
+	for keyUndeclaredBySeed, itemUndeclaredBySeed := range v.UndeclaredBySeed {
+		itemsUndeclaredBySeedValue := make([]vm.Value, len(itemUndeclaredBySeed))
+		for indexUndeclaredBySeedValue := range itemUndeclaredBySeed {
+			itemsUndeclaredBySeedValue[indexUndeclaredBySeedValue] = vm.StrValue(itemUndeclaredBySeed[indexUndeclaredBySeedValue])
+		}
+		mappedUndeclaredBySeed.MapSet(keyUndeclaredBySeed, vm.ListValue(itemsUndeclaredBySeedValue))
+	}
+	out.MapSet("undeclaredBySeed", mappedUndeclaredBySeed)
 	return out
 }
 
@@ -463,6 +477,7 @@ func buzzValueMagusFileHotspot(v types.FileHotspot) vm.Value {
 		formattedLastCommit = v.LastCommit.Format(time.RFC3339)
 	}
 	out.MapSet("lastCommit", vm.StrValue(formattedLastCommit))
+	out.MapSet("moves", vm.IntValue(int64(v.Moves)))
 	return out
 }
 
@@ -661,6 +676,11 @@ func buzzValueMagusImpactProject(v types.ImpactProject) vm.Value {
 		itemsFiles[indexFiles] = vm.StrValue(v.Files[indexFiles])
 	}
 	out.MapSet("files", vm.ListValue(itemsFiles))
+	itemsUndeclaredFiles := make([]vm.Value, len(v.UndeclaredFiles))
+	for indexUndeclaredFiles := range v.UndeclaredFiles {
+		itemsUndeclaredFiles[indexUndeclaredFiles] = vm.StrValue(v.UndeclaredFiles[indexUndeclaredFiles])
+	}
+	out.MapSet("undeclaredFiles", vm.ListValue(itemsUndeclaredFiles))
 	itemsSpells := make([]vm.Value, len(v.Spells))
 	for indexSpells := range v.Spells {
 		itemsSpells[indexSpells] = vm.StrValue(v.Spells[indexSpells])
@@ -737,6 +757,20 @@ func buzzValueMagusImpactResult(v types.ImpactResult) vm.Value {
 	return out
 }
 
+func buzzValueMagusFileClaim(v types.FileClaim) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("target", vm.StrValue(v.Target))
+	out.MapSet("role", vm.StrValue(v.Role))
+	out.MapSet("glob", vm.StrValue(v.Glob))
+	itemsPaths := make([]vm.Value, len(v.Paths))
+	for indexPaths := range v.Paths {
+		itemsPaths[indexPaths] = vm.StrValue(v.Paths[indexPaths])
+	}
+	out.MapSet("paths", vm.ListValue(itemsPaths))
+	return out
+}
+
 func buzzValueMagusFileEntry(v types.FileEntry) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StrValue(v.Path))
@@ -752,6 +786,16 @@ func buzzValueMagusFileEntry(v types.FileEntry) vm.Value {
 		itemsSourceOf[indexSourceOf] = vm.StrValue(v.SourceOf[indexSourceOf])
 	}
 	out.MapSet("sourceOf", vm.ListValue(itemsSourceOf))
+	itemsClaims := make([]vm.Value, len(v.Claims))
+	for indexClaims := range v.Claims {
+		itemsClaims[indexClaims] = buzzValueMagusFileClaim(v.Claims[indexClaims])
+	}
+	out.MapSet("claims", vm.ListValue(itemsClaims))
+	itemsDependsOn := make([]vm.Value, len(v.DependsOn))
+	for indexDependsOn := range v.DependsOn {
+		itemsDependsOn[indexDependsOn] = vm.StrValue(v.DependsOn[indexDependsOn])
+	}
+	out.MapSet("dependsOn", vm.ListValue(itemsDependsOn))
 	out.MapSet("hint", vm.StrValue(v.Hint))
 	return out
 }
@@ -765,6 +809,11 @@ func buzzValueMagusFileReport(v types.FileReport) vm.Value {
 		itemsFiles[indexFiles] = buzzValueMagusFileEntry(v.Files[indexFiles])
 	}
 	out.MapSet("files", vm.ListValue(itemsFiles))
+	itemsOverlaps := make([]vm.Value, len(v.Overlaps))
+	for indexOverlaps := range v.Overlaps {
+		itemsOverlaps[indexOverlaps] = buzzValueMagusFileClaim(v.Overlaps[indexOverlaps])
+	}
+	out.MapSet("overlaps", vm.ListValue(itemsOverlaps))
 	return out
 }
 

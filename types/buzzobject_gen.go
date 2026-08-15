@@ -172,12 +172,17 @@ func (v AffectedResult) BuzzObject() BuzzObject {
 	for keyFilesBySeed, itemFilesBySeed := range v.FilesBySeed {
 		mappedFilesBySeed[keyFilesBySeed] = itemFilesBySeed
 	}
+	mappedUndeclaredBySeed := make(map[string]any, len(v.UndeclaredBySeed))
+	for keyUndeclaredBySeed, itemUndeclaredBySeed := range v.UndeclaredBySeed {
+		mappedUndeclaredBySeed[keyUndeclaredBySeed] = itemUndeclaredBySeed
+	}
 	return BuzzObject{
-		"base":        v.Base,
-		"changed":     v.Changed,
-		"seed":        v.Seed,
-		"filesBySeed": mappedFilesBySeed,
-		"affected":    v.Affected,
+		"base":             v.Base,
+		"changed":          v.Changed,
+		"seed":             v.Seed,
+		"filesBySeed":      mappedFilesBySeed,
+		"affected":         v.Affected,
+		"undeclaredBySeed": mappedUndeclaredBySeed,
 	}
 }
 
@@ -331,6 +336,7 @@ func (v TargetGraphNode) BuzzObject() BuzzObject {
 		"modifiesExistingFiles": itemsModifiesExistingFiles,
 		"execOverrides":         v.ExecOverrides,
 		"envAllow":              v.EnvAllow,
+		"observations":          v.Observations,
 	}
 }
 
@@ -359,14 +365,30 @@ func (v TargetGraphOutput) BuzzObject() BuzzObject {
 	}
 }
 
-func (v FileEntry) BuzzObject() BuzzObject {
+func (v FileClaim) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"path":     v.Path,
-		"project":  v.Project,
-		"role":     v.Role,
-		"outputOf": v.OutputOf,
-		"sourceOf": v.SourceOf,
-		"hint":     v.Hint,
+		"project": v.Project,
+		"target":  v.Target,
+		"role":    v.Role,
+		"glob":    v.Glob,
+		"paths":   v.Paths,
+	}
+}
+
+func (v FileEntry) BuzzObject() BuzzObject {
+	itemsClaims := make([]any, len(v.Claims))
+	for indexClaims := range v.Claims {
+		itemsClaims[indexClaims] = v.Claims[indexClaims].BuzzObject()
+	}
+	return BuzzObject{
+		"path":      v.Path,
+		"project":   v.Project,
+		"role":      v.Role,
+		"outputOf":  v.OutputOf,
+		"sourceOf":  v.SourceOf,
+		"claims":    itemsClaims,
+		"dependsOn": v.DependsOn,
+		"hint":      v.Hint,
 	}
 }
 
@@ -375,10 +397,15 @@ func (v FileReport) BuzzObject() BuzzObject {
 	for indexFiles := range v.Files {
 		itemsFiles[indexFiles] = v.Files[indexFiles].BuzzObject()
 	}
+	itemsOverlaps := make([]any, len(v.Overlaps))
+	for indexOverlaps := range v.Overlaps {
+		itemsOverlaps[indexOverlaps] = v.Overlaps[indexOverlaps].BuzzObject()
+	}
 	return BuzzObject{
 		"definition": v.Definition,
 		"count":      v.Count,
 		"files":      itemsFiles,
+		"overlaps":   itemsOverlaps,
 	}
 }
 
@@ -534,6 +561,7 @@ func (v FileHotspot) BuzzObject() BuzzObject {
 		"score":      v.Score,
 		"authors":    v.Authors,
 		"lastCommit": formattedLastCommit,
+		"moves":      v.Moves,
 	}
 }
 
@@ -807,11 +835,12 @@ func (v ImpactFileCoverage) BuzzObject() BuzzObject {
 
 func (v ImpactProject) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"path":    v.Path,
-		"seed":    v.Seed,
-		"files":   v.Files,
-		"spells":  v.Spells,
-		"targets": v.Targets,
+		"path":            v.Path,
+		"seed":            v.Seed,
+		"files":           v.Files,
+		"undeclaredFiles": v.UndeclaredFiles,
+		"spells":          v.Spells,
+		"targets":         v.Targets,
 	}
 }
 

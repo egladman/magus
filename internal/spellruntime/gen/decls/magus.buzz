@@ -12,12 +12,14 @@ export object Affected {
     seed: [str] = [],
     filesBySeed: {str: [str]} = {},
     affected: [str] = [],
+    undeclaredBySeed: {str: [str]} = {},
 }
 
 export object ImpactProject {
     path: str = "",
     seed: bool = false,
     files: [str] = [],
+    undeclaredFiles: [str] = [],
     spells: [str] = [],
     targets: [str] = [],
 }
@@ -60,12 +62,22 @@ export object ExecResult {
     ok: bool = false,
 }
 
+export object FileClaim {
+    project: str = "",
+    target: str = "",
+    role: str = "",
+    glob: str = "",
+    paths: [str] = [],
+}
+
 export object FileEntry {
     path: str = "",
     project: str = "",
     role: str = "",
     outputOf: [str] = [],
     sourceOf: [str] = [],
+    claims: [FileClaim] = [],
+    dependsOn: [str] = [],
     hint: str = "",
 }
 
@@ -73,6 +85,7 @@ export object FileReport {
     definition: str = "",
     count: int = 0,
     files: [FileEntry] = [],
+    overlaps: [FileClaim] = [],
 }
 
 export object ModuleFieldEntry {
@@ -198,6 +211,7 @@ export object FileHotspot {
     score: int = 0,
     authors: int = 0,
     lastCommit: str = "",
+    moves: int = 0,
 }
 
 export object Hotspots {
@@ -383,6 +397,7 @@ export object TargetGraphNode {
     modifiesExistingFiles: [UpdateRef] = [],
     execOverrides: [str] = [],
     envAllow: [str] = [],
+    observations: [str] = [],
 }
 
 export object TargetGraphProject {
@@ -430,7 +445,7 @@ export object log {
     static extern fun warn(msg: str = "", fields: {str: str} = {<str: str>}) > void;
 }
 
-// Remote cache backend selection.
+// Remote cache provider selection.
 export object cache {
     static extern fun remote(spell: {str: any}) > void;
 }
@@ -440,7 +455,7 @@ export object ci {
     static extern fun provider(spell: {str: any}) > void;
 }
 
-// Secret backend selection, and the credentials read through it.
+// Secret provider selection, and the credentials read through it.
 export object secret {
     static extern fun endpoint(grant: any) > str !> any;
     static extern fun provider(spell: {str: any}) > void;
