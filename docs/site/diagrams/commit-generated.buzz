@@ -33,7 +33,7 @@ export fun commitGeneratedDiagram() > Diagram {
                   role = "focal", x = 696, y = 360, w = 200, h = 64 },
         ],
         // Three connectors converge on the left outcome and two on the right. Bends step
-        // outward with distance travelled so no descending leg crosses a nearer one's run.
+        // outward with distance traveled so no descending leg crosses a nearer one's run.
         edges = [
             Edge{ src = "start", dst = "pure" },
             Edge{ src = "pure", dst = "needed", label = "yes" },

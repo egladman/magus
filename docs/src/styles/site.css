@@ -4061,6 +4061,8 @@ a code {
 .download-route-sep {
   opacity: 0.45;
   padding: 0 0.15rem;
+}
+
 /* Diagram zoom (diagram-zoom.js). Deliberately the same shell as .shortcut-help above -
    a native <dialog> Pico gives a card look, a flex header with a "times" close button -
    so the site has one overlay treatment rather than one per feature. Only the stage,
@@ -4112,7 +4114,7 @@ a code {
    `dialog > article { max-width: 510px }`, so capping the dialog at 96vw left the figure
    squeezed into a 510px box and cut off. */
 /* Nothing is overridden on the <dialog> itself. Pico already makes it a fixed,
-   full-viewport flex container that centres the article and paints the backdrop; setting
+   full-viewport flex container that centers the article and paints the backdrop; setting
    width: 100vw on top of that overflowed past the reserved scrollbar gutter and pushed
    the card's right edge - and the close button with it - off screen. Only the article's
    510px cap ever needed changing.
@@ -4184,7 +4186,7 @@ a code {
   display: grid;
   place-items: center;
   padding: 0.75rem 0.9rem;
-  /* transform-origin centre so wheel zoom grows about the middle, not a corner. */
+  /* transform-origin center so wheel zoom grows about the middle, not a corner. */
   transform-origin: center center;
   cursor: grab;
   touch-action: none;

@@ -89,7 +89,7 @@ final BackrefMarker = "magus:diagram ";
 //
 // Reverse: every magus:diagram marker in the sources must name a diagram that exists. This
 // is the half that catches a diagram being renamed or dropped while call sites still point
-// at it. Neither half asserts the figure's SHAPE is right; that stays a human judgement.
+// at it. Neither half asserts the figure's SHAPE is right; that stays a human judgment.
 export fun verifyAnchors(root: str, sourceGlobs: [str]) > [str] !> any {
     final findings: mut [str] = mut [<str>];
 

@@ -37,7 +37,7 @@ export fun daemonSocketDiagram() > Diagram {
                   role = "optional", x = 320, y = 400, w = 200, h = 64 },
         ],
         // The fan out of the socket runs top to bottom, so the bends run outermost-first:
-        // the connector travelling furthest turns earliest, which is what keeps the runs to
+        // the connector traveling furthest turns earliest, which is what keeps the runs to
         // the pool and the workspace registry from crossing.
         edges = [
             Edge{ src = "cli", dst = "sock", label = "dispatch" },

@@ -39,4 +39,3 @@ declare module "*/assets/hljs.js" {
   const hljs: HljsApi;
   export default hljs;
 }
-

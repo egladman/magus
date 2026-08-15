@@ -192,7 +192,7 @@ for read-write or `cd` for continuous delivery. An [op](docs/concepts/operations
 single tool invocation. Learn the four words and the rest of the surface reads
 the same way.
 
-### There is a terminal UI. It stays out of your way.
+### There is a terminal UI. It stays out of your way
 
 <!-- Recorded by `magus run termcast-showcase` - a real interactive session driven
      by real keystrokes - and rendered by `magus run termcast-generate`. Both files

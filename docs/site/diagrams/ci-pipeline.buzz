@@ -33,7 +33,7 @@ export fun ciPipelineDiagram() > Diagram {
             Node{ id = "security", label = "security", x = 632, y = 340, w = 176, h = 56 },
         ],
         // Slots run left to right across the trigger's lower edge, and the bends step
-        // outward-first: the connector travelling furthest turns highest, so no descending
+        // outward-first: the connector traveling furthest turns highest, so no descending
         // leg has to cross a bus segment belonging to a nearer one.
         edges = [
             Edge{ src = "cmd", dst = "preflight", srcSide = "bottom", dstSide = "top",
