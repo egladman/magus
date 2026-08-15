@@ -70,20 +70,45 @@ func LookupStableSocket(ctx context.Context) (string, bool) {
 	return "unix://" + path, true
 }
 
-// DiscoverSocket scans SockDir for a live magus-*.sock file, preferring the stable daemon socket.
-// Used by `magus status` when no explicit --socket flag is given.
+// DiscoverSocket scans SockDir for a live magus-*.sock file, preferring the stable daemon
+// socket. Used where exactly one server has to be chosen to talk to.
+//
+// The stable socket short-circuits the scan, so a machine running the daemon plus ad-hoc
+// per-process servers still resolves to the daemon rather than reporting an ambiguity.
 func DiscoverSocket(ctx context.Context) (string, error) {
 	if addr, ok := LookupStableSocket(ctx); ok {
 		return addr, nil
+	}
+	addrs, err := DiscoverSockets(ctx)
+	if err != nil {
+		return "", err
+	}
+	if len(addrs) > 1 {
+		return "", fmt.Errorf("multiple proc servers found; use --socket to select one (%s)", strings.Join(addrs, ", "))
+	}
+	return addrs[0], nil
+}
+
+// DiscoverSockets returns every live proc-server address in SockDir, the stable daemon
+// socket first. Each one is a separate concurrency pool, so a reporter (`magus status`)
+// enumerates them instead of demanding the caller pick one.
+func DiscoverSockets(ctx context.Context) ([]string, error) {
+	var candidates []string
+	if addr, ok := LookupStableSocket(ctx); ok {
+		candidates = append(candidates, addr)
 	}
 
 	dir := SockDir()
 	entries, err := os.ReadDir(dir)
 	if err != nil {
-		return "", fmt.Errorf("proc: discover: scan %s: %w", dir, err)
+		// Only fatal when the scan is the sole source: with the stable daemon already
+		// found there is still a pool to report.
+		if len(candidates) > 0 {
+			return candidates, nil
+		}
+		return nil, fmt.Errorf("proc: discover: scan %s: %w", dir, err)
 	}
 
-	var candidates []string
 	for _, e := range entries {
 		if e.IsDir() {
 			continue
@@ -92,7 +117,7 @@ func DiscoverSocket(ctx context.Context) (string, error) {
 		if !strings.HasPrefix(name, "magus-") || !strings.HasSuffix(name, ".sock") {
 			continue
 		}
-		// Skip the stable socket — already checked above.
+		// Skip the stable socket - already probed above.
 		if name == stableSocketName {
 			continue
 		}
@@ -108,12 +133,8 @@ func DiscoverSocket(ctx context.Context) (string, error) {
 		reapDeadSocket(p, e)
 	}
 
-	switch len(candidates) {
-	case 0:
-		return "", fmt.Errorf("no running magus proc server found (set MAGUS_DAEMON_SOCKET or use --socket)")
-	case 1:
-		return candidates[0], nil
-	default:
-		return "", fmt.Errorf("multiple proc servers found; use --socket to select one (%s)", strings.Join(candidates, ", "))
+	if len(candidates) == 0 {
+		return nil, fmt.Errorf("no running magus proc server found (set MAGUS_DAEMON_SOCKET or use --socket)")
 	}
+	return candidates, nil
 }
