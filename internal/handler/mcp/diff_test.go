@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/diff"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -148,4 +149,130 @@ func TestAgentNameIsRecordedButCannotClaimToBeTheHuman(t *testing.T) {
 	require.Len(t, sess.Comments, 1)
 	assert.Equal(t, types.DiffAuthorAgent, sess.Comments[0].Author, "author is stamped from the transport")
 	assert.Equal(t, "Eli Gladman (human)", sess.Comments[0].AgentName, "the label is kept, as attribution only")
+}
+
+// The projection parameter is additive: a caller that never sends it, sends it empty, or
+// sends "full" must see byte-identical output to what op=state has always returned - the
+// serialized session, patch, and hunks, with nothing narrowed.
+func TestProjectionFullMatchesTheOriginalStateResponse(t *testing.T) {
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch})
+
+	// Built the same way op=state has always built its answer, independent of
+	// projectDiffState - the reference every case below is pinned against.
+	sess := tool.sessions.Get(tool.root)
+	want, err := json.Marshal(diffState{DiffSession: sess, Patch: agentPatch, Hunks: diff.ParseHunks(agentPatch)})
+	require.NoError(t, err)
+
+	cases := []struct {
+		name   string
+		params map[string]any
+	}{
+		{"projection absent", map[string]any{"op": "state"}},
+		{"projection empty", map[string]any{"op": "state", "projection": ""}},
+		{"projection full", map[string]any{"op": "state", "projection": "full"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			resp, err := invoke(t, tool, tc.params)
+			require.NoError(t, err)
+			got, err := json.Marshal(resp.Data)
+			require.NoError(t, err)
+			assert.JSONEq(t, string(want), string(got))
+		})
+	}
+}
+
+// Each projection keeps only the fields it promises: presence of what it claims to carry, and
+// - since a projection struct simply has no field for what it does not - absence of
+// everything else, checked on the serialized wire rather than trusted from the Go type alone.
+func TestProjectionsIncludeAndExcludeFields(t *testing.T) {
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch})
+
+	// Force one recompute so the annotated changeset actually carries a file: the fixture's
+	// initial Attach carries an empty Diff, and Counts.Files would be a misleading 0 otherwise.
+	tool.sessions.Attach(tool.root, "working", types.Diff{Base: "working"}, "stale")
+	_, err := invoke(t, tool, map[string]any{"op": "state"})
+	require.NoError(t, err)
+
+	hunks := diff.ParseHunks(agentPatch)
+	tool.sessions.MarkViewed(tool.root, hunks[0].Hunks[0].Digest, true)
+	_, err = invoke(t, tool, map[string]any{"op": "comment", "path": "a.go", "body": "note"})
+	require.NoError(t, err)
+	_, err = invoke(t, tool, map[string]any{"op": "suggest", "path": "a.go", "reason": "look here"})
+	require.NoError(t, err)
+
+	cases := []struct {
+		projection string
+		present    []string
+		absent     []string
+	}{
+		{
+			projection: "summary",
+			present:    []string{`"id":`, `"base":`, `"cursor":`, `"counts":`, `"files":1`, `"hunks":2`, `"comments":1`, `"suggestions":1`, `"viewed":1`},
+			absent:     []string{`"diff":`, `"patch":`, `"hunks":[`, `"comments":[`, `"suggestions":[`, `"viewed":[`},
+		},
+		{
+			projection: "conversation",
+			present:    []string{`"cursor":`, `"viewed":`, `"comments":`, `"suggestions":`},
+			absent:     []string{`"diff":`, `"patch":`, `"hunks":`, `"counts":`},
+		},
+		{
+			projection: "patch",
+			present:    []string{`"id":`, `"base":`, `"patch":`, `"hunks":`},
+			absent:     []string{`"diff":`, `"comments":`, `"suggestions":`, `"viewed":`, `"counts":`},
+		},
+	}
+	for _, tc := range cases {
+		t.Run(tc.projection, func(t *testing.T) {
+			resp, err := invoke(t, tool, map[string]any{"op": "state", "projection": tc.projection})
+			require.NoError(t, err)
+			got, err := json.Marshal(resp.Data)
+			require.NoError(t, err)
+			for _, want := range tc.present {
+				assert.Contains(t, string(got), want)
+			}
+			for _, notWant := range tc.absent {
+				assert.NotContains(t, string(got), notWant)
+			}
+		})
+	}
+}
+
+// The summary projection keeps Recomputed - the one bit that says an answer was freshly
+// computed rather than replayed - even though it drops everything else state adds.
+func TestProjectionSummaryCarriesRecomputedThrough(t *testing.T) {
+	src := &fakeDiffSrc{patch: agentPatch}
+	tool := newDiffTool(t, src)
+
+	src.patch = "diff --git a/b.go b/b.go\n@@ -1 +1 @@\n-x\n+y\n"
+	resp, err := invoke(t, tool, map[string]any{"op": "state", "projection": "summary"})
+	require.NoError(t, err)
+
+	sum, ok := resp.Data.(diffSummary)
+	require.True(t, ok)
+	assert.True(t, sum.Recomputed, "projection carries Recomputed through")
+	assert.Equal(t, 1, sum.Counts.Files, "the recomputed changeset, not the stale one, is counted")
+}
+
+func TestProjectionRejectsAnUnknownValue(t *testing.T) {
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch})
+
+	_, err := invoke(t, tool, map[string]any{"op": "state", "projection": "bogus"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "unknown projection")
+	assert.Contains(t, err.Error(), `"bogus"`)
+	assert.Contains(t, err.Error(), "summary")
+}
+
+// projectDiffState only shapes op=state by design - a writing op keeps returning the full
+// session no matter what this parameter is set to.
+func TestProjectionIsIgnoredByWritingOps(t *testing.T) {
+	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch})
+
+	resp, err := invoke(t, tool, map[string]any{
+		"op": "comment", "path": "a.go", "body": "hi", "projection": "summary",
+	})
+	require.NoError(t, err)
+	_, ok := resp.Data.(*types.DiffSession)
+	assert.True(t, ok, "comment always returns the full session regardless of projection")
 }

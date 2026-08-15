@@ -66,6 +66,113 @@ type diffState struct {
 	Recomputed bool `json:"recomputed,omitempty"`
 }
 
+// diffSummary is op=state's projection=summary shape: the session's identity plus counts,
+// with none of the heavy bodies. It answers "has anything happened here" at a fraction of the
+// cost of the full session, whose annotated changeset alone can dwarf everything else in it.
+type diffSummary struct {
+	ID         string           `json:"id"`
+	Base       string           `json:"base"`
+	AsOf       string           `json:"as_of,omitempty"`
+	Recomputed bool             `json:"recomputed,omitempty"`
+	Cursor     types.DiffCursor `json:"cursor"`
+	Counts     diffCounts       `json:"counts"`
+}
+
+// diffCounts is how many of each thing diffSummary elides.
+type diffCounts struct {
+	Files       int `json:"files"`
+	Hunks       int `json:"hunks"`
+	Comments    int `json:"comments"`
+	Suggestions int `json:"suggestions"`
+	Viewed      int `json:"viewed"`
+}
+
+// diffConversation is op=state's projection=conversation shape: where the human is and what
+// has been said about the change, without the changeset body that made those coordinates
+// checkable in the first place - a client asking for this shape already has the change and
+// wants the talk about it.
+type diffConversation struct {
+	ID          string                 `json:"id"`
+	Base        string                 `json:"base"`
+	AsOf        string                 `json:"as_of,omitempty"`
+	Cursor      types.DiffCursor       `json:"cursor"`
+	Viewed      []string               `json:"viewed,omitempty"`
+	Comments    []types.DiffComment    `json:"comments,omitempty"`
+	Suggestions []types.DiffSuggestion `json:"suggestions,omitempty"`
+}
+
+// diffPatch is op=state's projection=patch shape: the unified diff and its addressable hunks,
+// without the annotated changeset or the conversation.
+type diffPatch struct {
+	ID         string           `json:"id"`
+	Base       string           `json:"base"`
+	AsOf       string           `json:"as_of,omitempty"`
+	Recomputed bool             `json:"recomputed,omitempty"`
+	Patch      string           `json:"patch"`
+	Hunks      []diff.FileHunks `json:"hunks"`
+}
+
+// projectDiffState narrows st to the fields the named projection asks for. The empty string
+// and "full" both return st unchanged: op=state predates this parameter, and a caller that
+// omits it must see exactly what it always has.
+//
+// It shapes op=state only. comment, suggest, and resolve keep returning the full session no
+// matter what this parameter is set to - each already answers with just what it changed, so
+// there is no heavy body to elide, and a second response shape would be a second contract to
+// keep in sync for no reader's benefit.
+func projectDiffState(st diffState, projection string) (any, error) {
+	switch projection {
+	case "", "full":
+		return st, nil
+	case "summary":
+		return diffSummary{
+			ID:         st.ID,
+			Base:       st.Base,
+			AsOf:       st.AsOf,
+			Recomputed: st.Recomputed,
+			Cursor:     st.Cursor,
+			Counts: diffCounts{
+				Files:       len(st.Diff.Files),
+				Hunks:       totalHunks(st.Hunks),
+				Comments:    len(st.Comments),
+				Suggestions: len(st.Suggestions),
+				Viewed:      len(st.Viewed),
+			},
+		}, nil
+	case "conversation":
+		return diffConversation{
+			ID:          st.ID,
+			Base:        st.Base,
+			AsOf:        st.AsOf,
+			Cursor:      st.Cursor,
+			Viewed:      st.Viewed,
+			Comments:    st.Comments,
+			Suggestions: st.Suggestions,
+		}, nil
+	case "patch":
+		return diffPatch{
+			ID:         st.ID,
+			Base:       st.Base,
+			AsOf:       st.AsOf,
+			Recomputed: st.Recomputed,
+			Patch:      st.Patch,
+			Hunks:      st.Hunks,
+		}, nil
+	default:
+		return nil, fmt.Errorf("mcp: unknown projection %q (use full, summary, conversation, or patch)", projection)
+	}
+}
+
+// totalHunks sums the per-file hunk counts in a parsed patch, for the summary projection's
+// "hunks" count - st.Hunks is one entry per FILE, each carrying its own hunk slice.
+func totalHunks(files []diff.FileHunks) int {
+	n := 0
+	for _, f := range files {
+		n += len(f.Hunks)
+	}
+	return n
+}
+
 func (t *diffTool) Name() string { return ToolDiff.String() }
 
 func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
@@ -80,8 +187,9 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 	sess := t.sessions.Get(t.root)
 	if sess == nil {
 		return spells.InvokeResponse{}, errors.New(
-			"mcp: no review session is open. The person drives that: they open the console's " +
-				"Review surface (or run magus review), and this tool joins the session they started")
+			"mcp: no diff session is open. A session attaches when the console's Diff surface " +
+				"is opened (GET /api/v1/diff); plain `magus diff` does not attach one. This tool " +
+				"joins the session the console started")
 	}
 
 	switch op {
@@ -92,7 +200,12 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 		if serr != nil {
 			return spells.InvokeResponse{}, serr
 		}
-		return spells.InvokeResponse{Data: st}, nil
+		projection := strings.TrimSpace(paramString(req.Params, "projection", "full"))
+		data, perr := projectDiffState(st, projection)
+		if perr != nil {
+			return spells.InvokeResponse{}, perr
+		}
+		return spells.InvokeResponse{Data: data}, nil
 
 	case "comment":
 		body := strings.TrimSpace(paramString(req.Params, "body", ""))

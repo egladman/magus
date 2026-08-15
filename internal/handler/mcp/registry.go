@@ -184,6 +184,7 @@ var Registry = []ToolDescriptor{
 			"Read state before commenting - `viewed` holds the same hunk digests, so you can skip what they have already seen.",
 		Params: []ParamDescriptor{
 			{Name: "op", Type: "string", Description: "One of: state (default), comment, suggest, resolve."},
+			{Name: "projection", Type: "string", Description: "Shapes op=state's response only - comment, suggest, and resolve ignore it and always return the full session. One of: full (default; today's whole session), summary (id/base/as_of/recomputed/cursor plus counts of files, hunks, comments, suggestions, and viewed - no bodies), conversation (cursor, viewed, comments, suggestions, id/base/as_of - no diff, patch, or hunks), patch (id/base/as_of/recomputed plus patch and hunks - no diff, comments, or suggestions)."},
 			{Name: "path", Type: "string", Description: "Workspace-relative file the comment or suggestion is about (comment, suggest)."},
 			{Name: "hunk", Type: "number", Description: "0-based hunk index within the file, as reported by op=state's `hunks`; omit for the file as a whole. An index the file does not have is refused."},
 			{Name: "body", Type: "string", Description: "The remark (comment)."},
