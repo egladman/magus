@@ -164,13 +164,11 @@ func renderShowcase(capture string) (string, error) {
 	}
 	s := screen.New(showCols, showRows)
 	shots := make([]*screen.Screen, 0, len(frames))
-	holds := make([]float64, 0, len(frames))
 	for i, f := range frames {
 		if _, err := s.Write([]byte(f)); err != nil {
 			return "", fmt.Errorf("replay frame %d: %w", i, err)
 		}
 		shots = append(shots, s.Snapshot())
-		holds = append(holds, showcaseHold(i, len(frames)))
 	}
 	used := 0
 	for _, sh := range shots {
@@ -181,17 +179,7 @@ func renderShowcase(capture string) (string, error) {
 	for i, sh := range shots {
 		shots[i] = sh.Crop(used)
 	}
-	return screen.Animate(shots, holds, screen.SVGOptions{})
-}
-
-// showcaseHold is the reading pace. The interactive beats sit longer than the
-// runs: a reader needs time to see WHERE the highlight is and what changed,
-// which is not the same as reading a summary line.
-func showcaseHold(i, n int) float64 {
-	if i == n-1 {
-		return 5
-	}
-	return 3
+	return screen.Animate(shots, showcasePace.holds(shots), screen.SVGOptions{})
 }
 
 // recordShowcaseSession materializes a demo workspace and records the script

@@ -276,11 +276,7 @@ func render(capture string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	holds := make([]float64, len(frames))
-	for i := range frames {
-		holds[i] = hold(i, len(frames))
-	}
-	return screen.Animate(frames, holds, screen.SVGOptions{})
+	return screen.Animate(frames, corePace.holds(frames), screen.SVGOptions{})
 }
 
 // replay produces one frame per command: the terminal as it stood when that
@@ -340,16 +336,55 @@ func split(capture string) []string {
 	return segs
 }
 
-// hold returns how long a frame stays up, in seconds.
+// Frame pacing, in seconds. A reading pace, not a measurement: the capture is a
+// byte stream with no timings in it, and a frame-accurate replay of a run that
+// finishes in 281ms would be unreadable.
 //
-// A reading pace, not a measurement: the capture is a byte stream with no
-// timings in it, and a frame-accurate replay of a run that finishes in 281ms
-// would be unreadable anyway. The last frame is held longest because it carries
-// the payoff - the narrowed affected set - and because a loop that snaps back
-// the instant the point lands reads as a glitch.
-func hold(i, n int) float64 {
+// Not a flat hold, which is the obvious version and reads as a slideshow: every
+// beat identical leaves the eye no rhythm to ride. A frame adding two lines is
+// taken in at a glance, and holding it as long as one adding twenty stalls the
+// sequence, so the dwell scales with what the frame actually adds.
+type pace struct {
+	base    float64 // a frame that adds nothing still needs a beat
+	perLine float64 // each added line of output buys a little dwell
+	max     float64 // past this a dense frame stalls the loop, which repeats anyway
+	last    float64 // the payoff frame; a loop that snaps back the instant the point lands reads as a glitch
+}
+
+var (
+	corePace = pace{base: 0.5, perLine: 0.05, max: 1.6, last: 2.2}
+
+	// A higher floor, because the showcase's interactive beats move a highlight
+	// rather than adding output: line count understates what they ask the reader
+	// to find, and locating a cursor takes longer than reading one more line.
+	showcasePace = pace{base: 0.8, perLine: 0.05, max: 1.7, last: 2.5}
+)
+
+func (p pace) hold(i, n, added int) float64 {
 	if i == n-1 {
-		return 4.5
+		return p.last
 	}
-	return 2.5
+	return min(p.base+p.perLine*float64(added), p.max)
+}
+
+// holds paces a whole recording, scaling each frame by what it adds over its
+// predecessor. The first frame is measured against an empty screen.
+func (p pace) holds(frames []*screen.Screen) []float64 {
+	out := make([]float64, len(frames))
+	for i := range frames {
+		grew := frames[i].LastUsedRow() + 1
+		if i > 0 {
+			grew = added(frames[i-1], frames[i])
+		}
+		out[i] = p.hold(i, len(frames), grew)
+	}
+	return out
+}
+
+// added reports how many lines of output cur shows that prev did not, counting
+// what scrolled off the top as well as what appeared at the bottom - a frame
+// that filled the screen and pushed the earlier output away added all of it.
+func added(prev, cur *screen.Screen) int {
+	n := (cur.LastUsedRow() - prev.LastUsedRow()) + (cur.Scrolled() - prev.Scrolled())
+	return max(n, 0)
 }
