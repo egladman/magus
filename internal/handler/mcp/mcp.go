@@ -162,7 +162,7 @@ func allMCPTools(opts Options) []spells.Driver {
 		&pathTool{graph: opts.Magus},
 		&statsTool{graph: opts.Magus},
 		&refsTool{graph: opts.Magus},
-		&diffTool{sessions: opts.ReviewSessions, root: opts.Magus.Root()},
+		&diffTool{sessions: opts.ReviewSessions, root: opts.Magus.Root(), src: opts.Magus},
 	}
 }
 

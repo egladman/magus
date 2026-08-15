@@ -78,7 +78,7 @@ func HunkDigest(path string, lines []string) string {
 // Attach returns the session for root, creating it and adopting any persisted viewed set on
 // first use. review is the freshly computed annotated changeset; an existing session takes it
 // as an update, so a client that recomputes does not clobber the conversation.
-func (s *Store) Attach(root string, base string, rev types.Diff) *types.DiffSession {
+func (s *Store) Attach(root string, base string, rev types.Diff, asOf string) *types.DiffSession {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -95,6 +95,9 @@ func (s *Store) Attach(root string, base string, rev types.Diff) *types.DiffSess
 	}
 	sess.Base = base
 	sess.Diff = rev
+	// The snapshot identity travels with the changeset it describes, so no client can hold one
+	// without the other and believe a stale answer is current.
+	sess.AsOf = asOf
 	return clone(sess)
 }
 

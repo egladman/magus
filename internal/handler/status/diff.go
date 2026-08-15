@@ -25,6 +25,11 @@ type patchSource interface {
 // one without the expensive one.
 type diffSource interface {
 	Diff(ctx context.Context, paths []string) (types.Diff, error)
+	// WorkingDiff is read here only to stamp the session's snapshot identity. It is the same
+	// call the patch route makes, and it is cheap next to the symbol and impact work above it -
+	// whereas a client-supplied digest would describe whatever that client last fetched, which
+	// is not necessarily the tree this changeset was computed from.
+	WorkingDiff(ctx context.Context, paths []string) (string, error)
 }
 
 // DiffHandler serves GET /api/v1/diff: the changed files annotated with what the
@@ -79,7 +84,13 @@ func (h *DiffHandler) serve(w http.ResponseWriter, r *http.Request) {
 	// already paired: the console's first fetch is what makes the session an agent can find,
 	// so pairing needs no setup step anyone has to remember.
 	if h.sessions != nil && h.root != "" {
-		writeJSON(w, h.sessions.Attach(h.root, out.Base, out))
+		// Best-effort: a session with an unknown snapshot id is worse than one with a correct
+		// one, but far better than refusing to pair because a second git call failed.
+		asOf := ""
+		if patch, perr := h.src.WorkingDiff(r.Context(), nil); perr == nil {
+			asOf = diff.PatchDigest(patch)
+		}
+		writeJSON(w, h.sessions.Attach(h.root, out.Base, out, asOf))
 		return
 	}
 	writeJSON(w, types.DiffSession{Base: out.Base, Diff: out, Cursor: types.DiffCursor{Hunk: -1}})

@@ -325,6 +325,15 @@ type DiffSuggestion struct {
 type DiffSession struct {
 	ID   string `json:"id" yaml:"id"`
 	Base string `json:"base" yaml:"base"`
+	// AsOf is the digest of the patch this changeset was computed from - the session's
+	// snapshot identity.
+	//
+	// Without it a client cannot tell a current answer from a frozen one, and the party least
+	// able to notice is the one it hurts: an agent cannot see the tree, so it acted with
+	// confidence on a changeset that had stopped existing. It also makes "9 of 12 read"
+	// meaningful, because the denominator can be shown to be the one those marks were made
+	// against.
+	AsOf string `json:"as_of,omitempty" yaml:"as_of,omitempty"`
 	// Review is the annotated changeset. Recomputed when the working tree moves.
 	Diff Diff `json:"diff" yaml:"diff"`
 	// Cursor is where the HUMAN is looking.

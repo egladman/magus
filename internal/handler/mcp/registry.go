@@ -175,14 +175,17 @@ var Registry = []ToolDescriptor{
 			"op=state returns the whole session: every changed file annotated with its role (generated output vs source), " +
 			"how widely its changed symbols are referenced, whether it is public API surface, observed coverage, " +
 			"plus where the person is looking and what they have already read. " +
+			"op=state also returns `patch` (the unified diff) and `hunks` (per file, each hunk's 0-based index and its content digest), " +
+			"which are the coordinates comment and suggest take - so read state first and cite an index from it rather than guessing one. " +
+			"It recomputes when the working tree has moved since the session was attached, and sets `recomputed` when it did. " +
 			"op=comment attaches a remark to a hunk. op=suggest asks for their attention somewhere, with a reason. " +
-			"op=resolve closes a comment. " +
+			"op=resolve closes a comment. Both writing ops REFUSE a path that is not in the change and a hunk index that does not exist. " +
 			"You CANNOT move their cursor or mark a hunk read: suggest, and they accept with one key. " +
-			"Read state before commenting - it tells you what they have already seen, so you can skip it.",
+			"Read state before commenting - `viewed` holds the same hunk digests, so you can skip what they have already seen.",
 		Params: []ParamDescriptor{
 			{Name: "op", Type: "string", Description: "One of: state (default), comment, suggest, resolve."},
 			{Name: "path", Type: "string", Description: "Workspace-relative file the comment or suggestion is about (comment, suggest)."},
-			{Name: "hunk", Type: "number", Description: "0-based hunk index within the file; omit for the file as a whole."},
+			{Name: "hunk", Type: "number", Description: "0-based hunk index within the file, as reported by op=state's `hunks`; omit for the file as a whole. An index the file does not have is refused."},
 			{Name: "body", Type: "string", Description: "The remark (comment)."},
 			{Name: "reason", Type: "string", Description: "Why this is worth their attention - required, because a suggestion is an interruption (suggest)."},
 			{Name: "id", Type: "string", Description: "Comment id (resolve)."},
