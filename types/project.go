@@ -6,6 +6,8 @@ import (
 	"slices"
 	"strings"
 
+	"github.com/bmatcuk/doublestar/v4"
+
 	"github.com/egladman/magus/spells"
 )
 
@@ -329,6 +331,43 @@ func RootGlob(projectPath, glob string) string {
 		return path.Clean(glob)
 	}
 	return path.Clean(projectPath + "/" + glob)
+}
+
+// MatchesAnyGlob reports whether a workspace-relative path matches any of the
+// workspace-rooted globs - the question every consumer of [Project.DeclaredGlobs] asks,
+// so it lives beside the rooting rather than once per caller. It was three identical
+// helpers (affected attribution, doctor's standing check, `magus describe file`), which
+// is three places for the matcher family to drift from the cache's.
+//
+// It TOLERATES an unparsable pattern, which then matches nothing - the same thing the
+// cache walk does with one. Tolerance is the right default (a bad glob must not fail a
+// build that never depended on it) but it is silent, so the pattern is worth reporting
+// where the glob set is assembled: see [InvalidGlobs].
+func MatchesAnyGlob(globs []string, path string) bool {
+	for _, g := range globs {
+		if ok, _ := doublestar.Match(g, path); ok {
+			return true
+		}
+	}
+	return false
+}
+
+// InvalidGlobs returns the globs doublestar cannot parse, deduplicated and in the order
+// given. It is what lets a caller SAY that a declaration matches nothing before it
+// silently matches nothing for the rest of the run: an unparsable glob declares an input
+// that can never key, and MGS1028 would then advise declaring a path that is already
+// declared - by a pattern that never matches it.
+//
+// The error is not returned with it because doublestar has only one (ErrBadPattern, with
+// no position), so the pattern itself is the whole of the information.
+func InvalidGlobs(globs []string) []string {
+	var bad []string
+	for _, g := range globs {
+		if !doublestar.ValidatePattern(g) && !slices.Contains(bad, g) {
+			bad = append(bad, g)
+		}
+	}
+	return bad
 }
 
 // DeclaredGlobs is every glob this project declares, rooted at the WORKSPACE rather

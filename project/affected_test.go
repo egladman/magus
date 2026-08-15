@@ -58,11 +58,11 @@ func TestAffectedFromPathsHappyPath(t *testing.T) {
 //
 // The reaching declaration is a per-target ctx.readsFiles ref, which is the form whose
 // owner is resolved to a workspace-relative path at load. A project-wide "../proto/**"
-// source now says the same thing - types.RootGlob roots both by cleaning the join, so
-// the cache key and attribution move together either way; see the test below for that
-// spelling. It did not always: Sources were rooted by concatenation into
-// "api/../proto/**", which matches nothing, so attribution claiming that one seeds
-// would have been claiming a key movement that did not happen.
+// source says the same thing - types.RootGlob roots both by cleaning the join, so the
+// cache key and attribution move together either way; see the test below for that
+// spelling. A concatenated rooting would give "api/../proto/**", which matches nothing,
+// and attribution claiming that one seeds would be claiming a key movement that did not
+// happen.
 func globWorkspace(t *testing.T, rootSources ...string) *types.Workspace {
 	t.Helper()
 	return &types.Workspace{
@@ -87,7 +87,7 @@ func globWorkspace(t *testing.T, rootSources ...string) *types.Workspace {
 // and stays the answer.
 func TestSeedsForFileContainmentBeatsAReachingGlob(t *testing.T) {
 	t.Parallel()
-	idx := newProjectIndex(globWorkspace(t, "**/*.go"))
+	idx := newProjectIndex(t.Context(), globWorkspace(t, "**/*.go"))
 
 	seeds, declared := idx.seedsForFile("api/main.go")
 	assert.Equal(t, []string{"api"}, seeds, "a contained file seeds its own project only")
@@ -100,7 +100,7 @@ func TestSeedsForFileContainmentBeatsAReachingGlob(t *testing.T) {
 // merely sits above it.
 func TestSeedsForFileGlobRedirectsOutsideEveryTree(t *testing.T) {
 	t.Parallel()
-	idx := newProjectIndex(globWorkspace(t))
+	idx := newProjectIndex(t.Context(), globWorkspace(t))
 
 	seeds, declared := idx.seedsForFile("proto/order.proto")
 	assert.Equal(t, []string{"api"}, seeds, "the declaring project seeds, not the containment catch-all")
@@ -109,13 +109,13 @@ func TestSeedsForFileGlobRedirectsOutsideEveryTree(t *testing.T) {
 
 // TestSeedsForFileProjectWideReachingGlobRedirects is the redirect above spelled the
 // other documented way: a project-wide "../proto/**" source instead of a per-target
-// ctx.readsFiles. Both are declarations of the same input and both must seed. Until the
-// rooting cleaned the join, only the InputRef form did - the source glob rooted to
-// "api/../proto/**", matched nothing, and left the file to the root catch-all, which is
-// exactly the undeclared-seeding hazard MGS1028 reports.
+// ctx.readsFiles. Both are declarations of the same input and both must seed. The
+// rooting is what makes them equal - a concatenated "api/../proto/**" matches nothing,
+// leaving the file to the root catch-all, which is exactly the undeclared-seeding
+// hazard MGS1028 reports.
 func TestSeedsForFileProjectWideReachingGlobRedirects(t *testing.T) {
 	t.Parallel()
-	idx := newProjectIndex(&types.Workspace{
+	idx := newProjectIndex(t.Context(), &types.Workspace{
 		Root: "/fake",
 		Projects: map[string]*types.Project{
 			".": {Path: ".", Dir: "/fake", Spell: "go"},
@@ -131,13 +131,72 @@ func TestSeedsForFileProjectWideReachingGlobRedirects(t *testing.T) {
 	assert.True(t, declared, "a reaching source glob keys the file, so the rerun is backed by the cache")
 }
 
+// reachedProtoWorkspace is the shape both rules answer at once: docs/ reads the proto
+// tree through "../proto/**", and proto/ is a project of its own, so a changed .proto
+// file is both CONTAINED by one project and DECLARED by another. protoSources says
+// whether the containment owner declares its own files.
+func reachedProtoWorkspace(protoSources ...string) *types.Workspace {
+	return &types.Workspace{
+		Root: "/fake",
+		Projects: map[string]*types.Project{
+			".":     {Path: ".", Dir: "/fake", Spell: "go"},
+			"docs":  {Path: "docs", Dir: "/fake/docs", Spell: "markdown", Sources: []string{"**/*.md", "../proto/**"}},
+			"proto": {Path: "proto", Dir: "/fake/proto", Spell: "proto", Sources: protoSources},
+		},
+	}
+}
+
+// TestSeedsForFileReachingGlobSeedsBesideTheContainmentOwner is the case containment
+// used to swallow: a file inside proto/ moves docs/'s cache key through its reaching
+// glob, so BOTH seed. Answering with the owner alone left docs building against a stale
+// key, and it reported the file as declared without checking whether the owner declares
+// anything - the two halves of the same short circuit.
+func TestSeedsForFileReachingGlobSeedsBesideTheContainmentOwner(t *testing.T) {
+	t.Parallel()
+	idx := newProjectIndex(t.Context(), reachedProtoWorkspace("**/*.proto"))
+
+	seeds, declared := idx.seedsForFile("proto/order.proto")
+	assert.Equal(t, []string{"docs", "proto"}, seeds, "the containment owner AND every project reaching in")
+	assert.True(t, declared, "proto declares its own .proto files, so nothing here is MGS1028")
+}
+
+// TestSeedsForFileUndeclaredOwnerFlagsBesideAReachingGlob pins which project the
+// declared answer is about. docs reaching the file does not give PROTO a cache key for
+// it, and proto is the project that reruns on containment alone - so MGS1028 still has
+// something to report even though the file is declared somewhere.
+func TestSeedsForFileUndeclaredOwnerFlagsBesideAReachingGlob(t *testing.T) {
+	t.Parallel()
+	idx := newProjectIndex(t.Context(), reachedProtoWorkspace("**/*.go"))
+
+	seeds, declared := idx.seedsForFile("proto/order.proto")
+	assert.Equal(t, []string{"docs", "proto"}, seeds)
+	assert.False(t, declared, "the containment owner declares nothing that matches, so its rerun keys nothing")
+}
+
+// TestSeedsForFileContainmentOnlyStillFlags is the same question with no reaching glob
+// in the workspace at all: containment alone, declaring nothing, is the plain MGS1028.
+func TestSeedsForFileContainmentOnlyStillFlags(t *testing.T) {
+	t.Parallel()
+	idx := newProjectIndex(t.Context(), &types.Workspace{
+		Root: "/fake",
+		Projects: map[string]*types.Project{
+			".":     {Path: ".", Dir: "/fake", Spell: "go"},
+			"proto": {Path: "proto", Dir: "/fake/proto", Spell: "proto", Sources: []string{"**/*.go"}},
+		},
+	})
+
+	seeds, declared := idx.seedsForFile("proto/order.proto")
+	assert.Equal(t, []string{"proto"}, seeds)
+	assert.False(t, declared)
+}
+
 // TestSeedsForFileUndeclaredKeepsTheCatchAll pins the fail-safe. The catch-all is
 // load-bearing - a config nobody declares still changes what a build MEANS, and
 // seeding is the only reason editing one reruns anything - so it is REPORTED rather
 // than narrowed.
 func TestSeedsForFileUndeclaredKeepsTheCatchAll(t *testing.T) {
 	t.Parallel()
-	idx := newProjectIndex(globWorkspace(t, "**/*.go"))
+	idx := newProjectIndex(t.Context(), globWorkspace(t, "**/*.go"))
 
 	seeds, declared := idx.seedsForFile(".golangci.yml")
 	assert.Equal(t, []string{"."}, seeds, "an undeclared root file still seeds the root project")
@@ -146,10 +205,10 @@ func TestSeedsForFileUndeclaredKeepsTheCatchAll(t *testing.T) {
 
 // TestSeedsForFileDeclaringClearsTheHazard is the other side of the one above, and
 // the reason MGS1028's fix line can be stated honestly: declaring the file is what
-// makes the seeding meaningful. Same path, same seed - now backed by a key.
+// makes the seeding meaningful. Same path, same seed, backed by a key.
 func TestSeedsForFileDeclaringClearsTheHazard(t *testing.T) {
 	t.Parallel()
-	idx := newProjectIndex(globWorkspace(t, "**/*.go", ".golangci.yml"))
+	idx := newProjectIndex(t.Context(), globWorkspace(t, "**/*.go", ".golangci.yml"))
 
 	seeds, declared := idx.seedsForFile(".golangci.yml")
 	assert.Equal(t, []string{"."}, seeds)

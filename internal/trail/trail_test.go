@@ -236,8 +236,9 @@ func TestAppendAgentSpawn_RequiresContextAndFallsBackToAGenericAction(t *testing
 }
 
 // TestUnitFromContext pins the cooperative correlation marker: present, absent, and every shape
-// of malformed. A malformed marker yields no unit, never a wrong one - the whole contract is that
-// an uncorrelated spawn is the designed outcome.
+// of malformed or misplaced. A marker that is not the first non-blank line yields no unit, and
+// neither does a malformed one - never a wrong one. The whole contract is that an uncorrelated
+// spawn is the designed outcome.
 func TestUnitFromContext(t *testing.T) {
 	for name, tc := range map[string]struct {
 		context string
@@ -245,7 +246,7 @@ func TestUnitFromContext(t *testing.T) {
 	}{
 		"first line":           {"unit: MGS1021\nthen the work", "MGS1021"},
 		"indented":             {"  \tunit: feat/spawn-capture  \nrest", "feat/spawn-capture"},
-		"later line":           {"do this\nunit: a.b:c_d-1\n", "a.b:c_d-1"},
+		"after leading blanks": {"\n  \n\nunit: a.b:c_d-1\n", "a.b:c_d-1"},
 		"first marker wins":    {"unit: one\nunit: two", "one"},
 		"absent":               {"just a prompt with no marker", ""},
 		"empty id":             {"unit:\nrest", ""},
@@ -254,7 +255,11 @@ func TestUnitFromContext(t *testing.T) {
 		"not at line start":    {"see unit: MGS1021 in the ledger", ""},
 		"wrong key":            {"units: MGS1021", ""},
 		"illegal characters":   {"unit: MGS1021!", ""},
-		"past the scan window": {strings.Repeat("x\n", unitScanBytes) + "unit: MGS1021", ""},
+		// The reason the marker has to LEAD: both of these carry a well-formed marker that
+		// this handoff did not write - one quoted below the prompt's own opening line, one
+		// pushed out of the head by a pathological first line. A wrong join is worse than none.
+		"below the first line": {"do this\nunit: a.b:c_d-1\n", ""},
+		"past the head cap":    {strings.Repeat(" ", unitScanBytes) + "unit: MGS1021", ""},
 	} {
 		t.Run(name, func(t *testing.T) {
 			require.Equal(t, tc.want, unitFromContext(tc.context))

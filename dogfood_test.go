@@ -608,10 +608,10 @@ var quotedString = regexp.MustCompile(`"([^"]+)"`)
 // example in its own diagnostic.
 //
 // Each path below changes what a root target DOES while matching no spell source glob,
-// so before they were declared an edit to one produced a cache HIT - golangci-lint
-// re-run under a new rule set, replaying the verdict computed under the old one - while
-// still seeding the root project through directory containment and rerunning everything
-// for nothing (MGS1028, and doctor's undeclared-seeding advice).
+// so it has to be declared or an edit to one produces a cache HIT - golangci-lint re-run
+// under a new rule set, replaying the verdict computed under the old one - while still
+// seeding the root project through directory containment and rerunning everything for
+// nothing (MGS1028, and doctor's undeclared-seeding advice).
 //
 // Deliberately absent, and this test says so rather than leaving it to be rediscovered:
 // LICENSE is read only by release-build, which is skip_cache, so declaring it would

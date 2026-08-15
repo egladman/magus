@@ -1026,7 +1026,7 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 		for _, o := range declared {
 			outputs = append(outputs, joinGlob(p.Path, o))
 		}
-		if matchAnyGlob(outputs, path) {
+		if types.MatchesAnyGlob(outputs, path) {
 			entry.OutputOf = append(entry.OutputOf, p.Path)
 		}
 		// Per-target ctx.readsFiles folded in, for the same reason AllOutputs folds in
@@ -1052,7 +1052,7 @@ func (m *Magus) describeFile(raw string, all, owners []*types.Project) types.Fil
 				inputs = append(inputs, joinGlob(owner, ref.Glob))
 			}
 		}
-		if matchAnyGlob(step.Sources, path) || matchAnyGlob(inputs, path) {
+		if types.MatchesAnyGlob(step.Sources, path) || types.MatchesAnyGlob(inputs, path) {
 			entry.SourceOf = append(entry.SourceOf, p.Path)
 		}
 	}
@@ -1135,16 +1135,4 @@ func matchedClaims(p *types.Project, sources []string, path string) []types.File
 		}
 	}
 	return out
-}
-
-// matchAnyGlob reports whether path matches any of the workspace-rooted
-// doublestar globs. Same matcher family the cache uses for these globs; an
-// invalid pattern simply never matches, mirroring the cache's tolerance.
-func matchAnyGlob(globs []string, path string) bool {
-	for _, g := range globs {
-		if ok, _ := doublestar.Match(g, path); ok {
-			return true
-		}
-	}
-	return false
 }

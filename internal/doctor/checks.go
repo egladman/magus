@@ -1019,19 +1019,28 @@ func (r *runner) checkUndeclaredSeedingFiles(projects []*types.Project) types.Do
 	for _, p := range projects {
 		globs = append(globs, p.DeclaredGlobs()...)
 	}
+	// A glob the matcher cannot parse matches nothing, so every file it was meant to
+	// cover reads as undeclared and this check advises declaring what is already
+	// declared. Tolerated (the cache walk tolerates it too) but named in the report,
+	// because the advice above is wrong for exactly those files.
+	var bad string
+	if invalid := types.InvalidGlobs(globs); len(invalid) > 0 {
+		bad = fmt.Sprintf("; %d declared glob(s) cannot be parsed and so match nothing: %s",
+			len(invalid), strings.Join(invalid, ", "))
+	}
 	var details []string
 	for _, f := range files {
 		f = filepath.ToSlash(f)
 		if types.IsMagusMaintained(f) {
 			continue // magus writes it; no project was ever going to declare it
 		}
-		if matchesAnyGlob(globs, f) {
+		if types.MatchesAnyGlob(globs, f) {
 			continue
 		}
 		details = append(details, f)
 	}
 	if len(details) == 0 {
-		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "every committed file is declared by the project it seeds"}
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "every committed file is declared by the project it seeds" + bad}
 	}
 	slices.Sort(details)
 	return types.DoctorCheck{
@@ -1039,20 +1048,10 @@ func (r *runner) checkUndeclaredSeedingFiles(projects []*types.Project) types.Do
 		Status: types.DoctorAdvice,
 		Message: fmt.Sprintf(
 			"%d committed file(s) seed a project by directory containment while no project declares them, so touching one reruns targets whose answer cannot have changed; "+
-				"declare the ones that are inputs in the owning project's sources (see %s)",
-			len(details), types.CodeURL(types.UndeclaredSeedingFile)),
+				"declare the ones that are inputs in the owning project's sources (see %s)%s",
+			len(details), types.CodeURL(types.UndeclaredSeedingFile), bad),
 		Details: details,
 	}
-}
-
-// matchesAnyGlob reports whether path matches any of the workspace-rooted globs.
-func matchesAnyGlob(globs []string, path string) bool {
-	for _, g := range globs {
-		if ok, _ := doublestar.Match(g, path); ok {
-			return true
-		}
-	}
-	return false
 }
 
 // globOutputs expands one declared output glob against the project directory, returning

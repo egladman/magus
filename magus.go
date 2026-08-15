@@ -7,7 +7,6 @@ import (
 	"fmt"
 	"io/fs"
 	"log/slog"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -621,56 +620,18 @@ func (m *Magus) Where(dir string) (*types.Project, bool) {
 const BaseLastPassed = "last-passed"
 
 // Affected computes projects touched by VCS changes since base.
+//
+// Files that seeded a project by directory containment while it declares none of them
+// come back on [types.AffectedResult.UndeclaredBySeed]; reporting them (MGS1028) is the
+// caller's, because this is a library call and its caller owns whatever stream a person
+// is reading. The CLI reports it in cmd/magus/affected.go.
 func (m *Magus) Affected(ctx context.Context, base string) (*types.AffectedResult, error) {
 	base, err := m.resolveLastPassed(ctx, base)
 	if err != nil {
 		return nil, err
 	}
-	r, err := project.Affected(ctx, m.ws, base)
-	if err != nil {
-		return nil, err
-	}
-	noteUndeclaredSeeds(r)
-	return r, nil
+	return project.Affected(ctx, m.ws, base)
 }
-
-// noteUndeclaredSeeds reports MGS1028: changed files that seeded a project through
-// directory containment while no project declares them, so the run they cause moves
-// no cache key.
-//
-// interactive.Emit, not types.EmitDiagnostic, and that is not a style choice. The
-// run-scoped diagnostic sink is installed inside Run, AFTER the affected set has
-// already been computed, so a sink emission from here reaches nobody at all - and
-// this fires on `magus affected --impact` and the MCP handlers too, which never
-// enter Run. MGS1010 is emitted the same way, for the same reason. Emit dedupes by
-// message text, so a long-lived daemon says it once rather than on every request.
-func noteUndeclaredSeeds(r *types.AffectedResult) {
-	if len(r.UndeclaredBySeed) == 0 {
-		return
-	}
-	files := map[string]struct{}{}
-	for _, fs := range r.UndeclaredBySeed {
-		for _, f := range fs {
-			files[f] = struct{}{}
-		}
-	}
-	shown := slices.Sorted(maps.Keys(files))
-	// A changeset can be enormous; the first few name the shape of the problem and
-	// `magus describe file` is the surface that explains any one of them in full.
-	if len(shown) > undeclaredSeedHintCap {
-		shown = append(shown[:undeclaredSeedHintCap:undeclaredSeedHintCap],
-			fmt.Sprintf("and %d more", len(files)-undeclaredSeedHintCap))
-	}
-	interactive.Emit(os.Stderr, fmt.Sprintf(
-		"[%s] %d changed file(s) seed a project by directory containment while no project declares them, "+
-			"so the targets they rerun were already correct: %s. "+
-			"Declare them in the owning project's sources, or leave them undeclared deliberately (see %s)",
-		types.UndeclaredSeedingFile, len(files), strings.Join(shown, ", "),
-		types.CodeURL(types.UndeclaredSeedingFile)))
-}
-
-// undeclaredSeedHintCap bounds how many undeclared paths MGS1028 names inline.
-const undeclaredSeedHintCap = 5
 
 // resolveLastPassed translates [BaseLastPassed] into the commit the current branch last
 // passed at, and passes any other base through untouched.
@@ -734,14 +695,11 @@ func (m *Magus) resolveLastPassed(ctx context.Context, base string) (string, err
 	return parent, nil
 }
 
-// AffectedFromPaths computes the affected set from an explicit file list.
+// AffectedFromPaths computes the affected set from an explicit file list. Undeclared
+// seeding files ride [types.AffectedResult.UndeclaredBySeed], the same as [Magus.Affected];
+// see it for who reports them.
 func (m *Magus) AffectedFromPaths(ctx context.Context, paths []string) (*types.AffectedResult, error) {
-	r, err := project.AffectedFromPaths(ctx, m.ws, paths)
-	if err != nil {
-		return nil, err
-	}
-	noteUndeclaredSeeds(r)
-	return r, nil
+	return project.AffectedFromPaths(ctx, m.ws, paths)
 }
 
 func (m *Magus) limiter() *cache.Limiter {
@@ -868,7 +826,7 @@ func magusfileGlobs(projectPath string) []string {
 }
 
 // joinGlob roots a project-relative glob at the workspace for the cache step and the
-// describe surfaces. It is a named pass-through on purpose: nine call sites in this
+// describe surfaces. It is a named pass-through on purpose: the call sites in this
 // package read as "join", and the rooting rule itself belongs in types, where
 // Project.DeclaredGlobs - the attribution mirror of these very lines - can share it.
 // See types.RootGlob for why the join is cleaned rather than concatenated.

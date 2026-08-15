@@ -3,6 +3,7 @@ package ledger
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -115,6 +116,63 @@ func TestStorePutPreservesCreatedOnUpdate(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, first.Created, third.Created)
 	assert.NotEqual(t, int64(1), third.Updated)
+}
+
+// TestStoreUpdateMergesUnderOneLock is what Update exists for. Two writers advancing
+// different fields of one row - a state machine and a checkpoint recorder - each
+// read-modify-write the same file, and a merge that reads with List and writes with Put
+// releases the lock in between: the second write then reverts the first one's field.
+func TestStoreUpdateMergesUnderOneLock(t *testing.T) {
+	t.Parallel()
+
+	s := NewStore(t.TempDir())
+	_, err := s.Put(unit("a"))
+	require.NoError(t, err)
+
+	const rounds = 25
+	var wg sync.WaitGroup
+	errs := make(chan error, 2*rounds)
+	for _, apply := range []func(*types.DelegationUnit){
+		func(u *types.DelegationUnit) { u.State = types.StatePass },
+		func(u *types.DelegationUnit) { u.Checkpoint = "deadbeef" },
+	} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range rounds {
+				_, uerr := s.Update("a", apply)
+				errs <- uerr
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for e := range errs {
+		require.NoError(t, e)
+	}
+
+	got, err := s.List()
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, types.StatePass, got[0].State, "the state advance survived the concurrent checkpoint write")
+	assert.Equal(t, "deadbeef", got[0].Checkpoint, "and the checkpoint survived the concurrent state advance")
+	assert.Equal(t, "goal for a", got[0].Goal, "neither merge erased the row it did not name")
+}
+
+// TestStoreUpdateCreatesTheRowItMerges keeps declaring a unit and advancing one the same
+// call: a merge onto an id nothing has written yet starts from a zero row carrying the id.
+func TestStoreUpdateCreatesTheRowItMerges(t *testing.T) {
+	t.Parallel()
+
+	s := NewStore(t.TempDir())
+	stored, err := s.Update("fresh", func(u *types.DelegationUnit) { u.State = types.StateRunning })
+	require.NoError(t, err)
+	assert.Equal(t, "fresh", stored.ID)
+	assert.Equal(t, types.StateRunning, stored.State)
+	assert.NotZero(t, stored.Created)
+
+	_, err = s.Update("", func(*types.DelegationUnit) {})
+	require.ErrorIs(t, err, ErrNoID, "a merge with no id has no row to address")
 }
 
 func TestStoreClear(t *testing.T) {

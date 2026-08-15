@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"fmt"
 	"strings"
 
 	"github.com/egladman/magus/internal/ledger"
@@ -32,64 +33,15 @@ func (t *ledgerTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells
 		return spells.InvokeResponse{Data: map[string]any{"units": units}}, nil
 
 	case "put":
-		// A put updates only the fields it names. The second write of a unit's
-		// lifecycle (op=put id=u1 state=running) must not erase the declared
-		// row; presence with an empty value is an explicit clear.
-		id := strings.TrimSpace(paramString(req.Params, "id", ""))
-		unit := types.DelegationUnit{ID: id}
-		if id != "" {
-			existing, err := t.store.List()
-			if err != nil {
-				return spells.InvokeResponse{}, err
-			}
-			for _, u := range existing {
-				if u.ID == id {
-					unit = u
-					break
-				}
-			}
+		merge, err := ledgerMerge(req.Params)
+		if err != nil {
+			return spells.InvokeResponse{}, err
 		}
-		if v, ok := ledgerString(req.Params, "parent"); ok {
-			unit.Parent = strings.TrimSpace(v)
-		}
-		if v, ok := ledgerString(req.Params, "goal"); ok {
-			unit.Goal = v
-		}
-		if v, ok := ledgerString(req.Params, "checkpoint"); ok {
-			unit.Checkpoint = strings.TrimSpace(v)
-		}
-		if v, ok := ledgerList(req.Params, "owned_paths"); ok {
-			unit.OwnedPaths = v
-		}
-		if v, ok := ledgerList(req.Params, "forbidden_paths"); ok {
-			unit.ForbiddenPaths = v
-		}
-		if v, ok := ledgerList(req.Params, "depends_on"); ok {
-			unit.DependsOn = v
-		}
-		if v, ok := ledgerString(req.Params, "tier"); ok {
-			unit.Tier = strings.TrimSpace(v)
-		}
-		if v, ok := ledgerString(req.Params, "validation"); ok {
-			unit.Validation = v
-		}
-		if v, ok := ledgerString(req.Params, "state"); ok {
-			s := types.DelegationState(strings.TrimSpace(v))
-			switch s {
-			case types.StateDeclared, types.StateRunning, types.StatePass, types.StateFail, types.StateNoReturn:
-				unit.State = s
-			default:
-				return spells.InvokeResponse{}, errors.New("mcp: state must be one of declared, running, pass, fail, no_return")
-			}
-		}
-		if v, present := req.Params["read_only"]; present {
-			b, ok := v.(bool)
-			if !ok {
-				return spells.InvokeResponse{}, errors.New("mcp: read_only must be a boolean")
-			}
-			unit.ReadOnly = b
-		}
-		stored, err := t.store.Put(unit)
+		// Update, not List-then-Put: the merge has to read and write the row under one
+		// lock. Two concurrent puts on one id (an orchestrator advancing state while a
+		// worker records its checkpoint) would each read the row before the other wrote
+		// it, and the second write would revert the first one's field.
+		stored, err := t.store.Update(strings.TrimSpace(paramString(req.Params, "id", "")), merge)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
@@ -113,39 +65,123 @@ func (t *ledgerTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells
 	}
 }
 
+// ledgerMerge builds the field merge one put applies: only the keys the request names,
+// so the second write of a unit's lifecycle (op=put id=u1 state=running) advances the
+// state without erasing the declared row, and presence with an empty value is an
+// explicit clear.
+//
+// Every value is read and validated HERE rather than inside the merge, because the merge
+// runs while the store holds its lock and has no way to report a failure. Errors are
+// joined rather than returned at the first one: a client that mistyped two params should
+// learn about both in one round trip.
+func ledgerMerge(params map[string]any) (func(*types.DelegationUnit), error) {
+	var (
+		set []func(*types.DelegationUnit)
+		err error
+	)
+	str := func(key string, apply func(*types.DelegationUnit, string)) {
+		v, ok, e := ledgerString(params, key)
+		switch {
+		case e != nil:
+			err = errors.Join(err, e)
+		case ok:
+			set = append(set, func(u *types.DelegationUnit) { apply(u, v) })
+		}
+	}
+	list := func(key string, apply func(*types.DelegationUnit, []string)) {
+		v, ok, e := ledgerList(params, key)
+		switch {
+		case e != nil:
+			err = errors.Join(err, e)
+		case ok:
+			set = append(set, func(u *types.DelegationUnit) { apply(u, v) })
+		}
+	}
+
+	str("parent", func(u *types.DelegationUnit, v string) { u.Parent = strings.TrimSpace(v) })
+	str("goal", func(u *types.DelegationUnit, v string) { u.Goal = v })
+	str("checkpoint", func(u *types.DelegationUnit, v string) { u.Checkpoint = strings.TrimSpace(v) })
+	list("owned_paths", func(u *types.DelegationUnit, v []string) { u.OwnedPaths = v })
+	list("forbidden_paths", func(u *types.DelegationUnit, v []string) { u.ForbiddenPaths = v })
+	list("depends_on", func(u *types.DelegationUnit, v []string) { u.DependsOn = v })
+	str("tier", func(u *types.DelegationUnit, v string) { u.Tier = strings.TrimSpace(v) })
+	str("validation", func(u *types.DelegationUnit, v string) { u.Validation = v })
+
+	// state is the one param with a vocabulary, so it is checked against it here.
+	if v, ok, e := ledgerString(params, "state"); e != nil {
+		err = errors.Join(err, e)
+	} else if ok {
+		s := types.DelegationState(strings.TrimSpace(v))
+		switch s {
+		case types.StateDeclared, types.StateRunning, types.StatePass, types.StateFail, types.StateNoReturn:
+			set = append(set, func(u *types.DelegationUnit) { u.State = s })
+		default:
+			err = errors.Join(err, errors.New("mcp: state must be one of declared, running, pass, fail, no_return"))
+		}
+	}
+	if v, present := params["read_only"]; present {
+		b, ok := v.(bool)
+		if !ok {
+			err = errors.Join(err, errors.New("mcp: read_only must be a boolean"))
+		} else {
+			set = append(set, func(u *types.DelegationUnit) { u.ReadOnly = b })
+		}
+	}
+	if err != nil {
+		return nil, err
+	}
+	return func(u *types.DelegationUnit) {
+		for _, apply := range set {
+			apply(u)
+		}
+	}, nil
+}
+
 // ledgerString distinguishes an absent key from an empty value, which is what
-// lets a put carry only the fields it means to change.
-func ledgerString(params map[string]any, key string) (string, bool) {
+// lets a put carry only the fields it means to change. A present key holding
+// something that is not a string is an ERROR, not an absent one: silently
+// dropping it records a row the client did not ask for, and the client is then
+// told the put succeeded.
+func ledgerString(params map[string]any, key string) (string, bool, error) {
 	v, present := params[key]
 	if !present {
-		return "", false
+		return "", false, nil
 	}
 	s, ok := v.(string)
-	return s, ok
+	if !ok {
+		return "", false, fmt.Errorf("mcp: %s must be a string", key)
+	}
+	return s, true, nil
 }
 
 // ledgerList accepts the natural JSON array shape as well as the
 // space-separated string the descriptor schema forces on typed clients
 // (magus_describe_file's paths set the precedent). A client sending a real
-// array must not silently record nothing.
-func ledgerList(params map[string]any, key string) ([]string, bool) {
+// array must not silently record nothing - nor may one element of the wrong
+// type quietly shorten the list, so both are reported.
+func ledgerList(params map[string]any, key string) ([]string, bool, error) {
 	v, present := params[key]
 	if !present {
-		return nil, false
+		return nil, false, nil
 	}
+	badType := fmt.Errorf("mcp: %s must be an array of strings or a space-separated string", key)
 	switch t := v.(type) {
 	case string:
-		return strings.Fields(t), true
+		return strings.Fields(t), true, nil
 	case []any:
 		out := make([]string, 0, len(t))
 		for _, e := range t {
-			if s, ok := e.(string); ok && strings.TrimSpace(s) != "" {
+			s, ok := e.(string)
+			if !ok {
+				return nil, false, badType
+			}
+			if strings.TrimSpace(s) != "" {
 				out = append(out, strings.TrimSpace(s))
 			}
 		}
-		return out, true
+		return out, true, nil
 	}
-	return nil, false
+	return nil, false, badType
 }
 
 var _ spells.Driver = (*ledgerTool)(nil)

@@ -267,12 +267,30 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 							// literal count means a key whose value the static read could not
 							// pair - an observation in the source that contributes nothing to
 							// the key, which is the under-declaration this whole surface exists
-							// to reject - so trip the same guard a computed argument trips.
+							// to reject - so trip the same guard a computed argument trips, and
+							// record NOTHING: pairing what is left over invents observations
+							// from a list magus has just said it cannot read.
 							if len(globs)%2 != 0 {
 								flagDynamic(&node, kind)
+								break
 							}
+							pairs := make([]string, 0, len(globs)/2)
 							for i := 0; i+1 < len(globs); i += 2 {
-								node.Observations = appendUniq(node.Observations, globs[i]+"="+globs[i+1])
+								// A key carrying "=" makes the canonical form ambiguous
+								// ("a=b=c" is both a=b -> c and a -> b=c), so it is rejected
+								// where it is declared rather than hashed as whichever half
+								// a reader of the key happens to split on.
+								if strings.Contains(globs[i], "=") {
+									flagDynamic(&node, kind)
+									pairs = nil
+									break
+								}
+								pairs = append(pairs, globs[i]+"="+globs[i+1])
+							}
+							// Committed only once the whole call is readable; an earlier
+							// ctx.observes in the same target keeps what it recorded.
+							for _, p := range pairs {
+								node.Observations = appendUniq(node.Observations, p)
 							}
 						case "modifiesExistingFiles":
 							for _, g := range globs {

@@ -35,11 +35,18 @@ var ErrNoID = errors.New("ledger: a unit needs an id")
 // directory. Every operation reads the file, acts, and writes it back, so a Store is
 // cheap to construct and holds no state between calls beyond the path and its lock.
 //
-// The mutex serializes writers within one process. It does NOT lock across processes:
-// the CLI, the daemon, and an MCP client are separate processes that can each hold a
-// Store on the same file, and a concurrent read-modify-write from two of them can drop
-// a row. That is accepted for v1 because the writer is one orchestrating agent by
-// construction - the ledger has a single author by definition of what it records.
+// The mutex serializes writers within one process, and only for the span of ONE call: a
+// caller that merges fields by reading with List and writing back with Put takes the
+// lock twice, and two such merges on one id then lose whichever field the second one
+// read before the first wrote. [Store.Update] is that merge done under a single
+// acquisition, and it is what a field-at-a-time writer (the magus_ledger MCP tool) has
+// to use.
+//
+// It does NOT lock across processes: the CLI, the daemon, and an MCP client are separate
+// processes that can each hold a Store on the same file, and a concurrent
+// read-modify-write from two of them can drop a row. That is accepted for v1 because the
+// writer is one orchestrating agent by construction - the ledger has a single author by
+// definition of what it records.
 type Store struct {
 	mu   sync.Mutex
 	path string
@@ -66,7 +73,24 @@ type unitsFile struct {
 // It stamps Created on the first write and Updated on every write, ignoring whatever
 // the caller passed for either. The stored row is returned.
 func (s *Store) Put(u types.DelegationUnit) (types.DelegationUnit, error) {
-	if strings.TrimSpace(u.ID) == "" {
+	return s.Update(u.ID, func(cur *types.DelegationUnit) { *cur = u })
+}
+
+// Update applies apply to the row with this id and writes the result back, all under a
+// SINGLE lock acquisition. That is the whole point: a merge spread across List and Put
+// releases the lock in between, so two concurrent writers advancing different fields of
+// one row each read it before the other wrote, and the second write reverts the first.
+//
+// The row is CREATED when absent, matching Put: apply then sees a zero unit carrying
+// only the id, so declaring a unit and advancing one are the same call. Created is
+// preserved from the stored row and Updated is stamped on every write, exactly as Put
+// does, and the id is the key - whatever apply writes into ID is overwritten with it.
+//
+// apply runs while the lock is held, so it must not touch the store, and it cannot fail:
+// anything that could be rejected (an unknown state, a mistyped param) belongs in the
+// caller, before the call.
+func (s *Store) Update(id string, apply func(*types.DelegationUnit)) (types.DelegationUnit, error) {
+	if strings.TrimSpace(id) == "" {
 		return types.DelegationUnit{}, ErrNoID
 	}
 	s.mu.Lock()
@@ -76,11 +100,18 @@ func (s *Store) Put(u types.DelegationUnit) (types.DelegationUnit, error) {
 	if err != nil {
 		return types.DelegationUnit{}, err
 	}
-	now := time.Now().Unix()
+	i := slices.IndexFunc(f.Units, func(e types.DelegationUnit) bool { return e.ID == id })
+	u := types.DelegationUnit{ID: id}
+	if i >= 0 {
+		u = f.Units[i].Clone()
+	}
+	apply(&u)
 	u = u.Clone()
+	u.ID = id
+	now := time.Now().Unix()
 	u.Updated = now
 	u.Created = now
-	if i := slices.IndexFunc(f.Units, func(e types.DelegationUnit) bool { return e.ID == u.ID }); i >= 0 {
+	if i >= 0 {
 		u.Created = f.Units[i].Created
 		f.Units[i] = u
 	} else {

@@ -138,15 +138,22 @@ guess one from prose, so an orchestrator that wants the join writes ONE marker:
 unit: <id>
 ```
 
-A line whose trimmed text is exactly that, within the first 4096 bytes of the
-handed context. The id is a bare token of letters, digits and the separators
-`-` `_` `.` `/` `:`, at most 128 characters, with nothing after it on the line.
-The first match wins.
+It must be the FIRST non-blank line of the handed context, and its trimmed text
+must be exactly that. The id is a bare token of letters, digits and the
+separators `-` `_` `.` `/` `:`, at most 128 characters, with nothing after it on
+the line. Leading blank lines are skipped; the head of the context is capped at
+4096 bytes, so a marker cannot hide behind a pathological first line.
+
+Leading the prompt is the contract, not a convention. A delegation prompt
+routinely quotes a ledger listing, a file, or another agent's transcript, and a
+`unit:` line lifted from any of them would stamp the event with a unit this
+handoff has nothing to do with. Position is what separates a marker you wrote
+from one you pasted.
 
 Anything else leaves `unit` empty: no marker, an id with prose after it, an id
-carrying other punctuation, a marker further down a long prompt. That is a
-missing join, not an error, and it is the designed outcome for an orchestrator
-that never opted in.
+carrying other punctuation, a marker below the first line. That is a missing
+join, not an error, and it is the designed outcome for an orchestrator that
+never opted in.
 
 ## Notifications
 

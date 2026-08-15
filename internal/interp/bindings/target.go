@@ -567,7 +567,11 @@ var execRefusedDecls = []string{"needs", "glob", "readsFiles", "writesFiles", "m
 // another is silent until someone's body stops tracing.
 func TargetContextKeys() []string { return buildTargetContext(nil, nil, nil, nil).MapKeys() }
 
-// ExecRefusedKeys returns the ctx members a magus\Exec derivation refuses.
+// ExecRefusedKeys returns the ctx members a magus\Exec derivation refuses. It carries the
+// same caveat as [TargetContextKeys]: execRefusedDecls is one of three independent
+// enumerations of this context's members, and nothing but a test holds them against each
+// other, so a declaration added to buildTargetContext or the dry host's buildCtx and
+// forgotten here is silent until an Exec quietly accepts what it should refuse.
 func ExecRefusedKeys() []string { return slices.Clone(execRefusedDecls) }
 
 // buildTargetContext assembles the shared magus.Context value every target receives

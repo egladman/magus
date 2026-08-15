@@ -88,10 +88,11 @@ const (
 	//
 	// Correlation to a work-ledger unit is COOPERATIVE, not enforced. Nothing in the host event
 	// names a magus unit, and magus cannot infer one from prose, so the event's Unit is stamped
-	// only when the handed context carries the documented marker (see unitFromContext): a line
-	// reading "unit: <id>" within the first unitScanBytes. An orchestrator that wants the join
-	// writes the marker; one that does not gets an event with an empty Unit, which is a missing
-	// join rather than a wrong one.
+	// only when the handed context carries the documented marker (see unitFromContext): its
+	// FIRST non-blank line reading "unit: <id>". An orchestrator that wants the join writes the
+	// marker; one that does not gets an event with an empty Unit, which is a missing join rather
+	// than a wrong one - and a "unit:" line quoted deeper in a prompt stamps nothing, because a
+	// wrong join is worse than none.
 	KindAgentSpawn Kind = "agent_spawn"
 	// KindMemory is the console MemoryService door onto the durable magus_memory files. Unlike the
 	// other kinds it audits READS too (List/Get), not just edits: the memory files are the agent's
@@ -349,16 +350,21 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	})
 }
 
-// unitScanBytes bounds the marker scan to the head of the handed context. A marker is something
-// an orchestrator writes deliberately at the top of a delegation prompt; scanning a whole
-// multi-kilobyte prompt for one would also match a "unit:" line quoted from a file the prompt
-// happens to embed.
+// unitScanBytes bounds the head of the handed context the marker may appear in. The marker
+// leads the prompt, so this is a cap on one pathological first line rather than a window to
+// search: it keeps a multi-megabyte single-line payload from being scanned at all.
 const unitScanBytes = 4096
 
 // unitFromContext returns the work-ledger unit a delegation prompt declares, or "" when it
 // declares none. THE MARKER CONTRACT, documented once here and in the host glue pages:
 //
-//	a line whose trimmed text is exactly "unit: <id>", within the first unitScanBytes
+//	the FIRST non-blank line of the handed context, trimmed, reading exactly "unit: <id>"
+//
+// First line, not anywhere in the head: a delegation prompt routinely quotes things - a ledger
+// listing, a file, another agent's transcript - and a "unit: <id>" line lifted from any of them
+// would stamp the event with a unit that has nothing to do with this handoff. A marker an
+// orchestrator wrote is at the top, and a marker in quoted prose is not; the position is the
+// only thing that separates them. Leading blank lines are formatting and are skipped.
 //
 // The id is a bare token of letters, digits and -_./: - no spaces, at most unitMaxLen chars. That
 // charset is not decoration: Unit is exempt from event redaction (it is a correlation key matched
@@ -366,7 +372,7 @@ const unitScanBytes = 4096
 // may land in it has to be too narrow to smuggle a credential through.
 //
 // Anything else - no marker, an empty id, an id carrying spaces or punctuation outside the set,
-// a marker past the scan window - yields "". Correlation is cooperative: a missing join is the
+// a marker below the first line - yields "". Correlation is cooperative: a missing join is the
 // designed outcome, never an error.
 func unitFromContext(handed string) string {
 	const unitMaxLen = 128
@@ -375,13 +381,17 @@ func unitFromContext(handed string) string {
 		head = head[:unitScanBytes]
 	}
 	for _, line := range strings.Split(head, "\n") {
-		rest, found := strings.CutPrefix(strings.TrimSpace(line), "unit:")
-		if !found {
+		line = strings.TrimSpace(line)
+		if line == "" {
 			continue
+		}
+		rest, found := strings.CutPrefix(line, "unit:")
+		if !found {
+			return "" // the prompt leads with something else, so it declares no unit
 		}
 		id := strings.TrimSpace(rest)
 		if id == "" || len(id) > unitMaxLen || !validUnit(id) {
-			continue
+			return ""
 		}
 		return id
 	}

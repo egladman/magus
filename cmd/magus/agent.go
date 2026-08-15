@@ -726,9 +726,11 @@ type hookEnvelope struct {
 // remember. A payload carrying file_path rather than command is a write, so the
 // envelope also answers the --path question.
 //
-// A payload carrying a PROMPT rather than either is a delegation handoff: there is nothing to
-// judge, and the context being handed over is recorded instead. It is tested last on purpose, so
-// that adding this branch cannot change the verdict on any payload the guard already judged.
+// A payload carrying a PROMPT rather than either is a delegation handoff: it is RECORDED and
+// EXEMPT from judgment. No rule is evaluated against a prompt, so the guard never denies one -
+// there is no command and no path to judge, only a context transfer to note. It is tested last on
+// purpose, so that adding this branch cannot change the verdict on any payload the guard already
+// judged.
 //
 // Anything that is not an object with a usable tool_input is judged as the
 // literal text it is.

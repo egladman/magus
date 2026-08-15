@@ -50,7 +50,7 @@ func Scan(ctx context.Context, w *types.Workspace, dir string, commits int, sinc
 	// git reports paths relative to the VCS root regardless of where the log ran, so
 	// the prefix is still measured from the workspace root, not dir.
 	prefix := vcsRootPrefix(w.Root, res.VCS.Claims())
-	idx := newProjectIndex(w)
+	idx := newProjectIndex(ctx, w)
 
 	out := make([]ScannedCommit, 0, len(changes))
 	for _, c := range changes {

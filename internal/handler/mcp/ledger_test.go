@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"sync"
 	"testing"
 
 	"github.com/egladman/magus/internal/ledger"
@@ -118,4 +119,83 @@ func TestLedgerTool(t *testing.T) {
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "list, put, clear")
 	})
+
+	// A field of the wrong type used to be dropped while state and read_only errored, so
+	// a client sending goal=3 was told its put succeeded and got a row without the field
+	// it thought it wrote. Every reader answers the same way now.
+	for name, params := range map[string]map[string]any{
+		"a non-string goal":            {"op": "put", "id": "unit-typed", "goal": 3},
+		"a non-string tier":            {"op": "put", "id": "unit-typed", "tier": true},
+		"a non-list owned_paths":       {"op": "put", "id": "unit-typed", "owned_paths": 7},
+		"a list with a non-string":     {"op": "put", "id": "unit-typed", "depends_on": []any{"a", 2}},
+		"a non-string state":           {"op": "put", "id": "unit-typed", "state": 1},
+		"a non-boolean read_only":      {"op": "put", "id": "unit-typed", "read_only": "yes"},
+		"a non-string forbidden_paths": {"op": "put", "id": "unit-typed", "forbidden_paths": map[string]any{}},
+	} {
+		t.Run(name+" is rejected, not dropped", func(t *testing.T) {
+			_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: params})
+			require.Error(t, err)
+
+			got := units(t, invoke(t, map[string]any{"op": "list"}))
+			for _, u := range got {
+				assert.NotEqual(t, "unit-typed", u.ID, "a rejected put writes no row")
+			}
+		})
+	}
+
+	t.Run("every mistyped param is reported at once", func(t *testing.T) {
+		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{
+			"op": "put", "id": "unit-typed", "goal": 3, "read_only": "yes",
+		}})
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "goal")
+		assert.Contains(t, err.Error(), "read_only", "a client that mistyped two params learns both in one round trip")
+	})
+}
+
+// TestLedgerToolPutMergesConcurrently is why a put goes through Store.Update. Two
+// writers advance different fields of one unit - an orchestrator moving the state, a
+// worker recording its checkpoint - and both have to survive. Reading the row with List
+// and writing it back with Put releases the store's lock in between, so each writer
+// merges onto a row it read before the other wrote, and the second write reverts the
+// first one's field.
+func TestLedgerToolPutMergesConcurrently(t *testing.T) {
+	t.Parallel()
+
+	tool := &ledgerTool{store: ledger.NewStore(t.TempDir())}
+	put := func(params map[string]any) error {
+		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: params})
+		return err
+	}
+	require.NoError(t, put(map[string]any{
+		"op": "put", "id": "u1", "goal": "the declared goal", "state": "declared",
+	}))
+
+	const rounds = 25
+	var wg sync.WaitGroup
+	errs := make(chan error, 2*rounds)
+	for _, params := range []map[string]any{
+		{"op": "put", "id": "u1", "state": "running"},
+		{"op": "put", "id": "u1", "checkpoint": "deadbeef"},
+	} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for range rounds {
+				errs <- put(params)
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for err := range errs {
+		require.NoError(t, err)
+	}
+
+	got, err := tool.store.List()
+	require.NoError(t, err)
+	require.Len(t, got, 1)
+	assert.Equal(t, types.StateRunning, got[0].State, "the state advance survived the concurrent checkpoint write")
+	assert.Equal(t, "deadbeef", got[0].Checkpoint, "and the checkpoint survived the concurrent state advance")
+	assert.Equal(t, "the declared goal", got[0].Goal, "neither put erased the field it did not name")
 }

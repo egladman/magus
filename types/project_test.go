@@ -94,12 +94,12 @@ func TestProjectRef(t *testing.T) {
 }
 
 // TestDeclaredGlobsRootsAReachingSourceAndCollapsesTheDuplicate covers the two things
-// cleaning the rooting changes at once. A project-wide "../proto/**" resolves against
-// the declaring project instead of concatenating into "api/../proto/**", which nothing
-// matches; and once it does, it is the SAME declaration as the per-target ctx.readsFiles
-// that was the only working way to spell it, so the two collapse to one entry rather
-// than double-counting the same input. Dedup here is string equality on the rooted form,
-// which is why it converges only now that both sides root the same way.
+// cleaning the rooting does at once. A project-wide "../proto/**" resolves against the
+// declaring project rather than concatenating into "api/../proto/**", which nothing
+// matches; and so resolved, it is the SAME declaration as the per-target ctx.readsFiles
+// spelling of it, so the two collapse to one entry rather than double-counting the same
+// input. Dedup here is string equality on the rooted form, which is why both sides have
+// to root the same way for it to converge.
 func TestDeclaredGlobsRootsAReachingSourceAndCollapsesTheDuplicate(t *testing.T) {
 	t.Parallel()
 	p := &Project{

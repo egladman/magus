@@ -237,12 +237,24 @@ func TestObservesExtraction(t *testing.T) {
 	// An unpaired key contributes nothing to the key while reading, in the source,
 	// like a target that declared its dependence on something.
 	odd := Extract(`export fun scan(ctx: magus\Context, args: [str]) > void {
-    ctx.observes("trivy-db");
+    ctx.observes("trivy-db", "2026-08-15", "schema-rev");
 }
 `)
 	o, _ := nodeByName(odd, "scan")
 	assert.True(t, o.DynamicIO, "an unpaired observation key must be rejected, not silently ignored")
-	assert.Empty(t, o.Observations, "nothing to pair means nothing recorded")
+	assert.Empty(t, o.Observations, "an odd list is unreadable whole: pairing the leading literals would invent an observation from a call magus just said it cannot read")
+
+	// "a=b=c" is both a=b -> c and a -> b=c, so a key carrying the separator is
+	// rejected at declaration rather than hashed as whichever half a splitter picks.
+	ambiguous := Extract(`export fun scan(ctx: magus\Context, args: [str]) > void {
+    ctx.observes("schema-rev", "a1b2c3");
+    ctx.observes("trivy-db=stable", "2026-08-15");
+}
+`)
+	a, _ := nodeByName(ambiguous, "scan")
+	assert.True(t, a.DynamicIO, "an observation key containing = must be rejected")
+	assert.Equal(t, []string{"schema-rev=a1b2c3"}, a.Observations,
+		"the rejected call records nothing; an earlier readable one keeps what it recorded")
 }
 
 // TestUnreachedIO pins orphan detection: a ctx.readsFiles/writesFiles reached from a target

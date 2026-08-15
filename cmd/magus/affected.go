@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -20,6 +21,7 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/graph/url"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/json"
@@ -616,6 +618,39 @@ func readAffectedPlanPaths(r io.Reader, null bool) ([]string, error) {
 	return slices.Compact(paths), nil
 }
 
+// noteUndeclaredSeeds reports MGS1028: changed files that seeded a project through
+// directory containment while that project declares none of them, so the targets they
+// rerun were already correct.
+//
+// It lives at the CLI edge, not behind magus.Affected, because a library entry point
+// must not write to a stream its caller never opted into - the condition rides
+// types.AffectedResult.UndeclaredBySeed for every other consumer.
+//
+// The message names the SEED PROJECTS and nothing per-changeset, which is what makes
+// it dedupe: interactive.Emit keys on the whole text, so a file list would differ on
+// every request and churn a long-lived daemon's hint set instead of teaching once. The
+// files are already on screen where this is emitted - --impact and --explain both mark
+// each one - and `magus describe file` explains any of them in full.
+func noteUndeclaredSeeds(undeclaredBySeed map[string][]string) {
+	if len(undeclaredBySeed) == 0 {
+		return
+	}
+	seeds := slices.Sorted(maps.Keys(undeclaredBySeed))
+	if len(seeds) > undeclaredSeedHintCap {
+		seeds = append(seeds[:undeclaredSeedHintCap:undeclaredSeedHintCap],
+			fmt.Sprintf("and %d more", len(undeclaredBySeed)-undeclaredSeedHintCap))
+	}
+	interactive.Emit(os.Stderr, fmt.Sprintf(
+		"[%s] projects seeded by changed files nothing declares: %s. Directory containment "+
+			"selected them, so the targets they rerun were already correct. Declare the files "+
+			"in the owning project's sources, or leave them undeclared deliberately (see %s)",
+		types.UndeclaredSeedingFile, strings.Join(seeds, ", "),
+		types.CodeURL(types.UndeclaredSeedingFile)))
+}
+
+// undeclaredSeedHintCap bounds how many seed projects MGS1028 names inline.
+const undeclaredSeedHintCap = 5
+
 // affectedImpact reports the blast radius of the current changeset (the --impact
 // forensic mode of `magus affected`). It is strictly read-only: it maps changed files
 // to seed projects and expands the dependency-graph reverse closure to name the
@@ -655,6 +690,13 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	undeclared := map[string][]string{}
+	for _, p := range out.AffectedProjects {
+		if len(p.UndeclaredFiles) > 0 {
+			undeclared[p.Path] = p.UndeclaredFiles
+		}
+	}
+	noteUndeclaredSeeds(undeclared)
 
 	// Enrich with the differentiated overlays (changed-symbol callers, coverage on
 	// changed code). These read the heavier knowledge store - a prior symbol index and,
@@ -912,6 +954,7 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 	if err != nil {
 		return err
 	}
+	noteUndeclaredSeeds(r.UndeclaredBySeed)
 
 	g, err := ws.Graph()
 	if err != nil {
