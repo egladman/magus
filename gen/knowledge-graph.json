@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2180,
-  "edge_count": 5709,
+  "node_count": 2286,
+  "edge_count": 5827,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -540,6 +540,14 @@
       "label": "MGS8003",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/outputref/MGS8003/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS8004",
+      "kind": "diagnostic",
+      "label": "MGS8004",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/outputref/MGS8004/"
       }
     },
     {
@@ -4385,12 +4393,10 @@
       "label": "docs/reference/codes/outputref/MGS8004.md",
       "source": "docs/reference/codes/outputref/MGS8004.md",
       "attrs": {
-        "diagnostic": "MGS7002",
         "role": "doc",
         "section": "reference",
         "tags": "output-ref,reproduce,cache-key,platform,diagnostics",
-        "title": "MGS8004: output ref was produced on a different machine",
-        "unknown_codes": "MGS8004"
+        "title": "MGS8004: output ref was produced on a different machine"
       }
     },
     {
@@ -16518,7 +16524,7 @@
       "id": "method:magus.affected_impact",
       "kind": "method",
       "label": "magus.affected_impact",
-      "doc": "The VCS-affected set and WHY each project is in it: {base, changedFileCount, changedFiles, seedProjects, affectedProjects, notes}, each affected project carrying whether it was a seed and the files that pulled it in. Annotate the result `> Impact`. This is `magus affected --impact`, a forensic mode that reports the set without running a target - unlike `magus affected list`, which dispatches a target across every affected project to answer the same question. Runs a nested magus, so it works from a `magus bu",
+      "doc": "The VCS-affected set and WHY each project is in it: {base, changedFileCount, changedFiles, seedProjects, affectedProjects, notes}, each affected project carrying whether it was a seed and the files that pulled it in. Annotate the result `> Impact`. This is `magus affected --impact`, a forensic mode that reports the set without running a target - unlike `magus affected list`, which dispatches a target across every affected project to answer the same question. Computed in-process from the workspace on the con",
       "attrs": {
         "buzz": "magus\\affectedImpact([base], [opts]) → Impact"
       }
@@ -16617,9 +16623,18 @@
       "id": "method:magus.insight",
       "kind": "method",
       "label": "magus.insight",
-      "doc": "Every VCS-history lens plus the knowledge-graph axis, as one typed report: {hotspots, affinity, ownership, trend, volatility, graphStats}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. This is the same data `magus insight report` renders as Markdown, handed over as values instead of a document to scrape. Read s",
+      "doc": "Every VCS-history lens as one typed report: {hotspots, affinity, ownership, trend, volatility, unreferenced}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. Takes the window as `{commits, since}` and renders nothing; `insightMarkdown` is the same report as a document. Read straight off the workspace already open",
       "attrs": {
-        "buzz": "magus\\insight(args, [opts]) → InsightReport"
+        "buzz": "magus\\insight([opts]) → InsightReport"
+      }
+    },
+    {
+      "id": "method:magus.insight_markdown",
+      "kind": "method",
+      "label": "magus.insight_markdown",
+      "doc": "The same report as `magus\\insight`, rendered as the Markdown document (commit it as INSIGHT.md). Returns the document as a string. Takes the same flags: opts.commits caps the commits scanned, opts.since bounds the window (90d, 12w, 6mo, 1y). Computed in-process from the workspace on the context, so it needs a magusfile target rather than a bare `magus buzz` script.",
+      "attrs": {
+        "buzz": "magus\\insightMarkdown([opts]) → string"
       }
     },
     {
@@ -17340,6 +17355,15 @@
       "doc": "Report whether this run can prompt at all: both standard input and standard error are terminals. Branch on it before calling pick - in CI, behind a pipe, or under a daemon this is false, and pick would raise. It is the one call that makes an interactive step safe to add to a target that also runs unattended.",
       "attrs": {
         "buzz": "term\\isInteractive() → bool"
+      }
+    },
+    {
+      "id": "method:term.notify",
+      "kind": "method",
+      "label": "term.notify",
+      "doc": "Raise a notification into the band magus pins at the bottom of the terminal, where it shows for a few seconds and then disappears on its own. Unlike log.info it does not join the scrolling transcript: it is for something worth GLANCING at during a long run, not for the record. Returns immediately - the message expires on its own clock - and never raises: it is DROPPED when there is no terminal to show it on, or when the band has no room, so a piped or CI run is never given a repainted view it cannot use and",
+      "attrs": {
+        "buzz": "term\\notify(message, [level], [ttl_ms])"
       }
     },
     {
@@ -18448,6 +18472,995 @@
       "attrs": {
         "argv": "pnpm exec vitest run",
         "tool": "pnpm"
+      }
+    },
+    {
+      "id": "package:gomod aead.dev/minisign",
+      "kind": "package",
+      "label": "aead.dev/minisign",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.2.0"
+      }
+    },
+    {
+      "id": "package:gomod buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go",
+      "kind": "package",
+      "label": "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.36.11-20260415201107-50325440f8f2.1"
+      }
+    },
+    {
+      "id": "package:gomod connectrpc.com/connect",
+      "kind": "package",
+      "label": "connectrpc.com/connect",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.20.0"
+      }
+    },
+    {
+      "id": "package:gomod dario.cat/mergo",
+      "kind": "package",
+      "label": "dario.cat/mergo",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.0.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/Masterminds/goutils",
+      "kind": "package",
+      "label": "github.com/Masterminds/goutils",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.1.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/Masterminds/semver/v3",
+      "kind": "package",
+      "label": "github.com/Masterminds/semver/v3",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v3.5.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/Masterminds/sprig/v3",
+      "kind": "package",
+      "label": "github.com/Masterminds/sprig/v3",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v3.3.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/bmatcuk/doublestar/v4",
+      "kind": "package",
+      "label": "github.com/bmatcuk/doublestar/v4",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v4.10.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/brunoga/deep",
+      "kind": "package",
+      "label": "github.com/brunoga/deep",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.2.4"
+      }
+    },
+    {
+      "id": "package:gomod github.com/cbroglie/mustache",
+      "kind": "package",
+      "label": "github.com/cbroglie/mustache",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.4.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/cenkalti/backoff/v5",
+      "kind": "package",
+      "label": "github.com/cenkalti/backoff/v5",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v5.0.3"
+      }
+    },
+    {
+      "id": "package:gomod github.com/cespare/xxhash/v2",
+      "kind": "package",
+      "label": "github.com/cespare/xxhash/v2",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v2.3.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/davecgh/go-spew",
+      "kind": "package",
+      "label": "github.com/davecgh/go-spew",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.1.1",
+        "version_conflict": "v1.1.1,v1.1.2-0.20180830191138-d8f796af33cc"
+      }
+    },
+    {
+      "id": "package:gomod github.com/dlclark/regexp2",
+      "kind": "package",
+      "label": "github.com/dlclark/regexp2",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.12.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/ebitengine/purego",
+      "kind": "package",
+      "label": "github.com/ebitengine/purego",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.10.0",
+        "version_conflict": "v0.10.0,v0.10.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/evanphx/json-patch/v5",
+      "kind": "package",
+      "label": "github.com/evanphx/json-patch/v5",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v5.9.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/fatih/color",
+      "kind": "package",
+      "label": "github.com/fatih/color",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.19.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/fatih/structs",
+      "kind": "package",
+      "label": "github.com/fatih/structs",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.1.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/fsnotify/fsnotify",
+      "kind": "package",
+      "label": "github.com/fsnotify/fsnotify",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.10.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/gabriel-vasile/mimetype",
+      "kind": "package",
+      "label": "github.com/gabriel-vasile/mimetype",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.4.15"
+      }
+    },
+    {
+      "id": "package:gomod github.com/go-logr/logr",
+      "kind": "package",
+      "label": "github.com/go-logr/logr",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.4.4"
+      }
+    },
+    {
+      "id": "package:gomod github.com/go-logr/stdr",
+      "kind": "package",
+      "label": "github.com/go-logr/stdr",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.2.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/go-playground/locales",
+      "kind": "package",
+      "label": "github.com/go-playground/locales",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.14.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/go-playground/universal-translator",
+      "kind": "package",
+      "label": "github.com/go-playground/universal-translator",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.18.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/go-playground/validator/v10",
+      "kind": "package",
+      "label": "github.com/go-playground/validator/v10",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v10.30.3"
+      }
+    },
+    {
+      "id": "package:gomod github.com/go-viper/mapstructure/v2",
+      "kind": "package",
+      "label": "github.com/go-viper/mapstructure/v2",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v2.3.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/gofrs/flock",
+      "kind": "package",
+      "label": "github.com/gofrs/flock",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.13.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/golangci/plugin-module-register",
+      "kind": "package",
+      "label": "github.com/golangci/plugin-module-register",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.1.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/google/jsonschema-go",
+      "kind": "package",
+      "label": "github.com/google/jsonschema-go",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.4.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/google/uuid",
+      "kind": "package",
+      "label": "github.com/google/uuid",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.6.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/grpc-ecosystem/grpc-gateway/v2",
+      "kind": "package",
+      "label": "github.com/grpc-ecosystem/grpc-gateway/v2",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v2.29.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/huandu/xstrings",
+      "kind": "package",
+      "label": "github.com/huandu/xstrings",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.5.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/inconshreveable/mousetrap",
+      "kind": "package",
+      "label": "github.com/inconshreveable/mousetrap",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.1.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/jedib0t/go-pretty/v6",
+      "kind": "package",
+      "label": "github.com/jedib0t/go-pretty/v6",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v6.6.7"
+      }
+    },
+    {
+      "id": "package:gomod github.com/kkyr/fig",
+      "kind": "package",
+      "label": "github.com/kkyr/fig",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.5.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/klauspost/compress",
+      "kind": "package",
+      "label": "github.com/klauspost/compress",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.19.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/klauspost/pgzip",
+      "kind": "package",
+      "label": "github.com/klauspost/pgzip",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.2.6"
+      }
+    },
+    {
+      "id": "package:gomod github.com/knadh/koanf/maps",
+      "kind": "package",
+      "label": "github.com/knadh/koanf/maps",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.1.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/knadh/koanf/parsers/yaml",
+      "kind": "package",
+      "label": "github.com/knadh/koanf/parsers/yaml",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.1.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/knadh/koanf/providers/env",
+      "kind": "package",
+      "label": "github.com/knadh/koanf/providers/env",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.0.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/knadh/koanf/providers/file",
+      "kind": "package",
+      "label": "github.com/knadh/koanf/providers/file",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.1.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/knadh/koanf/providers/posflag",
+      "kind": "package",
+      "label": "github.com/knadh/koanf/providers/posflag",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.1.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/knadh/koanf/providers/structs",
+      "kind": "package",
+      "label": "github.com/knadh/koanf/providers/structs",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.1.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/knadh/koanf/v2",
+      "kind": "package",
+      "label": "github.com/knadh/koanf/v2",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v2.2.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/leodido/go-urn",
+      "kind": "package",
+      "label": "github.com/leodido/go-urn",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.5.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/mark3labs/mcp-go",
+      "kind": "package",
+      "label": "github.com/mark3labs/mcp-go",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.48.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/mattn/go-colorable",
+      "kind": "package",
+      "label": "github.com/mattn/go-colorable",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.1.15"
+      }
+    },
+    {
+      "id": "package:gomod github.com/mattn/go-isatty",
+      "kind": "package",
+      "label": "github.com/mattn/go-isatty",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.0.24"
+      }
+    },
+    {
+      "id": "package:gomod github.com/mattn/go-runewidth",
+      "kind": "package",
+      "label": "github.com/mattn/go-runewidth",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.0.16"
+      }
+    },
+    {
+      "id": "package:gomod github.com/minio/selfupdate",
+      "kind": "package",
+      "label": "github.com/minio/selfupdate",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.6.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/mitchellh/copystructure",
+      "kind": "package",
+      "label": "github.com/mitchellh/copystructure",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.2.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/mitchellh/mapstructure",
+      "kind": "package",
+      "label": "github.com/mitchellh/mapstructure",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.5.1-0.20231216201459-8508981c8b6c"
+      }
+    },
+    {
+      "id": "package:gomod github.com/mitchellh/reflectwalk",
+      "kind": "package",
+      "label": "github.com/mitchellh/reflectwalk",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.0.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/pelletier/go-toml/v2",
+      "kind": "package",
+      "label": "github.com/pelletier/go-toml/v2",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v2.4.3"
+      }
+    },
+    {
+      "id": "package:gomod github.com/pkg/errors",
+      "kind": "package",
+      "label": "github.com/pkg/errors",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.9.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/pmezard/go-difflib",
+      "kind": "package",
+      "label": "github.com/pmezard/go-difflib",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.0.0",
+        "version_conflict": "v1.0.0,v1.0.1-0.20181226105442-5d4384ee4fb2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/rivo/uniseg",
+      "kind": "package",
+      "label": "github.com/rivo/uniseg",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.4.7"
+      }
+    },
+    {
+      "id": "package:gomod github.com/rogpeppe/go-internal",
+      "kind": "package",
+      "label": "github.com/rogpeppe/go-internal",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.14.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/rs/zerolog",
+      "kind": "package",
+      "label": "github.com/rs/zerolog",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.33.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/samber/lo",
+      "kind": "package",
+      "label": "github.com/samber/lo",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.53.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/scip-code/scip/bindings/go/scip",
+      "kind": "package",
+      "label": "github.com/scip-code/scip/bindings/go/scip",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.9.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/shopspring/decimal",
+      "kind": "package",
+      "label": "github.com/shopspring/decimal",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.4.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/sourcegraph/beaut",
+      "kind": "package",
+      "label": "github.com/sourcegraph/beaut",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.0.0-20240611013027-627e4c25335a"
+      }
+    },
+    {
+      "id": "package:gomod github.com/spf13/cast",
+      "kind": "package",
+      "label": "github.com/spf13/cast",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.10.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/spf13/cobra",
+      "kind": "package",
+      "label": "github.com/spf13/cobra",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.8.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/spf13/pflag",
+      "kind": "package",
+      "label": "github.com/spf13/pflag",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.0.5"
+      }
+    },
+    {
+      "id": "package:gomod github.com/stretchr/objx",
+      "kind": "package",
+      "label": "github.com/stretchr/objx",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.5.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/stretchr/testify",
+      "kind": "package",
+      "label": "github.com/stretchr/testify",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.11.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/twitchyliquid64/golang-asm",
+      "kind": "package",
+      "label": "github.com/twitchyliquid64/golang-asm",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.15.1"
+      }
+    },
+    {
+      "id": "package:gomod github.com/ulikunitz/xz",
+      "kind": "package",
+      "label": "github.com/ulikunitz/xz",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.5.16"
+      }
+    },
+    {
+      "id": "package:gomod github.com/vektra/mockery/v3",
+      "kind": "package",
+      "label": "github.com/vektra/mockery/v3",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v3.5.4"
+      }
+    },
+    {
+      "id": "package:gomod github.com/xeipuuv/gojsonpointer",
+      "kind": "package",
+      "label": "github.com/xeipuuv/gojsonpointer",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.0.0-20180127040702-4e3ac2762d5f"
+      }
+    },
+    {
+      "id": "package:gomod github.com/xeipuuv/gojsonreference",
+      "kind": "package",
+      "label": "github.com/xeipuuv/gojsonreference",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.0.0-20180127040603-bd5ef7bd5415"
+      }
+    },
+    {
+      "id": "package:gomod github.com/xeipuuv/gojsonschema",
+      "kind": "package",
+      "label": "github.com/xeipuuv/gojsonschema",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.2.0"
+      }
+    },
+    {
+      "id": "package:gomod github.com/yosida95/uritemplate/v3",
+      "kind": "package",
+      "label": "github.com/yosida95/uritemplate/v3",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v3.0.2"
+      }
+    },
+    {
+      "id": "package:gomod github.com/yuin/goldmark",
+      "kind": "package",
+      "label": "github.com/yuin/goldmark",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.8.4"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/auto/sdk",
+      "kind": "package",
+      "label": "go.opentelemetry.io/auto/sdk",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.2.1"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlptrace",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/exporters/otlp/otlptrace",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/metric",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/metric",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/sdk",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/sdk",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/sdk/metric",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/sdk/metric",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/otel/trace",
+      "kind": "package",
+      "label": "go.opentelemetry.io/otel/trace",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.44.0"
+      }
+    },
+    {
+      "id": "package:gomod go.opentelemetry.io/proto/otlp",
+      "kind": "package",
+      "label": "go.opentelemetry.io/proto/otlp",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.11.0"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/crypto",
+      "kind": "package",
+      "label": "golang.org/x/crypto",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.53.0",
+        "version_conflict": "v0.53.0,v0.54.0"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/exp",
+      "kind": "package",
+      "label": "golang.org/x/exp",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.0.0-20240719175910-8a7402abbf56"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/mod",
+      "kind": "package",
+      "label": "golang.org/x/mod",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.37.0",
+        "version_conflict": "v0.37.0,v0.38.0"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/net",
+      "kind": "package",
+      "label": "golang.org/x/net",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.57.0"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/sync",
+      "kind": "package",
+      "label": "golang.org/x/sync",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.21.0",
+        "version_conflict": "v0.21.0,v0.22.0"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/sys",
+      "kind": "package",
+      "label": "golang.org/x/sys",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.46.0",
+        "version_conflict": "v0.46.0,v0.47.0"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/term",
+      "kind": "package",
+      "label": "golang.org/x/term",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.45.0"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/text",
+      "kind": "package",
+      "label": "golang.org/x/text",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.40.0"
+      }
+    },
+    {
+      "id": "package:gomod golang.org/x/tools",
+      "kind": "package",
+      "label": "golang.org/x/tools",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v0.47.0"
+      }
+    },
+    {
+      "id": "package:gomod google.golang.org/genproto/googleapis/api",
+      "kind": "package",
+      "label": "google.golang.org/genproto/googleapis/api",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.0.0-20260724162435-b2f20204f0df"
+      }
+    },
+    {
+      "id": "package:gomod google.golang.org/genproto/googleapis/rpc",
+      "kind": "package",
+      "label": "google.golang.org/genproto/googleapis/rpc",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v0.0.0-20260724162435-b2f20204f0df"
+      }
+    },
+    {
+      "id": "package:gomod google.golang.org/grpc",
+      "kind": "package",
+      "label": "google.golang.org/grpc",
+      "attrs": {
+        "indirect": "true",
+        "manager": "gomod",
+        "version": "v1.82.1"
+      }
+    },
+    {
+      "id": "package:gomod google.golang.org/protobuf",
+      "kind": "package",
+      "label": "google.golang.org/protobuf",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v1.36.11"
+      }
+    },
+    {
+      "id": "package:gomod gopkg.in/yaml.v3",
+      "kind": "package",
+      "label": "gopkg.in/yaml.v3",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v3.0.1"
+      }
+    },
+    {
+      "id": "package:gomod mvdan.cc/sh/v3",
+      "kind": "package",
+      "label": "mvdan.cc/sh/v3",
+      "attrs": {
+        "manager": "gomod",
+        "version": "v3.13.1"
       }
     },
     {
@@ -33900,6 +34913,14 @@
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
+      "provenance": "docs/reference/codes/outputref/MGS8004.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/outputref/MGS8004.md",
+      "target": "diagnostic:MGS8004",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
       "provenance": "docs/reference/codes/outputref/MGS8004.md"
     },
     {
@@ -58420,6 +59441,13 @@
     },
     {
       "source": "module:magus",
+      "target": "method:magus.insight_markdown",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:magus",
       "target": "method:magus.ls",
       "relation": "contains",
       "confidence": "extracted",
@@ -58974,6 +60002,13 @@
     {
       "source": "module:term",
       "target": "method:term.is_interactive",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:term",
+      "target": "method:term.notify",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
@@ -59832,6 +60867,822 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "releaser.buzz"
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod aead.dev/minisign",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod connectrpc.com/connect",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod dario.cat/mergo",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/Masterminds/goutils",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/Masterminds/semver/v3",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/Masterminds/sprig/v3",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/bmatcuk/doublestar/v4",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/brunoga/deep",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/cbroglie/mustache",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/cenkalti/backoff/v5",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/cespare/xxhash/v2",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/davecgh/go-spew",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/dlclark/regexp2",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/ebitengine/purego",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/evanphx/json-patch/v5",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/fatih/color",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/fatih/structs",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/fsnotify/fsnotify",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/gabriel-vasile/mimetype",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/go-logr/logr",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/go-logr/stdr",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/go-playground/locales",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/go-playground/universal-translator",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/go-playground/validator/v10",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/go-viper/mapstructure/v2",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/gofrs/flock",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/google/jsonschema-go",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/google/uuid",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/grpc-ecosystem/grpc-gateway/v2",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/huandu/xstrings",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/inconshreveable/mousetrap",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/jedib0t/go-pretty/v6",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/kkyr/fig",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/klauspost/compress",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/klauspost/pgzip",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/knadh/koanf/maps",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/knadh/koanf/parsers/yaml",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/knadh/koanf/providers/env",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/knadh/koanf/providers/file",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/knadh/koanf/providers/posflag",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/knadh/koanf/providers/structs",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/knadh/koanf/v2",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/leodido/go-urn",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/mark3labs/mcp-go",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/mattn/go-colorable",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/mattn/go-isatty",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/mattn/go-runewidth",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/minio/selfupdate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/mitchellh/copystructure",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/mitchellh/mapstructure",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/mitchellh/reflectwalk",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/pelletier/go-toml/v2",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/pkg/errors",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/pmezard/go-difflib",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/rivo/uniseg",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/rogpeppe/go-internal",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/rs/zerolog",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/samber/lo",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/scip-code/scip/bindings/go/scip",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/shopspring/decimal",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/sourcegraph/beaut",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/spf13/cast",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/spf13/cobra",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/spf13/pflag",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/stretchr/objx",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/stretchr/testify",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/twitchyliquid64/golang-asm",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/ulikunitz/xz",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/vektra/mockery/v3",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/xeipuuv/gojsonpointer",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/xeipuuv/gojsonreference",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/xeipuuv/gojsonschema",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/yosida95/uritemplate/v3",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod github.com/yuin/goldmark",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/auto/sdk",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetrichttp",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlptrace",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/metric",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/sdk",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/sdk/metric",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/otel/trace",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod go.opentelemetry.io/proto/otlp",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/crypto",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/exp",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/mod",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/net",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/sync",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/sys",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/term",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/text",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod golang.org/x/tools",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod google.golang.org/genproto/googleapis/api",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod google.golang.org/genproto/googleapis/rpc",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod google.golang.org/grpc",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod google.golang.org/protobuf",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod gopkg.in/yaml.v3",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
+      "target": "package:gomod mvdan.cc/sh/v3",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
     },
     {
       "source": "project:.",
@@ -60915,6 +62766,78 @@
     },
     {
       "source": "project:libs/gopherbuzz",
+      "target": "package:gomod github.com/davecgh/go-spew",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
+      "target": "package:gomod github.com/dlclark/regexp2",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
+      "target": "package:gomod github.com/ebitengine/purego",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
+      "target": "package:gomod github.com/pmezard/go-difflib",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
+      "target": "package:gomod github.com/stretchr/testify",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
+      "target": "package:gomod github.com/twitchyliquid64/golang-asm",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
+      "target": "package:gomod golang.org/x/crypto",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
+      "target": "package:gomod golang.org/x/sys",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
+      "target": "package:gomod gopkg.in/yaml.v3",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "project:libs/gopherbuzz",
       "target": "target:libs/gopherbuzz:build",
       "relation": "contains",
       "confidence": "extracted",
@@ -61008,6 +62931,38 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/testlayout/magusfile.buzz"
+    },
+    {
+      "source": "project:libs/testlayout",
+      "target": "package:gomod github.com/golangci/plugin-module-register",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/testlayout"
+    },
+    {
+      "source": "project:libs/testlayout",
+      "target": "package:gomod golang.org/x/mod",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/testlayout"
+    },
+    {
+      "source": "project:libs/testlayout",
+      "target": "package:gomod golang.org/x/sync",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/testlayout"
+    },
+    {
+      "source": "project:libs/testlayout",
+      "target": "package:gomod golang.org/x/tools",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/testlayout"
     },
     {
       "source": "project:libs/testlayout",

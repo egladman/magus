@@ -48,6 +48,18 @@ func TestHunkDigestSeparatesIdenticalHunksInDifferentFiles(t *testing.T) {
 		"the same three lines changed in two files are two different marks")
 }
 
+// A GOLDEN vector, and the console asserts the identical one in session.test.ts.
+//
+// The two implementations must agree byte for byte or the feature silently half-works: a hunk
+// the person marked read in the browser would still look unread to an agent reading the same
+// session, and neither side would report an error. Two tests over one literal is what turns
+// that into a build failure instead.
+func TestHunkDigestMatchesTheConsoleGoldenVector(t *testing.T) {
+	assert.Equal(t, "9a0125a4f7864894",
+		HunkDigest("a.go", []string{" ctx", "-old", "+new"}),
+		"digest drift from console/src/console/diff/session.ts would desynchronize viewed state")
+}
+
 func TestHunkDigestChangesWhenTheBodyDoes(t *testing.T) {
 	assert.NotEqual(t,
 		HunkDigest("a.go", []string{"-old", "+new"}),

@@ -1,23 +1,29 @@
-// main.ts - the console's Review surface: the working tree's uncommitted changes as one
-// continuous, virtualized hunk stream.
+// main.ts - the console's Review surface.
 //
-// The whole changeset reads top to bottom in sidebar order. There is no per-file view to flip
-// between, because flipping is what makes a large review feel large - the reader loses their
-// place at every boundary and has to re-find it.
+// A magus review is not a text diff. The daemon already knows which changed files are
+// generated, how widely each changed symbol is referenced, whether any of it is public API,
+// and what coverage was observed - so this surface spends the reader's attention in
+// CONSEQUENCE order rather than alphabetical order, and folds away the files a target
+// rewrote. On magus's own tree that routinely halves the number of files anyone has to read.
 //
-// VIRTUALIZED, and that is the feature rather than an optimization. A forge that renders every
-// row of a 5000-line diff into the DOM at once is slow in a way no amount of tuning fixes,
-// because the cost is the row count. Here the scroll space is a spacer sized to
-// rows x ROW_HEIGHT and only the rows intersecting the viewport exist as elements, so a
-// ten-thousand-line diff costs the same as a hundred-line one. Everything else in this file is
-// downstream of that: fixed row height, no wrapping (long lines scroll sideways, which is what
-// a diff reader wants anyway), and a flat row array from rows.ts rather than nested containers
-// whose geometry would have to be measured.
+// Three things it is built around:
 //
-// READ ONLY for now, deliberately. Comments are a separate store with its own write path and
-// its own anchors - see the plan. This surface is the reading half, and it is useful alone.
+//  1. VIRTUALIZED. The scroll space is a spacer sized to rows x ROW_HEIGHT and only the rows
+//     intersecting the viewport exist as elements, so a ten-thousand-line diff costs what a
+//     hundred-line one does. Fixed row height and no wrapping follow from that.
+//  2. TWO-PHASE. The patch paints immediately; the annotations decorate it when they land.
+//     Holding a readable diff behind the slower overlay would trade the thing the reader
+//     wants for the thing they have not asked for yet.
+//  3. PAIRED. Everything here reads and writes a session the daemon owns, which an agent
+//     joins over MCP. The agent can see where the reader is and suggest; only the reader
+//     navigates.
+//
+// KEYBOARD FIRST, MOUSE COMPLETE. Every action is a registered command (so it appears in the
+// command bar and the Actions surface, and can be rebound) AND has a click target. The
+// single-letter keys are handled on the scroll container rather than as global chords on
+// purpose: a bare "v" must not fire while someone is typing in another surface.
 
-import { parsePatch, type DiffFile, type DiffLine, type FileStatus } from "./parse";
+import { parsePatch, type DiffFile, type FileStatus } from "./parse";
 import {
   buildRows,
   hunkRowIndexes,
@@ -27,66 +33,51 @@ import {
   type Row,
   type ViewMode,
 } from "./rows";
-import { resolveDaemonHost, authHeaders, parseHash } from "../../lib/daemon";
+import { order, visibleFiles, stats, riskChips, type OrderedChangeset } from "./order";
+import {
+  fetchPatch,
+  fetchSession,
+  mutate,
+  hunkDigest,
+  HttpError,
+  type ReviewSession,
+  type ReviewFile,
+} from "./session";
+import { registerCommand, unregisterCommand } from "../commands";
+import { resolveDaemonHost, parseHash, adoptDaemonOrigin } from "../../lib/daemon";
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
 
-// ROW_HEIGHT must match the CSS line-height for a diff row exactly. The virtualizer computes
-// positions from it rather than measuring, so a mismatch shows up as rows drifting out of the
-// viewport as you scroll. It is asserted against the rendered height at runtime in dev builds
-// via the mismatch guard in mount().
+// Must equal the row height in diff.css. The virtualizer computes positions from it rather
+// than measuring, so a mismatch shows as rows drifting out of the viewport while scrolling.
 const ROW_HEIGHT = 20;
-
-// OVERSCAN is how many rows above and below the viewport are rendered anyway, so a fast scroll
-// does not show blank space while the next frame computes. Three screens' worth is generous;
-// the cost is bounded and constant.
+// Rows rendered beyond the viewport so a fast scroll never shows blank space. Bounded and
+// constant, unlike the diff.
 const OVERSCAN = 24;
 
-// The same key the dashboard and notes remember their daemon under, so opening Review after
-// connecting elsewhere resumes the same loopback host.
 const daemonCell = persisted<string | null>("dashboard-daemon", null);
 const modeCell = persisted<ViewMode>("diff-view-mode", "unified");
 
-interface Refs {
-  root: HTMLElement;
-  sidebar: HTMLElement;
-  scroll: HTMLElement;
-  spacer: HTMLElement;
-  window: HTMLElement;
-  empty: HTMLElement;
-  emptyTitle: HTMLElement;
-  emptyBody: HTMLElement;
-  toolbar: HTMLElement;
-  stats: HTMLElement;
-}
+type Phase = "loading" | "ready" | "empty";
 
 interface State {
+  changeset: OrderedChangeset;
   files: DiffFile[];
   rows: Row[];
   hunks: number[];
   fileRows: number[];
   mode: ViewMode;
-  // cursor is the row index `[` and `]` step from. Tracked separately from scrollTop so that
-  // repeated presses advance hunk by hunk rather than re-resolving from a position the smooth
-  // scroll has not finished animating to.
   cursor: number;
+  session: ReviewSession | null;
+  viewed: Set<string>;
+  // digestByRow maps a hunk row index to its content digest, computed once per rebuild so a
+  // keypress never awaits a hash.
+  digestByRow: Map<number, string>;
+  showGenerated: boolean;
+  overview: boolean;
+  phase: Phase;
 }
 
-// label builds a PF Label. Text goes through textContent by construction (h sets text, never
-// innerHTML), which is what keeps a path or a diff line from being trusted markup - a patch is
-// attacker-influenced input whenever it came from a branch someone else wrote.
-function label(text: string, modifier?: string, title?: string): HTMLElement {
-  const el = h("span", "pf-v6-c-label" + (modifier ? " " + modifier : ""));
-  el.append(h("span", "pf-v6-c-label__content", text));
-  if (title) el.title = title;
-  return el;
-}
-
-// STATUS_COPY maps a file status to its sidebar label and colour. A rename is blue rather than
-// green or red: nothing was added or removed, and colouring it either way misreports it.
-// Keyed by FileStatus rather than by string, so every status is covered by construction and
-// the lookup needs no fallback - a new status becomes a compile error here instead of
-// silently rendering as "modified".
 const STATUS_COPY: Record<FileStatus, { short: string; modifier: string }> = {
   added: { short: "A", modifier: "pf-m-green" },
   deleted: { short: "D", modifier: "pf-m-red" },
@@ -95,167 +86,175 @@ const STATUS_COPY: Record<FileStatus, { short: string; modifier: string }> = {
   copied: { short: "C", modifier: "pf-m-blue" },
 };
 
-function buildScaffold(host: HTMLElement): Refs {
-  const root = h("div", "console-diff-layout");
+const TONE_CLASS: Record<string, string> = {
+  neutral: "",
+  info: "pf-m-blue",
+  ok: "pf-m-green",
+  warn: "pf-m-orange",
+  danger: "pf-m-red",
+};
 
-  // Sidebar: the file list, in patch order. Order matters - it is the same order the stream
-  // scrolls in, so the sidebar doubles as a map rather than being a second sorted index.
-  const sidebar = h("nav", "console-diff-sidebar");
-  sidebar.setAttribute("aria-label", "Changed files");
-
-  const main = h("div", "console-diff-main");
-
-  const toolbar = h("div", "pf-v6-c-toolbar console-diff-toolbar");
-  const toolbarContent = h("div", "pf-v6-c-toolbar__content");
-  const toolbarItem = h("div", "pf-v6-c-toolbar__content-section");
-  const stats = h("div", "console-diff-toolbar__stats");
-  toolbarItem.append(stats);
-  toolbarContent.append(toolbarItem);
-  toolbar.append(toolbarContent);
-
-  const scroll = h("div", "console-diff-scroll");
-  scroll.tabIndex = 0; // focusable so [ and ] reach it without a document-wide listener
-  const spacer = h("div", "console-diff-spacer");
-  const windowEl = h("div", "console-diff-window");
-  spacer.append(windowEl);
-  scroll.append(spacer);
-
-  const empty = h("div", "pf-v6-c-empty-state console-diff-empty");
-  const emptyContent = h("div", "pf-v6-c-empty-state__content");
-  const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text", "No daemon connected");
-  const emptyBodyWrap = h("div", "pf-v6-c-empty-state__body");
-  const emptyBody = h("p");
-  emptyBody.textContent = "Review shows what you have changed but not yet committed.";
-  emptyBodyWrap.append(emptyBody);
-  emptyContent.append(emptyTitle, emptyBodyWrap);
-  empty.append(emptyContent);
-
-  main.append(toolbar, scroll, empty);
-  root.append(sidebar, main);
-  host.append(root);
-  return {
-    root,
-    sidebar,
-    scroll,
-    spacer,
-    window: windowEl,
-    empty,
-    emptyTitle,
-    emptyBody,
-    toolbar,
-    stats,
-  };
-}
-
-// renderRow builds one row element. Called only for rows in (or near) the viewport, so its
-// cost is bounded by screen height rather than by diff size.
-function renderRow(row: Row): HTMLElement {
-  if (row.kind === "file") return renderFileRow(row.file);
-  if (row.kind === "hunk") {
-    const el = h("div", "console-diff-row console-diff-row--hunk");
-    el.append(h("span", "console-diff-row__text", row.hunk.header));
-    return el;
-  }
-  if (row.kind === "line") {
-    const el = h("div", "console-diff-row");
-    el.dataset.kind = row.line.kind;
-    el.append(
-      gutter(row.line.oldLine),
-      gutter(row.line.newLine),
-      h("span", "console-diff-row__marker", markerFor(row.line.kind)),
-      h("span", "console-diff-row__text", row.line.text),
-    );
-    return el;
-  }
-  // pair (split). The row carries its own shape, so the view mode never has to be consulted
-  // here - buildRows already decided which kind to emit.
-  const el = h("div", "console-diff-row console-diff-row--pair");
-  el.append(side(row.left, "left"), side(row.right, "right"));
+// label builds a PF Label. Text goes through textContent by construction (h sets text, never
+// innerHTML), which is what keeps a path, a diff line, or an agent's comment from being
+// trusted markup - all three are attacker-influenceable on a branch someone else wrote.
+function label(text: string, modifier?: string, title?: string): HTMLElement {
+  const el = h("span", `pf-v6-c-label${modifier ? ` ${modifier}` : ""}`);
+  el.append(h("span", "pf-v6-c-label__content", text));
+  if (title) el.title = title;
   return el;
 }
 
 function markerFor(kind: string): string {
-  if (kind === "add") return "+";
-  if (kind === "del") return "-";
-  return " ";
+  return kind === "add" ? "+" : kind === "del" ? "-" : " ";
 }
 
 function gutter(n: number | null): HTMLElement {
-  // A non-breaking space, not "", so an empty gutter still occupies its column: an empty text
-  // node collapses and the two gutters would shift width row to row.
-  const el = h("span", "console-diff-row__gutter", n === null ? " " : String(n));
-  return el;
-}
-
-// side renders one column of a split row. A null side is an empty CELL, not an absent one -
-// the two columns must stay aligned, so the placeholder carries the same structure.
-function side(
-  line: { kind: string; text: string; oldLine: number | null; newLine: number | null } | null,
-  which: "left" | "right",
-): HTMLElement {
-  const cell = h("div", "console-diff-row__side");
-  cell.dataset.side = which;
-  if (!line) {
-    cell.dataset.kind = "empty";
-    cell.append(gutter(null), h("span", "console-diff-row__text", " "));
-    return cell;
-  }
-  cell.dataset.kind = line.kind;
-  cell.append(
-    gutter(which === "left" ? line.oldLine : line.newLine),
-    h("span", "console-diff-row__marker", markerFor(line.kind)),
-    h("span", "console-diff-row__text", line.text || " "),
-  );
-  return cell;
-}
-
-function renderFileRow(file: DiffFile): HTMLElement {
-  const el = h("div", "console-diff-row console-diff-row--file");
-  const status = STATUS_COPY[file.status];
-  el.append(label(status.short, status.modifier, file.status));
-
-  const name = h("span", "console-diff-row__path");
-  // A rename shows both names: "what is this file now" and "what was it" are different
-  // questions and a reader looking for the old path must not have to guess.
-  name.textContent =
-    file.status === "renamed" || file.status === "copied"
-      ? file.oldPath + " -> " + file.path
-      : file.path;
-  el.append(name);
-
-  if (file.binary) el.append(label("binary", "pf-m-grey", "No text diff to show"));
-  if (!file.binary && file.oldMode && file.newMode && file.oldMode !== file.newMode) {
-    el.append(label(file.oldMode + " -> " + file.newMode, "pf-m-orange", "Mode changed"));
-  }
-  if (file.additions > 0) el.append(label("+" + file.additions, "pf-m-green"));
-  if (file.deletions > 0) el.append(label("-" + file.deletions, "pf-m-red"));
-  return el;
+  // A non-breaking space, not "": an empty text node collapses and the gutters would shift
+  // width row to row.
+  return h("span", "console-diff-row__gutter", n === null ? " " : String(n));
 }
 
 export function activate(host: HTMLElement): () => void {
-  const refs = buildScaffold(host);
+  const controller = new AbortController();
+  let disposed = false;
+
   const state: State = {
+    changeset: { primary: [], generated: [] },
     files: [],
     rows: [],
     hunks: [],
     fileRows: [],
     mode: modeCell.get() ?? "unified",
     cursor: -1,
+    session: null,
+    viewed: new Set(),
+    digestByRow: new Map(),
+    showGenerated: false,
+    overview: false,
+    phase: "loading",
   };
 
-  let disposed = false;
-  const controller = new AbortController();
+  // --- scaffold -------------------------------------------------------------
+  const root = h("div", "console-diff-layout");
+  const sidebar = h("nav", "console-diff-sidebar");
+  sidebar.setAttribute("aria-label", "Changed files");
 
-  // paint renders exactly the rows intersecting the viewport (plus OVERSCAN). It is the hot
-  // path: called on every scroll frame, so it allocates one fragment and does no measurement.
+  const main = h("div", "console-diff-main");
+  const toolbar = h("div", "console-diff-toolbar");
+  const statsEl = h("div", "console-diff-toolbar__stats");
+  toolbar.append(statsEl);
+
+  const rail = h("div", "console-diff-rail");
+  rail.setAttribute("aria-label", "Agent suggestions");
+
+  const scroll = h("div", "console-diff-scroll");
+  scroll.tabIndex = 0;
+  const spacer = h("div", "console-diff-spacer");
+  const windowEl = h("div", "console-diff-window");
+  spacer.append(windowEl);
+  scroll.append(spacer);
+
+  const overview = h("div", "console-diff-overview");
+  const empty = h("div", "pf-v6-c-empty-state console-diff-empty");
+  const emptyContent = h("div", "pf-v6-c-empty-state__content");
+  const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text", "Loading");
+  const emptyBodyWrap = h("div", "pf-v6-c-empty-state__body");
+  const emptyBody = h("p", undefined, "Reading the working tree.");
+  emptyBodyWrap.append(emptyBody);
+  emptyContent.append(emptyTitle, emptyBodyWrap);
+  empty.append(emptyContent);
+
+  main.append(toolbar, rail, scroll, overview, empty);
+  root.append(sidebar, main);
+  host.append(root);
+  root.dataset.phase = "loading";
+
+  // --- rendering ------------------------------------------------------------
+
+  const annotationFor = (path: string): ReviewFile | undefined => {
+    for (const o of state.changeset.primary) if (o.file.path === path) return o.annotation;
+    for (const o of state.changeset.generated) if (o.file.path === path) return o.annotation;
+    return undefined;
+  };
+
+  const renderFileRow = (file: DiffFile): HTMLElement => {
+    const el = h("div", "console-diff-row console-diff-row--file");
+    const st = STATUS_COPY[file.status];
+    el.append(label(st.short, st.modifier, file.status));
+
+    const name = h("span", "console-diff-row__path");
+    name.textContent =
+      file.status === "renamed" || file.status === "copied"
+        ? `${file.oldPath} -> ${file.path}`
+        : file.path;
+    el.append(name);
+
+    if (file.binary) el.append(label("binary", "pf-m-grey", "No text diff to show"));
+    if (file.additions > 0) el.append(label(`+${file.additions}`, "pf-m-green"));
+    if (file.deletions > 0) el.append(label(`-${file.deletions}`, "pf-m-red"));
+
+    // The blast rail: what the workspace knows about this file. Evidence, not verdicts.
+    for (const c of riskChips(annotationFor(file.path))) {
+      el.append(label(c.text, TONE_CLASS[c.tone], c.title));
+    }
+    return el;
+  };
+
+  const renderRow = (row: Row, index: number): HTMLElement => {
+    if (row.kind === "file") return renderFileRow(row.file);
+    if (row.kind === "hunk") {
+      const el = h("div", "console-diff-row console-diff-row--hunk");
+      const digest = state.digestByRow.get(index);
+      if (digest && state.viewed.has(digest)) el.dataset.viewed = "";
+      el.append(h("span", "console-diff-row__text", row.hunk.header));
+      if (digest && state.viewed.has(digest))
+        el.append(label("read", "pf-m-green", "Marked read - press v to unmark"));
+      return el;
+    }
+    if (row.kind === "line") {
+      const el = h("div", "console-diff-row");
+      el.dataset.kind = row.line.kind;
+      el.append(
+        gutter(row.line.oldLine),
+        gutter(row.line.newLine),
+        h("span", "console-diff-row__marker", markerFor(row.line.kind)),
+        h("span", "console-diff-row__text", row.line.text),
+      );
+      return el;
+    }
+    const el = h("div", "console-diff-row console-diff-row--pair");
+    el.append(side(row.left, "left"), side(row.right, "right"));
+    return el;
+  };
+
+  const side = (
+    line: { kind: string; text: string; oldLine: number | null; newLine: number | null } | null,
+    which: "left" | "right",
+  ): HTMLElement => {
+    const cell = h("div", "console-diff-row__side");
+    cell.dataset.side = which;
+    if (!line) {
+      cell.dataset.kind = "empty";
+      cell.append(gutter(null), h("span", "console-diff-row__text", " "));
+      return cell;
+    }
+    cell.dataset.kind = line.kind;
+    cell.append(
+      gutter(which === "left" ? line.oldLine : line.newLine),
+      h("span", "console-diff-row__marker", markerFor(line.kind)),
+      h("span", "console-diff-row__text", line.text || " "),
+    );
+    return cell;
+  };
+
   const paint = (): void => {
     const total = state.rows.length;
     if (total === 0) {
-      refs.window.replaceChildren();
+      windowEl.replaceChildren();
       return;
     }
-    const top = refs.scroll.scrollTop;
-    const height = refs.scroll.clientHeight || 1;
+    const top = scroll.scrollTop;
+    const height = scroll.clientHeight || 1;
     const first = Math.max(0, Math.floor(top / ROW_HEIGHT) - OVERSCAN);
     const last = Math.min(total, Math.ceil((top + height) / ROW_HEIGHT) + OVERSCAN);
 
@@ -263,172 +262,559 @@ export function activate(host: HTMLElement): () => void {
     for (let i = first; i < last; i++) {
       const row = state.rows[i];
       if (!row) continue;
-      const el = renderRow(row);
+      const el = renderRow(row, i);
       el.dataset.row = String(i);
+      if (i === state.cursor) el.dataset.cursor = "";
       frag.append(el);
     }
-    // The window is absolutely positioned inside the spacer and translated to the first
-    // rendered row, so the browser scrolls the full height while the DOM holds one screen.
-    refs.window.style.transform = "translateY(" + first * ROW_HEIGHT + "px)";
-    refs.window.replaceChildren(frag);
+    windowEl.style.transform = `translateY(${first * ROW_HEIGHT}px)`;
+    windowEl.replaceChildren(frag);
   };
 
   let ticking = false;
-  const onScroll = (): void => {
-    if (ticking) return;
-    ticking = true;
-    requestAnimationFrame(() => {
-      ticking = false;
-      if (!disposed) paint();
+  scroll.addEventListener(
+    "scroll",
+    () => {
+      if (ticking) return;
+      ticking = true;
+      requestAnimationFrame(() => {
+        ticking = false;
+        if (!disposed) paint();
+      });
+    },
+    { passive: true, signal: controller.signal },
+  );
+
+  // --- session sync ---------------------------------------------------------
+
+  // host_ resolves which daemon to read.
+  //
+  // adoptDaemonOrigin() is called HERE, not left to the shell, and the reason is easy to miss:
+  // each surface is its own bundle, so lib/daemon's module-level "did we adopt this origin"
+  // flag is per-bundle state. The shell adopting it does not make it true in here. Without
+  // this call the surface falls back to whatever host the dashboard happened to persist, so
+  // Review would report "no daemon connected" on a console served BY that very daemon until
+  // the reader had visited the dashboard first.
+  const host_ = (): string | null => {
+    adoptDaemonOrigin();
+    return resolveDaemonHost(parseHash()) ?? daemonCell.get();
+  };
+
+  const sync = (op: Parameters<typeof mutate>[1]): void => {
+    const hp = host_();
+    if (!hp) return;
+    void mutate(hp, op, controller.signal).then((s) => {
+      if (!disposed && s) applySession(s);
     });
   };
-  refs.scroll.addEventListener("scroll", onScroll, { passive: true, signal: controller.signal });
 
-  const scrollToRow = (i: number): void => {
-    state.cursor = i;
-    refs.scroll.scrollTo({ top: i * ROW_HEIGHT, behavior: "smooth" });
+  const applySession = (s: ReviewSession): void => {
+    state.session = s;
+    state.viewed = new Set(s.viewed ?? []);
+    renderRail();
+    renderToolbar();
   };
 
-  // rebuild recomputes the row model for the current mode and repaints from the top.
-  const rebuild = (): void => {
+  // --- model rebuild --------------------------------------------------------
+
+  const rebuild = async (): Promise<void> => {
+    state.files = visibleFiles(state.changeset, state.showGenerated);
     state.rows = buildRows(state.files, state.mode);
     state.hunks = hunkRowIndexes(state.rows);
     state.fileRows = fileRowIndexes(state.rows);
-    refs.spacer.style.height = state.rows.length * ROW_HEIGHT + "px";
+    spacer.style.height = `${state.rows.length * ROW_HEIGHT}px`;
+
+    // Digest every hunk once, here, so `v` never awaits a hash mid-keypress.
+    const digests = new Map<number, string>();
+    await Promise.all(
+      state.hunks.map(async (i) => {
+        const row = state.rows[i];
+        if (row?.kind !== "hunk") return;
+        const body = row.hunk.lines.map((l) =>
+          l.kind === "meta" ? `\\${l.text}` : `${markerFor(l.kind)}${l.text}`,
+        );
+        digests.set(i, await hunkDigest(row.file.path, body));
+      }),
+    );
+    if (disposed) return;
+    state.digestByRow = digests;
     paint();
+    renderSidebar();
+    renderToolbar();
   };
 
-  const onKey = (e: KeyboardEvent): void => {
-    if (e.metaKey || e.ctrlKey || e.altKey) return;
-    // The cursor is resolved from scroll position only when it has not been set, so repeated
-    // presses step rather than re-anchoring to wherever a smooth scroll currently is.
-    const from = state.cursor >= 0 ? state.cursor : Math.floor(refs.scroll.scrollTop / ROW_HEIGHT);
-    if (e.key === "]") {
-      const i = nextIndexAfter(state.hunks, from);
-      if (i !== null) scrollToRow(i);
-      e.preventDefault();
-      return;
-    }
-    if (e.key === "[") {
-      const i = prevIndexBefore(state.hunks, from);
-      if (i !== null) scrollToRow(i);
-      e.preventDefault();
-      return;
-    }
-    // 1 unified, 2 split, 0 toggle - the same vocabulary hunk uses, so muscle memory carries.
-    if (e.key === "1" || e.key === "2" || e.key === "0") {
-      const next: ViewMode =
-        e.key === "1"
-          ? "unified"
-          : e.key === "2"
-            ? "split"
-            : state.mode === "split"
-              ? "unified"
-              : "split";
-      if (next !== state.mode) {
-        state.mode = next;
-        modeCell.set(next);
-        rebuild();
-        renderToolbar();
-      }
-      e.preventDefault();
-    }
-  };
-  refs.scroll.addEventListener("keydown", onKey, { signal: controller.signal });
+  // --- chrome ---------------------------------------------------------------
 
   const renderToolbar = (): void => {
-    const adds = state.files.reduce((n, f) => n + f.additions, 0);
-    const dels = state.files.reduce((n, f) => n + f.deletions, 0);
-    refs.stats.replaceChildren(
-      label(state.files.length + (state.files.length === 1 ? " file" : " files")),
-      label("+" + adds, "pf-m-green"),
-      label("-" + dels, "pf-m-red"),
+    const s = stats(state.changeset);
+    const chips: HTMLElement[] = [
+      label(
+        `${s.files} ${s.files === 1 ? "file" : "files"}`,
+        undefined,
+        "Files worth reading; generated output is excluded",
+      ),
+      label(`+${s.additions}`, "pf-m-green"),
+      label(`-${s.deletions}`, "pf-m-red"),
+    ];
+    if (s.generated > 0) {
+      const g = h("button", "console-diff-toolbar__fold");
+      g.type = "button";
+      g.textContent = state.showGenerated
+        ? `hide ${s.generated} generated`
+        : `${s.generated} generated folded`;
+      g.title =
+        "Declared target outputs. Reviewing their diff is reading a machine's restatement of a change made elsewhere - read the source change instead. Press . to toggle.";
+      g.addEventListener("click", () => void toggleGenerated());
+      chips.push(g);
+    }
+    if (s.publicSurface > 0) {
+      chips.push(
+        label(
+          `${s.publicSurface} public surface`,
+          "pf-m-orange",
+          "Files whose changed symbols are reachable outside their project or module",
+        ),
+      );
+    }
+    if (s.untested > 0) {
+      chips.push(
+        label(
+          `${s.untested} untested`,
+          "pf-m-red",
+          "Files with measured zero coverage (files nobody measured are not counted)",
+        ),
+      );
+    }
+    const read = state.hunks.filter((i) => {
+      const d = state.digestByRow.get(i);
+      return d && state.viewed.has(d);
+    }).length;
+    chips.push(
+      label(
+        `${read}/${state.hunks.length} hunks read`,
+        read === state.hunks.length && read > 0 ? "pf-m-green" : undefined,
+        "Marks are keyed to hunk CONTENT, so they survive a rebase that did not touch the hunk",
+      ),
+    );
+    chips.push(
       label(
         state.mode === "split" ? "split" : "unified",
         "pf-m-blue",
         "1 unified, 2 split, 0 toggle",
       ),
-      label(
-        state.hunks.length + (state.hunks.length === 1 ? " hunk" : " hunks"),
-        undefined,
-        "[ and ] step between hunks",
-      ),
     );
+    statsEl.replaceChildren(...chips);
   };
 
   const renderSidebar = (): void => {
     const frag = document.createDocumentFragment();
-    state.files.forEach((f, i) => {
+    state.changeset.primary.forEach((o, i) => {
       const item = h("button", "console-diff-sidebar__item");
       item.type = "button";
-      const status = STATUS_COPY[f.status];
-      item.append(label(status.short, status.modifier, f.status));
+      const st = STATUS_COPY[o.file.status];
+      item.append(label(st.short, st.modifier, o.file.status));
       const name = h("span", "console-diff-sidebar__path");
-      name.textContent = f.path;
-      name.title = f.path;
+      name.textContent = o.file.path;
+      name.title = o.annotation?.hint ?? o.file.path;
       item.append(name);
-      const counts = h("span", "console-diff-sidebar__counts");
-      counts.textContent =
-        (f.additions ? "+" + f.additions : "") + (f.deletions ? " -" + f.deletions : "");
-      item.append(counts);
+      if (o.annotation?.surface === "public") item.dataset.surface = "public";
+      if (o.annotation?.reach) {
+        const r = h("span", "console-diff-sidebar__counts");
+        r.textContent = String(o.annotation.reach);
+        r.title = `${o.annotation.reach} files reference the widest changed symbol here`;
+        item.append(r);
+      }
       item.addEventListener("click", () => {
         const row = state.fileRows[i];
         if (row !== undefined) scrollToRow(row);
-        refs.scroll.focus();
+        scroll.focus();
       });
       frag.append(item);
     });
-    refs.sidebar.replaceChildren(frag);
+    if (state.changeset.generated.length > 0) {
+      const g = h("button", "console-diff-sidebar__group");
+      g.type = "button";
+      g.textContent = `${state.changeset.generated.length} generated`;
+      g.title = "Declared target outputs, folded. Press . to expand.";
+      g.addEventListener("click", () => void toggleGenerated());
+      frag.append(g);
+    }
+    sidebar.replaceChildren(frag);
   };
 
+  // The suggestion rail: an agent asking for attention. It renders as a peripheral affordance
+  // the reader accepts with one key and NEVER as a scroll - see types.ReviewSuggestion.
+  const renderRail = (): void => {
+    const pending = (state.session?.suggestions ?? []).filter((s) => !s.accepted && !s.declined);
+    if (pending.length === 0) {
+      rail.replaceChildren();
+      rail.dataset.empty = "";
+      return;
+    }
+    delete rail.dataset.empty;
+    const frag = document.createDocumentFragment();
+    for (const s of pending) {
+      const item = h("div", "console-diff-rail__item");
+      const who = h("span", "console-diff-rail__who");
+      who.textContent = s.agent_name || "agent";
+      const what = h("span", "console-diff-rail__what");
+      what.textContent = `${s.path}${s.hunk >= 0 ? `:${s.hunk}` : ""} - ${s.reason}`;
+      const go = h("button", "console-diff-rail__go");
+      go.type = "button";
+      go.textContent = "go [g]";
+      go.addEventListener("click", () => acceptSuggestion(s.id));
+      const skip = h("button", "console-diff-rail__skip");
+      skip.type = "button";
+      skip.textContent = "skip [x]";
+      skip.addEventListener("click", () => sync({ op: "answer", id: s.id, on: false }));
+      item.append(who, what, go, skip);
+      frag.append(item);
+    }
+    rail.replaceChildren(frag);
+  };
+
+  const renderOverview = (): void => {
+    const s = stats(state.changeset);
+    const box = h("div", "console-diff-overview__box");
+    box.append(h("h2", "console-diff-overview__title", "This changeset"));
+
+    const line = (k: string, v: string, title?: string): HTMLElement => {
+      const r = h("div", "console-diff-overview__row");
+      const kk = h("span", "console-diff-overview__k", k);
+      const vv = h("span", "console-diff-overview__v", v);
+      if (title) r.title = title;
+      r.append(kk, vv);
+      return r;
+    };
+    box.append(line("to read", `${s.files} files, +${s.additions} -${s.deletions}`));
+    if (s.generated > 0)
+      box.append(line("folded away", `${s.generated} generated`, "Declared target outputs"));
+    if (s.publicSurface > 0)
+      box.append(
+        line(
+          "public surface",
+          `${s.publicSurface} files`,
+          "Changed symbols reachable outside their project or module",
+        ),
+      );
+    if (s.untested > 0) box.append(line("measured untested", `${s.untested} files`));
+    const seeds = state.session?.review?.seed_projects ?? [];
+    const affected = state.session?.review?.affected_projects ?? [];
+    if (affected.length > 0) {
+      box.append(
+        line(
+          "projects",
+          `${seeds.length} edited, ${affected.length} rebuild`,
+          "The gap is downstream: projects that rebuild because they sit below one you edited",
+        ),
+      );
+    }
+    for (const n of state.session?.review?.notes ?? []) {
+      const note = h("p", "console-diff-overview__note");
+      note.textContent = n;
+      box.append(note);
+    }
+    const top = state.changeset.primary.slice(0, 5);
+    if (top.length > 0) {
+      box.append(h("h3", "console-diff-overview__subtitle", "Read these first"));
+      for (const o of top) {
+        const r = h("button", "console-diff-overview__file");
+        r.type = "button";
+        r.textContent = o.file.path;
+        r.addEventListener("click", () => {
+          state.overview = false;
+          root.dataset.overview = "off";
+          const i = state.changeset.primary.indexOf(o);
+          const row = state.fileRows[i];
+          if (row !== undefined) scrollToRow(row);
+          scroll.focus();
+        });
+        box.append(r);
+      }
+    }
+    box.append(
+      h(
+        "p",
+        "console-diff-overview__hint",
+        "Esc returns to the diff. ] and [ step hunks, } and { step files, v marks read, . folds generated.",
+      ),
+    );
+    overview.replaceChildren(box);
+  };
+
+  // --- actions --------------------------------------------------------------
+
+  const scrollToRow = (i: number): void => {
+    state.cursor = i;
+    scroll.scrollTo({ top: i * ROW_HEIGHT, behavior: "smooth" });
+    const row = state.rows[i];
+    if (row && row.kind !== "file") {
+      const path = row.kind === "hunk" ? row.hunk : null;
+      void path;
+    }
+    // Tell the session where the reader is, so an agent can be useful about it.
+    const f = state.rows[i];
+    if (f) {
+      const path = "file" in f ? f.file.path : "";
+      if (path) sync({ op: "cursor", path, hunk: hunkIndexWithinFile(i) });
+    }
+    paint();
+  };
+
+  // hunkIndexWithinFile converts a row index to the hunk's position inside its own file, which
+  // is what the session and an agent speak in - a global row index would change meaning the
+  // moment the generated group folded.
+  const hunkIndexWithinFile = (rowIndex: number): number => {
+    let n = -1;
+    for (let i = 0; i <= rowIndex; i++) {
+      const r = state.rows[i];
+      if (!r) continue;
+      if (r.kind === "file") n = -1;
+      else if (r.kind === "hunk") n++;
+    }
+    return n;
+  };
+
+  const step = (dir: 1 | -1, marks: number[]): void => {
+    const from = state.cursor >= 0 ? state.cursor : Math.floor(scroll.scrollTop / ROW_HEIGHT);
+    const i = dir === 1 ? nextIndexAfter(marks, from) : prevIndexBefore(marks, from);
+    if (i !== null) scrollToRow(i);
+  };
+
+  // toggleViewed marks the hunk the cursor is in. It is the READER's claim, which is why no
+  // agent surface can make it.
+  const toggleViewed = (): void => {
+    const i = currentHunkRow();
+    if (i === null) return;
+    const digest = state.digestByRow.get(i);
+    if (!digest) return;
+    const on = !state.viewed.has(digest);
+    if (on) state.viewed.add(digest);
+    else state.viewed.delete(digest);
+    paint();
+    renderToolbar();
+    sync({ op: "viewed", digest, on });
+  };
+
+  const currentHunkRow = (): number | null => {
+    const from = state.cursor >= 0 ? state.cursor : Math.floor(scroll.scrollTop / ROW_HEIGHT);
+    let best: number | null = null;
+    for (const i of state.hunks) {
+      if (i <= from) best = i;
+      else break;
+    }
+    return best ?? state.hunks[0] ?? null;
+  };
+
+  const acceptSuggestion = (id?: string): void => {
+    const pending = (state.session?.suggestions ?? []).filter((s) => !s.accepted && !s.declined);
+    const target = id ? pending.find((s) => s.id === id) : pending[0];
+    if (!target) return;
+    // Accepting is the ONLY path from an agent's suggestion to the reader's viewport.
+    sync({ op: "answer", id: target.id, on: true });
+    const idx = state.changeset.primary.findIndex((o) => o.file.path === target.path);
+    if (idx >= 0) {
+      const row = state.fileRows[idx];
+      if (row !== undefined) scrollToRow(row);
+    }
+    scroll.focus();
+  };
+
+  const toggleGenerated = async (): Promise<void> => {
+    state.showGenerated = !state.showGenerated;
+    await rebuild();
+  };
+
+  const setMode = async (m: ViewMode): Promise<void> => {
+    if (m === state.mode) return;
+    state.mode = m;
+    modeCell.set(m);
+    await rebuild();
+  };
+
+  const toggleOverview = (): void => {
+    state.overview = !state.overview;
+    root.dataset.overview = state.overview ? "on" : "off";
+    if (state.overview) renderOverview();
+    else scroll.focus();
+  };
+
+  // --- commands -------------------------------------------------------------
+  // Registered so every action appears in the command bar and the Actions surface and can be
+  // rebound, which a private keydown table would not give. The single-letter keys stay bound
+  // on the scroll container below rather than as global chords: a bare "v" must not fire
+  // while someone is typing in another surface.
+  const COMMANDS: { id: string; label: string; run: () => void; key?: string }[] = [
+    {
+      id: "review.hunk.next",
+      label: "Review: next hunk",
+      run: () => step(1, state.hunks),
+      key: "]",
+    },
+    {
+      id: "review.hunk.prev",
+      label: "Review: previous hunk",
+      run: () => step(-1, state.hunks),
+      key: "[",
+    },
+    {
+      id: "review.file.next",
+      label: "Review: next file",
+      run: () => step(1, state.fileRows),
+      key: "}",
+    },
+    {
+      id: "review.file.prev",
+      label: "Review: previous file",
+      run: () => step(-1, state.fileRows),
+      key: "{",
+    },
+    { id: "review.viewed.toggle", label: "Review: mark hunk read", run: toggleViewed, key: "v" },
+    {
+      id: "review.generated.toggle",
+      label: "Review: fold or unfold generated files",
+      run: () => void toggleGenerated(),
+      key: ".",
+    },
+    {
+      id: "review.view.unified",
+      label: "Review: unified view",
+      run: () => void setMode("unified"),
+      key: "1",
+    },
+    {
+      id: "review.view.split",
+      label: "Review: split view",
+      run: () => void setMode("split"),
+      key: "2",
+    },
+    {
+      id: "review.view.toggle",
+      label: "Review: toggle split and unified",
+      run: () => void setMode(state.mode === "split" ? "unified" : "split"),
+      key: "0",
+    },
+    {
+      id: "review.suggestion.accept",
+      label: "Review: go to the agent's suggestion",
+      run: () => acceptSuggestion(),
+      key: "g",
+    },
+    {
+      id: "review.suggestion.skip",
+      label: "Review: skip the agent's suggestion",
+      run: () => {
+        const p = (state.session?.suggestions ?? []).find((s) => !s.accepted && !s.declined);
+        if (p) sync({ op: "answer", id: p.id, on: false });
+      },
+      key: "x",
+    },
+    {
+      id: "review.overview",
+      label: "Review: changeset overview",
+      run: toggleOverview,
+      key: "Escape",
+    },
+  ];
+  for (const c of COMMANDS)
+    registerCommand({ id: c.id, label: c.label, group: "Review", run: c.run });
+
+  const byKey = new Map(COMMANDS.filter((c) => c.key).map((c) => [c.key as string, c.run]));
+  scroll.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.metaKey || e.ctrlKey || e.altKey) return;
+      const run = byKey.get(e.key);
+      if (!run) return;
+      e.preventDefault();
+      run();
+    },
+    { signal: controller.signal },
+  );
+  // Esc has to work from the overview too, where the scroll container is not focused.
+  //
+  // The defaultPrevented guard is load-bearing, not defensive. root is an ANCESTOR of the
+  // scroll container, so an Esc pressed while reading fires the handler above, opens the
+  // overview, then BUBBLES here - where the overview is now open, so this would close it
+  // again and Esc would appear to do nothing at all. Skipping an event the inner handler
+  // already claimed leaves this one covering only the case it exists for: Esc pressed while
+  // the overview has focus, where the inner handler never runs.
+  root.addEventListener(
+    "keydown",
+    (e) => {
+      if (e.defaultPrevented) return;
+      if (e.key === "Escape" && state.overview) {
+        e.preventDefault();
+        toggleOverview();
+      }
+    },
+    { signal: controller.signal },
+  );
+
+  // --- load -----------------------------------------------------------------
+
   const showEmpty = (title: string, body: string): void => {
-    refs.emptyTitle.textContent = title;
-    refs.emptyBody.textContent = body;
-    refs.root.dataset.empty = "";
+    state.phase = "empty";
+    root.dataset.phase = "empty";
+    emptyTitle.textContent = title;
+    emptyBody.textContent = body;
   };
 
   const load = async (): Promise<void> => {
-    const host = resolveDaemonHost(parseHash()) ?? daemonCell.get();
-    if (!host) {
+    const hp = host_();
+    if (!hp) {
       showEmpty(
         "No daemon connected",
         "Review reads the working tree through a local daemon. Start one with `magus server start`.",
       );
       return;
     }
+    let patch: string;
     try {
-      const res = await fetch("http://" + host + "/api/v1/diff", {
-        headers: authHeaders(),
-        signal: controller.signal,
-      });
-      if (!res.ok) {
-        showEmpty(
-          res.status === 503 ? "No workspace" : "Could not read the diff",
-          res.status === 503
-            ? "The daemon is running but has not opened a workspace yet."
-            : "The daemon answered " + res.status + ".",
-        );
-        return;
-      }
-      const body = (await res.json()) as { patch: string; clean: boolean };
-      if (body.clean) {
-        // A clean tree is a STATE worth naming, not an error and not an empty list.
+      const res = await fetchPatch(hp, controller.signal);
+      if (res.clean) {
         showEmpty("Nothing to review", "The working tree is clean - every change is committed.");
         return;
       }
-      state.files = parsePatch(body.patch);
-      if (state.files.length === 0) {
-        showEmpty("Nothing to review", "The daemon returned a patch this reader could not parse.");
-        return;
-      }
-      delete refs.root.dataset.empty;
-      rebuild();
-      renderSidebar();
-      renderToolbar();
-      refs.scroll.focus();
+      patch = res.patch;
     } catch (e) {
       if (disposed) return;
-      showEmpty("Could not reach the daemon", String(e));
+      const status = e instanceof HttpError ? e.status : 0;
+      showEmpty(
+        status === 503 ? "No workspace" : "Could not read the diff",
+        status === 503 ? "The daemon is running but has not opened a workspace yet." : String(e),
+      );
+      return;
+    }
+
+    const parsed = parsePatch(patch);
+    if (parsed.length === 0) {
+      showEmpty("Nothing to review", "The daemon returned a patch this reader could not parse.");
+      return;
+    }
+
+    // PHASE ONE: paint the patch. No annotations yet, so this is a plain (fast) diff.
+    state.changeset = order(parsed, null);
+    state.phase = "ready";
+    root.dataset.phase = "ready";
+    root.dataset.overview = "off";
+    await rebuild();
+    scroll.focus();
+
+    // PHASE TWO: annotate and attach the session. Failure here leaves a working diff viewer
+    // rather than an error - the annotations are the differentiator, not the product.
+    try {
+      const sess = await fetchSession(
+        hp,
+        parsed.map((f) => f.path),
+        controller.signal,
+      );
+      if (disposed) return;
+      applySession(sess);
+      state.changeset = order(parsed, sess);
+      await rebuild();
+    } catch {
+      // Leave the un-annotated view standing.
     }
   };
 
@@ -437,6 +823,7 @@ export function activate(host: HTMLElement): () => void {
   return () => {
     disposed = true;
     controller.abort();
+    for (const c of COMMANDS) unregisterCommand(c.id);
     host.replaceChildren();
   };
 }

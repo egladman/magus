@@ -19,22 +19,6 @@
   overflow: hidden;
 }
 
-/* The empty state replaces the stream rather than sitting beside it: a reader with nothing to
- * review has no use for an empty sidebar and an empty toolbar. */
-.console-diff-layout[data-empty] .console-diff-sidebar,
-.console-diff-layout[data-empty] .console-diff-toolbar,
-.console-diff-layout[data-empty] .console-diff-scroll {
-  display: none;
-}
-
-.console-diff-layout:not([data-empty]) .console-diff-empty {
-  display: none;
-}
-
-.console-diff-layout[data-empty] {
-  grid-template-columns: 1fr;
-}
-
 .console-diff-sidebar {
   overflow-y: auto;
   border-inline-end: 1px solid var(--pf-t--global--border--color--default);
@@ -218,12 +202,195 @@
   background: var(--pf-t--global--background--color--status--danger--default);
 }
 
-/* An absent side is a filled cell, not a gap: the two columns must stay aligned row for row. */
+/* An absent side is a filled cell, not a gap: the two columns must stay aligned row for row.
+ *
+ * Rendered as faint hatching rather than a solid fill. A solid block is the loudest thing on
+ * the screen in a diff with many one-sided runs, and it is marking the ABSENCE of code - the
+ * one thing in view that carries no information. It has to read as "nothing here" without
+ * competing with the lines that do. */
 .console-diff-row__side[data-kind="empty"] {
-  background: var(--pf-t--global--background--color--disabled--default);
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 5px,
+    var(--pf-t--global--border--color--subtle) 5px,
+    var(--pf-t--global--border--color--subtle) 6px
+  );
+  opacity: 0.35;
 }
 
 .console-diff-empty {
   place-self: center;
   padding: var(--pf-t--global--spacer--2xl);
+}
+
+/* Phase gating: the empty state REPLACES the review rather than sitting beside it, because a
+ * reader with nothing to review has no use for an empty sidebar and an empty toolbar. */
+.console-diff-layout[data-phase="ready"] .console-diff-empty {
+  display: none;
+}
+
+.console-diff-layout:not([data-phase="ready"]) .console-diff-sidebar,
+.console-diff-layout:not([data-phase="ready"]) .console-diff-toolbar,
+.console-diff-layout:not([data-phase="ready"]) .console-diff-rail,
+.console-diff-layout:not([data-phase="ready"]) .console-diff-scroll {
+  display: none;
+}
+
+.console-diff-layout:not([data-phase="ready"]) {
+  grid-template-columns: 1fr;
+}
+
+/* The suggestion rail. It sits ABOVE the stream and out of the reading column on purpose: an
+ * agent asking for attention is peripheral until the reader chooses to act, and a suggestion
+ * that interrupted the diff itself would be the viewport-yanking this design exists to avoid. */
+.console-diff-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--highlight--default);
+}
+
+.console-diff-rail[data-empty] {
+  display: none;
+}
+
+.console-diff-rail__item {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.console-diff-rail__who {
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  color: var(--console-accent);
+  white-space: nowrap;
+}
+
+.console-diff-rail__what {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-diff-rail__go,
+.console-diff-rail__skip {
+  border: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--primary--default);
+  color: inherit;
+  cursor: pointer;
+  padding: 0 var(--pf-t--global--spacer--xs);
+  font-size: var(--pf-t--global--font--size--xs);
+  white-space: nowrap;
+}
+
+.console-diff-toolbar__fold {
+  border: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--primary--default);
+  color: inherit;
+  cursor: pointer;
+  padding: 0 var(--pf-t--global--spacer--xs);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+/* A read hunk dims rather than hides: the reader marked it, they did not delete it, and a
+ * collapsed one would make the scroll geometry depend on progress. */
+.console-diff-row--hunk[data-viewed] {
+  opacity: 0.55;
+}
+
+.console-diff-row[data-cursor] {
+  box-shadow: inset 2px 0 0 var(--console-accent);
+}
+
+.console-diff-sidebar__item[data-surface="public"] .console-diff-sidebar__path {
+  text-decoration: underline;
+  text-decoration-color: var(--pf-t--global--icon--color--status--warning--default);
+  text-underline-offset: 2px;
+}
+
+.console-diff-sidebar__group {
+  margin-block-start: var(--pf-t--global--spacer--sm);
+  padding: 2px var(--pf-t--global--spacer--xs);
+  border: 1px dashed var(--pf-t--global--border--color--default);
+  background: none;
+  color: var(--pf-t--global--text--color--subtle);
+  cursor: pointer;
+  font-size: var(--pf-t--global--font--size--xs);
+  text-align: start;
+}
+
+/* The overview. Esc lands here: the whole changeset on one screen, so a reader can decide what
+ * to spend attention on before spending any. */
+.console-diff-overview {
+  display: none;
+  overflow: auto;
+  padding: var(--pf-t--global--spacer--lg);
+}
+
+.console-diff-layout[data-overview="on"] .console-diff-overview {
+  display: block;
+}
+
+.console-diff-layout[data-overview="on"] .console-diff-scroll,
+.console-diff-layout[data-overview="on"] .console-diff-rail {
+  display: none;
+}
+
+.console-diff-overview__box {
+  max-width: 60rem;
+}
+
+.console-diff-overview__title {
+  font-size: var(--pf-t--global--font--size--xl);
+  margin-block-end: var(--pf-t--global--spacer--md);
+}
+
+.console-diff-overview__subtitle {
+  font-size: var(--pf-t--global--font--size--md);
+  margin-block: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--xs);
+}
+
+.console-diff-overview__row {
+  display: flex;
+  gap: var(--pf-t--global--spacer--md);
+  padding-block: 2px;
+  border-block-end: 1px solid var(--pf-t--global--border--color--subtle);
+}
+
+.console-diff-overview__k {
+  flex: 0 0 12rem;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.console-diff-overview__v {
+  font-family: var(--pf-t--global--font--family--mono);
+}
+
+.console-diff-overview__file {
+  display: block;
+  width: 100%;
+  text-align: start;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px 0;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.console-diff-overview__file:hover {
+  color: var(--console-accent);
+}
+
+.console-diff-overview__note,
+.console-diff-overview__hint {
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--sm);
+  margin-block-start: var(--pf-t--global--spacer--sm);
 }
