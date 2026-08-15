@@ -82,19 +82,38 @@ against a real dirty worktree - the compile and the tests were both green.
   reported **4 reads against 272 writes and 1709 shell commands** - which corroborates the
   persona finding that the reading trail is effectively empty in practice. Worth chasing.
 
+## The agent half, fixed last (`e4952da9a`)
+
+Two defects the persona pass found, both invisible from the console:
+
+- **The session was stale by construction.** `Attach` had one production caller - the console's
+  HTTP handler - and `op=state` returned `Get()` verbatim. An agent joined a changeset frozen
+  at whenever a browser last fetched, and `persona-coding-agent` duly commented on a file with
+  no uncommitted changes in a tree the CLI reported clean. The session now carries `AsOf`, the
+  digest of the patch it was computed from, and `op=state` RECOMPUTES when the tree has moved,
+  reporting `recomputed: true`. Recompute rather than a staleness flag, because an agent cannot
+  see the tree and has no way to act on advice.
+- **`op=state` withheld the diff.** It now returns `patch` and `hunks` (per file, each hunk's
+  0-based index and content digest), so a comment can cite a coordinate instead of guessing
+  one, and `viewed` is finally joinable. `comment` and `suggest` now REFUSE a path not in the
+  change and a hunk index that does not exist.
+
+`internal/diff/patch.go` is the new Go patch parser. **Its digests are pinned against the
+console's TypeScript implementation by a literal computed in node** - see
+`TestHunkDigestMatchesTheConsoleImplementation`. If those two ever diverge, a hunk marked read
+in the browser goes invisible to the CLI and to an agent, silently and only for some hunks.
+
 ## NOT DONE
 
 Nothing here was started and then left half-built; these were simply not reached.
 
 ### Task 4 remainder
 
-- **Session `as_of`** (tree digest + timestamp). Nothing carries snapshot identity, so two
-  clients cannot detect that they disagree and "9 of 12 read" loses meaning when the
-  denominator moves.
-- **"What changed since you last looked."** The persisted viewed digests already hold the
-  input; this is the Gerrit "Diff Against" idea done cheaply.
+- **"What changed since you last looked."** The persisted viewed digests and the new `AsOf`
+  now hold everything this needs; it is the Gerrit "Diff Against" idea done cheaply.
 - **A projection parameter on the MCP ops.** Every op still returns the whole session. The
-  locals filter cut the bulk, but a `fields` parameter is still the right shape.
+  locals filter cut the bulk, but a `fields` parameter is still the right shape - and `patch`
+  now makes the payload bigger, so this matters more than it did.
 - **Gate mode** (exit code / threshold). The vibe-coder persona's point stands: this is a
   prioritizer, not a gate, and it did not stop a changeset whose tests did not compile.
 - **Knowledge-loss / bus-factor join.** The ownership lens exists and the diff never reads it.
