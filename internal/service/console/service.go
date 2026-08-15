@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -336,7 +337,37 @@ func (s *Service) Review(ctx context.Context, paths []string) (types.Review, err
 	if view, ierr := s.Insight(ctx); ierr == nil {
 		rev.AttachChurn(view.Hotspots.Files, view.Trend.Projects)
 	}
+	// The agent trail: which sessions wrote each file and what they had read first. Bounded by
+	// reviewReplayEvents rather than the whole history, because the question is about the
+	// change in front of the reader, not about the repository's whole past.
+	rev.AttachReplay(reviewTouches(s.magus.Root(), s.magus.CacheDir(), paths))
 	return rev, nil
+}
+
+// reviewReplayEvents bounds the trail walk behind a review. Each event costs a small blob
+// read, so this is the knob that keeps the replay join cheap; a reader asking "what was this
+// agent looking at" is asking about recent work by construction.
+const reviewReplayEvents = 2000
+
+// reviewTouches adapts the trail's own Touch to the review's, which is a straight rename
+// across a package boundary types must not cross - types imports nothing internal, and the
+// trail is internal.
+func reviewTouches(root, cacheDir string, paths []string) map[string][]types.ReviewTouch {
+	raw := trail.Replay(root, cacheDir, paths, reviewReplayEvents)
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string][]types.ReviewTouch, len(raw))
+	for path, touches := range raw {
+		conv := make([]types.ReviewTouch, 0, len(touches))
+		for _, t := range touches {
+			conv = append(conv, types.ReviewTouch{
+				Host: t.Host, Session: t.Session, Transcript: t.Transcript, Read: t.Read, Ran: t.Ran,
+			})
+		}
+		out[path] = conv
+	}
+	return out
 }
 
 // knowledgeGraph resolves the workspace graph, honoring the test seam. withSymbols loads

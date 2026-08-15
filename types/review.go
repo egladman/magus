@@ -128,6 +128,26 @@ const notableRankCutoff = 50
 // remains meaningful on its own.
 func (c ReviewChurn) NotableRank() bool { return c.Rank > 0 && c.Rank <= notableRankCutoff }
 
+// ReviewTouch is one agent session's contact with a changed file: that it wrote the file, and
+// what it was looking at immediately before.
+//
+// This is the part of a review no forge can produce. A guard hook observes every path an agent
+// reaches, so magus can answer "what was it reading when it decided to write this" - the
+// closest thing to the author's reasoning that any tool can recover without asking them. A
+// diff shows what changed; this shows what the change was made in response to.
+//
+// Transcript is a POINTER and magus never opens it. The trail stays a record of paths and
+// timings, and a reader who wants what was actually said opens the host's own log themselves -
+// which is what lets a whole session's reach be carried cheaply while the expensive and
+// sensitive detail stays where the host already put it.
+type ReviewTouch struct {
+	Host       string   `json:"host,omitempty"       yaml:"host,omitempty"`
+	Session    string   `json:"session,omitempty"    yaml:"session,omitempty"`
+	Transcript string   `json:"transcript,omitempty" yaml:"transcript,omitempty"`
+	Read       []string `json:"read,omitempty"       yaml:"read,omitempty"`
+	Ran        []string `json:"ran,omitempty"        yaml:"ran,omitempty"`
+}
+
 // ReviewFile is one changed file, annotated.
 type ReviewFile struct {
 	Path string `json:"path" yaml:"path"`
@@ -149,6 +169,9 @@ type ReviewFile struct {
 	// referenced from another project. It is the semver-relevant fact, and it is evidence
 	// rather than a verdict - see ReviewSurface.
 	Surface string `json:"surface" yaml:"surface"`
+	// Touches are the agent sessions that wrote this file and what they had READ first.
+	// Empty when no guard hook is wired, which is the common case and not a fault.
+	Touches []ReviewTouch `json:"touches,omitempty" yaml:"touches,omitempty"`
 	// Churn is how often this file has been changing, nil when no history lens was attached.
 	// Nil is DISTINCT from zero: "nobody measured" and "this file is quiet" are different
 	// facts, and a review that renders the first as the second is lying quietly.
@@ -328,6 +351,22 @@ func (r Review) AttachChurn(files []FileHotspot, projects []TrendEntry) {
 			Score:        h.Score,
 			Rank:         rank[f.Path],
 			ProjectTrend: d,
+		}
+	}
+}
+
+// AttachReplay folds the agent trail onto the review, in place.
+//
+// Supplied by the caller for the same reason AttachChurn's data is: the trail lives beside the
+// daemon's cache dir and reading it is a different cost from computing annotations, so who
+// pays and how much they read is the caller's decision while the fold stays defined once.
+func (r Review) AttachReplay(byPath map[string][]ReviewTouch) {
+	if len(byPath) == 0 {
+		return
+	}
+	for i := range r.Files {
+		if t, ok := byPath[r.Files[i].Path]; ok {
+			r.Files[i].Touches = t
 		}
 	}
 }

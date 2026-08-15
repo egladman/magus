@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -67,6 +68,9 @@ func reviewCmd(ctx context.Context, root string, args []string) error {
 		}
 		rev.AttachChurn(hot.Files, projects)
 	}
+	// The agent trail: which sessions wrote each file and what they had read first. Empty when
+	// no guard hook is wired, which is the common case rather than a fault.
+	rev.AttachReplay(reviewTouches(m.Root(), m.CacheDir(), changedPathsFromPatch(patch)))
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
@@ -102,6 +106,30 @@ func reviewUsage(w *os.File) {
 // daemon's insight scan uses, so the CLI and the console rank the same files the same way -
 // two different windows would report two different "hottest file" answers for one tree.
 const reviewHistoryCommits = 500
+
+// reviewReplayEvents bounds the trail walk. Each event costs a small blob read, and a reader
+// asking "what was this agent looking at" is asking about recent work by construction.
+const reviewReplayEvents = 2000
+
+// reviewTouches adapts the trail's Touch to the review's - a rename across a boundary types
+// must not cross, since types imports nothing internal and the trail is internal.
+func reviewTouches(root, cacheDir string, paths []string) map[string][]types.ReviewTouch {
+	raw := trail.Replay(root, cacheDir, paths, reviewReplayEvents)
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string][]types.ReviewTouch, len(raw))
+	for path, touches := range raw {
+		conv := make([]types.ReviewTouch, 0, len(touches))
+		for _, t := range touches {
+			conv = append(conv, types.ReviewTouch{
+				Host: t.Host, Session: t.Session, Transcript: t.Transcript, Read: t.Read, Ran: t.Ran,
+			})
+		}
+		out[path] = conv
+	}
+	return out
+}
 
 // printReviewText renders the review in the house style: counts before lists, the evidence
 // beside the claim, plain ASCII.
@@ -210,6 +238,22 @@ func printReviewFile(f types.ReviewFile) {
 	}
 	for _, fact := range facts {
 		fmt.Printf("      %s\n", fact)
+	}
+	// The story, last: it is the deepest context and the least urgent. A reader scanning for
+	// risk should hit reach and coverage first and find the narrative when they stop to read.
+	for _, t := range f.Touches {
+		who := t.Host
+		if who == "" {
+			who = "an agent"
+		}
+		fmt.Printf("      written by %s", who)
+		if len(t.Read) > 0 {
+			fmt.Printf(", after reading %s", strings.Join(capSlice(t.Read, 4), ", "))
+		}
+		fmt.Println()
+		if t.Transcript != "" {
+			fmt.Printf("        transcript: %s\n", t.Transcript)
+		}
 	}
 }
 
