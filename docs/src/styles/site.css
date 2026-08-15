@@ -2736,7 +2736,7 @@ a code {
 .shortcut-help dd { margin: 0; color: var(--pico-muted-color); }
 /* Pico's kbd is deliberately inverted - it paints --pico-code-kbd-background-color
    (= --pico-color) behind --pico-code-kbd-color (= --pico-background-color), so
-   the chip flips with the colour scheme on its own. Retune BOTH tokens to keep
+   the chip flips with the color scheme on its own. Retune BOTH tokens to keep
    that pairing coherent while lightening the chip; setting `background` alone
    inverts only half of it and leaves white glyphs on a white chip. */
 .shortcut-help kbd {
