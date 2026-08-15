@@ -325,20 +325,47 @@ func TestWithTargetDeadlineCancelReleasesTheTimer(t *testing.T) {
 // "no VCS to check against" (a legitimate pass) versus "the check could not run"
 // (which must not be reported as clean). These pin that split; collapsing them is
 // how the gate previously failed open.
+// verifyReadOnlyFixture builds the minimum Magus the gate needs: it resolves the VCS from
+// the WORKSPACE ROOT (not the project dir), so the root is what a test has to set.
+func verifyReadOnlyFixture(t *testing.T) (*Magus, string) {
+	t.Helper()
+	dir := t.TempDir()
+	return &Magus{ws: &types.Workspace{Root: dir}}, dir
+}
+
 func TestVerifyReadOnlySkipsWhenVCSDisabled(t *testing.T) {
 	t.Setenv("MAGUS_VCS_ENABLED", "false")
+	m, dir := verifyReadOnlyFixture(t)
 
 	ran := false
-	err := verifyReadOnly(t.Context(), t.TempDir(), "generate", func() error { ran = true; return nil })
+	err := m.verifyReadOnly(t.Context(), dir, "generate", func() error { ran = true; return nil })
 
 	require.NoError(t, err, "no VCS means nothing to diff against, so the check does not apply")
 	require.True(t, ran, "the target still runs; only the drift check is skipped")
 }
 
+// An unversioned tree is the "container build, extracted tarball" case the gate promises to
+// no-op on. It is NOT reached through a nil driver: Resolve falls back to git and reports
+// VCSSourceDefault, so testing res.VCS alone made the promised no-op unreachable and the
+// gate hard-failed with "git could not report working-tree status" on a directory that was
+// never a repository.
+func TestVerifyReadOnlySkipsWhenNothingClaimsTheRoot(t *testing.T) {
+	t.Setenv("MAGUS_VCS_ENABLED", "")
+	t.Setenv("MAGUS_VCS_NAME", "")
+	m, dir := verifyReadOnlyFixture(t)
+
+	ran := false
+	err := m.verifyReadOnly(t.Context(), dir, "generate", func() error { ran = true; return nil })
+
+	require.NoError(t, err, "an unversioned tree has nothing to diff against; the gate must not fail")
+	require.True(t, ran)
+}
+
 func TestVerifyReadOnlyErrorsOnUnresolvableVCS(t *testing.T) {
 	t.Setenv("MAGUS_VCS_NAME", "nosuchvcs")
+	m, dir := verifyReadOnlyFixture(t)
 
-	err := verifyReadOnly(t.Context(), t.TempDir(), "generate", func() error { return nil })
+	err := m.verifyReadOnly(t.Context(), dir, "generate", func() error { return nil })
 
 	require.Error(t, err, "an unknown MAGUS_VCS_NAME is misconfiguration, not an absent VCS")
 	require.Contains(t, err.Error(), "FailOnDrift",
@@ -347,9 +374,10 @@ func TestVerifyReadOnlyErrorsOnUnresolvableVCS(t *testing.T) {
 
 func TestVerifyReadOnlyPropagatesTargetError(t *testing.T) {
 	t.Setenv("MAGUS_VCS_ENABLED", "false")
+	m, dir := verifyReadOnlyFixture(t)
 
 	want := errors.New("target blew up")
-	err := verifyReadOnly(t.Context(), t.TempDir(), "generate", func() error { return want })
+	err := m.verifyReadOnly(t.Context(), dir, "generate", func() error { return want })
 
 	require.ErrorIs(t, err, want, "the target's own failure is returned before any drift check")
 }

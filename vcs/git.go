@@ -12,6 +12,7 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"time"
 
@@ -77,7 +78,13 @@ func (v gitVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, e
 		}
 		mergeBase = recovered
 	}
-	out, err := vcsOutput(ctx, dir, "git", "diff", "--name-only", mergeBase)
+	// core.quotePath=false on BOTH probes, for the reason DirtyFiles sets it: git otherwise
+	// renders a path outside ASCII as a C-quoted, backslash-escaped literal
+	// ("uni/caf\303\251.md"). This is the one place that omitted it, and the failure is
+	// silent in the worst way - project.normalizeFiles only trims and slash-converts, so
+	// the quoted string matches no source glob, and the project owning that file is simply
+	// never rebuilt. No diagnostic, no error; `magus affected` just under-builds forever.
+	out, err := vcsOutput(ctx, dir, "git", "-c", "core.quotePath=false", "diff", "--name-only", mergeBase)
 	if err != nil {
 		return nil, fmt.Errorf("git diff: %w", err)
 	}
@@ -86,7 +93,7 @@ func (v gitVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, e
 	// the working tree, but git diff omits them. List them explicitly so a brand-new
 	// file seeds its project the same way a modified one does. --exclude-standard
 	// honors .gitignore, so build artifacts stay out.
-	untracked, err := vcsOutput(ctx, dir, "git", "ls-files", "--others", "--exclude-standard")
+	untracked, err := vcsOutput(ctx, dir, "git", "-c", "core.quotePath=false", "ls-files", "--others", "--exclude-standard")
 	if err != nil {
 		return nil, fmt.Errorf("git ls-files: %w", err)
 	}
@@ -351,11 +358,12 @@ func (v gitVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, er
 	return len(files) > 0, err
 }
 
+// DirtyFiles implements types.VCSDriver, returning repo-relative paths.
+//
+// core.quotePath=false: git otherwise renders a non-ASCII path as a C-quoted string
+// ("\303\251.md"), which the caller would have to unescape. Off, the bytes come through
+// literally and stripping the status columns is the whole parse.
 func (v gitVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
-	// core.quotePath=false: git otherwise renders a non-ASCII path as a C-quoted
-	// string ("\303\251.md"), which every consumer would have to unescape. Off, the
-	// bytes come through literally, so std.statusPaths can strip the status columns
-	// and stop.
 	args := []string{"-c", "core.quotePath=false", "status", "--porcelain"}
 	if len(paths) > 0 {
 		args = append(args, "--")
@@ -365,11 +373,55 @@ func (v gitVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]s
 	if err != nil {
 		return nil, fmt.Errorf("git status: %w", err)
 	}
-	return splitStatusLines(out), nil
+	return gitStatusPaths(splitStatusLines(out)), nil
+}
+
+// gitStatusPaths turns porcelain lines into paths: three columns of prefix, then the
+// rename arrow, then git's C-quoting.
+//
+// A rename reads "R  old -> new", and the NEW path is the one that exists on disk, so that
+// is the one kept - a caller stages, hashes, or globs what is there.
+//
+// The unquoting is NOT made redundant by core.quotePath=false. That setting stops git
+// escaping bytes outside ASCII, and nothing more: a name containing a double quote or a
+// backslash still comes back quoted and escaped ("we\"ird.txt") with the setting off -
+// measured. Left alone it is a path that exists nowhere.
+//
+// Only git's own quoting form is unquoted, gated on the leading double quote, because
+// strconv.Unquote also accepts Go rune and raw-string literals - without the gate a file
+// literally named `x` would lose its backquotes.
+func gitStatusPaths(lines []string) []string {
+	out := trimStatusColumns(lines, 3)
+	for i, p := range out {
+		if _, after, found := strings.Cut(p, " -> "); found {
+			p = after
+		}
+		if strings.HasPrefix(p, `"`) {
+			if unquoted, err := strconv.Unquote(p); err == nil {
+				p = unquoted
+			}
+		}
+		out[i] = p
+	}
+	return out
+}
+
+// hasCommits reports whether the repository has at least one commit, i.e. whether HEAD
+// resolves. A freshly `git init`ed repository has an UNBORN HEAD, and anything naming HEAD
+// fails there rather than reporting an empty result.
+//
+// It returns a bool rather than an error deliberately: the callers want the question
+// answered, not propagated, and phrasing it as "if err != nil { return nil }" at the call
+// site is both the nilerr pattern a linter flags and the shape this package has repeatedly
+// been bitten by - a probe whose failure becomes a false answer. Confining the error to one
+// named predicate makes "no commits yet" a fact rather than a swallowed failure.
+func (v gitVCS) hasCommits(ctx context.Context, dir string) bool {
+	_, err := vcsOutput(ctx, dir, "git", "rev-parse", "--verify", "HEAD")
+	return err == nil
 }
 
 // splitStatusLines splits VCS status/diff output into non-empty lines (one changed
-// entry each), or nil when the tree is clean. Shared by the git/hg/jj DirtyFiles.
+// entry each), or nil when the tree is clean. Shared by the git/hg/sl/jj DirtyFiles.
 func splitStatusLines(out string) []string {
 	out = strings.TrimRight(out, "\n")
 	if out == "" {
@@ -384,13 +436,37 @@ func splitStatusLines(out string) []string {
 // failing on the one workspace big enough to hit it.
 const gitTrackedBatch = 256
 
-// DirtyDiff implements types.VCSDriver. `git diff` is working tree against the index, which
-// is what a drift gate wants: a generator writes files, it does not stage them. -U1 keeps a
-// multi-file diff readable in a CI log, where this is mostly read.
+// DirtyDiff implements types.VCSDriver, diffing the working tree against HEAD.
+//
+// Against HEAD and not against the INDEX, which is what a bare `git diff` does. The index is
+// git's alone - hg, sl and jj have none, so their DirtyDiff and DirtyFiles necessarily agree
+// - and leaving it in made git the one backend where the two disagreed: `git status
+// --porcelain` reports a STAGED change, while `git diff` does not. Measured: stage a drifted
+// generated file and DirtyFiles names it while DirtyDiff comes back empty, so the drift gate
+// prints "these outputs moved" followed by no diff at all. That is precisely the situation
+// the gate exists for, since it fires in CI where nobody can look at the tree.
+//
+// It is also not a hypothetical ordering: `magus vcs add` stages, and a generate run that
+// follows a staging step lands exactly here.
+//
+// -U1 keeps a multi-file diff readable in a CI log, where this is mostly read.
 func (v gitVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (string, error) {
 	// core.quotePath=false for the same reason DirtyFiles sets it: a non-ASCII path
 	// otherwise comes back C-quoted.
-	args := []string{"-c", "core.quotePath=false", "diff", "-U1"}
+	// A repository with no commits has no HEAD to diff against: `git diff HEAD` exits 128
+	// there, where the bare `git diff` this replaced returned empty. Nothing is committed
+	// for the working tree to differ FROM, so an empty diff is the answer.
+	//
+	// The check runs BEFORE the diff rather than as a rescue afterwards. Rescuing would
+	// mean returning nil from an error branch, which cannot distinguish an unborn HEAD from
+	// any other failure without matching git's message - and this package has been bitten
+	// repeatedly by probes that report a false answer instead of an error. The cost is one
+	// extra process on every call, which this path can afford: DirtyDiff runs a handful of
+	// times per invocation, from the drift gate, not per file.
+	if !v.hasCommits(ctx, dir) {
+		return "", nil
+	}
+	args := []string{"-c", "core.quotePath=false", "diff", "-U1", "HEAD"}
 	if len(paths) > 0 {
 		args = append(args, "--")
 		args = append(args, paths...)
@@ -425,35 +501,34 @@ func (v gitVCS) TrackedFiles(ctx context.Context, dir string, paths []string) ([
 	return tracked, nil
 }
 
-// IgnoredFiles implements types.IgnoredFileReporter via `git check-ignore`, which
-// prints the subset of its arguments that the ignore rules match.
+// IgnoredFiles implements types.IgnoredFileReporter, returning the given paths the ignore
+// rules cover, AS GIVEN.
 //
-// Exit status 1 means "none of them matched" and is a RESULT, not a failure - the
-// one thing that makes this awkward enough to need its own exec instead of
-// vcsOutput, which treats any non-zero exit as an error. Getting that backwards
-// would report every clean workspace as broken.
+// It shares IgnoredPaths' probe, and that is a bug fix rather than tidying. The two were
+// separate implementations of nearly the same question, named one letter apart on the same
+// type, returning different shapes - and giving OPPOSITE answers: only IgnoredPaths passed
+// --no-index, so for a file that is tracked AND matches an ignore rule, IgnoredPaths said
+// "ignored" and IgnoredFiles said "not ignored". Measured on a repo tracking keep.log under
+// a *.log rule. A caller reaching for the wrong one of two nearly identical names got a
+// wrong answer rather than a compile error.
 //
-// Batched and core.quotePath=false for the same reasons TrackedFiles is.
+// The rules-based answer is the one kept, because it is what both callers actually want:
+// doc indexing asks "should I skip this", and conflict resolution asks whether a generated
+// file that one side stopped tracking is now covered by an ignore rule. The index-aware
+// answer ("git already tracks it, so the rules do not apply") answers neither. hg and sl
+// share their probe between the two methods for the same reason.
 func (v gitVCS) IgnoredFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
-	var ignored []string
-	for start := 0; start < len(paths); start += gitTrackedBatch {
-		end := min(start+gitTrackedBatch, len(paths))
-		args := []string{"-c", "core.quotePath=false", "check-ignore", "--"}
-		args = append(args, paths[start:end]...)
-		cmd := exec.CommandContext(ctx, "git", args...)
-		cmd.Dir = dir
-		cmd.Env = gitEnviron()
-		out, err := cmd.Output()
-		if err != nil {
-			var ee *exec.ExitError
-			if errors.As(err, &ee) && ee.ExitCode() == 1 {
-				continue // nothing in this batch is ignored
-			}
-			return nil, fmt.Errorf("git check-ignore: %w", err)
-		}
-		ignored = append(ignored, splitLines(out)...)
+	ignored, err := v.IgnoredPaths(ctx, dir, paths)
+	if err != nil {
+		return nil, err
 	}
-	return ignored, nil
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if ignored[p] {
+			out = append(out, p)
+		}
+	}
+	return out, nil
 }
 
 // Describe returns `git describe --tags --always --dirty`: the nearest tag (or a
@@ -465,8 +540,17 @@ func (v gitVCS) Describe(ctx context.Context, dir string) (string, error) {
 // Tags lists tags newest-first. creatordate is the sort key because it reads a
 // lightweight tag's commit date and an annotated tag's own date, so the two kinds
 // order together instead of the lightweight ones bunching at the repository's age.
+// An ANNOTATED tag's %(objectname) is the TAG OBJECT's id, not the commit it points at,
+// while a lightweight tag's is the commit. types.VCSTag.ID promises "the revision
+// identifier the tag resolves to", so recording objectname made every annotated tag - the
+// kind `git tag -a` and most release tooling create - report an id that matches no commit.
+// A caller asking "is this release tagged at HEAD?" compared VCSTag.ID to Commit.ID and
+// got no match for exactly the tags a release process creates. %(*objectname) is the
+// dereferenced commit, and is EMPTY for a lightweight tag, so the %(if) picks whichever of
+// the two is the commit.
 func (v gitVCS) Tags(ctx context.Context, dir, pattern string) ([]types.VCSTag, error) {
-	const format = "%(refname:short)\t%(creatordate:iso-strict)\t%(objectname)"
+	const format = "%(refname:short)\t%(creatordate:iso-strict)\t" +
+		"%(if)%(*objectname)%(then)%(*objectname)%(else)%(objectname)%(end)"
 	out, err := vcsOutput(ctx, dir, "git", "for-each-ref", "--sort=-creatordate", "--format="+format, "refs/tags")
 	if err != nil {
 		return nil, err

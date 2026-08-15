@@ -543,25 +543,18 @@ func checkVCSBaseRef(ctx context.Context, root string, opts types.VCSOptions) ty
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
-	var probeArgs []string
-	switch res.Name {
-	case "git":
-		probeArgs = []string{"-C", root, "rev-parse", "--verify", "--quiet", res.Base}
-	case "hg":
-		probeArgs = []string{"-R", root, "log", "-r", res.Base, "-l", "1", "-T", "{node}\\n"}
-	case "jj":
-		probeArgs = []string{"-R", root, "log", "-r", res.Base, "-n", "1", "--no-graph", "-T", "commit_id"}
-	default:
-		return types.DoctorCheck{Name: "vcs base ref", Status: types.DoctorOK, Message: fmt.Sprintf("%s: no probe available; skipped", res.Name)}
-	}
-
-	cmd := exec.CommandContext(ctx, res.Name, probeArgs...)
-	if err := cmd.Run(); err != nil {
+	// The driver is ASKED whether the ref resolves, rather than this check hand-writing a
+	// probe per backend. It used to switch on res.Name over four literal names and build
+	// the argv itself, which made it the only place outside vcs/ that shells out to a VCS
+	// binary - and made a NEW backend degrade to "no probe available; skipped", i.e. a
+	// silent pass for the one check whose whole job is catching an unreachable base ref.
+	// FindCommit is on the required interface, so every backend answers it by construction.
+	if _, err := res.VCS.FindCommit(ctx, root, res.Base); err != nil {
 		return types.DoctorCheck{
 			Name:    "vcs base ref",
 			Status:  types.DoctorFail,
 			Message: fmt.Sprintf("base_ref %q not reachable (set MAGUS_VCS_BASE_REF to a reachable ref)", res.Base),
-			Details: []string{fmt.Sprintf("%s exited: %v", res.Name, err)},
+			Details: []string{fmt.Sprintf("%s: %v", res.Name, err)},
 		}
 	}
 
@@ -2068,11 +2061,10 @@ func (r *runner) checkGeneratedDrift() types.DoctorCheck {
 	if err != nil || res.VCS == nil {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no vcs resolved; skipped"}
 	}
-	lines, err := res.VCS.DirtyFiles(ctx, r.root, nil)
+	paths, err := res.VCS.DirtyFiles(ctx, r.root, nil)
 	if err != nil {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "could not read tree status; skipped"}
 	}
-	paths := vcs.StatusPaths(res.Name, lines)
 	if len(paths) == 0 {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "tree is clean"}
 	}

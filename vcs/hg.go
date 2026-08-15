@@ -19,7 +19,22 @@ type hgVCS struct{}
 
 func (v hgVCS) Name() string     { return "hg" }
 func (v hgVCS) Claims() []string { return []string{".hg"} }
-func (v hgVCS) Base() string     { return "tip" }
+
+// Base is the "default" BRANCH, not "tip".
+//
+// tip is the newest commit in the repository, which after any commit of your own is your
+// own commit - so ChangedFiles compared the checkout against itself and `magus affected`
+// reported nothing affected, building nothing. Measured: working on a named branch,
+// `hg status --rev tip` returns empty where `--rev default` correctly names the changed
+// file.
+//
+// default is the mainline every hg repository has (`hg init` creates it and it cannot be
+// renamed), so it is the direct analogue of git's origin/main and sl's remote/main - a
+// fixed name for the line of development, rather than a pointer at whatever is newest. It
+// is a strict improvement rather than a trade: on a named branch it is correct where tip
+// was wrong, and for work committed straight onto default the two are equivalent, since
+// both then name the same commit.
+func (v hgVCS) Base() string { return "default" }
 
 // ParentRef is the first parent of the working directory. `p1(.)` names it
 // explicitly; a bare `.^` is p1 too but reads as a typo next to git's form.
@@ -138,17 +153,19 @@ func (v hgVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, err
 	return len(files) > 0, err
 }
 
+// DirtyFiles implements types.VCSDriver, returning repo-relative paths. Mercurial prints
+// one status column and a space before each.
 func (v hgVCS) DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
 	args := []string{"status"}
 	if len(paths) > 0 {
 		args = append(args, "--")
-		args = append(args, paths...)
+		args = append(args, hgFamilyGlobs(paths)...)
 	}
 	out, err := vcsOutputRaw(ctx, dir, "hg", args...)
 	if err != nil {
 		return nil, fmt.Errorf("hg status: %w", err)
 	}
-	return splitStatusLines(out), nil
+	return trimStatusColumns(splitStatusLines(out), 2), nil
 }
 
 // DirtyDiff implements types.VCSDriver: uncommitted changes against the working parent.
@@ -156,7 +173,7 @@ func (v hgVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (strin
 	args := []string{"diff", "-U", "1"}
 	if len(paths) > 0 {
 		args = append(args, "--")
-		args = append(args, paths...)
+		args = append(args, hgFamilyGlobs(paths)...)
 	}
 	out, err := vcsOutputRaw(ctx, dir, "hg", args...)
 	if err != nil {
@@ -207,7 +224,17 @@ func (v hgVCS) Tags(ctx context.Context, dir, pattern string) ([]types.VCSTag, e
 // hgCommitTemplate emits the NUL-delimited fields parseCommit expects: node,
 // short node, author name/email, the record date (RFC 3339), parents, and the
 // full message. \0 is the field delimiter Mercurial converts to NUL.
-const hgCommitTemplate = `{node}\0{node|short}\0{person(author)}\0{email(author)}\0{date|rfc3339date}\0{parents % "{node} "}\0{desc}`
+//
+// Parents are {p1node} {p2node} and NOT `{parents % "{node} "}`, which is what this used
+// and which reports NOTHING for ordinary linear history: Mercurial's `parents` keyword
+// filters through meaningfulparents, so it lists nodes only for a merge or after a
+// non-linear update. Every plain hg commit therefore came back with Parents nil - which
+// reads as a root commit at the Buzz boundary, and made `len(Parents) > 1` merge detection
+// permanently false. {p2node} is all zeros off a merge and parseCommit's parents() already
+// drops an all-zero id. Verified against both hg and sl, which is what lets the two share
+// this constant: sl's `parents` keyword DOES report linear parents, so the bug was
+// invisible from the Sapling side.
+const hgCommitTemplate = `{node}\0{node|short}\0{person(author)}\0{email(author)}\0{date|rfc3339date}\0{p1node} {p2node}\0{desc}`
 
 func (v hgVCS) FindCommit(ctx context.Context, dir, rev string) (types.Commit, error) {
 	if rev == "" {
@@ -611,4 +638,264 @@ func (v hgVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (m
 		}
 	}
 	return ignored, nil
+}
+
+// The capability ladder below brings hg level with git and sl. Every command was verified
+// against Mercurial 7.x rather than ported from sapling.go on the assumption that a fork
+// keeps its parent's behavior - which this session established it does not, in both
+// directions.
+var (
+	_ types.RemoteReporter      = hgVCS{}
+	_ types.DefaultRefReporter  = hgVCS{}
+	_ types.TrackedFileReporter = hgVCS{}
+	_ types.IgnoredFileReporter = hgVCS{}
+	_ types.ChurnReporter       = hgVCS{}
+	_ types.RevisionExporter    = hgVCS{}
+	_ types.MergeStarter        = hgVCS{}
+)
+
+// RemoteURL implements types.RemoteReporter. `hg paths default` prints the default
+// pull/push URL; a repository with none exits non-zero with "not found!" on stderr, which
+// is the ErrVCSUnsupported case callers degrade on rather than a failure to report.
+func (v hgVCS) RemoteURL(ctx context.Context, dir string) (string, error) {
+	out, err := vcsOutput(ctx, dir, "hg", "paths", "default")
+	if err != nil || out == "" {
+		return "", types.ErrVCSUnsupported
+	}
+	return out, nil
+}
+
+// DefaultRef implements types.DefaultRefReporter. Mercurial's primary line of development
+// is the branch literally named "default" - it is created by `hg init` and cannot be
+// renamed - so unlike git there is nothing to look up. It is still CONFIRMED to resolve
+// rather than returned blind: a repository whose history is entirely on named branches can
+// have no revision on default, and answering with a ref that resolves to nothing would put
+// a dead link in a committed artifact.
+func (v hgVCS) DefaultRef(ctx context.Context, dir string) (string, error) {
+	if _, err := vcsOutput(ctx, dir, "hg", "log", "-r", "default", "-l", "1", "--template", "{node}"); err != nil {
+		return "", types.ErrVCSUnsupported
+	}
+	return "default", nil
+}
+
+// TrackedFiles implements types.TrackedFileReporter. `hg files -- <paths>` prints the
+// subset those pathspecs match in the manifest.
+//
+// Exit status 1 means "no pathspec in this batch matched a tracked file" and is a RESULT,
+// not a failure - Mercurial and Sapling agree here and git does not, since `git ls-files`
+// exits 0 for the same question. Treating it as an error would fail the most ordinary
+// answer this method gives, and only for some inputs: the call is batched, so a long path
+// list would fail exactly when one chunk happened to hold no tracked path.
+func (v hgVCS) TrackedFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
+	var tracked []string
+	for _, chunk := range gitPathChunks(paths) {
+		args := append([]string{"files", "--"}, chunk...)
+		cmd := exec.CommandContext(ctx, "hg", args...)
+		cmd.Dir = dir
+		out, err := cmd.Output()
+		if err != nil {
+			var ee *exec.ExitError
+			if errors.As(err, &ee) && ee.ExitCode() == 1 {
+				continue // nothing in this batch is tracked
+			}
+			return nil, fmt.Errorf("hg files: %w", err)
+		}
+		tracked = append(tracked, splitLines(out)...)
+	}
+	return tracked, nil
+}
+
+// IgnoredFiles implements types.IgnoredFileReporter, returning the given paths the ignore
+// rules cover, AS GIVEN.
+//
+// It shares IgnoredPaths' probe rather than calling `hg status --ignored`, because that
+// command answers a different question than the interface asks: given a directory it
+// EXPANDS it, so `status --ignored -- genx` reports "genx/a.o" where the contract says to
+// echo "genx". A caller testing set membership against its own input would miss every
+// directory it passed. Verified on Mercurial 7.x; Sapling behaves the same way.
+//
+// Sharing the probe also means the two cannot drift into disagreeing - the defect the git
+// pair had, where its IgnoredFiles and IgnoredPaths returned opposite answers for a
+// tracked-but-ignored path.
+func (v hgVCS) IgnoredFiles(ctx context.Context, dir string, paths []string) ([]string, error) {
+	ignored, err := v.IgnoredPaths(ctx, dir, paths)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		if ignored[p] {
+			out = append(out, p)
+		}
+	}
+	return out, nil
+}
+
+// hgChurnTemplate opens each commit with its NUL-separated node, author and record date,
+// then lists that commit's files one per line - the stream shape parseChangesByCommit
+// reads, with the leading NUL sentinel supplied by the template itself.
+const hgChurnTemplate = `\0{node}\0{person(author)}\0{date|rfc3339date}\n{files % "{file}\n"}`
+
+// ChangesByCommit implements types.ChurnReporter. `-r` scopes the walk to the working
+// directory's ancestors so a repository with several heads cannot attribute churn from a
+// line of development this checkout is not on, and `not merge()` keeps a merge's sprawling
+// file list from skewing attribution, matching git's --no-merges.
+//
+// reverse() is load-bearing: a bare `hg log` is newest-first, but `hg log -r <revset>`
+// follows the REVSET's order, and ancestors() is ascending - so without it `-l N` returns
+// the N OLDEST commits while the interface promises the newest.
+//
+// The `.` pathspec limits which COMMITS appear but NOT the files each lists: `{files}` is
+// the changeset's whole file list, so a commit touching both root.txt and sub/a.txt reports
+// both even when the log runs in sub/, where git's --name-only reports only sub/a.txt.
+// Measured, and it matters because churn is attributed per project - the unfiltered list
+// credits a nested workspace with edits made outside it. Hence the subtree filter here.
+func (v hgVCS) ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]types.CommitChange, error) {
+	if commits <= 0 {
+		commits = 1
+	}
+	scope := "ancestors(.)"
+	if since != "" {
+		if err := checkRef(since); err != nil {
+			return nil, err
+		}
+		scope = fmt.Sprintf("ancestors(.) and date('>%s')", since)
+	}
+	revset := fmt.Sprintf("reverse(%s) and not merge()", scope)
+	out, err := vcsOutput(ctx, dir, "hg", "log", "-r", revset,
+		"-l", fmt.Sprintf("%d", commits), "--template", hgChurnTemplate, "--", ".")
+	if err != nil {
+		return nil, fmt.Errorf("hg log: %w", err)
+	}
+	changes := parseChangesByCommit(out)
+	_, prefix, err := repoPathPrefix(ctx, v, dir)
+	if err != nil {
+		return nil, err
+	}
+	if prefix == "" {
+		return changes, nil // dir IS the repository root; every file is in the subtree
+	}
+	for i := range changes {
+		kept := changes[i].Files[:0]
+		for _, f := range changes[i].Files {
+			if strings.HasPrefix(f, prefix) {
+				kept = append(kept, f)
+			}
+		}
+		changes[i].Files = kept
+	}
+	return changes, nil
+}
+
+// hgArchivalMeta is the provenance file `hg archive` injects into every export. It belongs
+// to no commit, so leaving it in would put a file in the exported tree that no revision
+// contains - which a graph diff reads as a change.
+const hgArchivalMeta = ".hg_archival.txt"
+
+// ExportRevision implements types.RevisionExporter via `hg archive -t files`.
+//
+// Unlike Sapling's, hg's archive needs no explicit include set - `sl archive` refuses a
+// whole-tree export without one, and hg does not. Both inject a provenance file, and both
+// keep repository-relative paths where git's `archive <rev> -- .` re-roots them, so dir's
+// prefix is stripped here to give the caller the subtree it asked about.
+func (v hgVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) error {
+	if rev == "" {
+		rev = "."
+	}
+	if err := checkRef(rev); err != nil {
+		return err
+	}
+	staging, err := os.MkdirTemp("", "magus-hg-export-")
+	if err != nil {
+		return fmt.Errorf("hg archive: %w", err)
+	}
+	defer func() { _ = os.RemoveAll(staging) }()
+
+	cmd := exec.CommandContext(ctx, "hg", "archive", "-r", rev, "-t", "files",
+		"-X", hgArchivalMeta, staging)
+	cmd.Dir = dir
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("hg archive %q: %w\n%s", rev, err, strings.TrimSpace(string(out)))
+	}
+
+	_, prefix, err := repoPathPrefix(ctx, v, dir)
+	if err != nil {
+		return err
+	}
+	// A revision predating dir yields no subtree. That is an empty tree, not a failure -
+	// git reports the same case as "everything was added".
+	staged := filepath.Join(staging, filepath.FromSlash(prefix))
+	if _, err := os.Stat(staged); os.IsNotExist(err) {
+		return os.MkdirAll(dstDir, 0o755)
+	}
+	return copyTree(staged, dstDir)
+}
+
+// StartMerge begins a merge of ref without committing it. See types.MergeStarter.
+//
+// `--tool internal:merge` is not a preference, it is what keeps this from HANGING. With no
+// tool named, Mercurial resolves ui.merge from the user's config and will happily launch an
+// interactive one; measured here, a plain `hg merge` on a conflicting file blocked until
+// killed, and `--noninteractive` alone did NOT prevent it. Naming an internal tool settles
+// what it can and leaves the rest marked unresolved, which is exactly the state Conflicts
+// reads. Sapling needed the same treatment for the same reason.
+//
+// There is no --no-commit to pass, and none is needed: `hg merge` never commits.
+//
+// A merge already underway is refused BEFORE starting, because it cannot be detected
+// afterwards - the leftover merge's own conflicts would satisfy any "did conflicts appear"
+// test, and the caller would resolve against a merge of a ref it never asked for.
+func (v hgVCS) StartMerge(ctx context.Context, root, ref string) error {
+	if err := checkRef(ref); err != nil {
+		return err
+	}
+	if underway, err := v.mergeInProgress(ctx, root); err != nil {
+		return err
+	} else if underway {
+		return fmt.Errorf("hg merge %s: a merge is already in progress; conclude or abandon it first", ref)
+	}
+	cmd := exec.CommandContext(ctx, "hg", "--noninteractive", "merge", "--tool", "internal:merge", ref)
+	cmd.Dir = root
+	out, err := cmd.CombinedOutput()
+	if err == nil {
+		return nil
+	}
+	// A merge that CONFLICTS exits non-zero, and that is the case this exists to set up.
+	// Having ruled out a pre-existing operation above, merge state now means THIS merge began.
+	if underway, uErr := v.mergeInProgress(ctx, root); uErr == nil && underway {
+		return nil
+	}
+	return fmt.Errorf("hg merge %s: %w\n%s", ref, err, strings.TrimSpace(string(out)))
+}
+
+// mergeInProgress reports whether Mercurial has merge state recorded. `hg debugmergestate`
+// prints "no merge state found" and exits 0 when there is none, so the absence has to be
+// read from the output rather than the status.
+func (v hgVCS) mergeInProgress(ctx context.Context, root string) (bool, error) {
+	out, err := vcsOutputRaw(ctx, root, "hg", "debugmergestate")
+	if err != nil {
+		return false, fmt.Errorf("hg debugmergestate: %w", err)
+	}
+	return !strings.Contains(out, "no merge state found"), nil
+}
+
+// AbortMerge abandons the in-progress merge. See types.MergeStarter.
+//
+// `hg merge --abort` refuses on its own when nothing is underway, unlike Sapling's
+// whole-tree revert - but the guard is kept so all three backends give the same error for
+// the same condition instead of three different messages from three different CLIs.
+func (v hgVCS) AbortMerge(ctx context.Context, root string) error {
+	underway, err := v.mergeInProgress(ctx, root)
+	if err != nil {
+		return err
+	}
+	if !underway {
+		return errors.New("hg: no merge is in progress to abort")
+	}
+	cmd := exec.CommandContext(ctx, "hg", "--noninteractive", "merge", "--abort")
+	cmd.Dir = root
+	if out, err := cmd.CombinedOutput(); err != nil {
+		return fmt.Errorf("hg merge --abort: %w\n%s", err, strings.TrimSpace(string(out)))
+	}
+	return nil
 }
