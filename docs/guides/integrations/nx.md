@@ -96,8 +96,7 @@ That is the whole file. It declares no targets of its own: every target in the
 workspace is an op of the provider spell, and an empty placeholder target would
 be a name, not a phase - it cannot fail and nothing depends on it.
 
-**3. Write `magus.yaml`** with the [sandbox env
-passthrough](#sandbox-env-passthrough) below. It is load-bearing only when the
+**3. Write `magus.yaml`** with the [sandbox env passthrough](#sandbox-env-passthrough) below. It is load-bearing only when the
 sandbox is enabled.
 
 **4. Append the [`.git/info/exclude` block](#nothing-is-committed-to-the-repo)**
