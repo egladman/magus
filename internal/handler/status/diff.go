@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/handler"
+	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
 )
@@ -40,12 +41,16 @@ type reviewSource interface {
 // read and annotate a file the reader cannot see.
 type ReviewHandler struct {
 	handler.Base
-	src reviewSource
+	src      reviewSource
+	sessions *review.Store
+	root     string
 }
 
-// NewReviewHandler returns the GET /api/v1/review handler reading from src.
-func NewReviewHandler(src reviewSource, log *slog.Logger) *ReviewHandler {
-	h := &ReviewHandler{src: src}
+// NewReviewHandler returns the GET /api/v1/review handler reading from src. sessions and root
+// may be nil/empty, which serves a session-less review - the shape is identical, so a client
+// needs no branch for a daemon that is not pairing.
+func NewReviewHandler(src reviewSource, sessions *review.Store, root string, log *slog.Logger) *ReviewHandler {
+	h := &ReviewHandler{src: src, sessions: sessions, root: root}
 	h.Base = handler.New(h.serve, log)
 	return h
 }
@@ -70,7 +75,14 @@ func (h *ReviewHandler) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "review error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	writeJSON(w, out)
+	// Attaching here rather than on a separate route means a client that can read a review is
+	// already paired: the console's first fetch is what makes the session an agent can find,
+	// so pairing needs no setup step anyone has to remember.
+	if h.sessions != nil && h.root != "" {
+		writeJSON(w, h.sessions.Attach(h.root, out.Base, out))
+		return
+	}
+	writeJSON(w, types.ReviewSession{Base: out.Base, Review: out, Cursor: types.ReviewCursor{Hunk: -1}})
 }
 
 // DiffHandler serves GET /api/v1/diff: the working tree's uncommitted changes as one unified

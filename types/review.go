@@ -130,6 +130,102 @@ type Review struct {
 	Notes []string `json:"notes,omitempty" yaml:"notes,omitempty"`
 }
 
+// ReviewAuthor says which kind of client produced a comment or a suggestion.
+//
+// It is STAMPED BY THE DAEMON from the transport the write arrived on, and never read from
+// the payload. That is the whole integrity of a paired review: an agent holds an MCP session
+// and a person holds a console tab, the daemon can tell them apart, and so an agent cannot
+// post as the person. The notes store settled the same question the same way - "a
+// self-attested author is forgeable by whatever wrote the file" - and this is that reasoning
+// applied to a store an agent IS allowed to write.
+type ReviewAuthor string
+
+const (
+	// ReviewAuthorHuman is a write from the console or an interactive CLI.
+	ReviewAuthorHuman ReviewAuthor = "human"
+	// ReviewAuthorAgent is a write from the MCP surface.
+	ReviewAuthorAgent ReviewAuthor = "agent"
+)
+
+// ReviewCursor is where a client is looking: a file and, within it, a hunk.
+//
+// The human's cursor is the one that matters and the one an agent READS. An agent has no
+// cursor of its own, on purpose - see ReviewSuggestion for why it cannot move this one.
+type ReviewCursor struct {
+	Path string `json:"path,omitempty" yaml:"path,omitempty"`
+	// Hunk is the 0-based index of the hunk within the file, or -1 for the file heading.
+	Hunk int `json:"hunk" yaml:"hunk"`
+}
+
+// ReviewComment is one remark attached to a hunk.
+//
+// Distinct from a note, and deliberately not stored with one. A note is durable workspace
+// knowledge whose only provenance is the person who wrote it; a comment is addressed to one
+// author about one change and is dead once the change lands. Folding them together would
+// either poison the notes store with ephemeral chatter or force review through an editor and
+// a commit, which nobody will do. A comment worth keeping graduates into a note by hand,
+// which re-attributes it to a person and a commit.
+type ReviewComment struct {
+	ID     string       `json:"id" yaml:"id"`
+	Path   string       `json:"path" yaml:"path"`
+	Hunk   int          `json:"hunk" yaml:"hunk"`
+	Author ReviewAuthor `json:"author" yaml:"author"`
+	// AgentName is the opaque host label an MCP client passed, empty for a human. Attribution
+	// only: nothing branches on it, matching the hook's treatment of the same field.
+	AgentName string `json:"agent_name,omitempty" yaml:"agent_name,omitempty"`
+	Body      string `json:"body" yaml:"body"`
+	// Anchor is the hunk's content digest at the time of writing, so the comment can report
+	// that the code under it has since changed rather than silently pointing at moved text.
+	Anchor   string `json:"anchor,omitempty" yaml:"anchor,omitempty"`
+	Resolved bool   `json:"resolved" yaml:"resolved"`
+}
+
+// ReviewSuggestion is an agent asking for the human's attention somewhere.
+//
+// It is a PROPOSAL and never an action, which is the load-bearing decision in the whole
+// paired-review design. A tool that lets an agent move the human's viewport is an agent that
+// yanks the screen around mid-read; the reviewer stops trusting their own scroll position and
+// the tool starts feeling possessed. So the agent explains and the human navigates: a
+// suggestion renders as a peripheral affordance the human accepts with one key, and ignoring
+// it costs nothing.
+//
+// This is the review-surface reading of the guard's own rule - deny only what cannot be
+// undone, explain everything else. Yanking a viewport cannot be undone, because the reader's
+// place in the diff was in their head.
+type ReviewSuggestion struct {
+	ID        string `json:"id" yaml:"id"`
+	Path      string `json:"path" yaml:"path"`
+	Hunk      int    `json:"hunk" yaml:"hunk"`
+	AgentName string `json:"agent_name,omitempty" yaml:"agent_name,omitempty"`
+	// Reason is the one line shown beside the affordance. It has to earn the interruption.
+	Reason string `json:"reason" yaml:"reason"`
+	// Accepted records that the human took it, so the agent can tell "not yet seen" from
+	// "seen and declined" instead of repeating itself.
+	Accepted bool `json:"accepted" yaml:"accepted"`
+	Declined bool `json:"declined" yaml:"declined"`
+}
+
+// ReviewSession is the shared object a console tab, an MCP agent, and the CLI all read.
+//
+// One object rather than three implementations: the daemon already multiplexes those three
+// transports over one workspace, so a review they each rebuilt privately would be three
+// diverging opinions of the same changeset. Sharing it is what makes pairing real - the agent
+// can see where the human is and be useful about it rather than narrating blindly.
+type ReviewSession struct {
+	ID   string `json:"id" yaml:"id"`
+	Base string `json:"base" yaml:"base"`
+	// Review is the annotated changeset. Recomputed when the working tree moves.
+	Review Review `json:"review" yaml:"review"`
+	// Cursor is where the HUMAN is looking.
+	Cursor ReviewCursor `json:"cursor" yaml:"cursor"`
+	// Viewed holds the content digests of hunks the human has marked read. Digests rather
+	// than paths-and-line-numbers so the mark survives a rebase that did not touch the hunk -
+	// the failing of every viewed-checkbox that resets on force-push.
+	Viewed      []string           `json:"viewed,omitempty"      yaml:"viewed,omitempty"`
+	Comments    []ReviewComment    `json:"comments,omitempty"    yaml:"comments,omitempty"`
+	Suggestions []ReviewSuggestion `json:"suggestions,omitempty" yaml:"suggestions,omitempty"`
+}
+
 // GeneratedCount reports how many files are declared outputs - the ones a reader can fold
 // away. It is the headline of the noise-collapse affordance.
 func (r Review) GeneratedCount() int {

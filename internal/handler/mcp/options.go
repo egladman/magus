@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/types"
 )
 
@@ -54,6 +55,14 @@ type Options struct {
 	// converters. When zero-valued the bridge returns an empty telemetry/cache
 	// block but still serves the live pool state.
 	StatusBase types.StatusBase
+
+	// ReviewSessions is the daemon's shared review-session store, the SAME one the console's
+	// /api/v1/review routes use. Sharing it is what makes pairing work: the person opens a
+	// review in the console and the agent joins the session they started, rather than each
+	// side holding a private opinion of the changeset.
+	//
+	// Nil disables magus_review, which is the honest state for a daemon with no workspace.
+	ReviewSessions *review.Store
 }
 
 func (o Options) validate() error {

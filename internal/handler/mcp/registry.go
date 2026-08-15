@@ -169,4 +169,24 @@ var Registry = []ToolDescriptor{
 			{Name: "kind", Type: "string", Description: "Scope every section to one node kind (e.g. spell, target, doc, diagnostic). Omit for the whole graph."},
 		},
 	},
+	{
+		Name: string(ToolReview),
+		Description: "Join the review session a person already has open and pair with them on it. " +
+			"op=state returns the whole session: every changed file annotated with its role (generated output vs source), " +
+			"how widely its changed symbols are referenced, whether it is public API surface, observed coverage, " +
+			"plus where the person is looking and what they have already read. " +
+			"op=comment attaches a remark to a hunk. op=suggest asks for their attention somewhere, with a reason. " +
+			"op=resolve closes a comment. " +
+			"You CANNOT move their cursor or mark a hunk read: suggest, and they accept with one key. " +
+			"Read state before commenting - it tells you what they have already seen, so you can skip it.",
+		Params: []ParamDescriptor{
+			{Name: "op", Type: "string", Description: "One of: state (default), comment, suggest, resolve."},
+			{Name: "path", Type: "string", Description: "Workspace-relative file the comment or suggestion is about (comment, suggest)."},
+			{Name: "hunk", Type: "number", Description: "0-based hunk index within the file; omit for the file as a whole."},
+			{Name: "body", Type: "string", Description: "The remark (comment)."},
+			{Name: "reason", Type: "string", Description: "Why this is worth their attention - required, because a suggestion is an interruption (suggest)."},
+			{Name: "id", Type: "string", Description: "Comment id (resolve)."},
+			{Name: "agent_name", Type: "string", Description: "Optional label for which agent is speaking; attribution only."},
+		},
+	},
 }

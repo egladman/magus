@@ -32,6 +32,7 @@ import (
 	metricshandler "github.com/egladman/magus/internal/handler/metrics"
 	noteshandler "github.com/egladman/magus/internal/handler/notes"
 	"github.com/egladman/magus/internal/handler/status"
+	"github.com/egladman/magus/internal/review"
 	tokenhandler "github.com/egladman/magus/internal/handler/token"
 	toolhandler "github.com/egladman/magus/internal/handler/tool"
 	"github.com/egladman/magus/internal/handler/trailrpc"
@@ -257,7 +258,17 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			eventsH := status.NewEventsHandler(svc, opts.Build, nil, inv, 0, 0, log)
 			insightH := status.NewInsightHandler(svc, log)
 			diffH := status.NewDiffHandler(svc, log)
-			reviewH := status.NewReviewHandler(svc, log)
+			// The daemon-wide session store, constructed by the caller so the console routes
+			// below and the magus_review MCP tool read the SAME object - that sharing is the
+			// pairing. A caller that supplied none gets a local one rather than a nil panic;
+			// pairing is then per-process, which is the honest degradation.
+			reviewSessions := opts.ReviewSessions
+			if reviewSessions == nil {
+				reviewSessions = review.NewStore(opts.Magus.CacheDir())
+			}
+			reviewRoot := opts.Magus.Root()
+			reviewH := status.NewReviewHandler(svc, reviewSessions, reviewRoot, log)
+			reviewSessionH := status.NewReviewSessionHandler(reviewSessions, reviewRoot, log)
 			outputsH := viewer.NewOutputsHandler(outputStore, log)
 			outputH := viewer.NewOutputHandler(outputStore, log)
 
@@ -280,6 +291,10 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// The annotation half: role, blast radius, changed-symbol reach, coverage. Split
 			// from /api/v1/diff because it is far more expensive - see ReviewHandler.
 			bridgeMux.Handle("/api/v1/review", cors(reviewH))
+			// The human's half of a paired review. Reachable only from the console and the
+			// CLI, which is what lets it stamp every write as human without trusting the
+			// payload - an agent reaches the session through MCP, never through here.
+			bridgeMux.Handle("/api/v1/review/session", cors(reviewSessionH))
 			// Run browser: the log viewer's tree lists prior runs (/api/v1/outputs) and loads any one's
 			// verbatim captured output (/api/v1/output?ref=). The store is constructed off the cache dir
 			// per request (a shallow keep-last-K scan), matching the other read-only /api JSON routes.
