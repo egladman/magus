@@ -20,6 +20,7 @@ event.
 | file surface     | deny and advise both reach the model   |
 | MCP              | [MCP](../mcp.md)                       |
 | attention events | `Notification`, `Stop`, `SubagentStop` |
+| delegation       | `PreToolUse` on the sub-agent tool     |
 
 ## Skills
 
@@ -83,6 +84,49 @@ What it trades away is the templates' handling of a magus that is missing or too
 old to judge: both of those render nothing, and Claude Code reads nothing as
 allow, so the session goes unguarded with no sign of it. Use the short form
 while you are experimenting; use the templates once you rely on the guard.
+
+## Delegation capture
+
+When Claude Code hands work to a sub-agent it does so through a tool call, and
+that call fires `PreToolUse` like any other - carrying the whole prompt the
+orchestrator is handing over in `tool_input.prompt`. Neither guard matcher above
+selects it, so by default magus never sees a delegation. Add a third entry to
+record one:
+
+```json
+{
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Task",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "GUARD_MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; [ -n \"$GUARD_MAGUS_BIN\" ] && \"$GUARD_MAGUS_BIN\" hook --agent-name claude-code >/dev/null 2>&1; exit 0",
+            "timeout": 10
+          }
+        ]
+      }
+    ]
+  }
+}
+```
+
+No `jq` and no template: the whole event goes in unchanged, and magus reads
+`tool_input.prompt` for the context, `tool_input.subagent_type` (then
+`description`, then `tool_name`) for the callee's label, and `session_id` for the
+parent's session. The result is one `agent_spawn` event per delegation, with the
+handed context stored as a payload blob you fetch by ref.
+
+It records; it does not judge. A delegation prompt is prose, so the command rules
+never run against it and the verdict is always a pass - a prompt that mentions a
+denied command describes it rather than runs it. Output is discarded and the exit
+status is forced to 0 for the same reason the notification hook does it: an audit
+step must not be able to break the session it observes.
+
+To join those events to a work ledger, write the marker line documented in
+[Any other host](any-host.md#delegation-capture) at the top of the prompt you
+hand the sub-agent.
 
 ## Notifications
 

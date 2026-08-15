@@ -41,7 +41,11 @@ test("kindLabel maps every kind to its terse tag", () => {
   assert.equal(kindLabel(Kind.CONFIG_CHANGE), "config");
   assert.equal(kindLabel(Kind.TOKEN_LIFECYCLE), "token");
   assert.equal(kindLabel(Kind.SANDBOX_DENIAL), "sandbox");
+  assert.equal(kindLabel(Kind.MEMORY), "memory");
   assert.equal(kindLabel(Kind.AGENT_COMMAND), "agent");
+  assert.equal(kindLabel(Kind.CREDENTIAL_GRANT), "credential");
+  assert.equal(kindLabel(Kind.AGENT_SPAWN), "spawn");
+  assert.equal(kindLabel(Kind.NOTES), "notes");
   assert.equal(kindLabel(Kind.UNSPECIFIED), "event");
 });
 
@@ -179,6 +183,26 @@ test("groupEventsByKind collects an unknown kind under Other", () => {
     ["Other"],
   );
   assert.equal(groups[0].events[0].index, 0);
+});
+
+// kindLabel and KIND_GROUP_ORDER are both hand-maintained switches/tables over the wire Kind
+// enum, and KindMemory and KindCredentialGrant already shipped in the proto and encodeKind while
+// staying absent here: their events silently fell back to the "event" label and the "Other"
+// bucket in the console. Enumerated straight off the generated Kind enum's own reverse mapping
+// (not a second hand-maintained list), so the NEXT kind added to the proto fails this test the
+// moment it lands, rather than shipping half-wired.
+test("every non-UNSPECIFIED wire kind has a real label and a named group", () => {
+  const allKinds = Object.values(Kind).filter((v): v is Kind => typeof v === "number");
+  assert.ok(allKinds.length > 1, "sanity: the generated enum should list more than UNSPECIFIED");
+  for (const kind of allKinds) {
+    if (kind === Kind.UNSPECIFIED) continue;
+    assert.notEqual(kindLabel(kind), "event", `Kind.${Kind[kind]} falls back to the default label`);
+
+    const groups = groupEventsByKind([ev({ kind })]);
+    assert.equal(groups.length, 1, `Kind.${Kind[kind]} did not produce exactly one group`);
+    assert.notEqual(groups[0].label, "Other", `Kind.${Kind[kind]} is missing from KIND_GROUP_ORDER`);
+    assert.equal(groups[0].kind, kind);
+  }
 });
 
 test("activityToModel titles every section and counts them", () => {

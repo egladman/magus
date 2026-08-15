@@ -1135,6 +1135,89 @@ func TestHookCmd_AttributionIsOptional(t *testing.T) {
 	assert.JSONEq(t, `{"schema_version":1,"tool":"shell.command","command":"ls"}`, string(body))
 }
 
+// TestHookCmd_RecordsSpawnFromEnvelope covers the delegation surface end to end: a host payload
+// carrying a prompt rather than a command is recorded as a spawn, with the handed context in the
+// blob and the cooperative unit marker stamped onto the event.
+//
+// It also pins the thing that must NOT happen. The prompt below quotes `git stash`, which the
+// command guard denies. A spawn is not a guard surface, so the verdict is a pass and the
+// delegation is recorded rather than blocked for describing a denied command.
+func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+	envelope := `{"hook_event_name":"PreToolUse","session_id":"abc123","tool_name":"Task",` +
+		`"tool_input":{"description":"audit the store","subagent_type":"Explore",` +
+		`"prompt":"unit: notes-store-6b\nDo not run git stash anywhere."}}`
+
+	var out bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader(envelope), &out,
+		[]string{"--agent-name", "claude-code", "-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	got := events[0]
+
+	requestRef := got.RequestRef
+	got.Ts, got.RequestRef, got.RequestBytes = 0, "", 0
+	assert.Equal(t, trail.Event{
+		Kind:      trail.KindAgentSpawn,
+		Actor:     "agent",
+		Host:      "claude-code",
+		Session:   "abc123",
+		Workspace: "/repo/magus",
+		Action:    "Explore",
+		Unit:      "notes-store-6b",
+		Outcome:   trail.OutcomeOK,
+	}, got)
+
+	body, err := trail.ReadBlob(dir, requestRef)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"schema_version":1,"host":"claude-code","session":"abc123","event":"PreToolUse",`+
+		`"tool":"Task","child":"Explore","unit":"notes-store-6b",`+
+		`"context":"unit: notes-store-6b\nDo not run git stash anywhere."}`, string(body))
+}
+
+// TestHookCmd_SpawnWithoutMarkerOrLabel holds the two halves of the cooperative contract: an
+// orchestrator that writes no marker still gets an audited handoff, just an uncorrelated one,
+// and a host whose payload names no callee still records a spawn.
+func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+
+	var out bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader(`{"tool_input":{"prompt":"go and audit the store"}}`),
+		&out, []string{"-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, trail.KindAgentSpawn, events[0].Kind)
+	assert.Equal(t, "agent.spawn", events[0].Action)
+	assert.Empty(t, events[0].Unit)
+}
+
+// TestDecodeHookEnvelope_CommandStillWinsOverPrompt guards the ordering that makes the spawn
+// branch purely additive: a payload carrying both is judged as the command it carries, so no
+// envelope the guard already evaluated can start skipping the guard because a prompt appeared
+// beside it.
+func TestDecodeHookEnvelope_CommandStillWinsOverPrompt(t *testing.T) {
+	req, ok := decodeHookEnvelope(`{"tool_input":{"command":"git stash","prompt":"delegate this"}}`)
+	require.True(t, ok)
+	assert.Equal(t, "git stash", req.Value)
+	assert.False(t, req.IsSpawn)
+
+	req, ok = decodeHookEnvelope(`{"tool_input":{"file_path":"MAGUS.md","prompt":"delegate this"}}`)
+	require.True(t, ok)
+	assert.Equal(t, "MAGUS.md", req.Value)
+	assert.True(t, req.IsPath)
+	assert.False(t, req.IsSpawn)
+}
+
 func TestAgentSampleDocPlainASCIISelfContained(t *testing.T) {
 	doc := agentSampleDoc()
 	assert.Contains(t, doc, "# AGENTS.md")

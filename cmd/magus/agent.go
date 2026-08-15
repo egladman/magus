@@ -383,6 +383,16 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		if who.Event == "" {
 			who.Event = req.Who.Event
 		}
+		if req.IsSpawn {
+			// A delegation carries no verdict, so it returns the pass every other
+			// non-finding does and never reaches the guard. Handled here rather than
+			// beside the two guard arms because the whole point is that nothing judges
+			// it: the handed context is prose, and a prompt that merely MENTIONS a
+			// denied command would otherwise block the delegation that describes it.
+			appendHookSpawn(ctx, req, who)
+			return writeGuardVerdict(out, opts,
+				guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"})
+		}
 	}
 	verdict := guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
 	if hf.Path {
@@ -694,9 +704,17 @@ func readGuardInput(in io.Reader) (guardInput, bool) {
 type hookEnvelope struct {
 	HookEventName string `json:"hook_event_name"`
 	SessionID     string `json:"session_id"`
+	ToolName      string `json:"tool_name"`
 	ToolInput     struct {
 		Command  string `json:"command"`
 		FilePath string `json:"file_path"`
+		// A delegation: the context an orchestrator is about to hand a sub-agent, plus
+		// whatever the host calls the callee. Field PATHS, not a host name - the same line
+		// the two fields above already draw. magus does not know which tool produces them
+		// and never switches on ToolName; a payload carrying a prompt IS a spawn.
+		Prompt       string `json:"prompt"`
+		Description  string `json:"description"`
+		SubagentType string `json:"subagent_type"`
 	} `json:"tool_input"`
 }
 
@@ -707,6 +725,10 @@ type hookEnvelope struct {
 // attribution come from the payload rather than from flags a wrapper has to
 // remember. A payload carrying file_path rather than command is a write, so the
 // envelope also answers the --path question.
+//
+// A payload carrying a PROMPT rather than either is a delegation handoff: there is nothing to
+// judge, and the context being handed over is recorded instead. It is tested last on purpose, so
+// that adding this branch cannot change the verdict on any payload the guard already judged.
 //
 // Anything that is not an object with a usable tool_input is judged as the
 // literal text it is.
@@ -724,6 +746,18 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 		req.Value = env.ToolInput.Command
 	case env.ToolInput.FilePath != "":
 		req.Value, req.IsPath = env.ToolInput.FilePath, true
+	case env.ToolInput.Prompt != "":
+		req.Value, req.IsSpawn = env.ToolInput.Prompt, true
+		req.Tool = env.ToolName
+		// Most specific label first. A sub-agent TYPE names what was delegated to and repeats
+		// across spawns, so it groups a delegation feed; a description is per-spawn prose; the
+		// tool name is the last resort that at least says a spawn happened.
+		for _, label := range []string{env.ToolInput.SubagentType, env.ToolInput.Description, env.ToolName} {
+			if label != "" {
+				req.Child = label
+				break
+			}
+		}
 	default:
 		return hookRequest{}, false
 	}
@@ -731,11 +765,15 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 }
 
 // hookRequest is what a host's payload asked the guard to judge: the text, whether it is a
-// path rather than a command, and who reported it.
+// path rather than a command, and who reported it. A spawn asks for nothing to be judged - it
+// carries the handed context and the callee's label, and is recorded rather than evaluated.
 type hookRequest struct {
-	Value  string
-	IsPath bool
-	Who    hookAttribution
+	Value   string
+	IsPath  bool
+	IsSpawn bool
+	Tool    string
+	Child   string
+	Who     hookAttribution
 }
 
 // hookAttribution is what the host wrapper knows about itself and cannot be
@@ -788,6 +826,30 @@ func appendHookActivity(ctx context.Context, input guardInput, who hookAttributi
 		command.Command = input.Value
 	}
 	trail.AppendAgentCommand(ctx, location.base, command)
+}
+
+// appendHookSpawn records a delegation handoff into the same trail, so a person auditing the
+// activity log later can see WHAT CONTEXT an orchestrator handed a sub-agent, not merely that it
+// spawned one. Like appendHookActivity it is best-effort and cannot fail the tool call; unlike it
+// there is no verdict to record, because a spawn is not a guard surface.
+func appendHookSpawn(ctx context.Context, req hookRequest, who hookAttribution) {
+	if req.Value == "" {
+		return
+	}
+	location := hookActivityTrail(ctx)
+	if location.base == "" {
+		return
+	}
+	trail.AppendAgentSpawn(ctx, location.base, trail.AgentSpawn{
+		Actor:     "agent",
+		Workspace: location.workspace,
+		Host:      who.Host,
+		Session:   who.Session,
+		Event:     who.Event,
+		Tool:      req.Tool,
+		Child:     req.Child,
+		Context:   req.Value,
+	})
 }
 
 // hookActivityTrail resolves the local workspace cache because a hook runs as a short-lived
