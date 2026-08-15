@@ -92,3 +92,12 @@ func TestKnownSurfacesCoversTheDiffSurface(t *testing.T) {
 		assert.False(t, strings.Contains(s, "/"), "a surface segment is one path element: %q", s)
 	}
 }
+
+// The redirect target is assembled from the allow-listed segment, so a request that reaches it
+// by an odd-but-legal path lands on the canonical one rather than echoing what was asked for.
+func TestRedirectNormalizesAndCannotEchoTheRequestPath(t *testing.T) {
+	h := StaticHandler(consoleDir(t))
+	w := get(t, h, "/console//diff")
+	assert.Equal(t, http.StatusFound, w.Code)
+	assert.Equal(t, "/console/diff/", w.Header().Get("Location"))
+}

@@ -60,12 +60,24 @@ func StaticHandler(consoleDir string) http.Handler {
 			// keeps the shell servable from a prefix it does not know, which is what the
 			// relative base is for. StatusFound, matching share.go's redirect to /console/.
 			if !strings.HasSuffix(r.URL.Path, "/") {
-				target := r.URL.Path + "/"
+				// The destination comes from KnownSurfaces itself, not from the request - see
+				// CanonicalSurfacePath. It also normalizes an odd but legal /console//diff.
+				target, ok := CanonicalSurfacePath(seg)
+				if !ok {
+					fileServer.ServeHTTP(cw, r)
+					return
+				}
 				if q := r.URL.RawQuery; q != "" {
 					target += "?" + q
 				}
 				// The fragment carries the daemon host and token and is never sent to a server,
 				// so there is nothing to preserve here; the browser reattaches it itself.
+				//
+				//nolint:gosec // G710: the destination is an element of KnownSurfaces, returned by
+				// CanonicalSurfacePath, so it cannot be influenced by the request - only the
+				// optional query rides along. gosec's taint analysis cannot see through the
+				// allow-list lookup and flags any redirect downstream of a request path.
+				// TestRedirectNormalizesAndCannotEchoTheRequestPath pins the property.
 				http.Redirect(w, r, target, http.StatusFound)
 				return
 			}

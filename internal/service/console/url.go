@@ -24,6 +24,23 @@ func IsSurfaceRoute(seg string) bool {
 	return slices.Contains(KnownSurfaces, seg)
 }
 
+// CanonicalSurfacePath returns the canonical trailing-slash URL for a surface segment, built
+// from the ENTRY IN KnownSurfaces rather than from the caller's string.
+//
+// The distinction is the point. A redirect assembled from a request path is a redirect whose
+// destination the requester influenced, which is both a real hazard class and one a taint
+// analyser is right to flag (gosec G710). Returning the matched constant means the destination
+// is drawn from this file's own list and can be nothing else, so the property holds by
+// construction rather than by the caller having validated first.
+func CanonicalSurfacePath(seg string) (string, bool) {
+	for _, s := range KnownSurfaces {
+		if s == seg {
+			return "/console/" + s + "/", true
+		}
+	}
+	return "", false
+}
+
 // LogViewerURL assembles the log-viewer deep link: BOTH the ref identity and the encoded
 // output ride the URL fragment (after #), which the browser NEVER transmits to a server - so
 // nothing about the run, not even its ref id, ever leaves the machine. The payload is a
