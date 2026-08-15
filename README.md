@@ -20,21 +20,13 @@ Change a file and magus works out which projects it reaches, rebuilds only those
      termcast-record` when the CLI's output changes; both files commit together. -->
 
 <p align="center">
-  <img alt="Terminal recording: magus ls lists five projects, magus run ci runs lint, build and test across all of them reporting '0 cached, 5 ran', the same command run again reports '5 cached, 0 ran' having replayed every result from cache, and finally one file is edited and magus affected ci narrows to three projects - the edited one and the project depending on it - reporting '2 cached, 1 ran'." src="./assets/gen/core-loop.svg" width="820">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="./assets/gen/core-loop-light.svg">
+    <img alt="Terminal recording: magus ls lists five projects, magus run ci runs lint, build and test across all of them reporting '0 cached, 5 ran', the same command run again reports '5 cached, 0 ran' having replayed every result from cache, and finally one file is edited and magus affected ci narrows to three projects - the edited one and the project depending on it - reporting '2 cached, 1 ran'." src="./assets/gen/core-loop.svg" width="820">
+  </picture>
 </p>
 
-<!-- Recorded by `magus run termcast-showcase` - a real interactive session driven
-     by real keystrokes - and rendered by `magus run termcast-generate`. Both files
-     commit together. -->
-
-<p align="center">
-  <img alt="Terminal recording of an interactive magus session: a run draws a pinned box at the bottom of the terminal showing pool slots and a live count while ordinary output scrolls above it; a failing run pins its failures as a tree grouped by project, with the selected failure's captured test output shown in a second column beside it; tab swaps which of the two views is larger; and magus x opens a picker that searches the knowledge graph as the filter is typed." src="./assets/gen/showcase.svg" width="1080">
-</p>
-
-The band at the bottom holds still while your output scrolls past it. Nothing is
-cleared, the alternate screen is never touched, and your scrollback survives -
-so selection, copy and paste keep working the way they always did. Every one of
-these surfaces degrades to plain text when there is no terminal to draw on.
+<p align="center"><em>One command, three runs: cold, fully cached, then narrowed to what a change reached.</em></p>
 
 ## Why magus exists
 
@@ -199,6 +191,26 @@ target's operations (the `go` spell provides `go-test`; the `buf` spell provides
 for read-write or `cd` for continuous delivery. An [op](docs/concepts/operations.md) is a
 single tool invocation. Learn the four words and the rest of the surface reads
 the same way.
+
+### There is a terminal UI. It stays out of your way.
+
+<!-- Recorded by `magus run termcast-showcase` - a real interactive session driven
+     by real keystrokes - and rendered by `magus run termcast-generate`. Both files
+     commit together. -->
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="./assets/gen/showcase-light.svg">
+    <img alt="Terminal recording of an interactive magus session: a run draws a pinned box at the bottom of the terminal showing pool slots and a live count while ordinary output scrolls above it; a failing run pins its failures as a tree grouped by project, with the selected failure's captured test output shown in a second column beside it; tab swaps which of the two views is larger; and magus x opens a picker that searches the knowledge graph as the filter is typed." src="./assets/gen/showcase.svg" width="1080">
+  </picture>
+</p>
+
+<p align="center"><em>A run pins its progress, failures group by project beside their output, and the picker searches the graph as you type.</em></p>
+
+The band at the bottom holds still while your output scrolls past it. Nothing is
+cleared, the alternate screen is never touched, and your scrollback survives -
+so selection, copy and paste keep working the way they always did. Every one of
+these surfaces degrades to plain text when there is no terminal to draw on.
 
 ## Getting started
 
