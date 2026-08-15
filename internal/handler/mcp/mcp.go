@@ -21,6 +21,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/handler/mcp/origin"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/spells"
@@ -164,6 +165,7 @@ func allMCPTools(opts Options) []spells.Driver {
 		&statsTool{graph: opts.Magus},
 		&refsTool{graph: opts.Magus},
 		&vcsCheckpointTool{ws: opts.Magus},
+		&ledgerTool{store: ledger.NewStore(opts.Magus.CacheDir())},
 	}
 }
 
