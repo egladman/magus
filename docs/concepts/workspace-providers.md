@@ -16,6 +16,11 @@ tags:
 
 # Workspace providers
 
+> [!NOTE]
+> This mechanism is new scaffolding, and its contract may still change. The
+> [Nx integration](../guides/integrations/nx.md) is the experiment exercising
+> it; nothing about it is settled yet.
+
 A magus workspace normally learns its projects from the tree: a directory with a
 magusfile is a project (see [workspace.md](workspace.md)). That rule assumes the
 repo's project structure is magus's to declare.
@@ -220,6 +225,8 @@ constant, and a constant pins one answer forever.
 
 ## See also
 
+- [Nx](../guides/integrations/nx.md): the experimental integration that exercises
+  this mechanism, with the spell to copy and the manual setup it needs
 - [Workspace and projects](workspace.md): how discovery works without a provider
 - [Spells](spells.md): the contract a provider spell is written against
 - [CI providers](ci-providers.md) and [Remote caching](cache/remote.md): the two

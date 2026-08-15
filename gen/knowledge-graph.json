@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2183,
-  "edge_count": 5712,
+  "node_count": 2197,
+  "edge_count": 5736,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -1754,8 +1754,8 @@
       "label": "spells",
       "source": "spells",
       "attrs": {
-        "dir_files": "64",
-        "dir_languages": "buzz"
+        "dir_files": "67",
+        "dir_languages": "buzz,markdown"
       }
     },
     {
@@ -1935,6 +1935,26 @@
       "source": "spells/examples/typescript",
       "attrs": {
         "dir_files": "10",
+        "dir_languages": "buzz"
+      }
+    },
+    {
+      "id": "dir:spells/experimental",
+      "kind": "dir",
+      "label": "spells/experimental",
+      "source": "spells/experimental",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "buzz,markdown"
+      }
+    },
+    {
+      "id": "dir:spells/experimental/nx",
+      "kind": "dir",
+      "label": "spells/experimental/nx",
+      "source": "spells/experimental/nx",
+      "attrs": {
+        "dir_files": "1",
         "dir_languages": "buzz"
       }
     },
@@ -3196,7 +3216,7 @@
       "attrs": {
         "role": "doc",
         "section": "guides",
-        "tags": "nx,workspace-provider,monorepo,typescript,adoption,integration",
+        "tags": "nx,workspace-provider,monorepo,typescript,adoption,integration,experimental",
         "title": "Nx"
       }
     },
@@ -6080,6 +6100,15 @@
       }
     },
     {
+      "id": "doc:spells/experimental/README.md",
+      "kind": "doc",
+      "label": "spells/experimental/README.md",
+      "source": "spells/experimental/README.md",
+      "attrs": {
+        "role": "readme"
+      }
+    },
+    {
       "id": "doc:std/README.md",
       "kind": "doc",
       "label": "std/README.md",
@@ -7398,6 +7427,15 @@
       "kind": "file",
       "label": "spells/examples/typescript/vitest.buzz",
       "source": "spells/examples/typescript/vitest.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
+      "id": "file:spells/experimental/nx/spell.buzz",
+      "kind": "file",
+      "label": "spells/experimental/nx/spell.buzz",
+      "source": "spells/experimental/nx/spell.buzz",
       "attrs": {
         "language": "buzz"
       }
@@ -13684,6 +13722,90 @@
       "attrs": {
         "exported": "true"
       }
+    },
+    {
+      "id": "function:spells/experimental/nx/spell.buzz:build",
+      "kind": "function",
+      "label": "build",
+      "doc": "Builds the project nx infers from the working directory.",
+      "source": "spells/experimental/nx/spell.buzz:40"
+    },
+    {
+      "id": "function:spells/experimental/nx/spell.buzz:ci",
+      "kind": "function",
+      "label": "ci",
+      "doc": "Chains lint, test and build so a provided project satisfies the ci anchor.",
+      "source": "spells/experimental/nx/spell.buzz:46"
+    },
+    {
+      "id": "function:spells/experimental/nx/spell.buzz:lint",
+      "kind": "function",
+      "label": "lint",
+      "doc": "Lints the project nx infers from the working directory.",
+      "source": "spells/experimental/nx/spell.buzz:44"
+    },
+    {
+      "id": "function:spells/experimental/nx/spell.buzz:list_projects",
+      "kind": "function",
+      "label": "list_projects",
+      "doc": "list_projects is the workspace-provider contract magus invokes by name.",
+      "source": "spells/experimental/nx/spell.buzz:55",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/experimental/nx/spell.buzz:mgs_getLanguage",
+      "kind": "function",
+      "label": "mgs_getLanguage",
+      "source": "spells/experimental/nx/spell.buzz:18",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/experimental/nx/spell.buzz:mgs_getName",
+      "kind": "function",
+      "label": "mgs_getName",
+      "source": "spells/experimental/nx/spell.buzz:17",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/experimental/nx/spell.buzz:mgs_listIgnoreDirs",
+      "kind": "function",
+      "label": "mgs_listIgnoreDirs",
+      "source": "spells/experimental/nx/spell.buzz:26",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/experimental/nx/spell.buzz:mgs_listRequiredGlobs",
+      "kind": "function",
+      "label": "mgs_listRequiredGlobs",
+      "doc": "For a provider spell this is read at WORKSPACE scope: the files that decide what the projects ARE. It is also what invalidates the provider cache.",
+      "source": "spells/experimental/nx/spell.buzz:22",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/experimental/nx/spell.buzz:mgs_listTargets",
+      "kind": "function",
+      "label": "mgs_listTargets",
+      "source": "spells/experimental/nx/spell.buzz:50",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:spells/experimental/nx/spell.buzz:test",
+      "kind": "function",
+      "label": "test",
+      "doc": "Tests the project nx infers from the working directory.",
+      "source": "spells/experimental/nx/spell.buzz:42"
     },
     {
       "id": "function:spells/github/actions/spell.buzz:annotate",
@@ -24280,6 +24402,14 @@
     },
     {
       "source": "dir:spells",
+      "target": "dir:spells/experimental",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/experimental"
+    },
+    {
+      "source": "dir:spells",
       "target": "dir:spells/github",
       "relation": "contains",
       "confidence": "extracted",
@@ -24869,6 +24999,30 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "spells/examples/typescript/vitest.buzz"
+    },
+    {
+      "source": "dir:spells/experimental",
+      "target": "dir:spells/experimental/nx",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/experimental/nx"
+    },
+    {
+      "source": "dir:spells/experimental",
+      "target": "doc:spells/experimental/README.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/experimental/README.md"
+    },
+    {
+      "source": "dir:spells/experimental/nx",
+      "target": "file:spells/experimental/nx/spell.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/experimental/nx/spell.buzz"
     },
     {
       "source": "dir:spells/github",
@@ -28944,6 +29098,14 @@
     },
     {
       "source": "doc:docs/concepts/workspace-providers.md",
+      "target": "doc:docs/guides/integrations/nx.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/concepts/workspace-providers.md"
+    },
+    {
+      "source": "doc:docs/concepts/workspace-providers.md",
       "target": "doc:docs/reference/codes/magusfile/MGS1023.md",
       "relation": "references",
       "confidence": "extracted",
@@ -29352,6 +29514,14 @@
     },
     {
       "source": "doc:docs/documentation.md",
+      "target": "doc:docs/concepts/workspace-providers.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/documentation.md"
+    },
+    {
+      "source": "doc:docs/documentation.md",
       "target": "doc:docs/concepts/workspace.md",
       "relation": "references",
       "confidence": "extracted",
@@ -29385,6 +29555,14 @@
     {
       "source": "doc:docs/documentation.md",
       "target": "doc:docs/guides/getting-started.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/documentation.md"
+    },
+    {
+      "source": "doc:docs/documentation.md",
+      "target": "doc:docs/guides/integrations/nx.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -31063,6 +31241,14 @@
       "provenance": "docs/guides/integrations/nx.md"
     },
     {
+      "source": "doc:docs/guides/integrations/nx.md",
+      "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/nx.md"
+    },
+    {
       "source": "doc:docs/guides/integrations/pr-advice.md",
       "target": "doc:docs/concepts/cache.md",
       "relation": "references",
@@ -31489,6 +31675,14 @@
     {
       "source": "doc:docs/migrating/from-nx.md",
       "target": "doc:docs/guides/getting-started.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/migrating/from-nx.md"
+    },
+    {
+      "source": "doc:docs/migrating/from-nx.md",
+      "target": "doc:docs/guides/integrations/nx.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -43511,6 +43705,14 @@
       "provenance": "schema/README.md"
     },
     {
+      "source": "doc:spells/experimental/README.md",
+      "target": "doc:docs/guides/integrations/nx.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/experimental/README.md"
+    },
+    {
       "source": "doc:std/README.md",
       "target": "spell:markdown",
       "relation": "documents",
@@ -52677,6 +52879,118 @@
       "confidence": "inferred",
       "score": 0.7,
       "provenance": "spells/examples/typescript/vitest.buzz"
+    },
+    {
+      "source": "file:spells/experimental/nx/spell.buzz",
+      "target": "function:spells/experimental/nx/spell.buzz:build",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/experimental/nx/spell.buzz"
+    },
+    {
+      "source": "file:spells/experimental/nx/spell.buzz",
+      "target": "function:spells/experimental/nx/spell.buzz:ci",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/experimental/nx/spell.buzz"
+    },
+    {
+      "source": "file:spells/experimental/nx/spell.buzz",
+      "target": "function:spells/experimental/nx/spell.buzz:lint",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/experimental/nx/spell.buzz"
+    },
+    {
+      "source": "file:spells/experimental/nx/spell.buzz",
+      "target": "function:spells/experimental/nx/spell.buzz:list_projects",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/experimental/nx/spell.buzz"
+    },
+    {
+      "source": "file:spells/experimental/nx/spell.buzz",
+      "target": "function:spells/experimental/nx/spell.buzz:mgs_getLanguage",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/experimental/nx/spell.buzz"
+    },
+    {
+      "source": "file:spells/experimental/nx/spell.buzz",
+      "target": "function:spells/experimental/nx/spell.buzz:mgs_getName",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/experimental/nx/spell.buzz"
+    },
+    {
+      "source": "file:spells/experimental/nx/spell.buzz",
+      "target": "function:spells/experimental/nx/spell.buzz:mgs_listIgnoreDirs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/experimental/nx/spell.buzz"
+    },
+    {
+      "source": "file:spells/experimental/nx/spell.buzz",
+      "target": "function:spells/experimental/nx/spell.buzz:mgs_listRequiredGlobs",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/experimental/nx/spell.buzz"
+    },
+    {
+      "source": "file:spells/experimental/nx/spell.buzz",
+      "target": "function:spells/experimental/nx/spell.buzz:mgs_listTargets",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/experimental/nx/spell.buzz"
+    },
+    {
+      "source": "file:spells/experimental/nx/spell.buzz",
+      "target": "function:spells/experimental/nx/spell.buzz:test",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "spells/experimental/nx/spell.buzz"
+    },
+    {
+      "source": "file:spells/experimental/nx/spell.buzz",
+      "target": "import:encoding/json",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/experimental/nx/spell.buzz"
+    },
+    {
+      "source": "file:spells/experimental/nx/spell.buzz",
+      "target": "import:magus/spell",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/experimental/nx/spell.buzz"
+    },
+    {
+      "source": "file:spells/experimental/nx/spell.buzz",
+      "target": "import:os",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/experimental/nx/spell.buzz"
+    },
+    {
+      "source": "file:spells/experimental/nx/spell.buzz",
+      "target": "import:proc",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "spells/experimental/nx/spell.buzz"
     },
     {
       "source": "file:spells/github/actions/spell.buzz",
