@@ -1,21 +1,28 @@
 package main
 
 import (
+	"bytes"
 	"context"
 	"flag"
 	"fmt"
 	"io"
+	"net/http"
 	"net/url"
 	"os"
 	"os/signal"
 	"path/filepath"
 	"strings"
 	"syscall"
+	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/file/watch"
+	"github.com/egladman/magus/internal/interactive/difftui"
 	"github.com/egladman/magus/internal/interactive/tty"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -48,6 +55,9 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
+		return err
+	}
+	if err := diffTUIRefusal(rf, src, opts.Format, isInteractiveTTY()); err != nil {
 		return err
 	}
 
@@ -109,6 +119,38 @@ func diffInputFromArgs(rest []string) (diffInput, error) {
 		"and pipe a patch in with `git diff %s | magus diff -`", arg, arg, arg)
 }
 
+// diffTUIRefusal reports why --tui cannot run under these flags, or nil when it can.
+//
+// Every refusal is LOUD and names plain `magus diff` as the way to get the same answer,
+// because each of these combinations has a reading that looks like it should work and a
+// silent one that would be a lie: a patch file has no working tree to coordinate a session
+// over, a watch loop and a keypress loop both own the same terminal, and -o json asked for
+// a machine-readable answer that a viewport cannot give.
+//
+// It takes interactive as an ARGUMENT rather than probing the terminal itself, which is
+// what makes the refusal matrix testable without a pty.
+func diffTUIRefusal(rf *gen.DiffFlags, src diffInput, format Format, interactive bool) error {
+	if !rf.Tui {
+		return nil
+	}
+	if src.kind != inputWorkingTree {
+		return usagef("magus diff: --tui reads the working tree, so it cannot be combined with %s", src.label)
+	}
+	if rf.Watch {
+		return usagef("magus diff: --tui and --watch both drive the terminal, so they cannot be combined")
+	}
+	if format != outputText {
+		return usagef("magus diff: --tui draws at a terminal, so it cannot be combined with -o %s", format)
+	}
+	if !interactive {
+		// Not a usage error: the flags are fine and the terminal is not, so say which one and
+		// name the command that works here.
+		fmt.Fprintln(os.Stderr, "magus: diff --tui requires an interactive terminal; use `magus diff` instead")
+		return errSilent{exitCode: 2}
+	}
+	return nil
+}
+
 // readPatch returns the unified patch for this input.
 func (in diffInput) readPatch(ctx context.Context, m *magus.Magus) (string, string, error) {
 	switch in.kind {
@@ -152,9 +194,38 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	}
 
 	paths := changedPathsFromPatch(patch)
-	rev, err := m.Diff(ctx, paths)
+	if rf.Tui {
+		return runDiffTUI(ctx, m, patch, base, paths, rf.Generated)
+	}
+	rev, err := annotateDiff(ctx, m, paths, base)
 	if err != nil {
 		return err
+	}
+
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(opts, rev)
+	case outputName:
+		for _, f := range rev.Files {
+			if f.Generated() && !rf.Generated {
+				continue
+			}
+			fmt.Println(f.Path)
+		}
+		return nil
+	}
+	return printDiffText(rev, rf.Generated, pathLinker(m.Root()))
+}
+
+// annotateDiff computes the annotated changeset for a set of changed paths.
+//
+// One definition, because the TUI and the one-shot renderer must show the same facts - two
+// callers folding on their own overlays is how "the console said 12 files reference this and
+// the CLI said nothing" happens.
+func annotateDiff(ctx context.Context, m *magus.Magus, paths []string, base string) (types.Diff, error) {
+	rev, err := m.Diff(ctx, paths)
+	if err != nil {
+		return types.Diff{}, err
 	}
 	rev.Base = base
 	// The churn lenses, from a fresh scan. The daemon serves these from a warm cache; a
@@ -172,20 +243,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	// The agent trail: which sessions wrote each file and what they had read first. Empty when
 	// no guard hook is wired, which is the common case rather than a fault.
 	rev.AttachReplay(diffTouches(m.Root(), m.CacheDir(), paths))
-
-	switch opts.Format {
-	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, rev)
-	case outputName:
-		for _, f := range rev.Files {
-			if f.Generated() && !rf.Generated {
-				continue
-			}
-			fmt.Println(f.Path)
-		}
-		return nil
-	}
-	return printDiffText(rev, rf.Generated, pathLinker(m.Root()))
+	return rev, nil
 }
 
 // watchDiff re-renders whenever the working tree changes, until interrupted.
@@ -269,6 +327,207 @@ func pathLinker(root string) func(string) string {
 	}
 }
 
+// runDiffTUI opens the interactive reader over the working tree's changeset.
+//
+// This is what makes "three clients, one session" true for a terminal. `magus diff` already
+// shared the COMPUTATION with the console and the MCP surface; what it did not share was the
+// coordination - where the reader is, what they have read, what an agent has asked them to
+// look at. Reading a diff is not a report you print once, it is a place you are IN.
+func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths []string, showGenerated bool) error {
+	rev, sess, sync, err := attachDiffSession(ctx, m, patch, base, paths)
+	if err != nil {
+		return err
+	}
+	return difftui.Run(ctx, difftui.Options{
+		In:    os.Stdin,
+		Out:   os.Stdout,
+		Probe: tty.SystemProbe,
+		Input: difftui.Input{
+			Files:       diffTUIFiles(rev, diff.ParseHunks(patch)),
+			Unranked:    !rev.Ranked(),
+			Viewed:      sess.Viewed,
+			Comments:    sess.Comments,
+			Suggestions: sess.Suggestions,
+			Unfolded:    showGenerated,
+			Link:        pathLinker(m.Root()),
+		},
+		Sync:    sync,
+		Summary: diffCountsLine(rev),
+	})
+}
+
+// attachDiffSession joins the shared review, daemon first.
+//
+// With a daemon running its session is the ONE session - the console tab and the agent are
+// already on it, so the terminal joining anywhere else would be a fourth opinion wearing the
+// same name. Without one there is nobody to pair with, so the changeset is computed here and
+// progress goes straight into the file the daemon's own store would have written.
+func attachDiffSession(ctx context.Context, m *magus.Magus, patch, base string, paths []string) (types.Diff, *types.DiffSession, difftui.Sync, error) {
+	asOf := diff.PatchDigest(patch)
+	if b := dialDiffBridge(ctx, paths, asOf); b != nil {
+		return b.session.Diff, b.session, b, nil
+	}
+	rev, err := annotateDiff(ctx, m, paths, base)
+	if err != nil {
+		return types.Diff{}, nil, nil, err
+	}
+	// Written straight into the store rather than through the daemon, which is sound only
+	// because there is no daemon: with one running it owns this file, and two writers would
+	// each persist their own idea of the whole set. Attach is what loads the marks a previous
+	// session left AND what makes MarkViewed below have a session to write to.
+	store := diff.NewStore(m.CacheDir())
+	sess := store.Attach(m.Root(), base, rev, asOf)
+	return rev, sess, diffStoreSync{store: store, root: m.Root()}, nil
+}
+
+// diffTUIFiles joins the annotations to the patch: one is ordered by consequence, the other
+// by whatever the VCS emitted, and the reader wants the first order with the second's text.
+//
+// The annotation order is authoritative and is never recomputed here - types.Diff.
+// SortForReading is the single definition of review order.
+func diffTUIFiles(rev types.Diff, parsed []diff.FileHunks) []difftui.File {
+	byPath := make(map[string][]diff.Hunk, len(parsed))
+	for _, f := range parsed {
+		byPath[f.Path] = f.Hunks
+	}
+	out := make([]difftui.File, 0, len(rev.Files))
+	for _, f := range rev.Files {
+		file := difftui.File{Path: f.Path, Generated: f.Generated(), Facts: diffFileFacts(f)}
+		for _, h := range byPath[f.Path] {
+			file.Hunks = append(file.Hunks, difftui.Hunk{Header: h.Header, Lines: h.Lines, Digest: h.Digest})
+		}
+		out = append(out, file)
+	}
+	return out
+}
+
+// diffStoreSync persists the reader's progress with no daemon in the picture. There is no
+// cursor to publish: nobody is listening.
+type diffStoreSync struct {
+	store *diff.Store
+	root  string
+}
+
+func (diffStoreSync) SetCursor(types.DiffCursor) {}
+
+func (s diffStoreSync) SetViewed(digest string, on bool) {
+	s.store.MarkViewed(s.root, digest, on)
+}
+
+// diffBridge is the running daemon's session, reached over the same loopback routes the
+// console uses. The session it attached to travels with it, because a transport that could
+// hand back a session it had not attached would be a client of nothing.
+type diffBridge struct {
+	addr    string
+	token   string
+	session *types.DiffSession
+}
+
+// diffBridgeAttach bounds the GET that annotates and attaches. It is the expensive route -
+// symbol shards and a reverse closure - so this is generous; the alternative on a slow answer
+// is not a faster one, it is computing the same thing locally.
+const diffBridgeAttach = 10 * time.Second
+
+// diffBridgeWrite bounds a coordination write. Short, because it happens on a KEYPRESS: a
+// long timeout against a wedged daemon would put that whole delay between the reader pressing
+// a key and the screen moving.
+const diffBridgeWrite = time.Second
+
+// dialDiffBridge attaches to the daemon's session, or returns nil when there is nothing to
+// join - no token, no listener, a daemon with no workspace. Every one of those is an ordinary
+// state rather than an error: the terminal reads the diff on its own and says nothing about
+// a daemon the reader never asked for.
+//
+// asOf is the digest of the patch about to be rendered, and the session is DECLINED unless
+// the daemon computed its changeset from the same bytes. Without that check a daemon serving
+// a different workspace - the main checkout while this is a worktree - answers confidently
+// about a tree the reader is not looking at, and the coordinate every comment and every
+// viewed mark is keyed by would silently mean something else.
+func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridge {
+	token, err := auth.Load()
+	if err != nil {
+		return nil
+	}
+	q := url.Values{}
+	for _, p := range paths {
+		q.Add("path", p)
+	}
+	b := &diffBridge{addr: mcpAddrString(), token: token}
+	ctx, cancel := context.WithTimeout(ctx, diffBridgeAttach)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, "http://"+b.addr+"/api/v1/diff?"+q.Encode(), nil)
+	if err != nil {
+		return nil
+	}
+	req.Header.Set("Authorization", "Bearer "+token)
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return nil
+	}
+	defer resp.Body.Close()
+	if resp.StatusCode != http.StatusOK {
+		return nil
+	}
+	var sess types.DiffSession
+	if err := json.NewDecoder(resp.Body).Decode(&sess); err != nil {
+		return nil
+	}
+	if sess.AsOf != asOf {
+		return nil
+	}
+	b.session = &sess
+	return b
+}
+
+// diffSessionOp is one mutation of the shared session, the wire shape the daemon's
+// /api/v1/diff/session route takes.
+type diffSessionOp struct {
+	Op     string `json:"op"`
+	Path   string `json:"path,omitempty"`
+	Hunk   int    `json:"hunk,omitempty"`
+	Digest string `json:"digest,omitempty"`
+	On     bool   `json:"on,omitempty"`
+}
+
+// SetCursor publishes where the reader is looking. The reply is discarded on purpose: it
+// carries the session's own cursor, and applying that would let another client move this
+// reader's viewport - which is the one thing the paired-review design forbids.
+func (b *diffBridge) SetCursor(c types.DiffCursor) {
+	b.post(diffSessionOp{Op: "cursor", Path: c.Path, Hunk: c.Hunk})
+}
+
+// SetViewed publishes a read mark, which the daemon persists for every client at once.
+func (b *diffBridge) SetViewed(digest string, on bool) {
+	b.post(diffSessionOp{Op: "viewed", Digest: digest, On: on})
+}
+
+// post sends one mutation, best-effort. A coordination write that fails is a pairing that
+// went quiet, not a review that has to stop - and there is nothing useful to say about it to
+// somebody in the middle of reading a diff.
+func (b *diffBridge) post(op diffSessionOp) {
+	body, err := json.Marshal(op)
+	if err != nil {
+		return
+	}
+	// Not the session's context: this is fire-and-forget under its own short deadline, and a
+	// cancelled read should not turn the last write into a lost mark.
+	ctx, cancel := context.WithTimeout(context.Background(), diffBridgeWrite)
+	defer cancel()
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+b.addr+"/api/v1/diff/session", bytes.NewReader(body))
+	if err != nil {
+		return
+	}
+	req.Header.Set("Authorization", "Bearer "+b.token)
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return
+	}
+	defer resp.Body.Close()
+	// Drained so the connection can be reused for the next keypress rather than torn down.
+	_, _ = io.Copy(io.Discard, resp.Body)
+}
+
 func diffUsage(w *os.File) {
 	fmt.Fprintln(w, "Usage: magus diff [--generated] [flags]")
 	fmt.Fprintln(w, "")
@@ -298,6 +557,8 @@ func diffUsage(w *os.File) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
 	fmt.Fprintln(w, "  --generated   include the folded declared outputs")
+	fmt.Fprintln(w, "  --tui         read it interactively, joined to the session the console")
+	fmt.Fprintln(w, "                and an agent share: ] and [ walk hunks, v marks one read")
 }
 
 // diffHistoryCommits bounds the git-log walk the churn lenses do. 500 matches what the
@@ -329,6 +590,25 @@ func diffTouches(root, cacheDir string, paths []string) map[string][]types.DiffT
 	return out
 }
 
+// diffCountsLine is the headline every rendering of a changeset opens with: how much there
+// is to read before any of it is shown.
+//
+// The interactive reader leaves this same line behind when it quits, which is why it is a
+// string rather than a print: a session that erased its viewport and printed nothing would
+// leave the scrollback with no record that a review happened at all.
+func diffCountsLine(rev types.Diff) string {
+	gen := rev.GeneratedCount()
+	line := fmt.Sprintf("%d files to read", len(rev.Files)-gen)
+	if gen > 0 {
+		line += fmt.Sprintf(", %d generated folded", gen)
+	}
+	if n := len(rev.SeedProjects); n > 0 {
+		// "rebuild" carried no noun and readers could not tell what the count was OF.
+		line += fmt.Sprintf("; %d projects edited, %d projects rebuild", n, len(rev.AffectedProjects))
+	}
+	return line
+}
+
 // printDiffText renders the diff in the house style: counts before lists, the evidence
 // beside the claim, plain ASCII.
 func printDiffText(rev types.Diff, showGenerated bool, link func(string) string) error {
@@ -341,15 +621,7 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string)
 		}
 	}
 
-	fmt.Printf("%d files to read", len(primary))
-	if len(generated) > 0 {
-		fmt.Printf(", %d generated folded", len(generated))
-	}
-	if n := len(rev.SeedProjects); n > 0 {
-		// "rebuild" carried no noun and readers could not tell what the count was OF.
-		fmt.Printf("; %d projects edited, %d projects rebuild", n, len(rev.AffectedProjects))
-	}
-	fmt.Println()
+	fmt.Println(diffCountsLine(rev))
 	fmt.Println()
 
 	// The ordering caveat prints BEFORE the list, and only this placement works. As a trailing
@@ -397,7 +669,33 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string)
 
 func printDiffFile(f types.DiffFile, link func(string) string) {
 	fmt.Printf("  %s\n", link(f.Path))
+	for _, fact := range diffFileFacts(f) {
+		fmt.Printf("      %s\n", fact)
+	}
+	// The story, last: it is the deepest context and the least urgent. A reader scanning for
+	// risk should hit reach and coverage first and find the narrative when they stop to read.
+	for _, t := range f.Touches {
+		who := t.Host
+		if who == "" {
+			who = "an agent"
+		}
+		fmt.Printf("      written by %s", who)
+		if len(t.Read) > 0 {
+			fmt.Printf(", after reading %s", strings.Join(capSlice(t.Read, 4), ", "))
+		}
+		fmt.Println()
+		if t.Transcript != "" {
+			fmt.Printf("        transcript: %s\n", t.Transcript)
+		}
+	}
+}
 
+// diffFileFacts is what magus knows about one changed file, one claim per line.
+//
+// Extracted from the printer so the interactive reader shows the SAME sentences: two
+// renderings of "12 files reference its widest changed symbol" would drift, and the drift
+// would be invisible until somebody compared two surfaces side by side.
+func diffFileFacts(f types.DiffFile) []string {
 	var facts []string
 	if f.Surface == types.DiffSurfacePublic {
 		var api []string
@@ -458,25 +756,7 @@ func printDiffFile(f types.DiffFile, link func(string) string) {
 	if f.Project != "" {
 		facts = append(facts, "in "+f.Project)
 	}
-	for _, fact := range facts {
-		fmt.Printf("      %s\n", fact)
-	}
-	// The story, last: it is the deepest context and the least urgent. A reader scanning for
-	// risk should hit reach and coverage first and find the narrative when they stop to read.
-	for _, t := range f.Touches {
-		who := t.Host
-		if who == "" {
-			who = "an agent"
-		}
-		fmt.Printf("      written by %s", who)
-		if len(t.Read) > 0 {
-			fmt.Printf(", after reading %s", strings.Join(capSlice(t.Read, 4), ", "))
-		}
-		fmt.Println()
-		if t.Transcript != "" {
-			fmt.Printf("        transcript: %s\n", t.Transcript)
-		}
-	}
+	return facts
 }
 
 // capSlice bounds a list for display, reporting the remainder rather than truncating in

@@ -3,7 +3,7 @@
 magus\-diff \- Read the working tree's changes in the order they deserve attention
 .SH SYNOPSIS
 .B magus
-.RI "diff [\-\-generated] [\-\-watch] [<patch\-file>|\-] [flags]"
+.RI "diff [\-\-generated] [\-\-tui] [\-\-watch] [<patch\-file>|\-] [flags]"
 .SH DESCRIPTION
 Read the working tree's uncommitted changes, annotated and ordered.
 .PP
@@ -32,6 +32,9 @@ and an agent can join that session through the magus_diff MCP tool.
 \fB\-\-generated\fR
 Include declared target outputs, which are folded away by default
 .TP
+\fB\-\-tui\fR
+Read the changeset interactively, joined to the session the console and an agent share
+.TP
 \fB\-\-watch\fR
 Re\-read and re\-render whenever the working tree changes
 .RE
@@ -46,6 +49,12 @@ magus diff
 .PP
 .EX
 magus diff --generated
+.EE
+.PP
+\fINavigate it hunk by hunk and mark what you have read\fR
+.PP
+.EX
+magus diff --tui
 .EE
 .PP
 \fIMachine\-readable, for a script or a Buzz advisor\fR

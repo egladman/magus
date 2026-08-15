@@ -10,7 +10,7 @@ Read the working tree's changes in the order they deserve attention
 
 ## Synopsis
 
-**magus** review [--generated] [flags]
+**magus** diff [--generated] [--tui] [--watch] [\<patch-file\>|-] [flags]
 
 ## Description
 
@@ -33,7 +33,7 @@ claim a change is breaking - deciding that needs signature compatibility, which
 needs a base-side index magus does not keep and language semantics it does not
 model - it reports who can see the thing you changed and lets you decide.
 
-The console's Review surface reads the same annotations over the same session,
+The console's Diff surface reads the same annotations over the same session,
 and an agent can join that session through the magus_diff MCP tool.
 
 ## Options
@@ -41,24 +41,36 @@ and an agent can join that session through the magus_diff MCP tool.
 **--generated**
 : Include declared target outputs, which are folded away by default
 
+**--tui**
+: Read the changeset interactively, joined to the session the console and an agent share
+
+**--watch**
+: Re-read and re-render whenever the working tree changes
+
 ## Examples
 
 *Read what you are about to commit*
 
 ```sh
-magus review
+magus diff
 ```
 
 *Include the generated files too*
 
 ```sh
-magus review --generated
+magus diff --generated
+```
+
+*Navigate it hunk by hunk and mark what you have read*
+
+```sh
+magus diff --tui
 ```
 
 *Machine-readable, for a script or a Buzz advisor*
 
 ```sh
-magus review -o json
+magus diff -o json
 ```
 
 ## See Also
