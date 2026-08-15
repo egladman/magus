@@ -352,9 +352,12 @@ func TestListProjects_Manifests(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
 	const hasSpell, noneSpell = "zzz-manifest-has", "zzz-manifest-none"
 	project.DefaultSpellRegistry().RegisterSpell(
-		spells.NewSpell(hasSpell, spells.WithManifests("pyproject.toml", "setup.py", "setup.cfg")))
+		spells.NewSpell(hasSpell, spells.WithManifests(
+			spells.Manifest{Value: "pyproject.toml"},
+			spells.Manifest{Value: "setup.py"},
+			spells.Manifest{Value: "setup.cfg"})))
 	project.DefaultSpellRegistry().RegisterSpell(
-		spells.NewSpell(noneSpell, spells.WithManifests("Cargo.toml")))
+		spells.NewSpell(noneSpell, spells.WithManifests(spells.Manifest{Value: "Cargo.toml"})))
 	t.Cleanup(func() {
 		project.DefaultSpellRegistry().UnregisterSpell(hasSpell)
 		project.DefaultSpellRegistry().UnregisterSpell(noneSpell)
@@ -385,6 +388,107 @@ func TestListProjects_Manifests(t *testing.T) {
 	}
 	assert.Equal(t, []string{"setup.py"}, byPath["has"].Manifests, `ListProjects: "has".Manifests`)
 	assert.Empty(t, byPath["none"].Manifests, `ListProjects: "none".Manifests`)
+}
+
+// TestListProjects_LockfilesHoistedToWorkspaceRoot covers projectLockfiles, and it is
+// deliberately built around the layout a sibling-only lookup gets WRONG.
+//
+// "member" holds a package.json and no lockfile; the pnpm-lock.yaml serving it sits at
+// the workspace root, which is how pnpm, npm, yarn and cargo workspaces are laid out.
+// An implementation that looked only in the project directory would report nothing here
+// and still pass every other test in this file, because magus's own repo happens to keep
+// a lockfile beside every package.json - so this fixture, not that one, is what pins the
+// walk.
+//
+// "solo" is the flat case, and it is here to prove the walk stops at the nearest hit
+// rather than running to the root: it has its own yarn.lock, which must win over the
+// root's pnpm-lock.yaml even though pnpm-lock.yaml is the earlier-declared candidate.
+func TestListProjects_LockfilesHoistedToWorkspaceRoot(t *testing.T) {
+	// Not parallel: mutates the global spell registry.
+	const nodeSpell = "zzz-lock-node"
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(nodeSpell, spells.WithManifests(
+		spells.Manifest{Value: "package.json", LockCandidates: []string{"pnpm-lock.yaml", "yarn.lock"}})))
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(nodeSpell) })
+
+	root := t.TempDir()
+	write := func(rel string) {
+		abs := filepath.Join(root, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(""), 0o644))
+	}
+	for _, rel := range []string{
+		"magusfile.buzz", "pnpm-lock.yaml",
+		"apps/member/magusfile.buzz", "apps/member/package.json",
+		"solo/magusfile.buzz", "solo/package.json", "solo/yarn.lock",
+	} {
+		write(rel)
+	}
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".")
+	reg.RegisterProject("apps/member", WithSpell(nodeSpell))
+	reg.RegisterProject("solo", WithSpell(nodeSpell))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Inspect")
+
+	out, err := ws.ListProjects(context.Background())
+	require.NoError(t, err, "ListProjects")
+	byPath := make(map[string]types.ProjectEntry, len(out.Projects))
+	for _, e := range out.Projects {
+		byPath[e.Path] = e
+	}
+
+	assert.Equal(t, []string{"package.json"}, byPath["apps/member"].Manifests,
+		"the manifest is still the bare name beside the project")
+	assert.Equal(t, []string{"pnpm-lock.yaml"}, byPath["apps/member"].Lockfiles,
+		"a hoisted lockfile must be found by walking up, and reported workspace-relative")
+	assert.Equal(t, []string{"solo/yarn.lock"}, byPath["solo"].Lockfiles,
+		"the nearest lockfile wins over a root one, whatever the candidate order says")
+}
+
+// TestListProjects_LockfilesAbsent pins the empty cases apart from each other: a spell
+// declaring no lock candidate at all, and one declaring candidates none of which exist.
+// Both report nothing, and neither may report the root's lockfile - a project whose
+// ecosystem does not lock must not inherit a lockfile from a neighbour it shares no
+// package manager with.
+func TestListProjects_LockfilesAbsent(t *testing.T) {
+	// Not parallel: mutates the global spell registry.
+	const noLocks, missingLocks = "zzz-lock-none", "zzz-lock-missing"
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(noLocks,
+		spells.WithManifests(spells.Manifest{Value: "setup.py"})))
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(missingLocks, spells.WithManifests(
+		spells.Manifest{Value: "Cargo.toml", LockCandidates: []string{"Cargo.lock"}})))
+	t.Cleanup(func() {
+		project.DefaultSpellRegistry().UnregisterSpell(noLocks)
+		project.DefaultSpellRegistry().UnregisterSpell(missingLocks)
+	})
+
+	root := t.TempDir()
+	for _, rel := range []string{
+		"magusfile.buzz", "pnpm-lock.yaml",
+		"py/magusfile.buzz", "py/setup.py",
+		"rs/magusfile.buzz", "rs/Cargo.toml",
+	} {
+		abs := filepath.Join(root, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(""), 0o644))
+	}
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".")
+	reg.RegisterProject("py", WithSpell(noLocks))
+	reg.RegisterProject("rs", WithSpell(missingLocks))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Inspect")
+
+	out, err := ws.ListProjects(context.Background())
+	require.NoError(t, err, "ListProjects")
+	byPath := make(map[string]types.ProjectEntry, len(out.Projects))
+	for _, e := range out.Projects {
+		byPath[e.Path] = e
+	}
+	assert.Empty(t, byPath["py"].Lockfiles, "a manifest declaring no lock candidate resolves none")
+	assert.Empty(t, byPath["rs"].Lockfiles, "an unwritten Cargo.lock must not fall through to the root's pnpm-lock.yaml")
 }
 
 func TestEvaluateTarget_FanOut(t *testing.T) {

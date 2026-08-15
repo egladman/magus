@@ -11,6 +11,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/daemon"
+	"github.com/egladman/magus/internal/diff"
 	internalmcp "github.com/egladman/magus/internal/handler/mcp"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/types"
@@ -159,6 +160,11 @@ func startMCPWithDaemon(ctx context.Context, cancel context.CancelFunc, tel obse
 		Config:     globalCfg,
 		HTTPAddr:   addr,
 		StatusBase: buildStatusBase(),
+		// ONE diff-session store for the whole daemon, constructed here because this is
+		// where the daemon's dependencies are assembled. The console's /api/v1/diff routes
+		// and the magus_diff MCP tool both read it, and that sharing IS the pairing: a
+		// person opens a diff, an agent joins the session they started.
+		DiffSessions: diff.NewStore(m.CacheDir()),
 		// Health endpoints share this HTTP server so k8s probes hit the
 		// same port as MCP. Set MAGUS_MCP_ADDRESS=0.0.0.0:7391 (or mcp.address)
 		// so the kubelet can reach them (default 127.0.0.1 is pod-local).

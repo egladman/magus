@@ -24,13 +24,25 @@ export fun mgs_getLanguage() > str { return "python"; }
 // dot-dirs skipped structurally, so only __pycache__ belongs here.
 export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "__pycache__", isDir = true}]; }
 
-// mgs_listManifests names the file that carries this project's OWN version - not
-// the toolchain's (that's mgs_getTools) and not a cache input (these three
-// are separately listed in mgs_listRequiredGlobs above, because they also feed the
-// cache key). Python genuinely has alternatives, unlike the other built-ins: a
-// pyproject.toml-managed project may still ship a legacy setup.py or setup.cfg, so
-// this is ORDERED and the first candidate present in a project directory wins.
-export fun mgs_listManifests() > [Path] { return [Path{value = "pyproject.toml"}, Path{value = "setup.py"}, Path{value = "setup.cfg"}]; }
+// mgs_listManifests names the files this project's dependencies are declared in -
+// not the toolchain's version (that's mgs_getTools) and not a cache input (these
+// three are separately listed in mgs_listRequiredGlobs above, because they also
+// feed the cache key). Python genuinely has alternatives, unlike the other
+// built-ins: a pyproject.toml-managed project may still ship a legacy setup.py or
+// setup.cfg, so this is ORDERED and the first candidate present in a project
+// directory wins.
+//
+// Only pyproject.toml carries lock candidates, and it carries four because python
+// has no single lockfile: poetry, pdm, uv and pipenv each write their own, and the
+// project's own [tool.*] table is what says which. setup.py and setup.cfg predate
+// locking entirely and get none - requirements.txt is NOT one, whatever it looks
+// like: it is a hand-maintained input a tool reads, not resolved output a tool
+// writes, so treating it as a lock would report a range as if it were a pin.
+export fun mgs_listManifests() > [Manifest] {
+    return [Manifest{value = "pyproject.toml", lockCandidates = ["uv.lock", "poetry.lock", "pdm.lock", "Pipfile.lock"]},
+            Manifest{value = "setup.py"},
+            Manifest{value = "setup.cfg"}];
+}
 
 // build/clean are uv's own subcommands; pytest and ruff are tools uv merely runs,
 // so they are named after the tool (pytest, ruff-check), not the `uv run` wrapper.

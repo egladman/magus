@@ -1,0 +1,658 @@
+/* Local tokens.
+ *
+ * PatternFly ships status COLOUR tokens but no status BACKGROUND tokens, so the add/delete
+ * tint is mixed here rather than named.
+ *
+ * The SYNTAX values are deliberately the same palette the docs site already uses for code and
+ * for ```diff blocks (--syn-* in docs/src/styles/theme.css, One Light / One Dark). magus
+ * renders code in two places and they should not disagree about what a keyword looks like.
+ *
+ * They are COPIED rather than imported, and that is the wart: docs/ and console/ are separate
+ * pnpm projects with separate bundles, and docs/package.json states the boundary outright
+ * ("the console surfaces ... own their bundles now"). Extracting one shared palette both can
+ * read is the right fix and is a bigger change than this one; until then, these two lists have
+ * to be edited together, and syntax-palette.test.ts (this directory) reads both files and
+ * fails the build if they stop agreeing. */
+:root {
+  --console-diff-add: var(--pf-t--global--color--status--success--default, #3e8635);
+  --console-diff-del: var(--pf-t--global--color--status--danger--default, #c9190b);
+  --console-diff-surface: var(--pf-t--global--background--color--primary--default, #ffffff);
+  --console-diff-panel: var(--pf-t--global--background--color--secondary--default, #f2f2f2);
+
+  --console-syn-comment: #636d76;
+  --console-syn-keyword: #715bb0;
+  --console-syn-string: #3d7a50;
+  --console-syn-number: #8d5e26;
+  --console-syn-function: #2f6aad;
+}
+
+:root.pf-v6-theme-dark {
+  --console-syn-comment: #838e98;
+  --console-syn-keyword: #b79ae6;
+  --console-syn-string: #8fc79b;
+  --console-syn-number: #dbab77;
+  --console-syn-function: #7fb2e6;
+}
+
+/* diff.css - the Review surface: a sidebar and a virtualized hunk stream.
+ *
+ * Every rule here exists because the virtualizer needs it, not for decoration. The row height
+ * is fixed and MUST equal ROW_HEIGHT in main.ts: the scroll geometry is computed from that
+ * constant rather than measured, so a divergence shows up as rows sliding out of the viewport.
+ * Nothing wraps, for the same reason - a wrapped line is a variable-height row and the whole
+ * constant-time position calculation collapses.
+ *
+ * There is no PF component for a diff stream, so these are authored classes under the
+ * console-diff-* area (see PATTERNFLY.md). PF is still used for everything that HAS a
+ * component: the toolbar, the labels, the empty state.
+ */
+
+.console-diff-layout {
+  display: grid;
+  grid-template-columns: minmax(180px, 18%) 1fr;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.console-diff-sidebar {
+  /* The panels were all transparent, so sidebar, toolbar and stream read as one sheet with a
+     single hairline between them. The stream keeps the primary surface because that is where
+     the tints have to register; the chrome around it steps back onto secondary. */
+  background: var(--console-diff-panel);
+  overflow-y: auto;
+  border-inline-end: 1px solid var(--pf-t--global--border--color--default);
+  padding: var(--pf-t--global--spacer--sm);
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.console-diff-sidebar__item {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+  padding: 2px var(--pf-t--global--spacer--xs);
+  background: none;
+  border: 0;
+  cursor: pointer;
+  text-align: start;
+  color: inherit;
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.console-diff-sidebar__item:hover {
+  background: var(--pf-t--global--background--color--secondary--hover);
+}
+
+/* The path truncates from the START: the tail of a path is what distinguishes two files in a
+ * monorepo, and clipping it leaves a column of identical prefixes. */
+.console-diff-sidebar__path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: start;
+}
+
+.console-diff-sidebar__counts {
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--xs);
+  color: var(--pf-t--global--text--color--subtle);
+  white-space: nowrap;
+}
+
+.console-diff-main {
+  display: grid;
+  grid-template-rows: auto 1fr;
+  min-height: 0;
+  min-width: 0;
+}
+
+.console-diff-toolbar {
+  background: var(--console-diff-panel);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  padding-block: var(--pf-t--global--spacer--xs);
+  padding-inline: var(--pf-t--global--spacer--sm);
+}
+
+.console-diff-scroll {
+  background: var(--console-diff-surface);
+}
+
+.console-diff-toolbar__stats {
+  display: flex;
+  gap: var(--pf-t--global--spacer--xs);
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+/* The scroll container owns BOTH axes: vertical for the stream, horizontal for long lines.
+ * Overflow on an inner element would clip rows against the virtualizer's transform. */
+.console-diff-scroll {
+  overflow: auto;
+  min-height: 0;
+  position: relative;
+  outline: none;
+}
+
+.console-diff-scroll:focus-visible {
+  outline: 2px solid var(--console-accent);
+  outline-offset: -2px;
+}
+
+/* The spacer holds the FULL scroll height (rows x ROW_HEIGHT) while the DOM holds one screen.
+ * This is what makes the scrollbar honest about a ten-thousand-line diff. */
+.console-diff-spacer {
+  position: relative;
+  width: 100%;
+}
+
+/* The window is translated to the first rendered row each frame. position:absolute takes it
+ * out of flow so the transform never reflows the spacer. */
+.console-diff-window {
+  position: absolute;
+  inset-inline: 0;
+  top: 0;
+  will-change: transform;
+}
+
+.console-diff-row {
+  display: flex;
+  align-items: center;
+  height: 20px; /* MUST equal ROW_HEIGHT in main.ts */
+  line-height: 20px;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--sm);
+  white-space: pre;
+  min-width: max-content; /* long lines extend the scroll width rather than wrapping */
+}
+
+/* Add and delete tint.
+ *
+ * These used to name --pf-t--global--background--color--status--{success,danger}--default,
+ * which PatternFly does not define: the declarations resolved to transparent, so a diff
+ * rendered as undifferentiated black text on white and the only thing separating an added
+ * line from a removed one was the +/- glyph. The COLOUR tokens below do exist, and every use
+ * carries a literal fallback the way overrides.css does.
+ *
+ * Mixed against the surface rather than hardcoded, so the tint follows the theme in both
+ * directions instead of needing a parallel dark palette.
+ *
+ * The accent bar is an inset box-shadow, NOT a border: the stream is virtualized against a
+ * fixed ROW_HEIGHT, and a border would grow the content box and drift rows out of alignment
+ * with the spacer. It is also the third channel after colour and the glyph. */
+.console-diff-row[data-kind="add"],
+.console-diff-row__side[data-kind="add"] {
+  background: color-mix(in srgb, var(--console-diff-add) 12%, var(--console-diff-surface));
+  box-shadow: inset 2px 0 0 var(--console-diff-add);
+}
+
+.console-diff-row[data-kind="del"],
+.console-diff-row__side[data-kind="del"] {
+  background: color-mix(in srgb, var(--console-diff-del) 12%, var(--console-diff-surface));
+  box-shadow: inset 2px 0 0 var(--console-diff-del);
+}
+
+/* Dark needs a heavier mix: the same 12% over a dark surface is very nearly invisible. */
+:root.pf-v6-theme-dark .console-diff-row[data-kind="add"],
+:root.pf-v6-theme-dark .console-diff-row__side[data-kind="add"] {
+  background: color-mix(in srgb, var(--console-diff-add) 22%, var(--console-diff-surface));
+}
+
+:root.pf-v6-theme-dark .console-diff-row[data-kind="del"],
+:root.pf-v6-theme-dark .console-diff-row__side[data-kind="del"] {
+  background: color-mix(in srgb, var(--console-diff-del) 22%, var(--console-diff-surface));
+}
+
+.console-diff-row--file {
+  gap: var(--pf-t--global--spacer--xs);
+  padding-inline: var(--pf-t--global--spacer--sm);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-block: 1px solid var(--pf-t--global--border--color--default);
+  font-family: var(--pf-t--global--font--family--body);
+  position: sticky;
+  top: 0;
+  z-index: 1;
+}
+
+.console-diff-row__path {
+  font-family: var(--pf-t--global--font--family--mono);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+}
+
+.console-diff-row--hunk {
+  color: var(--pf-t--global--text--color--subtle);
+  background: var(--pf-t--global--background--color--secondary--default);
+  padding-inline: var(--pf-t--global--spacer--sm);
+}
+
+/* The gutters are a fixed character width so the code column starts at the same x on every
+ * row. tabular-nums keeps a 4-digit line number from being wider than a 4-digit one in a
+ * proportional-figure font. */
+.console-diff-row__gutter {
+  flex: 0 0 auto;
+  width: 5ch;
+  padding-inline-end: var(--pf-t--global--spacer--xs);
+  text-align: end;
+  color: var(--pf-t--global--text--color--subtle);
+  font-variant-numeric: tabular-nums;
+  user-select: none;
+}
+
+.console-diff-row__marker {
+  flex: 0 0 auto;
+  width: 2ch;
+  text-align: center;
+  user-select: none;
+}
+
+.console-diff-row__text {
+  flex: 1 1 auto;
+}
+
+/* Split view: two equal columns that scroll together, divided down the middle. */
+.console-diff-row--pair {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0;
+}
+
+.console-diff-row__side {
+  display: flex;
+  align-items: center;
+  overflow: hidden;
+  min-width: 0;
+}
+
+.console-diff-row__side[data-side="right"] {
+  border-inline-start: 1px solid var(--pf-t--global--border--color--default);
+}
+
+.console-diff-row__side[data-kind="add"] {
+  background: var(--pf-t--global--background--color--status--success--default);
+}
+
+.console-diff-row__side[data-kind="del"] {
+  background: var(--pf-t--global--background--color--status--danger--default);
+}
+
+/* An absent side is a filled cell, not a gap: the two columns must stay aligned row for row.
+ *
+ * Rendered as faint hatching rather than a solid fill. A solid block is the loudest thing on
+ * the screen in a diff with many one-sided runs, and it is marking the ABSENCE of code - the
+ * one thing in view that carries no information. It has to read as "nothing here" without
+ * competing with the lines that do. */
+.console-diff-row__side[data-kind="empty"] {
+  background-image: repeating-linear-gradient(
+    45deg,
+    transparent,
+    transparent 5px,
+    var(--pf-t--global--border--color--subtle) 5px,
+    var(--pf-t--global--border--color--subtle) 6px
+  );
+  opacity: 0.35;
+}
+
+.console-diff-empty {
+  place-self: center;
+  padding: var(--pf-t--global--spacer--2xl);
+}
+
+/* Phase gating: the empty state REPLACES the review rather than sitting beside it, because a
+ * reader with nothing to review has no use for an empty sidebar and an empty toolbar. */
+.console-diff-layout[data-phase="ready"] .console-diff-empty {
+  display: none;
+}
+
+.console-diff-layout:not([data-phase="ready"]) .console-diff-sidebar,
+.console-diff-layout:not([data-phase="ready"]) .console-diff-toolbar,
+.console-diff-layout:not([data-phase="ready"]) .console-diff-rail,
+.console-diff-layout:not([data-phase="ready"]) .console-diff-scroll {
+  display: none;
+}
+
+.console-diff-layout:not([data-phase="ready"]) {
+  grid-template-columns: 1fr;
+}
+
+/* The suggestion rail. It sits ABOVE the stream and out of the reading column on purpose: an
+ * agent asking for attention is peripheral until the reader chooses to act, and a suggestion
+ * that interrupted the diff itself would be the viewport-yanking this design exists to avoid. */
+.console-diff-rail {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--highlight--default);
+}
+
+.console-diff-rail[data-empty] {
+  display: none;
+}
+
+.console-diff-rail__item {
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.console-diff-rail__who {
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  color: var(--console-accent);
+  white-space: nowrap;
+}
+
+.console-diff-rail__what {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-diff-rail__go,
+.console-diff-rail__skip {
+  border: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--primary--default);
+  color: inherit;
+  cursor: pointer;
+  padding: 0 var(--pf-t--global--spacer--xs);
+  font-size: var(--pf-t--global--font--size--xs);
+  white-space: nowrap;
+}
+
+.console-diff-toolbar__fold {
+  border: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--primary--default);
+  color: inherit;
+  cursor: pointer;
+  padding: 0 var(--pf-t--global--spacer--xs);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+/* A comment sits in the stream, one row tall like everything else, so it scrolls with the code
+ * it is about and costs the virtualizer nothing special. Indented past the gutters so the diff
+ * text stays in one column and the remark reads as attached rather than as another line. */
+.console-diff-row--comment {
+  gap: var(--pf-t--global--spacer--xs);
+  padding-inline-start: 7ch;
+  /* Secondary, not the highlight token. Highlight is a saturated yellow that in dark mode
+   * dominated the screen and dropped the text's contrast - and it was fighting for attention
+   * with the diff itself, which is what the reader actually came for. The coloured left border
+   * already says "this is a remark, and this is who wrote it", so the fill only has to
+   * separate the row from the code around it. */
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-inline-start: 3px solid var(--console-accent);
+  color: var(--pf-t--global--text--color--regular);
+  font-family: var(--pf-t--global--font--family--body);
+  /* The body font is taller than the mono font at the same nominal size, so at the shared row
+   * height its text overflowed the box and collided with the next comment. The virtualizer's
+   * geometry is fixed and non-negotiable - every row is ROW_HEIGHT - so the TEXT has to fit
+   * the row rather than the row growing to fit the text. */
+  font-size: var(--pf-t--global--font--size--xs);
+  line-height: 20px;
+  overflow: hidden;
+}
+
+/* An agent's remark is tinted differently from the reader's own. Not decoration: in a paired
+ * review the first question about any comment is who said it, and the daemon stamps that from
+ * the transport, so the colour is reporting a fact rather than a claim. */
+.console-diff-row--comment[data-author="agent"] {
+  border-inline-start-color: var(--pf-t--global--icon--color--status--info--default);
+}
+
+.console-diff-row--comment[data-resolved] {
+  opacity: 0.5;
+  text-decoration: line-through;
+}
+
+.console-diff-row__who {
+  flex: 0 0 auto;
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  font-size: var(--pf-t--global--font--size--xs);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.console-diff-row__comment {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* The composer is PINNED to the scroll container rather than inserted into the virtualized
+ * window, because that window is replaced wholesale on every scroll frame - a composer living
+ * inside it would be destroyed mid-sentence. */
+.console-diff-composer {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: var(--pf-t--global--spacer--sm);
+  padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-block-start: 2px solid var(--console-accent);
+}
+
+.console-diff-composer__where {
+  flex: 0 0 auto;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--sm);
+  color: var(--pf-t--global--text--color--subtle);
+  white-space: nowrap;
+}
+
+.console-diff-composer__input {
+  flex: 1 1 auto;
+  min-width: 0;
+  background: var(--pf-t--global--background--color--primary--default);
+  color: inherit;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  padding: 2px var(--pf-t--global--spacer--xs);
+  font: inherit;
+}
+
+/* The story: who wrote this file and what they were reading when they did. Sits under the file
+ * heading, dimmer than a comment - it is context a reader may want, not something addressed to
+ * them, and it must not compete with the code or with an actual remark. */
+.console-diff-row--story {
+  gap: var(--pf-t--global--spacer--xs);
+  padding-inline-start: 7ch;
+  color: var(--pf-t--global--text--color--subtle);
+  font-family: var(--pf-t--global--font--family--body);
+  font-size: var(--pf-t--global--font--size--xs);
+  line-height: 20px;
+  overflow: hidden;
+  border-inline-start: 2px dotted var(--pf-t--global--border--color--subtle);
+}
+
+.console-diff-row__story {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.console-diff-row__transcript {
+  flex: 0 0 auto;
+  text-decoration: underline dotted;
+  cursor: help;
+}
+
+/* A read hunk dims rather than hides: the reader marked it, they did not delete it, and a
+ * collapsed one would make the scroll geometry depend on progress. */
+.console-diff-row--hunk[data-viewed] {
+  opacity: 0.55;
+}
+
+.console-diff-row[data-cursor] {
+  box-shadow: inset 2px 0 0 var(--console-accent);
+}
+
+.console-diff-sidebar__item[data-surface="public"] .console-diff-sidebar__path {
+  text-decoration: underline;
+  text-decoration-color: var(--pf-t--global--icon--color--status--warning--default);
+  text-underline-offset: 2px;
+}
+
+.console-diff-sidebar__group {
+  margin-block-start: var(--pf-t--global--spacer--sm);
+  padding: 2px var(--pf-t--global--spacer--xs);
+  border: 1px dashed var(--pf-t--global--border--color--default);
+  background: none;
+  color: var(--pf-t--global--text--color--subtle);
+  cursor: pointer;
+  font-size: var(--pf-t--global--font--size--xs);
+  text-align: start;
+}
+
+/* The overview. Esc lands here: the whole changeset on one screen, so a reader can decide what
+ * to spend attention on before spending any. */
+.console-diff-overview {
+  display: none;
+  overflow: auto;
+  padding: var(--pf-t--global--spacer--lg);
+}
+
+.console-diff-layout[data-overview="on"] .console-diff-overview {
+  display: block;
+}
+
+.console-diff-layout[data-overview="on"] .console-diff-scroll,
+.console-diff-layout[data-overview="on"] .console-diff-rail {
+  display: none;
+}
+
+.console-diff-overview__box {
+  max-width: 60rem;
+}
+
+.console-diff-overview__title {
+  font-size: var(--pf-t--global--font--size--xl);
+  margin-block-end: var(--pf-t--global--spacer--md);
+}
+
+.console-diff-overview__subtitle {
+  font-size: var(--pf-t--global--font--size--md);
+  margin-block: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--xs);
+}
+
+.console-diff-overview__row {
+  display: flex;
+  gap: var(--pf-t--global--spacer--md);
+  padding-block: 2px;
+  border-block-end: 1px solid var(--pf-t--global--border--color--subtle);
+}
+
+.console-diff-overview__k {
+  flex: 0 0 12rem;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.console-diff-overview__v {
+  font-family: var(--pf-t--global--font--family--mono);
+}
+
+.console-diff-overview__file {
+  display: block;
+  width: 100%;
+  text-align: start;
+  background: none;
+  border: 0;
+  color: inherit;
+  cursor: pointer;
+  padding: 2px 0;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+.console-diff-overview__file:hover {
+  color: var(--console-accent);
+}
+
+.console-diff-overview__note,
+.console-diff-overview__hint {
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--sm);
+  margin-block-start: var(--pf-t--global--spacer--sm);
+}
+
+/* Reduced motion.
+ *
+ * The surface animates in two places: the scroll container smooth-scrolls on hunk and file
+ * navigation, and PatternFly transitions its labels. A reader who has asked the OS for less
+ * motion has asked for exactly that to stop, and a whole diff sliding past on every `[` is
+ * the symptom they turned it off to avoid. The JS honours this too (prefersReducedMotion in
+ * main.ts) because scrollTo's behavior option is not governed by CSS. */
+@media (prefers-reduced-motion: reduce) {
+  .console-diff-scroll {
+    scroll-behavior: auto;
+  }
+
+  .console-diff-layout *,
+  .console-diff-layout *::before,
+  .console-diff-layout *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+/* Intra-line emphasis: the part of a changed line that actually changed.
+ *
+ * Deliberately a background wash rather than a second foreground colour. The row already
+ * carries add/delete as colour AND as a +/- marker, and stacking another hue on the text
+ * would compete with syntax meaning and with the accessibility work above. A wash keeps the
+ * text contrast that the row already earned. */
+.console-diff-row__word {
+  border-radius: 2px;
+  /* Sits ON TOP of the row tint, so it has to be materially stronger than it to read at all. */
+  background: color-mix(in srgb, var(--console-diff-add) 38%, transparent);
+}
+
+[data-kind="del"] .console-diff-row__word {
+  background: color-mix(in srgb, var(--console-diff-del) 38%, transparent);
+}
+
+/* Syntax colour.
+ *
+ * Foreground only, because the row background is already spoken for by add/delete and the
+ * intra-line emphasis. Five classes, not fifty: a diff spends most of its colour budget
+ * distinguishing added from removed, and a rainbow on top of that competes with the signal the
+ * reader actually came for.
+ *
+ * Every value is a PatternFly token with a literal fallback, so the palette follows the theme
+ * rather than needing a hand-maintained dark ramp. */
+.console-diff-tok--kw {
+  color: var(--console-syn-keyword);
+  font-weight: 600;
+}
+
+.console-diff-tok--str {
+  color: var(--console-syn-string);
+}
+
+.console-diff-tok--num {
+  color: var(--console-syn-number);
+}
+
+.console-diff-tok--com {
+  color: var(--console-syn-comment);
+  font-style: italic;
+}
+
+.console-diff-tok--fn {
+  color: var(--console-syn-function);
+}
+
+/* A token inside a removed or added line keeps its colour; the row tint sits behind it. */
+.console-diff-row__text-part {
+  background: inherit;
+}

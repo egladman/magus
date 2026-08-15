@@ -244,6 +244,7 @@ func (v ProjectEntry) BuzzObject() BuzzObject {
 		"dependsOn": v.DependsOn,
 		"exclusive": v.Exclusive,
 		"manifests": v.Manifests,
+		"lockfiles": v.Lockfiles,
 	}
 }
 
@@ -378,6 +379,92 @@ func (v FileReport) BuzzObject() BuzzObject {
 		"definition": v.Definition,
 		"count":      v.Count,
 		"files":      itemsFiles,
+	}
+}
+
+func (v DiffSymbol) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"id":                v.ID,
+		"label":             v.Label,
+		"refCount":          v.RefCount,
+		"fileCount":         v.FileCount,
+		"externalProjects":  v.ExternalProjects,
+		"externalFileCount": v.ExternalFileCount,
+		"moduleAPI":         v.ModuleAPI,
+	}
+}
+
+func (v DiffChurn) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"commits":      v.Commits,
+		"authors":      v.Authors,
+		"score":        v.Score,
+		"rank":         v.Rank,
+		"projectTrend": v.ProjectTrend,
+	}
+}
+
+func (v DiffTouch) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"host":       v.Host,
+		"session":    v.Session,
+		"transcript": v.Transcript,
+		"read":       v.Read,
+		"ran":        v.Ran,
+	}
+}
+
+func (v DiffFile) BuzzObject() BuzzObject {
+	var optCoverage any
+	if v.Coverage != nil {
+		optCoverage = (*v.Coverage).BuzzObject()
+	}
+	itemsSymbols := make([]any, len(v.Symbols))
+	for indexSymbols := range v.Symbols {
+		itemsSymbols[indexSymbols] = v.Symbols[indexSymbols].BuzzObject()
+	}
+	itemsTouches := make([]any, len(v.Touches))
+	for indexTouches := range v.Touches {
+		itemsTouches[indexTouches] = v.Touches[indexTouches].BuzzObject()
+	}
+	var optChurn any
+	if v.Churn != nil {
+		optChurn = (*v.Churn).BuzzObject()
+	}
+	var optReach any
+	if v.Reach != nil {
+		optReach = (*v.Reach)
+	}
+	return BuzzObject{
+		"path":      v.Path,
+		"project":   v.Project,
+		"role":      v.Role,
+		"hint":      v.Hint,
+		"coverage":  optCoverage,
+		"symbols":   itemsSymbols,
+		"surface":   v.Surface,
+		"touches":   itemsTouches,
+		"churn":     optChurn,
+		"noHistory": v.NoHistory,
+		"reach":     optReach,
+	}
+}
+
+func (v Diff) BuzzObject() BuzzObject {
+	itemsFiles := make([]any, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = v.Files[indexFiles].BuzzObject()
+	}
+	itemsAffectedProjects := make([]any, len(v.AffectedProjects))
+	for indexAffectedProjects := range v.AffectedProjects {
+		itemsAffectedProjects[indexAffectedProjects] = v.AffectedProjects[indexAffectedProjects].BuzzObject()
+	}
+	return BuzzObject{
+		"base":             v.Base,
+		"files":            itemsFiles,
+		"seedProjects":     v.SeedProjects,
+		"affectedProjects": itemsAffectedProjects,
+		"notes":            v.Notes,
 	}
 }
 

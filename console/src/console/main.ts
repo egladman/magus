@@ -59,6 +59,7 @@ import {
 import { createClient } from "@connectrpc/connect";
 import { StatusService } from "../gen/magus/status/v1/status_pb";
 import { mountSharePanel } from "./share";
+import { mountActivityDrawer } from "./activityDrawer";
 import { applyFocusRing, getFocusRing, getDefaultHost } from "../lib/settings";
 import type { PageController, PageModule } from "./page";
 
@@ -179,6 +180,8 @@ const SURFACES: Launchable[] = [
   },
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
   { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
+  { pageId: "diff", label: "Diff", hint: "Read what you have changed but not committed" },
+  { pageId: "plan", label: "Plan", hint: "The delegation tree an orchestrating agent is running" },
   { pageId: "notes", label: "Notes", hint: "What people wrote about this workspace" },
   { pageId: "actions", label: "Actions", hint: "Every console action and its shortcut" },
   { pageId: "settings", label: "Settings", hint: "Console settings and keybindings" },
@@ -189,7 +192,7 @@ const SURFACES: Launchable[] = [
 // (internal/service/console KnownSurfaces): the daemon serves the console shell for exactly these
 // paths (SPA fallback), so the boot router below opens exactly these from the path. Keep the two
 // lists in step.
-const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity", "notes"];
+const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity", "notes", "diff", "plan"];
 
 // consoleSurfaceFromPath returns the surface a /console/<surface>/ entry path names, or null when
 // the page did not boot on such a path (the bare console root, or any non-surface path). It keys on
@@ -338,6 +341,18 @@ function shareGlyph(): SVGElement {
   return svg;
 }
 
+// activityGlyph is the status-bar Activity button's icon: the conventional pulse trace. It names
+// LIVENESS rather than a list or a clock, which is what the drawer answers - something is moving
+// right now - and it reads the same whether the panel lists one running target or twenty.
+function activityGlyph(): SVGElement {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = svgIcon();
+  const trace = document.createElementNS(NS, "path");
+  trace.setAttribute("d", "M2.5 12h4l2.5-6 4 12 2.5-6h4");
+  svg.append(trace);
+  return svg;
+}
+
 // panesIcon is the tray Panes button's glyph: a framed rect divided by a line whose ORIENTATION
 // mirrors the current split mode - a vertical divider for "row" (a plain split puts panes side by
 // side), a horizontal one for "col" (stacked) - so the icon doubles as an at-a-glance readout of the
@@ -459,6 +474,30 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
     s.setAttribute("aria-live", "polite");
     right.append(s);
   }
+  // Activity drawer toggle: opens the right-docked panel listing what magus is running right now and
+  // what ran recently. data-activity-toggle is the hook; startConsole's one delegated footer click
+  // drives the single shared panel regardless of which tab's copy fired - the same delegation the
+  // share and cheat-sheet buttons below use, since makeStatusBar rebuilds one button per tab.
+  //
+  // Ungated, unlike Share: a read-only viewer over the LAN reads status and the run feed the same way
+  // the dashboard does, so there is nothing here it is not already allowed to see.
+  const activity = document.createElement("button");
+  activity.type = "button";
+  activity.className = "pf-v6-c-button pf-m-plain console-shell-statusbar__activity";
+  activity.dataset.activityToggle = "";
+  // aria-controls names the one shared panel (its id is stable whichever tab's button opened it).
+  // Deliberately NO aria-expanded: there are as many of these buttons as there are tabs, all driving
+  // a single panel, and a copy built while the panel is already open would announce "collapsed". A
+  // missing attribute is honest; a stale one is a lie. Same reasoning the share button applies.
+  activity.setAttribute("aria-controls", "console-activitypanel");
+  activity.setAttribute("aria-label", "Activity");
+  activity.title = "Activity. What magus is running now, and what ran recently.";
+  const activityIcon = document.createElement("span");
+  activityIcon.className = "pf-v6-c-button__icon";
+  activityIcon.append(activityGlyph());
+  activity.append(activityIcon);
+  right.append(activity);
+
   // Panes tray toggle: opens the popup that drives split/focus/move/close without a keyboard - the
   // touch-reachable route tiling used to lack entirely on a phone. Its glyph is a live readout of the
   // persisted split mode (panesIcon); refreshPanesTray (startConsole) repaints every tab's copy in
@@ -965,6 +1004,12 @@ export function startConsole(
   // is a hidden singleton; a read-only viewer simply never gets a button to open it.
   const sharePanel = mountSharePanel();
 
+  // The activity drawer: the share panel's sibling on the same right-docked idiom, listing what magus
+  // is running now and what ran recently. Also a hidden singleton toggled from the status bar; unlike
+  // Share it is available to a read-only viewer too, since it only reads what the dashboard already
+  // shows. It polls only while open, so mounting it here costs nothing until someone opens it.
+  const activityDrawer = mountActivityDrawer();
+
   // Attach visibility: when the console booted attached (an explicit #port=, or a #token= own-origin
   // adoption), drop a HISTORY-tier note naming where it connected. History tier (kind "ok") so it
   // records silently and never lights the bell; keyed so a reload does not re-announce it. A bare #port
@@ -1153,6 +1198,16 @@ export function startConsole(
     label: "Notifications",
     group: "General",
     run: () => notifications.toggle(),
+  });
+
+  // Mirror the status-bar Activity button as a palette command, so the drawer is reachable by keyboard
+  // like every other action. Unbound by default: the drawer is a glance, not a chord anyone reaches for
+  // mid-edit, and the keymap's free chords are worth more to the surfaces.
+  registerCommand({
+    id: "console.activity.toggle",
+    label: "Activity",
+    group: "General",
+    run: () => activityDrawer.toggle(),
   });
 
   // Share a read-only view: a loopback-console affordance only (the status-bar share button is likewise
@@ -1589,6 +1644,7 @@ export function startConsole(
     const t = e.target as HTMLElement;
     if (t.closest("[data-cheatsheet-toggle]")) cheatsheet.toggle();
     if (t.closest("[data-share-toggle]")) sharePanel.toggle();
+    if (t.closest("[data-activity-toggle]")) activityDrawer.toggle();
     // Same delegation idiom for the Panes tray button: makeStatusBar rebuilds one per tab, this one
     // listener drives the single shared popup regardless of which tab's copy was clicked.
     const panesBtn = t.closest<HTMLElement>("[data-panes-toggle]");
@@ -1746,6 +1802,29 @@ export function startConsole(
       title: "Notes",
       bundle: "notes/notes.js",
       css: "logs/logs.css",
+    }),
+  );
+  // Review authors its own sheet rather than reusing logs.css: the hunk stream is virtualized
+  // against a fixed row height, so its geometry rules are part of the scroll math and must not
+  // drift with another surface's typography.
+  register(
+    moduleSurface({
+      id: "diff",
+      title: "Diff",
+      bundle: "diff/diff.js",
+      css: "diff/diff.css",
+    }),
+  );
+  // Plan authors its own sheet for the same reason Diff does: the stage is a laid-out node/edge
+  // drawing with its own geometry, and PF has no component for one. Its activate() hands back a
+  // per-mount controller carrying setVisible, so each pane's poll stops on its own while that pane
+  // is backgrounded.
+  register(
+    moduleSurface({
+      id: "plan",
+      title: "Plan",
+      bundle: "plan/plan.js",
+      css: "plan/plan.css",
     }),
   );
   // Actions is registered from the shell bundle (not a lazy surface bundle) - it is a thin, static

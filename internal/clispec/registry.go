@@ -24,6 +24,7 @@ var All = []Command{
 	configCommand,
 	memoryCommand,
 	notesCommand,
+	diffCommand,
 	serverCommand,
 	buzzCommand,
 	completionCommand,
@@ -1064,6 +1065,46 @@ the CLI is readable by an agent without either side learning a new format.`,
 	},
 }
 
+var diffCommand = Command{
+	Name:        "diff",
+	Short:       "Read the working tree's changes in the order they deserve attention",
+	Description: "Report every uncommitted change annotated with what the workspace knows: whether it is generated, how widely its changed symbols are referenced, whether it is public API surface, and what coverage was observed.",
+	Tags:        []string{"cli", "magus diff", "diff", "review", "changeset", "semver"},
+	Long: `Read the working tree's uncommitted changes, annotated and ordered.
+
+A changeset is not a list of files, it is a set of CONSEQUENCES, and a reader's
+attention is scarce. Alphabetical order spends it at random: it gives a
+regenerated lockfile the same weight as a signature change twelve packages
+depend on. This orders by what a change can BREAK.
+
+Generated files - declared target outputs - are folded away by default. Reading
+one is reading a machine's restatement of a change made somewhere else, so the
+source edit is the review. Pass --generated to see them anyway.
+
+Each file carries the evidence behind its rank: how many files reference the
+widest changed symbol it defines, whether any of those referents cross a project
+boundary or the module boundary (which is the question a version bump turns on),
+and the coverage a prior run observed. None of it is a verdict. magus does not
+claim a change is breaking - deciding that needs signature compatibility, which
+needs a base-side index magus does not keep and language semantics it does not
+model - it reports who can see the thing you changed and lets you decide.
+
+The console's Diff surface reads the same annotations over the same session,
+and an agent can join that session through the magus_diff MCP tool.`,
+	Usage: "magus diff [--generated] [--tui] [--watch] [<patch-file>|-] [flags]",
+	Flags: []Flag{
+		{Name: "generated", Kind: FlagBool, Doc: "Include declared target outputs, which are folded away by default"},
+		{Name: "tui", Kind: FlagBool, Doc: "Read the changeset interactively, joined to the session the console and an agent share"},
+		{Name: "watch", Kind: FlagBool, Doc: "Re-read and re-render whenever the working tree changes"},
+	},
+	Examples: []Example{
+		{"Read what you are about to commit", "magus diff"},
+		{"Include the generated files too", "magus diff --generated"},
+		{"Navigate it hunk by hunk and mark what you have read", "magus diff --tui"},
+		{"Machine-readable, for a script or a Buzz advisor", "magus diff -o json"},
+	},
+}
+
 var notesCommand = Command{
 	Name:        "notes",
 	Short:       "Human-authored notes committed to the repository",
@@ -1208,22 +1249,30 @@ a JSON tool to unwrap it: the envelope already says what is about to run and
 whether it is a write. An explicit flag still wins, because a wrapper that
 passed one meant it.
 
---agent-name, --session, and --event are attribution, not policy. They record who
-produced the observation on the activity event, and the verdict never reads
-them. All three are optional and unvalidated, including the host name, which
-is an opaque label the caller chooses rather than a set magus knows: a magus
-that enumerated hosts would need a release per host, and a wrapper that
+--observe records a path the agent merely REACHED, without judging it. No rule
+applies to a read, so the verdict is always pass and the activity event
+previews as observed rather than as a guard decision. Which of a host's tools
+only look is the wrapper's knowledge, never magus's.
+
+--agent-name, --session, --transcript, and --event are attribution, not policy.
+They record who produced the observation on the activity event, and the verdict
+never reads them. All are optional and unvalidated, including the host name,
+which is an opaque label the caller chooses rather than a set magus knows: a
+magus that enumerated hosts would need a release per host, and a wrapper that
 cannot extract a session id must still be able to get a verdict.`,
 	Usage: "magus hook [--path] [flags]",
 	Flags: []Flag{
 		{Name: "path", Kind: FlagBool, Doc: "Judge the input as a file path an edit is about to write, not as a shell command"},
+		{Name: "observe", Kind: FlagBool, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
 		{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this invocation came from (attribution only)"},
 		{Name: "session", Kind: FlagString, Doc: "The host's own session id for this invocation"},
+		{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
 		{Name: "event", Kind: FlagString, Doc: "The host's hook event name (e.g. PreToolUse)"},
 	},
 	Examples: []Example{
 		{"Judge a shell command", "printf '%s' 'go build ./...' | magus hook"},
 		{"Judge a path an edit is about to write", "printf '%s' 'MAGUS.md' | magus hook --path"},
+		{"Record a path an agent read, without judging it", "printf '%s' 'internal/cache/output.go' | magus hook --observe"},
 		{"Machine-readable verdict", "printf '%s' 'rm -rf /' | magus hook -o json"},
 	},
 }

@@ -29,6 +29,15 @@ const SpellModulePath = "magus/spell"
 //go:embed gen/types/path.buzz
 var PathSource string
 
+// ManifestSource is the generated mirror of spells.Manifest: the file a project's
+// dependencies are declared in, plus the lockfiles its ecosystem resolves them into.
+// It belongs in magus/spell for the same reason Path does - mgs_listManifests is
+// authored before any host module is invoked - and it references no other mirror
+// (its fields are a str and a [str]), so its position in the bundle is free.
+//
+//go:embed gen/types/manifest.buzz
+var ManifestSource string
+
 // TargetModuleSource is the generated Buzz `object Target` mirror of types.Target
 // (see cmd/magus-utils types), the canonical work-unit value type. It is consumed
 // both at runtime (as part of the magus/spell declarations) and at built-in
@@ -129,7 +138,7 @@ var CharmModuleSource string
 // Service, each referencing the prior; Target and Project have no cross-references
 // so their position is free). Shared by the runtime registration (modules.go) and
 // the built-in inliner (builtinModuleSources) below, so the two can't drift apart.
-var SpellModuleSource = strings.Join([]string{PathSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, ServiceSource, VersionKeySource, VersionBoundsSource, ToolSource, ProjectSource, SecretSource}, "\n")
+var SpellModuleSource = strings.Join([]string{PathSource, ManifestSource, TargetModuleSource, PatchOpSource, CharmTypeSource, HintSource, CommandSource, ServiceSource, VersionKeySource, VersionBoundsSource, ToolSource, ProjectSource, SecretSource}, "\n")
 
 // builtinModuleSources maps an import path a self-contained built-in may use to
 // the module source prepended in its place (imports emit no bytecode, so an

@@ -11,6 +11,7 @@ describe
 describeFile
 describeModule
 diagnoseDrift
+diff
 doctor
 fatal
 hasCharm

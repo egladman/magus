@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/egladman/magus"
@@ -391,12 +390,12 @@ func settledPaths(ctx context.Context, m *magus.Magus, driver types.VCSDriver, p
 	for _, p := range slices.Concat(plan.keep, plan.rederive) {
 		settled[p] = true
 	}
-	lines, err := driver.DirtyFiles(ctx, m.Root(), nil)
+	dirty, err := driver.DirtyFiles(ctx, m.Root(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("list regenerated files: %w", err)
 	}
 	rebuilt := plan.rebuiltProjects()
-	for _, path := range statusPaths(lines) {
+	for _, path := range dirty {
 		if settled[path] {
 			continue
 		}
@@ -511,11 +510,10 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) == 0 {
-		lines, err := res.VCS.DirtyFiles(ctx, root, nil)
+		paths, err = res.VCS.DirtyFiles(ctx, root, nil)
 		if err != nil {
 			return fmt.Errorf("vcs add: list dirty files: %w", err)
 		}
-		paths = statusPaths(lines)
 	}
 	if len(paths) == 0 {
 		fmt.Println("vcs add: nothing to stage; the tree is clean")
@@ -619,77 +617,6 @@ func workspaceRelPaths(root string, paths []string) ([]string, error) {
 		out = append(out, filepath.ToSlash(rel))
 	}
 	return out, nil
-}
-
-// statusPaths extracts the path from each entry DirtyFiles returns.
-//
-// DirtyFiles returns status LINES, not paths, despite the name - every existing caller
-// only tests whether the result is empty, so nothing noticed. Handing those lines to the
-// classifier unparsed made every entry look like " M foo", which matched no declared glob
-// and would have staged the workspace blind.
-//
-// The status prefix is DETECTED rather than assumed. git and hg emit two status columns
-// then the path, but jj's DirtyFiles runs `jj diff --name-only` and returns bare paths -
-// so blindly slicing off two characters turned every jj path into a corrupted one
-// ("docs/foo.md" -> "cs/foo.md") that then matched nothing and staged nothing.
-func statusPaths(lines []string) []string {
-	out := make([]string, 0, len(lines))
-	for _, line := range lines {
-		path := line
-		if rest, ok := strings.CutPrefix(line, statusPrefix(line)); ok {
-			path = rest
-		}
-		// A rename reads "old -> new"; the new name is what to stage.
-		if _, after, ok := strings.Cut(path, " -> "); ok {
-			path = after
-		}
-		// git quotes a path with unusual bytes, always with double quotes. Unquote also
-		// accepts Go rune and raw-string literals, so it is gated on the quoting form git
-		// actually emits; without that, a file literally named `x` loses its backquotes.
-		if strings.HasPrefix(path, `"`) {
-			if unquoted, err := strconv.Unquote(path); err == nil {
-				path = unquoted
-			}
-		}
-		if path != "" {
-			out = append(out, path)
-		}
-	}
-	return out
-}
-
-// statusPrefix returns the leading status columns of a status line, or "" when the line
-// carries none.
-//
-// Three shapes have to be told apart, and the width is not constant:
-//   - git porcelain is two columns then a space (" M path", "?? path", "A  path")
-//   - the FIRST line loses its leading space, because DirtyFiles reads the output through
-//     a trimming helper, so " M path" arrives as "M path" - one column then a space
-//   - hg status is one column then a space ("M path")
-//   - jj returns bare paths with no columns at all
-//
-// A fixed width cannot cover all four: two characters corrupts every jj path, three
-// leaves hg and the trimmed first line with "M " glued to the front, matching no declared
-// glob and reported as undeclared.
-func statusPrefix(line string) string {
-	if len(line) < 3 {
-		return ""
-	}
-	if isStatusColumn(line[0]) && isStatusColumn(line[1]) && line[2] == ' ' {
-		return line[:3]
-	}
-	// A trimmed git line, or hg: one column then the separating space.
-	if isStatusColumn(line[0]) && line[0] != ' ' && line[1] == ' ' {
-		return line[:2]
-	}
-	return ""
-}
-
-// isStatusColumn reports whether c can appear in a status column. Lowercase is excluded
-// deliberately: it is what keeps an ordinary bare path ("docs/foo.md") from being read as
-// a status line.
-func isStatusColumn(c byte) bool {
-	return c == ' ' || c == '?' || c == '!' || (c >= 'A' && c <= 'Z')
 }
 
 // classifyForStaging splits classified files into the three groups staging cares

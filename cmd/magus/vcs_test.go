@@ -13,62 +13,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestStatusPaths pins the porcelain parse. DirtyFiles returns status LINES despite its
-// name, and every other caller only checks the result for emptiness - so an unparsed line
-// reaches the classifier as " M foo", matches no glob, and reports the whole workspace as
-// undeclared (or with --untracked, stages it).
-func TestStatusPaths(t *testing.T) {
-	tests := []struct {
-		name  string
-		lines []string
-		want  []string
-	}{
-		{"modified", []string{" M cmd/magus/agent.go"}, []string{"cmd/magus/agent.go"}},
-		{"staged add", []string{"A  docs/new.md"}, []string{"docs/new.md"}},
-		{"untracked", []string{"?? scratch.txt"}, []string{"scratch.txt"}},
-		{"both columns", []string{"MM internal/agent/catalog.go"}, []string{"internal/agent/catalog.go"}},
-		// A rename must stage the NEW name; the old one no longer exists.
-		{"rename", []string{"R  old/path.go -> new/path.go"}, []string{"new/path.go"}},
-		// git quotes a path containing whitespace or unusual bytes.
-		{"quoted path", []string{` M "docs/a file.md"`}, []string{"docs/a file.md"}},
-		{"several", []string{" M a.go", "?? b.go"}, []string{"a.go", "b.go"}},
-
-		// DirtyFiles reads status output through a trimming helper, so the FIRST line
-		// loses its leading space. Unhandled, the path keeps an "M " on the front and
-		// reports as undeclared - how .gitattributes showed up as residue in a real run.
-		{"first line trimmed of its leading column", []string{"M .gitattributes"}, []string{".gitattributes"}},
-		{"trimmed first line then a normal one", []string{"M a.go", " M b.go"}, []string{"a.go", "b.go"}},
-		// hg reports one status column, not two.
-		{"hg single column", []string{"M docs/foo.md"}, []string{"docs/foo.md"}},
-		{"clean tree", nil, []string{}},
-
-		// jj's DirtyFiles runs `jj diff --name-only` and returns BARE paths. Slicing two
-		// columns off those corrupts every one, so a jj workspace stages nothing and
-		// reports the tree as undeclared rather than misparsed.
-		{"bare path is left intact", []string{"docs/foo.md"}, []string{"docs/foo.md"}},
-		{"short bare path is not dropped", []string{"a.go"}, []string{"a.go"}},
-		{"bare path with a space", []string{"my file.md"}, []string{"my file.md"}},
-
-		// Only git's quoting form may be unquoted: Go's Unquote also takes raw strings
-		// and rune literals, rewriting legitimate filenames.
-		{"backquoted name is not unquoted", []string{" M " + "`x`"}, []string{"`x`"}},
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.want, statusPaths(tt.lines))
-		})
-	}
-}
-
-func TestStatusPrefix(t *testing.T) {
-	assert.Equal(t, " M ", statusPrefix(" M a.go"))
-	assert.Equal(t, "MM ", statusPrefix("MM a.go"))
-	assert.Equal(t, "?? ", statusPrefix("?? a.go"))
-	assert.Equal(t, "M ", statusPrefix("M .gitattributes"), "a trimmed git line, or hg, has one column")
-	assert.Equal(t, "", statusPrefix("docs/foo.md"), "a bare path has no status columns")
-	assert.Equal(t, "", statusPrefix("a.go"))
-	assert.Equal(t, "", statusPrefix("ab"), "too short to carry a prefix")
-}
+// The porcelain parse this file used to own now lives with the driver that produces those
+// lines: DirtyFiles returns paths, so there is nothing left here to parse. See
+// vcs.TestGitStatusPaths for the shape table and vcs.TestParityDirtyFilesReturnsPaths for
+// the cross-backend rule.
 
 // TestSplitVCSVerb pins that the subcommand is found past a leading flag. Reading args[0]
 // alone let `magus vcs -q merge-driver ...` miss the merge-driver dispatch profile, which

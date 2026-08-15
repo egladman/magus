@@ -101,11 +101,15 @@ func resolveSpell(ctx context.Context, sess *buzz.Session) (spells.Descriptor, e
 				return spells.Descriptor{}, fmt.Errorf("magus/spell: %s: %w", f.Name, err)
 			}
 		}
-		if f.Paths {
+		switch f.Shape {
+		case ShapePaths:
 			rv, err = pathValues(f.Name, rv)
-			if err != nil {
-				return spells.Descriptor{}, fmt.Errorf("magus/spell: %w", err)
-			}
+		case ShapeManifests:
+			rv, err = manifestValues(f.Name, rv)
+		case ShapeStrs:
+		}
+		if err != nil {
+			return spells.Descriptor{}, fmt.Errorf("magus/spell: %w", err)
 		}
 		def.MapSet(f.Field, rv)
 	}
@@ -355,6 +359,54 @@ func valStrSlice(v vm.Value) []string {
 		}
 	}
 	return out
+}
+
+// manifestValues validates a [Manifest] and passes it through UNREDUCED, which is
+// the whole reason ShapeManifests exists: pathValues next door reduces each object to
+// its .value string, and a manifest's lockCandidates would be discarded by it in
+// silence, since that function only reads the keys it knows about.
+//
+// It validates rather than merely passing through because the alternative is the
+// failure this package keeps relearning - a malformed declaration decoding to empty
+// with nothing naming the cause. decodeManifests reads the structure back out with
+// Obj.Objs.
+//
+// A spell still returning [Path] passes: this checks only for a .value string, which
+// both objects carry, so the pre-Manifest contract keeps loading and simply declares
+// no lockfile.
+func manifestValues(name string, v vm.Value) (vm.Value, error) {
+	if !v.IsList() {
+		return vm.Null, fmt.Errorf("%s must return [Manifest]", name)
+	}
+	for i, item := range v.ListItems() {
+		m, ok := item.MapView()
+		if !ok {
+			return vm.Null, fmt.Errorf("%s[%d] must be Manifest", name, i)
+		}
+		value, ok := m.MapGet("value")
+		if !ok || !value.IsStr() {
+			return vm.Null, fmt.Errorf("%s[%d].value must be str", name, i)
+		}
+		// A backstop, not the primary check: an annotated `> [Manifest]` return puts the
+		// object's shape in front of the checker, which rejects a mistyped field at compile
+		// time with a better message than this one (BZZ1005). What the checker does NOT
+		// verify is the annotation itself against this contract, so the reachable failure is
+		// a wrong return type - caught by the MapView and .value checks above - and this
+		// guards the same class one level down.
+		locks, ok := m.MapGet("lockCandidates")
+		if !ok {
+			continue
+		}
+		if !locks.IsList() {
+			return vm.Null, fmt.Errorf("%s[%d].lockCandidates must be [str]", name, i)
+		}
+		for j, lock := range locks.ListItems() {
+			if !lock.IsStr() {
+				return vm.Null, fmt.Errorf("%s[%d].lockCandidates[%d] must be str", name, i, j)
+			}
+		}
+	}
+	return v, nil
 }
 
 // pathValues is the sole MGS metadata boundary. Buzz authors use the generated

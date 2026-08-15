@@ -352,7 +352,15 @@ type Daemon struct {
 // survives a daemon restart. A zero (or negative) interval disables that job's scheduling.
 // clear-cache is intentionally absent: wiping the cache is user-triggered only, never scheduled.
 type Maintenance struct {
-	RotateActivities time.Duration `json:"rotate_activities" yaml:"rotate_activities"` // trim the activity trail; default 30d (a slow safety net; the trail is already write-bounded)
+	// RotateActivities is how often the daemon trims the activity trail.
+	//
+	// It is that trail's only bound. The interval was 30d when a second, write-triggered rotate
+	// ran off the MCP handler's append counter - but a counter can only bound the producer that
+	// owns it, and an agent hook is a short-lived process with nowhere to keep one, so a
+	// hook-fed trail was bounded by nothing at all. With that path removed this job owns
+	// rotation outright, and it runs hourly because a rotate on an already-small trail costs
+	// one stat.
+	RotateActivities time.Duration `json:"rotate_activities" yaml:"rotate_activities"` // trim the activity trail; default 1h (its only bound)
 	RotateLogs       time.Duration `json:"rotate_logs" yaml:"rotate_logs"`             // trim the run-log journals; default 7d (their only bound, so weekly)
 	SyncGraph        time.Duration `json:"sync_graph" yaml:"sync_graph"`               // reconcile the graph; default 6h (a safety net behind the VCS hook)
 }
@@ -360,7 +368,7 @@ type Maintenance struct {
 // VCS controls VCS-driven affected detection.
 type VCS struct {
 	Enabled *bool  `json:"enabled" yaml:"enabled"` // false = fall back to all projects; pointer distinguishes unset
-	Name    string `json:"name" yaml:"name"`       // pin VCS by name (git/hg/jj); empty = autodetect
+	Name    string `json:"name" yaml:"name"`       // pin VCS by name (git/hg/sl/jj); empty = autodetect
 	// BaseRef sets the default base ref. Per-VCS overrides use MAGUS_VCS_<NAME>_BASE_REF (dynamic; not a Config field).
 	BaseRef string `json:"base_ref" yaml:"base_ref"`
 }
@@ -540,7 +548,7 @@ func EnvVarDocs() []EnvVarDoc {
 		{"MAGUS_DRY_RUN", "dry_run", "false", "When 1 or true, print what would run without executing anything"},
 		{"MAGUS_DEFAULT_CHARMS", "default_charms", "", "Comma-separated charms applied to every magus run/x by default (e.g. rw); the ci anchor still strips rw, and --no-default-charms ignores them for one run"},
 		{"MAGUS_VCS_ENABLED", "vcs.enabled", "true", "Master switch for VCS-driven affected detection; false makes affected fall back to all projects"},
-		{"MAGUS_VCS_NAME", "vcs.name", "", "Pin the active VCS by name (git, hg, jj); empty autodetects from .git/.hg/.jj"},
+		{"MAGUS_VCS_NAME", "vcs.name", "", "Pin the active VCS by name (git, hg, sl, jj); empty autodetects from .git/.hg/.sl/.jj"},
 		{"MAGUS_VCS_BASE_REF", "vcs.base_ref", "", "Default base ref for the active VCS adapter, e.g. origin/main for git"},
 		{"MAGUS_VCS_<NAME>_BASE_REF", "", "", "Per-VCS base-ref override, e.g. MAGUS_VCS_GIT_BASE_REF; dynamic pattern, read directly by package vcs"},
 		{"MAGUS_DAEMON_SOCKET", "daemon.socket", "", "Runtime proc-server socket set by the daemon for forwarded child processes; unix:// URL or bare path"},
@@ -582,9 +590,9 @@ func Defaults() Config {
 		Daemon: Daemon{
 			Enabled: true,
 			Maintenance: Maintenance{
-				RotateActivities: 30 * 24 * time.Hour, // trail is already write-bounded; this is a slow safety net
-				RotateLogs:       7 * 24 * time.Hour,  // run-logs have no other bound, so trim weekly
-				SyncGraph:        6 * time.Hour,       // safety net behind the VCS refresh hook
+				RotateActivities: time.Hour,          // the trail's only bound; cheap to run often (one stat when small)
+				RotateLogs:       7 * 24 * time.Hour, // run-logs have no other bound, so trim weekly
+				SyncGraph:        6 * time.Hour,      // safety net behind the VCS refresh hook
 			},
 		},
 		HistoryPath: DefaultHistoryPath(),

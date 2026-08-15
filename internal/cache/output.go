@@ -101,7 +101,7 @@ type OutputDescriptor struct {
 	// `go::go-build` and `go-build` are the same Target with different bodies.
 	Spell     string   `json:"spell,omitempty"`      // spell::op filter that selected the definition
 	ExtraArgs []string `json:"extra_args,omitempty"` // trailing args forwarded after --
-	VCSName   string   `json:"vcs,omitempty"`        // provider Revision came from: git, hg, jj
+	VCSName   string   `json:"vcs,omitempty"`        // provider Revision came from: git, hg, sl, jj
 	// Platform is GOOS/GOARCH, the same string readManifest and importArtifact
 	// refuse a mismatch on. Recorded unconditionally, NOT gated on the
 	// cache.include.os/arch settings: those govern what keys a build, while this

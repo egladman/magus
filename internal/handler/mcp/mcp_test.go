@@ -10,7 +10,6 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-	"sync/atomic"
 	"testing"
 
 	"github.com/egladman/magus"
@@ -55,7 +54,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 	t.Run("ok outcome sizes input and output", func(t *testing.T) {
 		tel := &fakeTel{}
 		const out = "hello world result"
-		h := wrap(quietLogger(), originFn, "", noSecrets, tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		h := wrap(quietLogger(), originFn, "", noSecrets, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return mcplib.NewToolResultText(out), nil
 		})
 
@@ -74,7 +73,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 
 	t.Run("error outcome nil result contributes zero output", func(t *testing.T) {
 		tel := &fakeTel{}
-		h := wrap(quietLogger(), originFn, "", noSecrets, tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		h := wrap(quietLogger(), originFn, "", noSecrets, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return nil, errors.New("boom")
 		})
 
@@ -91,7 +90,7 @@ func TestWrapRecordsMCPCall(t *testing.T) {
 	})
 
 	t.Run("nil telemetry is a no-op", func(t *testing.T) {
-		h := wrap(quietLogger(), originFn, "", noSecrets, nil, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+		h := wrap(quietLogger(), originFn, "", noSecrets, nil, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 			return mcplib.NewToolResultText("ok"), nil
 		})
 		result, err := h(context.Background(), req)
@@ -111,7 +110,7 @@ func TestWrapCapturesExchange(t *testing.T) {
 	}
 	req := callRequest("magus_query", map[string]any{"query": "kind:target"})
 	const out = "hello world result payload"
-	h := wrap(quietLogger(), originFn, dir, noSecrets, nil, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+	h := wrap(quietLogger(), originFn, dir, noSecrets, nil, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return mcplib.NewToolResultText(out), nil
 	})
 
@@ -150,7 +149,7 @@ func TestWrapRecordsSoftErrorAsError(t *testing.T) {
 	dir := t.TempDir()
 	tel := &fakeTel{}
 	originFn := func(context.Context) origin.Origin { return origin.Origin{Agent: "a"} }
-	h := wrap(quietLogger(), originFn, dir, noSecrets, tel, new(atomic.Uint64), func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
+	h := wrap(quietLogger(), originFn, dir, noSecrets, tel, func(context.Context, mcplib.CallToolRequest) (*mcplib.CallToolResult, error) {
 		return mcplib.NewToolResultError("bad arguments"), nil // soft error, err == nil
 	})
 
@@ -417,5 +416,5 @@ func wrapWithResolver(t *testing.T, trailDir string, res *secret.Resolver, fn ha
 	t.Helper()
 	return wrap(quietLogger(), func(context.Context) origin.Origin { return origin.Origin{Agent: "test-agent"} },
 		trailDir, func(ctx context.Context) context.Context { return secret.ContextWithResolver(ctx, res) },
-		nil, new(atomic.Uint64), fn)
+		nil, fn)
 }

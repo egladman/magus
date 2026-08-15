@@ -1,6 +1,9 @@
 package vcs
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"testing"
 
 	"github.com/egladman/magus/types"
@@ -60,4 +63,32 @@ file: gone.txt (state "u")
 	t.Run("unparseable output degrades to no deletions", func(t *testing.T) {
 		assert.Empty(t, parseHgRemovalCandidates("debugmergestate: unknown command"))
 	})
+}
+
+// TestBaseNamesTheMainlineNotTip is the regression test for hg's default base ref.
+//
+// tip is the newest commit in the repository, so once you have committed anything it is
+// YOUR commit: ChangedFiles then compared the checkout against itself, `magus affected`
+// reported nothing affected, and a working branch built nothing at all. Measured on
+// Mercurial 7.x - on a named branch `--rev tip` returns empty where `--rev default` names
+// the changed file.
+//
+// The assertion runs through ChangedFiles rather than reading Base() as a string, because
+// the string alone cannot show the failure: "tip" looks perfectly reasonable until you diff
+// against it from a branch.
+func TestBaseNamesTheMainlineNotTip(t *testing.T) {
+	if _, err := exec.LookPath("hg"); err != nil {
+		t.Skip("hg not available")
+	}
+	dir := t.TempDir()
+	hgInitRepo(t, dir, map[string]string{"a.txt": "one\n"})
+
+	vcsTestRun(t, dir, "hg", "branch", "feature")
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "a.txt"), []byte("changed\n"), 0o644))
+	vcsTestRun(t, dir, "hg", "commit", "-m", "feature work", "-u", "test")
+
+	got, err := hgVCS{}.ChangedFiles(t.Context(), dir, hgVCS{}.Base())
+	require.NoError(t, err, "ChangedFiles against the default base")
+	assert.Contains(t, got, "a.txt",
+		"a committed branch change reported nothing affected; affected would build nothing")
 }

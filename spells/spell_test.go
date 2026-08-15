@@ -111,8 +111,16 @@ func TestSpellMetadataAccessors(t *testing.T) {
 func TestSpellManifests(t *testing.T) {
 	assert.Nil(t, NewSpell("docker").Manifests(), "a spell with no manifest declares nil")
 
-	s := NewSpell("python", WithManifests("pyproject.toml", "setup.py", "setup.cfg"))
-	assert.Equal(t, []string{"pyproject.toml", "setup.py", "setup.cfg"}, s.Manifests())
+	s := NewSpell("python", WithManifests(
+		Manifest{Value: "pyproject.toml", LockCandidates: []string{"uv.lock"}},
+		Manifest{Value: "setup.py"},
+		Manifest{Value: "setup.cfg"},
+	))
+	assert.Equal(t, []Manifest{
+		{Value: "pyproject.toml", LockCandidates: []string{"uv.lock"}},
+		{Value: "setup.py"},
+		{Value: "setup.cfg"},
+	}, s.Manifests())
 }
 
 // TestSpellDependsOn covers the in-workspace dependency probe: nil probe returns

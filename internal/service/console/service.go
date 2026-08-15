@@ -15,6 +15,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/proc"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -55,6 +56,8 @@ type Service struct {
 	knowledgeGraphFn func(ctx context.Context, withSymbols bool) (*knowledge.Graph, error)
 	describeGraphFn  func() types.TargetGraphOutput
 	insightFn        func(ctx context.Context) (types.InsightView, error)
+	workingDiffFn    func(ctx context.Context, paths []string) (string, error)
+	diffFn           func(ctx context.Context, paths []string) (types.Diff, error)
 }
 
 // Option customizes a Service. The With* options inject test seams and the explicit
@@ -87,6 +90,18 @@ func WithDescribeGraphFn(fn func() types.TargetGraphOutput) Option {
 // drive the cache without a real workspace or git history.
 func WithInsightFn(fn func(ctx context.Context) (types.InsightView, error)) Option {
 	return func(s *Service) { s.insightFn = fn }
+}
+
+// WithWorkingDiffFn replaces the VCS call behind WorkingDiff. Tests pass a canned patch so
+// the review surface can be driven without a repository.
+func WithWorkingDiffFn(fn func(ctx context.Context, paths []string) (string, error)) Option {
+	return func(s *Service) { s.workingDiffFn = fn }
+}
+
+// WithDiffFn replaces the annotation join behind Review. Tests pass canned annotations so
+// the review surface can be driven without a symbol index or a coverage run.
+func WithDiffFn(fn func(ctx context.Context, paths []string) (types.Diff, error)) Option {
+	return func(s *Service) { s.diffFn = fn }
 }
 
 // WithInsightTTL overrides how long an assembled InsightView is reused before the git-log
@@ -272,6 +287,87 @@ func (s *Service) Graph(ctx context.Context, flavor, sel string) (types.Knowledg
 		}
 		return g.Output(), nil
 	}
+}
+
+// WorkingDiff returns the working tree's uncommitted changes as one unified patch, scoped to
+// paths when non-empty. It backs the console's review surface.
+//
+// Deliberately NOT cached, unlike Insight beside it. The insight lenses fold a bounded
+// git-log scan that costs the same answer for minutes at a time; a working diff is the thing
+// the reader is editing RIGHT NOW, and a review surface showing a diff from thirty seconds
+// ago is worse than one that takes another few milliseconds. The backend's own diff is fast
+// because it reads the index, not history.
+func (s *Service) WorkingDiff(ctx context.Context, paths []string) (string, error) {
+	if s.workingDiffFn != nil {
+		return s.workingDiffFn(ctx, paths)
+	}
+	if s.magus == nil {
+		return "", ErrNoWorkspace
+	}
+	return s.magus.WorkingDiff(ctx, paths)
+}
+
+// Diff annotates a changed-path set: role, owning project, changed-symbol reach, coverage,
+// and the blast radius, ordered by what magus recommends reading first.
+//
+// It is a SECOND round trip on purpose, and the split is the performance design. WorkingDiff
+// above is a index read and returns in milliseconds; this one loads the knowledge graph with
+// its symbol shards and computes a reverse closure. Folding them into one route would hold
+// the whole diff behind the slowest overlay, so the console paints the patch from the first
+// call and decorates it when this one lands. A reader is scrolling code either way.
+func (s *Service) Diff(ctx context.Context, paths []string) (types.Diff, error) {
+	if s.diffFn != nil {
+		return s.diffFn(ctx, paths)
+	}
+	if s.magus == nil {
+		return types.Diff{}, ErrNoWorkspace
+	}
+	rev, err := s.magus.Diff(ctx, paths)
+	if err != nil {
+		return types.Diff{}, err
+	}
+	// Fold on the churn lenses from the CACHED insight scan rather than a fresh one. This is
+	// the reason AttachChurn takes its data as an argument: the daemon already keeps a bounded
+	// git-log scan warm for the dashboard, so a review costs nothing extra to answer "is this
+	// file being rewritten over and over", which is the question a diff cannot answer and the
+	// one worth asking while somebody is still looking at the file.
+	//
+	// Best-effort, like every other overlay: a workspace with no history yields no churn, and
+	// the files stay nil rather than reporting a confident zero.
+	if view, ierr := s.Insight(ctx); ierr == nil {
+		rev.AttachChurn(view.Hotspots.Files, view.Trend.Projects)
+	}
+	// The agent trail: which sessions wrote each file and what they had read first. Bounded by
+	// diffReplayEvents rather than the whole history, because the question is about the
+	// change in front of the reader, not about the repository's whole past.
+	rev.AttachReplay(diffTouches(s.magus.Root(), s.magus.CacheDir(), paths))
+	return rev, nil
+}
+
+// diffReplayEvents bounds the trail walk behind a review. Each event costs a small blob
+// read, so this is the knob that keeps the replay join cheap; a reader asking "what was this
+// agent looking at" is asking about recent work by construction.
+const diffReplayEvents = 2000
+
+// diffTouches adapts the trail's own Touch to the review's, which is a straight rename
+// across a package boundary types must not cross - types imports nothing internal, and the
+// trail is internal.
+func diffTouches(root, cacheDir string, paths []string) map[string][]types.DiffTouch {
+	raw := trail.Replay(root, cacheDir, paths, diffReplayEvents)
+	if len(raw) == 0 {
+		return nil
+	}
+	out := make(map[string][]types.DiffTouch, len(raw))
+	for path, touches := range raw {
+		conv := make([]types.DiffTouch, 0, len(touches))
+		for _, t := range touches {
+			conv = append(conv, types.DiffTouch{
+				Host: t.Host, Session: t.Session, Transcript: t.Transcript, Read: t.Read, Ran: t.Ran,
+			})
+		}
+		out[path] = conv
+	}
+	return out
 }
 
 // knowledgeGraph resolves the workspace graph, honoring the test seam. withSymbols loads

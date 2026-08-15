@@ -133,6 +133,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return buzzValueMagusFileReport(ret0), nil
 	}))
+	m.MapSet("diff", vm.DirectValue("magus.diff", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		opts := AnyMap(bzArgs, 0)
+		ret0, err := std.MagusDiff(ctx, opts)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return buzzValueMagusDiff(ret0), nil
+	}))
 	m.MapSet("doctor", vm.DirectValue("magus.doctor", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := StrSlice(bzArgs, 0)
 		opts := AnyMap(bzArgs, 1)
@@ -210,6 +218,11 @@ func buzzValueMagusProjectEntry(v types.ProjectEntry) vm.Value {
 		itemsManifests[indexManifests] = vm.StrValue(v.Manifests[indexManifests])
 	}
 	out.MapSet("manifests", vm.ListValue(itemsManifests))
+	itemsLockfiles := make([]vm.Value, len(v.Lockfiles))
+	for indexLockfiles := range v.Lockfiles {
+		itemsLockfiles[indexLockfiles] = vm.StrValue(v.Lockfiles[indexLockfiles])
+	}
+	out.MapSet("lockfiles", vm.ListValue(itemsLockfiles))
 	return out
 }
 
@@ -752,6 +765,112 @@ func buzzValueMagusFileReport(v types.FileReport) vm.Value {
 		itemsFiles[indexFiles] = buzzValueMagusFileEntry(v.Files[indexFiles])
 	}
 	out.MapSet("files", vm.ListValue(itemsFiles))
+	return out
+}
+
+func buzzValueMagusDiffSymbol(v types.DiffSymbol) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("label", vm.StrValue(v.Label))
+	out.MapSet("refCount", vm.IntValue(int64(v.RefCount)))
+	out.MapSet("fileCount", vm.IntValue(int64(v.FileCount)))
+	itemsExternalProjects := make([]vm.Value, len(v.ExternalProjects))
+	for indexExternalProjects := range v.ExternalProjects {
+		itemsExternalProjects[indexExternalProjects] = vm.StrValue(v.ExternalProjects[indexExternalProjects])
+	}
+	out.MapSet("externalProjects", vm.ListValue(itemsExternalProjects))
+	out.MapSet("externalFileCount", vm.IntValue(int64(v.ExternalFileCount)))
+	out.MapSet("moduleAPI", vm.BoolValue(v.ModuleAPI))
+	return out
+}
+
+func buzzValueMagusDiffTouch(v types.DiffTouch) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("host", vm.StrValue(v.Host))
+	out.MapSet("session", vm.StrValue(v.Session))
+	out.MapSet("transcript", vm.StrValue(v.Transcript))
+	itemsRead := make([]vm.Value, len(v.Read))
+	for indexRead := range v.Read {
+		itemsRead[indexRead] = vm.StrValue(v.Read[indexRead])
+	}
+	out.MapSet("read", vm.ListValue(itemsRead))
+	itemsRan := make([]vm.Value, len(v.Ran))
+	for indexRan := range v.Ran {
+		itemsRan[indexRan] = vm.StrValue(v.Ran[indexRan])
+	}
+	out.MapSet("ran", vm.ListValue(itemsRan))
+	return out
+}
+
+func buzzValueMagusDiffChurn(v types.DiffChurn) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("commits", vm.IntValue(int64(v.Commits)))
+	out.MapSet("authors", vm.IntValue(int64(v.Authors)))
+	out.MapSet("score", vm.IntValue(int64(v.Score)))
+	out.MapSet("rank", vm.IntValue(int64(v.Rank)))
+	out.MapSet("projectTrend", vm.IntValue(int64(v.ProjectTrend)))
+	return out
+}
+
+func buzzValueMagusDiffFile(v types.DiffFile) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("role", vm.StrValue(v.Role))
+	out.MapSet("hint", vm.StrValue(v.Hint))
+	optCoverage := vm.Null
+	if v.Coverage != nil {
+		optCoverage = buzzValueMagusImpactCoverage((*v.Coverage))
+	}
+	out.MapSet("coverage", optCoverage)
+	itemsSymbols := make([]vm.Value, len(v.Symbols))
+	for indexSymbols := range v.Symbols {
+		itemsSymbols[indexSymbols] = buzzValueMagusDiffSymbol(v.Symbols[indexSymbols])
+	}
+	out.MapSet("symbols", vm.ListValue(itemsSymbols))
+	out.MapSet("surface", vm.StrValue(v.Surface))
+	itemsTouches := make([]vm.Value, len(v.Touches))
+	for indexTouches := range v.Touches {
+		itemsTouches[indexTouches] = buzzValueMagusDiffTouch(v.Touches[indexTouches])
+	}
+	out.MapSet("touches", vm.ListValue(itemsTouches))
+	optChurn := vm.Null
+	if v.Churn != nil {
+		optChurn = buzzValueMagusDiffChurn((*v.Churn))
+	}
+	out.MapSet("churn", optChurn)
+	out.MapSet("noHistory", vm.BoolValue(v.NoHistory))
+	optReach := vm.Null
+	if v.Reach != nil {
+		optReach = vm.IntValue(int64((*v.Reach)))
+	}
+	out.MapSet("reach", optReach)
+	return out
+}
+
+func buzzValueMagusDiff(v types.Diff) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("base", vm.StrValue(v.Base))
+	itemsFiles := make([]vm.Value, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = buzzValueMagusDiffFile(v.Files[indexFiles])
+	}
+	out.MapSet("files", vm.ListValue(itemsFiles))
+	itemsSeedProjects := make([]vm.Value, len(v.SeedProjects))
+	for indexSeedProjects := range v.SeedProjects {
+		itemsSeedProjects[indexSeedProjects] = vm.StrValue(v.SeedProjects[indexSeedProjects])
+	}
+	out.MapSet("seedProjects", vm.ListValue(itemsSeedProjects))
+	itemsAffectedProjects := make([]vm.Value, len(v.AffectedProjects))
+	for indexAffectedProjects := range v.AffectedProjects {
+		itemsAffectedProjects[indexAffectedProjects] = buzzValueMagusImpactProject(v.AffectedProjects[indexAffectedProjects])
+	}
+	out.MapSet("affectedProjects", vm.ListValue(itemsAffectedProjects))
+	itemsNotes := make([]vm.Value, len(v.Notes))
+	for indexNotes := range v.Notes {
+		itemsNotes[indexNotes] = vm.StrValue(v.Notes[indexNotes])
+	}
+	out.MapSet("notes", vm.ListValue(itemsNotes))
 	return out
 }
 

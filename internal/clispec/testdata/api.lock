@@ -107,12 +107,17 @@ flag buzz/no-autoload
 flag buzz/t
 flag buzz/test
 flag clean/cache
+flag diff/generated
+flag diff/tui
+flag diff/watch
 flag explain/global
 flag explain/refresh
 flag hook/agent-name
 flag hook/event
+flag hook/observe
 flag hook/path
 flag hook/session
+flag hook/transcript
 flag init/force
 flag init/global
 flag init/local
@@ -168,6 +173,7 @@ subcommand clean
 subcommand completion
 subcommand config
 subcommand describe
+subcommand diff
 subcommand doctor
 subcommand explain
 subcommand graph

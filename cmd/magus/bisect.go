@@ -22,7 +22,7 @@ import (
 // the active VCS's bisect to pinpoint the culprit commit. Prints culprit SHA
 // + subject + author to stdout; does NOT post PR comments or @mention anyone.
 //
-// Supported VCSes: git, hg. jj reports ErrUnsupported.
+// Supported VCSes: git, hg, sl. jj reports ErrUnsupported.
 func affectedBisect(ctx context.Context, root string, args []string) error {
 	var bf *gen.AffectedBisectFlags
 	if _, err := cmdParse("affected --bisect", args, func(fs *flag.FlagSet) {
@@ -77,7 +77,7 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 
 	wsRoot, err := res.VCS.Root(ctx, root)
 	if errors.Is(err, types.ErrVCSUnsupported) {
-		return fmt.Errorf("bisect: VCS %q does not support bisect (supported: git, hg)", res.Name)
+		return fmt.Errorf("bisect: VCS %q does not support bisect (supported: git, hg, sl)", res.Name)
 	}
 	if err != nil {
 		return fmt.Errorf("bisect: find vcs root: %w", err)
@@ -111,7 +111,7 @@ func affectedBisect(ctx context.Context, root string, args []string) error {
 
 	culprit, err := res.VCS.Bisect(ctx, wsRoot, opts)
 	if errors.Is(err, types.ErrVCSUnsupported) {
-		return fmt.Errorf("bisect: VCS %q does not support bisect (supported: git, hg)", res.Name)
+		return fmt.Errorf("bisect: VCS %q does not support bisect (supported: git, hg, sl)", res.Name)
 	}
 	if err != nil {
 		return fmt.Errorf("bisect: %w", err)

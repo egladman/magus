@@ -46,19 +46,15 @@ const (
 const refHexLen = 16
 
 // maxEvents caps the trail: Rotate keeps the most recent maxEvents events and garbage-collects
-// blobs no kept event references. Rotate runs at daemon start and thereafter every rotateEvery
-// appends (via RotateOnCount) - not on every append - so a long-lived daemon's trail stays
-// bounded without a rewrite per write.
+// blobs no kept event references. Rotate runs at daemon start and thereafter on the daemon's
+// rotate-activities schedule - never per append, because the trail is stateless and lock-free by
+// design (append is a bare POSIX append; there is no long-lived handle to hang a count on), so a
+// write-triggered rotate would have to re-scan the whole file per write.
+//
+// The overshoot between scheduled runs is therefore bounded by the SCHEDULE, not by a counter.
+// That is the honest shape: a counter can only ever bound the one producer that owns it, and the
+// producers that most need bounding - short-lived agent hooks - have nowhere to keep one.
 const maxEvents = 10000
-
-// rotateEvery is how many recorded events trigger the next Rotate. The trail is stateless and
-// lock-free by design (append is a bare POSIX append; there is no long-lived handle to hang a
-// count on), so the write-triggered rotate cannot count inside Append without re-scanning the
-// whole file per write. Instead RotateOnCount lets the caller - which already increments a counter
-// per append - drive the rotate, keeping the policy and its maxEvents sibling in one place. This
-// bounds the trail at roughly maxEvents + rotateEvery events between rotates; 512 keeps the rewrite
-// rare relative to tool-call traffic.
-const rotateEvery = 512
 
 // Kind names an action's source; the values map to the magus.activity.v1 Kind enum at the wire.
 // Readable strings on disk, like the journal's status strings. It is a NAMED string (not a bare string)
@@ -144,18 +140,28 @@ type Event struct {
 // invocation, the latter a file-edit invocation. Host integrations may omit identity fields when
 // their hook event does not expose them; the event remains attributable to the generic "agent"
 // actor rather than pretending to know more than the host supplied.
+// Transcript is the host's own record of the session this observation came from, as an
+// absolute path on the machine that produced it. It is a POINTER, never content: the trail
+// stays a record of paths and timings, and a reader who wants what was actually said opens
+// the transcript themselves. That division is what lets the trail carry a whole session's
+// reach cheaply while the expensive, sensitive detail stays where the host already put it.
+//
+// It travels beside Session rather than replacing it: the id is what groups the events, and
+// the path is what a reader follows to see the rest. A host that exposes no transcript sends
+// none, exactly as with the other identity fields.
 type AgentCommand struct {
-	Actor     string
-	Workspace string
-	Host      string
-	Session   string
-	Event     string
-	Tool      string
-	Command   string
-	Path      string
-	Decision  string
-	Reason    string
-	Context   string
+	Actor      string
+	Workspace  string
+	Host       string
+	Session    string
+	Transcript string
+	Event      string
+	Tool       string
+	Command    string
+	Path       string
+	Decision   string
+	Reason     string
+	Context    string
 }
 
 const agentCommandSchemaVersion = 1
@@ -164,6 +170,7 @@ type agentCommandRequest struct {
 	SchemaVersion int    `json:"schema_version"`
 	Host          string `json:"host,omitempty"`
 	Session       string `json:"session,omitempty"`
+	Transcript    string `json:"transcript,omitempty"`
 	Event         string `json:"event,omitempty"`
 	Tool          string `json:"tool,omitempty"`
 	Command       string `json:"command,omitempty"`
@@ -201,6 +208,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		SchemaVersion: agentCommandSchemaVersion,
 		Host:          command.Host,
 		Session:       command.Session,
+		Transcript:    command.Transcript,
 		Event:         command.Event,
 		Tool:          command.Tool,
 		Command:       command.Command,
@@ -425,22 +433,107 @@ func ReadRecent(base string, limit int) ([]Event, error) {
 	return out, nil
 }
 
-// Rotate keeps the last maxEvents events and deletes blobs that no kept event references. Called
-// at daemon start and, thereafter, by RotateOnCount. Best-effort: any error leaves the trail
-// as-is, and it only rewrites when the file exceeds the cap. It takes no lock, so a concurrent
-// Append racing the read-rewrite window can be dropped - acceptable for a best-effort governance
-// trail, and the price of keeping the trail lock-free.
+// Rotate keeps the last maxEvents events and deletes blobs that no kept event references.
+// Best-effort: any error leaves the trail as-is, and it only rewrites when the file exceeds the
+// cap. It takes no lock, so a concurrent Append racing the read-rewrite window can be dropped -
+// acceptable for a best-effort governance trail, and the price of keeping the trail lock-free.
+//
+// It is CHEAP to call on a trail that is already small (see minEventBytes), which is what lets the
+// daemon's maintenance schedule be the single owner of rotation. There used to be a second,
+// write-triggered path - a RotateOnCount the MCP handler drove off its own append counter - and it
+// covered exactly one producer: an agent hook is a short-lived process with nowhere to keep a
+// counter, so hook-fed trails were never write-bounded at all and relied on a 30-day sweep. One
+// trigger that every producer shares beats two that disagree about who is covered.
 func Rotate(base string) { rotate(base, maxEvents) }
 
-// RotateOnCount rotates iff n - the caller's running append count (the value returned by its
-// atomic increment) - lands on a rotateEvery boundary. Passing the count keeps the trail itself
-// stateless: the counter lives with the producer, not here. n == 0 never rotates, so a stray zero
-// cannot force a rewrite before the first real append. It is the write-triggered rotate, distinct
-// from the boot-time Rotate.
-func RotateOnCount(base string, n uint64) {
-	if n != 0 && n%rotateEvery == 0 {
-		Rotate(base)
+// minEventBytes is a floor on one serialized event line, used to skip the read entirely when the
+// file is too small to hold maxEvents of them. It is a SOUND bound rather than a guess: Ts, Kind,
+// Actor, Action and Outcome have no omitempty, so even an all-empty event marshals to about 65
+// bytes plus a newline. Rounding down to 64 keeps the check conservative - it can only ever decide
+// to look when it did not need to, never to skip when it did.
+const minEventBytes = 64
+
+// perKindFloor is how many of a kind's newest events survive a rotate regardless of how loud
+// its neighbours are.
+//
+// Plain recency is the wrong policy for a record with kinds this uneven. One chatty producer -
+// an agent hook wired to a read tool is the obvious one, but MCP tool calls do it too - can push
+// every sandbox_denial and config_change out of the window and, because gcBlobs then unlinks
+// whatever no kept line references, DELETE their payloads. The rare kinds are exactly the ones
+// worth keeping: nobody consults this file to find out that a read happened.
+//
+// A floor rather than an equal split, because an equal split wastes the window on kinds that are
+// idle. With the kinds defined here this reserves a minority of maxEvents and leaves the rest to
+// straight recency, so a quiet trail behaves exactly as it did before.
+const perKindFloor = 500
+
+// selectKept chooses which lines survive a rotate: every kind keeps its newest perKindFloor
+// events, and whatever budget remains goes to the newest events of any kind. Order is preserved,
+// because the file is append-ordered and every reader (ReadRecent, LastRun) depends on that.
+//
+// Kind is read with a narrow decode rather than a full Event unmarshal - this runs over the whole
+// file, and the only field the policy needs is the kind. A line that fails to decode has no kind
+// to reserve against and competes on recency alone, which is the same treatment ReadRecent gives
+// a corrupt line.
+func selectKept(lines []string, max int) []string {
+	type lineKind struct {
+		Kind string `json:"kind"`
 	}
+	kindOf := make([]string, len(lines))
+	present := map[string]bool{}
+	for i, l := range lines {
+		if l == "" {
+			continue
+		}
+		var lk lineKind
+		if err := json.Unmarshal([]byte(l), &lk); err != nil {
+			continue
+		}
+		kindOf[i] = lk.Kind
+		if lk.Kind != "" {
+			present[lk.Kind] = true
+		}
+	}
+
+	// The reservation is the floor OR an equal share of the window, whichever is smaller.
+	// Without the share, a floor larger than the window lets the first pass spend the whole
+	// budget on whichever kind happens to be newest - which is precisely the eviction this
+	// policy exists to prevent, reintroduced by the policy itself.
+	reserve := perKindFloor
+	if len(present) > 0 && max/len(present) < reserve {
+		reserve = max / len(present)
+	}
+
+	admit := make([]bool, len(lines))
+	seen := map[string]int{}
+	budget := max
+
+	// Newest first, so "the newest N of this kind" falls out of the iteration order.
+	for i := len(lines) - 1; i >= 0 && budget > 0; i-- {
+		if kindOf[i] == "" || seen[kindOf[i]] >= reserve {
+			continue
+		}
+		seen[kindOf[i]]++
+		admit[i] = true
+		budget--
+	}
+	// Second pass fills the remaining budget purely by recency, which is what keeps a
+	// single-kind trail behaving exactly as plain truncation did.
+	for i := len(lines) - 1; i >= 0 && budget > 0; i-- {
+		if lines[i] == "" || admit[i] {
+			continue
+		}
+		admit[i] = true
+		budget--
+	}
+
+	kept := make([]string, 0, max)
+	for i, ok := range admit {
+		if ok {
+			kept = append(kept, lines[i])
+		}
+	}
+	return kept
 }
 
 func rotate(base string, max int) {
@@ -448,6 +541,12 @@ func rotate(base string, max int) {
 		return
 	}
 	path := eventsPath(base)
+	// A stat before the read is what makes a frequent schedule affordable. Without it, every
+	// check reads the whole trail - fine at a 30-day cadence, wasteful at an hourly one, and
+	// worst exactly when the file has grown large enough to matter.
+	if info, err := os.Stat(path); err == nil && info.Size() < int64(max)*minEventBytes {
+		return
+	}
 	data, err := os.ReadFile(path)
 	if err != nil {
 		return
@@ -456,7 +555,7 @@ func rotate(base string, max int) {
 	if len(lines) <= max {
 		return
 	}
-	kept := lines[len(lines)-max:]
+	kept := selectKept(lines, max)
 
 	tmp, err := os.CreateTemp(filepath.Join(base, dir), eventsFile+".*")
 	if err != nil {

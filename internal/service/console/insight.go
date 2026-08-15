@@ -75,7 +75,12 @@ func (s *Service) computeInsight(ctx context.Context) (types.InsightView, error)
 	if s.magus == nil {
 		return types.InsightView{}, ErrNoWorkspace
 	}
-	opts := types.InsightOptions{Commits: insightCommits}
+	// Files: true adds the PER-FILE hotspot ranking alongside the per-project one. It reuses
+	// the same bounded git-log scan rather than doing a second, so the cost is formatting a
+	// list the scan already has the data for - and without it the review surface can only say
+	// "this project is hot", never "this FILE keeps being rewritten", which is the question a
+	// reader is actually in a position to act on while looking at the file.
+	opts := types.InsightOptions{Commits: insightCommits, Files: true}
 	hot, err := s.magus.Hotspots(ctx, opts)
 	if err != nil {
 		return types.InsightView{}, err

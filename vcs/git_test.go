@@ -528,3 +528,87 @@ func TestStartMergeFailsOnUnknownRef(t *testing.T) {
 
 	require.Error(t, err)
 }
+
+// TestGitStatusPaths pins the porcelain parse, which moved here from cmd/magus when
+// DirtyFiles started returning paths. It is a unit table rather than a live-git test
+// because the shapes it covers - a rename, a C-quoted name, both status columns - are
+// awkward to provoke on demand and easy to state exactly.
+func TestGitStatusPaths(t *testing.T) {
+	for name, tc := range map[string]struct {
+		lines []string
+		want  []string
+	}{
+		"modified":     {[]string{" M cmd/magus/agent.go"}, []string{"cmd/magus/agent.go"}},
+		"staged add":   {[]string{"A  docs/new.md"}, []string{"docs/new.md"}},
+		"untracked":    {[]string{"?? scratch.txt"}, []string{"scratch.txt"}},
+		"both columns": {[]string{"MM internal/agent/catalog.go"}, []string{"internal/agent/catalog.go"}},
+		"several":      {[]string{" M a.go", "?? b.go"}, []string{"a.go", "b.go"}},
+		"clean tree":   {nil, []string{}},
+
+		// A rename must name the NEW path; the old one no longer exists on disk.
+		"rename keeps the new name": {[]string{"R  old/path.go -> new/path.go"}, []string{"new/path.go"}},
+
+		// core.quotePath=false stops the escaping of non-ASCII bytes and nothing else: a
+		// name carrying a double quote still arrives quoted and escaped.
+		"quoted name is unquoted":  {[]string{` M "we\"ird.txt"`}, []string{`we"ird.txt`}},
+		"quoted name with a space": {[]string{` M "docs/a file.md"`}, []string{"docs/a file.md"}},
+
+		// strconv.Unquote also accepts Go raw-string and rune literals, so the unquoting is
+		// gated on git's own form - a file literally named `x` must keep its backquotes.
+		"backquoted name is left alone": {[]string{" M `x`"}, []string{"`x`"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, gitStatusPaths(tc.lines))
+		})
+	}
+}
+
+// TestTagsResolvesAnnotatedTagsToTheirCommit pins the %(*objectname) deref.
+//
+// An ANNOTATED tag's %(objectname) is the tag OBJECT's id, not the commit it points at,
+// while a lightweight tag's is the commit. types.VCSTag.ID promises "the revision
+// identifier the tag resolves to", so recording objectname made every annotated tag - the
+// kind `git tag -a` and most release tooling creates - report an id matching no commit. A
+// caller asking "is this release tagged at HEAD?" got no match for exactly the tags a
+// release process creates.
+func TestTagsResolvesAnnotatedTagsToTheirCommit(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n"})
+	gitRun(t, repo, "tag", "-a", "v1.0.0", "-m", "annotated")
+	gitRun(t, repo, "tag", "v1.0.1")
+
+	head, err := vcsOutput(t.Context(), repo, "git", "rev-parse", "HEAD")
+	require.NoError(t, err)
+
+	tags, err := gitVCS{}.Tags(t.Context(), repo, "")
+	require.NoError(t, err, "Tags")
+	require.Len(t, tags, 2)
+	for _, tag := range tags {
+		assert.Equal(t, head, tag.ID,
+			"%s resolves to %s, not the commit it marks", tag.Name, tag.ID)
+	}
+}
+
+// TestChangedFilesKeepsNonASCIIPathsRaw pins core.quotePath=false on BOTH of ChangedFiles'
+// probes. git otherwise renders a path outside ASCII as a C-quoted, backslash-escaped
+// literal ("uni/caf\303\251.md"), and project.normalizeFiles only trims and slash-converts -
+// so the quoted string matches no source glob and the project owning that file is silently
+// never rebuilt. No diagnostic, no error; `magus affected` just under-builds forever.
+//
+// Both probes are covered: the tracked path goes through `git diff`, the untracked one
+// through `git ls-files --others`, and only the first had the flag before.
+func TestChangedFilesKeepsNonASCIIPathsRaw(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n", "uni/café.md": "x\n"})
+	base, err := vcsOutput(t.Context(), repo, "git", "rev-parse", "HEAD")
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "uni", "café.md"), []byte("changed\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "uni", "naïve.md"), []byte("new\n"), 0o644))
+	gitRun(t, repo, "commit", "-q", "-am", "edit the tracked one")
+
+	got, err := gitVCS{}.ChangedFiles(t.Context(), repo, base)
+	require.NoError(t, err, "ChangedFiles")
+	assert.Contains(t, got, "uni/café.md", "tracked non-ASCII path came back quoted: %q", got)
+	assert.Contains(t, got, "uni/naïve.md", "untracked non-ASCII path came back quoted: %q", got)
+}

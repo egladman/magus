@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/serviceaudit"
+	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/project"
@@ -542,25 +543,18 @@ func checkVCSBaseRef(ctx context.Context, root string, opts types.VCSOptions) ty
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
-	var probeArgs []string
-	switch res.Name {
-	case "git":
-		probeArgs = []string{"-C", root, "rev-parse", "--verify", "--quiet", res.Base}
-	case "hg":
-		probeArgs = []string{"-R", root, "log", "-r", res.Base, "-l", "1", "-T", "{node}\\n"}
-	case "jj":
-		probeArgs = []string{"-R", root, "log", "-r", res.Base, "-n", "1", "--no-graph", "-T", "commit_id"}
-	default:
-		return types.DoctorCheck{Name: "vcs base ref", Status: types.DoctorOK, Message: fmt.Sprintf("%s: no probe available; skipped", res.Name)}
-	}
-
-	cmd := exec.CommandContext(ctx, res.Name, probeArgs...)
-	if err := cmd.Run(); err != nil {
+	// The driver is ASKED whether the ref resolves, rather than this check hand-writing a
+	// probe per backend. It used to switch on res.Name over four literal names and build
+	// the argv itself, which made it the only place outside vcs/ that shells out to a VCS
+	// binary - and made a NEW backend degrade to "no probe available; skipped", i.e. a
+	// silent pass for the one check whose whole job is catching an unreachable base ref.
+	// FindCommit is on the required interface, so every backend answers it by construction.
+	if _, err := res.VCS.FindCommit(ctx, root, res.Base); err != nil {
 		return types.DoctorCheck{
 			Name:    "vcs base ref",
 			Status:  types.DoctorFail,
 			Message: fmt.Sprintf("base_ref %q not reachable (set MAGUS_VCS_BASE_REF to a reachable ref)", res.Base),
-			Details: []string{fmt.Sprintf("%s exited: %v", res.Name, err)},
+			Details: []string{fmt.Sprintf("%s: %v", res.Name, err)},
 		}
 	}
 
@@ -1483,6 +1477,89 @@ func (r *runner) checkGuardBinary() types.DoctorCheck {
 	return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "hook would run ./magus, newer than every tracked Go source"}
 }
 
+// checkObserverRecording answers the question checkGuardBinary and checkGuardWiring cannot:
+// the hook is wired and the binary is current, but is anything actually being RECORDED?
+//
+// The observer is silent by design when absent, because interrupting on every read would be
+// worse than the gap. The cost of that choice is that a hook writing nothing is
+// indistinguishable from an agent that read nothing, and both are indistinguishable from a
+// human having written the file - so the diff surface's "written by X, after reading Y" claim
+// degrades into an agent name and no evidence, with nothing anywhere saying so.
+//
+// Measured in this repository: 3252 events, zero reads, correct wiring, green doctor. The
+// resolved hook was a PATH magus too old to accept --observe, which rejected the flag into an
+// `|| true` and recorded nothing, forever. That is the shape this check exists to name.
+//
+// Commands with no reads is the diagnostic pattern. An empty trail is NOT a failure: a
+// workspace where no agent has run yet is the ordinary case, and failing it would train
+// people to ignore the check.
+func (r *runner) checkObserverRecording() types.DoctorCheck {
+	const name = "agent observer"
+	const window = 2000
+
+	reads, writes, shell := trail.ObservedCounts(r.cacheDir(), window)
+	total := reads + writes + shell
+	switch {
+	case total == 0:
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorOK,
+			Message: "no agent activity recorded yet, which is the ordinary state for a workspace no agent has run in",
+		}
+	case total < observerMinSample:
+		// Too small a sample to conclude anything. A handful of events with no reads is what a
+		// fixture, a fresh workspace, or one session's worth of work looks like, and failing on
+		// it would be this check making the exact mistake it exists to catch: reporting "we did
+		// not look" as "we looked and found nothing".
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorOK,
+			Message: fmt.Sprintf("%d observation(s) so far, too few to judge whether the read hook is firing", total),
+		}
+	case reads == 0:
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorFail,
+			Message: fmt.Sprintf("%d observed commands and NOT ONE read, so the story behind a change cannot be reconstructed", total),
+			Details: []string{
+				fmt.Sprintf("writes: %d   shell: %d   reads: %d", writes, shell, reads),
+				"the usual cause is a hook resolving a magus too old to accept --observe, which",
+				"rejects the flag into an `|| true` and records nothing with nothing saying so",
+				"check which binary the hook runs: magus doctor (see the `guard binary` check)",
+				"re-stamp the hook templates: magus agent install <dir> --force",
+			},
+		}
+	case reads*observerReadRatio < writes:
+		// Wired, recording, and still useless for its actual purpose. Measured on this
+		// repository while writing this check: 4 reads against 272 writes and 1709 shell
+		// commands, which renders as "written by <agent>" with no reading trail on essentially
+		// every file - the same missing evidence as reads==0, arriving one rung quieter.
+		// Advice rather than fail: this is a degraded signal, not a broken workspace.
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorAdvice,
+			Message: fmt.Sprintf("%d read(s) against %d write(s): the reading trail is too sparse to explain a change", reads, writes),
+			Details: []string{
+				fmt.Sprintf("writes: %d   shell: %d   reads: %d", writes, shell, reads),
+				"a diff can name the agent that wrote a file but not what it had just read,",
+				"which is the one thing no forge can show - so this is the signal worth fixing",
+				"most hosts need the read hook wired separately from the command guard:",
+				"  magus agent install <dir> --force",
+			},
+		}
+	default:
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorOK,
+			Message: fmt.Sprintf("recording: %d read(s), %d write(s), %d shell command(s) in the last %d events", reads, writes, shell, window),
+		}
+	}
+}
+
+// observerReadRatio is how many reads one write should be accompanied by before the trail is
+// considered to be explaining anything. An agent reads far more than it writes, so anything
+// below parity means the read hook is firing rarely rather than working.
+const observerReadRatio = 1
+
+// observerMinSample is how many observations must exist before their SHAPE means anything.
+// Below it the trail is a fixture or a single session, and any verdict is noise.
+const observerMinSample = 50
+
 // newestGoSource returns the modification time of the most recently changed .go
 // file in the tree, skipping the directories that never hold guard sources.
 func newestGoSource(root string) (time.Time, string) {
@@ -1984,11 +2061,10 @@ func (r *runner) checkGeneratedDrift() types.DoctorCheck {
 	if err != nil || res.VCS == nil {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no vcs resolved; skipped"}
 	}
-	lines, err := res.VCS.DirtyFiles(ctx, r.root, nil)
+	paths, err := res.VCS.DirtyFiles(ctx, r.root, nil)
 	if err != nil {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "could not read tree status; skipped"}
 	}
-	paths := vcs.StatusPaths(res.Name, lines)
 	if len(paths) == 0 {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "tree is clean"}
 	}

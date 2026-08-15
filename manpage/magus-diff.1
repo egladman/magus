@@ -1,0 +1,97 @@
+.TH MAGUS-DIFF 1 "" "magus" "magus Manual"
+.SH NAME
+magus\-diff \- Read the working tree's changes in the order they deserve attention
+.SH SYNOPSIS
+.B magus
+.RI "diff [\-\-generated] [\-\-tui] [\-\-watch] [<patch\-file>|\-] [flags]"
+.SH DESCRIPTION
+Read the working tree's uncommitted changes, annotated and ordered.
+.PP
+A changeset is not a list of files, it is a set of CONSEQUENCES, and a reader's
+attention is scarce. Alphabetical order spends it at random: it gives a
+regenerated lockfile the same weight as a signature change twelve packages
+depend on. This orders by what a change can BREAK.
+.PP
+Generated files \- declared target outputs \- are folded away by default. Reading
+one is reading a machine's restatement of a change made somewhere else, so the
+source edit is the review. Pass \-\-generated to see them anyway.
+.PP
+Each file carries the evidence behind its rank: how many files reference the
+widest changed symbol it defines, whether any of those referents cross a project
+boundary or the module boundary (which is the question a version bump turns on),
+and the coverage a prior run observed. None of it is a verdict. magus does not
+claim a change is breaking \- deciding that needs signature compatibility, which
+needs a base\-side index magus does not keep and language semantics it does not
+model \- it reports who can see the thing you changed and lets you decide.
+.PP
+The console's Diff surface reads the same annotations over the same session,
+and an agent can join that session through the magus_diff MCP tool.
+.SH OPTIONS
+.RS
+.TP
+\fB\-\-generated\fR
+Include declared target outputs, which are folded away by default
+.TP
+\fB\-\-tui\fR
+Read the changeset interactively, joined to the session the console and an agent share
+.TP
+\fB\-\-watch\fR
+Re\-read and re\-render whenever the working tree changes
+.RE
+.SH EXAMPLES
+\fIRead what you are about to commit\fR
+.PP
+.EX
+magus diff
+.EE
+.PP
+\fIInclude the generated files too\fR
+.PP
+.EX
+magus diff --generated
+.EE
+.PP
+\fINavigate it hunk by hunk and mark what you have read\fR
+.PP
+.EX
+magus diff --tui
+.EE
+.PP
+\fIMachine\-readable, for a script or a Buzz advisor\fR
+.PP
+.EX
+magus diff -o json
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-graph\fR(1),
+\fBmagus\-query\fR(1),
+\fBmagus\-explain\fR(1),
+\fBmagus\-path\fR(1),
+\fBmagus\-refs\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-clean\fR(1),
+\fBmagus\-vcs\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-memory\fR(1),
+\fBmagus\-notes\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-buzz\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-man\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-agent\fR(1),
+\fBmagus\-hook\fR(1),
+\fBmagus\-notify\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br
