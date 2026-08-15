@@ -121,12 +121,16 @@ func (c DiffChurn) Rising() bool { return c.NotableRank() && c.ProjectTrend > 0 
 // they learn to skip - which then costs them the one time it says #3. The data stays whole and
 // the display is selective, the same trade the guard makes by explaining only what it is sure
 // of.
-const notableRankCutoff = 50
+// It is EXPORTED so a renderer can state the rule rather than leaving a reader to infer it.
+// An unexplained cutoff makes a missing rank ambiguous - outside the top N, or never computed?
+// - and the two have opposite implications for how much of the ranking to trust.
+const NotableRankCutoff = 50
 
 // NotableRank reports whether this file ranks high enough for its position to be worth
 // showing. A file outside the cutoff still reports its commit count, which is the part that
-// remains meaningful on its own.
-func (c DiffChurn) NotableRank() bool { return c.Rank > 0 && c.Rank <= notableRankCutoff }
+// remains meaningful on its own - and which is what tells a reader that churn WAS measured
+// here, so a missing rank means "outside the top NotableRankCutoff" rather than "not measured".
+func (c DiffChurn) NotableRank() bool { return c.Rank > 0 && c.Rank <= NotableRankCutoff }
 
 // DiffTouch is one agent session's contact with a changed file: that it wrote the file, and
 // what it was looking at immediately before.

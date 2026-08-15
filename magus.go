@@ -790,8 +790,17 @@ func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
 		return out, nil //nolint:nilerr // reported as a Note, see above
 	}
 	graph, gerr := m.KnowledgeGraphWithSymbols(ctx)
+	// indexed is the real question, and it is NOT "did a graph load". A graph loads fine with
+	// no symbol shards in it, so gating on a non-nil graph reported every file's reach as a
+	// measured zero on exactly the workspaces that have no index - which is the collapse the
+	// nil is there to prevent. HasSymbols is the same predicate impact.Enrich gates its own
+	// overlays on, so the ranking and the overlays can never disagree about whether anyone
+	// looked.
+	indexed := false
 	if gerr == nil {
-		impact.Enrich(res, impact.GraphStore(graph))
+		store := impact.GraphStore(graph)
+		indexed = store.HasSymbols()
+		impact.Enrich(res, store)
 	} else {
 		out.Notes = append(out.Notes,
 			"changed-symbol reach and coverage skipped (no symbol index loaded): "+gerr.Error())
@@ -820,7 +829,7 @@ func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
 	// nil and Review.Ranked() reports that there was no ranking key. The flag is workspace-wide
 	// rather than per-file because that is the granularity magus actually knows: it can tell
 	// whether an index loaded, not whether this particular path was in it.
-	if graph != nil {
+	if indexed {
 		for i := range out.Files {
 			zero := 0 // one pointer PER FILE: a shared one would raise every file's reach at once
 			out.Files[i].Reach = &zero

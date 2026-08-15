@@ -66,10 +66,16 @@ func (t *diffTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells.I
 		if body == "" || path == "" {
 			return spells.InvokeResponse{}, errors.New("mcp: comment needs path and body")
 		}
+		// agent_name is recorded here as well as on suggest. It was documented on the tool
+		// without an op qualifier and read only by suggest, so a comment silently dropped it -
+		// which made two agents in one session byte-identical in attribution, and neither the
+		// human nor the other agent could tell them apart. Attribution only: nothing branches
+		// on it, and it can never override the transport-stamped author below.
 		out := t.sessions.AddComment(t.root, types.DiffComment{
-			Path: path,
-			Hunk: int(paramFloat(req.Params, "hunk", -1)),
-			Body: body,
+			Path:      path,
+			Hunk:      int(paramFloat(req.Params, "hunk", -1)),
+			Body:      body,
+			AgentName: strings.TrimSpace(paramString(req.Params, "agent_name", "")),
 		}, types.DiffAuthorAgent)
 		return spells.InvokeResponse{Data: out}, nil
 

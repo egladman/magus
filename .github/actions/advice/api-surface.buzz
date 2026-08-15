@@ -14,8 +14,8 @@
 // parameter type - and a breaking-change warning nobody trusts is worse than none at all. So
 // this reports who can SEE the thing you changed and lets the author decide the bump.
 //
-// It shares the ranking with the console's Review surface and `magus review` by construction:
-// all three read magus\review, so nobody maintains a second opinion about which files matter.
+// It shares the ranking with the console's Diff surface and `magus diff` by construction:
+// all three read magus\diff, so nobody maintains a second opinion about which files matter.
 //
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
 import "proc";
@@ -74,7 +74,7 @@ fun body(count: int, lines: [str]) > str {
         + "This is evidence, not a verdict: magus reports WHO can see what you changed and "
         + "does not decide whether it broke. Deciding that needs signature compatibility "
         + "against the base, which magus does not index.\n\n"
-        + "`magus review` shows the same ranking locally.\n";
+        + "`magus diff` shows the same ranking locally.\n";
 }
 
 fun main() > void !> any {
@@ -97,7 +97,7 @@ fun main() > void !> any {
         return;
     }
 
-    final review = magus\review();
+    final review = magus\diff();
     var lines = mut [];
     foreach (f in review.files) {
         // Generated output is skipped even when it looks public. A regenerated binding file

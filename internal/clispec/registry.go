@@ -1089,16 +1089,17 @@ claim a change is breaking - deciding that needs signature compatibility, which
 needs a base-side index magus does not keep and language semantics it does not
 model - it reports who can see the thing you changed and lets you decide.
 
-The console's Review surface reads the same annotations over the same session,
+The console's Diff surface reads the same annotations over the same session,
 and an agent can join that session through the magus_diff MCP tool.`,
-	Usage: "magus review [--generated] [flags]",
+	Usage: "magus diff [--generated] [--watch] [<patch-file>|-] [flags]",
 	Flags: []Flag{
 		{Name: "generated", Kind: FlagBool, Doc: "Include declared target outputs, which are folded away by default"},
+		{Name: "watch", Kind: FlagBool, Doc: "Re-read and re-render whenever the working tree changes"},
 	},
 	Examples: []Example{
-		{"Read what you are about to commit", "magus review"},
-		{"Include the generated files too", "magus review --generated"},
-		{"Machine-readable, for a script or a Buzz advisor", "magus review -o json"},
+		{"Read what you are about to commit", "magus diff"},
+		{"Include the generated files too", "magus diff --generated"},
+		{"Machine-readable, for a script or a Buzz advisor", "magus diff -o json"},
 	},
 }
 

@@ -108,6 +108,7 @@ flag buzz/t
 flag buzz/test
 flag clean/cache
 flag diff/generated
+flag diff/watch
 flag explain/global
 flag explain/refresh
 flag hook/agent-name

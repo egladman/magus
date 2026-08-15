@@ -131,6 +131,8 @@ const (
 	FlagDescribeTargetNoDefaultCharms = "no-default-charms"
 	// diff: --generated
 	FlagDiffGenerated = "generated"
+	// diff: --watch
+	FlagDiffWatch = "watch"
 	// explain: --global
 	FlagExplainGlobal = "global"
 	// explain: --refresh
@@ -872,12 +874,14 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 // DiffFlags are the flags declared for `magus diff`.
 type DiffFlags struct {
 	Generated bool // --generated
+	Watch     bool // --watch
 }
 
 // BindDiff registers `magus diff`'s flags on fs and returns the destination.
 func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	var f DiffFlags
 	fs.BoolVar(&f.Generated, FlagDiffGenerated, false, "Include declared target outputs, which are folded away by default")
+	fs.BoolVar(&f.Watch, FlagDiffWatch, false, "Re-read and re-render whenever the working tree changes")
 	return &f
 }
 
