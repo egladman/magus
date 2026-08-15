@@ -160,10 +160,11 @@ func New(in Input) *Model {
 
 // Rows returns every visible row, cursor included. The renderer windows it.
 //
-// The slice ALIASES the model's own, which rebuild refills in place: every toggle and every
-// cursor move rewrites what an earlier return value points at. Read it and drop it rather than
-// holding it. Copying instead would allocate the whole changeset on each of the frames a
-// keypress draws, which is the cost the reuse exists to avoid.
+// The slice ALIASES the model's own, which rebuild refills in place. A cursor move does not
+// rebuild, but a fold or a read mark does, and a row list that grew REALLOCATES - so an earlier
+// return value is left pointing at whichever backing array it was handed, stale rather than
+// live. Read it and drop it rather than holding it. Copying instead would allocate the whole
+// changeset on each of the frames a keypress draws, which is the cost the reuse exists to avoid.
 func (m *Model) Rows() []Row { return m.rows }
 
 // CursorRow is the index into Rows of the row the cursor marks, or -1 when there is none.
@@ -188,11 +189,20 @@ func (m *Model) Overview() bool { return m.overview }
 func (m *Model) OverviewCursor() int { return m.overCursor }
 
 // Cursor is where the human is looking, in the shape the session takes.
+//
+// Hunk is the hunk's index in the PATCH (Hunk.Index), which is the coordinate the session
+// addresses talk by - the same one talkRows joins comments on. It is NOT the row position the
+// cursor walks: those coincide only while the viewer holds every hunk of every file, so
+// publishing the position would key the shared cursor by something no other client can resolve.
 func (m *Model) Cursor() types.DiffCursor {
 	if len(m.files) == 0 {
 		return types.DiffCursor{Hunk: -1}
 	}
-	return types.DiffCursor{Path: m.files[m.file].Path, Hunk: m.hunk}
+	f := &m.files[m.file]
+	if m.hunk < 0 || m.hunk >= len(f.Hunks) {
+		return types.DiffCursor{Path: f.Path, Hunk: -1}
+	}
+	return types.DiffCursor{Path: f.Path, Hunk: f.Hunks[m.hunk].Index}
 }
 
 // Resize sets the viewport height and keeps the cursor in view.
@@ -333,8 +343,10 @@ func (m *Model) OverviewEnter() {
 // matching text out of it again.
 type OverviewRow struct {
 	// Path is undecorated. The link, when there is one, is in Rendered.
-	Path      string
-	Hunks     int
+	Path string
+	// HunkCount rather than Hunks: File.Hunks in this same package is the hunks THEMSELVES, and
+	// one name for two shapes reads as a copy of the slice at every use.
+	HunkCount int
 	Read      int
 	Generated bool
 	Rendered  string
@@ -352,7 +364,7 @@ func (m *Model) OverviewRows() []OverviewRow {
 			line += ", generated"
 		}
 		out = append(out, OverviewRow{
-			Path: f.Path, Hunks: n, Read: read, Generated: f.Generated, Rendered: line,
+			Path: f.Path, HunkCount: n, Read: read, Generated: f.Generated, Rendered: line,
 		})
 	}
 	return out

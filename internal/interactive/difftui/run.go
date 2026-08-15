@@ -36,8 +36,10 @@ type Options struct {
 	// Sync is nil when nothing is listening - no daemon, no console, no agent.
 	Sync Sync
 	// Summary is the one line left behind in the scrollback when the reader quits, so the
-	// session records what was read rather than vanishing without a trace.
-	Summary string
+	// session records what was read rather than vanishing without a trace. It is called at that
+	// moment and handed the fold the reader left in, because `.` changes what the line has to
+	// describe. Nil leaves nothing behind.
+	Summary func(unfolded bool) string
 }
 
 // defaultHeight is what a terminal that will not report its size is assumed to be. The CLI's
@@ -55,19 +57,19 @@ func Run(ctx context.Context, opts Options) error {
 	if err != nil {
 		return err
 	}
+	m := New(opts.Input)
 	// Ordered so the terminal is handed back before anything is printed on it, and so both
 	// happen on EVERY exit path - a return, a cancelled context, or a panic unwinding through
 	// here. Leaving raw mode set would hand the reader a shell with no echo.
 	defer func() {
-		if opts.Summary != "" {
-			fmt.Fprintln(opts.Out, opts.Summary)
+		if opts.Summary != nil {
+			fmt.Fprintln(opts.Out, opts.Summary(m.Unfolded()))
 		}
 	}()
 	view := tty.NewInlineView(opts.Out, opts.Probe)
 	defer func() { _ = view.Clear() }()
 	defer func() { _ = input.Close() }()
 
-	m := New(opts.Input)
 	if opts.Sync != nil {
 		opts.Sync.SetCursor(m.Cursor())
 	}

@@ -293,9 +293,7 @@ func planClosure(index planTargets, projects []types.TargetGraphProject, anchor 
 		visit(planKey{p.Path, anchor})
 	}
 
-	// Empty rather than capacity-hinted: queue holds only the seeds at this point and the walk
-	// below grows it, so any hint taken from it would describe a plan this is not. Non-nil for
-	// the [] contract above.
+	// Non-nil, per the [] contract on planClosure above.
 	nodes := []planNode{}
 	edges := []planEdge{}
 	drawn := map[planEdge]bool{}

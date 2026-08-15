@@ -359,7 +359,9 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths [
 	}
 	// Closed here rather than inside difftui: how a Sync gets its writes out - inline, or over a
 	// goroutine that has to be drained - is this file's business, and the viewer stays ignorant
-	// of it. Deferred before Run, so it also runs when the reader interrupts.
+	// of it. Deferred before Run, so it also runs on the interrupts Run RETURNS from: `q`,
+	// Ctrl-C read as a key, a cancelled context. A raw SIGINT unwinds nothing, and the reader
+	// loses the queue along with the restored terminal.
 	defer sync.close()
 	return difftui.Run(ctx, difftui.Options{
 		In:    os.Stdin,
@@ -375,9 +377,10 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths [
 			Link:        pathLinker(m.Root()),
 		},
 		Sync: sync,
-		// The fold the session OPENS in. A reader who presses `.` changes what they are shown
-		// and not this line, which is the closest an up-front string gets to the truth.
-		Summary: diffCountsLine(rev, showGenerated),
+		// Called at quit rather than computed here, so the line reports the fold the reader
+		// LEFT in: `.` changes what is on the page, and a summary fixed at the opening state
+		// would describe a session nobody had.
+		Summary: func(unfolded bool) string { return diffCountsLine(rev, unfolded) },
 	})
 }
 
@@ -457,16 +460,30 @@ func (diffStoreSync) close() {}
 // console uses. The session it attached to travels with it, because a transport that could
 // hand back a session it had not attached would be a client of nothing.
 //
-// Writes leave on sends rather than on the caller's stack. Every one of them is provoked by a
-// KEYPRESS - a cursor move, a read mark - and posting inline put a network round trip between
-// the key and the screen moving, up to the full diffBridgeWrite deadline against a daemon that
-// had stopped answering.
+// Writes leave on sends rather than on the caller's stack: every one of them is provoked by a
+// KEYPRESS - a cursor move, a read mark - and an inline post would put a network round trip
+// between the key and the screen moving, up to the full diffBridgeWrite deadline against a
+// daemon that has stopped answering.
+//
+// The two kinds of write get two queues, because they fail in opposite directions. A cursor is
+// idempotent by REPLACEMENT - the newest one says where the reader is and everything behind it
+// says where they no longer are - so that queue evicts to stay current. A read mark is
+// replaceable by nothing: the bridge is the only writer of it on this path, so a dropped
+// `viewed` is a hunk the reader read that no client will ever be told about. Its queue is deep,
+// waited on, and drained in full at close.
 type diffBridge struct {
 	addr    string
 	token   string
 	session *types.DiffSession
-	sends   chan diffSessionOp
-	done    chan struct{}
+
+	cursors chan diffSessionOp
+	marks   chan diffSessionOp
+	// stop is closed in place of the op channels, so a send racing close cannot panic.
+	stop chan struct{}
+	// done closes when deliver has returned, which is the only proof the sender is gone.
+	done chan struct{}
+	// cancel aborts the post on the wire once close has spent its budget.
+	cancel context.CancelFunc
 }
 
 // diffBridgeAttach bounds the GET that annotates and attaches. It is the expensive route -
@@ -479,10 +496,20 @@ const diffBridgeAttach = 10 * time.Second
 // quitting waits for the last mark to leave.
 const diffBridgeWrite = time.Second
 
-// diffBridgeQueue bounds the writes waiting to leave. Small on purpose: a backlog means the
-// daemon has stopped keeping up, and at that point the newest cursor is the only one worth
+// diffBridgeQueue bounds the CURSOR writes waiting to leave. Small on purpose: a backlog means
+// the daemon has stopped keeping up, and at that point the newest cursor is the only one worth
 // having - the ones behind it describe somewhere the reader no longer is.
 const diffBridgeQueue = 8
+
+// diffBridgeMarks bounds the read marks waiting to leave. Deep rather than small, because
+// nothing here may be evicted and the volume is bounded by a human pressing `v`: reaching the
+// end of it takes a daemon that has stopped answering AND a minute of uninterrupted marking.
+const diffBridgeMarks = 64
+
+// diffBridgeClose caps how long quitting waits for the queue to empty. The budget is one write
+// deadline per queued op, and this is the ceiling on it: a wedged daemon costs the shell a few
+// seconds rather than the whole queue's worth of deadlines.
+const diffBridgeClose = 3 * time.Second
 
 // dialDiffBridge attaches to the daemon's session, or returns nil when there is nothing to
 // join - no token, no listener, a daemon with no workspace. Every one of those is an ordinary
@@ -527,10 +554,22 @@ func dialDiffBridge(ctx context.Context, paths []string, asOf string) *diffBridg
 		return nil
 	}
 	b.session = &sess
-	b.sends = make(chan diffSessionOp, diffBridgeQueue)
-	b.done = make(chan struct{})
-	go b.deliver()
+	b.start()
 	return b
+}
+
+// start wires the sender. Split from dialDiffBridge so the queue can be driven against a stub
+// server without a daemon, a token, or the attach round trip.
+func (b *diffBridge) start() {
+	b.cursors = make(chan diffSessionOp, diffBridgeQueue)
+	b.marks = make(chan diffSessionOp, diffBridgeMarks)
+	b.stop = make(chan struct{})
+	b.done = make(chan struct{})
+	// Not the caller's context and not the session's: a cancelled read must not turn the last
+	// read mark into a lost one. close owns this cancel and nothing else does.
+	ctx, cancel := context.WithCancel(context.Background())
+	b.cancel = cancel
+	go b.deliver(ctx)
 }
 
 // diffSessionOp is one mutation of the shared session, the wire shape the daemon's
@@ -547,54 +586,150 @@ type diffSessionOp struct {
 // carries the session's own cursor, and applying that would let another client move this
 // reader's viewport - which is the one thing the paired-review design forbids.
 func (b *diffBridge) SetCursor(c types.DiffCursor) {
-	b.queue(diffSessionOp{Op: "cursor", Path: c.Path, Hunk: c.Hunk})
+	b.queueCursor(diffSessionOp{Op: "cursor", Path: c.Path, Hunk: c.Hunk})
 }
 
 // SetViewed publishes a read mark, which the daemon persists for every client at once.
 func (b *diffBridge) SetViewed(digest string, on bool) {
-	b.queue(diffSessionOp{Op: "viewed", Digest: digest, On: on})
+	b.queueMark(diffSessionOp{Op: "viewed", Digest: digest, On: on})
 }
 
-// queue hands one mutation to the sender, and DROPS it when the sender is behind. It never
-// blocks: the key loop is what calls it, and difftui.Sync promises best-effort delivery
-// precisely so a slow daemon costs the reader nothing.
-func (b *diffBridge) queue(op diffSessionOp) {
-	select {
-	case b.sends <- op:
-	default:
+// queueCursor hands the newest cursor to the sender, evicting the OLDEST when the queue is
+// full. It never blocks: the key loop is what calls it, and difftui.Sync promises best-effort
+// delivery precisely so a slow daemon costs the reader nothing.
+//
+// A plain non-blocking send drops the ARRIVING op instead, which keeps exactly the positions
+// the reader has already walked past and throws away the only one still true.
+//
+// Evicting and sending are two steps, and deliver can take the head between them - which is why
+// this retries rather than assuming the receive made room. Each iteration ends with a slot free
+// whichever way that race went, and stop short-circuits both selects once close has run.
+func (b *diffBridge) queueCursor(op diffSessionOp) {
+	for {
+		select {
+		case b.cursors <- op:
+			return
+		case <-b.stop:
+			return
+		default:
+		}
+		select {
+		case <-b.cursors:
+		case <-b.stop:
+			return
+		default:
+		}
 	}
 }
 
-// deliver posts queued mutations one at a time, in order, until the queue is closed.
-func (b *diffBridge) deliver() {
+// queueMark hands a read mark to the sender. It never evicts, because there is nothing to
+// replace a mark with - see diffBridge.
+//
+// A full queue is waited on rather than dropped, and the wait is bounded at diffBridgeWrite
+// because an unbounded one would DEADLOCK the quit path: close runs after the key loop returns,
+// so a key loop parked in here is one that can never reach the drain that would empty the queue.
+//
+// Past that wait the mark is lost and there is no honest floor below it on this path: the daemon
+// owns the session file, so writing the local store instead would be a second writer persisting
+// its own idea of the whole set, and stderr belongs to the viewport until the reader quits.
+func (b *diffBridge) queueMark(op diffSessionOp) {
+	select {
+	case b.marks <- op:
+		return
+	default:
+	}
+	t := time.NewTimer(diffBridgeWrite)
+	defer t.Stop()
+	select {
+	case b.marks <- op:
+	case <-b.stop:
+	case <-t.C:
+	}
+}
+
+// deliver posts queued mutations one at a time, in order, until close stops it - then drains
+// what is left behind. It is the only receiver on either queue and it returns on every path: the
+// loop leaves on stop, and the drain is bounded by the depth it measured on entry.
+func (b *diffBridge) deliver(ctx context.Context) {
 	defer close(b.done)
-	for op := range b.sends {
-		b.post(op)
+	for {
+		select {
+		case op := <-b.marks:
+			b.post(ctx, op)
+		case op := <-b.cursors:
+			b.post(ctx, op)
+		case <-b.stop:
+			b.drain(ctx)
+			return
+		}
+	}
+}
+
+// drain posts what was waiting when close ran, marks first because those are the writes that
+// cannot be reconstructed, and never more than were queued at that moment - a send racing close
+// is not worth extending the shell's exit for.
+func (b *diffBridge) drain(ctx context.Context) {
+	for n := len(b.marks) + len(b.cursors); n > 0; n-- {
+		select {
+		case op := <-b.marks:
+			b.post(ctx, op)
+			continue
+		default:
+		}
+		select {
+		case op := <-b.cursors:
+			b.post(ctx, op)
+		default:
+			return
+		}
 	}
 }
 
 // close stops the sender and gives what is already queued a bounded chance to leave: a mark
 // made on the last keypress should not be lost to the process exiting, and a daemon that has
 // stopped answering should not hold the shell either.
+//
+// Spending the budget CANCELS the sender rather than just abandoning it, which is what aborts
+// the post already on the wire. Left uncancelled, the goroutine went on talking to the daemon
+// about a session the reader had walked away from, with nothing left to receive the answer.
 func (b *diffBridge) close() {
-	close(b.sends)
+	defer b.cancel() // the drain finished inside its budget; nothing is on the wire to abort
+	close(b.stop)
+	select {
+	case <-b.done:
+		return
+	case <-time.After(b.drainBudget()):
+	}
+	b.cancel()
 	select {
 	case <-b.done:
 	case <-time.After(diffBridgeWrite):
 	}
 }
 
+// drainBudget is how long close waits for the queue: one write deadline per op, since they leave
+// one at a time, plus one for whatever is already on the wire, capped at diffBridgeClose.
+func (b *diffBridge) drainBudget() time.Duration {
+	d := time.Duration(len(b.marks)+len(b.cursors)+1) * diffBridgeWrite
+	if d > diffBridgeClose {
+		return diffBridgeClose
+	}
+	return d
+}
+
 // post sends one mutation, best-effort. A coordination write that fails is a pairing that
 // went quiet, not a review that has to stop - and there is nothing useful to say about it to
 // somebody in the middle of reading a diff.
-func (b *diffBridge) post(op diffSessionOp) {
+//
+// ctx is the SENDER's, never the session's: a cancelled read must not turn the last write into a
+// lost mark. close cancels it once the drain budget is spent, so a post outlives the process's
+// interest in it by nothing.
+func (b *diffBridge) post(ctx context.Context, op diffSessionOp) {
 	body, err := json.Marshal(op)
 	if err != nil {
 		return
 	}
-	// Not the session's context: this is fire-and-forget under its own short deadline, and a
-	// cancelled read should not turn the last write into a lost mark.
-	ctx, cancel := context.WithTimeout(context.Background(), diffBridgeWrite)
+	ctx, cancel := context.WithTimeout(ctx, diffBridgeWrite)
 	defer cancel()
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, "http://"+b.addr+"/api/v1/diff/session", bytes.NewReader(body))
 	if err != nil {
@@ -679,9 +814,8 @@ func diffTouches(root, cacheDir string, paths []string) map[string][]types.DiffT
 // The interactive reader leaves this same line behind when it quits, which is why it is a
 // string rather than a print: a session that erased its viewport and printed nothing would
 // leave the scrollback with no record that a review happened at all.
-// The fold state is threaded rather than assumed: the line said "folded" unconditionally, so
-// under --generated - where every one of them is printed right below it - the headline
-// contradicted the page it introduced.
+// The fold state is threaded rather than assumed: under --generated every generated file is
+// printed right below this line, so calling them folded would contradict the page it introduces.
 func diffCountsLine(rev types.Diff, showGenerated bool) string {
 	gen := rev.GeneratedCount()
 	line := fmt.Sprintf("%d files to read", len(rev.Files)-gen)

@@ -193,7 +193,7 @@ var Magus = Module{
 		},
 		{
 			Name: "diff",
-			Doc:  "Read the working tree's uncommitted changes, annotated and ordered by what they can break: for each file the owning project, whether it is a declared `output` (generated - the source edit is the review), how widely its changed symbols are referenced (`reach`), whether it is public API `surface`, observed `coverage`, how often it has been changing (`churn`), and which agent sessions wrote it (`touches`). Files come back in the order magus recommends READING them - generated last whatever its reach, then widest reach first - so a caller renders the list as given rather than sorting it again. Returns a typed Review envelope; branch on `role` and `surface` rather than grepping text. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.",
+			Doc:  "Read the working tree's uncommitted changes, annotated and ordered by what they can break: for each file the owning project, whether it is a declared `output` (generated - the source edit is the review), how widely its changed symbols are referenced (`reach`), whether it is public API `surface`, observed `coverage`, how often it has been changing (`churn`), and which agent sessions wrote it (`touches`). Files come back in the order magus recommends READING them - generated last whatever its reach, then widest reach first - so a caller renders the list as given rather than sorting it again. Returns a typed Diff envelope; branch on `role` and `surface` rather than grepping text. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.",
 			Args: []Arg{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},

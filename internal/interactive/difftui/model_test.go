@@ -50,6 +50,23 @@ func move(t *testing.T, m *Model, key rune) bool {
 
 func at(path string, hunk int) types.DiffCursor { return types.DiffCursor{Path: path, Hunk: hunk} }
 
+// TestCursorPublishesThePatchIndexNotTheRowPosition pins the coordinate the shared session is
+// keyed by. Hunk.Index and the position in Hunks agree while the viewer holds every hunk of
+// every file, so only a fixture where they differ can tell the two apart - and Index is the one
+// the console and the MCP surface resolve talk by, the same one talkRows joins on.
+func TestCursorPublishesThePatchIndexNotTheRowPosition(t *testing.T) {
+	t.Parallel()
+	m := New(Input{Files: []File{{Path: "a.go", Hunks: []Hunk{
+		{Index: 4, Header: "@@ -1 +1 @@", Lines: []string{"+one"}, Digest: "d0"},
+		{Index: 7, Header: "@@ -9 +9 @@", Lines: []string{"+two"}, Digest: "d1"},
+	}}}})
+	assert.Equal(t, at("a.go", -1), m.Cursor(), "a heading names no hunk")
+	require.True(t, m.NextHunk())
+	assert.Equal(t, at("a.go", 4), m.Cursor(), "the first row is patch hunk 4")
+	require.True(t, m.NextHunk())
+	assert.Equal(t, at("a.go", 7), m.Cursor(), "the second row is patch hunk 7, not hunk 1")
+}
+
 func TestCursorMotionCrossesFileAndHunkBoundaries(t *testing.T) {
 	t.Parallel()
 	tests := []struct {
@@ -157,7 +174,7 @@ func TestOverviewEntersAndReturns(t *testing.T) {
 	assert.Equal(t, 0, m.OverviewCursor(), "it opens on the file being read")
 	rows := m.OverviewRows()
 	require.Len(t, rows, 3)
-	assert.Equal(t, OverviewRow{Path: "a.go", Hunks: 2, Read: 0, Rendered: "a.go  2 hunks, 0 read"}, rows[0])
+	assert.Equal(t, OverviewRow{Path: "a.go", HunkCount: 2, Read: 0, Rendered: "a.go  2 hunks, 0 read"}, rows[0])
 	assert.True(t, rows[2].Generated)
 
 	m.OverviewMove(-4)

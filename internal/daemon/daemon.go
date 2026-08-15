@@ -288,7 +288,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// run-outcome volatility lens, all under the single "volatility" key of InsightView.
 			// Plain JSON over the same /api guards as the rest.
 			bridgeMux.Handle("/api/v1/insight", cors(insightH))
-			// Review surface: the working tree's uncommitted changes as one unified patch.
+			// Diff surface: the working tree's uncommitted changes as one unified patch.
 			// Loopback-only, alongside the other /api reads - deliberately NOT added to the LAN
 			// share subset below, because a working diff is unreviewed source and a share link
 			// is handed to a phone.
