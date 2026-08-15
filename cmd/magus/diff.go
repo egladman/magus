@@ -664,6 +664,14 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string)
 	for _, n := range rev.Notes {
 		fmt.Printf("\nnote: %s\n", n)
 	}
+
+	// The same changeset in the console's Diff surface. Interactive-only: the token rides
+	// the URL fragment (see printJobWatchHint), so it must never land in a captured log.
+	if tty.IsTerminalWriter(os.Stdout, tty.SystemProbe) {
+		if u := consoleDiffURL(); u != "" {
+			fmt.Printf("\nopen in console: %s\n", u)
+		}
+	}
 	return nil
 }
 

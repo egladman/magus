@@ -438,6 +438,21 @@ func consoleWatchURL() string {
 	return console.Link(console.LinkOpts{Host: mcpAddrString(), Surface: "dashboard", Token: token})
 }
 
+// consoleDiffURL builds the console Diff surface URL for the working changeset, with the
+// same degrade as consoleWatchURL: "" when the console is disabled or no token loads, so
+// a caller never prints a dead link. The token rides the fragment, so callers must gate
+// on an interactive terminal (see printJobWatchHint).
+func consoleDiffURL() string {
+	if globalCfg.Console.Enabled != nil && !*globalCfg.Console.Enabled {
+		return ""
+	}
+	token, err := auth.Load()
+	if err != nil || token == "" {
+		return ""
+	}
+	return console.Link(console.LinkOpts{Host: mcpAddrString(), Surface: "diff", Token: token})
+}
+
 func serverJobUsage() {
 	fmt.Fprintln(os.Stderr, "usage: magus server job <name>")
 	fmt.Fprintln(os.Stderr, "")

@@ -114,6 +114,11 @@ is the annotated object.
 
 ## NEXT candidates, in rough order
 
+0. Advisors run LOCALLY in magus diff (Eli's direction, recon complete): a
+   local driver mode for the .github/actions/advice .buzz advisors -
+   base/head from the working tree, collect-dont-publish - rendering advisor
+   findings as a diff-report/TUI/console section. The "open in console" line
+   is the thin edge of this.
 1. Wire words.go into the TUI and CLI (the port exists, consumers do not).
 2. Color in the TUI, then wheel scrolling - the two cheap legibility wins.
 3. Comment compose in the TUI (the composer precedent is the picker's filter
