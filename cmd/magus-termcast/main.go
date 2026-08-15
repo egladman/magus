@@ -352,12 +352,12 @@ type pace struct {
 }
 
 var (
-	corePace = pace{base: 0.5, perLine: 0.05, max: 1.6, last: 2.2}
+	corePace = pace{base: 0.28, perLine: 0.028, max: 0.85, last: 1.3}
 
 	// A higher floor, because the showcase's interactive beats move a highlight
 	// rather than adding output: line count understates what they ask the reader
 	// to find, and locating a cursor takes longer than reading one more line.
-	showcasePace = pace{base: 0.8, perLine: 0.05, max: 1.7, last: 2.5}
+	showcasePace = pace{base: 0.42, perLine: 0.028, max: 0.95, last: 1.5}
 )
 
 func (p pace) hold(i, n, added int) float64 {
