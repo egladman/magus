@@ -1,0 +1,262 @@
+/* plan.css - page-scoped styles for the console Plan surface (the delegation ledger drawn as the
+ * unit tree it is).
+ *
+ * PatternFly owns everything it has a component for: the Reload button, the empty state, the path
+ * chips are PF Labels. What PF has no component for is the STAGE - a laid-out node/edge drawing -
+ * and the dense unit list and detail sheet beside it, so those are authored here under the
+ * console-plan-* area of the naming formula (PATTERNFLY.md). Transient state is data-* throughout
+ * (data-phase, data-state, data-selected, data-readonly, data-back), never a --modifier class.
+ *
+ * The five states read from the PF-native status tokens, so a theme toggle re-tints the plan with
+ * no per-theme rule here. no_return gets its OWN colour (the neutral-but-marked purple family used
+ * for spells), deliberately NOT the danger red a failure gets: a unit that never returned is not a
+ * unit that failed, and a reader must be able to tell them apart at a glance and by mark. */
+
+.console-plan-layout {
+  display: grid;
+  grid-template-columns: 17rem minmax(0, 1fr) 20rem;
+  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-areas:
+    "toolbar toolbar toolbar"
+    "tree stage detail";
+  height: 100%;
+  min-height: 0;
+  background: var(--pf-t--global--background--color--primary--default);
+  color: var(--pf-t--global--text--color--regular);
+  --console-plan-declared: var(--pf-t--global--text--color--subtle);
+  --console-plan-running: var(--console-status-running);
+  --console-plan-pass: var(--console-status-ok);
+  --console-plan-fail: var(--console-status-danger);
+  --console-plan-no-return: var(--console-node-spell);
+}
+
+/* The stage, the list and the detail are all one answer to "what is the plan"; when there is no
+   plan to show, the empty state replaces the lot rather than framing three blank panels. */
+.console-plan-empty { display: none; }
+.console-plan-layout[data-phase="empty"] .console-plan-tree,
+.console-plan-layout[data-phase="empty"] .console-plan-stage,
+.console-plan-layout[data-phase="empty"] .console-plan-detail { display: none; }
+.console-plan-layout[data-phase="empty"] .console-plan-empty {
+  display: flex;
+  grid-row: 2;
+  grid-column: 1 / -1;
+}
+
+.console-plan-toolbar {
+  grid-area: toolbar;
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  padding: 0.4rem 0.6rem;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-plan-summary {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--pf-t--global--text--color--regular);
+}
+/* The stale-ledger note. Loud enough to be read, quiet enough not to look like a failure: the plan
+   on screen is still the plan, it is just older than the work. */
+.console-plan-note {
+  margin: 0;
+  font-size: 0.75rem;
+  color: var(--console-status-warn);
+}
+.console-plan-refresh { margin-inline-start: auto; }
+
+/* ---- the accessible twin -------------------------------------------------- */
+
+.console-plan-tree {
+  grid-area: tree;
+  min-height: 0;
+  overflow-y: auto;
+  border-right: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-plan-list { margin: 0; padding: 0.3rem 0; list-style: none; }
+.console-plan-list__row { margin: 0; }
+.console-plan-list__item {
+  display: flex;
+  align-items: baseline;
+  gap: 0.4rem;
+  width: 100%;
+  padding-block: 0.2rem;
+  padding-inline: calc(0.4rem + var(--console-plan-depth, 0) * 0.6rem) 0.5rem;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: inherit;
+  font-size: 0.76rem;
+  line-height: 1.4;
+  text-align: start;
+  cursor: pointer;
+}
+.console-plan-list__item:hover { background: var(--pf-t--global--background--color--secondary--hover); }
+.console-plan-list__item[aria-current="true"] {
+  background: var(--pf-t--global--background--color--highlight--default);
+  box-shadow: inset 2px 0 0 var(--console-accent);
+}
+/* The mark is the non-colour channel: the state is readable from the two or four letters alone. */
+.console-plan-list__mark {
+  flex: 0 0 2.1rem;
+  color: var(--console-plan-state, inherit);
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.66rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+.console-plan-list__id {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--pf-t--global--font--family--mono);
+}
+.console-plan-list__meta {
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+/* One state, one colour, resolved ONCE per element that carries data-state and read by whatever
+   sits inside it (the list mark, the node box and its mark, the detail's state word). Scoped to
+   the layout because data-state is a console-wide hook - the status bar's connection dot carries
+   one too - and an unscoped attribute selector in a globally loaded sheet would tint it. */
+.console-plan-layout [data-state="declared"] { --console-plan-state: var(--console-plan-declared); }
+.console-plan-layout [data-state="running"] { --console-plan-state: var(--console-plan-running); }
+.console-plan-layout [data-state="pass"] { --console-plan-state: var(--console-plan-pass); }
+.console-plan-layout [data-state="fail"] { --console-plan-state: var(--console-plan-fail); }
+.console-plan-layout [data-state="no_return"] { --console-plan-state: var(--console-plan-no-return); }
+
+/* ---- the stage ------------------------------------------------------------ */
+
+.console-plan-stage {
+  grid-area: stage;
+  min-width: 0;
+  min-height: 0;
+  overflow: auto;
+  padding: 0.5rem;
+}
+.console-plan-stage__svg { width: 100%; height: 100%; min-height: 12rem; }
+
+.console-plan-edge {
+  fill: none;
+  stroke: var(--pf-t--global--border--color--default);
+  stroke-width: 1.2;
+}
+/* Parent and depends_on must not read as the same relation: one is who spawned whom, the other is
+   what has to finish first. Solid for the delegation spine, dashed and accented for the ordering
+   constraints laid over it. */
+.console-plan-edge[data-kind="depends_on"] {
+  stroke: var(--console-accent);
+  stroke-dasharray: 5 3;
+  opacity: 0.75;
+}
+/* An edge the layout had to reverse to break a cycle. The dotted stroke says the drawn direction is
+   layout fiction, not what the ledger claims. */
+.console-plan-edge[data-back] { stroke-dasharray: 2 3; opacity: 0.5; }
+.console-plan-arrow { fill: var(--pf-t--global--border--color--default); }
+.console-plan-arrow[data-kind="depends_on"] { fill: var(--console-accent); }
+
+.console-plan-node { cursor: pointer; }
+.console-plan-node__box {
+  fill: var(--pf-t--global--background--color--secondary--default);
+  stroke: var(--console-plan-state, var(--pf-t--global--border--color--default));
+  stroke-width: 1.4;
+}
+.console-plan-node[data-readonly] .console-plan-node__box { stroke-dasharray: 4 2; }
+.console-plan-node[data-selected] .console-plan-node__box {
+  stroke: var(--console-accent);
+  stroke-width: 2.4;
+}
+.console-plan-node__mark {
+  fill: var(--console-plan-state, var(--pf-t--global--text--color--subtle));
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 9px;
+  font-weight: 700;
+}
+.console-plan-node__id {
+  fill: var(--pf-t--global--text--color--regular);
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 10px;
+}
+.console-plan-node__ro {
+  fill: var(--pf-t--global--text--color--subtle);
+  font-size: 8px;
+}
+
+/* ---- the detail sheet ----------------------------------------------------- */
+
+.console-plan-detail {
+  grid-area: detail;
+  min-height: 0;
+  overflow-y: auto;
+  padding: 0.6rem;
+  border-left: 1px solid var(--pf-t--global--border--color--default);
+  font-size: 0.78rem;
+}
+.console-plan-detail__head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.4rem;
+  margin-bottom: 0.5rem;
+}
+.console-plan-detail__title {
+  margin: 0;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.88rem;
+  overflow-wrap: anywhere;
+}
+.console-plan-detail__state {
+  color: var(--console-plan-state, inherit);
+  font-size: 0.72rem;
+  font-weight: 700;
+}
+.console-plan-detail__ro { font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
+.console-plan-detail__hint { margin: 0.3rem 0; color: var(--pf-t--global--text--color--subtle); }
+.console-plan-detail__fields { display: grid; grid-template-columns: 1fr; gap: 0.1rem; margin: 0; }
+.console-plan-detail__label {
+  margin-top: 0.45rem;
+  font-size: 0.68rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-plan-detail__value { margin: 0; overflow-wrap: anywhere; }
+.console-plan-detail__runshead {
+  margin: 0.9rem 0 0.2rem;
+  font-size: 0.72rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-plan-detail__runlist { margin: 0; padding: 0; list-style: none; }
+.console-plan-detail__run {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+  padding: 0.25rem 0;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-plan-detail__runtitle { font-size: 0.74rem; overflow-wrap: anywhere; }
+.console-plan-detail__runmeta { font-size: 0.68rem; color: var(--pf-t--global--text--color--subtle); }
+.console-plan-detail__run[data-outcome="fail"] .console-plan-detail__runtitle {
+  color: var(--console-status-danger);
+}
+.console-plan-detail__run[data-outcome="pass"] .console-plan-detail__runtitle {
+  color: var(--console-status-ok);
+}
+
+/* One column on a phone: the drawing is the first thing to go, since the list carries the same
+   units with the same states in words. */
+@media (max-width: 900px) {
+  .console-plan-layout {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "toolbar"
+      "tree"
+      "detail";
+  }
+  .console-plan-stage { display: none; }
+}

@@ -53,9 +53,12 @@ export interface ModuleSurface {
 }
 
 // The shape moduleSurface calls on a host-building bundle: activate(host) builds into host and returns
-// an optional teardown run on close.
+// an optional teardown run on close. A surface with something LIVE in it (a poll timer, a stream) also
+// exports setVisible so it can go quiet while its pane is backgrounded - the same opt-in
+// standaloneSurface already forwards for the dashboard. Static surfaces omit it and stay undefined.
 interface HostModule {
   activate(host: HTMLElement): (() => void) | void;
+  setVisible?(visible: boolean): void;
 }
 
 // moduleSurface wraps a page-less surface: the console dynamically imports its bundle by URL (kept
@@ -79,6 +82,7 @@ export function moduleSurface(s: ModuleSurface): PageModule<null, null> {
       const teardown = mod.activate(host);
       return {
         search: noSearch,
+        setVisible: mod.setVisible,
         deactivate() {
           if (typeof teardown === "function") teardown();
           host.replaceChildren();

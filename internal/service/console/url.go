@@ -16,7 +16,7 @@ import (
 // console's own boot router can open that surface from the path. The decoupled console is a
 // single shell page; these clean paths are its public surface URLs (there is no ?app= query form
 // in canonical links). Keep it in step with the console's own surface registry.
-var KnownSurfaces = []string{"logs", "dashboard", "graph", "activity", "notes", "diff"}
+var KnownSurfaces = []string{"logs", "dashboard", "graph", "activity", "notes", "diff", "plan"}
 
 // IsSurfaceRoute reports whether seg is exactly one known surface segment (no sub-path), i.e. a
 // bare /console/<surface>/ route the daemon must serve the shell for rather than a static file.

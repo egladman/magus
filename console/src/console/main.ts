@@ -173,6 +173,7 @@ const SURFACES: Launchable[] = [
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
   { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
   { pageId: "diff", label: "Diff", hint: "Read what you have changed but not committed" },
+  { pageId: "plan", label: "Plan", hint: "The delegation tree an orchestrating agent is running" },
   { pageId: "notes", label: "Notes", hint: "What people wrote about this workspace" },
   { pageId: "actions", label: "Actions", hint: "Every console action and its shortcut" },
   { pageId: "settings", label: "Settings", hint: "Console settings and keybindings" },
@@ -183,7 +184,7 @@ const SURFACES: Launchable[] = [
 // (internal/service/console KnownSurfaces): the daemon serves the console shell for exactly these
 // paths (SPA fallback), so the boot router below opens exactly these from the path. Keep the two
 // lists in step.
-const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity", "notes", "diff"];
+const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity", "notes", "diff", "plan"];
 
 // consoleSurfaceFromPath returns the surface a /console/<surface>/ entry path names, or null when
 // the page did not boot on such a path (the bare console root, or any non-surface path). It keys on
@@ -1764,6 +1765,17 @@ export function startConsole(
       title: "Diff",
       bundle: "diff/diff.js",
       css: "diff/diff.css",
+    }),
+  );
+  // Plan authors its own sheet for the same reason Diff does: the stage is a laid-out node/edge
+  // drawing with its own geometry, and PF has no component for one. It also exports setVisible, so
+  // its poll stops while its pane is backgrounded.
+  register(
+    moduleSurface({
+      id: "plan",
+      title: "Plan",
+      bundle: "plan/plan.js",
+      css: "plan/plan.css",
     }),
   );
   // Actions is registered from the shell bundle (not a lazy surface bundle) - it is a thin, static

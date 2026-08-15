@@ -135,6 +135,10 @@ This mirrors PF's `pf-v6-c-<block>__<element>` + `pf-m-<modifier>` BEM structure
     columns, the file sidebar). Authored rather than PF because PF has no diff component, and
     because the row geometry is load-bearing: the stream is virtualized against a fixed row
     height, so these rules are part of the scroll math rather than decoration.
+  - `console-plan-*` the delegation-plan surface (the unit-tree stage and its edges, the unit list
+    that is the stage's accessible twin, the detail sheet). Authored for the same reason as the
+    graph stage: PF has no component for a laid-out node/edge drawing, and the node geometry is
+    shared with the layout that places it.
   - `console-render-*` the SHARED render model reused by log + activity (foldable sections,
     status badges, ANSI spans) - one home so both surfaces stay in lockstep.
 - **`<block>`** - the component/thing, kebab-case, verbose and explicit. Prefer a full word to
