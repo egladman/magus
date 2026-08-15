@@ -36,6 +36,7 @@ import {
 } from "./rows";
 import { order, visibleFiles, stats, riskChips, type OrderedChangeset } from "./order";
 import { emphasis, pairForEmphasis, type Span } from "./words";
+import { languageFor, tokenize, type Language } from "./syntax";
 import {
   fetchPatch,
   fetchSession,
@@ -161,20 +162,54 @@ function markEmphasis(files: readonly DiffFile[]): void {
   }
 }
 
-// lineText renders a line's text, emphasising the part that actually changed when one is
-// known. Built from spans rather than innerHTML: every character here is attacker-influenceable
-// on a branch someone else wrote.
-function lineText(line: DiffLine): HTMLElement {
+// lineText renders a line's text with syntax colour and intra-line emphasis.
+//
+// The two compose rather than compete: a syntax token owns the FOREGROUND, the emphasis range
+// owns the BACKGROUND. So the line is cut at the union of both boundaries and each piece
+// carries whichever classes apply to it, which is why emphasis can highlight half a string
+// literal without losing the fact that it is a string.
+//
+// Built from spans and textContent, never innerHTML: every character here comes from a diff on
+// a branch someone else may have written.
+function lineText(line: DiffLine, lang: Language): HTMLElement {
   const el = h("span", "console-diff-row__text");
-  const span = emphasisFor.get(line);
   const text = line.text || " ";
-  if (!span || span.end > text.length) {
+  const span = emphasisFor.get(line);
+  const toks = tokenize(text, lang);
+
+  if (toks.length === 0 && !span) {
     el.textContent = text;
     return el;
   }
-  if (span.start > 0) el.append(document.createTextNode(text.slice(0, span.start)));
-  el.append(h("span", "console-diff-row__word", text.slice(span.start, span.end)));
-  if (span.end < text.length) el.append(document.createTextNode(text.slice(span.end)));
+
+  // Every boundary either signal introduces, so no piece straddles one.
+  const cuts = new Set<number>([0, text.length]);
+  for (const t of toks) {
+    if (t.start <= text.length) cuts.add(t.start);
+    if (t.end <= text.length) cuts.add(t.end);
+  }
+  if (span && span.end <= text.length) {
+    cuts.add(span.start);
+    cuts.add(span.end);
+  }
+  const bounds = [...cuts].sort((a, b) => a - b);
+
+  for (let i = 0; i < bounds.length - 1; i++) {
+    const from = bounds[i] ?? 0;
+    const to = bounds[i + 1] ?? 0;
+    if (to <= from) continue;
+    const piece = text.slice(from, to);
+    const tok = toks.find((t) => t.start <= from && t.end >= to);
+    const emphasised = span !== undefined && span.start <= from && span.end >= to;
+    if (!tok && !emphasised) {
+      el.append(document.createTextNode(piece));
+      continue;
+    }
+    const classes = ["console-diff-row__text-part"];
+    if (tok) classes.push(`console-diff-tok--${tok.cls}`);
+    if (emphasised) classes.push("console-diff-row__word");
+    el.append(h("span", classes.join(" "), piece));
+  }
   return el;
 }
 
@@ -331,19 +366,20 @@ export function activate(host: HTMLElement): () => void {
       const marker = h("span", "console-diff-row__marker", markerFor(row.line.kind));
       // The glyph is for eyes; the label is for ears. Announcing "plus" would be noise.
       marker.setAttribute("aria-hidden", "true");
-      const text = lineText(row.line);
+      const text = lineText(row.line, languageFor(row.file.path));
       text.setAttribute("aria-label", `${kindLabel(row.line.kind)}: ${row.line.text}`);
       el.append(gutter(row.line.oldLine), gutter(row.line.newLine), marker, text);
       return el;
     }
     const el = h("div", "console-diff-row console-diff-row--pair");
-    el.append(side(row.left, "left"), side(row.right, "right"));
+    const lang = languageFor(row.file.path);
+    el.append(side(row.left, "left", lang), side(row.right, "right", lang));
     return el;
   };
 
   // Takes the DiffLine itself rather than a structural copy: intra-line emphasis is keyed by
   // the line object, so a shape-compatible clone would silently lose it.
-  const side = (line: DiffLine | null, which: "left" | "right"): HTMLElement => {
+  const side = (line: DiffLine | null, which: "left" | "right", lang: Language): HTMLElement => {
     const cell = h("div", "console-diff-row__side");
     cell.dataset.side = which;
     if (!line) {
@@ -354,7 +390,7 @@ export function activate(host: HTMLElement): () => void {
     cell.dataset.kind = line.kind;
     const marker = h("span", "console-diff-row__marker", markerFor(line.kind));
     marker.setAttribute("aria-hidden", "true");
-    const text = lineText(line);
+    const text = lineText(line, lang);
     text.setAttribute("aria-label", `${kindLabel(line.kind)}: ${line.text}`);
     cell.append(gutter(which === "left" ? line.oldLine : line.newLine), marker, text);
     return cell;

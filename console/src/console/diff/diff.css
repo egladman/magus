@@ -1,12 +1,36 @@
 /* Local tokens.
  *
- * PatternFly ships status COLOUR tokens but no status BACKGROUND tokens, so the tint below is
- * mixed here rather than named. Fallbacks match the ones overrides.css already uses. */
+ * PatternFly ships status COLOUR tokens but no status BACKGROUND tokens, so the add/delete
+ * tint is mixed here rather than named.
+ *
+ * The SYNTAX values are deliberately the same palette the docs site already uses for code and
+ * for ```diff blocks (--syn-* in docs/src/styles/theme.css, One Light / One Dark). magus
+ * renders code in two places and they should not disagree about what a keyword looks like.
+ *
+ * They are COPIED rather than imported, and that is the wart: docs/ and console/ are separate
+ * pnpm projects with separate bundles, and docs/package.json states the boundary outright
+ * ("the console surfaces ... own their bundles now"). Extracting one shared palette both can
+ * read is the right fix and is a bigger change than this one; until then, these two lists have
+ * to be edited together. */
 :root {
   --console-diff-add: var(--pf-t--global--color--status--success--default, #3e8635);
   --console-diff-del: var(--pf-t--global--color--status--danger--default, #c9190b);
   --console-diff-surface: var(--pf-t--global--background--color--primary--default, #ffffff);
   --console-diff-panel: var(--pf-t--global--background--color--secondary--default, #f2f2f2);
+
+  --console-syn-comment: #636d76;
+  --console-syn-keyword: #715bb0;
+  --console-syn-string: #3d7a50;
+  --console-syn-number: #8d5e26;
+  --console-syn-function: #2f6aad;
+}
+
+:root.pf-v6-theme-dark {
+  --console-syn-comment: #838e98;
+  --console-syn-keyword: #b79ae6;
+  --console-syn-string: #8fc79b;
+  --console-syn-number: #dbab77;
+  --console-syn-function: #7fb2e6;
 }
 
 /* diff.css - the Review surface: a sidebar and a virtualized hunk stream.
@@ -594,4 +618,40 @@
 
 [data-kind="del"] .console-diff-row__word {
   background: color-mix(in srgb, var(--console-diff-del) 38%, transparent);
+}
+
+/* Syntax colour.
+ *
+ * Foreground only, because the row background is already spoken for by add/delete and the
+ * intra-line emphasis. Five classes, not fifty: a diff spends most of its colour budget
+ * distinguishing added from removed, and a rainbow on top of that competes with the signal the
+ * reader actually came for.
+ *
+ * Every value is a PatternFly token with a literal fallback, so the palette follows the theme
+ * rather than needing a hand-maintained dark ramp. */
+.console-diff-tok--kw {
+  color: var(--console-syn-keyword);
+  font-weight: 600;
+}
+
+.console-diff-tok--str {
+  color: var(--console-syn-string);
+}
+
+.console-diff-tok--num {
+  color: var(--console-syn-number);
+}
+
+.console-diff-tok--com {
+  color: var(--console-syn-comment);
+  font-style: italic;
+}
+
+.console-diff-tok--fn {
+  color: var(--console-syn-function);
+}
+
+/* A token inside a removed or added line keeps its colour; the row tint sits behind it. */
+.console-diff-row__text-part {
+  background: inherit;
 }
