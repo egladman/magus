@@ -169,4 +169,8 @@ var Registry = []ToolDescriptor{
 			{Name: "kind", Type: "string", Description: "Scope every section to one node kind (e.g. spell, target, doc, diagnostic). Omit for the whole graph."},
 		},
 	},
+	{
+		Name:        string(ToolVCSCheckpoint),
+		Description: "Return the identity of the workspace's working state right now: head revision, branch, whether the tree is dirty, and a digest of the uncommitted patch. Record one when handing a piece of work out, so a later reader knows what that work was looking at. It resolves and records and never mints - no tag, no stash, no ref, no file, nothing changed anywhere - so calling it is free and a checkpoint nobody keeps costs nothing. Feed the revision to anything that takes a revision; compare two patch digests to learn whether two workers saw the same uncommitted tree, which the revision alone cannot say because everyone on the branch shares it. Takes no parameters.",
+	},
 }

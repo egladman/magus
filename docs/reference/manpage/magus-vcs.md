@@ -10,7 +10,7 @@ Staging and conflict resolution that knows what is generated
 
 ## Synopsis
 
-**magus** vcs \<add|resolve|merge-driver\> [flags]
+**magus** vcs \<add|resolve|checkpoint|merge-driver\> [flags]
 
 ## Description
 
@@ -35,6 +35,14 @@ not run it by hand; it is wired per clone, because a driver registration
 cannot be committed. That is also why a forge reports conflicts your own
 clone would settle silently, and why resolve exists as the bulk counterpart.
 
+checkpoint prints the identity of the working state right now - head revision,
+branch, whether the tree is dirty, and a digest of the uncommitted patch. Record
+one when you hand a piece of work out, so a later reader knows what that work was
+looking at. It RESOLVES AND RECORDS and never MINTS: no tag, no stash, no ref, no
+file, nothing changed anywhere, so a checkpoint nobody keeps has cost nothing.
+Feed the revision to anything that takes one; compare two digests to learn whether
+two workers saw the same uncommitted tree, which the revision alone cannot say.
+
 resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
 base in yourself on the others, then run resolve.
 
@@ -55,6 +63,9 @@ base in yourself on the others, then run resolve.
 
 **resolve**
 : Settle an in-progress merge's conflicted generated files, then regenerate once
+
+**checkpoint**
+: Print the working state's identity, for recording what a delegated unit was handed; writes nothing
 
 **merge-driver**
 : The per-file merge driver git and hg invoke; you do not run this by hand
@@ -83,6 +94,18 @@ magus vcs resolve
 
 ```sh
 magus vcs resolve --against origin/main
+```
+
+*Record what a delegated unit was handed*
+
+```sh
+magus vcs checkpoint
+```
+
+*The one citable token, for a ledger cell*
+
+```sh
+magus vcs checkpoint -o name
 ```
 
 ## See Also

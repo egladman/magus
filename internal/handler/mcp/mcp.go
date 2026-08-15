@@ -163,6 +163,7 @@ func allMCPTools(opts Options) []spells.Driver {
 		&pathTool{graph: opts.Magus},
 		&statsTool{graph: opts.Magus},
 		&refsTool{graph: opts.Magus},
+		&vcsCheckpointTool{ws: opts.Magus},
 	}
 }
 
