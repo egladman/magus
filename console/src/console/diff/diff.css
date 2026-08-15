@@ -528,3 +528,22 @@
     scroll-behavior: auto !important;
   }
 }
+
+/* Intra-line emphasis: the part of a changed line that actually changed.
+ *
+ * Deliberately a background wash rather than a second foreground colour. The row already
+ * carries add/delete as colour AND as a +/- marker, and stacking another hue on the text
+ * would compete with syntax meaning and with the accessibility work above. A wash keeps the
+ * text contrast that the row already earned. */
+.console-diff-row__word {
+  background: var(--pf-t--global--color--highlight--100, rgb(255 214 0 / 28%));
+  border-radius: 2px;
+}
+
+[data-kind="add"] .console-diff-row__word {
+  background: rgb(62 168 62 / 30%);
+}
+
+[data-kind="del"] .console-diff-row__word {
+  background: rgb(201 60 60 / 30%);
+}

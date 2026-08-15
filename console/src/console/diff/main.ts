@@ -23,7 +23,7 @@
 // single-letter keys are handled on the scroll container rather than as global chords on
 // purpose: a bare "v" must not fire while someone is typing in another surface.
 
-import { parsePatch, type DiffFile, type FileStatus } from "./parse";
+import { parsePatch, type DiffFile, type DiffLine, type FileStatus } from "./parse";
 import {
   buildRows,
   byHunk,
@@ -35,6 +35,7 @@ import {
   type ViewMode,
 } from "./rows";
 import { order, visibleFiles, stats, riskChips, type OrderedChangeset } from "./order";
+import { emphasis, pairForEmphasis, type Span } from "./words";
 import {
   fetchPatch,
   fetchSession,
@@ -123,6 +124,58 @@ function kindLabel(kind: string): string {
 // cached: the setting can change mid-session, and matchMedia is cheap.
 function prefersReducedMotion(): boolean {
   return globalThis.matchMedia?.("(prefers-reduced-motion: reduce)").matches ?? false;
+}
+
+// emphasisFor holds each changed line's intra-line span, computed once per rebuild. Keyed by
+// the line OBJECT: parse.ts freezes lines and the virtualizer renders them repeatedly from
+// arbitrary offsets, so recomputing per paint would redo the same work on every scroll frame.
+const emphasisFor = new WeakMap<DiffLine, Span>();
+
+// markEmphasis pairs each run of deleted lines with the run of added lines that follows it and
+// records which part of each changed. Runs of unequal length are left alone - see
+// pairForEmphasis for why inventing that correspondence would be worse than showing nothing.
+function markEmphasis(files: readonly DiffFile[]): void {
+  for (const f of files) {
+    for (const hunk of f.hunks) {
+      let dels: DiffLine[] = [];
+      let adds: DiffLine[] = [];
+      const flush = (): void => {
+        for (const [d, a] of pairForEmphasis(dels, adds)) {
+          const e = emphasis(d.text, a.text);
+          if (e.before) emphasisFor.set(d, e.before);
+          if (e.after) emphasisFor.set(a, e.after);
+        }
+        dels = [];
+        adds = [];
+      };
+      for (const line of hunk.lines) {
+        if (line.kind === "del" && adds.length === 0) dels.push(line);
+        else if (line.kind === "add" && dels.length > 0) adds.push(line);
+        else {
+          flush();
+          if (line.kind === "del") dels.push(line);
+        }
+      }
+      flush();
+    }
+  }
+}
+
+// lineText renders a line's text, emphasising the part that actually changed when one is
+// known. Built from spans rather than innerHTML: every character here is attacker-influenceable
+// on a branch someone else wrote.
+function lineText(line: DiffLine): HTMLElement {
+  const el = h("span", "console-diff-row__text");
+  const span = emphasisFor.get(line);
+  const text = line.text || " ";
+  if (!span || span.end > text.length) {
+    el.textContent = text;
+    return el;
+  }
+  if (span.start > 0) el.append(document.createTextNode(text.slice(0, span.start)));
+  el.append(h("span", "console-diff-row__word", text.slice(span.start, span.end)));
+  if (span.end < text.length) el.append(document.createTextNode(text.slice(span.end)));
+  return el;
 }
 
 function gutter(n: number | null): HTMLElement {
@@ -278,7 +331,7 @@ export function activate(host: HTMLElement): () => void {
       const marker = h("span", "console-diff-row__marker", markerFor(row.line.kind));
       // The glyph is for eyes; the label is for ears. Announcing "plus" would be noise.
       marker.setAttribute("aria-hidden", "true");
-      const text = h("span", "console-diff-row__text", row.line.text);
+      const text = lineText(row.line);
       text.setAttribute("aria-label", `${kindLabel(row.line.kind)}: ${row.line.text}`);
       el.append(gutter(row.line.oldLine), gutter(row.line.newLine), marker, text);
       return el;
@@ -288,10 +341,9 @@ export function activate(host: HTMLElement): () => void {
     return el;
   };
 
-  const side = (
-    line: { kind: string; text: string; oldLine: number | null; newLine: number | null } | null,
-    which: "left" | "right",
-  ): HTMLElement => {
+  // Takes the DiffLine itself rather than a structural copy: intra-line emphasis is keyed by
+  // the line object, so a shape-compatible clone would silently lose it.
+  const side = (line: DiffLine | null, which: "left" | "right"): HTMLElement => {
     const cell = h("div", "console-diff-row__side");
     cell.dataset.side = which;
     if (!line) {
@@ -300,11 +352,11 @@ export function activate(host: HTMLElement): () => void {
       return cell;
     }
     cell.dataset.kind = line.kind;
-    cell.append(
-      gutter(which === "left" ? line.oldLine : line.newLine),
-      h("span", "console-diff-row__marker", markerFor(line.kind)),
-      h("span", "console-diff-row__text", line.text || " "),
-    );
+    const marker = h("span", "console-diff-row__marker", markerFor(line.kind));
+    marker.setAttribute("aria-hidden", "true");
+    const text = lineText(line);
+    text.setAttribute("aria-label", `${kindLabel(line.kind)}: ${line.text}`);
+    cell.append(gutter(which === "left" ? line.oldLine : line.newLine), marker, text);
     return cell;
   };
 
@@ -402,6 +454,7 @@ export function activate(host: HTMLElement): () => void {
     for (const f of state.session?.diff?.files ?? []) {
       if (f.touches?.length) touches.set(f.path, f.touches);
     }
+    markEmphasis(state.files);
     state.rows = buildRows(state.files, state.mode, byHunk(state.session?.comments ?? []), touches);
     state.hunks = hunkRowIndexes(state.rows);
     state.fileRows = fileRowIndexes(state.rows);
