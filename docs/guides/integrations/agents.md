@@ -138,6 +138,26 @@ name that could be either. Commands that only ever take a project - `run`,
 > not already have, and it is not what magus teaches or prints any more. Drop
 > the scheme wherever you find one written down.
 
+## Incremental review
+
+Answer "I reviewed earlier - what changed since, and what do I need to look
+at now" without re-reading the whole workspace:
+
+1. At review time, record where you stopped: `magus vcs checkpoint -o name`
+   prints the revision, or `<revision>+<digest>` when the tree was dirty -
+   the digest says which dirty tree was reviewed, since the revision alone
+   reads the same for every dirty tree built on it.
+2. Later, pipe the delta through the annotated view instead of reading a raw
+   diff: `git diff <revision> | magus diff -` reports each changed file's
+   reach, public-surface exposure, and referents - the surrounding code
+   worth a second look, not just the literal hunks. `magus diff` refuses a
+   git ref given positionally, on purpose - a swallowed ref once printed the
+   reader's own edits as the answer - so the pipe form above is the only
+   sanctioned spelling, and the refusal message says so.
+3. Reviewing through a diff session carries this further: per-hunk viewed
+   marks key off content digest, not position, so a hunk that has not
+   changed stays marked reviewed and one that has resurfaces on its own.
+
 ## The MCP daemon
 
 `magus server start` brings up the daemon, and the MCP server with it. Agents

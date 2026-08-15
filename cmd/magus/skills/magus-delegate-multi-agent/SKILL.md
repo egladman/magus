@@ -193,7 +193,10 @@ warning. When evidence is incomplete, reduce parallelism.
 Before spawning, record one row per unit - including the checkpoint it was handed
 (`magus vcs checkpoint -o name`: the revision, plus a dirty-patch digest when the
 tree is not clean) - and keep descendants in the same table:
-
+{{if .Full}}
+The same checkpoint is what a later incremental re-review diffs from (see the
+magus-change-summary skill) - review time and handoff time read the same object.
+{{end}}
 | Unit | Parent | Checkpoint | Goal and acceptance criteria | Owned paths | Forbidden paths | Depends on | Tier | Validation | State |
 |---|---|---|---|---|---|---|---|---|---|
 

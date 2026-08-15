@@ -122,3 +122,25 @@ paths collapses to the handful that are declared sources.
 {{if .Full}}Raw VCS commands answer what only the VCS knows: who committed, when, and in which
 merge. The table above answers what the change did. Reading a raw diff to work out
 what a change affects is the work these verbs already did.{{else}}Raw VCS answers who and when; the table answers what the change did.{{end}}
+
+## Resume a review from a checkpoint
+
+Answer "what changed since I last reviewed, and what do I need to look at
+now" from three pieces:
+
+1. At review time: `magus vcs checkpoint -o name` - the revision, or
+   `<revision>+<digest>` when the tree was dirty{{if .Full}} (the digest says
+   which dirty tree was reviewed, since the revision alone reads the same
+   for every dirty tree built on it){{end}}.
+2. Later: `git diff <revision> | magus diff -` for the annotated delta - each
+   changed file's reach, public-surface exposure, and referents{{if .Full}},
+   the surrounding code worth a second look, not just the literal
+   hunks{{end}}. `magus diff` refuses a positional git ref on
+   purpose{{if .Full}} - a swallowed ref once printed the reader's own edits
+   as the answer{{end}}; the pipe form above is the sanctioned spelling.
+3. Through a diff session, per-hunk viewed marks key off content digest, not
+   position: unchanged stays marked, changed resurfaces on its own.
+
+WRONG: re-reviewing a whole branch because nobody recorded where the last
+review stopped.
+CORRECT: checkpoint at review time, pipe the delta later.
