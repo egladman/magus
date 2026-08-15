@@ -8,8 +8,8 @@ import (
 
 // FileHunks is one changed file's hunks, in patch order.
 type FileHunks struct {
-	Path  string
-	Hunks []Hunk
+	Path  string `json:"path"`
+	Hunks []Hunk `json:"hunks"`
 }
 
 // Hunk is one @@ section: the header line, its body, and the content digest the viewed set
@@ -18,10 +18,10 @@ type Hunk struct {
 	// Index is the 0-based position within the file, which is the coordinate the MCP surface
 	// takes on a comment. It is carried explicitly rather than left implicit in the slice
 	// position so a caller that filters hunks cannot silently renumber them.
-	Index  int
-	Header string
-	Lines  []string
-	Digest string
+	Index  int      `json:"index"`
+	Header string   `json:"header"`
+	Lines  []string `json:"lines"`
+	Digest string   `json:"digest"`
 }
 
 // ParseHunks splits a unified patch into per-file hunks.
