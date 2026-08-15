@@ -163,4 +163,3 @@ func TestWorkingDiffOnACleanTreeIsEmpty(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, strings.TrimSpace(patch))
 }
-
