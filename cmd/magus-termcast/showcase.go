@@ -157,7 +157,7 @@ func showcaseFrames(capture string) []string {
 // unrelated stills. The band holding its rows while output scrolls past is the
 // property the whole design rests on, and it is only visible if the frames
 // share a screen.
-func renderShowcase(capture string) (string, error) {
+func renderShowcase(capture string, theme screen.Theme) (string, error) {
 	frames := showcaseFrames(capture)
 	if len(frames) < 2 {
 		return "", fmt.Errorf("showcase capture has %d frames; expected the script's several", len(frames))
@@ -179,7 +179,7 @@ func renderShowcase(capture string) (string, error) {
 	for i, sh := range shots {
 		shots[i] = sh.Crop(used)
 	}
-	return screen.Animate(shots, showcasePace.holds(shots), screen.SVGOptions{})
+	return screen.Animate(shots, showcasePace.holds(shots), screen.SVGOptions{Theme: theme})
 }
 
 // recordShowcaseSession materializes a demo workspace and records the script

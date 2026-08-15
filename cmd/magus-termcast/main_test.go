@@ -4,6 +4,8 @@ import (
 	"os"
 	"strings"
 	"testing"
+
+	"github.com/egladman/magus/internal/interactive/screen"
 )
 
 // repoFile reads a path relative to the repo root. The tests run in the command's
@@ -17,20 +19,23 @@ func repoFile(t *testing.T, path string) string {
 	return string(b)
 }
 
-// TestCoreLoopUpToDate is the drift gate the GIF could never have.
+// TestCoreLoopUpToDate is the drift gate rendering buys.
 //
 // It is the whole reason for rendering rather than recording: the artifact a
 // reader sees is a pure function of a committed capture, so CI can assert the two
-// agree. The GIF it replaced went stale unnoticed to the point that the README's
-// alt text described a project count magus had stopped reporting.
+// agree. Both palettes are checked - a variant nothing gates is a variant that
+// goes stale, which is the failure this gate exists to prevent.
 func TestCoreLoopUpToDate(t *testing.T) {
-	want, err := render(repoFile(t, capturePath))
-	if err != nil {
-		t.Fatalf("render: %v", err)
-	}
-	if got := repoFile(t, svgPath); got != want {
-		t.Errorf("%s is stale (%d bytes on disk, %d rendered); run `magus run termcast-generate .`",
-			svgPath, len(got), len(want))
+	for _, v := range themeVariants {
+		path := variantPath(svgPath, v.suffix)
+		want, err := render(repoFile(t, capturePath), v.theme)
+		if err != nil {
+			t.Fatalf("render %s: %v", path, err)
+		}
+		if got := repoFile(t, path); got != want {
+			t.Errorf("%s is stale (%d bytes on disk, %d rendered); run `magus run termcast-generate .`",
+				path, len(got), len(want))
+		}
 	}
 }
 
@@ -114,11 +119,11 @@ func TestFinalFrameShowsTheNarrowing(t *testing.T) {
 // TestRenderIsDeterministic guards the property the drift gate depends on.
 func TestRenderIsDeterministic(t *testing.T) {
 	capture := repoFile(t, capturePath)
-	first, err := render(capture)
+	first, err := render(capture, screen.DarkTheme)
 	if err != nil {
 		t.Fatalf("render: %v", err)
 	}
-	second, err := render(capture)
+	second, err := render(capture, screen.DarkTheme)
 	if err != nil {
 		t.Fatalf("render again: %v", err)
 	}
