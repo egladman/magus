@@ -215,6 +215,14 @@ spawn rule. Require the worker to preserve unrelated changes, stay inside owned
 paths, avoid generated outputs, run only its assigned Magus target, and return
 changed paths, validation evidence, descendants it created, and unresolved risks.
 
+Ownership ends when EDITING ends, not when the worker exits. A worker that has
+finished writing a contested path announces the release immediately - shrink the
+unit's `owned_paths` with another `magus_ledger` put, or message the orchestrator
+if the host supports it - and then carries on validating. A waiting unit starts
+against the released file while the first is still running tests, which is most
+of a worker's lifetime; holding every path to exit serializes agents on time
+they spend not editing.
+
 Owned and Forbidden paths are prompt text, not an enforced boundary - step 1 of
 Integrate and verify is where it is actually checked, against that checkpoint. A
 read-only unit carries an abbreviated row: no Owned paths, no Forbidden paths. Every

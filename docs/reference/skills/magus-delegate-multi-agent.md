@@ -4,8 +4,8 @@ description: "Split work across agents in a magus workspace as an acceptance-cri
 tags: [agents, skills, magus-delegate-multi-agent]
 aliases:
   - reference/skills/magus-delegate-ultra
-skill_full_bytes: 14425
-skill_simple_bytes: 11046
+skill_full_bytes: 14929
+skill_simple_bytes: 11550
 ---
 
 # magus-delegate-multi-agent
@@ -31,7 +31,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `9cd139a58e90` |
+| `skill-content` | `75a747164b3c` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -252,6 +252,14 @@ Every worker prompt must include its row, relevant graph evidence, and the globa
 spawn rule. Require the worker to preserve unrelated changes, stay inside owned
 paths, avoid generated outputs, run only its assigned Magus target, and return
 changed paths, validation evidence, descendants it created, and unresolved risks.
+
+Ownership ends when EDITING ends, not when the worker exits. A worker that has
+finished writing a contested path announces the release immediately - shrink the
+unit's `owned_paths` with another `magus_ledger` put, or message the orchestrator
+if the host supports it - and then carries on validating. A waiting unit starts
+against the released file while the first is still running tests, which is most
+of a worker's lifetime; holding every path to exit serializes agents on time
+they spend not editing.
 
 Owned and Forbidden paths are prompt text, not an enforced boundary - step 1 of
 Integrate and verify is where it is actually checked, against that checkpoint. A
@@ -495,6 +503,14 @@ Every worker prompt must include its row, relevant graph evidence, and the globa
 spawn rule. Require the worker to preserve unrelated changes, stay inside owned
 paths, avoid generated outputs, run only its assigned Magus target, and return
 changed paths, validation evidence, descendants it created, and unresolved risks.
+
+Ownership ends when EDITING ends, not when the worker exits. A worker that has
+finished writing a contested path announces the release immediately - shrink the
+unit's `owned_paths` with another `magus_ledger` put, or message the orchestrator
+if the host supports it - and then carries on validating. A waiting unit starts
+against the released file while the first is still running tests, which is most
+of a worker's lifetime; holding every path to exit serializes agents on time
+they spend not editing.
 
 Owned and Forbidden paths are prompt text, not an enforced boundary - step 1 of
 Integrate and verify is where it is actually checked, against that checkpoint. A
