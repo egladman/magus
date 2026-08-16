@@ -8148,7 +8148,7 @@
       "kind": "function",
       "label": "conventionAnchorsIn",
       "doc": "conventionAnchorsIn returns the convention sections this page can actually send a reader to, read off the hints injectConventionHints already placed in the content.  Reading the INJECTED markup rather than re-deriving which markers the page has is what keeps the two from drifting: whatever the hints link to is exactly what the drawer carries, by construction, so adding a fourth hint kind needs no change here.",
-      "source": "docs/engine/nav.buzz:332",
+      "source": "docs/engine/nav.buzz:322",
       "attrs": {
         "exported": "true"
       }
@@ -8158,7 +8158,7 @@
       "kind": "function",
       "label": "keepConventionSections",
       "doc": "keepConventionSections is keepGlossarySections one heading level up: the conventions page is H2 sections where the glossary is H3 entries, so a section runs from its own <h2 id=\"> to the next one. Order is preserved.",
-      "source": "docs/engine/nav.buzz:304",
+      "source": "docs/engine/nav.buzz:294",
       "attrs": {
         "exported": "true"
       }
@@ -8168,13 +8168,13 @@
       "kind": "function",
       "label": "keepGlossarySections",
       "doc": "keepGlossarySections keeps only the <h3 id=\"...\"> term blocks whose anchor is in keep, in document order, and drops everything else. Same scan injectBacklinks uses: a term block runs from its own <h3 id=\"> to the next <h3 id=\"> or <h2>.",
-      "source": "docs/engine/nav.buzz:277"
+      "source": "docs/engine/nav.buzz:267"
     },
     {
       "id": "function:docs/engine/nav.buzz:loadReferenceContent",
       "kind": "function",
       "label": "loadReferenceContent",
-      "source": "docs/engine/nav.buzz:267",
+      "source": "docs/engine/nav.buzz:257",
       "attrs": {
         "exported": "true"
       }
@@ -8184,7 +8184,7 @@
       "kind": "function",
       "label": "refDocHtml",
       "doc": "refDocHtml renders one docs/*.md to content HTML and templatizes its root-relative links.",
-      "source": "docs/engine/nav.buzz:258",
+      "source": "docs/engine/nav.buzz:248",
       "attrs": {
         "exported": "true"
       }
@@ -8194,7 +8194,7 @@
       "kind": "function",
       "label": "renderAnnouncementBar",
       "doc": "renderAnnouncementBar renders a dismissible strip announcing the newest shipped release, or \"\" when none has shipped. The version comes from loadReleases (releases/*.yaml), so it is drift-stable; announcement.js hides it once the reader dismisses that version and re-shows it on the next release.  Takes root (the relative-depth prefix) like every other chrome renderer, because the optional second link points at a post on this site. The release link stays an absolute GitHub URL, so the bar needed no depth unt",
-      "source": "docs/engine/nav.buzz:440",
+      "source": "docs/engine/nav.buzz:430",
       "attrs": {
         "exported": "true"
       }
@@ -8214,7 +8214,7 @@
       "kind": "function",
       "label": "renderReferenceDrawer",
       "doc": "renderReferenceDrawer shows the page ITS vocabulary, not the whole glossary.  The drawer used to inline all 47 terms on every page, identically. A reference panel that is the same everywhere answers no question you had on the page you are reading - it is a second copy of /glossary/ that happens to slide out. Scoping it to the terms this page actually uses is what makes opening it worth doing.  pageTerms is the forward-built map (see Site): it is complete before the walk starts, so the first page rendered ge",
-      "source": "docs/engine/nav.buzz:360",
+      "source": "docs/engine/nav.buzz:350",
       "attrs": {
         "exported": "true"
       }
@@ -8234,7 +8234,7 @@
       "kind": "function",
       "label": "renderSiteFooter",
       "doc": "renderSiteFooter renders the shared one-line attribution footer: root-relative site links (Search, /public/ files) reachable from every page, then absolute GitHub/Buzz links. The License link points at the pinned site.metaBranch. root is the prefix back to gen/'s root, so the site links resolve at any depth.",
-      "source": "docs/engine/nav.buzz:417",
+      "source": "docs/engine/nav.buzz:407",
       "attrs": {
         "exported": "true"
       }
