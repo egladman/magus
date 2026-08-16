@@ -130,7 +130,7 @@ export fun renderLanding(site: Site) > void !> any {
         <span class="landing-rotate" aria-hidden="true">One layer between you and the command. Not five.</span>
         <span class="landing-rotate" aria-hidden="true">Explicit by design, debuggable by consequence.</span>
         <span class="landing-rotate" aria-hidden="true">No generated boilerplate. No inherited toil.</span>
-        <span class="landing-rotate" aria-hidden="true">No network. No difference.</span>
+        <span class="landing-rotate" aria-hidden="true">No login. No network. No difference.</span>
       </h1>
       <p class="landing-lede">magus is a task orchestrator: it builds, tests and lints the projects in a repository, works out which ones a change reached, and calls the tools you already run instead of replacing them. One project or two hundred, in whatever languages you already use. It caches what those tools produce, so the same work never runs twice. Ask it what it is going to do and it prints the exact command, arguments and all. When something breaks (and something always breaks), the error comes from <em>your</em> tool, not from ours.</p>
       <p class="landing-lede landing-lede-cont">It informs; it does not decide. Everything it knows about your repository, handed over as answers - and the call stays yours. It was not built for agents, either: they drive it well because an interface legible to a person is legible to anything, and that ordering is the design.</p>
