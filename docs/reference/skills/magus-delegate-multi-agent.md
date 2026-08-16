@@ -4,8 +4,8 @@ description: "Split work across agents in a magus workspace as an acceptance-cri
 tags: [agents, skills, magus-delegate-multi-agent]
 aliases:
   - reference/skills/magus-delegate-ultra
-skill_full_bytes: 14929
-skill_simple_bytes: 11550
+skill_full_bytes: 15962
+skill_simple_bytes: 12583
 ---
 
 # magus-delegate-multi-agent
@@ -31,7 +31,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `75a747164b3c` |
+| `skill-content` | `aff26b161fa1` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -252,6 +252,11 @@ Every worker prompt must include its row, relevant graph evidence, and the globa
 spawn rule. Require the worker to preserve unrelated changes, stay inside owned
 paths, avoid generated outputs, run only its assigned Magus target, and return
 changed paths, validation evidence, descendants it created, and unresolved risks.
+Also name any fact that will READ as drift to the worker's snapshot - a project
+deleted this session, a rename, an index regenerated underneath it. Not a generic
+"expect drift" line, which only primes the worker to dismiss real anomalies: the
+specific fact, so unexplained tree state costs neither an investigation nor a
+helpful revert of something correct.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker that has
 finished writing a contested path announces the release immediately - shrink the
@@ -260,6 +265,18 @@ if the host supports it - and then carries on validating. A waiting unit starts
 against the released file while the first is still running tests, which is most
 of a worker's lifetime; holding every path to exit serializes agents on time
 they spend not editing.
+
+That put records each dropped path with the digest it carried at that moment.
+Hand the digest to the unit taking the path over: it names the version being
+inherited, and one that no longer matches at verification means the waiter built
+on a tree the releaser never saw.
+
+Re-put the row on every state change. `op=list` then answers two questions you
+would otherwise derive by hand: which live units claim intersecting
+`owned_paths`, and how long since each row was touched. Both are facts, not
+verdicts - magus transitions nothing, so a row that has gone quiet is a unit YOU
+decide is possibly dead, and a reported overlap is a pair you either intended or
+must repartition.
 
 Owned and Forbidden paths are prompt text, not an enforced boundary - step 1 of
 Integrate and verify is where it is actually checked, against that checkpoint. A
@@ -503,6 +520,11 @@ Every worker prompt must include its row, relevant graph evidence, and the globa
 spawn rule. Require the worker to preserve unrelated changes, stay inside owned
 paths, avoid generated outputs, run only its assigned Magus target, and return
 changed paths, validation evidence, descendants it created, and unresolved risks.
+Also name any fact that will READ as drift to the worker's snapshot - a project
+deleted this session, a rename, an index regenerated underneath it. Not a generic
+"expect drift" line, which only primes the worker to dismiss real anomalies: the
+specific fact, so unexplained tree state costs neither an investigation nor a
+helpful revert of something correct.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker that has
 finished writing a contested path announces the release immediately - shrink the
@@ -511,6 +533,18 @@ if the host supports it - and then carries on validating. A waiting unit starts
 against the released file while the first is still running tests, which is most
 of a worker's lifetime; holding every path to exit serializes agents on time
 they spend not editing.
+
+That put records each dropped path with the digest it carried at that moment.
+Hand the digest to the unit taking the path over: it names the version being
+inherited, and one that no longer matches at verification means the waiter built
+on a tree the releaser never saw.
+
+Re-put the row on every state change. `op=list` then answers two questions you
+would otherwise derive by hand: which live units claim intersecting
+`owned_paths`, and how long since each row was touched. Both are facts, not
+verdicts - magus transitions nothing, so a row that has gone quiet is a unit YOU
+decide is possibly dead, and a reported overlap is a pair you either intended or
+must repartition.
 
 Owned and Forbidden paths are prompt text, not an enforced boundary - step 1 of
 Integrate and verify is where it is actually checked, against that checkpoint. A
