@@ -17,6 +17,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -900,4 +901,61 @@ func TestNoHostSpecificBehaviorInCode(t *testing.T) {
 			"instructions, help text, a per-host branch - belongs in docs the reader owns, or the next\n"+
 			"change to that host becomes a magus release.\n\nviolations:\n%s",
 		strings.Join(violations, "\n"))
+}
+
+// The landing headline rotates through N stacked spans on one shared keyframe
+// animation, each offset by a negative delay of one slot. The count lives in
+// landing.buzz and the slot arithmetic lives in site.css, so nothing but agreement
+// between two files keeps them in step - and that agreement broke: a thirteenth
+// line was added while site.css still had delays for twelve.
+//
+// The failure is invisible in review and ugly in production. A span with no delay
+// rule does not lose its animation, it inherits delay 0 and rides the FIRST span's
+// timeline, so two headlines fade in stacked on each other and the <h1> renders as
+// interleaved glyphs. Counting is what a reader cannot do reliably; assert it.
+func TestLandingRotatorSlotsMatchHeadlineCount(t *testing.T) {
+	t.Parallel()
+	markup, err := os.ReadFile(filepath.Join("docs", "site", "landing.buzz"))
+	require.NoError(t, err, "read landing.buzz")
+	headlines := strings.Count(string(markup), `class="landing-rotate"`)
+	require.NotZero(t, headlines, "no rotating headlines found; did the markup change?")
+
+	styles, err := os.ReadFile(filepath.Join("docs", "src", "styles", "site.css"))
+	require.NoError(t, err, "read site.css")
+
+	// The first span needs no rule: its slot is delay 0. So the delays cover 2..N,
+	// and the highest selector must be exactly N.
+	delays := regexp.MustCompile(`\.landing-rotate:nth-child\((\d+)\)`).FindAllStringSubmatch(string(styles), -1)
+	covered := map[int]bool{1: true}
+	highest := 1
+	for _, m := range delays {
+		n, convErr := strconv.Atoi(m[1])
+		require.NoError(t, convErr)
+		covered[n] = true
+		if n > highest {
+			highest = n
+		}
+	}
+
+	var uncovered []int
+	for i := 1; i <= headlines; i++ {
+		if !covered[i] {
+			uncovered = append(uncovered, i)
+		}
+	}
+	assert.Emptyf(t, uncovered,
+		"landing.buzz has %d headlines but site.css declares no animation-delay for span(s) %v; "+
+			"each falls back to delay 0 and renders on top of the first headline",
+		headlines, uncovered)
+	assert.Equalf(t, headlines, highest,
+		"site.css's highest .landing-rotate:nth-child(%d) does not match landing.buzz's %d headlines",
+		highest, headlines)
+
+	// One slot per headline: the cycle must be headlines * 10s, or the last span's
+	// -10s-per-slot offset lands somewhere other than its own slot.
+	dur := regexp.MustCompile(`animation: landing-rotate (\d+)s`).FindStringSubmatch(string(styles))
+	require.NotNil(t, dur, "no landing-rotate animation duration in site.css")
+	assert.Equalf(t, strconv.Itoa(headlines*10), dur[1],
+		"landing-rotate runs %ss for %d headlines; one slot is 10s, so it must be %ds",
+		dur[1], headlines, headlines*10)
 }
