@@ -119,7 +119,7 @@ export fun renderLanding(site: Site) > void !> any {
     <div class="landing-intro">
       <h1 class="landing-title landing-rotator">
         <span class="landing-rotate">Made to be debuggable at 2am.</span>
-        <span class="landing-rotate" aria-hidden="true">No magic. Just commands.</span>
+        <span class="landing-rotate" aria-hidden="true">No magic. Just the commands you already know.</span>
         <span class="landing-rotate" aria-hidden="true">Debug your code, not your build tool.</span>
         <span class="landing-rotate" aria-hidden="true">It calls your tools. It does not replace them.</span>
         <span class="landing-rotate" aria-hidden="true">magus never says you cannot do that.</span>
