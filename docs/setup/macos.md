@@ -6,6 +6,13 @@ tags: [download, install, macos, apple silicon, quarantine, path]
 
 # Install on macOS
 
+> [!NOTE]
+> Neither macOS target is covered by CI. darwin/arm64 is the primary development platform, so
+> the suite runs against it constantly by hand. darwin/amd64 is built natively on an Intel
+> runner, so it compiles and links, but is **never executed**.
+>
+> See [platform support](../setup.md#platform-support) for the full matrix.
+
 magus ships as a single self-contained binary. Download it with `curl`, extract it into a `PATH` directory you own - no root, no `sudo` - then [verify it](verify.md) before first run.
 
 ## Quick install

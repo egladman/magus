@@ -67,6 +67,7 @@ tar -xzf "magus_windows_amd64_static.tar.gz" magus.exe</code></pre>
       </div>
       <p class="landing-sub">Read it, then run it. <code>--dry-run</code> prints the whole plan without writing anything.</p>
       <p class="download-routes">{{{routes}}}</p>
+      <p class="landing-sub">magus is pre-1.0 and the builds are not equally proven. CI runs the full test suite on <strong>linux/amd64 only</strong>; every other platform is built by the release pipeline but not tested by it, and neither Windows build has ever been executed here. <a href="../setup/#platform-support">What is tested, per platform</a>.</p>
     </div>
   </section>
 `, {"routes": routeLinks()});
