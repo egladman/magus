@@ -1,0 +1,70 @@
+<!doctype html>
+<meta charset="utf-8">
+<style>
+  :root {
+    --bg: #f6f8f8;
+    --ink: #1a1f26;
+    --body: #2b3038;
+    --muted: #5a656d;
+    --accent: #df901c;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  html, body { width: 1280px; height: 640px; }
+  body {
+    background: var(--bg);
+    font-family: -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif;
+    display: flex;
+    align-items: center;
+    overflow: hidden;
+  }
+  .card { display: flex; align-items: center; width: 100%; padding: 0 72px; gap: 20px; }
+  .copy { flex: 1 1 auto; min-width: 0; }
+
+  .wordmark {
+    font-size: 154px;
+    font-weight: 700;
+    letter-spacing: -0.045em;
+    line-height: 0.92;
+    color: var(--ink);
+  }
+  .wordmark .dot { color: var(--accent); }
+
+  .tagline {
+    margin-top: 34px;
+    font-size: 38px;
+    line-height: 1.32;
+    font-weight: 500;
+    color: var(--body);
+    letter-spacing: -0.014em;
+    max-width: 17.5em;
+  }
+
+  .sub {
+    margin-top: 20px;
+    font-size: 24px;
+    line-height: 1.45;
+    color: var(--muted);
+    letter-spacing: -0.005em;
+  }
+
+  .url {
+    margin-top: 38px;
+    font-family: "SF Mono", SFMono-Regular, Menlo, Consolas, monospace;
+    font-size: 23px;
+    color: var(--muted);
+    letter-spacing: -0.01em;
+  }
+
+  .art { flex: 0 0 auto; width: 498px; display: flex; align-items: center; }
+  .art img { width: 100%; height: auto; display: block; }
+</style>
+
+<div class="card">
+  <div class="copy">
+    <div class="wordmark">magus<span class="dot">.</span></div>
+    <div class="tagline">A fast build system and task orchestrator for polyglot monorepos.</div>
+    <div class="sub">One statically linked Go binary. No second toolchain.</div>
+    <div class="url">github.com/egladman/magus</div>
+  </div>
+  <div class="art"><img src="gopher.png" alt=""></div>
+</div>
