@@ -58,7 +58,9 @@ magus\project({
     // project writes. Without the edge the two generate targets are unordered, so a schema
     // change could regenerate the API reference from the PREVIOUS descriptor - and reading
     // another project's declared output with no dependency on it is what MGS4004 flags.
-    "depends_on": ["..", "../proto"],
+    // ../libs/diagram for the same reason: diagrams-generate reads its renderer, and
+    // reading another project's file with no edge is unordered (MGS4004).
+    "depends_on": ["..", "../proto", "../libs/diagram"],
     // Affected/drift tracks this sources glob, not the import graph, so render.buzz
     // (and every other input) must be named to be watched. The SSG now lives IN docs/,
     // co-located with the markdown it renders, so the content and the generator share one
@@ -447,7 +449,10 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
 // them by relative path, which is all GitHub needs. Committed and drift-gated, unlike the
 // untracked gen/ site output.
 export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.readsFiles("site/diagrams/*.buzz", "lib/diagram.buzz");
+    // workspace.file, not a project-relative path: the renderer moved out to
+    // libs/diagram, and the stale "lib/diagram.buzz" entry left this target's cache
+    // key blind to renderer edits - it replayed committed SVGs through a Style change.
+    ctx.readsFiles("site/diagrams/*.buzz", workspace.file("libs/diagram/diagram.buzz"));
     ctx.writesFiles("assets/gen/diagram-*.svg");
     // Verified before writing, not after: a diagram that names a package which no longer
     // exists should fail the target rather than ship a rendered picture of a tree that is

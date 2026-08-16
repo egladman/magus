@@ -1563,41 +1563,6 @@
       ]
     },
     {
-      "path": "evals",
-      "name": "evals",
-      "engine": "buzz",
-      "nodes": [
-        {
-          "name": "preflight",
-          "reads_secrets": false
-        },
-        {
-          "name": "lint",
-          "doc": "lint validates every task file against the schema and checks that each named constraint predicate exists.",
-          "dependencies": [
-            "preflight"
-          ],
-          "reads_secrets": false
-        },
-        {
-          "name": "security",
-          "doc": "security audits what actually ships against the npm advisory database.",
-          "dependencies": [
-            "preflight"
-          ],
-          "reads_secrets": false
-        },
-        {
-          "name": "ci",
-          "doc": "ci is LINT ONLY, deliberately.",
-          "dependencies": [
-            "lint"
-          ],
-          "reads_secrets": false
-        }
-      ]
-    },
-    {
       "path": "libs/diagnostics",
       "name": "libs/diagnostics",
       "engine": "buzz",
