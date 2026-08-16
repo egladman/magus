@@ -17,15 +17,31 @@ export interface Launchable {
   hint: string;
 }
 
-// The launcher lede rotates a small time-of-day tagline each fresh load - a quiet sign of polish, not a
-// slogan. Each entry is dry and tool-flavored (magus is a build tool; the daemon keeps the graph warm),
-// understated to match the earthy identity. `at` gates an entry to an hour window (start inclusive, end
-// exclusive; a wrapped window like night spans midnight); `ANY_HOURS` entries are always eligible. The
-// original "See what magus is up to." stays in the pool so nothing is lost. Plain ASCII throughout.
+// The launcher lede rotates a small tagline each fresh load - a quiet sign of polish, not a slogan.
+// Each entry is dry and tool-flavored (magus is a build tool; the daemon keeps the graph warm),
+// understated to match the earthy identity.
+//
+// Two independent gates, so a line can be specific without needing its own window:
+//   `at` - an hour window, start inclusive and end exclusive; a wrapped window like night spans
+//          midnight. ANY_HOURS is always eligible.
+//   `on` - days of the week (0 = Sunday), for lines that only make sense on some of them. Omitted
+//          means every day. Kept separate from `at` rather than folded into it because the two
+//          genuinely cross: a Friday evening line is not a Friday line or an evening line.
+//
+// No entry may carry BOTH a narrow window and a narrow day set unless a broader line covers the same
+// slot - see the eligibility test, which walks every hour of every weekday and asserts the pool is
+// never empty. The ANY_HOURS entries are what guarantee that, so keep several of them dayless.
+//
+// The original "See what magus is up to." stays in the pool so nothing is lost. Plain ASCII
+// throughout, and no exclamation marks: the warmth is meant to come from variety, not volume.
 const ANY_HOURS: [number, number] = [0, 24];
+const WEEKEND = [0, 6];
+const MONDAY = [1];
+const FRIDAY = [5];
 interface Tagline {
   text: string;
   at: [number, number];
+  on?: number[];
 }
 const TAGLINES: Tagline[] = [
   { text: "See what magus is up to.", at: ANY_HOURS },
@@ -52,6 +68,35 @@ const TAGLINES: Tagline[] = [
   { text: "The daemon never sleeps.", at: [22, 5] },
   { text: "Quiet hours. The cache is listening.", at: [22, 5] },
   { text: "Late one. Keep it cached.", at: [22, 5] },
+
+  // Narrower windows sit inside the broad ones above, so these are extra colour at the edges of the
+  // day rather than the only thing eligible there.
+  { text: "Before the first coffee. Respect.", at: [4, 7] },
+  { text: "The tree is quiet at this hour.", at: [4, 7] },
+  { text: "Nobody has pushed yet.", at: [4, 7] },
+  { text: "Lunchtime. The cache will keep.", at: [12, 14] },
+  { text: "Half a day of green behind you.", at: [12, 14] },
+  { text: "Eat something. The build will wait.", at: [12, 14] },
+
+  // Day-gated. Each is deliberately broad on the hour so it reads as a note about the day, not a
+  // note about the minute.
+  { text: "Monday. Clean slate, warm cache.", at: [5, 12], on: MONDAY },
+  { text: "Back at it. The graph kept your place.", at: [5, 12], on: MONDAY },
+  { text: "Friday. Leave it green for Monday.", at: [12, 22], on: FRIDAY },
+  { text: "Last builds of the week.", at: [12, 22], on: FRIDAY },
+  { text: "Weekend build. Nobody is watching.", at: ANY_HOURS, on: WEEKEND },
+  { text: "Saturday hacking. The daemon kept the lights on.", at: [8, 22], on: WEEKEND },
+  { text: "The weekend tree is a quiet tree.", at: ANY_HOURS, on: WEEKEND },
+
+  // More of the always-eligible pool, so the broad case stays as varied as the narrow ones.
+  { text: "No stale artifacts in sight.", at: ANY_HOURS },
+  { text: "Every target knows what it needs.", at: ANY_HOURS },
+  { text: "The spells are where you left them.", at: ANY_HOURS },
+  { text: "Nothing here runs twice.", at: ANY_HOURS },
+  { text: "Declared, cached, and accounted for.", at: ANY_HOURS },
+  { text: "Ask it what it will do. It will tell you.", at: ANY_HOURS },
+  { text: "One binary, still no second toolchain.", at: ANY_HOURS },
+  { text: "The graph is not guessing.", at: ANY_HOURS },
 ];
 
 // The launcher HEADING also rotates, for the same reason the lede does: this is the first thing the
@@ -65,6 +110,11 @@ const TITLES: string[] = [
   "Pick a place to begin.",
   "What needs your attention?",
   "Where to?",
+  "What are we shipping?",
+  "Where does this one start?",
+  "What is worth a look?",
+  "Open something.",
+  "What is on your mind?",
 ];
 
 // launcherTitle picks one of the headings at random. `pick` is injected only so the choice is
@@ -85,7 +135,8 @@ function inWindow(hour: number, [start, end]: [number, number]): boolean {
 // at every hour), so it never falls back to a placeholder.
 export function launcherTagline(now: Date = new Date(), pick: () => number = Math.random): string {
   const hour = now.getHours();
-  const eligible = TAGLINES.filter((t) => inWindow(hour, t.at));
+  const day = now.getDay();
+  const eligible = TAGLINES.filter((t) => inWindow(hour, t.at) && (!t.on || t.on.includes(day)));
   return eligible[Math.floor(pick() * eligible.length)].text;
 }
 

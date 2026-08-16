@@ -9,7 +9,7 @@
 // or Up/Down or Tab to move, Enter to run, Esc to close), so it never fights the global key listener.
 //
 // This is the console's ONE sanctioned fully-custom component (no PatternFly analog renders a dmenu
-// bar), so its classes follow the PATTERNFLY.md formula: console-shell-commandbar__<element>, transient
+// bar), so its classes follow the README.md formula: console-shell-commandbar__<element>, transient
 // selection state as data-selected. Styled in console.css against PF tokens so both themes work.
 
 import { type Command, type Keymap } from "./commands";
