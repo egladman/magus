@@ -175,8 +175,8 @@ export fun renderLanding(site: Site) > void !> any {
       </a>
       <a class="landing-card" href="concepts/knowledge/">
         <span class="landing-card-mark" aria-hidden="true">03</span>
-        <span class="landing-card-title">It has a knowledge graph</span>
-        <span class="landing-card-body">A build tool already has to know every project, input and output, or builds break. magus hands that back as a graph you can query. Nothing has to scan your repository to rediscover what the build already declared.</span>
+        <span class="landing-card-title">The graph is a byproduct</span>
+        <span class="landing-card-body">A build tool already has to know every project, input and output, or builds break. magus hands that same knowledge back as something you can query. Nothing scans your repository to infer it, no LLM pass ever runs over it, and every edge traces to a declaration you can open.</span>
       </a>
     </div>
   </section>
