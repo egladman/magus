@@ -84,7 +84,7 @@ agent cannot reach the human route, so it cannot post as the person.
 **The share subset is smaller on purpose.** `POST /api/v1/share` opens an
 on-demand, time-boxed LAN listener behind a fresh read-only token, so you can
 watch a run from a phone. It serves only `events`, `insight`, `outputs` and
-`output`, plus the activity, metrics and status Connect reads. `graph`, `diff`,
+`output`, plus the activity, metrics, status and insight Connect reads. `graph`, `diff`,
 `diff/patch`, `diff/session`, `plan`, `ledger`, `/mcp` and the job service are
 deliberately loopback-only: a working diff is unreviewed source, a plan names
 every target in the workspace, and a share link is a URL handed to a phone. A

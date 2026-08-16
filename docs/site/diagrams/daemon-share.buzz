@@ -2,6 +2,11 @@
 // figure because the LAN listener is the only part of the daemon that a machine other than
 // localhost can reach, and burying that in a whole-system flowchart is how it stops being
 // obvious. The two accent elements both mark that boundary.
+//
+// The subset is drawn route by route rather than as one "read-only views" box, because the
+// asymmetry IS the message: a share link is a URL handed to a phone, so the graph, the diff
+// routes, the plan, the ledger, /mcp and job control never appear on it. The three boxes on
+// the left are internal/daemon/daemon.go's shareGuarded map and its complement, in order.
 namespace daemonShare;
 
 import "../libs/diagram/diagram" as _;
@@ -13,33 +18,48 @@ export fun daemonShareDiagram() > Diagram {
         title = "The only listener a second machine can reach",
         desc = "Sharing from the dashboard posts to a loopback-only endpoint, which mints a "
             + "time-boxed read-only token and opens an ephemeral LAN listener. The listener "
-            + "serves read-only views and carries no MCP, share or mutating routes.",
+            + "serves four JSON read routes and the read Connect services, and nothing "
+            + "else: the graph, the diff routes, the derived plan, the delegation ledger, "
+            + "/mcp and job control stay loopback only.",
         width = 960,
-        height = 480,
+        height = 600,
         nodes = [
             Node{ id = "dash", label = "Console", sub = "dashboard",
-                  tag = "pwa", x = 32, y = 176, w = 176, h = 64 },
+                  tag = "pwa", x = 32, y = 96, w = 176, h = 64 },
             Node{ id = "sharep", anchor = "internal/share", label = "/api/v1/share", sub = "loopback + bearer",
-                  tag = "route", x = 304, y = 176, w = 200, h = 64 },
+                  tag = "route", x = 288, y = 96, w = 216, h = 64 },
             Node{ id = "lan", anchor = "internal/share", label = "LAN listener", sub = "15m, read-only token",
-                  tag = "ephemeral", role = "focal", x = 600, y = 88, w = 240, h = 88 },
+                  tag = "ephemeral", role = "focal", x = 616, y = 88, w = 280, h = 88 },
             Node{ id = "phone", label = "Phone on the LAN", sub = "same-origin viewer",
-                  tag = "client", role = "external", x = 600, y = 280, w = 240, h = 64 },
-            Node{ id = "ws", anchor = "internal/graph", label = "Workspace registry", sub = "read-only views",
-                  role = "store", x = 304, y = 320, w = 200, h = 64 },
+                  tag = "client", role = "external", x = 616, y = 248, w = 280, h = 64 },
+
+            Node{ id = "served", anchor = "internal/handler/viewer", label = "Shared read routes",
+                  sub = "events, insight, outputs, output",
+                  role = "store", x = 176, y = 272, w = 280, h = 64 },
+            Node{ id = "connectreads", anchor = "internal/handler/status", label = "Shared Connect reads",
+                  sub = "status, activity, metrics, insight",
+                  role = "store", x = 176, y = 368, w = 280, h = 64 },
+            Node{ id = "withheld", anchor = "internal/handler/graph", label = "Never on a share",
+                  sub = "graph, diff, plan, ledger, /mcp",
+                  role = "optional", x = 176, y = 464, w = 280, h = 64 },
         ],
+        // The withheld box takes no connector on purpose: an arrow into it would say the
+        // listener reaches it. Nothing points at it, which is exactly the claim.
         edges = [
             Edge{ src = "dash", dst = "sharep", label = "share" },
             Edge{ src = "sharep", dst = "lan", label = "mints token",
-                  dstSlot = 1, dstSlots = 2, bend = 520 },
+                  dstSlot = 1, dstSlots = 3, bend = 560 },
             Edge{ src = "phone", dst = "lan", label = "read-only", kind = "accent",
                   srcSide = "top", dstSide = "bottom" },
-            Edge{ src = "lan", dst = "ws", label = "reads",
-                  srcSide = "left", srcSlot = 2, srcSlots = 2, dstSide = "right", bend = 560 },
+            Edge{ src = "lan", dst = "served", label = "serves",
+                  srcSide = "left", srcSlot = 2, srcSlots = 3, dstSide = "right", bend = 536 },
+            Edge{ src = "lan", dst = "connectreads", label = "serves",
+                  srcSide = "left", srcSlot = 3, srcSlots = 3, dstSide = "right", bend = 512 },
         ],
         legend = [
             LegendItem{ role = "focal", label = "reachable off-machine" },
-            LegendItem{ role = "store", label = "read-only" },
+            LegendItem{ role = "store", label = "served on a share" },
+            LegendItem{ role = "optional", label = "loopback only" },
         ],
     };
 }
