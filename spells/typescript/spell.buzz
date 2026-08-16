@@ -70,10 +70,23 @@ export fun mgs_getTools() > {str: Tool} {
 
 export fun mgs_getLanguage() > str { return "typescript"; }
 
-// mgs_listIgnoreDirs names non-source dirs the node/ts ecosystem generates, pruned
-// from the input-hashing walk. dist is already excluded as a declared output, and
-// .turbo/.pnpm-store are dot-dirs skipped structurally, so only node_modules belongs here.
-export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "node_modules", isDir = true}]; }
+// mgs_listIgnoreDirs names non-source dirs the node/ts ecosystem generates, pruned from the
+// input-hashing walk. dist is already excluded as a declared output.
+//
+// The dot-dirs are NOT optional, whatever their leading dot suggests. Two ignore predicates
+// exist and they disagree: project.IsIgnoreDir skips every dot-dir, but that one governs
+// DISCOVERY and watch, and it cannot be reused here - .claude/skills/** and .github/** are
+// declared sources in this workspace. The hashing walk uses cache.isIgnoreDir, which skips
+// only a fixed VCS/magus list plus what is named here. So an unnamed dot-dir of build output
+// lands in the cache key, and a target that writes it restales its own key on every run:
+// console:test compiles into .testcache and could never replay, which is how this was found
+// (MGS4007 reported the write).
+export fun mgs_listIgnoreDirs() > [Path] {
+    return [Path{value = "node_modules", isDir = true},
+            Path{value = ".testcache", isDir = true},
+            Path{value = ".turbo", isDir = true},
+            Path{value = ".pnpm-store", isDir = true}];
+}
 
 // mgs_listManifests names the file this project's dependencies are declared in -
 // not the toolchain's version (that's mgs_getTools) and not a cache input
