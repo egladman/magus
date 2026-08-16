@@ -6,10 +6,9 @@
  * components the console actually mounts. Add a component's sheet here when a surface
  * starts using it; that is the whole opt-in surface for PatternFly.
  *
- * NOTE (measured in W0): patternfly-base.css is the unavoidable fixed cost - it defines
- * the full --pf-t-* token palette (light + dark) and is ~321KB minified on its own.
- * Per-component sheets are small on top of it. See PATTERNFLY.md for the size delta and
- * the PurgeCSS follow-up flagged for the bulk migration.
+ * patternfly-base.css is the unavoidable fixed cost - it defines the full --pf-t-* token
+ * palette (light + dark) and is ~321KB minified on its own. Per-component sheets are small
+ * on top of it. See README.md for the stack and the PurgeCSS follow-up.
  *
  * Font/image url() assets in the base (RedHat webfonts, icons) are marked --external in
  * the build so esbuild leaves the urls untouched instead of trying to inline 10MB of

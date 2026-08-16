@@ -575,7 +575,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    ~30 lines) were removed here so the rebuilt PatternFly Tabs (.pf-v6-c-tabs*) render from PF's
    own classes. Those id+attr selectors out-specify PF's single-class rules, so they had to go for
    the spike; this is exactly the W2 shell rebuild, previewed. The PF strip carries its own ARIA
-   (role=tablist/tab, aria-selected). See tabBar.ts and PATTERNFLY.md. */
+   (role=tablist/tab, aria-selected). See tabBar.ts and README.md. */
 #console-tabs :focus-visible, #console-outlet [data-open]:focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
 
 /* Vertically center the tab close (x) control on the tab row. PF's tab action button is a plain
@@ -853,7 +853,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 
    The command bar (#command-bar, commandBar.ts) is NOT a modal: it is a dmenu-style bar - the
    console's one sanctioned fully-custom component (PatternFly has no dmenu analog), classed per the
-   PATTERNFLY.md formula (console-shell-commandbar). ONE bar pinned over the title bar at its exact
+   README.md formula (console-shell-commandbar). ONE bar pinned over the title bar at its exact
    height (--console-titlebar-h), reading as a soft sheet that descends from the top: rounded bottom corners and a
    drop shadow, no hard rule. A faint accent "run" prompt cap, an inline borderless input, then the
    matching command TOKENS (monospace, fuzzy-matched chars highlighted) run HORIZONTALLY to its right,
