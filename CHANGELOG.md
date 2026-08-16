@@ -186,10 +186,11 @@ file` explains any one of them in full. `magus doctor` reports the standing set.
 
 - **`magus insight` is removed.** The lenses were never a daily verb - they are a
   reporting surface, reached from CI and from a magusfile - and a subcommand is the
-  one place they cost every reader of `magus --help`. They are now
-  `magus\insight()` (typed) and `magus\insightMarkdown()` (the document), both
-  computed IN-PROCESS from the workspace magus already has open, and `magus_insight`
-  over MCP for agents, which never went through the subcommand at all.
+  one place they cost every reader of `magus --help`. The survivor is
+  `magus\insight()`: the typed report, computed IN-PROCESS from the workspace magus
+  already has open, plus `magus_insight` over MCP for agents, which never went
+  through the subcommand at all. There is no document renderer: presentation is the
+  caller's job, built from the typed report.
 
   What this costs, in full:
 
@@ -266,7 +267,7 @@ file` explains any one of them in full. `magus doctor` reports the standing set.
   `graph` and `targetGraph`, the second read as a variant of the first; they are
   siblings, so each is now named for what it contains. It also settles the surface's one
   inconsistent qualifier: every other pair suffixes (`describe`/`describeFile`,
-  `affected`/`affectedImpact`, `insight`/`insightMarkdown`) while this one prefixed.
+  `affected`/`affectedImpact`) while this one prefixed.
 - **`magus\modules()` and `magus\module(name)` are now one `magus\describeModule(name?)`.**
   Omit the name for every module; pass one to detail it. Either way the return is a
   `[Module]`, so detailing one reads `magus\describeModule("fs")[0]`.

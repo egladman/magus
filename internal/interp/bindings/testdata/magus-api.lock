@@ -16,7 +16,6 @@ doctor
 fatal
 hasCharm
 insight
-insightMarkdown
 log
 log.debug
 log.error

@@ -15,7 +15,6 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
-	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
 )
@@ -151,23 +150,13 @@ var Magus = Module{
 		},
 		{
 			Name: "insight",
-			Doc:  "Every VCS-history lens as one typed report: {hotspots, affinity, ownership, trend, volatility, unreferenced}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. Takes the window as `{commits, since}` and renders nothing; `insightMarkdown` is the same report as a document. Read straight off the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip. Works from a magusfile target and from a `magus buzz` script run inside a workspace; raises MGS1022 only when there is no workspace to read.",
+			Doc:  "Every VCS-history lens as one typed report: {hotspots, affinity, ownership, trend, volatility, unreferenced}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. Takes the window as `{commits, since}` and renders nothing - presentation is the caller's job. Read straight off the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip. Works from a magusfile target and from a `magus buzz` script run inside a workspace; raises MGS1022 only when there is no workspace to read.",
 			Args: []Arg{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "InsightReport"}},
 			Raises:  true,
 			Impl:    MagusInsight,
-		},
-		{
-			Name: "insight_markdown",
-			Doc:  "The same report as `magus\\insight`, rendered as the Markdown document (commit it as INSIGHT.md). Returns the document as a string. Takes the same flags: opts.commits caps the commits scanned, opts.since bounds the window (90d, 12w, 6mo, 1y). Computed in-process from the workspace on the context, so it needs a magusfile target rather than a bare `magus buzz` script.",
-			Args: []Arg{
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
-			},
-			Returns: []Ret{{Type: TypeString}},
-			Raises:  true,
-			Impl:    MagusInsightMarkdown,
 		},
 		{
 			Name: "affected_impact",
@@ -687,32 +676,6 @@ func MagusInsight(ctx context.Context, opts map[string]any) (types.InsightReport
 	return buildInsightReport(ctx, a, iopts)
 }
 
-// MagusInsightMarkdown renders the report as a document, for a target that writes
-// INSIGHT.md or a CI step summary.
-//
-// The rendering lives here rather than behind a subcommand because that is the only
-// thing the subcommand still did that this module could not: the analysis was always
-// the workspace's, and the CLI only turned it into a page.
-func MagusInsightMarkdown(ctx context.Context, opts map[string]any) (string, error) {
-	a, err := insightAnalyzer(ctx, "insightMarkdown")
-	if err != nil {
-		return "", err
-	}
-	iopts, err := insightOptions(opts)
-	if err != nil {
-		return "", err
-	}
-	report, err := buildInsightReport(ctx, a, iopts)
-	if err != nil {
-		return "", err
-	}
-	var b strings.Builder
-	if err := render.WriteInsightMarkdown(&b, report); err != nil {
-		return "", err
-	}
-	return b.String(), nil
-}
-
 // insightAnalyzer resolves the workspace that will answer the lenses.
 //
 // It ERRORS rather than forking. The `magus insight` subcommand it used to fall back
@@ -721,8 +684,7 @@ func MagusInsightMarkdown(ctx context.Context, opts map[string]any) (string, err
 // sprawl this removal is about. The cost is that a bare `magus buzz` script with no
 // workspace cannot ask - the same limit every other in-process verb here has.
 //
-// member names the caller so MGS1022 points at the method the author actually wrote;
-// both insight and insightMarkdown land here.
+// member names the caller so MGS1022 points at the method the author actually wrote.
 //
 // AnalyzerFromContext first: it is the seam a `magus buzz` script run inside a
 // workspace arrives through, so checking only the workspace value would raise

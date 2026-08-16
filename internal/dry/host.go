@@ -314,11 +314,6 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("files", vm.ListValue(nil))
 		return res, nil
 	}))
-	// A document, so there is no shape to preserve: the empty string is the string
-	// analogue of the empty lists above.
-	m.MapSet("insightMarkdown", fn("magus.insightMarkdown", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return vm.StrValue(""), nil
-	}))
 	// insight nests a record per lens rather than a list, so each one is shaped
 	// too: a null lens would break `.ownership.projects` where an empty list does not.
 	m.MapSet("insight", fn("magus.insight", func(_ context.Context, _ []vm.Value) (vm.Value, error) {

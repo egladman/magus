@@ -107,14 +107,6 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return buzzValueMagusInsightReport(ret0), nil
 	}))
-	m.MapSet("insightMarkdown", vm.DirectValue("magus.insightMarkdown", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		opts := AnyMap(bzArgs, 0)
-		ret0, err := std.MagusInsightMarkdown(ctx, opts)
-		if err != nil {
-			return vm.Null, HostError(err)
-		}
-		return StrVal(ret0), nil
-	}))
 	m.MapSet("affectedImpact", vm.DirectValue("magus.affectedImpact", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		base := Str(bzArgs, 0)
 		opts := AnyMap(bzArgs, 1)
