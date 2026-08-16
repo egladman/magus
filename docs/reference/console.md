@@ -1,46 +1,94 @@
 ---
 title: Console API
-description: Read-only loopback GET API that lets the Graph Explorer show your live workspace. Loopback only, bearer token. Mutation is confined to a separate, authenticated job-control service.
+description: Loopback JSON API the console reads your live workspace through - the graph, insight, diff, run-output, plan and ledger routes. Loopback only, bearer token, GET except where named. Mutation sits on a few bounded surfaces beside it, none of which touches your working tree.
 tags: [console, graph, privacy]
 aliases: [console, browser-bridge]
 ---
 
 # Console API
 
-The console is three frozen, read-only GET routes that the magus daemon
-exposes over loopback so the hosted [console](https://eli.gladman.cc/magus/console/)
-(its Graph Explorer app) can display your current workspace.
+The console is a small set of loopback JSON routes that the magus daemon
+exposes so the hosted [console](https://eli.gladman.cc/magus/console/) (the
+Graph Explorer and the surfaces beside it) can display your current workspace.
 
 The console holds no privileged access: it is one client of the same contract
 anyone can code against. The full schema - every service, method, message, and
 enum, generated from the `.proto` files - is the [daemon API reference](api/index.md).
 
-**These read routes cannot change your workspace.** The console's GET API has no
-write surface, no POST routes, and no way to trigger a build, run a target, or
-change configuration - it only reads. This is a design decision, not just a
-security posture (see section 0.3 of the PWA plan).
+**None of these routes can change your workspace.** They read what the daemon
+already knows: they cannot trigger a build, run a target, edit a file, or change
+configuration. Every route in the table below answers GET only and rejects any
+other method with a 405 - with one named exception, `POST /api/v1/diff/session`,
+which records a person's own review state (where they are looking, which hunks
+they have read, what they said) in the cache directory and touches no source
+file. This is a design decision, not just a security posture (see section 0.3 of
+the PWA plan).
 
-The daemon does expose one mutating surface, separate from these read routes: an
-authenticated [job-control service](#job-control) that triggers maintenance jobs
-(reconcile the graph, rotate the activity trail or run-logs, clear the cache).
-It is gated behind the same loopback bind and bearer token, and it cannot run an
-arbitrary command - only a fixed set of maintenance jobs.
+What can mutate sits beside this read surface rather than in it, and none of it
+runs an arbitrary command or writes into your working tree:
+
+- The [job-control service](#job-control), which submits a fixed set of
+  maintenance jobs (reconcile the graph, rotate the activity trail or run-logs,
+  clear the cache).
+- `POST /api/v1/diff/session`, the review-session route above.
+- `POST /api/v1/share`, which opens the time-boxed LAN listener described under
+  [what the console serves](#what-the-console-serves). It requires a loopback
+  peer as well as the bearer token, so only the local console can trigger it.
+- `magus.memory.v1.MemoryService`, which edits your own handoff journal
+  ([`magus memory`](manpage/magus-memory.md)). That journal lives in the user
+  state directory outside the repository, so it is not workspace state either.
+
+Every one of them is gated behind the same loopback bind and bearer token.
 
 ## What the console serves
 
-Every byte the console can emit, enumerated:
+Every route on the console's `/api/v1/` surface, enumerated:
 
-| Route                              | Content                                                             |
-| ---------------------------------- | ------------------------------------------------------------------- |
-| `GET /api/v1/graph`                | Merged knowledge graph (same bytes as `magus graph export -o json`) |
-| `GET /api/v1/graph?flavor=targets` | Target dependency graph (same as `magus describe graph -o json`)    |
-| `GET /api/v1/graph?level=projects` | Project skeleton only: project nodes + project edges                |
-| `GET /api/v1/graph?select=<terms>` | Scoped neighborhood (same query engine as `magus query`)            |
-| `GET /api/v1/status`               | Daemon pool state (same as `magus status -o json`)                  |
-| `GET /api/v1/events`               | SSE stream: `event: graph` when the workspace graph changes         |
+| Route                              | Content                                                                                                                            |
+| ---------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------- |
+| `GET /api/v1/graph`                | Merged knowledge graph (same bytes as `magus graph export -o json`)                                                                |
+| `GET /api/v1/graph?flavor=targets` | Target dependency graph (same as `magus describe graph -o json`)                                                                   |
+| `GET /api/v1/graph?level=projects` | Project skeleton only: project nodes + project edges                                                                               |
+| `GET /api/v1/graph?select=<terms>` | Scoped neighborhood (same query engine as `magus query`)                                                                           |
+| `GET /api/v1/events`               | SSE stream: `event: graph` when the workspace graph changes                                                                        |
+| `GET /api/v1/insight`              | Every [insight lens](../concepts/knowledge/insight.md): hotspots, affinity, ownership, trend, volatility                           |
+| `GET /api/v1/diff`                 | Working-tree changes annotated with role, blast radius, changed-symbol reach, and coverage ([`magus diff`](manpage/magus-diff.md)) |
+| `GET /api/v1/diff/patch`           | The same changes as one unified patch, without the annotation (much cheaper)                                                       |
+| `POST /api/v1/diff/session`        | The human's half of a paired review: cursor, viewed marks, comments. The one non-GET route here                                    |
+| `GET /api/v1/outputs`              | The run browser's tree: prior runs, newest first                                                                                   |
+| `GET /api/v1/output?ref=<ref>`     | One run's verbatim captured output, by [output reference](../concepts/cache/output-refs.md)                                        |
+| `GET /api/v1/plan`                 | The derived run plan: the target DAG the engine resolves, with each node's live state                                              |
+| `GET /api/v1/ledger`               | The delegation plan an agent [declared](../guides/integrations/agents/delegation.md); magus enforces none of it                    |
 
-No other routes exist. The console mounts at `/api/v1/` on the same port as the
-MCP server (`127.0.0.1:7391` by default).
+One more route sits under `/api/v1/` without belonging to this read surface:
+`POST /api/v1/share`, described below. The daemon's typed Connect
+services - status, activity, metrics, insight, memory, notes, tool, and
+[job control](#job-control) - are mounted at their own
+`magus.<service>.v1.<Service>/` prefixes rather than here, and the
+[daemon API reference](api/index.md) is their schema. The console mounts at
+`/api/v1/` on the same port as the MCP server (`127.0.0.1:7391` by default).
+
+There is no `GET /api/v1/status` any more. The typed
+`magus.status.v1.StatusService/GetStatus` route replaced it and serves the same
+live snapshot plus `observing_since` and config on a typed wire contract; the
+console reads it there.
+
+**Who may write to a review session.** `POST /api/v1/diff/session` is reachable
+only from the console and the CLI, so every write on it is stamped as the
+person's. An agent reaches the same session through the `magus_diff` MCP tool on
+`/mcp` - whose `comment`, `suggest` and `resolve` ops are writes too - and those
+are stamped as the agent's. Authorship is decided by which route the write
+arrived on and never by the payload, which is what makes it unforgeable: an
+agent cannot reach the human route, so it cannot post as the person.
+
+**The share subset is smaller on purpose.** `POST /api/v1/share` opens an
+on-demand, time-boxed LAN listener behind a fresh read-only token, so you can
+watch a run from a phone. It serves only `events`, `insight`, `outputs` and
+`output`, plus the activity, metrics and status Connect reads. `graph`, `diff`,
+`diff/patch`, `diff/session`, `plan`, `ledger`, `/mcp` and the job service are
+deliberately loopback-only: a working diff is unreviewed source, a plan names
+every target in the workspace, and a share link is a URL handed to a phone. A
+leaked share link reaches the small set and nothing else.
 
 **Error bodies.** When a route fails (5xx), the response body contains
 `err.Error()` detail to help an authenticated loopback caller diagnose the
@@ -61,9 +109,10 @@ serialization). This is a known limitation; memoization per variant is deferred.
 
 Separate from the read routes above, the daemon hosts a **mutating** Connect
 service, `magus.job.v1.JobService`, so a browser client (or the CLI) can trigger
-background maintenance without an open action endpoint. It is the daemon's only
-write surface, and it is bounded: it submits a fixed set of named jobs, never an
-arbitrary command.
+background maintenance without an open action endpoint. It is the only surface
+that changes anything magus computed - the others record a person's own review
+state, open a share listener, or edit their handoff journal - and it is bounded:
+it submits a fixed set of named jobs, never an arbitrary command.
 
 | RPC                | Effect                                                      |
 | ------------------ | ----------------------------------------------------------- |
@@ -142,8 +191,10 @@ The console serves your workspace graph over loopback. It does not:
 
 - Send data to any external service
 - Log request payloads
-- Store anything beyond what the daemon already caches on disk
-- Accept any write request
+- Store anything beyond what the daemon already caches on disk, plus the review
+  state a person records through `POST /api/v1/diff/session`
+- Accept a write into your working tree, or any request that runs a target,
+  edits a file, or changes configuration
 - Expose any path outside the routes listed above
 
 The hosted explorer page loads your graph via the bearer-authenticated fetch.
@@ -206,7 +257,7 @@ Safari blocks fetch requests from an HTTPS page to `http://127.0.0.1` (mixed con
 
 ### Affected view
 
-When the daemon has computed an affected set (from `magus affected` in a CI context), the `/api/v1/status` response includes an `affected` array of node ids. The "What does my diff touch?" view is enabled automatically and paints those nodes.
+When the daemon has computed an affected set (from `magus affected` in a CI context), the pool in the `magus.status.v1.StatusService/GetStatus` response carries an `affected` array of node ids. The "What does my diff touch?" view is enabled automatically and paints those nodes.
 
 ## Verify our claims - don't take our word for it
 
@@ -272,8 +323,12 @@ that's the HTTP standard, not our promise.
    row - the **Payload** tab is absent (no request carries a body). Compare
    any request's URL against your address bar: the `#data=...` portion
    appears in none of them.
-4. Type `method:POST` into the Network filter box: zero results. This page
-   never POSTs anything, anywhere.
+4. Type `method:POST` into the Network filter box: zero results for the
+   snapshot flow these steps describe. In live mode there is one exception, and
+   it goes to your own machine: the typed daemon services (status, activity,
+   metrics) are Connect RPCs, and Connect sends a read as a POST. Those requests
+   are addressed to `127.0.0.1` and carry a request message, never your graph -
+   the same `connect-src` policy above is what confines them to loopback.
 
 ### Claim: everything works with your network unplugged
 

@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2419,
-  "edge_count": 6214,
+  "node_count": 2420,
+  "edge_count": 6234,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -3136,6 +3136,18 @@
         "section": "guides",
         "tags": "agents,cursor,AGENTS.md,guard,hooks",
         "title": "Cursor"
+      }
+    },
+    {
+      "id": "doc:docs/guides/integrations/agents/delegation.md",
+      "kind": "doc",
+      "label": "docs/guides/integrations/agents/delegation.md",
+      "source": "docs/guides/integrations/agents/delegation.md",
+      "attrs": {
+        "role": "doc",
+        "section": "guides",
+        "tags": "agents,delegation,checkpoint,ledger,plan,magus vcs checkpoint,magus_ledger,console,activity",
+        "title": "Delegation"
       }
     },
     {
@@ -30038,8 +30050,8 @@
       "source": "doc:docs/concepts/knowledge.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
+      "confidence": "extracted",
+      "score": 1,
       "provenance": "docs/concepts/knowledge.md"
     },
     {
@@ -32684,6 +32696,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents.md",
+      "target": "doc:docs/guides/integrations/agents/delegation.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents.md",
       "target": "doc:docs/guides/integrations/agents/guard-templates.md",
       "relation": "references",
       "confidence": "extracted",
@@ -32733,6 +32753,14 @@
     {
       "source": "doc:docs/guides/integrations/agents.md",
       "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents.md",
+      "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -32963,6 +32991,94 @@
       "provenance": "docs/guides/integrations/agents/cursor.md"
     },
     {
+      "source": "doc:docs/guides/integrations/agents/delegation.md",
+      "target": "doc:docs/concepts/cache/output-refs.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/delegation.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/delegation.md",
+      "target": "doc:docs/concepts/knowledge.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/delegation.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/delegation.md",
+      "target": "doc:docs/guides/integrations/agents.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/delegation.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/delegation.md",
+      "target": "doc:docs/guides/integrations/agents/guard.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/delegation.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/delegation.md",
+      "target": "doc:docs/guides/integrations/daemon.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/delegation.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/delegation.md",
+      "target": "doc:docs/guides/integrations/mcp.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/delegation.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/delegation.md",
+      "target": "doc:docs/reference/console.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/delegation.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/delegation.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/delegation.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/delegation.md",
+      "target": "doc:docs/reference/manpage/magus-hook.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents/delegation.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/delegation.md",
+      "target": "doc:docs/reference/manpage/magus-vcs.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/delegation.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/delegation.md",
+      "target": "doc:docs/reference/skills/magus-delegate-multi-agent.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/delegation.md"
+    },
+    {
       "source": "doc:docs/guides/integrations/agents/guard-templates.md",
       "target": "doc:docs/guides/integrations/agents/claude-code.md",
       "relation": "references",
@@ -33045,6 +33161,14 @@
     {
       "source": "doc:docs/guides/integrations/agents/guard.md",
       "target": "doc:docs/guides/integrations/agents/cursor.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/guard.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/guard.md",
+      "target": "doc:docs/guides/integrations/agents/delegation.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -37476,6 +37600,30 @@
     },
     {
       "source": "doc:docs/reference/console.md",
+      "target": "doc:docs/concepts/cache/output-refs.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/console.md"
+    },
+    {
+      "source": "doc:docs/reference/console.md",
+      "target": "doc:docs/concepts/knowledge/insight.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/console.md"
+    },
+    {
+      "source": "doc:docs/reference/console.md",
+      "target": "doc:docs/guides/integrations/agents/delegation.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/console.md"
+    },
+    {
+      "source": "doc:docs/reference/console.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
@@ -37492,10 +37640,26 @@
     },
     {
       "source": "doc:docs/reference/console.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/console.md"
+    },
+    {
+      "source": "doc:docs/reference/console.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
+      "provenance": "docs/reference/console.md"
+    },
+    {
+      "source": "doc:docs/reference/console.md",
+      "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
       "provenance": "docs/reference/console.md"
     },
     {
@@ -66441,6 +66605,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/guides/integrations/agents/cursor.md"
+    },
+    {
+      "source": "project:docs/guides/integrations/agents",
+      "target": "doc:docs/guides/integrations/agents/delegation.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/delegation.md"
     },
     {
       "source": "project:docs/guides/integrations/agents",

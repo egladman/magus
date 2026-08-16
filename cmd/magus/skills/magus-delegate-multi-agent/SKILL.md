@@ -197,6 +197,7 @@ tree is not clean) - and keep descendants in the same table:
 The same checkpoint is what a later incremental re-review diffs from (see the
 magus-change-summary skill) - review time and handoff time read the same object.
 {{end}}
+
 | Unit | Parent | Checkpoint | Goal and acceptance criteria | Owned paths | Forbidden paths | Depends on | Tier | Validation | State |
 |---|---|---|---|---|---|---|---|---|---|
 

@@ -28,6 +28,32 @@ It exists so agents and humans can ask "what is this, what touches it, how do
 these relate" and get a precise answer instead of grepping. Agents reach it over
 MCP; humans reach it through three verbs and the `magus graph` home.
 
+## What this graph is not
+
+"Knowledge graph" now names architectures this one deliberately is not, and the
+distance is the point.
+
+- **Not open-world.** General knowledge graphs are genuinely hard: ontology
+  design, entity resolution, and modeling discipline that stays expensive at
+  scale. magus never attempts that problem. The build domain hands it a closed
+  ontology - the node kinds and relations above are the complete list - so
+  there is no modeling step to do well or badly, and no linking judgment to
+  trust.
+- **Not a second indexer.** Most codebase graphs are built by a separate system
+  that scans the repo and infers structure, and the drift between that system
+  and your build stays invisible until it bites. This graph is assembled from
+  the same declarations the build executes. A wrong edge is a broken build,
+  and a broken build is loud.
+- **Not synthesized links.** No pass ever guesses an edge - no LLM, no fuzzy
+  matching, no "related notes" heuristics. Every edge is extracted or
+  rubric-inferred from a source you can open, and `magus explain` prints each
+  edge's provenance so the claim is checkable per edge, not per marketing page.
+- **Not agent memory.** The graph is derived state: rebuilt from the workspace,
+  never accumulated, never remembered. Memory is a different surface with the
+  opposite contract - [`magus memory`](../reference/manpage/magus-memory.md) is
+  a user-owned journal of named decisions, written deliberately, and it stays
+  small precisely because the graph answers everything derivable.
+
 ## The two-concept model
 
 - **query / explain / path READ the graph** - daily retrieval.

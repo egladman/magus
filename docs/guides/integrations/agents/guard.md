@@ -259,3 +259,10 @@ path.
 A host without a hook cannot be observed: no local CLI can discover commands
 another process did not report. The coverage boundary is explicit rather than
 guessed.
+
+One payload shape is recorded and never judged. A hook event carrying a `prompt`
+rather than a command or a file path is a delegation handoff: it appends an
+`agent_spawn` event and returns `pass` without evaluating a rule, because there
+is no command and no path to judge, and a prompt that merely mentions a denied
+command would otherwise block the delegation that describes it. See
+[Delegation](delegation.md).
