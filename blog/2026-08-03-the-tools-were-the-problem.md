@@ -1,12 +1,13 @@
 ---
-title: "magus 0.4.0: I think our tools are the problem"
-description: A new name every few months for the same complaint. My case for fixing the CLI instead of bolting an AI integration onto it, plus what shipped in 0.4.0.
+title: "I think our tools are the problem"
+description: A new name every few months for the same complaint. My case for fixing the CLI instead of bolting an AI integration onto it, plus what shipped in this release.
 tags: [release, opinion]
 date: 2026-08-03
 release: v0.4.0
+draft: true
 ---
 
-# magus 0.4.0: I think our tools are the problem
+# I think our tools are the problem
 
 Harness engineering. Loop engineering. Context engineering. Graph engineering.
 Every few months I read a new term for the same job, and the conversation moves
@@ -23,7 +24,7 @@ years, and I am not adding to it.
 
 magus is a task orchestrator for polyglot monorepos: one statically linked
 binary, no second toolchain to install. It is built for humans, and it happens to
-work for agents. This post is why, with the 0.4.0 release notes at the end.
+work for agents. This post is why, with the release notes at the end.
 
 ## Our tools stopped being idiomatic
 
@@ -491,7 +492,7 @@ Durability and consistency are what I want a reputation for. The tool that works
 the way it worked last year, that you can put underneath something and stop
 thinking about. You earn that by not moving, over years.
 
-## What 0.4.0 is
+## What this release is
 
 I am not reinventing the wheel and I am not revolutionizing anything. There is no
 company behind this and no venture capital in it. I wanted a good tool I could be
