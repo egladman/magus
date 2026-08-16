@@ -39,9 +39,6 @@ final MaxAccent = 2;
 // pixels under the title, and every other diagram was guessing at the clearance.
 final HeaderPad = 40;
 
-// Corner radius for connector bends. Clamped down when a segment is too short to seat it.
-final BendRadius = 8;
-
 // Palette carries the nine semantic roles every diagram draws from. Values are whatever the
 // SVG `fill`/`stroke` attributes accept, so a palette is either resolved hex or CSS vars.
 export object Palette {
@@ -91,6 +88,74 @@ export fun darkPalette() > Palette {
         soft = "#6b7383", rule = "#202632", accent = "#f08a59",
         accentTint = "rgba(240,138,89,0.10)", link = "#6a95d8",
     };
+}
+
+// Style carries the presentation literals the painters write into SVG attributes: the two
+// font families, the type ramp, stroke widths, corner radii, dash patterns and the gutter
+// the frame keeps. Every field defaults to the value the renderer hardcoded before this
+// object existed, so Style{} is not merely a sensible baseline: it is the bytes the
+// renderer already ships.
+//
+// The omissions are deliberate. Grid, the budgets and layered()'s column geometry are
+// structural rather than painted: validate() reasons about them, so a per-render override
+// would let a caller ship a figure the validator approved under different numbers. Text
+// baselines and the character-width estimates that size an opaque label mask are calibrated
+// against the sizes below and only ever move together with them.
+//
+// Every default is written as a literal. A field default that names a module constant
+// resolves in the IMPORTER's scope, so it compiles here and fails the moment another
+// project imports this file.
+export object Style {
+    fontFamily: str = "var(--pico-font-family, sans-serif)",           // titles and node names
+    monoFamily: str = "var(--pico-font-family-monospace, monospace)",  // tags, sublabels, eyebrows, legend
+
+    titleSize: int = 20,
+    titleWeight: int = 600,
+    eyebrowSize: int = 8,
+    labelSize: int = 12,        // node and decision names
+    labelWeight: int = 600,
+    subSize: int = 9,
+    tagSize: int = 7,
+    zoneLabelSize: int = 8,
+    edgeLabelSize: int = 8,
+    legendSize: int = 8,
+
+    // Tracking is what keeps an all-caps mono run legible at these sizes: the smaller and
+    // shoutier the run, the more it needs.
+    eyebrowTracking: str = "0.18em",
+    zoneLabelTracking: str = "0.14em",
+    tagTracking: str = "0.08em",
+    edgeLabelTracking: str = "0.06em",
+    legendTracking: str = "0.06em",
+
+    strokeWidth: double = 1.0,      // node, zone, decision and connector outlines
+    hairlineWidth: double = 0.8,    // tag chip, legend rule and legend swatch
+
+    zoneDash: str = "4,4",
+    optionalDash: str = "4,3",
+    edgeDash: str = "5,4",
+
+    nodeRadius: int = 6,
+    zoneRadius: int = 8,
+    chipRadius: int = 2,            // tag chip, edge-label mask, legend swatch
+    bendRadius: int = 8,            // connector bends; clamped down when a segment is too short to seat it
+
+    // The arrowhead is drawn in marker units. refX and the polygon derive from these, so
+    // widening the head keeps its tip on the attach point rather than past it.
+    arrowWidth: int = 8,
+    arrowHeight: int = 6,
+
+    margin: int = 32,               // gutter the header and legend keep from the frame
+    nodePadding: int = 8,           // tag chip inset from the node's top-left corner
+    legendSwatch: int = 10,
+    legendPitch: int = 160,         // start-to-start spacing between legend entries
+}
+
+// defaultStyle names the baseline the way lightPalette() names its own. A customization
+// states only what differs, since every other field already carries the value here:
+// Style{ strokeWidth = 2.0 }.
+export fun defaultStyle() > Style {
+    return Style{};
 }
 
 // Node is one box. Role selects the fill/stroke treatment; sub and tag are optional and
@@ -466,7 +531,7 @@ fun attachPoint(n: Node, side: str, slot: int, slots: int) > [int] {
 // A horizontal route leaves and enters on the left/right sides and crosses on a vertical
 // segment at x = bend; a vertical route is the transpose. When the two points already share
 // an axis the route degenerates to a straight line and no bend is drawn.
-fun connectorPath(x1: int, y1: int, x2: int, y2: int, horizontal: bool, bend: int) > str {
+fun connectorPath(x1: int, y1: int, x2: int, y2: int, horizontal: bool, bend: int, radius: int) > str {
     // A shared axis collapses to a straight line only when no detour was asked for. A
     // return leg (bottom to bottom, say) shares its y with its own source, and taking the
     // shortcut there draws the connector straight through both boxes, which the nodes then
@@ -480,7 +545,7 @@ fun connectorPath(x1: int, y1: int, x2: int, y2: int, horizontal: bool, bend: in
         if (bx == 0) { bx = snap(x1 + (x2 - x1) / 2); }
         // Clamp the radius so a short leg cannot make the two quarter-rounds overlap and
         // bow the connector back on itself.
-        final r = imin(BendRadius, imin(iabs(bx - x1), imin(iabs(x2 - bx), iabs(y2 - y1) / 2)));
+        final r = imin(radius, imin(iabs(bx - x1), imin(iabs(x2 - bx), iabs(y2 - y1) / 2)));
         if (r <= 0) { return "M {x1} {y1} L {bx} {y1} L {bx} {y2} L {x2} {y2}"; }
         final sx = isign(bx - x1);
         final sy = isign(y2 - y1);
@@ -495,7 +560,7 @@ fun connectorPath(x1: int, y1: int, x2: int, y2: int, horizontal: bool, bend: in
 
     var by = bend;
     if (by == 0) { by = snap(y1 + (y2 - y1) / 2); }
-    final r = imin(BendRadius, imin(iabs(by - y1), imin(iabs(y2 - by), iabs(x2 - x1) / 2)));
+    final r = imin(radius, imin(iabs(by - y1), imin(iabs(y2 - by), iabs(x2 - x1) / 2)));
     if (r <= 0) { return "M {x1} {y1} L {x1} {by} L {x2} {by} L {x2} {y2}"; }
     final sy = isign(by - y1);
     final sx = isign(x2 - x1);
@@ -535,7 +600,10 @@ fun edgeStroke(kind: str, p: Palette) > str {
 // Paint order is load-bearing: zones, then connectors and their labels, then nodes, then
 // the legend. Connectors go under nodes so a stroke cannot cross a box face, and nodes go
 // over labels so a mask that strays onto a box is hidden rather than clipped mid-glyph.
-export fun renderSvg(d: Diagram, p: Palette) > str !> str {
+//
+// Style is defaulted rather than overloaded: a caller that only wants the design system as
+// shipped keeps writing renderSvg(d, palette), and one that wants a knob names it.
+export fun renderSvg(d: Diagram, p: Palette, s: Style = Style{}) > str !> str {
     final errs = validate(d);
     if (errs.len() > 0) {
         throw "diagram \"{d.id}\": " + errs.join("; ");
@@ -551,15 +619,15 @@ export fun renderSvg(d: Diagram, p: Palette) > str !> str {
         + " aria-labelledby=\"{d.id}-title {d.id}-desc\" class=\"magus-diagram\">";
     svg = svg + "<title id=\"{d.id}-title\">" + escapeSvg(d.title) + "</title>";
     svg = svg + "<desc id=\"{d.id}-desc\">" + escapeSvg(d.desc) + "</desc>";
-    svg = svg + renderMarkers(d, p);
+    svg = svg + renderMarkers(d, p, s);
     svg = svg + "<rect width=\"100%\" height=\"100%\" fill=\"{p.paper}\"/>";
-    svg = svg + renderHeader(d, p);
+    svg = svg + renderHeader(d, p, s);
     svg = svg + "<g transform=\"translate(0,{pad})\">";
-    foreach (z in d.zones) { svg = svg + renderZone(z, p); }
-    foreach (e in d.edges) { svg = svg + renderEdge(d, e, p); }
-    foreach (e in d.edges) { svg = svg + renderEdgeLabel(d, e, p); }
-    foreach (n in d.nodes) { svg = svg + renderNode(n, p); }
-    svg = svg + renderLegend(d, p);
+    foreach (z in d.zones) { svg = svg + renderZone(z, p, s); }
+    foreach (e in d.edges) { svg = svg + renderEdge(d, e, p, s); }
+    foreach (e in d.edges) { svg = svg + renderEdgeLabel(d, e, p, s); }
+    foreach (n in d.nodes) { svg = svg + renderNode(n, p, s); }
+    svg = svg + renderLegend(d, p, s);
     svg = svg + "</g>";
     return svg + "</svg>";
 }
@@ -567,39 +635,40 @@ export fun renderSvg(d: Diagram, p: Palette) > str !> str {
 // renderMarkers defines one arrowhead per connector kind. All three are always emitted:
 // an arrowhead referencing a marker that was not defined renders as a bare line, and which
 // kinds a diagram uses is not worth tracking to save 200 bytes.
-fun renderMarkers(d: Diagram, p: Palette) > str {
+fun renderMarkers(d: Diagram, p: Palette, s: Style) > str {
     var svg = "<defs>";
     final kinds = ["default", "accent", "link"];
+    final half = s.arrowHeight / 2;
     foreach (k in kinds) {
-        svg = svg + "<marker id=\"{d.id}-arrow-{k}\" markerWidth=\"8\" markerHeight=\"6\""
-            + " refX=\"7\" refY=\"3\" orient=\"auto\">"
-            + "<polygon points=\"0 0, 8 3, 0 6\" fill=\"" + edgeStroke(k, p) + "\"/></marker>";
+        svg = svg + "<marker id=\"{d.id}-arrow-{k}\" markerWidth=\"{s.arrowWidth}\" markerHeight=\"{s.arrowHeight}\""
+            + " refX=\"{s.arrowWidth - 1}\" refY=\"{half}\" orient=\"auto\">"
+            + "<polygon points=\"0 0, {s.arrowWidth} {half}, 0 {s.arrowHeight}\" fill=\"" + edgeStroke(k, p) + "\"/></marker>";
     }
     return svg + "</defs>";
 }
 
-fun renderHeader(d: Diagram, p: Palette) > str {
+fun renderHeader(d: Diagram, p: Palette, s: Style) > str {
     var svg = "";
     if (d.eyebrow != "") {
-        svg = svg + "<text x=\"32\" y=\"32\" fill=\"{p.soft}\" font-size=\"8\""
-            + " font-family=\"var(--pico-font-family-monospace, monospace)\" style=\"font-variant-ligatures:none\""
-            + " letter-spacing=\"0.18em\">" + escapeSvg(d.eyebrow.upper()) + "</text>";
+        svg = svg + "<text x=\"{s.margin}\" y=\"32\" fill=\"{p.soft}\" font-size=\"{s.eyebrowSize}\""
+            + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\""
+            + " letter-spacing=\"{s.eyebrowTracking}\">" + escapeSvg(d.eyebrow.upper()) + "</text>";
     }
     if (d.title != "") {
-        svg = svg + "<text x=\"32\" y=\"60\" fill=\"{p.ink}\" font-size=\"20\" font-weight=\"600\""
-            + " font-family=\"var(--pico-font-family, sans-serif)\">"
+        svg = svg + "<text x=\"{s.margin}\" y=\"60\" fill=\"{p.ink}\" font-size=\"{s.titleSize}\" font-weight=\"{s.titleWeight}\""
+            + " font-family=\"{s.fontFamily}\">"
             + escapeSvg(d.title) + "</text>";
     }
     return svg;
 }
 
-fun renderZone(z: Zone, p: Palette) > str {
-    var svg = "<rect x=\"{z.x}\" y=\"{z.y}\" width=\"{z.w}\" height=\"{z.h}\" rx=\"8\""
-        + " fill=\"none\" stroke=\"{p.rule}\" stroke-width=\"1\" stroke-dasharray=\"4,4\"/>";
+fun renderZone(z: Zone, p: Palette, s: Style) > str {
+    var svg = "<rect x=\"{z.x}\" y=\"{z.y}\" width=\"{z.w}\" height=\"{z.h}\" rx=\"{s.zoneRadius}\""
+        + " fill=\"none\" stroke=\"{p.rule}\" stroke-width=\"{s.strokeWidth}\" stroke-dasharray=\"{s.zoneDash}\"/>";
     if (z.label != "") {
-        svg = svg + "<text x=\"{z.x + 12}\" y=\"{z.y + 20}\" fill=\"{p.soft}\" font-size=\"8\""
-            + " font-family=\"var(--pico-font-family-monospace, monospace)\" style=\"font-variant-ligatures:none\""
-            + " letter-spacing=\"0.14em\">" + escapeSvg(z.label.upper()) + "</text>";
+        svg = svg + "<text x=\"{z.x + 12}\" y=\"{z.y + 20}\" fill=\"{p.soft}\" font-size=\"{s.zoneLabelSize}\""
+            + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\""
+            + " letter-spacing=\"{s.zoneLabelTracking}\">" + escapeSvg(z.label.upper()) + "</text>";
     }
     return svg;
 }
@@ -607,41 +676,41 @@ fun renderZone(z: Zone, p: Palette) > str {
 // renderDecision paints the diamond. The label sits on the centre line rather than the
 // stacked layout a box uses: a diamond's widest run is its middle, so a two-line stack
 // would push text out past the sloping sides.
-fun renderDecision(n: Node, p: Palette) > str {
+fun renderDecision(n: Node, p: Palette, s: Style) > str {
     final cx = n.x + n.w / 2;
     final cy = n.y + n.h / 2;
     final pts = "{cx},{n.y} {n.x + n.w},{cy} {cx},{n.y + n.h} {n.x},{cy}";
     var svg = "<polygon points=\"" + pts + "\" fill=\"{p.paper}\"/>";
     svg = svg + "<polygon points=\"" + pts + "\" fill=\"" + nodeFill("default", p) + "\""
-        + " stroke=\"" + nodeStroke("default", p) + "\" stroke-width=\"1\"/>";
-    svg = svg + "<text x=\"{cx}\" y=\"{cy + 4}\" fill=\"{p.ink}\" font-size=\"12\" font-weight=\"600\""
-        + " font-family=\"var(--pico-font-family, sans-serif)\" text-anchor=\"middle\">"
+        + " stroke=\"" + nodeStroke("default", p) + "\" stroke-width=\"{s.strokeWidth}\"/>";
+    svg = svg + "<text x=\"{cx}\" y=\"{cy + 4}\" fill=\"{p.ink}\" font-size=\"{s.labelSize}\" font-weight=\"{s.labelWeight}\""
+        + " font-family=\"{s.fontFamily}\" text-anchor=\"middle\">"
         + escapeSvg(n.label) + "</text>";
     return svg;
 }
 
-fun renderNode(n: Node, p: Palette) > str {
+fun renderNode(n: Node, p: Palette, s: Style) > str {
     final cx = n.x + n.w / 2;
     // A decision is a diamond inscribed in the node box, so its vertices land exactly on
     // the box edge midpoints attachPoint already returns. Same mask-then-shape order as a
     // box: the opaque under-layer stops a connector routed behind it showing through.
-    if (n.role == "decision") { return renderDecision(n, p); }
+    if (n.role == "decision") { return renderDecision(n, p, s); }
     // An opaque mask under the styled box stops a connector routed behind the node from
     // showing through a translucent fill such as accentTint.
-    var svg = "<rect x=\"{n.x}\" y=\"{n.y}\" width=\"{n.w}\" height=\"{n.h}\" rx=\"6\" fill=\"{p.paper}\"/>";
+    var svg = "<rect x=\"{n.x}\" y=\"{n.y}\" width=\"{n.w}\" height=\"{n.h}\" rx=\"{s.nodeRadius}\" fill=\"{p.paper}\"/>";
     var dash = "";
-    if (n.role == "optional") { dash = " stroke-dasharray=\"4,3\""; }
-    svg = svg + "<rect x=\"{n.x}\" y=\"{n.y}\" width=\"{n.w}\" height=\"{n.h}\" rx=\"6\""
+    if (n.role == "optional") { dash = " stroke-dasharray=\"{s.optionalDash}\""; }
+    svg = svg + "<rect x=\"{n.x}\" y=\"{n.y}\" width=\"{n.w}\" height=\"{n.h}\" rx=\"{s.nodeRadius}\""
         + " fill=\"" + nodeFill(n.role, p) + "\" stroke=\"" + nodeStroke(n.role, p) + "\""
-        + " stroke-width=\"1\"" + dash + "/>";
+        + " stroke-width=\"{s.strokeWidth}\"" + dash + "/>";
 
     if (n.tag != "") {
         final tw = snap(n.tag.len() * 6 + 12);
-        svg = svg + "<rect x=\"{n.x + 8}\" y=\"{n.y + 8}\" width=\"{tw}\" height=\"12\" rx=\"2\""
-            + " fill=\"none\" stroke=\"" + nodeStroke(n.role, p) + "\" stroke-width=\"0.8\"/>"
-            + "<text x=\"{n.x + 8 + tw / 2}\" y=\"{n.y + 17}\" fill=\"{p.soft}\" font-size=\"7\""
-            + " font-family=\"var(--pico-font-family-monospace, monospace)\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
-            + " letter-spacing=\"0.08em\">" + escapeSvg(n.tag.upper()) + "</text>";
+        svg = svg + "<rect x=\"{n.x + s.nodePadding}\" y=\"{n.y + s.nodePadding}\" width=\"{tw}\" height=\"12\" rx=\"{s.chipRadius}\""
+            + " fill=\"none\" stroke=\"" + nodeStroke(n.role, p) + "\" stroke-width=\"{s.hairlineWidth}\"/>"
+            + "<text x=\"{n.x + s.nodePadding + tw / 2}\" y=\"{n.y + 17}\" fill=\"{p.soft}\" font-size=\"{s.tagSize}\""
+            + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
+            + " letter-spacing=\"{s.tagTracking}\">" + escapeSvg(n.tag.upper()) + "</text>";
     }
 
     // A tag chip occupies y+8 through y+20, so a tagged node stacks its text from the top;
@@ -653,23 +722,23 @@ fun renderNode(n: Node, p: Palette) > str {
     } else {
         if (n.sub == "") { ny = n.y + n.h / 2 + 4; }
     }
-    svg = svg + "<text x=\"{cx}\" y=\"{ny}\" fill=\"{p.ink}\" font-size=\"12\" font-weight=\"600\""
-        + " font-family=\"var(--pico-font-family, sans-serif)\" text-anchor=\"middle\">"
+    svg = svg + "<text x=\"{cx}\" y=\"{ny}\" fill=\"{p.ink}\" font-size=\"{s.labelSize}\" font-weight=\"{s.labelWeight}\""
+        + " font-family=\"{s.fontFamily}\" text-anchor=\"middle\">"
         + escapeSvg(n.label) + "</text>";
     if (n.sub != "") {
-        svg = svg + "<text x=\"{cx}\" y=\"{ny + 16}\" fill=\"{p.soft}\" font-size=\"9\""
-            + " font-family=\"var(--pico-font-family-monospace, monospace)\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\">"
+        svg = svg + "<text x=\"{cx}\" y=\"{ny + 16}\" fill=\"{p.soft}\" font-size=\"{s.subSize}\""
+            + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\">"
             + escapeSvg(n.sub) + "</text>";
     }
     return svg;
 }
 
-fun renderEdge(d: Diagram, e: Edge, p: Palette) > str {
+fun renderEdge(d: Diagram, e: Edge, p: Palette, s: Style) > str {
     final geo = edgeGeometry(d, e);
     var dash = "";
-    if (e.dashed) { dash = " stroke-dasharray=\"5,4\""; }
-    return "<path d=\"" + connectorPath(geo[0], geo[1], geo[2], geo[3], geo[4] == 1, e.bend) + "\""
-        + " fill=\"none\" stroke=\"" + edgeStroke(e.kind, p) + "\" stroke-width=\"1\"" + dash
+    if (e.dashed) { dash = " stroke-dasharray=\"{s.edgeDash}\""; }
+    return "<path d=\"" + connectorPath(geo[0], geo[1], geo[2], geo[3], geo[4] == 1, e.bend, radius: s.bendRadius) + "\""
+        + " fill=\"none\" stroke=\"" + edgeStroke(e.kind, p) + "\" stroke-width=\"{s.strokeWidth}\"" + dash
         + " marker-end=\"url(#{d.id}-arrow-{e.kind})\"/>";
 }
 
@@ -692,7 +761,7 @@ fun edgeGeometry(d: Diagram, e: Edge) > [int] {
 // renderEdgeLabel places the label off the crossing segment with a 6px gap, never on the
 // stroke. Labels are painted before nodes, so one that strays onto a box is covered rather
 // than left sitting on the border as a fragment.
-fun renderEdgeLabel(d: Diagram, e: Edge, p: Palette) > str {
+fun renderEdgeLabel(d: Diagram, e: Edge, p: Palette, s: Style) > str {
     if (e.label == "") { return ""; }
     final geo = edgeGeometry(d, e);
     final x1 = geo[0];
@@ -707,10 +776,10 @@ fun renderEdgeLabel(d: Diagram, e: Edge, p: Palette) > str {
     if (x1 == x2) {
         final lx = x1 + 12 + w / 2;
         final vy = snap(y1 + (y2 - y1) / 2);
-        return "<rect x=\"{lx - w / 2}\" y=\"{vy - 8}\" width=\"{w}\" height=\"12\" rx=\"2\" fill=\"{p.paper}\"/>"
-            + "<text x=\"{lx}\" y=\"{vy + 1}\" fill=\"{p.soft}\" font-size=\"8\""
-            + " font-family=\"var(--pico-font-family-monospace, monospace)\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
-            + " letter-spacing=\"0.06em\">" + escapeSvg(e.label.upper()) + "</text>";
+        return "<rect x=\"{lx - w / 2}\" y=\"{vy - 8}\" width=\"{w}\" height=\"12\" rx=\"{s.chipRadius}\" fill=\"{p.paper}\"/>"
+            + "<text x=\"{lx}\" y=\"{vy + 1}\" fill=\"{p.soft}\" font-size=\"{s.edgeLabelSize}\""
+            + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
+            + " letter-spacing=\"{s.edgeLabelTracking}\">" + escapeSvg(e.label.upper()) + "</text>";
     }
 
     // Center on the crossing segment: its midpoint is open canvas by construction, whereas
@@ -728,28 +797,28 @@ fun renderEdgeLabel(d: Diagram, e: Edge, p: Palette) > str {
     }
     final ly = my - 14;
 
-    return "<rect x=\"{mx - w / 2}\" y=\"{ly - 8}\" width=\"{w}\" height=\"12\" rx=\"2\" fill=\"{p.paper}\"/>"
-        + "<text x=\"{mx}\" y=\"{ly + 1}\" fill=\"{p.soft}\" font-size=\"8\""
-        + " font-family=\"var(--pico-font-family-monospace, monospace)\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
-        + " letter-spacing=\"0.06em\">" + escapeSvg(e.label.upper()) + "</text>";
+    return "<rect x=\"{mx - w / 2}\" y=\"{ly - 8}\" width=\"{w}\" height=\"12\" rx=\"{s.chipRadius}\" fill=\"{p.paper}\"/>"
+        + "<text x=\"{mx}\" y=\"{ly + 1}\" fill=\"{p.soft}\" font-size=\"{s.edgeLabelSize}\""
+        + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\" text-anchor=\"middle\""
+        + " letter-spacing=\"{s.edgeLabelTracking}\">" + escapeSvg(e.label.upper()) + "</text>";
 }
 
 // renderLegend draws the strip below the figure. The design system puts it outside the
 // diagram area, so callers size the viewBox with 60px of room at the bottom.
-fun renderLegend(d: Diagram, p: Palette) > str {
+fun renderLegend(d: Diagram, p: Palette, s: Style) > str {
     if (d.legend.len() == 0) { return ""; }
-    final y = d.height - 32;
-    var svg = "<line x1=\"32\" y1=\"{y - 16}\" x2=\"{d.width - 32}\" y2=\"{y - 16}\""
-        + " stroke=\"{p.rule}\" stroke-width=\"0.8\"/>";
-    var x = 32;
+    final y = d.height - s.margin;
+    var svg = "<line x1=\"{s.margin}\" y1=\"{y - 16}\" x2=\"{d.width - s.margin}\" y2=\"{y - 16}\""
+        + " stroke=\"{p.rule}\" stroke-width=\"{s.hairlineWidth}\"/>";
+    var x = s.margin;
     foreach (item in d.legend) {
-        svg = svg + "<rect x=\"{x}\" y=\"{y - 8}\" width=\"10\" height=\"10\" rx=\"2\""
+        svg = svg + "<rect x=\"{x}\" y=\"{y - 8}\" width=\"{s.legendSwatch}\" height=\"{s.legendSwatch}\" rx=\"{s.chipRadius}\""
             + " fill=\"" + nodeFill(item.role, p) + "\" stroke=\"" + nodeStroke(item.role, p)
-            + "\" stroke-width=\"0.8\"/>"
-            + "<text x=\"{x + 18}\" y=\"{y + 1}\" fill=\"{p.soft}\" font-size=\"8\""
-            + " font-family=\"var(--pico-font-family-monospace, monospace)\" style=\"font-variant-ligatures:none\""
-            + " letter-spacing=\"0.06em\">" + escapeSvg(item.label.upper()) + "</text>";
-        x = x + 160;
+            + "\" stroke-width=\"{s.hairlineWidth}\"/>"
+            + "<text x=\"{x + 18}\" y=\"{y + 1}\" fill=\"{p.soft}\" font-size=\"{s.legendSize}\""
+            + " font-family=\"{s.monoFamily}\" style=\"font-variant-ligatures:none\""
+            + " letter-spacing=\"{s.legendTracking}\">" + escapeSvg(item.label.upper()) + "</text>";
+        x = x + s.legendPitch;
     }
     return svg;
 }
@@ -851,12 +920,12 @@ test "attachPoint spreads slots along the edge" {
 // line rather than emit a bend, and a route across both axes must cross on a single
 // segment, which is what keeps a diagonal unrepresentable.
 test "a shared axis routes straight" {
-    assert\equal(connectorPath(0, 40, 200, 40, true, 0), "M 0 40 L 200 40", "same y");
-    assert\equal(connectorPath(40, 0, 40, 200, false, 0), "M 40 0 L 40 200", "same x");
+    assert\equal(connectorPath(0, 40, 200, 40, true, 0, radius: defaultStyle().bendRadius), "M 0 40 L 200 40", "same y");
+    assert\equal(connectorPath(40, 0, 40, 200, false, 0, radius: defaultStyle().bendRadius), "M 40 0 L 40 200", "same x");
 }
 
 test "a two-axis route bends on one crossing segment" {
-    final path = connectorPath(0, 0, 200, 120, true, 100);
+    final path = connectorPath(0, 0, 200, 120, true, 100, radius: defaultStyle().bendRadius);
     std\assert(path.startsWith("M 0 0"), message: "starts at the source attach point");
     std\assert(path.endsWith("L 200 120"), message: "ends at the destination attach point");
     std\assert(path.indexOf("Q") != null, message: "corners are rounded, not mitred");
@@ -875,6 +944,48 @@ test "an invalid diagram fails the render rather than shipping crooked" {
     };
     final svg = renderSvg(bad, lightPalette()) catch "threw";
     assert\equal(svg, "threw", "renderSvg throws on a validation finding");
+}
+
+// The bytes pinned here are the ones Style was extracted FROM. Every field defaults to the
+// literal the painters carried before the object existed, so a default render has to come
+// out byte-identical to the renderer that had no Style at all. A diff nobody intended is a
+// default that drifted; a deliberate change to the design system regenerates this.
+test "the default Style renders the pre-Style bytes" {
+    final want = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 280" width="480" height="280" role="img" aria-labelledby="t-title t-desc" class="magus-diagram">`
+        + `<title id="t-title">Two boxes</title><desc id="t-desc">a and b</desc><defs>`
+        + `<marker id="t-arrow-default" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">`
+        + `<polygon points="0 0, 8 3, 0 6" fill="#646b79"/></marker>`
+        + `<marker id="t-arrow-accent" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">`
+        + `<polygon points="0 0, 8 3, 0 6" fill="#bc4c00"/></marker>`
+        + `<marker id="t-arrow-link" markerWidth="8" markerHeight="6" refX="7" refY="3" orient="auto">`
+        + `<polygon points="0 0, 8 3, 0 6" fill="#2e5aa8"/></marker></defs>`
+        + `<rect width="100%" height="100%" fill="#ffffff"/>`
+        + `<text x="32" y="60" fill="#373c44" font-size="20" font-weight="600" font-family="var(--pico-font-family, sans-serif)">Two boxes</text>`
+        + `<g transform="translate(0,40)">`
+        + `<path d="M 192 140 L 288 140" fill="none" stroke="#646b79" stroke-width="1" marker-end="url(#t-arrow-default)"/>`
+        + `<rect x="32" y="112" width="160" height="56" rx="6" fill="#ffffff"/>`
+        + `<rect x="32" y="112" width="160" height="56" rx="6" fill="#f3f4f6" stroke="#dce3eb" stroke-width="1"/>`
+        + `<text x="112" y="144" fill="#373c44" font-size="12" font-weight="600" font-family="var(--pico-font-family, sans-serif)" text-anchor="middle">A</text>`
+        + `<rect x="288" y="112" width="160" height="56" rx="6" fill="#ffffff"/>`
+        + `<rect x="288" y="112" width="160" height="56" rx="6" fill="#f3f4f6" stroke="#dce3eb" stroke-width="1"/>`
+        + `<text x="368" y="144" fill="#373c44" font-size="12" font-weight="600" font-family="var(--pico-font-family, sans-serif)" text-anchor="middle">B</text>`
+        + `</g></svg>`;
+    assert\equal(renderSvg(twoBox(), lightPalette()) catch "threw", want, "twoBox at the shipped defaults");
+    assert\equal(renderSvg(twoBox(), lightPalette(), defaultStyle()) catch "threw", want,
+        "naming the default explicitly changes nothing");
+}
+
+// A knob nothing reaches is not customization. Three field kinds at once - a double, an int
+// and a string - because each one reaches its attribute by a different formatting path.
+test "a customized Style field reaches the attribute" {
+    final styled = renderSvg(twoBox(), lightPalette(),
+        Style{ strokeWidth = 2.0, nodeRadius = 12, fontFamily = "Iosevka" }) catch "threw";
+    std\assert(styled.indexOf("stroke-width=\"2\"") != null, message: "the wider stroke landed");
+    std\assert(styled.indexOf("rx=\"12\"") != null, message: "the rounder corner landed");
+    std\assert(styled.indexOf("font-family=\"Iosevka\"") != null, message: "the family landed");
+    std\assert(styled.indexOf("stroke-width=\"1\"") == null, message: "and the default is gone from it");
+    final plain = renderSvg(twoBox(), lightPalette()) catch "threw";
+    std\assert(plain.indexOf("stroke-width=\"2\"") == null, message: "a default render is untouched by it");
 }
 
 // inlineDiagrams swaps a diagram reference in rendered HTML for the SVG itself, keyed by
@@ -957,13 +1068,13 @@ test "a diagram picture is found after an unrelated one" {
 test "an explicit bend beats the shared-axis shortcut" {
     // Both ends on y=224, detouring via y=288: a straight line here would run back through
     // the boxes it connects.
-    final path = connectorPath(772, 224, 180, 224, false, 288);
+    final path = connectorPath(772, 224, 180, 224, false, 288, radius: defaultStyle().bendRadius);
     std\assert(path.indexOf("288") != null, message: "the route reaches the declared bend");
     std\assert(path != "M 772 224 L 180 224", message: "not the straight shortcut");
 }
 
 test "a shared axis with no bend still routes straight" {
-    assert\equal(connectorPath(0, 40, 200, 40, true, 0), "M 0 40 L 200 40", "unchanged");
+    assert\equal(connectorPath(0, 40, 200, 40, true, 0, radius: defaultStyle().bendRadius), "M 0 40 L 200 40", "unchanged");
 }
 
 // LayeredItem is one node handed to layered(): an id, its display label, and the ids it
