@@ -2,6 +2,7 @@ affected/
 agents/
 blog/
 blog/2026/07/01/hello-blog/
+blog/2026/08/03/the-tools-were-the-problem/
 breaking-changes/
 browser-bridge/
 buzz/modules/
@@ -197,6 +198,7 @@ guides/integrations/agents/any-host/
 guides/integrations/agents/claude-code/
 guides/integrations/agents/codex/
 guides/integrations/agents/cursor/
+guides/integrations/agents/delegation/
 guides/integrations/agents/guard-templates/
 guides/integrations/agents/guard/
 guides/integrations/agents/notifications/
@@ -489,6 +491,7 @@ spells/py/
 spells/rs/
 spells/ts/
 tags/
+tags/activity/
 tags/adoption/
 tags/affected/
 tags/agent-install/
