@@ -55,7 +55,13 @@ import { h } from "../view";
 
 // Must equal the row height in diff.css. The virtualizer computes positions from it rather
 // than measuring, so a mismatch shows as rows drifting out of the viewport while scrolling.
-const ROW_HEIGHT = 20;
+// 24, not 20. The file-header row carries an M/A/D/R badge and at 20px it sat wall-to-wall
+// in its own row with no air around it. Padding cannot buy that room: the row is height-locked
+// (box-sizing is border-box, so padding eats the 20px rather than adding to it) and the
+// virtualizer positions every row at index * ROW_HEIGHT, so a taller file row alone would
+// desynchronise the scroll math. Raising the shared height is the change that keeps the
+// invariant - it gives the badge its margin and the whole stream a little more air.
+const ROW_HEIGHT = 24;
 // Rows rendered beyond the viewport so a fast scroll never shows blank space. Bounded and
 // constant, unlike the diff.
 const OVERSCAN = 24;
@@ -240,7 +246,10 @@ export function activate(host: HTMLElement): () => void {
     session: null,
     viewed: new Set(),
     digestByRow: new Map(),
-    showGenerated: false,
+    // Open. The activity view folds its sections shut because a run's output is long and
+    // mostly uninteresting; a changeset's file list is the thing the reader came for, so the
+    // sidebar starts showing everything and folds on request rather than the other way round.
+    showGenerated: true,
     overview: false,
     phase: "loading",
   };
@@ -553,18 +562,14 @@ export function activate(host: HTMLElement): () => void {
   const renderToolbar = (): void => {
     const s = stats(state.changeset);
     const chips: HTMLElement[] = [];
-    // Said HERE and not only in the shell's status bar: this surface is tileable, so a reader
-    // can be looking at the toolbar with the rest of the console off screen, and every number
-    // beside it would otherwise read as a measurement of their own tree.
-    if (demo) {
-      chips.push(
-        label(
-          "demo data",
-          "pf-m-purple",
-          "A fabricated changeset. This is not your working tree, and no daemon is connected.",
-        ),
-      );
-    }
+    // Demo state is NOT chipped here. Every other surface says it in one place - the shell's
+    // connection pill - and a second badge in this toolbar made the diff the one surface that
+    // announced it twice, in a style nothing else uses.
+    //
+    // The tileable case (toolbar on screen, status bar hidden, numbers reading as your own
+    // tree) is real and is the reason this existed. It is answered by the pill rather than by
+    // a per-surface badge: fixing it here only would leave every other tileable surface with
+    // the same gap and a different answer.
     chips.push(
       label(
         `${s.files} ${s.files === 1 ? "file" : "files"}`,
@@ -653,10 +658,20 @@ export function activate(host: HTMLElement): () => void {
       frag.append(item);
     });
     if (state.changeset.generated.length > 0) {
-      const g = h("button", "console-diff-sidebar__group");
+      // Same fold affordance as an activity section - the twist caret plus aria-expanded and
+      // data-collapsed - so a collapsible in the sidebar reads the way collapsibles read
+      // everywhere else in the console. It was a bare button styled like nothing else.
+      const g = h("button", "console-diff-sidebar__group console-render-section__head");
       g.type = "button";
-      g.textContent = `${state.changeset.generated.length} generated`;
-      g.title = "Declared target outputs, folded. Press . to expand.";
+      g.setAttribute("aria-expanded", state.showGenerated ? "true" : "false");
+      const twist = h("span", "console-render-section__twist");
+      twist.setAttribute("aria-hidden", "true");
+      const gLabel = h("span", "console-render-section__title");
+      gLabel.textContent = `${state.changeset.generated.length} generated`;
+      g.append(twist, gLabel);
+      g.title = state.showGenerated
+        ? "Declared target outputs. Press . to fold."
+        : "Declared target outputs, folded. Press . to expand.";
       g.addEventListener("click", () => void toggleGenerated());
       frag.append(g);
     }

@@ -161,8 +161,8 @@
 .console-diff-row {
   display: flex;
   align-items: center;
-  height: 20px; /* MUST equal ROW_HEIGHT in main.ts */
-  line-height: 20px;
+  height: 24px; /* MUST equal ROW_HEIGHT in main.ts */
+  line-height: 24px;
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--sm);
   white-space: pre;
@@ -394,7 +394,7 @@
    * geometry is fixed and non-negotiable - every row is ROW_HEIGHT - so the TEXT has to fit
    * the row rather than the row growing to fit the text. */
   font-size: var(--pf-t--global--font--size--xs);
-  line-height: 20px;
+  line-height: 24px;
   overflow: hidden;
 }
 
@@ -468,7 +468,7 @@
   color: var(--pf-t--global--text--color--subtle);
   font-family: var(--pf-t--global--font--family--body);
   font-size: var(--pf-t--global--font--size--xs);
-  line-height: 20px;
+  line-height: 24px;
   overflow: hidden;
   border-inline-start: 2px dotted var(--pf-t--global--border--color--subtle);
 }
