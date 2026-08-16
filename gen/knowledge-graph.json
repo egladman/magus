@@ -2022,12 +2022,12 @@
       }
     },
     {
-      "id": "doc:console/PATTERNFLY.md",
+      "id": "doc:console/README.md",
       "kind": "doc",
-      "label": "console/PATTERNFLY.md",
-      "source": "console/PATTERNFLY.md",
+      "label": "console/README.md",
+      "source": "console/README.md",
       "attrs": {
-        "role": "doc"
+        "role": "readme"
       }
     },
     {
@@ -8148,7 +8148,7 @@
       "kind": "function",
       "label": "conventionAnchorsIn",
       "doc": "conventionAnchorsIn returns the convention sections this page can actually send a reader to, read off the hints injectConventionHints already placed in the content.  Reading the INJECTED markup rather than re-deriving which markers the page has is what keeps the two from drifting: whatever the hints link to is exactly what the drawer carries, by construction, so adding a fourth hint kind needs no change here.",
-      "source": "docs/engine/nav.buzz:322",
+      "source": "docs/engine/nav.buzz:338",
       "attrs": {
         "exported": "true"
       }
@@ -8158,7 +8158,7 @@
       "kind": "function",
       "label": "keepConventionSections",
       "doc": "keepConventionSections is keepGlossarySections one heading level up: the conventions page is H2 sections where the glossary is H3 entries, so a section runs from its own <h2 id=\"> to the next one. Order is preserved.",
-      "source": "docs/engine/nav.buzz:294",
+      "source": "docs/engine/nav.buzz:310",
       "attrs": {
         "exported": "true"
       }
@@ -8168,13 +8168,13 @@
       "kind": "function",
       "label": "keepGlossarySections",
       "doc": "keepGlossarySections keeps only the <h3 id=\"...\"> term blocks whose anchor is in keep, in document order, and drops everything else. Same scan injectBacklinks uses: a term block runs from its own <h3 id=\"> to the next <h3 id=\"> or <h2>.",
-      "source": "docs/engine/nav.buzz:267"
+      "source": "docs/engine/nav.buzz:283"
     },
     {
       "id": "function:docs/engine/nav.buzz:loadReferenceContent",
       "kind": "function",
       "label": "loadReferenceContent",
-      "source": "docs/engine/nav.buzz:257",
+      "source": "docs/engine/nav.buzz:273",
       "attrs": {
         "exported": "true"
       }
@@ -8184,7 +8184,7 @@
       "kind": "function",
       "label": "refDocHtml",
       "doc": "refDocHtml renders one docs/*.md to content HTML and templatizes its root-relative links.",
-      "source": "docs/engine/nav.buzz:248",
+      "source": "docs/engine/nav.buzz:264",
       "attrs": {
         "exported": "true"
       }
@@ -8194,7 +8194,7 @@
       "kind": "function",
       "label": "renderAnnouncementBar",
       "doc": "renderAnnouncementBar renders a dismissible strip announcing the newest shipped release, or \"\" when none has shipped. The version comes from loadReleases (releases/*.yaml), so it is drift-stable; announcement.js hides it once the reader dismisses that version and re-shows it on the next release.  Takes root (the relative-depth prefix) like every other chrome renderer, because the optional second link points at a post on this site. The release link stays an absolute GitHub URL, so the bar needed no depth unt",
-      "source": "docs/engine/nav.buzz:430",
+      "source": "docs/engine/nav.buzz:446",
       "attrs": {
         "exported": "true"
       }
@@ -8214,7 +8214,7 @@
       "kind": "function",
       "label": "renderReferenceDrawer",
       "doc": "renderReferenceDrawer shows the page ITS vocabulary, not the whole glossary.  The drawer used to inline all 47 terms on every page, identically. A reference panel that is the same everywhere answers no question you had on the page you are reading - it is a second copy of /glossary/ that happens to slide out. Scoping it to the terms this page actually uses is what makes opening it worth doing.  pageTerms is the forward-built map (see Site): it is complete before the walk starts, so the first page rendered ge",
-      "source": "docs/engine/nav.buzz:350",
+      "source": "docs/engine/nav.buzz:366",
       "attrs": {
         "exported": "true"
       }
@@ -8234,7 +8234,7 @@
       "kind": "function",
       "label": "renderSiteFooter",
       "doc": "renderSiteFooter renders the shared one-line attribution footer: root-relative site links (Search, /public/ files) reachable from every page, then absolute GitHub/Buzz links. The License link points at the pinned site.metaBranch. root is the prefix back to gen/'s root, so the site links resolve at any depth.",
-      "source": "docs/engine/nav.buzz:407",
+      "source": "docs/engine/nav.buzz:423",
       "attrs": {
         "exported": "true"
       }
@@ -8244,7 +8244,7 @@
       "kind": "function",
       "label": "renderSiteNav",
       "doc": "renderSiteNav renders the shared top bar (brand + section links + settings gear). One definition for every page, so adding a nav item lands everywhere at once. root is the prefix back to gen/'s root; active is the current section's key (or \"\"). withRef shows the Reference drawer trigger only where the page ships #ref-drawer + ref-drawer.js and loads console.css (which sizes the icon button): the docs and playground. The 404 and offline pages have no reference content, so they pass false to omit the button.",
-      "source": "docs/engine/nav.buzz:177",
+      "source": "docs/engine/nav.buzz:193",
       "attrs": {
         "exported": "true"
       }
@@ -14710,28 +14710,28 @@
       "kind": "function",
       "label": "biomeCheck",
       "doc": "biome-check is biome's lint/analyze pass (eslint's role, if your project chose Biome over eslint+prettier - the magusfile decides which composes into lint, not this spell). --write and --reporter=github verified against the current Biome CLI docs (biomejs.dev/reference/cli).",
-      "source": "spells/typescript/spell.buzz:143"
+      "source": "spells/typescript/spell.buzz:156"
     },
     {
       "id": "function:spells/typescript/spell.buzz:biomeFormat",
       "kind": "function",
       "label": "biomeFormat",
       "doc": "biome-format is biome's formatter (prettier's role). Unlike prettier/ruffFormat, `biome format` has no --check flag to drop: it is read-only by default (reports differences, writes nothing) and --write applies them, so rw ADDS a flag instead of removing one.",
-      "source": "spells/typescript/spell.buzz:154"
+      "source": "spells/typescript/spell.buzz:167"
     },
     {
       "id": "function:spells/typescript/spell.buzz:devServer",
       "kind": "function",
       "label": "devServer",
       "doc": "dev-server runs the project's package.json \"dev\" script via the package manager - framework-neutral (Vite, Next, webpack-dev-server, ...). No readiness probe is declared: the port and startup signal vary by framework, so guessing one would be wrong more often than right (readiness is optional - see services.md). A magusfile that needs to block on readiness for its specific dev server can declare its own service op instead.",
-      "source": "spells/typescript/spell.buzz:197"
+      "source": "spells/typescript/spell.buzz:210"
     },
     {
       "id": "function:spells/typescript/spell.buzz:eslint",
       "kind": "function",
       "label": "eslint",
       "doc": "eslint has no built-in \"github\" formatter (unlike ruff's --output-format=github); \"unix\" is the built-in, no-extra-devDependency formatter closest to a CI-friendly, one-line-per-problem shape for annotation/regex parsing.",
-      "source": "spells/typescript/spell.buzz:163"
+      "source": "spells/typescript/spell.buzz:176"
     },
     {
       "id": "function:spells/typescript/spell.buzz:mgs_getLanguage",
@@ -14774,8 +14774,8 @@
       "id": "function:spells/typescript/spell.buzz:mgs_listIgnoreDirs",
       "kind": "function",
       "label": "mgs_listIgnoreDirs",
-      "doc": "mgs_listIgnoreDirs names non-source dirs the node/ts ecosystem generates, pruned from the input-hashing walk. dist is already excluded as a declared output, and .turbo/.pnpm-store are dot-dirs skipped structurally, so only node_modules belongs here.",
-      "source": "spells/typescript/spell.buzz:76",
+      "doc": "mgs_listIgnoreDirs names non-source dirs the node/ts ecosystem generates, pruned from the input-hashing walk. dist is already excluded as a declared output.  The dot-dirs are NOT optional, whatever their leading dot suggests. Two ignore predicates exist and they disagree: project.IsIgnoreDir skips every dot-dir, but that one governs DISCOVERY and watch, and it cannot be reused here - .claude/skills/** and .github/** are declared sources in this workspace. The hashing walk uses cache.isIgnoreDir, which skips",
+      "source": "spells/typescript/spell.buzz:84",
       "attrs": {
         "exported": "true"
       }
@@ -14785,7 +14785,7 @@
       "kind": "function",
       "label": "mgs_listManifests",
       "doc": "mgs_listManifests names the file this project's dependencies are declared in - not the toolchain's version (that's mgs_getTools) and not a cache input (package.json and every lockfile below are separately listed in mgs_listRequiredGlobs above, because they also feed the cache key). A node project has exactly one manifest candidate and five LOCK candidates.  The five are alternatives, not a set: whichever package manager the project uses writes one of them and the others are absent. package.json alone cannot",
-      "source": "spells/typescript/spell.buzz:93",
+      "source": "spells/typescript/spell.buzz:106",
       "attrs": {
         "exported": "true"
       }
@@ -14814,7 +14814,7 @@
       "kind": "function",
       "label": "mgs_listTargets",
       "doc": "mgs_listTargets is typed `any` (not {str: fun(Target) Command}) because dev-server mixes in a Service-returning op alongside the Command-returning ones.",
-      "source": "spells/typescript/spell.buzz:212",
+      "source": "spells/typescript/spell.buzz:225",
       "attrs": {
         "exported": "true"
       }
@@ -14824,46 +14824,46 @@
       "kind": "function",
       "label": "preflight",
       "doc": "preflight is a no-op marker op (no command).",
-      "source": "spells/typescript/spell.buzz:171"
+      "source": "spells/typescript/spell.buzz:184"
     },
     {
       "id": "function:spells/typescript/spell.buzz:prettier",
       "kind": "function",
       "label": "prettier",
-      "source": "spells/typescript/spell.buzz:172"
+      "source": "spells/typescript/spell.buzz:185"
     },
     {
       "id": "function:spells/typescript/spell.buzz:scip",
       "kind": "function",
       "label": "scip",
       "doc": "scip is the reserved op that runs the TypeScript SCIP indexer for the knowledge graph. The indexer is a PATH binary (install it with mise, not as a project dep), so the op forks it directly. magus injects MAGUS_SYMBOL_INDEX with the cache destination, so the index never lands in the tree; scip-typescript writes there via --output. The runner resolves the bare $MAGUS_SYMBOL_INDEX token against that destination, so no shell is needed to expand it.",
-      "source": "spells/typescript/spell.buzz:206"
+      "source": "spells/typescript/spell.buzz:219"
     },
     {
       "id": "function:spells/typescript/spell.buzz:tsc",
       "kind": "function",
       "label": "tsc",
-      "source": "spells/typescript/spell.buzz:178"
+      "source": "spells/typescript/spell.buzz:191"
     },
     {
       "id": "function:spells/typescript/spell.buzz:tscBuild",
       "kind": "function",
       "label": "tscBuild",
       "doc": "tsc-build uses TypeScript's project-references incremental build mode (works even without declared references, via its own .tsbuildinfo cache), emitting per tsconfig outDir - see mgs_listProvidedGlobs.",
-      "source": "spells/typescript/spell.buzz:182"
+      "source": "spells/typescript/spell.buzz:195"
     },
     {
       "id": "function:spells/typescript/spell.buzz:tscClean",
       "kind": "function",
       "label": "tscClean",
       "doc": "tsc-clean mirrors tsc-build's project-references mode: --clean removes the declared outputs and the incremental .tsbuildinfo cache.",
-      "source": "spells/typescript/spell.buzz:185"
+      "source": "spells/typescript/spell.buzz:198"
     },
     {
       "id": "function:spells/typescript/spell.buzz:vitest",
       "kind": "function",
       "label": "vitest",
-      "source": "spells/typescript/spell.buzz:186"
+      "source": "spells/typescript/spell.buzz:199"
     },
     {
       "id": "function:std/examples/term/pick.buzz:choose",
@@ -64229,11 +64229,11 @@
     },
     {
       "source": "project:console",
-      "target": "doc:console/PATTERNFLY.md",
+      "target": "doc:console/README.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "console/PATTERNFLY.md"
+      "provenance": "console/README.md"
     },
     {
       "source": "project:console",
