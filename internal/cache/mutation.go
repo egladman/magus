@@ -3,6 +3,7 @@ package cache
 import (
 	"context"
 	"fmt"
+	"log/slog"
 	"slices"
 
 	"github.com/egladman/magus/types"
@@ -69,7 +70,10 @@ func (c *Cache) checkSourceMutation(ctx context.Context, s *Step, before sourceF
 	after, err := c.fingerprintSources(ctx, s)
 	if err != nil {
 		// An assertion about the run, not part of it: a tree that moved underfoot
-		// between the two passes must not turn a passing target red.
+		// between the two passes must not turn a passing target red. Logged rather
+		// than dropped, so a check that stops running is still observable.
+		c.log.DebugContext(ctx, "cache.debug", slog.String("msg",
+			fmt.Sprintf("source mutation check skipped for %s: %v", s.ProjectPath, err)))
 		return nil
 	}
 	changed := mutatedSources(before, after, s.Updates, s.OwnedOutputs)
