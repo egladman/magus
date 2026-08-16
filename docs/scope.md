@@ -193,7 +193,6 @@ builder; and when the daemon is not up, the failure arrives oblique, far from
 the cause, with nowhere sensible to attach an error explaining it. That is the
 same shape as the rule about package managers above - a tool that arrives
 through the thing it is meant to orchestrate has put itself downstream of it.
-One rule, two instances.
 
 So magus pursues determinism without the runtime, through mechanisms that need
 nothing installed: inputs are declared and hashed, the child environment is
@@ -217,16 +216,14 @@ no opt-in container isolation, and the `container` charm is not it.** In this
 repo `magus run build:container` selects a different _artifact_ - it builds and
 signs an image instead of a host binary - and the build itself still runs on the
 host, unconfined. That is container-grade packaging, not container-grade
-isolation, and they are different products. Reading the charm as "the Dagger
-guarantee, available per run" is a misreading this section previously
-encouraged.
+isolation. Reading the charm as "the Dagger guarantee, available per run" is a
+misreading this section previously encouraged.
 
 So the honest position is narrower than "you can have it when you want it": if
 you need every step to run in a fixed environment, magus does not offer that at
 any setting, and a container-native runner is the better tool. What magus offers
 instead is a precise description of the environment plus a build that fails when
-what ran falls outside what you declared. That is a different bet, not a cheaper
-version of the same one.
+what ran falls outside what you declared.
 
 ## The knobs
 
@@ -242,9 +239,8 @@ cannot enumerate what it does. You have met the result: a build that works on on
 machine, a setting three people cargo-culted from a blog post, and a maintainer
 who cannot tell you what turning it off would break.
 
-So the default is the product. Zero configuration is the feature - not because
-there are no knobs, but because **you should never need one to get correct
-behavior**. magus is opinionated where an opinion prevents a footgun: one
+So the default is the product: correct behavior must never require a knob.
+magus is opinionated where an opinion prevents a footgun: one
 required target name, four reserved charms, `skip_cache` demanding a reason
 string rather than a boolean, no fallback chain when a secret will not resolve.
 Each of those removes states rather than adding them.
@@ -273,8 +269,7 @@ sprawl is whether we reach for them ourselves.
 
 The rule that follows: **a new option must remove a failure, not enable a
 preference.** If the answer to "what happens if I set this wrong" is "your build
-is subtly different and nothing says so", it is not an option, it is a trap with
-a default.
+is subtly different and nothing says so", that is a trap with a default.
 
 Where this is strained: an option nobody can find is worse than one that does not
 exist, because the escape hatch is real and the person who needs it is told it is
@@ -402,14 +397,14 @@ its behavior is supposed to be yours, and hackability is the product. magus made
 the opposite bet for the opposite reason. A build tool's product is its verdicts:
 the cache saying a replay is honest, the drift gate saying generated output
 matches source, `ci` stripping the write charms whether or not anyone remembered.
-A pluggable verdict is not a verdict. So the engine, the cache, the graph schema,
-and the guard's evaluation are sealed on purpose, and every extension point magus
+A verdict a plugin can rewrite proves nothing. So the engine, the cache, the
+graph schema, and the guard's evaluation are sealed on purpose, and every
+extension point magus
 does have - spells, the magusfile, charms, skills, config - is a DECLARATION the
 sealed engine evaluates, auditable in a diff the way code loaded at startup never
 is. The test for a proposed extension seam: it may change what magus does, never
 what a verdict means. And one seam is absent deliberately rather than sealed:
-there is no model adapter, because magus never calls a model - a fact this page
-would rather state than have inferred.
+there is no model adapter, because magus never calls a model.
 
 ## Unsettled
 
@@ -427,9 +422,8 @@ diagnostic code, the code has a page, and the page says what tripped and what to
 do next - so when the expressive language does something surprising, the way out
 is in front of you rather than in a maintainer's head. The sandbox and the
 content-addressed cache sit under that as the floor - what is enforced stays
-enforced - but they are not the thesis. The thesis is that footguns are removed
-by making every failure legible, not by shrinking the language until failures
-are inexpressible.
+enforced - but they are not the thesis. The bet is that legible failures remove
+footguns without shrinking the language.
 
 Nobody has settled that bet. A large enough body of magusfiles rots the way any
 large program rots, and neither documentation nor error discipline rules it out.
