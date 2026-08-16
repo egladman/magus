@@ -85,9 +85,9 @@ export fun mgs_listManifests() > [Manifest] {
 // phrasing that moves between toolchain releases does not belong here.
 final GO_MOD_HINTS = [
     Hint{contains = "missing go.sum entry",
-         advise = "go.sum is out of date with go.mod; run `magus run generate:relock` (or `go mod tidy`) and commit the result"},
+         advise = "go.sum is out of date with go.mod; run the covering target with the relock charm (`magus run <target>:relock`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
     Hint{contains = "updates to go.mod needed",
-         advise = "go.mod does not cover the imports in the tree; run `magus run generate:relock` (or `go mod tidy`) and commit the result"},
+         advise = "go.mod does not cover the imports in the tree; run the covering target with the relock charm (`magus run <target>:relock`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
 ];
 
 fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build"], hints = GO_MOD_HINTS}; }

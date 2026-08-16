@@ -185,8 +185,8 @@ func applyWithEvanphx(argv []string, ops []spells.PatchOp) ([]string, error) {
 // so a golden that inlined it per op would drift one entry at a time.
 var (
 	goldenGoModHints = []spells.Hint{
-		{Contains: "missing go.sum entry", Advise: "go.sum is out of date with go.mod; run `magus run generate:relock` (or `go mod tidy`) and commit the result"},
-		{Contains: "updates to go.mod needed", Advise: "go.mod does not cover the imports in the tree; run `magus run generate:relock` (or `go mod tidy`) and commit the result"},
+		{Contains: "missing go.sum entry", Advise: "go.sum is out of date with go.mod; run the covering target with the relock charm (`magus run <target>:relock`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
+		{Contains: "updates to go.mod needed", Advise: "go.mod does not cover the imports in the tree; run the covering target with the relock charm (`magus run <target>:relock`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
 	}
 	goldenPackageManagerHints = []spells.Hint{
 		{Contains: "ERR_PNPM_OUTDATED_LOCKFILE", Advise: "pnpm-lock.yaml disagrees with package.json - usually a merge that changed one of them; run `pnpm install` and commit the lockfile"},
