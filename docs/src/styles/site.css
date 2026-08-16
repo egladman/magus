@@ -3198,7 +3198,13 @@ a code {
   gap: 0.6rem;
 }
 
-.landing-btn {
+/* :visited twins throughout. These are styled CONTROLS inside <article>, so the
+   article's purple visited-link convention (theme.css) outranks a bare class rule -
+   article a:visited is (0,1,2) against .landing-btn's (0,1,0) - and the filled
+   button's white label turned purple on blue once clicked. Same pin as
+   .open-in-playground above. */
+.landing-btn,
+.landing-btn:visited {
   display: inline-block;
   padding: 0.6rem 1.15rem;
   border: 1px solid var(--pico-primary);
@@ -3211,17 +3217,22 @@ a code {
   transition: background-color 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 }
 .landing-btn:hover,
-.landing-btn:focus-visible {
+.landing-btn:focus-visible,
+.landing-btn:visited:hover,
+.landing-btn:visited:focus-visible {
   background: var(--pico-primary);
   color: var(--pico-primary-inverse);
   text-decoration: none;
 }
-.landing-btn-primary {
+.landing-btn-primary,
+.landing-btn-primary:visited {
   background: var(--pico-primary);
   color: var(--pico-primary-inverse);
 }
 .landing-btn-primary:hover,
-.landing-btn-primary:focus-visible {
+.landing-btn-primary:focus-visible,
+.landing-btn-primary:visited:hover,
+.landing-btn-primary:visited:focus-visible {
   background: var(--pico-primary-hover);
   border-color: var(--pico-primary-hover);
 }
@@ -3381,7 +3392,11 @@ a code {
 .landing-cards {
 }
 
-.landing-card {
+/* :visited pinned for the same reason as .landing-btn: the whole card is one <a>
+   inside <article>, so without this its text - title and body both - turns purple
+   once clicked. `inherit` cannot win that on its own. */
+.landing-card,
+.landing-card:visited {
   display: flex;
   flex-direction: column;
   gap: 0.4rem;
