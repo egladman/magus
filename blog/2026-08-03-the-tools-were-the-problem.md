@@ -61,7 +61,8 @@ work one out, and without a rule I can hold in my head, I look things up forever
 
 ### The terminal UI
 
-Nx 21 shipped a terminal UI and turned it on by default. It takes the screen, and
+Nx 21 shipped a terminal UI and turned it on by default on supported terminals,
+locally. It takes the screen, and
 my scrollback goes with it. Selecting text stops behaving the way it does in
 every other program in that window, so copying a stack trace out of build output
 turns into a puzzle I have to solve first.
@@ -102,9 +103,11 @@ Nx core is MIT, and I want that on the record before I complain.
 
 Remote caching is most of why anyone adopts a monorepo build tool, and it keeps
 moving. Community task runners, then caching behind a paid Powerpack license in
-v20, then free self-hosted plugins again in 20.8, then those deprecated in 2026
-over a cache-poisoning vulnerability (CVE-2025-36852) that Nx describes as
-unpatchable given how the packages handle bucket credentials. Today the guidance
+v20, then free self-hosted plugins again in 20.8, then those deprecated in May
+2026 over a cache-poisoning vulnerability (CVE-2025-36852) that Nx says is in
+the packages' design and cannot be patched - and which, to be fair to Nx, they
+note affects self-hosted cache plugins across many build systems, not only
+theirs. Today the guidance
 points at Nx Cloud, an Enterprise plan, or writing your own server against their
 OpenAPI spec.
 
@@ -161,11 +164,11 @@ take on it, but the influence is there.
 This is the position I am least willing to give up.
 
 Nx puts `nx generate` right in the surface. Dagger works harder to hide it and it
-is still there: `dagger develop` writes `dagger.gen.go` and an `internal/dagger/`
-tree of typed client bindings next to your code, those files get committed, and
-Dagger marks them `linguist-generated` in `.gitattributes` so GitHub folds them
-out of diffs. That tells me they know it is noise. It lands in my repository
-anyway.
+is still there: authoring a module writes `dagger.gen.go` and an
+`internal/dagger/` tree of typed client bindings next to your code, the docs
+recommend committing them - the new module format requires it - and Dagger marks
+them `linguist-generated` in `.gitattributes` so GitHub folds them out of diffs.
+That tells me they know it is noise. It lands in my repository anyway.
 
 None of this is new, which is the part that gets me. Autotools has worked this
 way since long before I started: you write `configure.ac` and `Makefile.am`,
