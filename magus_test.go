@@ -5,9 +5,11 @@ import (
 	"crypto/ed25519"
 	"crypto/rand"
 	"encoding/base64"
+	"errors"
 	"fmt"
 	"io"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -17,6 +19,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/observability"
 	"github.com/egladman/magus/internal/observability/otlp"
 	"github.com/egladman/magus/spells"
@@ -930,4 +933,435 @@ func TestForEachSpell_MagusfileShadowsSpellOp(t *testing.T) {
 		}))
 	assert.Equal(t, []string{types.MagusfileSpellName}, ran,
 		"the magusfile target must run alone; the shadowed spell op must not also run")
+}
+
+// recordingProvider is a minimal observability.Provider fake: every method except
+// Shutdown is a no-op, and Shutdown records whether it ran (and can be told to error).
+type recordingProvider struct {
+	shutdownCalled bool
+	shutdownErr    error
+}
+
+func (p *recordingProvider) Enabled() bool                                                       { return true }
+func (p *recordingProvider) RecordCacheHit(context.Context, ...observability.Attr)               {}
+func (p *recordingProvider) RecordCacheMiss(context.Context, ...observability.Attr)              {}
+func (p *recordingProvider) RecordCacheError(context.Context, ...observability.Attr)             {}
+func (p *recordingProvider) RecordCacheDuration(context.Context, float64, ...observability.Attr) {}
+func (p *recordingProvider) RecordGraphQuery(context.Context, float64, ...observability.Attr)    {}
+func (p *recordingProvider) RecordRemoteOp(context.Context, observability.RemoteOp)              {}
+func (p *recordingProvider) StartSpan(ctx context.Context, _ string, _ ...observability.Attr) (context.Context, func(error)) {
+	return ctx, func(error) {}
+}
+func (p *recordingProvider) RecordTargetRun(context.Context, float64, ...observability.Attr) {}
+func (p *recordingProvider) RecordPoolAcquire(context.Context, float64, int64)               {}
+func (p *recordingProvider) RecordPoolRelease(context.Context, int64)                        {}
+func (p *recordingProvider) RecordPoolWaiting(context.Context, int64)                        {}
+func (p *recordingProvider) RecordMCPCall(context.Context, observability.MCPCall)            {}
+func (p *recordingProvider) RecordSandboxApply(context.Context, float64, string, string)     {}
+func (p *recordingProvider) RecordSandboxRules(context.Context, observability.SandboxRules)  {}
+func (p *recordingProvider) RecordSandboxCheck(context.Context, string, string, string)      {}
+func (p *recordingProvider) RecordSandboxEnvDropped(context.Context, string, int64)          {}
+func (p *recordingProvider) RecordBuzzExec(context.Context, float64, string, string)         {}
+func (p *recordingProvider) RecordBuzzCompile(context.Context, float64, string, string)      {}
+func (p *recordingProvider) RecordBuzzHostCall(context.Context, observability.BuzzHostCall)  {}
+func (p *recordingProvider) RecordBuzzSessionReuse(context.Context, string)                  {}
+func (p *recordingProvider) RecordBuzzSessionIdle(context.Context, int64)                    {}
+func (p *recordingProvider) RecordBuzzSessionEviction(context.Context, string)               {}
+func (p *recordingProvider) RecordBuzzSessionWarm(context.Context, float64, string)          {}
+func (p *recordingProvider) RecordBuzzImport(context.Context, float64, string, string)       {}
+func (p *recordingProvider) RecordBuzzSpellResolve(context.Context, float64, string, string) {}
+func (p *recordingProvider) RecordBuzzSpellBuiltinsWarm(context.Context, float64, string)    {}
+func (p *recordingProvider) RecordBuzzJITRun(context.Context)                                {}
+func (p *recordingProvider) RecordBuzzVMFault(context.Context, string)                       {}
+func (p *recordingProvider) Snapshot(context.Context) ([]byte, error)                        { return nil, nil }
+func (p *recordingProvider) Shutdown(context.Context) error {
+	p.shutdownCalled = true
+	return p.shutdownErr
+}
+
+var _ observability.Provider = (*recordingProvider)(nil)
+
+// TestClose_ShutsDownOwnedProvider is P1-A's regression test: before the fix, Close
+// only closed the buzz pool registry, so a provider built by Open (spans/metrics)
+// was silently dropped on exit rather than flushed. Pre-fix this failed with
+// "shutdownCalled: Expected true, but got false" because nothing called Shutdown.
+func TestClose_ShutsDownOwnedProvider(t *testing.T) {
+	p := &recordingProvider{}
+	m := &Magus{tel: p}
+
+	err := m.Close()
+
+	require.NoError(t, err)
+	assert.True(t, p.shutdownCalled, "Close must shut down a provider it owns")
+}
+
+// TestClose_JoinsProviderShutdownError verifies a shutdown error is surfaced (not
+// swallowed) and that Close does not bail out early - required so a later resource
+// (the pool registry) still gets a chance to close even when telemetry shutdown fails.
+func TestClose_JoinsProviderShutdownError(t *testing.T) {
+	wantErr := errors.New("otlp: flush failed")
+	p := &recordingProvider{shutdownErr: wantErr}
+	m := &Magus{tel: p}
+
+	err := m.Close()
+
+	require.Error(t, err)
+	assert.ErrorIs(t, err, wantErr)
+}
+
+// TestClose_LeavesInjectedProviderRunning covers the daemon case (WithProvider):
+// several workspaces plus the bridge Magus share ONE provider so metrics survive
+// workspace eviction (see cmd/magus/registry.go's wsRegistry, which Closes an idle
+// workspace while the shared provider keeps serving the others). Close must not
+// shut down a provider it does not own.
+func TestClose_LeavesInjectedProviderRunning(t *testing.T) {
+	p := &recordingProvider{}
+	m := &Magus{tel: p, injectedTel: p}
+
+	err := m.Close()
+
+	require.NoError(t, err)
+	assert.False(t, p.shutdownCalled, "Close must not shut down a shared/injected provider")
+}
+
+// mkTree creates dirs and marker files under root. A trailing "/" makes a directory,
+// otherwise an empty marker file.
+func mkTree(t *testing.T, root string, paths ...string) {
+	t.Helper()
+	for _, p := range paths {
+		full := filepath.Join(root, filepath.FromSlash(p))
+		if p[len(p)-1] == '/' {
+			if err := os.MkdirAll(full, 0o755); err != nil {
+				t.Fatalf("mkdir %s: %v", p, err)
+			}
+			continue
+		}
+		if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
+			t.Fatalf("mkdir for %s: %v", p, err)
+		}
+		if err := os.WriteFile(full, nil, 0o600); err != nil {
+			t.Fatalf("write %s: %v", p, err)
+		}
+	}
+}
+
+func mustFindRoot(t *testing.T, dir string) string {
+	t.Helper()
+	got, err := FindRoot(dir)
+	if err != nil {
+		t.Fatalf("FindRoot(%s): %v", dir, err)
+	}
+	return got
+}
+
+// TestFindRoot pins the one-workspace rule: a magusfile marks a PROJECT, and only
+// magus.yaml declares where a workspace begins.
+func TestFindRoot(t *testing.T) {
+	t.Run("a nested project does not become its own workspace", func(t *testing.T) {
+		root := t.TempDir()
+		mkTree(t, root, "magus.yaml", "magusfile.buzz", "console/magusfile.buzz")
+		if got := mustFindRoot(t, filepath.Join(root, "console")); got != root {
+			t.Errorf("root = %q, want %q; halting at console's magusfile is the original bug", got, root)
+		}
+	})
+
+	// The regression the first attempt shipped: go.mod was treated as a workspace
+	// marker on the theory it only sits at a repo's top, which is false in any
+	// multi-module repo. A submodule then locked its own cache dir and stopped
+	// excluding the root run despite touching the same files.
+	t.Run("a nested go.mod does not become its own workspace", func(t *testing.T) {
+		root := t.TempDir()
+		mkTree(t, root, "magus.yaml", "go.mod", "libs/diagnostics/go.mod", "libs/diagnostics/magusfile.buzz")
+		if got := mustFindRoot(t, filepath.Join(root, "libs", "diag")); got != root {
+			t.Errorf("root = %q, want %q; a submodule must not split the workspace", got, root)
+		}
+	})
+
+	// Worktrees nest INSIDE their parent repo, so an outermost-wins rule swallows
+	// them. The nearest declaration governs, the same way .git behaves.
+	t.Run("nearest magus.yaml wins so a nested worktree keeps its own", func(t *testing.T) {
+		outer := t.TempDir()
+		mkTree(t, outer, "magus.yaml", "magusfile.buzz",
+			".claude/worktrees/feature/magus.yaml",
+			".claude/worktrees/feature/magusfile.buzz",
+			".claude/worktrees/feature/console/magusfile.buzz")
+
+		wt := filepath.Join(outer, ".claude", "worktrees", "feature")
+		if got := mustFindRoot(t, wt); got != wt {
+			t.Errorf("root = %q, want the worktree %q, not its parent repo", got, wt)
+		}
+		if got := mustFindRoot(t, filepath.Join(wt, "console")); got != wt {
+			t.Errorf("root from inside the worktree = %q, want %q", got, wt)
+		}
+		if got := mustFindRoot(t, outer); got != outer {
+			t.Errorf("root from the parent = %q, want %q", got, outer)
+		}
+	})
+
+	t.Run("a standalone project with no magus.yaml resolves to its outermost marker", func(t *testing.T) {
+		root := t.TempDir()
+		mkTree(t, root, "solo/magusfile.buzz", "solo/nested/magusfile.buzz")
+		if got, want := mustFindRoot(t, filepath.Join(root, "solo", "nested")), filepath.Join(root, "solo"); got != want {
+			t.Errorf("root = %q, want %q", got, want)
+		}
+	})
+
+	// Contiguity bounds the fallback: without it, one stray magusfile in a home
+	// directory would adopt every project beneath it.
+	t.Run("a gap stops the fallback from reaching a stray ancestor", func(t *testing.T) {
+		root := t.TempDir()
+		mkTree(t, root, "magusfile.buzz", "gap/", "gap/proj/magusfile.buzz")
+		if got, want := mustFindRoot(t, filepath.Join(root, "gap", "proj")), filepath.Join(root, "gap", "proj"); got != want {
+			t.Errorf("root = %q, want %q; the marker-less gap must stop the walk", got, want)
+		}
+	})
+}
+
+// floorWorkspace writes a minimal workspace whose magus.yaml declares constraint.
+func floorWorkspace(t *testing.T, constraint string) string {
+	t.Helper()
+	root := t.TempDir()
+	yaml := ""
+	if constraint != "" {
+		yaml = "required_version: \"" + constraint + "\"\n"
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magus.yaml"), []byte(yaml), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "magusfile.buzz"),
+		[]byte("import \"magus\";\nexport fun ci(ctx: magus\\Context, args: [str]) > void {}\n"), 0o644))
+	return root
+}
+
+// The wiring, not the comparison: internal/ward covers the semver logic, and this
+// covers that magus.yaml's required_version actually reaches it. That path is easy to
+// break invisibly - the field carries `cli:"-"`, so it is absent from the generated
+// flag/env/schema tables, and a loader that read those instead of the struct tags
+// would silently see an empty floor and admit every binary.
+//
+// It also cannot be exercised by a dev build: an unstamped binary reports "unknown"
+// and the ward exempts it by design, so `go run ./cmd/magus` against a floored
+// workspace always passes. A version has to be injected to test this at all.
+func TestRequiredVersion_TooOldBinaryIsRefused(t *testing.T) {
+	root := floorWorkspace(t, ">= 99.0.0")
+
+	_, err := Inspect(context.Background(), root, WithVersion("v0.3.0"))
+
+	require.Error(t, err, "a binary below the declared floor must not open the workspace")
+	assert.ErrorIs(t, err, types.WorkspaceNeedsNewerMagus)
+	assert.Contains(t, err.Error(), ">= 99.0.0")
+	assert.Contains(t, err.Error(), "v0.3.0")
+}
+
+func TestRequiredVersion_SatisfiedBinaryOpens(t *testing.T) {
+	root := floorWorkspace(t, ">= 0.3.0")
+
+	_, err := Inspect(context.Background(), root, WithVersion("v0.4.0"))
+
+	assert.NoError(t, err)
+}
+
+// No floor declared is the overwhelmingly common case and must stay free.
+func TestRequiredVersion_NoFloorOpens(t *testing.T) {
+	root := floorWorkspace(t, "")
+
+	_, err := Inspect(context.Background(), root, WithVersion("v0.1.0"))
+
+	assert.NoError(t, err)
+}
+
+// A library caller that never supplied a version has no version to be too old.
+func TestRequiredVersion_NoVersionSuppliedOpens(t *testing.T) {
+	root := floorWorkspace(t, ">= 99.0.0")
+
+	_, err := Inspect(context.Background(), root)
+
+	assert.NoError(t, err, "magus.Open/Inspect without WithVersion must not be gated")
+}
+
+func TestStatusLinePath(t *testing.T) {
+	cases := map[string]string{
+		"?? cmd/magus/review.go":  "cmd/magus/review.go", // git porcelain, untracked
+		" M magus.go":             "magus.go",            // git porcelain, modified (leading space)
+		"A  internal/new.go":      "internal/new.go",     // staged add
+		"R  old.go -> new.go":     "new.go",              // a rename keeps the name on disk
+		"? scratch.txt":           "scratch.txt",         // hg
+		"bare/path/with/no/state": "bare/path/with/no/state",
+		"":                        "",
+		"   ":                     "",
+	}
+	for line, want := range cases {
+		assert.Equal(t, want, statusLinePath(line), "line %q", line)
+	}
+}
+
+// A brand-new file is the thing a reviewer most wants to see, and a tree-against-index diff
+// misses it entirely. This is the regression test for that gap.
+func TestWorkingDiffIncludesUntrackedFiles(t *testing.T) {
+	root := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
+	}
+	run("init", "-q")
+	run("config", "user.email", "t@example.com")
+	run("config", "user.name", "t")
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "tracked.txt"), []byte("one\ntwo\n"), 0o644))
+	run("add", "tracked.txt")
+	run("commit", "-qm", "seed")
+
+	// One modified tracked file and one brand-new untracked file.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "tracked.txt"), []byte("one\nCHANGED\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "fresh.txt"), []byte("hello\nworld\n"), 0o644))
+
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = m.Close() })
+
+	patch, err := m.WorkingDiff(context.Background(), nil)
+	require.NoError(t, err)
+
+	assert.Contains(t, patch, "tracked.txt", "the tracked change must still be there")
+	assert.Contains(t, patch, "diff --git a/fresh.txt b/fresh.txt",
+		"an untracked file must appear, or a review cannot show a new file at all")
+	assert.Contains(t, patch, "new file mode")
+	assert.Contains(t, patch, "+hello")
+	assert.Contains(t, patch, "+world")
+}
+
+func TestWorkingDiffMarksUntrackedBinaryRatherThanDumpingIt(t *testing.T) {
+	root := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
+	}
+	run("init", "-q")
+	run("config", "user.email", "t@example.com")
+	run("config", "user.name", "t")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "seed.txt"), []byte("x\n"), 0o644))
+	run("add", "seed.txt")
+	run("commit", "-qm", "seed")
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "blob.bin"), []byte{0x00, 0x01, 0x02, 0x00}, 0o644))
+
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = m.Close() })
+
+	patch, err := m.WorkingDiff(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Contains(t, patch, "Binary files /dev/null and b/blob.bin differ",
+		"a binary file must be marked, not rendered as a wall of mojibake")
+}
+
+// The two halves are CONCATENATED, and a tracked diff whose last line is not
+// newline-terminated would otherwise glue the first synthesized header onto it - so that
+// header stops starting a line, every reader misses it, and the first untracked file vanishes
+// from the review while the rest appear normally. It cost one real file here and reported
+// nothing, which is what makes it worth a test rather than a comment.
+func TestWorkingDiffSeparatesTheTrackedAndUntrackedHalves(t *testing.T) {
+	root := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
+	}
+	run("init", "-q")
+	run("config", "user.email", "t@example.com")
+	run("config", "user.name", "t")
+
+	// Seed a file with NO trailing newline, then change it: git renders "\ No newline at end
+	// of file" and the diff's own last line is unterminated.
+	require.NoError(t, os.WriteFile(filepath.Join(root, "nonewline.txt"), []byte("one"), 0o644))
+	run("add", "nonewline.txt")
+	run("commit", "-qm", "seed")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "nonewline.txt"), []byte("two"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "brand-new.txt"), []byte("fresh\n"), 0o644))
+
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = m.Close() })
+
+	patch, err := m.WorkingDiff(context.Background(), nil)
+	require.NoError(t, err)
+
+	// The header must START a line. Asserting Contains would pass even when glued.
+	var headers []string
+	for _, l := range strings.Split(patch, "\n") {
+		if strings.HasPrefix(l, "diff --git ") {
+			headers = append(headers, l)
+		}
+	}
+	assert.Contains(t, headers, "diff --git a/brand-new.txt b/brand-new.txt",
+		"the first untracked file's header must begin a line, not be appended to the tracked half")
+}
+
+// A clean tree has nothing to review, and must not synthesize a patch out of ignored files.
+func TestWorkingDiffOnACleanTreeIsEmpty(t *testing.T) {
+	root := t.TempDir()
+	run := func(args ...string) {
+		t.Helper()
+		cmd := exec.Command("git", args...)
+		cmd.Dir = root
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, err, "git %s: %s", strings.Join(args, " "), out)
+	}
+	run("init", "-q")
+	run("config", "user.email", "t@example.com")
+	run("config", "user.name", "t")
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.txt"), []byte("x\n"), 0o644))
+	run("add", "a.txt")
+	run("commit", "-qm", "seed")
+
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = m.Close() })
+
+	patch, err := m.WorkingDiff(context.Background(), nil)
+	require.NoError(t, err)
+	assert.Empty(t, strings.TrimSpace(patch))
+}
+
+// ApplyEnv is generated (internal/config/gen/env.go) from the Config struct. Its
+// env-to-Config behavior is tested here, in a consuming package, rather than inside the
+// generated tree.
+func TestApplyEnv_VolatilityEnabledTrue(t *testing.T) {
+	t.Setenv("MAGUS_VOLATILITY_ENABLED", "true")
+	cfg := config.Defaults()
+	configgen.ApplyEnv(&cfg, os.Getenv)
+	assert.True(t, cfg.Volatility.Enabled, "MAGUS_VOLATILITY_ENABLED=true: Volatility.Enabled should be true")
+}
+
+func TestApplyEnv_VolatilityEnabledFalse(t *testing.T) {
+	t.Setenv("MAGUS_VOLATILITY_ENABLED", "false")
+	cfg := config.Defaults()
+	configgen.ApplyEnv(&cfg, os.Getenv)
+	assert.False(t, cfg.Volatility.Enabled, "MAGUS_VOLATILITY_ENABLED=false: Volatility.Enabled should be false")
+}
+
+func TestApplyEnvToConfig(t *testing.T) {
+	t.Setenv("MAGUS_CACHE_WRITE_ENABLED", "false")
+	t.Setenv("MAGUS_CONCURRENCY", "6")
+	t.Setenv("MAGUS_DRY_RUN", "1")
+
+	cfg := config.Defaults()
+	configgen.ApplyEnv(&cfg, os.Getenv)
+
+	assert.False(t, cfg.Cache.WriteEnabled())
+	assert.Equal(t, 6, cfg.Concurrency)
+	assert.True(t, cfg.DryRun, "DryRun should be true")
+}
+
+func TestApplyEnv_SandboxEnabled(t *testing.T) {
+	t.Setenv("MAGUS_SANDBOX_ENABLED", "true")
+	cfg := config.Defaults()
+	configgen.ApplyEnv(&cfg, os.Getenv)
+	assert.True(t, cfg.Sandbox.Enabled, "MAGUS_SANDBOX_ENABLED=true: Sandbox.Enabled should be true")
 }

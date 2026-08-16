@@ -7,6 +7,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -661,11 +662,174 @@ func TestPrintStatusTextDoesNotCallActiveLocalWorkIdle(t *testing.T) {
 	assert.NotContains(t, string(body), "nothing running")
 }
 
-func TestApplyStatusReplyCarriesSharedServices(t *testing.T) {
-	services := []types.StatusService{{ID: "service-1", State: "running", Dependents: 3}}
-	report := types.StatusReport{}
-	applyStatusReply(&report, &proc.StatusReply{Services: services})
-	assert.Equal(t, services, report.Services)
+// fakeProcServers returns a statusQuery answering for exactly the addresses in replies,
+// standing in for live proc servers. An address with no entry fails the way a socket that
+// died between discovery and the query does.
+func fakeProcServers(replies map[string]*proc.StatusReply) statusQuery {
+	return func(_ context.Context, addr string) (*proc.StatusReply, error) {
+		reply, ok := replies[addr]
+		if !ok {
+			return nil, errors.New("connection refused")
+		}
+		return reply, nil
+	}
+}
+
+func TestApplyStatusPools(t *testing.T) {
+	ctx := context.Background()
+	const sockA, sockB = "unix:///run/magus-111.sock", "unix:///run/magus-222.sock"
+	servers := map[string]*proc.StatusReply{
+		sockA: {ParentPID: 111, Mode: "proc", Capacity: 8, Running: 3,
+			Services: []types.StatusService{{ID: "service-1", State: "running", Dependents: 3}}},
+		sockB: {ParentPID: 222, Mode: "proc", Capacity: 4, Running: 4},
+	}
+
+	t.Run("one server fills pool and leaves the list empty", func(t *testing.T) {
+		report := types.StatusReport{}
+		applyStatusPools(ctx, &report, []string{sockA}, fakeProcServers(servers))
+		require.NotNil(t, report.Pool)
+		assert.Equal(t, 111, report.Pool.ParentPID)
+		assert.Equal(t, sockA, report.Pool.Socket)
+		assert.Equal(t, 5, report.Pool.Available, "8 capacity less 3 running")
+		assert.Empty(t, report.Pools, "a single server is not repeated as a list")
+		assert.Empty(t, report.PoolError)
+	})
+
+	t.Run("carries the shared services of the first server", func(t *testing.T) {
+		report := types.StatusReport{}
+		applyStatusPools(ctx, &report, []string{sockA, sockB}, fakeProcServers(servers))
+		assert.Equal(t, servers[sockA].Services, report.Services)
+	})
+
+	t.Run("two servers report as two entries, never an error", func(t *testing.T) {
+		report := types.StatusReport{}
+		applyStatusPools(ctx, &report, []string{sockA, sockB}, fakeProcServers(servers))
+		assert.Empty(t, report.PoolError, "more than one server is reported, not refused")
+		require.Len(t, report.Pools, 2)
+		assert.Equal(t, []string{sockA, sockB}, []string{report.Pools[0].Socket, report.Pools[1].Socket})
+		assert.Equal(t, []int{111, 222}, []int{report.Pools[0].ParentPID, report.Pools[1].ParentPID})
+		assert.Equal(t, []int{5, 0}, []int{report.Pools[0].Available, report.Pools[1].Available})
+		require.NotNil(t, report.Pool)
+		assert.Equal(t, sockA, report.Pool.Socket, "the first server is still THE pool")
+	})
+
+	t.Run("a server that died is dropped, the rest still report", func(t *testing.T) {
+		report := types.StatusReport{}
+		applyStatusPools(ctx, &report, []string{"unix:///run/magus-gone.sock", sockB}, fakeProcServers(servers))
+		assert.Empty(t, report.PoolError)
+		require.NotNil(t, report.Pool)
+		assert.Equal(t, sockB, report.Pool.Socket)
+		assert.Empty(t, report.Pools, "one survivor is the single-server case")
+	})
+
+	t.Run("nothing answered reports why", func(t *testing.T) {
+		report := types.StatusReport{}
+		applyStatusPools(ctx, &report, []string{"unix:///run/magus-gone.sock"}, fakeProcServers(servers))
+		assert.Nil(t, report.Pool)
+		assert.Contains(t, report.PoolError, "magus-gone.sock")
+	})
+}
+
+// TestResolveStatusSocketsNarrowing pins that --socket (and the env pin) still select one
+// server, and that discovery is only consulted when neither pins one.
+func TestResolveStatusSocketsNarrowing(t *testing.T) {
+	ctx := context.Background()
+
+	t.Run("--socket narrows to one", func(t *testing.T) {
+		t.Setenv("MAGUS_DAEMON_SOCKET", "unix:///run/magus-env.sock")
+		addrs, err := resolveStatusSockets(ctx, "unix:///run/magus-flag.sock")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"unix:///run/magus-flag.sock"}, addrs, "the flag wins over the env")
+	})
+
+	t.Run("env pins one", func(t *testing.T) {
+		t.Setenv("MAGUS_DAEMON_SOCKET", "unix:///run/magus-env.sock")
+		addrs, err := resolveStatusSockets(ctx, "")
+		require.NoError(t, err)
+		assert.Equal(t, []string{"unix:///run/magus-env.sock"}, addrs)
+	})
+
+	t.Run("unpinned discovers, and says so when there is nothing", func(t *testing.T) {
+		t.Setenv("MAGUS_DAEMON_SOCKET", "")
+		t.Setenv("XDG_RUNTIME_DIR", t.TempDir())
+		_, err := resolveStatusSockets(ctx, "")
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "no running magus proc server")
+	})
+}
+
+// TestBuildConfigStatusConcurrency covers the fact a delegation orchestrator budgets
+// against: concurrency 0 means "unset", and only the effective value answers how wide a
+// run gets. The wants are stated independently of internal/cache.ResolveConcurrency, which
+// is the function under test here.
+func TestBuildConfigStatusConcurrency(t *testing.T) {
+	cpus := runtime.NumCPU()
+	for _, tc := range []struct {
+		name       string
+		env        string
+		configured int
+		want       int
+	}{
+		{"unset resolves to the machine default", "", 0, min(cpus, 8)},
+		{"unset honours MAGUS_CONCURRENCY", "3", 0, min(3, cpus)},
+		{"an explicit value passes through", "3", 2, min(2, cpus)},
+		{"a value above the machine is clamped", "", cpus + 4, cpus},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Setenv("MAGUS_CONCURRENCY", tc.env)
+			t.Setenv("GITHUB_ACTIONS", "") // the hosted-runner default must not decide this
+			got := buildConfigStatus(config.Config{Concurrency: tc.configured})
+			assert.Equal(t, tc.want, got.ConcurrencyEffective)
+			assert.Equal(t, tc.configured, got.Concurrency, "the configured value is kept alongside")
+		})
+	}
+}
+
+// TestPrintStatusTextListsEveryProcServer proves the multi-server case renders as a list
+// with each server's slots rather than an error demanding --socket.
+func TestPrintStatusTextListsEveryProcServer(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "status-*")
+	require.NoError(t, err)
+	pools := []types.StatusOutput{
+		{ParentPID: 111, Mode: "proc", Socket: "unix:///run/magus-111.sock", Capacity: 8, Running: 3, Available: 5},
+		{ParentPID: 222, Mode: "proc", Socket: "unix:///run/magus-222.sock", Capacity: 4, Running: 4},
+	}
+	printStatusText(f, types.StatusReport{Pool: &pools[0], Pools: pools}, false, 0)
+	require.NoError(t, f.Close())
+	body, err := os.ReadFile(f.Name())
+	require.NoError(t, err)
+	out := string(body)
+
+	assert.Contains(t, out, "proc servers (2)")
+	assert.Contains(t, out, "unix:///run/magus-111.sock")
+	assert.Contains(t, out, "unix:///run/magus-222.sock")
+	assert.Contains(t, out, "pid 111")
+	assert.Contains(t, out, "3/8 in use")
+	assert.Contains(t, out, "4/4 in use")
+	assert.Contains(t, out, "5 available")
+	assert.NotContains(t, out, "use --socket", "a second server is reported, not refused")
+}
+
+// TestPrintStatusTextReportsSlotsAndConcurrency covers the single-server case: the pool
+// line carries available slots, and the concurrency block carries the effective width.
+func TestPrintStatusTextReportsSlotsAndConcurrency(t *testing.T) {
+	f, err := os.CreateTemp(t.TempDir(), "status-*")
+	require.NoError(t, err)
+	r := types.StatusReport{
+		Config: types.StatusConfig{ConcurrencyEffective: 8},
+		Pool:   &types.StatusOutput{ParentPID: 4242, Mode: "daemon", Capacity: 8, Running: 2, Available: 6},
+	}
+	printStatusText(f, r, false, 0)
+	require.NoError(t, f.Close())
+	body, err := os.ReadFile(f.Name())
+	require.NoError(t, err)
+	out := string(body)
+
+	assert.Contains(t, out, "available: 6")
+	assert.Contains(t, out, "concurrency")
+	assert.Contains(t, out, "(default)", "an unset configured value says so instead of printing 0")
+	assert.Contains(t, out, "effective")
+	assert.Contains(t, out, "8")
 }
 
 func TestCompactMCPToken(t *testing.T) {

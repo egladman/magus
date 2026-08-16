@@ -281,6 +281,15 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("files", vm.ListValue(nil))
 		return res, nil
 	}))
+	m.MapSet("diff", fn("magus.diff", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("base", vm.StrValue(""))
+		res.MapSet("files", vm.ListValue(nil))
+		res.MapSet("seedProjects", vm.ListValue(nil))
+		res.MapSet("affectedProjects", vm.ListValue(nil))
+		res.MapSet("notes", vm.ListValue(nil))
+		return res, nil
+	}))
 	m.MapSet("affectedImpact", fn("magus.affectedImpact", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("base", vm.StrValue(""))
@@ -304,11 +313,6 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("url", vm.StrValue(""))
 		res.MapSet("files", vm.ListValue(nil))
 		return res, nil
-	}))
-	// A document, so there is no shape to preserve: the empty string is the string
-	// analogue of the empty lists above.
-	m.MapSet("insightMarkdown", fn("magus.insightMarkdown", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
-		return vm.StrValue(""), nil
 	}))
 	// insight nests a record per lens rather than a list, so each one is shaped
 	// too: a null lens would break `.ownership.projects` where an empty list does not.
@@ -495,6 +499,7 @@ func buildCtx(tr *Tracer) vm.Value {
 	c.MapSet("readsFiles", fn("ctx.readsFiles", retNull))
 	c.MapSet("writesFiles", fn("ctx.writesFiles", retNull))
 	c.MapSet("modifiesExistingFiles", fn("ctx.modifiesExistingFiles", retNull))
+	c.MapSet("observes", fn("ctx.observes", retNull))
 	return c
 }
 

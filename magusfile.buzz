@@ -79,6 +79,28 @@ magus\project({
     // a worktree produced spurious diffs.
     "name": "magus",
     "spells": [go, buzz, markdown, bash],
+    // The tool configs the bound spells actually read, on top of the source globs those
+    // spells contribute. Every one of these changes what a target DOES while matching no
+    // spell glob, so leaving one undeclared buys a cache HIT on an edit to it: golangci-lint
+    // re-run under a new rule set, replaying the verdict from the old one. That is the
+    // silent half of under-declaration. The loud half is louder - an undeclared file here
+    // still seeds the root project through directory containment, so touching it reruns
+    // everything without keying anything (MGS1028).
+    //
+    // Deliberately NOT here: LICENSE (only release-build reads it, and that target is
+    // skip_cache, so declaring it would invalidate build/test/lint to key nothing) and
+    // .gitignore (no target reads it at all). Both keep seeding by containment, and
+    // doctor keeps saying so - an undeclared file is only wrong when it is an input.
+    "sources": [
+        ".golangci.yml",        // golangci-lint, via the go spell's lint op
+        ".mockery.yaml",        // drives `go tool mockery` in generate
+        ".markdownlintignore",  // markdownlint, via the markdown spell's lint op
+        "dprint-base.json",     // dprint.json extends it; the markdown spell declares only dprint.json
+        "mise.toml",            // pins the toolchain every op in this project runs under
+        "magus.yaml",           // charms, cache and sandbox policy every run resolves
+        "Dockerfile",           // image-build's amd64 variant
+        "Dockerfile.static",    // image-build's static multi-arch variant
+    ],
     "targets": {
         "watch": {"skip_cache": "blocks on a filesystem watch loop and never returns"},
         // serve blocks (a long-running dev-loop server), so it must never cache.
@@ -101,6 +123,9 @@ magus\project({
         // Keyed on the image and this tree, but the ANSWER also depends on trivy's
         // vulnerability database, which changes daily and is not an input magus can see.
         // A hit would report yesterday's CVEs against today's image.
+        // ctx.observes is the successor, and it is not usable here YET: it keys on a value
+        // the magusfile STATES, and nothing states trivy's DB id without probing for it,
+        // which cannot run before the key is minted. See plans/ctx-observes-reconstruction.md.
         "image-scan": {"skip_cache": "reads trivy's vulnerability database, which changes independently of this tree"},
         // A release must never replay a cached artifact (see cd.yaml's remote-cache
         // comment); each has a real side effect (dist/ output, or a signature over it)
@@ -131,17 +156,9 @@ magus\project({
 		// Preserves the hand-authored Unreleased section in place; caching a prior
 		// file would overwrite a later edit that is intentionally outside releases/.
 		"changelog-generate": {"skip_cache": "preserves a hand-authored Unreleased section; a replay would overwrite a later edit"},
-        // Screen-records the CLI, so the bytes it writes are never the same twice
-        // (real target durations land in the frames). Caching would replay a GIF
-        // recorded against different code, which is the one thing a demo must not
-        // do. Deliberately NOT named *-generate: `generate` globs that suffix and
-        // drift-gates it, and a non-reproducible artifact under a drift gate fails
-        // every CI run by construction. See the tapes target below.
-        "tapes": {"skip_cache": "screen-records the CLI, so its bytes differ every run and a replay would show different code"},
-        // Same reasoning as tapes: it runs a real session, so real durations and
-        // output refs land in the capture and no two runs agree. Only the RENDER
-        // downstream of it (termcast-generate) is reproducible enough to cache
-        // and to gate.
+        // Runs a real session, so real durations and output refs land in the
+        // capture and no two runs agree. Only the RENDER downstream of it
+        // (termcast-generate) is reproducible enough to cache and to gate.
         "termcast-record": {"skip_cache": "records a real session, so its bytes differ every run and a replay would show different code"},
         "termcast-showcase": {"skip_cache": "drives a live interactive session, so its bytes differ every run"},
     },
@@ -765,7 +782,7 @@ export fun image_scan(ctx: magus\Context, args: [str]) > void !> any {
 // the upgrade. --severity HIGH,CRITICAL mirrors image_scan's threshold.
 //
 // The whole tree is scanned, npm subtrees included. That is not duplicated effort: the
-// per-project `security` targets in console/, docs/ and evals/ run pnpm's ADVISORY audit,
+// per-project `security` targets in console/ and docs/ run pnpm's ADVISORY audit,
 // which says nothing about licensing.
 //
 // The baseline when this landed was 265 findings, all `notice` or `unencumbered` and none
@@ -919,13 +936,12 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
 // that is always wrong. CLAUDE.md has said "edit the sources, not the installed
 // copies" all along; this is the declaration that makes the tooling say it too.
 //
-// AGENTS.md is absent here, and no longer only because declaring it would be
-// wrong: magus does not write that file at all. It is hand-authored prose, the
-// magus block inside it is pasted by a human from `magus agent sample
-// --section`, and `magus graph verify` grades that block's stamp without
-// touching it. This target used to end in an `install-agents-md` call that
-// rewrote the block on every generate, which is what made AGENTS.md a hybrid
-// file and put it at odds with the Markdown formatter.
+// AGENTS.md is absent here because magus does not write that file at all. It is
+// hand-authored prose, the magus block inside it is pasted by a human from
+// `magus agent sample --section`, and `magus graph verify` grades that block's
+// stamp without touching it. An install call here would rewrite the block on
+// every generate, making AGENTS.md a hybrid file at odds with the Markdown
+// formatter.
 // The globs name the SHIPPED skills rather than the whole directory, and that
 // distinction is the point. `.claude/skills/**` also claimed the two skills magus
 // does NOT write - magus-skill-authoring and magus-local-development, both
@@ -1047,9 +1063,7 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
 
 // Renders the insight report (hotspots, affinity, ownership, trend) to stdout. Local
 // only: no workflow invokes this target, and ci-outcome.buzz's volatility-lens step
-// summary is the CI-facing equivalent now. It used to also append to a host path
-// under the `gha` charm; that branch was unreachable (nothing set
-// MAGUS_INSIGHT_OUTPUT_PATH or ran this target in CI) and was removed.
+// summary is the CI-facing equivalent.
 export fun postflight(ctx: magus\Context, args: [str]) > void !> any {
     // A summary built from the typed report rather than the whole Markdown document:
     // this target only ever logged that document locally, so the counts are what a
@@ -1068,11 +1082,11 @@ export fun postflight(ctx: magus\Context, args: [str]) > void !> any {
 // after rather than by asking whether the tree is clean, so the gate works on a dirty
 // tree. An uncommitted-but-current generated file still passes: its bytes do not move.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    // Hash every already-dirty path BEFORE the generators run. The gate used to require a
-    // clean tree, which disarmed it at exactly the moment it is reached: the documented
-    // pre-push check is run with uncommitted work in the tree, so it printed "skipped" and
-    // exited 0 - a check that cannot fail, which is how drift kept reaching CI after a
-    // local run said it would not. Comparing before against after asks the question that
+    // Hash every already-dirty path BEFORE the generators run. Requiring a clean tree
+    // instead would disarm the gate at exactly the moment it is reached: the documented
+    // pre-push check runs with uncommitted work in the tree, so it would print "skipped"
+    // and exit 0 - a check that cannot fail, which is how drift reaches CI after a
+    // local run says it will not. Comparing before against after asks the question that
     // actually matters (did the generators change anything?) and an unrelated edit no
     // longer hides the answer.
     var dirtyBefore: mut [str] = mut [<str>];
@@ -1119,46 +1133,13 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// Records every VHS tape in tapes/ into assets/gen/. Each tape drives a real magus
-// binary through a real terminal, so the GIFs are documentation that cannot quietly
-// go stale the way a pasted transcript does - re-record and the drift is visible.
-//
-// Opt-in, never wired into `generate` or `ci`: a render takes tens of seconds, needs
-// vhs (and the ttyd/ffmpeg it pulls in) on PATH, and produces a different file every
-// time. Run it when the CLI's output actually changes, then commit the result.
-//
-// The GIFs are declared outputs all the same, so `magus describe file` reports them
-// as generated and the agent guard warns on a hand-edit - the same treatment
-// assets/coverage.svg gets.
-export fun tapes(ctx: magus\Context, args: [str]) > void !> any {
-    // Declared, or the tapes and the script that stages their workspace would be
-    // unclaimed: `magus describe file tapes/core-loop.tape` reported no owner, so
-    // editing a tape invalidated nothing and told a reader it affected no target.
-    ctx.readsFiles("tapes/*.tape", "tapes/demo-init.sh", "tapes/demo.txtar");
-    ctx.writesFiles("assets/gen/*.gif");
-    // try/catch, not a sentinel: proc.which RAISES when the tool is absent, so the check
-    // cannot be forgotten and the helpful message stays where it was.
-    try {
-        proc\which("vhs");
-    } catch (e) {
-        throw "tapes: vhs not found on PATH; install it with `brew install vhs` "
-            + "(see tapes/README.md)";
-    }
-    foreach (tape in fs\glob("tapes/*.tape")) {
-        magus\log.info("recording {tape.value}");
-        proc\exec("vhs", [tape.value], ".", {});
-    }
-}
-
 // Re-records tapes/core-loop.capture: the raw bytes a real magus prints to a real
 // pseudo-terminal, driven by tapes/core-loop.session.sh.
 //
-// Opt-in and NOT named *_generate, for the same reason `tapes` is not: a session
-// is not byte-reproducible, so a drift gate over it would be red by construction.
-// The difference from `tapes` is where the unreproducible part stops. A GIF is
-// unreproducible all the way to the artifact a reader sees, so nothing about it
-// can be gated; a capture is unreproducible only up to the bytes, and RENDERING
-// those bytes is arithmetic - which is what termcast_generate gates.
+// Opt-in and NOT named *_generate: `generate` globs that suffix and drift-gates
+// what it finds, and a session is not byte-reproducible, so the gate would be red
+// by construction. The unreproducibility stops at the bytes, though - RENDERING
+// them is arithmetic, which is what termcast_generate gates instead.
 //
 // Run it when magus's output changes, commit the capture, and let the render
 // follow in the same commit.
@@ -1174,9 +1155,9 @@ export fun termcast_record(ctx: magus\Context, args: [str]) > void !> any {
 // Renders tapes/core-loop.capture into the README's animated SVG.
 //
 // Deterministic - it replays committed bytes through the terminal emulator and
-// emits text - so unlike the GIF it can be drift-gated, and is. That gate is the
-// point: the GIF it replaces went stale without anything noticing, to where the
-// README's alt text described a project count magus no longer reported.
+// emits text - so it can be drift-gated, and is. That gate is the point: a
+// recording nothing checks goes stale in silence, until the README's alt text is
+// describing a project count magus no longer reports.
 // Re-records tapes/showcase.capture: a real INTERACTIVE session, driven by real
 // keystrokes, showing the surfaces a transcript cannot - the pinned band, the
 // failure tree beside its captured output, the picker searching the graph.
@@ -1207,8 +1188,8 @@ export fun termcast_generate(ctx: magus\Context, args: [str]) > void !> any {
 // a terminal would receive even though the scenario is staged.
 export fun termshots_generate(ctx: magus\Context, args: [str]) > void !> any {
     // internal/cache too: the shots drive the REAL PrettyHandler, so its band
-    // is an input to the picture. Leaving it undeclared meant editing the band
-    // replayed a cached SVG of the band as it used to be.
+    // is an input to the picture. Left undeclared, an edit to the band replays
+    // a cached SVG of the stale band.
     ctx.readsFiles("cmd/magus-termshots/*.go", "internal/interactive/**/*.go",
         "internal/cache/*.go");
     ctx.writesFiles("assets/gen/terminal-*.svg");
@@ -1452,9 +1433,9 @@ fun release_target_platform(goos: str, goarch: str) > [str] !> any {
 //
 // The default is static so that every layer says the same thing: the bare command
 // produces the bare asset, and that asset is the one that runs anywhere - no loader,
-// no glibc, no system libzstd. It used to be inverted, with the bare command producing
-// the cgo build while the bare ARCHIVE was the static one, so `release-build` and
-// `magus_<v>_<os>_<arch>.tar.gz` meant opposite things in the same release.
+// no glibc, no system libzstd. Inverted - the bare command producing the cgo build
+// while the bare ARCHIVE is the static one - `release-build` and
+// `magus_<v>_<os>_<arch>.tar.gz` would mean opposite things in the same release.
 //
 // The charm is named for the property it selects, matching the `_dynamic` asset suffix -
 // not for cgo, which is the mechanism that happens to produce it. Static also
@@ -1702,10 +1683,10 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         if (deliver) { vcs\cmd(["tag", m["prefix"] + "v" + v]); }
         // Only a Go module is required by the root's go.mod; a library in another
         // language is tag-only, so there is nothing to repoint.
-        // "Go module" used to imply "the root's go.mod requires it". libs/testlayout
-        // breaks that: `golangci-lint custom` compiles it into a binary and magus
-        // never imports it, so there is no require line to repoint. Ask go.mod
-        // directly instead of inferring from the manifest. rewriteRequire still
+        // Inferring "the root's go.mod requires it" from the manifest breaks on
+        // libs/testlayout: `golangci-lint custom` compiles it into a binary and
+        // magus never imports it, so there is no require line to repoint. Ask
+        // go.mod directly. rewriteRequire still
         // throws on a missing line, which is right for a module the root does
         // require and whose line moved.
         if (m["gomodule"] != "" and gomod.indexOf(m["gomodule"] + " v") == null) {
@@ -1830,11 +1811,11 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // below, and every magusfile by doctor's magusfile-syntax check. Reviving them means first
 // having standalone Buzz and pinning `buzz` in mise.toml, which is not the case today.
 //
-// That middle claim used to read "every spells/<dir>/spell.buzz by the registry compile
-// that doctor's spell-contract check exercises", and it was false in both halves. The
+// The stronger middle claim - "every spells/<dir>/spell.buzz by the registry compile
+// that doctor's spell-contract check exercises" - is false in both halves. The
 // built-in compile in cmd/magus-utils only sees one directory level and skips anything in
 // its workspaceLocalSpells list; doctor only ever observes spells that REGISTERED, which a
-// spell no magusfile imports never does. Two sources fell through both - see buzz-test.
+// spell no magusfile imports never does. Two sources fall through both - see buzz-test.
 
 // Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through
 // magus's embedded engine.
@@ -1919,11 +1900,11 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// This project deliberately declares NO preflight, and the reason is worth keeping: doctor
-// used to run in one and fail the build on a finding, which made workspace conventions a
-// blocker for everyone downstream. The advice action now reports the same findings on the
-// pull request, non-blocking - and unlike a preflight gate, that works for a consumer who
-// never wired doctor into their own pipeline.
+// This project deliberately declares NO preflight: doctor running in one fails the build
+// on a finding, making workspace conventions a blocker for everyone downstream. The
+// advice action reports the same findings on the pull request, non-blocking - and unlike
+// a preflight gate, that works for a consumer who never wired doctor into their own
+// pipeline.
 //
 // What was left behind was an EMPTY preflight with no callers, which reported `[pass]` for
 // doing nothing. The TypeScript projects keep theirs because it does real work there (an
@@ -1987,7 +1968,18 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // `--version` on a custom binary carries a build timestamp that moves every
     // rebuild.
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/**/*.go");
-    proc\exec("./custom-gcl", ["run"]);
+    // The linter cache lives inside this checkout, not at the user-global default.
+    // golangci-lint (v2.12) keys package results by module-relative path + content,
+    // relocatable across checkouts - but each stored issue carries the ABSOLUTE file
+    // paths of whichever checkout analyzed the package first. Byte-identical sibling
+    // worktrees replay each other's entries, so a neighbor's suppressed findings
+    // resurface here as ../<sibling>/... paths that no ^-anchored exclusion in
+    // .golangci.yml matches - measured: 25 stdversion findings from a sibling failing
+    // a tree with zero of its own. A cold analysis per fresh worktree is the price.
+    final lintCache = magus\ls().workspace + "/.magus/golangci-lint";
+    os\withEnv({"GOLANGCI_LINT_CACHE": lintCache}, fun () > void !> any {
+        proc\exec("./custom-gcl", ["run"]);
+    });
     go["go-vet"](ctx);
     // Compile the browser playground for wasm. COMPILE only, to /dev/null: TinyGo
     // builds the shipped artifact, but that runs by hand and never in ci, so nothing
@@ -2025,6 +2017,9 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 // covers.
 export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
+    // Not writesFiles: gofmt amends authored code rather than producing it, so these
+    // bytes must stay off the snapshot/replay path. Undeclared, this is MGS4007.
+    ctx.modifiesExistingFiles("**/*.go", "go.mod", "go.sum");
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);
     // Scope dprint by ARGV, not by its config. dprint discovers a nested dprint.json and
@@ -2037,6 +2032,8 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     // Passing paths scopes it (10 files, none in a child project). The excludes in
     // dprint.json still apply, so MAGUS.md and CHANGELOG.md stay out. Keep this list in
     // step with that file's `includes`.
+    ctx.modifiesExistingFiles("*.md", "benchmarks/**/*.md", "tapes/**/*.md",
+        "cmd/magus/agents-section.md");
     markdown["dprint"](ctx, {"args": ["./*.md", "./benchmarks/**/*.md", "./tapes/**/*.md",
         "./cmd/magus/agents-section.md"]});
 }
@@ -2234,8 +2231,8 @@ fun missing_input(path: str, project: str) > str {
 // reproducible locally: run the same three commands, then serve gen/site, and what you see
 // is what publishes.
 //
-// It ASSEMBLES ONLY. It used to drive the two builds itself (magus\run of docs generate and
-// console build) so one command reproduced the deploy, and that tripped MGS3001: a root
+// It ASSEMBLES ONLY. Driving the two builds itself (magus\run of docs generate and
+// console build) would let one command reproduce the deploy, and trips MGS3001: a root
 // target that writes into a descendant project's tree breaks the boundary the cache and the
 // affected set are computed over. The ward is right, and the fix is not to widen the parent's
 // footprint - it is for each project to write its own tree. So the caller runs the two
@@ -2246,10 +2243,10 @@ fun missing_input(path: str, project: str) > str {
 // is `ctx.needs(ctx.glob("*-generate", "!deploy-generate"))`: the suffix would otherwise
 // enrol a full tree copy in every `magus run generate`, to satisfy a drift gate over output
 // that is deliberately gitignored. Before negation existed the only remedy was to avoid the
-// name - which is what the `tapes` target above still records, and what this target was first
-// called (build-site). Renaming around a matcher hides the reason at both ends: the glob does
-// not say what it is missing, and the target does not say why it is called something else.
-// "!deploy-generate" says it once, where it applies.
+// name - which is what termcast-record and termcast-showcase above still do, and what this
+// target was first called (build-site). Renaming around a matcher hides the reason at both
+// ends: the glob does not say what it is missing, and the target does not say why it is
+// called something else. "!deploy-generate" says it once, where it applies.
 //
 // NOT site-generate: the docs project already exports a target by that name, and two targets
 // called the same thing in one workspace - one rendering docs/gen, one assembling the whole

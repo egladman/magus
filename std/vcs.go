@@ -108,7 +108,7 @@ var Vcs = Module{
 		},
 		{
 			Name: "cmd",
-			Doc:  "Escape hatch: run the active VCS binary (git/hg/jj) with args, for something no method covers. Same result and raise semantics as magus.cmd and proc.exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd, unlike proc.exec's positional dir); opts.quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on vcs.name() when they differ. Raises when no VCS is resolved, rather than running nothing and reporting success.",
+			Doc:  "Escape hatch: run the active VCS binary (git/hg/sl/jj) with args, for something no method covers. Same result and raise semantics as magus.cmd and proc.exec - returns {stdout, stderr, code, ok} and raises on a non-zero exit unless opts.allow_failure. opts.dir runs it elsewhere (relative to the target's cwd, unlike proc.exec's positional dir); opts.quiet captures the output without echoing it to the console. This is VCS-AGNOSTIC only in that magus picks the binary; the args are the backend's own, so branch on vcs.name() when they differ. Raises when no VCS is resolved, rather than running nothing and reporting success.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -293,8 +293,8 @@ func VcsRef(ctx context.Context) (string, error) {
 // VcsStatus reports the working tree's uncommitted state as a typed Status.
 //
 // Handing a magusfile the backend's own status lines - git porcelain, hg status, jj diff
-// --name-only - made every caller reimplement the parsing and know which VCS it was on.
-// statusPaths does it once, here.
+// --name-only - would make every caller reimplement the parsing and know which VCS it is on.
+// DirtyFiles answers in paths, so there is nothing here to reimplement.
 //
 // Paths carry the repository root as their base: a VCS reports from the root while a
 // target's cwd is its PROJECT directory, so a bare string was ambiguous exactly when a
@@ -311,7 +311,7 @@ func VcsStatus(ctx context.Context, paths []string) (types.Status, error) {
 	if err != nil {
 		dir = ""
 	}
-	lines, err := v.DirtyFiles(ctx, dir, paths)
+	dirty, err := v.DirtyFiles(ctx, dir, paths)
 	if err != nil {
 		return types.Status{}, types.WrapDiagnostic(types.VCSUnavailable, err, "read %s status", v.Name())
 	}
@@ -319,17 +319,11 @@ func VcsStatus(ctx context.Context, paths []string) (types.Status, error) {
 	if err != nil {
 		root = dir
 	}
-	files := make([]types.Path, 0, len(lines))
-	for _, p := range statusPaths(v.Name(), lines) {
+	files := make([]types.Path, 0, len(dirty))
+	for _, p := range dirty {
 		files = append(files, types.Path{Value: p, Base: root})
 	}
 	return types.Status{Clean: len(files) == 0, Files: files}, nil
-}
-
-// statusPaths delegates to vcs.StatusPaths, which lives beside the drivers that produce
-// these lines. Kept as a local alias so the call sites in this file stay short.
-func statusPaths(vcsName string, lines []string) []string {
-	return vcs.StatusPaths(vcsName, lines)
 }
 
 // VcsIsDirty reports whether the working tree has uncommitted changes.

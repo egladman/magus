@@ -13,6 +13,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -731,4 +732,284 @@ func BenchmarkOutputStoreLookupOutput(b *testing.B) {
 			b.Fatal(err)
 		}
 	}
+}
+
+// The contracts in this file are the ones portable refs REST ON. Each is cheap to
+// break by accident from a long way away (the hit path, the resolver, a shape
+// constant, a consumer's regexp) and expensive to notice, because the system keeps
+// working locally - refs simply stop meaning the same thing on two machines. Line
+// coverage does not protect any of them; these assertions do.
+
+// realRefShape is what a run actually prints: the prefix plus exactly refHexLen hex.
+var realRefShape = regexp.MustCompile(`^out[0-9a-f]{12}$`)
+
+// TestRefShapeContract pins the WIRE SHAPE of both id kinds, because they are pasted
+// into terminals, matched by consumers' own patterns (the MCP hint scanner), and
+// quoted in docs. Changing a length is legitimate; changing it ACCIDENTALLY is what
+// this catches. It also pins that both shapes satisfy the two public predicates, so a
+// consumer scanning free text keeps recognizing real ids.
+func TestRefShapeContract(t *testing.T) {
+	assert.Equal(t, "out", RefPrefix)
+	assert.Equal(t, 12, refHexLen, "a ref is out + 12 hex; changing this changes every printed id")
+	assert.Equal(t, 8, attemptHexLen, "an attempt keeps the pre-portable width, so old ids still parse")
+
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	step := makeStep(root)
+	step.Target = "build"
+	r, err := c.Run(context.Background(), step, func(context.Context) error { return nil })
+	require.NoError(t, err)
+
+	require.Regexp(t, realRefShape, r.Ref, "a real run must print out + 12 hex")
+	assert.Len(t, r.Ref, 15, "callers size terminal output and test fixtures against this")
+	assert.True(t, LooksLikeRef(r.Ref), "`magus query output` must accept what a run printed")
+	assert.True(t, IsMintedRef(r.Ref), "a free-text scanner must recognize what a run printed")
+
+	attempts, err := c.outputs.Attempts(r.Ref)
+	require.NoError(t, err)
+	require.Len(t, attempts, 1)
+	assert.True(t, IsMintedRef(attempts[0].Attempt), "an attempt id must also be recognizable")
+	assert.True(t, LooksLikeRef(attempts[0].Attempt))
+}
+
+// TestCacheKeyUnaffectedByPlatform pins that Manifest.Platform (the replay-time
+// gate added alongside portable refs) is NOT a key input. The key is what an
+// output ref truncates, and a ref must be identical on every machine - that is
+// the whole portable-ref feature - so platform must only ever be consulted after
+// the key is computed, never folded into hashStepInputs. Two Cache instances that
+// differ ONLY in platform must hash the same step to the same key.
+func TestCacheKeyUnaffectedByPlatform(t *testing.T) {
+	root := t.TempDir()
+	writeMain(t, root, "package main")
+	step := makeStep(root)
+	step.Target = "build"
+
+	cLinux, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), withPlatform("linux/amd64"))
+	require.NoError(t, err)
+	cDarwin, err := Open(t.Context(), filepath.Join(t.TempDir(), ".magus"), withPlatform("darwin/arm64"))
+	require.NoError(t, err)
+
+	hLinux, err := cLinux.hashStep(context.Background(), &step)
+	require.NoError(t, err)
+	hDarwin, err := cDarwin.hashStep(context.Background(), &step)
+	require.NoError(t, err)
+
+	assert.Equal(t, hLinux, hDarwin, "cache key must be byte-identical across platforms")
+}
+
+// TestCacheHitReusesTheSameRef is THE portability contract, and the easiest one to
+// break from far away: a hit must answer with the ref the miss printed. If a hit ever
+// minted a fresh id, every existing test would still pass while two machines - or the
+// same machine twice - silently stopped agreeing on what a run is called.
+func TestCacheHitReusesTheSameRef(t *testing.T) {
+	root, cdir, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	out := touchOut(t, root)
+	step := makeStep(root)
+	step.Outputs = []string{"test/pkg/out.txt"}
+	build := func(context.Context) error { return os.WriteFile(out, []byte("built"), 0o644) }
+
+	miss, err := c.Run(context.Background(), step, build)
+	require.NoError(t, err)
+	require.False(t, miss.Hit)
+	require.NotEmpty(t, miss.Ref)
+
+	c2, err := Open(t.Context(), cdir, WithMutable(false))
+	require.NoError(t, err)
+	hit, err := c2.Run(context.Background(), step, build)
+	require.NoError(t, err)
+	require.True(t, hit.Hit, "second run must hit")
+	assert.Equal(t, miss.Ref, hit.Ref, "a hit must reuse the miss's ref, never mint a new one")
+
+	// And the ref still resolves to the captured bytes after the hit.
+	_, desc, err := c2.outputs.ByRef(hit.Ref)
+	require.NoError(t, err)
+	assert.Equal(t, "test/pkg", desc.Project)
+}
+
+// TestFailingRunRefResolves: failures are the outputs people most want to retrieve,
+// and they take a different code path (never snapshotted, never pushed). The ref a
+// failing run prints must resolve to that run's bytes.
+func TestFailingRunRefResolves(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	step := makeStep(root)
+	step.Target = "test"
+
+	boom := errors.New("exit status 1")
+	res, err := c.Run(context.Background(), step, func(ctx context.Context) error {
+		stdout, _ := runPkg.OutputWriters(ctx)
+		fmt.Fprintln(stdout, "FAIL: one assertion")
+		return boom
+	})
+	require.ErrorIs(t, err, boom)
+	require.Regexp(t, realRefShape, res.Ref, "a failing run prints a real ref too")
+
+	data, desc, err := c.outputs.ByRef(res.Ref)
+	require.NoError(t, err)
+	assert.Contains(t, string(data), "FAIL: one assertion")
+	assert.True(t, desc.Failed)
+}
+
+// TestConcurrentPersistsShareRefWithDistinctAttempts: the store advertises safety for
+// concurrent Persist. Two executions of one step must agree on the ref and disagree on
+// the attempt - if attempts ever collided, one run's output would overwrite another's.
+func TestConcurrentPersistsShareRefWithDistinctAttempts(t *testing.T) {
+	s := NewOutputStore(t.TempDir())
+	const key = "0f1e2d3c4b5a69788796a5b4c3d2e1f0"
+	const n = 8
+
+	var wg sync.WaitGroup
+	refs := make([]string, n)
+	attempts := make([]string, n)
+	for i := range n {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			stored, err := s.Persist(context.Background(), key,
+				[]byte(fmt.Sprintf("run %d\n", i)), OutputDescriptor{Project: "p", Target: "build"})
+			if err == nil {
+				refs[i], attempts[i] = stored.Ref, stored.Attempt
+			}
+		}()
+	}
+	wg.Wait()
+
+	seen := map[string]struct{}{}
+	for i := range n {
+		require.Equal(t, PortableRef(key), refs[i], "every concurrent execution shares the step's ref")
+		require.NotEmpty(t, attempts[i])
+		_, dup := seen[attempts[i]]
+		require.False(t, dup, "attempt ids collided: one run would overwrite another")
+		seen[attempts[i]] = struct{}{}
+	}
+}
+
+// TestOldRefStillResolvesAfterUpgrade: a ref copied from scrollback, a ticket, or a CI
+// log written by the PREVIOUS magus is 11 chars. Upgrading must not turn those into
+// dead ids while the outputs are still on disk.
+func TestOldRefStillResolvesAfterUpgrade(t *testing.T) {
+	dir := t.TempDir()
+	const key = "9988776655443322119900aabbccddee"
+	keyDir := filepath.Join(dir, "outputs", key)
+	require.NoError(t, os.MkdirAll(keyDir, 0o755))
+	const oldRef = "outfeedface" // out + 8 hex, exactly what a pre-portable run printed
+	require.NoError(t, os.WriteFile(filepath.Join(keyDir, oldRef+outExt), []byte("legacy output\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(keyDir, oldRef+descExt),
+		[]byte(`{"ref":"`+oldRef+`","project":"pkg/a","target":"build","failed":false,"timestamp_ms":1,"duration_ms":1}`), 0o644))
+
+	s := NewOutputStore(dir)
+	data, _, err := s.ByRef(oldRef)
+	require.NoError(t, err, "an id printed by the previous magus must still resolve")
+	assert.Equal(t, "legacy output\n", string(data))
+
+	// A git-style short prefix of the old id keeps working too.
+	data, _, err = s.ByRef("outfeed")
+	require.NoError(t, err)
+	assert.Equal(t, "legacy output\n", string(data))
+}
+
+// A 12-hex ref is 48 bits, and the design ACCEPTS a birthday collision at roughly
+// 1e-3 per million distinct steps rather than paying for a longer id. That trade is
+// only defensible if colliding refs stay RECOVERABLE, which is the one path a user
+// hits precisely when they are already confused. These tests prove the recovery
+// works rather than trusting the comment that says it does.
+
+// TestCollidingRefsListDistinguishableCandidates: two cache keys sharing their first
+// refHexLen hex render the SAME portable ref. Asking for it must not dead-end - the
+// ambiguity error has to name candidates that are distinct AND that actually resolve,
+// or the user has no way back (they cannot see the full keys to lengthen the prefix
+// themselves).
+func TestCollidingRefsListDistinguishableCandidates(t *testing.T) {
+	s := NewOutputStore(t.TempDir())
+	// Identical for the first 12 hex, different immediately after.
+	const keyA = "abcdef012345" + "aaaa000000000000000000000000000000000000000000000000"
+	const keyB = "abcdef012345" + "bbbb000000000000000000000000000000000000000000000000"
+	require.Equal(t, PortableRef(keyA), PortableRef(keyB), "the fixture must actually collide")
+
+	mustPersist(t, s, keyA, []byte("output from A\n"), OutputDescriptor{Project: "pkg/a", Target: "build"})
+	mustPersist(t, s, keyB, []byte("output from B\n"), OutputDescriptor{Project: "pkg/b", Target: "build"})
+
+	_, _, err := s.ByRef(PortableRef(keyA))
+	var amb *AmbiguousRefError
+	require.True(t, errors.As(err, &amb), "a collided ref must report ambiguity, got %v", err)
+	require.Len(t, amb.Candidates, 2)
+	require.NotEqual(t, amb.Candidates[0], amb.Candidates[1],
+		"candidates must differ; two identical strings leave the user no way to disambiguate")
+
+	// Every listed candidate must resolve on its own - the error is only useful if
+	// what it prints can be pasted straight back in.
+	got := map[string]string{}
+	for _, cand := range amb.Candidates {
+		data, _, cerr := s.ByRef(cand)
+		require.NoError(t, cerr, "candidate %q from the error message must resolve", cand)
+		got[cand] = string(data)
+	}
+	assert.ElementsMatch(t, []string{"output from A\n", "output from B\n"},
+		[]string{got[amb.Candidates[0]], got[amb.Candidates[1]]},
+		"the two candidates must reach the two different outputs")
+
+	// The rendered message names the ref and both candidates, since that string is
+	// the entire recovery affordance.
+	msg := amb.Error()
+	assert.Contains(t, msg, "ambiguous")
+	assert.Contains(t, msg, amb.Candidates[0])
+	assert.Contains(t, msg, amb.Candidates[1])
+}
+
+// TestDescriptorByRefSkipsTheBlob: the identity views want metadata only. It must
+// agree with ByRef's descriptor, and - unlike ByRef, which still has bytes to hand
+// back - it must ERROR when the descriptor is unreadable rather than quietly
+// returning a zero-valued record that reads as a real run.
+func TestDescriptorByRefSkipsTheBlob(t *testing.T) {
+	dir := t.TempDir()
+	s := NewOutputStore(dir)
+	const key = "1122334455667788990011223344556677889900112233445566"
+
+	ref := mustPersist(t, s, key, []byte("a very large captured log\n"),
+		OutputDescriptor{Project: "svc/api", Target: "test", TimestampMs: 42, DurationMs: 7})
+
+	desc, err := s.DescriptorByRef(ref)
+	require.NoError(t, err)
+	assert.Equal(t, "svc/api", desc.Project)
+	assert.Equal(t, "test", desc.Target)
+	assert.Equal(t, int64(42), desc.TimestampMs)
+
+	_, viaBytes, err := s.ByRef(ref)
+	require.NoError(t, err)
+	assert.Equal(t, viaBytes, desc, "both readers must report the same identity")
+
+	// Remove the sidecar: the blob still resolves, so ByRef degrades to a zero
+	// descriptor while DescriptorByRef must say it cannot answer.
+	require.NoError(t, os.Remove(filepath.Join(dir, "outputs", key, desc.Attempt+descExt)))
+	_, zero, err := s.ByRef(ref)
+	require.NoError(t, err, "bytes are still retrievable")
+	assert.Empty(t, zero.Project, "ByRef degrades to a zero descriptor")
+	_, err = s.DescriptorByRef(ref)
+	assert.Error(t, err, "a metadata reader must not invent an empty run")
+
+	_, err = s.DescriptorByRef("outffffffffffff")
+	assert.ErrorIs(t, err, fs.ErrNotExist, "an unknown ref is not-exist, not a zero record")
+}
+
+// TestRefNotFoundNamesTheStoresConsulted: "not found" is only actionable if the
+// reader learns WHERE magus looked - a never-published foreign ref and a typo are
+// otherwise the same message. It must also keep matching fs.ErrNotExist so the CLI's
+// existing MGS8001 path still fires.
+func TestRefNotFoundNamesTheStoresConsulted(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+
+	_, _, err := c.OutputByRef(context.Background(), "outdeadbeefcafe")
+	require.Error(t, err)
+	assert.ErrorIs(t, err, fs.ErrNotExist, "the CLI's not-found diagnostic keys on this")
+
+	var missing *RefNotFoundError
+	require.True(t, errors.As(err, &missing), "a miss must name the stores, got %v", err)
+	assert.Equal(t, []string{"local cache"}, missing.Stores,
+		"with no remote configured, claiming a remote was consulted would be a lie")
+	msg := missing.Error()
+	assert.Contains(t, msg, "outdeadbeefcafe")
+	assert.Contains(t, msg, "local cache")
+	assert.True(t, strings.Contains(msg, "consulted"), "the message must say where magus looked: %q", msg)
 }

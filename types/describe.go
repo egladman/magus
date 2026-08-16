@@ -1,6 +1,10 @@
 package types
 
-import "github.com/egladman/magus/spells"
+import (
+	"slices"
+
+	"github.com/egladman/magus/spells"
+)
 
 // Describe-output types and the concept definitions printed by "magus describe".
 //
@@ -181,6 +185,20 @@ type TargetGraphNode struct {
 	// target names), each carries the other project's path, so the graph can draw a
 	// target -> target edge across project boundaries instead of a coarse project -> project one.
 	CrossDependencies []CrossTargetRef `json:"cross_dependencies,omitempty" yaml:"cross_dependencies,omitempty"`
+	// Chain is the target's composition IN INVOCATION ORDER: the DISTINCT steps the
+	// body names, in the order it first names them, across every ctx.needs call the
+	// target makes. A step named twice appears once, at its first invocation - the
+	// second mention adds no ordering the first has not already fixed.
+	// Dependencies and CrossDependencies answer "what does this compose"
+	// as two sets keyed by locality; Chain answers "in what order", which is the one
+	// fact the source carries and neither set preserves once the graph merges them.
+	// Empty for a target that composes nothing.
+	//
+	// DIRECT steps only - one level, never a recursive flattening. A step that itself
+	// chains is described by ITS own record; expanding it here would print a plan the
+	// magusfile never writes, and the pool (not this list) decides how a transitive
+	// dependency actually schedules.
+	Chain []ChainStep `json:"chain,omitempty" yaml:"chain,omitempty"`
 	// ReadsFiles are the per-target file inputs the body declares via ctx.readsFiles(...),
 	// captured statically in ONE representation where each entry carries its owning
 	// project (InputRef). A bare-literal glob (ctx.readsFiles("glob")) is a same-project
@@ -244,7 +262,17 @@ type TargetGraphNode struct {
 	// env is genuinely derived from the environment stay cacheable instead of having to
 	// opt out of the cache entirely.
 	EnvAllow []string `json:"env_allow,omitempty" yaml:"env_allow,omitempty"`
-	// DynamicIO is set when a ctx.readsFiles/writesFiles/modifiesExistingFiles/envInputs call carries a
+	// Observations are the external facts this target declares via ctx.observes, as
+	// canonical "key=value" strings in declaration order (hash.go sorts a copy at hash
+	// time; nothing sorts the stored value). An observation is a fact the answer depends
+	// on that the tree does not contain - a vulnerability feed's id, a remote schema's
+	// revision - so the target can key on it instead of opting out of the cache with
+	// skip_cache. Both halves are literals, hashed directly as ExecOverrides are, which
+	// makes this ExecOverrides' mechanical twin; what differs is that an observation
+	// changes nothing about HOW the target runs, only what its answer is a function of.
+	// magus never interprets the value: it stores it, and a change is a miss.
+	Observations []string `json:"observations,omitempty" yaml:"observations,omitempty"`
+	// DynamicIO is set when a ctx.readsFiles/writesFiles/modifiesExistingFiles/envInputs/observes call carries a
 	// non-literal argument. A computed glob is invisible to this static read, so the load
 	// path rejects it loudly rather than silently caching an under-declared footprint.
 	// Not serialized: it is a load-time validation signal, not part of the graph.
@@ -263,6 +291,35 @@ type TargetGraphNode struct {
 type CrossTargetRef struct {
 	Project string `json:"project" yaml:"project"`
 	Target  string `json:"target"  yaml:"target"`
+}
+
+// Ref spells the reference the way the CLI takes a target ref, "project:target" - the
+// same method ChainStep carries, so a caller printing either kind of reference asks for
+// it the same way. Project is never empty on this type (a cross-project ref names
+// another project by definition), so there is no bare-name form.
+func (r CrossTargetRef) Ref() string {
+	return r.Project + ":" + r.Target
+}
+
+// ChainStep is one target a composed target invokes, in source order. Project is empty
+// for a same-project step (the common case, `ctx.needs(build)`) and carries the other
+// project's path for a cross-project one (`ctx.needs(<alias>.build)`) - the same
+// empty-means-this-project convention InputRef uses, and it stays empty here even after
+// resolution so a reader can tell the two apart at a glance. Deliberately its own type
+// rather than a reused CrossTargetRef: that one names a target in ANOTHER project by
+// definition, and a chain is mostly local steps.
+type ChainStep struct {
+	Project string `json:"project,omitempty" yaml:"project,omitempty"`
+	Target  string `json:"target"            yaml:"target"`
+}
+
+// Ref spells the step the way the CLI takes a target ref: "target" for a same-project
+// step, "project:target" for a cross-project one.
+func (s ChainStep) Ref() string {
+	if s.Project == "" {
+		return s.Target
+	}
+	return s.Project + ":" + s.Target
 }
 
 // InputRef names one file input a target declares via ctx.readsFiles, in a single shape
@@ -421,6 +478,20 @@ type ProjectEntry struct {
 	// or none of whose candidates exist, has an empty list: it carries no version of
 	// its own.
 	Manifests []string `json:"manifests,omitempty" yaml:"manifests,omitempty"`
+	// Lockfiles lists the lockfile each entry in Manifests actually resolves into
+	// (spells.Manifest.LockCandidates), found by walking from Dir up to the workspace
+	// root and taking the first candidate that exists. Empty when the ecosystem has no
+	// lockfile, when none has been written yet, or when the manifest is one that does
+	// not lock (setup.py).
+	//
+	// These are WORKSPACE-RELATIVE, unlike Manifests, which are bare filenames. That
+	// asymmetry is the useful part rather than an inconsistency: a manifest is always
+	// in Dir, so its directory says nothing, while a lockfile may be hoisted to a
+	// workspace root several levels up to serve many projects - so which directory
+	// holds it is the only thing resolving it determines. A pnpm workspace member
+	// reports "pnpm-lock.yaml" at the root here while its Manifests says
+	// "package.json" beside it.
+	Lockfiles []string `json:"lockfiles,omitempty" yaml:"lockfiles,omitempty"`
 }
 
 // ProjectsOutput is the top-level result for "describe projects".
@@ -470,7 +541,8 @@ type ModuleEntry struct {
 // EvaluatedTargetDefinition is the human-readable description of an evaluated target shown by "magus describe".
 const EvaluatedTargetDefinition = "An evaluated target shows the fully-resolved " +
 	"dispatch plan for a specific path:target pair: the workspace-rooted source and " +
-	"output globs that feed the cache key, the spells that will fire (with " +
+	"output globs that feed the cache key, the chain of targets it composes in " +
+	"invocation order, the spells that will fire (with " +
 	"target-specific sources), " +
 	"and any behavioural policy (CheckClean, TrackVolatile, Exclusive)."
 
@@ -503,11 +575,14 @@ type EvaluatedSpell struct {
 
 // EvaluatedTarget is the fully-resolved view of a single path:target pair.
 type EvaluatedTarget struct {
-	Project   string           `json:"project"             yaml:"project"`
-	Target    string           `json:"target"              yaml:"target"`
-	Dir       string           `json:"dir"                 yaml:"dir"`
-	Sources   []string         `json:"sources,omitempty"    yaml:"sources,omitempty"`
-	Outputs   []string         `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
+	Project string   `json:"project"             yaml:"project"`
+	Target  string   `json:"target"              yaml:"target"`
+	Dir     string   `json:"dir"                 yaml:"dir"`
+	Sources []string `json:"sources,omitempty"    yaml:"sources,omitempty"`
+	Outputs []string `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
+	// Chain is the targets this one composes, in invocation order; empty when it
+	// composes nothing. See TargetGraphNode.Chain, which it is copied from.
+	Chain     []ChainStep      `json:"chain,omitempty"      yaml:"chain,omitempty"`
 	DependsOn []string         `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
 	Charms    []string         `json:"charms,omitempty"     yaml:"charms,omitempty"`
 	Spells    []EvaluatedSpell `json:"spells,omitempty"     yaml:"spells,omitempty"`
@@ -619,7 +694,8 @@ const FileDefinition = "Describe file classifies paths against the workspace's d
 	"regenerate it, never hand-edit), a declared source (it feeds cache keys and the " +
 	"affected set), or one magus maintains itself outside any target, and which projects " +
 	"claim it either way. It answers \"can I disregard this changed file\" from the " +
-	"workspace's own declarations."
+	"workspace's own declarations, and - over several paths in one call - which single " +
+	"declaration covers more than one of them."
 
 // FileEntry classifies one workspace-relative path.
 type FileEntry struct {
@@ -630,8 +706,10 @@ type FileEntry struct {
 	// Role summarizes the strongest claim: "output" (a declared output glob
 	// matches - the file is generated), "source" (a declared source glob
 	// matches), "maintained" (no project declares it, but magus's own core writes
-	// it - see IsMagusMaintained), or "unclaimed" (nothing writes it and no
-	// project declares it; it invalidates no cache key and affects no target).
+	// it - see IsMagusMaintained), or "unclaimed" (no declared glob matches; it
+	// invalidates no cache key and affects no target). An unclaimed path may
+	// still carry Claims: an in-place edit is a declaration none of these roles
+	// rank, and the Hint says so when that is what happened.
 	//
 	// maintained is a REFINEMENT of unclaimed, not a rank above source: both are
 	// invisible to the cache and the affected set. It is separate because the
@@ -646,9 +724,51 @@ type FileEntry struct {
 	// the regeneration rule dominates how the file should be treated.
 	OutputOf []string `json:"output_of,omitempty" yaml:"output_of,omitempty"`
 	SourceOf []string `json:"source_of,omitempty" yaml:"source_of,omitempty"`
+	// Claims are the individual declarations that name the path, each with the
+	// target that made it and the glob that matched. OutputOf/SourceOf are the
+	// project-level summary of the same facts; the declaration is the finer unit,
+	// and it is the one that answers "which target rewrites this" for a caller
+	// splitting work across agents.
+	//
+	// The set is wider than Role ranks: it also carries the in-place edits of
+	// ctx.modifiesExistingFiles ("update"), which is a write nobody replays or
+	// cleans, so Role deliberately leaves such a file reading as its source or
+	// unclaimed self.
+	Claims []FileClaim `json:"claims,omitempty" yaml:"claims,omitempty"`
+	// DependsOn is the owning project's DIRECT declared dependencies, verbatim
+	// from Project.DependsOn - carried here so one classification call answers
+	// both "who owns this path" and "what does that owner run behind". It is not
+	// the transitive closure; `magus graph deps` computes that.
+	DependsOn []string `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
 	// Hint is the one-line handling rule for the role, ready to surface to a
 	// human or an agent.
 	Hint string `json:"hint,omitempty" yaml:"hint,omitempty"`
+}
+
+// FileClaim is one declaration that names a path: the project whose magusfile
+// declared it, the target that did, and the workspace-rooted glob that matched.
+//
+// A cross-project write is attributed to the DECLARING project, not the tree it
+// lands in - the opposite of FileEntry.OutputOf, which follows Project.AllOutputs
+// and counts it on the owner. Both are true and neither is redundant: the owner
+// says whose tree the file appears in, the declarer says whose target puts it
+// there, and only the second one can regenerate it.
+type FileClaim struct {
+	Project string `json:"project" yaml:"project"`
+	// Target is empty for a project-wide or spell-supplied glob, which every
+	// target of that project carries.
+	Target string `json:"target,omitempty" yaml:"target,omitempty"`
+	// Role is "output" (ctx.writesFiles or a project/spell output glob), "source"
+	// (ctx.readsFiles or a project/spell source glob), or "update"
+	// (ctx.modifiesExistingFiles). The first two are also FileEntry.Role values;
+	// "update" has no FileEntry.Role counterpart - see FileEntry.Claims.
+	Role string `json:"role" yaml:"role"`
+	Glob string `json:"glob" yaml:"glob"`
+	// Paths is populated only on FileReport.Overlaps, where one claim is reported
+	// once for the whole request and lists every path in it that the declaration
+	// covers. It is empty on a FileEntry's own claims, where the path is the
+	// entry's.
+	Paths []string `json:"paths,omitempty" yaml:"paths,omitempty"`
 }
 
 // magusMaintainedFiles are the workspace-relative paths magus's own core writes
@@ -702,6 +822,59 @@ type FileReport struct {
 	Definition string      `json:"definition" yaml:"definition"`
 	Count      int         `json:"count"      yaml:"count"`
 	Files      []FileEntry `json:"files"      yaml:"files"`
+	// Overlaps are the declarations that cover MORE THAN ONE of the classified
+	// paths, each listing the paths it covers. Grouped by declaration rather than
+	// emitted per pair: a hundred paths under one glob is a hundred rows here and
+	// five thousand as pairs, and the declaration is the shared thing anyway.
+	//
+	// A fact, not a verdict. Two paths under one glob mean one target rewrites
+	// both, which may be a collision between two authors or may be exactly what a
+	// single author intends; nothing here decides which.
+	Overlaps []FileClaim `json:"overlaps,omitempty" yaml:"overlaps,omitempty"`
+}
+
+// NewFileReport wraps a classification in the wire envelope. A constructor rather
+// than a literal at each render edge, because Overlaps is derived from files and
+// two call sites (the CLI and the MCP tool) building it by hand is the same
+// forgotten-line hazard the Count field above already documents.
+func NewFileReport(files []FileEntry) FileReport {
+	return FileReport{
+		Definition: FileDefinition,
+		Count:      len(files),
+		Files:      files,
+		Overlaps:   fileOverlaps(files),
+	}
+}
+
+// fileOverlaps groups the entries' claims by declaration, keeping the ones that
+// cover several distinct paths. Order follows first appearance, so the result is
+// stable for a given argument order.
+func fileOverlaps(files []FileEntry) []FileClaim {
+	type key struct{ project, target, role, glob string }
+	index := map[key]int{}
+	var claims []FileClaim
+	for _, f := range files {
+		for _, c := range f.Claims {
+			k := key{c.Project, c.Target, c.Role, c.Glob}
+			i, seen := index[k]
+			if !seen {
+				index[k] = len(claims)
+				c.Paths = []string{f.Path}
+				claims = append(claims, c)
+				continue
+			}
+			if !slices.Contains(claims[i].Paths, f.Path) {
+				claims[i].Paths = append(claims[i].Paths, f.Path)
+			}
+		}
+	}
+	var out []FileClaim
+	for _, c := range claims {
+		if len(c.Paths) > 1 {
+			out = append(out, c)
+		}
+	}
+	return out
 }
 
 // CharmReport is the "describe charm[s]" envelope.

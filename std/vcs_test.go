@@ -165,39 +165,7 @@ func TestFsExistsDistinguishesAbsenceFromDenial(t *testing.T) {
 	})
 }
 
-// statusPaths is the whole reason vcs.status can hand back paths rather than the
-// porcelain vcs.dirty_files used to leak: each backend prefixes its status lines
-// differently, and a magusfile should not have to know which one it is on.
-func TestStatusPathsStripsEachBackendsPrefix(t *testing.T) {
-	for name, tc := range map[string]struct {
-		vcs   string
-		lines []string
-		want  []string
-	}{
-		"git porcelain has two status columns": {
-			vcs:   "git",
-			lines: []string{" M docs/conventions.md", "?? new.txt", "A  added.go"},
-			want:  []string{"docs/conventions.md", "new.txt", "added.go"},
-		},
-		"a git rename names both, and the new path is the one that exists": {
-			vcs:   "git",
-			lines: []string{"R  old/name.md -> new/name.md"},
-			want:  []string{"new/name.md"},
-		},
-		"hg has one status column": {
-			vcs:   "hg",
-			lines: []string{"M docs/conventions.md", "? new.txt"},
-			want:  []string{"docs/conventions.md", "new.txt"},
-		},
-		"jj reports no status at all, so the line IS the path": {
-			vcs:   "jj",
-			lines: []string{"docs/conventions.md", "new.txt"},
-			want:  []string{"docs/conventions.md", "new.txt"},
-		},
-		"a clean tree has nothing to strip": {vcs: "git", lines: nil, want: []string{}},
-	} {
-		t.Run(name, func(t *testing.T) {
-			assert.Equal(t, tc.want, statusPaths(tc.vcs, tc.lines))
-		})
-	}
-}
+// The per-backend prefix stripping lives in the drivers, where each one knows its own format
+// instead of being keyed on its NAME - a switch on the name silently gives any backend
+// outside it git's parsing. vcs.TestParityDirtyFilesReturnsPaths pins the rule against every
+// real binary; there is nothing for std to strip.

@@ -19,11 +19,12 @@ function __magus_subcommands
         watch      'emit changed file paths (pipe into affected --stdin)' \
         status     'inspect the concurrency pool of a running parent magus' \
         clean      'remove declared Outputs (regenerable build artifacts) [--cache to also drop entries]' \
-        vcs        'staging and conflict resolution that knows what is generated (add, resolve, merge-driver)' \
+        vcs        'staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)' \
         doctor     'validate the workspace' \
         config     'view or update magus configuration' \
         memory     'durable cross-session project memory (ls, get, put, delete, verify)' \
         notes      'human-authored notes committed to the repo (ls, get, edit, verify)' \
+        diff       'read uncommitted changes in the order they deserve attention, generated folded' \
         server     'manage the persistent daemon (start / stop / status; MCP starts with it)' \
         buzz       'run a Buzz script (Buzz stdlib + every magus host module)' \
         completion 'print a shell completion script (bash, zsh, fish)' \

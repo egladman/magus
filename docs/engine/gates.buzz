@@ -350,7 +350,7 @@ export fun pruneStaleOutputs(site: Site) > void !> any {
 // writeSiteManifest emits gen/site-manifest.sha256: one "<sha256>  <path>\n" line (standard
 // sha256sum(1) format, so `sha256sum -c` verifies it directly) per file shipped under gen/,
 // repo-relative, sorted. Called from generate() AFTER generateJsBundles(), not from
-// site_render(), because generateJsBundles() writes gen/assets/mermaid.js and hljs.js
+// site_render(), because generateJsBundles() writes gen/assets/hljs.js
 // (served assets) only after site_render() returns - computing the manifest earlier would
 // omit them. Excludes its own output path (a file cannot hash itself).
 export fun writeSiteManifest(site: Site) > void !> any {

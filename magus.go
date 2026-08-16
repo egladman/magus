@@ -1,6 +1,8 @@
 package magus
 
 import (
+	"bytes"
+	"cmp"
 	"context"
 	"encoding/base64"
 	"errors"
@@ -20,6 +22,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	configgen "github.com/egladman/magus/internal/config/gen"
 	"github.com/egladman/magus/internal/graph/dependency"
+	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/internal/observability"
@@ -30,6 +33,7 @@ import (
 	"github.com/egladman/magus/internal/workspace"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/project"
+	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
@@ -380,13 +384,13 @@ func preloadMagusfiles(ctx context.Context, m *Magus) (map[string][]string, erro
 			if errors.Is(err, interp.ErrNoMagusfile) {
 				continue
 			}
-			return nil, fmt.Errorf("magus: %s: %w", types.WorkspaceRef(p.Path), err)
+			return nil, fmt.Errorf("magus: %s: %w", types.ProjectLabel(p.Path, p.Dir), err)
 		}
 		pctx := interp.WithProjectPath(ctx, p.Path)
 		for _, src := range srcs {
 			targets, err := interp.Parse(pctx, src)
 			if err != nil {
-				return nil, fmt.Errorf("magus: %s: %w", types.WorkspaceRef(p.Path), err)
+				return nil, fmt.Errorf("magus: %s: %w", types.ProjectLabel(p.Path, p.Dir), err)
 			}
 			for _, t := range targets {
 				customTargets[p.Path] = append(customTargets[p.Path], t.Key)
@@ -603,6 +607,408 @@ func (m *Magus) SetGraphObserver(o types.Observer) {
 
 func (m *Magus) VCSOptions() types.VCSOptions { return m.ws.VCSOptions }
 
+// WorkingDiff returns the working tree's uncommitted changes as the backend's own unified
+// diff, scoped to paths when non-empty and repository-wide otherwise. Empty when the tree
+// is clean.
+//
+// It is the SELF-REVIEW half of the review surface: what you are about to commit, before
+// any provider is involved. The committed-range half (base..head, a pull request) is a
+// different question and deliberately not folded in here - a range diff has to name two
+// revisions, and answering both through one signature would make the common case carry
+// arguments it never uses.
+//
+// Every backend already implements DirtyDiff, so this is VCS-agnostic without a per-backend
+// branch. The bytes are NOT identical across backends and are not meant to be: git, hg, and
+// jj each emit their native diff header, and a wrapper that reconciled them would be lying
+// about what ran. A reader parses the unified body, which they do share.
+//
+// A workspace with no VCS is not an error - it is a clean tree with nothing to review - so
+// an unresolvable backend yields "" rather than failing the caller.
+func (m *Magus) WorkingDiff(ctx context.Context, paths []string) (string, error) {
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
+	if err != nil || res.VCS == nil {
+		//nolint:nilerr // a workspace with no VCS has nothing to review, which is a clean
+		// tree rather than a failure; erroring would make the review surface unopenable in
+		// exactly the workspaces where it has least to say.
+		return "", nil
+	}
+	tracked, err := res.VCS.DirtyDiff(ctx, m.ws.Root, paths)
+	if err != nil {
+		return "", err
+	}
+	// A diff of tracked changes MISSES a brand-new file entirely, and a new file is the thing
+	// a reviewer most wants to see. Every backend's dirty-diff is tree-against-index by
+	// design - that is what a drift gate needs, and DirtyDiff must keep meaning exactly that -
+	// so the untracked half is composed here rather than by widening a contract other callers
+	// depend on.
+	untracked, uerr := m.untrackedPatch(ctx, res.VCS, paths)
+	if uerr != nil || untracked == "" {
+		//nolint:nilerr // the tracked half is still worth showing: a permission error on one
+		// scratch file must not make the whole changeset unreadable.
+		return tracked, nil
+	}
+	if tracked == "" {
+		return untracked, nil
+	}
+	// The newline between the halves is load-bearing. A patch whose last line is not
+	// newline-terminated - which is exactly what a diff ending in "\ No newline at end of
+	// file" produces - would otherwise have the first synthesized header glued onto it, so
+	// that header stops starting a line, every reader misses it, and the first untracked file
+	// silently disappears from the review while the rest show up fine. Measured: it ate
+	// exactly one new file and nothing reported an error.
+	if !strings.HasSuffix(tracked, "\n") {
+		return tracked + "\n" + untracked, nil
+	}
+	return tracked + untracked, nil
+}
+
+// untrackedPatch synthesizes a unified patch for files the VCS does not track yet: every line
+// is an addition against /dev/null, which is exactly how git renders a new file.
+//
+// Untracked paths are derived from two capabilities the backends already expose rather than
+// by parsing status output - DirtyFiles lists everything dirty, TrackedFiles says which of
+// those the VCS knows - so this stays backend-agnostic instead of learning git's porcelain
+// column format. A backend implementing neither yields no untracked half, which is the honest
+// degradation.
+func (m *Magus) untrackedPatch(ctx context.Context, driver types.VCSDriver, paths []string) (string, error) {
+	tracker, ok := driver.(types.TrackedFileReporter)
+	if !ok {
+		return "", nil
+	}
+	lines, err := driver.DirtyFiles(ctx, m.ws.Root, paths)
+	if err != nil || len(lines) == 0 {
+		return "", err
+	}
+	dirty := make([]string, 0, len(lines))
+	for _, l := range lines {
+		if p := statusLinePath(l); p != "" {
+			dirty = append(dirty, p)
+		}
+	}
+	if len(dirty) == 0 {
+		return "", nil
+	}
+	known, err := tracker.TrackedFiles(ctx, m.ws.Root, dirty)
+	if err != nil {
+		return "", err
+	}
+	isTracked := make(map[string]bool, len(known))
+	for _, p := range known {
+		isTracked[p] = true
+	}
+
+	var b strings.Builder
+	for _, p := range dirty {
+		if isTracked[p] {
+			continue
+		}
+		body, rerr := os.ReadFile(filepath.Join(m.ws.Root, p))
+		if rerr != nil {
+			continue // unreadable or already gone; see the note in WorkingDiff
+		}
+		if bytes.IndexByte(body, 0) >= 0 {
+			// A binary file gets git's own marker rather than a wall of mojibake.
+			fmt.Fprintf(&b, "diff --git a/%s b/%s\nnew file mode 100644\nBinary files /dev/null and b/%s differ\n", p, p, p)
+			continue
+		}
+		content := strings.TrimSuffix(string(body), "\n")
+		rows := strings.Split(content, "\n")
+		fmt.Fprintf(&b, "diff --git a/%s b/%s\nnew file mode 100644\n--- /dev/null\n+++ b/%s\n@@ -0,0 +1,%d @@\n", p, p, p, len(rows))
+		for _, r := range rows {
+			b.WriteString("+" + r + "\n")
+		}
+	}
+	return b.String(), nil
+}
+
+// statusLinePath strips a backend's status columns off one dirty-file line.
+//
+// Every backend prints "<status> <path>" with the status first and no spaces in it (git
+// porcelain "?? a/b.go", hg "? a/b.go", jj "A a/b.go"), so splitting on the last run of
+// leading non-space plus space recovers the path without knowing which backend wrote it. A
+// rename arrow ("R old -> new") keeps the NEW name, which is the file that exists on disk.
+func statusLinePath(line string) string {
+	s := strings.TrimSpace(line)
+	if s == "" {
+		return ""
+	}
+	if i := strings.Index(s, " -> "); i >= 0 {
+		return strings.TrimSpace(s[i+4:])
+	}
+	i := strings.IndexByte(s, ' ')
+	if i < 0 {
+		return s // no status column at all; the whole line is the path
+	}
+	return strings.TrimSpace(s[i+1:])
+}
+
+// Diff annotates a changed-path set with what the workspace already knows about each file:
+// whether it is generated, which project owns it, how widely its changed symbols are
+// referenced, and what coverage was observed on it.
+//
+// It is a JOIN, not a computation. Every input already exists - ClassifyFiles reads the same
+// declared globs `magus describe file` reads, and impact.Compute/Enrich are what `magus
+// affected --impact` prints. Assembling them here rather than in the console keeps one
+// definition of review order (types.Diff.SortForReading), so a Buzz advisor writing a
+// pull-request comment ranks files the same way the console scrolls them.
+//
+// EVERY overlay is best-effort and degrades to a Note rather than an error. A workspace with
+// no symbol index still gets roles and ownership, which is most of the value; failing the
+// whole review because coverage was never run would make the useful part unreachable. A
+// reader must be able to tell "nothing depends on this" from "nothing was measured", which is
+// what Notes is for.
+func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
+	out := types.Diff{Base: "working"}
+
+	entries, err := m.ClassifyFiles(ctx, paths)
+	if err != nil {
+		return types.Diff{}, err
+	}
+	byPath := make(map[string]*types.DiffFile, len(entries))
+	out.Files = make([]types.DiffFile, 0, len(entries))
+	for _, e := range entries {
+		out.Files = append(out.Files, types.DiffFile{
+			Path: e.Path, Project: e.Project, Role: e.Role, Hint: e.Hint,
+		})
+	}
+	for i := range out.Files {
+		byPath[out.Files[i].Path] = &out.Files[i]
+	}
+
+	// The blast radius and the symbol/coverage overlays. Computed from the SAME path set
+	// rather than from a fresh VCS diff, so the annotations describe exactly the files the
+	// caller is reviewing - re-diffing here would race an edit made since the patch was read
+	// and annotate a file the reader cannot see.
+	res, ierr := impact.ComputeFromPaths(ctx, m, paths)
+	if ierr != nil {
+		// Every overlay is best-effort and degrades to a Note. Roles and ownership are most
+		// of the value and are already computed; failing the whole review because a blast
+		// radius could not be walked would make the useful part unreachable, and the Note is
+		// what keeps the absence visible rather than silent.
+		out.Notes = append(out.Notes, "blast radius unavailable: "+ierr.Error())
+		out.SortForReading()
+		return out, nil //nolint:nilerr // reported as a Note, see above
+	}
+	graph, gerr := m.KnowledgeGraphWithSymbols(ctx)
+	// indexed is the real question, and it is NOT "did a graph load". A graph loads fine with
+	// no symbol shards in it, so gating on a non-nil graph reports every file's reach as a
+	// measured zero on exactly the workspaces that have no index - which is the collapse the
+	// nil is there to prevent. HasSymbols is the same predicate impact.Enrich gates its own
+	// overlays on, so the ranking and the overlays can never disagree about whether anyone
+	// looked.
+	indexed := false
+	if gerr == nil {
+		store := impact.GraphStore(graph)
+		indexed = store.HasSymbols()
+		impact.Enrich(res, store)
+	} else {
+		out.Notes = append(out.Notes,
+			"changed-symbol reach and coverage skipped (no symbol index loaded): "+gerr.Error())
+	}
+	out.Notes = append(out.Notes, res.Notes...)
+	// SeedProjects is documented as "the ones the author actually edited", so a project whose
+	// only changed file is a declared output does not belong in it - the whole premise of the
+	// fold is that a regenerated file is a machine's restatement, not an edit. Counting it
+	// has one line folding files and un-folding projects in the same breath: measured, a
+	// background regeneration moves "3 projects edited" to 6 while the read list stays
+	// byte-identical.
+	//
+	// AffectedProjects deliberately keeps the FULL closure over every changed path, generated
+	// included, because a regenerated output really does invalidate a downstream cache key.
+	// The two numbers answer different questions - who wrote something, and what has to run -
+	// so they must not be conflated.
+	out.SeedProjects = authorEditedProjects(res.SeedProjects, out.Files)
+	out.AffectedProjects = res.AffectedProjects
+
+	// Surface starts UNKNOWN everywhere and is only lowered to internal for a file the symbol
+	// index actually covered. Defaulting to internal would report every unindexed file as
+	// safe, which is the one wrong answer that costs something.
+	for i := range out.Files {
+		out.Files[i].Surface = types.DiffSurfaceUnknown
+	}
+	// Reach gets a measured baseline of zero ONLY when an index was loaded; otherwise it stays
+	// nil and Review.Ranked() reports that there was no ranking key. The flag is workspace-wide
+	// rather than per-file because that is the granularity magus actually knows: it can tell
+	// whether an index loaded, not whether this particular path was in it.
+	if indexed {
+		for i := range out.Files {
+			zero := 0 // one pointer PER FILE: a shared one would raise every file's reach at once
+			out.Files[i].Reach = &zero
+		}
+	}
+	for _, s := range res.ChangedSymbols {
+		f, ok := byPath[s.File]
+		if !ok {
+			continue
+		}
+		sym := types.DiffSymbol{ID: s.Symbol, Label: s.Label, RefCount: s.RefCount, FileCount: s.FileCount}
+		sym.ModuleAPI = exportedFromModule(s.File, s.Label)
+		if graph != nil {
+			sym.ExternalProjects, sym.ExternalFileCount = m.externalReferents(graph, s.Symbol, f.Project)
+		}
+		// Drop the locals. SCIP indexes every binding, so a changed function contributes its
+		// parameters and temporaries - `signal0`, `headers1`, `body0` - and on a real file they
+		// were roughly two thirds of the payload this surface serves to every MCP client. A
+		// symbol that nothing references and that leaves neither the project nor the module
+		// cannot change how anyone reads the diff, so carrying it costs an agent's context and
+		// buys nothing.
+		//
+		// The exports are kept even at zero references, and that is the whole reason this is a
+		// conjunction rather than `RefCount == 0`: a NEWLY ADDED public function has no
+		// referents yet and is precisely the thing a reviewer must see.
+		//
+		// Only the APPEND is skipped. The reach and surface updates below still run for a
+		// local, because a file whose changed symbols are all locals was still COVERED by the
+		// index - and reporting its surface as unknown would say nobody looked when somebody
+		// did.
+		if sym.RefCount > 0 || sym.FileCount > 0 || sym.ModuleAPI || len(sym.ExternalProjects) > 0 {
+			f.Symbols = append(f.Symbols, sym)
+		}
+		// Reach is the WIDEST file count among the file's changed symbols, not their sum: a
+		// file is as dangerous as its most-depended-on export, and summing would rank a file
+		// with many narrow symbols above one with a single load-bearing API.
+		if s.FileCount > f.ReachOr(-1) {
+			n := s.FileCount // a fresh pointer, never a write through the shared baseline
+			f.Reach = &n
+		}
+		// One symbol crossing a project boundary makes the whole file public surface: a
+		// reviewer needs to know the file contains something a consumer can see, and burying
+		// that because its neighbours are internal is how the signal gets missed.
+		switch {
+		case len(sym.ExternalProjects) > 0 || sym.ModuleAPI:
+			f.Surface = types.DiffSurfacePublic
+		case f.Surface == types.DiffSurfaceUnknown:
+			f.Surface = types.DiffSurfaceInternal
+		}
+	}
+	for _, c := range res.ChangedFileCoverage {
+		if f, ok := byPath[c.File]; ok {
+			cov := c.Coverage
+			f.Coverage = &cov
+		}
+	}
+
+	out.SortForReading()
+	return out, nil
+}
+
+// authorEditedProjects narrows a seed set to the projects a PERSON changed something in.
+//
+// A seed whose every changed file is a declared output was not edited; a target rewrote it.
+// Keeping it made "N projects edited" count projects with nothing to read, which is
+// indefensible in the same sentence that folds those files away. A seed with no files at all
+// in the review is kept: that means the review does not know the file's project rather than
+// that the project was untouched, and dropping it would silently shrink the count on the
+// strength of an absence.
+func authorEditedProjects(seeds []string, files []types.DiffFile) []string {
+	authored := make(map[string]bool, len(seeds))
+	known := make(map[string]bool, len(seeds))
+	for _, f := range files {
+		if f.Project == "" {
+			continue
+		}
+		known[f.Project] = true
+		if !f.Generated() {
+			authored[f.Project] = true
+		}
+	}
+	out := make([]string, 0, len(seeds))
+	for _, s := range seeds {
+		if authored[s] || !known[s] {
+			out = append(out, s)
+		}
+	}
+	return out
+}
+
+// exportedFromModule reports whether a symbol defined at path with the given label is
+// reachable from OUTSIDE the module - the boundary a semver bump is actually about.
+//
+// It is deliberately per-language and deliberately narrow. Go is the only language answered
+// here because Go states export in the language itself (an initial capital) and states
+// unreachability in the path (an `internal/` segment the toolchain enforces), so the answer
+// is a fact rather than a heuristic. Every other language returns false, which reads as "not
+// known to be module API" and never as "internal" - the caller keeps ExternalProjects, which
+// is language-neutral, and the surface stays honest about what was not checked.
+//
+// Adding a language here needs the same standard: a rule the toolchain ENFORCES, not a
+// convention it merely encourages. TypeScript's `export` keyword does not qualify, because
+// what a package actually publishes is decided by its entry points and its `exports` map,
+// which this signature cannot see.
+func exportedFromModule(path, label string) bool {
+	if !strings.HasSuffix(path, ".go") || label == "" {
+		return false
+	}
+	// `internal/` anywhere in the path makes the package unimportable outside the module,
+	// whatever the symbol's case. Checked on segments so a directory merely CONTAINING the
+	// word (say "internals/") is not mistaken for the enforced one.
+	for _, seg := range strings.Split(path, "/") {
+		if seg == "internal" {
+			return false
+		}
+	}
+	// A test file exports nothing a consumer can import.
+	if strings.HasSuffix(path, "_test.go") {
+		return false
+	}
+	r := rune(label[0])
+	return r >= 'A' && r <= 'Z'
+}
+
+// externalReferents reports which OTHER projects reference symbolID, and how many of its
+// referencing files sit outside owner. It is the semver-relevant half of the review: a symbol
+// used only inside its own project cannot break a consumer the workspace does not also
+// rebuild, and one used across a boundary can.
+//
+// Ownership is by directory containment, longest project path first, which is the same rule
+// ClassifyFiles uses - so a file in a nested project is attributed to the nested one rather
+// than to the root, and a nested project consuming its parent's symbol reads as external.
+//
+// A file owned by nothing is NOT counted as external. It affects no target and rebuilds
+// nothing, so calling it a downstream consumer would inflate the surface with paths that
+// cannot break.
+func (m *Magus) externalReferents(g *knowledge.Graph, symbolID, owner string) ([]string, int) {
+	refs, ok := g.Refs(symbolID)
+	if !ok {
+		return nil, 0
+	}
+	owners := slices.Clone(m.ws.All())
+	slices.SortFunc(owners, func(a, b *types.Project) int {
+		if c := cmp.Compare(len(b.Path), len(a.Path)); c != 0 {
+			return c
+		}
+		return cmp.Compare(a.Path, b.Path)
+	})
+	projectOf := func(path string) string {
+		for _, p := range owners {
+			if p.Path == "." || strings.HasPrefix(path, p.Path+"/") {
+				if p.Path != "." {
+					return p.Path
+				}
+				return "."
+			}
+		}
+		return ""
+	}
+
+	seen := map[string]bool{}
+	external := 0
+	for _, site := range refs.Refs {
+		proj := projectOf(site.File)
+		if proj == "" || proj == owner {
+			continue
+		}
+		external++
+		seen[proj] = true
+	}
+	projects := make([]string, 0, len(seen))
+	for p := range seen {
+		projects = append(projects, p)
+	}
+	slices.Sort(projects)
+	return projects, external
+}
+
 // Telemetry returns this workspace's observability provider (nil on an Inspect workspace,
 // which builds no cache and no provider). When several Magus instances were opened with a
 // shared provider via [WithProvider] this returns that same instance, so metrics recorded
@@ -620,6 +1026,11 @@ func (m *Magus) Where(dir string) (*types.Project, bool) {
 const BaseLastPassed = "last-passed"
 
 // Affected computes projects touched by VCS changes since base.
+//
+// Files that seeded a project by directory containment while it declares none of them
+// come back on [types.AffectedResult.UndeclaredBySeed]; reporting them (MGS1028) is the
+// caller's, because this is a library call and its caller owns whatever stream a person
+// is reading. The CLI reports it in cmd/magus/affected.go.
 func (m *Magus) Affected(ctx context.Context, base string) (*types.AffectedResult, error) {
 	base, err := m.resolveLastPassed(ctx, base)
 	if err != nil {
@@ -690,7 +1101,9 @@ func (m *Magus) resolveLastPassed(ctx context.Context, base string) (string, err
 	return parent, nil
 }
 
-// AffectedFromPaths computes the affected set from an explicit file list.
+// AffectedFromPaths computes the affected set from an explicit file list. Undeclared
+// seeding files ride [types.AffectedResult.UndeclaredBySeed], the same as [Magus.Affected];
+// see it for who reports them.
 func (m *Magus) AffectedFromPaths(ctx context.Context, paths []string) (*types.AffectedResult, error) {
 	return project.AffectedFromPaths(ctx, m.ws, paths)
 }
@@ -818,11 +1231,13 @@ func magusfileGlobs(projectPath string) []string {
 	return out
 }
 
-func joinGlob(path, glob string) string {
-	if path == "." {
-		return glob
-	}
-	return path + "/" + glob
+// joinGlob roots a project-relative glob at the workspace for the cache step and the
+// describe surfaces. It is a named pass-through on purpose: the call sites in this
+// package read as "join", and the rooting rule itself belongs in types, where
+// Project.DeclaredGlobs - the attribution mirror of these very lines - can share it.
+// See types.RootGlob for why the join is cleaned rather than concatenated.
+func joinGlob(projectPath, glob string) string {
+	return types.RootGlob(projectPath, glob)
 }
 
 // ExpandPath resolves the target pattern to concrete per-project targets; empty or "/" fans out to all.

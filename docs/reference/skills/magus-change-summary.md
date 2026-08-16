@@ -4,8 +4,8 @@ description: "Summarize what changed in a magus workspace, write it up, or answe
 tags: [agents, skills, magus-change-summary]
 aliases:
   - reference/skills/magus-changes
-skill_full_bytes: 5137
-skill_simple_bytes: 3916
+skill_full_bytes: 6211
+skill_simple_bytes: 4715
 ---
 
 # magus-change-summary
@@ -31,7 +31,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `430a06d637fe` |
+| `skill-content` | `3ce451d61f54` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -165,6 +165,28 @@ paths collapses to the handful that are declared sources.
 Raw VCS commands answer what only the VCS knows: who committed, when, and in which
 merge. The table above answers what the change did. Reading a raw diff to work out
 what a change affects is the work these verbs already did.
+
+## Resume a review from a checkpoint
+
+Answer "what changed since I last reviewed, and what do I need to look at
+now" from three pieces:
+
+1. At review time: `magus vcs checkpoint -o name` - the revision, or
+   `<revision>+<digest>` when the tree was dirty (the digest says
+   which dirty tree was reviewed, since the revision alone reads the same
+   for every dirty tree built on it).
+2. Later: `git diff <revision> | magus diff -` for the annotated delta - each
+   changed file's reach, public-surface exposure, and referents,
+   the surrounding code worth a second look, not just the literal
+   hunks. `magus diff` refuses a positional git ref on
+   purpose - a swallowed ref once printed the reader's own edits
+   as the answer; the pipe form above is the sanctioned spelling.
+3. Through a diff session, per-hunk viewed marks key off content digest, not
+   position: unchanged stays marked, changed resurfaces on its own.
+
+WRONG: re-reviewing a whole branch because nobody recorded where the last
+review stopped.
+CORRECT: checkpoint at review time, pipe the delta later.
 ````
 
 ## Short form
@@ -285,6 +307,23 @@ When the ask narrows to "what exactly changed in X", stay on magus surfaces.
 paths collapses to the handful that are declared sources.
 
 Raw VCS answers who and when; the table answers what the change did.
+
+## Resume a review from a checkpoint
+
+Answer "what changed since I last reviewed, and what do I need to look at
+now" from three pieces:
+
+1. At review time: `magus vcs checkpoint -o name` - the revision, or
+   `<revision>+<digest>` when the tree was dirty.
+2. Later: `git diff <revision> | magus diff -` for the annotated delta - each
+   changed file's reach, public-surface exposure, and referents. `magus diff` refuses a positional git ref on
+   purpose; the pipe form above is the sanctioned spelling.
+3. Through a diff session, per-hunk viewed marks key off content digest, not
+   position: unchanged stays marked, changed resurfaces on its own.
+
+WRONG: re-reviewing a whole branch because nobody recorded where the last
+review stopped.
+CORRECT: checkpoint at review time, pipe the delta later.
 ````
 
 

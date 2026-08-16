@@ -47,6 +47,40 @@ func StaticHandler(consoleDir string) http.Handler {
 		// multi-element sub-path ("graph/explorer.js") - only a bare known surface is a route.
 		seg := strings.Trim(strings.TrimPrefix(r.URL.Path, "/console/"), "/")
 		if IsSurfaceRoute(seg) {
+			// Canonicalize to the trailing-slash form BEFORE serving, because the shell is
+			// served with <base href="../"> and that only lands on /console/ when the URL
+			// already ends in a slash. Without the redirect, /console/diff resolves every asset
+			// one level too high - console.css, theme.js, patternfly.css all 404 at the site
+			// root, and the surface renders unstyled and never boots. The trim above hides the
+			// difference from IsSurfaceRoute, so the check has to happen on the raw path.
+			//
+			// KnownSurfaces documents the canonical grammar as /console/<surface>/ and Link
+			// mints it that way, so this only affects a URL a person typed - which is exactly
+			// the case worth being kind about. Redirecting rather than making the base absolute
+			// keeps the shell servable from a prefix it does not know, which is what the
+			// relative base is for. StatusFound, matching share.go's redirect to /console/.
+			if !strings.HasSuffix(r.URL.Path, "/") {
+				// The destination comes from KnownSurfaces itself, not from the request - see
+				// CanonicalSurfacePath. It also normalizes an odd but legal /console//diff.
+				target, ok := CanonicalSurfacePath(seg)
+				if !ok {
+					fileServer.ServeHTTP(cw, r)
+					return
+				}
+				if q := r.URL.RawQuery; q != "" {
+					target += "?" + q
+				}
+				// The fragment carries the daemon host and token and is never sent to a server,
+				// so there is nothing to preserve here; the browser reattaches it itself.
+				//
+				//nolint:gosec // G710: the destination is an element of KnownSurfaces, returned by
+				// CanonicalSurfacePath, so it cannot be influenced by the request - only the
+				// optional query rides along. gosec's taint analysis cannot see through the
+				// allow-list lookup and flags any redirect downstream of a request path.
+				// TestRedirectNormalizesAndCannotEchoTheRequestPath pins the property.
+				http.Redirect(w, r, target, http.StatusFound)
+				return
+			}
 			serveConsoleShell(cw, r, consoleDir)
 			return
 		}

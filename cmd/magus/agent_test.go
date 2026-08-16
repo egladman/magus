@@ -501,6 +501,25 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "ls -la"},
 		{command: "git status --porcelain"},
 		{command: "git diff --cached --stat"},
+		// Tree identity: a revision alone cannot identify a dirty tree, and
+		// checkpoint adds the patch digest that can. Advise - reading the revision
+		// is legitimate, and checkpoint is a superset rather than a substitute.
+		{command: "git rev-parse HEAD", context: "magus vcs checkpoint"},
+		{command: "git rev-parse --short HEAD", context: "magus vcs checkpoint"},
+		// The build-stamp spelling: `git describe --tags` is asking for a version string
+		// to embed, which a checkpoint does not replace.
+		{command: "git describe --tags"},
+		// `git stash create` returns a commit object without touching the working
+		// tree or the stash stack, so it is not the destructive form.
+		{command: "git stash create", context: "magus vcs checkpoint"},
+		// rev-parse answers repository-LAYOUT questions too, and none of those is
+		// asking which revision this is.
+		{command: "git rev-parse --show-toplevel"},
+		{command: "git rev-parse --git-dir"},
+		{command: "git rev-parse --is-inside-work-tree"},
+		// --abbrev-ref takes HEAD and answers with the BRANCH NAME, which a
+		// checkpoint does not replace.
+		{command: "git rev-parse --abbrev-ref HEAD"},
 	}
 	for _, tt := range tests {
 		v := evaluateBashGuard(tt.command)
@@ -599,13 +618,49 @@ func TestRawToolGuardFollowsSpellCatalog(t *testing.T) {
 	assert.False(t, rawToolDenied(guardCommand{Name: "catalog-tool", Args: []string{"other"}}))
 }
 
+// The TOP-LEVEL TARGET is the form to teach, and it cannot be named: the guard
+// ships in a binary and a workspace calls its targets whatever it likes, so the
+// message points at discovery. The resolved spell op appears only as the
+// arg-passthrough escape hatch, which is the one thing the target form does not
+// cover as directly.
 func TestRawToolGuardNamesTheReplacementAndForwarding(t *testing.T) {
 	verdict := evaluateBashGuard("go test ./... -run TestFocused")
 	require.NotEmpty(t, verdict.Deny)
-	assert.Contains(t, verdict.Deny, "Run this instead: `magus run go::go-test`")
-	assert.Contains(t, verdict.Deny, "Tool flags and overrides remain available")
+	assert.Contains(t, verdict.Deny, "`magus run <target> <project>`")
+	assert.Contains(t, verdict.Deny, "magus describe targets")
+	assert.Contains(t, verdict.Deny, "magus run go::go-test")
 	assert.Contains(t, verdict.Deny, "-- <tool-args>")
 	assert.NotContains(t, verdict.Deny, "mise exec")
+
+	// The op form must not lead: it is the exception, and a verdict that opens
+	// with it teaches the dispreferred spelling to every reader.
+	assert.Less(t, strings.Index(verdict.Deny, "magus run <target>"), strings.Index(verdict.Deny, "magus run go::go-test"),
+		"the target form must precede the spell-op form")
+}
+
+// TestGuardVerdictsNameNoCanonicalTarget: test, build, lint, format and generate
+// are THIS repository's target names, not magus vocabulary - another magusfile
+// declares whatever it likes. A verdict compiled into the binary that instructs
+// `magus run test` is therefore wrong in most workspaces it will ever judge, so a
+// message names a target only when it resolved one from the workspace's own
+// declarations (see regenerateAdvice), and otherwise points at discovery. `ci` is
+// exempt: it is the one target name magus enforces (docs/recommendations.md), so
+// `magus affected ci` is valid in every workspace.
+func TestGuardVerdictsNameNoCanonicalTarget(t *testing.T) {
+	canonical := regexp.MustCompile(`magus (?:run|affected) (?:test|build|lint|format|generate)\b`)
+	for _, command := range []string{
+		"go test ./...", "gofmt -w x.go", "go mod tidy",
+		"git stash", "git stash pop", "git reset --hard", "git clean -fd",
+		"git worktree remove ../wt", "git add -A", "git push origin HEAD",
+		"git commit -m x", "git restore cmd/magus/agent.go",
+		"magus describe targets | grep build", "magus run lint . > /tmp/x.txt",
+		"cd /tmp/copy && magus run lint .", "cd libs/foo && magus run test",
+		`grep -rn "funcName" .`, "magus notes edit x", "sed -i 's/a/b/' f.go",
+	} {
+		v := evaluateBashGuard(command)
+		assert.NotRegexp(t, canonical, v.Deny, "%q names a canonical target in its deny reason", command)
+		assert.NotRegexp(t, canonical, v.Context, "%q names a canonical target in its advisory", command)
+	}
 }
 
 // TestGuardAdversarial is the hostile pass: every way found to smuggle a covered
@@ -1135,6 +1190,203 @@ func TestHookCmd_AttributionIsOptional(t *testing.T) {
 	assert.JSONEq(t, `{"schema_version":1,"tool":"shell.command","command":"ls"}`, string(body))
 }
 
+// TestHookCmd_ObserveRecordsWithoutJudging pins what --observe is for. AGENTS.md is the exact
+// path TestHookCmd_PathAndEmptyInputActivity gets an ADVISE for as a write, so a pass here is
+// specifically the observation being exempted from the write rules rather than the rule
+// failing to fire. Without it, a hook wired to a host's read tool would advise "you are
+// editing a declared output" at a file the agent only opened.
+func TestHookCmd_ObserveRecordsWithoutJudging(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+	var out bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--observe", "-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	got := events[0]
+	assert.Equal(t, "file.read", got.Action, "a reach is recorded under its own label, not as a write")
+
+	// "observed", not "guard: pass". The trail already distinguishes the two, and recording
+	// a verdict here would have every read claim the guard ran and cleared it - the exact
+	// conflation --observe exists to remove. The wire verdict the host reads is still pass.
+	assert.Equal(t, "observed", got.Preview)
+
+	body, err := trail.ReadBlob(dir, got.RequestRef)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"schema_version":1,"tool":"file.read","path":"AGENTS.md"}`, string(body))
+	body, err = trail.ReadBlob(dir, got.ResponseRef)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"schema_version":1,"decision":""}`, string(body))
+}
+
+// TestHookCmd_ObserveOutranksPath holds the precedence the wrapper depends on: a host whose
+// read event carries a file_path will send --observe alongside the envelope that sets --path,
+// and the observation must win. The reverse would silently restore the false advisory.
+func TestHookCmd_ObserveOutranksPath(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+	var out bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader("AGENTS.md"), &out, []string{"--path", "--observe", "-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "file.read", events[0].Action)
+}
+
+// TestHookCmd_RecordsTranscriptPath covers the session-to-transcript link. The id groups a
+// session's events; the path is what a reader follows to see the rest. magus records the
+// POINTER and never opens the file, which is what keeps the trail paths-and-timings.
+func TestHookCmd_RecordsTranscriptPath(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+	var out bytes.Buffer
+	envelope := `{"hook_event_name":"PreToolUse","session_id":"s1","transcript_path":"/tmp/t.jsonl","tool_input":{"command":"ls"}}`
+	require.NoError(t, hookCmd(ctx, strings.NewReader(envelope), &out, []string{"-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	got := events[0]
+	assert.Equal(t, "s1", got.Session)
+
+	body, err := trail.ReadBlob(dir, got.RequestRef)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"schema_version":1,"session":"s1","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"shell.command","command":"ls"}`, string(body))
+}
+
+// TestHookCmd_TranscriptFlagRecordsThePointer covers the FLAG path, which is the one the
+// shipped observe template actually uses. That template extracts the path with jq and pipes
+// plain text rather than the whole event, so nothing about the envelope is available to it -
+// without the flag the transcript link exists only for hosts that pipe raw JSON, which is
+// none of the ones magus ships a template for.
+func TestHookCmd_TranscriptFlagRecordsThePointer(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+	var out bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader("internal/trail/trail.go"), &out,
+		[]string{"--observe", "--agent-name", "claude-code", "--session", "s9", "--transcript", "/tmp/t.jsonl", "--event", "PreToolUse", "-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	got := events[0]
+	assert.Equal(t, "file.read", got.Action)
+	assert.Equal(t, "s9", got.Session)
+
+	body, err := trail.ReadBlob(dir, got.RequestRef)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"schema_version":1,"host":"claude-code","session":"s9","transcript":"/tmp/t.jsonl","event":"PreToolUse","tool":"file.read","path":"internal/trail/trail.go"}`, string(body))
+}
+
+// TestHookCmd_ObserveWithNoInputRecordsNothing: a wrapper whose host event carried no path
+// has nothing to report, and an observation with no subject is dropped like any other empty
+// one rather than being invented as "." - which would claim a reach the host never described.
+func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+	var out bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader(""), &out, []string{"--observe", "-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	assert.Empty(t, events)
+}
+
+// TestHookCmd_RecordsSpawnFromEnvelope covers the delegation surface end to end: a host payload
+// carrying a prompt rather than a command is recorded as a spawn, with the handed context in the
+// blob and the cooperative unit marker stamped onto the event.
+//
+// It also pins the thing that must NOT happen. The prompt below quotes `git stash`, which the
+// command guard denies. A spawn is not a guard surface, so the verdict is a pass and the
+// delegation is recorded rather than blocked for describing a denied command.
+func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+	envelope := `{"hook_event_name":"PreToolUse","session_id":"abc123","tool_name":"Task",` +
+		`"tool_input":{"description":"audit the store","subagent_type":"Explore",` +
+		`"prompt":"unit: notes-store-6b\nDo not run git stash anywhere."}}`
+
+	var out bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader(envelope), &out,
+		[]string{"--agent-name", "claude-code", "-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	got := events[0]
+
+	requestRef := got.RequestRef
+	got.Ts, got.RequestRef, got.RequestBytes = 0, "", 0
+	assert.Equal(t, trail.Event{
+		Kind:      trail.KindAgentSpawn,
+		Actor:     "agent",
+		Host:      "claude-code",
+		Session:   "abc123",
+		Workspace: "/repo/magus",
+		Action:    "Explore",
+		Unit:      "notes-store-6b",
+		Outcome:   trail.OutcomeOK,
+	}, got)
+
+	body, err := trail.ReadBlob(dir, requestRef)
+	require.NoError(t, err)
+	assert.JSONEq(t, `{"schema_version":1,"host":"claude-code","session":"abc123","event":"PreToolUse",`+
+		`"tool":"Task","child":"Explore","unit":"notes-store-6b",`+
+		`"context":"unit: notes-store-6b\nDo not run git stash anywhere."}`, string(body))
+}
+
+// TestHookCmd_SpawnWithoutMarkerOrLabel holds the two halves of the cooperative contract: an
+// orchestrator that writes no marker still gets an audited handoff, just an uncorrelated one,
+// and a host whose payload names no callee still records a spawn.
+func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
+	global = globalFlags{}
+	dir := t.TempDir()
+	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
+
+	var out bytes.Buffer
+	require.NoError(t, hookCmd(ctx, strings.NewReader(`{"tool_input":{"prompt":"go and audit the store"}}`),
+		&out, []string{"-o", "name"}))
+	assert.Equal(t, "pass\n", out.String())
+
+	events, err := trail.ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, trail.KindAgentSpawn, events[0].Kind)
+	assert.Equal(t, "agent.spawn", events[0].Action)
+	assert.Empty(t, events[0].Unit)
+}
+
+// TestDecodeHookEnvelope_CommandStillWinsOverPrompt guards the ordering that makes the spawn
+// branch purely additive: a payload carrying both is judged as the command it carries, so no
+// envelope the guard already evaluated can start skipping the guard because a prompt appeared
+// beside it.
+func TestDecodeHookEnvelope_CommandStillWinsOverPrompt(t *testing.T) {
+	req, ok := decodeHookEnvelope(`{"tool_input":{"command":"git stash","prompt":"delegate this"}}`)
+	require.True(t, ok)
+	assert.Equal(t, "git stash", req.Value)
+	assert.False(t, req.IsSpawn)
+
+	req, ok = decodeHookEnvelope(`{"tool_input":{"file_path":"MAGUS.md","prompt":"delegate this"}}`)
+	require.True(t, ok)
+	assert.Equal(t, "MAGUS.md", req.Value)
+	assert.True(t, req.IsPath)
+	assert.False(t, req.IsSpawn)
+}
+
 func TestAgentSampleDocPlainASCIISelfContained(t *testing.T) {
 	doc := agentSampleDoc()
 	assert.Contains(t, doc, "# AGENTS.md")
@@ -1482,6 +1734,97 @@ func TestGuardDeniesAuthoringANote(t *testing.T) {
 	// Reading is untouched: the boundary is on authorship, not on access.
 	for _, cmd := range []string{"magus notes ls", "magus notes get foo", "magus notes verify"} {
 		assert.Empty(t, evaluateBashGuard(cmd).Deny, "%q only reads", cmd)
+	}
+}
+
+// TestGuardAdvisesCheckpointOnTreeIdentity pins the scoping, which is the whole
+// difficulty of this rule: `git rev-parse` answers repository-layout questions as
+// well as identity ones, and only the identity forms have a magus superset.
+//
+// A deny would be wrong twice over - reading a revision is legitimate, and
+// checkpoint ADDS to it rather than replacing it.
+func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		"git rev-parse HEAD",
+		"git rev-parse --short HEAD",
+		"git rev-parse --verify HEAD",
+		"git rev-parse HEAD~1",
+		"git rev-parse @",
+		"git describe",
+		"git stash create",
+		"cd libs/foo && git rev-parse HEAD",
+	} {
+		v := evaluateBashGuard(cmd)
+		assert.Empty(t, v.Deny, "%q reads: advise, never block", cmd)
+		assert.Contains(t, v.Context, "magus vcs checkpoint", "%q must name the superset", cmd)
+	}
+
+	for _, cmd := range []string{
+		"git rev-parse --show-toplevel",
+		"git rev-parse --git-dir",
+		"git rev-parse --is-inside-work-tree",
+		"git rev-parse --show-cdup",
+		"git rev-parse --abbrev-ref HEAD",
+		// A branch whose NAME starts with those four letters is an ordinary revision.
+		"git rev-parse HEADLESS_BRANCH",
+		// The build-stamp spellings: a version string to embed, not the identity of a
+		// tree being handed to someone. This repository's own go_build target uses both.
+		"git describe --tags --always",
+		"git describe --always",
+	} {
+		v := evaluateBashGuard(cmd)
+		assert.Empty(t, v.Deny)
+		assert.NotContains(t, v.Context, "magus vcs checkpoint",
+			"%q is not asking which revision this is", cmd)
+	}
+
+	// A destructive stash form is still a deny: adding `create` to the safe list
+	// must not have widened the arm.
+	for _, cmd := range []string{"git stash", "git stash push -u", "git stash pop"} {
+		assert.NotEmpty(t, evaluateBashGuard(cmd).Deny, "%q must still deny", cmd)
+	}
+}
+
+// TestGuardAdvisesRelockOnDependencyMutations covers the one rule that routes to a
+// CHARM rather than a command. Re-resolving dependencies writes state that is not
+// reproducible from a clean checkout, which is the whole line between rw and relock
+// (types.CharmRelock), and relock is under-discoverable: nothing prompts for a
+// reserved charm nobody declared.
+//
+// ADVISE, never deny: the third deny trigger needs an exact equivalent, and there
+// is none - magus has no verb that re-resolves dependencies on its own.
+func TestGuardAdvisesRelockOnDependencyMutations(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		"go get github.com/foo/bar@latest",
+		"pnpm add lodash",
+		"pnpm up",
+		"npm update",
+		"yarn upgrade",
+		"cargo update",
+		"uv lock",
+		"poetry update",
+		"pip-compile",
+		"cd libs/foo && pnpm add lodash",
+	} {
+		v := evaluateBashGuard(cmd)
+		assert.Empty(t, v.Deny, "%q is legitimate work with no magus equivalent: advise, never block", cmd)
+		assert.Contains(t, v.Context, ":relock", "%q must name the charm that makes the write legal", cmd)
+	}
+
+	// A DENIED re-resolution still carries the route. `go mod tidy` is both a covered
+	// spell op and a dependency refresh, and the deny answers first, so without this
+	// the reader is sent to a target that would refuse the write.
+	tidy := evaluateBashGuard("go mod tidy")
+	require.NotEmpty(t, tidy.Deny)
+	assert.Contains(t, tidy.Deny, ":relock")
+
+	// Applying a lockfile is not re-resolving one, and installing a tool is not a
+	// dependency at all. Firing here would put an advisory on the most routine
+	// command in a JS repo.
+	for _, cmd := range []string{"npm ci", "npm install", "pnpm install", "mise install", "go mod vendor", "go mod edit -require=x@v1"} {
+		assert.NotContains(t, evaluateBashGuard(cmd).Context, ":relock", "%q does not re-resolve dependencies", cmd)
 	}
 }
 

@@ -36,20 +36,7 @@ func Affected(ctx context.Context, w *types.Workspace, base string) (*types.Affe
 	changed := workspaceRelative(prefix, normalizeFiles(rawFiles))
 	base = res.Base
 
-	idx := newProjectIndex(w)
-	seedSet := map[string]struct{}{}
-	filesBySeed := map[string][]string{}
-	for _, f := range changed {
-		if path, ok := idx.projectForFile(f); ok {
-			seedSet[path] = struct{}{}
-			filesBySeed[path] = append(filesBySeed[path], f)
-		}
-	}
-	seed := make([]string, 0, len(seedSet))
-	for path := range seedSet {
-		seed = append(seed, path)
-	}
-	slices.Sort(seed)
+	seed, filesBySeed, undeclaredBySeed := attribute(newProjectIndex(ctx, w), changed)
 
 	g, err := dependency.Build(w, graphObserverOpts(ctx)...)
 	if err != nil {
@@ -70,12 +57,41 @@ func Affected(ctx context.Context, w *types.Workspace, base string) (*types.Affe
 	)
 
 	return &types.AffectedResult{
-		Base:        base,
-		Changed:     changed,
-		Seed:        seed,
-		FilesBySeed: filesBySeed,
-		Affected:    closure,
+		Base:             base,
+		Changed:          changed,
+		Seed:             seed,
+		FilesBySeed:      filesBySeed,
+		UndeclaredBySeed: undeclaredBySeed,
+		Affected:         closure,
 	}, nil
+}
+
+// attribute maps changed files onto the projects they seed, alongside the subset of
+// them no project declares. Shared by the VCS path and the explicit-paths path so
+// the two cannot drift on what seeds what.
+func attribute(idx *projectIndex, files []string) (seed []string, filesBySeed, undeclaredBySeed map[string][]string) {
+	seedSet := map[string]struct{}{}
+	filesBySeed = map[string][]string{}
+	undeclaredBySeed = map[string][]string{}
+	for _, f := range files {
+		paths, declared := idx.seedsForFile(f)
+		for _, path := range paths {
+			seedSet[path] = struct{}{}
+			filesBySeed[path] = append(filesBySeed[path], f)
+			if !declared {
+				undeclaredBySeed[path] = append(undeclaredBySeed[path], f)
+			}
+		}
+	}
+	seed = make([]string, 0, len(seedSet))
+	for path := range seedSet {
+		seed = append(seed, path)
+	}
+	slices.Sort(seed)
+	if len(undeclaredBySeed) == 0 {
+		undeclaredBySeed = nil
+	}
+	return seed, filesBySeed, undeclaredBySeed
 }
 
 // vcsRootPrefix returns the slash-terminated path from the VCS root down to wsRoot
@@ -141,30 +157,18 @@ func normalizeFiles(files []string) []string {
 // AffectedFromPaths computes the affected set from explicit paths without VCS.
 // Absolute paths outside the workspace root are silently skipped.
 func AffectedFromPaths(ctx context.Context, w *types.Workspace, paths []string) (*types.AffectedResult, error) {
-	idx := newProjectIndex(w)
-	seedSet := map[string]struct{}{}
-	filesBySeed := map[string][]string{}
-
+	rel := make([]string, 0, len(paths))
 	for _, f := range paths {
 		if filepath.IsAbs(f) {
-			rel, err := filepath.Rel(w.Root, f)
-			if err != nil || strings.HasPrefix(rel, "..") {
+			r, err := filepath.Rel(w.Root, f)
+			if err != nil || strings.HasPrefix(r, "..") {
 				continue
 			}
-			f = rel
+			f = r
 		}
-		f = filepath.ToSlash(f)
-		if path, ok := idx.projectForFile(f); ok {
-			seedSet[path] = struct{}{}
-			filesBySeed[path] = append(filesBySeed[path], f)
-		}
+		rel = append(rel, filepath.ToSlash(f))
 	}
-
-	seed := make([]string, 0, len(seedSet))
-	for path := range seedSet {
-		seed = append(seed, path)
-	}
-	slices.Sort(seed)
+	seed, filesBySeed, undeclaredBySeed := attribute(newProjectIndex(ctx, w), rel)
 
 	g, err := dependency.Build(w, graphObserverOpts(ctx)...)
 	if err != nil {
@@ -174,11 +178,12 @@ func AffectedFromPaths(ctx context.Context, w *types.Workspace, paths []string) 
 	slices.Sort(closure)
 
 	return &types.AffectedResult{
-		Base:        "paths",
-		Changed:     append([]string(nil), paths...),
-		Seed:        seed,
-		FilesBySeed: filesBySeed,
-		Affected:    closure,
+		Base:             "paths",
+		Changed:          append([]string(nil), paths...),
+		Seed:             seed,
+		FilesBySeed:      filesBySeed,
+		UndeclaredBySeed: undeclaredBySeed,
+		Affected:         closure,
 	}, nil
 }
 
@@ -212,33 +217,46 @@ func Where(w *types.Workspace, dir string) (*types.Project, bool) {
 	}
 }
 
-// projectIndex pre-sorts project paths by descending length for O(n) longest-prefix lookup.
+// projectIndex pre-sorts project paths by descending length for O(n) longest-prefix
+// lookup, and carries each project's workspace-rooted declarations for the glob half
+// of attribution.
 type projectIndex struct {
 	w     *types.Workspace
-	paths []string // sorted by descending length
+	paths []string            // sorted by descending length; excludes "."
+	globs map[string][]string // project path -> its DeclaredGlobs, "." included
 }
 
-func newProjectIndex(w *types.Workspace) *projectIndex {
+func newProjectIndex(ctx context.Context, w *types.Workspace) *projectIndex {
 	paths := make([]string, 0, len(w.Projects))
-	for path := range w.Projects {
+	globs := make(map[string][]string, len(w.Projects))
+	for path, p := range w.Projects {
+		globs[path] = p.DeclaredGlobs()
+		// Tolerated exactly as the cache walk tolerates it - an unparsable pattern
+		// matches nothing and fails nothing - but SAID, once per index rather than
+		// once per file. Silent, it reads as a declared input while keying nothing,
+		// and MGS1028 then advises declaring a path the project already "declares".
+		if bad := types.InvalidGlobs(globs[path]); len(bad) > 0 {
+			slog.WarnContext(ctx, "affected: project declares globs this matcher cannot parse; they match nothing",
+				slog.String("project", path),
+				slog.Any("globs", bad))
+		}
 		if path == "." {
 			continue
 		}
 		paths = append(paths, path)
 	}
 	slices.SortFunc(paths, func(a, b string) int { return len(b) - len(a) })
-	return &projectIndex{w: w, paths: paths}
+	return &projectIndex{w: w, paths: paths, globs: globs}
 }
 
-// projectForFile returns the innermost project for a repo-relative file path.
-//
-// TODO: attribution is directory-prefix only; no declared glob (a project's
-// source globs included) narrows or redirects it. If glob-aware attribution
-// ever lands, this lookup is the seam.
+// projectForFile returns the innermost project DIRECTORY containing a repo-relative
+// file path, falling back to the root project. It answers ownership ("whose tree is
+// this in"), which is what the VCS insight lenses attribute churn with; seedsForFile
+// is the affected-set question and layers declarations on top of this one.
 func (idx *projectIndex) projectForFile(file string) (string, bool) {
 	file = filepath.ToSlash(file)
 	for _, path := range idx.paths {
-		if file == path || strings.HasPrefix(file, path+"/") {
+		if dirContains(path, file) {
 			return path, true
 		}
 	}
@@ -246,6 +264,80 @@ func (idx *projectIndex) projectForFile(file string) (string, bool) {
 		return ".", true
 	}
 	return "", false
+}
+
+// seedsForFile returns the projects a changed file seeds, and whether the project that
+// seeds it BY CONTAINMENT declares it.
+//
+// Three rules, and the order they compose in is the whole design:
+//
+//  1. A project whose DIRECTORY contains the file owns it. Containment is the most
+//     specific claim there is, and it is what makes today's affected sets correct -
+//     a broad ANCESTOR glob (the root's "**/*.go" reaches every nested Go file in this
+//     very repo) must not add the ancestor as a second seed on every child edit.
+//  2. Every project that declares the file from OUTSIDE its own tree seeds it too.
+//     A reaching glob ("../proto/**" declared by docs/) moves that project's cache key
+//     just as surely as a file in its own directory does, so it seeds ALONGSIDE the
+//     containment owner rather than instead of it - and where no directory contains the
+//     file at all, the reaching declarers are the whole answer, in place of the root
+//     project that merely happens to sit above them.
+//  3. Otherwise the root project seeds it anyway. That catch-all is load-bearing and
+//     stays: a config nobody declares still changes what a build MEANS, and seeding
+//     is the only reason editing one reruns anything at all. It is reported rather
+//     than narrowed - see the declared return, MGS1028, and doctor's advice.
+//
+// declared answers for the CONTAINMENT seed, because that is the question MGS1028 asks:
+// whether the project a file reruns by sitting inside it has a cache key the edit moves.
+// A file that no directory contains is declared by construction - its seeds are exactly
+// the projects declaring it - and only rule 3 leaves it false there. A file whose owner
+// declares nothing while a reaching glob does is reported undeclared for BOTH seeds,
+// which overstates the reaching one; the owner's problem is the real one and the caller
+// carries a single flag per file.
+//
+// The scan runs every project's globs for every file. Rule 1 cannot short-circuit it: a
+// file contained by one project and declared by another seeds both, and which projects
+// those are is not known until the scan finishes.
+func (idx *projectIndex) seedsForFile(file string) (paths []string, declared bool) {
+	file = filepath.ToSlash(file)
+	owner, hasOwner := idx.projectForFile(file)
+
+	var reaching []string
+	for path, globs := range idx.globs {
+		if !types.MatchesAnyGlob(globs, file) {
+			continue
+		}
+		if path == owner {
+			declared = true
+			continue
+		}
+		if dirContains(path, file) {
+			continue // an ancestor's broad glob: rule 1 already answered for this file
+		}
+		reaching = append(reaching, path)
+	}
+
+	switch {
+	case hasOwner && owner != ".":
+		paths = append(reaching, owner)
+	case declared || len(reaching) > 0:
+		paths = reaching
+		if declared {
+			paths = append(paths, owner)
+		}
+		declared = true
+	case hasOwner:
+		paths = []string{owner} // the root catch-all, keying nothing
+	default:
+		return nil, false
+	}
+	slices.Sort(paths)
+	return paths, declared
+}
+
+// dirContains reports whether a project's DIRECTORY holds a workspace-relative file.
+// The root project holds everything, which is what makes it the catch-all.
+func dirContains(projectPath, file string) bool {
+	return projectPath == "." || file == projectPath || strings.HasPrefix(file, projectPath+"/")
 }
 
 // graphObserverOpts extracts the request-scoped graph observer from ctx, if set.

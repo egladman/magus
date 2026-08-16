@@ -58,7 +58,9 @@ magus\project({
     // project writes. Without the edge the two generate targets are unordered, so a schema
     // change could regenerate the API reference from the PREVIOUS descriptor - and reading
     // another project's declared output with no dependency on it is what MGS4004 flags.
-    "depends_on": ["..", "../proto"],
+    // ../libs/diagram for the same reason: diagrams-generate reads its renderer, and
+    // reading another project's file with no edge is unordered (MGS4004).
+    "depends_on": ["..", "../proto", "../libs/diagram"],
     // Affected/drift tracks this sources glob, not the import graph, so render.buzz
     // (and every other input) must be named to be watched. The SSG now lives IN docs/,
     // co-located with the markdown it renders, so the content and the generator share one
@@ -68,7 +70,7 @@ magus\project({
     // watched content. Both src/**/*.js AND src/**/*.ts are named: the client bundles are
     // increasingly TypeScript (esbuild strips the types), and a .ts edit must mark this
     // project affected just like a .js one. package.json + pnpm-lock.yaml are named so a
-    // bundled-dep version bump (mermaid, hljs, d3, codemirror) invalidates the cacheable
+    // bundled-dep version bump (hljs, d3, codemirror) invalidates the cacheable
     // build-* targets and marks this project affected - the esbuild inputs live in those
     // manifests, not in the src/ entries. tsconfig.json (the ts build) is a render/build
     // input too. (pnpm is the package manager - NOT npm; there is no package-lock.json.)
@@ -96,7 +98,7 @@ magus\project({
                 "../std/**/*.go", "../host/**/*.go",
                 "../spells/**/*.buzz", "../internal/spellruntime/**/*.go",
                 "../internal/clispec/**/*.go", "../internal/config/**/*.go",
-                "../internal/render/**/*.go", "../internal/knowledge/**/*.go",
+                "../internal/render/**/*.go", "../internal/graph/**/*.go",
                 "../cmd/magus-docs/**/*.go", "../cmd/magus-spelldocs/**/*.go",
                 "../cmd/magus-manpage/**/*.go", "../cmd/magus-examples/**/*.go",
                 // The skill reference is generated from the embedded bodies and the
@@ -145,7 +147,7 @@ magus\project({
 		// outside file hashing, so replay is unsafe until the cache has a VCS input
 		// primitive. It still has a narrow target footprint and no output snapshot.
 		"site-generate": {"skip_cache": "incorporates VCS tags and history, which are outside file hashing, so a replay is unsafe"},
-        // build-mermaid / build-hljs / build-playground-editor bundle a
+        // build-hljs / build-playground-editor bundle a
         // src/*-vendor.js (or feature) entry with esbuild (pinned in mise.toml) into a
         // gen/ artifact. esbuild + pinned npm deps are deterministic, so these
         // stay cacheable (no skip_cache): a cache hit replays identical bytes, and a
@@ -201,7 +203,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.readsFiles(workspace.file("std/**/*.go"), workspace.file("host/**/*.go"),
         workspace.file("spells/**/*.buzz"), workspace.file("internal/spellruntime/**/*.go"),
         workspace.file("internal/clispec/**/*.go"), workspace.file("internal/config/**/*.go"),
-        workspace.file("internal/render/**/*.go"), workspace.file("internal/knowledge/**/*.go"),
+        workspace.file("internal/render/**/*.go"), workspace.file("internal/graph/**/*.go"),
         workspace.file("cmd/magus-docs/**/*.go"), workspace.file("cmd/magus-spelldocs/**/*.go"),
         workspace.file("cmd/magus-manpage/**/*.go"), workspace.file("cmd/magus-examples/**/*.go"),
         workspace.file("cmd/magus-skilldocs/**/*.go"), workspace.file("internal/agent/**/*.go"),
@@ -293,7 +295,7 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // it: site-generate hashes gen/ into the service-worker precache and site-manifest, so a
     // bundle written after it would ship with a manifest that does not describe it. They used
     // to be run by hand and committed; with gen/ untracked, generate is what produces them.
-    ctx.needs(build_mermaid, build_hljs, build_playground_editor, build_playground);
+    ctx.needs(build_hljs, build_playground_editor, build_playground);
     ctx.needs(site_generate);
     // site_generate owns the full render, bundle, and manifest artifact.
     if (ctx.hasCharm("rw")) { return; }
@@ -333,6 +335,11 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 // excludes there still apply, so the generated trees stay out.
 export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
+    // Keep in step with the dprint args below. Not writesFiles: dprint amends authored
+    // pages, so `magus clean` must never claim them. Undeclared, this is MGS4007.
+    ctx.modifiesExistingFiles("*.md", "concepts/**/*.md", "guides/*.md",
+        "guides/integrations/*.md", "migrating/**/*.md", "reference/**/*.md",
+        "setup/**/*.md");
     markdown["dprint"](ctx, {"args": ["./*.md", "./concepts/**/*.md", "./guides/*.md",
         "./guides/integrations/*.md", "./migrating/**/*.md", "./reference/**/*.md",
         "./setup/**/*.md"]});
@@ -436,18 +443,33 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
     fs\copyFile(goroot + "/lib/wasm/wasm_exec.js", "gen/playground/wasm_exec.js");
 }
 
-// build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11)
-// into gen/assets/mermaid.js. mermaid.js (the runtime init script) imports it same-origin so
-// diagrams and page styling work offline without any CDN. Bump the mermaid version in
-// package.json and the next generate picks it up; gen/ is not committed, so there is no
-// artifact to commit and generate runs this as one of its stages.
-export fun build_mermaid(ctx: magus\Context, args: [str]) > void !> any {
-    ctx.needs(preflight);
-    // Declared so the snapshot records THIS artifact. Without it the target inherits the
-    // project baseline (the typescript spell's `dist/**`, which this project never writes).
-    ctx.writesFiles("gen/assets/mermaid.js");
-    proc\exec("pnpm", ["run", "build-mermaid"], ".", {});
-    magus\log.info("rebuilt gen/assets/mermaid.js");
+// diagrams-generate writes the committed light/dark SVG pair for every diagram under
+// diagrams/. The docs site does NOT read these - it inlines a CSS-variable copy at render
+// time so a diagram follows the theme toggle. This pair is for GitHub, where the README
+// loads an image through <img> and cannot reach the page's CSS at all.
+//
+// The pair lands under this project rather than beside the terminal recordings in the
+// workspace's assets/gen: docs already depends on the root project, so writing there is
+// MGS1012, a target reading from and writing into the same project. The README reaches
+// them by relative path, which is all GitHub needs. Committed and drift-gated, unlike the
+// untracked gen/ site output.
+export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
+    // workspace.file, not a project-relative path: the renderer moved out to
+    // libs/diagram, and the stale "lib/diagram.buzz" entry left this target's cache
+    // key blind to renderer edits - it replayed committed SVGs through a Style change.
+    ctx.readsFiles("site/diagrams/*.buzz", workspace.file("libs/diagram/diagram.buzz"));
+    ctx.writesFiles("assets/gen/diagram-*.svg");
+    // Verified before writing, not after: a diagram that names a package which no longer
+    // exists should fail the target rather than ship a rendered picture of a tree that is
+    // gone. Scans the Go sources for back-references too, so deleting a diagram whose id a
+    // source file still marks is caught from the other side.
+    final drift = renderer\site_diagram_drift(ROOT, ["internal/**/*.go", "cmd/**/*.go"]);
+    if (drift.len() > 0) {
+        foreach (msg in drift) { magus\log.error(msg); }
+        throw "diagram anchors are stale: {drift.len()} finding(s)";
+    }
+    renderer\site_diagrams("assets/gen");
+    magus\log.info("rendered the diagram pair into docs/assets/gen");
 }
 
 // build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11)
@@ -456,7 +478,7 @@ export fun build_mermaid(ctx: magus\Context, args: [str]) > void !> any {
 // it up; gen/ is not committed, so generate runs this as one of its stages.
 export fun build_hljs(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
-    // See build-mermaid: declare the real artifact rather than inheriting `dist/**`.
+    // See build-hljs: declare the real artifact rather than inheriting `dist/**`.
     ctx.writesFiles("gen/assets/hljs.js");
     proc\exec("pnpm", ["run", "build-hljs"], ".", {});
     magus\log.info("rebuilt gen/assets/hljs.js");
@@ -469,7 +491,7 @@ export fun build_hljs(ctx: magus\Context, args: [str]) > void !> any {
 // shipped a playground with no editor.
 export fun build_playground_editor(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
-    // See build-mermaid: declare the real artifact rather than inheriting `dist/**`.
+    // See build-hljs: declare the real artifact rather than inheriting `dist/**`.
     ctx.writesFiles("gen/playground/editor.js");
     proc\exec("pnpm", ["run", "build-editor"], ".", {});
 }

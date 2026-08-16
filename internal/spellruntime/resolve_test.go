@@ -378,38 +378,48 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 }
 
 // TestOptionalContract_PathEntriesAreSelfDescribing pins the invariant that made a rename fail
-// silently: which contract fields carry [Path] values is recorded ON the entry, so it travels with
-// the entry when its Field is renamed.
+// silently: which reduction a contract field's value needs is recorded ON the entry, so it travels
+// with the entry when its Field is renamed.
 //
-// The regression it guards is specific. resolve.go used to decide this with a switch over field
-// name strings. Renaming mgs_listManifests's field updated the contract, the decoder and every
-// spell source - and strings(1) confirmed the regenerated .bo exported the new name - but the
-// switch still named the old field, so pathValues stopped running, the Path objects were never
-// reduced to strings, and the decoded value came back EMPTY with no error anywhere. It cost a
-// revert to find. A second list of these field names is the thing to keep out of this package.
+// The regression it guards is specific: deciding the reduction with a switch over field-name
+// strings in resolve.go means a rename can update the contract, the decoder, and every spell
+// source while the switch still names the old field - pathValues stops running, the Path
+// objects are never reduced to strings, and the decoded value comes back EMPTY with no error
+// anywhere. A second list of these field names is the thing to keep out of this package.
+//
+// The table below states each entry's shape by NAME, which is what holds the invariant through a
+// change of shape: mgs_listManifests sits at ShapeManifests rather than ShapePaths because it
+// carries lock candidates, and naming the expectation makes such a move a one-line diff a
+// reviewer reads as a decision rather than a silent behaviour change.
 func TestOptionalContract_PathEntriesAreSelfDescribing(t *testing.T) {
-	// Every entry whose Buzz signature is [Path]. Stated by NAME, which is the stable half of the
-	// contract - a Field rename must not be able to change this set.
-	pathFns := map[string]bool{
-		"mgs_listRequiredGlobs": true,
-		"mgs_listProvidedGlobs": true,
-		"mgs_listIgnoreDirs":    true,
-		"mgs_listManifests":     true,
+	// Every entry's Buzz element type, stated by NAME - the stable half of the contract, since a
+	// Field rename must not be able to change this map. Absent means ShapeStrs.
+	shapes := map[string]ContractShape{
+		"mgs_listRequiredGlobs": ShapePaths,
+		"mgs_listProvidedGlobs": ShapePaths,
+		"mgs_listClaimedGlobs":  ShapePaths,
+		"mgs_listIgnoreDirs":    ShapePaths,
+		"mgs_listManifests":     ShapeManifests,
 	}
 	seen := map[string]bool{}
 	for _, e := range OptionalContract {
 		seen[e.Name] = true
-		assert.Equal(t, pathFns[e.Name], e.Paths,
-			"%s: Paths must match whether its Buzz signature returns [Path]", e.Name)
+		assert.Equal(t, shapes[e.Name], e.Shape,
+			"%s: Shape must match the element type its Buzz signature returns", e.Name)
 	}
-	for name := range pathFns {
+	for name := range shapes {
 		assert.True(t, seen[name], "%s left the contract; drop it here too", name)
 	}
 }
 
-// TestResolve_ManifestsSurviveAFieldRename is the end-to-end half: a [Path]-valued entry decodes to
-// strings. Read together with the test above, a rename that broke the Paths wiring would surface
-// here as an empty slice rather than as a mysterious downstream absence.
+// TestResolve_ManifestsUsePathValues is the end-to-end half: the manifests entry decodes to
+// populated values. Read together with the test above, a rename that broke the Shape wiring
+// would surface here as an empty slice rather than as a mysterious downstream absence.
+//
+// It uses the [Path] form deliberately, so it doubles as the compat proof: mgs_listManifests
+// returned [Path] before Manifest existed, and a spell that still does must keep loading rather
+// than fail. Path and Manifest agree on .value, and the reduction reads keys structurally, so
+// the older form decodes as manifests declaring no lockfile.
 func TestResolve_ManifestsUsePathValues(t *testing.T) {
 	const src = `
 import "magus/spell";
@@ -418,6 +428,47 @@ export fun mgs_listManifests() > [Path] { return [Path{value = "package.json"}, 
 `
 	spec, err := resolve(t, src)
 	require.NoError(t, err)
-	assert.Equal(t, []string{"package.json", "deno.json"}, spec.Manifests,
-		"a [Path] entry must reduce to its lexical strings, not decode empty")
+	assert.Equal(t, []spells.Manifest{{Value: "package.json"}, {Value: "deno.json"}}, spec.Manifests,
+		"a pre-Manifest [Path] entry must still decode, as manifests carrying no lock candidates")
+}
+
+// TestResolve_ManifestsCarryLockCandidates pins the field this type was added for. pathValues
+// next door reduces each object to its .value and would drop lockCandidates in silence, since it
+// reads only the keys it knows - so the assertion that matters is that the candidates SURVIVE the
+// boundary, not merely that the manifest does.
+func TestResolve_ManifestsCarryLockCandidates(t *testing.T) {
+	const src = `
+import "magus/spell";
+export fun mgs_getName() > str { return "manifest-locks"; }
+export fun mgs_listManifests() > [Manifest] {
+    return [Manifest{value = "package.json", lockCandidates = ["pnpm-lock.yaml", "yarn.lock"]},
+            Manifest{value = "setup.py"}];
+}
+`
+	spec, err := resolve(t, src)
+	require.NoError(t, err)
+	assert.Equal(t, []spells.Manifest{
+		{Value: "package.json", LockCandidates: []string{"pnpm-lock.yaml", "yarn.lock"}},
+		{Value: "setup.py"},
+	}, spec.Manifests, "lockCandidates must survive the MGS boundary, not be flattened away")
+}
+
+// TestResolve_ManifestsRejectAWrongReturnType covers the other half of why manifestValues
+// validates rather than passing through: this package's recurring failure is a malformed
+// declaration decoding to empty with nothing naming the cause.
+//
+// The case it uses is the one the CHECKER cannot catch. A mistyped FIELD is rejected at
+// compile time (`Manifest.lockCandidates is [str], got str` - BZZ1005), because the annotated
+// return type makes the object's shape known. Nothing checks the annotation against the mgs_
+// contract itself, though, so a spell returning the wrong LIST type compiles cleanly and only
+// this validation stands between it and a silently empty Manifests.
+func TestResolve_ManifestsRejectAWrongReturnType(t *testing.T) {
+	const src = `
+import "magus/spell";
+export fun mgs_getName() > str { return "manifest-bad-shape"; }
+export fun mgs_listManifests() > [str] { return ["package.json"]; }
+`
+	_, err := resolve(t, src)
+	require.Error(t, err, "a [str] where [Manifest] belongs must fail at load, not decode to nothing")
+	assert.Contains(t, err.Error(), "must be Manifest")
 }

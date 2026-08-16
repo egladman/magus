@@ -52,15 +52,27 @@ interface BootModule {
 // for the Activity view (there is no /console/activity/ tool page). Paths are relative to gen/console/.
 export interface ModuleSurface {
   id: string; // registry id / pageId, e.g. "activity"
-  title: string; // tab title, e.g. "Activity Trail"
+  title: string; // tab title, e.g. "Activity"
   bundle: string; // bundle path under gen/console/ whose activate(host) builds the DOM, e.g. "activity/activity.js"
   css: string; // page-scoped stylesheet path under gen/console/, e.g. "logs/logs.css" (the trail reuses it)
 }
 
-// The shape moduleSurface calls on a host-building bundle: activate(host) builds into host and returns
-// an optional teardown run on close.
+// What a host-building bundle's activate(host) may hand back for ONE mount: nothing (a static
+// surface), its teardown, or a controller carrying the teardown plus that mount's own visibility
+// switch.
+export interface SurfaceInstance {
+  deactivate(): void;
+  setVisible?(visible: boolean): void;
+}
+
+// The shape moduleSurface calls on a host-building bundle. A surface with something LIVE in it (a
+// poll timer, a stream) also exposes setVisible so it can go quiet while its pane is backgrounded -
+// and it does so on the INSTANCE, never as a module export, because the console drives visibility
+// per PANE (tileView's applyVisibility calls each pane's controller). One switch shared by however
+// many mounts a bundle has cannot tell them apart: backgrounding one pane silences another that is
+// still on screen.
 interface HostModule {
-  activate(host: HTMLElement): (() => void) | void;
+  activate(host: HTMLElement): SurfaceInstance | (() => void) | void;
 }
 
 // moduleSurface wraps a page-less surface: the console dynamically imports its bundle by URL (kept
@@ -81,11 +93,16 @@ export function moduleSurface(s: ModuleSurface): PageModule<null, null> {
         document.head.append(link);
       }
       const mod = (await import(url(s.bundle))) as HostModule;
-      const teardown = mod.activate(host);
+      // Normalized here so the console below has ONE shape to drive, whichever of the three a
+      // surface hands back.
+      const boot = mod.activate(host);
+      const instance: SurfaceInstance | null =
+        typeof boot === "function" ? { deactivate: boot } : (boot ?? null);
       return {
         search: noSearch,
+        setVisible: instance?.setVisible?.bind(instance),
         deactivate() {
-          if (typeof teardown === "function") teardown();
+          instance?.deactivate();
           host.replaceChildren();
         },
       };

@@ -112,12 +112,33 @@ func TestSplitTargetFromArgs(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			target, rest, ok := splitTargetFromArgs(c.args)
+			target, rest, ok := splitTargetFromArgs(c.args, nil)
 			assert.Equal(t, c.ok, ok, "ok")
 			assert.Equal(t, c.target, target, "target")
 			assert.Equal(t, c.rest, rest, "rest")
 		})
 	}
+}
+
+// TestSplitTargetFromArgsLocalFlags proves why the prescan takes the command's own
+// flags. Without them a value-taking local flag reads as a bool here, so its value is
+// hoisted out as a positional - which one flag survives by luck of ordering, and a
+// REPEATED one does not: the first --skip ends up holding the second as its value.
+func TestSplitTargetFromArgsLocalFlags(t *testing.T) {
+	args := []string{"generate", "--skip", "docs", "--skip", "console"}
+
+	target, rest, ok := splitTargetFromArgs(args, func(fs *flag.FlagSet) {
+		fs.Var(&skipFlag{}, "skip", "")
+	})
+	require.True(t, ok)
+	assert.Equal(t, "generate", target)
+	assert.Equal(t, []string{"--skip", "docs", "--skip", "console"}, rest)
+
+	// The limit a nil binder still accepts, pinned so it is a known cost rather than a
+	// surprise: `magus affected` passes nil and carries no repeatable flag.
+	_, rest, ok = splitTargetFromArgs(args, nil)
+	require.True(t, ok)
+	assert.Equal(t, []string{"--skip", "--skip", "docs", "console"}, rest)
 }
 
 // ---- the man page's flag list vs what the CLI binds ----

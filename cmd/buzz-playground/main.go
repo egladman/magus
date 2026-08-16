@@ -365,6 +365,17 @@ func (u *ui) render(lines []playground.Line) {
 	u.out.Set("scrollTop", u.out.Get("scrollHeight"))
 }
 
+// diagJS flattens a *dry.Diag for the JS bridge. syscall/js marshals maps, slices
+// and primitives but NOT arbitrary structs, so the Diag has to be spread by hand;
+// handed over whole it crosses as nothing, leaving every caller with a bare ok:false
+// and no way to say what went wrong. nil (a run that succeeded) crosses as JS null.
+func diagJS(d *dry.Diag) any {
+	if d == nil {
+		return nil
+	}
+	return map[string]any{"msg": d.Msg, "line": d.Line, "col": d.Col}
+}
+
 // exposeDataAPI installs globalThis.buzz with the raw evaluation functions, so
 // the interpreter is scriptable from the browser console independent of the UI.
 func exposeDataAPI() {
@@ -374,7 +385,7 @@ func exposeDataAPI() {
 			return nil
 		}
 		r := dry.Eval(context.Background(), args[0].String())
-		return map[string]any{"ok": r.OK, "result": r.Result, "output": r.Output}
+		return map[string]any{"ok": r.OK, "result": r.Result, "output": r.Output, "diag": diagJS(r.Diag)}
 	}))
 	// evalBuzzWithRecorder is the spell-docs Run path: it dry-runs a magusfile
 	// example under the tracing host and returns the host-op trace its targets
@@ -393,7 +404,7 @@ func exposeDataAPI() {
 				"target": op.Target, "kind": op.Kind, "name": op.Name, "detail": op.Detail,
 			}
 		}
-		return map[string]any{"ok": r.OK, "output": r.Output, "trace": trace}
+		return map[string]any{"ok": r.OK, "output": r.Output, "trace": trace, "diag": diagJS(r.Diag)}
 	}))
 	api.Set("loadMagusfile", js.FuncOf(func(_ js.Value, args []js.Value) any {
 		if len(args) < 1 {

@@ -100,7 +100,7 @@ installed.
 # the two lines say exactly where: an advise on a shell command is delivered
 # nowhere (Cursor sends nothing on an allow), and an advise on a file write
 # reaches the person via stderr but never the model.
-# magus-guard-template: 4
+# magus-guard-template: 5
 # magus-guard-coverage: schema=1 host=cursor surface=command deny=model advise=none pass=none
 # magus-guard-coverage: schema=1 host=cursor surface=path deny=human advise=human pass=none
 
@@ -181,6 +181,13 @@ its coverage as `deny=human` rather than claiming a parity Cursor does not have.
 Reporting a declared-output edit after the fact is not a concession: that rule
 only ever explains, on every host. What differs is the channel - injected
 context where a host has one, stderr prose where it does not.
+
+**Delegation capture is not available.** Cursor's documented hooks are
+`beforeShellExecution`, `beforeReadFile` and `afterFileEdit` - all of them
+tool-specific, and none of them carrying a prompt handed to a sub-agent. There is
+no generic pre-tool event to attach to, so there is nothing to pipe. Even if one
+arrived, neither Cursor event carries a session id, so the parent side of the
+handoff would be unattributable.
 
 Cursor fails open on a hook crash or malformed JSON unless the hook sets
 `failClosed`. The script above matches that stance instead of pretending to be

@@ -102,6 +102,9 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 **notes**
 : Human-authored notes committed to the repository. See [**magus-notes**(1)](magus-notes.md).
 
+**diff**
+: Read the working tree's changes in the order they deserve attention. See [**magus-diff**(1)](magus-diff.md).
+
 **server**
 : Manage the persistent magus daemon. See [**magus-server**(1)](magus-server.md).
 
@@ -130,7 +133,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Manage the magus binary (update, install-shorthand). See [**magus-self**(1)](magus-self.md).
 
 **version**
-: Print version, commit, and build date. See [**magus-version**(1)](magus-version.md).
+: Print the client and daemon versions. See [**magus-version**(1)](magus-version.md).
 
 ## Environment
 
@@ -174,7 +177,7 @@ after the subcommand word. Last-write-wins, matching kubectl conventions.
 : Master switch for VCS-driven affected detection; false makes affected fall back to all projects (default: true). Equivalent magus.yaml key: **vcs.enabled**.
 
 **MAGUS_VCS_NAME**
-: Pin the active VCS by name (git, hg, jj); empty autodetects from .git/.hg/.jj. Equivalent magus.yaml key: **vcs.name**.
+: Pin the active VCS by name (git, hg, sl, jj); empty autodetects from .git/.hg/.sl/.jj. Equivalent magus.yaml key: **vcs.name**.
 
 **MAGUS_VCS_BASE_REF**
 : Default base ref for the active VCS adapter, e.g. origin/main for git. Equivalent magus.yaml key: **vcs.base_ref**.
@@ -282,5 +285,5 @@ MAGUS_CACHE_DIR.
 
 ## See Also
 
-[**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-server**(1)](magus-server.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-hook**(1)](magus-hook.md), [**magus-notify**(1)](magus-notify.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-hook**(1)](magus-hook.md), [**magus-notify**(1)](magus-notify.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

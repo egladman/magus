@@ -28,6 +28,32 @@ It exists so agents and humans can ask "what is this, what touches it, how do
 these relate" and get a precise answer instead of grepping. Agents reach it over
 MCP; humans reach it through three verbs and the `magus graph` home.
 
+## What this graph is not
+
+"Knowledge graph" now names architectures this one deliberately is not, and the
+distance is the point.
+
+- **Not open-world.** General knowledge graphs are genuinely hard: ontology
+  design, entity resolution, and modeling discipline that stays expensive at
+  scale. magus never attempts that problem. The build domain hands it a closed
+  ontology - the node kinds and relations above are the complete list - so
+  there is no modeling step to do well or badly, and no linking judgment to
+  trust.
+- **Not a second indexer.** Most codebase graphs are built by a separate system
+  that scans the repo and infers structure, and the drift between that system
+  and your build stays invisible until it bites. This graph is assembled from
+  the same declarations the build executes. A wrong edge is a broken build,
+  and a broken build is loud.
+- **Not synthesized links.** No pass ever guesses an edge - no LLM, no fuzzy
+  matching, no "related notes" heuristics. Every edge is extracted or
+  rubric-inferred from a source you can open, and `magus explain` prints each
+  edge's provenance so the claim is checkable per edge, not per marketing page.
+- **Not agent memory.** The graph is derived state: rebuilt from the workspace,
+  never accumulated, never remembered. Memory is a different surface with the
+  opposite contract - [`magus memory`](../reference/manpage/magus-memory.md) is
+  a user-owned journal of named decisions, written deliberately, and it stays
+  small precisely because the graph answers everything derivable.
+
 ## The two-concept model
 
 - **query / explain / path READ the graph** - daily retrieval.
@@ -512,6 +538,18 @@ graph, rebuild it, and all of that comes back.
 A note is the exception. Its content originates with a person, nothing in the repository
 corroborates it, and no rebuild recovers it. That single property is why the store looks
 the way it does.
+
+If you have played Dark Souls, you have already used this. Players there cannot talk to
+each other; they can only leave a short message on the ground where they are standing, and
+everyone who passes that spot afterwards reads it. A few are jokes. Most are someone who
+just got caught by something, telling you what caught them - and they beat any wiki,
+because they are lying exactly where you needed them.
+
+That is what a note is for, and the rest of this section is the machinery that keeps the
+promise. Not documentation filed somewhere central and read by nobody: one sentence left at
+the spot in the code that earned it, for whoever arrives next. An anchor is how it stays at
+that spot when the code moves, `verify` is how it speaks up when the spot quietly stops
+meaning what the note said, and git is how the person who left it has their name on it.
 
 ### Where a note goes, and what that means
 

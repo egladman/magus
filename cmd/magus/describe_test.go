@@ -10,6 +10,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/types"
 )
 
 // TestDescribeWorkspacesOutput_MultiDeclared verifies that `describe workspaces`
@@ -34,4 +35,25 @@ func TestDescribeWorkspacesOutput_MultiDeclared(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, out, 2)
 	assert.NotEqual(t, out[1].Root, out[0].Root, "expected two distinct workspace roots")
+}
+
+// TestClaimLabel pins the one spelling `describe file` prints a claim's declarer
+// as: the path:target ref every other magus command accepts, so a reader can run
+// the target that wrote the file without translating anything.
+func TestClaimLabel(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name  string
+		claim types.FileClaim
+		want  string
+	}{
+		{name: "per-target glob", claim: types.FileClaim{Project: "docs", Target: "generate"}, want: "docs:generate"},
+		{name: "project-wide glob", claim: types.FileClaim{Project: "docs"}, want: "docs"},
+		{name: "root project", claim: types.FileClaim{Project: ".", Target: "generate"}, want: ".:generate"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, claimLabel(tc.claim))
+		})
+	}
 }

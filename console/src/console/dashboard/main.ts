@@ -20,6 +20,7 @@ import { createStore } from "../../lib/store";
 import { persisted } from "../../lib/persist";
 import { notify } from "../../lib/notifications";
 import { showCountdownToast, showRefreshToast } from "../../lib/refresh-toast";
+import { registerServiceWorker } from "../../lib/sw";
 import { bind } from "../view";
 import { initialState, type DashboardState, type ConnView } from "./state";
 import { DashboardTransport } from "./transport";
@@ -515,29 +516,15 @@ function wireResumeForm(): void {
 }
 
 // ---- service worker --------------------------------------------------------
-// This page does NOT load the docs main.js (which injects site search + nav chrome),
-// so it registers the site sw.js itself to stay an installable, offline-capable PWA
-// surface, at the gen-root scope that also covers /dashboard/. Only on a secure origin.
-function registerServiceWorker(): void {
-  if (typeof navigator === "undefined" || !("serviceWorker" in navigator)) return;
-  const secure = location.protocol === "https:" || location.hostname === "localhost";
-  if (!secure) return;
-  const go = (): void => {
-    navigator.serviceWorker
-      .register(new URL("../sw.js", import.meta.url))
-      .then((reg) => {
-        watchForNewVersion(reg);
-        pollForNewVersion(reg);
-      })
-      .catch(() => {});
-  };
-  // Waiting on `load` unconditionally never fires when the console shell reaches this
-  // module through a dynamic import: by then the page has long finished loading, and the
-  // listener is registered for an event that has already been and gone - so the dashboard
-  // silently ran with no service worker at all inside the shell, while the standalone page
-  // (a deferred module script, which does run before `load`) worked fine.
-  if (document.readyState === "complete") go();
-  else window.addEventListener("load", go, { once: true });
+// The registration itself lives in lib/sw.ts (the shell registers the same worker at boot, so a console
+// that never opens this surface still has one). What stays HERE is the dashboard's own reaction to a new
+// version, which no other surface wants: this is the screen that is left running unattended.
+function registerDashboardServiceWorker(): void {
+  void registerServiceWorker(new URL("../sw.js", import.meta.url)).then((reg) => {
+    if (!reg) return;
+    watchForNewVersion(reg);
+    pollForNewVersion(reg);
+  });
 }
 
 // How often a tab re-checks the server for a new worker. Registration alone does not: the browser
@@ -622,7 +609,7 @@ function onNewVersion(): void {
 let notificationsWired = false;
 export function activate(): void {
   document.documentElement.classList.remove("no-js");
-  registerServiceWorker();
+  registerDashboardServiceWorker();
   // Drop the previous generation before building the next one. activate() runs again every
   // time the console reopens this surface, and the module (with its store and tile list)
   // outlives the tab.

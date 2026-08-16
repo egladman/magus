@@ -93,6 +93,24 @@ func TestProjectRef(t *testing.T) {
 	assert.Equal(t, "workspace://pkg/foo", nested.WorkspaceURI())
 }
 
+// TestDeclaredGlobsRootsAReachingSourceAndCollapsesTheDuplicate covers the two things
+// cleaning the rooting does at once. A project-wide "../proto/**" resolves against the
+// declaring project rather than concatenating into "api/../proto/**", which nothing
+// matches; and so resolved, it is the SAME declaration as the per-target ctx.readsFiles
+// spelling of it, so the two collapse to one entry rather than double-counting the same
+// input. Dedup here is string equality on the rooted form, which is why both sides have
+// to root the same way for it to converge.
+func TestDeclaredGlobsRootsAReachingSourceAndCollapsesTheDuplicate(t *testing.T) {
+	t.Parallel()
+	p := &Project{
+		Path:         "api",
+		Sources:      []string{"**/*.go", "../proto/**"},
+		TargetInputs: map[string][]InputRef{"build": {{Project: "proto", Glob: "**"}}},
+	}
+
+	assert.Equal(t, []string{"api/**/*.go", "proto/**"}, p.DeclaredGlobs())
+}
+
 func TestProject_AttachSpell(t *testing.T) {
 	goSpell := spells.NewSpell("go",
 		spells.WithSources("**/*.go"),

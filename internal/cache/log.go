@@ -745,7 +745,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 			lead = "\nSummary: "
 		}
 		if recordBool(r, "dry") {
-			h.printf("%sdry run - %s would run (%s)\n",
+			h.printf("%sdry run, %s would run (%s)\n",
 				lead, plural(recordInt(r, "planned"), "target"), fmtDur(elapsed))
 		} else {
 			h.printf("%s%d cached, %d ran, %d failed (%s)\n",
@@ -767,9 +767,9 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		}
 	case "cache.dry.banner":
 		if colorize {
-			h.printf("%s\n", tty.Colorize("dry run - commands shown, not executed", colDim))
+			h.printf("%s\n", tty.Colorize("dry run: commands shown, not executed", colDim))
 		} else {
-			h.printf("dry run - commands shown, not executed\n")
+			h.printf("dry run: commands shown, not executed\n")
 		}
 	case "cache.dry":
 		// Neutral glyph: a dry run has no pass/fail outcome (nothing executes), and
@@ -829,7 +829,7 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 			h.printf("base: %s\n", recordStr(r, "base"))
 		}
 	case "run.exec":
-		// Every subprocess magus spawns (os.exec, fork spells) logs through this event
+		// Every subprocess magus spawns (proc.exec, fork spells) logs through this event
 		// in run.Exec. Rendered as a shell-style echo, indented under the owning
 		// project/stage. At debug level it surfaces with -v during a real run; in a dry
 		// run run.Exec logs it at info so the planned commands always show.

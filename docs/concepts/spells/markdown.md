@@ -110,7 +110,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 
 **Command:** `typos --format brief`
 
-### rw
+### fix
 
 Appends `-w`.
 

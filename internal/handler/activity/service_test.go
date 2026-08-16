@@ -144,6 +144,37 @@ func TestListActivity_FilterAgentCommand(t *testing.T) {
 	assert.Equal(t, "session:abc", events[0].GetActor())
 }
 
+// TestListActivity_CarriesAgentSpawn proves the delegation record reaches the console over the
+// EXISTING listing: a distinct kind, the unit on the row so a reader can join a page to a work
+// ledger without a GetPayload per row, and the handed context reachable only by its ref.
+func TestListActivity_CarriesAgentSpawn(t *testing.T) {
+	dir := t.TempDir()
+	trail.AppendAgentSpawn(t.Context(), dir, trail.AgentSpawn{
+		Workspace: "/ws/a", Host: "claude-code", Session: "abc", Tool: "Task", Child: "Explore",
+		Context: "unit: notes-store-6b\naudit the store",
+	})
+
+	events := list(t, dir, nil)
+	require.Len(t, events, 1)
+	assert.Equal(t, activityv1.Kind_KIND_AGENT_SPAWN, events[0].GetKind())
+	assert.Equal(t, "Explore", events[0].GetAction())
+	assert.Equal(t, "notes-store-6b", events[0].GetUnit())
+	assert.Equal(t, "claude-code", events[0].GetHost())
+	assert.Equal(t, "/ws/a", events[0].GetWorkspace())
+	assert.NotEmpty(t, events[0].GetRequestRef())
+	assert.Empty(t, events[0].GetResponseRef(), "a spawn has no response: nothing judged it")
+
+	// The kind filter selects it, so the console needs no new endpoint to build a delegation view.
+	assert.Len(t, list(t, dir, &activityv1.ActivityQuery{
+		Kinds: []activityv1.Kind{activityv1.Kind_KIND_AGENT_SPAWN},
+	}), 1)
+
+	body, err := svc(dir).GetPayload(context.Background(),
+		connect.NewRequest(&activityv1.GetPayloadRequest{Ref: events[0].GetRequestRef()}))
+	require.NoError(t, err)
+	assert.Contains(t, string(body.Msg.GetBody()), "audit the store")
+}
+
 func TestGetPayload_RoundTripAndReject(t *testing.T) {
 	dir, ref := seedTrail(t)
 	s := svc(dir)
@@ -380,6 +411,8 @@ func TestEncodeKindCoversEveryTrailKind(t *testing.T) {
 		trail.KindMemory,
 		trail.KindAgentCommand,
 		trail.KindCredentialGrant,
+		trail.KindAgentSpawn,
+		trail.KindNotes,
 	} {
 		assert.NotEqual(t, activityv1.Kind_KIND_UNSPECIFIED, encodeKind(k),
 			"trail kind %q has no proto value, so the activity view cannot show or filter it", k)

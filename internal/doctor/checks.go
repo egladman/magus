@@ -27,6 +27,7 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/identity"
 	"github.com/egladman/magus/internal/serviceaudit"
+	"github.com/egladman/magus/internal/trail"
 	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/libs/gopherbuzz/ast"
 	"github.com/egladman/magus/project"
@@ -542,25 +543,18 @@ func checkVCSBaseRef(ctx context.Context, root string, opts types.VCSOptions) ty
 	ctx, cancel := context.WithTimeout(ctx, 2*time.Second)
 	defer cancel()
 
-	var probeArgs []string
-	switch res.Name {
-	case "git":
-		probeArgs = []string{"-C", root, "rev-parse", "--verify", "--quiet", res.Base}
-	case "hg":
-		probeArgs = []string{"-R", root, "log", "-r", res.Base, "-l", "1", "-T", "{node}\\n"}
-	case "jj":
-		probeArgs = []string{"-R", root, "log", "-r", res.Base, "-n", "1", "--no-graph", "-T", "commit_id"}
-	default:
-		return types.DoctorCheck{Name: "vcs base ref", Status: types.DoctorOK, Message: fmt.Sprintf("%s: no probe available; skipped", res.Name)}
-	}
-
-	cmd := exec.CommandContext(ctx, res.Name, probeArgs...)
-	if err := cmd.Run(); err != nil {
+	// The driver is ASKED whether the ref resolves, rather than this check hand-writing a
+	// probe per backend. Switching on res.Name over four literal names and building the argv
+	// here would make this the only place outside vcs/ that shells out to a VCS binary, and
+	// would degrade a NEW backend to "no probe available; skipped" - a silent pass for the
+	// one check whose whole job is catching an unreachable base ref. FindCommit is on the
+	// required interface, so every backend answers it by construction.
+	if _, err := res.VCS.FindCommit(ctx, root, res.Base); err != nil {
 		return types.DoctorCheck{
 			Name:    "vcs base ref",
 			Status:  types.DoctorFail,
 			Message: fmt.Sprintf("base_ref %q not reachable (set MAGUS_VCS_BASE_REF to a reachable ref)", res.Base),
-			Details: []string{fmt.Sprintf("%s exited: %v", res.Name, err)},
+			Details: []string{fmt.Sprintf("%s: %v", res.Name, err)},
 		}
 	}
 
@@ -979,6 +973,81 @@ func (*runner) checkOutputOwnedByTwoTargets(projects []*types.Project) types.Doc
 	}
 }
 
+// checkUndeclaredSeedingFiles is MGS1028 standing still: committed files that no
+// project declares, yet that pull a project into the affected set the moment they are
+// touched, because directory containment seeds and the root project catches
+// everything else.
+//
+// ADVICE, never a failure, and the doctrine at types/doctor.go decides that rather
+// than taste: which files are build inputs is the workspace's judgement. A LICENSE
+// nobody's cache key reads is correctly undeclared, and a checker that failed on it
+// would be dictating a layout. What magus can say is that the seeding is happening -
+// the cost is real and invisible, and every entry here is either a declaration
+// somebody forgot or a rerun somebody is paying for on purpose.
+//
+// The affected-set diagnostic only ever sees one changeset; this is the whole tree
+// answered at once, so the fix can be made in one pass instead of one file per pull
+// request. Tracked files only: an untracked build product seeding a rerun is a
+// different problem (a missing ignore), and a fresh clone must not read differently
+// from a working one. A backend that cannot report tracked files skips the question
+// rather than guessing, the same way checkDeadOutputGlobs does.
+func (r *runner) checkUndeclaredSeedingFiles(projects []*types.Project) types.DoctorCheck {
+	const name = "undeclared seeding files"
+
+	res, err := vcs.Resolve(r.runCtx(), r.root, "", r.ws.VCSOptions())
+	if err != nil || res.VCS == nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no VCS to enumerate committed files with"}
+	}
+	tracked, ok := res.VCS.(types.TrackedFileReporter)
+	if !ok {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: res.Name + " cannot report tracked files"}
+	}
+	// "." is a pathspec for the whole tree, so this is one ls-files rather than one
+	// per candidate: the check has no candidate set until it has the file list.
+	files, err := tracked.TrackedFiles(r.runCtx(), r.root, []string{"."})
+	if err != nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "could not list tracked files: " + err.Error()}
+	}
+
+	var globs []string
+	for _, p := range projects {
+		globs = append(globs, p.DeclaredGlobs()...)
+	}
+	// A glob the matcher cannot parse matches nothing, so every file it was meant to
+	// cover reads as undeclared and this check advises declaring what is already
+	// declared. Tolerated (the cache walk tolerates it too) but named in the report,
+	// because the advice above is wrong for exactly those files.
+	var bad string
+	if invalid := types.InvalidGlobs(globs); len(invalid) > 0 {
+		bad = fmt.Sprintf("; %d declared glob(s) cannot be parsed and so match nothing: %s",
+			len(invalid), strings.Join(invalid, ", "))
+	}
+	var details []string
+	for _, f := range files {
+		f = filepath.ToSlash(f)
+		if types.IsMagusMaintained(f) {
+			continue // magus writes it; no project was ever going to declare it
+		}
+		if types.MatchesAnyGlob(globs, f) {
+			continue
+		}
+		details = append(details, f)
+	}
+	if len(details) == 0 {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "every committed file is declared by the project it seeds" + bad}
+	}
+	slices.Sort(details)
+	return types.DoctorCheck{
+		Name:   name,
+		Status: types.DoctorAdvice,
+		Message: fmt.Sprintf(
+			"%d committed file(s) seed a project by directory containment while no project declares them, so touching one reruns targets whose answer cannot have changed; "+
+				"declare the ones that are inputs in the owning project's sources (see %s)%s",
+			len(details), types.CodeURL(types.UndeclaredSeedingFile), bad),
+		Details: details,
+	}
+}
+
 // globOutputs expands one declared output glob against the project directory, returning
 // absolute paths.
 //
@@ -1392,7 +1461,7 @@ func (r *runner) checkStaleSockets() types.DoctorCheck {
 		return types.DoctorCheck{
 			Name:    "sockets",
 			Status:  types.DoctorFail,
-			Message: fmt.Sprintf("%d live daemon sockets - multiple daemons running", len(live)),
+			Message: fmt.Sprintf("%d live daemon sockets: multiple daemons running", len(live)),
 			Details: details,
 		}
 	}
@@ -1482,6 +1551,89 @@ func (r *runner) checkGuardBinary() types.DoctorCheck {
 	}
 	return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "hook would run ./magus, newer than every tracked Go source"}
 }
+
+// checkObserverRecording answers the question checkGuardBinary and checkGuardWiring cannot:
+// the hook is wired and the binary is current, but is anything actually being RECORDED?
+//
+// The observer is silent by design when absent, because interrupting on every read would be
+// worse than the gap. The cost of that choice is that a hook writing nothing is
+// indistinguishable from an agent that read nothing, and both are indistinguishable from a
+// human having written the file - so the diff surface's "written by X, after reading Y" claim
+// degrades into an agent name and no evidence, with nothing anywhere saying so.
+//
+// Measured in this repository: 3252 events, zero reads, correct wiring, green doctor. The
+// resolved hook was a PATH magus too old to accept --observe, which rejected the flag into an
+// `|| true` and recorded nothing, forever. That is the shape this check exists to name.
+//
+// Commands with no reads is the diagnostic pattern. An empty trail is NOT a failure: a
+// workspace where no agent has run yet is the ordinary case, and failing it would train
+// people to ignore the check.
+func (r *runner) checkObserverRecording() types.DoctorCheck {
+	const name = "agent observer"
+	const window = 2000
+
+	reads, writes, shell := trail.ObservedCounts(r.cacheDir(), window)
+	total := reads + writes + shell
+	switch {
+	case total == 0:
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorOK,
+			Message: "no agent activity recorded yet, which is the ordinary state for a workspace no agent has run in",
+		}
+	case total < observerMinSample:
+		// Too small a sample to conclude anything. A handful of events with no reads is what a
+		// fixture, a fresh workspace, or one session's worth of work looks like, and failing on
+		// it would be this check making the exact mistake it exists to catch: reporting "we did
+		// not look" as "we looked and found nothing".
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorOK,
+			Message: fmt.Sprintf("%d observation(s) so far, too few to judge whether the read hook is firing", total),
+		}
+	case reads == 0:
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorFail,
+			Message: fmt.Sprintf("%d observed commands and NOT ONE read, so the story behind a change cannot be reconstructed", total),
+			Details: []string{
+				fmt.Sprintf("writes: %d   shell: %d   reads: %d", writes, shell, reads),
+				"the usual cause is a hook resolving a magus too old to accept --observe, which",
+				"rejects the flag into an `|| true` and records nothing with nothing saying so",
+				"check which binary the hook runs: magus doctor (see the `guard binary` check)",
+				"re-stamp the hook templates: magus agent install <dir> --force",
+			},
+		}
+	case reads*observerReadRatio < writes:
+		// Wired, recording, and still useless for its actual purpose. Measured on this
+		// repository while writing this check: 4 reads against 272 writes and 1709 shell
+		// commands, which renders as "written by <agent>" with no reading trail on essentially
+		// every file - the same missing evidence as reads==0, arriving one rung quieter.
+		// Advice rather than fail: this is a degraded signal, not a broken workspace.
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorAdvice,
+			Message: fmt.Sprintf("%d read(s) against %d write(s): the reading trail is too sparse to explain a change", reads, writes),
+			Details: []string{
+				fmt.Sprintf("writes: %d   shell: %d   reads: %d", writes, shell, reads),
+				"a diff can name the agent that wrote a file but not what it had just read,",
+				"which is the one thing no forge can show - so this is the signal worth fixing",
+				"most hosts need the read hook wired separately from the command guard:",
+				"  magus agent install <dir> --force",
+			},
+		}
+	default:
+		return types.DoctorCheck{
+			Name: name, Status: types.DoctorOK,
+			Message: fmt.Sprintf("recording: %d read(s), %d write(s), %d shell command(s) in the last %d events", reads, writes, shell, window),
+		}
+	}
+}
+
+// observerReadRatio is how many reads one write should be accompanied by before the trail is
+// considered to be explaining anything. An agent reads far more than it writes, so anything
+// below parity means the read hook is firing rarely rather than working.
+const observerReadRatio = 1
+
+// observerMinSample is how many observations must exist before their SHAPE means anything.
+// Below it the trail is a fixture or a single session, and any verdict is noise.
+const observerMinSample = 50
 
 // newestGoSource returns the modification time of the most recently changed .go
 // file in the tree, skipping the directories that never hold guard sources.
@@ -1984,11 +2136,10 @@ func (r *runner) checkGeneratedDrift() types.DoctorCheck {
 	if err != nil || res.VCS == nil {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no vcs resolved; skipped"}
 	}
-	lines, err := res.VCS.DirtyFiles(ctx, r.root, nil)
+	paths, err := res.VCS.DirtyFiles(ctx, r.root, nil)
 	if err != nil {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "could not read tree status; skipped"}
 	}
-	paths := vcs.StatusPaths(res.Name, lines)
 	if len(paths) == 0 {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "tree is clean"}
 	}

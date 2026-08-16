@@ -24,7 +24,9 @@
 // create it whole"; `modifiesExistingFiles` says "this file is someone else's and I edit a
 // region of it". Get that backwards and `magus clean` deletes a hand-written page.
 //
-// This magusfile contains a deliberate contradiction. Run `doctor` and read the ward.
+// This magusfile contains two deliberate contradictions. `doctor` refuses the first before
+// anything runs; the second only shows up once a target has executed, because it is about
+// what the run DID rather than what it declared.
 
 import "magus";
 import "fs";
@@ -67,4 +69,24 @@ export fun inject(ctx: magus\Context, args: [str]) > void {
     ctx.readsFiles("data/**");
     ctx.modifiesExistingFiles("README.md");
     magus\log.info("would rewrite the generated block in README.md, leaving the rest alone");
+}
+
+// THE SECOND CONTRADICTION, and unlike `stamp` no static check can see it: this target
+// writes a file it declared as an INPUT. The key is hashed from data/** before the body
+// runs, so by the time the run finishes the key describes a tree that no longer exists.
+// Nothing can reproduce that entry - not CI, not a teammate, not this machine a second
+// later - and it still reported success.
+//
+// `magus run tidy` fails it with MGS4007 and names the file. The fix is the line above in
+// `inject`: say `ctx.modifiesExistingFiles("data/**")` and the edit becomes declared
+// rather than accidental.
+//
+// Watch for this most where a charm supplies the write. A charm patches ARGUMENTS, so it
+// cannot tell magus the tool now writes - swap a --check for a --write and a target named
+// for checking quietly edits your tree. Worse when the charm is a workspace default
+// (magus.yaml default_charms), because the local run carries it and CI strips it: the same
+// target has opposite behavior on the two machines and neither run can reveal the other.
+export fun tidy(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles("data/**");
+    fs\writeFile("data/notes.txt", "rewritten in place");
 }

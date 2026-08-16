@@ -24,6 +24,7 @@ import {
   parseHash,
   wantsDemo,
   daemonAttach,
+  adoptDaemonOrigin,
   validateLoopbackHost,
   consumeLiveToken,
   createDaemonTransport,
@@ -70,8 +71,7 @@ function buildScaffold(host: HTMLElement): Refs {
   const emptyTitle = h("h1", "pf-v6-c-empty-state__title-text", "No daemon connected");
   const emptyBody = h("div", "pf-v6-c-empty-state__body");
   const emptySub = h("p");
-  emptySub.textContent =
-    "The activity trail records what the daemon did: MCP calls, jobs, config changes.";
+  emptySub.textContent = "Activity records what the daemon did: MCP calls, jobs, config changes.";
   // Two "ways" mirroring the log viewer / graph empty state - a command to go live, or the demo button.
   // The data-empty-* hooks pick up the shared grid + mobile stacking from logs.css, so it matches logs.
   const emptyActions = h("div", "pf-v6-c-empty-state__actions");
@@ -122,7 +122,7 @@ function notifyDenials(events: ActivityEvent[]): void {
     const ms = tsMillis(ev.time);
     const action = ev.action || "a sandboxed operation";
     notify({
-      source: "Activity Trail",
+      source: "Activity",
       kind: "error",
       key: "sandbox:" + (ms ?? 0) + ":" + action,
       message: "Sandbox denied " + action + ".",
@@ -341,6 +341,12 @@ export function activate(host: HTMLElement): () => void {
   function load(): void {
     const params = parseHash();
     consumeLiveToken(params);
+    // adoptDaemonOrigin, not just consumeLiveToken. Each surface is its own esbuild bundle, so
+    // lib/daemon's "did we adopt this origin" flag is PER-BUNDLE state: the shell setting it
+    // does not make it true in here, and daemonAttach then returns null on a console served by
+    // that very daemon. Without this the surface works only after the dashboard has persisted a
+    // host to localStorage, which is the shape of bug that looks fine on the developer's machine.
+    adoptDaemonOrigin();
     if (wantsDemo(params)) {
       render(demoEvents(Date.now()));
       return;
@@ -354,7 +360,7 @@ export function activate(host: HTMLElement): () => void {
     }
     showEmpty(
       "No daemon connected",
-      "The activity trail records what the daemon did: MCP calls, jobs, config changes.",
+      "Activity records what the daemon did: MCP calls, jobs, config changes.",
       "not connected",
     );
   }

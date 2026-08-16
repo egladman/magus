@@ -12,4 +12,5 @@ export object FileHotspot {
     score: int = 0,
     authors: int = 0,
     lastCommit: str = "",
+    moves: int = 0,
 }

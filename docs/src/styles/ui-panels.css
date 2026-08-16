@@ -100,14 +100,16 @@
 .js #ref-drawer.browsing .ref-section { display: none; }
 #ref-drawer.browsing .ref-docview { display: block; }
 .ref-docview-bar {
-  position: sticky; top: 0; z-index: 2; background: var(--pico-card-background-color);
+  /* Sticks BELOW the drawer head, not on top of it: --ref-head-h is measured by
+     reference-drawer.ts. Both were top: 0 and the higher z-index simply painted this
+     bar over "Reference" and its buttons as soon as the doc scrolled. */
+  position: sticky; top: var(--ref-head-h, 3.25rem); z-index: 1;
+  background: var(--pico-card-background-color);
   /* Matches .ref-drawer-head - same bar in browse mode, so it spans and lifts the same way. */
   box-shadow: 0 2px 4px -2px rgba(0, 0, 0, 0.12);
   /* Same fix as .ref-drawer-head: all the space around the back bar is opaque padding (top and
-     bottom), never a transparent margin, so scrolling content never leaks through it. It overlays the
-     drawer head (2 over the head's 1 - stated outright rather than left to DOM order) in browse
-     mode, so its top padding covers the head's spot too. Side margins cancel the drawer padding
-     so it spans edge to edge, same as the head. */
+     bottom), never a transparent margin, so scrolling content never leaks through it. Side margins cancel the drawer
+     padding so it spans edge to edge, same as the head. */
   margin: 0 calc(-1 * var(--ref-pad-x)); padding: 0.9rem var(--ref-pad-x) 0.7rem;
 }
 /* Bare button: reset Pico's white --pico-color (see .ref-pin) so hover firms up, never vanishes. */
@@ -163,7 +165,7 @@ html.ref-instant body, html.ref-instant .ref-drawer, html.ref-instant .ref-backd
   /* z-index is REQUIRED, not decorative: sticky alone pins the box but leaves it at z-index auto,
      so the .ref-section summaries scrolling underneath (their native disclosure chevrons most
      visibly) paint OVER this opaque background instead of behind it. */
-  position: sticky; top: 0; z-index: 1;
+  position: sticky; top: 0; z-index: 2;
   /* Vertical spacing is PADDING (inside the opaque background box), never a transparent margin,
      so scrolling content is fully covered above and below the sticky head. Horizontally it does
      the opposite: a negative margin cancels the drawer's side padding so the bar reaches both

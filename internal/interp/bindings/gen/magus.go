@@ -17,7 +17,7 @@ import (
 // RegisterMagus builds the "magus" module map and returns it.
 // Magus core primitives.
 //
-// Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\cache.remote(<spell>)` selects a remote cache backend, `magus\ci.provider(<spell>)` a CI provider, and `magus\secret.provider(<spell>)` / `magus\secret.read(<ref>)` a secret backend and the credentials read through it. Each takes an imported spell handle. `magus\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the credential on the way upstream and the child never holds it. It takes an object with ref/host/header/prefix fields, declared in your own magusfile. For your own code, `read` is the ordinary choice. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI integration](../../guides/integrations/ci.md).
+// Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\cache.remote(<spell>)` selects a remote cache provider, `magus\ci.provider(<spell>)` a CI provider, and `magus\secret.provider(<spell>)` / `magus\secret.read(<ref>)` a secret provider and the credentials read through it. Each takes an imported spell handle. `magus\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the credential on the way upstream and the child never holds it. It takes an object with ref/host/header/prefix fields, declared in your own magusfile. For your own code, `read` is the ordinary choice. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI integration](../../guides/integrations/ci.md).
 //
 // `import "magus"` resolves in a `magus buzz` script as well as in a magusfile, and a script run inside a workspace reads that workspace: `ls`, `affected`, `projectGraph`, `where` and `insight` all answer in-process. Only the members that DECLARE into the workspace being loaded (`magus\project`, the provider selections above) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script - there is nothing for them to declare into. Run a script outside any workspace and the reading members raise it too, since there is no workspace to read. The nested-command methods (`cmd`, `run`, `describe`, `doctor`) work there either way and discover the workspace themselves.
 func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
@@ -107,14 +107,6 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return buzzValueMagusInsightReport(ret0), nil
 	}))
-	m.MapSet("insightMarkdown", vm.DirectValue("magus.insightMarkdown", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
-		opts := AnyMap(bzArgs, 0)
-		ret0, err := std.MagusInsightMarkdown(ctx, opts)
-		if err != nil {
-			return vm.Null, HostError(err)
-		}
-		return StrVal(ret0), nil
-	}))
 	m.MapSet("affectedImpact", vm.DirectValue("magus.affectedImpact", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		base := Str(bzArgs, 0)
 		opts := AnyMap(bzArgs, 1)
@@ -132,6 +124,14 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, HostError(err)
 		}
 		return buzzValueMagusFileReport(ret0), nil
+	}))
+	m.MapSet("diff", vm.DirectValue("magus.diff", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		opts := AnyMap(bzArgs, 0)
+		ret0, err := std.MagusDiff(ctx, opts)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return buzzValueMagusDiff(ret0), nil
 	}))
 	m.MapSet("doctor", vm.DirectValue("magus.doctor", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		args := StrSlice(bzArgs, 0)
@@ -210,6 +210,11 @@ func buzzValueMagusProjectEntry(v types.ProjectEntry) vm.Value {
 		itemsManifests[indexManifests] = vm.StrValue(v.Manifests[indexManifests])
 	}
 	out.MapSet("manifests", vm.ListValue(itemsManifests))
+	itemsLockfiles := make([]vm.Value, len(v.Lockfiles))
+	for indexLockfiles := range v.Lockfiles {
+		itemsLockfiles[indexLockfiles] = vm.StrValue(v.Lockfiles[indexLockfiles])
+	}
+	out.MapSet("lockfiles", vm.ListValue(itemsLockfiles))
 	return out
 }
 
@@ -237,6 +242,13 @@ func buzzValueMagusTargetSpellUse(v types.TargetSpellUse) vm.Value {
 }
 
 func buzzValueMagusCrossTargetRef(v types.CrossTargetRef) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("target", vm.StrValue(v.Target))
+	return out
+}
+
+func buzzValueMagusChainStep(v types.ChainStep) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", vm.StrValue(v.Project))
 	out.MapSet("target", vm.StrValue(v.Target))
@@ -289,6 +301,11 @@ func buzzValueMagusTargetGraphNode(v types.TargetGraphNode) vm.Value {
 		itemsCrossDependencies[indexCrossDependencies] = buzzValueMagusCrossTargetRef(v.CrossDependencies[indexCrossDependencies])
 	}
 	out.MapSet("crossDependencies", vm.ListValue(itemsCrossDependencies))
+	itemsChain := make([]vm.Value, len(v.Chain))
+	for indexChain := range v.Chain {
+		itemsChain[indexChain] = buzzValueMagusChainStep(v.Chain[indexChain])
+	}
+	out.MapSet("chain", vm.ListValue(itemsChain))
 	itemsReadsFiles := make([]vm.Value, len(v.ReadsFiles))
 	for indexReadsFiles := range v.ReadsFiles {
 		itemsReadsFiles[indexReadsFiles] = buzzValueMagusInputRef(v.ReadsFiles[indexReadsFiles])
@@ -320,6 +337,11 @@ func buzzValueMagusTargetGraphNode(v types.TargetGraphNode) vm.Value {
 		itemsEnvAllow[indexEnvAllow] = vm.StrValue(v.EnvAllow[indexEnvAllow])
 	}
 	out.MapSet("envAllow", vm.ListValue(itemsEnvAllow))
+	itemsObservations := make([]vm.Value, len(v.Observations))
+	for indexObservations := range v.Observations {
+		itemsObservations[indexObservations] = vm.StrValue(v.Observations[indexObservations])
+	}
+	out.MapSet("observations", vm.ListValue(itemsObservations))
 	return out
 }
 
@@ -383,6 +405,15 @@ func buzzValueMagusAffectedResult(v types.AffectedResult) vm.Value {
 		itemsAffected[indexAffected] = vm.StrValue(v.Affected[indexAffected])
 	}
 	out.MapSet("affected", vm.ListValue(itemsAffected))
+	mappedUndeclaredBySeed := vm.NewMap()
+	for keyUndeclaredBySeed, itemUndeclaredBySeed := range v.UndeclaredBySeed {
+		itemsUndeclaredBySeedValue := make([]vm.Value, len(itemUndeclaredBySeed))
+		for indexUndeclaredBySeedValue := range itemUndeclaredBySeed {
+			itemsUndeclaredBySeedValue[indexUndeclaredBySeedValue] = vm.StrValue(itemUndeclaredBySeed[indexUndeclaredBySeedValue])
+		}
+		mappedUndeclaredBySeed.MapSet(keyUndeclaredBySeed, vm.ListValue(itemsUndeclaredBySeedValue))
+	}
+	out.MapSet("undeclaredBySeed", mappedUndeclaredBySeed)
 	return out
 }
 
@@ -450,6 +481,7 @@ func buzzValueMagusFileHotspot(v types.FileHotspot) vm.Value {
 		formattedLastCommit = v.LastCommit.Format(time.RFC3339)
 	}
 	out.MapSet("lastCommit", vm.StrValue(formattedLastCommit))
+	out.MapSet("moves", vm.IntValue(int64(v.Moves)))
 	return out
 }
 
@@ -648,6 +680,11 @@ func buzzValueMagusImpactProject(v types.ImpactProject) vm.Value {
 		itemsFiles[indexFiles] = vm.StrValue(v.Files[indexFiles])
 	}
 	out.MapSet("files", vm.ListValue(itemsFiles))
+	itemsUndeclaredFiles := make([]vm.Value, len(v.UndeclaredFiles))
+	for indexUndeclaredFiles := range v.UndeclaredFiles {
+		itemsUndeclaredFiles[indexUndeclaredFiles] = vm.StrValue(v.UndeclaredFiles[indexUndeclaredFiles])
+	}
+	out.MapSet("undeclaredFiles", vm.ListValue(itemsUndeclaredFiles))
 	itemsSpells := make([]vm.Value, len(v.Spells))
 	for indexSpells := range v.Spells {
 		itemsSpells[indexSpells] = vm.StrValue(v.Spells[indexSpells])
@@ -724,6 +761,20 @@ func buzzValueMagusImpactResult(v types.ImpactResult) vm.Value {
 	return out
 }
 
+func buzzValueMagusFileClaim(v types.FileClaim) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("target", vm.StrValue(v.Target))
+	out.MapSet("role", vm.StrValue(v.Role))
+	out.MapSet("glob", vm.StrValue(v.Glob))
+	itemsPaths := make([]vm.Value, len(v.Paths))
+	for indexPaths := range v.Paths {
+		itemsPaths[indexPaths] = vm.StrValue(v.Paths[indexPaths])
+	}
+	out.MapSet("paths", vm.ListValue(itemsPaths))
+	return out
+}
+
 func buzzValueMagusFileEntry(v types.FileEntry) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("path", vm.StrValue(v.Path))
@@ -739,6 +790,16 @@ func buzzValueMagusFileEntry(v types.FileEntry) vm.Value {
 		itemsSourceOf[indexSourceOf] = vm.StrValue(v.SourceOf[indexSourceOf])
 	}
 	out.MapSet("sourceOf", vm.ListValue(itemsSourceOf))
+	itemsClaims := make([]vm.Value, len(v.Claims))
+	for indexClaims := range v.Claims {
+		itemsClaims[indexClaims] = buzzValueMagusFileClaim(v.Claims[indexClaims])
+	}
+	out.MapSet("claims", vm.ListValue(itemsClaims))
+	itemsDependsOn := make([]vm.Value, len(v.DependsOn))
+	for indexDependsOn := range v.DependsOn {
+		itemsDependsOn[indexDependsOn] = vm.StrValue(v.DependsOn[indexDependsOn])
+	}
+	out.MapSet("dependsOn", vm.ListValue(itemsDependsOn))
 	out.MapSet("hint", vm.StrValue(v.Hint))
 	return out
 }
@@ -752,6 +813,117 @@ func buzzValueMagusFileReport(v types.FileReport) vm.Value {
 		itemsFiles[indexFiles] = buzzValueMagusFileEntry(v.Files[indexFiles])
 	}
 	out.MapSet("files", vm.ListValue(itemsFiles))
+	itemsOverlaps := make([]vm.Value, len(v.Overlaps))
+	for indexOverlaps := range v.Overlaps {
+		itemsOverlaps[indexOverlaps] = buzzValueMagusFileClaim(v.Overlaps[indexOverlaps])
+	}
+	out.MapSet("overlaps", vm.ListValue(itemsOverlaps))
+	return out
+}
+
+func buzzValueMagusDiffSymbol(v types.DiffSymbol) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("id", vm.StrValue(v.ID))
+	out.MapSet("label", vm.StrValue(v.Label))
+	out.MapSet("refCount", vm.IntValue(int64(v.RefCount)))
+	out.MapSet("fileCount", vm.IntValue(int64(v.FileCount)))
+	itemsExternalProjects := make([]vm.Value, len(v.ExternalProjects))
+	for indexExternalProjects := range v.ExternalProjects {
+		itemsExternalProjects[indexExternalProjects] = vm.StrValue(v.ExternalProjects[indexExternalProjects])
+	}
+	out.MapSet("externalProjects", vm.ListValue(itemsExternalProjects))
+	out.MapSet("externalFileCount", vm.IntValue(int64(v.ExternalFileCount)))
+	out.MapSet("moduleAPI", vm.BoolValue(v.ModuleAPI))
+	return out
+}
+
+func buzzValueMagusDiffTouch(v types.DiffTouch) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("host", vm.StrValue(v.Host))
+	out.MapSet("session", vm.StrValue(v.Session))
+	out.MapSet("transcript", vm.StrValue(v.Transcript))
+	itemsRead := make([]vm.Value, len(v.Read))
+	for indexRead := range v.Read {
+		itemsRead[indexRead] = vm.StrValue(v.Read[indexRead])
+	}
+	out.MapSet("read", vm.ListValue(itemsRead))
+	itemsRan := make([]vm.Value, len(v.Ran))
+	for indexRan := range v.Ran {
+		itemsRan[indexRan] = vm.StrValue(v.Ran[indexRan])
+	}
+	out.MapSet("ran", vm.ListValue(itemsRan))
+	return out
+}
+
+func buzzValueMagusDiffChurn(v types.DiffChurn) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("commits", vm.IntValue(int64(v.Commits)))
+	out.MapSet("authors", vm.IntValue(int64(v.Authors)))
+	out.MapSet("score", vm.IntValue(int64(v.Score)))
+	out.MapSet("rank", vm.IntValue(int64(v.Rank)))
+	out.MapSet("projectTrend", vm.IntValue(int64(v.ProjectTrend)))
+	return out
+}
+
+func buzzValueMagusDiffFile(v types.DiffFile) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("path", vm.StrValue(v.Path))
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("role", vm.StrValue(v.Role))
+	out.MapSet("hint", vm.StrValue(v.Hint))
+	optCoverage := vm.Null
+	if v.Coverage != nil {
+		optCoverage = buzzValueMagusImpactCoverage((*v.Coverage))
+	}
+	out.MapSet("coverage", optCoverage)
+	itemsSymbols := make([]vm.Value, len(v.Symbols))
+	for indexSymbols := range v.Symbols {
+		itemsSymbols[indexSymbols] = buzzValueMagusDiffSymbol(v.Symbols[indexSymbols])
+	}
+	out.MapSet("symbols", vm.ListValue(itemsSymbols))
+	out.MapSet("surface", vm.StrValue(v.Surface))
+	itemsTouches := make([]vm.Value, len(v.Touches))
+	for indexTouches := range v.Touches {
+		itemsTouches[indexTouches] = buzzValueMagusDiffTouch(v.Touches[indexTouches])
+	}
+	out.MapSet("touches", vm.ListValue(itemsTouches))
+	optChurn := vm.Null
+	if v.Churn != nil {
+		optChurn = buzzValueMagusDiffChurn((*v.Churn))
+	}
+	out.MapSet("churn", optChurn)
+	out.MapSet("noHistory", vm.BoolValue(v.NoHistory))
+	optReach := vm.Null
+	if v.Reach != nil {
+		optReach = vm.IntValue(int64((*v.Reach)))
+	}
+	out.MapSet("reach", optReach)
+	return out
+}
+
+func buzzValueMagusDiff(v types.Diff) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("base", vm.StrValue(v.Base))
+	itemsFiles := make([]vm.Value, len(v.Files))
+	for indexFiles := range v.Files {
+		itemsFiles[indexFiles] = buzzValueMagusDiffFile(v.Files[indexFiles])
+	}
+	out.MapSet("files", vm.ListValue(itemsFiles))
+	itemsSeedProjects := make([]vm.Value, len(v.SeedProjects))
+	for indexSeedProjects := range v.SeedProjects {
+		itemsSeedProjects[indexSeedProjects] = vm.StrValue(v.SeedProjects[indexSeedProjects])
+	}
+	out.MapSet("seedProjects", vm.ListValue(itemsSeedProjects))
+	itemsAffectedProjects := make([]vm.Value, len(v.AffectedProjects))
+	for indexAffectedProjects := range v.AffectedProjects {
+		itemsAffectedProjects[indexAffectedProjects] = buzzValueMagusImpactProject(v.AffectedProjects[indexAffectedProjects])
+	}
+	out.MapSet("affectedProjects", vm.ListValue(itemsAffectedProjects))
+	itemsNotes := make([]vm.Value, len(v.Notes))
+	for indexNotes := range v.Notes {
+		itemsNotes[indexNotes] = vm.StrValue(v.Notes[indexNotes])
+	}
+	out.MapSet("notes", vm.ListValue(itemsNotes))
 	return out
 }
 

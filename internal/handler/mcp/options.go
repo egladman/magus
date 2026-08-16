@@ -9,6 +9,8 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/diff"
+	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/types"
 )
 
@@ -54,6 +56,23 @@ type Options struct {
 	// converters. When zero-valued the bridge returns an empty telemetry/cache
 	// block but still serves the live pool state.
 	StatusBase types.StatusBase
+
+	// DiffSessions is the daemon's shared diff-session store, the SAME one the console's
+	// /api/v1/diff and /api/v1/diff/session routes use. Sharing it is what makes pairing work:
+	// the person opens a diff in the console and the agent joins the session they started,
+	// rather than each side holding a private opinion of the changeset.
+	//
+	// Nil disables magus_diff, which is the honest state for a daemon with no workspace.
+	DiffSessions *diff.Store
+
+	// Ledger is the daemon's shared delegation-ledger store, the SAME one the console's
+	// /api/v1/ledger route reads. Sharing it is what makes the Store's mutex mean
+	// anything: two Stores over one file each hold their own lock, so the in-process
+	// serialization the store documents would hold only while nothing wrote concurrently.
+	//
+	// Nil builds a private one, which is correct for a single-door server (the stdio MCP
+	// process) and wrong for the daemon, where the daemon sets it.
+	Ledger *ledger.Store
 }
 
 func (o Options) validate() error {

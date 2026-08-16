@@ -14,6 +14,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -183,11 +184,12 @@ func TestWriteManagedHookPreservesUserContent(t *testing.T) {
 	assert.Contains(t, s, gitHookBegin, "the managed section is appended")
 }
 
-// TestParseChangesByCommit verifies the NUL-delimited `git log --name-only` parse:
-// a NUL line opens a commit (hash, author, date); following non-empty lines are files.
+// TestParseChangesByCommit verifies the NUL-delimited `git log -M --name-status` parse:
+// a NUL line opens a commit (hash, author, date); following non-empty lines are one
+// status-prefixed entry each.
 func TestParseChangesByCommit(t *testing.T) {
-	out := "\x00abc123\x00Ada\x002026-06-20T10:00:00Z\n\napi/main.go\napi/util.go\n" +
-		"\x00def456\x00Babbage\x002026-06-19T09:00:00Z\n\nweb/app.ts\n"
+	out := "\x00abc123\x00Ada\x002026-06-20T10:00:00Z\n\nM\tapi/main.go\nA\tapi/util.go\n" +
+		"\x00def456\x00Babbage\x002026-06-19T09:00:00Z\n\nD\tweb/app.ts\n"
 
 	got := parseChangesByCommit(out)
 	require.Len(t, got, 2)
@@ -195,11 +197,59 @@ func TestParseChangesByCommit(t *testing.T) {
 	assert.Equal(t, "abc123", got[0].ID)
 	assert.Equal(t, "Ada", got[0].Author)
 	assert.Equal(t, time.Date(2026, 6, 20, 10, 0, 0, 0, time.UTC), got[0].Date.UTC())
-	assert.Equal(t, []string{"api/main.go", "api/util.go"}, got[0].Files)
+	assert.Equal(t, []types.FileChange{
+		{Path: "api/main.go", Status: types.ChangeModified},
+		{Path: "api/util.go", Status: types.ChangeAdded},
+	}, got[0].Files)
 
 	assert.Equal(t, "def456", got[1].ID)
 	assert.Equal(t, "Babbage", got[1].Author)
-	assert.Equal(t, []string{"web/app.ts"}, got[1].Files)
+	assert.Equal(t, []types.FileChange{{Path: "web/app.ts", Status: types.ChangeDeleted}}, got[1].Files)
+}
+
+// TestParseChangesByCommitRename is the case -M exists for: a rename arrives as ONE
+// entry carrying both names, so churn can follow the file instead of splitting across
+// the two paths. A copy is deliberately NOT lineage - both files survive it, so
+// crediting the new path with the old one's history would attribute edits it never
+// received - and it is recorded as a plain add.
+func TestParseChangesByCommitRename(t *testing.T) {
+	out := "\x00abc123\x00Ada\x002026-06-20T10:00:00Z\n\n" +
+		"R096\tinternal/old.go\tinternal/new.go\n" +
+		"C075\tinternal/new.go\tinternal/copy.go\n"
+
+	got := parseChangesByCommit(out)
+	require.Len(t, got, 1)
+	require.Len(t, got[0].Files, 2)
+
+	assert.Equal(t, types.FileChange{
+		Path: "internal/new.go", PrevPath: "internal/old.go", Status: types.ChangeRenamed,
+	}, got[0].Files[0], "a rename carries both names")
+	assert.Equal(t, types.FileChange{
+		Path: "internal/copy.go", Status: types.ChangeAdded,
+	}, got[0].Files[1], "a copy is an add, with no lineage back to its source")
+}
+
+// TestParseChangesByCommitMalformed pins that an unreadable entry is SKIPPED rather
+// than guessed at: a rename line missing its second path has no usable destination,
+// and inventing one would attribute churn to a file that does not exist.
+func TestParseChangesByCommitMalformed(t *testing.T) {
+	out := "\x00abc123\x00Ada\x002026-06-20T10:00:00Z\n\nR100\tonly/one/path.go\nM\tgood.go\n"
+
+	got := parseChangesByCommit(out)
+	require.Len(t, got, 1)
+	assert.Equal(t, []types.FileChange{{Path: "good.go", Status: types.ChangeModified}}, got[0].Files)
+}
+
+// A "?" is the letter a non-git driver emits for a status IT could not translate (see
+// jjChurnTemplate). Skipping it is the whole point: recorded as an edit - which the
+// default branch would have done - the driver's uncertainty reads back as a fact about
+// the file, and churn attributes work to a path that may not have changed at all.
+func TestParseChangesByCommitSkipsAnUntranslatedStatus(t *testing.T) {
+	out := "\x00abc123\x00Ada\x002026-06-20T10:00:00Z\n\n?\tmystery.go\t mystery.go\nM\tgood.go\n"
+
+	got := parseChangesByCommit(out)
+	require.Len(t, got, 1)
+	assert.Equal(t, []types.FileChange{{Path: "good.go", Status: types.ChangeModified}}, got[0].Files)
 }
 
 // TestParseChangesByCommitEmpty covers a commit that touched no files and a bad date.
@@ -527,4 +577,88 @@ func TestStartMergeFailsOnUnknownRef(t *testing.T) {
 	err := gitVCS{}.StartMerge(context.Background(), mergeRepo(t), "no-such-branch")
 
 	require.Error(t, err)
+}
+
+// TestGitStatusPaths pins the porcelain parse, which lives beside the driver that produces
+// those lines. It is a unit table rather than a live-git test because the shapes it covers -
+// a rename, a C-quoted name, both status columns - are awkward to provoke on demand and easy
+// to state exactly.
+func TestGitStatusPaths(t *testing.T) {
+	for name, tc := range map[string]struct {
+		lines []string
+		want  []string
+	}{
+		"modified":     {[]string{" M cmd/magus/agent.go"}, []string{"cmd/magus/agent.go"}},
+		"staged add":   {[]string{"A  docs/new.md"}, []string{"docs/new.md"}},
+		"untracked":    {[]string{"?? scratch.txt"}, []string{"scratch.txt"}},
+		"both columns": {[]string{"MM internal/agent/catalog.go"}, []string{"internal/agent/catalog.go"}},
+		"several":      {[]string{" M a.go", "?? b.go"}, []string{"a.go", "b.go"}},
+		"clean tree":   {nil, []string{}},
+
+		// A rename must name the NEW path; the old one no longer exists on disk.
+		"rename keeps the new name": {[]string{"R  old/path.go -> new/path.go"}, []string{"new/path.go"}},
+
+		// core.quotePath=false stops the escaping of non-ASCII bytes and nothing else: a
+		// name carrying a double quote still arrives quoted and escaped.
+		"quoted name is unquoted":  {[]string{` M "we\"ird.txt"`}, []string{`we"ird.txt`}},
+		"quoted name with a space": {[]string{` M "docs/a file.md"`}, []string{"docs/a file.md"}},
+
+		// strconv.Unquote also accepts Go raw-string and rune literals, so the unquoting is
+		// gated on git's own form - a file literally named `x` must keep its backquotes.
+		"backquoted name is left alone": {[]string{" M `x`"}, []string{"`x`"}},
+	} {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, tc.want, gitStatusPaths(tc.lines))
+		})
+	}
+}
+
+// TestTagsResolvesAnnotatedTagsToTheirCommit pins the %(*objectname) deref.
+//
+// An ANNOTATED tag's %(objectname) is the tag OBJECT's id, not the commit it points at,
+// while a lightweight tag's is the commit. types.VCSTag.ID promises "the revision
+// identifier the tag resolves to", so recording objectname made every annotated tag - the
+// kind `git tag -a` and most release tooling creates - report an id matching no commit. A
+// caller asking "is this release tagged at HEAD?" got no match for exactly the tags a
+// release process creates.
+func TestTagsResolvesAnnotatedTagsToTheirCommit(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n"})
+	gitRun(t, repo, "tag", "-a", "v1.0.0", "-m", "annotated")
+	gitRun(t, repo, "tag", "v1.0.1")
+
+	head, err := vcsOutput(t.Context(), repo, "git", "rev-parse", "HEAD")
+	require.NoError(t, err)
+
+	tags, err := gitVCS{}.Tags(t.Context(), repo, "")
+	require.NoError(t, err, "Tags")
+	require.Len(t, tags, 2)
+	for _, tag := range tags {
+		assert.Equal(t, head, tag.ID,
+			"%s resolves to %s, not the commit it marks", tag.Name, tag.ID)
+	}
+}
+
+// TestChangedFilesKeepsNonASCIIPathsRaw pins core.quotePath=false on BOTH of ChangedFiles'
+// probes. git otherwise renders a path outside ASCII as a C-quoted, backslash-escaped
+// literal ("uni/caf\303\251.md"), and project.normalizeFiles only trims and slash-converts -
+// so the quoted string matches no source glob and the project owning that file is silently
+// never rebuilt. No diagnostic, no error; `magus affected` just under-builds forever.
+//
+// Both probes are covered: the tracked path goes through `git diff`, the untracked one
+// through `git ls-files --others`, and the flag has to be on each of them.
+func TestChangedFilesKeepsNonASCIIPathsRaw(t *testing.T) {
+	repo := t.TempDir()
+	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n", "uni/café.md": "x\n"})
+	base, err := vcsOutput(t.Context(), repo, "git", "rev-parse", "HEAD")
+	require.NoError(t, err)
+
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "uni", "café.md"), []byte("changed\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(repo, "uni", "naïve.md"), []byte("new\n"), 0o644))
+	gitRun(t, repo, "commit", "-q", "-am", "edit the tracked one")
+
+	got, err := gitVCS{}.ChangedFiles(t.Context(), repo, base)
+	require.NoError(t, err, "ChangedFiles")
+	assert.Contains(t, got, "uni/café.md", "tracked non-ASCII path came back quoted: %q", got)
+	assert.Contains(t, got, "uni/naïve.md", "untracked non-ASCII path came back quoted: %q", got)
 }

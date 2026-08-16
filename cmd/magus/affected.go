@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"io"
 	"log/slog"
+	"maps"
 	"os"
 	"os/signal"
 	"path/filepath"
@@ -20,9 +21,9 @@ import (
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/graph/url"
+	"github.com/egladman/magus/internal/interactive"
 	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/project/impact"
 	"github.com/egladman/magus/types"
@@ -88,7 +89,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 
 	// Find the target even if global flags precede it (`magus affected --dry-run ci`);
 	// mirrors `magus run`. rest carries the hoisted flags for cmdParse below.
-	rawTarget, rest, ok := splitTargetFromArgs(args)
+	rawTarget, rest, ok := splitTargetFromArgs(args, nil)
 	if !ok {
 		affectedUsage()
 		return flag.ErrHelp
@@ -244,6 +245,11 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	// as `magus run` does. Previously `affected` used only the explicit charms, so
 	// default_charms (e.g. rw) silently did NOT apply to `affected`, unlike `run`.
 	charms := withDefaultCharms(parsed.Charms, globalCfg.DefaultCharms, af.NoDefaultCharms)
+	// Same as `magus run`: an affected ci run goes through RunCI and loses the write
+	// charms, so the header has to say so.
+	if target == "ci" {
+		charms = magus.CharmsForCI(charms)
+	}
 	m.LogCharms(ctx, strings.Join(charms, ","))
 	m.LogCache(ctx)
 	if len(targets) == 0 {
@@ -406,8 +412,8 @@ type planOutput struct {
 }
 
 type planShard struct {
-	Shard    string `json:"shard"`
-	Projects string `json:"projects"`
+	Shard    string `json:"shard"    yaml:"shard"`
+	Projects string `json:"projects" yaml:"projects"`
 }
 
 // shardDetail is what each shard actually DOES: the invocation, what it runs, and what it
@@ -578,15 +584,35 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		}
 	}
 
-	b, err := json.MarshalIndent(out, "", "  ")
+	// --plan goes through the shared renderer like every other structured command, so -o
+	// selects the encoding. Marshalling here directly would ignore it and print JSON for
+	// `-o yaml`, in both flag positions.
+	//
+	// FormatText maps to JSON rather than to a prose rendering, because the plan has
+	// no prose rendering to fall back on - the default output IS the machine-readable
+	// document, and a workflow that pipes `--plan` without -o must keep getting it.
+	opts, err := outputOptionsOrDefault()
 	if err != nil {
 		return err
 	}
-	if _, err := os.Stdout.Write(b); err != nil {
-		return err
+	switch opts.Format {
+	case outputText, outputJSON:
+		return emitFormatted(OutputOptions{Format: outputJSON}, out)
+	case outputName:
+		w, cleanup, err := outputDst()
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cleanup() }()
+		for _, s := range out.Matrix {
+			if _, err := fmt.Fprintln(w, s.Shard); err != nil {
+				return err
+			}
+		}
+		return nil
+	default:
+		return emitFormatted(opts, out)
 	}
-	_, err = os.Stdout.Write([]byte{'\n'})
-	return err
 }
 
 func readAffectedPlanPaths(r io.Reader, null bool) ([]string, error) {
@@ -615,6 +641,39 @@ func readAffectedPlanPaths(r io.Reader, null bool) ([]string, error) {
 	slices.Sort(paths)
 	return slices.Compact(paths), nil
 }
+
+// noteUndeclaredSeeds reports MGS1028: changed files that seeded a project through
+// directory containment while that project declares none of them, so the targets they
+// rerun were already correct.
+//
+// It lives at the CLI edge, not behind magus.Affected, because a library entry point
+// must not write to a stream its caller never opted into - the condition rides
+// types.AffectedResult.UndeclaredBySeed for every other consumer.
+//
+// The message names the SEED PROJECTS and nothing per-changeset, which is what makes
+// it dedupe: interactive.Emit keys on the whole text, so a file list would differ on
+// every request and churn a long-lived daemon's hint set instead of teaching once. The
+// files are already on screen where this is emitted - --impact and --explain both mark
+// each one - and `magus describe file` explains any of them in full.
+func noteUndeclaredSeeds(undeclaredBySeed map[string][]string) {
+	if len(undeclaredBySeed) == 0 {
+		return
+	}
+	seeds := slices.Sorted(maps.Keys(undeclaredBySeed))
+	if len(seeds) > undeclaredSeedHintCap {
+		seeds = append(seeds[:undeclaredSeedHintCap:undeclaredSeedHintCap],
+			fmt.Sprintf("and %d more", len(undeclaredBySeed)-undeclaredSeedHintCap))
+	}
+	interactive.Emit(os.Stderr, fmt.Sprintf(
+		"[%s] projects seeded by changed files nothing declares: %s. Directory containment "+
+			"selected them, so the targets they rerun were already correct. Declare the files "+
+			"in the owning project's sources, or leave them undeclared deliberately (see %s)",
+		types.UndeclaredSeedingFile, strings.Join(seeds, ", "),
+		types.CodeURL(types.UndeclaredSeedingFile)))
+}
+
+// undeclaredSeedHintCap bounds how many seed projects MGS1028 names inline.
+const undeclaredSeedHintCap = 5
 
 // affectedImpact reports the blast radius of the current changeset (the --impact
 // forensic mode of `magus affected`). It is strictly read-only: it maps changed files
@@ -655,6 +714,13 @@ func affectedImpact(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	undeclared := map[string][]string{}
+	for _, p := range out.AffectedProjects {
+		if len(p.UndeclaredFiles) > 0 {
+			undeclared[p.Path] = p.UndeclaredFiles
+		}
+	}
+	noteUndeclaredSeeds(undeclared)
 
 	// Enrich with the differentiated overlays (changed-symbol callers, coverage on
 	// changed code). These read the heavier knowledge store - a prior symbol index and,
@@ -727,7 +793,15 @@ func printImpactText(out *types.ImpactResult) error {
 			continue
 		}
 		seeded += len(p.Files)
-		fmt.Printf("  %s (seeded by %s)\n", p.Path, countLabel(len(p.Files), "changed file", "changed files"))
+		// "seeded by 12 changed files" reads as twelve files this project is built
+		// from. Some of them may be seeding it by directory containment alone, which
+		// is a rerun whose result was already correct - so the count says how many,
+		// and the listing below marks which.
+		label := countLabel(len(p.Files), "changed file", "changed files")
+		if n := len(p.UndeclaredFiles); n > 0 {
+			label += fmt.Sprintf(", %d declared by no project", n)
+		}
+		fmt.Printf("  %s (seeded by %s)\n", p.Path, label)
 		if len(p.Targets) > 0 {
 			fmt.Printf("    targets: %s\n", strings.Join(p.Targets, ", "))
 		}
@@ -736,6 +810,10 @@ func printImpactText(out *types.ImpactResult) error {
 			shown = shown[:impactFileCap]
 		}
 		for _, f := range shown {
+			if slices.Contains(p.UndeclaredFiles, f) {
+				fmt.Printf("    %s (undeclared)\n", f)
+				continue
+			}
 			fmt.Printf("    %s\n", f)
 		}
 		if extra := len(p.Files) - len(shown); extra > 0 {
@@ -876,6 +954,9 @@ type affectedExplainPath struct {
 	Seed  string   `json:"seed"  yaml:"seed"`
 	Chain []string `json:"chain" yaml:"chain"`
 	Files []string `json:"files" yaml:"files"`
+	// Undeclared is the subset of Files that no project declares - the ones whose
+	// answer to "why did this run" is directory containment rather than a cache key.
+	Undeclared []string `json:"undeclared,omitempty" yaml:"undeclared,omitempty"`
 }
 
 func affectedExplain(ctx context.Context, root, target, base string) error {
@@ -897,6 +978,7 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 	if err != nil {
 		return err
 	}
+	noteUndeclaredSeeds(r.UndeclaredBySeed)
 
 	g, err := ws.Graph()
 	if err != nil {
@@ -915,9 +997,10 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 		paths := g.PathsFromSeeds(r.Seed, target)
 		for _, ap := range paths {
 			out.Paths = append(out.Paths, affectedExplainPath{
-				Seed:  ap.Seed,
-				Chain: ap.Chain,
-				Files: r.FilesBySeed[ap.Seed],
+				Seed:       ap.Seed,
+				Chain:      ap.Chain,
+				Files:      r.FilesBySeed[ap.Seed],
+				Undeclared: r.UndeclaredBySeed[ap.Seed],
 			})
 		}
 	}
@@ -933,20 +1016,8 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 	}
 
 	// text and wide
-	if !out.Affected {
-		fmt.Printf("%s is not affected (base: %s)\n", out.Project, out.Base)
+	if !printAffectedExplainText(out) {
 		return nil
-	}
-	fmt.Printf("%s\n", out.Project)
-	for _, ap := range out.Paths {
-		if len(ap.Chain) == 1 {
-			fmt.Printf("  changed files:\n")
-		} else {
-			fmt.Printf("  via %s:\n", strings.Join(ap.Chain, " -> "))
-		}
-		for _, f := range ap.Files {
-			fmt.Printf("    %s\n", f)
-		}
 	}
 
 	if res, err := vcs.Resolve(ctx, ws.Root(), "", ws.VCSOptions()); err == nil && res.VCS != nil {
@@ -959,6 +1030,36 @@ func affectedExplain(ctx context.Context, root, target, base string) error {
 		}
 	}
 	return nil
+}
+
+// printAffectedExplainText renders the text and wide forms of `magus affected --explain`,
+// reporting whether the project is affected at all - the caller appends the VCS diff
+// hints only when it is. Split out for the same reason printImpactText is: the rendering
+// is a pure function of the result, and the I/O around it is not.
+func printAffectedExplainText(out affectedExplainOutput) bool {
+	if !out.Affected {
+		fmt.Printf("%s is not affected (base: %s)\n", out.Project, out.Base)
+		return false
+	}
+	fmt.Printf("%s\n", out.Project)
+	for _, ap := range out.Paths {
+		if len(ap.Chain) == 1 {
+			fmt.Printf("  changed files:\n")
+		} else {
+			fmt.Printf("  via %s:\n", strings.Join(ap.Chain, " -> "))
+		}
+		for _, f := range ap.Files {
+			// The marker answers the question the file list raises but cannot settle:
+			// whether this path is an input the seed is built from, or one that only
+			// happens to sit inside it.
+			if slices.Contains(ap.Undeclared, f) {
+				fmt.Printf("    %s (undeclared: seeds by directory containment, keys nothing)\n", f)
+				continue
+			}
+			fmt.Printf("    %s\n", f)
+		}
+	}
+	return true
 }
 
 // planDetail joins the shard partition against what magus already declares about each

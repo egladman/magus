@@ -70,7 +70,7 @@ var guardSurfaces = []string{"command", "path"}
 // host takes as allow. And the templates now resolve ./magus before PATH: an older PATH
 // binary does not fail when it lacks a rule, it reads the config key that ARMS the rule
 // as unknown and answers pass, so the guard enforces nothing at exit 0.
-const GuardTemplateVersion = 4
+const GuardTemplateVersion = 6
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

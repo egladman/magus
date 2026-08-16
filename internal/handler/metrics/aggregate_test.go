@@ -223,8 +223,8 @@ func TestBuzzStats(t *testing.T) {
 	rm := scope(
 		fHistMetric(instBuzzExec, fHistDP([]float64{1}, []uint64{2, 0}, 0.6, kvSet("mode", "run", "outcome", "success"))),
 		fHistMetric(instBuzzCompile, fHistDP([]float64{1}, []uint64{3, 0}, 0.3, kvSet("phase", "parse", "mode", "run"))),
-		sumMetric(instBuzzHostCallCount, idp(5, kvSet("callable", "os.exec", "outcome", "success"))),
-		fHistMetric(instBuzzHostCallDur, fHistDP([]float64{1}, []uint64{5, 0}, 0.5, kvSet("callable", "os.exec"))),
+		sumMetric(instBuzzHostCallCount, idp(5, kvSet("callable", "proc.exec", "outcome", "success"))),
+		fHistMetric(instBuzzHostCallDur, fHistDP([]float64{1}, []uint64{5, 0}, 0.5, kvSet("callable", "proc.exec"))),
 		sumMetric(instBuzzSessionReuse, idp(7, kvSet("outcome", "reused"))),
 		sumMetric(instBuzzSessionIdle, idp(2, kvSet())),
 		sumMetric(instBuzzSessionEvict, idp(1, kvSet("source", "ttl"))),

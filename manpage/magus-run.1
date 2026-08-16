@@ -10,6 +10,11 @@ arguments, selects the project containing the current directory, or all projects
 if the current directory is not inside a project. Explicit project paths on the
 command line select exactly those projects.
 .PP
+\-\-skip subtracts from whatever that selection resolved to, so a CI step can gate
+every project except a named few without any shell filtering. It takes the same
+project reference a positional does, and refuses a reference no project matches
+rather than skipping nothing quietly.
+.PP
 The target ci is an ordinary magusfile\-defined target \- magus does not hardcode
 its steps; your magusfile composes them with magus.needs. magus keeps ci as
 the anchor that the affected set keys off, and always runs it read\-only; apply
@@ -46,6 +51,9 @@ Race\-condition diagnostics (watch|replay, comma\-combinable); omit to disable. 
 .TP
 \fB\-\-shard\fR \fIstring\fR
 This run's shard index within a CI matrix; paired with \-\-n\-shards
+.TP
+\fB\-\-skip\fR \fIstring\fR
+Exclude projects from the selection; repeatable or comma\-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/*); a value matching nothing is an error
 .TP
 \fB\-\-step\fR
 Pause before each subprocess for interactive stepping (needs a TTY; implies \-\-concurrency=1)
@@ -103,6 +111,12 @@ magus run test api/gateway
 .PP
 .EX
 magus run build api/gateway web/studio
+.EE
+.PP
+\fIEvery project that declares generate except two\fR
+.PP
+.EX
+magus run generate --skip docs --skip console
 .EE
 .PP
 \fIDry\-run: show what would run\fR
@@ -167,6 +181,7 @@ magus run build -o jsonl --tee build.jsonl
 \fBmagus\-config\fR(1),
 \fBmagus\-memory\fR(1),
 \fBmagus\-notes\fR(1),
+\fBmagus\-diff\fR(1),
 \fBmagus\-server\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),

@@ -15,7 +15,7 @@
      text is an off-white (#cfd6dd); accents are lightened and DESATURATED so
      they don't vibrate on the dark field.
    Pico resolves color at use-time, so overriding its variables here restyles
-   every classless component (and mermaid, which reads these live) for free.
+   every classless component for free.
    Load order is Pico -> theme.css -> site.css; selectors mirror Pico's own so
    the later source position wins without an !important anywhere. */
 
@@ -90,6 +90,12 @@
   --accent-warm: #ea580c;
   --accent-warm-hover: #c2410c;
   --accent-warm-inverse: #ffffff;
+
+  /* The wordmark's trailing dot, carried from assets/social-preview.html so the nav
+     lockup and the social card are the same mark. Its own token, not --accent-warm:
+     that one is reserved for the single call to action on a page, and a brand mark
+     that borrows it would read as something to click. */
+  --brand-dot: #df901c;
 
   /* Glossary term highlight: a soft parchment-gold (marker swipe) that marks an
      auto-linked glossary term as a distinct kind of thing, not another blue link. Its
@@ -175,6 +181,7 @@
     --accent-warm: #fb923c;
     --accent-warm-hover: #fdba74;
     --accent-warm-inverse: #0b0e12;
+    --brand-dot: #f0aa33;
 
     /* Glossary term highlight (dark): a translucent amber wash so the marker reads on the
        dark surface while the light body text on top stays legible. Must be repeated here,
@@ -258,6 +265,7 @@
   --accent-warm: #fb923c;
   --accent-warm-hover: #fdba74;
   --accent-warm-inverse: #0b0e12;
+  --brand-dot: #f0aa33;
 
   /* Glossary term highlight (dark): a translucent amber wash so the marker reads on the
      dark surface while the light body text on top stays legible. */

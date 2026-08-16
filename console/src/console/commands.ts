@@ -41,7 +41,28 @@ const SEQ_SEP = " ";
 // --- Registry ---------------------------------------------------------------
 // One process-wide command map. registerCommand is idempotent by id (a re-register replaces),
 // so a surface re-activating in the console does not accumulate duplicates.
-const registry = new Map<string, Command>();
+//
+// It hangs off the window rather than being a plain module-level `const`, and that is what makes
+// "process-wide" true. Every surface is its own esbuild entry point loaded with a runtime import(),
+// so each bundle inlines its OWN copy of this module: a module-level Map gives the shell one
+// registry and each surface another, and a command registered by a surface is then invisible to the
+// shell's command bar and Actions surface - reachable only from that surface's own keydown handler.
+// The built bundles are where to check it: a surface's ids appear in its own bundle and in no other.
+//
+// One well-known key, created on first import by whichever bundle loads first.
+const REGISTRY_KEY = "__magusCommandRegistry";
+
+type RegistryHost = { [REGISTRY_KEY]?: Map<string, Command> };
+
+const registry: Map<string, Command> = (() => {
+  if (typeof globalThis === "undefined") return new Map<string, Command>();
+  const host = globalThis as RegistryHost;
+  const existing = host[REGISTRY_KEY];
+  if (existing) return existing;
+  const fresh = new Map<string, Command>();
+  host[REGISTRY_KEY] = fresh;
+  return fresh;
+})();
 
 export function registerCommand(cmd: Command): void {
   registry.set(cmd.id, cmd);

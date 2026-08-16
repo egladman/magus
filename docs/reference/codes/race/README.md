@@ -50,3 +50,6 @@ or a manual audit rather than every push.
 - [MGS4002](MGS4002.md): declared output overlap.
 - [MGS4003](MGS4003.md): non-deterministic output.
 - [MGS4004](MGS4004.md): potential undeclared dependency.
+- [MGS4007](MGS4007.md): undeclared source modified. Always on, like `MGS4002`,
+  and needs no `--race`: the comparison is between two hashes of the declared
+  source set, which every run computes anyway.

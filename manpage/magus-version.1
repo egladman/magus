@@ -1,11 +1,47 @@
 .TH MAGUS-VERSION 1 "" "magus" "magus Manual"
 .SH NAME
-magus\-version \- Print version, commit, and build date
+magus\-version \- Print the client and daemon versions
 .SH SYNOPSIS
 .B magus
-.RI "version"
+.RI "version [flags]"
 .SH DESCRIPTION
 Print the magus version string, git commit hash, and build date.
+.PP
+Two versions, because there can be two binaries: this one, and the daemon
+that has been serving the workspace since it was started. A daemon outlives
+the CLI that started it, so upgrading magus leaves the older code running
+until it is restarted \- which is the case this command exists to show. The
+daemon line reads "not running" when nothing answers, and \-\-client skips the
+probe entirely for a script that wants the build stamp with no daemon I/O.
+.PP
+In json and yaml the daemon key is present only when the probe ran: absent
+means it never ran (\-\-client, or \-o name, which prints the bare version and
+renders no daemon), and an empty value means it ran and nothing answered.
+.SH OPTIONS
+.RS
+.TP
+\fB\-\-client\fR
+Print only this binary's version; skip the daemon probe entirely
+.RE
+.SH EXAMPLES
+\fIClient and daemon\fR
+.PP
+.EX
+magus version
+.EE
+.PP
+\fIJust this binary, no daemon I/O\fR
+.PP
+.EX
+magus version --client
+.EE
+.PP
+\fIThe bare version, for a CI pin comparison\fR
+.PP
+.EX
+magus version -o name
+.EE
+.PP
 .SH SEE ALSO
 \fBmagus\fR(1),
 \fBmagus\-ls\fR(1),
@@ -27,6 +63,7 @@ Print the magus version string, git commit hash, and build date.
 \fBmagus\-config\fR(1),
 \fBmagus\-memory\fR(1),
 \fBmagus\-notes\fR(1),
+\fBmagus\-diff\fR(1),
 \fBmagus\-server\fR(1),
 \fBmagus\-buzz\fR(1),
 \fBmagus\-completion\fR(1),

@@ -20,6 +20,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/deps"
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	"github.com/egladman/magus/internal/hostmodules"
@@ -201,6 +202,7 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, c
 			cfg: cfg, root: root, cacheDir: cacheDir,
 			projects: projects, spells: spells, log: log,
 		}),
+		Packages:       loadKnowledgePackages(projects),
 		VCS:            vcsEntries,
 		VCSAuthorship:  cfg.Knowledge.VCS.Authorship == nil || *cfg.Knowledge.VCS.Authorship,
 		DeclaredSpells: declaredSpellSet(projects),
@@ -215,6 +217,40 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, c
 		MaxBytes:  int64(cfg.Knowledge.MaxSizeMB) * 1024 * 1024,
 		Remote:    remoteShardsFor(ws),
 	}, in, log)
+}
+
+// loadKnowledgePackages reads each project's third-party dependencies out of the
+// manifests ProjectEntry already resolved, for the @packages shard.
+//
+// It reads ProjectEntry rather than reaching back into the spell registry because the
+// existence check has already been done: ProjectEntry.Manifests holds the candidates
+// that actually exist in the project's directory, in declared order. There is nothing
+// to re-derive here, only a file to read.
+//
+// Go is the only reader today. Its manifest states exact versions, so go.mod alone is a
+// resolved inventory; an ecosystem whose manifest holds ranges needs its lockfile
+// (ProjectEntry.Lockfiles, already resolved beside Manifests) and a reader that
+// understands that format. Best-effort throughout: an unreadable or unparseable
+// manifest contributes no packages rather than failing the graph build.
+func loadKnowledgePackages(projects types.ProjectsOutput) map[string][]types.KnowledgePackage {
+	out := map[string][]types.KnowledgePackage{}
+	for _, p := range projects.Projects {
+		if p.Dir == "" {
+			continue
+		}
+		for _, manifest := range p.Manifests {
+			if manifest != "go.mod" {
+				continue
+			}
+			if pkgs := deps.GoModule(filepath.Join(p.Dir, manifest)); len(pkgs) > 0 {
+				out[p.Path] = append(out[p.Path], pkgs...)
+			}
+		}
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // loadKnowledgeTimings reads the local timing history (best-effort) into per-target
@@ -952,8 +988,12 @@ func aggregateFileHistory(changes []types.CommitChange, prefix string) []types.K
 	for _, c := range changes {
 		short := ShortRevision(c.ID)
 		modified := c.Date.UTC()
-		for _, f := range c.Files {
-			f = filepath.ToSlash(strings.TrimSpace(f))
+		for _, ch := range c.Files {
+			// The @vcs shard describes files as they are NOW, so a rename's Path (the
+			// name after the commit) is the only side that can match a node. PrevPath
+			// is lineage, which FileHotspots reassembles; here it would name a path
+			// that no longer exists.
+			f := filepath.ToSlash(strings.TrimSpace(ch.Path))
 			if prefix != "" {
 				rel, ok := strings.CutPrefix(f, prefix)
 				if !ok {

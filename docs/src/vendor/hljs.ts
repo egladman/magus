@@ -1,5 +1,5 @@
 // vendor/hljs.ts - single-line entry point for esbuild to bundle highlight.js
-// into gen/assets/hljs.js. Mirrors the vendor/mermaid.ts pattern (third-party
+// into gen/assets/hljs.js. The vendor/ pattern (third-party
 // bundle entries live in src/vendor/, distinct from src/site/syntax-highlight.ts,
 // the init module that consumes the built bundle). This file is not raw library
 // source - highlight.js is a pinned pnpm dependency; this only re-exports it.

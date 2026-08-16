@@ -39,8 +39,9 @@ import (
 // Each node's Dependencies are the resolved dependency target names — exact edges
 // first (target functions passed to ctx.needs, in source order), then the names
 // matched by each ctx.glob pattern; self-edges and duplicates are dropped.
-// CrossDependencies hold cross-project edges (from project imports). Charms are the
-// has_charm names the body reads, sorted.
+// CrossDependencies hold cross-project edges (from project imports). Chain is the same
+// composition as an ORDERED list - every ctx.needs argument, local and cross alike, in
+// the order the body writes them. Charms are the has_charm names the body reads, sorted.
 func Extract(source string) []types.TargetGraphNode {
 	nodes, _, _ := extractNodes(source)
 	return nodes
@@ -122,12 +123,29 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 					// handle (a variable holding the function) is invisible to this
 					// static read, the same way any non-literal argument is.
 					if ctxCall(e, "needs") {
+						// Chain is built HERE, argument by argument, rather than folded
+						// from Dependencies and CrossDependencies afterwards: those are two
+						// sets split by locality, and merging them back cannot recover which
+						// step the body wrote first. ast.Inspect visits in source order, so
+						// a target with several ctx.needs calls accumulates them in the order
+						// it makes them.
 						for _, a := range e.Args {
 							switch arg := a.(type) {
 							case *ast.IdentExpr:
 								// Exact edge: a target function passed by reference.
 								if key := norm(arg.Name); slices.Contains(names, key) {
 									node.Dependencies = appendUniq(node.Dependencies, key)
+									node.Chain = appendUniq(node.Chain, types.ChainStep{Target: key})
+								}
+							case *ast.MemberExpr:
+								// Cross-project step (<alias>.<target>). The MemberExpr walk
+								// case below collects it into CrossDependencies from ANYWHERE
+								// in the body; the chain wants only what ctx.needs invokes, so
+								// it is recognized again here rather than read back from there.
+								if id, ok := arg.Object.(*ast.IdentExpr); ok && arg.Name != types.CrossFileMember {
+									if proj, ok := projectAliases[id.Name]; ok {
+										node.Chain = appendUniq(node.Chain, types.ChainStep{Project: proj, Target: norm(arg.Name)})
+									}
 								}
 							case *ast.CallExpr:
 								// Pattern edges: ctx.needs(ctx.glob("...")). glob resolves
@@ -148,6 +166,7 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 									for _, m := range types.MatchTargetPatterns(names, patterns) {
 										if m != node.Name {
 											node.Dependencies = appendUniq(node.Dependencies, m)
+											node.Chain = appendUniq(node.Chain, types.ChainStep{Target: m})
 										}
 									}
 								}
@@ -260,6 +279,37 @@ func extractNodes(source string) ([]types.TargetGraphNode, map[ast.Pos]bool, *as
 							// literal name is all the static read needs - and all it can get.
 							for _, g := range globs {
 								node.EnvAllow = appendUniq(node.EnvAllow, g)
+							}
+						case "observes":
+							// (key, value) pairs, canonicalized the way withEnv canonicalizes
+							// its map so buildStep can fold them straight into the key. An odd
+							// literal count means a key whose value the static read could not
+							// pair - an observation in the source that contributes nothing to
+							// the key, which is the under-declaration this whole surface exists
+							// to reject - so trip the same guard a computed argument trips, and
+							// record NOTHING: pairing what is left over invents observations
+							// from a list magus has just said it cannot read.
+							if len(globs)%2 != 0 {
+								flagDynamic(&node, kind)
+								break
+							}
+							pairs := make([]string, 0, len(globs)/2)
+							for i := 0; i+1 < len(globs); i += 2 {
+								// A key carrying "=" makes the canonical form ambiguous
+								// ("a=b=c" is both a=b -> c and a -> b=c), so it is rejected
+								// where it is declared rather than hashed as whichever half
+								// a reader of the key happens to split on.
+								if strings.Contains(globs[i], "=") {
+									flagDynamic(&node, kind)
+									pairs = nil
+									break
+								}
+								pairs = append(pairs, globs[i]+"="+globs[i+1])
+							}
+							// Committed only once the whole call is readable; an earlier
+							// ctx.observes in the same target keeps what it recorded.
+							for _, p := range pairs {
+								node.Observations = appendUniq(node.Observations, p)
 							}
 						case "modifiesExistingFiles":
 							for _, g := range globs {
@@ -435,7 +485,20 @@ func ctxCall(e *ast.CallExpr, name string) bool {
 // not-ctx-rooted rejection, and UnreachedIO all key off it, so adding a member cannot
 // leave one of the three behind.
 var ctxDeclNames = map[string]bool{
-	"readsFiles": true, "writesFiles": true, "modifiesExistingFiles": true, "envInputs": true, "withEnv": true, "withCwd": true,
+	"readsFiles": true, "writesFiles": true, "modifiesExistingFiles": true, "envInputs": true, "observes": true, "withEnv": true, "withCwd": true,
+}
+
+// CtxDeclNames returns the declaration members this static reader recognizes. Exported
+// for the drift test that holds it against the members the runtime actually binds: a
+// name here that no ctx offers would be collected from source and then fail at run time,
+// and one the runtime binds but this map omits is a declaration that never reaches a key.
+func CtxDeclNames() []string {
+	names := make([]string, 0, len(ctxDeclNames))
+	for n := range ctxDeclNames {
+		names = append(names, n)
+	}
+	slices.Sort(names)
+	return names
 }
 
 // ctxExecNames is the execution half of ctxDeclNames: the members that steer HOW an op

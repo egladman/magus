@@ -180,6 +180,18 @@ func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) 
 	return m.executeStages(ctx, stages, TargetLabel(targets, ""), o)
 }
 
+// CharmsForCI returns charms with the write-granting ones removed, which is what a ci
+// run actually executes under. Exported because the CLI has to print the same set it
+// runs: a header reporting the RESOLVED charms would announce "charms: rw" for
+// `magus run ci` and then run read-only, since RunCI strips them afterwards. Whoever
+// reads that header is checking exactly this, so both sides read it from here.
+func CharmsForCI(charms []string) []string {
+	return slices.DeleteFunc(slices.Clone(charms), func(s string) bool {
+		n := types.Normalize(s)
+		return n == types.CharmReadWrite || n == types.CharmRelock
+	})
+}
+
 // RunCI runs the ci target(s) with write mode forced off. "ci" is an ordinary
 // magusfile-defined target; magus keeps it only as the affected-set anchor,
 // not a hardcoded preflight...test chain. The magusfile composes the pipeline
@@ -189,10 +201,7 @@ func (m *Magus) RunCI(ctx context.Context, targets []types.Target, opts ...RunOp
 	// Both write-granting charms come off: rw so check-only targets stay check-only,
 	// and relock so a ci run verifies the committed dependency state rather than
 	// re-resolving it against whatever the registry serves today.
-	o.Charms = slices.DeleteFunc(slices.Clone(o.Charms), func(s string) bool {
-		n := types.Normalize(s)
-		return n == types.CharmReadWrite || n == types.CharmRelock
-	})
+	o.Charms = CharmsForCI(o.Charms)
 
 	// ci is the one target that must not silently no-op when undefined. Ordinary
 	// targets fan out and skip projects that lack them, but ci is the anchor that
@@ -382,6 +391,19 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 			step.Sources = append(step.Sources, magusfileGlobs(".")...)
 		}
 	}
+	// Gathered BEFORE the ownership boundary below narrows step.Outputs to one target's.
+	step.OwnedOutputs = append(step.OwnedOutputs, step.Outputs...)
+	for _, refs := range p.TargetOutputs {
+		for _, ref := range refs {
+			owner := ref.Project
+			if owner == "" {
+				owner = p.Path
+			}
+			if g := joinGlob(owner, ref.Glob); !slices.Contains(step.OwnedOutputs, g) {
+				step.OwnedOutputs = append(step.OwnedOutputs, g)
+			}
+		}
+	}
 	// ctx.writesFiles completes the same ownership boundary for replay: once a target
 	// names its own artifacts, do not inherit every project or spell output into
 	// its snapshot. Otherwise an unrelated target can restore a stale tree merely
@@ -433,9 +455,18 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	step.ExecOverrides = append(step.ExecOverrides, p.TargetExecOverrides[target]...)
 	// Names, not values: hashStep reads each variable's process value at hash time.
 	step.EnvAllow = append(step.EnvAllow, p.TargetEnvAllow[target]...)
+	// ctx.observes: an external fact the answer depends on, keyed so the target stays
+	// cacheable rather than having to opt out with skip_cache.
+	step.Observations = append(step.Observations, p.TargetObservations[target]...)
 	for _, ref := range p.TargetUpdates[target] {
-		if g := joinGlob(ref.Project, ref.Glob); !slices.Contains(step.Sources, g) {
+		g := joinGlob(ref.Project, ref.Glob)
+		if !slices.Contains(step.Sources, g) {
 			step.Sources = append(step.Sources, g)
+		}
+		// Also on its own: once folded into Sources the glob can no longer answer
+		// "was this edit declared", which is what MGS4007 asks.
+		if !slices.Contains(step.Updates, g) {
+			step.Updates = append(step.Updates, g)
 		}
 	}
 	for _, ref := range p.TargetOutputs[target] {
@@ -656,7 +687,8 @@ func toolVersionMode() string {
 //
 // executeStages resolves it ONCE per invocation and copies it onto every step, as
 // toolVersionsByProject does - probing per target would spawn a VCS subprocess per step.
-// The two returns are types.VCSMeta's Hash and IsDirty.
+// The revision and dirty returns are types.VCSMeta's ID and IsDirty. ("Hash" is git's word
+// alone - hg reports a node, jj a commit id - which is why the field is named ID.)
 func (m *Magus) CurrentRevision(ctx context.Context) (name, revision string, dirty bool) {
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil || res.VCS == nil {
@@ -889,7 +921,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 		if m.cache != nil {
 			m.cache.LogDryBanner(ctx)
 		} else {
-			fmt.Println("dry run - commands shown, not executed")
+			fmt.Println("dry run: commands shown, not executed")
 		}
 		planned := 0
 		for _, st := range stages {
@@ -1637,30 +1669,40 @@ func annotateVolatility(project, target, status string, rt *volatility.Runtime) 
 // without the rw charm) - then fails if it left uncommitted changes in dir, i.e. it
 // wrote when it should only have checked (the error points the user at the rw charm).
 // Skipped when dir has no VCS, so the guard never blocks a non-repo checkout.
-func verifyReadOnly(ctx context.Context, dir, target string, fn func() error) error {
+func (m *Magus) verifyReadOnly(ctx context.Context, dir, target string, fn func() error) error {
 	if err := fn(); err != nil {
 		return err
 	}
-	// Resolve the active VCS (git/hg/jj) rather than shelling out to git, so the
+	// Resolve the active VCS (git/hg/sl/jj) rather than shelling out to git, so the
 	// cleanliness gate works under any backend.
 	//
-	// The three outcomes below are deliberately not collapsed, following the rule
-	// this file already applies to a missing ci target: "definitely absent" and
-	// "could not tell" are different answers, and only the first is safe to read
-	// as a pass. A target reaches here only by declaring FailOnDrift, so it has
-	// explicitly asked to be checked; reporting "clean" when the check never ran
-	// would silently retract the guarantee it opted into.
-	res, err := vcs.Resolve(ctx, dir, "", types.VCSOptions{})
+	// Resolved from the WORKSPACE ROOT with the workspace's own options, matching every
+	// other vcs.Resolve call site in the tree. Resolving from the project dir instead detects
+	// a backend only when the marker sits in that exact directory, because claimsExist stats
+	// the path it is given and does not walk up. A project nested below an .hg/.sl/.jj root
+	// then matches nothing, falls through to the default git driver, and the gate fails with
+	// "git could not report working-tree status" on a perfectly healthy Mercurial workspace.
+	// Passing empty options compounds it by ignoring a configured vcs.name / vcs.enabled.
+	//
+	// The outcomes below are deliberately not collapsed, following the rule this file
+	// already applies to a missing ci target: "definitely absent" and "could not tell" are
+	// different answers, and only the first is safe to read as a pass. A target reaches
+	// here only by declaring FailOnDrift, so it has explicitly asked to be checked;
+	// reporting "clean" when the check never ran would silently retract that guarantee.
+	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil {
 		// Resolve fails only for an explicitly requested VCS that does not exist
 		// (MAGUS_VCS_NAME naming an unknown backend). That is misconfiguration, not
 		// an absent VCS, and silently skipping it would hide the typo forever.
 		return fmt.Errorf("%s: %s declares FailOnDrift but the VCS could not be resolved: %w", dir, target, err)
 	}
-	if res.VCS == nil {
-		// No VCS, or VCS explicitly disabled. There is genuinely nothing to diff
-		// against, so the check does not apply - this is the no-op that keeps magus
-		// usable outside a repository (a container build, an extracted tarball).
+	// VCS disabled, or NO backend claimed the root. The second half is what actually keeps
+	// magus usable outside a repository (a container build, an extracted tarball): Resolve
+	// never hands back a nil driver for that case - it falls back to git and reports
+	// VCSSourceDefault - so testing res.VCS alone promised a no-op that could not happen,
+	// and an unversioned tree hard-failed here instead. An explicitly requested backend is
+	// deliberately not covered: asking for one and not having it is worth failing over.
+	if res.VCS == nil || res.Source == types.VCSSourceDefault {
 		return nil
 	}
 	files, err := res.VCS.DirtyFiles(ctx, dir, []string{"."})
@@ -1683,7 +1725,7 @@ func (m *Magus) makeHandler(name string) TargetHandler {
 			run := func() error { return runTarget(ctx, p, name) }
 			pol := p.TargetPolicies[name]
 			if pol.FailOnDrift && !types.HasCharm(ctx, types.CharmReadWrite) {
-				return verifyReadOnly(ctx, p.Dir, name, run)
+				return m.verifyReadOnly(ctx, p.Dir, name, run)
 			}
 			return run()
 		}

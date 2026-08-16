@@ -105,7 +105,15 @@ type Step struct {
 	// statically. Unlike EnvAllow, which names env vars whose PROCESS value is read, a
 	// derived override's value lives in the magusfile, so it is hashed directly.
 	ExecOverrides []string
-	Outputs       []string // globs snapshotted into cache and replayed on hit
+	// Observations are per-target ctx.observes declarations ("key=value"): facts OUTSIDE
+	// the tree that the target's answer depends on and no other key input can see - a
+	// vulnerability feed's id, a remote schema's revision. Hashed directly like
+	// ExecOverrides, since both halves are written in the magusfile; unlike
+	// ExecOverrides they change nothing about how the target runs, so they get their own
+	// line class rather than reusing exec:. The value is opaque here - magus compares it
+	// and never interprets it.
+	Observations []string
+	Outputs      []string // globs snapshotted into cache and replayed on hit
 	// RequiredOutputs is the subset of Outputs that must each match at least one file,
 	// rather than the whole set merely matching something. It carries the globs another
 	// project's build order depends on (a cross-project output), where producing nothing
@@ -125,11 +133,20 @@ type Step struct {
 	// That failure hid for a long time because snapshot only runs on a cache MISS, and those
 	// targets always replayed.
 	OutputsDeclared bool
-	Deps            []string // upstream project hashes folded into the key
-	DependsOn       []string // upstream project paths for scheduling (not hashed)
-	WorkspaceRoot   string
-	Target          string   // mixed into key to distinguish targets on the same sources
-	Charms          []string // active charm names (sorted), mixed into key so charm-variant runs differ
+
+	// Updates and OwnedOutputs are unhashed: both are already covered by Sources and
+	// Outputs, and hashing either would change every existing key. They exist so
+	// checkSourceMutation can tell a declared write from an undeclared one (MGS4007).
+	Updates []string // ctx.modifiesExistingFiles globs
+	// OwnedOutputs spans EVERY target in the project, not the running one, because
+	// ctx.needs puts a chained target's writes inside this step's window.
+	OwnedOutputs []string
+
+	Deps          []string // upstream project hashes folded into the key
+	DependsOn     []string // upstream project paths for scheduling (not hashed)
+	WorkspaceRoot string
+	Target        string   // mixed into key to distinguish targets on the same sources
+	Charms        []string // active charm names (sorted), mixed into key so charm-variant runs differ
 	// ExtraArgs are the args after `--`, forwarded to the target. They change what
 	// the target does, so like Charms they MUST key the cache: without them a run
 	// with different args replays the previous run's result. Order is significant
@@ -160,7 +177,7 @@ type Step struct {
 	// step) and copied onto every step. Display-only provenance for the output
 	// descriptor (recordOutput) - never hashed, so a run before vs. after a commit still
 	// shares a cache entry when the tree content is unchanged.
-	// VCSName is the provider the two above came from ("git", "hg", "jj"). Recorded
+	// VCSName is the provider the two above came from ("git", "hg", "sl", "jj"). Recorded
 	// because a bare hash does not identify its own kind: a git SHA and an hg node id
 	// are both 40 hex, and a colocated jj repo can yield either a git commit or a jj
 	// commit_id. Comparing two revisions without it is a confident answer to the
@@ -377,6 +394,10 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 			slog.Any("tool_versions", s.ToolVersions),
 			slog.Any("charms", s.Charms),
 			slog.Int("env_allow", len(s.EnvAllow)),
+			// Values, not a count, like tool_versions and unlike env_allow: an
+			// observation is a literal in a committed magusfile, and WHICH fact moved
+			// is the entire answer to "why did this rebuild".
+			slog.Any("observations", s.Observations),
 			slog.Bool("no_cache", s.NoCache),
 			slog.Bool("skip_replay", s.SkipReplay),
 		)
@@ -512,6 +533,13 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		return result, err
 	}
 
+	// Taken here rather than threaded out of hashStep, to leave that pinned hot path
+	// alone; the files were just hashed, so the mtime fast-path makes this a stat sweep.
+	preSources, preErr := c.fingerprintSources(ctx, rc.step)
+	if preErr != nil {
+		preSources = nil
+	}
+
 	lp := c.logPath(s.ProjectPath, hash)
 	// NewContext lets spell bindings (magus.bust_cache) reach the active cache.
 	rawOutput, runErr := c.captureRun(NewContext(ctx, c), lp, s.ProjectPath, reproTarget(s), fn)
@@ -552,6 +580,30 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	if err := ctx.Err(); err != nil {
 		result.Duration = time.Since(start)
 		return result, err
+	}
+
+	// Before the snapshot, never after: an entry whose key no longer describes its
+	// inputs must not reach the local store or the shared remote.
+	if mutErr := c.checkSourceMutation(ctx, rc.step, preSources); mutErr != nil {
+		result.Duration = time.Since(start)
+		c.errs.Add(1)
+		ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, mutErr)
+		result.Ref = ref
+		c.log.ErrorContext(ctx,
+			"cache.error",
+			slog.String("project", s.ProjectPath),
+			slog.String("label", s.Label),
+			slog.String("target", reproTarget(s)),
+			slog.Int64("duration", int64(result.Duration)),
+			slog.String("error", types.CauseText(mutErr)),
+			slog.String("ref", ref),
+			slog.String("log", lp),
+		)
+		if rc.onError != nil {
+			rc.onError(mutErr)
+		}
+		rc.fireResults(rc.step, &result, mutErr)
+		return result, mutErr
 	}
 
 	if c.mutable && !s.NoCache {

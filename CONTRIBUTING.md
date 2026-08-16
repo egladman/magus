@@ -457,28 +457,33 @@ workflow file plus the same magusfile. The targets and charms are
 portable; a target that must read a host-native env var confines that
 knowledge behind its charm check.
 
-## Workspace references: `workspace://path` and friends
+## Workspace references: the bare path
 
-Project paths accept four equivalent forms; only one canonical form survives
-on the wire:
+A project reference is a workspace-relative path written bare. That is the only
+canonical spelling, in and out:
 
 ```sh
-.                     # bare path, shell convention
-pkg/foo               # bare nested path
-workspace://.         # explicit root, scheme form
-workspace://pkg/foo   # explicit nested path, scheme form
+pkg/foo               # a nested project, measured from the workspace root
+.                     # the project the cwd is in
+./pkg/foo  ../foo     # measured from the cwd
 ```
 
-The CLI accepts all four at every project-arg surface. The canonical form
-that appears in error messages (where a user can copy-paste it back as a
-command) is `workspace://pkg/foo` - rendered via `types.WorkspaceRef`. The
-form that appears in logs, Mermaid labels, and table cells is the bare
-path (`pkg/foo`) - rendered via `types.ProjectLabel`. The browser shows
-`example.com` until you hover; magus shows `pkg/foo` until you pipe it.
+Every project-arg surface takes those, and every surface that prints a project
+prints the bare path - rendered via `types.ProjectLabel`, which reads the root
+as the workspace directory's name rather than a bare `.`. What magus prints is
+what magus takes, so nothing has to be rewritten between the two.
 
-Both forms route through `types.ProjectRef{Path, Dir}` so the two helpers
-share one definition. New rendering rules go on the struct's methods, and
-both helpers pick them up automatically.
+`project:pkg/foo` is a different grammar, not a second path syntax: it is the
+kind-prefixed node reference the graph commands (`explain`, `query`, `path`)
+use where kinds mix, alongside `target:` and `spell:`.
+
+The `workspace://pkg/foo` scheme is DEPRECATED. It still parses, with a warning
+(`internal/file/resolve.go`), so a ref written against it keeps resolving; it is
+not taught or printed any more, and it never bought a reading the bare path did
+not already have. `types.WorkspaceRef` still renders it and is down to two error
+wraps in `magus.go`; both it and `ProjectLabel` route through
+`types.ProjectRef{Path, Dir}`, so new rendering rules go on the struct's methods
+and both pick them up.
 
 ## Release-signing key rotation
 

@@ -37,10 +37,23 @@ type VCSDriver interface {
 	// dir, the same as the VCS's own CLI); empty checks the whole repository. It is
 	// the path-scoped counterpart to Metadata's repo-wide IsDirty.
 	Dirty(ctx context.Context, dir string, paths []string) (bool, error)
-	// DirtyFiles is Dirty with the detail: the changed entries as the backend's
-	// status lines (git porcelain, hg status, jj diff --name-only), one per line,
-	// nil when clean. Dirty is defined in terms of this; callers that report *what*
-	// changed use these lines.
+	// DirtyFiles is Dirty with the detail: the changed PATHS, relative to the
+	// repository root and using forward slashes, nil when clean. Dirty is defined in
+	// terms of this; callers that report *what* changed use these paths.
+	//
+	// Paths, not the backend's status lines, and the difference is the whole contract.
+	// Each backend prints a different shape - git porcelain's two status columns, hg
+	// and sl's one, jj's bare `diff --name-only` output, plus git's " -> " for a rename
+	// and its C-quoting for unusual bytes - and only the driver knows which it emits.
+	// Returning lines pushed that knowledge outward, where it grew THREE parsers that
+	// disagreed: one keyed on the backend name, one that guessed the prefix from the
+	// line's own bytes, and a Buzz-boundary wrapper delegating to the first. The
+	// guessing one read a jj file named "A note.txt" as status "A " plus path
+	// "note.txt", so a legitimately-named file silently matched no glob.
+	//
+	// A per-entry status CODE is deliberately not modeled. It is not portable - jj
+	// reports none at all - which is the same reason types.Status carries paths only.
+	// Reach for vcs.cmd when the codes matter.
 	DirtyFiles(ctx context.Context, dir string, paths []string) ([]string, error)
 	// DirtyDiff is DirtyFiles with the CONTENT: the working tree's uncommitted changes
 	// to those paths, as the backend's own unified diff, empty when nothing changed.
@@ -48,7 +61,7 @@ type VCSDriver interface {
 	// names use DirtyFiles.
 	//
 	// Parity here means every backend answers the question, not that the bytes match:
-	// git, hg, and jj each emit their native diff header, and no wrapper can reconcile
+	// git, hg, sl, and jj each emit their native diff header, and no wrapper can reconcile
 	// those without lying about what ran. Context width follows the backend's own flag
 	// where it has one.
 	DirtyDiff(ctx context.Context, dir string, paths []string) (string, error)
@@ -111,7 +124,7 @@ type Person struct {
 }
 
 // Commit is a VCS-agnostic snapshot of one revision. Every field is meaningful
-// for every backend (git, hg, jj); concepts a single VCS lacks (jj's change id,
+// for every backend (git, hg, sl, jj); concepts a single VCS lacks (jj's change id,
 // git's author/committer split) are deliberately not modeled here. Reach for
 // vcs.exe() for VCS-specific work.
 type Commit struct {
@@ -342,13 +355,35 @@ type IgnoredFileReporter interface {
 	IgnoredFiles(ctx context.Context, dir string, paths []string) ([]string, error)
 }
 
+// ChangeStatus is what a commit did to one path. It exists so churn attribution can
+// tell a rename from a delete-plus-add: without that distinction a file's history
+// splits across every name it ever had, and each fragment ranks as a separate,
+// quieter file than the one thing actually being rewritten.
+type ChangeStatus string
+
+const (
+	ChangeAdded    ChangeStatus = "added"
+	ChangeModified ChangeStatus = "modified"
+	ChangeDeleted  ChangeStatus = "deleted"
+	ChangeRenamed  ChangeStatus = "renamed"
+)
+
+// FileChange is one path a commit touched. Path is the name AFTER the commit;
+// PrevPath is set only on a rename and carries the name before it, which is the
+// edge a reader follows to reassemble a file's lineage.
+type FileChange struct {
+	Path     string
+	PrevPath string
+	Status   ChangeStatus
+}
+
 // CommitChange reduces one commit to who made it, when, and the repo-relative
 // paths it touched: the input to churn attribution (no message or diff content).
 type CommitChange struct {
 	ID     string
 	Author string
 	Date   time.Time
-	Files  []string
+	Files  []FileChange
 }
 
 // ChurnReporter is an optional capability for VCSDriver implementations that can
@@ -360,6 +395,10 @@ type ChurnReporter interface {
 	// first, each reduced to its author, date, and touched repo-relative paths.
 	// since, when non-empty, is a backend-native lower bound on the commit date
 	// (a git approxidate / RFC3339); commits still caps the result.
+	//
+	// A backend that cannot detect renames reports them as a delete and an add,
+	// which costs lineage but stays correct: PrevPath is simply never set, and
+	// FileHotspots then ranks the two names separately rather than wrongly.
 	ChangesByCommit(ctx context.Context, dir string, commits int, since string) ([]CommitChange, error)
 }
 
@@ -646,6 +685,45 @@ type StagingPlan struct {
 	Code    string `json:"code,omitempty" yaml:"code,omitempty"`
 	Message string `json:"message,omitempty" yaml:"message,omitempty"`
 	URL     string `json:"url,omitempty" yaml:"url,omitempty"`
+}
+
+// VCSCheckpoint is the identity of the working state a piece of work was handed:
+// what was true in this tree, at this moment, in a form a ledger can record and a
+// later reader can act on.
+//
+// It RESOLVES AND RECORDS; it never MINTS. No tag, no stash, no ref, no file - a
+// checkpoint is a pure read, so nothing about it can be lost by not keeping it and
+// nothing about the tree changes by taking it. That is what makes it safe to take
+// one per delegated unit, and it is why this is a plain value with no id of its own:
+// an identity magus invented would be a fact only magus could confirm.
+//
+// Two things a reader can do with it. Revision feeds anything that takes a rev
+// (`magus graph diff --rev <rev>`). PatchDigest compares against another worker's:
+// equal digests mean the two saw the same uncommitted patch, which no revision alone
+// can tell you, because a dirty tree's revision is the same one everybody else has.
+type VCSCheckpoint struct {
+	// Revision is the resolved head revision id (VCSMeta.ID): git SHA, hg node, jj
+	// commit_id. Full, never abbreviated - it is meant to be fed back to a VCS.
+	Revision string `json:"revision" yaml:"revision"`
+	// Branch is the movable name pointing at Revision, or empty where the backend has
+	// none. VCSMeta.Ref's value under the name a caller recording a handoff writes;
+	// empty is ordinary (a detached HEAD, or jj's usual anonymous change), not an error.
+	Branch string `json:"branch,omitempty" yaml:"branch,omitempty"`
+	// Dirty reports uncommitted changes, on the vcs package's existing definition
+	// (VCSMeta.IsDirty, which for git is a non-empty `status --porcelain` and so counts
+	// untracked files too).
+	Dirty bool `json:"dirty" yaml:"dirty"`
+	// PatchDigest fingerprints the uncommitted patch, empty when the tree is clean.
+	//
+	// It covers exactly what the backend's DirtyDiff covers, which is TRACKED content
+	// against the checked-out revision. Untracked files make Dirty true and leave no
+	// mark here, so two trees differing only in untracked files share a digest. Stated
+	// rather than papered over: a digest that silently changed with build residue would
+	// answer "did we see the same tree" wrong in the commoner direction.
+	PatchDigest string `json:"patch_digest,omitempty" yaml:"patch_digest,omitempty"`
+	// VCS is the resolved backend name (git, hg, jj), so a reader knows whose revision
+	// syntax Revision is written in.
+	VCS string `json:"vcs,omitempty" yaml:"vcs,omitempty"`
 }
 
 // DriftResultRecord is the boundary mirror cmd/magus-utils types reflects over; see

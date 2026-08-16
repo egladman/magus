@@ -75,6 +75,7 @@ var removedMagusfileAPI = []struct {
 	{[]string{"project", "register"}, `call magus\project({...}) at the top level`},
 	{[]string{"needs"}, "call ctx.needs(<target>)"},
 	{[]string{"glob"}, `call ctx.glob("<pattern>")`},
+	{[]string{"insightMarkdown"}, `build the document from magus\insight()'s typed report`},
 }
 
 // RemovedAPINames returns the dotted member path of every removed call, without the

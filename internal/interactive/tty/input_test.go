@@ -58,6 +58,22 @@ func TestInputDecodesAMultiByteRune(t *testing.T) {
 	assert.Equal(t, 'é', got[0].Rune)
 }
 
+func TestInputDecodesThePagingKeys(t *testing.T) {
+	t.Parallel()
+	// The tilde family is numbered, not lettered: "ESC [ 5 ~" and "ESC [ 6 ~". A MODIFIED
+	// page key carries a second parameter and stays unknown, which callers ignore - acting on
+	// it as the bare key would bind a chord nobody asked for.
+	in, _ := newTestInput("\x1b[5~\x1b[6~\x1b[5;2~")
+	got := drain(t, in)
+
+	want := []Key{KeyPageUp, KeyPageDown, KeyUnknown}
+	require.Len(t, got, len(want))
+	for i, k := range want {
+		assert.Equal(t, k, got[i].Key, "event %d", i)
+		assert.Equal(t, EventKey, got[i].Kind)
+	}
+}
+
 func TestInputDecodesAnSGRClick(t *testing.T) {
 	t.Parallel()
 	// ESC [ < button ; col ; row M  -- a left press at column 12, row 20.

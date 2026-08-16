@@ -21,11 +21,16 @@ import (
 // revision on an output ref describing a tree other than the one built, and
 // `magus x <ref>` compared against it.
 //
-// .jj and .hg are unambiguous: their presence means that VCS is driving the working
-// copy. .git is the fallback precisely because another tool may have created it.
-// gitVCS stays LAST for the same reason it used to be first - it is also the default
-// when nothing claims the directory (see Resolve).
-var builtin = []types.VCSDriver{jjVCS{}, hgVCS{}, gitVCS{}}
+// .jj, .hg and .sl are unambiguous: their presence means that VCS is driving the
+// working copy. .git is the fallback precisely because another tool may have created
+// it. gitVCS is LAST because it is also the default when nothing claims the directory
+// (see Resolve).
+//
+// Sapling's position in the list is not load-bearing the way jj's is: `sl clone` of a
+// git repository writes .sl and NO .git, so unlike a colocated jj workspace there is no
+// tree that satisfies both claims and no ordering that could resolve it wrongly. It
+// sits with the other unambiguous markers so the rule reads as one rule.
+var builtin = []types.VCSDriver{jjVCS{}, hgVCS{}, saplingVCS{}, gitVCS{}}
 
 // IsSecondaryCheckout reports whether dir is a second checkout of a repository
 // under any supported VCS (a git linked worktree, an `hg share`, a jj secondary
@@ -159,6 +164,78 @@ func checkRef(ref string) error {
 	return nil
 }
 
+// repoPathPrefix returns dir's path relative to the repository root, forward-slashed with
+// a trailing slash, or "" when dir IS the root.
+//
+// It exists because the four backends disagree about which directory their paths are
+// relative to, while every caller in magus assumes the repository root: a driver that
+// answers in cwd-relative paths hands back a name that resolves to a DIFFERENT existing
+// file once the caller rebases it, with nothing to error on. git and hg report from the
+// root already; sl needs --root-relative; jj has no such flag and has to be run from the
+// root instead, which is what needs this prefix to translate pathspecs.
+//
+// It asks the driver for its own root rather than reading a marker directory, so a backend
+// whose root is not simply "the dir containing the claim" stays correct.
+//
+// Both sides are symlink-resolved before being related, and that is load-bearing rather
+// than defensive: every backend reports a root with symlinks already resolved, while dir
+// arrives as the caller wrote it. On macOS a path under /var is really /private/var, so
+// relating the two unresolved yields "../../../.." and a prefix that matches nothing -
+// which silently filters every file out instead of failing. The same happens anywhere a
+// repository is reached through a symlinked parent.
+//
+// The returned root is the driver's own answer, unresolved-by-us, because callers use it
+// as a working directory rather than for comparison.
+func repoPathPrefix(ctx context.Context, v types.VCSDriver, dir string) (root, prefix string, err error) {
+	root, err = v.Root(ctx, dir)
+	if err != nil {
+		return "", "", fmt.Errorf("vcs: locate repository root: %w", err)
+	}
+	abs, err := filepath.Abs(dir)
+	if err != nil {
+		return "", "", err
+	}
+	// EvalSymlinks fails on a path that does not exist; fall back to the literal path so a
+	// caller naming a directory that is about to be created still gets a usable answer.
+	resolve := func(p string) string {
+		if r, err := filepath.EvalSymlinks(p); err == nil {
+			return r
+		}
+		return p
+	}
+	rel, err := filepath.Rel(resolve(root), resolve(abs))
+	if err != nil {
+		return "", "", err
+	}
+	if rel == "." {
+		return root, "", nil
+	}
+	return root, filepath.ToSlash(rel) + "/", nil
+}
+
+// hgFamilyGlobs prefixes each pathspec with Mercurial's "glob:" pattern kind, for the two
+// backends that speak Mercurial's pathspec syntax (hg and sl).
+//
+// It is a silent-wrong-answer fix, not a nicety. An hg pathspec defaults to the "relpath"
+// kind - a literal path - so a caller-supplied GLOB matches nothing, and hg reports that by
+// writing "gen/**: No such file or directory" to STDERR while exiting 0 with empty stdout.
+// The drivers read stdout, so the answer came back "no files changed". Callers pass globs:
+// magus.diagnoseDrift hands DirtyFiles a project's declared output globs verbatim, so under
+// hg and sl the generate drift gate reported every project clean having matched nothing -
+// in CI, with no diagnostic. git and jj both handle "gen/**" natively, which is why only
+// these two were wrong. Measured on Mercurial 7.x and Sapling 0.2.x.
+//
+// A pattern with no wildcards still matches itself under glob:, so this is safe for the
+// literal paths some callers pass. It also removes a latent ambiguity: an unprefixed
+// pathspec containing a colon would be read as "<kind>:<pattern>" and rejected.
+func hgFamilyGlobs(paths []string) []string {
+	out := make([]string, 0, len(paths))
+	for _, p := range paths {
+		out = append(out, "glob:"+p)
+	}
+	return out
+}
+
 func claimsExist(root string, claims []string) bool {
 	for _, c := range claims {
 		if _, err := os.Stat(filepath.Join(root, c)); err == nil {
@@ -239,37 +316,28 @@ func splitTagVersion(name string) (prefix string, version types.SemverVersion) {
 	}
 }
 
-// StatusPaths strips each backend's status prefix from DirtyFiles output, leaving the
-// path.
+// trimStatusColumns drops a fixed-width status prefix from each of a backend's status
+// lines, leaving the path, and discards any line left empty.
 //
-//	git  "XY path"      porcelain: two status columns and a space
-//	hg   "X path"       one status column and a space
-//	jj   "path"         diff --name-only reports no status at all
+//	git  "XY path"   width 3: two status columns and a space
+//	hg   "X path"    width 2: one status column and a space
+//	sl   "X path"    width 2: Sapling kept Mercurial's status shape
+//	jj   "path"      no prefix, so jj does not call this
 //
-// A git rename reads "R  old -> new"; the new path is the one that exists, so that is
-// what is kept. git quotes paths outside ASCII unless core.quotePath is off, which
-// gitEnviron disables, so no unquoting is needed here.
+// width is passed by the driver rather than derived from the line, because a line's own
+// bytes cannot distinguish a prefix from a path that happens to look like one: a jj file
+// named "A note.txt" is indistinguishable from an added "note.txt" without knowing which
+// backend printed it. The driver always knows.
 //
-// It lives here, beside the drivers that PRODUCE those lines, because the format is the
-// backend's and the caller should never have to guess it. DirtyFiles returning status
-// lines rather than paths is what forces this to exist at all; a second parser in
-// cmd/magus sniffs the shape instead of being told it, and is the one still to fold in.
-func StatusPaths(vcsName string, lines []string) []string {
+// A line SHORTER than width is passed through whole rather than sliced away. Slicing
+// would silently turn a short path into "", dropping a changed file from the result -
+// and a caller cannot tell an empty answer from a clean tree.
+func trimStatusColumns(lines []string, width int) []string {
 	out := make([]string, 0, len(lines))
 	for _, line := range lines {
 		p := line
-		switch vcsName {
-		case "git":
-			if len(p) > 3 {
-				p = p[3:]
-			}
-			if _, after, found := strings.Cut(p, " -> "); found {
-				p = after
-			}
-		case "hg":
-			if len(p) > 2 {
-				p = p[2:]
-			}
+		if len(p) > width {
+			p = p[width:]
 		}
 		if p = strings.TrimSpace(p); p != "" {
 			out = append(out, p)

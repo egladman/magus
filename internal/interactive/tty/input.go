@@ -38,6 +38,10 @@ const (
 	KeyCtrlP
 	// KeyCtrlU clears a line of input.
 	KeyCtrlU
+	// KeyPageUp and KeyPageDown page a bounded viewport. Appended rather than filed beside
+	// the arrows so the constants above keep the values they already have.
+	KeyPageUp
+	KeyPageDown
 )
 
 // MouseButton names which button an [Event] carries. Wheel movement arrives as
@@ -463,7 +467,8 @@ func (i *Input) decodeByte(b byte) (Event, error) {
 // utf8Self is the first byte value that begins a multi-byte UTF-8 sequence.
 const utf8Self = 0x80
 
-// decodeCSI handles the arrow keys, the only CSI sequences magus acts on.
+// decodeCSI handles the arrow keys and the two paging keys, the only CSI sequences magus
+// acts on.
 func (i *Input) decodeCSI() (Event, error) {
 	b, err := i.r.ReadByte()
 	if err != nil {
@@ -492,6 +497,17 @@ func (i *Input) decodeCSI() (Event, error) {
 		// CPR: the reply to a cursor-position query, "row;col".
 		if row, col, ok := twoInts(string(params)); ok {
 			return Event{Kind: eventCursor, Row: row, Col: col}, nil
+		}
+	}
+	if b == '~' {
+		// The tilde family is numbered rather than lettered. A MODIFIED page key carries its
+		// modifier in a second parameter ("5;2~") and stays unknown: magus binds no chord, and
+		// an unknown key is ignored rather than acted on as the bare one.
+		switch string(params) {
+		case "5":
+			return Event{Kind: EventKey, Key: KeyPageUp}, nil
+		case "6":
+			return Event{Kind: EventKey, Key: KeyPageDown}, nil
 		}
 	}
 	return Event{Kind: EventKey, Key: KeyUnknown}, nil

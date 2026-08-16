@@ -169,4 +169,50 @@ var Registry = []ToolDescriptor{
 			{Name: "kind", Type: "string", Description: "Scope every section to one node kind (e.g. spell, target, doc, diagnostic). Omit for the whole graph."},
 		},
 	},
+	{
+		Name: string(ToolDiff),
+		Description: "Join the review session a person already has open and pair with them on it. " +
+			"op=state returns the whole session: every changed file annotated with its role (generated output vs source), " +
+			"how widely its changed symbols are referenced, whether it is public API surface, observed coverage, " +
+			"plus where the person is looking and what they have already read. " +
+			"op=state also returns `patch` (the unified diff) and `hunks` (per file, each hunk's 0-based index and its content digest), " +
+			"which are the coordinates comment and suggest take - so read state first and cite an index from it rather than guessing one. " +
+			"It recomputes when the working tree has moved since the session was attached, and sets `recomputed` when it did. " +
+			"op=comment attaches a remark to a hunk. op=suggest asks for their attention somewhere, with a reason. " +
+			"op=resolve closes a comment. Both writing ops REFUSE a path that is not in the change and a hunk index that does not exist. " +
+			"You CANNOT move their cursor or mark a hunk read: suggest, and they accept with one key. " +
+			"Read state before commenting - `viewed` holds the same hunk digests, so you can skip what they have already seen.",
+		Params: []ParamDescriptor{
+			{Name: "op", Type: "string", Description: "One of: state (default), comment, suggest, resolve."},
+			{Name: "projection", Type: "string", Description: "Shapes op=state's response only - comment, suggest, and resolve ignore it and always return the full session. One of: full (default; today's whole session), summary (id/base/as_of/recomputed/cursor plus counts of files, hunks, comments, suggestions, and viewed - no bodies), conversation (cursor, viewed, comments, suggestions, id/base/as_of - no diff, patch, or hunks), patch (id/base/as_of/recomputed plus patch and hunks - no diff, comments, or suggestions)."},
+			{Name: "path", Type: "string", Description: "Workspace-relative file the comment or suggestion is about (comment, suggest)."},
+			{Name: "hunk", Type: "number", Description: "0-based hunk index within the file, as reported by op=state's `hunks`; omit for the file as a whole. An index the file does not have is refused."},
+			{Name: "body", Type: "string", Description: "The remark (comment)."},
+			{Name: "reason", Type: "string", Description: "Why this is worth their attention - required, because a suggestion is an interruption (suggest)."},
+			{Name: "id", Type: "string", Description: "Comment id (resolve)."},
+			{Name: "agent_name", Type: "string", Description: "Optional label for which agent is speaking; attribution only."},
+		},
+	},
+	{
+		Name:        string(ToolVCSCheckpoint),
+		Description: "Return the identity of the workspace's working state right now: head revision, branch, whether the tree is dirty, and a digest of the uncommitted patch. Record one when handing a piece of work out, so a later reader knows what that work was looking at. It resolves and records and never mints - no tag, no stash, no ref, no file, nothing changed anywhere - so calling it is free and a checkpoint nobody keeps costs nothing. Feed the revision to anything that takes a revision; compare two patch digests to learn whether two workers saw the same uncommitted tree, which the revision alone cannot say because everyone on the branch shares it. Takes no parameters.",
+	},
+	{
+		Name:        string(ToolLedger),
+		Description: "Record the orchestrating agent's declared delegation plan so humans can see it; magus never enforces it. One row per delegated unit, in the magus-delegate-multi-agent vocabulary: goal and acceptance criteria, the checkpoint the unit was handed, owned and forbidden paths, dependencies, tier, validation, and state. Owned/forbidden paths are a DECLARATION, not a boundary: nothing here blocks a write, gates a run, or derives a verdict - ownership is checked by comparing this ledger against the actual diff since each unit's checkpoint. Every row should end in pass, fail, or no_return; a read-only unit carries an abbreviated row with no paths. One plan per workspace: clear starts a fresh one and keeps no history. Re-put your row on every state change: each put re-stamps updated, and a row nobody touches goes stale, so an orchestrator reading that staleness will treat the unit as possibly dead - which is the READER's judgment, since nothing here transitions a row on its own.",
+		Params: []ParamDescriptor{
+			{Name: "op", Type: "string", Description: "One of: list (default; every row, plus overlaps - the pairs of live units whose owned_paths intersect, reported as unit_a/unit_b with each side's own declarations in paths_a/paths_b, derived on the read and stored nowhere, and a fact to look at rather than a verdict), put (create or replace one row by id), clear (drop every row to start a fresh plan)."},
+			{Name: "id", Type: "string", Description: "put only, REQUIRED: the unit's id, which put upserts on. Use the same id you put in the worker's prompt."},
+			{Name: "parent", Type: "string", Description: "put only: the id of the unit that delegated this one. Omit for a unit the root spawned."},
+			{Name: "goal", Type: "string", Description: "put only: the unit's goal and its observable acceptance criteria (named tests, artifacts, diagnostics, review checks - not \"works correctly\")."},
+			{Name: "checkpoint", Type: "string", Description: "put only: the working state this unit was handed, as `magus vcs checkpoint -o name` prints it (revision, plus a dirty-patch digest when the tree was not clean)."},
+			{Name: "owned_paths", Type: "string", Description: "put only: space-separated paths the unit may edit. Empty on a read-only unit by design. Shrinking this set IS how a unit announces it has finished editing a path: the dropped paths are recorded on the row as releases, each with the sha256 of the file at that moment (absent when nothing is there, dir for a directory, unreadable when something is there that could not be hashed - which is deliberately not the same answer as absent), so the next agent knows WHICH version it inherits - a digest that no longer matches at verification time means it built on a tree the releaser never saw."},
+			{Name: "forbidden_paths", Type: "string", Description: "put only: space-separated paths the unit must not touch. Empty on a read-only unit by design."},
+			{Name: "depends_on", Type: "string", Description: "put only: space-separated ids of units that must land before this one."},
+			{Name: "tier", Type: "string", Description: "put only: the effort tier the work was matched to, e.g. principal, standard, economy."},
+			{Name: "validation", Type: "string", Description: "put only: the magus target or named check this unit was assigned."},
+			{Name: "state", Type: "string", Description: "put only: declared, running, pass, fail, or no_return. no_return is not fail - it means the worker died, stalled, or was cancelled and returned no verdict at all."},
+			{Name: "read_only", Type: "boolean", Description: "put only: mark a unit that gathers evidence and writes nothing, so empty owned/forbidden paths read as deliberate rather than forgotten."},
+		},
+	},
 }

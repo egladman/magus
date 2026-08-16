@@ -2,12 +2,11 @@
   "name": "magus-website-editor",
   "version": "0.0.0",
   "private": true,
-  "description": "Build-only dependencies for the committed browser bundles: the playground's CodeMirror editor (src/playground/editor.js -> gen/playground/editor.js) and the vendored mermaid/highlight.js libraries (src/vendor/* -> gen/assets/*). The console surfaces (graph/logs/dashboard/activity) moved to the standalone top-level console/ project, which owns their bundles now. esbuild (pinned in mise.toml) bundles each into a committed artifact, like gen/playground/buzz.wasm. Managed with pnpm (pinned in mise.toml), NOT npm: .npmrc sets minimum-release-age (10 days) so a just-published version is never installed. `pnpm run build` is the entry point; magusfile.buzz (generate) runs `pnpm install --frozen-lockfile && pnpm run build`. Not part of the site's runtime dependency graph.",
+  "description": "Build-only dependencies for the committed browser bundles: the playground's CodeMirror editor (src/playground/editor.js -> gen/playground/editor.js) and the vendored highlight.js library (src/vendor/* -> gen/assets/*). The console surfaces (graph/logs/dashboard/activity) moved to the standalone top-level console/ project, which owns their bundles now. esbuild (pinned in mise.toml) bundles each into a committed artifact, like gen/playground/buzz.wasm. Managed with pnpm (pinned in mise.toml), NOT npm: .npmrc sets minimum-release-age (10 days) so a just-published version is never installed. `pnpm run build` is the entry point; magusfile.buzz (generate) runs `pnpm install --frozen-lockfile && pnpm run build`. Not part of the site's runtime dependency graph.",
   "type": "module",
   "scripts": {
-    "build": "pnpm run build-editor && pnpm run build-mermaid && pnpm run build-hljs",
+    "build": "pnpm run build-editor && pnpm run build-hljs",
     "build-editor": "esbuild src/playground/editor.js --bundle --minify --format=esm --outfile=gen/playground/editor.js",
-    "build-mermaid": "esbuild src/vendor/mermaid.ts --bundle --minify --format=esm --outfile=gen/assets/mermaid.js",
     "build-hljs": "esbuild src/vendor/hljs.ts --bundle --minify --format=esm --outfile=gen/assets/hljs.js",
     "typecheck": "tsc --noEmit -p tsconfig.json",
     "lint": "biome check src"
@@ -29,7 +28,6 @@
     "d3-selection": "3.0.0",
     "d3-zoom": "3.0.0",
     "highlight.js": "11.11.1",
-    "mermaid": "11.16.0",
     "uplot": "1.6.31"
   },
   "devDependencies": {

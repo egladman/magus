@@ -62,8 +62,9 @@ wire the guard hook. Both are on your host's page.
 The shared reference pages sit behind those: [Skills](agents/skills.md) for the
 install surface, [The guard](agents/guard.md) for what is denied and why,
 [Guard hook templates](agents/guard-templates.md) for the two files Claude Code
-and Codex run, and [Attention hooks](agents/notifications.md) for `magus
-notify`.
+and Codex run, [Attention hooks](agents/notifications.md) for `magus notify`,
+and [Delegation](agents/delegation.md) for the surface an agent uses when it
+fans work out across several.
 
 ## Parity across hosts
 
@@ -85,52 +86,77 @@ the verdict already exist and only the wrapper is host-shaped.
 
 ## Project references
 
-Every magus command that names a project accepts the same two forms, and every
-command that prints one picks the form that suits its audience. Agents sit on
-both sides of that line.
+A project reference is a workspace-relative path, written bare: `pkg/api`. That
+is the one spelling to read, to write, and to quote back. What a project arg
+prints is what a project arg takes, so a path out of any magus command pastes
+straight back into the next one.
 
-```mermaid
-flowchart LR
-  subgraph IN["accepted as input (interchangeable)"]
-    A["workspace://pkg/api"]
-    B["pkg/api"]
-    C["./pkg/api"]
-    D["workspace:// (root alias)"]
-  end
-  IN --> P{{"parse"}}
-  P --> R["one project reference<br/>path: pkg/api"]
-  R --> H["human output<br/>pkg/api"]
-  R --> M["machine output<br/>workspace://pkg/api"]
-```
+<!--diagram:project-reference-->
 
-The scheme is metadata, not content. It behaves like `https://` in a browser
-bar: present in the canonical reference, hidden when a human is reading.
+| form              | means                                                            |
+| ----------------- | ---------------------------------------------------------------- |
+| `pkg/api`         | that project, measured from the workspace root, from anywhere    |
+| `./pkg/api`, `..` | measured from the current directory                              |
+| `.`               | the project the current directory is in                          |
+| `project:pkg/api` | the same project as a GRAPH NODE, for `explain`, `query`, `path` |
 
-| form                  | where it appears                                              |
-| --------------------- | ------------------------------------------------------------- |
-| `workspace://pkg/api` | structured output (`-o json`), error messages, generated docs |
-| `pkg/api`             | human-facing logs, run output, Mermaid node labels            |
-| `workspace://`        | alias for the workspace root, equivalent to `.`               |
+Three rules cover the whole surface:
 
-Two rules cover the whole surface:
-
-- **Reading magus output**: never string-strip the scheme yourself. Wherever a
-  command takes a project path, both forms parse identically, so
-  `magus run build workspace://pkg/api` and `magus run build pkg/api` are the
-  same invocation. Commands that take fuzzy search tokens rather than paths,
-  such as `magus where`, match on the bare name; give those the path without the
-  scheme.
+- **A bare path is absolute enough.** It is measured from the workspace root, so
+  it means the same project from any directory. Only the dot forms depend on
+  where you are standing, and when you are standing outside the workspace
+  entirely, `--root <path>` measures them from the workspace it names - so a
+  command written once keeps working when it is run from somewhere else.
+- **Never rewrite a path magus printed.** Every surface prints the bare
+  workspace-relative form - `-o name`, `-o json`, logs, error messages, Mermaid
+  node labels - so it is already in the form the next command wants. Commands
+  that take fuzzy search tokens rather than paths, such as `magus where`, take
+  the same bare text.
 - **Quoting a project back to a user**: prefer whatever magus printed. The
   workspace root is the case that bites, because it is the one project whose
-  path is a bare `.`; magus renders it as the repository's directory name in
-  human output and as `workspace://.` in machine output, so a `.` never leaks
-  into a sentence where it reads as punctuation.
+  path is a bare `.`; human output renders it as the repository's directory
+  name, so a `.` never leaks into a sentence where it reads as punctuation.
+
+The `project:` prefix in the last row is not a second path syntax. It is the
+kind-prefixed node grammar the graph commands use where kinds mix, alongside
+`target:`, `spell:`, and `doc:`; `magus explain project:pkg/api` disambiguates a
+name that could be either. Commands that only ever take a project - `run`,
+`affected`, `ls`, `describe project` - take the bare path.
 
 > [!NOTE]
-> The root alias exists because `.` is ambiguous in almost every context an
-> agent works in: a shell argument, a JSON value, the end of a sentence. magus
-> has already made that choice in whichever form it handed you, so passing the
-> value through unmodified is always correct.
+> A `workspace://pkg/api` reference still parses and resolves to the same
+> project, with a deprecation warning. It bought no reading the bare path did
+> not already have, and it is not what magus teaches or prints any more. Drop
+> the scheme wherever you find one written down.
+
+## Incremental review
+
+Answer "I reviewed earlier - what changed since, and what do I need to look
+at now" without re-reading the whole workspace:
+
+1. At review time, record where you stopped: `magus vcs checkpoint -o name`
+   prints the revision, or `<revision>+<digest>` when the tree was dirty -
+   the digest says which dirty tree was reviewed, since the revision alone
+   reads the same for every dirty tree built on it.
+2. Later, pipe the delta through the annotated view instead of reading a raw
+   diff: `git diff <revision> | magus diff -` reports each changed file's
+   reach, public-surface exposure, and referents - the surrounding code
+   worth a second look, not just the literal hunks. `magus diff` refuses a
+   git ref given positionally, on purpose - a swallowed ref once printed the
+   reader's own edits as the answer - so the pipe form above is the only
+   sanctioned spelling, and the refusal message says so.
+3. Reviewing through a diff session carries this further: per-hunk viewed
+   marks key off content digest, not position, so a hunk that has not
+   changed stays marked reviewed and one that has resurfaces on its own.
+
+## Delegating across agents
+
+The same checkpoint identifies a piece of work handed to another agent, and it
+is one leg of a wider surface: a declared delegation ledger, a console Plan
+surface that draws it, and a spawn recorded but never judged. magus records what
+an orchestrating agent says it intends and enforces none of it - ownership is
+settled by diffing against the checkpoint each unit was handed.
+[Delegation](agents/delegation.md) covers that loop.
 
 ## The MCP daemon
 

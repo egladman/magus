@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"github.com/egladman/magus/internal/cache"
@@ -551,6 +552,28 @@ func matchBuzzTargets(targets map[string]vm.Callable, patterns []string) []strin
 // part of the authored surface; it disappears when the context becomes a real type.
 const ctxMarker = "__magus_context"
 
+// execRefusedDecls are the ctx members a magus\Exec answers with a refusal rather
+// than a no-op, so ctx.withEnv({...}).readsFiles("x") fails loudly instead of
+// declaring nothing. Named rather than written inline at its one use because it is
+// one of three places that enumerate this context's members independently (the other
+// two being buildTargetContext itself and the dry host's buildCtx), and a name is
+// what lets a test hold them against each other.
+var execRefusedDecls = []string{"needs", "glob", "readsFiles", "writesFiles", "modifiesExistingFiles", "envInputs", "observes", "hasCharm"}
+
+// TargetContextKeys returns the member names bound on the magus\Context a target
+// receives, and ExecRefusedKeys those a magus\Exec refuses. Same role as
+// MagusModuleKeys one surface over: nothing but a test connects the enumerations
+// above to the dry-run host's copy, so a declaration added to one and forgotten in
+// another is silent until someone's body stops tracing.
+func TargetContextKeys() []string { return buildTargetContext(nil, nil, nil, nil).MapKeys() }
+
+// ExecRefusedKeys returns the ctx members a magus\Exec derivation refuses. It carries the
+// same caveat as [TargetContextKeys]: execRefusedDecls is one of three independent
+// enumerations of this context's members, and nothing but a test holds them against each
+// other, so a declaration added to buildTargetContext or the dry host's buildCtx and
+// forgotten here is silent until an Exec quietly accepts what it should refuse.
+func ExecRefusedKeys() []string { return slices.Clone(execRefusedDecls) }
+
 // buildTargetContext assembles the shared magus.Context value every target receives
 // as its first argument. Its methods are the injected, per-target form of what used to
 // be global magus.* declarations: `ctx.needs(format)` binds on the context the function
@@ -563,6 +586,8 @@ const ctxMarker = "__magus_context"
 //     are no-ops at run time: it is read STATICALLY by describe.Extract (both arms of
 //     any branch), so the body is never run to learn it. A non-literal argument is
 //     caught there as DynamicIO at load, not here.
+//   - envInputs / observes extend that footprint past the tree: an env var whose
+//     process value keys the step, and a fact outside the tree entirely.
 //   - has_charm(name) returns the live charm state.
 //
 // The value is stateless, so the session stashes one instance and reuses it for every
@@ -611,7 +636,7 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 			}
 			return execCtx(env, args[0]), nil
 		}))
-		for _, decl := range []string{"needs", "glob", "readsFiles", "writesFiles", "modifiesExistingFiles", "envInputs", "has_charm"} {
+		for _, decl := range execRefusedDecls {
 			e.MapSet(decl, directVal(obs, "ctx."+decl, func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 				return vm.Null, fmt.Errorf(
 					"ctx.%s: magus\\Exec carries execution overrides only; declare on the magus\\Context the target received", decl)
@@ -650,6 +675,21 @@ func buildTargetContext(obs buzz.DirectObserver, targets map[string]vm.Callable,
 	// environment map, which spell dispatch reads back - a declaration under that name
 	// silently replaced the environment with a no-op and dropped every withEnv override.
 	c.MapSet("envInputs", directVal(obs, "ctx.envInputs", footprintDecl))
+	// observes names an EXTERNAL fact the answer depends on but the tree does not
+	// contain - a vulnerability feed's id, a remote schema's revision - so a target
+	// whose answer moves with the world stays cacheable instead of opting out via
+	// skip_cache. Both halves are written in the magusfile and hashed directly, making
+	// it withEnv's mechanical twin and its semantic opposite: an override changes what
+	// the tool RUNS WITH, an observation changes nothing about execution and only
+	// states what the answer depends on.
+	//
+	// The VALUE is a cheap stamp the magusfile states - a version, a digest, a date.
+	// magus stores it, compares it, and never interprets it: an observation that moves
+	// is a miss, one that holds still replays. This is observation, not verification,
+	// so an expensive probe belongs in the target BODY, where its cost is paid only on
+	// a miss. Both arguments must be literals; the key is computed before the body
+	// runs, so a computed value could not reach it and is rejected at load.
+	c.MapSet("observes", directVal(obs, "ctx.observes", footprintDecl))
 	c.MapSet("hasCharm", directVal(obs, "ctx.hasCharm", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		return vm.BoolValue(types.HasCharm(ctx, argStr(args, 0))), nil
 	}))

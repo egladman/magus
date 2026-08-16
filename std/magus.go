@@ -15,7 +15,6 @@ import (
 	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
-	"github.com/egladman/magus/internal/render"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
 )
@@ -38,8 +37,8 @@ var Magus = Module{
 	Doc: "Magus core primitives.\n\n" +
 		"Three provider namespaces are wired by the runtime rather than declared here, so " +
 		"they do not appear in the method list below: `magus\\cache.remote(<spell>)` selects " +
-		"a remote cache backend, `magus\\ci.provider(<spell>)` a CI provider, and " +
-		"`magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret backend and " +
+		"a remote cache provider, `magus\\ci.provider(<spell>)` a CI provider, and " +
+		"`magus\\secret.provider(<spell>)` / `magus\\secret.read(<ref>)` a secret provider and " +
 		"the credentials read through it. Each takes an imported spell handle. " +
 		"`magus\\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback " +
 		"base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the " +
@@ -151,23 +150,13 @@ var Magus = Module{
 		},
 		{
 			Name: "insight",
-			Doc:  "Every VCS-history lens as one typed report: {hotspots, affinity, ownership, trend, volatility, unreferenced}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. Takes the window as `{commits, since}` and renders nothing; `insightMarkdown` is the same report as a document. Read straight off the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip. Works from a magusfile target and from a `magus buzz` script run inside a workspace; raises MGS1022 only when there is no workspace to read.",
+			Doc:  "Every VCS-history lens as one typed report: {hotspots, affinity, ownership, trend, volatility, unreferenced}. Annotate the result `> InsightReport` for compile-checked field access - `r.ownership.projects` gives each project's primary author and bus-factor flag, `r.hotspots.files` the churn-by-complexity ranking, `r.volatility` the targets that flapped. Takes the window as `{commits, since}` and renders nothing - presentation is the caller's job. Read straight off the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip. Works from a magusfile target and from a `magus buzz` script run inside a workspace; raises MGS1022 only when there is no workspace to read.",
 			Args: []Arg{
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
 			},
 			Returns: []Ret{{Type: TypeAnyMap, Object: "InsightReport"}},
 			Raises:  true,
 			Impl:    MagusInsight,
-		},
-		{
-			Name: "insight_markdown",
-			Doc:  "The same report as `magus\\insight`, rendered as the Markdown document (commit it as INSIGHT.md). Returns the document as a string. Takes the same flags: opts.commits caps the commits scanned, opts.since bounds the window (90d, 12w, 6mo, 1y). Computed in-process from the workspace on the context, so it needs a magusfile target rather than a bare `magus buzz` script.",
-			Args: []Arg{
-				{Name: "opts", Type: TypeAnyMap, Optional: true},
-			},
-			Returns: []Ret{{Type: TypeString}},
-			Raises:  true,
-			Impl:    MagusInsightMarkdown,
 		},
 		{
 			Name: "affected_impact",
@@ -190,6 +179,16 @@ var Magus = Module{
 			Returns: []Ret{{Type: TypeAnyMap, Object: "FileReport"}},
 			Raises:  true,
 			Impl:    MagusDescribeFile,
+		},
+		{
+			Name: "diff",
+			Doc:  "Read the working tree's uncommitted changes, annotated and ordered by what they can break: for each file the owning project, whether it is a declared `output` (generated - the source edit is the review), how widely its changed symbols are referenced (`reach`), whether it is public API `surface`, observed `coverage`, how often it has been changing (`churn`), and which agent sessions wrote it (`touches`). Files come back in the order magus recommends READING them - generated last whatever its reach, then widest reach first - so a caller renders the list as given rather than sorting it again. Returns a typed Diff envelope; branch on `role` and `surface` rather than grepping text. Runs a nested magus, so it needs no workspace on the context and works from a `magus buzz` script.",
+			Args: []Arg{
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap, Object: "Diff"}},
+			Raises:  true,
+			Impl:    MagusDiff,
 		},
 		{
 			Name: "doctor",
@@ -340,10 +339,10 @@ var Magus = Module{
 		},
 		{
 			Name: "cache",
-			Doc:  "Remote cache backend selection.",
+			Doc:  "Remote cache provider selection.",
 			Methods: []Method{{
 				Name:   "remote",
-				Doc:    "Select the remote cache backend, given an imported spell handle. Declared at the top level of the root magusfile.",
+				Doc:    "Select the remote cache provider, given an imported spell handle. Declared at the top level of the root magusfile.",
 				Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
 				Extern: true,
 			}},
@@ -360,17 +359,17 @@ var Magus = Module{
 		},
 		{
 			Name: "secret",
-			Doc:  "Secret backend selection, and the credentials read through it.",
+			Doc:  "Secret provider selection, and the credentials read through it.",
 			Methods: []Method{
 				{
 					Name:   "provider",
-					Doc:    "Select the secret backend, given an imported spell handle.",
+					Doc:    "Select the secret provider, given an imported spell handle.",
 					Args:   []Arg{{Name: "spell", Type: TypeAnyMap}},
 					Extern: true,
 				},
 				{
 					Name: "read",
-					Doc:  "Read a credential by reference through the selected backend. Unlike the selections, this is called from inside a target, so its failure IS something a caller can handle.",
+					Doc:  "Read a credential by reference through the selected provider. Unlike the selections, this is called from inside a target, so its failure IS something a caller can handle.",
 					Args: []Arg{{Name: "ref", Type: TypeString}},
 					// A magus-resolved value rather than a bare str, which is what lets
 					// magus recognise it and keep it out of logs and cache keys.
@@ -677,32 +676,6 @@ func MagusInsight(ctx context.Context, opts map[string]any) (types.InsightReport
 	return buildInsightReport(ctx, a, iopts)
 }
 
-// MagusInsightMarkdown renders the report as a document, for a target that writes
-// INSIGHT.md or a CI step summary.
-//
-// The rendering lives here rather than behind a subcommand because that is the only
-// thing the subcommand still did that this module could not: the analysis was always
-// the workspace's, and the CLI only turned it into a page.
-func MagusInsightMarkdown(ctx context.Context, opts map[string]any) (string, error) {
-	a, err := insightAnalyzer(ctx, "insightMarkdown")
-	if err != nil {
-		return "", err
-	}
-	iopts, err := insightOptions(opts)
-	if err != nil {
-		return "", err
-	}
-	report, err := buildInsightReport(ctx, a, iopts)
-	if err != nil {
-		return "", err
-	}
-	var b strings.Builder
-	if err := render.WriteInsightMarkdown(&b, report); err != nil {
-		return "", err
-	}
-	return b.String(), nil
-}
-
 // insightAnalyzer resolves the workspace that will answer the lenses.
 //
 // It ERRORS rather than forking. The `magus insight` subcommand it used to fall back
@@ -711,8 +684,7 @@ func MagusInsightMarkdown(ctx context.Context, opts map[string]any) (string, err
 // sprawl this removal is about. The cost is that a bare `magus buzz` script with no
 // workspace cannot ask - the same limit every other in-process verb here has.
 //
-// member names the caller so MGS1022 points at the method the author actually wrote;
-// both insight and insightMarkdown land here.
+// member names the caller so MGS1022 points at the method the author actually wrote.
 //
 // AnalyzerFromContext first: it is the seam a `magus buzz` script run inside a
 // workspace arrives through, so checking only the workspace value would raise
@@ -809,6 +781,20 @@ func buildInsightReport(ctx context.Context, a types.InsightAnalyzer, iopts type
 // a `magus buzz` script deciding whether a changed file is worth a human's attention.
 func MagusDescribeFile(ctx context.Context, paths []string, opts map[string]any) (types.FileReport, error) {
 	return runMagusJSON[types.FileReport](ctx, "describe", append([]string{"file"}, paths...), opts)
+}
+
+// MagusDiff implements magus\diff: the annotated changeset, in reading order.
+//
+// It shells out to `magus diff` rather than reimplementing the join, which is the whole
+// point of exposing it here - a Buzz advisor writing a pull-request comment and the console
+// surface then rank files by the SAME definition (types.Diff.SortForReading), and a change to
+// that order reaches both without either being edited.
+//
+// --generated is passed so the caller receives every file and decides what to fold. A CI
+// comment and a terminal reader want different things from the generated set, and a host
+// module that pre-filtered would make the wider answer unreachable.
+func MagusDiff(ctx context.Context, opts map[string]any) (types.Diff, error) {
+	return runMagusJSON[types.Diff](ctx, "diff", []string{"--generated"}, opts)
 }
 
 // runMagusJSON runs a nested magus subcommand and decodes its report into T.
@@ -1024,7 +1010,7 @@ func MagusDiagnoseDrift(ctx context.Context, outputs, inputs []string) (types.Dr
 		root = dir
 	}
 	files := make([]types.Path, 0, len(dirtyFiles))
-	for _, p := range statusPaths(v.Name(), dirtyFiles) {
+	for _, p := range dirtyFiles {
 		files = append(files, types.Path{Value: p, Base: root})
 	}
 	return types.DriftResult{

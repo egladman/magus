@@ -1,0 +1,60 @@
+# `--root <path>` selects the workspace, and a relative project ref is measured from
+# THAT workspace - not from the directory the caller happens to be standing in.
+#
+# It used to be measured from the cwd: filepath.Rel answered an outside cwd with a
+# "../"-prefixed anchor, and every relative ref inherited the escape, so
+# `magus --root <ws> ls targets .` failed with
+#   magus: project path "." escapes workspace root from "../<dir>"
+# The workspace:// scheme was reached for as the fix and failed identically, which is
+# what condemned it: it never bought a reading the bare path did not already have.
+
+mkdir outside
+cd outside
+
+# The repro. `.` is the workspace root project, because that is the workspace named.
+exec magus --root $WORK/ws ls targets .
+stdout '^project: \. \(1 targets\)'
+! stderr 'escapes workspace root'
+
+# Dot-relative refs are measured from the same place.
+exec magus --root $WORK/ws ls targets ./api
+stdout '^project: api \(1 targets\)'
+
+# A ref that escapes is still rejected: anchoring at the root does not widen what
+# resolves, it only stops inventing an escape the caller did not write.
+! exec magus --root $WORK/ws ls targets ../up
+stderr 'escapes workspace root'
+
+# Inside the workspace, nothing changed: a dot-relative ref anchors at the cwd.
+cd $WORK/ws/api
+exec magus ls targets .
+stdout '^project: api \(1 targets\)'
+exec magus ls targets ..
+stdout '^project: \. \(1 targets\)'
+
+# The retired workspace:// scheme still parses, and says so once.
+cd $WORK/outside
+exec magus --root $WORK/ws ls targets workspace://api
+stdout '^project: api \(1 targets\)'
+stderr 'workspace:// is deprecated'
+stderr 'bare workspace-relative path'
+
+-- ws/magus.yaml --
+concurrency: 2
+-- ws/magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
+-- ws/api/magusfile.buzz --
+import "magus";
+import "../spells/acme" as acme;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
+-- ws/spells/acme/spell.buzz --
+import "magus/spell";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

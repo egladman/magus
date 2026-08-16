@@ -199,7 +199,7 @@ func describeGraph(ctx context.Context, root string, args []string) error {
 	fmt.Printf("definition: %s\n\n", out.Definition)
 	for _, p := range out.Projects {
 		if p.Engine != "buzz" {
-			fmt.Printf("project: %s  (engine %s - graph extraction not yet supported)\n\n", p.Label(), p.Engine)
+			fmt.Printf("project: %s  (engine %s: graph extraction not yet supported)\n\n", p.Label(), p.Engine)
 			continue
 		}
 		fmt.Printf("project: %s  (%d targets)\n", p.Label(), len(p.Nodes))
@@ -655,7 +655,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		return errSilent{exitCode: 2}
 	}
 	if against != "" && len(evaluated) > 1 {
-		fmt.Fprintf(os.Stderr, "magus describe target --cache: %q resolves to %d projects; --against compares ONE step - name the project (e.g. `magus describe target %s %s --cache --against %s`)\n",
+		fmt.Fprintf(os.Stderr, "magus describe target --cache: %q resolves to %d projects; --against compares ONE step; name the project (e.g. `magus describe target %s %s --cache --against %s`)\n",
 			pos[0], len(evaluated), pos[0], evaluated[0].Project, against)
 		return errSilent{exitCode: 2}
 	}
@@ -768,7 +768,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 			continue
 		}
 		if r.Against.Matches {
-			fmt.Printf("  against %s: keys MATCH - a run here mints the same ref\n\n", r.Against.Ref)
+			fmt.Printf("  against %s: keys MATCH: a run here mints the same ref\n\n", r.Against.Ref)
 			continue
 		}
 		fmt.Printf("  against %s: keys DIFFER\n", r.Against.Ref)
@@ -1054,6 +1054,17 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 		if len(e.Outputs) > 0 {
 			fmt.Printf("  outputs: %v\n", e.Outputs)
 		}
+		// Always on, no flag: it is one line, it is absent for a target that composes
+		// nothing, and "what does this run, in what order" is the question the command
+		// already exists to answer - a flag would only hide the answer behind knowing
+		// to ask for it (docs/recommendations.md, fold don't add).
+		if len(e.Chain) > 0 {
+			refs := make([]string, len(e.Chain))
+			for i, s := range e.Chain {
+				refs[i] = s.Ref()
+			}
+			fmt.Printf("  chain:   %s\n", strings.Join(refs, " -> "))
+		}
 		if len(e.DependsOn) > 0 {
 			fmt.Printf("  depends_on: %v\n", e.DependsOn)
 		}
@@ -1338,10 +1349,11 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	report := types.NewFileReport(files)
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
-		return emitFormatted(opts, types.FileReport{Definition: types.FileDefinition, Count: len(files), Files: files})
+		return emitFormatted(opts, report)
 	case outputName:
 		for _, f := range files {
 			fmt.Printf("%s\t%s\n", f.Path, f.Role)
@@ -1363,10 +1375,31 @@ func describeFiles(ctx context.Context, root string, args []string) error {
 		if len(f.SourceOf) > 0 {
 			fmt.Printf("  source_of: %v\n", f.SourceOf)
 		}
+		if len(f.DependsOn) > 0 {
+			fmt.Printf("  depends_on: %v\n", f.DependsOn)
+		}
+		for _, c := range f.Claims {
+			fmt.Printf("  declared: %-6s %s  %s\n", c.Role, claimLabel(c), c.Glob)
+		}
 		if f.Hint != "" {
 			fmt.Printf("  hint: %s\n", f.Hint)
 		}
 		fmt.Println()
 	}
+	if len(report.Overlaps) > 0 {
+		fmt.Println("declarations covering more than one of these paths:")
+		for _, c := range report.Overlaps {
+			fmt.Printf("  %-6s %-24s %-24s %s\n", c.Role, claimLabel(c), c.Glob, strings.Join(c.Paths, ", "))
+		}
+	}
 	return nil
+}
+
+// claimLabel spells a claim's declarer as the path:target ref the rest of the CLI
+// takes, or the bare project for a project-wide glob no single target owns.
+func claimLabel(c types.FileClaim) string {
+	if c.Target == "" {
+		return c.Project
+	}
+	return c.Project + ":" + c.Target
 }

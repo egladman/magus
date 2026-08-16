@@ -16,12 +16,29 @@ import (
 // console's own boot router can open that surface from the path. The decoupled console is a
 // single shell page; these clean paths are its public surface URLs (there is no ?app= query form
 // in canonical links). Keep it in step with the console's own surface registry.
-var KnownSurfaces = []string{"logs", "dashboard", "graph", "activity", "notes"}
+var KnownSurfaces = []string{"logs", "dashboard", "graph", "activity", "notes", "diff", "plan"}
 
 // IsSurfaceRoute reports whether seg is exactly one known surface segment (no sub-path), i.e. a
 // bare /console/<surface>/ route the daemon must serve the shell for rather than a static file.
 func IsSurfaceRoute(seg string) bool {
 	return slices.Contains(KnownSurfaces, seg)
+}
+
+// CanonicalSurfacePath returns the canonical trailing-slash URL for a surface segment, built
+// from the ENTRY IN KnownSurfaces rather than from the caller's string.
+//
+// The distinction is the point. A redirect assembled from a request path is a redirect whose
+// destination the requester influenced, which is both a real hazard class and one a taint
+// analyser is right to flag (gosec G710). Returning the matched constant means the destination
+// is drawn from this file's own list and can be nothing else, so the property holds by
+// construction rather than by the caller having validated first.
+func CanonicalSurfacePath(seg string) (string, bool) {
+	for _, s := range KnownSurfaces {
+		if s == seg {
+			return "/console/" + s + "/", true
+		}
+	}
+	return "", false
 }
 
 // LogViewerURL assembles the log-viewer deep link: BOTH the ref identity and the encoded

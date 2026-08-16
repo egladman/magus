@@ -247,10 +247,10 @@ const isDagMode = () => layoutMode === "layered" || layoutMode === "waves";
 // and the "Color by duration" preset's conditional visibility.
 let graphHasDurations = false;
 
-// ---- Phase 5: question-first views -----------------------------------------
+// ---- question-first views -----------------------------------------------------
 // Views answer developer questions with graph interactions. The active view is
 // one of: null (default projection), "blast", "trace", "critical", "hubs",
-// "orphans", "cycles". "affected" is Phase 9 (disabled until live).
+// "orphans", "cycles". "affected" needs live mode and stays disabled without it.
 let activeView: string | null = null; // null | "blast" | "trace" | "hubs" | "orphans" | "critical" | "cycles" | "affected"
 let viewNode: string | null = null; // primary node id for blast/trace
 let viewNodeTo: string | null = null; // secondary node id for trace
@@ -260,7 +260,7 @@ let projectionUnfolded = false;
 // Set of node ids visible in the current projection (null = all).
 let projectionSet: Set<string> | null = null;
 
-// ---- Phase 9: live mode state ----------------------------------------------
+// ---- live mode state -------------------------------------------------------
 let liveHost: string | null = null; // host:port string when in live mode, else null
 let liveToken: string | null = null; // bearer token for live mode
 let liveETag: string | null = null; // last ETag from the currently loaded graph variant, for If-None-Match
@@ -296,7 +296,7 @@ let uninstallKeys: (() => void) | null = null;
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 const idleAlpha = () => (reducedMotion.matches ? 0 : 0.006);
 
-// ---- Phase 6: motion layer (flow particles + live recency pulses) ---------
+// ---- motion layer (flow particles + live recency pulses) ------------------
 // Motion is OFF outside two states: an active path/subset view (blast, trace,
 // critical) with flow particles running along its edges, or a live refresh
 // that just pulsed some nodes. flowOn mirrors whether particles.ts currently
@@ -1139,7 +1139,7 @@ function draw() {
   }
   ctx.globalAlpha = 1;
 
-  // Phase 6 motion layer: flow particles along the active view's edges, and
+  // Motion layer: flow particles along the active view's edges, and
   // recency-pulse rings from a live refresh. Gated on prefers-reduced-motion
   // and tab visibility here too (not just in motionEligible/motionLoop) so
   // nothing paints even when draw() is triggered by something other than the
@@ -1476,7 +1476,7 @@ function renderCard(id: string | null) {
 
 // ---- selection, search, list, deep links -----------------------------------
 function selectNode(id: string | null, center: boolean) {
-  // Phase 5: default projection - clicking a project node in projection mode unfolds it.
+  // Default projection - clicking a project node in projection mode unfolds it.
   if (!projectionUnfolded && id && projectionSet && projectionSet.has(id)) {
     const n = graph.byId ? graph.byId.get(id) : null;
     if (n && n.kind === "project") {
@@ -1519,13 +1519,13 @@ function selectNode(id: string | null, center: boolean) {
     }
   }
 
-  // Phase 5: blast view picking mode - clicking a node activates blast on it.
+  // Blast view picking mode - clicking a node activates blast on it.
   if (activeView === "blast" && id && !viewNode) {
     activateView("blast", id);
     return;
   }
 
-  // Phase 5: trace view picking mode - two-click flow.
+  // Trace view picking mode - two-click flow.
   if (activeView === "trace" && id) {
     if (!viewNode) {
       viewNode = id;
@@ -1749,7 +1749,7 @@ function groupColorFor(node: GNode) {
 // id/label/doc; "quoted" spans stay one term; a leading - negates. So a query
 // typed here (or arriving in #q=) selects the same nodes `magus query` would.
 //
-// Fidelity contract (Phase 5): every field accepted here is also accepted by the
+// Fidelity contract: every field accepted here is also accepted by the
 // real `magus query` CLI. The data-q example buttons in graph.html double as a
 // drift fixture (cmd/magus/testdata/script/query_syntax.txtar). Verified fields:
 // kind, project, relation, id, symbol (KindSymbol prefix for SCIP symbol nodes).
@@ -2144,7 +2144,7 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   flowOn = false;
   pulsesPending = false;
   if (searchEl) searchEl.value = "";
-  // Reset Phase 5 view/projection state.
+  // Reset view/projection state.
   activeView = null;
   viewNode = null;
   viewNodeTo = null;
@@ -2349,7 +2349,7 @@ async function readGraphFile(file: File | undefined) {
   }
 }
 
-// ---- Phase 5: default projection -------------------------------------------
+// ---- default projection ----------------------------------------------------
 // On first load with no fragment directives, show only project nodes + project
 // -> project depends_on edges. Clicking a project unfolds it (targets flavor:
 // its target children; knowledge flavor: its `contains` neighborhood).
@@ -2410,7 +2410,7 @@ function unfoldProjection() {
   } else draw();
 }
 
-// ---- Phase 5: views ---------------------------------------------------------
+// ---- views ------------------------------------------------------------------
 // Each view answers a named question; max 7 total. View state serializes into
 // the URL fragment as #view=<id>&node=<id>[&to=<id>].
 
@@ -2967,7 +2967,7 @@ function buildFlowEdges() {
   if (flowOn) startMotion();
 }
 
-// ---- Phase 5: CLI idiom rendering -------------------------------------------
+// ---- CLI idiom rendering ----------------------------------------------------
 // The search box and view-command bar both use the .term-prompt styling from
 // playground.html. The prefix swaps verb based on context:
 //   search: "magus query"
@@ -2994,7 +2994,7 @@ function buildQueryCmd(queryStr: string) {
   return "magus query " + (needsDDash ? "-- " : "") + shellQuote(queryStr);
 }
 
-// ---- Phase 7: Copy as Mermaid (toMermaid lives in mermaid.ts) --------------
+// ---- Copy as Mermaid (toMermaid lives in mermaid.ts) -----------------------
 
 // Compute the node/link scope for "Copy as Mermaid": local-graph if a focus/ego
 // view is active, else current query matches, else all nodes (refused if >150).
@@ -3123,7 +3123,7 @@ function updateSearchCopyBtn() {
   btn.dataset.cmd = cmd;
 }
 
-// ---- Phase 5: empty-state suggestions (chips) -------------------------------
+// ---- empty-state suggestions (chips) ----------------------------------------
 // After a graph loads, compute up to 3 quick facts and show clickable suggestion
 // chips. Targets graphs lead with the build-order suggestion (the discoverability
 // phase's "wow" - see the plan's ORDERING note); the rest fill remaining slots.
@@ -3202,7 +3202,7 @@ function renderSuggestions() {
   });
 }
 
-// ---- Phase 5: color preset lenses -------------------------------------------
+// ---- color preset lenses ----------------------------------------------------
 // Three one-click presets over the existing color-group machinery. Each preset
 // emits the same group entries the user could type by hand. The active preset
 // serializes into the fragment as #preset=<id>.
@@ -3389,7 +3389,7 @@ function applyPreset(presetId: string) {
   updateHash();
 }
 
-// ---- Phase 9: live mode ----------------------------------------------------
+// ---- live mode -------------------------------------------------------------
 
 // daemonAttach, consumeLiveToken, getLiveToken, and fetchSSE now live in ./lib/daemon
 // (imported at the top of this file) - the ONE audited copy of host resolution, the
@@ -3883,7 +3883,7 @@ function finishInteractiveSetup() {
   // applyLayoutAndSimulation above; applyDeepLinks skips switching when the
   // mode already matches).
   applyDeepLinks();
-  // Phase 5: emit empty-state suggestion chips.
+  // Emit empty-state suggestion chips.
   renderSuggestions();
 }
 
@@ -4006,7 +4006,7 @@ export async function activate() {
     });
   }
 
-  // Phase 9: attempt a live-mode connection on an explicit daemon attach (#port, or the
+  // Attempt a live-mode connection on an explicit daemon attach (#port, or the
   // daemon-origin/shared console). Returns true if handled; false falls through.
   if (await bootLive()) return;
 
@@ -4156,7 +4156,7 @@ function bootWireEvents() {
   // toggle could never be turned off. The data-lens attribute is gone from the scaffold too;
   // it was only ever a hook for the listener this comment replaces.
 
-  // Phase 5: color preset buttons.
+  // Color preset buttons.
   document.querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset").forEach((b) => {
     b.addEventListener("click", () => {
       const preset = b.dataset.preset;
@@ -4354,7 +4354,7 @@ function bootWireEvents() {
   // Keep the gentle wobble from being a background CPU drain: stop the sim while
   // the tab is hidden, resume when it returns. Also honor a live change to the
   // reduced-motion preference. In a dag mode the sim stays stopped (no wobble).
-  // startMotion() re-arms the Phase 6 motion loop on the same two triggers -
+  // startMotion() re-arms the motion loop on the same two triggers -
   // it self-checks motionEligible(), so it's a no-op when there's nothing to
   // animate or the tab/preference still says not to.
   document.addEventListener(
@@ -4424,7 +4424,7 @@ function bootWireEvents() {
     });
   });
 
-  // Phase 9: wire the live-mode "Remember this workspace" checkbox.
+  // Wire the live-mode "Remember this workspace" checkbox.
   const rememberCb = el("live-remember-cb") as HTMLInputElement | null;
   if (rememberCb) {
     rememberCb.checked = isRemembered();
@@ -4562,7 +4562,7 @@ async function bootLive() {
 }
 
 // deactivate tears down everything with a lifetime when the console unmounts a graph tab or pane: it
-// stops the force simulation (its rAF wobble is the main background CPU drain), cancels the Phase 6
+// stops the force simulation (its rAF wobble is the main background CPU drain), cancels the
 // motion loop and clears its state, aborts a live SSE stream and cancels its reconnect timer,
 // disconnects the stage ResizeObserver and the theme MutationObserver, and removes the
 // window/document lifecycle listeners (via the one AbortController). Idempotent. The standalone

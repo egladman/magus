@@ -10,13 +10,21 @@ import (
 	"testing"
 )
 
-// applyOpts runs the parsed project options against a fresh project so tests can
+// applyOpts runs the parsed project options against a fresh root project so tests can
 // assert the resulting policy fields.
 func applyOpts(t *testing.T, opts vm.Value) *types.Project {
 	t.Helper()
+	return applyOptsAt(t, ".", opts)
+}
+
+// applyOptsAt is applyOpts against a project at projectPath. Sources are the one option
+// whose stored value depends on where the project sits, because a glob may reach out of
+// it; every other case reads the same from the root.
+func applyOptsAt(t *testing.T, projectPath string, opts vm.Value) *types.Project {
+	t.Helper()
 	got, err := parseBuzzProjectOpts(context.Background(), opts)
 	require.NoError(t, err)
-	p := &types.Project{Path: "."}
+	p := &types.Project{Path: projectPath}
 	for _, o := range got {
 		require.NoError(t, o(p))
 	}
@@ -56,11 +64,34 @@ func TestParseBuzzProjectOpts_TargetSlotsNonIntErrors(t *testing.T) {
 	assert.ErrorContains(t, err, `targets["lint"].slots must be a whole number`)
 }
 
+// TestParseBuzzProjectOpts_Sources pins the CLEANED stored form and, with it, the truth
+// the cleaning buys: a magusfile may reach into a sibling tree, and the reach resolves
+// against the declaring project, so "../proto/**/*.proto" from docs/ declares
+// "proto/**/*.proto" to the cache key and to affected attribution alike. Storing the
+// spelling raw roots it to "docs/../proto/**/*.proto", which matches no path any walk
+// produces, so the declaration reads as supported and keys nothing.
 func TestParseBuzzProjectOpts_Sources(t *testing.T) {
 	opts := vm.NewMap()
-	opts.MapSet("sources", vm.ListValue([]vm.Value{vm.StrValue("docs/**"), vm.StrValue("../proto/**/*.proto")}))
-	p := applyOpts(t, opts)
-	assert.Equal(t, []string{"docs/**", "../proto/**/*.proto"}, p.Sources)
+	opts.MapSet("sources", vm.ListValue([]vm.Value{vm.StrValue("./guides/**"), vm.StrValue("../proto/**/*.proto")}))
+	p := applyOptsAt(t, "docs", opts)
+	assert.Equal(t, []string{"guides/**", "../proto/**/*.proto"}, p.Sources)
+	assert.Equal(t, []string{"docs/guides/**", "proto/**/*.proto"}, p.DeclaredGlobs(),
+		"both globs root at the workspace; only the reaching one moves")
+}
+
+// TestParseBuzzProjectOpts_SourcesRejectsAWorkspaceEscape pins the one reach that is a
+// load error rather than a declaration. Nothing outside the workspace root is ever
+// walked, so the glob could only be stored and ignored - the silent shape this whole
+// affordance was fixed to stop producing.
+func TestParseBuzzProjectOpts_SourcesRejectsAWorkspaceEscape(t *testing.T) {
+	opts := vm.NewMap()
+	opts.MapSet("sources", vm.ListValue([]vm.Value{vm.StrValue("../../elsewhere/**")}))
+	got, err := parseBuzzProjectOpts(context.Background(), opts)
+	require.NoError(t, err, "parsing builds the option; the project it anchors against decides")
+	require.Len(t, got, 1)
+
+	err = got[0](&types.Project{Path: "docs"})
+	assert.ErrorContains(t, err, `source glob "../../elsewhere/**" escapes the workspace root`)
 }
 
 // no_language exempts a project from doctor's language-coverage check, so it has to cost a

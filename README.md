@@ -3,7 +3,7 @@
 <p align="center">
   <picture>
     <source srcset="./assets/gopher.webp" type="image/webp">
-    <img alt="magus gopher mascot" width="400" height="267" fetchpriority="high" src="./assets/gopher.png">
+    <img alt="magus gopher mascot" width="360" height="338" fetchpriority="high" src="./assets/gopher.png">
   </picture>
 </p>
 
@@ -11,30 +11,24 @@
 
 <a href="https://github.com/egladman/magus/actions/workflows/ci.yaml"><img alt="CI" src="https://github.com/egladman/magus/actions/workflows/ci.yaml/badge.svg"></a> <img alt="Go coverage" src="./assets/coverage.svg"> <img alt="textsearch coverage" src="./assets/textsearch-coverage.svg"> <a href="https://pkg.go.dev/github.com/egladman/magus"><img alt="Go Reference" src="https://pkg.go.dev/badge/github.com/egladman/magus.svg"></a>
 
-A fast, cross-platform task orchestrator for polyglot monorepos. One statically linked binary, config as code, no second toolchain to install.
+A fast, cross-platform task orchestrator for polyglot monorepos. One binary, no second toolchain to install. Targets are programs, not YAML.
 
 Change a file and magus works out which projects it reaches, rebuilds only those, and caches every result so the same work never runs twice.
+
+magus informs; it never decides. It hands you everything it knows about your repository - what a change reaches, which files are generated, where a symbol is used - and the call stays yours. It was built for humans, not for agents: agents drive it well anyway, because an interface legible to a person is legible to anything, and that ordering is the design.
 
 <!-- Rendered by `magus run termcast-generate` from tapes/core-loop.capture, the raw
      bytes a real magus printed to a real terminal. Re-record with `magus run
      termcast-record` when the CLI's output changes; both files commit together. -->
 
 <p align="center">
-  <img alt="Terminal recording: magus ls lists five projects, magus run ci runs lint, build and test across all of them reporting '0 cached, 5 ran', the same command run again reports '5 cached, 0 ran' having replayed every result from cache, and finally one file is edited and magus affected ci narrows to three projects - the edited one and the project depending on it - reporting '2 cached, 1 ran'." src="./assets/gen/core-loop.svg" width="820">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="./assets/gen/core-loop-light.svg">
+    <img alt="Terminal recording: magus ls lists five projects, magus run ci runs lint, build and test across all of them reporting '0 cached, 5 ran', the same command run again reports '5 cached, 0 ran' having replayed every result from cache, and finally one file is edited and magus affected ci narrows to three projects - the edited one and the project depending on it - reporting '2 cached, 1 ran'." src="./assets/gen/core-loop.svg" width="820">
+  </picture>
 </p>
 
-<!-- Recorded by `magus run termcast-showcase` - a real interactive session driven
-     by real keystrokes - and rendered by `magus run termcast-generate`. Both files
-     commit together. -->
-
-<p align="center">
-  <img alt="Terminal recording of an interactive magus session: a run draws a pinned box at the bottom of the terminal showing pool slots and a live count while ordinary output scrolls above it; a failing run pins its failures as a tree grouped by project, with the selected failure's captured test output shown in a second column beside it; tab swaps which of the two views is larger; and magus x opens a picker that searches the knowledge graph as the filter is typed." src="./assets/gen/showcase.svg" width="1080">
-</p>
-
-The band at the bottom holds still while your output scrolls past it. Nothing is
-cleared, the alternate screen is never touched, and your scrollback survives -
-so selection, copy and paste keep working the way they always did. Every one of
-these surfaces degrades to plain text when there is no terminal to draw on.
+<p align="center"><em>One command, three runs: cold, fully cached, then narrowed to what a change reached.</em></p>
 
 ## Why magus exists
 
@@ -71,16 +65,21 @@ guesses about. magus gives them the same fix. Query the
 [targets](docs/concepts/targets.md) instead of raw tools, and let `magus affected ci`
 prove what a change touched. For agents, see [Agents](docs/guides/integrations/agents.md).
 
+The longer argument behind that position, and what it was a reaction to, is in
+[I think our tools are the problem](https://eli.gladman.cc/magus/blog/2026/08/03/the-tools-were-the-problem/).
+
 ## Who this is for
 
 If any of these is your week, the rest of this page is worth your time:
 
-- **You run more than one language in one repo**, and your task runner was built
-  for one of them.
+- **You came back to your own project after three months** and cannot remember
+  which command is the real one.
 - **Your CI runs everything on every commit**, you know most of it was pointless,
   and you cannot prove which part.
 - **You inherited the build.** Whoever wrote it has gone, and you need to change
   one step without discovering what else it fed.
+- **You run more than one language in one repo**, and your task runner was built
+  for one of them.
 - **Your agent greps and guesses.** It is fast, it is confident, and it is wrong
   in ways that take longer to catch than to fix.
 - **You have a `.env` full of tokens** you keep meaning to clean up, in a shell
@@ -113,7 +112,7 @@ So the install runs every time and lets the package manager be the judge. That
 costs about a second on a warm tree and fails loudly when the lockfile and the
 manifest disagree.
 
-**The bootstrap loop.** magus is one statically linked binary and installs
+**The bootstrap loop.** magus is one binary and installs
 through none of the toolchains it drives. A task orchestrator that arrives
 through the package manager it orchestrates has put itself downstream of the
 thing it is meant to control: the failures arrive oblique, there is rarely
@@ -121,12 +120,25 @@ anywhere sensible to attach an error explaining them, and the repair is to
 upgrade the runtime you adopted the tool to pin. That boundary is stated as a
 rule in [Scope](docs/scope.md), not as a preference.
 
+### If you only have one project
+
+Most of what is above does not depend on having several. A target's cache key is
+built from that target's own declared inputs, so a warm re-run skips work in a
+one-project repo exactly as it does in this repository's ten. The knowledge graph
+indexes symbols, docs and generated files, not just the edges between projects.
+One vocabulary is worth more on your own, not less, because there is nobody else
+to ask what the build step was called.
+
+What does thin out is the affected set. With one project, "what did this change
+reach" has only one answer, and the shard planning behind `magus affected ci` has
+nothing to plan. That is the part that starts paying when you split out a second
+project, which is also why `magus init` scaffolds exactly one and expects to be
+right for a while.
+
 ### Who it is not for
 
 Stated plainly, because a list of strengths on its own is advertising:
 
-- **One project, one language.** Use that language's own tooling. magus earns
-  its place between projects; with one, it is ceremony.
 - **You need a build farm.** There is no remote execution. magus caches results
   and shares them; it does not run your work on someone else's machine.
 - **You want your toolchain versions installed for you.** magus compares what
@@ -166,13 +178,22 @@ content hash, so a replay is a byte-for-byte reproduction of the recorded run.
 
 ### The knowledge graph
 
-Because magus already knows every project, target, spell, and how they relate,
-it exposes that as a graph you can query. `magus query "kind:target lint"` finds
+Most tools that offer you a codebase graph are observers: a separate indexer
+scans the repo, infers the structure, and can be wrong in ways nothing warns you
+about. magus is not observing - it is the thing that builds the repo, so it
+already has to know every project, every target's declared inputs and outputs,
+and what a diff reaches, and getting any of that wrong breaks builds loudly.
+The graph is that same knowledge handed back: a byproduct of being the source
+of truth, never an inference about it. No LLM pass, no fuzzy linking; every
+edge traces to a declaration you can open.
+
+`magus query "kind:target lint"` finds
 nodes, `magus explain <node>` shows a node's edges and what reaches it, and
 `magus refs <symbol>` lists where a symbol is defined and used from a SCIP
 index.[^scip] The same graph answers "is this file generated," "what does my diff
 touch," and "how do these two things relate" without grepping. See the
-[knowledge graph](docs/concepts/knowledge.md).
+[knowledge graph](docs/concepts/knowledge.md), including
+[what this graph deliberately is not](docs/concepts/knowledge.md#what-this-graph-is-not).
 
 ### One vocabulary
 
@@ -184,6 +205,26 @@ target's operations (the `go` spell provides `go-test`; the `buf` spell provides
 for read-write or `cd` for continuous delivery. An [op](docs/concepts/operations.md) is a
 single tool invocation. Learn the four words and the rest of the surface reads
 the same way.
+
+### There is a terminal UI. It stays out of your way
+
+<!-- Recorded by `magus run termcast-showcase` - a real interactive session driven
+     by real keystrokes - and rendered by `magus run termcast-generate`. Both files
+     commit together. -->
+
+<p align="center">
+  <picture>
+    <source media="(prefers-color-scheme: light)" srcset="./assets/gen/showcase-light.svg">
+    <img alt="Terminal recording of an interactive magus session: a run draws a pinned box at the bottom of the terminal showing pool slots and a live count while ordinary output scrolls above it; a failing run pins its failures as a tree grouped by project, with the selected failure's captured test output shown in a second column beside it; tab swaps which of the two views is larger; and magus x opens a picker that searches the knowledge graph as the filter is typed." src="./assets/gen/showcase.svg" width="1080">
+  </picture>
+</p>
+
+<p align="center"><em>A run pins its progress, failures group by project beside their output, and the picker searches the graph as you type.</em></p>
+
+The band at the bottom holds still while your output scrolls past it. Nothing is
+cleared, the alternate screen is never touched, and your scrollback survives -
+so selection, copy and paste keep working the way they always did. Every one of
+these surfaces degrades to plain text when there is no terminal to draw on.
 
 ## Getting started
 
@@ -226,9 +267,13 @@ export fun test(ctx: magus\Context, args: [str])  > void { go["go-test"](ctx); }
 export fun lint(ctx: magus\Context, args: [str])  > void { go["golangci-lint"](ctx); }
 
 // format is read-only by default: go-fmt reports files that need formatting, and
-// go-mod-tidy runs with --diff so it fails if go.mod/go.sum have drifted. The `rw`
-// (read-write) charm flips both to apply: `magus run format:rw` formats the code
-// and tidies the modules in place.
+// go-mod-tidy runs with --diff so it fails if go.mod/go.sum have drifted. They take
+// DIFFERENT write charms, because they are not the same risk. gofmt is offline, so
+// the same tree always yields the same bytes - `magus run format:rw` rewrites the
+// code. Tidy resolves against the module proxy, so what it writes depends on what
+// upstream serves today; that is a second, deliberate ask:
+//   magus run format:rw          formatting only; go mod tidy still just reports
+//   magus run format:rw,relock   also let go mod tidy amend go.mod and go.sum
 export fun format(ctx: magus\Context, args: [str]) > void {
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);
@@ -257,118 +302,45 @@ projects a change reaches so you run no more than that.
 
 ## Architecture
 
-One process (`magus server start`) exposes the workspace through two standing listeners, one per audience, and every browser page is a separate static asset; the binary serves no HTML. A third listener is raised only on demand: "share to phone" opens a time-boxed LAN listener that serves the read-only console to a phone on the same network, then tears itself down. The diagram below is the whole system: the clients, the transports and their guards, the shared in-memory state, the background jobs and knowledge-graph pipeline that keep it warm, and how the browser console reaches (or does without) the daemon.
+One process (`magus server start`) exposes the workspace through two standing listeners, one per audience, and every browser page is a separate static asset; the binary serves no HTML. A third listener is raised only on demand: "share to phone" opens a time-boxed LAN listener that serves the read-only console to a phone on the same network, then tears itself down.
 
-```mermaid
-flowchart LR
-    cli(["Local CLI and shell<br/>magus run, status, query"])
-    agent(["AI agents<br/>Claude Code, Desktop, IDE"])
-    probe(["kubelet and scripts"])
-    vcs(["git hook / magus server sync"])
-    phone(["Phone on the LAN<br/>read-only console viewer"])
+Four figures, one subject each. They were one flowchart until it carried roughly thirty-five boxes, which is the point at which a diagram stops being read and starts being skipped.
 
-    subgraph pwa["Progressive web app - project: docs/ (static assets, loopback-locked, binary serves NO HTML)<br/>eli.gladman.cc/magus or self-hosted"]
-        dash["Dashboard"]
-        gexp["Graph Explorer"]
-        logs["Log Viewer"]
-        actv["Activity Trail"]
-    end
-    serve["Ephemeral loopback server<br/>graph export --open --serve (Safari fallback)"]
+### The HTTP surface
 
-    sources["Declared sources<br/>magusfiles, docs, buzz,<br/>SCIP index, git history, CODEOWNERS"]
-    gjson["Graph export -o json<br/>console graph demo data<br/>MAGUS.md (routing index)"]
+Agents and the console share one guarded front door: a DNS-rebind check, a bearer token and a CORS policy sit in front of `/mcp`, `/api/v1`, the Connect services and the share endpoint. The health endpoints are the deliberate exception, so a probe never needs a credential.
 
-    subgraph daemon["magus daemon - one process, magus server start (project: root Go module, cmd/magus + internal/*)"]
-        sock["Unix domain socket<br/>proc RPC, private 0700<br/>internal/proc"]
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/gen/diagram-daemon-http-light.svg">
+  <img alt="Clients reach the daemon's routes through a single guard; the health endpoints bypass it" src="docs/assets/gen/diagram-daemon-http.svg">
+</picture>
 
-        subgraph http["HTTP server on mcp.address, 127.0.0.1:7391<br/>internal/daemon, internal/handler/*, internal/httpx"]
-            guards{{"DNS-rebind + Bearer token + CORS<br/>internal/httpx, internal/auth"}}
-            mcpr["/mcp<br/>MCP Streamable HTTP + SSE<br/>internal/handler/mcp"]
-            apir["/api/v1<br/>graph, status, events, insight<br/>internal/handler/{graph,status}"]
-            conn["/magus.metrics.v1<br/>/magus.activity.v1 (Connect)<br/>internal/handler/{metrics,activity}"]
-            sharep["/api/v1/share (POST)<br/>loopback-only trigger + bearer<br/>internal/daemon, internal/share"]
-            health["/livez /readyz /healthz<br/>UNGUARDED"]
-        end
+### The local path
 
-        lan["Ephemeral LAN listener - on demand, time-boxed 15m<br/>read-only share token, same-origin console (CORS never engages)<br/>console static + status/events/insight/outputs + activity/metrics<br/>NO /mcp, NO share endpoint, NO mutating routes<br/>internal/share"]
+A CLI invocation never goes over HTTP. It dispatches across a private unix domain socket into the concurrency pool and the three registries the daemon keeps warm. Sharing a graph is the one case that spawns a separate short-lived loopback server.
 
-        subgraph jobs["Background jobs<br/>internal/file/watch, internal/proc"]
-            watch["File watchers<br/>graph invalidate + SSE"]
-            idx["SCIP auto-indexer"]
-            job["Graph-build job<br/>fire-and-forget, coalesced"]
-        end
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/gen/diagram-daemon-socket-light.svg">
+  <img alt="The magus CLI dispatching over a unix socket into the daemon's pool and registries" src="docs/assets/gen/diagram-daemon-socket.svg">
+</picture>
 
-        subgraph st["Shared daemon state<br/>internal/knowledge, cache, service, trail"]
-            pool[("Concurrency pool")]
-            ws[("Workspace registry<br/>warm knowledge graph, SCIP, cache")]
-            runs[("Run registry")]
-            svc[("Service registry")]
-            trail[("Activity trail")]
-            otel[("OTel provider")]
-        end
-    end
+### What keeps it warm
 
-    cli -->|"Unix socket: adopt run/affected, status"| sock
-    cli -->|spawns| serve
-    agent -->|"MCP over HTTP, bearer token"| guards
-    probe -->|httpGet| health
+File watchers, the SCIP auto-indexer and a coalesced graph-build job all exist to keep one thing current: the workspace registry, which holds the daemon's only warm copy of the knowledge graph.
 
-    dash -->|"status + events (SSE), metrics + activity, bearer"| guards
-    gexp -->|"graph + events (SSE), bearer"| guards
-    logs -->|"activity (Connect), bearer"| guards
-    actv -->|"activity (Connect), bearer"| guards
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/gen/diagram-daemon-jobs-light.svg">
+  <img alt="File watchers, the SCIP indexer and the graph-build job all writing into the workspace registry" src="docs/assets/gen/diagram-daemon-jobs.svg">
+</picture>
 
-    cli -.->|"snapshot: graph / output via URL fragment"| pwa
-    serve -.->|"graph blob (#src)"| gexp
+### Sharing to a phone
 
-    guards --> mcpr
-    guards --> apir
-    guards --> conn
-    guards --> sharep
-    dash -->|"share to phone, bearer"| guards
-    sharep -->|"mints read-only token, opens"| lan
-    phone -->|"same-origin, read-only share token"| lan
-    lan -->|"read-only views"| ws
-    health -.->|"reads status via"| sock
+The LAN listener is the only part of magus a second machine can reach. It is minted by a loopback-only endpoint, time-boxed to fifteen minutes, carries a read-only token, and serves no MCP, share or mutating route at all.
 
-    sock -->|"dispatch, concurrency"| pool
-    sock -->|"loaded workspaces"| ws
-    sock -->|"host shared services"| svc
-    mcpr -->|"query, describe, run"| ws
-    apir -->|"graph, events, insight"| ws
-    apir -->|"status: live runs"| runs
-    conn -->|"derived metrics"| otel
-    conn -->|"agent activity"| trail
-
-    vcs -->|"submit job, Unix socket"| sock
-    sock -->|"run background job"| job
-    job -->|"rebuild + reindex"| ws
-    watch -->|"invalidate warm graph"| ws
-    watch -->|"SSE graph event"| apir
-    idx -->|"refresh SCIP index"| ws
-    sources -->|"extract shards"| ws
-    ws -->|"graph export -o json"| gjson
-    gjson -.->|"offline graph (site default)"| gexp
-
-    classDef client fill:#dbeafe,stroke:#3b82f6,color:#1e3a8a;
-    classDef site fill:#ccfbf1,stroke:#14b8a6,color:#134e4a;
-    classDef unix fill:#dcfce7,stroke:#22c55e,color:#14532d;
-    classDef httproute fill:#ffedd5,stroke:#f97316,color:#7c2d12;
-    classDef guard fill:#fee2e2,stroke:#ef4444,color:#7f1d1d;
-    classDef health fill:#fef9c3,stroke:#ca8a04,color:#713f12;
-    classDef store fill:#ede9fe,stroke:#8b5cf6,color:#4c1d95;
-    classDef job fill:#e0e7ff,stroke:#6366f1,color:#312e81;
-
-    class cli,agent,probe,vcs,phone client;
-    class dash,gexp,logs,serve,lan site;
-    class sock unix;
-    class mcpr,apir,conn,sharep httproute;
-    class guards guard;
-    class health health;
-    class pool,ws,runs,svc,trail,otel store;
-    class sources,gjson store;
-    class watch,idx,job job;
-```
+<picture>
+  <source media="(prefers-color-scheme: light)" srcset="docs/assets/gen/diagram-daemon-share-light.svg">
+  <img alt="A loopback endpoint minting a time-boxed read-only LAN listener for a phone" src="docs/assets/gen/diagram-daemon-share.svg">
+</picture>
 
 <details>
 <summary>How to read the diagram</summary>
@@ -381,12 +353,12 @@ the wire contracts are the [`proto/magus`](https://github.com/egladman/magus/tre
 protobufs.
 
 Green is the Unix domain socket, the local control plane: it dispatches
-`magus run`/`magus affected` into one shared [concurrency pool](docs/guides/daemon.md#concurrency),
+`magus run`/`magus affected` into one shared [concurrency pool](docs/guides/integrations/daemon.md#concurrency),
 answers `magus status`, and adopts nested `magus` calls. Fast and private
 (`0700`); the local CLI and the liveness/readiness probes use it.
 
 Orange is the HTTP server on `mcp.address`, for clients that cannot reach a Unix
-socket. It carries [MCP](docs/guides/mcp.md) for agents at `/mcp`, the read-only
+socket. It carries [MCP](docs/guides/integrations/mcp.md) for agents at `/mcp`, the read-only
 [`/api/v1`](docs/reference/console.md#what-the-console-serves) console routes,
 Connect services for metrics and the activity trail, and one bearer-gated
 [job-control service](docs/reference/console.md#job-control) for maintenance
@@ -396,12 +368,12 @@ protobufs, generated by `buf` and served over Connect/JSON.
 
 Red is the guard chain every HTTP route but health passes through: a
 [DNS-rebind](docs/reference/console.md#how-it-is-secured) host check, a
-[bearer token](docs/guides/mcp.md#security-keep-this-local) (the cli token plus named
+[bearer token](docs/guides/integrations/mcp.md#security-keep-this-local) (the cli token plus named
 connector tokens), and CORS scoped to the site and loopback origins.
 
 Yellow is the health routes, left unguarded so a kubelet can probe them; they
 answer by querying the same socket. See
-[container probes](docs/guides/daemon.md#kubernetes-and-container-probes).
+[container probes](docs/guides/integrations/daemon.md#kubernetes-and-container-probes).
 
 Purple is shared, warm daemon state: the [knowledge graph](docs/concepts/knowledge.md)
 and SCIP index in the workspace registry, plus the runs, services, metrics, and
@@ -430,19 +402,36 @@ reports each one on its own line.
 
 ## The browser console
 
-magus is fully featured from the terminal, so everything here is optional. Alongside the CLI, the daemon can drive four read-only browser apps.
+magus is fully featured from the terminal, so everything here is optional. Alongside the CLI, the daemon can drive a set of read-only browser apps.
 
-> Want to see it first? [Open the live demo](https://eli.gladman.cc/magus/console/): no install, no daemon. It fills the dashboard with synthesized activity, streams a build into the log viewer, and lets you jump between all four apps in demo mode. Everything below runs against your own daemon instead.
+> Want to see it first? [Open the live demo](https://eli.gladman.cc/magus/console/): no install, no daemon. It fills the dashboard with synthesized activity, streams a build into the log viewer, and lets you jump between every app in demo mode. Everything below runs against your own daemon instead.
 
-### The four apps
+### The apps
 
-The four apps ship as one console; each link below opens it on the
+The apps ship as one console; each link below opens it on the
 matching app.
+
+<!-- Grid layout after cathrynlavery/diagram-design's README gallery. Screenshots are
+     regenerated by ./hacks/screenshots.sh against each surface's #demo showcase. -->
+<table>
+  <tr>
+    <td align="center" width="33%"><img src="./assets/screenshots/console-dashboard.png" alt="Dashboard"><br><b>Dashboard</b><br><sub>Pool, cache and daemon health, live</sub></td>
+    <td align="center" width="33%"><img src="./assets/screenshots/console-graph.png" alt="Graph Explorer"><br><b>Graph Explorer</b><br><sub>Targets, spells and their dependencies</sub></td>
+    <td align="center" width="33%"><img src="./assets/screenshots/console-logs.png" alt="Log Viewer"><br><b>Log Viewer</b><br><sub>Any run's captured output, streamed or replayed</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="33%"><img src="./assets/screenshots/console-activity.png" alt="Activity Trail"><br><b>Activity Trail</b><br><sub>What agents did, and when</sub></td>
+    <td align="center" width="33%"><img src="./assets/screenshots/console-diff.png" alt="Diff"><br><b>Diff</b><br><sub>Review the working tree, paired with an agent</sub></td>
+    <td align="center" width="33%"></td>
+  </tr>
+</table>
 
 - [Dashboard](https://eli.gladman.cc/magus/console/) shows live daemon health, the concurrency pool, running targets, and cache activity.[^app-dashboard]
 - [Graph Explorer](https://eli.gladman.cc/magus/console/) navigates targets, spells, and their dependency graph (`magus graph export --open`).[^app-graph]
 - [Log Viewer](https://eli.gladman.cc/magus/console/) reads or streams any past run's captured output (`magus query output <ref> --open`).[^app-logs]
 - [Activity Trail](https://eli.gladman.cc/magus/console/) shows recent MCP calls, agent-command observations, background jobs, and config changes.[^app-activity]
+- [Diff](https://eli.gladman.cc/magus/console/) annotates the working tree's uncommitted changes - generated vs source, blast radius, coverage - and hosts the human half of a paired review.
+- [Plan](https://eli.gladman.cc/magus/console/) draws the delegation ledger an orchestrating agent declared beside the target DAG a plain run derives.
 
 ### How it stays on your machine
 
@@ -458,9 +447,7 @@ The hosted page talks only to `127.0.0.1`/`[::1]`, a loopback lock it enforces b
 
 ## Working with AI agents
 
-> The fastest way to make your agent better at your code base isn't a smarter model. It's a tighter feedback loop. Most of these are scripts you already have because you had to set up environments for developers. You just need to hook them up the right way.
-
-That hookup is what magus is. The build, test, lint, format, and cache scripts that already run for human developers become the same feedback loop an agent gets - deterministic, fast, and answerable through the knowledge graph instead of through guess and grep.
+A tighter feedback loop does more for an agent working in your code base than a larger model does, and most of that loop already exists: the build, test, lint, format, and cache scripts you wrote so developers could set up an environment. magus is the hookup. Those same scripts become what the agent runs, deterministic and fast.
 
 magus treats an AI agent and a new teammate as the same kind of user: someone who cannot yet trust their guesses about the repo. It ships an agent surface built on the knowledge graph, so an agent asks magus instead of grepping and guessing.
 
@@ -475,7 +462,7 @@ Full detail, including which tools exist and how to connect, is on the [Agents](
 Full docs live at **[eli.gladman.cc/magus](https://eli.gladman.cc/magus/)**.[^docs-source] The major sections:
 
 - Core concepts: [Targets](docs/concepts/targets.md), [Spells](docs/concepts/spells.md), [Charms](docs/concepts/charms.md), [Operations](docs/concepts/operations.md), [Services](docs/concepts/services.md)
-- Running at scale: [CI](docs/concepts/targets/ci.md), [CI providers](docs/concepts/ci-providers.md), [Daemon](docs/guides/daemon.md), [Remote caching](docs/concepts/remote-cache.md), [MCP](docs/guides/mcp.md), [Telemetry](docs/concepts/telemetry.md)
+- Running at scale: [CI](docs/concepts/targets/ci.md), [CI providers](docs/concepts/ci/providers.md), [Daemon](docs/guides/integrations/daemon.md), [Remote caching](docs/concepts/cache/remote.md), [MCP](docs/guides/integrations/mcp.md), [Telemetry](docs/concepts/telemetry.md)
 - Reference: [Man pages](docs/reference/manpage/magus.md), [Standard library modules](docs/reference/buzz/index.md), [Testing](docs/guides/testing.md), [Debugging](docs/guides/debugging.md), [Output references](docs/concepts/output-refs.md), [Tips and tricks](docs/guides/tips.md)
 
 Inside a workspace, the entry point is the committed [`MAGUS.md`](https://github.com/egladman/magus/blob/main/MAGUS.md): a
@@ -488,12 +475,10 @@ never hand-edit.
 
 ## Development
 
-**[eli.gladman.cc/magus/development/](https://eli.gladman.cc/magus/development/)** is the contributor reference: everything below, plus the parts that are generated rather than written.
+magus is built and tested by magus, so this repository is a magus workspace like any other. That means parts of the contributor reference are generated from the workspace's own graph rather than written, and can show things a hand-maintained page cannot:
 
-magus is built and tested by magus, so this repository is a magus workspace like any other. The Development page is rendered from that workspace's own graph, which is why it can show things a hand-written page cannot:
-
-- **[Per-project target catalogs](https://eli.gladman.cc/magus/development/)** - one page per project: every runnable target, what it depends on, which toolchains it drives, and a run-order diagram built from the real `ctx.needs` edges.
-- **Workspace dependencies** - the projects in dependency order, with each one's blast radius: how many projects a change there can reach. Read it before you touch `libs/gopherbuzz`.
+- **[Project catalogs](https://eli.gladman.cc/magus/development/projects/)** - one page per project: every runnable target, what it depends on, which toolchains it drives, and a run-order diagram built from the real `ctx.needs` edges.
+- **[Workspace dependencies](https://eli.gladman.cc/magus/development/projects/)** - the projects in dependency order, with each one's blast radius: how many projects a change there can reach. Read it before you touch `libs/gopherbuzz`.
 - **[Contributing guide](https://eli.gladman.cc/magus/development/contributing/)** - the conventions worth knowing before opening a pull request, including the benchmark-evidence rule for performance changes.
 - **[Configuration reference](https://eli.gladman.cc/magus/reference/config/)** - the `magus.yaml` keys and the `MAGUS_*` environment inventory.
 
@@ -524,12 +509,12 @@ magus run ci
 
 [^scip]: [SCIP](https://sourcegraph.com/docs/code-search/code-navigation/writing_an_indexer) is Sourcegraph's code-index format. magus indexes on its own once a project uses the `scip` op, stores the index in the cache, and refreshes it in the background; the [knowledge graph](docs/concepts/knowledge.md) page covers the symbol layer and the `@symbols` shard.
 
-[^app-dashboard]: What the tiles mean, and the metrics behind them: [Telemetry](docs/concepts/telemetry.md) and the [daemon](docs/guides/daemon.md) page.
+[^app-dashboard]: What the tiles mean, and the metrics behind them: [Telemetry](docs/concepts/telemetry.md) and the [daemon](docs/guides/integrations/daemon.md) page.
 
 [^app-graph]: The same graph the CLI queries, drawn. See [`magus graph`](docs/reference/manpage/magus-graph.md) for the verbs and [knowledge graph](docs/concepts/knowledge.md) for the schema.
 
 [^app-logs]: A run's output is addressed by a short reference ID, which is what `<ref>` is above. See [output references](docs/concepts/output-refs.md).
 
-[^mcp]: Tool list, transport, and how to connect an agent: [MCP](docs/guides/mcp.md).
+[^mcp]: Tool list, transport, and how to connect an agent: [MCP](docs/guides/integrations/mcp.md).
 
-[^app-activity]: The trail is the daemon's own record, kept in memory per workspace. See the [daemon](docs/guides/daemon.md) page.
+[^app-activity]: The trail is the daemon's own record, kept in memory per workspace. See the [daemon](docs/guides/integrations/daemon.md) page.

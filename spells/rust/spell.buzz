@@ -25,11 +25,18 @@ export fun mgs_getLanguage() > str { return "rust"; }
 // input-hashing walk. Dot-dirs are skipped structurally, so only target belongs here.
 export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "target", isDir = true}]; }
 
-// mgs_listManifests names the file that carries this project's OWN version - not
-// the toolchain's (that's mgs_getVersionProbe) and not a cache input (Cargo.toml
-// is separately listed in mgs_listRequiredGlobs above, because it also feeds the
-// cache key). A cargo crate has exactly one candidate.
-export fun mgs_listManifests() > [Path] { return [Path{value = "Cargo.toml"}]; }
+// mgs_listManifests names the file this project's dependencies are declared in -
+// not the toolchain's version (that's mgs_getVersionProbe) and not a cache input
+// (Cargo.toml and Cargo.lock are separately listed in mgs_listRequiredGlobs above,
+// because they also feed the cache key). A cargo crate has exactly one of each.
+//
+// In a cargo WORKSPACE only the workspace root holds a Cargo.lock; member crates
+// have a Cargo.toml and no lock of their own. That is why the lock is declared as a
+// bare filename and located by walking up from the project rather than being read
+// beside the manifest.
+export fun mgs_listManifests() > [Manifest] {
+    return [Manifest{value = "Cargo.toml", lockCandidates = ["Cargo.lock"]}];
+}
 
 fun cargoBuild(target: Target) > Command { return Command{bin = "cargo", args = ["build", "--release"]}; }
 fun cargoClean(target: Target) > Command { return Command{bin = "cargo", args = ["clean"]}; }

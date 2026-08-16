@@ -9,6 +9,7 @@ import "../tools/toolchain-policy" as policy;
 // coverage.svg gates hash through tools/drift.buzz; the gen/ gate still uses vcs.
 import "fs";
 import "os";
+import "proc";
 import "vcs";
 // The shared DOM-free browser client lib (libs/textsearch) holds the search grammar the
 // Reference drawer imports from source. Affected tracking is glob-based (not

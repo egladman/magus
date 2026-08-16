@@ -129,6 +129,12 @@ const (
 	FlagDescribeTargetExplain = "explain"
 	// describe target: --no-default-charms
 	FlagDescribeTargetNoDefaultCharms = "no-default-charms"
+	// diff: --generated
+	FlagDiffGenerated = "generated"
+	// diff: --tui
+	FlagDiffTui = "tui"
+	// diff: --watch
+	FlagDiffWatch = "watch"
 	// explain: --global
 	FlagExplainGlobal = "global"
 	// explain: --refresh
@@ -177,10 +183,14 @@ const (
 	FlagHookAgentName = "agent-name"
 	// hook: --event
 	FlagHookEvent = "event"
+	// hook: --observe
+	FlagHookObserve = "observe"
 	// hook: --path
 	FlagHookPath = "path"
 	// hook: --session
 	FlagHookSession = "session"
+	// hook: --transcript
+	FlagHookTranscript = "transcript"
 	// init: --force
 	FlagInitForce = "force"
 	// init: --global
@@ -253,6 +263,8 @@ const (
 	FlagRunRace = "race"
 	// run: --shard
 	FlagRunShard = "shard"
+	// run: --skip
+	FlagRunSkip = "skip"
 	// run: --step
 	FlagRunStep = "step"
 	// run: --timeout
@@ -305,6 +317,8 @@ const (
 	FlagVCSAddUntracked = "untracked"
 	// vcs resolve: --against
 	FlagVCSResolveAgainst = "against"
+	// version: --client
+	FlagVersionClient = "client"
 	// watch: --backend
 	FlagWatchBackend = "backend"
 	// watch: --debounce
@@ -863,6 +877,22 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 	return &f
 }
 
+// DiffFlags are the flags declared for `magus diff`.
+type DiffFlags struct {
+	Generated bool // --generated
+	Tui       bool // --tui
+	Watch     bool // --watch
+}
+
+// BindDiff registers `magus diff`'s flags on fs and returns the destination.
+func BindDiff(fs *flag.FlagSet) *DiffFlags {
+	var f DiffFlags
+	fs.BoolVar(&f.Generated, FlagDiffGenerated, false, "Include declared target outputs, which are folded away by default")
+	fs.BoolVar(&f.Tui, FlagDiffTui, false, "Read the changeset interactively, joined to the session the console and an agent share")
+	fs.BoolVar(&f.Watch, FlagDiffWatch, false, "Re-read and re-render whenever the working tree changes")
+	return &f
+}
+
 // ServerStartFlags are the flags declared for `magus server start`.
 type ServerStartFlags struct {
 	Foreground bool // --foreground
@@ -950,18 +980,22 @@ func BindAgent(fs *flag.FlagSet) *AgentFlags {
 
 // HookFlags are the flags declared for `magus hook`.
 type HookFlags struct {
-	Path      bool   // --path
-	AgentName string // --agent-name
-	Session   string // --session
-	Event     string // --event
+	Path       bool   // --path
+	Observe    bool   // --observe
+	AgentName  string // --agent-name
+	Session    string // --session
+	Transcript string // --transcript
+	Event      string // --event
 }
 
 // BindHook registers `magus hook`'s flags on fs and returns the destination.
 func BindHook(fs *flag.FlagSet) *HookFlags {
 	var f HookFlags
 	fs.BoolVar(&f.Path, FlagHookPath, false, "Judge the input as a file path an edit is about to write, not as a shell command")
+	fs.BoolVar(&f.Observe, FlagHookObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
 	fs.StringVar(&f.AgentName, FlagHookAgentName, "", "Name of the agent host this invocation came from (attribution only)")
 	fs.StringVar(&f.Session, FlagHookSession, "", "The host's own session id for this invocation")
+	fs.StringVar(&f.Transcript, FlagHookTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
 	fs.StringVar(&f.Event, FlagHookEvent, "", "The host's hook event name (e.g. PreToolUse)")
 	return &f
 }
@@ -1014,5 +1048,17 @@ func BindSelfInstallShorthand(fs *flag.FlagSet) *SelfInstallShorthandFlags {
 	var f SelfInstallShorthandFlags
 	fs.StringVar(&f.Dir, FlagSelfInstallShorthandDir, "", "Directory for the shorthand (default: the running binary's directory)")
 	fs.BoolVar(&f.Force, FlagSelfInstallShorthandForce, false, "Replace an existing file at the shorthand path")
+	return &f
+}
+
+// VersionFlags are the flags declared for `magus version`.
+type VersionFlags struct {
+	Client bool // --client
+}
+
+// BindVersion registers `magus version`'s flags on fs and returns the destination.
+func BindVersion(fs *flag.FlagSet) *VersionFlags {
+	var f VersionFlags
+	fs.BoolVar(&f.Client, FlagVersionClient, false, "Print only this binary's version; skip the daemon probe entirely")
 	return &f
 }

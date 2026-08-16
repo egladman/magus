@@ -27,6 +27,15 @@
               "target": "build"
             }
           ],
+          "chain": [
+            {
+              "project": "libs/gopherbuzz",
+              "target": "build"
+            },
+            {
+              "target": "spells-generate"
+            }
+          ],
           "reads_secrets": false,
           "exec_overrides": [
             "env:GOEXPERIMENT=jsonv2"
@@ -44,6 +53,12 @@
             }
           ],
           "cross_dependencies": [
+            {
+              "project": "libs/gopherbuzz",
+              "target": "build"
+            }
+          ],
+          "chain": [
             {
               "project": "libs/gopherbuzz",
               "target": "build"
@@ -120,6 +135,11 @@
           ],
           "charms": [
             "rw"
+          ],
+          "chain": [
+            {
+              "target": "image-build"
+            }
           ],
           "reads_secrets": false
         },
@@ -218,6 +238,11 @@
           "dependencies": [
             "types-generate"
           ],
+          "chain": [
+            {
+              "target": "types-generate"
+            }
+          ],
           "reads_secrets": false,
           "writes_files": [
             {
@@ -231,6 +256,11 @@
           "doc": "Regenerates the magusfile API surface lock: every member a magusfile can call on the magus namespace, one dotted name per line.",
           "dependencies": [
             "bindings-generate"
+          ],
+          "chain": [
+            {
+              "target": "bindings-generate"
+            }
           ],
           "reads_secrets": false,
           "writes_files": [
@@ -257,6 +287,11 @@
           "dependencies": [
             "types-generate"
           ],
+          "chain": [
+            {
+              "target": "types-generate"
+            }
+          ],
           "reads_secrets": false,
           "writes_files": [
             {
@@ -276,6 +311,11 @@
           "doc": "Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir.",
           "dependencies": [
             "types-generate"
+          ],
+          "chain": [
+            {
+              "target": "types-generate"
+            }
           ],
           "reads_secrets": false,
           "writes_files": [
@@ -416,6 +456,11 @@
           "dependencies": [
             "types-generate"
           ],
+          "chain": [
+            {
+              "target": "types-generate"
+            }
+          ],
           "reads_secrets": false,
           "writes_files": [
             {
@@ -489,31 +534,51 @@
               ]
             }
           ],
-          "reads_secrets": false
-        },
-        {
-          "name": "tapes",
-          "doc": "Records every VHS tape in tapes/ into assets/gen/.",
-          "reads_files": [
+          "chain": [
             {
-              "project": ".",
-              "glob": "tapes/*.tape"
+              "target": "bindings-generate"
             },
             {
-              "project": ".",
-              "glob": "tapes/demo-init.sh"
+              "target": "changelog-generate"
             },
             {
-              "project": ".",
-              "glob": "tapes/demo.txtar"
+              "target": "config-generate"
+            },
+            {
+              "target": "graph-generate"
+            },
+            {
+              "target": "index-generate"
+            },
+            {
+              "target": "langservice-generate"
+            },
+            {
+              "target": "magusfile-api-generate"
+            },
+            {
+              "target": "man-generate"
+            },
+            {
+              "target": "mocks-generate"
+            },
+            {
+              "target": "skills-generate"
+            },
+            {
+              "target": "spells-generate"
+            },
+            {
+              "target": "termcast-generate"
+            },
+            {
+              "target": "termshots-generate"
+            },
+            {
+              "target": "types-generate"
             }
           ],
-          "reads_secrets": false,
-          "writes_files": [
-            {
-              "glob": "assets/gen/*.gif"
-            }
-          ]
+          "reads_secrets": false
         },
         {
           "name": "termcast-record",
@@ -685,6 +750,15 @@
               "target": "build"
             }
           ],
+          "chain": [
+            {
+              "project": "libs/gopherbuzz",
+              "target": "build"
+            },
+            {
+              "target": "spells-generate"
+            }
+          ],
           "reads_secrets": false,
           "exec_overrides": [
             "env:GOEXPERIMENT=jsonv2"
@@ -727,6 +801,17 @@
               "ops": [
                 "go-test"
               ]
+            }
+          ],
+          "chain": [
+            {
+              "target": "advice-test"
+            },
+            {
+              "target": "format"
+            },
+            {
+              "target": "buzz-test"
             }
           ],
           "reads_secrets": false,
@@ -782,6 +867,17 @@
           "charms": [
             "container"
           ],
+          "chain": [
+            {
+              "target": "format"
+            },
+            {
+              "target": "image-build"
+            },
+            {
+              "target": "go-build"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -833,6 +929,14 @@
               "ops": [
                 "shellcheck"
               ]
+            }
+          ],
+          "chain": [
+            {
+              "target": "format"
+            },
+            {
+              "target": "lint-build"
             }
           ],
           "reads_files": [
@@ -892,7 +996,35 @@
               ]
             }
           ],
-          "reads_secrets": false
+          "chain": [
+            {
+              "target": "generate"
+            }
+          ],
+          "reads_secrets": false,
+          "modifies_existing_files": [
+            {
+              "glob": "**/*.go"
+            },
+            {
+              "glob": "go.mod"
+            },
+            {
+              "glob": "go.sum"
+            },
+            {
+              "glob": "*.md"
+            },
+            {
+              "glob": "benchmarks/**/*.md"
+            },
+            {
+              "glob": "tapes/**/*.md"
+            },
+            {
+              "glob": "cmd/magus/agents-section.md"
+            }
+          ]
         },
         {
           "name": "ci",
@@ -904,6 +1036,26 @@
             "compress-cgo-test",
             "completion-test",
             "security"
+          ],
+          "chain": [
+            {
+              "target": "lint"
+            },
+            {
+              "target": "build"
+            },
+            {
+              "target": "test"
+            },
+            {
+              "target": "compress-cgo-test"
+            },
+            {
+              "target": "completion-test"
+            },
+            {
+              "target": "security"
+            }
           ],
           "reads_secrets": false
         },
@@ -1003,6 +1155,11 @@
           "charms": [
             "rw"
           ],
+          "chain": [
+            {
+              "target": "preflight"
+            }
+          ],
           "reads_secrets": false,
           "writes_files": [
             {
@@ -1025,6 +1182,15 @@
               "target": "graph-generate"
             }
           ],
+          "chain": [
+            {
+              "target": "preflight"
+            },
+            {
+              "project": ".",
+              "target": "graph-generate"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1039,6 +1205,15 @@
               "target": "lint"
             }
           ],
+          "chain": [
+            {
+              "target": "preflight"
+            },
+            {
+              "project": "libs/textsearch",
+              "target": "lint"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1046,6 +1221,11 @@
           "doc": "security audits the dependency tree against the npm advisory database.",
           "dependencies": [
             "preflight"
+          ],
+          "chain": [
+            {
+              "target": "preflight"
+            }
           ],
           "reads_secrets": false
         },
@@ -1058,6 +1238,23 @@
             "test",
             "build",
             "security"
+          ],
+          "chain": [
+            {
+              "target": "preflight"
+            },
+            {
+              "target": "lint"
+            },
+            {
+              "target": "test"
+            },
+            {
+              "target": "build"
+            },
+            {
+              "target": "security"
+            }
           ],
           "reads_secrets": false
         }
@@ -1140,7 +1337,7 @@
             },
             {
               "project": ".",
-              "glob": "internal/knowledge/**/*.go"
+              "glob": "internal/graph/**/*.go"
             },
             {
               "project": ".",
@@ -1325,7 +1522,6 @@
             "preflight",
             "content-generate",
             "index-generate",
-            "build-mermaid",
             "build-hljs",
             "build-playground-editor",
             "build-playground",
@@ -1338,6 +1534,33 @@
             {
               "project": ".",
               "target": "changelog-generate"
+            }
+          ],
+          "chain": [
+            {
+              "target": "preflight"
+            },
+            {
+              "project": ".",
+              "target": "changelog-generate"
+            },
+            {
+              "target": "content-generate"
+            },
+            {
+              "target": "index-generate"
+            },
+            {
+              "target": "build-hljs"
+            },
+            {
+              "target": "build-playground-editor"
+            },
+            {
+              "target": "build-playground"
+            },
+            {
+              "target": "site-generate"
             }
           ],
           "reads_secrets": false
@@ -1356,7 +1579,35 @@
               ]
             }
           ],
-          "reads_secrets": false
+          "chain": [
+            {
+              "target": "generate"
+            }
+          ],
+          "reads_secrets": false,
+          "modifies_existing_files": [
+            {
+              "glob": "*.md"
+            },
+            {
+              "glob": "concepts/**/*.md"
+            },
+            {
+              "glob": "guides/*.md"
+            },
+            {
+              "glob": "guides/integrations/*.md"
+            },
+            {
+              "glob": "migrating/**/*.md"
+            },
+            {
+              "glob": "reference/**/*.md"
+            },
+            {
+              "glob": "setup/**/*.md"
+            }
+          ]
         },
         {
           "name": "conventions",
@@ -1410,12 +1661,33 @@
               "target": "lint"
             }
           ],
+          "chain": [
+            {
+              "target": "format"
+            },
+            {
+              "target": "conventions"
+            },
+            {
+              "project": "libs/textsearch",
+              "target": "lint"
+            },
+            {
+              "project": "docs/guides/integrations/agents",
+              "target": "lint"
+            }
+          ],
           "reads_secrets": false
         },
         {
           "name": "build",
           "dependencies": [
             "generate"
+          ],
+          "chain": [
+            {
+              "target": "generate"
+            }
           ],
           "reads_secrets": false
         },
@@ -1431,6 +1703,14 @@
             "format",
             "buzz-test"
           ],
+          "chain": [
+            {
+              "target": "format"
+            },
+            {
+              "target": "buzz-test"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1438,6 +1718,11 @@
           "doc": "security audits what actually ships against the npm advisory database.",
           "dependencies": [
             "preflight"
+          ],
+          "chain": [
+            {
+              "target": "preflight"
+            }
           ],
           "reads_secrets": false
         },
@@ -1448,6 +1733,20 @@
             "lint",
             "build",
             "test"
+          ],
+          "chain": [
+            {
+              "target": "generate"
+            },
+            {
+              "target": "lint"
+            },
+            {
+              "target": "build"
+            },
+            {
+              "target": "test"
+            }
           ],
           "reads_secrets": false
         },
@@ -1464,6 +1763,15 @@
               "target": "build"
             }
           ],
+          "chain": [
+            {
+              "target": "preflight"
+            },
+            {
+              "project": "libs/gopherbuzz",
+              "target": "build"
+            }
+          ],
           "reads_secrets": false,
           "writes_files": [
             {
@@ -1475,16 +1783,23 @@
           ]
         },
         {
-          "name": "build-mermaid",
-          "declared": "build_mermaid",
-          "doc": "build-mermaid bundles the vendored mermaid library (src/vendor/mermaid.js -> mermaid@11) into gen/assets/mermaid.js.",
-          "dependencies": [
-            "preflight"
+          "name": "diagrams-generate",
+          "declared": "diagrams_generate",
+          "doc": "diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/.",
+          "reads_files": [
+            {
+              "project": "docs",
+              "glob": "site/diagrams/*.buzz"
+            },
+            {
+              "project": ".",
+              "glob": "libs/diagram/diagram.buzz"
+            }
           ],
           "reads_secrets": false,
           "writes_files": [
             {
-              "glob": "gen/assets/mermaid.js"
+              "glob": "assets/gen/diagram-*.svg"
             }
           ]
         },
@@ -1494,6 +1809,11 @@
           "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js.",
           "dependencies": [
             "preflight"
+          ],
+          "chain": [
+            {
+              "target": "preflight"
+            }
           ],
           "reads_secrets": false,
           "writes_files": [
@@ -1508,6 +1828,11 @@
           "doc": "build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js.",
           "dependencies": [
             "preflight"
+          ],
+          "chain": [
+            {
+              "target": "preflight"
+            }
           ],
           "reads_secrets": false,
           "writes_files": [
@@ -1525,6 +1850,7 @@
       "depends_on": [
         ".",
         "docs/guides/integrations/agents",
+        "libs/diagram",
         "libs/gopherbuzz",
         "libs/textsearch",
         "proto"
@@ -1545,6 +1871,11 @@
           "dependencies": [
             "preflight"
           ],
+          "chain": [
+            {
+              "target": "preflight"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1552,6 +1883,11 @@
           "doc": "test runs the OpenCode plugin's transport cases: does it ASK magus correctly (the top-level `hook` subcommand, the input on stdin) and handle each decision the way it declares.",
           "dependencies": [
             "preflight"
+          ],
+          "chain": [
+            {
+              "target": "preflight"
+            }
           ],
           "reads_secrets": false
         },
@@ -1562,6 +1898,17 @@
             "format",
             "lint",
             "test"
+          ],
+          "chain": [
+            {
+              "target": "format"
+            },
+            {
+              "target": "lint"
+            },
+            {
+              "target": "test"
+            }
           ],
           "reads_secrets": false
         },
@@ -1575,41 +1922,6 @@
                 "dprint"
               ]
             }
-          ],
-          "reads_secrets": false
-        }
-      ]
-    },
-    {
-      "path": "evals",
-      "name": "evals",
-      "engine": "buzz",
-      "nodes": [
-        {
-          "name": "preflight",
-          "reads_secrets": false
-        },
-        {
-          "name": "lint",
-          "doc": "lint validates every task file against the schema and checks that each named constraint predicate exists.",
-          "dependencies": [
-            "preflight"
-          ],
-          "reads_secrets": false
-        },
-        {
-          "name": "security",
-          "doc": "security audits what actually ships against the npm advisory database.",
-          "dependencies": [
-            "preflight"
-          ],
-          "reads_secrets": false
-        },
-        {
-          "name": "ci",
-          "doc": "ci is LINT ONLY, deliberately.",
-          "dependencies": [
-            "lint"
           ],
           "reads_secrets": false
         }
@@ -1634,6 +1946,14 @@
           "charms": [
             "rw"
           ],
+          "chain": [
+            {
+              "target": "preflight"
+            },
+            {
+              "target": "index-generate"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1661,6 +1981,11 @@
               ]
             }
           ],
+          "chain": [
+            {
+              "target": "generate"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1674,6 +1999,11 @@
               "ops": [
                 "go-vet"
               ]
+            }
+          ],
+          "chain": [
+            {
+              "target": "format"
             }
           ],
           "reads_secrets": false
@@ -1691,6 +2021,11 @@
               ]
             }
           ],
+          "chain": [
+            {
+              "target": "format"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1706,6 +2041,11 @@
               ]
             }
           ],
+          "chain": [
+            {
+              "target": "format"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1715,6 +2055,47 @@
             "lint",
             "build",
             "test"
+          ],
+          "chain": [
+            {
+              "target": "lint"
+            },
+            {
+              "target": "build"
+            },
+            {
+              "target": "test"
+            }
+          ],
+          "reads_secrets": false
+        }
+      ]
+    },
+    {
+      "path": "libs/diagram",
+      "name": "libs/diagram",
+      "engine": "buzz",
+      "nodes": [
+        {
+          "name": "test",
+          "doc": "test runs the in-file test blocks.",
+          "reads_files": [
+            {
+              "project": "libs/diagram",
+              "glob": "*.buzz"
+            }
+          ],
+          "reads_secrets": false
+        },
+        {
+          "name": "ci",
+          "dependencies": [
+            "test"
+          ],
+          "chain": [
+            {
+              "target": "test"
+            }
           ],
           "reads_secrets": false
         }
@@ -1739,6 +2120,14 @@
           "charms": [
             "rw"
           ],
+          "chain": [
+            {
+              "target": "preflight"
+            },
+            {
+              "target": "index-generate"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1772,6 +2161,11 @@
               ]
             }
           ],
+          "chain": [
+            {
+              "target": "generate"
+            }
+          ],
           "reads_files": [
             {
               "project": "libs/gopherbuzz",
@@ -1793,6 +2187,11 @@
               ]
             }
           ],
+          "chain": [
+            {
+              "target": "format"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1808,6 +2207,11 @@
               ]
             }
           ],
+          "chain": [
+            {
+              "target": "format"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1821,6 +2225,11 @@
               "ops": [
                 "go-test"
               ]
+            }
+          ],
+          "chain": [
+            {
+              "target": "format"
             }
           ],
           "reads_secrets": false
@@ -1840,6 +2249,11 @@
               ]
             }
           ],
+          "chain": [
+            {
+              "target": "format"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1850,6 +2264,17 @@
             "build",
             "test"
           ],
+          "chain": [
+            {
+              "target": "lint"
+            },
+            {
+              "target": "build"
+            },
+            {
+              "target": "test"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1857,6 +2282,11 @@
           "doc": "Runs the upstream buzz-language/buzz behavior suite through gopherbuzz and checks the result against testdata/upstream-behavior-allowlist.txt (see conformance_test.go).",
           "dependencies": [
             "preflight"
+          ],
+          "chain": [
+            {
+              "target": "preflight"
+            }
           ],
           "reads_secrets": false
         }
@@ -1881,6 +2311,14 @@
           "charms": [
             "rw"
           ],
+          "chain": [
+            {
+              "target": "preflight"
+            },
+            {
+              "target": "index-generate"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1914,6 +2352,11 @@
               ]
             }
           ],
+          "chain": [
+            {
+              "target": "generate"
+            }
+          ],
           "reads_files": [
             {
               "project": "libs/testlayout",
@@ -1936,6 +2379,11 @@
               ]
             }
           ],
+          "chain": [
+            {
+              "target": "format"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1949,6 +2397,11 @@
               "ops": [
                 "go-build"
               ]
+            }
+          ],
+          "chain": [
+            {
+              "target": "format"
             }
           ],
           "reads_secrets": false
@@ -1966,6 +2419,11 @@
               ]
             }
           ],
+          "chain": [
+            {
+              "target": "format"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -1975,6 +2433,17 @@
             "lint",
             "build",
             "test"
+          ],
+          "chain": [
+            {
+              "target": "lint"
+            },
+            {
+              "target": "build"
+            },
+            {
+              "target": "test"
+            }
           ],
           "reads_secrets": false
         }
@@ -1999,6 +2468,14 @@
           "charms": [
             "rw"
           ],
+          "chain": [
+            {
+              "target": "preflight"
+            },
+            {
+              "target": "index-generate"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -2018,6 +2495,11 @@
           "dependencies": [
             "preflight"
           ],
+          "chain": [
+            {
+              "target": "preflight"
+            }
+          ],
           "reads_secrets": false
         },
         {
@@ -2028,6 +2510,11 @@
           ],
           "charms": [
             "rw"
+          ],
+          "chain": [
+            {
+              "target": "preflight"
+            }
           ],
           "reads_secrets": false,
           "writes_files": [
@@ -2043,6 +2530,14 @@
           "dependencies": [
             "lint",
             "test"
+          ],
+          "chain": [
+            {
+              "target": "lint"
+            },
+            {
+              "target": "test"
+            }
           ],
           "reads_secrets": false
         }
@@ -2084,6 +2579,14 @@
           "dependencies": [
             "generate",
             "lint"
+          ],
+          "chain": [
+            {
+              "target": "generate"
+            },
+            {
+              "target": "lint"
+            }
           ],
           "reads_secrets": false
         }

@@ -1,0 +1,55 @@
+// site/diagrams/project-reference.buzz - the four spellings of a project reference magus
+// accepts, and the two it emits. The figure exists to make one point: input is forgiving
+// and output is not, so an agent can pass whatever it has and still get a stable string
+// back to key on.
+namespace projectReference;
+
+import "../libs/diagram/diagram" as _;
+
+export fun projectReferenceDiagram() > Diagram {
+    return Diagram{
+        id = "project-reference",
+        eyebrow = "agents",
+        title = "Four spellings in, one reference out",
+        desc = "magus accepts a workspace URL, a workspace-relative path, a dot-relative "
+            + "path or the bare root alias, and parses them all to one project reference. "
+            + "Human output prints the short path; machine output prints the workspace URL.",
+        width = 960,
+        height = 520,
+        zones = [
+            Zone{ label = "accepted as input, interchangeable", x = 32, y = 88, w = 280, h = 344 },
+        ],
+        nodes = [
+            Node{ id = "url", label = "workspace://pkg/api", x = 56, y = 112, w = 232, h = 64 },
+            Node{ id = "rel", label = "pkg/api", x = 56, y = 192, w = 232, h = 64 },
+            Node{ id = "dot", label = "./pkg/api", x = 56, y = 272, w = 232, h = 64 },
+            Node{ id = "root", label = "workspace://", sub = "the root alias",
+                  x = 56, y = 352, w = 232, h = 64 },
+
+            Node{ id = "parse", label = "parse", tag = "step", x = 400, y = 232, w = 144, h = 64 },
+            Node{ id = "ref", label = "One reference", sub = "path: pkg/api", role = "focal",
+                  x = 624, y = 232, w = 232, h = 64 },
+
+            Node{ id = "human", label = "Human output", sub = "pkg/api",
+                  x = 624, y = 88, w = 232, h = 64 },
+            Node{ id = "machine", label = "Machine output", sub = "workspace://pkg/api",
+                  x = 624, y = 376, w = 232, h = 64 },
+        ],
+        // Bends run shortest-leg-first here, the opposite of a fan-out: these four converge,
+        // so the connector with the least distance to cover turns earliest and the longer
+        // ones pass outside it.
+        edges = [
+            Edge{ src = "rel", dst = "parse", dstSlot = 2, dstSlots = 4, bend = 344 },
+            Edge{ src = "dot", dst = "parse", dstSlot = 3, dstSlots = 4, bend = 356 },
+            Edge{ src = "url", dst = "parse", dstSlot = 1, dstSlots = 4, bend = 368 },
+            Edge{ src = "root", dst = "parse", dstSlot = 4, dstSlots = 4, bend = 380 },
+
+            Edge{ src = "parse", dst = "ref" },
+            Edge{ src = "ref", dst = "human", label = "printed", srcSide = "top", dstSide = "bottom" },
+            Edge{ src = "ref", dst = "machine", label = "-o json", srcSide = "bottom", dstSide = "top" },
+        ],
+        legend = [
+            LegendItem{ role = "focal", label = "one canonical form" },
+        ],
+    };
+}

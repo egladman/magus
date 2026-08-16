@@ -210,7 +210,7 @@ type OutputDescriptor struct {
 
 	Spell     string   `json:"spell,omitempty"`      // spell::op filter that selected the definition
 	ExtraArgs []string `json:"extra_args,omitempty"` // trailing args forwarded after --
-	VCSName   string   `json:"vcs,omitempty"`        // provider Revision came from: git, hg, jj
+	VCSName   string   `json:"vcs,omitempty"`        // provider Revision came from: git, hg, sl, jj
 	Platform  string   `json:"platform,omitempty"`   // GOOS/GOARCH the run executed on
 }
 

@@ -16,7 +16,7 @@ Package `magus.viewer.v1`, defined in `proto/magus/viewer/v1/viewer.proto`. Part
 
 GetInvocation returns an invocation's header: its command, lineage, and timing - what a viewer shows on top. Selected by a ref (one target) or an invocation id (a run).
 
-`POST /magus.viewer.v1.ViewerService/GetInvocation` - unary.
+`POST /magus.viewer.v1.ViewerService/GetInvocation`: unary.
 
 Takes `GetInvocationRequest`, returns `GetInvocationResponse`.
 
@@ -24,7 +24,7 @@ Takes `GetInvocationRequest`, returns `GetInvocationResponse`.
 
 ListEvents returns a page of an invocation's events; page through with page\_token until next\_page\_token is empty. filter narrows them server-side (large logs).
 
-`POST /magus.viewer.v1.ViewerService/ListEvents` - unary.
+`POST /magus.viewer.v1.ViewerService/ListEvents`: unary.
 
 Takes `ListEventsRequest`, returns `ListEventsResponse`.
 
@@ -32,7 +32,7 @@ Takes `ListEventsRequest`, returns `ListEventsResponse`.
 
 StreamEvents streams a running invocation's events as they are produced. Reconnect with start\_time set to the last seen time to resume.
 
-`POST /magus.viewer.v1.ViewerService/StreamEvents` - server streaming.
+`POST /magus.viewer.v1.ViewerService/StreamEvents`: server streaming.
 
 Takes `StreamEventsRequest`, returns `StreamEventsResponse`.
 

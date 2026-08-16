@@ -180,7 +180,8 @@ and it removes an entire category of support burden.
 image fixes what is installed. Inside it, a step can still reach the network,
 read the clock, resolve a floating tag, or depend on filesystem ordering.
 Nothing fails a build there because a step read a file it never declared. That
-is Bazel's guarantee, and containerizing does not supply it. The certainty a
+is what Bazel's sandbox buys - the undeclared file simply is not there, when the
+sandbox is in use - and containerizing does not supply it. The certainty a
 container produces is partly a feeling, and the feeling is
 what makes the runtime dependency seem cheap.
 
@@ -192,7 +193,6 @@ builder; and when the daemon is not up, the failure arrives oblique, far from
 the cause, with nowhere sensible to attach an error explaining it. That is the
 same shape as the rule about package managers above - a tool that arrives
 through the thing it is meant to orchestrate has put itself downstream of it.
-One rule, two instances.
 
 So magus pursues determinism without the runtime, through mechanisms that need
 nothing installed: inputs are declared and hashed, the child environment is
@@ -216,16 +216,14 @@ no opt-in container isolation, and the `container` charm is not it.** In this
 repo `magus run build:container` selects a different _artifact_ - it builds and
 signs an image instead of a host binary - and the build itself still runs on the
 host, unconfined. That is container-grade packaging, not container-grade
-isolation, and they are different products. Reading the charm as "the Dagger
-guarantee, available per run" is a misreading this section previously
-encouraged.
+isolation. Reading the charm as "the Dagger guarantee, available per run" is a
+misreading this section previously encouraged.
 
 So the honest position is narrower than "you can have it when you want it": if
 you need every step to run in a fixed environment, magus does not offer that at
 any setting, and a container-native runner is the better tool. What magus offers
 instead is a precise description of the environment plus a build that fails when
-what ran falls outside what you declared. That is a different bet, not a cheaper
-version of the same one.
+what ran falls outside what you declared.
 
 ## The knobs
 
@@ -241,9 +239,8 @@ cannot enumerate what it does. You have met the result: a build that works on on
 machine, a setting three people cargo-culted from a blog post, and a maintainer
 who cannot tell you what turning it off would break.
 
-So the default is the product. Zero configuration is the feature - not because
-there are no knobs, but because **you should never need one to get correct
-behavior**. magus is opinionated where an opinion prevents a footgun: one
+So the default is the product: correct behavior must never require a knob.
+magus is opinionated where an opinion prevents a footgun: one
 required target name, four reserved charms, `skip_cache` demanding a reason
 string rather than a boolean, no fallback chain when a secret will not resolve.
 Each of those removes states rather than adding them.
@@ -272,8 +269,7 @@ sprawl is whether we reach for them ourselves.
 
 The rule that follows: **a new option must remove a failure, not enable a
 preference.** If the answer to "what happens if I set this wrong" is "your build
-is subtly different and nothing says so", it is not an option, it is a trap with
-a default.
+is subtly different and nothing says so", that is a trap with a default.
 
 Where this is strained: an option nobody can find is worse than one that does not
 exist, because the escape hatch is real and the person who needs it is told it is
@@ -356,33 +352,80 @@ separately once someone looked.
 
 Some of these projects shaped magus directly. The disagreements are specific.
 
+Mage came first, and the name says so. magus began as something compatible with
+it - magefiles in an adjacent project, exported functions as targets, build
+logic in the language you already write - and evolved from there keeping that
+shape whole. The divergence is the engine underneath. A magefile runs; a
+magusfile is modeled, so the same declaration that dispatches a target also
+feeds a cache key and an affected set. And Mage arrives through the Go toolchain
+it drives, which is the loop the bootstrap rule above exists to end: magus
+embeds its language precisely so the orchestrator installs through none of the
+toolchains it orchestrates.
+
 Nx comes up here because of proximity: it is what this project's author has used
 most and most recently, so its edges are the memorable ones. Its project graph is
 the closest prior art for affected sets. The disagreement is surface area. `nx
-release` and `nx generate` do not read that graph, they are separate capabilities
-with their own data models bolted to one CLI, and the plugin matrix multiplies
-into more permutations than a team can support. You see the result as
-inconsistency between corners and regressions in unrelated places, the cost of
-being adequate at many things. Nx Cloud is an upsell, which shifts what the tool
-optimizes for in ways you cannot see from inside a repo depending on it. The npm
-install channel is the concrete case behind the rule above.
+release` and `nx generate` do read that graph, but each arrives with its own
+model stacked on top - release groups and version plans for one, a virtual
+filesystem and schema-driven generators for the other - and the CLI registers
+over fifty commands, with forty-odd first-party plugins beside them. Remote
+caching, the capability many teams adopt a monorepo tool for, routes through Nx
+Cloud, a product the same company sells. And every install channel Nx documents -
+npm, Homebrew, apt - puts a Node runtime underneath the tool managing your Node
+builds, which is the concrete case behind the rule above.
 
 Dagger's SDK design is excellent and influenced magus's API. It costs a required
-container runtime and generated bindings in your repository.
+container runtime, and authoring a Dagger module generates bindings into your
+repository.
 
-Bazel buys real hermeticity by owning your toolchain. The trade is coherent and
-the cost is large.
+Bazel can buy real hermeticity; the price is declaring your toolchain rather
+than inheriting the host's. The trade is coherent and the cost is large.
 
 Each of those took on a new capability. magus's additions read a model it already
-had to build. Check that against the diff if you doubt it.
+had to build, and the test above is how to check any one of them against its diff.
+
+The agent-harness world drew the line at the opposite extreme, and the contrast
+is worth stating because magus keeps being read as a member of that category.
+deepseek-harness's published decision notes sharpened the delegation surface's
+checkpoint and release semantics, which is why the architectural disagreement
+deserves stating precisely. It makes every module a plugin - the model adapter,
+the tool registry, the session log, the agent loop itself - so there is no
+privileged core to patch: what remains is a small kernel, Cordis, owning the
+context, the service registry, and plugin lifecycle, with a few services still
+marked core rather than swappable. For a harness that is a defensible bet: a harness is an orchestration shell,
+its behavior is supposed to be yours, and hackability is the product. magus made
+the opposite bet for the opposite reason. A build tool's product is its verdicts:
+the cache saying a replay is honest, the drift gate saying generated output
+matches source, `ci` stripping the write charms whether or not anyone remembered.
+A verdict a plugin can rewrite proves nothing. So the engine, the cache, the
+graph schema, and the guard's evaluation are sealed on purpose, and every
+extension point magus
+does have - spells, the magusfile, charms, skills, config - is a DECLARATION the
+sealed engine evaluates, auditable in a diff the way code loaded at startup never
+is. The test for a proposed extension seam: it may change what magus does, never
+what a verdict means. And one seam is absent deliberately rather than sealed:
+there is no model adapter, because magus never calls a model.
 
 ## Unsettled
 
 The engine carries complexity the constraint camp avoids by limiting their
-configuration language. Starlark is not Turing-complete on purpose; Nix and Dhall
-made related trades. magus bets that a sandbox and a content-addressed cache can
-contain what an expressive language does.
+configuration language. Starlark forbids unbounded loops so evaluation stays
+deterministic and hermetic; Dhall goes further and guarantees termination. Nix
+made a different trade - its language is Turing-complete, and the containment is
+purity and a sandboxed store. The constraint camp's bet is that a language which
+cannot express a footgun never fires one.
+
+magus keeps the full language and bets on legibility instead. The documentation
+was written before the announcement, not after it, and ships from day one. An
+error magus raises is written to be read once and acted on: it carries a
+diagnostic code, the code has a page, and the page says what tripped and what to
+do next - so when the expressive language does something surprising, the way out
+is in front of you rather than in a maintainer's head. The sandbox and the
+content-addressed cache sit under that as the floor - what is enforced stays
+enforced - but they are not the thesis. The bet is that legible failures remove
+footguns without shrinking the language.
 
 Nobody has settled that bet. A large enough body of magusfiles rots the way any
-large program rots, and tooling discipline does not rule it out. If that happens,
-this page was wrong about something load-bearing, and it should say so here.
+large program rots, and neither documentation nor error discipline rules it out.
+If that happens, this page was wrong about something load-bearing, and it should
+say so here.

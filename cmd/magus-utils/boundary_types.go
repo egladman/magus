@@ -18,6 +18,10 @@ import (
 // new mirror cannot silently describe a shape the runtime fails to produce.
 var boundaryTypes = []boundaryType{
 	{Name: "Path", Type: reflect.TypeFor[types.Path]()},
+	// Manifest's fields are a str and a [str], so it references no other mirror and
+	// its position here is free - but it is kept beside Path because a spell authors
+	// the two together in mgs_listManifests, and Path is what Manifest replaced there.
+	{Name: "Manifest", Type: reflect.TypeFor[spells.Manifest]()},
 	{Name: "Target", Type: reflect.TypeFor[types.Target]()},
 	// Leaf first: Command.hints is [Hint], so Hint must already be declared.
 	{Name: "Hint", Type: reflect.TypeFor[spells.Hint]()},
@@ -68,11 +72,22 @@ var boundaryTypes = []boundaryType{
 	{Name: "InputRef", Type: reflect.TypeFor[types.InputRef](), RuntimeObject: true},
 	{Name: "OutputRef", Type: reflect.TypeFor[types.OutputRef](), RuntimeObject: true},
 	{Name: "UpdateRef", Type: reflect.TypeFor[types.UpdateRef](), RuntimeObject: true},
+	{Name: "ChainStep", Type: reflect.TypeFor[types.ChainStep](), RuntimeObject: true},
 	{Name: "TargetGraphNode", Type: reflect.TypeFor[types.TargetGraphNode](), RuntimeObject: true},
 	{Name: "TargetGraphProject", Type: reflect.TypeFor[types.TargetGraphProject](), RuntimeObject: true},
 	{Name: "TargetGraph", Type: reflect.TypeFor[types.TargetGraphOutput](), RuntimeObject: true},
+	// Leaf first: FileEntry.claims and FileReport.overlaps are both [FileClaim].
+	{Name: "FileClaim", Type: reflect.TypeFor[types.FileClaim](), RuntimeObject: true},
 	{Name: "FileEntry", Type: reflect.TypeFor[types.FileEntry](), RuntimeObject: true},
 	{Name: "FileReport", Type: reflect.TypeFor[types.FileReport](), RuntimeObject: true},
+	// magus.review's bundle, leaf-first. A Buzz advisor annotating `> Review` gets
+	// compile-checked field access on the same shape the console and the CLI read, which is
+	// what keeps one definition of review order serving all three.
+	{Name: "DiffSymbol", Type: reflect.TypeFor[types.DiffSymbol](), RuntimeObject: true},
+	{Name: "DiffChurn", Type: reflect.TypeFor[types.DiffChurn](), RuntimeObject: true},
+	{Name: "DiffTouch", Type: reflect.TypeFor[types.DiffTouch](), RuntimeObject: true},
+	{Name: "DiffFile", Type: reflect.TypeFor[types.DiffFile](), RuntimeObject: true},
+	{Name: "Diff", Type: reflect.TypeFor[types.Diff](), RuntimeObject: true},
 	// Not a RuntimeObject: it reaches Buzz through a thrown error, not a return.
 	{Name: "Diagnostic", Type: reflect.TypeFor[types.Diagnostic]()},
 	{Name: "DoctorCheck", Type: reflect.TypeFor[types.DoctorCheck](), RuntimeObject: true},

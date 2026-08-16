@@ -84,6 +84,23 @@ func memoryList(root string, args []string) error {
 	if err != nil {
 		return err
 	}
+	// -o name is the ids-one-per-line form every other listing command answers, and
+	// writeFormatted does not implement it: a command that offers it renders it here.
+	// Without this arm `magus memory ls -o name` reaches the renderer's default case and
+	// dies with "unsupported format", which reads as a broken flag rather than a gap.
+	if opts.Format == outputName {
+		w, cleanup, err := outputDst()
+		if err != nil {
+			return err
+		}
+		defer func() { _ = cleanup() }()
+		for _, rec := range recs {
+			if _, err := fmt.Fprintln(w, rec.Name); err != nil {
+				return err
+			}
+		}
+		return memoryIssuesError(issues)
+	}
 	if opts.Format != outputText {
 		if err := emitFormatted(opts, out); err != nil {
 			return err

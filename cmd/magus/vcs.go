@@ -10,7 +10,6 @@ import (
 	"os/exec"
 	"path/filepath"
 	"slices"
-	"strconv"
 	"strings"
 
 	"github.com/egladman/magus"
@@ -21,9 +20,10 @@ import (
 
 // vcsCmd implements `magus vcs <subcommand>`.
 //
-// All three verbs rest on one fact git does not have: which files are generated, and
+// Three of the verbs rest on one fact git does not have: which files are generated, and
 // which target rebuilds them. `add` classifies paths before staging, `resolve` settles a
-// conflicted merge, `merge-driver` is the per-file callback git invokes.
+// conflicted merge, `merge-driver` is the per-file callback git invokes. `checkpoint` is
+// the odd one out and rests on nothing: it reads the working state's identity back.
 //
 // `add` replaces the `git add -A` the agent guard denies: the guard infers intent from a
 // command STRING, while a magus verb gets the paths as arguments and classifies them
@@ -33,7 +33,7 @@ import (
 func vcsCmd(ctx context.Context, root string, rc runConfig, args []string) error {
 	if len(args) == 0 {
 		vcsUsage(os.Stderr)
-		return usagef("magus vcs: a subcommand is required (try: add, resolve)")
+		return usagef("magus vcs: a subcommand is required (try: add, resolve, checkpoint)")
 	}
 	verb, rest := splitVCSVerb(args)
 	switch verb {
@@ -41,13 +41,15 @@ func vcsCmd(ctx context.Context, root string, rc runConfig, args []string) error
 		return vcsAddCmd(ctx, root, rest)
 	case "resolve":
 		return vcsResolveCmd(ctx, root, rc, rest)
+	case "checkpoint":
+		return vcsCheckpointCmd(ctx, root, rest)
 	case "merge-driver":
 		return mergeDriverCmd(ctx, root, rest)
 	case "-h", "--help", "help":
 		vcsUsage(os.Stderr)
 		return nil
 	default:
-		return usagef("magus vcs: unknown subcommand %q (want add, resolve, or merge-driver)", verb)
+		return usagef("magus vcs: unknown subcommand %q (want add, resolve, checkpoint, or merge-driver)", verb)
 	}
 }
 
@@ -71,6 +73,7 @@ func vcsUsage(w io.Writer) {
 	fmt.Fprintln(w, "Subcommands:")
 	fmt.Fprintln(w, "  add            stage a change the way this workspace's declarations say it should be staged")
 	fmt.Fprintln(w, "  resolve        settle an in-progress merge/rebase's conflicted generated files, then regenerate once")
+	fmt.Fprintln(w, "  checkpoint     print the identity of the working state right now; writes nothing")
 	fmt.Fprintln(w, "  merge-driver   the per-file merge driver git and hg invoke; you do not run this by hand")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Run `magus vcs <subcommand> -h` for its own flags.")
@@ -391,12 +394,12 @@ func settledPaths(ctx context.Context, m *magus.Magus, driver types.VCSDriver, p
 	for _, p := range slices.Concat(plan.keep, plan.rederive) {
 		settled[p] = true
 	}
-	lines, err := driver.DirtyFiles(ctx, m.Root(), nil)
+	dirty, err := driver.DirtyFiles(ctx, m.Root(), nil)
 	if err != nil {
 		return nil, fmt.Errorf("list regenerated files: %w", err)
 	}
 	rebuilt := plan.rebuiltProjects()
-	for _, path := range statusPaths(lines) {
+	for _, path := range dirty {
 		if settled[path] {
 			continue
 		}
@@ -450,6 +453,106 @@ func unresolvedError(plan resolutionPlan) error {
 		return nil
 	}
 	return fmt.Errorf("%d conflict(s) still need you; resolve them, then `magus vcs add` and continue", len(plan.manual))
+}
+
+// ------------------------------------------------------------- vcs checkpoint
+
+func vcsCheckpointUsage(w io.Writer) {
+	fmt.Fprintln(w, "Usage: magus vcs checkpoint [flags]")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Print the identity of the working state right now: the head revision, the")
+	fmt.Fprintln(w, "branch carrying it, whether the tree is dirty, and a digest of the")
+	fmt.Fprintln(w, "uncommitted patch.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "It RESOLVES AND RECORDS; it never MINTS. No tag, no stash, no ref, no file,")
+	fmt.Fprintln(w, "nothing changed anywhere - so taking one costs the tree nothing and one you")
+	fmt.Fprintln(w, "do not keep costs nothing either. Record it when you hand work out, so a")
+	fmt.Fprintln(w, "later reader knows what that work was looking at.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Feed the revision to anything that takes one (magus graph diff --rev <rev>).")
+	fmt.Fprintln(w, "Compare two digests to learn whether two workers saw the same uncommitted")
+	fmt.Fprintln(w, "tree, which the revision alone cannot tell you: a dirty tree's revision is")
+	fmt.Fprintln(w, "the same one everybody else has.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "Flags:")
+	fmt.Fprintln(w, "  -o name    the citable token: the revision, or <revision>+<digest> when dirty")
+	fmt.Fprintln(w, "  -o json    the whole record (global flag; yaml, jsonl and template too)")
+}
+
+// vcsCheckpointCmd reads the working state's identity and prints it.
+func vcsCheckpointCmd(ctx context.Context, root string, args []string) error {
+	pos, err := cmdParse("vcs checkpoint", args, func(fs *flag.FlagSet) {
+		fs.Usage = func() { vcsCheckpointUsage(os.Stderr) }
+	})
+	if err != nil {
+		return err
+	}
+	if len(pos) > 0 {
+		return usagef("vcs checkpoint: takes no arguments; it reports the whole workspace's working state (got %q)", pos[0])
+	}
+
+	ws, err := inspectWorkspace(ctx, root)
+	if err != nil {
+		return err
+	}
+	// The RESOLVED workspace root, not the --root override, for the reason vcsAddCmd
+	// spells out: the override is empty unless you passed --root, and an empty dir sends
+	// every VCS call to the process cwd - which is a different repository the moment you
+	// run this from anywhere but the root.
+	wsRoot := ws.Root()
+	res, err := vcs.Resolve(ctx, wsRoot, "", ws.VCSOptions())
+	if err != nil {
+		return fmt.Errorf("vcs checkpoint: %w", err)
+	}
+	cp, err := vcs.Checkpoint(ctx, wsRoot, res)
+	if err != nil {
+		return err
+	}
+	return emitCheckpoint(cp)
+}
+
+// emitCheckpoint renders the checkpoint: the structured formats get the record, -o name
+// the one citable token, and the terminal the one-line reading of the same value.
+func emitCheckpoint(cp types.VCSCheckpoint) error {
+	opts, err := outputOptionsOrDefault()
+	if err != nil {
+		return err
+	}
+	switch opts.Format {
+	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		return emitFormatted(opts, cp)
+	case outputName:
+		fmt.Println(checkpointToken(cp))
+		return nil
+	}
+	fmt.Println(checkpointLine(cp))
+	return nil
+}
+
+// checkpointToken is the single most citable thing about a checkpoint, for the one cell a
+// ledger gives it. A clean tree IS its revision. A dirty one is not - every worker on this
+// branch shares that revision - so the digest joins it, and the "+" marks the identity as
+// a revision PLUS uncommitted work rather than a revision anyone can check out.
+func checkpointToken(cp types.VCSCheckpoint) string {
+	if !cp.Dirty {
+		return cp.Revision
+	}
+	return cp.Revision + "+" + cp.PatchDigest
+}
+
+// checkpointLine is the human reading: "<rev> <branch> clean" or "<rev> <branch> dirty
+// <digest>". The field count is fixed through the dirty word, so a branchless revision (a
+// detached head, jj's usual anonymous change) renders "-" rather than collapsing the
+// column and silently shifting everything after it.
+func checkpointLine(cp types.VCSCheckpoint) string {
+	branch := cp.Branch
+	if branch == "" {
+		branch = "-"
+	}
+	if !cp.Dirty {
+		return fmt.Sprintf("%s %s clean", cp.Revision, branch)
+	}
+	return fmt.Sprintf("%s %s dirty %s", cp.Revision, branch, cp.PatchDigest)
 }
 
 // -------------------------------------------------------------------- vcs add
@@ -511,11 +614,10 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 	if len(pos) == 0 {
-		lines, err := res.VCS.DirtyFiles(ctx, root, nil)
+		paths, err = res.VCS.DirtyFiles(ctx, root, nil)
 		if err != nil {
 			return fmt.Errorf("vcs add: list dirty files: %w", err)
 		}
-		paths = statusPaths(lines)
 	}
 	if len(paths) == 0 {
 		fmt.Println("vcs add: nothing to stage; the tree is clean")
@@ -621,77 +723,6 @@ func workspaceRelPaths(root string, paths []string) ([]string, error) {
 	return out, nil
 }
 
-// statusPaths extracts the path from each entry DirtyFiles returns.
-//
-// DirtyFiles returns status LINES, not paths, despite the name - every existing caller
-// only tests whether the result is empty, so nothing noticed. Handing those lines to the
-// classifier unparsed made every entry look like " M foo", which matched no declared glob
-// and would have staged the workspace blind.
-//
-// The status prefix is DETECTED rather than assumed. git and hg emit two status columns
-// then the path, but jj's DirtyFiles runs `jj diff --name-only` and returns bare paths -
-// so blindly slicing off two characters turned every jj path into a corrupted one
-// ("docs/foo.md" -> "cs/foo.md") that then matched nothing and staged nothing.
-func statusPaths(lines []string) []string {
-	out := make([]string, 0, len(lines))
-	for _, line := range lines {
-		path := line
-		if rest, ok := strings.CutPrefix(line, statusPrefix(line)); ok {
-			path = rest
-		}
-		// A rename reads "old -> new"; the new name is what to stage.
-		if _, after, ok := strings.Cut(path, " -> "); ok {
-			path = after
-		}
-		// git quotes a path with unusual bytes, always with double quotes. Unquote also
-		// accepts Go rune and raw-string literals, so it is gated on the quoting form git
-		// actually emits; without that, a file literally named `x` loses its backquotes.
-		if strings.HasPrefix(path, `"`) {
-			if unquoted, err := strconv.Unquote(path); err == nil {
-				path = unquoted
-			}
-		}
-		if path != "" {
-			out = append(out, path)
-		}
-	}
-	return out
-}
-
-// statusPrefix returns the leading status columns of a status line, or "" when the line
-// carries none.
-//
-// Three shapes have to be told apart, and the width is not constant:
-//   - git porcelain is two columns then a space (" M path", "?? path", "A  path")
-//   - the FIRST line loses its leading space, because DirtyFiles reads the output through
-//     a trimming helper, so " M path" arrives as "M path" - one column then a space
-//   - hg status is one column then a space ("M path")
-//   - jj returns bare paths with no columns at all
-//
-// A fixed width cannot cover all four: two characters corrupts every jj path, three
-// leaves hg and the trimmed first line with "M " glued to the front, matching no declared
-// glob and reported as undeclared.
-func statusPrefix(line string) string {
-	if len(line) < 3 {
-		return ""
-	}
-	if isStatusColumn(line[0]) && isStatusColumn(line[1]) && line[2] == ' ' {
-		return line[:3]
-	}
-	// A trimmed git line, or hg: one column then the separating space.
-	if isStatusColumn(line[0]) && line[0] != ' ' && line[1] == ' ' {
-		return line[:2]
-	}
-	return ""
-}
-
-// isStatusColumn reports whether c can appear in a status column. Lowercase is excluded
-// deliberately: it is what keeps an ordinary bare path ("docs/foo.md") from being read as
-// a status line.
-func isStatusColumn(c byte) bool {
-	return c == ' ' || c == '?' || c == '!' || (c >= 'A' && c <= 'Z')
-}
-
 // classifyForStaging splits classified files into the three groups staging cares
 // about.
 //
@@ -752,7 +783,7 @@ func reportStaging(v types.StagingPlan, dropped []string, untracked, dryRun bool
 		}
 	} else {
 		if len(v.Undeclared) > 0 {
-			fmt.Printf("skipped %d undeclared file(s) - no target claims them:\n", len(v.Undeclared))
+			fmt.Printf("skipped %d undeclared file(s); no target claims them:\n", len(v.Undeclared))
 			printPaths(v.Undeclared)
 			fmt.Println("  if one is a new source file, name it explicitly or pass --untracked;")
 			fmt.Println("  if it is build residue, add it to your VCS ignore rules")

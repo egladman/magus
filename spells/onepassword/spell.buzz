@@ -7,7 +7,7 @@
 //   final token = magus\secret.read("Private/Docker Hub/credential");
 //
 // This is the reference implementation of a spell-backed secret provider, and it is
-// deliberately thin: the whole contract is one exported op. If a backend has a CLI
+// deliberately thin: the whole contract is one exported op. If a provider has a CLI
 // that prints a secret to stdout - `op read`, `vault kv get -field`, `gcloud secrets
 // versions access` - it is this file with a different argv.
 //

@@ -59,7 +59,10 @@ import {
 import { createClient } from "@connectrpc/connect";
 import { StatusService } from "../gen/magus/status/v1/status_pb";
 import { mountSharePanel } from "./share";
+import { mountActivityDrawer } from "./activityDrawer";
 import { applyFocusRing, getFocusRing, getDefaultHost } from "../lib/settings";
+import { browserInstallHost, createInstallStore } from "../lib/install";
+import { registerServiceWorker } from "../lib/sw";
 import type { PageController, PageModule } from "./page";
 
 // The console's default tab keybindings. Flat commandId -> chord, layered over the user's persisted
@@ -85,7 +88,7 @@ const CONSOLE_KEYMAP: Keymap = {
   "console.pane.moveUp": "alt+shift+k",
   "console.pane.moveRight": "alt+shift+l",
   "console.pane.focusParent": "alt+a",
-  // The action bar: one searchable list of every action (and its chord).
+  // The Command Palette: one searchable list of every command (and its chord).
   "console.actionBar.open": "mod+k",
 };
 const keymapCell = persisted<Keymap>("keymap", {});
@@ -174,13 +177,30 @@ const SURFACES: Launchable[] = [
   { pageId: "dashboard", label: "Dashboard", hint: "What magus is doing right now" },
   {
     pageId: "activity",
-    label: "Activity Trail",
-    hint: "A history of magus actions, user-triggered and scheduled",
+    // The bare noun, never "Trail": "audit trail" is the phrase it summons, and that frames the
+    // surface as governance, which it is not. It also matches the service behind it
+    // (magus.activity.v1) and survives what is coming - once sessions group and replay, and an
+    // agent's reasoning hangs off the command it led to, "activity" still covers it.
+    label: "Activity",
+    hint: "Everything that happened here, and what led to it",
   },
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
   { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
-  { pageId: "notes", label: "Notes", hint: "What people wrote about this workspace" },
-  { pageId: "actions", label: "Actions", hint: "Every console action and its shortcut" },
+  { pageId: "diff", label: "Diff", hint: "Read what you have changed but not committed" },
+  { pageId: "plan", label: "Plan", hint: "The delegation tree an orchestrating agent is running" },
+  // Not "what people wrote about this workspace" - that describes the storage. A note's whole point is
+  // that someone who was here before you left it for you, at the spot where it matters.
+  { pageId: "notes", label: "Notes", hint: "What people left here for whoever comes next" },
+  // pageId stays "actions" (it is an identifier, and every keymap/route/test keys on it) while the
+  // LABEL is Shortcuts, because "actions" collides with both the Command Palette and the Activity
+  // feed. Prior art splits the two roles cleanly and this surface is the second one: VS Code's
+  // Keyboard Shortcuts editor (and GNOME's, and KDE's) is the list of every command with its
+  // binding, while the palette is the thing that runs one.
+  {
+    pageId: "actions",
+    label: "Shortcuts",
+    hint: "Every command, its keys, and where to change them",
+  },
   { pageId: "settings", label: "Settings", hint: "Console settings and keybindings" },
 ];
 
@@ -189,7 +209,7 @@ const SURFACES: Launchable[] = [
 // (internal/service/console KnownSurfaces): the daemon serves the console shell for exactly these
 // paths (SPA fallback), so the boot router below opens exactly these from the path. Keep the two
 // lists in step.
-const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity", "notes"];
+const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity", "notes", "diff", "plan"];
 
 // consoleSurfaceFromPath returns the surface a /console/<surface>/ entry path names, or null when
 // the page did not boot on such a path (the bare console root, or any non-surface path). It keys on
@@ -243,7 +263,11 @@ function setBuild(version: string, fingerprint: string): void {
 function loadBuildInfo(): void {
   const params = parseHash();
   if (wantsDemo(params)) {
-    setBuild("v0.2.0", "magus v0.2.0 (a1b2c3d) built 2026-07-16T00:00:00Z");
+    // v0.0.0 on purpose. There is no daemon in the demo, so there is no build to report, and a
+    // plausible-looking literal would invent a version, a commit and a date - then drift behind
+    // the real binary, so the showcase reads as an abandoned project. A zero version cannot go
+    // stale and claims no commit that never existed.
+    setBuild("v0.0.0", "synthesized demo data; no daemon is connected");
     return;
   }
   const host = resolveDaemonHost(params);
@@ -335,6 +359,18 @@ function shareGlyph(): SVGElement {
     edge("8.3", "10.7", "15.7", "6.3"),
     edge("8.3", "13.3", "15.7", "17.7"),
   );
+  return svg;
+}
+
+// activityGlyph is the status-bar Activity button's icon: the conventional pulse trace. It names
+// LIVENESS rather than a list or a clock, which is what the drawer answers - something is moving
+// right now - and it reads the same whether the panel lists one running target or twenty.
+function activityGlyph(): SVGElement {
+  const NS = "http://www.w3.org/2000/svg";
+  const svg = svgIcon();
+  const trace = document.createElementNS(NS, "path");
+  trace.setAttribute("d", "M2.5 12h4l2.5-6 4 12 2.5-6h4");
+  svg.append(trace);
   return svg;
 }
 
@@ -459,6 +495,30 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
     s.setAttribute("aria-live", "polite");
     right.append(s);
   }
+  // Activity drawer toggle: opens the right-docked panel listing what magus is running right now and
+  // what ran recently. data-activity-toggle is the hook; startConsole's one delegated footer click
+  // drives the single shared panel regardless of which tab's copy fired - the same delegation the
+  // share and cheat-sheet buttons below use, since makeStatusBar rebuilds one button per tab.
+  //
+  // Ungated, unlike Share: a read-only viewer over the LAN reads status and the run feed the same way
+  // the dashboard does, so there is nothing here it is not already allowed to see.
+  const activity = document.createElement("button");
+  activity.type = "button";
+  activity.className = "pf-v6-c-button pf-m-plain console-shell-statusbar__activity";
+  activity.dataset.activityToggle = "";
+  // aria-controls names the one shared panel (its id is stable whichever tab's button opened it).
+  // Deliberately NO aria-expanded: there are as many of these buttons as there are tabs, all driving
+  // a single panel, and a copy built while the panel is already open would announce "collapsed". A
+  // missing attribute is honest; a stale one is a lie. Same reasoning the share button applies.
+  activity.setAttribute("aria-controls", "console-activitypanel");
+  activity.setAttribute("aria-label", "Activity");
+  activity.title = "Activity. What magus is running now, and what ran recently.";
+  const activityIcon = document.createElement("span");
+  activityIcon.className = "pf-v6-c-button__icon";
+  activityIcon.append(activityGlyph());
+  activity.append(activityIcon);
+  right.append(activity);
+
   // Panes tray toggle: opens the popup that drives split/focus/move/close without a keyboard - the
   // touch-reachable route tiling used to lack entirely on a phone. Its glyph is a live readout of the
   // persisted split mode (panesIcon); refreshPanesTray (startConsole) repaints every tab's copy in
@@ -656,11 +716,22 @@ function formatReadinessTitle(
   return summary ? base + " " + summary + "." : base;
 }
 
+// The PWA install offer, captured at MODULE SCOPE rather than inside startConsole: Chromium fires
+// `beforeinstallprompt` once, early, and a listener attached later misses it outright. Bundle evaluation
+// is the earliest point the shell has. The store is handed to the Settings surface below, which is where
+// the operator asks for the install it defers.
+const installStore = createInstallStore(browserInstallHost());
+
 export function startConsole(
   tabBarHost: HTMLElement,
   outlet: HTMLElement,
   statusHost: HTMLElement,
 ): void {
+  // The console's own service worker, registered by the SHELL so every session has one - it precaches
+  // this shell and its surface bundles, and Chromium's install-prompt algorithm still requires a fetch
+  // handler. Registering it from one surface instead would leave a console that never opened that
+  // surface with neither an offline shell nor an install offer.
+  void registerServiceWorker(new URL("./sw.js", import.meta.url));
   // Snapshot the boot fragment BEFORE adoptDaemonOrigin consumes/strips the #token= (below), so the
   // attach-visibility notification further down can still tell it booted attached and name the port.
   const bootParams = parseHash();
@@ -965,6 +1036,12 @@ export function startConsole(
   // is a hidden singleton; a read-only viewer simply never gets a button to open it.
   const sharePanel = mountSharePanel();
 
+  // The activity drawer: the share panel's sibling on the same right-docked idiom, listing what magus
+  // is running now and what ran recently. Also a hidden singleton toggled from the status bar; unlike
+  // Share it is available to a read-only viewer too, since it only reads what the dashboard already
+  // shows. It polls only while open, so mounting it here costs nothing until someone opens it.
+  const activityDrawer = mountActivityDrawer();
+
   // Attach visibility: when the console booted attached (an explicit #port=, or a #token= own-origin
   // adoption), drop a HISTORY-tier note naming where it connected. History tier (kind "ok") so it
   // records silently and never lights the bell; keyed so a reload does not re-announce it. A bare #port
@@ -1140,8 +1217,10 @@ export function startConsole(
   });
   document.body.append(commandBar.el);
   registerCommand({
+    // The id is an identifier the keymap and the tests key on, so it keeps the old actionBar
+    // spelling while the label follows the Command Palette naming.
     id: "console.actionBar.open",
-    label: "Action bar",
+    label: "Command Palette",
     group: "General",
     run: () => commandBar.open(),
   });
@@ -1153,6 +1232,16 @@ export function startConsole(
     label: "Notifications",
     group: "General",
     run: () => notifications.toggle(),
+  });
+
+  // Mirror the status-bar Activity button as a palette command, so the drawer is reachable by keyboard
+  // like every other action. Unbound by default: the drawer is a glance, not a chord anyone reaches for
+  // mid-edit, and the keymap's free chords are worth more to the surfaces.
+  registerCommand({
+    id: "console.activity.toggle",
+    label: "Activity",
+    group: "General",
+    run: () => activityDrawer.toggle(),
   });
 
   // Share a read-only view: a loopback-console affordance only (the status-bar share button is likewise
@@ -1176,7 +1265,7 @@ export function startConsole(
       mergeKeymap(CONSOLE_KEYMAP, keymapCell.get())["console.actionBar.open"] ?? "",
       isMac(),
     );
-    if (chord) commandBarBtn.title = "Action bar (" + chord + ")";
+    if (chord) commandBarBtn.title = "Command Palette (" + chord + ")";
   }
 
   // The Panes tray: a small square control panel, docked to the bottom-right corner, opened from the
@@ -1589,6 +1678,7 @@ export function startConsole(
     const t = e.target as HTMLElement;
     if (t.closest("[data-cheatsheet-toggle]")) cheatsheet.toggle();
     if (t.closest("[data-share-toggle]")) sharePanel.toggle();
+    if (t.closest("[data-activity-toggle]")) activityDrawer.toggle();
     // Same delegation idiom for the Panes tray button: makeStatusBar rebuilds one per tab, this one
     // listener drives the single shared popup regardless of which tab's copy was clicked.
     const panesBtn = t.closest<HTMLElement>("[data-panes-toggle]");
@@ -1732,7 +1822,7 @@ export function startConsole(
   register(
     moduleSurface({
       id: "activity",
-      title: "Activity Trail",
+      title: "Activity",
       bundle: "activity/activity.js",
       css: "logs/logs.css",
     }),
@@ -1746,6 +1836,29 @@ export function startConsole(
       title: "Notes",
       bundle: "notes/notes.js",
       css: "logs/logs.css",
+    }),
+  );
+  // Review authors its own sheet rather than reusing logs.css: the hunk stream is virtualized
+  // against a fixed row height, so its geometry rules are part of the scroll math and must not
+  // drift with another surface's typography.
+  register(
+    moduleSurface({
+      id: "diff",
+      title: "Diff",
+      bundle: "diff/diff.js",
+      css: "diff/diff.css",
+    }),
+  );
+  // Plan authors its own sheet for the same reason Diff does: the stage is a laid-out node/edge
+  // drawing with its own geometry, and PF has no component for one. Its activate() hands back a
+  // per-mount controller carrying setVisible, so each pane's poll stops on its own while that pane
+  // is backgrounded.
+  register(
+    moduleSurface({
+      id: "plan",
+      title: "Plan",
+      bundle: "plan/plan.js",
+      css: "plan/plan.css",
     }),
   );
   // Actions is registered from the shell bundle (not a lazy surface bundle) - it is a thin, static
@@ -1769,6 +1882,7 @@ export function startConsole(
       keybindings: { commands: editableCommands, defaults: CONSOLE_KEYMAP, keymap: keymapCell },
       presets: KEYMAP_PRESETS,
       presetList: KEYMAP_PRESET_LIST,
+      install: installStore,
     }),
   );
   // The Reference surface backs the drawer's "break out to tab" button. Registered but NOT in SURFACES:

@@ -1,0 +1,55 @@
+// site/diagrams/volatility.buzz - what magus does with a failing target before it calls
+// the failure a regression. The single accent is on "suspected regression": every other
+// path in the figure is magus absorbing noise, and that one is the path that wants a human.
+namespace volatility;
+
+import "../libs/diagram/diagram" as _;
+
+export fun volatilityDiagram() > Diagram {
+    return Diagram{
+        id = "volatility",
+        eyebrow = "volatility",
+        title = "When a failure is retried, and when it is believed",
+        desc = "A failing target is retried once if history is too thin to judge, or if its "
+            + "measured volatility is above the threshold. A retry that passes is recorded "
+            + "as volatile and the run continues; anything else is a suspected regression.",
+        width = 960,
+        height = 760,
+        nodes = [
+            Node{ id = "fail", label = "Target fails", x = 400, y = 64, w = 160, h = 56 },
+            Node{ id = "det", label = "detection on?", role = "decision",
+                  x = 408, y = 152, w = 144, h = 72 },
+            Node{ id = "report", label = "Report failure", x = 64, y = 156, w = 200, h = 64 },
+            Node{ id = "hist", label = "enough history?", role = "decision",
+                  x = 408, y = 256, w = 144, h = 72 },
+            Node{ id = "rate", label = "over threshold?", role = "decision",
+                  x = 408, y = 360, w = 144, h = 72 },
+            Node{ id = "retry", anchor = "internal/retry", label = "Retry once", sub = "the same target",
+                  x = 712, y = 364, w = 192, h = 64 },
+            Node{ id = "pass", label = "retry passed?", role = "decision",
+                  x = 736, y = 480, w = 144, h = 72 },
+            Node{ id = "volatile", label = "Record volatile", sub = "the run continues",
+                  x = 712, y = 604, w = 192, h = 64 },
+            Node{ id = "regress", label = "Suspected regression", sub = "chase with --bisect",
+                  role = "focal", x = 64, y = 480, w = 200, h = 64 },
+        ],
+        edges = [
+            Edge{ src = "fail", dst = "det" },
+            Edge{ src = "det", dst = "report", label = "no" },
+            Edge{ src = "det", dst = "hist", label = "yes" },
+            Edge{ src = "hist", dst = "retry", label = "bootstrap",
+                  dstSlot = 1, dstSlots = 2, bend = 632 },
+            Edge{ src = "hist", dst = "rate", label = "yes" },
+            Edge{ src = "rate", dst = "retry", label = "yes",
+                  dstSlot = 2, dstSlots = 2, bend = 664 },
+            Edge{ src = "rate", dst = "regress", label = "no",
+                  dstSlot = 1, dstSlots = 2, bend = 336 },
+            Edge{ src = "retry", dst = "pass" },
+            Edge{ src = "pass", dst = "volatile", label = "yes" },
+            Edge{ src = "pass", dst = "regress", label = "no", dstSlot = 2, dstSlots = 2 },
+        ],
+        legend = [
+            LegendItem{ role = "focal", label = "wants a human" },
+        ],
+    };
+}

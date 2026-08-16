@@ -498,6 +498,15 @@ export interface ScenarioInsight {
     blastRadius: number;
     lastCommitMs: number;
   }[];
+  hotspotFiles: {
+    path: string;
+    commits: number;
+    complexity: number;
+    score: number;
+    authors: number;
+    moves: number;
+    lastCommitMs: number;
+  }[];
   affinity: { a: string; b: string; count: number; hidden: boolean }[];
   ownership: {
     path: string;
@@ -558,6 +567,49 @@ export function scenarioInsight(now: number): ScenarioInsight {
         authors: 2,
         blastRadius: 14,
         lastCommitMs: at(84),
+      },
+    ],
+    // The same lens one level down, at the granularity a reader can open. claims.go leads here
+    // too, and it is the file the whole scenario turns on. session.ts carries moves: 2 on
+    // purpose - it is the case the project-level table cannot show and the one lineage
+    // tracking exists for, a file that was rewritten AND shuffled between directories twice,
+    // whose history would read as three quieter files if churn were attributed by path.
+    hotspotFiles: [
+      {
+        path: "libs/authkit/claims.go",
+        commits: 46,
+        complexity: 310,
+        score: 14260,
+        authors: 2,
+        moves: 0,
+        lastCommitMs: at(92),
+      },
+      {
+        path: "apps/dashboard/src/api/session.ts",
+        commits: 19,
+        complexity: 402,
+        score: 7638,
+        authors: 2,
+        moves: 2,
+        lastCommitMs: at(84),
+      },
+      {
+        path: "services/identity/internal/token/verify.go",
+        commits: 31,
+        complexity: 205,
+        score: 6355,
+        authors: 3,
+        moves: 0,
+        lastCommitMs: at(80),
+      },
+      {
+        path: "services/identity/internal/token/verify_test.go",
+        commits: 24,
+        complexity: 96,
+        score: 2304,
+        authors: 2,
+        moves: 0,
+        lastCommitMs: at(80),
       },
     ],
     // The first two pairs are the story stated as history: claims.go has been changing WITH both

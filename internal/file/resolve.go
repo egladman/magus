@@ -1,15 +1,19 @@
 package file
 
 import (
+	"context"
 	"fmt"
+	"log/slog"
 	"path"
 	"path/filepath"
 	"strings"
 )
 
-// workspaceScheme is the URI prefix a project reference may carry. Callers
-// render it via types.WorkspaceRef on the way out; ResolveProject consumes
-// it on the way in, so no caller strips it by hand.
+// workspaceScheme is the RETIRED URI prefix a project reference may carry.
+// A bare workspace-relative path is the only spelling magus teaches;
+// ResolveProject still consumes the scheme, with a warning, so no caller
+// strips it by hand. The output half lives in types (WorkspaceURI, also
+// deprecated); magus itself no longer emits the scheme anywhere.
 const workspaceScheme = "workspace://"
 
 // resolveAmbiguous canonicalises input to a repo-relative, forward-slash path,
@@ -23,6 +27,8 @@ const workspaceScheme = "workspace://"
 // mode, silently mis-anchored and broke graph builds. Callers go through the
 // entry point named for the surface their string came from - ResolveDependsOn,
 // ResolveProject, or ResolveImport - so the mode is chosen by the name, once.
+// Only ResolveProject takes a ctx: it is the one that logs (the deprecation
+// warning above); the siblings gain one when they gain a reason.
 func resolveAmbiguous(input, anchor string) (string, error) {
 	in := filepath.ToSlash(input)
 	if in == "" {
@@ -64,23 +70,41 @@ func ResolveDependsOn(input, anchor string) (string, error) {
 // ResolveProject canonicalises a project reference to a workspace-relative,
 // forward-slash path.
 //
-// The explicit "workspace://<path>" form and the plain "<path>" form are
-// accepted interchangeably, so a path copied out of machine-readable output
-// can be pasted straight back into a command. A bare "workspace://" is the
-// root alias. The "" and "/" all-projects sentinels pass through untouched
-// for the caller to fan out. Everything else takes the same ambiguous reading as
-// [ResolveDependsOn]: dot-relative against anchor, bare paths workspace-relative,
-// absolute or escaping paths rejected.
+// A plain "<path>" is the canonical spelling. The "" and "/" all-projects
+// sentinels pass through untouched for the caller to fan out. Everything else
+// takes the same ambiguous reading as [ResolveDependsOn]: dot-relative against
+// anchor, bare paths workspace-relative, absolute or escaping paths rejected.
+//
+// The retired "workspace://<path>" form still parses, with a warning; a bare
+// "workspace://" is still the root alias.
 //
 // This is the one place a CLI-supplied project reference is normalized; add new
 // rules for that surface here rather than in callers. It is not the only entry
 // point: an `import "project/<path>"` path anchors unconditionally and goes
 // through [ResolveImport] instead.
-func ResolveProject(input, anchor string) (string, error) {
+func ResolveProject(ctx context.Context, input, anchor string) (string, error) {
 	if input == "" || input == "/" {
 		return input, nil
 	}
 	if rest, found := strings.CutPrefix(input, workspaceScheme); found {
+		// compat(until: no shipped docs or skills teach workspace://): supports a ref
+		// written against the scheme - an older script, a saved command, a doc page
+		// read before it was retired - so it keeps resolving rather than failing as a
+		// bare relative path with a stray "workspace:" segment.
+		//
+		// Observe dropping it is safe when the deprecation notes themselves have aged
+		// out: `grep -rn --exclude-dir=gen "workspace://" docs/ CONTRIBUTING.md
+		// cmd/magus/skills/` finds nothing (docs/gen is rendered output and follows the
+		// sources). Today it finds exactly two, both saying the scheme is deprecated and
+		// a bare path replaced it - that pair IS the window this branch covers. The
+		// hits under types/ are a different thing: the OUTPUT rendering
+		// (types.WorkspaceRef), which this branch does not serve.
+		suggest := rest
+		if suggest == "" {
+			suggest = "."
+		}
+		slog.WarnContext(ctx, "magus: workspace:// is deprecated; a bare workspace-relative path means the same thing",
+			"ref", input, "use", suggest)
 		if rest == "" {
 			return ".", nil
 		}

@@ -63,25 +63,9 @@ An **HTTP server** on `mcp.address` serves the clients that cannot reach a Unix 
 agents over [MCP](mcp.md) at `/mcp`, and orchestrators or scripts at the `/livez`,
 `/readyz`, and `/healthz` probe routes.
 
-```mermaid
-flowchart LR
-    cli["Local CLI and shell<br/>magus status<br/>--probe=liveness / readiness"]
-    agent["AI agents (MCP)<br/>Claude Code, IDE plugins"]
-    ext["kubelet and scripts<br/>httpGet probes<br/>--probe=mcp"]
+<!--diagram:daemon-socket-->
 
-    subgraph daemon["magus daemon - one process"]
-        sock["Unix socket<br/>proc RPC: dispatch, status, adopt"]
-        http["HTTP server on mcp.address<br/>/mcp + /livez /readyz /healthz"]
-        state["workspace state + concurrency pool"]
-        sock --> state
-        http --> state
-        http -.->|health routes read status via| sock
-    end
-
-    cli -->|Unix socket| sock
-    agent -->|HTTP| http
-    ext -->|HTTP| http
-```
+<!--diagram:daemon-http-->
 
 The Unix socket is the source of truth for daemon state; the HTTP health routes are a thin
 wrapper that answers by querying that same socket. But only an actual HTTP request proves

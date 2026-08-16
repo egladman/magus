@@ -263,21 +263,6 @@ func TestInsightMapsTheOptionsItTakes(t *testing.T) {
 	assert.Equal(t, 50, a.got.Commits)
 }
 
-// TestInsightMarkdownRendersTheDocument covers the surface that replaced the
-// subcommand's rendering: the same report, handed over as the page.
-func TestInsightMarkdownRendersTheDocument(t *testing.T) {
-	t.Parallel()
-
-	ctx := types.WithWorkspace(t.Context(), &fakeAnalyzer{})
-	doc, err := MagusInsightMarkdown(ctx, nil)
-	require.NoError(t, err)
-	assert.Contains(t, doc, "# Insight", "the document is the whole point of this method")
-	// click/subgraph are what the portable subset drops; quadrantChart never reached
-	// the combined report, so asserting its absence proved nothing.
-	assert.NotContains(t, doc, "click ", "the portable Mermaid subset is the default now")
-	assert.NotContains(t, doc, "subgraph ", "the portable Mermaid subset is the default now")
-}
-
 // TestInsightReportKeepsTheBestEffortSections pins the rule the CLI kept: a lens
 // whose source is missing omits its section rather than failing the whole report.
 func TestInsightReportKeepsTheBestEffortSections(t *testing.T) {

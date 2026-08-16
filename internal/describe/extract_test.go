@@ -207,6 +207,56 @@ func TestExecOverrideAliasedIsDynamicExec(t *testing.T) {
 	assert.False(t, build.DynamicIO, "an aliased execution override is not a footprint error")
 }
 
+// TestObservesExtraction pins the static read of ctx.observes: literal (key, value)
+// pairs are canonicalized for the key, and anything the read cannot pair is a load
+// error rather than a silently dropped observation. Dropping one is the failure the
+// declaration exists to prevent - the target would key as though the external fact
+// were not there and replay a stale answer, which is exactly what it was reaching
+// past skip_cache to avoid.
+func TestObservesExtraction(t *testing.T) {
+	g := Extract(`export fun scan(ctx: magus\Context, args: [str]) > void {
+    ctx.observes("trivy-db", "2026-08-15");
+    ctx.observes("schema-rev", "a1b2c3");
+}
+`)
+	scan, ok := nodeByName(g, "scan")
+	require.True(t, ok, "scan must extract")
+	assert.Equal(t, []string{"trivy-db=2026-08-15", "schema-rev=a1b2c3"}, scan.Observations,
+		"accumulated in declaration order, canonicalized as key=value")
+	assert.False(t, scan.DynamicIO, "two literals are fully attributable")
+
+	// A probe cannot reach the key: the key is minted before the body runs, so a
+	// computed value would be an observation magus never sees.
+	computed := Extract(`export fun scan(ctx: magus\Context, args: [str]) > void {
+    ctx.observes("trivy-db", probe());
+}
+`)
+	c, _ := nodeByName(computed, "scan")
+	assert.True(t, c.DynamicIO, "a computed observation value must be rejected at load, not dropped")
+
+	// An unpaired key contributes nothing to the key while reading, in the source,
+	// like a target that declared its dependence on something.
+	odd := Extract(`export fun scan(ctx: magus\Context, args: [str]) > void {
+    ctx.observes("trivy-db", "2026-08-15", "schema-rev");
+}
+`)
+	o, _ := nodeByName(odd, "scan")
+	assert.True(t, o.DynamicIO, "an unpaired observation key must be rejected, not silently ignored")
+	assert.Empty(t, o.Observations, "an odd list is unreadable whole: pairing the leading literals would invent an observation from a call magus just said it cannot read")
+
+	// "a=b=c" is both a=b -> c and a -> b=c, so a key carrying the separator is
+	// rejected at declaration rather than hashed as whichever half a splitter picks.
+	ambiguous := Extract(`export fun scan(ctx: magus\Context, args: [str]) > void {
+    ctx.observes("schema-rev", "a1b2c3");
+    ctx.observes("trivy-db=stable", "2026-08-15");
+}
+`)
+	a, _ := nodeByName(ambiguous, "scan")
+	assert.True(t, a.DynamicIO, "an observation key containing = must be rejected")
+	assert.Equal(t, []string{"schema-rev=a1b2c3"}, a.Observations,
+		"the rejected call records nothing; an earlier readable one keeps what it recorded")
+}
+
 // TestUnreachedIO pins orphan detection: a ctx.readsFiles/writesFiles reached from a target
 // body (directly or via a bare-call helper) is NOT flagged, while one in an
 // unreferenced helper or used as a value IS - it would never enter a cache key.
@@ -249,17 +299,18 @@ func TestRemovedContextMethods(t *testing.T) {
 // TestSpellOps pins the per-target spell extraction: bracket (`go["go-test"]`) and
 // dotted (`md.prettier(`) op calls are captured and grouped by spell, in call
 // order, but only for handles a spell import brought into scope — a host call
-// (os.exec) or a call on a non-spell identifier is dropped.
+// (proc.exec) or a call on a non-spell identifier is dropped.
 func TestSpellOps(t *testing.T) {
 	g := Extract(`import "magus/spell/go";
 import "magus/spell/md";
 import "os";
+import "proc";
 export fun format(ctx: magus\Context, args: [str]) > void { go["go-fmt"](); }
 export fun lint(ctx: magus\Context, args: [str]) > void {
     ctx.needs(format);
     go["golangci-lint"](); go["go-vet"](); go["golangci-lint"](); md.markdownlint();
 }
-export fun scan(ctx: magus\Context, args: [str]) > void { os.exec("trivy", []); other["x"](); }
+export fun scan(ctx: magus\Context, args: [str]) > void { proc.exec("trivy", []); other["x"](); }
 `)
 	lint, _ := nodeByName(g, "lint")
 	want := []types.TargetSpellUse{
@@ -270,7 +321,7 @@ export fun scan(ctx: magus\Context, args: [str]) > void { os.exec("trivy", []); 
 	assert.Equal(t, []string{"format"}, lint.Dependencies, "the identifier edge resolves to the exported target")
 	// scan only calls a host module and an unknown identifier: no spell ops.
 	scan, _ := nodeByName(g, "scan")
-	assert.Empty(t, scan.Spells, "os.exec is host, other[] is not a spell")
+	assert.Empty(t, scan.Spells, "proc.exec is host, other[] is not a spell")
 }
 
 // TestSpellOpsThroughHelper pins helper-following: a target that factors its spell
@@ -317,7 +368,7 @@ export fun preflight(ctx: magus\Context, args: [str]) > void { go["x"](); }
 func TestSpellOpsIgnoresStringLiterals(t *testing.T) {
 	g := Extract(`import "magus/spell/go";
 export fun help(ctx: magus\Context, args: [str]) > void {
-    os.exec("echo", ["run go.fmt() then go[\"go-test\"]() yourself"]);
+    proc.exec("echo", ["run go.fmt() then go[\"go-test\"]() yourself"]);
     go["go-build"]();
 }
 `)
@@ -346,7 +397,7 @@ export fun ci(ctx: magus\Context, args: [str]) > void { ctx.needs(goBuild); }
 // AST body and drop the magus.needs edge that follows it.
 func TestBraceInString(t *testing.T) {
 	g := Extract(`export fun build(ctx: magus\Context, args: [str]) > void {
-    os.exec("sh", ["-c", "echo }"]);
+    proc.exec("sh", ["-c", "echo }"]);
     ctx.needs(fmt);
 }
 export fun fmt(ctx: magus\Context, args: [str]) > void { go["x"](); }
@@ -418,6 +469,63 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 	require.True(t, ok, "missing test; got %v", g)
 	want := []string{"build", "a-gen", "b-gen"}
 	assert.Equal(t, want, test.Dependencies, "identifier exact + glob patterns; comment ignored")
+}
+
+// TestChainIsSourceOrdered pins the fact the whole chain surface exists for: the order
+// is the order the body writes, ACROSS ctx.needs calls, and a glob step expands in
+// place. Dependencies happens to agree here; Chain is what promises it.
+func TestChainIsSourceOrdered(t *testing.T) {
+	g := Extract(`export fun generate(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun lint(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun build(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun test(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate, lint);
+    ctx.needs(build, test);
+}
+`)
+	ci, ok := nodeByName(g, "ci")
+	require.True(t, ok, "missing ci; got %v", g)
+	assert.Equal(t, []types.ChainStep{
+		{Target: "generate"}, {Target: "lint"}, {Target: "build"}, {Target: "test"},
+	}, ci.Chain)
+}
+
+// TestChainInterleavesCrossSteps: a chain that mixes local and cross-project steps keeps
+// them in ONE list in written order. Dependencies and CrossDependencies split them by
+// locality, so neither can answer this on its own - the reason Chain is built from the
+// argument list rather than folded from those two afterwards.
+func TestChainInterleavesCrossSteps(t *testing.T) {
+	g := Extract(`import "project/../lib" as lib;
+export fun format(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun conventions(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
+    ctx.needs(lib.lint);
+    ctx.needs(conventions);
+}
+`)
+	l, ok := nodeByName(g, "lint")
+	require.True(t, ok, "missing lint; got %v", g)
+	assert.Equal(t, []types.ChainStep{
+		{Target: "format"},
+		{Project: "../lib", Target: "lint"}, // raw import path; the caller resolves it
+		{Target: "conventions"},
+	}, l.Chain)
+}
+
+// TestChainEmptyForALeafTarget: a target that composes nothing has no chain, so the
+// describe surface prints no line rather than an empty one.
+func TestChainEmptyForALeafTarget(t *testing.T) {
+	g := Extract(`import "project/../lib" as lib;
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles(lib.file("go.mod"));
+    go["go-build"]();
+}
+`)
+	b, ok := nodeByName(g, "build")
+	require.True(t, ok, "missing build; got %v", g)
+	assert.Empty(t, b.Chain, "a spell call is not a composition, and lib.file is not a step")
 }
 
 func TestExternalCrossDependencies(t *testing.T) {

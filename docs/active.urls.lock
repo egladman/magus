@@ -86,6 +86,8 @@ concepts/cache/remote/
 concepts/cache/tool-identity/
 concepts/charms/
 concepts/ci-providers/
+concepts/ci/
+concepts/ci/providers/
 concepts/compatibility/
 concepts/concurrency/
 concepts/dependencies/
@@ -98,6 +100,7 @@ concepts/output-refs/
 concepts/remote-cache/
 concepts/sandbox/
 concepts/secrets/
+concepts/secrets/providers/
 concepts/services/
 concepts/spells/
 concepts/spells/bash/
@@ -124,6 +127,7 @@ concepts/wards/
 concepts/workspace-providers/
 concepts/workspace/
 concepts/workspace/affected/
+concepts/workspace/providers/
 concurrency/
 config/
 console/
@@ -141,6 +145,7 @@ development/evals/
 development/gopherbuzz/
 development/libs-diag/
 development/libs-diagnostics/
+development/libs-diagram/
 development/libs-gopherbuzz/
 development/libs-orphanator/
 development/libs-testlayout/
@@ -192,6 +197,7 @@ guides/integrations/agents/any-host/
 guides/integrations/agents/claude-code/
 guides/integrations/agents/codex/
 guides/integrations/agents/cursor/
+guides/integrations/agents/delegation/
 guides/integrations/agents/guard-templates/
 guides/integrations/agents/guard/
 guides/integrations/agents/notifications/
@@ -359,6 +365,7 @@ reference/codes/magusfile/MGS1024/
 reference/codes/magusfile/MGS1025/
 reference/codes/magusfile/MGS1026/
 reference/codes/magusfile/MGS1027/
+reference/codes/magusfile/MGS1028/
 reference/codes/outputref/
 reference/codes/outputref/MGS8001/
 reference/codes/outputref/MGS8002/
@@ -371,6 +378,7 @@ reference/codes/race/MGS4003/
 reference/codes/race/MGS4004/
 reference/codes/race/MGS4005/
 reference/codes/race/MGS4006/
+reference/codes/race/MGS4007/
 reference/codes/sandbox/
 reference/codes/sandbox/MGS2001/
 reference/codes/sandbox/MGS2002/
@@ -409,6 +417,7 @@ reference/manpage/magus-clean/
 reference/manpage/magus-completion/
 reference/manpage/magus-config/
 reference/manpage/magus-describe/
+reference/manpage/magus-diff/
 reference/manpage/magus-doctor/
 reference/manpage/magus-explain/
 reference/manpage/magus-graph/
@@ -482,6 +491,7 @@ spells/py/
 spells/rs/
 spells/ts/
 tags/
+tags/activity/
 tags/adoption/
 tags/affected/
 tags/agent-install/
@@ -535,6 +545,7 @@ tags/cursor/
 tags/cycle/
 tags/daemon/
 tags/debugging/
+tags/declarations/
 tags/dependency-graph/
 tags/depends-on/
 tags/depends/
@@ -543,6 +554,7 @@ tags/desktop/
 tags/detach/
 tags/determinism/
 tags/diagnostics/
+tags/diff/
 tags/discovery/
 tags/docker/
 tags/docs/
@@ -673,11 +685,13 @@ tags/remote-cache/
 tags/repl/
 tags/replay/
 tags/reproduce/
+tags/review/
 tags/rfc-6902/
 tags/ruff/
 tags/run/
 tags/rust/
 tags/sandbox/
+tags/secret-provider/
 tags/secrets/
 tags/security/
 tags/self-update/
@@ -685,6 +699,7 @@ tags/semver/
 tags/service-op/
 tags/services/
 tags/setup/
+tags/sharding/
 tags/shared-services/
 tags/sharing/
 tags/shell/
@@ -694,6 +709,7 @@ tags/signing/
 tags/skills/
 tags/snapshot/
 tags/socket/
+tags/sources/
 tags/spell/
 tags/spells/
 tags/status/

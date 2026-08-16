@@ -44,7 +44,7 @@ func graphVerify(_ context.Context, root string, args []string) error {
 	for _, status := range statuses {
 		if status.Stale {
 			anyStale = true
-			fmt.Printf("agent skills (%s): STALE - %s\n", status.Location, status.Detail)
+			fmt.Printf("agent skills (%s): STALE: %s\n", status.Location, status.Detail)
 		} else {
 			fmt.Printf("agent skills (%s): %s\n", status.Location, status.Detail)
 		}

@@ -122,7 +122,7 @@ func runCLI() int {
 	case "help", "-h", "--help":
 		usage()
 	case "version", "-v", "--version":
-		code = exitCodeOf(runVersion(res.subArgs))
+		code = exitCodeOf(runVersion(res.rootCtx, res.subArgs))
 	default:
 		code = exitCodeOf(dispatchSub(res.rootCtx, res.root, res.rc, res.sub, res.subArgs))
 	}
@@ -218,8 +218,10 @@ func hasDetachFlag(args []string) bool {
 func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	switch sub {
 	case "help", "version":
-		// Neither reads a workspace, a config, or a daemon: one prints text compiled
-		// into the binary, the other a stamp.
+		// Neither reads a workspace or a config: one prints text compiled into the
+		// binary, the other a stamp. version dials the daemon for the server half, but
+		// must never FORWARD - a forwarded version would report the daemon's binary as
+		// the client's, which is exactly the difference it exists to show.
 		return dispatchProfile{}
 	case "buzz":
 		// buzz is a standalone Buzz runner (and `buzz lsp` a stdio language server), so
@@ -747,6 +749,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return memoryCmd(ctx, root, subArgs)
 	case "notes":
 		return notesCmd(ctx, root, subArgs)
+	case "diff":
+		return diffCmd(ctx, root, subArgs)
 	case "server":
 		return serverCmd(ctx, root, subArgs)
 	case "mcp":

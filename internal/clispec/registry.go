@@ -24,6 +24,7 @@ var All = []Command{
 	configCommand,
 	memoryCommand,
 	notesCommand,
+	diffCommand,
 	serverCommand,
 	buzzCommand,
 	completionCommand,
@@ -87,7 +88,11 @@ of the charms a single "describe target" lists.
 
 For a target ref (e.g. "api:build", or ":test" for all projects) magus prints the
 fully-evaluated dispatch plan: the workspace-rooted source and output globs, the
-spells that fire, the charm-applied command, and any per-target policy. Add a charm
+spells that fire, the charm-applied command, and any per-target policy. A target
+that composes others also prints a "chain" line naming them in invocation order
+(e.g. "generate -> lint -> build -> test"), read from the ctx.needs calls in the
+magusfile; a cross-project step reads as "project:target". It lists DIRECT steps
+only, so a step that itself composes is described by its own ref. Add a charm
 and --explain (e.g. "lint:rw --explain") to see each charm reshape the command one
 step at a time.`,
 	Usage: "magus describe <noun> [<name>] [flags]",
@@ -153,6 +158,11 @@ arguments, selects the project containing the current directory, or all projects
 if the current directory is not inside a project. Explicit project paths on the
 command line select exactly those projects.
 
+--skip subtracts from whatever that selection resolved to, so a CI step can gate
+every project except a named few without any shell filtering. It takes the same
+project reference a positional does, and refuses a reference no project matches
+rather than skipping nothing quietly.
+
 The target ci is an ordinary magusfile-defined target - magus does not hardcode
 its steps; your magusfile composes them with magus.needs. magus keeps ci as
 the anchor that the affected set keys off, and always runs it read-only; apply
@@ -162,6 +172,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{Name: "graph", Kind: FlagBool, Doc: "Render the dependency graph for the selected scope instead of executing"},
 		{Name: "upstream", Kind: FlagBool, Doc: "With --graph: show dependents instead of dependencies"},
 		{Name: "depth", Kind: FlagInt, Doc: "With --graph: cap displayed depth (0 = unlimited)"},
+		{Name: "skip", Kind: FlagCustom, Doc: "Exclude projects from the selection; repeatable or comma-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/*); a value matching nothing is an error"},
 		{Name: "no-cache", Kind: FlagBool, Doc: "Force a fresh run even on a cache hit; still refreshes the entry"},
 		{Name: "no-default-charms", Kind: FlagBool, Doc: "Ignore magus.yaml default_charms for this run"},
 		{Name: "detach", Kind: FlagBool, Doc: "Hand the run to the daemon and return immediately; follow it with magus status --watch"},
@@ -183,6 +194,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{"Build everything", "magus run build"},
 		{"Test one project", "magus run test api/gateway"},
 		{"Build two specific projects", "magus run build api/gateway web/studio"},
+		{"Every project that declares generate except two", "magus run generate --skip docs --skip console"},
 		{"Dry-run: show what would run", "magus run build --dry-run"},
 		{"Force a fresh rebuild past a cache hit", "magus run build --no-cache"},
 		{"Full CI pipeline", "magus run ci"},
@@ -891,11 +903,30 @@ mgs_ contract stubbed, each function documented, and a runnable test block.`,
 
 var versionCommand = Command{
 	Name:        "version",
-	Short:       "Print version, commit, and build date",
-	Description: "Print the magus version string, git commit hash, and build date for the currently installed binary.",
-	Tags:        []string{"cli", "magus version", "version", "build info", "commit"},
-	Long:        `Print the magus version string, git commit hash, and build date.`,
-	Usage:       "magus version",
+	Short:       "Print the client and daemon versions",
+	Description: "Print the magus version string, git commit hash, and build date for the currently installed binary, plus the version reported by the daemon serving this workspace.",
+	Tags:        []string{"cli", "magus version", "version", "build info", "commit", "daemon"},
+	Long: `Print the magus version string, git commit hash, and build date.
+
+Two versions, because there can be two binaries: this one, and the daemon
+that has been serving the workspace since it was started. A daemon outlives
+the CLI that started it, so upgrading magus leaves the older code running
+until it is restarted - which is the case this command exists to show. The
+daemon line reads "not running" when nothing answers, and --client skips the
+probe entirely for a script that wants the build stamp with no daemon I/O.
+
+In json and yaml the daemon key is present only when the probe ran: absent
+means it never ran (--client, or -o name, which prints the bare version and
+renders no daemon), and an empty value means it ran and nothing answered.`,
+	Flags: []Flag{
+		{Name: "client", Kind: FlagBool, Doc: "Print only this binary's version; skip the daemon probe entirely"},
+	},
+	Usage: "magus version [flags]",
+	Examples: []Example{
+		{"Client and daemon", "magus version"},
+		{"Just this binary, no daemon I/O", "magus version --client"},
+		{"The bare version, for a CI pin comparison", "magus version -o name"},
+	},
 }
 
 // A subcommand that reaches the dispatcher but not All is documented nowhere on the machine.
@@ -986,6 +1017,14 @@ not run it by hand; it is wired per clone, because a driver registration
 cannot be committed. That is also why a forge reports conflicts your own
 clone would settle silently, and why resolve exists as the bulk counterpart.
 
+checkpoint prints the identity of the working state right now - head revision,
+branch, whether the tree is dirty, and a digest of the uncommitted patch. Record
+one when you hand a piece of work out, so a later reader knows what that work was
+looking at. It RESOLVES AND RECORDS and never MINTS: no tag, no stash, no ref, no
+file, nothing changed anywhere, so a checkpoint nobody keeps has cost nothing.
+Feed the revision to anything that takes one; compare two digests to learn whether
+two workers saw the same uncommitted tree, which the revision alone cannot say.
+
 resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
 base in yourself on the others, then run resolve.`,
 	// No parent Flags: neither flag belongs to `magus vcs`, which takes none of
@@ -993,7 +1032,7 @@ base in yourself on the others, then run resolve.`,
 	// text ("(vcs resolve)", "(vcs add)") because a child could not carry flags,
 	// which put them in one merged Options section on the man page and made a
 	// generated binder for either child bind both.
-	Usage: "magus vcs <add|resolve|merge-driver> [flags]",
+	Usage: "magus vcs <add|resolve|checkpoint|merge-driver> [flags]",
 	Children: []Command{
 		{
 			Name:  "add",
@@ -1009,6 +1048,10 @@ base in yourself on the others, then run resolve.`,
 				{Name: "against", Kind: FlagString, Doc: "Merge this `ref` first, then settle what it conflicts with"},
 			},
 		},
+		{
+			Name:  "checkpoint",
+			Short: "Print the working state's identity, for recording what a delegated unit was handed; writes nothing",
+		},
 		{Name: "merge-driver", Short: "The per-file merge driver git and hg invoke; you do not run this by hand"},
 	},
 	Examples: []Example{
@@ -1016,6 +1059,8 @@ base in yourself on the others, then run resolve.`,
 		{"Classify the dirty tree, stage nothing", "magus vcs add --dry-run"},
 		{"Settle a conflicted merge", "magus vcs resolve"},
 		{"Merge the base in and settle it in one step", "magus vcs resolve --against origin/main"},
+		{"Record what a delegated unit was handed", "magus vcs checkpoint"},
+		{"The one citable token, for a ledger cell", "magus vcs checkpoint -o name"},
 	},
 }
 
@@ -1061,6 +1106,46 @@ the CLI is readable by an agent without either side learning a new format.`,
 		{"List entries and warnings", "magus memory ls"},
 		{"Read one entry", "magus memory get release-checklist"},
 		{"Check the journal's health", "magus memory verify"},
+	},
+}
+
+var diffCommand = Command{
+	Name:        "diff",
+	Short:       "Read the working tree's changes in the order they deserve attention",
+	Description: "Report every uncommitted change annotated with what the workspace knows: whether it is generated, how widely its changed symbols are referenced, whether it is public API surface, and what coverage was observed.",
+	Tags:        []string{"cli", "magus diff", "diff", "review", "changeset", "semver"},
+	Long: `Read the working tree's uncommitted changes, annotated and ordered.
+
+A changeset is not a list of files, it is a set of CONSEQUENCES, and a reader's
+attention is scarce. Alphabetical order spends it at random: it gives a
+regenerated lockfile the same weight as a signature change twelve packages
+depend on. This orders by what a change can BREAK.
+
+Generated files - declared target outputs - are folded away by default. Reading
+one is reading a machine's restatement of a change made somewhere else, so the
+source edit is the review. Pass --generated to see them anyway.
+
+Each file carries the evidence behind its rank: how many files reference the
+widest changed symbol it defines, whether any of those referents cross a project
+boundary or the module boundary (which is the question a version bump turns on),
+and the coverage a prior run observed. None of it is a verdict. magus does not
+claim a change is breaking - deciding that needs signature compatibility, which
+needs a base-side index magus does not keep and language semantics it does not
+model - it reports who can see the thing you changed and lets you decide.
+
+The console's Diff surface reads the same annotations over the same session,
+and an agent can join that session through the magus_diff MCP tool.`,
+	Usage: "magus diff [--generated] [--tui] [--watch] [<patch-file>|-] [flags]",
+	Flags: []Flag{
+		{Name: "generated", Kind: FlagBool, Doc: "Include declared target outputs, which are folded away by default"},
+		{Name: "tui", Kind: FlagBool, Doc: "Read the changeset interactively, joined to the session the console and an agent share"},
+		{Name: "watch", Kind: FlagBool, Doc: "Re-read and re-render whenever the working tree changes"},
+	},
+	Examples: []Example{
+		{"Read what you are about to commit", "magus diff"},
+		{"Include the generated files too", "magus diff --generated"},
+		{"Navigate it hunk by hunk and mark what you have read", "magus diff --tui"},
+		{"Machine-readable, for a script or a Buzz advisor", "magus diff -o json"},
 	},
 }
 
@@ -1208,22 +1293,30 @@ a JSON tool to unwrap it: the envelope already says what is about to run and
 whether it is a write. An explicit flag still wins, because a wrapper that
 passed one meant it.
 
---agent-name, --session, and --event are attribution, not policy. They record who
-produced the observation on the activity event, and the verdict never reads
-them. All three are optional and unvalidated, including the host name, which
-is an opaque label the caller chooses rather than a set magus knows: a magus
-that enumerated hosts would need a release per host, and a wrapper that
+--observe records a path the agent merely REACHED, without judging it. No rule
+applies to a read, so the verdict is always pass and the activity event
+previews as observed rather than as a guard decision. Which of a host's tools
+only look is the wrapper's knowledge, never magus's.
+
+--agent-name, --session, --transcript, and --event are attribution, not policy.
+They record who produced the observation on the activity event, and the verdict
+never reads them. All are optional and unvalidated, including the host name,
+which is an opaque label the caller chooses rather than a set magus knows: a
+magus that enumerated hosts would need a release per host, and a wrapper that
 cannot extract a session id must still be able to get a verdict.`,
 	Usage: "magus hook [--path] [flags]",
 	Flags: []Flag{
 		{Name: "path", Kind: FlagBool, Doc: "Judge the input as a file path an edit is about to write, not as a shell command"},
+		{Name: "observe", Kind: FlagBool, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
 		{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this invocation came from (attribution only)"},
 		{Name: "session", Kind: FlagString, Doc: "The host's own session id for this invocation"},
+		{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
 		{Name: "event", Kind: FlagString, Doc: "The host's hook event name (e.g. PreToolUse)"},
 	},
 	Examples: []Example{
 		{"Judge a shell command", "printf '%s' 'go build ./...' | magus hook"},
 		{"Judge a path an edit is about to write", "printf '%s' 'MAGUS.md' | magus hook --path"},
+		{"Record a path an agent read, without judging it", "printf '%s' 'internal/cache/output.go' | magus hook --observe"},
 		{"Machine-readable verdict", "printf '%s' 'rm -rf /' | magus hook -o json"},
 	},
 }

@@ -1,6 +1,8 @@
 package file
 
 import (
+	"bytes"
+	"log/slog"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -44,6 +46,51 @@ func TestResolve(t *testing.T) {
 	t.Run("bare embedded escape", func(t *testing.T) { fail(t, "foo/../../bar", "a/b", "escapes workspace root") })
 	t.Run("bare escape to parent", func(t *testing.T) { fail(t, "foo/../..", "a/b", "escapes workspace root") })
 	t.Run("bare internal dotdot ok", func(t *testing.T) { ok(t, "foo/../bar", "a/b", "bar") })
+}
+
+// TestResolveProjectDeprecatedScheme pins the deprecation window: workspace:// still
+// resolves exactly as the bare path it wraps, and every use says so once. A silent
+// acceptance would leave the scheme in circulation with nothing telling anyone it went.
+func TestResolveProjectDeprecatedScheme(t *testing.T) {
+	logged := func(t *testing.T, input, anchor, want string) string {
+		t.Helper()
+		var buf bytes.Buffer
+		prev := slog.Default()
+		slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+		t.Cleanup(func() { slog.SetDefault(prev) })
+		got, err := ResolveProject(t.Context(), input, anchor)
+		require.NoError(t, err, "ResolveProject(%q, %q)", input, anchor)
+		assert.Equal(t, want, got)
+		return buf.String()
+	}
+
+	t.Run("nested path resolves as the bare path", func(t *testing.T) {
+		out := logged(t, "workspace://pkg/api", "web/studio", "pkg/api")
+		assert.Contains(t, out, "workspace:// is deprecated")
+		assert.Contains(t, out, `use=pkg/api`)
+	})
+
+	// The root alias returns "." regardless of anchor - it is not the bare "." reading,
+	// which would resolve to the anchor.
+	t.Run("root alias stays the root", func(t *testing.T) {
+		out := logged(t, "workspace://", "web/studio", ".")
+		assert.Contains(t, out, "workspace:// is deprecated")
+		assert.Contains(t, out, "use=.")
+	})
+
+	// "workspace://." is NOT the root alias: the "." is a dot-relative marker and
+	// anchors, exactly as a bare "." does. That equivalence is the whole argument for
+	// retiring the scheme - it never bought a reading the bare path did not already have.
+	t.Run("explicit dot anchors like the bare dot", func(t *testing.T) {
+		logged(t, "workspace://.", "web/studio", "web/studio")
+		bare, err := ResolveProject(t.Context(), ".", "web/studio")
+		require.NoError(t, err)
+		assert.Equal(t, "web/studio", bare)
+	})
+
+	t.Run("bare path warns about nothing", func(t *testing.T) {
+		assert.Empty(t, logged(t, "pkg/api", "web/studio", "pkg/api"))
+	})
 }
 
 // TestResolveImport pins the `import "project/<path>"` contract: the path is

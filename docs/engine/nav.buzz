@@ -182,17 +182,23 @@ export fun renderSiteNav(root: str, active: str, withRef: bool, cfg: Config) > s
     // glyphs ship, one shows at a time. The "Menu" caption and closing hint are mobile-only
     // (aria-hidden on desktop). Home is an explicit link because the brand mark's accessible
     // name is just "magus". A backtick raw string holds the Mustache verbatim.
+    //
+    // The brand mark is INLINE SVG, not the old <picture>/hat.webp/hat.png trio. It is the same
+    // hat the app icons use, and fill="currentColor" is the point: the mark takes the wordmark's
+    // own color, so it can never disagree with it, never fail a theme, and needs no second file
+    // or media query. It also inherits hover and focus color, which the raster could not.
     final tmpl = `  <header class="site-header">
     <nav class="container">
-      <ul><li><a href="{{root}}index.html" class="contrast"><picture><source srcset="{{root}}assets/hat.webp" type="image/webp"><img class="brand-mark" src="{{root}}assets/hat.png" width="65" height="48" alt=""></picture> <strong>{{title}}</strong></a></li></ul>
+      <ul><li><a href="{{root}}index.html" class="contrast"><strong>{{title}}<span class="brand-dot">.</span></strong></a></li></ul>
       <div class="nav-right">
 {{#withRef}}        <button class="ref-trigger outline" type="button" aria-controls="ref-drawer" aria-expanded="false" aria-label="Reference" title="Reference"><svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/><line x1="8" y1="7" x2="16" y2="7"/><line x1="8" y1="11" x2="16" y2="11"/></svg></button>
         <span class="nav-divider" aria-hidden="true"></span>
 {{/withRef}}        <button class="nav-toggle outline" type="button" aria-label="Open menu" aria-expanded="false" aria-controls="site-nav-links"><svg class="icon-menu" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="7" x2="20" y2="7"/><line x1="4" y1="12" x2="20" y2="12"/><line x1="4" y1="17" x2="20" y2="17"/></svg><svg class="icon-close" viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="6" y1="6" x2="18" y2="18"/><line x1="18" y1="6" x2="6" y2="18"/></svg></button>
         <ul class="nav-links" id="site-nav-links">
           <li class="nav-menu-label" aria-hidden="true">Menu</li>
-{{#links}}        <li><a href="{{href}}"{{#current}} aria-current="page"{{/current}}{{#blank}} target="_blank" rel="noopener" title="Opens in a new tab"{{/blank}}>{{label}}{{#blank}} <span class="ext-arrow" aria-hidden="true">&#x2197;</span>{{/blank}}</a></li>
-{{/links}}          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
+{{#links}}{{#group}}        <li><details class="dropdown"{{#current}} data-section-current="true"{{/current}}><summary>{{label}}</summary><ul>{{#children}}<li><a href="{{href}}"{{#current}} aria-current="page"{{/current}}>{{label}}</a></li>{{/children}}</ul></details></li>
+{{/group}}{{^group}}        <li><a href="{{href}}"{{#current}} aria-current="page"{{/current}}{{#blank}} target="_blank" rel="noopener" title="Opens in a new tab"{{/blank}}>{{label}}{{#blank}} <svg class="ext-arrow" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg>{{/blank}}</a></li>
+{{/group}}{{/links}}          <li class="nav-menu-hint" aria-hidden="true">Tap outside or press Esc to close</li>
         </ul>
 {{{settings}}}
       </div>
@@ -202,9 +208,29 @@ export fun renderSiteNav(root: str, active: str, withRef: bool, cfg: Config) > s
     // The nav is data-driven from Config: each entry's href is root + suffix (depth-relative)
     // and the active section is the one whose key matches `active`. A blank entry (the
     // console, the only off-docs link) opens in a new tab, with the arrow off that flag.
+    // A GROUP renders as a Pico details.dropdown - native disclosure, so it is keyboard
+    // reachable and needs no JavaScript, which is the same reason the rest of this bar is
+    // classless Pico. Its summary is NOT a link: the group label names a category, and making
+    // it navigable too would give one control two meanings.
+    //
+    // A group counts as current when any CHILD is the active section, so the bar still shows
+    // where you are once a section is one level down. That is the thing grouping most easily
+    // loses, and it is why the flag is computed here rather than left to the template.
     final links = mut [<{str: any}>];
     foreach (nl in cfg.navLinks) {
-        links.append({"href": root + nl.suffix, "label": nl.label, "current": active == nl.key, "blank": nl.blank});
+        if (nl.children.len() > 0) {
+            final kids = mut [<{str: any}>];
+            var anyCurrent = false;
+            foreach (c in nl.children) {
+                final isCur = active == c.key;
+                if (isCur) { anyCurrent = true; }
+                kids.append({"href": root + c.suffix, "label": c.label, "current": isCur});
+            }
+            links.append({"group": true, "label": nl.label, "children": kids, "current": anyCurrent});
+        } else {
+            links.append({"group": false, "href": root + nl.suffix, "label": nl.label,
+                          "current": active == nl.key, "blank": nl.blank});
+        }
     }
     return template\render(tmpl, {"root": root, "title": cfg.title, "links": links, "withRef": withRef, "settings": renderSettingsPanel(false)});
 }
@@ -397,7 +423,11 @@ export fun renderSiteFooter(root: str, site: Site) > str !> any {
 // or "" when none has shipped. The version comes from loadReleases (releases/*.yaml), so it
 // is drift-stable; announcement.js hides it once the reader dismisses that version and
 // re-shows it on the next release.
-export fun renderAnnouncementBar(site: Site) > str !> any {
+//
+// Takes root (the relative-depth prefix) like every other chrome renderer, because the
+// optional second link points at a post on this site. The release link stays an absolute
+// GitHub URL, so the bar needed no depth until the post link existed.
+export fun renderAnnouncementBar(root: str, site: Site) > str !> any {
     if (site.releases.len() == 0) { return ""; }
     final ver = site.releases[0].version;
     // data-released lets the client expire the bar; the decision cannot be made here.
@@ -407,12 +437,19 @@ export fun renderAnnouncementBar(site: Site) > str !> any {
     final released = site.releases[0].date;
     final tmpl = `  <div id="announcement-bar" data-version="{{ver}}" data-released="{{released}}">
     <div class="container">
-      <span>magus <strong>{{ver}}</strong> is out. <a href="{{gh}}/releases/tag/{{ver}}">See what's new</a></span>
+      <span>magus <strong>{{ver}}</strong> is out. <a href="{{gh}}/releases/tag/{{ver}}">See what's new</a>{{#hasPost}} &middot; <a href="{{root}}{{post}}">Read the post</a>{{/hasPost}}</span>
       <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
     </div>
   </div>
 `;
-    return template\render(tmpl, {"ver": ver, "released": released, "gh": site.config.repoURL});
+    return template\render(tmpl, {
+        "ver": ver,
+        "released": released,
+        "gh": site.config.repoURL,
+        "root": root,
+        "post": site.releaseBlogURL,
+        "hasPost": site.releaseBlogURL != "",
+    });
 }
 
 test "conventionAnchorsIn reads the anchors the injected hints point at" {

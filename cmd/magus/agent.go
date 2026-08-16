@@ -136,9 +136,13 @@ func hookUsage(w io.Writer) {
 	fmt.Fprintln(w, "Flags:")
 	fmt.Fprintln(w, "  --path                judge the input as a file path an edit is about to")
 	fmt.Fprintln(w, "                        write, not as a shell command")
+	fmt.Fprintln(w, "  --observe             record the path as one the agent REACHED and judge")
+	fmt.Fprintln(w, "                        nothing; wire it to the tools that only look")
 	fmt.Fprintln(w, "  --agent-name <name>   agent host this invocation came from (attribution")
 	fmt.Fprintln(w, "                        only; the verdict never reads it)")
 	fmt.Fprintln(w, "  --session <id>        the host's own session id, recorded on the event")
+	fmt.Fprintln(w, "  --transcript <path>   the host's own log of this session, recorded as a")
+	fmt.Fprintln(w, "                        pointer; magus never opens it")
 	fmt.Fprintln(w, "  --event <name>        the host's hook event name (e.g. PreToolUse)")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Global display flags (-o, -s, -q, -v, --tee) are accepted; see `magus -h`.")
@@ -264,7 +268,7 @@ func printAgentInstallNextSteps(dir string, written, stale []string, v agent.Var
 	}
 	// MAGUS.md is regenerated for HUMAN readers; the skills send agents to the live
 	// verbs instead, because a generated index is only true as of its last run.
-	interactive.Emit(os.Stderr, "regenerate MAGUS.md for human readers:  magus describe graph -o markdown  (the skills send agents to the live verbs - magus describe targets, magus ls)")
+	interactive.Emit(os.Stderr, "regenerate MAGUS.md for human readers:  magus describe graph -o markdown  (the skills send agents to the live verbs: magus describe targets, magus ls)")
 	interactive.Emit(os.Stderr, "safety: consider a line in your repo's agent instruction file so parallel agents cannot wipe each other's work:")
 	interactive.Emit(os.Stderr, "  \""+vcsSafetyRule+"\"")
 	interactive.Emit(os.Stderr, "starter AGENTS.md you can own and tweak (prints, never writes):  magus agent sample")
@@ -286,7 +290,7 @@ func printAgentsBlockToPaste(dir string) {
 		}
 		verb = "your AGENTS.md has an older copy: replace it BETWEEN the markers and leave the rest of the file alone"
 	}
-	interactive.Emit(os.Stderr, "magus does not write AGENTS.md - that file is yours. If your agent host reads it, "+verb+":")
+	interactive.Emit(os.Stderr, "magus does not write AGENTS.md. That file is yours. If your agent host reads it, "+verb+":")
 	fmt.Fprint(os.Stderr, "\n"+agentSkills.AgentsBlock()+"\n")
 }
 
@@ -341,13 +345,20 @@ type guardVerdict struct {
 // that would block every tool call.
 func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
 	fset := flag.NewFlagSet("hook", flag.ContinueOnError)
+	// --observe is observation, not policy. A wrapper sets it for a tool that only
+	// LOOKS - no rule judges a read, so running the write rules over one would only
+	// ever manufacture a false advisory about editing a file the agent opened
+	// read-only. Which of a host's tools merely look is the wrapper's knowledge,
+	// never magus's: see the tool-label constants and
+	// TestNoHostSpecificBehaviorInCode.
+	//
+	// The attribution flags name WHO produced the observation, and the guard's
+	// verdict never reads them. Every one is optional and unvalidated - including
+	// the host name, which is an opaque label the caller chooses rather than a set
+	// magus knows, because a magus that enumerated hosts would need a release per
+	// host. A wrapper that cannot extract a session id must still get a verdict;
+	// erroring here would block a tool call over metadata.
 	hf := gen.BindHook(fset)
-	// Attribution, not policy: these name WHO produced the observation, and the
-	// guard's verdict never reads them. Every one is optional and unvalidated -
-	// including the host name, which is an opaque label the caller chooses rather
-	// than a set magus knows, because a magus that enumerated hosts would need a
-	// release per host. A wrapper that cannot extract a session id must still get
-	// a verdict; erroring here would block a tool call over metadata.
 	// The whole display set, not a hand-rolled -o: this command used to define
 	// its own output flag and so silently lacked -s, -q, -v and --tee. That gap
 	// is the reason for the rule - a flag accepted on most commands teaches
@@ -368,7 +379,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	}
 
 	input, hasInput := readGuardInput(in)
-	who := hookAttribution{Host: hf.AgentName, Session: hf.Session, Event: hf.Event}
+	who := hookAttribution{Host: hf.AgentName, Session: hf.Session, Transcript: hf.Transcript, Event: hf.Event}
 	// A host that writes its hook payload as JSON needs no jq and no --path: the envelope
 	// says what is about to run and whether it is a write. Explicit flags still win, since
 	// a wrapper that passed them meant them.
@@ -380,45 +391,64 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		if who.Session == "" {
 			who.Session = req.Who.Session
 		}
+		if who.Transcript == "" {
+			who.Transcript = req.Who.Transcript
+		}
 		if who.Event == "" {
 			who.Event = req.Who.Event
 		}
+		if req.IsSpawn {
+			// A delegation carries no verdict, so it returns the pass every other
+			// non-finding does and never reaches the guard. Handled here rather than
+			// beside the two guard arms because the whole point is that nothing judges
+			// it: the handed context is prose, and a prompt that merely MENTIONS a
+			// denied command would otherwise block the delegation that describes it.
+			appendHookSpawn(ctx, req, who)
+			return writeGuardVerdict(out, opts,
+				guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"})
+		}
+	}
+	tool := hookToolCommand
+	switch {
+	case hf.Observe:
+		tool = hookToolRead
+	case hf.Path:
+		tool = hookToolWrite
 	}
 	verdict := guardVerdict{SchemaVersion: agent.GuardSchemaVersion, Decision: "pass"}
-	if hf.Path {
-		if hasInput {
-			// The generated-output rule is definitive (it reads declared globs), so it
-			// speaks first; the memory nudge is a heuristic on the filename and only
-			// fills the silence it leaves.
-			context := adviseGeneratedWrite(ctx, input.Value)
-			// The notes rule DENIES, so it is checked before the advisories: a verdict
-			// that blocks is not something to fall through to. It sits after the
-			// generated-output rule only because a path cannot honestly be both, and if
-			// it somehow were, the regeneration answer is the more actionable one.
-			if context == "" {
-				if reason := denyNotesWrite(input.Value); reason != "" {
-					verdict.Decision = "deny"
-					verdict.Reason = reason
-				}
-			}
-			if verdict.Decision == "pass" && context == "" {
-				context = adviseInstalledSkillWrite(input.Value)
-			}
-			if verdict.Decision == "pass" && context == "" {
-				context = adviseMemoryWrite(input.Value)
-			}
-			if verdict.Decision == "pass" && context != "" {
-				verdict.Decision = "advise"
-				verdict.Context = context
+	switch {
+	case !hasInput:
+		// Nothing arrived on stdin. The verdict stays pass and the append below no-ops.
+	case hf.Observe:
+		// No rule judges a read or a search, so none is run: the observation IS the whole
+		// contribution. Running the write rules here would only ever manufacture a false
+		// advisory about editing a file the agent opened read-only.
+	case hf.Path:
+		// The generated-output rule is definitive (it reads declared globs), so it
+		// speaks first; the memory nudge is a heuristic on the filename and only
+		// fills the silence it leaves.
+		context := adviseGeneratedWrite(ctx, input.Value)
+		// The notes rule DENIES, so it is checked before the advisories: a verdict
+		// that blocks is not something to fall through to. It sits after the
+		// generated-output rule only because a path cannot honestly be both, and if
+		// it somehow were, the regeneration answer is the more actionable one.
+		if context == "" {
+			if reason := denyNotesWrite(input.Value); reason != "" {
+				verdict.Decision = "deny"
+				verdict.Reason = reason
 			}
 		}
-		appendHookActivity(ctx, input, who, true, verdict)
-		if err := writeGuardVerdict(out, opts, verdict); err != nil {
-			return err
+		if verdict.Decision == "pass" && context == "" {
+			context = adviseInstalledSkillWrite(input.Value)
 		}
-		return enforceVerdict(opts, verdict)
-	}
-	if hasInput {
+		if verdict.Decision == "pass" && context == "" {
+			context = adviseMemoryWrite(input.Value)
+		}
+		if verdict.Decision == "pass" && context != "" {
+			verdict.Decision = "advise"
+			verdict.Context = context
+		}
+	default:
 		switch v := evaluateBashGuard(input.Value); {
 		case v.Deny != "":
 			verdict.Decision = "deny"
@@ -428,7 +458,16 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 			verdict.Context = v.Context
 		}
 	}
-	appendHookActivity(ctx, input, who, false, verdict)
+	// An observation is not a judgment, and the trail already knows the difference: an
+	// AgentCommand with no Decision previews as "observed" rather than "guard: <decision>".
+	// Recording the pass verdict here would have every read claim the guard ran and cleared
+	// it, which is exactly the conflation --observe exists to remove. The WIRE verdict is
+	// unchanged - a host still needs a decision it can parse, and "pass" is the true one.
+	record := verdict
+	if hf.Observe {
+		record.Decision, record.Reason, record.Context = "", "", ""
+	}
+	appendHookActivity(ctx, input, who, tool, record)
 	if err := writeGuardVerdict(out, opts, verdict); err != nil {
 		return err
 	}
@@ -511,7 +550,50 @@ func adviseGeneratedWrite(ctx context.Context, path string) string {
 	if owner == "" {
 		owner = "."
 	}
-	return fmt.Sprintf("magus workspace: %s is a DECLARED OUTPUT of project %s - it is generated, and the next run of its producing target overwrites whatever you write there. This is not a style rule: magus reads the target's declared output globs, so the classification is definitive. Change the SOURCE that produces it instead, then run `magus run generate %s` (or the producing target) and commit the regenerated file together with your source change. `magus describe file %s` classifies any path. Load the magus-vcs-hygiene skill if not already loaded.", f.Path, owner, owner, f.Path)
+	return fmt.Sprintf("magus workspace: edit the SOURCE instead, then %s and commit the regenerated file with your source change.\n"+
+		"%s is a DECLARED OUTPUT of project %s - magus read the target's declared globs, so the next run overwrites whatever you write there.\n"+
+		"`magus describe file <path>` classifies any path. Load the magus-vcs-hygiene skill if not already loaded.", regenerateAdvice(f, owner), f.Path, owner)
+}
+
+// regenerateAdvice names the target that rewrites the path, resolved from the
+// declaration that claimed it.
+//
+// Never a canonical name: a target called "generate" is this repository's
+// convention, and the guard ships in a binary that judges workspaces which name
+// their codegen anything at all. A project-wide or spell-supplied output glob
+// carries no target (FileClaim.Target is empty there), so that case routes to
+// discovery rather than guessing.
+//
+// The CLAIM's project, not the owner: a cross-project write is attributed to the
+// tree it lands in by FileEntry.Project and to the declarer by FileClaim.Project,
+// and only the declarer can regenerate it.
+//
+// Several targets may declare the same output glob, and the order the claims arrive in
+// is the extractor's. The pick is sorted by project then target so the same path always
+// advises the same command - WHICH of them is named does not matter, since any of them
+// regenerates the file, but an answer that changes between two runs of the same guard
+// does.
+func regenerateAdvice(f types.FileEntry, owner string) string {
+	producers := make([]types.FileClaim, 0, len(f.Claims))
+	for _, c := range f.Claims {
+		if c.Role == "output" && c.Target != "" {
+			producers = append(producers, c)
+		}
+	}
+	if len(producers) == 0 {
+		return "run the target that produces it - `magus describe targets` lists what this workspace defines"
+	}
+	slices.SortFunc(producers, func(a, b types.FileClaim) int {
+		if n := strings.Compare(a.Project, b.Project); n != 0 {
+			return n
+		}
+		return strings.Compare(a.Target, b.Target)
+	})
+	producer := producers[0].Project
+	if producer == "" {
+		producer = owner
+	}
+	return fmt.Sprintf("run `magus run %s %s`", producers[0].Target, producer)
 }
 
 // denyNotesWrite blocks a write into the workspace's declared notes store, or returns ""
@@ -591,10 +673,9 @@ func denyNotesWrite(path string) string {
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
 		return ""
 	}
-	return fmt.Sprintf("magus workspace: %s is in this workspace's NOTES store, which is human-authored by design - agents read notes and never write them.\n"+
-		"A note is the one thing in the knowledge graph that is not derived from the repository: nothing here can corroborate it later, so its only provenance is the person who wrote it and signed the commit. A note of uncertain authorship is not a weaker note, it is a worthless one.\n"+
-		"If you are recording a DECISION ABOUT THIS WORKSPACE, put it in the handoff journal instead: `magus memory put <name>`, which is the agent-writable store and is anchored to refs a later reader can re-run.\n"+
-		"If this genuinely belongs in the notes, say so and let the person write it: `magus notes edit %s` opens their editor. Read the store with `magus notes ls` and `magus notes get <name>`.", path, strings.TrimSuffix(filepath.Base(path), ".md"))
+	return fmt.Sprintf("magus workspace: recording a DECISION ABOUT THIS WORKSPACE? Use `magus memory put <name>`, the agent-writable store. If it genuinely belongs in the notes, say so and let the person run `magus notes edit %s`.\n"+
+		"%s is in this workspace's NOTES store, which only a person may write: a note is the one thing in the graph the repository cannot corroborate later, so its only provenance is the human who signed the commit.\n"+
+		"Read the store with `magus notes ls` and `magus notes get <name>`.", strings.TrimSuffix(filepath.Base(path), ".md"), path)
 }
 
 // resolveSymlinks canonicalizes as much of path as exists, returning it unchanged when
@@ -635,7 +716,8 @@ func adviseMemoryWrite(path string) string {
 	default:
 		return ""
 	}
-	return "magus workspace: this is a per-host instruction file - it lives in one checkout and one host's conventions, and a second worktree or a different agent host does not see it. If what you are recording is a DECISION ABOUT THIS WORKSPACE (a target, a saved query, an output ref, a doc), put it in the handoff journal too: `magus memory put <name>` keeps it outside the checkout, where it survives worktrees, sessions, and hosts. Host instructions are right where they are; workspace decisions are not. Load the magus-handoff-journal skill if not already loaded."
+	return "magus workspace: recording a DECISION ABOUT THIS WORKSPACE (a target, a saved query, an output ref, a doc)? Put it in the handoff journal too: `magus memory put <name>`.\n" +
+		"This file is per-host and per-checkout, so a second worktree or a different agent host never sees it. Host instructions belong right where you are writing them; workspace decisions outlive the file. Load the magus-handoff-journal skill if not already loaded."
 }
 
 // adviseInstalledSkillWrite explains that an installed skill is generated, or
@@ -669,7 +751,9 @@ func adviseInstalledSkillWrite(path string) string {
 	if err != nil || !strings.Contains(string(body), "source: magus") {
 		return ""
 	}
-	return "magus workspace: that file is an INSTALLED skill - magus generates it from its own embedded sources and stamps it with a content digest. Editing it does not fail loudly, it fails silently in two ways: `magus graph verify` reports the file as stale rather than reading what you wrote, and the next `magus agent install <dir> --force` overwrites it. Rules that belong to THIS workspace go in a local skill beside the installed ones instead - a directory magus does not ship, conventionally magus-local-development, which install and verify both leave alone by construction. Stamp each rule with its evidence and the condition that retires it. Load the magus-workspace-rules skill for the format and the rest of the method."
+	return "magus workspace: put rules that belong to THIS workspace in a local skill beside the installed ones - a directory magus does not ship, conventionally magus-local-development, which install and verify both leave alone.\n" +
+		"That file is an INSTALLED skill, generated from magus's embedded sources and stamped with a content digest: `magus graph verify` reports your edit as stale rather than reading it, and the next `magus agent install <dir> --force` overwrites it.\n" +
+		"Stamp each rule with its evidence and the condition that retires it. Load the magus-workspace-rules skill for the format."
 }
 
 // guardInput keeps the resolved command/path distinct from its rendering and
@@ -694,22 +778,64 @@ func readGuardInput(in io.Reader) (guardInput, bool) {
 type hookEnvelope struct {
 	HookEventName string `json:"hook_event_name"`
 	SessionID     string `json:"session_id"`
-	ToolInput     struct {
+	// TranscriptPath is the host's own log of this session. Recorded as a pointer so a
+	// session id in the activity view leads somewhere; magus never reads the file.
+	TranscriptPath string `json:"transcript_path"`
+	ToolName       string `json:"tool_name"`
+	ToolInput      struct {
 		Command  string `json:"command"`
 		FilePath string `json:"file_path"`
+		// A delegation: the context an orchestrator is about to hand a sub-agent, plus
+		// whatever the host calls the callee. Field PATHS, not a host name - the same line
+		// the two fields above already draw. magus does not know which tool produces them
+		// and never switches on ToolName; a payload carrying a prompt IS a spawn.
+		Prompt       string `json:"prompt"`
+		Description  string `json:"description"`
+		SubagentType string `json:"subagent_type"`
 	} `json:"tool_input"`
 }
 
-// decodeHookEnvelope pulls the thing to judge out of a host's hook payload,
-// reporting whether the input was an envelope at all.
+// The tool labels recorded on an activity event. They are magus's OWN vocabulary, chosen by
+// which flags the wrapper passed - never a host's tool name.
+//
+// That division is the whole design: only the wrapper knows that its host calls a read
+// "Read" or "read_file", and mapping those names here would be a per-host branch, so the
+// next change to any host would mean a magus release. The matcher in a host's own config is
+// where the host's vocabulary lives.
+//
+// Nothing MECHANICALLY enforces this particular case, which is why it is written down here.
+// TestNoHostSpecificBehaviorInCode matches host NAMES, so a switch over "Read"/"Bash" - a
+// per-host branch in everything but spelling - passes it untouched.
+const (
+	hookToolCommand = "shell.command"
+	hookToolWrite   = "file.write"
+	hookToolRead    = "file.read"
+)
+
+// decodeHookEnvelope pulls the thing to judge out of a host's hook payload, reporting
+// whether the input was an envelope at all.
 //
 // Reading it here keeps `jq` off the critical path of every tool call, and lets
 // attribution come from the payload rather than from flags a wrapper has to
 // remember. A payload carrying file_path rather than command is a write, so the
 // envelope also answers the --path question.
 //
-// Anything that is not an object with a usable tool_input is judged as the
-// literal text it is.
+// A payload with a file_path rather than a command is a WRITE, which is the --path
+// question, so the envelope decides that too: a caller that pipes real JSON should not
+// also have to know which flag its shape implies.
+//
+// The envelope cannot tell a read from a write on its own - both arrive carrying a
+// file_path - so it does not try. --observe is what separates them, and only the wrapper
+// can set it, because only the wrapper knows which of its host's tools merely look.
+//
+// A payload carrying a PROMPT rather than either is a delegation handoff: it is RECORDED and
+// EXEMPT from judgment. No rule is evaluated against a prompt, so the guard never denies one -
+// there is no command and no path to judge, only a context transfer to note. It is tested last on
+// purpose, so that adding this branch cannot change the verdict on any payload the guard already
+// judged.
+//
+// Anything that is not an object with a usable tool_input is left alone and judged as the
+// literal text it is - the bare-command form keeps working exactly as before.
 func decodeHookEnvelope(raw string) (hookRequest, bool) {
 	if !strings.HasPrefix(raw, "{") {
 		return hookRequest{}, false
@@ -718,12 +844,28 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 	if err := json.Unmarshal([]byte(raw), &env); err != nil {
 		return hookRequest{}, false
 	}
-	req := hookRequest{Who: hookAttribution{Session: env.SessionID, Event: env.HookEventName}}
+	req := hookRequest{Who: hookAttribution{
+		Session:    env.SessionID,
+		Transcript: env.TranscriptPath,
+		Event:      env.HookEventName,
+	}}
 	switch {
 	case env.ToolInput.Command != "":
 		req.Value = env.ToolInput.Command
 	case env.ToolInput.FilePath != "":
 		req.Value, req.IsPath = env.ToolInput.FilePath, true
+	case env.ToolInput.Prompt != "":
+		req.Value, req.IsSpawn = env.ToolInput.Prompt, true
+		req.Tool = env.ToolName
+		// Most specific label first. A sub-agent TYPE names what was delegated to and repeats
+		// across spawns, so it groups a delegation feed; a description is per-spawn prose; the
+		// tool name is the last resort that at least says a spawn happened.
+		for _, label := range []string{env.ToolInput.SubagentType, env.ToolInput.Description, env.ToolName} {
+			if label != "" {
+				req.Child = label
+				break
+			}
+		}
 	default:
 		return hookRequest{}, false
 	}
@@ -731,11 +873,15 @@ func decodeHookEnvelope(raw string) (hookRequest, bool) {
 }
 
 // hookRequest is what a host's payload asked the guard to judge: the text, whether it is a
-// path rather than a command, and who reported it.
+// path rather than a command, and who reported it. A spawn asks for nothing to be judged - it
+// carries the handed context and the callee's label, and is recorded rather than evaluated.
 type hookRequest struct {
-	Value  string
-	IsPath bool
-	Who    hookAttribution
+	Value   string
+	IsPath  bool
+	IsSpawn bool
+	Tool    string
+	Child   string
+	Who     hookAttribution
 }
 
 // hookAttribution is what the host wrapper knows about itself and cannot be
@@ -743,9 +889,10 @@ type hookRequest struct {
 // discover which agent host started it. It travels beside the input rather than
 // inside guardInput because the guard's verdict must never depend on it.
 type hookAttribution struct {
-	Host    string
-	Session string
-	Event   string
+	Host       string
+	Session    string
+	Transcript string
+	Event      string
 }
 
 type hookActivityLocation struct {
@@ -759,7 +906,7 @@ type hookActivityLocationKey struct{}
 // trail used by MCP and daemon actions. It deliberately runs before rendering the guard response:
 // the host may choose not to execute a denied command, and a pre-hook never learns the eventual
 // exit status. An audit failure must therefore be invisible to both the verdict and the command.
-func appendHookActivity(ctx context.Context, input guardInput, who hookAttribution, asPath bool, verdict guardVerdict) {
+func appendHookActivity(ctx context.Context, input guardInput, who hookAttribution, tool string, verdict guardVerdict) {
 	if input.Value == "" {
 		return
 	}
@@ -767,27 +914,48 @@ func appendHookActivity(ctx context.Context, input guardInput, who hookAttributi
 	if location.base == "" {
 		return
 	}
-	tool := "shell.command"
-	if asPath {
-		tool = "file.write"
-	}
 	command := trail.AgentCommand{
+		Actor:      "agent",
+		Workspace:  location.workspace,
+		Host:       who.Host,
+		Session:    who.Session,
+		Transcript: who.Transcript,
+		Event:      who.Event,
+		Tool:       tool,
+		Decision:   verdict.Decision,
+		Reason:     verdict.Reason,
+		Context:    verdict.Context,
+	}
+	if tool == hookToolCommand {
+		command.Command = input.Value
+	} else {
+		command.Path = input.Value
+	}
+	trail.AppendAgentCommand(ctx, location.base, command)
+}
+
+// appendHookSpawn records a delegation handoff into the same trail, so a person auditing the
+// activity log later can see WHAT CONTEXT an orchestrator handed a sub-agent, not merely that it
+// spawned one. Like appendHookActivity it is best-effort and cannot fail the tool call; unlike it
+// there is no verdict to record, because a spawn is not a guard surface.
+func appendHookSpawn(ctx context.Context, req hookRequest, who hookAttribution) {
+	if req.Value == "" {
+		return
+	}
+	location := hookActivityTrail(ctx)
+	if location.base == "" {
+		return
+	}
+	trail.AppendAgentSpawn(ctx, location.base, trail.AgentSpawn{
 		Actor:     "agent",
 		Workspace: location.workspace,
 		Host:      who.Host,
 		Session:   who.Session,
 		Event:     who.Event,
-		Tool:      tool,
-		Decision:  verdict.Decision,
-		Reason:    verdict.Reason,
-		Context:   verdict.Context,
-	}
-	if asPath {
-		command.Path = input.Value
-	} else {
-		command.Command = input.Value
-	}
-	trail.AppendAgentCommand(ctx, location.base, command)
+		Tool:      req.Tool,
+		Child:     req.Child,
+		Context:   req.Value,
+	})
 }
 
 // hookActivityTrail resolves the local workspace cache because a hook runs as a short-lived
@@ -1216,12 +1384,16 @@ func firstRawToolDenied(command string) (guardCommand, bool) {
 // explainDeny prefixes a rule's reason with the resolved command that tripped
 // it, and says so explicitly when that differs from what was typed - which is
 // the whole point of peeling wrappers, made visible instead of implied.
+//
+// It does not repeat that re-wrapping will not help: runGuardContext's tail
+// already says the guard reads the command being RUN, and this prefix is
+// prepended to it.
 func explainDeny(typed string, c guardCommand, reason string) string {
 	resolved := strings.TrimSpace(c.Name + " " + strings.Join(c.Args, " "))
 	var b strings.Builder
 	b.WriteString("magus guard denied `" + resolved + "`")
 	if strings.TrimSpace(typed) != resolved {
-		b.WriteString(", which is what `" + strings.TrimSpace(typed) + "` resolves to once wrappers and quoting are stripped. The wrapper is not the problem and re-wrapping will not help: the guard reads the command being RUN")
+		b.WriteString(" - what `" + strings.TrimSpace(typed) + "` resolves to once wrappers and quoting are stripped")
 	}
 	b.WriteString(".\n\n")
 	b.WriteString(reason)
@@ -1296,6 +1468,53 @@ func guardCommandPrefix(args []string) []string {
 	return prefix
 }
 
+// guardDependencyMutations are the argv prefixes that RE-RESOLVE dependencies and
+// rewrite the lockfile, keyed by program. They are what types.CharmRelock exists
+// for: `rw` grants rewriting DERIVED output, which is reproducible from a clean
+// checkout, while these read a registry and yield different bytes on different
+// days - which is why relock is not folded into rw.
+//
+// A hand-kept list rather than a catalog lookup, unlike the raw-tool rule: the
+// spell catalog says which op renders a command, never whether that command's
+// write is reproducible, and only the second question picks the charm.
+//
+// Deliberately narrow, and the exclusions are the load-bearing part. A bare `npm
+// install`, `npm ci` and `pnpm install --frozen-lockfile` APPLY a lockfile rather
+// than re-resolve one, so they are rw work at most and firing on them would put an
+// advisory on the most routine command in a JS repo. `go mod edit` writes go.mod
+// without consulting a registry, for the same reason. `mise install` installs
+// TOOLS, whose versions are pinned in config rather than resolved into a lockfile.
+//
+// Each prefix is spelled as its argv words. Written as a space-joined string it needed
+// re-splitting on every call, and the bare-program case had to be encoded as an empty
+// string - a sentinel indistinguishable from a typo'd entry; here it is the empty prefix
+// {{}}, which is what it means.
+var guardDependencyMutations = map[string][][]string{
+	"go":          {{"get"}, {"mod", "tidy"}},
+	"npm":         {{"update"}, {"up"}},
+	"pnpm":        {{"add"}, {"update"}, {"up"}},
+	"yarn":        {{"add"}, {"upgrade"}, {"up"}},
+	"bun":         {{"add"}, {"update"}},
+	"cargo":       {{"update"}, {"add"}},
+	"uv":          {{"lock"}, {"add"}},
+	"poetry":      {{"lock"}, {"update"}, {"add"}},
+	"pip-compile": {{}},
+}
+
+// isDependencyMutation reports whether one resolved command re-resolves dependency
+// state. The empty prefix matches the program on its own.
+func isDependencyMutation(c guardCommand) bool {
+	for _, want := range guardDependencyMutations[c.Name] {
+		if len(want) == 0 {
+			return true
+		}
+		if len(c.Args) >= len(want) && slices.Equal(c.Args[:len(want)], want) {
+			return true
+		}
+	}
+	return false
+}
+
 // gitGuard classifies git invocations from PARSED commands, returning the first
 // verdict any of them earns.
 //
@@ -1319,7 +1538,11 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 			// routinely a stranger's work from another worktree - into your tree, and
 			// drops the entry if it applies cleanly. Naming the entry after reading
 			// `git stash list` is the deliberate form and stays allowed.
-			if len(rest) > 0 && slices.Contains([]string{"list", "show"}, rest[0]) {
+			// `create` writes a stash COMMIT OBJECT and returns its name, touching
+			// neither the working tree nor the stash stack, so denyWholeTree was a
+			// false positive on it. It falls through to the checkpoint advisory
+			// below, which is what it was reaching for.
+			if len(rest) > 0 && slices.Contains([]string{"list", "show", "create"}, rest[0]) {
 				continue
 			}
 			if len(rest) > 1 && slices.Contains([]string{"pop", "apply", "drop", "branch"}, rest[0]) {
@@ -1331,7 +1554,8 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 			return bashGuardVerdict{Deny: denyWholeTree("git stash")}, true
 		case "worktree":
 			if len(rest) > 0 && rest[0] == "remove" {
-				return bashGuardVerdict{Deny: "git worktree remove deletes that worktree's working tree, including uncommitted and untracked work in it - which in a repo running several worktrees is routinely someone else's, and is not in any commit to recover from. Check it is clean first (git -C <path> status), and remove it from a session that owns it."}, true
+				return bashGuardVerdict{Deny: "Check it is clean first - `git -C <path> status` - and remove the worktree from a session that owns it.\n" +
+					"git worktree remove deletes that worktree's uncommitted and untracked work, which in a repo running several worktrees is routinely another session's and is in no commit to recover from."}, true
 			}
 		case "reset":
 			if slices.Contains(rest, "--hard") {
@@ -1382,9 +1606,54 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 		case "restore":
 			// `git restore` targets worktree files by definition.
 			return bashGuardVerdict{Context: revertGuardContext}, true
+		case "describe":
+			// --tags and --always are the build-stamp spelling (this repository's own
+			// go_build target uses both): the caller wants a version string to embed,
+			// not the identity of a tree it is handing to someone. A checkpoint does not
+			// replace that, so the advisory would be noise on every build.
+			if slices.ContainsFunc(rest, func(a string) bool { return a == "--tags" || a == "--always" }) {
+				continue
+			}
+			return bashGuardVerdict{Context: checkpointGuardContext}, true
+		case "stash":
+			if len(rest) > 0 && rest[0] == "create" {
+				return bashGuardVerdict{Context: checkpointGuardContext}, true
+			}
+		case "rev-parse":
+			if isTreeIdentityQuery(rest) {
+				return bashGuardVerdict{Context: checkpointGuardContext}, true
+			}
 		}
 	}
 	return bashGuardVerdict{}, false
+}
+
+// isTreeIdentityQuery reports whether a `git rev-parse` invocation is asking WHICH
+// REVISION this is, rather than one of the many repository-layout questions the
+// same subcommand answers (`--show-toplevel`, `--git-dir`, `--is-inside-work-tree`).
+//
+// Two conditions, and both are needed. A HEAD-ish operand excludes the layout
+// queries, which take no revision at all. `--abbrev-ref` is then excluded
+// explicitly: it takes HEAD and answers with the BRANCH NAME, which a checkpoint
+// does not replace.
+//
+// HEAD-ish is HEAD itself plus the forms that navigate from it (HEAD~2, HEAD^,
+// HEAD@{1}), and NOT every word starting with those four letters: a branch called
+// HEADLESS_BRANCH is an ordinary revision nobody is asking the identity of.
+func isTreeIdentityQuery(args []string) bool {
+	if slices.Contains(args, "--abbrev-ref") {
+		return false
+	}
+	for _, a := range args {
+		if strings.HasPrefix(a, "-") {
+			continue
+		}
+		if a == "@" || a == "HEAD" || strings.HasPrefix(a, "HEAD~") ||
+			strings.HasPrefix(a, "HEAD^") || strings.HasPrefix(a, "HEAD@{") {
+			return true
+		}
+	}
+	return false
 }
 
 // gitGuardFallback applies the legacy regexes, and runs ONLY when the line does
@@ -1512,29 +1781,25 @@ var (
 )
 
 const (
-	vcsGuardContext = "magus workspace: classify the dirty tree before staging or committing: magus describe file $(git diff --name-only). role=output paths are generated - never hand-edit them; regenerate and commit them with their source change. Stage the reviewed paths explicitly with `git add -- <paths>`. Load the magus-vcs-hygiene skill for the commit checklist if not already loaded."
-	// An explicit ladder: naming the middle rung is the point, because a spell op
-	// still runs through magus, so the cache, the sandbox and affected tracking
-	// all survive. Rung 2 forwards args - `magus run go::go-test <p> -- -run
-	// TestX`.
+	vcsGuardContext = "magus workspace: classify the dirty tree first - `magus describe file $(git diff --name-only)` - then stage the reviewed paths explicitly: `git add -- <paths>`.\n" +
+		"role=output paths are generated: never hand-edit them, and commit them with the source change that moved them. Load the magus-vcs-hygiene skill for the commit checklist if not already loaded."
+	// The tail of runGuardContextFor, which supplies the replacements. This half
+	// carries only the WHY and the anti-retry line.
 	//
 	// DENIED, not advised: every tool matched here has an exact magus equivalent,
 	// so the deny costs nothing, and an advisory loses to a trained reflex. As an
 	// advisory it changed behaviour zero times over a long session and left the Go
 	// build cache poisoned by uninstrumented raw runs.
-	runGuardContext = "this has an exact equivalent in magus, so it is DENIED rather than explained - not because it is dangerous, but because the replacement does strictly more (cache, sandbox, affected tracking) and costs you nothing. If the command WRITES into the working tree (generate, a formatter with -w/--write/--fix, go mod tidy, build output on a tracked path) the rule is firm and has no exceptions: a raw write leaves the owning target reporting drift it did not cause, and the workspace's account of itself wrong. Escalate only as far as you actually need:\n" +
-		"  1. TOP-LEVEL TARGET (use this almost always):  magus run test|build|lint|format|generate [<project>]  - `magus describe targets` lists every target, `-o name` for just the names\n" +
-		"  2. ONE SPELL OP, still through magus, when a whole target is too broad:  magus run <spell>::<op> [<project>]  (e.g. magus run go::go-test libs/foo). `magus describe spell <name>` lists a spell's ops.\n" +
-		"To see the exact command a target or op would run, WITHOUT running it, add --dry-run: `magus run go::go-test libs/foo --dry-run` prints `$ go test ./...`. Use that to learn what magus does under the hood instead of guessing and reaching for the raw tool.\n" +
-		"Args after `--` are forwarded, so a specific flag is NOT a reason to reach for the raw tool: `magus run go::go-test libs/foo -- -run TestX` runs `go test ./... -run TestX`, and a magusfile target receives them as its `args: [str]` parameter. The operation already supplies its own default arguments: forward only the extra flags or overrides you need. Narrow by PROJECT too - `magus run test libs/foo` runs less. Load the magus-run skill if not already loaded.\n" +
-		"Do NOT retry this behind a wrapper. The guard reads the command being RUN, not the one being typed, so a launcher, `env -u GOROOT ...`, a `VAR=value` prefix, and `bash -c '...'` all reach the same verdict. Run the named magus command directly."
+	runGuardContext = "magus covers this exactly and adds cache, sandbox, and affected tracking, so the deny costs you nothing. A raw WRITE (codegen, a formatter with -w/--write/--fix, go mod tidy, build output on a tracked path) also leaves the owning target reporting drift it did not cause - that half has no exceptions.\n" +
+		"The guard reads the command being RUN, so a launcher, a `VAR=value` prefix, or `bash -c '...'` reaches the same verdict. Run the magus command directly. Load the magus-run skill if not already loaded."
 	// Reverting regenerated output is the wrong default. An agent that did not
 	// hand-edit a gen/ file concludes it is not "its" change and discards it -
 	// but a generate target rewriting its declared outputs is the system working,
 	// and those outputs belong in the same commit as the source that moved them.
 	// The honest test is whether the SOURCE changed, not whether the agent typed
 	// into the output.
-	revertGuardContext = "magus workspace: do not revert a file just because you did not hand-edit it. Classify first: magus describe file <paths>. A role=output path is a declared target output, and if a source change moved it that is correct - it belongs in the SAME commit as the source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged, which means the drift is environmental (a tool version, a path baked into the output) rather than yours - report that instead of silently discarding it. Load the magus-vcs-hygiene skill if not already loaded."
+	revertGuardContext = "magus workspace: classify before reverting - `magus describe file <paths>` - and do not revert a file just because you did not hand-edit it.\n" +
+		"A role=output path moved by a source change is correct: it belongs in the SAME commit as that source, and reverting it is what makes CI fail on drift. Revert only when regenerating reproduces the same diff with the target's declared inputs unchanged - that drift is environmental, and worth reporting rather than discarding. Load the magus-vcs-hygiene skill if not already loaded."
 	// ADVISE, not deny. Denying was tried and reverted: magus has no raw-text
 	// search to fall back on, so "where does this string appear" has no magus
 	// answer and the deny removed a capability. The advisory still applies the
@@ -1546,17 +1811,28 @@ const (
 	// useless is the failure this text exists to prevent.
 	// Names the mechanism, because the fix is not "remember where you are" - it is
 	// that the project is an argument and never needs to be implied by the CWD.
-	cwdGuardContext = "magus workspace: magus is CWD-relative, and `cd` before a magus command is how the right command lands on the wrong project. Pass the project explicitly instead - `magus run <target> <project>`, `magus describe project <path>`, `magus affected ci` - so the command means the same thing from anywhere. Project paths are workspace-relative (`libs/foo`, or `workspace://libs/foo`; both parse). `magus where <name>` resolves a name to its path. Only a DIFFERENT workspace needs relocating, and that is `--root <path>`, not a cd."
+	cwdGuardContext = "magus workspace: pass the project instead of cd-ing to it - `magus run <target> <project>`, `magus describe project <path>` - so the command means the same thing from anywhere. `magus where <name>` resolves a name to its path.\n" +
+		"magus is CWD-relative, so a `cd` first is how the right command lands on the wrong project; project paths are workspace-relative and written bare (`libs/foo`). Only a DIFFERENT workspace needs relocating, and that is `--root <path>`, not a cd."
 
-	searchGuardReason = "this workspace has a knowledge graph, and a text match is a guess that misses generated, indirect, and cross-language references the graph knows about. Pick by what you are asking:\n" +
-		"  CODE SYMBOL (where is it defined / used):  magus refs <symbol>   -> definition file, every referencing file, exact lines\n" +
+	searchGuardReason = "this workspace has a knowledge graph, and a text match misses the generated, indirect, and cross-language references it knows about. Pick by what you are asking:\n" +
+		"  CODE SYMBOL (defined / used where):  magus refs <symbol>\n" +
 		"  DOMAIN ENTITY (projects, targets, spells, ops, docs, diagnostics):  magus query \"<terms>\"  with kind:<k> project:<p> relation:<r> filters and -negation\n" +
 		"  ONE node's edges, provenance, blast radius:  magus explain <node>\n" +
 		"  HOW two things connect:  magus path <a> <b>\n" +
-		"`magus query <symbol>` returns 0 for code symbols - that is refs's job, not query's. Every empty result carries a verdict saying which kind of empty it is: `absent` is a fact magus verified, `unknown` names what it could not search and how to fix it. Read the verdict rather than guessing.\n" +
-		"If you are searching for raw TEXT rather than a symbol or an entity (a string literal, a comment, a config value), grep is the right tool and magus has no replacement - carry on. Load the magus-query skill for the full grammar."
+		"`magus query <symbol>` returns 0 for a code symbol - that is refs's job. Searching raw TEXT (a string literal, a comment, a config value) has no magus replacement: carry on with grep. Load the magus-query skill for the full grammar."
 
-	pushGuardContext = "magus workspace: `magus affected ci` is the gate before publishing - it runs the full pipeline over every project the diff reaches, including ones you never edited. Run it if you have not since your last change. If you are pushing deliberate work-in-progress, or you already ran it, push. Load the magus-run skill if not already loaded."
+	// `ci` is the one target name magus ENFORCES (docs/recommendations.md), so it is
+	// the one literal a shipped verdict may carry; every other target name is
+	// workspace vocabulary and routes through discovery.
+	pushGuardContext = "magus workspace: run the gate before publishing if you have not since your last change - `magus affected ci` runs it over every project the diff reaches, including ones you never edited.\n" +
+		"Already ran it, or pushing deliberate work-in-progress? Push. Load the magus-run skill if not already loaded."
+
+	denyNotesAuthor = "Recording a DECISION ABOUT THIS WORKSPACE is what `magus memory put <name>` is for: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
+		"Notes are human-authored by design: a note is the one thing in the knowledge graph nothing here corroborates later, so its only provenance is the person who wrote it and signed the commit. That is why it is refused however the write is spelled.\n" +
+		"If the content genuinely belongs in the notes, say so and let the person run it themselves."
+
+	denySedInPlace = "Use your editor tool instead: it reads the file, applies an exact replacement, and reports what changed. For a whole-tree mechanical edit, `magus refs <symbol> --occurrences` gives column-precise sites rather than a pattern that also matches the comment about it.\n" +
+		"`sed -i` is not portable and the two spellings destroy each other's work: GNU reads `sed -i 's/x/y/' f` as an edit, BSD and macOS read that same script as the BACKUP SUFFIX, and `sed -i '' ...` makes GNU edit nothing - so it mangles the file on the next machine, by WRITING, before anyone reads a diff. Reading with sed is untouched."
 
 	// Named for what the agent should do instead, not for what it did wrong: the
 	// exact safe replacement is the actionable part. `git add -A` is the single command
@@ -1565,18 +1841,8 @@ const (
 	// a commit about something else. Measured: one such call put 69 files - a whole
 	// regenerated docs site plus five untouched source files - into a commit about
 	// four collection methods.
-	denyNotesAuthor = "authoring a note is denied because notes are human-authored by design - agents read them and never write them.\n" +
-		"A note is the one thing in the knowledge graph that is not derived from the repository: nothing here corroborates it later, so its only provenance is the person who wrote it and signed the commit. That is why this is refused however the write is spelled - `magus notes edit` reading piped prose is a command rather than a file write, so the path rule would never have seen it.\n" +
-		"Recording a DECISION ABOUT THIS WORKSPACE is what `magus memory put <name>` is for: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
-		"If the content genuinely belongs in the notes, say so and let the person run it themselves."
-
-	denySedInPlace = "editing a file in place with sed is denied because the flag is not portable and the two spellings destroy each other's work.\n" +
-		"GNU reads `sed -i 's/x/y/' f` as an edit; BSD and macOS read that same `s/x/y/` as the BACKUP SUFFIX and are then left with no script. The portable-looking `sed -i '' ...` inverts it: GNU takes `''` as the script and edits nothing. So the command that worked where it was written mangles the file on the next machine, and it does it by WRITING, so the damage is on disk before anyone reads the diff.\n" +
-		"Use your editor tool instead - it reads the file, applies an exact replacement, and reports what changed. Reading with sed is untouched; only an in-place edit is refused.\n" +
-		"For a whole-tree mechanical edit, `magus refs <symbol> --occurrences` gives column-precise sites to edit rather than a pattern that also matches the comment about it."
-
-	denyStageAll = "staging everything is denied because it sweeps unrelated sources, generated outputs, and residue into one commit. First classify the dirty tree: `magus describe file $(git diff --name-only)`. Then stage only the reviewed source files and the generated outputs they require: `git add -- <paths>`.\n" +
-		"Why this is not just style: a magus target writes its declared outputs as it runs, so a tree is routinely dirty with generated files you did not edit. `git add -A` commits them with no signal that it happened, and it also picks up build residue. Confirm the deliberate selection with `git diff --cached --stat` BEFORE committing. There is deliberately no `magus vcs` wrapper; load the magus-vcs-hygiene skill if not already loaded."
+	denyStageAll = "Classify the dirty tree first: `magus describe file $(git diff --name-only)`. Then stage only the reviewed paths - `git add -- <paths>` - and confirm the selection with `git diff --cached --stat` before committing.\n" +
+		"A magus target writes its declared outputs as it runs, so the tree is routinely dirty with files you did not edit; `git add -A` sweeps those and build residue into the commit with no signal that it happened. There is deliberately no `magus vcs` wrapper; load the magus-vcs-hygiene skill if not already loaded."
 
 	// Both messages LEAD with the replacement, per this file's rule: the agent
 	// reached for a filter because it wanted one specific thing, so the actionable
@@ -1585,29 +1851,53 @@ const (
 		"  -o name                      the ids/names, one per line\n" +
 		"  -o json                      the full record\n" +
 		"  -o template=<go-template>    one field, e.g. -o template='{{.Ref}}'\n" +
-		"Denied rather than advised because a pipe also replaces the exit status with the last stage's, so a failing gate reads as exit 0.\n" +
+		"A pipe also replaces the exit status with the last stage's, so a failing gate reads as exit 0.\n" +
 		outputGuardTail
 	outputRedirectDeny = "magus already wrote the log; you do not need to capture it:\n" +
 		"  magus query output <ref>     the failing target's full captured log (this one may be redirected)\n" +
 		"  .magus/logs/<hash>.log       the path, printed by the failure itself\n" +
 		"  -o json --tee <file>         mirror structured output to a file (never console text)\n" +
-		"Redirecting hides what you need next: --silent prints the diagnostics and the log path on failure, and `-s > /dev/null 2>&1` throws exactly that away.\n" +
+		"--silent prints the diagnostics and the log path on failure, and a redirect throws exactly that away.\n" +
 		outputGuardTail
-	throwawayCopyDeny = "This runs magus inside a temp or scratchpad copy, so its verdict describes a tree nobody ships: a green gate leaves the real tree unverified, generated files land in the copy, and the copy gets its own cache.\n" +
-		"Run from the workspace and name the project: `magus run <target> <project>`. A different workspace is `--root <path>`; a pristine tree is a throwaway `git worktree`, not a copy."
-	outputGuardTail = "The one exception is `magus query output <ref>`: a raw captured log has no schema to project, so searching it is a real need."
+	throwawayCopyDeny = "Run from the workspace and name the project: `magus run <target> <project>`. A different workspace is `--root <path>`; a pristine tree is a throwaway `git worktree`, not a copy.\n" +
+		"A run inside a temp or scratchpad copy judges a tree nobody ships: a green gate leaves the real tree unverified, generated files land in the copy, and the cache splits."
+	outputGuardTail = "The one exception is `magus query output <ref>`: a raw captured log has no schema to project."
+
+	// ADVISE, never deny: reading the revision is legitimate, and checkpoint is a
+	// strict SUPERSET rather than a substitute, so there is nothing to block. That
+	// also rules out the third deny trigger, which needs an exact equivalent.
+	checkpointGuardContext = "magus workspace: `magus vcs checkpoint` identifies the working state - `-o name` prints `<revision>` clean, `<revision>+<digest>` dirty - and records it on the activity trail, so a later reader knows what the work was looking at.\n" +
+		"A revision alone cannot identify a DIRTY tree: two workers on the same commit with different uncommitted work read as identical, and the patch digest is what separates them. checkpoint RESOLVES AND RECORDS - no tag, no stash, no ref, no file - so one nobody keeps has cost nothing."
+
+	// ADVISE, never deny: re-resolving dependencies is legitimate work with no
+	// exact magus equivalent to route to, so the third deny trigger does not apply.
+	// It is here because relock is under-discoverable - a reserved charm nothing
+	// prompts for - and a lockfile refreshed outside magus is a write the cache and
+	// the affected set never saw.
+	//
+	// The covering TARGET is not named and cannot be: relock is magus vocabulary,
+	// but which target carries the dependency work is the workspace's.
+	//
+	// Shared with the raw-tool deny, which appends it when the denied command is
+	// also a re-resolution (`go mod tidy` is both), so the charm is named whichever
+	// rule answers first.
+	relockAdvice = "Run the covering target with the relock charm - `magus run <target>:relock <project>` - so the dependency rewrite happens inside magus, cached and visible to affected tracking. `magus describe targets` lists what this workspace defines.\n" +
+		"relock is the reserved charm for rewriting DEPENDENCY state, the way rw covers derived output: reproducible from a clean checkout is rw, dependent on what a registry serves today is relock. ci strips both, so a gate verifies the committed lockfile rather than refreshing it."
+	relockGuardContext = "magus workspace: " + relockAdvice
 
 	// Advice, not a deny: it wastes a line, it does not break anything.
-	echoOnSuccessAdvice = "The `&& echo ...` is redundant - the exit status already says the command passed, and a message that only prints on success carries no information the status did not. Drop it and read the status."
+	echoOnSuccessAdvice = "Drop the `&& echo ...` and read the exit status - it already says the command passed, and a message that prints only on success adds nothing."
 )
 
 // denySharedStash explains why an unqualified stash restore is refused.
 func denySharedStash(verb string) string {
-	return "git stash " + verb + " with no entry named acts on stash@{0}, and the stash stack belongs to the REPOSITORY, not to your worktree - so the top entry is often work another checkout (or another agent) shelved, and " + verb + " applies or destroys it. Read `git stash list` first, then name the one you meant: git stash " + verb + " stash@{N}."
+	return "Name the entry you meant: read `git stash list`, then `git stash " + verb + " stash@{N}`.\n" +
+		"Bare `git stash " + verb + "` acts on stash@{0}, and the stash stack belongs to the REPOSITORY rather than your worktree - the top entry is often another checkout's work, and " + verb + " applies or destroys it."
 }
 
 func denyWholeTree(op string) string {
-	return "whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. Verify builds in place (magus run build / magus affected ci); building never requires a clean tree. If you truly need a pristine tree, use a throwaway git worktree. See the magus-vcs-hygiene skill."
+	return "Verify in place: no magus run needs a clean tree - `magus run <target> <project>`, or `magus affected ci` for everything the diff reaches. If you truly need a pristine tree, use a throwaway git worktree.\n" +
+		"whole-tree " + op + " destroys uncommitted and untracked work, including a concurrent agent's. See the magus-vcs-hygiene skill."
 }
 
 // evaluateBashGuard applies the guard rules in severity order.
@@ -1664,13 +1954,27 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	switch {
 	case rawToolDeny:
 		match, _ := rawToolMatch(rawToolCmd)
-		return bashGuardVerdict{Deny: explainDeny(command, rawToolCmd, runGuardContextFor(match))}
+		reason := runGuardContextFor(match)
+		// `go mod tidy` is both a covered spell op and a dependency re-resolution.
+		// The deny answers first, so it is the only text the reader gets, and
+		// routing into magus without naming the charm that makes the write legal
+		// sends them to a target that would refuse to do it.
+		//
+		// The WHOLE line is scanned, not just the denied command: `go test ./... &&
+		// npm update` denies on the first half, and the reader was never told the
+		// second half rewrites a lockfile - the deny is the only text they get.
+		if isDependencyMutation(rawToolCmd) || slices.ContainsFunc(cmds, isDependencyMutation) {
+			reason += "\n" + relockAdvice
+		}
+		return bashGuardVerdict{Deny: explainDeny(command, rawToolCmd, reason)}
 	case magusInThrowawayCopy(command):
 		return bashGuardVerdict{Deny: throwawayCopyDeny}
 	case magusPipedToFilter(command):
 		return bashGuardVerdict{Deny: outputPipeDeny}
 	case magusRedirected(command):
 		return bashGuardVerdict{Deny: outputRedirectDeny}
+	case parsed && slices.ContainsFunc(cmds, isDependencyMutation):
+		return bashGuardVerdict{Context: relockGuardContext}
 	case guardCdMagusRe.MatchString(command):
 		return bashGuardVerdict{Context: cwdGuardContext}
 	case guardCodeSearchRe.MatchString(command):
@@ -1682,8 +1986,16 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	return advisory
 }
 
+// runGuardContextFor leads with the TOP-LEVEL TARGET, and names the spell op
+// only as the arg-passthrough escape hatch.
+//
+// The target is not named, because it cannot be: the guard ships in a binary and
+// a workspace calls its targets whatever it likes, so a literal `magus run test`
+// would be this repository's vocabulary asserted over someone else's. The op IS
+// named, since it resolved from the spell catalog rather than from a convention.
 func runGuardContextFor(match guardToolMatch) string {
-	return fmt.Sprintf("Run this instead: `magus run %s::%s`. Tool flags and overrides remain available: `magus run %s::%s [<project>] -- <tool-args>`.\n\n%s", match.spell, match.operation, match.spell, match.operation, runGuardContext)
+	return fmt.Sprintf("Run it through magus instead: `magus run <target> <project>`. `magus describe targets` lists what this workspace calls its targets (`-o name` for just the names); add `--dry-run` to print the exact command without running it.\n"+
+		"Only to pass flags to the tool itself, the one-op form forwards everything after `--`: `magus run %s::%s [<project>] -- <tool-args>`.\n\n%s", match.spell, match.operation, runGuardContext)
 }
 
 // reportContextCost tells the caller how many bytes of instruction the install

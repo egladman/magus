@@ -1,6 +1,6 @@
 ---
 title: Remote caching
-description: Wire an S3 or GitHub Actions remote cache backend as a spell so CI runners replay signed build artifacts across machines with a strict trust model.
+description: Wire an S3 or GitHub Actions remote cache provider as a spell so CI runners replay signed build artifacts across machines with a strict trust model.
 tags:
   [
     remote-cache,
@@ -23,7 +23,7 @@ previous output instead of rebuilding. That cache lives on disk (`.magus/` in th
 workspace root) and is **local** to one machine.
 
 A **remote cache** shares those artifacts across **CI runners**, machine to
-machine. When the local cache misses, magus asks the remote backend for the
+machine. When the local cache misses, magus asks the remote provider for the
 artifact; if found, it downloads and replays it instead of building. After a genuine
 build, magus uploads the result so the next machine gets a hit. A cold CI runner can
 replay work another runner (or `main`) already did.
@@ -33,33 +33,33 @@ magus is built to keep it that way. A cache hit replays another machine's build
 outputs into your tree, so whoever can write an artifact a consumer trusts can
 inject arbitrary files into that consumer's build. That is a supply-chain trust
 boundary, so **every remote artifact must be cryptographically signed by a trusted
-key, and wiring a backend without a trust set is refused** (see
+key, and wiring a provider without a trust set is refused** (see
 [Signing is required](#signing-is-required-trust-model) below). Neither a developer,
 a fork PR, nor anyone holding raw bucket credentials can publish an artifact that
 any machine will replay.
 
-magus itself knows nothing about S3 or GitHub. A backend is a
+magus itself knows nothing about S3 or GitHub. A provider is a
 [spell](../spells.md) that declares no operations and instead exports the cache
 contract: three functions the remote-cache subsystem detects by name and invokes:
 
 | function                   | when                             | does                                            |
 | -------------------------- | -------------------------------- | ----------------------------------------------- |
-| `enabled(target, cb)`      | once, before fetch/push          | is the backend active here? (gates everything)  |
+| `enabled(target, cb)`      | once, before fetch/push          | is the provider active here? (gates everything) |
 | `get_artifact(target, cb)` | on a local cache miss            | download the artifact into `dest`; `true` = hit |
 | `put_artifact(target, cb)` | after building a missed artifact | upload the artifact at `src`; `true` = stored   |
 
 (A fourth, `prune`, evicts artifacts by retention policy.) These are not
 operations a target composes; they are the contract the remote-cache subsystem
-calls. Everything backend-specific (auth, transport) stays in the spell, in pure
+calls. Everything provider-specific (auth, transport) stays in the spell, in pure
 Buzz. See [spells.md](../spells.md) and [engines.md](../engines.md).
 
-## Wiring a backend
+## Wiring a provider
 
-Wiring has two parts: the magusfile binds the backend (a spell, i.e. code), and
+Wiring has two parts: the magusfile binds the provider (a spell, i.e. code), and
 `magus.yaml` declares the trust set that secures it (`cache.remote.trusted_keys`, i.e.
 data). The split is deliberate. A trust anchor is declarative config, not build
 logic, so it lives in YAML where it can't branch or compute itself. The spell
-**self-gates** via `enabled()`, so the backend is a no-op anywhere it isn't
+**self-gates** via `enabled()`, so the provider is a no-op anywhere it isn't
 configured (e.g. a developer machine with no credentials):
 
 ```buzz
@@ -76,9 +76,9 @@ cache:
       - "<base64 Ed25519 public key>"
 ```
 
-`magus\cache.remote(handle)` records the backend; magus resolves and drives it
-during a run. Bind **one** backend. A non-empty `cache.remote.trusted_keys` is
-**required** alongside it: a remote backend with no trust set fails at load (see
+`magus\cache.remote(handle)` records the provider; magus resolves and drives it
+during a run. Bind **one** provider. A non-empty `cache.remote.trusted_keys` is
+**required** alongside it: a remote provider with no trust set fails at load (see
 the next section). Generate a key with `magus config cache key generate`.
 
 ### GitHub Actions Cache
@@ -94,15 +94,15 @@ magus\cache.remote(github);
 It reads everything it needs from the runner environment, all provided
 automatically inside a GitHub Actions job:
 
-| variable                | provided by | purpose                                    |
-| ----------------------- | ----------- | ------------------------------------------ |
-| `GITHUB_ACTIONS`        | the runner  | gates the backend (`"true"` only in a job) |
-| `ACTIONS_RESULTS_URL`   | the runner  | cache service (v2) base URL                |
-| `ACTIONS_RUNTIME_TOKEN` | the runner  | bearer token for the cache service         |
+| variable                | provided by | purpose                                     |
+| ----------------------- | ----------- | ------------------------------------------- |
+| `GITHUB_ACTIONS`        | the runner  | gates the provider (`"true"` only in a job) |
+| `ACTIONS_RESULTS_URL`   | the runner  | cache service (v2) base URL                 |
+| `ACTIONS_RUNTIME_TOKEN` | the runner  | bearer token for the cache service          |
 
 There is no transport to configure: bind it, and it activates in CI and stays
 dormant locally. You still declare a trust set and set the signing secret as for
-any backend (see [Signing is required](#signing-is-required-trust-model)). GitHub
+any provider (see [Signing is required](#signing-is-required-trust-model)). GitHub
 evicts old artifacts on its own (7-day idle / repo size cap).
 
 ### S3, MinIO, Cloudflare R2, Backblaze B2
@@ -120,14 +120,14 @@ Configuration comes from the environment (standard AWS variables plus a bucket):
 
 | variable                | required | purpose                                                                                                     |
 | ----------------------- | -------- | ----------------------------------------------------------------------------------------------------------- |
-| `MAGUS_S3_BUCKET`       | yes      | bucket name (gates the backend)                                                                             |
-| `AWS_ACCESS_KEY_ID`     | yes      | access key (gates the backend)                                                                              |
+| `MAGUS_S3_BUCKET`       | yes      | bucket name (gates the provider)                                                                            |
+| `AWS_ACCESS_KEY_ID`     | yes      | access key (gates the provider)                                                                             |
 | `AWS_SECRET_ACCESS_KEY` | yes      | secret key                                                                                                  |
 | `AWS_SESSION_TOKEN`     | no       | for temporary credentials                                                                                   |
 | `AWS_REGION`            | no       | region (falls back to `AWS_DEFAULT_REGION`, then us-east-1)                                                 |
 | `MAGUS_S3_ENDPOINT`     | no       | base URL incl. scheme, no trailing slash; set for MinIO/R2/B2 (default `https://s3.<region>.amazonaws.com`) |
 
-Unlike the GitHub backend, S3 has no automatic eviction. Prune it on a schedule:
+Unlike the GitHub provider, S3 has no automatic eviction. Prune it on a schedule:
 
 ```sh
 magus config cache prune --remote   # evict by the configured retention policy
@@ -155,7 +155,7 @@ Because verification happens on the consumer, this holds even against an attacke
 who bypasses magus entirely and writes poisoned bytes straight into the bucket:
 with no valid signature, every consumer rejects them.
 
-**Wiring a remote backend without a trust set is a hard error**, on every machine,
+**Wiring a remote provider without a trust set is a hard error**, on every machine,
 so a shared cache can never come up unverified. _Upgrading an existing remote
 cache:_ add `cache.remote.trusted_keys` to `magus.yaml` and set `MAGUS_CACHE_SIGNING_KEY`
 on trusted pushes, or the run fails at load with a message saying so.
@@ -163,11 +163,11 @@ on trusted pushes, or the run fails at load with a message saying so.
 ### Insecure mode (no signing)
 
 `cache.remote.insecure: true` (env `MAGUS_CACHE_REMOTE_INSECURE`) is the explicit
-opt-out: the backend runs with **no trust set and no signing key**, importing and
+opt-out: the provider runs with **no trust set and no signing key**, importing and
 producing **unsigned** artifacts. This removes the supply-chain protection above
 (any writer the store trusts can inject files into a consumer's build), so it is
 only appropriate for a **trusted single-repo CI** (no fork PRs writing the store)
-or for **validating a backend before minting keys**. It is off by default and must
+or for **validating a provider before minting keys**. It is off by default and must
 be set deliberately; prefer a signed trust set for anything shared. Setting it is
 mutually exclusive with `trusted_keys` in effect: when `insecure` is true,
 verification is skipped regardless of any keys.
@@ -300,7 +300,7 @@ read-only; the default is mutable. See the
 ## Observability
 
 When [telemetry](../telemetry.md) is enabled, magus instruments every remote
-`get`/`put` automatically, with no backend changes, since the wrapping
+`get`/`put` automatically, with no provider changes, since the wrapping
 happens around the `RemoteBackend` interface, not inside the spell. You get the
 `magus.cache.remote.{hits,misses,errors,duration,io.size}` metrics (hit-rate,
 latency, bytes moved) plus a `magus.cache.remote.get`/`.put` span per operation,
@@ -309,17 +309,17 @@ under their own `.remote` prefix and are never folded into the local
 `magus.cache.*` counters. See the
 [telemetry reference](../telemetry.md#remote-cache) for the full instrument list.
 
-## Writing your own backend
+## Writing your own provider
 
-Any store reachable over HTTP can be a backend. Implement the three functions
+Any store reachable over HTTP can be a provider. Implement the three functions
 (`enabled`/`get_artifact`/`put_artifact`) in a spell: read inputs from the `cb(io)`
 callback (`io.hash`, `io.dest`/`io.src`), use the `http` byte primitives
 (`http\download`/`upload_chunked`/`byteSize`) and `crypto` for request signing
 (e.g. AWS SigV4 via `crypto\hmacSha256`), and
-return the boolean result. The two shipped backends are worked examples; start
+return the boolean result. The two shipped providers are worked examples; start
 from whichever transport is closest.
 
-A backend is a pure byte mover: **artifact signing and verification happen in
-magus's core, not in the spell.** A backend never sees, produces, or checks a
+A provider is a pure byte mover: **artifact signing and verification happen in
+magus's core, not in the spell.** A provider never sees, produces, or checks a
 cache-artifact signature, so it cannot weaken or bypass the trust model and it gets
 signing for free. It only moves the opaque bytes.

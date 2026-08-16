@@ -1,0 +1,75 @@
+// site/diagrams/daemon-http.buzz - what reaches the daemon's HTTP server, and what bypasses the
+// guard. Split out of the README's single whole-system flowchart, which carried this
+// alongside four other subjects and blew every complexity budget in the design system.
+//
+// The figure has one claim: every route except the health probes sits behind the guard.
+// The accent pair (the guard box, the probe connector) is spent entirely on making that
+// one exception visible.
+//
+// The /api/v1 routes are drawn as two clusters rather than ten boxes, and the split is the
+// one internal/daemon itself makes: the read views a share link may also serve, and the
+// review-and-plan routes that stay loopback-only. Their contents are the mounting order in
+// internal/daemon/daemon.go's bridgeMux; docs/reference/console.md is the prose twin.
+namespace daemonHttp;
+
+import "../libs/diagram/diagram" as _;
+
+export fun daemonHttpDiagram() > Diagram {
+    return Diagram{
+        id = "daemon-http",
+        eyebrow = "magus daemon",
+        title = "The HTTP surface, and the one route without a guard",
+        desc = "Agents and the console reach /mcp, the /api/v1 read views, the review and "
+            + "plan routes and nine typed Connect services through the DNS-rebind, "
+            + "bearer-token and CORS guard. POST /api/v1/diff/session carries the human "
+            + "half of a paired review and POST /api/v1/share opens the LAN listener; both "
+            + "are loopback only. The health endpoints answer probes directly, with no "
+            + "authentication.",
+        width = 960,
+        height = 600,
+        nodes = [
+            Node{ id = "agent", label = "AI agents", sub = "Claude Code, IDE",
+                  tag = "client", x = 32, y = 112, w = 160, h = 64 },
+            Node{ id = "console", label = "Console PWA", sub = "dashboard, review",
+                  tag = "client", x = 32, y = 200, w = 160, h = 64 },
+            Node{ id = "probe", label = "kubelet", sub = "scripts, probes",
+                  tag = "client", role = "external", x = 32, y = 440, w = 160, h = 64 },
+
+            Node{ id = "guard", anchor = "internal/httpx", label = "Guard", sub = "rebind + token + CORS",
+                  tag = "gate", role = "focal", x = 320, y = 200, w = 180, h = 88 },
+
+            Node{ id = "mcp", anchor = "internal/handler/mcp", label = "/mcp", sub = "agent tools, SSE",
+                  x = 600, y = 88, w = 280, h = 64 },
+            Node{ id = "reads", anchor = "internal/handler/graph", label = "/api/v1 read views",
+                  sub = "graph, events, insight, outputs",
+                  x = 600, y = 176, w = 280, h = 64 },
+            Node{ id = "review", anchor = "internal/handler/status", label = "/api/v1 review + plans",
+                  sub = "diff, session, plan, ledger",
+                  x = 600, y = 264, w = 280, h = 64 },
+            Node{ id = "connect", anchor = "internal/handler/metrics", label = "Connect RPC",
+                  sub = "nine typed services",
+                  x = 600, y = 352, w = 280, h = 64 },
+            Node{ id = "health", anchor = "internal/daemon", label = "/livez /readyz", sub = "no authentication",
+                  role = "external", x = 600, y = 440, w = 280, h = 64 },
+        ],
+        // Bends are declared rather than defaulted so no two crossing segments share an x:
+        // the fan order out of the guard has to mirror the bend order, or the runs to /mcp
+        // and the read views cross each other on the way up. The connector traveling
+        // furthest turns closest to the guard.
+        edges = [
+            Edge{ src = "agent", dst = "guard", dstSlot = 1, dstSlots = 2, bend = 240 },
+            Edge{ src = "console", dst = "guard", dstSlot = 2, dstSlots = 2, bend = 272 },
+
+            Edge{ src = "guard", dst = "mcp", srcSlot = 1, srcSlots = 4, bend = 520 },
+            Edge{ src = "guard", dst = "reads", srcSlot = 2, srcSlots = 4, bend = 536 },
+            Edge{ src = "guard", dst = "review", srcSlot = 3, srcSlots = 4, bend = 528 },
+            Edge{ src = "guard", dst = "connect", srcSlot = 4, srcSlots = 4, bend = 512 },
+
+            Edge{ src = "probe", dst = "health", label = "unguarded", kind = "accent" },
+        ],
+        legend = [
+            LegendItem{ role = "focal", label = "authenticated" },
+            LegendItem{ role = "external", label = "open to any caller" },
+        ],
+    };
+}

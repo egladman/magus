@@ -118,15 +118,7 @@ An axis with one charm is binary and needs no guard. An axis with two needs one.
 
 Drawn as axes rather than a list of charms, magus's own `image-build` reads like this:
 
-```mermaid
-flowchart LR
-    R["magus run image-build"] --> D{"cd?"}
-    D -- "no" --> L["load locally, push nothing"]
-    D -- "yes" --> C{"channel"}
-    C -- "(none)" --> K["commit: ghcr, tagged by hash"]
-    C -- "unstable" --> U["prerelease: both registries, no floating tag"]
-    C -- "stable" --> S["release: both registries, version + latest"]
-```
+<!--diagram:image-build-->
 
 Every leaf is reachable, and no two charms lead to the same one. That is the shape to
 aim for: if two combinations land on one leaf, one of the charms is not earning its

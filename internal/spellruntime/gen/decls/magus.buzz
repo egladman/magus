@@ -12,12 +12,14 @@ export object Affected {
     seed: [str] = [],
     filesBySeed: {str: [str]} = {},
     affected: [str] = [],
+    undeclaredBySeed: {str: [str]} = {},
 }
 
 export object ImpactProject {
     path: str = "",
     seed: bool = false,
     files: [str] = [],
+    undeclaredFiles: [str] = [],
     spells: [str] = [],
     targets: [str] = [],
 }
@@ -60,12 +62,22 @@ export object ExecResult {
     ok: bool = false,
 }
 
+export object FileClaim {
+    project: str = "",
+    target: str = "",
+    role: str = "",
+    glob: str = "",
+    paths: [str] = [],
+}
+
 export object FileEntry {
     path: str = "",
     project: str = "",
     role: str = "",
     outputOf: [str] = [],
     sourceOf: [str] = [],
+    claims: [FileClaim] = [],
+    dependsOn: [str] = [],
     hint: str = "",
 }
 
@@ -73,6 +85,7 @@ export object FileReport {
     definition: str = "",
     count: int = 0,
     files: [FileEntry] = [],
+    overlaps: [FileClaim] = [],
 }
 
 export object ModuleFieldEntry {
@@ -107,6 +120,54 @@ export object DriftResult {
     message: str = "",
     url: str = "",
     files: [Path] = [],
+}
+
+export object DiffSymbol {
+    id: str = "",
+    label: str = "",
+    refCount: int = 0,
+    fileCount: int = 0,
+    externalProjects: [str] = [],
+    externalFileCount: int = 0,
+    moduleAPI: bool = false,
+}
+
+export object DiffTouch {
+    host: str = "",
+    session: str = "",
+    transcript: str = "",
+    read: [str] = [],
+    ran: [str] = [],
+}
+
+export object DiffChurn {
+    commits: int = 0,
+    authors: int = 0,
+    score: int = 0,
+    rank: int = 0,
+    projectTrend: int = 0,
+}
+
+export object DiffFile {
+    path: str = "",
+    project: str = "",
+    role: str = "",
+    hint: str = "",
+    coverage: ImpactCoverage? = null,
+    symbols: [DiffSymbol] = [],
+    surface: str = "",
+    touches: [DiffTouch] = [],
+    churn: DiffChurn? = null,
+    noHistory: bool = false,
+    reach: int? = null,
+}
+
+export object Diff {
+    base: str = "",
+    files: [DiffFile] = [],
+    seedProjects: [str] = [],
+    affectedProjects: [ImpactProject] = [],
+    notes: [str] = [],
 }
 
 export object DoctorCheck {
@@ -150,6 +211,7 @@ export object FileHotspot {
     score: int = 0,
     authors: int = 0,
     lastCommit: str = "",
+    moves: int = 0,
 }
 
 export object Hotspots {
@@ -280,6 +342,7 @@ export object ProjectEntry {
     dependsOn: [str] = [],
     exclusive: bool = false,
     manifests: [str] = [],
+    lockfiles: [str] = [],
 }
 
 export object Projects {
@@ -300,6 +363,11 @@ export object TargetSpellUse {
 }
 
 export object CrossTargetRef {
+    project: str = "",
+    target: str = "",
+}
+
+export object ChainStep {
     project: str = "",
     target: str = "",
 }
@@ -327,6 +395,7 @@ export object TargetGraphNode {
     charms: [str] = [],
     spells: [TargetSpellUse] = [],
     crossDependencies: [CrossTargetRef] = [],
+    chain: [ChainStep] = [],
     readsFiles: [InputRef] = [],
     readsSecrets: bool = false,
     secretRefs: [str] = [],
@@ -334,6 +403,7 @@ export object TargetGraphNode {
     modifiesExistingFiles: [UpdateRef] = [],
     execOverrides: [str] = [],
     envAllow: [str] = [],
+    observations: [str] = [],
 }
 
 export object TargetGraphProject {
@@ -358,11 +428,11 @@ export extern fun describe(args: [str], opts: {str: any} = {<str: any>}) > ExecR
 export extern fun describeFile(paths: [str], opts: {str: any} = {<str: any>}) > FileReport !> any;
 export extern fun describeModule(name: str = "") > [Module] !> any;
 export extern fun diagnoseDrift(outputs: [str], inputs: [str] = [<str>]) > DriftResult !> any;
+export extern fun diff(opts: {str: any} = {<str: any>}) > Diff !> any;
 export extern fun doctor(args: [str], opts: {str: any} = {<str: any>}) > DoctorReport !> any;
 export extern fun fatal(msg: str = "") > void;
 export extern fun hasCharm(name: str) > bool;
 export extern fun insight(opts: {str: any} = {<str: any>}) > InsightReport !> any;
-export extern fun insightMarkdown(opts: {str: any} = {<str: any>}) > str !> any;
 export extern fun ls() > Projects !> any;
 export extern fun project(config: any, opts: any = null) > void;
 export extern fun projectGraph() > Graph !> any;
@@ -380,7 +450,7 @@ export object log {
     static extern fun warn(msg: str = "", fields: {str: str} = {<str: str>}) > void;
 }
 
-// Remote cache backend selection.
+// Remote cache provider selection.
 export object cache {
     static extern fun remote(spell: {str: any}) > void;
 }
@@ -390,7 +460,7 @@ export object ci {
     static extern fun provider(spell: {str: any}) > void;
 }
 
-// Secret backend selection, and the credentials read through it.
+// Secret provider selection, and the credentials read through it.
 export object secret {
     static extern fun endpoint(grant: any) > str !> any;
     static extern fun provider(spell: {str: any}) > void;

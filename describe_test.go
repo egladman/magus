@@ -352,9 +352,12 @@ func TestListProjects_Manifests(t *testing.T) {
 	// Not parallel: mutates the global spell registry.
 	const hasSpell, noneSpell = "zzz-manifest-has", "zzz-manifest-none"
 	project.DefaultSpellRegistry().RegisterSpell(
-		spells.NewSpell(hasSpell, spells.WithManifests("pyproject.toml", "setup.py", "setup.cfg")))
+		spells.NewSpell(hasSpell, spells.WithManifests(
+			spells.Manifest{Value: "pyproject.toml"},
+			spells.Manifest{Value: "setup.py"},
+			spells.Manifest{Value: "setup.cfg"})))
 	project.DefaultSpellRegistry().RegisterSpell(
-		spells.NewSpell(noneSpell, spells.WithManifests("Cargo.toml")))
+		spells.NewSpell(noneSpell, spells.WithManifests(spells.Manifest{Value: "Cargo.toml"})))
 	t.Cleanup(func() {
 		project.DefaultSpellRegistry().UnregisterSpell(hasSpell)
 		project.DefaultSpellRegistry().UnregisterSpell(noneSpell)
@@ -385,6 +388,107 @@ func TestListProjects_Manifests(t *testing.T) {
 	}
 	assert.Equal(t, []string{"setup.py"}, byPath["has"].Manifests, `ListProjects: "has".Manifests`)
 	assert.Empty(t, byPath["none"].Manifests, `ListProjects: "none".Manifests`)
+}
+
+// TestListProjects_LockfilesHoistedToWorkspaceRoot covers projectLockfiles, and it is
+// deliberately built around the layout a sibling-only lookup gets WRONG.
+//
+// "member" holds a package.json and no lockfile; the pnpm-lock.yaml serving it sits at
+// the workspace root, which is how pnpm, npm, yarn and cargo workspaces are laid out.
+// An implementation that looked only in the project directory would report nothing here
+// and still pass every other test in this file, because magus's own repo happens to keep
+// a lockfile beside every package.json - so this fixture, not that one, is what pins the
+// walk.
+//
+// "solo" is the flat case, and it is here to prove the walk stops at the nearest hit
+// rather than running to the root: it has its own yarn.lock, which must win over the
+// root's pnpm-lock.yaml even though pnpm-lock.yaml is the earlier-declared candidate.
+func TestListProjects_LockfilesHoistedToWorkspaceRoot(t *testing.T) {
+	// Not parallel: mutates the global spell registry.
+	const nodeSpell = "zzz-lock-node"
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(nodeSpell, spells.WithManifests(
+		spells.Manifest{Value: "package.json", LockCandidates: []string{"pnpm-lock.yaml", "yarn.lock"}})))
+	t.Cleanup(func() { project.DefaultSpellRegistry().UnregisterSpell(nodeSpell) })
+
+	root := t.TempDir()
+	write := func(rel string) {
+		abs := filepath.Join(root, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(""), 0o644))
+	}
+	for _, rel := range []string{
+		"magusfile.buzz", "pnpm-lock.yaml",
+		"apps/member/magusfile.buzz", "apps/member/package.json",
+		"solo/magusfile.buzz", "solo/package.json", "solo/yarn.lock",
+	} {
+		write(rel)
+	}
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".")
+	reg.RegisterProject("apps/member", WithSpell(nodeSpell))
+	reg.RegisterProject("solo", WithSpell(nodeSpell))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Inspect")
+
+	out, err := ws.ListProjects(context.Background())
+	require.NoError(t, err, "ListProjects")
+	byPath := make(map[string]types.ProjectEntry, len(out.Projects))
+	for _, e := range out.Projects {
+		byPath[e.Path] = e
+	}
+
+	assert.Equal(t, []string{"package.json"}, byPath["apps/member"].Manifests,
+		"the manifest is still the bare name beside the project")
+	assert.Equal(t, []string{"pnpm-lock.yaml"}, byPath["apps/member"].Lockfiles,
+		"a hoisted lockfile must be found by walking up, and reported workspace-relative")
+	assert.Equal(t, []string{"solo/yarn.lock"}, byPath["solo"].Lockfiles,
+		"the nearest lockfile wins over a root one, whatever the candidate order says")
+}
+
+// TestListProjects_LockfilesAbsent pins the empty cases apart from each other: a spell
+// declaring no lock candidate at all, and one declaring candidates none of which exist.
+// Both report nothing, and neither may report the root's lockfile - a project whose
+// ecosystem does not lock must not inherit a lockfile from a neighbour it shares no
+// package manager with.
+func TestListProjects_LockfilesAbsent(t *testing.T) {
+	// Not parallel: mutates the global spell registry.
+	const noLocks, missingLocks = "zzz-lock-none", "zzz-lock-missing"
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(noLocks,
+		spells.WithManifests(spells.Manifest{Value: "setup.py"})))
+	project.DefaultSpellRegistry().RegisterSpell(spells.NewSpell(missingLocks, spells.WithManifests(
+		spells.Manifest{Value: "Cargo.toml", LockCandidates: []string{"Cargo.lock"}})))
+	t.Cleanup(func() {
+		project.DefaultSpellRegistry().UnregisterSpell(noLocks)
+		project.DefaultSpellRegistry().UnregisterSpell(missingLocks)
+	})
+
+	root := t.TempDir()
+	for _, rel := range []string{
+		"magusfile.buzz", "pnpm-lock.yaml",
+		"py/magusfile.buzz", "py/setup.py",
+		"rs/magusfile.buzz", "rs/Cargo.toml",
+	} {
+		abs := filepath.Join(root, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(""), 0o644))
+	}
+
+	reg := NewWorkspaceRegistry()
+	reg.RegisterProject(".")
+	reg.RegisterProject("py", WithSpell(noLocks))
+	reg.RegisterProject("rs", WithSpell(missingLocks))
+	ws, err := Inspect(context.Background(), root, WithWorkspaceRegistry(reg))
+	require.NoError(t, err, "Inspect")
+
+	out, err := ws.ListProjects(context.Background())
+	require.NoError(t, err, "ListProjects")
+	byPath := make(map[string]types.ProjectEntry, len(out.Projects))
+	for _, e := range out.Projects {
+		byPath[e.Path] = e
+	}
+	assert.Empty(t, byPath["py"].Lockfiles, "a manifest declaring no lock candidate resolves none")
+	assert.Empty(t, byPath["rs"].Lockfiles, "an unwritten Cargo.lock must not fall through to the root's pnpm-lock.yaml")
 }
 
 func TestEvaluateTarget_FanOut(t *testing.T) {
@@ -858,6 +962,94 @@ func TestEvaluateTarget_ReportsPerTargetOutputs(t *testing.T) {
 		"a per-target ctx.writesFiles glob belongs in that target's own description")
 }
 
+// TestEvaluateTarget_ReportsTheChainInOrder walks the composition the whole way: the
+// magusfile's ctx.needs arguments, through resolution onto the project, out as the
+// evaluated target's chain. The hop that matters is the last one - the extractor has
+// always had the order and the described plan has always dropped it - and the
+// cross-project step must arrive resolved to a workspace path, not the raw import.
+func TestEvaluateTarget_ReportsTheChainInOrder(t *testing.T) {
+	t.Parallel()
+	root := writeWorkspace(t, map[string]string{
+		"magusfile.buzz": `import "project/api" as api;
+export fun generate(ctx: magus\Context, args: [str]) > void {}
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate);
+    ctx.needs(api.build, build);
+}
+`,
+		"api/magusfile.buzz": `export fun build(ctx: magus\Context, args: [str]) > void {}
+`,
+	})
+
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	out, err := m.EvaluateTarget(context.Background(), types.Target{Path: ".", Name: "ci"})
+	require.NoError(t, err, "EvaluateTarget")
+	require.Len(t, out, 1)
+	assert.Equal(t, []types.ChainStep{
+		{Target: "generate"},
+		{Project: "api", Target: "build"},
+		{Target: "build"},
+	}, out[0].Chain, "invocation order across both ctx.needs calls, cross step resolved")
+
+	leaf, err := m.EvaluateTarget(context.Background(), types.Target{Path: ".", Name: "generate"})
+	require.NoError(t, err, "EvaluateTarget")
+	require.Len(t, leaf, 1)
+	assert.Empty(t, leaf[0].Chain, "a target that composes nothing carries no chain")
+}
+
+// TestObservesReachesTheCacheKey walks ctx.observes the whole way: a magusfile
+// declaration, through resolution onto the project, into the step buildStep hands the
+// cache, out as a key input line. Each hop is covered by a unit test of its own; what
+// this pins is that they are actually connected, which is the failure mode a
+// declaration like this has - it reads as declared, resolves to nothing, and the
+// target caches as though the external fact were not there.
+func TestObservesReachesTheCacheKey(t *testing.T) {
+	t.Parallel()
+	root := writeWorkspace(t, map[string]string{
+		"magusfile.buzz": `export fun scan(ctx: magus\Context, args: [str]) > void {
+    ctx.observes("trivy-db", "2026-08-15");
+}
+`,
+	})
+
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	p := m.Get(".")
+	require.NotNil(t, p)
+	assert.Equal(t, map[string][]string{"scan": {"trivy-db=2026-08-15"}}, p.TargetObservations,
+		"the declaration must resolve onto the project")
+
+	_, lines, err := m.ComputeTargetKey(context.Background(), ".", "scan", nil)
+	require.NoError(t, err, "ComputeTargetKey")
+	assert.Contains(t, lines, "obs:trivy-db=2026-08-15",
+		"the observation must reach the key a run would mint, not stop at the project")
+}
+
+// TestObservesRejectsAComputedValue pins the load error. A probe cannot reach the key -
+// the key is minted before the body runs - so accepting one would key the step as
+// though nothing were observed and replay the staleness the declaration exists to
+// prevent. Loud at load beats quiet at run.
+func TestObservesRejectsAComputedValue(t *testing.T) {
+	t.Parallel()
+	root := writeWorkspace(t, map[string]string{
+		"magusfile.buzz": `export fun scan(ctx: magus\Context, args: [str]) > void {
+    ctx.observes("trivy-db", probe());
+}
+fun probe() > str { return "x"; }
+`,
+	})
+
+	_, err := Open(context.Background(), root)
+	require.Error(t, err, "a computed observation value must not load")
+	assert.Contains(t, err.Error(), "observes", "the error names the declaration that failed")
+}
+
 // TestClassifyFiles_PerTargetOutputs pins the classification against the whole
 // declared set, not the project-wide globs alone. A file declared only by a
 // per-target ctx.writesFiles is generated by every other consumer's reckoning (clean
@@ -885,6 +1077,7 @@ func TestClassifyFiles_PerTargetOutputs(t *testing.T) {
 		Project:  ".",
 		Role:     "output",
 		OutputOf: []string{"."},
+		Claims:   []types.FileClaim{{Project: ".", Target: "generate", Role: "output", Glob: "GEN.md"}},
 		Hint:     out[0].Hint,
 	}, out[0])
 	assert.Contains(t, out[0].Hint, "generated")
@@ -933,4 +1126,122 @@ export fun render(ctx: magus\Context, args: [str]) > void {
 	assert.Contains(t, entries[0].SourceOf, "site",
 		"site declares skills/note.md via a cross-project ctx.readsFiles, so it must appear in source_of; "+
 			"without it magus vcs add calls site's regenerated output MGS4005 and tells the author not to commit it")
+}
+
+// TestClassifyFiles_Claims pins the per-declaration facts, which are what a caller
+// handing paths to concurrent authors needs and what output_of/source_of cannot
+// say: WHICH target declared each path, the glob it matched, and - for a
+// cross-project write - the project that DECLARED it rather than the tree it lands
+// in. It also pins the two dependency edges a cross-project ref creates, in
+// opposite directions.
+func TestClassifyFiles_Claims(t *testing.T) {
+	root := t.TempDir()
+	// Three projects, because a target may not both read from and write into one
+	// other project (MGS1012): site reads skills and writes dist.
+	files := map[string]string{
+		"skills/note.md":        "# a source another project renders\n",
+		"skills/magusfile.buzz": "export fun build(ctx: magus\\Context, args: [str]) > void {}\n",
+		"dist/magusfile.buzz":   "export fun build(ctx: magus\\Context, args: [str]) > void {}\n",
+		"site/magusfile.buzz": `import "project/../skills" as skills;
+import "project/../dist" as dist;
+export fun render(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles(skills.file("note.md"));
+    ctx.writesFiles("gen/*.html");
+}
+export fun publish(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles(dist.file("index.html"));
+}
+export fun stamp(ctx: magus\Context, args: [str]) > void {
+    ctx.modifiesExistingFiles("README.md");
+}
+`,
+	}
+	for rel, body := range files {
+		abs := filepath.Join(root, rel)
+		require.NoError(t, os.MkdirAll(filepath.Dir(abs), 0o755))
+		require.NoError(t, os.WriteFile(abs, []byte(body), 0o644))
+	}
+
+	ws, err := Inspect(context.Background(), root)
+	require.NoError(t, err, "Inspect")
+	paths := []string{"skills/note.md", "dist/index.html", "skills/magusfile.buzz", "site/gen/a.html", "site/gen/b.html", "site/README.md"}
+	entries, err := ws.ClassifyFiles(context.Background(), paths)
+	require.NoError(t, err, "ClassifyFiles")
+	require.Len(t, entries, len(paths))
+	byPath := map[string]types.FileEntry{}
+	for _, f := range entries {
+		byPath[f.Path] = f
+	}
+
+	for _, tc := range []struct {
+		name      string
+		path      string
+		role      string
+		claims    []types.FileClaim
+		dependsOn []string
+		hint      string // substring, when the hint is part of what the case pins
+	}{
+		{
+			// No depends_on: a cross-project READ gives the edge to the reader, so it
+			// shows up on site's files below, not here.
+			name:   "cross-project read is a source claim of the READING target",
+			path:   "skills/note.md",
+			role:   "source",
+			claims: []types.FileClaim{{Project: "site", Target: "render", Role: "source", Glob: "skills/note.md"}},
+		},
+		{
+			// The file lands in dist, so output_of says dist; only site's magusfile
+			// can regenerate it, so the claim says site.
+			name:      "cross-project write is claimed by the WRITER, not the owner",
+			path:      "dist/index.html",
+			role:      "output",
+			claims:    []types.FileClaim{{Project: "site", Target: "publish", Role: "output", Glob: "dist/index.html"}},
+			dependsOn: []string{"site"},
+		},
+		{
+			name:   "a project-wide glob carries no target",
+			path:   "skills/magusfile.buzz",
+			role:   "source",
+			claims: []types.FileClaim{{Project: "skills", Role: "source", Glob: "skills/magusfile.buzz"}},
+		},
+		{
+			name:      "a per-target write glob names its target",
+			path:      "site/gen/a.html",
+			role:      "output",
+			claims:    []types.FileClaim{{Project: "site", Target: "render", Role: "output", Glob: "site/gen/*.html"}},
+			dependsOn: []string{"skills"},
+		},
+		{
+			// An in-place edit is neither an output nor a project-wide source, so the
+			// role stays unclaimed - but without the claim the only write set that
+			// names the file would be invisible, and the default hint would tell the
+			// reader nothing declares it.
+			name:      "an in-place edit is claimed, and the hint stops calling it undeclared",
+			path:      "site/README.md",
+			role:      "unclaimed",
+			claims:    []types.FileClaim{{Project: "site", Target: "stamp", Role: "update", Glob: "site/README.md"}},
+			dependsOn: []string{"skills"},
+			hint:      "edits it in place",
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := byPath[tc.path]
+			assert.Equal(t, tc.claims, got.Claims, "claims")
+			assert.Equal(t, tc.dependsOn, got.DependsOn, "depends_on")
+			assert.Equal(t, tc.role, got.Role, "role")
+			if tc.hint != "" {
+				assert.Contains(t, got.Hint, tc.hint, "hint")
+			}
+		})
+	}
+
+	assert.Equal(t, []types.FileClaim{{
+		Project: "site", Target: "render", Role: "output", Glob: "site/gen/*.html",
+		Paths: []string{"site/gen/a.html", "site/gen/b.html"},
+	}}, types.NewFileReport(entries).Overlaps,
+		"one ctx.writesFiles glob covers both html paths, and that is the collision fact - "+
+			"the same declaration regenerates them, so two authors editing one each are editing one write set")
+
+	assert.Equal(t, []string{"dist"}, byPath["dist/index.html"].OutputOf,
+		"output_of stays the tree the file lands in, whatever the claim says about who writes it")
 }

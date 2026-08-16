@@ -535,6 +535,15 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
       blastRadius: n.blastRadius,
       lastCommit: date(n.lastCommitMs),
     })),
+    hotspotFiles: si.hotspotFiles.map((f) => ({
+      path: f.path,
+      commits: f.commits,
+      complexity: f.complexity,
+      score: f.score,
+      authors: f.authors,
+      moves: f.moves,
+      lastCommit: date(f.lastCommitMs),
+    })),
     affinity: si.affinity.map((p) => ({ a: p.a, b: p.b, count: p.count, hidden: p.hidden })),
     ownership: si.ownership.map((o) => ({
       path: o.path,
@@ -682,8 +691,10 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
           startedAt: timestampFromMs(now - 88_000),
         },
       ],
-      magusVersion: "0.2.0",
-      daemonVersion: "0.2.0",
+      // 0.0.0, matching the status bar: the demo has no daemon, so any real-looking
+      // version here is a fact the showcase invented, and one that goes stale.
+      magusVersion: "0.0.0",
+      daemonVersion: "0.0.0",
     };
   }
 

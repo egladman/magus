@@ -2,8 +2,8 @@
 title: magus-run
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 9375
-skill_simple_bytes: 5947
+skill_full_bytes: 9938
+skill_simple_bytes: 6481
 ---
 
 # magus-run
@@ -29,7 +29,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `430a06d637fe` |
+| `skill-content` | `3ce451d61f54` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -70,38 +70,45 @@ resolves a name to its path; over MCP, `magus_where`/`magus_describe` ignore the
    (`magus run <target>` / `magus affected <target>`). Do not stop, and do not
    drop to a raw language tool. When you shell out, silence it (`-s`) so a
    passing run costs a few lines, not a scroll of progress.
-2. Always reach for a top-level target first: `build`, `test`, `lint`, `format`,
-   `generate`, or a custom target from the catalog. `magus describe targets`
-   lists every target (`-o name` for bare names) and classifies each as
-   canonical, spell, or custom; `magus_describe` (kind=targets) is the MCP
-   equivalent. Ask the workspace rather than reading `MAGUS.md`: that file is a
-   generated index for humans, true only as of its last regeneration.
-3. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...)
+2. Verification is `ci`'s job, not a sequence you compose. `ci` is the one
+   target name magus enforces: the command that composes the pipeline
+   (typically generate, lint, build, test) in the order the magusfile declares.
+   Run `magus run ci <project>` for the project you are working in, and
+   `magus affected ci` as the final gate once the change is done - it runs the
+   full pipeline over every project your change reaches, which is how you learn
+   about ramifications in projects you never touched. Hand-running lint,
+   format, and test one at a time re-derives an order the magusfile already
+   owns, and the step you forget fails silently by omission. Verify in place;
+   never `git stash`/`reset` first (data-loss-prone and pointless - the tree is
+   already what you want to verify).
+3. Reach for an individual target only to iterate on a failure `ci` named:
+   rerunning one failing target is cheaper than the pipeline while you fix it,
+   and `ci` afterwards proves the change. `magus describe targets` lists every
+   target (`-o name` for bare names) and classifies each as canonical, spell,
+   or custom; `magus_describe` (kind=targets) is the MCP equivalent. Ask the
+   workspace rather than reading `MAGUS.md`: that file is a generated index
+   for humans, true only as of its last regeneration.
+4. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...)
    for work a target covers. If no target covers it, say so rather than silently
    going around magus.
-4. `ci` is the canonical anchor target: the one command that composes the
-   pipeline (typically generate, lint, build, test). When your change is done,
-   run `magus affected ci` as the final gate - it runs the full pipeline over
-   every project your change reaches, which is how you learn about ramifications
-   in projects you never touched. Verify in place; never `git stash`/`reset`
-   first (data-loss-prone and pointless - the tree is already what you want to
-   verify).
 
 ## Command patterns
 
 ```sh
-magus run test                    # cwd project (or all), top-level target
-magus run build web               # scope to projects (positional, after target)
+magus run ci web                  # verify one project: the composed pipeline, in order
+magus affected ci                 # the final gate: everything the diff reaches
+magus run test web                # iterate on the one failing target ci named
 magus affected test               # only projects affected by the VCS diff
-magus affected ci                 # the final gate before handing work back
 ```
 
 MCP equivalents: `magus_run_target` {target, projects, dry_run} and
 `magus_run_affected` {target, base, dry_run}. Use `magus_where` to resolve a
 fuzzy project name first.
 
-WRONG: `go test ./...` after editing Go in a magus workspace.
-CORRECT: `magus run test`, then `magus affected ci` once the change is done.
+WRONG: `go test ./...` after editing Go in a magus workspace; also wrong is
+hand-sequencing `magus run lint`, `format`, `test` to check your own work.
+CORRECT: `magus run ci <project>` while working, `magus affected ci` once the
+change is done, and a single narrower target only to iterate on a failure.
 
 ## Output control: silence runs, read structure
 
@@ -264,28 +271,36 @@ project (`magus run test web`), or let `magus affected` compute it from the diff
    If the MCP tool errors or no daemon is connected, run the CLI equivalent
    (`magus run <target>` / `magus affected <target>`). Do not stop, and do not
    drop to a raw language tool. When you shell out, silence it (`-s`).
-2. Always reach for a top-level target first: `build`, `test`, `lint`, `format`,
-   `generate`, or a custom target from the catalog. `magus describe targets`
-   lists every target (`-o name` for bare names). Ask the workspace rather than reading `MAGUS.md`.
-3. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...)
+2. Verification is `ci`'s job, not a sequence you compose. `ci` is the one
+   target name magus enforces.
+   Run `magus run ci <project>` for the project you are working in, and
+   `magus affected ci` as the final gate once the change is done. Hand-running lint,
+   format, and test one at a time re-derives an order the magusfile already
+   owns, and the step you forget fails silently by omission. Verify in place;
+   never `git stash`/`reset` first (it destroys a concurrent agent's untracked
+   work, and the tree is already what you want to verify).
+3. Reach for an individual target only to iterate on a failure `ci` named:
+   rerunning one failing target is cheaper than the pipeline while you fix it,
+   and `ci` afterwards proves the change. `magus describe targets` lists every
+   target (`-o name` for bare names). Ask the
+   workspace rather than reading `MAGUS.md`.
+4. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...)
    for work a target covers. If no target covers it, say so rather than silently
    going around magus.
-4. `ci` is the canonical anchor target. When your change is done,
-   run `magus affected ci` as the final gate. Verify in place; never `git stash`/`reset`
-   first (it destroys a concurrent agent's untracked work, and the tree is already
-   what you want to verify).
 
 ## Command patterns
 
 ```sh
-magus run test                    # cwd project (or all), top-level target
-magus run build web               # scope to projects (positional, after target)
+magus run ci web                  # verify one project: the composed pipeline, in order
+magus affected ci                 # the final gate: everything the diff reaches
+magus run test web                # iterate on the one failing target ci named
 magus affected test               # only projects affected by the VCS diff
-magus affected ci                 # the final gate before handing work back
 ```
 
-WRONG: `go test ./...` after editing Go in a magus workspace.
-CORRECT: `magus run test`, then `magus affected ci` once the change is done.
+WRONG: `go test ./...` after editing Go in a magus workspace; also wrong is
+hand-sequencing `magus run lint`, `format`, `test` to check your own work.
+CORRECT: `magus run ci <project>` while working, `magus affected ci` once the
+change is done, and a single narrower target only to iterate on a failure.
 
 ## Output control: silence runs, read structure
 

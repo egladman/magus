@@ -185,8 +185,8 @@ func applyWithEvanphx(argv []string, ops []spells.PatchOp) ([]string, error) {
 // so a golden that inlined it per op would drift one entry at a time.
 var (
 	goldenGoModHints = []spells.Hint{
-		{Contains: "missing go.sum entry", Advise: "go.sum is out of date with go.mod; run `magus run generate:relock` (or `go mod tidy`) and commit the result"},
-		{Contains: "updates to go.mod needed", Advise: "go.mod does not cover the imports in the tree; run `magus run generate:relock` (or `go mod tidy`) and commit the result"},
+		{Contains: "missing go.sum entry", Advise: "go.sum is out of date with go.mod; run the covering target with the relock charm (`magus run <target>:relock`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
+		{Contains: "updates to go.mod needed", Advise: "go.mod does not cover the imports in the tree; run the covering target with the relock charm (`magus run <target>:relock`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
 	}
 	goldenPackageManagerHints = []spells.Hint{
 		{Contains: "ERR_PNPM_OUTDATED_LOCKFILE", Advise: "pnpm-lock.yaml disagrees with package.json - usually a merge that changed one of them; run `pnpm install` and commit the lockfile"},
@@ -303,7 +303,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 		Language:   "go",
 		IgnoreDirs: []string{"vendor"},
-		Manifests:  []string{"go.mod"},
+		Manifests:  []spells.Manifest{{Value: "go.mod", LockCandidates: []string{"go.sum"}}},
 		Ops: map[string]spells.Op{
 			"go-build":    {Command: spells.Command{Bin: "go", Args: []string{"build"}, Hints: goldenGoModHints}},
 			"go-clean":    {Command: spells.Command{Bin: "go", Args: []string{"clean", "./..."}}},
@@ -352,8 +352,10 @@ var goldenBuiltins = map[string]spells.Descriptor{
 			"prettier": {Command: spells.Command{Bin: "prettier", Args: []string{"--check", "--no-error-on-unmatched-pattern", "**/*.md", "**/*.mdx"}, Charms: map[string]spells.Charm{
 				"rw": {Ops: []spells.PatchOp{{Op: "replace", Path: "/0", Value: "--write"}}},
 			}}},
+			// "fix", not "rw": this op takes no paths, so under the workspace default
+			// charm every caller rewrote its whole tree. See the spell source.
 			"typos": {Command: spells.Command{Bin: "typos", Args: []string{"--format", "brief"}, Charms: map[string]spells.Charm{
-				"rw": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-w"}}},
+				"fix": {Ops: []spells.PatchOp{{Op: "add", Path: "/-", Value: "-w"}}},
 			}}},
 		},
 	},
@@ -382,7 +384,11 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Tools:      map[string]spells.Tool{"python3": {Probe: spells.Command{Bin: "python3", Args: []string{"--version"}}}},
 		Language:   "python",
 		IgnoreDirs: []string{"__pycache__"},
-		Manifests:  []string{"pyproject.toml", "setup.py", "setup.cfg"},
+		Manifests: []spells.Manifest{
+			{Value: "pyproject.toml", LockCandidates: []string{"uv.lock", "poetry.lock", "pdm.lock", "Pipfile.lock"}},
+			{Value: "setup.py"},
+			{Value: "setup.cfg"},
+		},
 		Ops: map[string]spells.Op{
 			"uv-build": {Command: spells.Command{Bin: "uv", Args: []string{"build"}}},
 			"uv-clean": {Command: spells.Command{Bin: "uv", Args: []string{"clean"}}},
@@ -406,7 +412,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		Tools:      map[string]spells.Tool{"rustc": {Probe: spells.Command{Bin: "rustc", Args: []string{"--version"}}, Key: spells.VersionKey{UpTo: spells.VersionPatch}}},
 		Language:   "rust",
 		IgnoreDirs: []string{"target"},
-		Manifests:  []string{"Cargo.toml"},
+		Manifests:  []spells.Manifest{{Value: "Cargo.toml", LockCandidates: []string{"Cargo.lock"}}},
 		Ops: map[string]spells.Op{
 			"cargo-build":  {Command: spells.Command{Bin: "cargo", Args: []string{"build", "--release"}}},
 			"cargo-clean":  {Command: spells.Command{Bin: "cargo", Args: []string{"clean"}}},
@@ -433,7 +439,9 @@ var goldenBuiltins = map[string]spells.Descriptor{
 		},
 		Language:   "typescript",
 		IgnoreDirs: []string{"node_modules"},
-		Manifests:  []string{"package.json"},
+		Manifests: []spells.Manifest{
+			{Value: "package.json", LockCandidates: []string{"pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lockb"}},
+		},
 		Ops: map[string]spells.Op{
 			"biome-check": {Command: spells.Command{Bin: "pnpm", Args: []string{"exec", "biome", "check", "."}, Hints: goldenPackageManagerHints, Charms: map[string]spells.Charm{
 				"rw":  {Ops: []spells.PatchOp{{Op: "add", Path: "/3", Value: "--write"}}},

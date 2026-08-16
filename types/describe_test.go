@@ -67,3 +67,74 @@ func TestModuleEntryBuzzObjectEmpty(t *testing.T) {
 		"methods": []any{},
 	}, got)
 }
+
+// TestNewFileReportOverlaps pins the set-level half of describe file: one row per
+// declaration that covers SEVERAL of the classified paths, listing them. A caller
+// splitting paths across concurrent authors reads this instead of intersecting the
+// per-entry claims itself, so the grouping key (project, target, role, glob) has to
+// be exact - two claims that differ only by target are two declarations.
+func TestNewFileReportOverlaps(t *testing.T) {
+	t.Parallel()
+	gen := FileClaim{Project: "docs", Target: "generate", Role: "output", Glob: "docs/gen/**"}
+	pub := FileClaim{Project: "docs", Target: "publish", Role: "output", Glob: "docs/gen/**"}
+	src := FileClaim{Project: ".", Role: "source", Glob: "**/*.go"}
+	covering := func(c FileClaim, paths ...string) FileClaim {
+		c.Paths = paths
+		return c
+	}
+
+	for _, tc := range []struct {
+		name  string
+		files []FileEntry
+		want  []FileClaim
+	}{
+		{
+			name:  "one path cannot overlap itself",
+			files: []FileEntry{{Path: "docs/gen/a.html", Claims: []FileClaim{gen}}},
+		},
+		{
+			name: "one declaration over two paths",
+			files: []FileEntry{
+				{Path: "docs/gen/a.html", Claims: []FileClaim{gen}},
+				{Path: "docs/gen/b.html", Claims: []FileClaim{gen}},
+			},
+			want: []FileClaim{covering(gen, "docs/gen/a.html", "docs/gen/b.html")},
+		},
+		{
+			name: "a declaration only one path carries is dropped",
+			files: []FileEntry{
+				{Path: "docs/gen/a.html", Claims: []FileClaim{gen, src}},
+				{Path: "docs/gen/b.html", Claims: []FileClaim{gen}},
+			},
+			want: []FileClaim{covering(gen, "docs/gen/a.html", "docs/gen/b.html")},
+		},
+		{
+			name: "same glob, different target, two declarations",
+			files: []FileEntry{
+				{Path: "docs/gen/a.html", Claims: []FileClaim{gen, pub}},
+				{Path: "docs/gen/b.html", Claims: []FileClaim{gen, pub}},
+			},
+			want: []FileClaim{
+				covering(gen, "docs/gen/a.html", "docs/gen/b.html"),
+				covering(pub, "docs/gen/a.html", "docs/gen/b.html"),
+			},
+		},
+		{
+			// `describe file a.go a.go` classifies the path twice; one path named
+			// twice is not two paths that collide.
+			name: "a repeated path counts once",
+			files: []FileEntry{
+				{Path: "main.go", Claims: []FileClaim{src}},
+				{Path: "main.go", Claims: []FileClaim{src}},
+			},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := NewFileReport(tc.files)
+			assert.Equal(t, tc.want, got.Overlaps, "Overlaps")
+			assert.Equal(t, len(tc.files), got.Count, "Count")
+			assert.Equal(t, FileDefinition, got.Definition, "Definition")
+		})
+	}
+}

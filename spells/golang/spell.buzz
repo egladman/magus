@@ -61,11 +61,19 @@ export fun mgs_getLanguage() > str { return "go"; }
 
 export fun mgs_listIgnoreDirs() > [Path] { return [Path{value = "vendor", isDir = true}]; }
 
-// mgs_listManifests names the file that carries this project's OWN version - not
-// the toolchain's (that's mgs_getVersionProbe) and not a cache input (go.mod is
-// separately listed in mgs_listRequiredGlobs above, because it also feeds the
-// cache key). A Go module has exactly one candidate.
-export fun mgs_listManifests() > [Path] { return [Path{value = "go.mod"}]; }
+// mgs_listManifests names the file this project's dependencies are declared in -
+// not the toolchain's version (that's mgs_getVersionProbe) and not a cache input
+// (go.mod and go.sum are separately listed in mgs_listRequiredGlobs above, because
+// they also feed the cache key). A Go module has exactly one candidate.
+//
+// go.mod is the ecosystem where manifest and lockfile answer nearly the same
+// question: its require lines are EXACT versions, never ranges, so it already names
+// what gets compiled. go.sum holds hashes for module@version pairs, including ones
+// MVS did not select, which is why it is a lock CANDIDATE here rather than the
+// resolved dependency list - `go list -m all` is what answers that.
+export fun mgs_listManifests() > [Manifest] {
+    return [Manifest{value = "go.mod", lockCandidates = ["go.sum"]}];
+}
 
 // GO_MOD_HINTS classify the two failures a Go build hits after someone else's merge, and
 // they are worth advice because the tool's message names a symptom rather than the command
@@ -77,9 +85,9 @@ export fun mgs_listManifests() > [Path] { return [Path{value = "go.mod"}]; }
 // phrasing that moves between toolchain releases does not belong here.
 final GO_MOD_HINTS = [
     Hint{contains = "missing go.sum entry",
-         advise = "go.sum is out of date with go.mod; run `magus run generate:relock` (or `go mod tidy`) and commit the result"},
+         advise = "go.sum is out of date with go.mod; run the covering target with the relock charm (`magus run <target>:relock`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
     Hint{contains = "updates to go.mod needed",
-         advise = "go.mod does not cover the imports in the tree; run `magus run generate:relock` (or `go mod tidy`) and commit the result"},
+         advise = "go.mod does not cover the imports in the tree; run the covering target with the relock charm (`magus run <target>:relock`; `magus describe targets` lists them) or `go mod tidy`, and commit the result"},
 ];
 
 fun goBuild(target: Target) > Command { return Command{bin = "go", args = ["build"], hints = GO_MOD_HINTS}; }

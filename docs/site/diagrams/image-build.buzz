@@ -1,0 +1,45 @@
+// site/diagrams/image-build.buzz - which registries and tags an image-build run touches, as a
+// function of the charms stacked on it. The first diagram to use the decision shape: two
+// diamonds, each with one connector per vertex, which is all a diamond has room for.
+namespace imageBuild;
+
+import "../libs/diagram/diagram" as _;
+
+export fun imageBuildDiagram() > Diagram {
+    return Diagram{
+        id = "image-build",
+        eyebrow = "recommendations",
+        title = "What a bare run pushes, and what each channel adds",
+        desc = "Without the cd charm an image-build loads locally and pushes nothing. With "
+            + "it, the channel decides: the default commit channel adds one immutable tag "
+            + "to one registry, and only stable moves the floating latest tag.",
+        width = 960,
+        height = 480,
+        nodes = [
+            Node{ id = "run", label = "magus run image-build", role = "focal",
+                  x = 32, y = 232, w = 160, h = 56 },
+            Node{ id = "cd", label = "cd?", role = "decision", x = 256, y = 224, w = 144, h = 72 },
+            Node{ id = "local", label = "Load locally", sub = "pushes nothing",
+                  x = 480, y = 104, w = 200, h = 64 },
+            Node{ id = "channel", label = "channel", role = "decision",
+                  x = 560, y = 224, w = 144, h = 72 },
+            Node{ id = "commit", label = "Commit", sub = "ghcr, tagged by hash",
+                  x = 784, y = 104, w = 160, h = 64 },
+            Node{ id = "unstable", label = "Prerelease", sub = "no floating tag",
+                  x = 784, y = 228, w = 160, h = 64 },
+            Node{ id = "stable", label = "Release", sub = "version and latest",
+                  x = 784, y = 352, w = 160, h = 64 },
+        ],
+        edges = [
+            Edge{ src = "run", dst = "cd" },
+            Edge{ src = "cd", dst = "local", label = "no",
+                  srcSide = "top", dstSide = "bottom", bend = 196 },
+            Edge{ src = "cd", dst = "channel", label = "yes" },
+            Edge{ src = "channel", dst = "commit", label = "default",
+                  srcSide = "top", dstSide = "bottom", bend = 196 },
+            Edge{ src = "channel", dst = "unstable", label = "unstable" },
+            Edge{ src = "channel", dst = "stable", label = "stable",
+                  srcSide = "bottom", dstSide = "top", bend = 324 },
+        ],
+    };
+}

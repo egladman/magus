@@ -24,30 +24,24 @@ hand-edit it.
 
 ## Commands
 
-- Build: `magus run build`
-- Test: `magus run test` (or `go test ./...`)
-- Lint + vet + vuln: `magus run lint`
+How to use magus is not this file's job: `MAGUS.md` routes every question, and
+`magus ls` / `magus ls targets <project>` list what exists. Two repo policies
+that are not derivable from either:
+
 - Final gate before committing (and especially before pushing): `magus affected ci
---no-default-charms` - the full pipeline (lint, build, test, coverage) over
-  affected projects with the local `rw` charm stripped, so `generate` runs as a
-  drift gate exactly as CI does. Plain `magus affected ci` auto-writes generated
-  output locally (the charm note below) and can hide uncommitted-gen drift that
-  then fails CI.
-- Regenerate generated files: `magus run generate`, then commit.
-- Charm note: `magus.yaml` sets `default_charms: [rw]`, so every local run carries
-  the `rw` charm implicitly - plain `magus affected ci` is exactly `magus affected
-ci:rw`, and `generate` writes its output locally. CI strips the default
-  (`--no-default-charms` / the ci anchor), so there the same run carries no `rw`
-  and `generate` acts as a pure drift gate instead.
+--no-default-charms`. `magus.yaml` sets `default_charms: [rw]`, so a plain
+  `affected ci` runs as `ci:rw` and `generate` auto-writes its output locally,
+  hiding uncommitted-gen drift; `--no-default-charms` strips that so `generate`
+  acts as the pure drift gate exactly as CI runs it.
 
 ## Which magus binary
 
-RIGHT NOW the released `magus` on PATH CANNOT load this workspace. `evals/magusfile.buzz`
-declares `no_language`, which no release knows yet, so every command fails at workspace
-load with:
+RIGHT NOW the released `magus` on PATH CANNOT load this workspace. The root magusfile
+imports `./tools/toolchain`, which imports the `proc` module no release carries yet, so
+every command fails at workspace load with:
 
 ```text
-magus.project: unknown option "no_language" (known options: depends_on, exclusive, ...)
+magus: workspace://.: magusfile: exec magusfile.buzz: [BZZ2001] buzz: import "./tools/toolchain": [BZZ2001] buzz: import "proc": module not found
 ```
 
 So build one - `magus run go_build .` - and use `./magus`. This is a temporary state that
@@ -131,10 +125,9 @@ to obey it and said so.
   wrapper, an env prefix, or `bash -c` all reach the same verdict.
 
 Producing a binary is a write, and writes go through magus - the toolchain verb
-is what has to change, not the destination. `magus run go::go-build .` is the
-one-op form when you only want the compile checked, but note it does NOT write
-`./magus` and reports `[pass]` while leaving a stale one in place, which reads as
-a successful rebuild. Use `magus run go_build .` when you intend to run the result.
+is what has to change, not the destination. `magus run go_build .` writes
+`./magus`; prefer top-level targets over `spell::op` forms, which exist for
+passing arguments through to the underlying tool, not as an everyday spelling.
 
 `magus run test .` passes. It previously failed to link with `fingerprint
 mismatch: github.com/egladman/magus ...`, which was mise setting

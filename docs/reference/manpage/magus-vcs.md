@@ -10,7 +10,7 @@ Staging and conflict resolution that knows what is generated
 
 ## Synopsis
 
-**magus** vcs \<add|resolve|merge-driver\> [flags]
+**magus** vcs \<add|resolve|checkpoint|merge-driver\> [flags]
 
 ## Description
 
@@ -35,6 +35,14 @@ not run it by hand; it is wired per clone, because a driver registration
 cannot be committed. That is also why a forge reports conflicts your own
 clone would settle silently, and why resolve exists as the bulk counterpart.
 
+checkpoint prints the identity of the working state right now - head revision,
+branch, whether the tree is dirty, and a digest of the uncommitted patch. Record
+one when you hand a piece of work out, so a later reader knows what that work was
+looking at. It RESOLVES AND RECORDS and never MINTS: no tag, no stash, no ref, no
+file, nothing changed anywhere, so a checkpoint nobody keeps has cost nothing.
+Feed the revision to anything that takes one; compare two digests to learn whether
+two workers saw the same uncommitted tree, which the revision alone cannot say.
+
 resolve works on git, Mercurial and Jujutsu. Only --against is git-only: merge the
 base in yourself on the others, then run resolve.
 
@@ -55,6 +63,9 @@ base in yourself on the others, then run resolve.
 
 **resolve**
 : Settle an in-progress merge's conflicted generated files, then regenerate once
+
+**checkpoint**
+: Print the working state's identity, for recording what a delegated unit was handed; writes nothing
 
 **merge-driver**
 : The per-file merge driver git and hg invoke; you do not run this by hand
@@ -85,7 +96,19 @@ magus vcs resolve
 magus vcs resolve --against origin/main
 ```
 
+*Record what a delegated unit was handed*
+
+```sh
+magus vcs checkpoint
+```
+
+*The one citable token, for a ledger cell*
+
+```sh
+magus vcs checkpoint -o name
+```
+
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-server**(1)](magus-server.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-hook**(1)](magus-hook.md), [**magus-notify**(1)](magus-notify.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-diff**(1)](magus-diff.md), [**magus-server**(1)](magus-server.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-hook**(1)](magus-hook.md), [**magus-notify**(1)](magus-notify.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

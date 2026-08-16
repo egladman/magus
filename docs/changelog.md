@@ -13,16 +13,197 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 ## [Unreleased]
 
 See the unreleased changes at
-https://github.com/egladman/magus/compare/v0.2.1...main
+https://github.com/egladman/magus/compare/v0.3.0...main
+
+### Added
+
+- **`magus diff` reads the working tree's uncommitted changes, annotated and ordered by
+  what they can break.** A changeset is a set of consequences, not a list of files, and
+  alphabetical order spends a reader's attention at random - it gives a regenerated
+  lockfile the same weight as a signature twelve packages depend on. Each file carries the
+  evidence behind its rank: how widely its changed symbols are referenced, whether any
+  referent crosses a project or the module boundary (the question a version bump turns
+  on), the coverage a prior run observed, how often the file has been changing, and which
+  agent sessions wrote it. Declared target outputs are folded away by default, because
+  reading a generated file is reading a machine's restatement of an edit made somewhere
+  else; `--generated` shows them anyway. `--watch` re-reads on every tree change, and a
+  patch can be read from a file or `-` instead of the tree. None of it is a verdict: magus
+  does not claim a change is breaking, since deciding that needs signature compatibility,
+  a base-side index magus does not keep, and language semantics it does not model. It
+  reports who can see the thing you changed. Also `magus\diff()` in Buzz, `magus_diff`
+  over MCP, and `GET /api/v1/diff` (with `/api/v1/diff/patch` for the raw patch), all
+  ranking by the same definition so a terminal, an advisor, and an agent cannot disagree
+  about what to read first.
+- **A person and an agent can pair on one diff session.** The console's Diff surface
+  (`/console/diff/`), `magus diff --tui`, and the `magus_diff` MCP tool attach to the same
+  session when a daemon is reachable, so a comment written in the browser renders inline
+  in the terminal and an agent cites a hunk by index rather than guessing one. The session
+  carries the digest of the patch it was computed from and `op=state` recomputes when the
+  tree has moved, rather than replaying whatever a browser last attached - an agent is
+  never served a changeset that stopped existing, and a path or hunk the change does not
+  contain is refused. `POST /api/v1/diff/session` is the human half. The surface also
+  answers with no daemon at all: `/console/diff/#demo` runs the real surface over a
+  fabricated changeset.
+- **`magus vcs checkpoint` prints the working state's identity and writes nothing.** No
+  tag, no stash, no ref, no file - it reads the head revision, the branch carrying it,
+  whether the tree is dirty, and a 32-hex digest of the uncommitted patch, so a checkpoint
+  nobody kept has cost nothing but the probes. The digest is deliberately the same
+  algorithm the diff session uses for its patch, so a checkpoint recorded when work was
+  handed out and a session opened over the same tree produce the same string; either can
+  be used to check the other. `-o name` prints the one citable token for a ledger cell,
+  and `magus_vcs_checkpoint` serves the same facts over MCP. magus emits the facts and
+  decides nothing about what they mean.
+- **A delegation ledger, for recording what work was handed to whom.** An orchestrating
+  agent writes one row per delegated unit through the `magus_ledger` MCP tool (`op` of
+  `list`, `put`, or `clear`), in the vocabulary the `magus-delegate-multi-agent` skill
+  defines; `GET /api/v1/ledger` is the read door onto the same file and the console's Plan
+  surface (`/console/plan/`, served alongside `GET /api/v1/plan`) renders the units as a
+  layered graph with the live run states overlaid from the pool. It records and never
+  enforces: magus does not check that a worker stayed inside its owned paths, does not
+  block a write outside them, and derives no verdict from a row. A `put` merges
+  field-at-a-time under one lock rather than read-then-write, because an orchestrator
+  advancing a unit's state while that unit's worker records its checkpoint would otherwise
+  have the second write revert the first. `clear` reports how many rows it dropped, since
+  clearing is both how a fresh plan starts and how one orchestrator silently erases
+  another's.
+- **A Sapling backend (`sl`), the fourth VCS magus drives.** Sapling is a Mercurial fork,
+  so most of the hg driver's shapes carry over, but every one was verified against a real
+  `sl` rather than inferred from that lineage - the places Sapling has diverged are
+  exactly the places a transliterated hg driver fails silently. `sl tags` is a deprecated
+  no-op and git tags are invisible even in a git-backed clone, so tag lookup and describe
+  report nothing rather than guessing; `sl debugignore` answers "not ignored", which
+  CONTAINS "ignored", so hg's substring test would have reported every path in the tree as
+  ignored; and `sl merge` prompts where `hg merge` does not, so the driver names a merge
+  tool explicitly. A cross-backend parity suite now pins the behavior every backend has to
+  share, rather than the behavior git happens to have.
+- **`ctx.observes(name, value)` declares an external fact a target's answer depends on.**
+  An image scan is keyed on the image and the tree, but its answer also depends on the
+  scanner's vulnerability database, which moves daily and is not an input magus can see -
+  so a cache hit reports yesterday's CVEs against today's image. The only control was
+  `skip_cache`, which forfeits caching forever to avoid the staleness. An observation
+  joins the cache key instead, so a fact that moved is a miss and a fact that held still
+  replays, and it keys as its own input class: `magus describe target <t> --cache` shows
+  an `obs` line, so "why did this rebuild" names the external fact rather than blaming a
+  source file. Like every other footprint declaration it takes literal arguments on the
+  target's own `ctx`; a computed value is rejected at load, because the key is minted
+  before the target body runs and a value probed at key time cannot reach it. That
+  restriction is why this does not yet convert the image-scan case it was built for.
+- **Third-party dependencies are graph nodes.** `magus query kind:package` lists them;
+  `magus explain package:<manager> <name>` shows a package's version, whether it is
+  indirect or replaced, and which projects require it. Nodes are keyed by manager plus
+  name so an npm and a Go package with one name never share a node, a version bump edits
+  an attribute rather than renaming the node, and two projects pinned to different
+  versions of one package share a node that flags the split. Go modules only in this
+  release; other manifest readers follow.
+- **[MGS1028](reference/codes/magusfile/MGS1028.md) reports a changed file that seeds
+  a project it does not key.** Seeding and keying are separate mechanisms and this is the
+  case where they disagree: directory containment selects a project, the root project
+  catches whatever no directory claims, but only DECLARED sources enter a cache key. So
+  touching an undeclared file selects the project, magus runs the target, the key has not
+  moved, and the answer is the one already recorded - a config edit at the root of a
+  monorepo can rebuild and retest everything and produce nothing new. The silent half is
+  worse and is the same declaration missing: when that file genuinely does change what a
+  target produces - a lint rule set, a toolchain pin, a formatter config - the cache does
+  not know. `magus affected --impact` and `--explain` emit it, naming the seed projects
+  rather than the files, because both already mark each file inline and `magus describe
+file` explains any one of them in full. `magus doctor` reports the standing set.
+- **`magus describe file` reports the individual declarations behind a path, and which
+  ones cover more than one of them.** `claims` carries each declaration that names the
+  path with the project and target that made it and the glob that matched, which is the
+  unit that answers "which target rewrites this" where the existing `output_of`/`source_of`
+  summary only answers "whose tree does it appear in". A cross-project write is attributed
+  to the DECLARING project, since that is the only one that can regenerate it. The claim
+  set is wider than `role` ranks: it also carries the in-place edits of
+  `ctx.modifiesExistingFiles` as `update`, a write nobody replays or cleans. `overlaps`
+  groups the declarations covering several of the requested paths, once per declaration
+  with the paths it covers rather than once per pair - a hundred paths under one glob is a
+  hundred rows rather than five thousand. It is a fact and not a verdict: one target
+  rewriting two paths may be a collision between two authors or exactly what one author
+  intends, and nothing here decides which. `magus_describe_file` carries both.
+- **`magus version` reports the daemon's version beside the client's.** There can be two
+  binaries - this one, and the daemon that has been serving the workspace since it was
+  started - and a daemon outlives the CLI that started it, so upgrading magus leaves the
+  older code running until it is restarted. That is the case this exists to show. The
+  daemon line reads "not running" when nothing answers, and `--client` skips the probe
+  entirely for a script that wants the build stamp with no daemon I/O.
+- **A hook payload carrying a prompt is recorded as a delegation handoff and exempt from
+  judgment.** The guard reads what a host hands it by field shape rather than by tool
+  name - a payload with a command is a command, one with a file path is a path, and one
+  with a prompt is an orchestrator handing context to a sub-agent. There is nothing to
+  judge in a prompt: no command, no path, only a context transfer to note, so no rule is
+  evaluated against one and the guard never denies it. It is tested last on purpose, so
+  adding the branch cannot change the verdict on any payload the guard already judged. The
+  event records the sub-agent type where the host supplies one (it repeats across spawns,
+  so it groups a delegation feed), falling back to the per-spawn description and then to
+  the tool name. Every activity event also now carries the host's own transcript path as a
+  POINTER, so a session id in the console leads somewhere; magus never reads the file. The
+  console gains an activity drawer that renders every activity kind.
+- **`magus status` reports the concurrency a run actually gets, and every live pool.**
+  `concurrency` alone could not be budgeted against, because its common value is 0, which
+  means "nothing was configured" rather than "no build may run"; `concurrency_effective`
+  is that resolved through the default and the machine clamp. Each pool entry adds
+  `available` (free slots, floored at zero) so the reader does not subtract, and `socket`
+  so entries can be told apart. Two live proc servers used to produce no pool section at
+  all - a "use --socket to select one" error stood in for it, withholding exactly the
+  capacity and in-use numbers the question was about - and are now enumerated under
+  `pools`.
+- **The docs site announces a release from its own bar, and can hold a post back.** The
+  announcement strip links the blog post for the newest shipped release rather than only
+  naming the version, and a post marked `draft: true` in its frontmatter renders nowhere -
+  no post page, no blog index entry, no feed item, no announcement link - so unfinished
+  writing stays committed and reviewable in the repository. The gate lives in the one walk
+  every renderer shares, because the draft test previously sat in exactly one of three and
+  the front door hid a draft the blog index went on listing.
+
+### Changed
+
+- **A changed file now seeds every project that DECLARES it, not only the one whose
+  directory contains it.** A project declaring a source outside its own tree was invisible
+  to `magus affected` until the containing directory happened to be a project too, so an
+  edit to a file a target genuinely reads could select nothing. Containment still seeds,
+  and the root project still catches whatever no directory claims - that last case is what
+  MGS1028 above reports.
+- **Churn follows a file through a rename.** A rename used to split a file's history
+  across every name it ever had, so each fragment ranked as a separate, quieter file than
+  the one thing actually being rewritten. Each backend now reports what a commit did to a
+  path - added, modified, deleted, or renamed, with the previous name on a rename - and
+  attribution follows that lineage. `FileHotspot` gains `moves`, the number of times a
+  file changed address inside the history window: a file that keeps moving is churning
+  architecturally rather than textually, which is a different thing to know than its edit
+  count and is not derivable from its path. A backend that cannot detect a rename reports
+  it as a delete and an add, which is the old behavior rather than a wrong answer.
+
+### Fixed
+
+- **`magus --root <path> ls targets .` no longer reports that `.` escapes the workspace
+  root.** A relative project ref was measured from the caller's cwd rather than from the
+  workspace `--root` names, so `filepath.Rel` answered an outside cwd with a `../`-prefixed
+  anchor and every relative ref inherited the escape: `magus --root <ws> ls targets .`
+  failed with `project path "." escapes workspace root`. Refs now anchor at the workspace
+  when one was named explicitly. A ref that genuinely escapes is still rejected - this
+  stops magus inventing an escape the caller did not write, it does not widen what
+  resolves - and inside the workspace a dot-relative ref still anchors at the cwd.
+- **hg and jj reported cwd-relative paths where git reports workspace-relative ones.** The
+  same question answered from a subdirectory produced paths that resolved against
+  different roots depending on which VCS the workspace used, so churn, hotspots, and every
+  consumer of a changed-file list were quietly wrong for anyone not standing at the root.
+  Found by the cross-backend parity suite, which now pins this as behavior every backend
+  shares rather than something git happens to do.
+- **`magus memory ls -o name` printed `unsupported format` instead of the entry ids.** It
+  is the one-per-line form every other listing command answers, and the shared renderer
+  does not implement it, so a command that offers it has to render it - reaching the
+  default case read as a broken flag rather than a gap. `magus affected --plan` likewise
+  emitted JSON whatever `-o` asked for, and now honors it.
 
 ### Breaking
 
 - **`magus insight` is removed.** The lenses were never a daily verb - they are a
   reporting surface, reached from CI and from a magusfile - and a subcommand is the
-  one place they cost every reader of `magus --help`. They are now
-  `magus\insight()` (typed) and `magus\insightMarkdown()` (the document), both
-  computed IN-PROCESS from the workspace magus already has open, and `magus_insight`
-  over MCP for agents, which never went through the subcommand at all.
+  one place they cost every reader of `magus --help`. The survivor is
+  `magus\insight()`: the typed report, computed IN-PROCESS from the workspace magus
+  already has open, plus `magus_insight` over MCP for agents, which never went
+  through the subcommand at all. There is no document renderer: presentation is the
+  caller's job, built from the typed report.
 
   What this costs, in full:
 
@@ -99,7 +280,7 @@ https://github.com/egladman/magus/compare/v0.2.1...main
   `graph` and `targetGraph`, the second read as a variant of the first; they are
   siblings, so each is now named for what it contains. It also settles the surface's one
   inconsistent qualifier: every other pair suffixes (`describe`/`describeFile`,
-  `affected`/`affectedImpact`, `insight`/`insightMarkdown`) while this one prefixed.
+  `affected`/`affectedImpact`) while this one prefixed.
 - **`magus\modules()` and `magus\module(name)` are now one `magus\describeModule(name?)`.**
   Omit the name for every module; pass one to detail it. Either way the return is a
   `[Module]`, so detailing one reads `magus\describeModule("fs")[0]`.

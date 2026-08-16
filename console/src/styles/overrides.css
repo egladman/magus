@@ -73,11 +73,13 @@
 /* Keyboard-shortcuts toggle: a quiet icon button matching the version chip's muted-until-hover weight,
  * sized down to sit on the slim rail without inflating it. */
 #console-statusbar .console-shell-statusbar__shortcuts,
+#console-statusbar .console-shell-statusbar__activity,
 #console-statusbar .console-shell-statusbar__share {
   padding: 0 0.15rem; min-height: 0; line-height: 0; border: 0; background: none;
   color: var(--pf-t--global--text--color--subtle); opacity: 0.65;
 }
 #console-statusbar .console-shell-statusbar__shortcuts:hover,
+#console-statusbar .console-shell-statusbar__activity:hover,
 #console-statusbar .console-shell-statusbar__share:hover { opacity: 1; }
 
 /* Panes tray toggle (main.ts): the same quiet weight as the shortcuts button, but its glyph is a live
@@ -204,6 +206,7 @@
    lower edge (which already clears the status bar via bottom:var(--console-statusbar-h)). */
 .console-shell-notify::after,
 .console-shell-share::after,
+.console-shell-activity::after,
 #console-refpanel::after {
   content: ""; position: absolute; left: 0; right: 0; bottom: 0; height: 6rem;
   /* A tall, eased fade: it stays near-transparent through the first half, then ramps into the
@@ -410,7 +413,8 @@
    behind it without a symmetric blur bleeding DOWN onto the status bar, which would fight the seamless
    bottom fade. top/bottom:0 keeps it inside the panel's own height, so nothing spills past the seam. */
 .console-shell-notify::before,
-.console-shell-share::before {
+.console-shell-share::before,
+.console-shell-activity::before {
   content: ""; position: absolute; top: 0; bottom: 0; left: -18px; width: 18px;
   background: linear-gradient(to right, transparent, rgba(0, 0, 0, 0.16));
   pointer-events: none;
@@ -482,3 +486,74 @@
 .console-shell-share__actions {
   display: flex; gap: 0.5rem; margin-top: 0.2rem;
 }
+
+/* --- Activity drawer -----------------------------------------------------------------------------
+ * "What magus is running, and what just ran" (activityDrawer.ts): the share panel's immediate
+ * sibling, so it shares that panel's frame rules verbatim (docked between the top chrome and the
+ * status bar on the right edge, same width, same tier, same bottom fade and left shadow strip added
+ * to the grouped selectors above). Only what differs from the share panel is written here: a dense
+ * two-section list rather than a centered single-task form.
+ *
+ * There is no slide-in transition, matching its sibling: both panels appear and disappear via the
+ * `hidden` attribute. Nothing here moves on its own, so there is nothing for a reduced-motion query
+ * to switch off. */
+.console-shell-activity {
+  position: fixed; top: var(--console-topchrome-h); bottom: var(--console-statusbar-h); right: 0; left: auto;
+  width: 24rem; max-width: calc(100vw - 1rem);
+  display: flex; flex-direction: column;
+  background: var(--pf-t--global--background--color--primary--default);
+  border-left: 1px solid var(--pf-t--global--border--color--default);
+  z-index: var(--pf-t--global--z-index--300); /* same tier as the share + notification panels */
+}
+.console-shell-activity[hidden] { display: none; }
+.console-shell-activity__head {
+  flex: 0 0 auto; display: flex; align-items: center; justify-content: space-between;
+  gap: 0.5rem; padding: 0.5rem 0.35rem 0.5rem 0.75rem;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-shell-activity__title { font-size: 0.85rem; font-weight: 600; color: var(--pf-t--global--text--color--regular); }
+/* Bottom padding clears the status-bar fade (::after) so the last row is never cut. */
+.console-shell-activity__body {
+  flex: 1 1 auto; overflow-y: auto; min-height: 0;
+  display: flex; flex-direction: column; gap: 0.9rem;
+  padding: 0.75rem 0.9rem 2.75rem;
+}
+/* The aria-live line. Visible as well as announced - the counts are the panel's one-glance answer,
+   and a sighted reader wants them for the same reason a screen-reader user is told them. */
+.console-shell-activity__summary {
+  margin: 0; font-size: 0.74rem; color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-activity__section { display: flex; flex-direction: column; gap: 0.35rem; }
+.console-shell-activity__sectionhead {
+  margin: 0; display: flex; align-items: center; gap: 0.4rem;
+  font-size: 0.72rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.04em;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-activity__list { margin: 0; padding: 0; list-style: none; display: flex; flex-direction: column; }
+/* Each row is a two-line block: the command, then its meta. The left rule carries the outcome, which
+   is why it is a data attribute and not a colour baked into the row class. */
+.console-shell-activity__row {
+  display: flex; flex-direction: column; gap: 0.1rem;
+  padding: 0.35rem 0.5rem;
+  border-left: 2px solid transparent;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-shell-activity__row[data-outcome="pass"] { border-left-color: var(--console-status-ok); }
+.console-shell-activity__row[data-outcome="fail"] { border-left-color: var(--pf-t--global--border--color--status--danger--default); }
+.console-shell-activity__rowtitle {
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.74rem;
+  color: var(--pf-t--global--text--color--regular);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.console-shell-activity__rowmeta { font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); }
+/* The delegation unit a row belongs to. Nothing sets it yet (phase 2 does); the rule exists so the
+   field's arrival is a data change rather than a styling one. */
+.console-shell-activity__rowunit {
+  align-self: flex-start; font-size: 0.66rem; letter-spacing: 0.03em;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-activity__empty {
+  margin: 0; padding: 0.5rem; font-size: 0.76rem; line-height: 1.4;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-activity__empty[hidden] { display: none; }

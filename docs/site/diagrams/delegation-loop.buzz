@@ -1,0 +1,91 @@
+// site/diagrams/delegation-loop.buzz - how work is split across several agents and put back
+// together. Drawn as a ring because the mechanism is a loop that closes: the checkpoint the
+// orchestrator takes at the start is the same one it diffs against at the end, so a unit is
+// verified against what it CLAIMED rather than against whatever the tree looks like later.
+//
+// The center box is not a step. It is the doctrine the rest of the figure only makes sense
+// under: every box on the ring is a thing magus RECORDS or ANSWERS, and none of them is a
+// thing it prevents. No connector reaches it because it constrains all of them.
+//
+// The release connector is the one accent. Releasing a path early - so owned_paths shrinks
+// while the unit is still running - is the move that makes the plan usable by a reader, and
+// it is the half people skip.
+namespace delegationLoop;
+
+import "../libs/diagram/diagram" as _;
+
+export fun delegationLoopDiagram() > Diagram {
+    return Diagram{
+        id = "delegation-loop",
+        eyebrow = "delegation",
+        title = "A declared plan, released early, verified by diff",
+        desc = "An orchestrator checkpoints the working state, partitions the work by write "
+            + "set using graph evidence, and declares one ledger row per unit: goal, "
+            + "checkpoint, owned paths. Workers release paths as soon as they are done with "
+            + "them, so the plan shrinks while it runs, and the Plan surface renders the "
+            + "rows, their overlaps and their staleness for whoever is watching. The "
+            + "orchestrator verifies each unit by diffing since that unit's checkpoint "
+            + "against what it claimed, then integrates and runs magus affected ci. magus "
+            + "records and answers; it enforces none of it.",
+        width = 960,
+        height = 600,
+        nodes = [
+            Node{ id = "cp", anchor = "cmd/magus", label = "magus vcs checkpoint",
+                  sub = "revision + dirty digest",
+                  x = 32, y = 88, w = 200, h = 64 },
+            Node{ id = "part", anchor = "internal/graph", label = "Partition by write set",
+                  sub = "refs, explain, affected",
+                  x = 280, y = 88, w = 200, h = 64 },
+            Node{ id = "decl", anchor = "internal/ledger", label = "Declare the plan",
+                  sub = "goal, checkpoint, paths",
+                  x = 528, y = 88, w = 200, h = 64 },
+            Node{ id = "work", label = "Workers edit", sub = "one write set each",
+                  role = "external", x = 744, y = 192, w = 200, h = 64 },
+            Node{ id = "verify", anchor = "internal/diff", label = "Verify each unit",
+                  sub = "diff since its checkpoint",
+                  x = 744, y = 440, w = 200, h = 64 },
+            Node{ id = "integrate", anchor = "cmd/magus", label = "Integrate",
+                  sub = "magus affected ci",
+                  x = 280, y = 440, w = 200, h = 64 },
+
+            Node{ id = "plan", anchor = "internal/handler/status", label = "Plan surface",
+                  sub = "/console/plan/, overlaps, stale",
+                  x = 32, y = 232, w = 224, h = 64 },
+            Node{ id = "human", label = "The human", sub = "watches and decides",
+                  role = "external", x = 32, y = 344, w = 224, h = 64 },
+
+            Node{ id = "doctrine", anchor = "internal/ledger", label = "magus records and answers",
+                  sub = "it enforces none of it",
+                  role = "focal", x = 376, y = 272, w = 280, h = 72 },
+        ],
+        // The ring runs clockwise and closes on the left at x=16, in the frame gutter: the
+        // return leg has to pass the whole left column, and every other lane there is spent
+        // on the Plan surface the human reads.
+        edges = [
+            Edge{ src = "cp", dst = "part" },
+            Edge{ src = "part", dst = "decl" },
+            Edge{ src = "decl", dst = "work",
+                  srcSide = "bottom", srcSlot = 1, srcSlots = 2, dstSide = "top", bend = 168 },
+            Edge{ src = "work", dst = "verify", label = "reports done" },
+            Edge{ src = "verify", dst = "integrate" },
+            Edge{ src = "integrate", dst = "cp", srcSide = "left", dstSide = "left", bend = 16 },
+
+            // The feedback leg: a released path is a ledger update, not a new step, so it
+            // returns to the same row the unit was declared in.
+            // bend sits at 740 rather than the middle of the 16px corridor: a bend exactly
+            // between the two boxes leaves a zero-length final leg, and an arrowhead on one
+            // of those takes its angle from whatever the renderer infers.
+            Edge{ src = "work", dst = "decl", label = "release", kind = "accent",
+                  srcSide = "left", dstSide = "right", bend = 740 },
+
+            Edge{ src = "decl", dst = "plan", label = "ledger rows",
+                  srcSide = "bottom", srcSlot = 2, srcSlots = 2, dstSide = "top", bend = 196 },
+            Edge{ src = "human", dst = "plan", label = "watches",
+                  srcSide = "top", dstSide = "bottom" },
+        ],
+        legend = [
+            LegendItem{ role = "focal", label = "the whole guarantee" },
+            LegendItem{ role = "external", label = "agents and people" },
+        ],
+    };
+}

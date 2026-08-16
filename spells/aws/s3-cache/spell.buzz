@@ -1,4 +1,4 @@
-// S3 remote cache backend for magus, written as an ordinary magus spell. Works
+// S3 remote cache provider for magus, written as an ordinary magus spell. Works
 // with Amazon S3 and any S3-compatible store (MinIO, Cloudflare R2, Backblaze
 // B2). Wire it in a magusfile:
 //
@@ -37,11 +37,11 @@
 // store accepts.
 //
 // Configuration comes from the environment (standard AWS variables plus a bucket):
-//   AWS_ACCESS_KEY_ID       — access key (gates the backend)
+//   AWS_ACCESS_KEY_ID       — access key (gates the provider)
 //   AWS_SECRET_ACCESS_KEY   — secret key
 //   AWS_SESSION_TOKEN       — optional; for temporary credentials
 //   AWS_REGION              — region (falls back to AWS_DEFAULT_REGION, then us-east-1)
-//   MAGUS_S3_BUCKET         — bucket name (gates the backend)
+//   MAGUS_S3_BUCKET         — bucket name (gates the provider)
 //   MAGUS_S3_ENDPOINT       — optional; base URL incl. scheme, no trailing slash
 //                             (default https://s3.<region>.amazonaws.com; set this
 //                             for MinIO/R2/B2)
@@ -60,10 +60,10 @@ import "os"
 // CONTRIBUTING.md#naming.
 export fun mgs_getName() > str { return "aws-s3"; }
 
-// A cache backend exports the well-known cache-contract functions below (enabled
+// A cache provider exports the well-known cache-contract functions below (enabled
 // / get_artifact / put_artifact / prune), which the remote-cache subsystem detects
 // by name and invokes via magus\cache.remote(s3). It declares no mgs_listTargets -
-// a cache backend contributes no operations a target could compose.
+// a cache provider contributes no operations a target could compose.
 
 // SHA-256 of the empty string — the x-amz-content-sha256 for a bodyless GET.
 final EMPTY_SHA256 = "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855";
@@ -208,7 +208,7 @@ fun sign(method: str, path: str, query: str, payloadHash: str) > any {
     return headers;
 }
 
-// enabled gates the backend on having credentials and a bucket. The cache probes
+// enabled gates the provider on having credentials and a bucket. The cache probes
 // this once and skips fetch/push entirely when false — no remote calls.
 export fun enabled(target: Target, cb: fun(any)) > bool {
     return access() != "" and secret() != "" and bucket() != "";

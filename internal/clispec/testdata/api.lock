@@ -107,12 +107,17 @@ flag buzz/no-autoload
 flag buzz/t
 flag buzz/test
 flag clean/cache
+flag diff/generated
+flag diff/tui
+flag diff/watch
 flag explain/global
 flag explain/refresh
 flag hook/agent-name
 flag hook/event
+flag hook/observe
 flag hook/path
 flag hook/session
+flag hook/transcript
 flag init/force
 flag init/global
 flag init/local
@@ -144,6 +149,7 @@ flag run/no-volatility-retry
 flag run/open
 flag run/race
 flag run/shard
+flag run/skip
 flag run/step
 flag run/timeout
 flag run/upstream
@@ -156,6 +162,7 @@ flag status/socket
 flag status/symbols
 flag status/watch
 flag status/workspace
+flag version/client
 flag watch/backend
 flag watch/debounce
 flag watch/ignore
@@ -168,6 +175,7 @@ subcommand clean
 subcommand completion
 subcommand config
 subcommand describe
+subcommand diff
 subcommand doctor
 subcommand explain
 subcommand graph

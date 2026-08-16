@@ -517,6 +517,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 @media (max-width: 47.999rem) {
   :root { --console-topchrome-h: calc(var(--console-titlebar-h) * 2); }
   #console-titlebar { flex-direction: column; }
+  /* Drop the block gutter on a phone. main's 0.6rem padding-block buys a "floating card" reading on a
+     desktop window, but here it is 9.6px of dead page grey at each end - the panel visibly stops short
+     of the title bar and again of the status bar, which reads as two slim strips the content failed to
+     fill rather than as deliberate framing. The two chrome rails already frame the content, and 19px of
+     a phone's height is worth more than the effect. The INLINE gutter stays: flush to the side bezel is
+     genuinely harder to read, and nothing frames the content there. */
+  body[data-console-fill] > main { padding-block: 0; }
   /* Zero open tabs (the launcher screen): the second row would be empty, so collapse back to a single
      row - drop the doubled height and hide the empty tab strip, so the home screen isn't topped by a
      blank bar. data-no-tabs is set in main.ts's show() when the workspace has no active tab. */
@@ -818,10 +825,15 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 @keyframes console-launcher-rise { from { opacity: 0; transform: translateY(0.6rem); } to { opacity: 1; transform: translateY(0); } }
 
 /* One-shot "living" icon micro-motions on hover - each surface's glyph animates ONCE, in character, and
-   settles. data-motion on a single inner element (or the icon slot, for the gear) picks the motion. All
-   under 250ms-ish, none loop. Disabled under reduced-motion (below). */
+   settles. data-motion on a single inner element (or the icon slot, for the gear and the note) picks the
+   motion. All under 250ms-ish, none loop. Disabled under reduced-motion (below). */
 .console-launcher-card:hover .console-launcher-card__icon[data-motion="gear"] svg { animation: console-launcher-gear 0.6s var(--console-ease, ease); }
 @keyframes console-launcher-gear { from { transform: rotate(0); } to { transform: rotate(30deg); } }
+/* The note is drawn askew and settles the rest of the way down on hover - the page and its prose have to
+   turn together, so this rides the icon slot's whole svg exactly as the gear does. It rotates TOWARD
+   upright from a steeper tilt, so the glyph appears to have just been set down. */
+.console-launcher-card:hover .console-launcher-card__icon[data-motion="settle"] svg { animation: console-launcher-settle 0.6s var(--console-ease, ease); }
+@keyframes console-launcher-settle { from { transform: rotate(-7deg); } to { transform: rotate(0); } }
 .console-launcher-card:hover .console-launcher-card__icon [data-motion="bars"] { animation: console-launcher-bars 0.6s var(--console-ease, ease); transform-origin: center bottom; transform-box: fill-box; }
 @keyframes console-launcher-bars { from { transform: scaleY(0.55); } to { transform: scaleY(1); } }
 .console-launcher-card:hover .console-launcher-card__icon [data-motion="pulse"] { animation: console-launcher-pulse 0.7s var(--console-ease, ease); transform-origin: center; transform-box: fill-box; }
@@ -830,6 +842,10 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 @keyframes console-launcher-flick { 30% { opacity: 0.35; } 60% { opacity: 1; } }
 .console-launcher-card:hover .console-launcher-card__icon [data-motion="wave"] { animation: console-launcher-wave 0.7s var(--console-ease, ease); }
 @keyframes console-launcher-wave { 50% { transform: translateY(-1.5px) scaleY(1.2); } }
+/* The keyboard's spacebar depresses and comes back - the smallest motion in the set, because a key
+   travelling further than a key travels stops reading as a key. */
+.console-launcher-card:hover .console-launcher-card__icon [data-motion="press"] { animation: console-launcher-press 0.45s var(--console-ease, ease); }
+@keyframes console-launcher-press { 40% { transform: translateY(1px); } }
 
 /* The keybindings editor (#keybindings-overlay) is a PatternFly ModalBox/Backdrop overlay
    (keybindings.ts); its frame is PatternFly and its row grid (which has no PF component) lives

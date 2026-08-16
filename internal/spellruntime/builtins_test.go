@@ -1,12 +1,17 @@
 package spellruntime
 
 import (
-	"testing"
-
+	"context"
+	bindinggen "github.com/egladman/magus/internal/interp/bindings/gen"
+	json "github.com/egladman/magus/internal/json"
+	buzz "github.com/egladman/magus/libs/gopherbuzz"
 	"github.com/egladman/magus/spells"
+	"github.com/egladman/magus/std"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"strings"
+	"testing"
 )
 
 func TestBuiltins_NonEmpty(t *testing.T) {
@@ -157,5 +162,203 @@ func TestBuiltinTargetNamesAreCanonical(t *testing.T) {
 			assert.Equalf(t, types.Normalize(op), op,
 				"spell %q op %q is not canonical - it would be unreachable by any request", name, op)
 		}
+	}
+}
+
+// TestCharmBuzzParityWithHost keeps the pure-Buzz magus/charm module
+// (internal/spellruntime/charm.buzz) in lockstep with the Go charm host module
+// (std/charm.go): every constructor magus/charm exports must produce a
+// byte-identical RFC 6902 patch record. The Buzz module is hand-written (charm is
+// logic, not a struct, so it can't be codegen'd), so this guard is what licenses
+// the duplication — diverge the two and this fails.
+func TestCharmBuzzParityWithHost(t *testing.T) {
+	ctx := context.Background()
+
+	// eval loads the magus/charm source and evaluates a bare constructor call
+	// (exports are flat-imported, like magus/spell's Target), returning the
+	// marshalled Go value.
+	eval := func(t *testing.T, expr string) any {
+		t.Helper()
+		s := buzz.NewSession(ctx, buzz.WithEmbedded())
+		defer s.Close()
+		// charm.buzz imports magus/spell for the Charm/PatchOp object types; register
+		// the same bundle the runtime does so the import resolves in this bare session.
+		s.SetModuleDecls(SpellModulePath, strings.Join([]string{
+			TargetModuleSource, PatchOpSource, CharmTypeSource, CommandSource,
+		}, "\n"))
+		require.NoError(t, s.Exec(ctx, CharmModuleSource), "load charm.buzz")
+		require.NoError(t, s.Exec(ctx, "final __r = "+expr+";"), "eval %s", expr)
+		return bindinggen.ValueToAny(s.GetGlobal("__r"))
+	}
+	// spells.Charm now, not map[string]any: the host constructors return the typed value
+	// the Buzz side already mirrored. norm marshals both sides through spells.Charm
+	// anyway, so the comparison is unchanged.
+	ok := func(v spells.Charm, err error) any {
+		t.Helper()
+		require.NoError(t, err)
+		return v
+	}
+	// norm collapses both shapes - the host's spells.Charm and the Buzz Charm object's
+	// field map - through spells.Charm, so the comparison ignores whether an empty
+	// value/fromPtr key is present (the object carries all fields; the host omits
+	// empties) and pins only the RFC 6902 content.
+	norm := func(v any) spells.Charm {
+		t.Helper()
+		b, err := json.Marshal(v)
+		require.NoError(t, err)
+		var c spells.Charm
+		require.NoError(t, json.Unmarshal(b, &c))
+		return c
+	}
+
+	argv := []string{"tool", "golangci-lint", "run", "./..."}
+
+	cases := []struct {
+		name string
+		expr string
+		want any
+	}{
+		{"append", `append(["-v","-x"])`, ok(std.CharmAppend(ctx, []string{"-v", "-x"}))},
+		{"prepend", `prepend(["a","b"])`, ok(std.CharmPrepend(ctx, []string{"a", "b"}))},
+		{"after", `after(["tool","golangci-lint","run","./..."], "run", ["--fix"])`, ok(std.CharmAfter(ctx, argv, "run", []string{"--fix"}))},
+		{"before", `before(["tool","golangci-lint","run","./..."], "run", ["--fix"])`, ok(std.CharmBefore(ctx, argv, "run", []string{"--fix"}))},
+		{"set", `set(["-l","."], "-l", "-w")`, ok(std.CharmSet(ctx, []string{"-l", "."}, "-l", "-w"))},
+		{"drop", `drop(["mod","tidy","--diff"], "--diff")`, ok(std.CharmDrop(ctx, []string{"mod", "tidy", "--diff"}, "--diff"))},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			require.Equal(t, norm(c.want), norm(eval(t, c.expr)))
+		})
+	}
+}
+
+func TestValidatePatch(t *testing.T) {
+	t.Run("empty", func(t *testing.T) {
+		assert.NoError(t, spells.ValidatePatch(nil))
+	})
+	t.Run("add end", func(t *testing.T) {
+		assert.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "add", Path: "/-", Value: "-v"}}))
+	})
+	t.Run("replace index", func(t *testing.T) {
+		assert.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "replace", Path: "/0", Value: "-w"}}))
+	})
+	t.Run("remove index", func(t *testing.T) {
+		assert.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "remove", Path: "/2"}}))
+	})
+	t.Run("move", func(t *testing.T) {
+		assert.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "move", Path: "/0", From: "/1"}}))
+	})
+	t.Run("copy", func(t *testing.T) {
+		assert.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "copy", Path: "/0", From: "/1"}}))
+	})
+	t.Run("test", func(t *testing.T) {
+		assert.NoError(t, spells.ValidatePatch([]spells.PatchOp{{Op: "test", Path: "/0", Value: "go"}}))
+	})
+	t.Run("unknown op", func(t *testing.T) {
+		assert.Error(t, spells.ValidatePatch([]spells.PatchOp{{Op: "patch", Path: "/0"}}))
+	})
+	t.Run("root path rejected", func(t *testing.T) {
+		assert.Error(t, spells.ValidatePatch([]spells.PatchOp{{Op: "replace", Path: "", Value: "x"}}))
+	})
+	t.Run("path without slash", func(t *testing.T) {
+		assert.Error(t, spells.ValidatePatch([]spells.PatchOp{{Op: "add", Path: "0", Value: "x"}}))
+	})
+	t.Run("move without from", func(t *testing.T) {
+		assert.Error(t, spells.ValidatePatch([]spells.PatchOp{{Op: "move", Path: "/0"}}))
+	})
+	t.Run("copy bad from", func(t *testing.T) {
+		assert.Error(t, spells.ValidatePatch([]spells.PatchOp{{Op: "copy", Path: "/0", From: "1"}}))
+	})
+}
+
+func TestDescriptor_TargetNames(t *testing.T) {
+	m := spells.Descriptor{
+		Name: "test",
+		Ops: map[string]spells.Op{
+			"vet":   {},
+			"build": {},
+			"test":  {},
+		},
+	}
+	assert.Equal(t, []string{"build", "test", "vet"}, m.OpNames())
+}
+
+func TestDescriptor_TargetNamesEmpty(t *testing.T) {
+	m := spells.Descriptor{Name: "empty"}
+	assert.Empty(t, m.OpNames(), "OpNames() on empty Ops should be empty")
+}
+
+// The docker spell drives two binaries and only one of them talks to a daemon. That
+// asymmetry is the whole reason readiness is keyed by TOOL rather than by spell:
+// a spell-scoped probe would make a Dockerfile lint wait on a service it never uses.
+func TestDockerReadinessIsScopedToTheDaemonBackedTool(t *testing.T) {
+	d, ok := Builtins()["docker"]
+	require.True(t, ok, "docker spell not registered")
+
+	tool, ok := d.Tools["docker"]
+	probe := tool.Ready
+	require.True(t, ok, "docker spell declares no docker tool")
+	require.NotEmpty(t, probe.Bin, "docker declares no readiness probe")
+	assert.Equal(t, "docker", probe.Bin)
+	assert.Equal(t, []string{"info"}, probe.Args,
+		"`docker --version` is client-only and cannot detect a stopped daemon")
+
+	gated := d.Tools["hadolint"].Ready.Bin != ""
+	assert.False(t, gated, "linting a Dockerfile must not wait on the docker daemon")
+}
+
+// Every op resolves its probe through the bin it already declares, so no op restates
+// which tool it uses.
+func TestReadinessResolvesThroughOpBin(t *testing.T) {
+	d := Builtins()["docker"]
+	for name, op := range d.Ops {
+		gated := d.Tools[op.Command.Bin].Ready.Bin != ""
+		if op.Bin == "docker" {
+			assert.True(t, gated, "op %q runs docker and should be gated", name)
+		}
+	}
+}
+
+// A spell that declares nothing behaves exactly as before.
+func TestSpellsWithoutReadinessAreUngated(t *testing.T) {
+	for _, name := range []string{"go", "rust", "typescript"} {
+		s, ok := Builtins()[name]
+		require.True(t, ok, name)
+		for tool, tl := range s.Tools {
+			assert.Empty(t, tl.Ready.Bin,
+				"%s: %s is self-contained and needs no readiness probe", name, tool)
+		}
+	}
+}
+
+// The end-to-end check the enum was adopted for: a built-in spell writes
+// `VersionKey{upTo = VersionComponent.patch}` in Buzz, and it must arrive in Go as
+// VersionPatch. An enum case is a heap object rather than a string, so before the
+// adapter unwrapped it this decoded as absent - silently, which is exactly the failure
+// a bare string invited and the enum was meant to end.
+func TestBuiltinSpellsDecodeVersionKeyFromEnum(t *testing.T) {
+	reg := Builtins()
+
+	goSpell, ok := reg["go"]
+	require.True(t, ok, "go spell not registered")
+	assert.Equal(t, spells.VersionPatch, goSpell.Tools["go"].Key.UpTo,
+		"`go version` prints the host platform; patch extraction is what sheds it")
+	assert.Equal(t, spells.VersionPatch, goSpell.Tools["golangci-lint"].Key.UpTo,
+		"golangci-lint pads its version line with a commit and a build timestamp")
+
+	// govulncheck declares nothing on purpose: its verdict comes from the vulnerability
+	// database, whose date is in the probe output and would not survive extraction.
+	assert.True(t, goSpell.Tools["govulncheck"].Key.IsZero(),
+		"govulncheck must key on its whole output")
+
+	for _, name := range []string{"docker", "rust"} {
+		s, ok := reg[name]
+		require.True(t, ok, "%s spell not registered", name)
+		assert.Equal(t, spells.VersionPatch, s.Tools[map[string]string{"docker": "docker", "rust": "rustc"}[name]].Key.UpTo, "%s", name)
+	}
+
+	// A spell that declares nothing keeps the whole-output default.
+	if bash, ok := reg["bash"]; ok {
+		assert.Empty(t, bash.Tools)
 	}
 }

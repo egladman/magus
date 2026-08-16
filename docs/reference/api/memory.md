@@ -16,7 +16,7 @@ Package `magus.memory.v1`, defined in `proto/magus/memory/v1/memory.proto`. Part
 
 ListMemories returns every record in full (records are small). Paginated by contract so growth never forces a breaking change, though the store returns all records today.
 
-`POST /magus.memory.v1.MemoryService/ListMemories` - unary.
+`POST /magus.memory.v1.MemoryService/ListMemories`: unary.
 
 Takes `ListMemoriesRequest`, returns `ListMemoriesResponse`.
 
@@ -24,7 +24,7 @@ Takes `ListMemoriesRequest`, returns `ListMemoriesResponse`.
 
 UpdateMemory upserts a record by name: with allow\_missing=true it creates the record when absent, otherwise it updates in place. An empty update\_mask is a full replace.
 
-`POST /magus.memory.v1.MemoryService/UpdateMemory` - unary.
+`POST /magus.memory.v1.MemoryService/UpdateMemory`: unary.
 
 Takes `UpdateMemoryRequest`, returns `UpdateMemoryResponse`.
 
@@ -32,7 +32,7 @@ Takes `UpdateMemoryRequest`, returns `UpdateMemoryResponse`.
 
 DeleteMemory removes a record by name. With allow\_missing=true, deleting an absent record succeeds as a no-op (idempotent).
 
-`POST /magus.memory.v1.MemoryService/DeleteMemory` - unary.
+`POST /magus.memory.v1.MemoryService/DeleteMemory`: unary.
 
 Takes `DeleteMemoryRequest`, returns `DeleteMemoryResponse`.
 
@@ -40,7 +40,7 @@ Takes `DeleteMemoryRequest`, returns `DeleteMemoryResponse`.
 
 GetCursor returns the cursor snapshot, empty when never written.
 
-`POST /magus.memory.v1.MemoryService/GetCursor` - unary.
+`POST /magus.memory.v1.MemoryService/GetCursor`: unary.
 
 Takes `GetCursorRequest`, returns `GetCursorResponse`.
 
@@ -48,7 +48,7 @@ Takes `GetCursorRequest`, returns `GetCursorResponse`.
 
 UpdateCursor overwrites the cursor snapshot.
 
-`POST /magus.memory.v1.MemoryService/UpdateCursor` - unary.
+`POST /magus.memory.v1.MemoryService/UpdateCursor`: unary.
 
 Takes `UpdateCursorRequest`, returns `UpdateCursorResponse`.
 

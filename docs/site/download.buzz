@@ -1,0 +1,83 @@
+// site/download.buzz - the install page (gen/download/index.html).
+//
+// It was docs/download.md, a Markdown source rendered through the documentation template,
+// which put a breadcrumb, a search box, a reading time, a prev/next pager and a tag row
+// around what is really one command. A page whose whole job is "run this" is a call to
+// action, not a document, so it is hand-built here and carries the landing's chrome: no
+// breadcrumb, no article card, full-bleed sections. See DOWNLOAD_SRC in engine/route.buzz
+// for the routing marker and the four conditions in engine/page.buzz that key off it.
+//
+// The install snippet is deliberately three lines rather than a `curl | sh` one-liner. A
+// page that tells you to pipe a remote script straight into a shell has taught you the
+// habit, not the tool; `-o install.sh`, read it, then run it is the version worth printing.
+namespace download;
+
+import "fs";
+import "io";
+import "template";
+import "lib/url" as _;
+import "engine/types" as _;
+import "engine/route" as _;
+import "engine/page" as _;
+
+// The routes that are NOT on the page. Each is a real install path that already has a guide
+// of its own, so the page names them once and links out rather than reprinting four
+// variants of the same instruction. Kept as data so the row cannot drift out of sync with
+// the guides it points at.
+final ROUTES = [
+    {"href": "setup/windows/", "label": "Windows"},
+    {"href": "setup/mise/", "label": "mise"},
+    {"href": "setup/container-image/", "label": "container"},
+    {"href": "setup/linux/", "label": "place it yourself"},
+    {"href": "setup/verify/", "label": "verify a release"},
+];
+
+fun routeLinks() > str {
+    var row = "";
+    var first = true;
+    foreach (route in ROUTES) {
+        if (!first) { row = row + " <span class=\"download-route-sep\" aria-hidden=\"true\">&middot;</span> "; }
+        row = row + "<a href=\"../" + route["href"] + "\">" + route["label"] + "</a>";
+        first = false;
+    }
+    return row;
+}
+
+// renderDownloadPage writes gen/download/index.html.
+//
+// Every link is relative and resolves one level up, since the page sits at download/ rather
+// than at gen's root: the asset gate proves each target exists, so a renamed setup guide
+// fails the build here rather than 404ing for a reader mid-install.
+export fun renderDownloadPage(site: Site) > void !> any {
+    final html = template\render(`  <section class="landing-hero download-hero">
+    <div class="landing-intro">
+      <p class="landing-eyebrow">Install</p>
+      <h1 class="landing-title">One binary. Nothing under it.</h1>
+      <p class="landing-lede">No runtime, no package manager, nothing to add to a <code>PATH</code> you did not choose. Around 35 MB, it runs offline, and uninstalling is deleting a file.</p>
+      <div class="download-command" id="install-platform">
+        <div data-install-route="unix">
+          <pre><code class="language-sh">curl --proto '=https' --tlsv1.2 -sSf https://eli.gladman.cc/magus/install -o install.sh
+less install.sh
+sh install.sh</code></pre>
+        </div>
+        <div data-install-route="windows" hidden>
+          <pre><code class="language-powershell">curl.exe -fLO "https://github.com/egladman/magus/releases/latest/download/magus_windows_amd64_static.tar.gz"
+tar -xzf "magus_windows_amd64_static.tar.gz" magus.exe</code></pre>
+        </div>
+      </div>
+      <p class="landing-sub">Read it, then run it. <code>--dry-run</code> prints the whole plan without writing anything.</p>
+      <p class="download-routes">{{{routes}}}</p>
+    </div>
+  </section>
+`, {"routes": routeLinks()});
+
+    final title = "Download";
+    final desc = "Install magus on macOS, Linux or Windows. One binary, no runtime, and the exact command for the machine you are on.";
+    final doc = renderPage(title, desc, html, DOWNLOAD_SRC, "", "download/", "", mut [], site);
+    fs\mkdirAll(site.outDir + "/download");
+    final of = io\File.open(site.outDir + "/download/index.html", io\FileMode.write);
+    of.write(doc);
+    of.close();
+    site.addRecord("download/", title, desc,
+        "---\ntags: [install, download, release, macos, linux, windows, mise, container]\n---\nInstall magus. One binary, no runtime, and the exact command for the machine you are on.\n");
+}

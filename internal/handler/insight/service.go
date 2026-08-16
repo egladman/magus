@@ -114,6 +114,7 @@ func fileHotspotToProto(f types.FileHotspot) *insightv1.FileHotspot {
 		Score:      int32(f.Score),
 		Authors:    int32(f.Authors),
 		LastCommit: tsFromTime(f.LastCommit),
+		Moves:      int32(f.Moves),
 	}
 }
 

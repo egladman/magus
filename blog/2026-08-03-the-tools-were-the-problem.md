@@ -1,0 +1,583 @@
+---
+title: "I think our tools are the problem"
+description: A new name every few months for the same complaint. My case for fixing the CLI instead of bolting an AI integration onto it, plus what shipped in this release.
+tags: [release, opinion]
+date: 2026-08-03
+release: v0.4.0
+draft: true
+---
+
+# I think our tools are the problem
+
+Harness engineering. Loop engineering. Context engineering. Graph engineering.
+Every few months I read a new term for the same job, and the conversation moves
+over to it.
+
+I reject all of them. The work under those labels is often real; the labels are
+four names for one complaint, and the complaint is that our developer tools are
+bad.
+
+The same churn produced a wave of AI-first, agent-first toolkits, announced with
+a paragraph of emoji and shipped without much evidence anyone thought about
+quality. I am skeptical of the whole category. I think most of it is gone in two
+years, and I am not adding to it.
+
+magus is a task orchestrator for polyglot monorepos: one statically linked
+binary, no second toolchain to install. It is built for humans, and it happens to
+work for agents. This post is why, with the release notes at the end.
+
+## Our tools stopped being idiomatic
+
+Some of the tools most of us depend on took the Unix conventions and dropped
+them. Decades of agreement about what a command looks like, what it prints, what
+it writes to your disk, what a non-zero exit means, all traded for a house
+dialect with abstractions stacked on top.
+
+Now those same maintainers ship AI integrations and find that agents struggle.
+
+An agent that cannot drive your CLI is telling you something about your CLI. You
+had that evidence before the agents arrived, because your users were already
+failing at it. They blamed themselves and read the docs again.
+
+## The loop I keep watching
+
+Your tool has a foot gun. You trip on it, and so does everyone on your team. One
+of you writes a wrapper script, another answers a Stack Overflow question, a
+third publishes a "gotchas" post. Model builders train on that corpus, so the
+models learn the workaround and never see the fix. Your agent trips on the same
+idiom you tripped on, having learned it from you. Somebody ships an integration
+to paper over the tool.
+
+Nothing in that circuit puts pressure on the tool itself.
+
+## Nx
+
+Nx pushed me into writing my own build tool. I want this aimed at decisions
+rather than at the people who made them, and I would rather have the argument
+with those people than about them.
+
+Run `nx --help` and count. Then try to say out loud what rule decides whether
+something is a subcommand, a flag, or a target in a config file. I could never
+work one out, and without a rule I can hold in my head, I look things up forever.
+
+### The terminal UI
+
+Nx 21 shipped a terminal UI and turned it on by default on supported terminals,
+locally. It takes the screen, and
+my scrollback goes with it. Selecting text stops behaving the way it does in
+every other program in that window, so copying a stack trace out of build output
+turns into a puzzle I have to solve first.
+
+The Nx docs say the interface "is entirely controlled through keyboard
+shortcuts," and tell me to press `?` for the list. To read the output of my own
+build, I have to learn a keymap. It is the most asinine fucking developer
+experience I have run into in years.
+
+Search that page for the words scroll, select, or copy. I could not find them. I
+think nobody weighed those questions, because whoever designed this looked at a
+terminal and saw a rendering surface instead of an interface carrying fifty years
+of contract. Frontend instincts pointed at a backend concern, rebuilding a
+problem the terminal settled before I got here.
+
+Three switches turn it off: `--no-tui`, `NX_TUI=false`, and `tui.enabled` in
+`nx.json`. Finding the off switch was the first thing I did.
+
+### Everything goes in the box
+
+Nx wants everything inside its box, and while my work matches what the box
+anticipated, I am fine. The moment I need something it did not anticipate, I
+write an executor, and an executor is custom JavaScript. Plugins landed on top of
+that later. So I end up writing TypeScript, maintaining a bundler, and carrying a
+build step for the thing that runs my build steps.
+
+Options make it worse. One option arriving at one task can come from the
+executor's schema defaults, from `targetDefaults` in `nx.json`, from that
+target's `options`, from whichever named `configuration` got picked, or from what
+I typed. When the value reaching the process is not the one I expected, I go
+digging through layers to find which won. Configuration inheritance has been
+solved many times over, and the good versions all ship a command that prints the
+resolved value next to where each piece of it came from.
+
+### The layer I cannot build on
+
+Nx core is MIT, and I want that on the record before I complain.
+
+Remote caching is most of why anyone adopts a monorepo build tool, and it keeps
+moving. Community task runners, then caching behind a paid Powerpack license in
+v20, then free self-hosted plugins again in 20.8, then those deprecated in May
+2026 over a cache-poisoning vulnerability (CVE-2025-36852) that Nx says is in
+the packages' design and cannot be patched - and which, to be fair to Nx, they
+note affects self-hosted cache plugins across many build systems, not only
+theirs. Today the guidance
+points at Nx Cloud, an Enterprise plan, or writing your own server against their
+OpenAPI spec.
+
+The vulnerability is real and I won't dress a security deprecation up as a
+pricing decision. But land anywhere in that timeline and it stops mattering which
+link was commercial and which was security. A foundational capability moved four
+times in two years, and where it lands is a paid product.
+
+I don't understand how you write open source software on a build tool whose
+foundational layer is gated. If I cannot hand my entire build to a stranger with
+no account and no license, I have not handed them the project.
+
+So: magus will never be monetized. No paid tier, no hosted plan, no open core, no
+license key for the cache. That is settled rather than a stage I plan to grow out
+of, and the reasoning is selfish as much as principled. A project with nothing to
+sell has no reason to move a capability behind a wall later.
+
+## Nix
+
+Nix frustrated me more than Nx did, for a reason that has nothing to do with the
+technology. The engineering is impressive and the people behind it are sharper
+than I am.
+
+I hit the CLI while `nix-env` was giving way to `nix profile`. Two vocabularies
+live at once, answers online from both eras, no consistency to lean on. Part of
+that churn was a real move from imperative to declarative, which I count as
+design work rather than noise. Learning it still wore me out. It may be better
+now, and I am describing what I ran into then.
+
+A CLI I can predict beats a CLI that is powerful in ways I have to look up every
+time.
+
+## Dagger
+
+Dagger is the one I wanted to love.
+
+The ideas are good. Building a container without a Dockerfile, describing it in a
+real language, cuts out a category of foot guns people trip over every day. Their
+Go SDK is cleanly written, reads as idiomatic Go put together with intent, and I
+still open it and look at it. They diagnosed the same problem I did.
+
+Execution is where we part. Dagger stays agnostic about your language, so it
+hands you an SDK in whichever one you picked, and the seam where my code met
+theirs got wonky. The people I showed it to split over it. I never got buy-in
+internally and never saw it take hold elsewhere either, which bothers me more
+than any technical complaint here.
+
+It has been a while since I used it in anger, so read that as a snapshot. And
+magus owes Dagger a debt: I refined the formula hard and what came out is my own
+take on it, but the influence is there.
+
+## A build tool should not generate code
+
+This is the position I am least willing to give up.
+
+Nx puts `nx generate` right in the surface. Dagger works harder to hide it and it
+is still there: authoring a module writes `dagger.gen.go` and an
+`internal/dagger/` tree of typed client bindings next to your code, the docs
+recommend committing them - the new module format requires it - and Dagger marks
+them `linguist-generated` in `.gitattributes` so GitHub folds them out of diffs.
+That tells me they know it is noise. It lands in my repository anyway.
+
+None of this is new, which is the part that gets me. Autotools has worked this
+way since long before I started: you write `configure.ac` and `Makefile.am`,
+autoconf and automake turn those into a `configure` shell script and a
+`Makefile.in`, and running `configure` turns that into the Makefile that make
+finally reads. Generated code producing generated code producing the thing that
+runs. CMake arrived later and does a tidier version of the same job,
+turning `CMakeLists.txt` into Makefiles or Ninja files.
+
+I want to be fair: it is impressive. A system that generates its own build
+machinery and has it work across a hundred platforms is a real engineering
+achievement and part of me enjoys looking at it. But when it breaks you need
+every layer in your head at once, the macro language and the generated script and
+the generated makefile and make itself, which is four things to understand before
+you can fix one.
+
+I have to keep my own house in order here, because magus generates things.
+`magus init` scaffolds a magusfile once and never touches it again. This repo
+regenerates its own docs on a target I run when I want it. The line I hold: no
+generated code sits between you and running a build. A magusfile is Buzz, and
+magus interprets it. Nothing compiles it, nothing binds it, and no file lands in
+your tree that you have to keep synchronized with a tool version.
+
+Scaffolding hands you a file and leaves. A generator that runs as a condition of
+the tool working never leaves.
+
+Packaging is the same argument, and it has nothing to do with the language as a
+language. It is about what your user sees when your CLI fails.
+
+A JavaScript runtime stack trace is not an error message. It is the tool's
+internals dumped on somebody who wanted to know what to do next, with the one
+human-readable line buried in the middle of it, if it is there at all. We are in
+2026 and this is still how a large share of command line tools report failure. I
+do not understand why we are still writing CLIs in fucking TypeScript.
+
+Use the right tool for the job. A CLI is a program a stranger runs on a machine
+you will never see, and that argues for something compiled, self-contained, and
+able to fail in a sentence. magus ships as one statically linked binary. No
+runtime, no `node_modules`, no second toolchain to install.
+
+That last part stopped being a taste argument a while ago. A CLI that pulls a few
+hundred transitive dependencies at install time is a CLI with a few hundred
+chances to hand somebody else's code to your users. The npm ecosystem has been
+learning that in public, repeatedly, through one supply chain compromise after
+another, and the lesson finally looks like it is landing. It is a strange thing
+to feel vindicated about, because everybody downstream paid for the lesson.
+
+The frameworks that grew out of that ecosystem strike me the same way:
+overengineered, and re-deriving things computer science settled decades ago.
+
+We can do better than this as an industry, and I mean that as a challenge rather
+than a complaint. Shipping a pile of code has never been easier, and it has never
+been easier to mistake the pile for progress. Easy to write does not mean good,
+well architected, or worth maintaining. Lines of code measures none of that. If
+we are going to count anything, fewer lines is the number worth promoting.
+
+## Why explicit
+
+There is a real market for the opposite approach and I want to be fair to it.
+Tools that abstract the machinery away are a pleasure inside the domain they were
+built for. Nx is good there. Skaffold markets itself well and feels like magic
+for a week. Stay inside what the authors imagined and you move fast.
+
+Step outside it and the experience degrades all at once. The moment you need
+something they did not anticipate, writing a file somewhere unexpected or tagging
+something in a way their path does not cover, you are fighting the tool instead
+of using it.
+
+The failure has a shape. We are drawn to abstracting things away, so one team
+wraps a tool, another team wraps that wrapper, and a third builds on the second.
+Each layer looks reasonable to whoever wrote it and none of them is obviously the
+mistake, which is why the stack keeps growing until something small at the bottom
+brings the whole thing down.
+
+Abstracting well needs the whole picture, and layering is what takes the whole
+picture away. Whoever writes layer three can see layer two. They cannot see the
+tool at the bottom, its failure modes, or which of its features layer two quietly
+dropped, so they end up abstracting over a model of the thing rather than the
+thing itself.
+
+Temporal says this out loud, which I respect. Their guidance is to avoid wrapping
+their SDKs so deeply that you hide useful features or make them hard to upgrade.
+A thin shim is fine. A friendly layer for newcomers is fine too, as long as those
+people can still reach the SDK directly, and that last condition is what keeps it
+honest.
+
+So my position: a build tool should not hide the tools from you. You should be
+able to see which command runs and how its arguments were assembled. Software
+breaks, it breaks in ways nobody designed for, and at that moment the only thing
+that matters is whether you can work out what happened. Every layer between you
+and the actual command is a layer you have to peel back first, usually while
+something is on fire.
+
+I watched this play out. Someone on my team wrote an Nx executor built tightly
+around one job, and it worked. When it broke, everyone had to go through that one
+person, because they were the only one who could see what it did. That is a bus
+factor of one, manufactured by the design. The person was not the problem; the
+shape was.
+
+At a large company with deep subject matter experts on every layer, this matters
+less. For everyone else, seeing how the thing works is what lets you pick up the
+pieces yourself instead of escalating to a maintainer or waiting on the one
+person who understands it.
+
+I think of it as the How It's Made problem. Be helpful, but not so helpful that
+nobody using your tool ever learns anything from it. There is a line there, and I
+would rather sit on the transparent side of it.
+
+## Where the guardrails belong
+
+Software is not perfect, and CI is the weakest link in most chains I have worked
+in. There is a baseline of jank that most teams quietly sweep under the rug.
+
+The response I keep seeing is to wall it off: describe everything in hermetic
+JSON or YAML, permit nothing outside the schema, and expect it to hold. That is a
+losing bet, because it asks you to be a fortune teller. You are anticipating what
+your users need without fully understanding how they use the thing, and every
+time you guess wrong the tool's answer is that they cannot do that here.
+
+It also gives the developer no grace. There are days when you push something you
+know is not right because the pipeline has to be green in the next ten minutes,
+and that is part of the job. Pretending otherwise removes your tool from the
+conversation without removing any of the pressure.
+
+Underneath all of it is a posture. These are developer tools. The people running
+them are capable adults who do this for a living, and a tool built as though they
+cannot be trusted with a decision is going to lose them. Inform them instead.
+Hand over everything you know: what will run, what it will touch, what you think
+is wrong with the plan. Then let them choose. Whether their choice matches what I
+consider best practice is not mine to settle, and sometimes the right answer for
+somebody is the half fix they already know is a half fix, because the constraint
+they are working under is a delivery date rather than an engineering one.
+
+Security worked this out fifty years ago. Saltzer and Schroeder listed
+psychological acceptability among their design principles in 1975: if the
+protection mechanism makes the work harder than going without it, people route
+around the mechanism, and the route they find is worse than whatever you were
+guarding against. The password policy strict enough to get passwords written on
+sticky notes is the classic example. Tighten past what the job can bear and you
+do not get compliance, you get workarounds.
+
+Build tooling behaves the same way, so magus puts its guardrails somewhere else.
+The language you write targets in is a real language, with an escape hatch,
+because sooner or later you need one. What contains it is the engine: a sandbox
+that declares what a target may touch, and a content-addressed cache that makes a
+run reproducible from its declared inputs. The constraint sits where it can be
+enforced without anyone having to predict you.
+
+It is also how you get out of the usual tradeoff. A tool should meet a new user
+where they are without penning in the person who has been doing this for fifteen
+years, and I do not think those two are opposed. You get both by informing rather
+than deciding: the newcomer follows what the tool told them, and the veteran
+reads the same information and does something else with it.
+
+## What I wanted instead
+
+Bad developer experience gets under my skin and drives me fucking mad. Input
+latency in a command, a tool that makes me wait before I can tell it what I want,
+an error that says something broke without saying what to do about it. I have had
+enough of it, and that is most of why any of this exists.
+
+So: a tool built for a human first. Behavior explicit rather than implicit.
+Deterministic, so the same inputs give the same output and a second run of a
+cached target changes nothing. Output I can read in a terminal and parse in a
+pipe. Errors that tell me what to do next rather than what broke inside.
+
+Agents can drive that, and I did not build any of it for them. An interface
+legible to me is legible to them. I repeat work all day; an agent repeats it
+faster.
+
+## A good CLI does not need an MCP server
+
+magus ships one. I built it, I use it, it works, and for what magus is I have
+come around to thinking it should not need to exist.
+
+The CLI already prints structured output: `-o json`, `-o name`,
+`-o template=<go-template>`, and an output reference for anything that ran. An
+agent pointed at `magus ls -o json` gets what the MCP tool would have handed it,
+through an interface I had to build for myself anyway.
+
+Generalize that and you get the claim I actually hold. If your CLI is intuitive,
+consistent, and predictable, a protocol layer on top has close to nothing left to
+do. You should be building it that way regardless, which is the uncomfortable
+part of this: I think we got lazy over the last ten or fifteen years and started
+treating a confusing CLI as the natural state of things. An MCP server is often
+filling a gap that should never have opened.
+
+The hole in that argument is that "good CLI" is subjective, and I will not
+pretend otherwise. Consistency and predictability are the least subjective parts
+of it, which is why those are the two I named.
+
+None of which writes MCP off. Where you wrap something you don't own, can't
+change, or that was never going to grow a decent interface, a protocol layer
+earns its place. It goes case by case, and my case is build tools and greenfield
+work where I still control the interface. If your CLI needs an MCP server before
+an agent can drive it, the problem sits upstream of the MCP server.
+
+## Why Buzz
+
+A magusfile is written in Buzz, which is a strange enough pick that it deserves
+an explanation.
+
+I was not shopping for a language on ideology. I had a hard constraint: I have to
+implement it. magusfiles run on my own Go implementation, so the language had to
+be small enough for one person to write an interpreter for, and anything larger
+would have been a much bigger feat. Getting a JIT working smoothly was hard
+enough at that size. Small and statically typed was the requirement, and Buzz fit
+it.
+
+What decided it was the people. A small, dedicated group has been refining Buzz
+and shipping releases for years without much of an audience, and I recognized the
+work ethic in that. I would rather build on something maintained that way than on
+something fashionable.
+
+The choice started as a practical one. I did not expect the design of the
+language itself to matter as much as it turned out to.
+
+## Explicit beats familiar
+
+Building magus handed me an accident I did not plan for.
+
+There is close to nothing out there for a model to have trained on Buzz, so I
+expected agents to be useless at it. Instead I get good code out of them with
+little effort. Those same agents write JavaScript and TypeScript for me and I
+spend the afternoon undoing it, and those two languages carry more training data
+than anything else on earth.
+
+I don't think that gap is about the models. Buzz gives you close to one way to
+say a thing, which leaves little room to be clever and be wrong. TypeScript keeps
+adding sugar, and I hate the sugar and what it teaches people to write.
+
+Weigh that as my experience rather than a benchmark. It is still the strongest
+evidence I have here: a language an agent has never seen beat the language it has
+seen most, and explicitness is the only variable I can point at.
+
+Someone will open this repo, find the TypeScript in the console, and tell me it
+is bad TypeScript. Fair enough, and you are probably right. I use it at work, so
+I need enough of it to stay useful, and this is where I get the practice.
+
+## I built the knowledge graph for me
+
+I did not build it so an agent could learn my monorepo. I built it so I can walk
+into a repo I have never seen, ask what depends on what, ask why a target runs,
+ask what a change would break, and learn the place myself. `magus query`,
+`magus explain`, `magus path`, `magus insight`. Discovery tooling for someone who
+is lost, which is me most of the time. A teammate on day one and an agent in a
+fresh session have the same problem, and it is the problem I had.
+
+A lot of projects will turn your codebase into a knowledge graph now, and most of
+them build it with a separate indexer that scans the repo and infers structure.
+That is a second system that can be wrong, and the drift between it and your
+build stays invisible until it bites someone.
+
+magus went the other way because it had no choice. A build tool already has to
+know the repo precisely, down to every project, every target's declared inputs
+and outputs, and what a diff reaches. Get that wrong and builds break, loudly.
+The graph is that same knowledge handed back as answers, so it is checked every
+time anything runs, by the build itself.
+
+An agent reading the same graph is a byproduct I am happy about. The day I catch
+myself designing that graph for an agent first is the day I have taken a wrong
+turn.
+
+## These are not new problems
+
+I want to be blunt about something, because it is the thing I find most tiring
+about this whole moment.
+
+Loop engineering. Graph engineering. Context engineering. The names keep arriving
+and underneath every one of them is a problem computer science has been working on
+for fifty years. Partition work into units that do not conflict. Know what a change
+affects so you can skip the rest. Cache on content instead of timestamps. Give a
+process the smallest amount of state it needs to do its job. None of that is new,
+and calling it new does not help anyone.
+
+`magus affected ci --plan` splits the affected projects into shards that can run at
+the same time. I wrote it to fan CI jobs across runners, and it feeds a GitHub
+Actions job matrix. That is all it is. It turns out the same record answers the
+question someone gets when they hand work to several agents at once: which units
+can run together, and what does each one touch. I did not add anything for that. It
+already knew, because a build tool that did not know would break builds.
+
+There is one field in that output that is genuinely agent specific, which skill a
+unit's work routes to, and it sits in its own `agents` key so that everything
+around it reads as what it is. Ordinary build metadata. The invocation, the spells
+it runs, the files it declares it writes. A person wants all of that too, and did
+first.
+
+The part I will concede, because it is real: agents made short, explicit,
+machine-readable output matter more than it used to. A person skims past a wall of
+text. An agent pays for it by the token, and a vague error costs a retry. That is a
+genuine forcing function and it made me better at output design. But it sharpened
+an old problem, it did not create a new field.
+
+So when something here works well with an agent, the reason is boring. It is a
+build tool that knows what it declared, says so in few words, and can hand you any
+answer as text or JSON. That was the goal before, and it would still be the goal if
+none of this had happened.
+
+## What I take from suckless
+
+A philosophy and a group of developers both go by suckless, and the core of it is
+right: get software back to its roots and keep the bloat out. They write C, cap
+how large a project may grow, and count deleted code as progress.
+
+I am not there, and I want to say so before anyone else does. magus ships a
+daemon, an MCP server, a knowledge graph, and a web console. I doubt Go is even a
+language that can get there, given what it puts in a binary before I write my
+first line.
+
+So I take the discipline and leave the aesthetic. Be intentional about what you
+add. Take on no more than you can maintain. Get the foundation right before you
+put another floor on it.
+
+That last part is where Nx lost me. Every complaint above went unfixed while the
+ground underneath kept moving. After all of it I have no trust left for them.
+None.
+
+Durability and consistency are what I want a reputation for. The tool that works
+the way it worked last year, that you can put underneath something and stop
+thinking about. You earn that by not moving, over years.
+
+## What this release is
+
+I am not reinventing the wheel and I am not revolutionizing anything. There is no
+company behind this and no venture capital in it. I wanted a good tool I could be
+proud of, and this is the release where magus turned into the one I have wanted
+since I started caring about build systems.
+
+So let me show it off.
+
+`magus ls` is what I would put in front of you first. Bare, it lists every
+project in the workspace along with what you can run in each. `magus ls targets`
+narrows to one project and shows the doc and the spell ops behind each target.
+One enumeration verb, on purpose: the alternative was `magus targets`, then
+`magus spells`, then `magus charms`, which is the sprawl I spent this post
+complaining about. One rule to learn, and a new noun costs no new subcommand.
+
+Hints teach the tool while you use it. Misspell a target and magus names the
+canonical spelling once. Every command path inside magus output renders from a
+single declaration, and a test fails the build when one stops resolving to a real
+subcommand, so a hint can never point you at a command that no longer exists.
+
+Fifty diagnostic codes carry their own documentation page. Failures that used to
+pass in silence now have a code and a fix: an invalid charm patch, a `has_charm`
+typo, two charms fighting over the same argument.
+
+`describe target --explain` prints the charm trace behind a resolved command
+line, so you see what will run before it runs. `magus graph` gathers the graphs
+as objects: `deps`, `export`, `stats`, `diff`.
+
+Most of the breaking changes are renames toward coherence. Spells carry the name
+of what they adapt, so `ts` became `typescript`. `magus describe knowledge`
+became `magus graph export`. `magus lsp` became `magus buzz lsp`. `magus tail` is
+gone. `magusfile` stopped pretending to be a spell. I would rather pay that cost
+at 0.x while the blast radius is small than let an incoherent name survive
+because renaming it would disrupt people.
+
+## A thing I am still working out
+
+This sits under the whole post, so I want to say it out loud, and I would rather
+open a conversation than land on a position.
+
+I use agents every day and I have not settled how I feel about it. There is a
+pressure now to keep using them, to justify the spend, to show the tokens went
+somewhere, to avoid being the one seen as holding the team back. I feel that
+pressure, and I don't hear many people saying so.
+
+I am not sold on most of what gets promised about this technology, and plenty of
+it has been oversold. Programming is probably the strongest case anyone has made
+for any of it, which is part of why I keep reaching for the thing I am uneasy
+about.
+
+I read the code, I critique it, I review it, I tweak it. That is real work and I
+won't pretend otherwise. It is not the same as it was. I miss writing code, I
+don't write enough of it now, and I don't like that about how I work.
+
+The worry underneath is atrophy. Skills behave like muscle, and there are some I
+have stopped working. Plenty of what I hand off is remedial and I am glad to skip
+it. But some of it was the hard part, and the hard part is where I learned. The
+friction, the frustration, the afternoon lost to something stupid, and then the
+click when it lands: that sequence is how I got whatever I know. I might be
+trading a short jump ahead for being a worse engineer in ten years.
+
+The other side of it is just as true. My head runs a lot of threads at once, and
+ideas used to pile up faster than I could get to them. Now I can hold several and
+ship them, and some of what went out this year exists only because of that. It
+unsettles me about as much as it pleases me. Scary good, but scary.
+
+For what it is worth: I used voice dictation and a model to get these thoughts
+onto the page, then read every line and reworked it by hand. If my name is on it,
+it is mine.
+
+Building these tools is how I get back to it. This is the work I still do with my
+hands, and where I have come out for now is this: I build tools for humans that
+happen to work for agents, because both are stuck on the same problems.
+
+## An invitation
+
+I am one person with opinions about build tools, and some of this is probably
+off. If you work on Nx, Nix, or Dagger and you think I have it wrong, I would
+rather hear it than not. Some of what I described may already be fixed, and some
+of it I may have misread from outside. Tell me and I will correct the post.
+
+The one thing I would ask you to take from this: an AI integration bolted onto a
+tool people struggle with does not fix the tool. Abstract the amount of
+complexity your users can carry, print what you resolved and where it came from,
+and the agents will come along for the ride.
+
+Read the [changelog](../../changelog/), or start with the
+[documentation](../../documentation/).
