@@ -80,6 +80,15 @@ pool (`magus status`) rather than a fixed number, and serialize validations
 that share a worktree even when their write sets are disjoint. Ask before
 exceeding the budget.
 
+Assign validation from the pipeline the workspace composed, not from convention:
+`magus describe target ci <project>` names what `ci` chains and in what order,
+so a unit directed at a single target gets the narrowest one from that
+decomposition, and the integrator re-runs them in the described order rather
+than one anybody remembered. `magus affected ci` at integration re-proves the
+whole composition; a worker hand-sequencing lint, format, and test is
+re-deriving an order the magusfile already owns, and the step it forgets fails
+silently by omission.
+
 A worker may delegate again. What it may not do is delegate without shrinking the
 problem{{if .Full}} - that is the shape that does not terminate, and the cost people
 attribute to "multi-agent" is almost always this{{end}}. Three rules give it a

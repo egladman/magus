@@ -4,8 +4,8 @@ description: "Split work across agents in a magus workspace as an acceptance-cri
 tags: [agents, skills, magus-delegate-multi-agent]
 aliases:
   - reference/skills/magus-delegate-ultra
-skill_full_bytes: 13867
-skill_simple_bytes: 10488
+skill_full_bytes: 14425
+skill_simple_bytes: 11046
 ---
 
 # magus-delegate-multi-agent
@@ -31,7 +31,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `cfc9f65a176d` |
+| `skill-content` | `9cd139a58e90` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -118,6 +118,15 @@ VALIDATION - the magus runs a unit triggers - so size that cap from the live
 pool (`magus status`) rather than a fixed number, and serialize validations
 that share a worktree even when their write sets are disjoint. Ask before
 exceeding the budget.
+
+Assign validation from the pipeline the workspace composed, not from convention:
+`magus describe target ci <project>` names what `ci` chains and in what order,
+so a unit directed at a single target gets the narrowest one from that
+decomposition, and the integrator re-runs them in the described order rather
+than one anybody remembered. `magus affected ci` at integration re-proves the
+whole composition; a worker hand-sequencing lint, format, and test is
+re-deriving an order the magusfile already owns, and the step it forgets fails
+silently by omission.
 
 A worker may delegate again. What it may not do is delegate without shrinking the
 problem - that is the shape that does not terminate, and the cost people
@@ -367,6 +376,15 @@ VALIDATION - the magus runs a unit triggers - so size that cap from the live
 pool (`magus status`) rather than a fixed number, and serialize validations
 that share a worktree even when their write sets are disjoint. Ask before
 exceeding the budget.
+
+Assign validation from the pipeline the workspace composed, not from convention:
+`magus describe target ci <project>` names what `ci` chains and in what order,
+so a unit directed at a single target gets the narrowest one from that
+decomposition, and the integrator re-runs them in the described order rather
+than one anybody remembered. `magus affected ci` at integration re-proves the
+whole composition; a worker hand-sequencing lint, format, and test is
+re-deriving an order the magusfile already owns, and the step it forgets fails
+silently by omission.
 
 A worker may delegate again. What it may not do is delegate without shrinking the
 problem. Three rules give it a
