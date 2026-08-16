@@ -3,7 +3,7 @@
 <p align="center">
   <picture>
     <source srcset="./assets/gopher.webp" type="image/webp">
-    <img alt="magus gopher mascot" width="360" height="338" fetchpriority="high" src="./assets/gopher.png">
+    <img alt="magus gopher mascot" width="360" height="240" fetchpriority="high" src="./assets/gopher.png">
   </picture>
 </p>
 

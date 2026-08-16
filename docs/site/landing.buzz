@@ -155,7 +155,7 @@ export fun renderLanding(site: Site) > void !> any {
       <figure class="landing-mascot">
       <picture>
       <source srcset="assets/gopher.webp" type="image/webp">
-      <img src="assets/gopher.png" width="1110" height="1042" loading="lazy" decoding="async" alt="The magus mascot: a gopher in a wizard's hat and robe, a staff in one hand and a small cube offered in the open palm of the other.">
+      <img src="assets/gopher.png" width="1110" height="740" loading="lazy" decoding="async" alt="The magus mascot: a gopher in a wizard's hat and robe, a staff in one hand and a small cube offered in the open palm of the other.">
       </picture>
       </figure>
       <p class="landing-section-lede">Affected sets and a build cache are settled ground, and I am not trying to reinvent them. There is no new idea on this page. The work went into refining old ones and then stopping: nothing here invents vocabulary for something that already has a name, and nothing here hands you a second way to do what one verb already does. What is rarer than a new idea is a build tool you can still follow six months in. Boring is the point, because boring means consistent, and inconsistency is where footguns come from: every arbitrary pattern and special case is one more thing you have to remember instead of derive.</p>
