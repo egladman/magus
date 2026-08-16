@@ -367,6 +367,11 @@ export object CrossTargetRef {
     target: str = "",
 }
 
+export object ChainStep {
+    project: str = "",
+    target: str = "",
+}
+
 export object InputRef {
     project: str = "",
     glob: str = "",
@@ -390,6 +395,7 @@ export object TargetGraphNode {
     charms: [str] = [],
     spells: [TargetSpellUse] = [],
     crossDependencies: [CrossTargetRef] = [],
+    chain: [ChainStep] = [],
     readsFiles: [InputRef] = [],
     readsSecrets: bool = false,
     secretRefs: [str] = [],

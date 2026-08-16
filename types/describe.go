@@ -185,6 +185,18 @@ type TargetGraphNode struct {
 	// target names), each carries the other project's path, so the graph can draw a
 	// target -> target edge across project boundaries instead of a coarse project -> project one.
 	CrossDependencies []CrossTargetRef `json:"cross_dependencies,omitempty" yaml:"cross_dependencies,omitempty"`
+	// Chain is the target's composition IN INVOCATION ORDER: one step per ctx.needs
+	// argument, in the order the body writes them, across every ctx.needs call the
+	// target makes. Dependencies and CrossDependencies answer "what does this compose"
+	// as two sets keyed by locality; Chain answers "in what order", which is the one
+	// fact the source carries and neither set preserves once the graph merges them.
+	// Empty for a target that composes nothing.
+	//
+	// DIRECT steps only - one level, never a recursive flattening. A step that itself
+	// chains is described by ITS own record; expanding it here would print a plan the
+	// magusfile never writes, and the pool (not this list) decides how a transitive
+	// dependency actually schedules.
+	Chain []ChainStep `json:"chain,omitempty" yaml:"chain,omitempty"`
 	// ReadsFiles are the per-target file inputs the body declares via ctx.readsFiles(...),
 	// captured statically in ONE representation where each entry carries its owning
 	// project (InputRef). A bare-literal glob (ctx.readsFiles("glob")) is a same-project
@@ -277,6 +289,27 @@ type TargetGraphNode struct {
 type CrossTargetRef struct {
 	Project string `json:"project" yaml:"project"`
 	Target  string `json:"target"  yaml:"target"`
+}
+
+// ChainStep is one target a composed target invokes, in source order. Project is empty
+// for a same-project step (the common case, `ctx.needs(build)`) and carries the other
+// project's path for a cross-project one (`ctx.needs(<alias>.build)`) - the same
+// empty-means-this-project convention InputRef uses, and it stays empty here even after
+// resolution so a reader can tell the two apart at a glance. Deliberately its own type
+// rather than a reused CrossTargetRef: that one names a target in ANOTHER project by
+// definition, and a chain is mostly local steps.
+type ChainStep struct {
+	Project string `json:"project,omitempty" yaml:"project,omitempty"`
+	Target  string `json:"target"            yaml:"target"`
+}
+
+// Ref spells the step the way the CLI takes a target ref: "target" for a same-project
+// step, "project:target" for a cross-project one.
+func (s ChainStep) Ref() string {
+	if s.Project == "" {
+		return s.Target
+	}
+	return s.Project + ":" + s.Target
 }
 
 // InputRef names one file input a target declares via ctx.readsFiles, in a single shape
@@ -498,7 +531,8 @@ type ModuleEntry struct {
 // EvaluatedTargetDefinition is the human-readable description of an evaluated target shown by "magus describe".
 const EvaluatedTargetDefinition = "An evaluated target shows the fully-resolved " +
 	"dispatch plan for a specific path:target pair: the workspace-rooted source and " +
-	"output globs that feed the cache key, the spells that will fire (with " +
+	"output globs that feed the cache key, the chain of targets it composes in " +
+	"invocation order, the spells that will fire (with " +
 	"target-specific sources), " +
 	"and any behavioural policy (CheckClean, TrackVolatile, Exclusive)."
 
@@ -536,6 +570,9 @@ type EvaluatedTarget struct {
 	Dir       string           `json:"dir"                 yaml:"dir"`
 	Sources   []string         `json:"sources,omitempty"    yaml:"sources,omitempty"`
 	Outputs   []string         `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
+	// Chain is the targets this one composes, in invocation order; empty when it
+	// composes nothing. See TargetGraphNode.Chain, which it is copied from.
+	Chain     []ChainStep      `json:"chain,omitempty"      yaml:"chain,omitempty"`
 	DependsOn []string         `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
 	Charms    []string         `json:"charms,omitempty"     yaml:"charms,omitempty"`
 	Spells    []EvaluatedSpell `json:"spells,omitempty"     yaml:"spells,omitempty"`

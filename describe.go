@@ -468,6 +468,26 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 						}
 					}
 				}
+				if len(n.Chain) > 0 {
+					if p.TargetChain == nil {
+						p.TargetChain = map[string][]types.ChainStep{}
+					}
+					steps := make([]types.ChainStep, 0, len(n.Chain))
+					for _, step := range n.Chain {
+						if step.Project != "" {
+							// Unresolvable is unreachable here - the CrossDependencies loop
+							// above already failed the load on it - but a chain that silently
+							// carried a raw import path would print a ref no command accepts.
+							r, rerr := file.ResolveImport(step.Project, p.Path)
+							if rerr != nil {
+								continue
+							}
+							step.Project = r
+						}
+						steps = append(steps, step)
+					}
+					p.TargetChain[n.Name] = steps
+				}
 				if len(n.EnvAllow) > 0 {
 					if p.TargetEnvAllow == nil {
 						p.TargetEnvAllow = map[string][]string{}
@@ -717,6 +737,24 @@ func resolveNodeRefs(nodes []types.TargetGraphNode, projectPath string) {
 				resolved = append(resolved, types.CrossTargetRef{Project: r, Target: ref.Target})
 			}
 			nodes[i].CrossDependencies = resolved
+		}
+		if len(nodes[i].Chain) > 0 {
+			resolved := make([]types.ChainStep, 0, len(nodes[i].Chain))
+			for _, step := range nodes[i].Chain {
+				// A same-project step keeps its empty Project (unlike an input, whose
+				// owner is filled in): the chain is read, not joined onto a path, and
+				// leaving it empty is what makes a local step render as a bare name.
+				if step.Project == "" {
+					resolved = append(resolved, step)
+					continue
+				}
+				r, err := file.ResolveImport(step.Project, projectPath)
+				if err != nil {
+					continue
+				}
+				resolved = append(resolved, types.ChainStep{Project: r, Target: step.Target})
+			}
+			nodes[i].Chain = resolved
 		}
 		if len(nodes[i].ReadsFiles) > 0 {
 			resolved := make([]types.InputRef, 0, len(nodes[i].ReadsFiles))
@@ -996,6 +1034,7 @@ func (m *Magus) EvaluateTarget(ctx context.Context, t types.Target) ([]types.Eva
 			Dir:       p.Dir,
 			Sources:   step.Sources,
 			Outputs:   step.Outputs,
+			Chain:     p.TargetChain[et.Name],
 			DependsOn: p.DependsOn,
 			Charms:    charms,
 			Spells:    spellEntries,

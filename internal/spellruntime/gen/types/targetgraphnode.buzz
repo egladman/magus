@@ -13,6 +13,7 @@ export object TargetGraphNode {
     charms: [str] = [],
     spells: [TargetSpellUse] = [],
     crossDependencies: [CrossTargetRef] = [],
+    chain: [ChainStep] = [],
     readsFiles: [InputRef] = [],
     readsSecrets: bool = false,
     secretRefs: [str] = [],

@@ -471,6 +471,63 @@ export fun test(ctx: magus\Context, args: [str]) > void {
 	assert.Equal(t, want, test.Dependencies, "identifier exact + glob patterns; comment ignored")
 }
 
+// TestChainIsSourceOrdered pins the fact the whole chain surface exists for: the order
+// is the order the body writes, ACROSS ctx.needs calls, and a glob step expands in
+// place. Dependencies happens to agree here; Chain is what promises it.
+func TestChainIsSourceOrdered(t *testing.T) {
+	g := Extract(`export fun generate(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun lint(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun build(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun test(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate, lint);
+    ctx.needs(build, test);
+}
+`)
+	ci, ok := nodeByName(g, "ci")
+	require.True(t, ok, "missing ci; got %v", g)
+	assert.Equal(t, []types.ChainStep{
+		{Target: "generate"}, {Target: "lint"}, {Target: "build"}, {Target: "test"},
+	}, ci.Chain)
+}
+
+// TestChainInterleavesCrossSteps: a chain that mixes local and cross-project steps keeps
+// them in ONE list in written order. Dependencies and CrossDependencies split them by
+// locality, so neither can answer this on its own - the reason Chain is built from the
+// argument list rather than folded from those two afterwards.
+func TestChainInterleavesCrossSteps(t *testing.T) {
+	g := Extract(`import "project/../lib" as lib;
+export fun format(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun conventions(ctx: magus\Context, args: [str]) > void { go["x"](); }
+export fun lint(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(format);
+    ctx.needs(lib.lint);
+    ctx.needs(conventions);
+}
+`)
+	l, ok := nodeByName(g, "lint")
+	require.True(t, ok, "missing lint; got %v", g)
+	assert.Equal(t, []types.ChainStep{
+		{Target: "format"},
+		{Project: "../lib", Target: "lint"}, // raw import path; the caller resolves it
+		{Target: "conventions"},
+	}, l.Chain)
+}
+
+// TestChainEmptyForALeafTarget: a target that composes nothing has no chain, so the
+// describe surface prints no line rather than an empty one.
+func TestChainEmptyForALeafTarget(t *testing.T) {
+	g := Extract(`import "project/../lib" as lib;
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.readsFiles(lib.file("go.mod"));
+    go["go-build"]();
+}
+`)
+	b, ok := nodeByName(g, "build")
+	require.True(t, ok, "missing build; got %v", g)
+	assert.Empty(t, b.Chain, "a spell call is not a composition, and lib.file is not a step")
+}
+
 func TestExternalCrossDependencies(t *testing.T) {
 	g := Extract(`import "project/../gopherbuzz" as gopherbuzz;
 export fun build_playground(ctx: magus\Context, args: [str]) > void {

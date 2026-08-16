@@ -1054,6 +1054,17 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 		if len(e.Outputs) > 0 {
 			fmt.Printf("  outputs: %v\n", e.Outputs)
 		}
+		// Always on, no flag: it is one line, it is absent for a target that composes
+		// nothing, and "what does this run, in what order" is the question the command
+		// already exists to answer - a flag would only hide the answer behind knowing
+		// to ask for it (docs/recommendations.md, fold don't add).
+		if len(e.Chain) > 0 {
+			refs := make([]string, len(e.Chain))
+			for i, s := range e.Chain {
+				refs[i] = s.Ref()
+			}
+			fmt.Printf("  chain:   %s\n", strings.Join(refs, " -> "))
+		}
 		if len(e.DependsOn) > 0 {
 			fmt.Printf("  depends_on: %v\n", e.DependsOn)
 		}

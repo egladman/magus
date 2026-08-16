@@ -10,6 +10,7 @@ var RuntimeBoundaryTypes = []any{
 	types.AffectedResult{},
 	types.AffinityOutput{},
 	types.ArchiveEntry{},
+	types.ChainStep{},
 	types.CoChange{},
 	types.CommitAuthor{},
 	types.CommitRecord{},

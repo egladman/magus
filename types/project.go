@@ -242,6 +242,11 @@ type Project struct {
 	// when a parent target depends on a target INSIDE a descendant project, the writes
 	// that descendant makes are its own, not the parent reaching across a boundary.
 	TargetCrossDeps map[string][]CrossTargetRef
+	// TargetChain is each composed target's ctx.needs steps in INVOCATION ORDER, local
+	// and cross-project alike. TargetCrossDeps above answers a different question (which
+	// other projects a target reaches into) and drops both the ordering and every local
+	// step, so it cannot serve this one. See TargetGraphNode.Chain.
+	TargetChain map[string][]ChainStep
 	// TargetEnvAllow are per-target ctx.env declarations: env var NAMES whose process
 	// values fold into the cache key. See TargetGraphNode.EnvAllow.
 	TargetEnvAllow map[string][]string

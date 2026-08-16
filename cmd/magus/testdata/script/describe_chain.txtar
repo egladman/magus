@@ -1,0 +1,64 @@
+# `describe target` names the targets a composed target invokes, IN ORDER.
+#
+# The order is the one fact only the magusfile source carries: the depends SET is
+# alphabetical everywhere else it is surfaced, so a reader asking "what does ci run,
+# in what order" had nowhere to look but the magusfile itself.
+
+# The chain reads in invocation order, not alphabetical - which is the whole point,
+# and the reason this asserts the joined line rather than the four names.
+exec magus describe target ci
+stdout 'chain:   generate -> lint -> build -> test'
+
+# A cross-project step spells out as the project:target ref the CLI itself takes, and
+# keeps its written position among the local steps rather than being grouped after them.
+exec magus describe target release
+stdout 'chain:   build -> api:lint -> test'
+
+# A target that composes nothing prints no chain line at all - an empty one would read
+# as "magus could not tell".
+exec magus describe target lint
+stdout 'target: lint'
+! stdout 'chain:'
+
+# The same ordered list is the structured arm's, as a typed list of steps: a local step
+# carries only its target, a cross-project one also its resolved project path.
+exec magus describe target ci -o json
+stdout '"chain"'
+exec magus describe target ci -o 'template={{range (index .targets 0).chain}}{{.target}},{{end}}'
+stdout 'generate,lint,build,test,'
+# A local step omits project entirely rather than echoing the target's own path, so a
+# reader (and a template) can tell the two apart without knowing where it started.
+exec magus describe target release -o json
+stdout '"project": "api"'
+! exec magus describe target ci -o 'template={{range (index .targets 0).chain}}{{.project}}{{end}}'
+stderr 'map has no entry for key "project"'
+
+-- magus.yaml --
+concurrency: 1
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+import "project/api" as api;
+magus.project({ "spells": [acme] });
+export fun generate(ctx: magus\Context, args: [str]) > void {}
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun test(ctx: magus\Context, args: [str]) > void {}
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate, lint);
+    ctx.needs(build, test);
+}
+export fun release(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(build, api.lint, test);
+}
+-- api/magusfile.buzz --
+import "magus";
+magus.project({});
+export fun lint(ctx: magus\Context, args: [str]) > void {}
+-- spells/acme/spell.buzz --
+import "magus/spell";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

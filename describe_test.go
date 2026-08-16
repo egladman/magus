@@ -962,6 +962,45 @@ func TestEvaluateTarget_ReportsPerTargetOutputs(t *testing.T) {
 		"a per-target ctx.writesFiles glob belongs in that target's own description")
 }
 
+// TestEvaluateTarget_ReportsTheChainInOrder walks the composition the whole way: the
+// magusfile's ctx.needs arguments, through resolution onto the project, out as the
+// evaluated target's chain. The hop that matters is the last one - the extractor has
+// always had the order and the described plan has always dropped it - and the
+// cross-project step must arrive resolved to a workspace path, not the raw import.
+func TestEvaluateTarget_ReportsTheChainInOrder(t *testing.T) {
+	t.Parallel()
+	root := writeWorkspace(t, map[string]string{
+		"magusfile.buzz": `import "project/api" as api;
+export fun generate(ctx: magus\Context, args: [str]) > void {}
+export fun build(ctx: magus\Context, args: [str]) > void {}
+export fun ci(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate);
+    ctx.needs(api.build, build);
+}
+`,
+		"api/magusfile.buzz": `export fun build(ctx: magus\Context, args: [str]) > void {}
+`,
+	})
+
+	m, err := Open(context.Background(), root)
+	require.NoError(t, err, "Open")
+	t.Cleanup(func() { _ = m.Close() })
+
+	out, err := m.EvaluateTarget(context.Background(), types.Target{Path: ".", Name: "ci"})
+	require.NoError(t, err, "EvaluateTarget")
+	require.Len(t, out, 1)
+	assert.Equal(t, []types.ChainStep{
+		{Target: "generate"},
+		{Project: "api", Target: "build"},
+		{Target: "build"},
+	}, out[0].Chain, "invocation order across both ctx.needs calls, cross step resolved")
+
+	leaf, err := m.EvaluateTarget(context.Background(), types.Target{Path: ".", Name: "generate"})
+	require.NoError(t, err, "EvaluateTarget")
+	require.Len(t, leaf, 1)
+	assert.Empty(t, leaf[0].Chain, "a target that composes nothing carries no chain")
+}
+
 // TestObservesReachesTheCacheKey walks ctx.observes the whole way: a magusfile
 // declaration, through resolution onto the project, into the step buildStep hands the
 // cache, out as a key input line. Each hop is covered by a unit test of its own; what

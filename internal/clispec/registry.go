@@ -88,7 +88,11 @@ of the charms a single "describe target" lists.
 
 For a target ref (e.g. "api:build", or ":test" for all projects) magus prints the
 fully-evaluated dispatch plan: the workspace-rooted source and output globs, the
-spells that fire, the charm-applied command, and any per-target policy. Add a charm
+spells that fire, the charm-applied command, and any per-target policy. A target
+that composes others also prints a "chain" line naming them in invocation order
+(e.g. "generate -> lint -> build -> test"), read from the ctx.needs calls in the
+magusfile; a cross-project step reads as "project:target". It lists DIRECT steps
+only, so a step that itself composes is described by its own ref. Add a charm
 and --explain (e.g. "lint:rw --explain") to see each charm reshape the command one
 step at a time.`,
 	Usage: "magus describe <noun> [<name>] [flags]",

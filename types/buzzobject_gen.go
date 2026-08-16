@@ -300,6 +300,13 @@ func (v UpdateRef) BuzzObject() BuzzObject {
 	}
 }
 
+func (v ChainStep) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"project": v.Project,
+		"target":  v.Target,
+	}
+}
+
 func (v TargetGraphNode) BuzzObject() BuzzObject {
 	itemsSpells := make([]any, len(v.Spells))
 	for indexSpells := range v.Spells {
@@ -308,6 +315,10 @@ func (v TargetGraphNode) BuzzObject() BuzzObject {
 	itemsCrossDependencies := make([]any, len(v.CrossDependencies))
 	for indexCrossDependencies := range v.CrossDependencies {
 		itemsCrossDependencies[indexCrossDependencies] = v.CrossDependencies[indexCrossDependencies].BuzzObject()
+	}
+	itemsChain := make([]any, len(v.Chain))
+	for indexChain := range v.Chain {
+		itemsChain[indexChain] = v.Chain[indexChain].BuzzObject()
 	}
 	itemsReadsFiles := make([]any, len(v.ReadsFiles))
 	for indexReadsFiles := range v.ReadsFiles {
@@ -329,6 +340,7 @@ func (v TargetGraphNode) BuzzObject() BuzzObject {
 		"charms":                v.Charms,
 		"spells":                itemsSpells,
 		"crossDependencies":     itemsCrossDependencies,
+		"chain":                 itemsChain,
 		"readsFiles":            itemsReadsFiles,
 		"readsSecrets":          v.ReadsSecrets,
 		"secretRefs":            v.SecretRefs,

@@ -256,6 +256,13 @@ func buzzValueMagusCrossTargetRef(v types.CrossTargetRef) vm.Value {
 	return out
 }
 
+func buzzValueMagusChainStep(v types.ChainStep) vm.Value {
+	out := vm.NewMap()
+	out.MapSet("project", vm.StrValue(v.Project))
+	out.MapSet("target", vm.StrValue(v.Target))
+	return out
+}
+
 func buzzValueMagusInputRef(v types.InputRef) vm.Value {
 	out := vm.NewMap()
 	out.MapSet("project", vm.StrValue(v.Project))
@@ -302,6 +309,11 @@ func buzzValueMagusTargetGraphNode(v types.TargetGraphNode) vm.Value {
 		itemsCrossDependencies[indexCrossDependencies] = buzzValueMagusCrossTargetRef(v.CrossDependencies[indexCrossDependencies])
 	}
 	out.MapSet("crossDependencies", vm.ListValue(itemsCrossDependencies))
+	itemsChain := make([]vm.Value, len(v.Chain))
+	for indexChain := range v.Chain {
+		itemsChain[indexChain] = buzzValueMagusChainStep(v.Chain[indexChain])
+	}
+	out.MapSet("chain", vm.ListValue(itemsChain))
 	itemsReadsFiles := make([]vm.Value, len(v.ReadsFiles))
 	for indexReadsFiles := range v.ReadsFiles {
 		itemsReadsFiles[indexReadsFiles] = buzzValueMagusInputRef(v.ReadsFiles[indexReadsFiles])
