@@ -1,0 +1,63 @@
+# --skip subtracts from whatever the positionals resolved to, so a CI step can gate
+# "every project except these" with no shell filtering. The failure it exists to end
+# is a SILENT one - a typo'd exclusion that skips nothing and un-gates a project - so
+# every reference has to match a project, and a contradiction is an error.
+
+# Bare invocation runs every project that declares the target.
+exec magus run lint --dry-run
+stderr 'projects: 3 projects'
+
+# --skip subtracts from that set, and the header reports what will actually run.
+exec magus run lint --dry-run --skip api
+stderr 'projects: 2 projects'
+
+# Repeatable, and the last one standing is the root project.
+exec magus run lint --dry-run --skip api --skip web
+stderr 'projects: \.'
+
+# Against an explicit selection it subtracts only what that selection did not name;
+# a project outside it was never going to run, so this is a quiet no-op.
+exec magus run lint api --dry-run --skip web
+stderr 'projects: api'
+
+# A reference no project matches is an error naming the reference, not a silent no-op.
+! exec magus run lint --dry-run --skip apo
+stderr '--skip apo'
+stderr 'unknown project'
+
+# Skipping a project the command line also named is contradictory, not a subtraction.
+! exec magus run lint api --dry-run --skip api
+stderr '--skip api contradicts naming it'
+
+# Skipping everything would run nothing at all; say so rather than reporting a pass.
+! exec magus run lint --dry-run --skip . --skip api --skip web
+stderr 'removed every selected project'
+
+# --graph renders from the raw roots, so it refuses the flag instead of ignoring it.
+! exec magus run lint --graph --skip api
+stderr '--skip applies to the run selection'
+
+-- magus.yaml --
+concurrency: 1
+-- magusfile.buzz --
+import "magus";
+import "spells/acme" as acme;
+import "project/api" as api;
+import "project/web" as web;
+magus.project({ "spells": [acme] });
+export fun lint(ctx: magus\Context, args: [str]) > void { acme.lint(ctx); }
+-- api/magusfile.buzz --
+import "magus";
+magus.project({});
+export fun lint(ctx: magus\Context, args: [str]) > void {}
+-- web/magusfile.buzz --
+import "magus";
+magus.project({});
+export fun lint(ctx: magus\Context, args: [str]) > void {}
+-- spells/acme/spell.buzz --
+import "magus/spell";
+export fun mgs_getName() > str { return "acme"; }
+fun lint(target: Target) > Command {
+    return Command{bin = "acme", args = ["lint", "."]};
+}
+export fun mgs_listTargets() > {str: fun(Target) Command} { return {"lint": lint}; }

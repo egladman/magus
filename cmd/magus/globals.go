@@ -126,13 +126,20 @@ func partitionFlags(fs *flag.FlagSet, args []string) (flags, positionals []strin
 // global/display flags precede it, so `magus run --dry-run build` sees "build" as the
 // target instead of mistaking the flag for it. It hoists global/display flags out first,
 // then returns the first positional as the target and the remaining flags+positionals for
-// the subcommand's own cmdParse. Only global/display flags are recognized here; a target's
-// own local flags still belong after the target (they can't be resolved until the target
-// is known). ok is false when there is no positional target at all.
-func splitTargetFromArgs(args []string) (target string, rest []string, ok bool) {
+// the subcommand's own cmdParse. ok is false when there is no positional target at all.
+//
+// local binds the command's OWN flags, and is what keeps the prescan from reading a
+// value-taking local flag as a bool: with the flag unknown here its value is hoisted out
+// as a positional, so `--skip api --skip web` reorders to `--skip --skip api web` and the
+// first flag swallows the second as its value. A command that passes nil accepts that
+// limit - one such flag survives it by luck of ordering, two do not.
+func splitTargetFromArgs(args []string, local func(*flag.FlagSet)) (target string, rest []string, ok bool) {
 	fs := flag.NewFlagSet("prescan", flag.ContinueOnError)
 	gen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
+	if local != nil {
+		local(fs)
+	}
 	flags, positionals := partitionFlags(fs, args)
 	if len(positionals) == 0 || positionals[0] == "--" {
 		return "", nil, false

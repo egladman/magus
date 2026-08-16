@@ -52,8 +52,12 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 
 	// Find the target even if global flags precede it (`magus run --dry-run build`);
 	// stdlib flag would otherwise treat the flag as the target. rest carries the hoisted
-	// flags + any project args for cmdParse below.
-	rawTarget, rest, ok := splitTargetFromArgs(args)
+	// flags + any project args for cmdParse below. The prescan binds run's own flags too,
+	// throwing the values away: it needs to know which of them consume the next token.
+	var skips skipFlag
+	rawTarget, rest, ok := splitTargetFromArgs(args, func(fs *flag.FlagSet) {
+		bindRunFlags(fs, &skipFlag{})
+	})
 	if !ok {
 		return targetUsage()
 	}
@@ -76,7 +80,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// property of THIS process rather than of the documented flag.
 	var rf *gen.RunFlags
 	projectArgs, err := cmdParse("run "+targetName, flagArgs, func(fs *flag.FlagSet) {
-		rf = gen.BindRun(fs)
+		rf = bindRunFlags(fs, &skips)
 		// The shard pair defaults from the environment CI sets, so a matrix job
 		// need not repeat itself on every magus call. Applied by seeding the bound
 		// value (an explicit flag still wins, since parsing runs after this) and
@@ -102,6 +106,12 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	}
 	if rf.Wait && !rf.Detach {
 		return usagef("magus run: --wait applies to --detach; a plain run already blocks until it finishes")
+	}
+	if len(skips.refs) > 0 && rf.Graph {
+		// Refused rather than ignored: --graph renders from the raw roots, so honoring
+		// the flag there would take a second subtraction, and accepting it silently is
+		// the un-gated skip this flag exists to prevent.
+		return usagef("magus run: --skip applies to the run selection, not --graph")
 	}
 	if rf.Detach {
 		return detachToDaemon(ctx, root, append([]string{"run"}, withoutDetachFlag(origArgs)...), rf.Wait)
@@ -164,7 +174,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 			return err
 		}
 		listTarget := types.Target{Path: parsedTarget.Path, Name: "ls"}
-		targets, source, err := resolveTargets(ctx, ws, listTarget, projectArgs, clientCwd(ctx))
+		targets, source, err := resolveTargets(ctx, ws, listTarget, projectArgs, skips.refs, clientCwd(ctx))
 		if err != nil {
 			return err
 		}
@@ -180,7 +190,7 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// ctx, not the daemon's process cwd. It scopes target resolution below and is recorded
 	// on the invocation's journal, so both agree with where the user actually ran.
 	cwd := clientCwd(ctx)
-	targets, source, err := resolveTargets(ctx, m, parsedTarget, projectArgs, cwd)
+	targets, source, err := resolveTargets(ctx, m, parsedTarget, projectArgs, skips.refs, cwd)
 	if err != nil {
 		return err
 	}
@@ -325,13 +335,31 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	return nil
 }
 
-// resolveTargets resolves targets from the workspace: by path, explicit args, cwd-scope, or all.
+// resolveTargets resolves targets from the workspace: by path, explicit args, cwd-scope, or all,
+// then subtracts the projects skipArgs names.
 // cwd is the caller's working directory (the client's, for an adopted run - see clientCwd);
 // it anchors relative project args and the cwd-scope lookup. Resolving cwd-scope against the
 // daemon's own os.Getwd() is exactly the transposition that let a daemon adopt a run for an
 // unrelated workspace and pass it vacuously, so the cwd is threaded in rather than read here.
-func resolveTargets(ctx context.Context, ws types.WorkspaceRepository, t types.Target, projectArgs []string, cwd string) ([]types.Target, string, error) {
+//
+// The subtraction happens here, at the one place the selection is finalized, so the run
+// header, --dry-run and the fan-out all describe the same set.
+func resolveTargets(ctx context.Context, ws types.WorkspaceRepository, t types.Target, projectArgs, skipArgs []string, cwd string) ([]types.Target, string, error) {
 	anchor := cwdAnchor(ws.Root(), cwd)
+	targets, source, err := selectTargets(ctx, ws, t, projectArgs, anchor, cwd)
+	if err != nil {
+		return nil, "", err
+	}
+	targets, err = subtractSkipped(ctx, ws, t.Name, targets, skipArgs, anchor, t.Path != "" || len(projectArgs) > 0)
+	if err != nil {
+		return nil, "", err
+	}
+	return targets, source, nil
+}
+
+// selectTargets is resolveTargets before any subtraction: the four ways a selection is
+// named, in precedence order.
+func selectTargets(ctx context.Context, ws types.WorkspaceRepository, t types.Target, projectArgs []string, anchor, cwd string) ([]types.Target, string, error) {
 	if t.Path != "" {
 		resolved, err := file.ResolveProject(ctx, t.Path, anchor)
 		if err != nil {
@@ -365,6 +393,76 @@ func resolveTargets(ctx context.Context, ws types.WorkspaceRepository, t types.T
 	}
 	targets, err := ws.ExpandPath(t)
 	return targets, "", err
+}
+
+// bindRunFlags registers `magus run`'s flags: the generated set from the command
+// registry, plus --skip by hand. --skip is repeatable, a shape the registry declares
+// (FlagCustom) for the man page and binds nothing, exactly like watch's --ignore.
+func bindRunFlags(fs *flag.FlagSet, skips *skipFlag) *gen.RunFlags {
+	rf := gen.BindRun(fs)
+	fs.Var(skips, gen.FlagRunSkip, "Exclude a project from the selection; repeatable. Takes the same project reference as a positional")
+	return rf
+}
+
+// skipFlag accumulates repeated --skip values; satisfies flag.Value.
+type skipFlag struct {
+	refs []string
+}
+
+func (f *skipFlag) String() string { return strings.Join(f.refs, ",") }
+
+func (f *skipFlag) Set(value string) error {
+	if value == "" {
+		return errors.New("empty project reference")
+	}
+	f.refs = append(f.refs, value)
+	return nil
+}
+
+// subtractSkipped removes the projects skipArgs names from an already-resolved selection.
+// A skip reference goes through the same resolver a positional does, so the two spellings
+// cannot drift apart. explicit reports whether the selection was named on the command line
+// rather than inferred from the cwd or fanned out over the workspace.
+//
+// Every refusal here exists because the flag's job is to GATE a set, and a skip that
+// quietly matches nothing un-gates a project with no one the wiser: a reference no project
+// matches is a typo, a reference the caller also named explicitly is a contradiction rather
+// than a preference, and emptying the selection would otherwise surface downstream as
+// "workspace has no projects to run target".
+func subtractSkipped(ctx context.Context, ws types.WorkspaceRepository, targetName string, targets []types.Target, skipArgs []string, anchor string, explicit bool) ([]types.Target, error) {
+	if len(skipArgs) == 0 {
+		return targets, nil
+	}
+	skip := make(map[string]bool, len(skipArgs))
+	for _, arg := range skipArgs {
+		resolved, err := file.ResolveProject(ctx, arg, anchor)
+		if err != nil {
+			return nil, fmt.Errorf("run: --skip %s: %w", arg, err)
+		}
+		if resolved == "" || resolved == "/" {
+			return nil, fmt.Errorf("run: --skip %s: name one project; there is no all-projects skip", arg)
+		}
+		// ExpandPath is the existence check, and the same one a positional gets:
+		// an unknown project errors here with its did-you-mean.
+		if _, err := ws.ExpandPath(types.Target{Path: resolved, Name: targetName}); err != nil {
+			return nil, fmt.Errorf("run: --skip %s: %w", arg, err)
+		}
+		skip[resolved] = true
+	}
+	kept := make([]types.Target, 0, len(targets))
+	for _, t := range targets {
+		if !skip[t.Path] {
+			kept = append(kept, t)
+			continue
+		}
+		if explicit {
+			return nil, fmt.Errorf("run: --skip %s contradicts naming it on the command line", t.Path)
+		}
+	}
+	if len(targets) > 0 && len(kept) == 0 {
+		return nil, errors.New("run: --skip removed every selected project; nothing would run")
+	}
+	return kept, nil
 }
 
 // filterServedTargets keeps only the (project, target) pairs whose project actually

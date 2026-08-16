@@ -154,6 +154,11 @@ arguments, selects the project containing the current directory, or all projects
 if the current directory is not inside a project. Explicit project paths on the
 command line select exactly those projects.
 
+--skip subtracts from whatever that selection resolved to, so a CI step can gate
+every project except a named few without any shell filtering. It takes the same
+project reference a positional does, and refuses a reference no project matches
+rather than skipping nothing quietly.
+
 The target ci is an ordinary magusfile-defined target - magus does not hardcode
 its steps; your magusfile composes them with magus.needs. magus keeps ci as
 the anchor that the affected set keys off, and always runs it read-only; apply
@@ -163,6 +168,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{Name: "graph", Kind: FlagBool, Doc: "Render the dependency graph for the selected scope instead of executing"},
 		{Name: "upstream", Kind: FlagBool, Doc: "With --graph: show dependents instead of dependencies"},
 		{Name: "depth", Kind: FlagInt, Doc: "With --graph: cap displayed depth (0 = unlimited)"},
+		{Name: "skip", Kind: FlagCustom, Doc: "Exclude a project from the selection; repeatable. Takes the same project reference as a positional"},
 		{Name: "no-cache", Kind: FlagBool, Doc: "Force a fresh run even on a cache hit; still refreshes the entry"},
 		{Name: "no-default-charms", Kind: FlagBool, Doc: "Ignore magus.yaml default_charms for this run"},
 		{Name: "detach", Kind: FlagBool, Doc: "Hand the run to the daemon and return immediately; follow it with magus status --watch"},
@@ -184,6 +190,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{"Build everything", "magus run build"},
 		{"Test one project", "magus run test api/gateway"},
 		{"Build two specific projects", "magus run build api/gateway web/studio"},
+		{"Every project that declares generate except two", "magus run generate --skip docs --skip console"},
 		{"Dry-run: show what would run", "magus run build --dry-run"},
 		{"Force a fresh rebuild past a cache hit", "magus run build --no-cache"},
 		{"Full CI pipeline", "magus run ci"},

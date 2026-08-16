@@ -263,6 +263,8 @@ const (
 	FlagRunRace = "race"
 	// run: --shard
 	FlagRunShard = "shard"
+	// run: --skip
+	FlagRunSkip = "skip"
 	// run: --step
 	FlagRunStep = "step"
 	// run: --timeout

@@ -23,7 +23,7 @@ $__magus_scriptblock = {
     $serverSubs    = 'start', 'stop'
     $selfSubs      = 'update', 'install-shorthand'
     $shells        = 'bash', 'zsh', 'fish', 'powershell'
-    $runFlags      = '--dry-run', '--graph', '--upstream', '--depth', '--timeout',
+    $runFlags      = '--dry-run', '--graph', '--upstream', '--depth', '--timeout', '--skip',
                       '--shard', '--n-shards', '--no-volatility-retry', '--race', '--step',
                       '--no-default-charms'
     $affectedFlags = '--dry-run', '--base', '--stdin', '--null', '--graph', '--upstream',

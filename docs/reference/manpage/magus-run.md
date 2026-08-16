@@ -19,6 +19,11 @@ arguments, selects the project containing the current directory, or all projects
 if the current directory is not inside a project. Explicit project paths on the
 command line select exactly those projects.
 
+--skip subtracts from whatever that selection resolved to, so a CI step can gate
+every project except a named few without any shell filtering. It takes the same
+project reference a positional does, and refuses a reference no project matches
+rather than skipping nothing quietly.
+
 The target ci is an ordinary magusfile-defined target - magus does not hardcode
 its steps; your magusfile composes them with magus.needs. magus keeps ci as
 the anchor that the affected set keys off, and always runs it read-only; apply
@@ -55,6 +60,9 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 
 **--shard** *string*
 : This run's shard index within a CI matrix; paired with --n-shards
+
+**--skip** *string*
+: Exclude a project from the selection; repeatable. Takes the same project reference as a positional
 
 **--step**
 : Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)
@@ -112,6 +120,12 @@ magus run test api/gateway
 
 ```sh
 magus run build api/gateway web/studio
+```
+
+*Every project that declares generate except two*
+
+```sh
+magus run generate --skip docs --skip console
 ```
 
 *Dry-run: show what would run*

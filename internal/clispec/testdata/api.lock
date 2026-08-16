@@ -149,6 +149,7 @@ flag run/no-volatility-retry
 flag run/open
 flag run/race
 flag run/shard
+flag run/skip
 flag run/step
 flag run/timeout
 flag run/upstream

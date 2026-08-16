@@ -79,7 +79,7 @@ _magus() {
         args)
             case $words[1] in
                 run)
-                    local -a run_flags=(--dry-run --graph --upstream --depth --timeout --shard --n-shards --no-volatility-retry --race --step --no-default-charms)
+                    local -a run_flags=(--dry-run --graph --upstream --depth --timeout --skip --shard --n-shards --no-volatility-retry --race --step --no-default-charms)
                     if [[ $words[CURRENT] == -* ]]; then
                         _describe 'flag' run_flags
                     elif (( CURRENT == 2 )); then

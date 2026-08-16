@@ -89,7 +89,7 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 
 	// Find the target even if global flags precede it (`magus affected --dry-run ci`);
 	// mirrors `magus run`. rest carries the hoisted flags for cmdParse below.
-	rawTarget, rest, ok := splitTargetFromArgs(args)
+	rawTarget, rest, ok := splitTargetFromArgs(args, nil)
 	if !ok {
 		affectedUsage()
 		return flag.ErrHelp
