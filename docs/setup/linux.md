@@ -6,6 +6,13 @@ tags: [download, install, linux, path]
 
 # Install on Linux
 
+> [!NOTE]
+> linux/amd64 is the one continuously tested platform - the full suite runs on it every CI
+> run. linux/arm64 is not covered by CI, but the release binary and the test suites have been
+> executed on real arm64 hardware.
+>
+> See [platform support](../setup.md#platform-support) for the full matrix.
+
 magus ships as a single self-contained binary. Download it with `curl`, extract it into a `PATH` directory you own - no root, no `sudo` - then [verify it](verify.md) before first run.
 
 ## Quick install

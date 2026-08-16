@@ -6,6 +6,18 @@ tags: [download, install, windows, powershell, path]
 
 # Install on Windows
 
+> [!WARNING]
+> Nothing has run these binaries end to end. Both Windows targets are built by the release
+> pipeline and never executed by it: windows/amd64 compiles and links natively, windows/arm64
+> is cross-compiled and is the newest, least proven target of all. windows/amd64 has shipped
+> for several releases and has field use behind it; windows/arm64 has none.
+>
+> The Buzz JIT is also newly enabled on Windows and its machine-code path has never run on a
+> Windows machine here. If a magusfile gives a result that looks wrong, set `BUZZ_JIT=0` and
+> re-run - if the answer changes, that is a JIT bug and a very valuable report.
+>
+> See [platform support](../setup.md#platform-support) for the full matrix.
+
 magus ships as a single self-contained binary. Download it with `curl.exe`, extract it into a `PATH` directory you own, then [verify it](verify.md) before first run. Run these in PowerShell:
 
 ## Quick install
