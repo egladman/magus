@@ -418,7 +418,9 @@ func queryInvocation(ctx context.Context, root, inv string, secretsOnly bool, ou
 	if len(secrets) == 0 {
 		// Say it plainly rather than printing an empty heading. "No credential reads" is a
 		// real audit answer, and the reader must be able to tell it apart from "not recorded".
-		fmt.Println("secrets: no credential was resolved during this run")
+		// Same noun as the populated branch below, and as the rest of the CLI surface: this
+		// line used to say "no credential was resolved", which read as a different fact.
+		fmt.Println("secrets: no credential reads during this run")
 	} else {
 		fmt.Printf("secrets: %d credential read(s)\n", len(secrets))
 		for _, e := range secrets {

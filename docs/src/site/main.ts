@@ -30,6 +30,7 @@ import { initKeyboardHelp } from "./keyboard-help.js";
 import { initAnnouncement } from "./announcement.js";
 import { initRelativeTime } from "./relative-time.js";
 import { initOfflineBadge } from "./offline-badge.js";
+import { initOfflineStatus } from "./offline-status.js";
 import { initServiceWorker } from "./service-worker-register.js";
 
 initNav();
@@ -55,4 +56,5 @@ initKeyboardHelp();
 initAnnouncement();
 initRelativeTime();
 initOfflineBadge();
+initOfflineStatus();
 initServiceWorker();
