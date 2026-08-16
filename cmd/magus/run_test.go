@@ -248,7 +248,8 @@ func TestResolveTargetsSkip(t *testing.T) {
 	})
 }
 
-// TestSkipFlag proves the hand-bound repeatable flag accumulates and rejects an empty value.
+// TestSkipFlag proves the hand-bound repeatable flag accumulates, splits a
+// comma-separated value, and rejects an empty ref in either spelling.
 func TestSkipFlag(t *testing.T) {
 	var f skipFlag
 	require.NoError(t, f.Set("docs"))
@@ -256,6 +257,12 @@ func TestSkipFlag(t *testing.T) {
 	require.Error(t, f.Set(""))
 	assert.Equal(t, []string{"docs", "console"}, f.refs)
 	assert.Equal(t, "docs,console", f.String())
+
+	var c skipFlag
+	require.NoError(t, c.Set("docs, console"))
+	assert.Equal(t, []string{"docs", "console"}, c.refs)
+	require.Error(t, c.Set("docs,"), "a trailing comma is an empty ref, not a silent no-op")
+	require.Error(t, c.Set(",,"))
 }
 
 // TestClientCwd proves the client's cwd carried on ctx wins over the process os.Getwd,

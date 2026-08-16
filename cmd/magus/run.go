@@ -412,10 +412,16 @@ type skipFlag struct {
 func (f *skipFlag) String() string { return strings.Join(f.refs, ",") }
 
 func (f *skipFlag) Set(value string) error {
-	if value == "" {
-		return errors.New("empty project reference")
+	// Both spellings: repeated --skip flags and one comma-separated value. An empty
+	// segment (a bare or trailing comma) is refused rather than dropped, so a typo
+	// cannot shrink the skip set silently.
+	for _, ref := range strings.Split(value, ",") {
+		ref = strings.TrimSpace(ref)
+		if ref == "" {
+			return errors.New("empty project reference")
+		}
+		f.refs = append(f.refs, ref)
 	}
-	f.refs = append(f.refs, value)
 	return nil
 }
 
