@@ -376,6 +376,24 @@ the cost is large.
 Each of those took on a new capability. magus's additions read a model it already
 had to build. Check that against the diff if you doubt it.
 
+The agent-harness world drew the line at the opposite extreme, and the contrast
+is worth stating because magus keeps being read as a member of that category.
+deepseek-harness makes every module a plugin - the model adapter, the tool
+registry, the session log, the agent loop itself - so there is no core code at
+all. For a harness that is a defensible bet: a harness is an orchestration shell,
+its behavior is supposed to be yours, and hackability is the product. magus made
+the opposite bet for the opposite reason. A build tool's product is its verdicts:
+the cache saying a replay is honest, the drift gate saying generated output
+matches source, `ci` stripping the write charms whether or not anyone remembered.
+A pluggable verdict is not a verdict. So the engine, the cache, the graph schema,
+and the guard's evaluation are sealed on purpose, and every extension point magus
+does have - spells, the magusfile, charms, skills, config - is a DECLARATION the
+sealed engine evaluates, auditable in a diff the way code loaded at startup never
+is. The test for a proposed extension seam: it may change what magus does, never
+what a verdict means. And one seam is absent deliberately rather than sealed:
+there is no model adapter, because magus never calls a model - a fact this page
+would rather state than have inferred.
+
 ## Unsettled
 
 The engine carries complexity the constraint camp avoids by limiting their

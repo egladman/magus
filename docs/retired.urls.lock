@@ -234,3 +234,7 @@ tags/volatility/
 tags/magus-buzz/
 tags/magus-memory/
 tags/magus-vcs/
+
+# The evals project was deleted before 0.4.0 shipped its harness; the page has no
+# successor to redirect to.
+development/evals/
