@@ -331,6 +331,15 @@ details.dropdown > summary + ul {
     display: flex;
     align-items: center;
     justify-content: space-between;
+    /* Restated in the anchors' terms, exactly as the wide bar does above. Inheriting
+       the bar's compact values here left the grouped rows shorter than their plain
+       neighbors, pulled together by the -0.2rem margin meant to keep the nav row
+       from growing, and inset 0.1rem less - so Get started and Community read as a
+       tighter pair wedged between Documentation and Console. The bar's fixed height
+       goes back to auto so the padding sizes the row. */
+    height: auto;
+    padding: 0.45rem 0.6rem;
+    margin: 0;
   }
   /* Pico paints dropdown items with --pico-dropdown-color, the body text color, because in a
      floating panel they are menu rows rather than nav links. Inline in this accordion they sit
