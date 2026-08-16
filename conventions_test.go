@@ -1,5 +1,183 @@
 package magus
 
+// Source-level convention guards: assertions about the SHAPE of this repository
+// rather than the behavior of any symbol in it. They scan the tree as text because
+// what they prevent has no runtime signal to observe.
+//
+// None of them pairs with a source file, and that is the point rather than an
+// oversight - their subject is an agreement across artifacts, not a Go symbol. They
+// live together so the tree carries one file named for that subject instead of four
+// named after nothing, which is how hookdocs_test.go once advertised a hookdocs.go
+// that never existed.
+
+import (
+	"bufio"
+	"fmt"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strings"
+	"testing"
+
+	"github.com/bmatcuk/doublestar/v4"
+	"github.com/egladman/magus/internal/agent"
+	json "github.com/egladman/magus/internal/json"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// A source-level check over the Buzz this repository ships, in the spirit of
+// cmd/magus's TestEveryCommandBindsDisplayFlags: a text scan, because the thing
+// it prevents cannot be observed at runtime without rendering the whole site and
+// watching memory.
+
+// scanLoopRe matches `while (<expr>.indexOf(...) != null)`, the shape of a loop
+// that rescans a string it is also rewriting.
+var scanLoopRe = regexp.MustCompile(`while\s*\([^)]*\.indexOf\([^)]*\)\s*!=\s*null`)
+
+// buzzScanOptOut lets a genuine case through, and demands a reason in the same
+// breath - the same shape as the repo's other acknowledged suppressions.
+const buzzScanOptOut = "buzz-scan-ok:"
+
+// TestNoRescanningStringLoops keeps a quadratic, memory-retaining idiom out of
+// the Buzz sources.
+//
+// `while (s.indexOf(x) != null) { s = s.replace(x, y) }` is the natural way to
+// write replace-all in Buzz, because str.replace substitutes only the FIRST
+// occurrence. It is also the most expensive way: each pass copies the whole
+// string, and on the default VM build every copy is a distinct string interned
+// for the life of the process and never freed (see libs/gopherbuzz/vm/value.go -
+// the intern table has no eviction, and it is what bounds the never-freed heap,
+// so the fix cannot be eviction). Removing three of these from the docs render
+// cut its measured peak from 5806MB to 4259MB.
+//
+// The replacements:
+//
+//	s.split(x).join(y)                 replace-all, one pass
+//	s.split(x).len() - 1               count occurrences, one pass
+//
+// Neither is a drop-in for collapsing RUNS of a substring: splitting on two
+// spaces leaves the odd one behind. Split on one and drop the empty parts.
+func TestNoRescanningStringLoops(t *testing.T) {
+	var findings []string
+
+	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			// An unreadable subtree is not this gate's business: it scans the
+			// sources that ARE readable and says nothing about the rest, rather
+			// than failing a lint over a permissions quirk.
+			return nil //nolint:nilerr // deliberate: skip, do not abort the walk
+		}
+		if d.IsDir() {
+			switch d.Name() {
+			case "node_modules", "worktrees", "gen", ".git":
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".buzz" {
+			return nil
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return nil //nolint:nilerr // same: an unreadable file is skipped, not fatal
+		}
+		lines := strings.Split(string(body), "\n")
+		for i, line := range lines {
+			if !scanLoopRe.MatchString(line) {
+				continue
+			}
+			// An opt-out on the loop or the line above it.
+			if strings.Contains(line, buzzScanOptOut) ||
+				(i > 0 && strings.Contains(lines[i-1], buzzScanOptOut)) {
+				continue
+			}
+			findings = append(findings, path+":"+itoa(i+1)+": "+strings.TrimSpace(line))
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	assert.Emptyf(t, findings,
+		"a string loop that rescans what it rewrites copies the whole string per pass,\n"+
+			"and every copy is interned for the life of the process:\n  %s\n\n"+
+			"Use s.split(x).join(y) to replace all, or s.split(x).len()-1 to count.\n"+
+			"To collapse RUNS, split on ONE separator and drop the empty parts.\n"+
+			"If a loop genuinely has to rescan, put `%s <reason>` on it.",
+		strings.Join(findings, "\n  "), buzzScanOptOut)
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	var b []byte
+	for n > 0 {
+		b = append([]byte{byte('0' + n%10)}, b...)
+		n /= 10
+	}
+	return string(b)
+}
+
+// bearerRe matches a `token=` carrying something long enough to be a real bearer
+// rather than a placeholder. auth.Generate mints 256 bits base64url-encoded, so a
+// live token is 43 characters; the documented forms (`token=...`, `token=<bearer>`)
+// are far shorter and contain characters this class excludes.
+var bearerRe = regexp.MustCompile(`token=[A-Za-z0-9_-]{20,}`)
+
+// TestDocsCarryNoBearerToken keeps a live daemon token out of committed documentation.
+//
+// docs/concepts/knowledge.md is generated by cmd/magus-examples, which captures the
+// real stdout of `magus explain`. That output ends with a Graph Explorer deep-link,
+// and the link carries the daemon auth token - auth.Load reads it from a file in the
+// state dir whether or not a daemon is running. So the page committed a real token
+// from whichever machine last regenerated it, and the docs site published it.
+//
+// It also made the page machine-dependent, which is how it was found: a runner has no
+// token file, regenerated the link without one, and the drift gate failed on CI while
+// passing on every developer machine. The capture now runs with XDG_STATE_HOME pointed
+// into its own fixture, so there is no token to find.
+//
+// Documented placeholders stay legal - docs/reference/console.md explains the scheme
+// with `#token=<bearer>`, which is the useful thing to write.
+func TestDocsCarryNoBearerToken(t *testing.T) {
+	var findings []string
+
+	err := filepath.WalkDir("docs", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return nil //nolint:nilerr // an unreadable subtree is skipped, not fatal
+		}
+		if d.IsDir() {
+			// gen/ is rendered output, not committed (see the publish workflow).
+			if d.Name() == "gen" || d.Name() == "node_modules" {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		if filepath.Ext(path) != ".md" {
+			return nil
+		}
+		body, err := os.ReadFile(path)
+		if err != nil {
+			return nil //nolint:nilerr // same
+		}
+		for i, line := range strings.Split(string(body), "\n") {
+			if m := bearerRe.FindString(line); m != "" {
+				findings = append(findings, path+":"+itoa(i+1)+": "+m)
+			}
+		}
+		return nil
+	})
+	require.NoError(t, err)
+
+	assert.Emptyf(t, findings,
+		"committed documentation carries what looks like a live bearer token:\n  %s\n\n"+
+			"Regenerate the page rather than editing it, and rotate the token - a doc site is\n"+
+			"public. Write a placeholder (`token=<bearer>`) when documenting the scheme.",
+		strings.Join(findings, "\n  "))
+}
+
 // Dogfooding checks: assertions that this repository actually uses what it publishes.
 //
 // This file deliberately has no dogfood.go beside it, and it is the one place in the tree
@@ -21,22 +199,6 @@ package magus
 // true: a config that stops referencing a template, or a template that stops
 // being embedded in the guide, is a test failure rather than something only a
 // careful reader would notice.
-
-import (
-	"fmt"
-	"os"
-	"path/filepath"
-	"regexp"
-	"sort"
-	"strings"
-	"testing"
-
-	"github.com/bmatcuk/doublestar/v4"
-	"github.com/egladman/magus/internal/agent"
-	json "github.com/egladman/magus/internal/json"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-)
 
 const (
 	dogfoodedHookConfig = ".claude/settings.json"
@@ -649,4 +811,93 @@ func TestRootProjectDeclaresTheConfigsItsToolsRead(t *testing.T) {
 				"root target while keying none of them. Declare it in this magusfile's sources.",
 			path, reader)
 	}
+}
+
+// magus is agent-host agnostic, and this test is the only thing that enforces it.
+// The rule was written down twice - in docs/guides/integrations/agents.md ("magus
+// owns the guard rules and the verdict, not integration code for each host") and
+// in the skill-authoring skill ("no host name appears in code") - and honored
+// nowhere mechanically, which is how `magus mcp` came to print Codex and Claude
+// Desktop setup instructions. A change to any one of those clients then meant a
+// magus release.
+//
+// The rule, precisely: a host's NAME may appear only as part of a filesystem
+// path, because naming the directory a host discovers skills in is the one
+// host-specific step magus is allowed to know about (agents.md says so). Anywhere
+// else - prose, help text, printed setup instructions, a per-host branch - the
+// host-specific part belongs in documentation the reader owns.
+
+// hostNames are agent hosts magus must not encode behavior for. Deliberately
+// omits "cursor": magus uses it as an ordinary pagination term, so matching it
+// would be noise rather than signal.
+var hostNames = regexp.MustCompile(`(?i)\b(claude|opencode|codex|aider|windsurf)\b`)
+
+// hostPathUse allows a host name that names something ON DISK: a path
+// (`.claude/skills`, `~/.config/opencode/skills`, `.codex/config.toml`) or a bare
+// quoted filename stem (`case "agents", "claude":` classifying AGENTS.md and
+// CLAUDE.md). Recognizing a well-known file is the sanctioned exception - it is a
+// destination, not a code path branching on which host is running.
+var hostPathUse = regexp.MustCompile(`(?i)([./~][a-z0-9_.-]*\b(claude|opencode|codex|aider|windsurf)\b[a-z0-9_.-]*)|("(claude|opencode|codex|aider|windsurf)")`)
+
+// hostAgnosticSkipDirs are trees this rule does not govern: generated output,
+// vendored/third-party code, and the embedded skill bodies (which are
+// documentation, and already ASCII- and drift-checked elsewhere).
+var hostAgnosticSkipDirs = map[string]bool{
+	".git": true, ".magus": true, ".claude": true, ".agents": true, ".opencode": true,
+	"node_modules": true, "gen": true, "testdata": true, "docs": true, "blog": true,
+	"skills": true, "releases": true, "manpage": true, "schema": true,
+}
+
+func TestNoHostSpecificBehaviorInCode(t *testing.T) {
+	var violations []string
+
+	err := filepath.WalkDir(".", func(path string, d os.DirEntry, err error) error {
+		if err != nil {
+			return err
+		}
+		if d.IsDir() {
+			if hostAgnosticSkipDirs[d.Name()] {
+				return filepath.SkipDir
+			}
+			return nil
+		}
+		// Tests may name a host: a test asserting the guard's behavior against a
+		// real host event is describing the world, not encoding a code path.
+		if !strings.HasSuffix(path, ".go") || strings.HasSuffix(path, "_test.go") {
+			return nil
+		}
+
+		f, err := os.Open(path)
+		if err != nil {
+			return err
+		}
+		defer func() { _ = f.Close() }()
+
+		sc := bufio.NewScanner(f)
+		sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
+		for line := 1; sc.Scan(); line++ {
+			text := sc.Text()
+			if !hostNames.MatchString(text) {
+				continue
+			}
+			// Strip every path-shaped use, then re-test: a line may legitimately
+			// carry both (an example destination plus surrounding prose).
+			if !hostNames.MatchString(hostPathUse.ReplaceAllString(text, "")) {
+				continue
+			}
+			violations = append(violations, fmt.Sprintf("%s:%d: %s", path, line, strings.TrimSpace(text)))
+		}
+		return sc.Err()
+	})
+	if err != nil {
+		t.Fatalf("walk: %v", err)
+	}
+
+	assert.Empty(t, violations,
+		"magus must not encode agent-host specifics.\n"+
+			"A host name is allowed only inside a filesystem path (e.g. .claude/skills), because naming\n"+
+			"the directory a host reads is the one host-specific step magus owns. Everything else - setup\n"+
+			"instructions, help text, a per-host branch - belongs in docs the reader owns, or the next\n"+
+			"change to that host becomes a magus release.\n\nviolations:\n%s",
+		strings.Join(violations, "\n"))
 }
