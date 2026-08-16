@@ -4,7 +4,7 @@
  * sections. The keybindings editor grid is styled globally in overrides.css ([data-kbeditor]) because
  * the same core also appears in the modal overlay, which exists before this tab is ever opened.
  *
- * Conventions (PATTERNFLY.md): pf-v6-* is the only borrowed vocabulary; app hooks are console-settings-*
+ * Conventions (README.md): pf-v6-* is the only borrowed vocabulary; app hooks are console-settings-*
  * classes and data-*; colors come from --pf-t-* / --console-* tokens, never a raw hex. */
 
 /* The page is a single scrolling column, capped for readability and centered in the pane. The global

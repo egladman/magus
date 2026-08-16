@@ -448,7 +448,7 @@ function buildSection(heading: string, initialEmpty: string): Section {
 function rowEl(row: ActivityRow): HTMLElement {
   const li = document.createElement("li");
   li.className = "console-shell-activity__row";
-  // State is a data attribute, never a modifier class (PATTERNFLY.md). Absent while the outcome is
+  // State is a data attribute, never a modifier class (README.md). Absent while the outcome is
   // still unknown, so an in-flight row is styled as neutral rather than provisionally green.
   if (row.outcome) li.dataset.outcome = row.outcome;
 

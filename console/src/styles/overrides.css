@@ -1,6 +1,6 @@
 /* overrides.css - the ONE small, audited escape hatch for the console shell (W2).
  *
- * The class-vs-ID convention (PATTERNFLY.md) is: pf-v6-* is the only class vocabulary and app
+ * The class-vs-ID convention (README.md) is: pf-v6-* is the only class vocabulary and app
  * hooks are IDs + data-*. A few shell bits have no PatternFly component to stand in for them - a
  * bottom STATUS BAR (PF has none), the settings popover POSITION under the gear, the connection LIVENESS DOT,
  * and viewport-capping the two modal overlays. They live here, ID-scoped, instead of scattered
