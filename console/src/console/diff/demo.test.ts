@@ -1,0 +1,158 @@
+import { test } from "node:test";
+import assert from "node:assert/strict";
+import { DEMO_PATCH, demoSession, applyDemoOp } from "./demo";
+import { parsePatch } from "./parse";
+import { order, stats, visibleFiles } from "./order";
+import { buildRows, byHunk } from "./rows";
+
+// The fixture is data a person edits by hand, so what is pinned here is the ways it can go
+// quietly wrong: an annotation for a path the patch does not carry (the file then renders with
+// no chips and no ranking, and nothing says so), a hunk index a comment cannot reach, or a
+// hand-counted @@ header that has drifted from the lines under it.
+
+const files = parsePatch(DEMO_PATCH);
+const session = demoSession();
+
+test("the demo patch parses into the changeset it claims", () => {
+  assert.deepEqual(
+    files.map((f) => f.path),
+    [
+      "libs/authkit/claims.go",
+      "services/identity/internal/token/verify.go",
+      "apps/dashboard/src/api/session.ts",
+      "libs/authkit/audience.go",
+      "services/identity/internal/token/legacy_audience.go",
+      "services/identity/internal/token/verify_test.go",
+      "docs/auth/tokens.md",
+      "libs/protocol/gen/token_pb.go",
+      "apps/dashboard/src/gen/session_pb.ts",
+      "docs/gen/auth/tokens.html",
+    ],
+  );
+  const byPath = new Map(files.map((f) => [f.path, f]));
+  assert.equal(byPath.get("libs/authkit/audience.go")?.status, "added");
+  assert.equal(
+    byPath.get("services/identity/internal/token/legacy_audience.go")?.status,
+    "deleted",
+  );
+  const doc = byPath.get("docs/auth/tokens.md");
+  assert.equal(doc?.status, "renamed");
+  assert.equal(doc?.oldPath, "docs/auth/jwt.md");
+});
+
+// Every hand-written @@ header states a line count. parsePatch does not check them, so a header
+// that has drifted from its body is invisible until a reader notices the gutter numbers are
+// wrong - which is exactly the kind of detail the showcase is read closely for.
+test("every hunk header's counts match the lines under it", () => {
+  const wrong: string[] = [];
+  for (const f of files) {
+    for (const h of f.hunks) {
+      const olds = h.lines.filter((l) => l.kind === "context" || l.kind === "del").length;
+      const news = h.lines.filter((l) => l.kind === "context" || l.kind === "add").length;
+      if (olds !== h.oldCount || news !== h.newCount) {
+        wrong.push(
+          `${f.path} ${h.header} counts ${h.oldCount}/${h.newCount}, body ${olds}/${news}`,
+        );
+      }
+    }
+  }
+  assert.deepEqual(wrong, []);
+});
+
+test("every annotated path is in the patch, and every patched path is annotated", () => {
+  const patched = new Set(files.map((f) => f.path));
+  const annotated = new Set((session.diff.files ?? []).map((a) => a.path));
+  for (const p of annotated) assert.ok(patched.has(p), `annotated but not in the patch: ${p}`);
+  for (const p of patched) assert.ok(annotated.has(p), `in the patch but not annotated: ${p}`);
+});
+
+test("every comment and suggestion anchors to a hunk that exists", () => {
+  const hunks = new Map(files.map((f) => [f.path, f.hunks.length]));
+  for (const c of session.comments ?? []) {
+    assert.ok((hunks.get(c.path) ?? 0) > c.hunk, `comment ${c.id} anchors past ${c.path}`);
+  }
+  for (const s of session.suggestions ?? []) {
+    assert.ok(hunks.has(s.path), `suggestion ${s.id} names a path outside the patch`);
+    assert.ok((hunks.get(s.path) ?? 0) > s.hunk, `suggestion ${s.id} anchors past ${s.path}`);
+  }
+});
+
+// The three things the showcase exists to show off: the generated fold, consequence order, and
+// the evidence chips having something to say.
+test("the demo changeset folds its generated files and leads with the widest one", () => {
+  const cs = order(files, session);
+  assert.deepEqual(
+    cs.generated.map((o) => o.file.path),
+    [
+      "libs/protocol/gen/token_pb.go",
+      "apps/dashboard/src/gen/session_pb.ts",
+      "docs/gen/auth/tokens.html",
+    ],
+  );
+  assert.equal(cs.primary[0]?.file.path, "libs/authkit/claims.go");
+  const s = stats(cs);
+  assert.equal(s.files, 7);
+  assert.equal(s.generated, 3);
+  assert.equal(s.publicSurface, 1);
+  assert.equal(s.untested, 1);
+  assert.ok(s.additions > 0 && s.deletions > 0);
+});
+
+// The whole point of the wiring: the payload reaches the row model the virtualizer paints.
+test("demo mode builds rows from the demo payload", () => {
+  const cs = order(files, session);
+  const touches = new Map(
+    (session.diff.files ?? [])
+      .filter((a) => a.touches?.length)
+      .map((a) => [a.path, a.touches ?? []]),
+  );
+  const rows = buildRows(
+    visibleFiles(cs, false),
+    "unified",
+    byHunk(session.comments ?? []),
+    touches,
+  );
+  assert.deepEqual(
+    rows.filter((r) => r.kind === "file").map((r) => r.file.path),
+    cs.primary.map((o) => o.file.path),
+  );
+  // A story row for each file the trail says an agent wrote, and a comment row under each
+  // annotated hunk - both are rows, which is what makes them scroll with the code.
+  assert.equal(rows.filter((r) => r.kind === "story").length, 3);
+  assert.equal(rows.filter((r) => r.kind === "comment").length, 3);
+  assert.ok(rows.some((r) => r.kind === "line" && r.line.text.includes("Audience []string")));
+});
+
+test("the ranking key is present, so the surface may claim an order", () => {
+  assert.ok((session.diff.files ?? []).some((f) => f.reach !== null && f.reach !== undefined));
+});
+
+test("applyDemoOp marks a hunk read and unread", () => {
+  const on = applyDemoOp(session, { op: "viewed", digest: "abc123", on: true });
+  assert.deepEqual(on.viewed, ["abc123"]);
+  assert.deepEqual(applyDemoOp(on, { op: "viewed", digest: "abc123", on: false }).viewed, []);
+});
+
+test("applyDemoOp posts a comment as the human, whatever the payload says", () => {
+  const after = applyDemoOp(session, {
+    op: "comment",
+    path: "libs/authkit/audience.go",
+    hunk: 0,
+    body: "Accepts is O(n) - fine for two audiences.",
+  });
+  const posted = (after.comments ?? []).at(-1);
+  assert.equal(posted?.author, "human");
+  assert.equal(posted?.path, "libs/authkit/audience.go");
+  assert.equal(posted?.resolved, false);
+  assert.equal((session.comments ?? []).length + 1, (after.comments ?? []).length);
+});
+
+test("applyDemoOp resolves a comment and answers a suggestion", () => {
+  const resolved = applyDemoOp(session, { op: "resolve", id: "cm1", on: true });
+  assert.equal((resolved.comments ?? []).find((c) => c.id === "cm1")?.resolved, true);
+
+  const skipped = applyDemoOp(session, { op: "answer", id: "sg1", on: false });
+  const sg1 = (skipped.suggestions ?? []).find((s) => s.id === "sg1");
+  assert.equal(sg1?.declined, true);
+  assert.equal(sg1?.accepted, false);
+});

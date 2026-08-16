@@ -47,8 +47,9 @@ import {
   type DiffAnnotation,
   type DiffTouch,
 } from "./session";
+import { DEMO_PATCH, demoSession, applyDemoOp } from "./demo";
 import { registerCommand, unregisterCommand } from "../commands";
-import { resolveDaemonHost, parseHash, adoptDaemonOrigin } from "../../lib/daemon";
+import { resolveDaemonHost, parseHash, adoptDaemonOrigin, wantsDemo } from "../../lib/daemon";
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
 
@@ -223,6 +224,11 @@ export function activate(host: HTMLElement): () => void {
   const controller = new AbortController();
   let disposed = false;
 
+  // The daemon-free showcase, on the fragment every other surface reads. Derived ONCE, here,
+  // rather than per fetch: a console served BY a daemon would otherwise answer host_() with a
+  // real origin and the showcase would start writing a stranger's review session.
+  let demo = wantsDemo(parseHash());
+
   const state: State = {
     changeset: { primary: [], generated: [] },
     files: [],
@@ -275,7 +281,18 @@ export function activate(host: HTMLElement): () => void {
   const emptyBodyWrap = h("div", "pf-v6-c-empty-state__body");
   const emptyBody = h("p", undefined, "Reading the working tree.");
   emptyBodyWrap.append(emptyBody);
-  emptyContent.append(emptyTitle, emptyBodyWrap);
+  // The same second way out the dashboard and the activity trail offer: someone who has no
+  // daemon running is the person most likely to be meeting this surface for the first time.
+  const demoBtn = h("button", "pf-v6-c-button pf-m-primary") as HTMLButtonElement;
+  demoBtn.type = "button";
+  demoBtn.title = "A fabricated changeset, no daemon and no workspace needed";
+  demoBtn.append(h("span", "pf-v6-c-button__text", "See the demo"));
+  const emptyFooter = h("div", "pf-v6-c-empty-state__footer");
+  const emptyActions = h("div", "pf-v6-c-empty-state__actions");
+  emptyActions.append(demoBtn);
+  emptyFooter.append(emptyActions);
+  emptyFooter.hidden = true;
+  emptyContent.append(emptyTitle, emptyBodyWrap, emptyFooter);
   empty.append(emptyContent);
 
   main.append(toolbar, rail, scroll, overview, empty);
@@ -461,6 +478,12 @@ export function activate(host: HTMLElement): () => void {
   };
 
   const sync = (op: Parameters<typeof mutate>[1]): void => {
+    // In the showcase the store is in memory: the reader's marks, comments and answers have to
+    // land somewhere or the affordances read as broken, and there is no daemon to land them in.
+    if (demo) {
+      if (state.session) applySession(applyDemoOp(state.session, op));
+      return;
+    }
     const hp = host_();
     if (!hp) return;
     void mutate(hp, op, controller.signal).then((s) => {
@@ -529,7 +552,20 @@ export function activate(host: HTMLElement): () => void {
 
   const renderToolbar = (): void => {
     const s = stats(state.changeset);
-    const chips: HTMLElement[] = [
+    const chips: HTMLElement[] = [];
+    // Said HERE and not only in the shell's status bar: this surface is tileable, so a reader
+    // can be looking at the toolbar with the rest of the console off screen, and every number
+    // beside it would otherwise read as a measurement of their own tree.
+    if (demo) {
+      chips.push(
+        label(
+          "demo data",
+          "pf-m-purple",
+          "A fabricated changeset. This is not your working tree, and no daemon is connected.",
+        ),
+      );
+    }
+    chips.push(
       label(
         `${s.files} ${s.files === 1 ? "file" : "files"}`,
         undefined,
@@ -537,7 +573,7 @@ export function activate(host: HTMLElement): () => void {
       ),
       label(`+${s.additions}`, "pf-m-green"),
       label(`-${s.deletions}`, "pf-m-red"),
-    ];
+    );
     if (s.generated > 0) {
       const g = h("button", "console-diff-toolbar__fold");
       g.type = "button";
@@ -1027,19 +1063,51 @@ export function activate(host: HTMLElement): () => void {
 
   // --- load -----------------------------------------------------------------
 
-  const showEmpty = (title: string, body: string): void => {
+  const showEmpty = (title: string, body: string, offerDemo = false): void => {
     state.phase = "empty";
     root.dataset.phase = "empty";
     emptyTitle.textContent = title;
     emptyBody.textContent = body;
+    emptyFooter.hidden = !offerDemo;
   };
 
+  // Entering the showcase in place, NOT by reloading: inside the console a reload would tear
+  // down the whole SPA (every tab) instead of this one surface. The fragment is recorded with
+  // replaceState so a standalone refresh stays in the demo and the URL reads as a shareable
+  // /console/diff/#demo, and no hashchange fires for a sibling pane to react to.
+  demoBtn.addEventListener(
+    "click",
+    () => {
+      history.replaceState(null, "", "#demo");
+      demo = true;
+      void load();
+    },
+    { signal: controller.signal },
+  );
+
   const load = async (): Promise<void> => {
+    // The showcase joins the same pipeline one step in, with the patch and the session the
+    // daemon would have returned. Everything below order() is the production path, so what it
+    // shows off is the surface itself rather than a rendering of it. No fetch is issued at all,
+    // which is what makes /console/diff/#demo work with no daemon, no workspace and offline.
+    if (demo) {
+      const sess = demoSession();
+      state.changeset = order(parsePatch(DEMO_PATCH), sess);
+      state.phase = "ready";
+      root.dataset.phase = "ready";
+      root.dataset.overview = "off";
+      applySession(sess, false);
+      await rebuild();
+      scroll.focus();
+      return;
+    }
+
     const hp = host_();
     if (!hp) {
       showEmpty(
         "No daemon connected",
         "Diff reads the working tree through a local daemon. Start one with `magus server start`.",
+        true,
       );
       return;
     }
