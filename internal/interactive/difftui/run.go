@@ -114,8 +114,8 @@ func apply(m *Model, ev tty.Event, sync Sync) (quit bool) {
 		// scrollback the wheel would otherwise reach - for as long as it takes to read a
 		// changeset, so refusing the gesture does not preserve scrolling, it removes it.
 		//
-		// Every other mouse event is dropped rather than guessed at, exactly as before: they are
-		// reported only because opening the input turns tracking on.
+		// Every other mouse event is dropped rather than guessed at: they are reported only
+		// because opening the input turns tracking on.
 		switch ev.Button {
 		case tty.MouseWheelUp:
 			m.Scroll(-wheelRows)

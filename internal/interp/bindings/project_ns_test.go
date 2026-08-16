@@ -68,8 +68,8 @@ func TestParseBuzzProjectOpts_TargetSlotsNonIntErrors(t *testing.T) {
 // the cleaning buys: a magusfile may reach into a sibling tree, and the reach resolves
 // against the declaring project, so "../proto/**/*.proto" from docs/ declares
 // "proto/**/*.proto" to the cache key and to affected attribution alike. Storing the
-// spelling raw was the defect - it rooted to "docs/../proto/**/*.proto", which matches
-// no path any walk produces, so the declaration read as supported and keyed nothing.
+// spelling raw roots it to "docs/../proto/**/*.proto", which matches no path any walk
+// produces, so the declaration reads as supported and keys nothing.
 func TestParseBuzzProjectOpts_Sources(t *testing.T) {
 	opts := vm.NewMap()
 	opts.MapSet("sources", vm.ListValue([]vm.Value{vm.StrValue("./guides/**"), vm.StrValue("../proto/**/*.proto")}))

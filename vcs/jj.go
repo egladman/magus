@@ -272,13 +272,13 @@ func parseJJConflicts(out string) []types.Conflict {
 // exit for jj ("No conflicts found at this revision"), not empty output, so the error is
 // swallowed into the empty result the interface asks for.
 // The discriminator reads STDERR, not stdout, and that is the whole correctness of it.
-// vcsOutputRaw returns ("", err) on any failure, so testing `out` - which is stdout - meant
-// testing the empty string every time: `strings.Contains(out, "No conflicts") || out == ""`
-// was unconditionally true on the error path, and the real-failure branch below it was
+// vcsOutputRaw returns ("", err) on any failure, so testing `out` - which is stdout - tests
+// the empty string every time: `strings.Contains(out, "No conflicts") || out == ""` is
+// unconditionally true on the error path, leaving the real-failure branch below it
 // unreachable. jj missing from PATH, not a jj repo, a cancelled context and a permission
-// error all reported "no conflicts", and `magus vcs resolve` then called the merge settled.
-// jj writes its "No conflicts found" notice to stderr, which cmd.Output() captures into
-// ExitError.Stderr.
+// error would all report "no conflicts", and `magus vcs resolve` would call the merge
+// settled. jj writes its "No conflicts found" notice to stderr, which cmd.Output() captures
+// into ExitError.Stderr.
 func (v jjVCS) Conflicts(ctx context.Context, root string) ([]types.Conflict, error) {
 	out, err := vcsOutputRaw(ctx, root, "jj", "resolve", "--list")
 	if err != nil {

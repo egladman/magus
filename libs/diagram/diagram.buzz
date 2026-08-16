@@ -469,8 +469,8 @@ fun attachPoint(n: Node, side: str, slot: int, slots: int) > [int] {
 fun connectorPath(x1: int, y1: int, x2: int, y2: int, horizontal: bool, bend: int) > str {
     // A shared axis collapses to a straight line only when no detour was asked for. A
     // return leg (bottom to bottom, say) shares its y with its own source, and taking the
-    // shortcut there drew the connector straight through both boxes, where the nodes then
-    // painted over it.
+    // shortcut there draws the connector straight through both boxes, which the nodes then
+    // paint over.
     if (bend == 0 and (x1 == x2 or y1 == y2)) {
         return "M {x1} {y1} L {x2} {y2}";
     }
@@ -913,8 +913,8 @@ fun replacePicture(html: str, needle: str, replacement: str) > str {
         if (element.indexOf(needle) != null) {
             return done + page.sub(0, len: start!) + replacement + rest.sub(close! + 10);
         }
-        // Carry this one through and keep scanning. Returning on the first miss skipped
-        // every diagram that followed an unrelated <picture>, and the README opens with
+        // Carry this one through and keep scanning. Returning on the first miss skips
+        // every diagram that follows an unrelated <picture>, and the README opens with
         // one: the hero terminal recording.
         done = done + page.sub(0, len: start!) + element;
         page = rest.sub(close! + 10);
@@ -985,7 +985,7 @@ final LayerTop = 64;
 
 // LayerMaxChars is what fits across a generated node at the 12px body size. A project
 // path longer than that is truncated from the FRONT: the tail (the project's own name) is
-// what distinguishes it, and "docs/guides/integrations/agents" overflowed its box.
+// what distinguishes it, and "docs/guides/integrations/agents" overflows its box.
 final LayerMaxChars = 32;
 
 fun fitLabel(label: str) > str {
@@ -1092,8 +1092,8 @@ fun layoutWithStagger(id: str, title: str, desc: str, items: [LayeredItem], stag
         }
     }
     // Vertical channels are allocated per COLUMN GAP, not per source node. Staggering
-    // within one node's own outgoing edges left two nodes in the same column handing out
-    // the same channel x, and their verticals then ran along each other.
+    // within one node's own outgoing edges leaves two nodes in the same column handing out
+    // the same channel x, and their verticals then run along each other.
     final gapTotal: mut {int: int} = mut {<int: int>};
     foreach (it in items) {
         foreach (dep in it.deps) {

@@ -584,9 +584,9 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 		}
 	}
 
-	// --plan went through json.MarshalIndent directly and so ignored -o entirely:
-	// `-o yaml` printed JSON, in both flag positions. Route it through the shared
-	// renderer like every other structured command.
+	// --plan goes through the shared renderer like every other structured command, so -o
+	// selects the encoding. Marshalling here directly would ignore it and print JSON for
+	// `-o yaml`, in both flag positions.
 	//
 	// FormatText maps to JSON rather than to a prose rendering, because the plan has
 	// no prose rendering to fall back on - the default output IS the machine-readable

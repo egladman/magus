@@ -23,8 +23,8 @@ import (
 //
 // .jj, .hg and .sl are unambiguous: their presence means that VCS is driving the
 // working copy. .git is the fallback precisely because another tool may have created
-// it. gitVCS stays LAST for the same reason it used to be first - it is also the
-// default when nothing claims the directory (see Resolve).
+// it. gitVCS is LAST because it is also the default when nothing claims the directory
+// (see Resolve).
 //
 // Sapling's position in the list is not load-bearing the way jj's is: `sl clone` of a
 // git repository writes .sl and NO .git, so unlike a colocated jj workspace there is no

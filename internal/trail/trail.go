@@ -607,11 +607,11 @@ func ReadRecent(base string, limit int) ([]Event, error) {
 // acceptable for a best-effort governance trail, and the price of keeping the trail lock-free.
 //
 // It is CHEAP to call on a trail that is already small (see minEventBytes), which is what lets the
-// daemon's maintenance schedule be the single owner of rotation. There used to be a second,
-// write-triggered path - a RotateOnCount the MCP handler drove off its own append counter - and it
-// covered exactly one producer: an agent hook is a short-lived process with nowhere to keep a
-// counter, so hook-fed trails were never write-bounded at all and relied on a 30-day sweep. One
-// trigger that every producer shares beats two that disagree about who is covered.
+// daemon's maintenance schedule be the single owner of rotation. A second, write-triggered path -
+// a rotate driven off a producer's own append counter - can only cover that one producer: an agent
+// hook is a short-lived process with nowhere to keep a counter, so a hook-fed trail would be
+// write-bounded by nothing at all. One trigger that every producer shares beats two that disagree
+// about who is covered.
 func Rotate(base string) { rotate(base, maxEvents) }
 
 // minEventBytes is a floor on one serialized event line, used to skip the read entirely when the

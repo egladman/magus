@@ -81,10 +81,10 @@ magus\project({
     "spells": [go, buzz, markdown, bash],
     // The tool configs the bound spells actually read, on top of the source globs those
     // spells contribute. Every one of these changes what a target DOES while matching no
-    // spell glob, so before this list an edit to one produced a cache HIT: golangci-lint
+    // spell glob, so leaving one undeclared buys a cache HIT on an edit to it: golangci-lint
     // re-run under a new rule set, replaying the verdict from the old one. That is the
-    // silent half of under-declaration. The loud half was already visible - each of these
-    // still seeded the root project through directory containment, so touching one reran
+    // silent half of under-declaration. The loud half is louder - an undeclared file here
+    // still seeds the root project through directory containment, so touching it reruns
     // everything without keying anything (MGS1028).
     //
     // Deliberately NOT here: LICENSE (only release-build reads it, and that target is
@@ -2243,9 +2243,8 @@ fun missing_input(path: str, project: str) > str {
 // that is deliberately gitignored. Before negation existed the only remedy was to avoid the
 // name - which is what termcast-record and termcast-showcase above still do, and what this
 // target was first called (build-site). Renaming around a matcher hides the reason at both
-// ends: the glob does
-// not say what it is missing, and the target does not say why it is called something else.
-// "!deploy-generate" says it once, where it applies.
+// ends: the glob does not say what it is missing, and the target does not say why it is
+// called something else. "!deploy-generate" says it once, where it applies.
 //
 // NOT site-generate: the docs project already exports a target by that name, and two targets
 // called the same thing in one workspace - one rendering docs/gen, one assembling the whole

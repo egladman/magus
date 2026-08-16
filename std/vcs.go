@@ -293,8 +293,8 @@ func VcsRef(ctx context.Context) (string, error) {
 // VcsStatus reports the working tree's uncommitted state as a typed Status.
 //
 // Handing a magusfile the backend's own status lines - git porcelain, hg status, jj diff
-// --name-only - made every caller reimplement the parsing and know which VCS it was on.
-// DirtyFiles now answers in paths, so there is nothing left here to reimplement.
+// --name-only - would make every caller reimplement the parsing and know which VCS it is on.
+// DirtyFiles answers in paths, so there is nothing here to reimplement.
 //
 // Paths carry the repository root as their base: a VCS reports from the root while a
 // target's cwd is its PROJECT directory, so a bare string was ambiguous exactly when a

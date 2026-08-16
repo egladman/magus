@@ -84,10 +84,10 @@ file: gone.txt (record type "C", state "u", hash 0ce54e727589f3f743f5063e0d17c60
 }
 
 // Sapling's status column width is pinned through the DRIVER, against a live repository,
-// by TestParityDirtyFilesReturnsPaths. It used to be asserted here by calling
-// trimStatusColumns with a literal 2 - which never touched saplingVCS at all, so changing
-// the driver's width to 3 left it green. A test that cannot fail for the thing it names is
-// worse than no test, because it reads as coverage.
+// by TestParityDirtyFilesReturnsPaths. Asserting it here by calling trimStatusColumns with a
+// literal 2 would never touch saplingVCS at all, so changing the driver's width to 3 would
+// leave it green. A test that cannot fail for the thing it names is worse than no test,
+// because it reads as coverage.
 
 // slInitRepo initializes a Sapling repository in dir with one commit holding files. It is
 // the sl counterpart of gitInitRepo, and vcs_test.go's cross-backend tables call it too.

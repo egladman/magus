@@ -366,10 +366,9 @@ func (u *ui) render(lines []playground.Line) {
 }
 
 // diagJS flattens a *dry.Diag for the JS bridge. syscall/js marshals maps, slices
-// and primitives but NOT arbitrary structs, so the Diag has to be spread by hand -
-// which is why it was missing from these results in the first place, leaving every
-// caller with a bare ok:false and no way to say what went wrong. nil (a run that
-// succeeded) crosses as JS null.
+// and primitives but NOT arbitrary structs, so the Diag has to be spread by hand;
+// handed over whole it crosses as nothing, leaving every caller with a bare ok:false
+// and no way to say what went wrong. nil (a run that succeeded) crosses as JS null.
 func diagJS(d *dry.Diag) any {
 	if d == nil {
 		return nil

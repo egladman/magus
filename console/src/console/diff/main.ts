@@ -938,10 +938,6 @@ export function activate(host: HTMLElement): () => void {
   };
 
   // --- commands -------------------------------------------------------------
-  // Registered so every action appears in the command bar and the Actions surface and can be
-  // rebound, which a private keydown table would not give. The single-letter keys stay bound
-  // on the scroll container below rather than as global chords: a bare "v" must not fire
-  // while someone is typing in another surface.
   const COMMANDS: { id: string; label: string; run: () => void; key?: string }[] = [
     {
       id: "diff.hunk.next",

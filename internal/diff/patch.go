@@ -27,9 +27,9 @@ type Hunk struct {
 // ParseHunks splits a unified patch into per-file hunks.
 //
 // This exists so the agent half of the diff can address a coordinate it can SEE. The MCP
-// surface takes a 0-based hunk index on a comment and used to validate nothing, because the
-// handler had no parsed changeset to check against - so a comment landed at a plausible
-// coordinate that had never been verified, on a file that might not even be in the change.
+// surface takes a 0-based hunk index on a comment, and without a parsed changeset the handler
+// has nothing to check it against - so a comment lands at a plausible coordinate nothing
+// verified, on a file that might not even be in the change.
 //
 // Deliberately shallow. It reads `diff --git` and `@@` boundaries and keeps line text; it does
 // not model renames, modes, or binary payloads, because nothing downstream of it asks. The

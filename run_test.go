@@ -346,8 +346,8 @@ func TestVerifyReadOnlySkipsWhenVCSDisabled(t *testing.T) {
 
 // An unversioned tree is the "container build, extracted tarball" case the gate promises to
 // no-op on. It is NOT reached through a nil driver: Resolve falls back to git and reports
-// VCSSourceDefault, so testing res.VCS alone made the promised no-op unreachable and the
-// gate hard-failed with "git could not report working-tree status" on a directory that was
+// VCSSourceDefault, so testing res.VCS alone leaves the promised no-op unreachable and the
+// gate hard-fails with "git could not report working-tree status" on a directory that was
 // never a repository.
 func TestVerifyReadOnlySkipsWhenNothingClaimsTheRoot(t *testing.T) {
 	t.Setenv("MAGUS_VCS_ENABLED", "")

@@ -122,9 +122,8 @@
 }
 /* Toolbar buttons: icon + label. .console-render-btn__icon (svg) + .console-render-btn__label
    (text) are the render/JS hooks setBtnLabel/flashBtnLabel touch and the narrow-screen query
-   drops. No font-size here on purpose - it used to force 0.72rem, which is what actually made
-   these buttons a different scale from the toggle groups and the filter field sharing their
-   row. The comment blamed pf-m-small; the override was doing it. */
+   drops. No font-size here on purpose: forcing one (0.72rem) is what puts these buttons on a
+   different scale from the toggle groups and the filter field sharing their row. */
 /* Shared with Activity (.console-render-panel is the common frame both surfaces build); Activity's
    Refresh button has no sizing rule of its own otherwise, so its icon renders at 0x0. */
 .console-render-panel .console-render-btn__icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
@@ -380,20 +379,20 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
    runs (project -> target -> run) read from the daemon's /api/v1/outputs. Selecting a run loads its
    verbatim output in the scroll box on the right. initRunBrowser reparents .console-render-scroll into
    .console-log-split so no scaffold markup changed; the split becomes the panel's flex:1 body row. */
-/* The view toolbar deliberately carries NO PatternFly size modifiers. It used to mix them
-   and ended up three scales in one row: the filter input at 37px/14px, the toggle groups
-   at 29px/14px (pf-m-compact), and the action buttons at 25px/11.52px (pf-m-small).
+/* The view toolbar deliberately carries NO PatternFly size modifiers. Mixing them puts three
+   scales in one row: the filter input at 37px/14px, the toggle groups at 29px/14px
+   (pf-m-compact), and the action buttons at 25px/11.52px (pf-m-small).
    pf-m-small shrinks padding AND font; pf-m-compact shrinks padding only, so no pairing of
    the two ever lines up - the mismatch is in PatternFly's scales, not in this stylesheet.
    Default everywhere matches the filter input, which already set the row's height. Do not
    "tidy" the row by adding a modifier back to one control. */
 .console-log-split { display: flex; flex: 1 1 auto; min-height: 0; }
 .console-log-split > .console-render-scroll { flex: 1 1 auto; min-width: 0; }
-/* Proportional between bounds, not a flat 15rem. Fixed, the run tree took the same
-   240px whatever it was sitting in, which is a quarter of a 960px window and nearly a
-   third of an 800px one - so the pane the panel exists to navigate got squeezed hardest
-   exactly when it was already tight. Below 48rem it stops being in flow at all (the
-   overlay rule further down), so this only governs the docked case. */
+/* Proportional between bounds, not a flat 15rem. A fixed 240px is a quarter of a 960px
+   window and nearly a third of an 800px one, so the pane the panel exists to navigate
+   would get squeezed hardest exactly when it is already tight. Below 48rem the tree stops
+   being in flow at all (the overlay rule further down), so this only governs the docked
+   case. */
 .console-log-runs {
   flex: 0 0 clamp(10rem, 24%, 15rem); display: flex; flex-direction: column; min-height: 0;
   border-right: 1px solid var(--pf-t--global--border--color--default);

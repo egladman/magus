@@ -9,9 +9,9 @@
 // the surface: a plan with no runs under it is a plan nobody started, and a run under no unit is
 // work nobody planned.
 //
-// The endpoint lands with the sibling branch. Until then GET /api/v1/ledger 404s, which is a
-// FIRST-CLASS outcome here rather than an error: loadLedger reports "absent" so the surface can say
-// what is missing instead of showing an empty plan, which would read as "nothing was delegated".
+// A daemon predating the endpoint 404s GET /api/v1/ledger, and that is a FIRST-CLASS outcome here
+// rather than an error: loadLedger reports "absent" so the surface can say what is missing instead
+// of showing an empty plan, which would read as "nothing was delegated".
 
 import { authHeaders } from "../../lib/daemon";
 import { layoutLayered, LAYERED_COL_W, LAYERED_ROW_H } from "../graph/layout";

@@ -354,12 +354,11 @@ type Daemon struct {
 type Maintenance struct {
 	// RotateActivities is how often the daemon trims the activity trail.
 	//
-	// It is that trail's only bound. The interval was 30d when a second, write-triggered rotate
-	// ran off the MCP handler's append counter - but a counter can only bound the producer that
-	// owns it, and an agent hook is a short-lived process with nowhere to keep one, so a
-	// hook-fed trail was bounded by nothing at all. With that path removed this job owns
-	// rotation outright, and it runs hourly because a rotate on an already-small trail costs
-	// one stat.
+	// It is that trail's only bound, so this job owns rotation outright, and it runs hourly
+	// because a rotate on an already-small trail costs one stat. A write-triggered rotate
+	// running off a producer's own append counter cannot share the job: a counter only bounds
+	// the producer that owns it, and an agent hook is a short-lived process with nowhere to
+	// keep one, so a hook-fed trail would be bounded by nothing at all.
 	RotateActivities time.Duration `json:"rotate_activities" yaml:"rotate_activities"` // trim the activity trail; default 1h (its only bound)
 	RotateLogs       time.Duration `json:"rotate_logs" yaml:"rotate_logs"`             // trim the run-log journals; default 7d (their only bound, so weekly)
 	SyncGraph        time.Duration `json:"sync_graph" yaml:"sync_graph"`               // reconcile the graph; default 6h (a safety net behind the VCS hook)

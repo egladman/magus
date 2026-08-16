@@ -120,9 +120,9 @@ func TestLedgerTool(t *testing.T) {
 		assert.Contains(t, err.Error(), "list, put, clear")
 	})
 
-	// A field of the wrong type used to be dropped while state and read_only errored, so
-	// a client sending goal=3 was told its put succeeded and got a row without the field
-	// it thought it wrote. Every reader answers the same way now.
+	// Every reader answers a wrong-typed field the same way. Dropping one while state and
+	// read_only error would tell a client sending goal=3 that its put succeeded and hand
+	// back a row without the field it thought it wrote.
 	for name, params := range map[string]map[string]any{
 		"a non-string goal":            {"op": "put", "id": "unit-typed", "goal": 3},
 		"a non-string tier":            {"op": "put", "id": "unit-typed", "tier": true},

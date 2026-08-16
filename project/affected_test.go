@@ -146,11 +146,11 @@ func reachedProtoWorkspace(protoSources ...string) *types.Workspace {
 	}
 }
 
-// TestSeedsForFileReachingGlobSeedsBesideTheContainmentOwner is the case containment
-// used to swallow: a file inside proto/ moves docs/'s cache key through its reaching
-// glob, so BOTH seed. Answering with the owner alone left docs building against a stale
-// key, and it reported the file as declared without checking whether the owner declares
-// anything - the two halves of the same short circuit.
+// TestSeedsForFileReachingGlobSeedsBesideTheContainmentOwner is the case a containment-only
+// answer swallows: a file inside proto/ moves docs/'s cache key through its reaching glob, so
+// BOTH seed. Answering with the owner alone leaves docs building against a stale key, and
+// reports the file as declared without checking whether the owner declares anything - the two
+// halves of the same short circuit.
 func TestSeedsForFileReachingGlobSeedsBesideTheContainmentOwner(t *testing.T) {
 	t.Parallel()
 	idx := newProjectIndex(t.Context(), reachedProtoWorkspace("**/*.proto"))

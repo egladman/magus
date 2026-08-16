@@ -73,9 +73,9 @@ func TestAssemblePackages_DisagreeingPinsAreFlagged(t *testing.T) {
 }
 
 // TestAssemblePackages_DirectAnywhereIsDirect pins the fold direction on the indirect
-// attr, which the first version of this file got backwards. The attr answers "is this
-// ours to bump", so one project choosing a dependency deliberately settles it even when
-// every other project merely inherited the same package transitively.
+// attr, which is easy to write backwards. The attr answers "is this ours to bump", so one
+// project choosing a dependency deliberately settles it even when every other project
+// merely inherited the same package transitively.
 func TestAssemblePackages_DirectAnywhereIsDirect(t *testing.T) {
 	t.Parallel()
 	s := assemblePackages(map[string][]types.KnowledgePackage{

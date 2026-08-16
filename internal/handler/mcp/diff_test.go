@@ -54,8 +54,8 @@ func invoke(t *testing.T, tool *diffTool, params map[string]any) (spells.InvokeR
 	return tool.Invoke(context.Background(), spells.InvokeRequest{Params: params})
 }
 
-// The gap that made every other capability unusable: comment and suggest take a 0-based hunk
-// index that op=state never showed, so the coordinate had to be guessed.
+// What makes every other capability usable: comment and suggest take a 0-based hunk index,
+// and an op=state that did not show one would leave the coordinate to be guessed.
 func TestStateCarriesThePatchAndItsHunks(t *testing.T) {
 	tool := newDiffTool(t, &fakeDiffSrc{patch: agentPatch})
 

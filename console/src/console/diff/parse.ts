@@ -111,9 +111,9 @@ export function parsePatch(patch: string): DiffFile[] {
     //
     // The open hunk counts. Hunks move into cur.hunks only when one closes, so at the `---`
     // that starts the SECOND file of a bare patch the first file's sole hunk is still in
-    // flight and cur.hunks is empty - reading that as "no hunks yet" made this line
-    // overwrite file one's path instead of starting file two, and the patch parsed as a
-    // single file.
+    // flight and cur.hunks is empty - reading that as "no hunks yet" makes this line
+    // overwrite file one's path instead of starting file two, and the whole patch parses as
+    // a single file.
     if (line.startsWith("--- ") && (!cur || cur.hunks.length > 0 || hunk !== null)) {
       closeFile();
       cur = newFile({ oldPath: stripPathPrefix(line.slice(4)), path: "" });

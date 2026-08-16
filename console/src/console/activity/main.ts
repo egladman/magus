@@ -345,7 +345,7 @@ export function activate(host: HTMLElement): () => void {
     // lib/daemon's "did we adopt this origin" flag is PER-BUNDLE state: the shell setting it
     // does not make it true in here, and daemonAttach then returns null on a console served by
     // that very daemon. Without this the surface works only after the dashboard has persisted a
-    // host to localStorage, which is why it looked fine.
+    // host to localStorage, which is the shape of bug that looks fine on the developer's machine.
     adoptDaemonOrigin();
     if (wantsDemo(params)) {
       render(demoEvents(Date.now()));

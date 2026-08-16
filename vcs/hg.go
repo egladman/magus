@@ -225,15 +225,14 @@ func (v hgVCS) Tags(ctx context.Context, dir, pattern string) ([]types.VCSTag, e
 // short node, author name/email, the record date (RFC 3339), parents, and the
 // full message. \0 is the field delimiter Mercurial converts to NUL.
 //
-// Parents are {p1node} {p2node} and NOT `{parents % "{node} "}`, which is what this used
-// and which reports NOTHING for ordinary linear history: Mercurial's `parents` keyword
-// filters through meaningfulparents, so it lists nodes only for a merge or after a
-// non-linear update. Every plain hg commit therefore came back with Parents nil - which
-// reads as a root commit at the Buzz boundary, and made `len(Parents) > 1` merge detection
-// permanently false. {p2node} is all zeros off a merge and parseCommit's parents() already
-// drops an all-zero id. Verified against both hg and sl, which is what lets the two share
-// this constant: sl's `parents` keyword DOES report linear parents, so the bug was
-// invisible from the Sapling side.
+// Parents are {p1node} {p2node} and NOT `{parents % "{node} "}`, which reports NOTHING for
+// ordinary linear history: Mercurial's `parents` keyword filters through meaningfulparents,
+// so it lists nodes only for a merge or after a non-linear update. Every plain hg commit
+// would come back with Parents nil - which reads as a root commit at the Buzz boundary, and
+// makes `len(Parents) > 1` merge detection permanently false. {p2node} is all zeros off a
+// merge and parseCommit's parents() already drops an all-zero id. Verified against both hg
+// and sl, which is what lets the two share this constant: sl's `parents` keyword DOES report
+// linear parents, so the trap is invisible from the Sapling side.
 const hgCommitTemplate = `{node}\0{node|short}\0{person(author)}\0{email(author)}\0{date|rfc3339date}\0{p1node} {p2node}\0{desc}`
 
 func (v hgVCS) FindCommit(ctx context.Context, dir, rev string) (types.Commit, error) {
@@ -642,8 +641,8 @@ func (v hgVCS) IgnoredPaths(ctx context.Context, root string, paths []string) (m
 
 // The capability ladder below brings hg level with git and sl. Every command was verified
 // against Mercurial 7.x rather than ported from sapling.go on the assumption that a fork
-// keeps its parent's behavior - which this session established it does not, in both
-// directions.
+// keeps its parent's behavior: Sapling and Mercurial diverge in both directions, and the
+// notes on the individual methods say where.
 var (
 	_ types.RemoteReporter      = hgVCS{}
 	_ types.DefaultRefReporter  = hgVCS{}

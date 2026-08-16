@@ -1,12 +1,10 @@
 // syntax.ts - a small, dependency-free tokenizer for diff line text.
 //
 // WHY HAND-ROLLED. The console is served under a strict CSP with no CDN and no external
-// script origin, so highlighting is a BUNDLED tokenizer or it does not exist. It did not
-// exist: the original scoping wrote it off, and a diff viewer whose whole job is making a
-// change readable rendered every language as undifferentiated text. A full grammar engine
-// (Prism, highlight.js, Shiki) is tens to hundreds of kilobytes shipped into a surface that
-// already ships a virtualizer, and it buys precision this context cannot use - a diff line is
-// a FRAGMENT, so no tokenizer can be correct about it anyway (see below).
+// script origin, so highlighting is a BUNDLED tokenizer or it does not exist. A full grammar
+// engine (Prism, highlight.js, Shiki) is tens to hundreds of kilobytes shipped into a surface
+// that already ships a virtualizer, and it buys precision this context cannot use - a diff
+// line is a FRAGMENT, so no tokenizer can be correct about it anyway (see below).
 //
 // WHAT IT DELIBERATELY DOES NOT DO. A diff line has no context: the hunk above it may be
 // missing, so an unterminated block comment, a template literal spanning lines, or a here-doc
@@ -19,8 +17,8 @@
 // from words.ts - syntax owns the foreground colour, emphasis owns the background - so the two
 // signals never fight over the same property.
 
-/// Token classes. Kept few on purpose: more classes means more palette, and a diff already
-/// spends its colour budget on add/delete.
+// Token classes. Kept few on purpose: more classes means more palette, and a diff already
+// spends its colour budget on add/delete.
 export type TokenClass = "kw" | "str" | "num" | "com" | "fn" | "";
 
 export interface Token {
@@ -123,7 +121,7 @@ const BY_EXTENSION: Record<string, Language> = {
   md: "markdown",
 };
 
-/// languageFor maps a path to a tokenizer, or "none" when magus has no business guessing.
+// languageFor maps a path to a tokenizer, or "none" when magus has no business guessing.
 export function languageFor(path: string): Language {
   const base = path.slice(path.lastIndexOf("/") + 1);
   if (base === "magusfile.buzz" || base.endsWith(".buzz")) return "buzz";
@@ -142,8 +140,8 @@ function blockCommentLang(lang: Language): boolean {
   return lang === "go" || lang === "ts" || lang === "rust" || lang === "css";
 }
 
-/// tokenize splits one line into non-overlapping ranges, in order. Ranges with class "" are
-/// omitted: the renderer treats any gap as plain text, so the common case allocates nothing.
+// tokenize splits one line into non-overlapping ranges, in order. Ranges with class "" are
+// omitted: the renderer treats any gap as plain text, so the common case allocates nothing.
 export function tokenize(text: string, lang: Language): Token[] {
   if (lang === "none" || text === "") return [];
   const keywords = new Set(KEYWORDS[lang] ?? []);
@@ -177,7 +175,7 @@ export function tokenize(text: string, lang: Language): Token[] {
     // one cross-line inference worth making. Every convention in every language here continues
     // a block comment on the following lines, so an opener with no closer is a comment for the
     // rest of the line with near-certainty - and this codebase is dense with long comment
-    // blocks, so refusing to colour them left the most common thing on screen unstyled.
+    // blocks, so refusing to colour them leaves the most common thing on screen unstyled.
     if (blockCommentLang(lang) && text.startsWith("/*", i)) {
       const close = text.indexOf("*/", i + 2);
       out.push({ start: i, end: close < 0 ? text.length : close + 2, cls: "com" });

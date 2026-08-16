@@ -335,9 +335,9 @@ func RootGlob(projectPath, glob string) string {
 
 // MatchesAnyGlob reports whether a workspace-relative path matches any of the
 // workspace-rooted globs - the question every consumer of [Project.DeclaredGlobs] asks,
-// so it lives beside the rooting rather than once per caller. It was three identical
-// helpers (affected attribution, doctor's standing check, `magus describe file`), which
-// is three places for the matcher family to drift from the cache's.
+// so it lives beside the rooting rather than once per caller. The three callers (affected
+// attribution, doctor's standing check, `magus describe file`) would otherwise be three
+// places for the matcher family to drift from the cache's.
 //
 // It TOLERATES an unparsable pattern, which then matches nothing - the same thing the
 // cache walk does with one. Tolerance is the right default (a bad glob must not fail a
@@ -379,10 +379,9 @@ func InvalidGlobs(globs []string) []string {
 // attribution asks before falling back to directory containment, and the one doctor
 // asks about the tree standing still. The rooting goes through RootGlob, which is also
 // what the cache step and `magus describe file` root with, so the three agreeing is a
-// shared function rather than three parallel implementations that happened to match -
-// they did not: this one and the cache both concatenated, so a reaching "../" glob
-// resolved to a path neither could match, while the missing-dependency check joined the
-// same glob with filepath.Join and resolved it correctly.
+// shared function rather than three parallel implementations that happen to match.
+// Measured, they do not: plain concatenation leaves a reaching "../" glob at a path
+// nothing can match, while joining the same glob with filepath.Join resolves it.
 //
 // Dedup here is string equality on the ROOTED form, so two spellings that resolve to
 // one path collapse to one entry - a project-wide "../proto/**" and a per-target

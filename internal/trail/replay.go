@@ -34,11 +34,11 @@ type Touch struct {
 	// Ran are the PROGRAMS the session ran before the write, most recent first and capped -
 	// "go", "grep", "perl", not their arguments.
 	//
-	// Arguments are dropped, and that is the whole point of this field's shape. It used to
-	// carry the raw command line, which made the trail a verbatim record of everything an
-	// agent typed: an `op=state` response was observed carrying a live daemon bearer token in
-	// a `curl -H "Authorization: Bearer ..."`, plus multi-hundred-line heredocs and whole
-	// commit messages. Transcript one field up states the rule this broke - "A POINTER, never
+	// Arguments are dropped, and that is the whole point of this field's shape. Carrying the
+	// raw command line makes the trail a verbatim record of everything an agent typed: an
+	// `op=state` response was observed carrying a live daemon bearer token in a
+	// `curl -H "Authorization: Bearer ..."`, plus multi-hundred-line heredocs and whole
+	// commit messages. Transcript one field up states the rule that breaks - "A POINTER, never
 	// content ... the expensive and sensitive detail stays where the host already put it" -
 	// and a review payload is read by every MCP client, so an agent asked to summarise it
 	// reproduces whatever is in there. The program name is the part that explains the edit;
@@ -90,7 +90,7 @@ func Replay(root, base string, paths []string, limit int) map[string][]Touch {
 	// observations - which is the normal shape, since an agent reads several files and then
 	// writes one, all inside a millisecond - lands on identical timestamps, and a stable sort
 	// over ties preserves whatever order it was handed. ReadRecent hands back newest-first, so
-	// sorting by Ts silently walked the whole thing backwards and every read looked like it
+	// sorting by Ts silently walks the whole thing backwards and every read looks like it
 	// happened after the write it explained.
 	for i, j := 0, len(events)-1; i < j; i, j = i+1, j-1 {
 		events[i], events[j] = events[j], events[i]

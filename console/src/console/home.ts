@@ -131,9 +131,9 @@ const SURFACE_ICONS: Record<string, string> = {
   // SLOT (like the gear) rather than an inner element: the page and its prose must settle together.
   notes:
     '<path d="M13.6 3.1 7.4 4.8a2 2 0 0 0-1.4 2.45l3 11a2 2 0 0 0 2.45 1.4l6.8-1.85a2 2 0 0 0 1.4-2.45L17.2 6.6z"/><path d="m13.6 3.1 1 3.6 3.6-1"/><path d="m10.5 11.8 5-1.35"/><path d="m11.4 15.1 3.4-.9"/>',
-  // Shortcuts: a keyboard. It replaced a lightning bolt, which stood for "energy" back when this card
-  // was called Actions; against the new name a bolt reads as "fast", which is the Palette's job, not
-  // this surface's. The spacebar presses on hover. (Key is still the "actions" pageId - see main.ts.)
+  // Shortcuts: a keyboard, deliberately not a lightning bolt - a bolt reads as "fast", which is the
+  // Palette's job, not this surface's. The spacebar presses on hover. (Key is still the "actions"
+  // pageId - see main.ts.)
   actions:
     '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01"/><path data-motion="press" d="M8.5 14h7"/>',
   // Settings: a proper cog (not the sun-like spoked glyph); the whole icon turns on hover.

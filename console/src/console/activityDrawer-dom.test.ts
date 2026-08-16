@@ -131,8 +131,8 @@ test("destroy removes the panel, and a destroyed drawer stays destroyed", () => 
 });
 
 // The dismissal listeners are on document rather than inside the panel, so a drawer dropped without
-// destroy() left a pair behind per mount. What that would cost is what this pins: the events a live
-// drawer answers are answered ONCE, by the live one.
+// destroy() leaves a pair behind per mount. What that would cost is what this pins: the events a
+// live drawer answers are answered ONCE, by the live one.
 test("a drawer mounted after a destroy is the only one answering", () => {
   mountActivityDrawer().destroy();
   const live = mountActivityDrawer();

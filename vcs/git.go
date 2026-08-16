@@ -80,10 +80,10 @@ func (v gitVCS) ChangedFiles(ctx context.Context, dir, base string) ([]string, e
 	}
 	// core.quotePath=false on BOTH probes, for the reason DirtyFiles sets it: git otherwise
 	// renders a path outside ASCII as a C-quoted, backslash-escaped literal
-	// ("uni/caf\303\251.md"). This is the one place that omitted it, and the failure is
-	// silent in the worst way - project.normalizeFiles only trims and slash-converts, so
-	// the quoted string matches no source glob, and the project owning that file is simply
-	// never rebuilt. No diagnostic, no error; `magus affected` just under-builds forever.
+	// ("uni/caf\303\251.md"). Omitting it on either probe fails silently in the worst way -
+	// project.normalizeFiles only trims and slash-converts, so the quoted string matches no
+	// source glob, and the project owning that file is simply never rebuilt. No diagnostic,
+	// no error; `magus affected` just under-builds forever.
 	out, err := vcsOutput(ctx, dir, "git", "-c", "core.quotePath=false", "diff", "--name-only", mergeBase)
 	if err != nil {
 		return nil, fmt.Errorf("git diff: %w", err)
@@ -454,8 +454,8 @@ func (v gitVCS) DirtyDiff(ctx context.Context, dir string, paths []string) (stri
 	// core.quotePath=false for the same reason DirtyFiles sets it: a non-ASCII path
 	// otherwise comes back C-quoted.
 	// A repository with no commits has no HEAD to diff against: `git diff HEAD` exits 128
-	// there, where the bare `git diff` this replaced returned empty. Nothing is committed
-	// for the working tree to differ FROM, so an empty diff is the answer.
+	// there, where a bare `git diff` returns empty. Nothing is committed for the working
+	// tree to differ FROM, so an empty diff is the answer.
 	//
 	// The check runs BEFORE the diff rather than as a rescue afterwards. Rescuing would
 	// mean returning nil from an error branch, which cannot distinguish an unborn HEAD from
@@ -504,13 +504,13 @@ func (v gitVCS) TrackedFiles(ctx context.Context, dir string, paths []string) ([
 // IgnoredFiles implements types.IgnoredFileReporter, returning the given paths the ignore
 // rules cover, AS GIVEN.
 //
-// It shares IgnoredPaths' probe, and that is a bug fix rather than tidying. The two were
-// separate implementations of nearly the same question, named one letter apart on the same
-// type, returning different shapes - and giving OPPOSITE answers: only IgnoredPaths passed
-// --no-index, so for a file that is tracked AND matches an ignore rule, IgnoredPaths said
+// It shares IgnoredPaths' probe, and the sharing is what keeps the two from disagreeing.
+// They ask nearly the same question, are named one letter apart on the same type, and return
+// different shapes; separate probes gave OPPOSITE answers, because only IgnoredPaths passed
+// --no-index, so for a file that is tracked AND matches an ignore rule IgnoredPaths said
 // "ignored" and IgnoredFiles said "not ignored". Measured on a repo tracking keep.log under
-// a *.log rule. A caller reaching for the wrong one of two nearly identical names got a
-// wrong answer rather than a compile error.
+// a *.log rule. Reaching for the wrong one of two nearly identical names is not a compile
+// error, so the divergence surfaces only as a wrong answer.
 //
 // The rules-based answer is the one kept, because it is what both callers actually want:
 // doc indexing asks "should I skip this", and conflict resolution asks whether a generated

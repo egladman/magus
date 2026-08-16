@@ -400,10 +400,10 @@ func TestRotate_ExportedWrapperUnderCapKeepsAll(t *testing.T) {
 	}
 }
 
-// TestRotate_TrimsAnOverCapTrail is what the deleted RotateOnCount test used to cover: that a
-// rotate actually trims, and to the right window. It reaches Rotate directly now, because the
-// daemon's maintenance schedule is the only thing that triggers one - there is no longer a
-// write-driven path, and the counter that drove it belonged to a single producer.
+// TestRotate_TrimsAnOverCapTrail covers that a rotate actually trims, and to the right window.
+// It reaches Rotate directly because the daemon's maintenance schedule is the only thing that
+// triggers one: there is no write-driven path, since a counter can only bound the producer that
+// owns it.
 func TestRotate_TrimsAnOverCapTrail(t *testing.T) {
 	dir := t.TempDir()
 	seedEvents(t, dir, maxEvents+5) // over the cap so a rotate is observable

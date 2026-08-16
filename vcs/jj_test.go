@@ -36,14 +36,14 @@ func TestParseJJConflicts(t *testing.T) {
 
 // TestConflictsDoesNotSwallowRealFailures pins the stderr-based discriminator.
 //
-// The check used to read `out`, which is STDOUT - and vcsOutputRaw returns ("", err) on any
-// failure, so `strings.Contains(out, "No conflicts") || out == ""` was unconditionally true
-// on the error path and the real-failure branch below it was unreachable. jj missing from
-// PATH, a directory that is not a jj repo, a cancelled context and a permission error all
-// reported "no conflicts", and `magus vcs resolve` then called the merge settled.
+// Reading `out` - STDOUT - cannot discriminate: vcsOutputRaw returns ("", err) on any
+// failure, so `strings.Contains(out, "No conflicts") || out == ""` is unconditionally true on
+// the error path and the real-failure branch below it is unreachable. jj missing from PATH, a
+// directory that is not a jj repo, a cancelled context and a permission error would all report
+// "no conflicts", and `magus vcs resolve` would then call the merge settled.
 //
 // A plain temp directory is the cheapest way to provoke a genuine failure; jj writes its
-// "No conflicts found" notice to stderr, which is where the real discriminator now looks.
+// "No conflicts found" notice to stderr, which is where the discriminator looks.
 func TestConflictsDoesNotSwallowRealFailures(t *testing.T) {
 	if _, err := exec.LookPath("jj"); err != nil {
 		t.Skip("jj not available")

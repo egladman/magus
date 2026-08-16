@@ -756,10 +756,10 @@ func diffUsage(w *os.File) {
 	fmt.Fprintln(w, "reading a machine's restatement of a change made elsewhere, so the source edit")
 	fmt.Fprintln(w, "is what to read.")
 	fmt.Fprintln(w, "")
-	// Name the ranking key exactly, and name what is NOT one. The previous wording listed
-	// reach, public surface, and coverage as "the evidence behind its rank"; only reach ranks,
-	// so a reader who saw a hot file sitting eighth concluded the ranking had weighed churn and
-	// dismissed it. Printing a number beside a rank it did not earn teaches the wrong model.
+	// Name the ranking key exactly, and name what is NOT one. Only reach ranks; listing public
+	// surface and coverage as "the evidence behind its rank" has a reader who sees a hot file
+	// sitting eighth conclude the ranking weighed churn and dismissed it. Printing a number
+	// beside a rank it did not earn teaches the wrong model.
 	fmt.Fprintln(w, "The order is: declared outputs last, then the widest reach first - how many")
 	fmt.Fprintln(w, "files reference the most-referenced symbol the file changed. Reach needs a")
 	fmt.Fprintln(w, "symbol index; without one there is no ranking key at all, and diff says so")
@@ -827,7 +827,8 @@ func diffCountsLine(rev types.Diff, showGenerated bool) string {
 		line += fmt.Sprintf(", %d generated %s", gen, state)
 	}
 	if n := len(rev.SeedProjects); n > 0 {
-		// "rebuild" carried no noun and readers could not tell what the count was OF.
+		// Both halves name the noun: a bare "N rebuild" leaves the reader guessing what is
+		// being counted.
 		line += fmt.Sprintf("; %d projects edited, %d projects rebuild", n, len(rev.AffectedProjects))
 	}
 	return line

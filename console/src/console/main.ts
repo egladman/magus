@@ -177,10 +177,10 @@ const SURFACES: Launchable[] = [
   { pageId: "dashboard", label: "Dashboard", hint: "What magus is doing right now" },
   {
     pageId: "activity",
-    // "Trail" was the whole problem: "audit trail" is the phrase, and it framed this as governance,
-    // which it is not. The bare noun matches the service behind it (magus.activity.v1) and survives
-    // what is coming - once sessions group and replay, and an agent's reasoning hangs off the command
-    // it led to, "activity" still covers it where "audit trail" would fight it.
+    // The bare noun, never "Trail": "audit trail" is the phrase it summons, and that frames the
+    // surface as governance, which it is not. It also matches the service behind it
+    // (magus.activity.v1) and survives what is coming - once sessions group and replay, and an
+    // agent's reasoning hangs off the command it led to, "activity" still covers it.
     label: "Activity",
     hint: "Everything that happened here, and what led to it",
   },
@@ -191,11 +191,11 @@ const SURFACES: Launchable[] = [
   // Not "what people wrote about this workspace" - that describes the storage. A note's whole point is
   // that someone who was here before you left it for you, at the spot where it matters.
   { pageId: "notes", label: "Notes", hint: "What people left here for whoever comes next" },
-  // pageId stays "actions" (it is an identifier, and every keymap/route/test keys on it); the LABEL is
-  // Shortcuts. "Actions" collided twice - with the Command Palette, which was called the action bar, and
-  // with the Activity tile's old "a history of magus actions". Prior art splits these two roles cleanly and
-  // this surface is the second one: VS Code's Keyboard Shortcuts editor (and GNOME's, and KDE's) is the
-  // list of every command with its binding, while the palette is the thing that runs one.
+  // pageId stays "actions" (it is an identifier, and every keymap/route/test keys on it) while the
+  // LABEL is Shortcuts, because "actions" collides with both the Command Palette and the Activity
+  // feed. Prior art splits the two roles cleanly and this surface is the second one: VS Code's
+  // Keyboard Shortcuts editor (and GNOME's, and KDE's) is the list of every command with its
+  // binding, while the palette is the thing that runs one.
   {
     pageId: "actions",
     label: "Shortcuts",
@@ -263,11 +263,10 @@ function setBuild(version: string, fingerprint: string): void {
 function loadBuildInfo(): void {
   const params = parseHash();
   if (wantsDemo(params)) {
-    // v0.0.0 on purpose. There is no daemon in the demo, so there is no build to report,
-    // and the previous literal (v0.2.0, commit a1b2c3d, a fixed 2026 date) invented all
-    // three - then drifted a minor version behind the real binary, so the showcase read
-    // as an abandoned project. A zero version cannot go stale and does not claim a commit
-    // that never existed.
+    // v0.0.0 on purpose. There is no daemon in the demo, so there is no build to report, and a
+    // plausible-looking literal would invent a version, a commit and a date - then drift behind
+    // the real binary, so the showcase reads as an abandoned project. A zero version cannot go
+    // stale and claims no commit that never existed.
     setBuild("v0.0.0", "synthesized demo data; no daemon is connected");
     return;
   }
@@ -730,8 +729,8 @@ export function startConsole(
 ): void {
   // The console's own service worker, registered by the SHELL so every session has one - it precaches
   // this shell and its surface bundles, and Chromium's install-prompt algorithm still requires a fetch
-  // handler. It used to be registered only by the dashboard, so a console that never opened that surface
-  // had neither an offline shell nor an install offer.
+  // handler. Registering it from one surface instead would leave a console that never opened that
+  // surface with neither an offline shell nor an install offer.
   void registerServiceWorker(new URL("./sw.js", import.meta.url));
   // Snapshot the boot fragment BEFORE adoptDaemonOrigin consumes/strips the #token= (below), so the
   // attach-visibility notification further down can still tell it booted attached and name the port.
@@ -1218,7 +1217,8 @@ export function startConsole(
   });
   document.body.append(commandBar.el);
   registerCommand({
-    // id is an identifier and stays; only the label moved to the Command Palette naming.
+    // The id is an identifier the keymap and the tests key on, so it keeps the old actionBar
+    // spelling while the label follows the Command Palette naming.
     id: "console.actionBar.open",
     label: "Command Palette",
     group: "General",

@@ -544,11 +544,11 @@ func checkVCSBaseRef(ctx context.Context, root string, opts types.VCSOptions) ty
 	defer cancel()
 
 	// The driver is ASKED whether the ref resolves, rather than this check hand-writing a
-	// probe per backend. It used to switch on res.Name over four literal names and build
-	// the argv itself, which made it the only place outside vcs/ that shells out to a VCS
-	// binary - and made a NEW backend degrade to "no probe available; skipped", i.e. a
-	// silent pass for the one check whose whole job is catching an unreachable base ref.
-	// FindCommit is on the required interface, so every backend answers it by construction.
+	// probe per backend. Switching on res.Name over four literal names and building the argv
+	// here would make this the only place outside vcs/ that shells out to a VCS binary, and
+	// would degrade a NEW backend to "no probe available; skipped" - a silent pass for the
+	// one check whose whole job is catching an unreachable base ref. FindCommit is on the
+	// required interface, so every backend answers it by construction.
 	if _, err := res.VCS.FindCommit(ctx, root, res.Base); err != nil {
 		return types.DoctorCheck{
 			Name:    "vcs base ref",

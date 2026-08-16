@@ -49,12 +49,12 @@ type diffSource interface {
 
 // diffState is what op=state returns: the session, plus the change it describes.
 //
-// The session is EMBEDDED so every field it used to carry stays exactly where it was. The
-// additions are the ones that make the rest of the surface usable: an agent is asked for a
-// 0-based hunk index by comment and suggest, and until now the tool never showed it one - so
-// the coordinate had to be guessed, and nothing checked the guess. Hunks also make Viewed
-// joinable, which is what its own description promises ("it tells you what they have already
-// seen, so you can skip it") and could not deliver.
+// The session is EMBEDDED, so every field it carries sits at the top level of the response.
+// The fields beside it are what make the rest of the surface usable: comment and suggest ask
+// an agent for a 0-based hunk index, so a response that showed none would leave the coordinate
+// to be guessed with nothing checking the guess. Hunks also make Viewed joinable, which is
+// what its own description promises ("it tells you what they have already seen, so you can
+// skip it").
 type diffState struct {
 	*types.DiffSession
 	// Patch is the unified diff the hunks below index into.
@@ -213,11 +213,11 @@ func (t *diffTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells
 		if body == "" || path == "" {
 			return spells.InvokeResponse{}, errors.New("mcp: comment needs path and body")
 		}
-		// agent_name is recorded here as well as on suggest. It was documented on the tool
-		// without an op qualifier and read only by suggest, so a comment silently dropped it -
-		// which made two agents in one session byte-identical in attribution, and neither the
-		// human nor the other agent could tell them apart. Attribution only: nothing branches
-		// on it, and it can never override the transport-stamped author below.
+		// agent_name is recorded here as well as on suggest, because the tool documents it
+		// without an op qualifier. Reading it only on suggest would have a comment silently
+		// drop it, leaving two agents in one session byte-identical in attribution with
+		// neither the human nor the other agent able to tell them apart. Attribution only:
+		// nothing branches on it, and it can never override the transport-stamped author below.
 		hunk := int(paramFloat(req.Params, "hunk", -1))
 		if verr := t.validateAnchor(ctx, path, hunk); verr != nil {
 			return spells.InvokeResponse{}, verr
@@ -293,9 +293,9 @@ func (t *diffTool) state(ctx context.Context, sess *types.DiffSession) (diffStat
 
 // validateAnchor refuses a coordinate the changeset does not contain.
 //
-// The surface used to enforce the argument it could check locally (a suggestion's reason) and
-// silently accept the one that needed the changeset, so comments landed at plausible-looking
-// indices that had never been verified - on files that were sometimes not in the change at
+// Without it the surface enforces only the argument it can check locally (a suggestion's
+// reason) and silently accepts the one that needs the changeset, so comments land at
+// plausible-looking indices nothing verified, on files that are sometimes not in the change at
 // all. A refusal an agent can read and correct is worth more than a stored guess.
 //
 // A file-level anchor (hunk < 0) is always valid: it means "this file", which needs no index.

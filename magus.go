@@ -791,7 +791,7 @@ func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
 	}
 	graph, gerr := m.KnowledgeGraphWithSymbols(ctx)
 	// indexed is the real question, and it is NOT "did a graph load". A graph loads fine with
-	// no symbol shards in it, so gating on a non-nil graph reported every file's reach as a
+	// no symbol shards in it, so gating on a non-nil graph reports every file's reach as a
 	// measured zero on exactly the workspaces that have no index - which is the collapse the
 	// nil is there to prevent. HasSymbols is the same predicate impact.Enrich gates its own
 	// overlays on, so the ranking and the overlays can never disagree about whether anyone
@@ -809,13 +809,14 @@ func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
 	// SeedProjects is documented as "the ones the author actually edited", so a project whose
 	// only changed file is a declared output does not belong in it - the whole premise of the
 	// fold is that a regenerated file is a machine's restatement, not an edit. Counting it
-	// meant one line folded files and un-folded projects in the same breath: a background
-	// regeneration moved "3 projects edited" to 6 while the read list stayed byte-identical.
+	// has one line folding files and un-folding projects in the same breath: measured, a
+	// background regeneration moves "3 projects edited" to 6 while the read list stays
+	// byte-identical.
 	//
 	// AffectedProjects deliberately keeps the FULL closure over every changed path, generated
 	// included, because a regenerated output really does invalidate a downstream cache key.
 	// The two numbers answer different questions - who wrote something, and what has to run -
-	// and conflating them was the bug.
+	// so they must not be conflated.
 	out.SeedProjects = authorEditedProjects(res.SeedProjects, out.Files)
 	out.AffectedProjects = res.AffectedProjects
 

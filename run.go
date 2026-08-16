@@ -182,9 +182,9 @@ func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) 
 
 // CharmsForCI returns charms with the write-granting ones removed, which is what a ci
 // run actually executes under. Exported because the CLI has to print the same set it
-// runs: the run header used to report the charms as RESOLVED, before RunCI stripped
-// them, so `magus run ci` announced "charms: rw" and then ran read-only. Whoever reads
-// that header is checking exactly this, so both sides read it from here.
+// runs: a header reporting the RESOLVED charms would announce "charms: rw" for
+// `magus run ci` and then run read-only, since RunCI strips them afterwards. Whoever
+// reads that header is checking exactly this, so both sides read it from here.
 func CharmsForCI(charms []string) []string {
 	return slices.DeleteFunc(slices.Clone(charms), func(s string) bool {
 		n := types.Normalize(s)
@@ -1658,13 +1658,12 @@ func (m *Magus) verifyReadOnly(ctx context.Context, dir, target string, fn func(
 	// cleanliness gate works under any backend.
 	//
 	// Resolved from the WORKSPACE ROOT with the workspace's own options, matching every
-	// other vcs.Resolve call site in the tree. Resolving from the project dir - which this
-	// did - detects a backend only when the marker sits in that exact directory, because
-	// claimsExist stats the path it is given and does not walk up. A project nested below
-	// an .hg/.sl/.jj root therefore matched nothing, fell through to the default git
-	// driver, and the gate then failed with "git could not report working-tree status" on
-	// a perfectly healthy Mercurial workspace. Passing empty options compounded it by
-	// ignoring a configured vcs.name / vcs.enabled.
+	// other vcs.Resolve call site in the tree. Resolving from the project dir instead detects
+	// a backend only when the marker sits in that exact directory, because claimsExist stats
+	// the path it is given and does not walk up. A project nested below an .hg/.sl/.jj root
+	// then matches nothing, falls through to the default git driver, and the gate fails with
+	// "git could not report working-tree status" on a perfectly healthy Mercurial workspace.
+	// Passing empty options compounds it by ignoring a configured vcs.name / vcs.enabled.
 	//
 	// The outcomes below are deliberately not collapsed, following the rule this file
 	// already applies to a missing ci target: "definitely absent" and "could not tell" are

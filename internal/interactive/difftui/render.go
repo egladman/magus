@@ -57,8 +57,8 @@ func Chrome(m *Model) int {
 // that differ - moving the cursor changes two lines and costs two lines of terminal traffic.
 //
 // colour is decided by the caller, from [tty.WantsColor], and is a parameter rather than
-// something read here so the model stays as testable as it is: false must produce the same bytes
-// this drew before there was a palette at all.
+// something read here so the model stays as testable as it is: false must produce the plain
+// frame, byte for byte, with no escape sequence anywhere in it.
 func Frame(m *Model, color bool) string {
 	if m.Overview() {
 		return overviewFrame(m)

@@ -69,7 +69,7 @@ export interface SurfaceInstance {
 // poll timer, a stream) also exposes setVisible so it can go quiet while its pane is backgrounded -
 // and it does so on the INSTANCE, never as a module export, because the console drives visibility
 // per PANE (tileView's applyVisibility calls each pane's controller). One switch shared by however
-// many mounts a bundle has cannot tell them apart: backgrounding one pane silenced another that was
+// many mounts a bundle has cannot tell them apart: backgrounding one pane silences another that is
 // still on screen.
 interface HostModule {
   activate(host: HTMLElement): SurfaceInstance | (() => void) | void;

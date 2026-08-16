@@ -165,7 +165,7 @@ func TestFsExistsDistinguishesAbsenceFromDenial(t *testing.T) {
 	})
 }
 
-// The per-backend prefix stripping this file used to test moved into the drivers, where
-// each one knows its own format instead of being keyed on its NAME - which silently gave a
-// backend outside the switch git's parsing. vcs.TestParityDirtyFilesReturnsPaths pins the
-// rule against every real binary; there is nothing left for std to strip.
+// The per-backend prefix stripping lives in the drivers, where each one knows its own format
+// instead of being keyed on its NAME - a switch on the name silently gives any backend
+// outside it git's parsing. vcs.TestParityDirtyFilesReturnsPaths pins the rule against every
+// real binary; there is nothing for std to strip.

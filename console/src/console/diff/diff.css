@@ -56,9 +56,9 @@
 }
 
 .console-diff-sidebar {
-  /* The panels were all transparent, so sidebar, toolbar and stream read as one sheet with a
-     single hairline between them. The stream keeps the primary surface because that is where
-     the tints have to register; the chrome around it steps back onto secondary. */
+  /* Left transparent, sidebar, toolbar and stream read as one sheet with a single hairline
+     between them. The stream keeps the primary surface because that is where the tints have to
+     register; the chrome around it steps back onto secondary. */
   background: var(--console-diff-panel);
   overflow-y: auto;
   border-inline-end: 1px solid var(--pf-t--global--border--color--default);
@@ -171,10 +171,9 @@
 
 /* Add and delete tint.
  *
- * These used to name --pf-t--global--background--color--status--{success,danger}--default,
- * which PatternFly does not define: the declarations resolved to transparent, so a diff
- * rendered as undifferentiated black text on white and the only thing separating an added
- * line from a removed one was the +/- glyph. The COLOUR tokens below do exist, and every use
+ * Mixed from the COLOUR tokens, NOT from --pf-t--global--background--color--status--*: those
+ * background tokens do not exist, so naming one resolves to transparent and the diff renders
+ * as undifferentiated text with only the +/- glyph separating added from removed. Every use
  * carries a literal fallback the way overrides.css does.
  *
  * Mixed against the surface rather than hardcoded, so the tint follows the theme in both
@@ -380,8 +379,8 @@
   gap: var(--pf-t--global--spacer--xs);
   padding-inline-start: 7ch;
   /* Secondary, not the highlight token. Highlight is a saturated yellow that in dark mode
-   * dominated the screen and dropped the text's contrast - and it was fighting for attention
-   * with the diff itself, which is what the reader actually came for. The coloured left border
+   * dominates the screen and drops the text's contrast - and it fights for attention with the
+   * diff itself, which is what the reader actually came for. The coloured left border
    * already says "this is a remark, and this is who wrote it", so the fill only has to
    * separate the row from the code around it. */
   background: var(--pf-t--global--background--color--secondary--default);
@@ -628,8 +627,8 @@
  * distinguishing added from removed, and a rainbow on top of that competes with the signal the
  * reader actually came for.
  *
- * Every value is a PatternFly token with a literal fallback, so the palette follows the theme
- * rather than needing a hand-maintained dark ramp. */
+ * The values come from the --console-syn-* tokens at the top of this file, which carry their own
+ * dark ramp - PatternFly has no syntax palette to borrow. */
 .console-diff-tok--kw {
   color: var(--console-syn-keyword);
   font-weight: 600;

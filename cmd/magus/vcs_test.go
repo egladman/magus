@@ -13,10 +13,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// The porcelain parse this file used to own now lives with the driver that produces those
-// lines: DirtyFiles returns paths, so there is nothing left here to parse. See
-// vcs.TestGitStatusPaths for the shape table and vcs.TestParityDirtyFilesReturnsPaths for
-// the cross-backend rule.
+// The porcelain parse lives with the driver that produces those lines: DirtyFiles returns
+// paths, so there is nothing here to parse. See vcs.TestGitStatusPaths for the shape table
+// and vcs.TestParityDirtyFilesReturnsPaths for the cross-backend rule.
 
 // TestSplitVCSVerb pins that the subcommand is found past a leading flag. Reading args[0]
 // alone let `magus vcs -q merge-driver ...` miss the merge-driver dispatch profile, which

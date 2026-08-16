@@ -6,9 +6,9 @@
 // refactor would most plausibly break:
 //
 //   - The EMPTY STATES stay apart. Per source: "no daemon", "the daemon has no route", and "the
-//     plan is empty" are three different facts, and only the last means no work exists. No daemon
-//     serves the delegation ledger yet, so the middle one is what a reader who asks for Declared
-//     meets - it has to name the route rather than showing a blank plan.
+//     plan is empty" are three different facts, and only the last means no work exists. The middle
+//     one is what a reader meets on any daemon predating the route, and it has to name the route
+//     rather than showing a blank plan.
 //   - WHICH SOURCE OPENS is decided by the data. A ledger with rows means an orchestration is in
 //     flight and Declared opens; anything else hands the surface to Run, which is what a person
 //     doing plain work came for. An explicit pick then sticks - the poll must not overrule it.
@@ -168,11 +168,10 @@ test("with no daemon configured it says that, rather than showing an empty plan"
   }
 });
 
-// The case every reader hits against a daemon that does not serve the delegation ledger - which is
-// every daemon today, the route being the one half of this surface that has no handler yet. A blank
-// plan here would read as "nothing was delegated", which is the one wrong answer that costs
-// something: they stop looking. Reached by asking for Declared, because a ledger with no rows is
-// exactly the case that hands the surface to Run.
+// What a reader meets against any daemon predating the delegation ledger. A blank plan here would
+// read as "nothing was delegated", which is the one wrong answer that costs something: they stop
+// looking. Reached by asking for Declared, because a ledger with no rows is exactly the case that
+// hands the surface to Run.
 test("a daemon with no ledger route names the missing endpoint", async () => {
   serveLedger(() => ({ ok: false, status: 404 }));
   const { host, teardown } = mount();
@@ -413,9 +412,8 @@ test("an empty ledger hands the surface to the run plan", async () => {
   }
 });
 
-// The ledger route is the one this tree does not serve, so this is what a reader meets today. The
-// run plan is still what opens, because a secondary endpoint that is missing has no business taking
-// the surface over.
+// The run plan is still what opens when the ledger route is missing: a secondary endpoint that is
+// not there has no business taking the surface over.
 test("a ledger route that is not there hands the surface to the run plan too", async () => {
   serve({ ledger: () => ({ ok: false, status: 404 }), plan: okPlan(RUN_BODY) });
   const { host, teardown } = mount();
@@ -765,8 +763,8 @@ test("a ledger that answers after the switch to Run cannot paint the run view", 
 });
 
 // Visibility is per PANE - the console calls it on each pane's own controller - so one Plan pane
-// going quiet says nothing about another. A module-wide switch fanned every call out to every mount,
-// which showed up as the pane that came back ALSO refreshing the one that had not.
+// going quiet says nothing about another. A module-wide switch fans every call out to every mount,
+// which shows up as the pane that came back ALSO refreshing the one that had not.
 test("hiding one Plan pane leaves the other alone", async () => {
   let plans = 0;
   serve({
@@ -793,9 +791,9 @@ test("hiding one Plan pane leaves the other alone", async () => {
   }
 });
 
-// The command ids are shared by every mount, so unregistering them per teardown took them away from
-// a pane that was still on screen - with two Plan panes open, closing either left the command bar
-// with no Plan commands at all.
+// The command ids are shared by every mount, so unregistering them per teardown takes them away
+// from a pane that is still on screen - with two Plan panes open, closing either leaves the command
+// bar with no Plan commands at all.
 test("closing one Plan pane leaves the commands with the pane still open", async () => {
   serve({ ledger: ok([]), plan: okPlan(RUN_BODY) });
   const a = mount();
@@ -839,8 +837,8 @@ test("closing the last Plan pane unregisters the commands", async () => {
 // ---- repainting around the reader ------------------------------------------
 
 // The detail sheet holds this surface's only link, and the poll rebuilds the surface every four
-// seconds. Gating the sheet on the plan's signature was not enough: the sheet draws from the
-// SELECTED node, so it was rebuilt on every tick and took the focused anchor with it.
+// seconds. Gating the sheet on the plan's signature alone is not enough: the sheet draws from the
+// SELECTED node, so it rebuilds on every tick and takes the focused anchor with it.
 test("a repaint that changes nothing leaves the focused output link where it is", async () => {
   serve({ ledger: ok([]), plan: okPlan(RUN_BODY) });
   const { host, teardown } = mount();
@@ -865,7 +863,7 @@ test("a repaint that changes nothing leaves the focused output link where it is"
 });
 
 // The other half of the same gate: what a row SAYS is part of what decides a repaint. With meta left
-// out of the signature, a unit whose tier changed under an unchanged state kept drawing the old one.
+// out of the signature, a unit whose tier changed under an unchanged state keeps drawing the old one.
 test("a changed tier repaints the row that carries it", async () => {
   let reads = 0;
   serve({

@@ -48,7 +48,7 @@ test("a closed block comment is exact", () => {
 });
 
 // The dominant shape in this codebase: long comment blocks whose opener is on another line, so
-// it cannot be derived from the hunk. Refusing to colour them left most of the screen unstyled.
+// it cannot be derived from the hunk. Refusing to colour them leaves most of the screen unstyled.
 test("an unclosed block comment colours to end of line", () => {
   const line = "  /* the opener, continuing below";
   assert.equal(only(line, tokenize(line, "go"), "com"), "/* the opener, continuing below");

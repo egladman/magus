@@ -186,7 +186,7 @@ type DiffFile struct {
 	// it walked - a file added in this change, or one untouched for the whole window.
 	//
 	// It is a ranking signal because absence of history is not the same as absence of risk,
-	// and the ordering treated it as though it were. Every other annotation here is derived
+	// and without it the ordering conflates the two. Every other annotation here is derived
 	// from a file's past, so a brand-new file collects no churn, no hotspot rank, no authors
 	// and no coverage, and sinks to the bottom on the strength of having no evidence. The one
 	// file in a real changeset whose tests did not compile was exactly that file. Nothing has
@@ -203,9 +203,9 @@ type DiffFile struct {
 	//
 	// NIL when no symbol index was loaded, and nil is DISTINCT from zero for the same reason
 	// Coverage and Churn are: "nothing references this" and "nobody looked" are different
-	// facts. It shipped as a plain int, so an unindexed workspace served `reach: 0` on every
-	// file - a valid-looking number that a fleet dashboard reads as "no change touches widely
-	// used code". DiffSurfaceUnknown already refuses that collapse; this is the same refusal
+	// facts. As a plain int an unindexed workspace serves `reach: 0` on every file - a
+	// valid-looking number that a fleet dashboard reads as "no change touches widely used
+	// code". DiffSurfaceUnknown already refuses that collapse; the pointer is the same refusal
 	// applied to the field the ordering actually turns on.
 	Reach *int `json:"reach" yaml:"reach"`
 }
@@ -508,10 +508,10 @@ func (r Diff) SortForReading() {
 //
 // False means every file's reach is unmeasured, so SortForReading had nothing to sort on and
 // the result is path order wearing a ranking's clothes. Every renderer MUST say so before
-// showing the list. This is the check that was missing: the review already emitted a Note
-// about the absent symbol index, but it named the missing OVERLAYS (callers, coverage) and
-// never the missing ORDER, and it printed after the list - by which point the reader had
-// already formed the belief that the first file was the most dangerous one.
+// showing the list. The review's Note about an absent symbol index does not cover this: it
+// names the missing OVERLAYS (callers, coverage) and never the missing ORDER, and it prints
+// after the list - by which point the reader has already formed the belief that the first
+// file is the most dangerous one.
 func (r Diff) Ranked() bool {
 	for _, f := range r.Files {
 		if f.Reach != nil {

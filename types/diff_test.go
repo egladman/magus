@@ -52,8 +52,9 @@ func TestSortForReadingKeepsGeneratedLast(t *testing.T) {
 	assert.Equal(t, []string{"src.go", "gen.json"}, paths(d))
 }
 
-// A file with no history is one nothing has exercised and nobody has reviewed. It used to sink
-// to the bottom precisely because it had collected no evidence.
+// A file with no history is one nothing has exercised and nobody has reviewed. Every other
+// annotation is derived from a file's past, so without this it sinks to the bottom precisely
+// because it has collected no evidence.
 func TestSortForReadingReadsAnUnseenFileSooner(t *testing.T) {
 	d := Diff{Files: []DiffFile{
 		{Path: "aaa-known.go", Role: DiffRoleSource},

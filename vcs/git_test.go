@@ -567,10 +567,10 @@ func TestStartMergeFailsOnUnknownRef(t *testing.T) {
 	require.Error(t, err)
 }
 
-// TestGitStatusPaths pins the porcelain parse, which moved here from cmd/magus when
-// DirtyFiles started returning paths. It is a unit table rather than a live-git test
-// because the shapes it covers - a rename, a C-quoted name, both status columns - are
-// awkward to provoke on demand and easy to state exactly.
+// TestGitStatusPaths pins the porcelain parse, which lives beside the driver that produces
+// those lines. It is a unit table rather than a live-git test because the shapes it covers -
+// a rename, a C-quoted name, both status columns - are awkward to provoke on demand and easy
+// to state exactly.
 func TestGitStatusPaths(t *testing.T) {
 	for name, tc := range map[string]struct {
 		lines []string
@@ -634,7 +634,7 @@ func TestTagsResolvesAnnotatedTagsToTheirCommit(t *testing.T) {
 // never rebuilt. No diagnostic, no error; `magus affected` just under-builds forever.
 //
 // Both probes are covered: the tracked path goes through `git diff`, the untracked one
-// through `git ls-files --others`, and only the first had the flag before.
+// through `git ls-files --others`, and the flag has to be on each of them.
 func TestChangedFilesKeepsNonASCIIPathsRaw(t *testing.T) {
 	repo := t.TempDir()
 	gitInitRepo(t, repo, map[string]string{"a.txt": "one\n", "uni/café.md": "x\n"})

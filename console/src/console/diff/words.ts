@@ -14,7 +14,7 @@
 // disagrees with the eye, produce confident nonsense; the cheap version is never wrong, only
 // sometimes coarse.
 
-/// A half-open [start, end) range of the line's text to emphasise.
+// A half-open [start, end) range of the line's text to emphasise.
 export interface Span {
   readonly start: number;
   readonly end: number;
@@ -43,11 +43,11 @@ function forwardToBoundary(s: string, i: number): number {
   return n;
 }
 
-/// emphasis returns the changed span of each side, or null for a side with nothing to mark.
-///
-/// Both nulls means the two lines are identical, or differ so completely that emphasising
-/// everything would be noise rather than signal - in either case the plain add/delete colour
-/// already says all there is to say.
+// emphasis returns the changed span of each side, or null for a side with nothing to mark.
+//
+// Both nulls means the two lines are identical, or differ so completely that emphasising
+// everything would be noise rather than signal - in either case the plain add/delete colour
+// already says all there is to say.
 export function emphasis(
   before: string,
   after: string,
@@ -80,12 +80,12 @@ export function emphasis(
   };
 }
 
-/// pairForEmphasis matches deleted lines to added lines inside one run of changes.
-///
-/// Pairing is strictly positional and only within a run of equal length. An unequal run means
-/// lines were added or removed rather than rewritten, and pairing across that boundary invents
-/// a correspondence the patch does not contain - which would emphasise the wrong half of two
-/// unrelated lines and read as a confident lie.
+// pairForEmphasis matches deleted lines to added lines inside one run of changes.
+//
+// Pairing is strictly positional and only within a run of equal length. An unequal run means
+// lines were added or removed rather than rewritten, and pairing across that boundary invents
+// a correspondence the patch does not contain - which would emphasise the wrong half of two
+// unrelated lines and read as a confident lie.
 export function pairForEmphasis<T>(dels: readonly T[], adds: readonly T[]): Array<[T, T]> {
   if (dels.length === 0 || dels.length !== adds.length) return [];
   const out: Array<[T, T]> = [];

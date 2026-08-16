@@ -388,10 +388,10 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 // reduced to strings, and the decoded value came back EMPTY with no error anywhere. It cost a
 // revert to find. A second list of these field names is the thing to keep out of this package.
 //
-// The invariant survived Shape replacing the original Paths bool, and the table below is why it
-// had to: mgs_listManifests moved from ShapePaths to ShapeManifests when it started carrying lock
-// candidates, and stating the expectation by NAME is what makes that a one-line diff a reviewer
-// reads as a decision rather than a silent behaviour change.
+// The table below states each entry's shape by NAME, which is what holds the invariant through a
+// change of shape: mgs_listManifests sits at ShapeManifests rather than ShapePaths because it
+// carries lock candidates, and naming the expectation makes such a move a one-line diff a
+// reviewer reads as a decision rather than a silent behaviour change.
 func TestOptionalContract_PathEntriesAreSelfDescribing(t *testing.T) {
 	// Every entry's Buzz element type, stated by NAME - the stable half of the contract, since a
 	// Field rename must not be able to change this map. Absent means ShapeStrs.

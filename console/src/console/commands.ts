@@ -42,14 +42,12 @@ const SEQ_SEP = " ";
 // One process-wide command map. registerCommand is idempotent by id (a re-register replaces),
 // so a surface re-activating in the console does not accumulate duplicates.
 //
-// It hangs off the window rather than being a plain module-level `const`, and that is a
-// correctness fix rather than a style choice. Every surface is its own esbuild entry point
-// loaded with a runtime import(), so each bundle inlines its OWN copy of this module - a
-// module-level Map would give the shell one registry and each surface another. "Process-wide"
-// was therefore false across exactly the boundary that matters: a surface registering a
-// command wrote it into a map the shell's command bar and Actions surface never read, so the
-// command was invisible everywhere except the surface's own keydown handler. Verified by
-// grepping the built bundles - a surface's ids appear in its own bundle and in no other.
+// It hangs off the window rather than being a plain module-level `const`, and that is what makes
+// "process-wide" true. Every surface is its own esbuild entry point loaded with a runtime import(),
+// so each bundle inlines its OWN copy of this module: a module-level Map gives the shell one
+// registry and each surface another, and a command registered by a surface is then invisible to the
+// shell's command bar and Actions surface - reachable only from that surface's own keydown handler.
+// The built bundles are where to check it: a surface's ids appear in its own bundle and in no other.
 //
 // One well-known key, created on first import by whichever bundle loads first.
 const REGISTRY_KEY = "__magusCommandRegistry";

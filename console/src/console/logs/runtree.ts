@@ -186,7 +186,7 @@ function makeNode(
   text.className = "pf-v6-c-tree-view__node-text";
   // The dot goes INSIDE the text node, not beside it. PatternFly's __node-content is
   // display:flex/column - it stacks a label above a description - so a dot appended as a
-  // sibling of the label landed on its own line above it. Inside the label it rides the
+  // sibling of the label lands on its own line above it. Inside the label it rides the
   // same nowrap line, which is what a status dot is for.
   if (spec.status) {
     const dot = document.createElement("span");

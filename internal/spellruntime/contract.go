@@ -20,9 +20,8 @@ type ContractEntry struct {
 	// nothing pointing at the cause. The rename was reverted over it. One list means the
 	// next rename carries this behaviour along with it.
 	//
-	// It is an enum rather than the bool it started as because a third shape arrived
-	// (ShapeManifests) and the alternative - a second bool beside the first - encodes
-	// "both set" as a reachable state that means nothing.
+	// An enum rather than a bool per shape: with three of them, a second bool beside the
+	// first encodes "both set" as a reachable state that means nothing.
 	Shape ContractShape
 }
 

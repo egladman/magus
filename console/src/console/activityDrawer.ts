@@ -472,7 +472,7 @@ function rowEl(row: ActivityRow): HTMLElement {
 }
 
 // The two answers each read can give, in the shape plan/ledger.ts's LedgerRead uses: it came back,
-// or it did not and here is WHY. A bare undefined/null told the panel that something went wrong and
+// or it did not and here is WHY. A bare undefined/null tells the panel that something went wrong and
 // nothing else, which is the half of the answer a reader cannot act on.
 type StatusRead =
   | { readonly kind: "ok"; readonly status: Status | undefined }

@@ -394,7 +394,7 @@ func TestPlainFrameIsByteForByteTheUnstyledOne(t *testing.T) {
 
 	// Spelled out rather than composed from the renderer's own parts: this is the output a
 	// reader gets down a pipe, under NO_COLOR and on a dumb terminal, and the point of the
-	// assertion is that adding a palette did not move a single byte of it.
+	// assertion is that no palette may move a single byte of it.
 	want := strings.Join([]string{
 		"▸ a.go  1 hunk, 0 read",
 		"  [ ] @@ -1 +1 @@",
