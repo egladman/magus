@@ -4,8 +4,8 @@ description: "Split work across agents in a magus workspace as an acceptance-cri
 tags: [agents, skills, magus-delegate-multi-agent]
 aliases:
   - reference/skills/magus-delegate-ultra
-skill_full_bytes: 15962
-skill_simple_bytes: 12583
+skill_full_bytes: 15895
+skill_simple_bytes: 11978
 ---
 
 # magus-delegate-multi-agent
@@ -31,7 +31,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `aff26b161fa1` |
+| `skill-content` | `3ce451d61f54` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -121,12 +121,11 @@ exceeding the budget.
 
 Assign validation from the pipeline the workspace composed, not from convention:
 `magus describe target ci <project>` names what `ci` chains and in what order,
-so a unit directed at a single target gets the narrowest one from that
-decomposition, and the integrator re-runs them in the described order rather
-than one anybody remembered. `magus affected ci` at integration re-proves the
-whole composition; a worker hand-sequencing lint, format, and test is
-re-deriving an order the magusfile already owns, and the step it forgets fails
-silently by omission.
+so a unit gets the narrowest target from that decomposition and the integrator
+re-runs the described order, with `magus affected ci` re-proving the whole
+composition. A worker hand-sequencing lint, format, and test is re-deriving an
+order the magusfile already owns, and the step it forgets fails silently by
+omission.
 
 A worker may delegate again. What it may not do is delegate without shrinking the
 problem - that is the shape that does not terminate, and the cost people
@@ -253,18 +252,18 @@ spawn rule. Require the worker to preserve unrelated changes, stay inside owned
 paths, avoid generated outputs, run only its assigned Magus target, and return
 changed paths, validation evidence, descendants it created, and unresolved risks.
 Also name any fact that will READ as drift to the worker's snapshot - a project
-deleted this session, a rename, an index regenerated underneath it. Not a generic
-"expect drift" line, which only primes the worker to dismiss real anomalies: the
-specific fact, so unexplained tree state costs neither an investigation nor a
-helpful revert of something correct.
+deleted this session, a rename, an index regenerated underneath it - never a
+generic "expect drift" line, which only primes the worker to dismiss real
+anomalies: the specific fact is what keeps unexplained tree state from costing
+an investigation or a helpful revert of something correct.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker that has
 finished writing a contested path announces the release immediately - shrink the
 unit's `owned_paths` with another `magus_ledger` put, or message the orchestrator
-if the host supports it - and then carries on validating. A waiting unit starts
-against the released file while the first is still running tests, which is most
-of a worker's lifetime; holding every path to exit serializes agents on time
-they spend not editing.
+if the host supports it - and then carries on validating. A waiting unit
+starts against the released file while the first is still running tests, which
+is most of a worker's lifetime; holding every path to exit serializes agents on
+time they spend not editing.
 
 That put records each dropped path with the digest it carried at that moment.
 Hand the digest to the unit taking the path over: it names the version being
@@ -404,12 +403,9 @@ exceeding the budget.
 
 Assign validation from the pipeline the workspace composed, not from convention:
 `magus describe target ci <project>` names what `ci` chains and in what order,
-so a unit directed at a single target gets the narrowest one from that
-decomposition, and the integrator re-runs them in the described order rather
-than one anybody remembered. `magus affected ci` at integration re-proves the
-whole composition; a worker hand-sequencing lint, format, and test is
-re-deriving an order the magusfile already owns, and the step it forgets fails
-silently by omission.
+so a unit gets the narrowest target from that decomposition and the integrator
+re-runs the described order, with `magus affected ci` re-proving the whole
+composition.
 
 A worker may delegate again. What it may not do is delegate without shrinking the
 problem. Three rules give it a
@@ -521,18 +517,13 @@ spawn rule. Require the worker to preserve unrelated changes, stay inside owned
 paths, avoid generated outputs, run only its assigned Magus target, and return
 changed paths, validation evidence, descendants it created, and unresolved risks.
 Also name any fact that will READ as drift to the worker's snapshot - a project
-deleted this session, a rename, an index regenerated underneath it. Not a generic
-"expect drift" line, which only primes the worker to dismiss real anomalies: the
-specific fact, so unexplained tree state costs neither an investigation nor a
-helpful revert of something correct.
+deleted this session, a rename, an index regenerated underneath it - never a
+generic "expect drift" line.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker that has
 finished writing a contested path announces the release immediately - shrink the
 unit's `owned_paths` with another `magus_ledger` put, or message the orchestrator
-if the host supports it - and then carries on validating. A waiting unit starts
-against the released file while the first is still running tests, which is most
-of a worker's lifetime; holding every path to exit serializes agents on time
-they spend not editing.
+if the host supports it - and then carries on validating.
 
 That put records each dropped path with the digest it carried at that moment.
 Hand the digest to the unit taking the path over: it names the version being
