@@ -480,6 +480,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      so together they frame the internal content top and bottom. */
   background: var(--pf-t--global--background--color--primary--default);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  /* A soft cast DOWN over the content, so a surface scrolling under the bar passes beneath
+     something rather than meeting a flat seam. The hairline above stays: it is what holds the
+     edge crisp at rest, and the shadow only reads once there is content behind it. PF's
+     directional token rather than a hand-rolled rgba, so it tracks the theme like every other
+     elevation here. */
+  box-shadow: var(--pf-t--global--box-shadow--sm--bottom);
   -webkit-app-region: drag; app-region: drag;
 }
 /* Interactive title-bar children opt out of the drag region so a click activates them (a drag region
