@@ -1,6 +1,10 @@
 package types
 
-import "slices"
+import (
+	"path"
+	"slices"
+	"strings"
+)
 
 // DelegationState is where one delegated unit stands. The three terminal values are
 // the point of the set: a row that never reaches one is a row nobody closed.
@@ -24,6 +28,13 @@ const (
 	// StateNoReturn is a unit that never reported: dead, stalled, or cancelled.
 	StateNoReturn DelegationState = "no_return"
 )
+
+// Terminal reports whether the unit is done, however it ended. Nothing derives a
+// verdict from it - it is what a reader needs to stop asking about a row, and what
+// keeps a finished unit out of the overlap report below.
+func (s DelegationState) Terminal() bool {
+	return s == StatePass || s == StateFail || s == StateNoReturn
+}
 
 // DelegationUnit is one row of an orchestrating agent's delegation ledger: what that
 // agent DECLARED about a piece of work it handed out, recorded so a human can see the
@@ -89,11 +100,160 @@ type DelegationUnit struct {
 	// ForbiddenPaths are correct rather than missing. Without this flag a reader
 	// cannot tell an abbreviated row from one whose author forgot the boundary.
 	ReadOnly bool `json:"read_only,omitempty" yaml:"read_only,omitempty"`
+	// Releases are the paths this unit gave up, each with the content digest the path
+	// carried at that moment. Store-computed and output-only, like the timestamps: a
+	// worker announces a release by shrinking OwnedPaths, and the digest is what the
+	// next agent needs to tell whether it inherited the file the releaser left.
+	Releases []DelegationRelease `json:"releases,omitempty" yaml:"releases,omitempty"`
 	// Created and Updated are unix seconds, stamped by the store on write and
 	// output-only to callers - a client-supplied timestamp is a fact about the client's
 	// clock, not about when the row was recorded.
+	//
+	// Updated is the row's heartbeat. A unit that re-puts its row on every state change
+	// keeps it moving; a row nobody touches goes stale, and a reader may then judge the
+	// unit possibly dead. That judgment is the READER'S - nothing here transitions a row
+	// on its own, and silence has no verdict in it.
 	Created int64 `json:"created" yaml:"created"`
 	Updated int64 `json:"updated" yaml:"updated"`
+}
+
+// Release digests that are not a content hash. A digest is `sha256:<hex>` of the
+// file's bytes when the path held one; these two say why it could not be, so a
+// reader is never handed a hash-shaped value that is not a hash.
+const (
+	// ReleaseAbsent is a path with nothing on disk when it was released: a file the
+	// unit deleted, or a declared glob, which is a pattern rather than a path.
+	ReleaseAbsent = "absent"
+	// ReleaseDir is a directory. A tree has no single content digest, and hashing one
+	// on every put would walk it, so the next agent is told to go look instead.
+	ReleaseDir = "dir"
+)
+
+// DelegationRelease is one path a unit stopped owning, and the version of it the
+// next agent inherits.
+//
+// The skill has workers release a contested path as soon as they finish EDITING it
+// rather than at exit, so a waiter can start against it during validation. Digest is
+// what makes that safe to act on: it identifies the file the releaser left behind, and
+// a mismatch at verification time means the waiter built on a tree the releaser never
+// saw.
+type DelegationRelease struct {
+	Path   string `json:"path"   yaml:"path"`
+	Digest string `json:"digest" yaml:"digest"`
+	// ReleasedAt is unix seconds, stamped by the store on the put that dropped the path.
+	ReleasedAt int64 `json:"released_at" yaml:"released_at"`
+}
+
+// DelegationOverlap is two units whose declared OwnedPaths intersect. A FACT the
+// reader is handed, never a verdict: two units may share a path because their author
+// meant them to run in sequence, or because nobody noticed. Nothing here blocks,
+// gates, or reorders anything.
+type DelegationOverlap struct {
+	// A and B are the unit ids, in ledger order - A was recorded first.
+	A string `json:"a" yaml:"a"`
+	B string `json:"b" yaml:"b"`
+	// Paths are the declared paths that intersect, A's first, deduped. Both sides are
+	// listed because they are rarely the same string: "internal/ledger" and
+	// "internal/ledger/store.go" intersect, and only showing one of them would hide
+	// which unit claimed what.
+	Paths []string `json:"paths" yaml:"paths"`
+}
+
+// DelegationReport is what a reader of the ledger is served: the recorded rows, plus
+// the overlaps derived from them. A constructor rather than a literal at each read
+// door, because the MCP tool and the console's route must not be able to disagree
+// about whether an overlap exists - the same reason types.NewFileReport exists.
+type DelegationReport struct {
+	Units    []DelegationUnit    `json:"units"              yaml:"units"`
+	Overlaps []DelegationOverlap `json:"overlaps,omitempty" yaml:"overlaps,omitempty"`
+}
+
+// NewDelegationReport wraps the rows and derives the overlaps. Derived on READ and
+// never stored: an overlap is a relation between two rows, so storing it on either
+// one would mean a row that stopped being true when its neighbour changed.
+func NewDelegationReport(units []DelegationUnit) DelegationReport {
+	return DelegationReport{Units: units, Overlaps: DelegationOverlaps(units)}
+}
+
+// DelegationOverlaps reports every pair of units whose declared owned paths
+// intersect, in ledger order.
+//
+// A unit in a terminal state is not in any pair. A released or finished unit is not
+// competing for a path - that is the whole shape of the skill's early-release rule,
+// where a worker shrinks its owned paths so a waiter can start - and reporting one
+// would make the surface noisiest exactly when the plan is winding down.
+func DelegationOverlaps(units []DelegationUnit) []DelegationOverlap {
+	var out []DelegationOverlap
+	for i, a := range units {
+		if a.State.Terminal() || len(a.OwnedPaths) == 0 {
+			continue
+		}
+		for _, b := range units[i+1:] {
+			if b.State.Terminal() || len(b.OwnedPaths) == 0 {
+				continue
+			}
+			if paths := intersectingPaths(a.OwnedPaths, b.OwnedPaths); len(paths) > 0 {
+				out = append(out, DelegationOverlap{A: a.ID, B: b.ID, Paths: paths})
+			}
+		}
+	}
+	return out
+}
+
+// intersectingPaths collects the declared paths from both sides that cover common
+// ground, A's before B's.
+func intersectingPaths(a, b []string) []string {
+	var out []string
+	add := func(p string) {
+		if !slices.Contains(out, p) {
+			out = append(out, p)
+		}
+	}
+	for _, pa := range a {
+		for _, pb := range b {
+			if pathsIntersect(pa, pb) {
+				add(pa)
+				add(pb)
+			}
+		}
+	}
+	return out
+}
+
+// pathsIntersect decides whether two DECLARED paths cover common ground. Nothing else
+// in magus compares owned paths yet, so this is the definition rather than a copy of
+// one: containment on the cleaned paths, with a glob truncated to the literal prefix
+// it can be judged by.
+//
+// Truncating is deliberate over-reporting. "console/src/**/*.ts" and
+// "console/src/**/*.css" cover no common file, and this reports them anyway because
+// both reduce to "console/src"; deciding whether two arbitrary globs can ever match
+// one path is a solver, and a missed collision costs a reader far more than a pair
+// they look at and dismiss.
+func pathsIntersect(a, b string) bool {
+	a, b = literalPrefix(a), literalPrefix(b)
+	if a == "" || b == "" {
+		// A pattern with no literal prefix ("**/*.go") claims the whole tree.
+		return true
+	}
+	return a == b || strings.HasPrefix(a, b+"/") || strings.HasPrefix(b, a+"/")
+}
+
+// literalPrefix is the part of a declared path that names actual directories: the
+// cleaned path itself when it holds no glob metacharacter, and everything above the
+// first segment that does when it holds one.
+func literalPrefix(p string) string {
+	p = path.Clean(strings.TrimSpace(p))
+	if p == "." || p == "/" {
+		return ""
+	}
+	segs := strings.Split(p, "/")
+	for i, s := range segs {
+		if strings.ContainsAny(s, "*?[{") {
+			return strings.Join(segs[:i], "/")
+		}
+	}
+	return p
 }
 
 // Clone returns a deep copy: the slice fields are the only shared state, so copying
@@ -104,5 +264,6 @@ func (u DelegationUnit) Clone() DelegationUnit {
 	c.OwnedPaths = slices.Clone(u.OwnedPaths)
 	c.ForbiddenPaths = slices.Clone(u.ForbiddenPaths)
 	c.DependsOn = slices.Clone(u.DependsOn)
+	c.Releases = slices.Clone(u.Releases)
 	return c
 }

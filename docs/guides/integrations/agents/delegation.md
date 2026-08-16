@@ -87,16 +87,18 @@ returns the same record. Full flags: [`magus vcs`](../../../reference/manpage/ma
 `magus_ledger` records the delegation plan an orchestrating agent declared, so a
 person can see it. One row per delegated unit, in the skill's vocabulary.
 
-| op      | does                                                           |
-| ------- | -------------------------------------------------------------- |
-| `list`  | every row, in the order they were recorded (the default)       |
-| `put`   | create or replace one row by `id`, merging the fields you send |
-| `clear` | drop every row and start a fresh plan                          |
+| op      | does                                                                       |
+| ------- | -------------------------------------------------------------------------- |
+| `list`  | every row in the order they were recorded, plus the overlaps (the default) |
+| `put`   | create or replace one row by `id`, merging the fields you send             |
+| `clear` | drop every row and start a fresh plan                                      |
 
 A row carries `id` and optionally `parent` (the unit that delegated this one),
 `goal` with its observable acceptance criteria, `checkpoint` (as
 `magus vcs checkpoint -o name` prints it), `owned_paths` and `forbidden_paths`,
-`depends_on`, `tier`, `validation`, `state`, and `read_only`.
+`depends_on`, `tier`, `validation`, `state`, and `read_only`. The store adds
+`created`, `updated`, and `releases`, which are output-only: a timestamp a client
+sent would be a fact about that client's clock.
 
 Three properties are worth stating plainly.
 
@@ -116,6 +118,36 @@ nothing. A read-only unit that gathers evidence and writes nothing carries an
 abbreviated row: `read_only` set, and empty owned and forbidden paths that then
 read as deliberate rather than forgotten.
 
+### Three answers the ledger gives back
+
+None of them is enforcement. Each is something an orchestrator would otherwise
+derive by hand from a table it wrote itself, and each leaves the decision where
+it was.
+
+**Overlaps.** A `list` reports every pair of units whose `owned_paths` intersect,
+naming both ids and both declarations. Derived on the read and stored nowhere, so
+it cannot go out of date with the rows. A path is compared by containment - a unit
+owning `internal/ledger` overlaps one owning `internal/ledger/store.go` - and a
+glob is judged by the directories it names, which over-reports rather than misses
+a pair: `console/src/**/*.ts` and `console/src/**/*.css` share no file and are
+reported anyway. A unit in a terminal state is in no pair, because a finished or
+released unit is not competing for anything.
+
+**Staleness.** Every put re-stamps `updated`. A row nobody touches goes quiet, and
+a reader watching that gap may judge the unit possibly dead - the console draws
+the age on live rows and marks one that has not moved in ten minutes. The judgment
+is the reader's: no row transitions itself, and `no_return` is only ever a state an
+agent wrote.
+
+**Releases.** Shrinking `owned_paths` is how a unit announces it has finished
+editing a path, and the store records each dropped path with the digest that path
+carried at that moment: the file's sha256, or `absent` when nothing is there and
+`dir` for a directory, which have no single content hash. Computed here so no
+worker has to hash anything, and so the digest describes the tree the releaser
+actually left rather than the one it believed it left. Hand it to the unit taking
+the path over; a digest that no longer matches at verification time means that
+unit built on a tree the releaser never saw.
+
 The rows live in one JSON file under the cache directory
 (`<cache-dir>/ledger/units.json`). `magus_ledger` is its write door and the
 daemon's read-only `GET /api/v1/ledger` route is its read door; there is no CLI
@@ -132,6 +164,10 @@ reader does not learn the picture twice.
 
 - **The declared plan** is the ledger: one node per unit, indented by `parent`,
   joined to the live activity feeds so a row shows what its worker is doing now.
+  A unit in a reported overlap is marked on both rows, in the word "overlap" and
+  in the warning color; a live row carries how long since it was last touched, and
+  says "stale" once that passes ten minutes. The released paths and their digests
+  read in the detail beside the row.
 - **The run plan** is the target DAG the engine resolves for plain human work,
   served by `GET /api/v1/plan`. Nobody declared it, so nothing about it can go
   stale the way a hand-kept table can, and it follows the live run: with no

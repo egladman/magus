@@ -2,6 +2,8 @@ package mcp
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 
@@ -15,20 +17,22 @@ import (
 func TestLedgerTool(t *testing.T) {
 	t.Parallel()
 
-	tool := &ledgerTool{store: ledger.NewStore(t.TempDir())}
+	tool := &ledgerTool{store: ledger.NewStore(t.TempDir(), t.TempDir())}
 	invoke := func(t *testing.T, params map[string]any) spells.InvokeResponse {
 		t.Helper()
 		resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: params})
 		require.NoError(t, err)
 		return resp
 	}
-	units := func(t *testing.T, resp spells.InvokeResponse) []types.DelegationUnit {
+	report := func(t *testing.T, resp spells.InvokeResponse) types.DelegationReport {
 		t.Helper()
-		data, ok := resp.Data.(map[string]any)
-		require.True(t, ok)
-		got, ok := data["units"].([]types.DelegationUnit)
+		got, ok := resp.Data.(types.DelegationReport)
 		require.True(t, ok)
 		return got
+	}
+	units := func(t *testing.T, resp spells.InvokeResponse) []types.DelegationUnit {
+		t.Helper()
+		return report(t, resp).Units
 	}
 
 	t.Run("an unwritten ledger lists empty", func(t *testing.T) {
@@ -153,6 +157,44 @@ func TestLedgerTool(t *testing.T) {
 	})
 }
 
+// TestLedgerToolListAnswersOverlapsAndReleases covers what a list is FOR beyond the
+// rows: two units claiming one tree, and the version of a path a finished editor left
+// behind. Both are answers an orchestrator would otherwise have to derive by hand from
+// a table it wrote itself.
+func TestLedgerToolListAnswersOverlapsAndReleases(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "shared.go"), []byte("package shared\n"), 0o644))
+
+	tool := &ledgerTool{store: ledger.NewStore(t.TempDir(), root)}
+	invoke := func(params map[string]any) spells.InvokeResponse {
+		resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: params})
+		require.NoError(t, err)
+		return resp
+	}
+	invoke(map[string]any{"op": "put", "id": "u1", "owned_paths": "shared.go docs", "state": "running"})
+	invoke(map[string]any{"op": "put", "id": "u2", "owned_paths": "shared.go", "state": "declared"})
+
+	got, ok := invoke(map[string]any{"op": "list"}).Data.(types.DelegationReport)
+	require.True(t, ok)
+	require.Len(t, got.Overlaps, 1)
+	assert.Equal(t, "u1", got.Overlaps[0].A)
+	assert.Equal(t, "u2", got.Overlaps[0].B)
+	assert.Equal(t, []string{"shared.go"}, got.Overlaps[0].Paths)
+
+	// u1 finishes editing the contested file and announces it by shrinking the row. The
+	// digest is what tells u2 which version it is starting from.
+	invoke(map[string]any{"op": "put", "id": "u1", "owned_paths": "docs"})
+	got, ok = invoke(map[string]any{"op": "list"}).Data.(types.DelegationReport)
+	require.True(t, ok)
+	assert.Empty(t, got.Overlaps, "the released path is no longer claimed twice")
+	require.Len(t, got.Units[0].Releases, 1)
+	assert.Equal(t, "shared.go", got.Units[0].Releases[0].Path)
+	assert.Contains(t, got.Units[0].Releases[0].Digest, "sha256:")
+	assert.NotZero(t, got.Units[0].Updated, "every put re-stamps the row a reader watches for staleness")
+}
+
 // TestLedgerToolPutMergesConcurrently is why a put goes through Store.Update. Two
 // writers advance different fields of one unit - an orchestrator moving the state, a
 // worker recording its checkpoint - and both have to survive. Reading the row with List
@@ -162,7 +204,7 @@ func TestLedgerTool(t *testing.T) {
 func TestLedgerToolPutMergesConcurrently(t *testing.T) {
 	t.Parallel()
 
-	tool := &ledgerTool{store: ledger.NewStore(t.TempDir())}
+	tool := &ledgerTool{store: ledger.NewStore(t.TempDir(), t.TempDir())}
 	put := func(params map[string]any) error {
 		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: params})
 		return err

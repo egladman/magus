@@ -16,8 +16,11 @@ type ledgerSource interface {
 }
 
 // LedgerHandler serves GET /api/v1/ledger: the orchestrating agent's declared plan as
-// JSON ({"units":[...]}), in the order the rows were recorded, so the console's
-// delegation drawer can join them to agent activity by unit id.
+// JSON ({"units":[...],"overlaps":[...]}), in the order the rows were recorded, so the
+// console's delegation drawer can join them to agent activity by unit id.
+//
+// The overlaps are derived on every read and stored nowhere (types.NewDelegationReport),
+// which is why this handler needs nothing from the store but its rows.
 //
 // Read-only, and the rows it serves are DECLARATIONS. Nothing magus does is gated on
 // them; the console renders what an agent said it intended, never a verdict magus
@@ -48,5 +51,5 @@ func (h *LedgerHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if units == nil {
 		units = []types.DelegationUnit{}
 	}
-	writeJSON(w, map[string]any{"units": units})
+	writeJSON(w, types.NewDelegationReport(units))
 }

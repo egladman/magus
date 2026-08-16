@@ -565,11 +565,11 @@ type EvaluatedSpell struct {
 
 // EvaluatedTarget is the fully-resolved view of a single path:target pair.
 type EvaluatedTarget struct {
-	Project   string           `json:"project"             yaml:"project"`
-	Target    string           `json:"target"              yaml:"target"`
-	Dir       string           `json:"dir"                 yaml:"dir"`
-	Sources   []string         `json:"sources,omitempty"    yaml:"sources,omitempty"`
-	Outputs   []string         `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
+	Project string   `json:"project"             yaml:"project"`
+	Target  string   `json:"target"              yaml:"target"`
+	Dir     string   `json:"dir"                 yaml:"dir"`
+	Sources []string `json:"sources,omitempty"    yaml:"sources,omitempty"`
+	Outputs []string `json:"outputs,omitempty"    yaml:"outputs,omitempty"`
 	// Chain is the targets this one composes, in invocation order; empty when it
 	// composes nothing. See TargetGraphNode.Chain, which it is copied from.
 	Chain     []ChainStep      `json:"chain,omitempty"      yaml:"chain,omitempty"`

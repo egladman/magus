@@ -137,6 +137,26 @@
   font-size: 0.68rem;
   color: var(--pf-t--global--text--color--subtle);
 }
+/* The two warnings a declared row can carry: another unit claims one of its paths, and nobody has
+   touched it in a while. Both read in the PF warning token, the same gold the stale-ledger note
+   above uses - a warning, never a failure: the row is still the row, and magus derived neither of
+   these from anything but what two agents wrote down. Each carries its own word, so the warning
+   survives with no colour at all. */
+.console-plan-list__warn,
+.console-plan-list__age[data-stale] {
+  color: var(--console-status-warn);
+}
+.console-plan-list__warn {
+  flex: 0 0 auto;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+.console-plan-list__age {
+  flex: 0 0 auto;
+  font-size: 0.66rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--pf-t--global--text--color--subtle);
+}
 
 /* One state, one colour, resolved ONCE per element that carries data-state and read by whatever
    sits inside it (the list mark, the node box and its mark, the detail's state word). Scoped to
@@ -211,6 +231,14 @@
   stroke: var(--console-accent);
   stroke-width: 2.4;
 }
+/* A warned node keeps its state colour on the box - the state is still what it is - and turns its
+   id gold, so a contested or untouched unit is findable in the drawing without reading the list.
+   The words themselves are in the node's title and in the list row beside it; a colour on the
+   picture is never the only place a warning is told. */
+.console-plan-node[data-warn] .console-plan-node__id,
+.console-plan-node[data-stale] .console-plan-node__id {
+  fill: var(--console-status-warn);
+}
 .console-plan-node__mark {
   fill: var(--console-plan-state, var(--pf-t--global--text--color--subtle));
   font-family: var(--pf-t--global--font--family--mono);
@@ -271,6 +299,16 @@
   font-size: 0.72rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+  color: var(--pf-t--global--text--color--subtle);
+}
+/* The released paths: what the unit gave up, and which version of it the next one inherits. Two
+   lines per entry so a long path never squeezes the digest it has to be compared against. */
+.console-plan-detail__releases { margin: 0; padding: 0; list-style: none; }
+.console-plan-detail__release { display: flex; flex-direction: column; padding: 0.15rem 0; }
+.console-plan-detail__releasepath { font-size: 0.74rem; overflow-wrap: anywhere; }
+.console-plan-detail__releasedigest {
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.66rem;
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-plan-detail__runlist { margin: 0; padding: 0; list-style: none; }

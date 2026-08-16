@@ -20,7 +20,12 @@ func (f fakeLedgerSource) List() ([]types.DelegationUnit, error) { return f.unit
 
 func TestLedgerHandler_Returns200WithUnits(t *testing.T) {
 	src := fakeLedgerSource{units: []types.DelegationUnit{
-		{ID: "unit-a", Goal: "ship the store", Checkpoint: "60dc9151", OwnedPaths: []string{"internal/ledger"}, State: types.StateRunning},
+		{
+			ID: "unit-a", Goal: "ship the store", Checkpoint: "60dc9151",
+			OwnedPaths: []string{"internal/ledger"}, State: types.StateRunning,
+			Updated:  1755300000,
+			Releases: []types.DelegationRelease{{Path: "types/delegation.go", Digest: "sha256:abc", ReleasedAt: 1755299000}},
+		},
 		{ID: "scout", ReadOnly: true, State: types.StateNoReturn},
 	}}
 	h := NewLedgerHandler(src, nil)
@@ -29,9 +34,7 @@ func TestLedgerHandler_Returns200WithUnits(t *testing.T) {
 	if w.Code != http.StatusOK {
 		t.Fatalf("want 200, got %d", w.Code)
 	}
-	var out struct {
-		Units []types.DelegationUnit `json:"units"`
-	}
+	var out types.DelegationReport
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
 		t.Fatalf("want valid JSON: %v; body %s", err, w.Body.String())
 	}
@@ -46,8 +49,45 @@ func TestLedgerHandler_Returns200WithUnits(t *testing.T) {
 	if out.Units[1].State != types.StateNoReturn || !out.Units[1].ReadOnly {
 		t.Errorf("want the abbreviated no_return row, got %+v", out.Units[1])
 	}
+	// The heartbeat: a reader watching for a unit nobody has touched needs the row's
+	// own timestamp, not the moment it happened to read the route.
+	if out.Units[0].Updated != 1755300000 {
+		t.Errorf("want the row's updated stamp on the wire, got %d", out.Units[0].Updated)
+	}
+	// What the next agent inherits, and which version of it.
+	if len(out.Units[0].Releases) != 1 || out.Units[0].Releases[0].Digest != "sha256:abc" {
+		t.Errorf("want the released path and its digest, got %+v", out.Units[0].Releases)
+	}
 	if got := w.Header().Get("Cache-Control"); got != "no-store" {
 		t.Errorf("want no-store, got %q", got)
+	}
+}
+
+// The overlap is derived on the read and stored nowhere, so the route reports it
+// without either row saying anything about the other. A fact for the reader, not a
+// verdict: nothing is blocked, reordered, or failed on account of it.
+func TestLedgerHandler_ReportsOverlappingOwnedPaths(t *testing.T) {
+	src := fakeLedgerSource{units: []types.DelegationUnit{
+		{ID: "unit-a", OwnedPaths: []string{"internal/ledger"}, State: types.StateRunning},
+		{ID: "unit-b", OwnedPaths: []string{"internal/ledger/store.go"}, State: types.StateDeclared},
+		{ID: "unit-done", OwnedPaths: []string{"internal/ledger"}, State: types.StatePass},
+	}}
+	h := NewLedgerHandler(src, nil)
+	w := httptest.NewRecorder()
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/ledger", nil))
+
+	var out types.DelegationReport
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatalf("want valid JSON: %v; body %s", err, w.Body.String())
+	}
+	if len(out.Overlaps) != 1 {
+		t.Fatalf("want one pair - the finished unit is not competing for anything - got %+v", out.Overlaps)
+	}
+	if out.Overlaps[0].A != "unit-a" || out.Overlaps[0].B != "unit-b" {
+		t.Errorf("want the pair in ledger order, got %+v", out.Overlaps[0])
+	}
+	if len(out.Overlaps[0].Paths) != 2 {
+		t.Errorf("want both declarations named, got %v", out.Overlaps[0].Paths)
 	}
 }
 

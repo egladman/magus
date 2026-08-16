@@ -57,7 +57,10 @@ import {
   type RunDescriptor,
 } from "../activityDrawer";
 import {
+  ageLabel,
   buildPlan,
+  isStale,
+  isTerminal,
   joinRuns,
   layoutPlan,
   loadLedger,
@@ -69,6 +72,7 @@ import {
   STATE_MARK,
   type PlanModel,
   type RunJoin,
+  type UnitRelease,
 } from "./ledger";
 import {
   emptyRunPlan,
@@ -218,8 +222,16 @@ interface DrawnNode {
   // What is drawn in the box and read in the list row. Usually the id.
   readonly text: string;
   readonly meta: readonly string[];
+  // The warnings drawn beside the state, in words. Both sources project into this even though only
+  // the ledger has anything to say today: a run plan the engine resolved cannot have two owners.
+  readonly warn: readonly string[];
   readonly readOnly: boolean;
   readonly depth: number;
+  // When the row was last touched (unix seconds, 0 when nothing said), and whether it is finished.
+  // The pair is what the age pass reads; it is deliberately NOT folded into meta, because an age
+  // recomputed every tick would change the signature and rebuild the list under the reader.
+  readonly updated: number;
+  readonly terminal: boolean;
 }
 
 // Field named `nodes` rather than `rows` so a Drawn IS a ledger.Placeable: layoutPlan takes it
@@ -248,9 +260,14 @@ function declaredDrawn(model: PlanModel): Drawn {
       label: STATE_LABEL[n.state],
       text: n.id,
       meta,
+      // Both units of a reported pair carry the warning, because either row is where a reader
+      // might be standing when they need to know the other one exists.
+      warn: n.overlaps.length ? ["overlap"] : [],
       readOnly: n.readOnly,
       // Capped so a deeply nested plan does not indent itself off the panel.
       depth: Math.min(n.depth, 6),
+      updated: n.unit.updated ?? 0,
+      terminal: isTerminal(n.state),
     });
   }
   return { nodes, edges: model.edges.map((e) => ({ from: e.from, to: e.to, kind: e.kind })) };
@@ -268,8 +285,13 @@ function runDrawn(model: RunPlanModel): Drawn {
       label: RUN_STATE_LABEL[n.state],
       text: n.id,
       meta: [RUN_STATE_LABEL[n.state]],
+      warn: [],
       readOnly: false,
       depth: 0,
+      // A resolved run plan has no declared row to go stale: the engine knows what happened to
+      // every node in it, so there is no timestamp to watch and nothing to call possibly dead.
+      updated: 0,
+      terminal: false,
     })),
     // Every edge in a run plan is a dependency, so there is nothing to tell it apart FROM. It still
     // carries the depends_on kind - that is what it is - and plan.css drops the dashed accent under
@@ -537,6 +559,39 @@ function pathField(dl: HTMLElement, label: string, paths: readonly string[]): vo
   dl.append(dd);
 }
 
+// releaseField renders what the unit gave up: the path, and the version of it the next unit
+// inherits. Compact by design - a short digest is enough to COMPARE, which is the only thing a
+// reader does with it, and the full one would push the path off the sheet.
+//
+// A digest that is not a hash arrives as a word ("absent" for a path with nothing on disk, "dir"
+// for a directory) and is shown as it came: shortening it would produce a hash-shaped lie.
+function releaseField(dl: HTMLElement, releases: readonly UnitRelease[]): void {
+  if (!releases.length) return;
+  dl.append(h("dt", "console-plan-detail__label", "Released"));
+  const dd = h("dd", "console-plan-detail__value");
+  const ul = h("ul", "console-plan-detail__releases");
+  ul.setAttribute("role", "list");
+  for (const r of releases) {
+    const li = h("li", "console-plan-detail__release");
+    li.append(h("code", "console-plan-detail__releasepath", r.path));
+    li.append(h("span", "console-plan-detail__releasedigest", shortDigest(r.digest)));
+    ul.append(li);
+  }
+  dd.append(ul);
+  dl.append(dd);
+}
+
+function shortDigest(digest: string): string {
+  const hex = digest.startsWith("sha256:") ? digest.slice("sha256:".length) : "";
+  return hex ? "sha256:" + hex.slice(0, 12) : digest;
+}
+
+// stamp renders a unix-second timestamp for the detail sheet, "" when the row carries none. The
+// reader's own locale: this is a local daemon's clock being read on the same machine.
+function stamp(seconds: number): string {
+  return seconds > 0 ? new Date(seconds * 1000).toLocaleString() : "";
+}
+
 // PlanInstance is what ONE mount hands back: its teardown, and its own visibility switch. Visibility
 // belongs to the instance and not to the module because the console drives it per PANE (tileView's
 // applyVisibility calls each pane's controller). A module-level export cannot tell two mounts of
@@ -645,7 +700,11 @@ export function activate(host: HTMLElement): PlanInstance {
   // near-match rather than a match: a unit whose tier changed under an unchanged state drew the same
   // signature, and the row went on reading the old tier until something else moved.
   const signature = (d: Drawn): string =>
-    d.nodes.map((n) => [n.id, n.state, n.depth, n.readOnly, n.meta.join("/")].join(":")).join("|") +
+    d.nodes
+      .map((n) =>
+        [n.id, n.state, n.depth, n.readOnly, n.meta.join("/"), n.warn.join("/")].join(":"),
+      )
+      .join("|") +
     "#" +
     d.edges.map((e) => e.kind + ":" + e.from + ">" + e.to).join("|");
 
@@ -674,10 +733,40 @@ export function activate(host: HTMLElement): PlanInstance {
         n.parent,
         n.danglingParent,
         n.unit,
+        n.overlaps,
         runs,
         feedsUnread,
       ])
     );
+  };
+
+  // syncAges writes the heartbeat onto rows that already exist: how long since the unit's row was
+  // last touched, and the stale mark once that gap passes the surface's threshold. It runs on every
+  // paint and touches only text and one attribute, so a plan that has not changed is never rebuilt
+  // just because time passed - which is what keeps a clock from taking the focus off the row a
+  // reader is standing on.
+  //
+  // Terminal rows carry no age. A unit that finished is not going to be touched again, and an
+  // ever-growing "2h" beside a pass reads as a problem where there is none.
+  const syncAges = (): void => {
+    const now = Date.now();
+    const byId = new Map(drawn.nodes.map((n) => [n.id, n]));
+    for (const btn of refs.list.querySelectorAll<HTMLElement>(".console-plan-list__item")) {
+      const n = byId.get(btn.dataset.id ?? "");
+      const el = btn.querySelector<HTMLElement>(".console-plan-list__age");
+      if (!n || !el) continue;
+      const age = n.terminal ? "" : ageLabel(n.updated, now);
+      const stale = isStale(n.terminal, n.updated, now);
+      // The word rides along with the number: colour alone cannot carry a state on this surface.
+      const label = age && stale ? age + " stale" : age;
+      if (el.textContent !== label) el.textContent = label;
+      el.toggleAttribute("data-stale", stale);
+    }
+    for (const g of refs.stage.querySelectorAll<SVGElement>(".console-plan-node")) {
+      const n = byId.get(g.dataset.id ?? "");
+      if (n && isStale(n.terminal, n.updated, now)) g.dataset.stale = "";
+      else delete g.dataset.stale;
+    }
   };
 
   const renderList = (): void => {
@@ -697,6 +786,15 @@ export function activate(host: HTMLElement): PlanInstance {
       const idEl = h("span", "console-plan-list__id", n.text);
       const metaEl = h("span", "console-plan-list__meta", n.meta.join(" - "));
       btn.append(mark, idEl, metaEl);
+      if (n.warn.length) {
+        btn.dataset.warn = "";
+        // In words, not in colour alone: the same rule the state mark follows, for the same
+        // reason - this row says something a reader has to be able to read.
+        btn.append(h("span", "console-plan-list__warn", n.warn.join(" - ")));
+      }
+      // Filled by syncAges rather than here: age moves on its own, and rebuilding this list to
+      // advance a clock would take the focus off whatever row a reader is standing on.
+      btn.append(h("span", "console-plan-list__age"));
       btn.title = n.id + " - " + n.label;
       li.append(btn);
       return li;
@@ -737,10 +835,16 @@ export function activate(host: HTMLElement): PlanInstance {
       g.dataset.id = n.id;
       g.dataset.state = n.state;
       if (n.readOnly) g.dataset.readonly = "";
+      if (n.warn.length) g.dataset.warn = "";
       if (n.id === selected) g.dataset.selected = "";
       g.setAttribute("transform", `translate(${at.x} ${at.y})`);
       const title = svgEl("title");
-      title.textContent = n.id + " - " + n.label + (n.readOnly ? " - read only" : "");
+      title.textContent =
+        n.id +
+        " - " +
+        n.label +
+        (n.readOnly ? " - read only" : "") +
+        (n.warn.length ? " - " + n.warn.join(" - ") : "");
       const box = svgEl("rect", "console-plan-node__box");
       box.setAttribute("x", String(-NODE_W / 2));
       box.setAttribute("y", String(-NODE_H / 2));
@@ -804,8 +908,17 @@ export function activate(host: HTMLElement): PlanInstance {
     if (n.rawState && n.rawState !== n.state) {
       field(dl, "Ledger state", n.rawState + " (unrecognized, shown as declared)");
     }
-    field(dl, "Created", n.unit.created ?? "");
-    field(dl, "Updated", n.unit.updated ?? "");
+    // Every pair this unit is in, naming the OTHER unit and the declarations that intersect. A
+    // fact, and worded as one: magus derived it from two rows an agent wrote, and it blocks
+    // nothing - the list beside it says who to go ask.
+    for (const o of n.overlaps) {
+      field(dl, "Overlaps", (o.a === n.id ? o.b : o.a) + ": " + o.paths.join(", "));
+    }
+    releaseField(dl, n.unit.releases ?? []);
+    // An absolute time rather than an age: the row list carries the age, which moves, and a sheet
+    // that changed every second would rebuild itself out from under the link it holds.
+    field(dl, "Created", stamp(n.unit.created ?? 0));
+    field(dl, "Updated", stamp(n.unit.updated ?? 0));
 
     const runs = join.byUnit.get(n.id) ?? [];
     const runsBox = h("div", "console-plan-detail__runs");
@@ -968,6 +1081,9 @@ export function activate(host: HTMLElement): PlanInstance {
       renderList();
       renderStage();
     }
+    // Always, whether or not the plan changed: the rows may be identical and the heartbeat still
+    // advances, and it is the one thing a poll returning the same plan has to move.
+    syncAges();
     setSummary(overview);
     setNote(noteLine);
     syncSelection();
@@ -1088,7 +1204,7 @@ export function activate(host: HTMLElement): PlanInstance {
       return;
     }
     if (settleSource(read.units.length > 0)) return refreshRun(daemonHost);
-    model = buildPlan(read.units);
+    model = buildPlan(read.units, read.overlaps);
     join = joinRuns(model, feeds.rows);
     if (!model.nodes.length) {
       blank();

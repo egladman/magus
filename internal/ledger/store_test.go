@@ -1,6 +1,8 @@
 package ledger
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"os"
 	"path/filepath"
 	"sync"
@@ -47,7 +49,12 @@ func TestStoreRoundTrip(t *testing.T) {
 				{ID: "a", Goal: "revised", State: types.StatePass},
 			},
 			want: []types.DelegationUnit{
-				{ID: "a", Goal: "revised", State: types.StatePass},
+				// The replacement carries no owned paths, so the row's paths were
+				// released by it - see TestStorePutRecordsReleasedPaths.
+				{
+					ID: "a", Goal: "revised", State: types.StatePass,
+					Releases: []types.DelegationRelease{{Path: "internal/a", Digest: types.ReleaseAbsent}},
+				},
 				unit("b"),
 			},
 		},
@@ -67,7 +74,7 @@ func TestStoreRoundTrip(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			s := NewStore(t.TempDir())
+			s := NewStore(t.TempDir(), t.TempDir())
 			for _, u := range tt.puts {
 				stored, err := s.Put(u)
 				require.NoError(t, err)
@@ -81,6 +88,10 @@ func TestStoreRoundTrip(t *testing.T) {
 				// Timestamps are the store's, not the fixture's; assert them separately
 				// above and compare the declared facts here.
 				w.Created, w.Updated = got[i].Created, got[i].Updated
+				require.Len(t, got[i].Releases, len(w.Releases))
+				for j := range w.Releases {
+					w.Releases[j].ReleasedAt = got[i].Releases[j].ReleasedAt
+				}
 				assert.Equal(t, w, got[i])
 			}
 		})
@@ -90,7 +101,7 @@ func TestStoreRoundTrip(t *testing.T) {
 func TestStorePutRequiresAnID(t *testing.T) {
 	t.Parallel()
 
-	s := NewStore(t.TempDir())
+	s := NewStore(t.TempDir(), t.TempDir())
 	_, err := s.Put(types.DelegationUnit{Goal: "no id"})
 	require.ErrorIs(t, err, ErrNoID, "a row with no id could never be updated or referred to again")
 
@@ -102,7 +113,7 @@ func TestStorePutRequiresAnID(t *testing.T) {
 func TestStorePutPreservesCreatedOnUpdate(t *testing.T) {
 	t.Parallel()
 
-	s := NewStore(t.TempDir())
+	s := NewStore(t.TempDir(), t.TempDir())
 	first, err := s.Put(unit("a"))
 	require.NoError(t, err)
 
@@ -125,7 +136,7 @@ func TestStorePutPreservesCreatedOnUpdate(t *testing.T) {
 func TestStoreUpdateMergesUnderOneLock(t *testing.T) {
 	t.Parallel()
 
-	s := NewStore(t.TempDir())
+	s := NewStore(t.TempDir(), t.TempDir())
 	_, err := s.Put(unit("a"))
 	require.NoError(t, err)
 
@@ -164,7 +175,7 @@ func TestStoreUpdateMergesUnderOneLock(t *testing.T) {
 func TestStoreUpdateCreatesTheRowItMerges(t *testing.T) {
 	t.Parallel()
 
-	s := NewStore(t.TempDir())
+	s := NewStore(t.TempDir(), t.TempDir())
 	stored, err := s.Update("fresh", func(u *types.DelegationUnit) { u.State = types.StateRunning })
 	require.NoError(t, err)
 	assert.Equal(t, "fresh", stored.ID)
@@ -175,10 +186,106 @@ func TestStoreUpdateCreatesTheRowItMerges(t *testing.T) {
 	require.ErrorIs(t, err, ErrNoID, "a merge with no id has no row to address")
 }
 
+// TestStorePutRecordsReleasedPaths is the early-release rule the skill teaches, seen
+// from the store: a worker that has finished editing a contested path shrinks its
+// owned_paths, and the row then has to say WHICH version of that path the waiting unit
+// inherits. A release with no digest would leave the waiter guessing.
+func TestStorePutRecordsReleasedPaths(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "kept.go"), []byte("package kept\n"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "released.go"), []byte("package released\n"), 0o644))
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg"), 0o755))
+
+	s := NewStore(t.TempDir(), root)
+	_, err := s.Put(types.DelegationUnit{
+		ID:         "u1",
+		OwnedPaths: []string{"kept.go", "released.go", "pkg", "gone.go"},
+		State:      types.StateRunning,
+	})
+	require.NoError(t, err)
+	before, err := s.List()
+	require.NoError(t, err)
+	assert.Empty(t, before[0].Releases, "declaring a unit releases nothing")
+
+	stored, err := s.Put(types.DelegationUnit{
+		ID:         "u1",
+		OwnedPaths: []string{"kept.go"},
+		State:      types.StateRunning,
+	})
+	require.NoError(t, err)
+
+	require.Len(t, stored.Releases, 3, "every path the put dropped is recorded, in the order it was owned")
+	assert.Equal(t, "released.go", stored.Releases[0].Path)
+	assert.Equal(t,
+		"sha256:"+hashOf(t, filepath.Join(root, "released.go")),
+		stored.Releases[0].Digest,
+		"the digest is the file's content at the moment it was released")
+	assert.NotZero(t, stored.Releases[0].ReleasedAt)
+	// A directory has no single content digest and a path with nothing on disk has no
+	// content at all; both say so by name rather than by a hash-shaped value.
+	assert.Equal(t, types.DelegationRelease{
+		Path: "pkg", Digest: types.ReleaseDir, ReleasedAt: stored.Releases[1].ReleasedAt,
+	}, stored.Releases[1])
+	assert.Equal(t, types.DelegationRelease{
+		Path: "gone.go", Digest: types.ReleaseAbsent, ReleasedAt: stored.Releases[2].ReleasedAt,
+	}, stored.Releases[2])
+	for _, r := range stored.Releases {
+		assert.NotEqual(t, "kept.go", r.Path, "a path the unit still owns was not released")
+	}
+}
+
+// A release is the store's to say, not the caller's: a put that does not name
+// owned_paths releases nothing, and one that owns a path again stops claiming to have
+// released it.
+func TestStoreReleasesFollowTheOwnedSet(t *testing.T) {
+	t.Parallel()
+
+	root := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("one\n"), 0o644))
+
+	s := NewStore(t.TempDir(), root)
+	_, err := s.Put(types.DelegationUnit{ID: "u1", OwnedPaths: []string{"a.go"}})
+	require.NoError(t, err)
+
+	released, err := s.Update("u1", func(u *types.DelegationUnit) { u.OwnedPaths = nil })
+	require.NoError(t, err)
+	require.Len(t, released.Releases, 1)
+	first := released.Releases[0].Digest
+
+	advanced, err := s.Update("u1", func(u *types.DelegationUnit) { u.State = types.StateRunning })
+	require.NoError(t, err)
+	assert.Equal(t, released.Releases, advanced.Releases, "a state advance neither releases nor forgets anything")
+
+	// Owned again, edited, released again: the row keeps ONE entry, carrying the version
+	// the next agent actually inherits.
+	_, err = s.Update("u1", func(u *types.DelegationUnit) { u.OwnedPaths = []string{"a.go"} })
+	require.NoError(t, err)
+	reowned, err := s.List()
+	require.NoError(t, err)
+	assert.Empty(t, reowned[0].Releases, "a path the unit owns again is not a path it released")
+
+	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("two\n"), 0o644))
+	again, err := s.Update("u1", func(u *types.DelegationUnit) { u.OwnedPaths = nil })
+	require.NoError(t, err)
+	require.Len(t, again.Releases, 1)
+	assert.NotEqual(t, first, again.Releases[0].Digest, "the second release digests the file as it stands now")
+}
+
+func hashOf(t *testing.T, path string) string {
+	t.Helper()
+
+	raw, err := os.ReadFile(path)
+	require.NoError(t, err)
+	sum := sha256.Sum256(raw)
+	return hex.EncodeToString(sum[:])
+}
+
 func TestStoreClear(t *testing.T) {
 	t.Parallel()
 
-	s := NewStore(t.TempDir())
+	s := NewStore(t.TempDir(), t.TempDir())
 	require.NoError(t, s.Clear(), "clearing a ledger that was never written is not an error")
 
 	_, err := s.Put(unit("a"))
@@ -204,12 +311,12 @@ func TestStorePersistsAcrossStores(t *testing.T) {
 	t.Parallel()
 
 	dir := t.TempDir()
-	first := NewStore(dir)
+	first := NewStore(dir, t.TempDir())
 	_, err := first.Put(unit("a"))
 	require.NoError(t, err)
 
 	// The point of the store: a plan outlives the process that declared it.
-	second := NewStore(dir)
+	second := NewStore(dir, t.TempDir())
 	got, err := second.List()
 	require.NoError(t, err)
 	require.Len(t, got, 1)
@@ -223,7 +330,7 @@ func TestStorePersistsAcrossStores(t *testing.T) {
 func TestStoreListReturnsCopies(t *testing.T) {
 	t.Parallel()
 
-	s := NewStore(t.TempDir())
+	s := NewStore(t.TempDir(), t.TempDir())
 	_, err := s.Put(unit("a"))
 	require.NoError(t, err)
 
@@ -245,7 +352,7 @@ func TestStoreReportsUnreadableLedger(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ledger"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "ledger", "units.json"), []byte("{not json"), 0o644))
 
-	s := NewStore(dir)
+	s := NewStore(dir, t.TempDir())
 	_, err := s.List()
 	assert.Error(t, err, "a corrupt ledger is reported, never silently read as empty")
 }

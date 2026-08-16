@@ -30,7 +30,10 @@ func (t *ledgerTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
-		return spells.InvokeResponse{Data: map[string]any{"units": units}}, nil
+		// The report, not the bare rows: the overlaps ride along, derived on this read
+		// by the same constructor the console's route uses, so the two doors cannot
+		// disagree about whether two units claim the same path.
+		return spells.InvokeResponse{Data: types.NewDelegationReport(units)}, nil
 
 	case "put":
 		merge, err := ledgerMerge(req.Params)

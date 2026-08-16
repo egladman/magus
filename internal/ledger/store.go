@@ -13,7 +13,10 @@
 package ledger
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
 	"errors"
+	"io"
 	"os"
 	"path/filepath"
 	"slices"
@@ -50,12 +53,17 @@ var ErrNoID = errors.New("ledger: a unit needs an id")
 type Store struct {
 	mu   sync.Mutex
 	path string
+	root string
 }
 
 // NewStore returns the ledger rooted at stateDir, writing <stateDir>/ledger/units.json.
 // It touches no disk: the file is created by the first Put.
-func NewStore(stateDir string) *Store {
-	return &Store{path: filepath.Join(stateDir, "ledger", "units.json")}
+//
+// root is the workspace a row's paths are relative to, and it is read for one purpose:
+// digesting a path at the moment a unit releases it (see Update). A Store built with an
+// empty root still records releases - it just cannot say what was in them.
+func NewStore(stateDir, root string) *Store {
+	return &Store{path: filepath.Join(stateDir, "ledger", "units.json"), root: root}
 }
 
 // unitsFile is the on-disk envelope. An object rather than a bare array so a later
@@ -86,6 +94,13 @@ func (s *Store) Put(u types.DelegationUnit) (types.DelegationUnit, error) {
 // preserved from the stored row and Updated is stamped on every write, exactly as Put
 // does, and the id is the key - whatever apply writes into ID is overwritten with it.
 //
+// Releases are stamped here too, and for the same reason Created is: they are the
+// store's to say, not the caller's. A write that drops a path from OwnedPaths IS the
+// release announcement the skill has workers make when they finish editing a contested
+// path, so the dropped paths are digested and recorded on the row - under this same
+// lock, because reading the previous owned set and writing the next one has to be one
+// step or a concurrent put decides which release happened.
+//
 // apply runs while the lock is held, so it must not touch the store, and it cannot fail:
 // anything that could be rejected (an unknown state, a mistyped param) belongs in the
 // caller, before the call.
@@ -101,18 +116,21 @@ func (s *Store) Update(id string, apply func(*types.DelegationUnit)) (types.Dele
 		return types.DelegationUnit{}, err
 	}
 	i := slices.IndexFunc(f.Units, func(e types.DelegationUnit) bool { return e.ID == id })
-	u := types.DelegationUnit{ID: id}
+	var prev types.DelegationUnit
 	if i >= 0 {
-		u = f.Units[i].Clone()
+		prev = f.Units[i]
 	}
+	u := prev.Clone()
+	u.ID = id
 	apply(&u)
 	u = u.Clone()
 	u.ID = id
 	now := time.Now().Unix()
 	u.Updated = now
 	u.Created = now
+	u.Releases = s.releases(prev, u, now)
 	if i >= 0 {
-		u.Created = f.Units[i].Created
+		u.Created = prev.Created
 		f.Units[i] = u
 	} else {
 		f.Units = append(f.Units, u)
@@ -147,6 +165,68 @@ func (s *Store) Clear() error {
 	defer s.mu.Unlock()
 
 	return s.write(unitsFile{})
+}
+
+// releases carries the row's recorded releases forward and adds the paths this write
+// gave up - the ones prev owned and next does not.
+//
+// A path that is owned again drops OUT of the list: a row saying it both owns and has
+// released the same path tells a reader nothing they can act on. A path released twice
+// keeps its position and takes the NEWER digest, because the version the next agent
+// inherits is the one left behind last.
+func (s *Store) releases(prev, next types.DelegationUnit, now int64) []types.DelegationRelease {
+	out := slices.DeleteFunc(slices.Clone(prev.Releases), func(r types.DelegationRelease) bool {
+		return slices.Contains(next.OwnedPaths, r.Path)
+	})
+	for _, p := range prev.OwnedPaths {
+		if slices.Contains(next.OwnedPaths, p) {
+			continue
+		}
+		rel := types.DelegationRelease{Path: p, Digest: s.digest(p), ReleasedAt: now}
+		if at := slices.IndexFunc(out, func(r types.DelegationRelease) bool { return r.Path == p }); at >= 0 {
+			out[at] = rel
+			continue
+		}
+		out = append(out, rel)
+	}
+	return out
+}
+
+// digest identifies the content at a released path, resolved inside the workspace.
+// Computed here rather than passed in: a worker announcing a release should not have to
+// hash anything, and a digest the releaser supplied would describe the tree it believed
+// it left rather than the one it did.
+//
+// Everything that is not a readable file inside the root answers with one of the two
+// documented markers rather than a hash - types.ReleaseAbsent and types.ReleaseDir say
+// which. A path escaping the root is absent by the same rule: the ledger describes this
+// workspace, so a row is never handed a digest of something outside it.
+func (s *Store) digest(declared string) string {
+	if s.root == "" {
+		return types.ReleaseAbsent
+	}
+	full := filepath.Join(s.root, filepath.FromSlash(declared))
+	rel, err := filepath.Rel(s.root, full)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return types.ReleaseAbsent
+	}
+	info, err := os.Stat(full)
+	switch {
+	case err != nil:
+		return types.ReleaseAbsent
+	case info.IsDir():
+		return types.ReleaseDir
+	}
+	fh, err := os.Open(full)
+	if err != nil {
+		return types.ReleaseAbsent
+	}
+	defer fh.Close()
+	sum := sha256.New()
+	if _, err := io.Copy(sum, fh); err != nil {
+		return types.ReleaseAbsent
+	}
+	return "sha256:" + hex.EncodeToString(sum.Sum(nil))
 }
 
 // read loads the file. An absent file is an empty ledger, not a failure: nothing has

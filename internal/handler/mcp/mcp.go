@@ -165,7 +165,7 @@ func allMCPTools(opts Options) []spells.Driver {
 		&refsTool{graph: opts.Magus},
 		&diffTool{sessions: opts.DiffSessions, root: opts.Magus.Root(), src: opts.Magus},
 		&vcsCheckpointTool{ws: opts.Magus},
-		&ledgerTool{store: ledger.NewStore(opts.Magus.CacheDir())},
+		&ledgerTool{store: ledger.NewStore(opts.Magus.CacheDir(), opts.Magus.Root())},
 	}
 }
 

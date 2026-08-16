@@ -94,8 +94,14 @@ function serveLedger(reply: () => unknown): void {
   serve({ ledger: reply });
 }
 
-function ok(units: unknown[]): () => unknown {
-  return () => ({ ok: true, status: 200, json: () => Promise.resolve({ units }) });
+function ok(units: unknown[], overlaps: unknown[] = []): () => unknown {
+  return () => ({ ok: true, status: 200, json: () => Promise.resolve({ units, overlaps }) });
+}
+
+// secondsAgo builds the unix-second stamp a row carries, so a test can put a row far enough in the
+// past to be stale without reaching for fake timers.
+function secondsAgo(secs: number): number {
+  return Math.floor(Date.now() / 1000) - secs;
 }
 
 // okPlan answers /api/v1/plan with a run-plan body in the contract's shape.
@@ -367,6 +373,118 @@ test("a unit whose activity feeds could not be read says that instead", async ()
     assert.match(detail, /The activity feeds could not be read/);
     assert.match(detail, /stub: no network/, "and it carries what actually went wrong");
     assert.doesNotMatch(detail, /No runs are attributed to this unit/);
+  } finally {
+    teardown();
+  }
+});
+
+// ---- what the ledger reports about itself ----------------------------------
+
+// Two units claiming one path is a FACT the route derived from two rows an agent wrote, and the
+// surface's job is to put it in front of a reader. Nothing is blocked, reordered, or failed by it -
+// and it is drawn on BOTH rows, because either one is where the reader might be standing.
+test("an overlap warns on both rows and names the other unit in the detail", async () => {
+  serve({
+    ledger: ok(
+      [
+        { id: "a", state: "running", owned_paths: ["internal/ledger"] },
+        { id: "b", state: "declared", owned_paths: ["internal/ledger/store.go"] },
+        { id: "c", state: "pass" },
+      ],
+      [{ a: "a", b: "b", paths: ["internal/ledger", "internal/ledger/store.go"] }],
+    ),
+    feeds: true,
+  });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    const warned = [...host.querySelectorAll<HTMLElement>(".console-plan-list__item")].filter(
+      (el) => el.dataset.warn !== undefined,
+    );
+    assert.deepEqual(
+      warned.map((el) => el.dataset.id),
+      ["a", "b"],
+      "the unit with no reported overlap carries no warning",
+    );
+    // In words, not in colour alone.
+    assert.match(warned[0]?.textContent ?? "", /overlap/);
+    assert.equal(host.querySelectorAll(".console-plan-node[data-warn]").length, 2);
+
+    host.querySelector<HTMLElement>('.console-plan-list__item[data-id="a"]')?.click();
+    const detail = host.querySelector(".console-plan-detail")?.textContent ?? "";
+    assert.match(detail, /Overlaps/);
+    assert.match(detail, /b: internal\/ledger, internal\/ledger\/store\.go/);
+  } finally {
+    teardown();
+  }
+});
+
+// The heartbeat. A unit re-puts its row on every state change, so a running row nobody has touched
+// in a long time is worth pointing at - as a question for the reader, never as a state the store
+// invented for them.
+test("a running row nobody has touched reads as stale; a fresh one just reads its age", async () => {
+  // Minutes and hours rather than seconds: the age is asserted verbatim, and a fixture a few
+  // seconds old would tick over into the next second while the surface was still settling.
+  serveLedger(
+    ok([
+      { id: "fresh", state: "running", updated: secondsAgo(120) },
+      { id: "quiet", state: "running", updated: secondsAgo(3600) },
+      { id: "done", state: "pass", updated: secondsAgo(3600) },
+    ]),
+  );
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    const age = (id: string): HTMLElement | null =>
+      host.querySelector<HTMLElement>(
+        `.console-plan-list__item[data-id="${id}"] .console-plan-list__age`,
+      );
+    assert.equal(age("fresh")?.textContent, "2m");
+    assert.equal(age("fresh")?.hasAttribute("data-stale"), false);
+    assert.equal(age("quiet")?.textContent, "1h stale", "the word rides along with the number");
+    assert.equal(age("quiet")?.hasAttribute("data-stale"), true);
+    assert.equal(host.querySelectorAll(".console-plan-node[data-stale]").length, 1);
+    // A finished unit is not going to be touched again, so an age beside it would read as a
+    // problem where there is none.
+    assert.equal(age("done")?.textContent, "");
+  } finally {
+    teardown();
+  }
+});
+
+// What the next agent inherits. A release with no digest would leave a waiting unit unable to tell
+// whether it is starting from the tree the releaser left.
+test("a released path shows with a short digest", async () => {
+  serve({
+    ledger: ok([
+      {
+        id: "a",
+        state: "running",
+        owned_paths: ["docs"],
+        releases: [
+          {
+            path: "internal/ledger/store.go",
+            digest: "sha256:1a2b3c4d5e6f7a8b9c0d1e2f3a4b5c6d7e8f9a0b1c2d3e4f5a6b7c8d9e0f1a2b",
+            released_at: secondsAgo(60),
+          },
+          { path: "gone.go", digest: "absent", released_at: secondsAgo(60) },
+        ],
+      },
+    ]),
+    feeds: true,
+  });
+  const { host, teardown } = mount();
+  try {
+    await settle();
+    host.querySelector<HTMLElement>(".console-plan-list__item")?.click();
+    const detail = host.querySelector(".console-plan-detail")?.textContent ?? "";
+    assert.match(detail, /Released/);
+    assert.match(detail, /internal\/ledger\/store\.go/);
+    assert.match(detail, /sha256:1a2b3c4d5e6f/, "short enough to compare, long enough to be one");
+    assert.doesNotMatch(detail, /9e0f1a2b/, "the full digest would push the path off the sheet");
+    // Not every digest is a hash: a path with nothing on disk says so in words rather than being
+    // dressed up as one.
+    assert.match(detail, /absent/);
   } finally {
     teardown();
   }

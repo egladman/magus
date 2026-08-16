@@ -51,6 +51,43 @@ export const STATE_MARK: Record<UnitState, string> = {
   no_return: "NR",
 };
 
+const TERMINAL: readonly UnitState[] = ["pass", "fail", "no_return"];
+
+// isTerminal is "this unit is done, however it ended". A terminal row is not competing for its
+// paths and nobody is going to touch it again, which is why neither the overlap warning nor the
+// staleness one is ever drawn on one.
+export function isTerminal(s: UnitState): boolean {
+  return TERMINAL.includes(s);
+}
+
+// STALE_AFTER_MS is a RENDERING decision and lives here rather than in any config: it says when
+// this surface starts drawing attention to a row, and nothing downstream reads it. Ten minutes,
+// because a unit re-puts its row on every state change and a working one moves far more often than
+// that - long enough that a normal running unit is never called stale, short enough that a worker
+// that died is noticed while the reader still remembers spawning it. The store transitions nothing
+// on its own; what a stale row MEANS stays the reader's call.
+export const STALE_AFTER_MS = 10 * 60 * 1000;
+
+// isStale is that threshold applied to one row. A terminal row is never stale - it is finished -
+// and a row with no timestamp is not either: an unstamped row is a fact about a daemon that did not
+// send one, and dressing it as a dead worker would be an invented alarm.
+export function isStale(terminal: boolean, updatedSec: number, nowMs: number): boolean {
+  if (terminal || updatedSec <= 0) return false;
+  return nowMs - updatedSec * 1000 >= STALE_AFTER_MS;
+}
+
+// ageLabel is how long ago the row was last touched, at the coarsest granularity that still answers
+// the question. "" when the row carries no timestamp, so the caller renders nothing rather than a
+// confident "0s" about a time nobody recorded.
+export function ageLabel(updatedSec: number, nowMs: number): string {
+  if (!Number.isFinite(updatedSec) || updatedSec <= 0) return "";
+  const secs = Math.max(0, Math.round(nowMs / 1000 - updatedSec));
+  if (secs < 60) return secs + "s";
+  if (secs < 3600) return Math.floor(secs / 60) + "m";
+  if (secs < 86400) return Math.floor(secs / 3600) + "h";
+  return Math.floor(secs / 86400) + "d";
+}
+
 // normalizeState maps whatever the ledger said onto the five known states. An unrecognized value
 // (a newer daemon, a typo in a hand-kept table) becomes "declared" - the least-claiming of the
 // five, because it asserts only that a unit exists. Nothing unknown may ever read as a pass or a
@@ -80,8 +117,30 @@ export interface DelegationUnit {
   readonly validation?: string;
   readonly state?: string;
   readonly read_only?: boolean;
-  readonly created?: string;
-  readonly updated?: string;
+  readonly releases?: readonly UnitRelease[];
+  // Unix SECONDS, as the route serves them - numbers, never strings. Coerced as a string the field
+  // reads as "", and the surface then cannot tell a row nobody has touched in an hour from one
+  // written a moment ago.
+  readonly created?: number;
+  readonly updated?: number;
+}
+
+// UnitRelease is a path a unit gave up, and the version of it the next unit inherits. The digest is
+// the file's sha256 when there was a file; the route's two other answers ("absent", "dir") are
+// rendered as they arrive rather than being turned into a hash-shaped lie.
+export interface UnitRelease {
+  readonly path: string;
+  readonly digest: string;
+  readonly released_at: number;
+}
+
+// UnitOverlap is one pair of units whose declared owned paths intersect, as the route reports it.
+// Derived there on every read, never stored, and never a verdict: the surface draws it and the
+// reader decides whether their plan meant it.
+export interface UnitOverlap {
+  readonly a: string;
+  readonly b: string;
+  readonly paths: readonly string[];
 }
 
 // str is the one string coercion both of the surface's parsers read the wire through - the ledger's
@@ -93,6 +152,27 @@ export function str(v: unknown): string {
 
 function strList(v: unknown): string[] {
   return Array.isArray(v) ? v.filter((x): x is string => typeof x === "string" && x !== "") : [];
+}
+
+// num is str's counterpart for the wire's unix-second stamps: anything that is not a real number
+// reads as 0, which every caller already treats as "the row carries no timestamp".
+function num(v: unknown): number {
+  return typeof v === "number" && Number.isFinite(v) ? v : 0;
+}
+
+function releaseList(v: unknown): UnitRelease[] {
+  if (!Array.isArray(v)) return [];
+  const out: UnitRelease[] = [];
+  for (const raw of v) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const r = raw as Record<string, unknown>;
+    const path = str(r.path);
+    // A release with no path names nothing a reader can go look at, and its digest describes
+    // something they cannot find. Dropped rather than drawn as a row with a blank left half.
+    if (!path) continue;
+    out.push({ path, digest: str(r.digest), released_at: num(r.released_at) });
+  }
+  return out;
 }
 
 // parseUnits normalizes the response body into units this module's model can be TOTAL over: every
@@ -120,9 +200,28 @@ export function parseUnits(body: unknown): DelegationUnit[] {
       validation: str(r.validation),
       state: str(r.state),
       read_only: r.read_only === true,
-      created: str(r.created),
-      updated: str(r.updated),
+      releases: releaseList(r.releases),
+      created: num(r.created),
+      updated: num(r.updated),
     });
+  }
+  return out;
+}
+
+// parseOverlaps reads the pairs the route derived. A pair naming a unit twice, or naming nothing,
+// is dropped: it would draw a warning a reader cannot act on. Total over any body, like parseUnits -
+// a daemon that predates the field sends none, and that is an absence, not a failure.
+export function parseOverlaps(body: unknown): UnitOverlap[] {
+  const list = (body as { overlaps?: unknown } | null)?.overlaps;
+  if (!Array.isArray(list)) return [];
+  const out: UnitOverlap[] = [];
+  for (const raw of list) {
+    if (typeof raw !== "object" || raw === null) continue;
+    const r = raw as Record<string, unknown>;
+    const a = str(r.a);
+    const b = str(r.b);
+    if (!a || !b || a === b) continue;
+    out.push({ a, b, paths: strList(r.paths) });
   }
   return out;
 }
@@ -144,6 +243,10 @@ export interface PlanNode {
   readonly children: readonly string[];
   readonly depth: number;
   readonly readOnly: boolean;
+  // The reported pairs this unit is IN, both sides of each kept so the row can name the other unit
+  // and the paths without going back to the model. Empty on every unit when the daemon reports no
+  // overlaps, which is the ordinary case.
+  readonly overlaps: readonly UnitOverlap[];
 }
 
 // A PlanEdge always runs left to right in the drawn plan: `from` is the parent or the dependency,
@@ -165,13 +268,18 @@ export interface PlanModel {
   // The units that named a parent this ledger does not carry. A stale or partial ledger is a fact
   // worth reporting, not a shape to silently flatten.
   readonly dangling: readonly string[];
+  // The overlapping pairs, exactly as the route reported them and in its order.
+  readonly overlaps: readonly UnitOverlap[];
 }
 
 // buildPlan assembles the tree. It is total over any unit list, including the ones a hand-kept
 // table produces: a duplicate id (the first wins), a unit that is its own parent, a parent cycle,
 // a depends_on naming something that is not here. None of those may hang or throw - the reader
 // gets the plan that CAN be drawn plus, where it matters, a note about what could not.
-export function buildPlan(units: readonly DelegationUnit[]): PlanModel {
+export function buildPlan(
+  units: readonly DelegationUnit[],
+  overlaps: readonly UnitOverlap[] = [],
+): PlanModel {
   const byId = new Map<string, PlanNode>();
   const kept: DelegationUnit[] = [];
   for (const u of units) {
@@ -228,6 +336,19 @@ export function buildPlan(units: readonly DelegationUnit[]): PlanModel {
     fail: 0,
     no_return: 0,
   };
+  // A pair naming a unit this ledger does not carry is dropped rather than drawn on the one side it
+  // can reach: a warning that cannot say who the other party is asks a reader to go find a row that
+  // is not on their screen.
+  const kernel = overlaps.filter((o) => byId.has(o.a) && byId.has(o.b));
+  const overlapsOf = new Map<string, UnitOverlap[]>();
+  for (const o of kernel) {
+    for (const id of [o.a, o.b]) {
+      const at = overlapsOf.get(id);
+      if (at) at.push(o);
+      else overlapsOf.set(id, [o]);
+    }
+  }
+
   const nodes: PlanNode[] = [];
   for (const u of kept) {
     const state = normalizeState(u.state);
@@ -244,6 +365,7 @@ export function buildPlan(units: readonly DelegationUnit[]): PlanModel {
       children: childrenOf.get(u.id) ?? [],
       depth: depthOf.get(u.id) ?? 0,
       readOnly: u.read_only === true,
+      overlaps: overlapsOf.get(u.id) ?? [],
     };
     nodes.push(node);
     byId.set(u.id, node);
@@ -268,6 +390,7 @@ export function buildPlan(units: readonly DelegationUnit[]): PlanModel {
     byId,
     counts,
     dangling,
+    overlaps: kernel,
   };
 }
 
@@ -285,6 +408,7 @@ function placeholder(u: DelegationUnit): PlanNode {
     children: [],
     depth: 0,
     readOnly: u.read_only === true,
+    overlaps: [],
   };
 }
 
@@ -440,7 +564,11 @@ export function layoutPlan(model: Placeable): PlanLayout {
 // daemon could not be read. Collapsing them into one "no data" is how a missing feature comes to
 // look like an idle one.
 export type LedgerRead =
-  | { readonly kind: "ok"; readonly units: DelegationUnit[] }
+  | {
+      readonly kind: "ok";
+      readonly units: DelegationUnit[];
+      readonly overlaps: UnitOverlap[];
+    }
   | { readonly kind: "absent" }
   | { readonly kind: "unreadable"; readonly detail: string };
 
@@ -466,7 +594,8 @@ export async function loadLedger(host: string, signal?: AbortSignal): Promise<Le
   if (res.status === 404 || res.status === 501) return { kind: "absent" };
   if (!res.ok) return { kind: "unreadable", detail: "HTTP " + res.status };
   try {
-    return { kind: "ok", units: parseUnits(await res.json()) };
+    const body = await res.json();
+    return { kind: "ok", units: parseUnits(body), overlaps: parseOverlaps(body) };
   } catch (e) {
     return { kind: "unreadable", detail: e instanceof Error ? e.message : String(e) };
   }

@@ -277,7 +277,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// live pool state, the output store for each node's last outcome and its ref - so
 			// it introduces no third notion of what ran.
 			planH := status.NewPlanHandler(svc, outputStore, opts.Magus.Root(), log)
-			ledgerH := status.NewLedgerHandler(ledger.NewStore(opts.Magus.CacheDir()), log)
+			ledgerH := status.NewLedgerHandler(ledger.NewStore(opts.Magus.CacheDir(), opts.Magus.Root()), log)
 
 			bridgeMux := http.NewServeMux()
 			// The JSON /api/v1/status route is GONE: the typed StatusService Connect route

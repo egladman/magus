@@ -13,14 +13,18 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { ActivityRow } from "../activityDrawer";
 import {
+  ageLabel,
   buildPlan,
+  isStale,
   joinRuns,
   layoutPlan,
   loadLedger,
   normalizeState,
   overviewLine,
+  parseOverlaps,
   parseUnits,
   treeOrder,
+  STALE_AFTER_MS,
   type DelegationUnit,
 } from "./ledger";
 
@@ -168,6 +172,39 @@ test("the no-return call-out is present even when it is zero", () => {
   assert.equal(overviewLine(buildPlan([])), "0 units - 0 no-return");
 });
 
+// ---- the heartbeat ---------------------------------------------------------
+
+// A row is re-put on every state change, so the gap since the last one is the only evidence this
+// surface has that a worker is still there. What the gap MEANS stays the reader's call - nothing
+// here transitions a unit, and no-return is never inferred.
+test("a row nobody has touched past the threshold is stale; a fresh one is not", () => {
+  const now = 1_755_300_000_000;
+  const sec = (msAgo: number): number => (now - msAgo) / 1000;
+  assert.equal(isStale(false, sec(STALE_AFTER_MS + 1000), now), true);
+  assert.equal(isStale(false, sec(STALE_AFTER_MS - 1000), now), false);
+});
+
+test("a finished row is never stale, and neither is one carrying no timestamp", () => {
+  const now = 1_755_300_000_000;
+  const long = (now - STALE_AFTER_MS * 10) / 1000;
+  assert.equal(isStale(true, long, now), false, "a unit that finished is not going to be touched");
+  assert.equal(
+    isStale(false, 0, now),
+    false,
+    "an unstamped row is a daemon fact, not a dead worker",
+  );
+});
+
+test("age reads at the coarsest granularity that still answers the question", () => {
+  const now = 1_755_300_000_000;
+  const ago = (secs: number): number => now / 1000 - secs;
+  assert.equal(ageLabel(ago(9), now), "9s");
+  assert.equal(ageLabel(ago(150), now), "2m");
+  assert.equal(ageLabel(ago(7200), now), "2h");
+  assert.equal(ageLabel(ago(200000), now), "2d");
+  assert.equal(ageLabel(0, now), "", "no timestamp renders nothing rather than a confident zero");
+});
+
 // ---- the live join ---------------------------------------------------------
 
 test("runs join onto the unit they name, in the order they were fed", () => {
@@ -261,8 +298,12 @@ test("parseUnits keeps the documented fields and drops a row with no id", () => 
         validation: "console:test",
         state: "running",
         read_only: true,
-        created: "2026-08-15T00:00:00Z",
-        updated: "2026-08-15T00:01:00Z",
+        releases: [
+          { path: "b.ts", digest: "sha256:abc", released_at: 1755300000 },
+          { digest: "sha256:def" },
+        ],
+        created: 1755299000,
+        updated: 1755300000,
       },
       { goal: "no id here" },
       null,
@@ -276,6 +317,50 @@ test("parseUnits keeps the documented fields and drops a row with no id", () => 
   );
   assert.equal(units[0]?.read_only, true);
   assert.equal(units[0]?.tier, "sonnet");
+  // Unix seconds, as the route serves them. Read as strings they were silently discarded, and a
+  // surface that cannot read this field cannot tell a fresh row from an abandoned one.
+  assert.equal(units[0]?.updated, 1755300000);
+  assert.equal(units[0]?.created, 1755299000);
+  assert.deepEqual(
+    units[0]?.releases,
+    [{ path: "b.ts", digest: "sha256:abc", released_at: 1755300000 }],
+    "a release naming no path points at nothing a reader can open",
+  );
+});
+
+test("parseOverlaps keeps the pairs it can draw and drops the ones it cannot", () => {
+  assert.deepEqual(
+    parseOverlaps({
+      overlaps: [
+        { a: "u1", b: "u2", paths: ["internal/ledger", 7] },
+        { a: "u1", b: "u1", paths: [] },
+        { a: "u1" },
+        null,
+      ],
+    }),
+    [{ a: "u1", b: "u2", paths: ["internal/ledger"] }],
+  );
+  // A daemon predating the field sends none, which is an absence and not a failure.
+  assert.deepEqual(parseOverlaps({ units: [] }), []);
+  assert.deepEqual(parseOverlaps(null), []);
+});
+
+// The warning belongs on BOTH rows: either one is where a reader might be standing when they need
+// to know the other exists.
+test("an overlap lands on both units, carrying the other id and the paths", () => {
+  const plan = buildPlan(
+    [unit({ id: "a", state: "running" }), unit({ id: "b", state: "running" })],
+    [{ a: "a", b: "b", paths: ["internal/ledger"] }],
+  );
+  assert.equal(plan.byId.get("a")?.overlaps.length, 1);
+  assert.deepEqual(plan.byId.get("b")?.overlaps[0]?.paths, ["internal/ledger"]);
+  assert.equal(plan.overlaps.length, 1);
+});
+
+test("an overlap naming a unit this ledger does not carry is dropped, not half-drawn", () => {
+  const plan = buildPlan([unit({ id: "a" })], [{ a: "a", b: "ghost", paths: ["x"] }]);
+  assert.deepEqual(plan.byId.get("a")?.overlaps, []);
+  assert.deepEqual(plan.overlaps, []);
 });
 
 test("a body that is not the documented shape yields no units rather than throwing", () => {
@@ -336,11 +421,20 @@ test("a refused connection is unreadable rather than absent", async () => {
   }
 });
 
-test("a served ledger comes back parsed", async () => {
+test("a served ledger comes back parsed, overlaps included", async () => {
   const read = await stubFetch(
-    () => ({ ok: true, status: 200, json: () => Promise.resolve({ units: [{ id: "root" }] }) }),
+    () => ({
+      ok: true,
+      status: 200,
+      json: () =>
+        Promise.resolve({
+          units: [{ id: "root" }, { id: "b1" }],
+          overlaps: [{ a: "root", b: "b1", paths: ["internal/ledger"] }],
+        }),
+    }),
     () => loadLedger("127.0.0.1:7391"),
   );
   assert.equal(read.kind, "ok");
-  assert.deepEqual(read.kind === "ok" ? read.units.map((u) => u.id) : [], ["root"]);
+  assert.deepEqual(read.kind === "ok" ? read.units.map((u) => u.id) : [], ["root", "b1"]);
+  assert.deepEqual(read.kind === "ok" ? read.overlaps.map((o) => o.b) : [], ["b1"]);
 });
