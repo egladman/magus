@@ -246,6 +246,30 @@ func TestResolveTargetsSkip(t *testing.T) {
 		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, []string{"/"}, "/ws/other")
 		require.ErrorContains(t, err, "there is no all-projects skip")
 	})
+
+	t.Run("a glob subtracts every project it matches", func(t *testing.T) {
+		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, []string{"a*"}, "/ws/other")
+		require.NoError(t, err)
+		assert.Equal(t, []types.Target{{Path: ".", Name: "test"}, {Path: "web", Name: "test"}}, targets)
+	})
+
+	t.Run("a glob matching no project is an error", func(t *testing.T) {
+		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, []string{"z*"}, "/ws/other")
+		require.ErrorContains(t, err, "no project matches the glob")
+	})
+
+	t.Run("a glob covering an explicitly named project is contradictory", func(t *testing.T) {
+		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"},
+			[]string{"api"}, []string{"a*"}, "/ws/other")
+		require.ErrorContains(t, err, "contradicts naming it on the command line")
+	})
+
+	// "*" legitimately matches every single-segment path including ".", so it falls to
+	// the emptied-selection refusal rather than a special case.
+	t.Run("a glob skipping everything is the emptied-selection error", func(t *testing.T) {
+		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, []string{"*"}, "/ws/other")
+		require.ErrorContains(t, err, "removed every selected project")
+	})
 }
 
 // TestSkipFlag proves the hand-bound repeatable flag accumulates, splits a

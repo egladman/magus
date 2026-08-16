@@ -62,7 +62,7 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 : This run's shard index within a CI matrix; paired with --n-shards
 
 **--skip** *string*
-: Exclude projects from the selection; repeatable or comma-separated. Takes the same project references as positionals
+: Exclude projects from the selection; repeatable or comma-separated. Takes project references like positionals, or a doublestar glob over project paths (libs/\*); a value matching nothing is an error
 
 **--step**
 : Pause before each subprocess for interactive stepping (needs a TTY; implies --concurrency=1)

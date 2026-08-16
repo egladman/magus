@@ -22,6 +22,8 @@ import (
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/types"
+
+	"github.com/bmatcuk/doublestar/v4"
 )
 
 // runTarget dispatches `magus run <target> [projects...]`.
@@ -400,7 +402,7 @@ func selectTargets(ctx context.Context, ws types.WorkspaceRepository, t types.Ta
 // (FlagCustom) for the man page and binds nothing, exactly like watch's --ignore.
 func bindRunFlags(fs *flag.FlagSet, skips *skipFlag) *gen.RunFlags {
 	rf := gen.BindRun(fs)
-	fs.Var(skips, gen.FlagRunSkip, "Exclude a project from the selection; repeatable. Takes the same project reference as a positional")
+	fs.Var(skips, gen.FlagRunSkip, "Exclude projects from the selection; repeatable or comma-separated. Takes project references or a doublestar glob (libs/*)")
 	return rf
 }
 
@@ -441,6 +443,26 @@ func subtractSkipped(ctx context.Context, ws types.WorkspaceRepository, targetNa
 	}
 	skip := make(map[string]bool, len(skipArgs))
 	for _, arg := range skipArgs {
+		// A glob subtracts every workspace project it matches, in the same doublestar
+		// dialect declared sources use. It matches workspace-relative project paths
+		// directly - never anchored to the cwd, because "libs/*" should mean the same
+		// thing from anywhere - and a glob matching zero projects is the same typo an
+		// unknown exact ref is.
+		if strings.ContainsAny(arg, "*?[") {
+			matched := false
+			for _, p := range ws.All() {
+				if ok, err := doublestar.Match(arg, p.Path); err != nil {
+					return nil, fmt.Errorf("run: --skip %s: %w", arg, err)
+				} else if ok {
+					skip[p.Path] = true
+					matched = true
+				}
+			}
+			if !matched {
+				return nil, fmt.Errorf("run: --skip %s: no project matches the glob", arg)
+			}
+			continue
+		}
 		resolved, err := file.ResolveProject(ctx, arg, anchor)
 		if err != nil {
 			return nil, fmt.Errorf("run: --skip %s: %w", arg, err)
