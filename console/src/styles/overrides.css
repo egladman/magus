@@ -30,6 +30,10 @@
      to frame the content; the bottom stays recessive so it does not draw the eye. */
   background: var(--pf-t--global--background--color--secondary--default);
   border-top: 1px solid var(--pf-t--global--border--color--default);
+  /* The mirror of the title bar's cast, pointing UP. Deliberately the same sm step: the
+     status bar is the recessive rail (see the background note above), so a heavier shadow
+     here would give the quieter bar the stronger presence. */
+  box-shadow: var(--pf-t--global--box-shadow--sm--top);
   font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle);
   overflow: hidden; /* a stray long value truncates with the bar, never scrolls the page */
   -webkit-user-select: none; user-select: none; /* chrome rail, like a native window edge */
