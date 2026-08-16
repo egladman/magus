@@ -4228,3 +4228,40 @@ a code {
   height: 100%;
   max-width: 100%;
   max-height: 100%;}
+
+/* ---- Reading preferences (settings gear) ---------------------------------
+   Two opt-outs the reader sets in the gear panel. theme.js writes the attribute on
+   <html> before paint; absent means the default, so a reader who never opens the panel
+   has no attribute and gets exactly the behavior they had before.
+
+   MOTION. The site already honors prefers-reduced-motion in eight places, but that
+   setting is all-or-nothing across every site a person visits, and someone may want
+   this page still while leaving their OS alone. Rather than restate those eight blocks
+   against a second selector - which would guarantee the two drift - this is the blanket
+   kill: near-zero durations rather than `animation: none`, because a zero-length
+   animation still fires animationend, and code that waits on it would hang. */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
+/* GLOSSARY. The marked terms earn their keep on a first read and turn into noise on a
+   re-read, so this drops the highlight to plain body text. The anchor stays a link and
+   the popup still opens - this is about visual quiet, not removing the affordance. */
+:root[data-glossary="off"] .glossary-term,
+:root[data-glossary="off"] .glossary-term:visited {
+  background-color: transparent;
+  box-shadow: none;
+  padding: 0;
+}
+
+/* The Offline row reports rather than configures, so it is not a control: no pointer,
+   and the value sits where the other rows put their input. */
+.settings-status-value {
+  color: var(--pico-muted-color);
+  font-size: 0.85em;
+}

@@ -106,6 +106,24 @@
 
   set(get()); // pre-paint, prevents a flash of the wrong theme
 
+  // Two more reading preferences, applied pre-paint for the same reason the theme is:
+  // both are visible the instant the page draws, so seeding them after DOMContentLoaded
+  // would show a frame of the thing the reader asked not to see - an animation starting,
+  // or every glossary term lighting up.
+  //
+  // Stored as "off"/"reduced" only; the default is absent, so a reader who never opens
+  // the panel gets exactly the old behavior and no attribute in the DOM.
+  function pref(key: string, on: string): void {
+    try {
+      if (localStorage.getItem(key) === on) root.setAttribute("data-" + key, on);
+      else root.removeAttribute("data-" + key);
+    } catch {
+      /* private mode: fall through to the default */
+    }
+  }
+  pref("motion", "reduced");
+  pref("glossary", "off");
+
   document.addEventListener("DOMContentLoaded", function () {
     const btn = document.getElementById("theme-cycle");
     if (btn) {
@@ -115,6 +133,37 @@
         set(order[(order.indexOf(get()) + 1) % order.length]);
       });
     }
+
+    // Switches (role=switch), not the theme's cycle button: each is a plain two-state
+    // preference, and a cycle would hide half its states behind a click.
+    //
+    // `onMeans` is which switch position writes the stored value. Motion reads
+    // positively (on = reduce it), but glossary would not: a switch labelled "Glossary
+    // highlights" must be ON when they are showing, so it is the OFF position that
+    // stores "off". Same helper, opposite polarity, rather than a second function or a
+    // label that says "Hide" to work around the widget.
+    function toggle(id: string, key: string, value: string, onMeans: boolean): void {
+      const box = document.getElementById(id) as HTMLInputElement | null;
+      if (!box) return;
+      let stored = "";
+      try {
+        stored = localStorage.getItem(key) || "";
+      } catch {
+        /* private mode */
+      }
+      box.checked = (stored === value) === onMeans;
+      box.addEventListener("change", function () {
+        try {
+          if (box.checked === onMeans) localStorage.setItem(key, value);
+          else localStorage.removeItem(key);
+        } catch {
+          /* private mode: the attribute below still applies for this page view */
+        }
+        pref(key, value);
+      });
+    }
+    toggle("settings-motion", "motion", "reduced", true);
+    toggle("settings-glossary", "glossary", "off", false);
 
     document.querySelectorAll("time[datetime]").forEach(function (el) {
       const raw = el.getAttribute("datetime");

@@ -18,17 +18,45 @@
   border: 1px solid var(--pico-muted-border-color); border-radius: var(--pico-border-radius);
   box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
 }
+/* A flex column so every row STRETCHES to the panel width. width:100% on the rows is not
+   enough on its own: the switch rows are <label>s, and a label resolves a percentage width
+   against a shrink-to-fit box, so they came out at their content width (143px and 168px in
+   a 222px panel) while the theme row - a plain div - filled. Stretching from the container
+   makes the row's element type stop mattering. */
+/* The panel is position:absolute with no width, so it is SHRINK-TO-FIT: its width comes
+   from its widest child, which leaves the narrower rows nothing to stretch against and is
+   why the controls never lined up. A definite min-width breaks that circularity; the flex
+   column then stretches every row to it, whatever element the row happens to be. */
+.settings-panel { display: flex; flex-direction: column; align-items: stretch; min-width: 15rem; }
 .settings-title { margin: 0 0 0.15rem; font-size: 0.9rem; }
 .settings-note { margin: 0 0 0.7rem; font-size: 0.72rem; color: var(--pico-muted-color); }
+/* A two-column grid, not flex + space-between. The flex version put the label and the
+   control side by side at the START of the row: Pico's role=switch carries its own inline
+   margin, so the control landed a label-width away from the edge and every row landed
+   somewhere different (measured 103px, 78px and 16px from the panel's right edge). A grid
+   track cannot be pushed around that way - the control owns the right-hand column whatever
+   its own margins are, so every row's control lines up. */
 .settings-row {
-  display: flex; align-items: center; justify-content: space-between; gap: 0.6rem;
+  display: grid; grid-template-columns: 1fr auto; align-items: center; gap: 0.6rem;
+  /* Explicit, because these rows are <label>s: a label shrink-wraps its content, so the
+     1fr track was resolving against a 143px box inside a 255px panel and every row ended
+     at a different x. The grid alone does not fix alignment without this. */
+  width: 100%;
   margin: 0 0 0.55rem; font-size: 0.8rem;
 }
+.settings-row > :last-child { justify-self: end; margin-inline-end: 0; }
+/* Pico gives a label a block margin and cursor defaults meant for form stacks; inside a
+   row it is just the left-hand cell. */
+.settings-row > label { margin: 0; cursor: pointer; }
 .settings-row:last-child { margin-bottom: 0; }
-.settings-row select, .settings-row input {
+/* Text inputs and selects only. A role=switch input draws its own track and knob and
+   sizes itself; this padding/height (written for the console's host and poll fields)
+   squashed it into something that did not read as a Pico toggle at all. */
+.settings-row select, .settings-row input:not([role="switch"]) {
   width: auto; margin: 0; padding: 0.2rem 0.45rem; height: auto; font-size: 0.8rem;
 }
-.settings-row input { max-width: 9.5rem; }
+.settings-row input:not([role="switch"]) { max-width: 9.5rem; }
+.settings-row input[role="switch"] { margin: 0; }
 /* The theme control is a click-to-cycle button (auto -> light -> dark), showing the
    current mode as an icon + label. Sized to match the row's selects/inputs; theme.js
    fills the icon and label. */
