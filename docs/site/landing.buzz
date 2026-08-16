@@ -124,7 +124,7 @@ export fun renderLanding(site: Site) > void !> any {
         <span class="landing-rotate" aria-hidden="true">It calls your tools. It does not replace them.</span>
         <span class="landing-rotate" aria-hidden="true">magus never says you cannot do that.</span>
         <span class="landing-rotate" aria-hidden="true">Everything magus knows, handed over.</span>
-        <span class="landing-rotate" aria-hidden="true">Agents grep faster. Guessing faster is still guessing.</span>
+        <span class="landing-rotate" aria-hidden="true">A grep is a guess. The graph is not.</span>
         <span class="landing-rotate" aria-hidden="true">The graph is not inferred. It is what the build already knew.</span>
         <span class="landing-rotate" aria-hidden="true">A build tool should be boring. Exciting means it moved under you.</span>
         <span class="landing-rotate" aria-hidden="true">One layer between you and the command. Not five.</span>
