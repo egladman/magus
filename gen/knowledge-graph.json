@@ -7798,7 +7798,7 @@
       "kind": "function",
       "label": "renderBlogIndex",
       "doc": "renderBlogIndex writes gen/blog/index.html, a reverse-chronological list of the collected posts. Runs AFTER renderBlogPost has populated site.blogPosts. A plain <ul> under renderPage(), so it inherits nav/breadcrumb/footer.",
-      "source": "docs/engine/blog.buzz:221",
+      "source": "docs/engine/blog.buzz:219",
       "attrs": {
         "exported": "true"
       }
@@ -7808,7 +7808,7 @@
       "kind": "function",
       "label": "renderBlogPager",
       "doc": "renderBlogPager renders the prev/next links between posts, ordered by date newest-first so \"prev\" is newer and \"next\" is older (timeline intuition). Falls back to filename order when a post lacks a date.",
-      "source": "docs/engine/blog.buzz:162"
+      "source": "docs/engine/blog.buzz:160"
     },
     {
       "id": "function:docs/engine/blog.buzz:renderBlogPost",
@@ -8243,7 +8243,7 @@
       "id": "function:docs/engine/page.buzz:dependencyFigure",
       "kind": "function",
       "label": "dependencyFigure",
-      "source": "docs/engine/page.buzz:767",
+      "source": "docs/engine/page.buzz:765",
       "attrs": {
         "exported": "true"
       }
@@ -8253,7 +8253,7 @@
       "kind": "function",
       "label": "diagramDrift",
       "doc": "diagramDrift re-exports the anchor check, alongside writeDiagramPair.",
-      "source": "docs/engine/page.buzz:754",
+      "source": "docs/engine/page.buzz:752",
       "attrs": {
         "exported": "true"
       }
@@ -8338,7 +8338,7 @@
       "kind": "function",
       "label": "writeDiagramPair",
       "doc": "writeDiagramPair re-exports the standalone writer so the magusfile can reach it through render.buzz. It lives behind this module because the registry may have exactly one importer, and the site render is the consumer that cannot give it up.",
-      "source": "docs/engine/page.buzz:749",
+      "source": "docs/engine/page.buzz:747",
       "attrs": {
         "exported": "true"
       }
@@ -9675,14 +9675,14 @@
       "kind": "function",
       "label": "generateJsBundles",
       "doc": "generateJsBundles builds the committed browser bundles that import npm packages. pnpm is pinned by package.json and pnpm-lock.yaml, and --frozen-lockfile runs every time rather than behind an isDir check: an interrupted install leaves a node_modules that exists but is incomplete, and the guard read that as ready and fed esbuild a half tree. See the install() note in magusfile.buzz.",
-      "source": "docs/render.buzz:431"
+      "source": "docs/render.buzz:435"
     },
     {
       "id": "function:docs/render.buzz:site_conventions",
       "kind": "function",
       "label": "site_conventions",
       "doc": "site_publish is the cacheable publication unit used by docs:site-generate. Keep every output that belongs to the completed site in this one phase: the page tree, pnpm-backed vendor bundles, the integrity manifest, and (only for rw) the URL ledger. site_conventions re-exports the gates check for the magusfile. engine/gates is flat-imported here, and a flat import does not RE-export, so the magusfile cannot reach conventionsCheck through this module without a wrapper.",
-      "source": "docs/render.buzz:415",
+      "source": "docs/render.buzz:419",
       "attrs": {
         "exported": "true"
       }
@@ -9692,7 +9692,7 @@
       "kind": "function",
       "label": "site_diagram_drift",
       "doc": "site_diagram_drift forwards the diagram-to-code check, for the same reason site_diagrams does: engine/page owns the single import of the registry.",
-      "source": "docs/render.buzz:444",
+      "source": "docs/render.buzz:448",
       "attrs": {
         "exported": "true"
       }
@@ -9702,7 +9702,7 @@
       "kind": "function",
       "label": "site_diagrams",
       "doc": "site_diagrams writes the committed light/dark SVG pair for the magusfile's diagrams-generate target, forwarding to engine/page, which owns the registry import.",
-      "source": "docs/render.buzz:438",
+      "source": "docs/render.buzz:442",
       "attrs": {
         "exported": "true"
       }
@@ -9711,7 +9711,7 @@
       "id": "function:docs/render.buzz:site_publish",
       "kind": "function",
       "label": "site_publish",
-      "source": "docs/render.buzz:419",
+      "source": "docs/render.buzz:423",
       "attrs": {
         "exported": "true"
       }
