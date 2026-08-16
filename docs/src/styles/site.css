@@ -383,26 +383,9 @@ details.dropdown > summary + ul {
   .no-js .nav-links { flex-wrap: wrap; justify-content: flex-end; }
 }
 
-/* The brand lockup must never break across lines. It sits a fraction of a pixel from
-   overflowing its own shrink-wrapped box (mark + space + wordmark came to 88.85px inside an
-   88.8px content box), so without this the hat wraps onto the line above the word - which is
-   what it did, and it is not a width the artwork can be tuned out of. */
-.site-header ul a.contrast {
-  white-space: nowrap;
-}
-
-/* Small hat mark beside the "magus" wordmark in the nav. Inline SVG on currentColor, so it
-   takes the wordmark's color in both themes.
-
-   The width is COMPUTED from the viewBox ratio (875/766) rather than left as `auto`. That is
-   not a preference: `width: auto` on an inline <svg> does not scale from the height the way it
-   does on an <img>, it resolves to the element's own width attribute - 875px - so the box was
-   full-width and the wordmark wrapped to the next line. Keep the two in step if the artwork's
-   viewBox ever changes. */
-.brand-mark {
-  height: 1.5em;
-  width: calc(1.5em * 875 / 766);
-  vertical-align: -0.35em;
+/* The wordmark's trailing dot, the one mark in the nav lockup that carries color. */
+.brand-dot {
+  color: var(--brand-dot);
 }
 
 /* Centered hero image on the home page (the README gopher). */
