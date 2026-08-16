@@ -486,14 +486,25 @@ The architecture diagram above tags each runtime component with the package it l
 
 ### Building from source
 
-Building magus needs Go. The full toolchain (Go itself, plus Node and esbuild for the docs site) is pinned in [`mise.toml`](https://github.com/egladman/magus/blob/main/mise.toml); [mise](https://mise.jdx.dev/) installs it in one step. From a fresh clone:
+magus builds magus, so the binary comes out of a magus target like anything else in this workspace:
 
 ```sh
-mise install           # installs the pinned Go, Node, and esbuild
-go build -o magus ./cmd/magus
+mise install              # the pinned Go, Node, and esbuild
+magus run go-build .      # writes ./magus
 ```
 
-Only building the `magus` binary? Go alone is enough: run `GOEXPERIMENT=jsonv2 go build -o magus ./cmd/magus`. Use `mise install` for the docs site (`magus run generate docs`) and the playground.
+`go-build` regenerates the compiled built-in spells before it links, so the binary never embeds stale bytecode. It is the target to use over `build`, which also runs the format and image stages.
+
+Do not have a magus yet? [Install a release](https://eli.gladman.cc/magus/setup/) and point it at your checkout - then every build after that is the command above.
+
+Failing that, a clone with no magus and no release can bootstrap one with Go directly. This is the only place a raw `go build` belongs, and only to produce the binary that runs everything after it:
+
+```sh
+GOEXPERIMENT=jsonv2 go build -o magus ./cmd/magus   # bootstrap only
+./magus run go-build .
+```
+
+`GOEXPERIMENT=jsonv2` is not optional: [`mise.toml`](https://github.com/egladman/magus/blob/main/mise.toml) sets it for this repository, so a build without it differs from every other build here and shows up later as generated-file drift that is not yours.
 
 ### Running the tests
 
