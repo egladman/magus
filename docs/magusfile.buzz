@@ -335,6 +335,11 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
 // excludes there still apply, so the generated trees stay out.
 export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
+    // Keep in step with the dprint args below. Not writesFiles: dprint amends authored
+    // pages, so `magus clean` must never claim them. Undeclared, this is MGS4007.
+    ctx.modifiesExistingFiles("*.md", "concepts/**/*.md", "guides/*.md",
+        "guides/integrations/*.md", "migrating/**/*.md", "reference/**/*.md",
+        "setup/**/*.md");
     markdown["dprint"](ctx, {"args": ["./*.md", "./concepts/**/*.md", "./guides/*.md",
         "./guides/integrations/*.md", "./migrating/**/*.md", "./reference/**/*.md",
         "./setup/**/*.md"]});

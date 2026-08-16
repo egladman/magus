@@ -1001,7 +1001,30 @@
               "target": "generate"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "modifies_existing_files": [
+            {
+              "glob": "**/*.go"
+            },
+            {
+              "glob": "go.mod"
+            },
+            {
+              "glob": "go.sum"
+            },
+            {
+              "glob": "*.md"
+            },
+            {
+              "glob": "benchmarks/**/*.md"
+            },
+            {
+              "glob": "tapes/**/*.md"
+            },
+            {
+              "glob": "cmd/magus/agents-section.md"
+            }
+          ]
         },
         {
           "name": "ci",
@@ -1561,7 +1584,30 @@
               "target": "generate"
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "modifies_existing_files": [
+            {
+              "glob": "*.md"
+            },
+            {
+              "glob": "concepts/**/*.md"
+            },
+            {
+              "glob": "guides/*.md"
+            },
+            {
+              "glob": "guides/integrations/*.md"
+            },
+            {
+              "glob": "migrating/**/*.md"
+            },
+            {
+              "glob": "reference/**/*.md"
+            },
+            {
+              "glob": "setup/**/*.md"
+            }
+          ]
         },
         {
           "name": "conventions",

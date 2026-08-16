@@ -391,6 +391,19 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 			step.Sources = append(step.Sources, magusfileGlobs(".")...)
 		}
 	}
+	// Gathered BEFORE the ownership boundary below narrows step.Outputs to one target's.
+	step.OwnedOutputs = append(step.OwnedOutputs, step.Outputs...)
+	for _, refs := range p.TargetOutputs {
+		for _, ref := range refs {
+			owner := ref.Project
+			if owner == "" {
+				owner = p.Path
+			}
+			if g := joinGlob(owner, ref.Glob); !slices.Contains(step.OwnedOutputs, g) {
+				step.OwnedOutputs = append(step.OwnedOutputs, g)
+			}
+		}
+	}
 	// ctx.writesFiles completes the same ownership boundary for replay: once a target
 	// names its own artifacts, do not inherit every project or spell output into
 	// its snapshot. Otherwise an unrelated target can restore a stale tree merely
@@ -446,8 +459,14 @@ func (m *Magus) buildStep(p *types.Project, target string) cache.Step {
 	// cacheable rather than having to opt out with skip_cache.
 	step.Observations = append(step.Observations, p.TargetObservations[target]...)
 	for _, ref := range p.TargetUpdates[target] {
-		if g := joinGlob(ref.Project, ref.Glob); !slices.Contains(step.Sources, g) {
+		g := joinGlob(ref.Project, ref.Glob)
+		if !slices.Contains(step.Sources, g) {
 			step.Sources = append(step.Sources, g)
+		}
+		// Also on its own: once folded into Sources the glob can no longer answer
+		// "was this edit declared", which is what MGS4007 asks.
+		if !slices.Contains(step.Updates, g) {
+			step.Updates = append(step.Updates, g)
 		}
 	}
 	for _, ref := range p.TargetOutputs[target] {

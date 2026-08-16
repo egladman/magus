@@ -35,11 +35,12 @@ fun typos(target: Target) > Command {
     // exits non-zero when any are found. Config comes from ./_typos.toml at the
     // repo root - an [files.extend-exclude] for generated/vendored trees, empty
     // by default so domain terms (gopherbuzz/magusfile/TinyGo) never trip it.
-    // The `rw` charm swaps the read-only check for typos' safe autofix so
-    // `md.typos:rw` writes corrections in place.
+    // `fix`, NOT `rw`: rw is a workspace default charm, and this op takes no paths, so
+    // under rw every caller silently rewrote its whole tree - including `lint`, while CI
+    // stripped the default and ran read-only.
     final args = ["--format", "brief"];
     return Command{bin = "typos", args = args, charms = {
-        "rw": append(["-w"]),
+        "fix": append(["-w"]),
     }};
 }
 

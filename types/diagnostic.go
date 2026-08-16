@@ -159,23 +159,34 @@ const (
 	MissingDependencyDetected DiagnosticCode = "MGS4004"
 	EnvironmentalDrift        DiagnosticCode = "MGS4005"
 	StaleGeneratedOutput      DiagnosticCode = "MGS4006"
-	NearDuplicateServices     DiagnosticCode = "MGS5001"
-	ServiceOpDetached         DiagnosticCode = "MGS5002"
-	CommandOpNeverExits       DiagnosticCode = "MGS5003"
-	DaemonRequired            DiagnosticCode = "MGS5004"
-	CharmPatchInvalid         DiagnosticCode = "MGS6001"
-	UnresolvableBuzzImport    DiagnosticCode = "MGS7001"
-	DanglingDocReference      DiagnosticCode = "MGS7002"
-	OutputRefMissing          DiagnosticCode = "MGS8001"
-	OutputRefAmbiguous        DiagnosticCode = "MGS8002"
-	OutputRefMalformed        DiagnosticCode = "MGS8003"
-	OutputRefForeignMachine   DiagnosticCode = "MGS8004"
-	BearerRejected            DiagnosticCode = "MGS9001"
-	InsecureTokenPermissions  DiagnosticCode = "MGS9002"
-	ConnectorStoreTooNew      DiagnosticCode = "MGS9003"
-	NoAuthToken               DiagnosticCode = "MGS9004"
-	ConnectorNameExists       DiagnosticCode = "MGS9005"
-	ConnectorNotFound         DiagnosticCode = "MGS9006"
+	// UndeclaredSourceModified is a target that rewrote a file it declared as a SOURCE
+	// and did not declare as an update. The key that identified the result no longer
+	// describes the inputs that produced it, so the entry is unreproducible by
+	// construction.
+	//
+	// Deliberately charm-agnostic. Keying on the charm was considered and rejected: a
+	// charm patches args, so it cannot say whether the tool writes, and a rule keyed on
+	// whether the caller TYPED the charm exempts a mutating custom charm merely because
+	// someone spelled it out. ctx.modifiesExistingFiles is the declaration that answers
+	// this, which is why a formatter names its edits rather than earning an exemption.
+	UndeclaredSourceModified DiagnosticCode = "MGS4007"
+	NearDuplicateServices    DiagnosticCode = "MGS5001"
+	ServiceOpDetached        DiagnosticCode = "MGS5002"
+	CommandOpNeverExits      DiagnosticCode = "MGS5003"
+	DaemonRequired           DiagnosticCode = "MGS5004"
+	CharmPatchInvalid        DiagnosticCode = "MGS6001"
+	UnresolvableBuzzImport   DiagnosticCode = "MGS7001"
+	DanglingDocReference     DiagnosticCode = "MGS7002"
+	OutputRefMissing         DiagnosticCode = "MGS8001"
+	OutputRefAmbiguous       DiagnosticCode = "MGS8002"
+	OutputRefMalformed       DiagnosticCode = "MGS8003"
+	OutputRefForeignMachine  DiagnosticCode = "MGS8004"
+	BearerRejected           DiagnosticCode = "MGS9001"
+	InsecureTokenPermissions DiagnosticCode = "MGS9002"
+	ConnectorStoreTooNew     DiagnosticCode = "MGS9003"
+	NoAuthToken              DiagnosticCode = "MGS9004"
+	ConnectorNameExists      DiagnosticCode = "MGS9005"
+	ConnectorNotFound        DiagnosticCode = "MGS9006"
 )
 
 // allDiagnosticCodes lists every registered code in ascending MGS order. Keep it
@@ -197,7 +208,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	DescendantBoundaryCrossed, VCSUnavailable, ToolNotOnPath, ToolNotReady, ToolTooOld, ToolTooNew,
 	ProjectLockHeldByAncestor,
 	RaceDetected, OutputOverlapDetected, NondeterministicOutput, MissingDependencyDetected,
-	EnvironmentalDrift, StaleGeneratedOutput,
+	EnvironmentalDrift, StaleGeneratedOutput, UndeclaredSourceModified,
 	NearDuplicateServices, ServiceOpDetached, CommandOpNeverExits, DaemonRequired,
 	CharmPatchInvalid,
 	UnresolvableBuzzImport, DanglingDocReference,

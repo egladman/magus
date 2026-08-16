@@ -378,6 +378,7 @@ reference/codes/race/MGS4003/
 reference/codes/race/MGS4004/
 reference/codes/race/MGS4005/
 reference/codes/race/MGS4006/
+reference/codes/race/MGS4007/
 reference/codes/sandbox/
 reference/codes/sandbox/MGS2001/
 reference/codes/sandbox/MGS2002/
@@ -544,6 +545,7 @@ tags/cursor/
 tags/cycle/
 tags/daemon/
 tags/debugging/
+tags/declarations/
 tags/dependency-graph/
 tags/depends-on/
 tags/depends/

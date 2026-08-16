@@ -2017,6 +2017,9 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 // covers.
 export fun format(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
+    // Not writesFiles: gofmt amends authored code rather than producing it, so these
+    // bytes must stay off the snapshot/replay path. Undeclared, this is MGS4007.
+    ctx.modifiesExistingFiles("**/*.go", "go.mod", "go.sum");
     go["go-fmt"](ctx);
     go["go-mod-tidy"](ctx);
     // Scope dprint by ARGV, not by its config. dprint discovers a nested dprint.json and
@@ -2029,6 +2032,8 @@ export fun format(ctx: magus\Context, args: [str]) > void {
     // Passing paths scopes it (10 files, none in a child project). The excludes in
     // dprint.json still apply, so MAGUS.md and CHANGELOG.md stay out. Keep this list in
     // step with that file's `includes`.
+    ctx.modifiesExistingFiles("*.md", "benchmarks/**/*.md", "tapes/**/*.md",
+        "cmd/magus/agents-section.md");
     markdown["dprint"](ctx, {"args": ["./*.md", "./benchmarks/**/*.md", "./tapes/**/*.md",
         "./cmd/magus/agents-section.md"]});
 }

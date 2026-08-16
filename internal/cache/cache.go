@@ -133,11 +133,20 @@ type Step struct {
 	// That failure hid for a long time because snapshot only runs on a cache MISS, and those
 	// targets always replayed.
 	OutputsDeclared bool
-	Deps            []string // upstream project hashes folded into the key
-	DependsOn       []string // upstream project paths for scheduling (not hashed)
-	WorkspaceRoot   string
-	Target          string   // mixed into key to distinguish targets on the same sources
-	Charms          []string // active charm names (sorted), mixed into key so charm-variant runs differ
+
+	// Updates and OwnedOutputs are unhashed: both are already covered by Sources and
+	// Outputs, and hashing either would change every existing key. They exist so
+	// checkSourceMutation can tell a declared write from an undeclared one (MGS4007).
+	Updates []string // ctx.modifiesExistingFiles globs
+	// OwnedOutputs spans EVERY target in the project, not the running one, because
+	// ctx.needs puts a chained target's writes inside this step's window.
+	OwnedOutputs []string
+
+	Deps          []string // upstream project hashes folded into the key
+	DependsOn     []string // upstream project paths for scheduling (not hashed)
+	WorkspaceRoot string
+	Target        string   // mixed into key to distinguish targets on the same sources
+	Charms        []string // active charm names (sorted), mixed into key so charm-variant runs differ
 	// ExtraArgs are the args after `--`, forwarded to the target. They change what
 	// the target does, so like Charms they MUST key the cache: without them a run
 	// with different args replays the previous run's result. Order is significant
@@ -524,6 +533,13 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 		return result, err
 	}
 
+	// Taken here rather than threaded out of hashStep, to leave that pinned hot path
+	// alone; the files were just hashed, so the mtime fast-path makes this a stat sweep.
+	preSources, preErr := c.fingerprintSources(ctx, rc.step)
+	if preErr != nil {
+		preSources = nil
+	}
+
 	lp := c.logPath(s.ProjectPath, hash)
 	// NewContext lets spell bindings (magus.bust_cache) reach the active cache.
 	rawOutput, runErr := c.captureRun(NewContext(ctx, c), lp, s.ProjectPath, reproTarget(s), fn)
@@ -564,6 +580,30 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	if err := ctx.Err(); err != nil {
 		result.Duration = time.Since(start)
 		return result, err
+	}
+
+	// Before the snapshot, never after: an entry whose key no longer describes its
+	// inputs must not reach the local store or the shared remote.
+	if mutErr := c.checkSourceMutation(ctx, rc.step, preSources); mutErr != nil {
+		result.Duration = time.Since(start)
+		c.errs.Add(1)
+		ref := c.recordOutput(ctx, s, hash, rawOutput, result.Duration, mutErr)
+		result.Ref = ref
+		c.log.ErrorContext(ctx,
+			"cache.error",
+			slog.String("project", s.ProjectPath),
+			slog.String("label", s.Label),
+			slog.String("target", reproTarget(s)),
+			slog.Int64("duration", int64(result.Duration)),
+			slog.String("error", types.CauseText(mutErr)),
+			slog.String("ref", ref),
+			slog.String("log", lp),
+		)
+		if rc.onError != nil {
+			rc.onError(mutErr)
+		}
+		rc.fireResults(rc.step, &result, mutErr)
+		return result, mutErr
 	}
 
 	if c.mutable && !s.NoCache {

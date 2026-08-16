@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2328,
-  "edge_count": 6081,
+  "node_count": 2331,
+  "edge_count": 6091,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -468,6 +468,14 @@
       "label": "MGS4006",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/race/MGS4006/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS4007",
+      "kind": "diagnostic",
+      "label": "MGS4007",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/race/MGS4007/"
       }
     },
     {
@@ -1002,7 +1010,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "187",
+        "dir_files": "188",
         "dir_languages": "markdown"
       }
     },
@@ -1032,7 +1040,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "83",
+        "dir_files": "84",
         "dir_languages": "markdown"
       }
     },
@@ -1092,7 +1100,7 @@
       "label": "docs/reference/codes/race",
       "source": "docs/reference/codes/race",
       "attrs": {
-        "dir_files": "7",
+        "dir_files": "8",
         "dir_languages": "markdown"
       }
     },
@@ -4139,6 +4147,18 @@
         "section": "reference",
         "tags": "MGS4006,drift,generated,stale,inputs,regenerate",
         "title": "MGS4006: stale generated output"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/race/MGS4007.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/race/MGS4007.md",
+      "source": "docs/reference/codes/race/MGS4007.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS4007,race,cache,sources,charms,formatter,outputs,declarations",
+        "title": "MGS4007: undeclared source modified"
       }
     },
     {
@@ -9484,7 +9504,7 @@
       "id": "function:docs/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "docs/magusfile.buzz:379",
+      "source": "docs/magusfile.buzz:384",
       "attrs": {
         "exported": "true"
       }
@@ -9494,7 +9514,7 @@
       "kind": "function",
       "label": "build_hljs",
       "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Bump the version in package.json and the next generate picks it up; gen/ is not committed, so generate runs this as one of its stages.",
-      "source": "docs/magusfile.buzz:474",
+      "source": "docs/magusfile.buzz:479",
       "attrs": {
         "exported": "true"
       }
@@ -9504,7 +9524,7 @@
       "kind": "function",
       "label": "build_playground",
       "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: the stock Go toolchain compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and Go's own wasm_exec.js glue is copied beside it. The glue must come from the SAME Go that built the wasm - it is a matched pair.  gen/, not vendor/. Those bytes were committed for one reason: CI had no TinyGo, so it could not reproduce them and they had to be inputs rather than output. CI has Go. So this is ordinary render output now, r",
-      "source": "docs/magusfile.buzz:423",
+      "source": "docs/magusfile.buzz:428",
       "attrs": {
         "exported": "true"
       }
@@ -9514,7 +9534,7 @@
       "kind": "function",
       "label": "build_playground_editor",
       "doc": "build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js. It existed only as a pnpm script before, because the artifact was committed and a human ran it after a version bump. gen/ is no longer committed, so every published byte needs a target CI can run - a script nothing invokes would have shipped a playground with no editor.",
-      "source": "docs/magusfile.buzz:487",
+      "source": "docs/magusfile.buzz:492",
       "attrs": {
         "exported": "true"
       }
@@ -9524,7 +9544,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "buzz-test runs render's in-file `test \"...\" {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises on a non-zero exit, so a failing assertion fails this target.",
-      "source": "docs/magusfile.buzz:384",
+      "source": "docs/magusfile.buzz:389",
       "attrs": {
         "exported": "true"
       }
@@ -9533,7 +9553,7 @@
       "id": "function:docs/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "source": "docs/magusfile.buzz:400",
+      "source": "docs/magusfile.buzz:405",
       "attrs": {
         "exported": "true"
       }
@@ -9553,7 +9573,7 @@
       "kind": "function",
       "label": "conventions",
       "doc": "conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved. See docs/conventions.md for what each rule means.  Its OWN target, not a line inside lint, and it deliberately depends on nothing. A prose nit should name the thing that is wrong; folding it into lint would report a stale path in the README as \"docs lint failed\", and a target that fails for reasons unrelated to",
-      "source": "docs/magusfile.buzz:352",
+      "source": "docs/magusfile.buzz:357",
       "attrs": {
         "exported": "true"
       }
@@ -9563,7 +9583,7 @@
       "kind": "function",
       "label": "diagrams_generate",
       "doc": "diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/. The docs site does NOT read these - it inlines a CSS-variable copy at render time so a diagram follows the theme toggle. This pair is for GitHub, where the README loads an image through <img> and cannot reach the page's CSS at all.  The pair lands under this project rather than beside the terminal recordings in the workspace's assets/gen: docs already depends on the root project, so writing there is MGS1012, a targ",
-      "source": "docs/magusfile.buzz:451",
+      "source": "docs/magusfile.buzz:456",
       "attrs": {
         "exported": "true"
       }
@@ -9610,7 +9630,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both need node_modules, which it reaches through format -> generate -> preflight; proc.exec raises on a non-zero exit, so either gate fails lint.  Markdown formatting is dprint, run once from the root project (its scope is dprint.json at the workspace root), so `format` here is a dependency edge and nothing else. This project only lints prose; see docs/concep",
-      "source": "docs/magusfile.buzz:365",
+      "source": "docs/magusfile.buzz:370",
       "attrs": {
         "exported": "true"
       }
@@ -9629,7 +9649,7 @@
       "kind": "function",
       "label": "render",
       "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
-      "source": "docs/magusfile.buzz:495",
+      "source": "docs/magusfile.buzz:500",
       "attrs": {
         "exported": "true"
       }
@@ -9639,7 +9659,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits what actually ships against the npm advisory database. See console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the .npmrc cooling period is the stronger half of this.",
-      "source": "docs/magusfile.buzz:395",
+      "source": "docs/magusfile.buzz:400",
       "attrs": {
         "exported": "true"
       }
@@ -9658,7 +9678,7 @@
       "id": "function:docs/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "docs/magusfile.buzz:388",
+      "source": "docs/magusfile.buzz:393",
       "attrs": {
         "exported": "true"
       }
@@ -10934,7 +10954,7 @@
       "kind": "function",
       "label": "inject",
       "doc": "Editing rather than producing. This page is hand-written and only a region of it is generated, so it is NOT an output magus owns - declaring it with writesFiles would let `magus clean` delete somebody's prose. modifiesExistingFiles hashes it without claiming it.",
-      "source": "docs/tour/20-footprints.buzz:66",
+      "source": "docs/tour/20-footprints.buzz:68",
       "attrs": {
         "exported": "true"
       }
@@ -10944,7 +10964,7 @@
       "kind": "function",
       "label": "report",
       "doc": "Narrow on purpose. readsFiles replaces the project baseline for this target, so editing something outside data/ does not re-run it. Name every input the target reads: a glob you forget is a file whose change magus cannot see, and a stale hit is the result.",
-      "source": "docs/tour/20-footprints.buzz:42",
+      "source": "docs/tour/20-footprints.buzz:44",
       "attrs": {
         "exported": "true"
       }
@@ -10954,7 +10974,17 @@
       "kind": "function",
       "label": "stamp",
       "doc": "THE CONTRADICTION. This target claims the same output as `report`. Nothing stops both from running, so whichever finishes last wins and the other's drift gate fails against a file it did not write - a failure that points at the wrong target and wastes an afternoon.  `magus doctor` refuses it up front with MGS1020 and names both claimants. An output has one owner. If two targets both need to contribute, they write separate files and a third target combines them.",
-      "source": "docs/tour/20-footprints.buzz:57",
+      "source": "docs/tour/20-footprints.buzz:59",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/tour/20-footprints.buzz:tidy",
+      "kind": "function",
+      "label": "tidy",
+      "doc": "THE SECOND CONTRADICTION, and unlike `stamp` no static check can see it: this target writes a file it declared as an INPUT. The key is hashed from data/** before the body runs, so by the time the run finishes the key describes a tree that no longer exists. Nothing can reproduce that entry - not CI, not a teammate, not this machine a second later - and it still reported success.  `magus run tidy` fails it with MGS4007 and names the file. The fix is the line above in `inject`: say `ctx.modifiesExistingFiles(\"",
+      "source": "docs/tour/20-footprints.buzz:89",
       "attrs": {
         "exported": "true"
       }
@@ -12260,7 +12290,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:2037",
+      "source": "magusfile.buzz:2042",
       "attrs": {
         "exported": "true"
       }
@@ -12270,7 +12300,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:2113",
+      "source": "magusfile.buzz:2118",
       "attrs": {
         "exported": "true"
       }
@@ -12287,7 +12317,7 @@
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Part of ci, and it REQUIRES a docker daemon rather than skipping without one: a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out. Its declared footprint keeps the cost off every run: affected only reaches it when the completion scripts or their checks change.  One image per she",
-      "source": "magusfile.buzz:2058",
+      "source": "magusfile.buzz:2063",
       "attrs": {
         "exported": "true"
       }
@@ -12297,7 +12327,7 @@
       "kind": "function",
       "label": "compress_cgo_test",
       "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.  `go-test` passes no tags, so it compiles the pure-Go fallbacks and never the ~470 lines of zstd_cgo.go and xz_cgo.go - exactly the files a release binary ships. The coverage figure hid it: 78.9% while the shipped half sat at zero.  It cost correctness. The cgo zstd reader dropped ZSTD_decompressStream's hint, so a stream cut mid-frame returned io.EOF with a NIL error and a truncated cache artifact extracted as a",
-      "source": "magusfile.buzz:2101",
+      "source": "magusfile.buzz:2106",
       "attrs": {
         "exported": "true"
       }
@@ -12324,7 +12354,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:2252",
+      "source": "magusfile.buzz:2257",
       "attrs": {
         "exported": "true"
       }
@@ -12545,7 +12575,7 @@
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:2213"
+      "source": "magusfile.buzz:2218"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
@@ -12599,7 +12629,7 @@
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
-      "source": "magusfile.buzz:2175"
+      "source": "magusfile.buzz:2180"
     },
     {
       "id": "function:magusfile.buzz:release",
@@ -12642,7 +12672,7 @@
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:2187"
+      "source": "magusfile.buzz:2192"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
@@ -12671,7 +12701,7 @@
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
-      "source": "magusfile.buzz:2318",
+      "source": "magusfile.buzz:2323",
       "attrs": {
         "exported": "true"
       }
@@ -12750,7 +12780,7 @@
       "kind": "function",
       "label": "toolchain_report",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:2314",
+      "source": "magusfile.buzz:2319",
       "attrs": {
         "exported": "true"
       }
@@ -14350,7 +14380,7 @@
       "id": "function:spells/markdown/spell.buzz:mgs_listTargets",
       "kind": "function",
       "label": "mgs_listTargets",
-      "source": "spells/markdown/spell.buzz:46",
+      "source": "spells/markdown/spell.buzz:47",
       "attrs": {
         "exported": "true"
       }
@@ -19851,11 +19881,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:2058:TODO",
+      "id": "rationale:magusfile.buzz:2063:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:2058"
+      "source": "magusfile.buzz:2063"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:108:WHY",
@@ -23603,6 +23633,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/race/MGS4006.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/race",
+      "target": "doc:docs/reference/codes/race/MGS4007.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/race/MGS4007.md"
     },
     {
       "source": "dir:docs/reference/codes/race",
@@ -35509,6 +35547,54 @@
       "provenance": "docs/reference/codes/race/MGS4006.md"
     },
     {
+      "source": "doc:docs/reference/codes/race/MGS4007.md",
+      "target": "diagnostic:MGS1020",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/race/MGS4007.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/race/MGS4007.md",
+      "target": "diagnostic:MGS1028",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/race/MGS4007.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/race/MGS4007.md",
+      "target": "diagnostic:MGS4007",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/race/MGS4007.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/race/MGS4007.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1020.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/race/MGS4007.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/race/MGS4007.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1028.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/race/MGS4007.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/race/MGS4007.md",
+      "target": "doc:docs/reference/manpage/magus-clean.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/race/MGS4007.md"
+    },
+    {
       "source": "doc:docs/reference/codes/race/README.md",
       "target": "diagnostic:MGS4001",
       "relation": "documents",
@@ -35542,6 +35628,14 @@
     },
     {
       "source": "doc:docs/reference/codes/race/README.md",
+      "target": "diagnostic:MGS4007",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/race/README.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/race/README.md",
       "target": "doc:docs/reference/codes/race/MGS4001.md",
       "relation": "references",
       "confidence": "extracted",
@@ -35567,6 +35661,14 @@
     {
       "source": "doc:docs/reference/codes/race/README.md",
       "target": "doc:docs/reference/codes/race/MGS4004.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/race/README.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/race/README.md",
+      "target": "doc:docs/reference/codes/race/MGS4007.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -50806,6 +50908,14 @@
     },
     {
       "source": "file:docs/tour/20-footprints.buzz",
+      "target": "function:docs/tour/20-footprints.buzz:tidy",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/tour/20-footprints.buzz"
+    },
+    {
+      "source": "file:docs/tour/20-footprints.buzz",
       "target": "import:fs",
       "relation": "imports",
       "confidence": "inferred",
@@ -65166,12 +65276,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:2058:TODO",
+      "source": "rationale:magusfile.buzz:2063:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:2058"
+      "provenance": "magusfile.buzz:2063"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:108:WHY",
