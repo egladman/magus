@@ -317,7 +317,17 @@
   gap: 2px;
   padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
-  background: var(--pf-t--global--background--color--highlight--default);
+  /* Secondary, not the highlight token - the same call the comment row below makes, and for
+   * the same reasons: highlight is a saturated yellow that dominates in dark mode, drops the
+   * contrast of the text on it (these rows carry blue agent links), and fights the diff for
+   * attention. This rail is meant to be PERIPHERAL until the reader chooses to act on it,
+   * which a full-strength wash contradicts.
+   *
+   * The attention signal moves to a warning-toned rule on the leading edge. Colour on an edge
+   * marks the strip without tinting anything the reader has to read through - the device the
+   * comment row already uses for its own accent. */
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-inline-start: 3px solid var(--pf-t--global--icon--color--status--warning--default);
 }
 
 .console-diff-rail[data-empty] {
