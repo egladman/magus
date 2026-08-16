@@ -480,6 +480,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      so together they frame the internal content top and bottom. */
   background: var(--pf-t--global--background--color--primary--default);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  /* A soft cast DOWN over the content, so a surface scrolling under the bar passes beneath
+     something rather than meeting a flat seam. The hairline above stays: it is what holds the
+     edge crisp at rest, and the shadow only reads once there is content behind it. PF's
+     directional token rather than a hand-rolled rgba, so it tracks the theme like every other
+     elevation here. */
+  box-shadow: var(--pf-t--global--box-shadow--sm--bottom);
   -webkit-app-region: drag; app-region: drag;
 }
 /* Interactive title-bar children opt out of the drag region so a click activates them (a drag region
@@ -575,7 +581,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    ~30 lines) were removed here so the rebuilt PatternFly Tabs (.pf-v6-c-tabs*) render from PF's
    own classes. Those id+attr selectors out-specify PF's single-class rules, so they had to go for
    the spike; this is exactly the W2 shell rebuild, previewed. The PF strip carries its own ARIA
-   (role=tablist/tab, aria-selected). See tabBar.ts and PATTERNFLY.md. */
+   (role=tablist/tab, aria-selected). See tabBar.ts and README.md. */
 #console-tabs :focus-visible, #console-outlet [data-open]:focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
 
 /* Vertically center the tab close (x) control on the tab row. PF's tab action button is a plain
@@ -886,7 +892,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 
    The command bar (#command-bar, commandBar.ts) is NOT a modal: it is a dmenu-style bar - the
    console's one sanctioned fully-custom component (PatternFly has no dmenu analog), classed per the
-   PATTERNFLY.md formula (console-shell-commandbar). ONE bar pinned over the title bar at its exact
+   README.md formula (console-shell-commandbar). ONE bar pinned over the title bar at its exact
    height (--console-titlebar-h), reading as a soft sheet that descends from the top: rounded bottom corners and a
    drop shadow, no hard rule. A faint accent "run" prompt cap, an inline borderless input, then the
    matching command TOKENS (monospace, fuzzy-matched chars highlighted) run HORIZONTALLY to its right,

@@ -5,7 +5,7 @@
  * target override's form control, the empty state, the path chips are PF Labels. What PF has no
  * component for is the STAGE - a laid-out node/edge drawing - and the dense node list and detail
  * sheet beside it, so those are authored here under the console-plan-* area of the naming formula
- * (PATTERNFLY.md). Transient state is data-* throughout (data-phase, data-source, data-state,
+ * (README.md). Transient state is data-* throughout (data-phase, data-source, data-state,
  * data-selected, data-readonly, data-back), never a --modifier class.
  *
  * The states read from the PF-native status tokens, so a theme toggle re-tints the plan with no

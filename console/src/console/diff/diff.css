@@ -43,7 +43,7 @@
  * constant-time position calculation collapses.
  *
  * There is no PF component for a diff stream, so these are authored classes under the
- * console-diff-* area (see PATTERNFLY.md). PF is still used for everything that HAS a
+ * console-diff-* area (see README.md). PF is still used for everything that HAS a
  * component: the toolbar, the labels, the empty state.
  */
 

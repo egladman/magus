@@ -117,21 +117,20 @@ fun recentPosts(site: Site) > str !> any {
 export fun renderLanding(site: Site) > void !> any {
     var html = template\render(`  <section class="landing-hero">
     <div class="landing-intro">
-      <p class="landing-eyebrow">magus</p>
       <h1 class="landing-title landing-rotator">
         <span class="landing-rotate">Made to be debuggable at 2am.</span>
-        <span class="landing-rotate" aria-hidden="true">No magic. Just commands.</span>
+        <span class="landing-rotate" aria-hidden="true">No magic. Just the commands you already know.</span>
         <span class="landing-rotate" aria-hidden="true">Debug your code, not your build tool.</span>
         <span class="landing-rotate" aria-hidden="true">It calls your tools. It does not replace them.</span>
-        <span class="landing-rotate" aria-hidden="true">It tells you the plan is bad, then runs it anyway.</span>
-        <span class="landing-rotate" aria-hidden="true">Everything it knows, handed over. The call stays yours.</span>
-        <span class="landing-rotate" aria-hidden="true">Agents grep faster. Guessing faster is still guessing.</span>
+        <span class="landing-rotate" aria-hidden="true">magus never says you cannot do that.</span>
+        <span class="landing-rotate" aria-hidden="true">Everything magus knows, handed over.</span>
+        <span class="landing-rotate" aria-hidden="true">A grep is a guess. The graph is not.</span>
         <span class="landing-rotate" aria-hidden="true">The graph is not inferred. It is what the build already knew.</span>
         <span class="landing-rotate" aria-hidden="true">A build tool should be boring. Exciting means it moved under you.</span>
         <span class="landing-rotate" aria-hidden="true">One layer between you and the command. Not five.</span>
         <span class="landing-rotate" aria-hidden="true">Explicit by design, debuggable by consequence.</span>
         <span class="landing-rotate" aria-hidden="true">No generated boilerplate. No inherited toil.</span>
-        <span class="landing-rotate" aria-hidden="true">Offline is not a degraded mode.</span>
+        <span class="landing-rotate" aria-hidden="true">No login. No network. No difference.</span>
       </h1>
       <p class="landing-lede">magus is a task orchestrator: it builds, tests and lints the projects in a repository, works out which ones a change reached, and calls the tools you already run instead of replacing them. One project or two hundred, in whatever languages you already use. It caches what those tools produce, so the same work never runs twice. Ask it what it is going to do and it prints the exact command, arguments and all. When something breaks (and something always breaks), the error comes from <em>your</em> tool, not from ours.</p>
       <p class="landing-lede landing-lede-cont">It informs; it does not decide. Everything it knows about your repository, handed over as answers - and the call stays yours. It was not built for agents, either: they drive it well because an interface legible to a person is legible to anything, and that ordering is the design.</p>
@@ -354,19 +353,19 @@ lint</code></pre>
         <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
         <span class="term-name" data-nolink>magus query invocation invmsnkhkml1</span>
       </div>
-      <pre class="term-body"><code>command: magus run lint apps/web
-cwd:     ~/src/acme
-started: 2026-08-10 14:30:49 (3.488s)
-status:  pass
+      <pre class="term-body"><code><span class="term-muted">command:</span> magus run lint apps/web
+<span class="term-muted">cwd:    </span> ~/src/acme
+<span class="term-muted">started:</span> 2026-08-10 14:30:49 <span class="term-muted">(3.488s)</span>
+<span class="term-muted">status: </span> <span class="term-ok">pass</span>
 
-secrets: no credential was resolved during this run
+<span class="term-muted">secrets:</span> no credential reads during this run
 
-events:  19
-  14:30:49  started
-  14:30:51  exec      pnpm install --frozen-lockfile
-  14:30:51  exec      pnpm run typecheck
-  14:30:52  exec      pnpm run biome
-  14:30:53  result    pass</code></pre>
+<span class="term-muted">events: </span> 19
+  <span class="term-muted">14:30:49  started</span>
+  <span class="term-muted">14:30:51  exec    </span>  pnpm install --frozen-lockfile
+  <span class="term-muted">14:30:51  exec    </span>  pnpm run typecheck
+  <span class="term-muted">14:30:52  exec    </span>  pnpm run biome
+  <span class="term-muted">14:30:53  result  </span>  <span class="term-ok">pass</span></code></pre>
     </div>
     <p class="landing-humans-body">The second question is the one a cache normally cannot answer. A content-addressed cache decides by hashing its inputs, so "why did this run again" has an exact answer, and magus will show you the key broken into the parts that composed it. One digest differs from last time; that is the input that changed.</p>
     <div class="term term-plain">
@@ -374,24 +373,24 @@ events:  19
         <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
         <span class="term-name" data-nolink>magus query output out840a2b0bbffb --meta</span>
       </div>
-      <pre class="term-body"><code>target:  lint:rw
-status:  pass (1.843s)
-inv:     invmsnkhkml1  (magus run lint apps/web)
-key:     840a2b0bbffb9be6...553bfe4d (keyVersion 5)
-rev:     9f3c1d7a4b2e (dirty: uncommitted changes at capture time;
-         the revision alone may not reproduce it)
+      <pre class="term-body"><code><span class="term-muted">target: </span> lint:rw
+<span class="term-muted">status: </span> <span class="term-ok">pass</span> <span class="term-muted">(1.843s)</span>
+<span class="term-muted">inv:    </span> invmsnkhkml1  <span class="term-muted">(magus run lint apps/web)</span>
+<span class="term-muted">key:    </span> 840a2b0bbffb9be6...553bfe4d <span class="term-muted">(keyVersion 5)</span>
+<span class="term-muted">rev:    </span> 9f3c1d7a4b2e <span class="term-muted">(dirty: uncommitted changes at capture time;
+         the revision alone may not reproduce it)</span>
 
-key components:
-  os               b6d8d425bd8a  1 line
-  arch             f67e9ac7c9ea  1 line
-  projectPath      6495552683f0  1 line
-  target           b8e6454d1495  1 line
-  charm            2c5d84332584  1 line
-  src              200bc8e89b6e  10 lines
-  spellDefVersion  cbb77e117681  1 line
-  tool             fb3166df8e7d  3 lines</code></pre>
+<span class="term-muted">key components:</span>
+  <span class="term-muted">os              </span> b6d8d425bd8a  <span class="term-muted">1 line</span>
+  <span class="term-muted">arch            </span> f67e9ac7c9ea  <span class="term-muted">1 line</span>
+  <span class="term-muted">projectPath     </span> 6495552683f0  <span class="term-muted">1 line</span>
+  <span class="term-muted">target          </span> b8e6454d1495  <span class="term-muted">1 line</span>
+  <span class="term-muted">charm           </span> 2c5d84332584  <span class="term-muted">1 line</span>
+  <span class="term-muted">src             </span> 200bc8e89b6e  <span class="term-muted">10 lines</span>
+  <span class="term-muted">spellDefVersion </span> cbb77e117681  <span class="term-muted">1 line</span>
+  <span class="term-muted">tool            </span> fb3166df8e7d  <span class="term-muted">3 lines</span></code></pre>
     </div>
-    <p class="landing-humans-body">Two lines there are worth pointing at. <code>rev</code> says the tree was dirty and that the revision alone may not reproduce the result, rather than printing a commit hash and letting you assume it would. And <code>secrets</code> reports that nothing was resolved, because the useful thing to know is whether a run touched a credential at all, which is a question about how your build behaves and not an accusation about who ran it.</p>
+    <p class="landing-humans-body">Two lines there are worth pointing at. <code>rev</code> says the tree was dirty and that the revision alone may not reproduce the result, rather than printing a commit hash and letting you assume it would. And <code>secrets</code> reports that nothing was read, because the useful thing to know is whether a run touched a credential at all, which is a question about how your build behaves and not an accusation about who ran it.</p>
   </section>
 
   <section class="landing-section">

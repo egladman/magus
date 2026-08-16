@@ -247,7 +247,7 @@ deliberately instead:
   static site at `docs/gen/` (generated, NOT committed - .github/workflows/publish-site.yaml
   renders it at deploy time)
 - `console/` - the native console PWA (standalone pnpm project); read
-  `console/PATTERNFLY.md` before touching it (CSS naming, PF conventions)
+  `console/README.md` before touching it (CSS naming, PF conventions)
 
 ## Local gotchas
 

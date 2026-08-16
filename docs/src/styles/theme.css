@@ -97,6 +97,11 @@
      that borrows it would read as something to click. */
   --brand-dot: #df901c;
 
+  /* Status green for the LIGHT terminal panel (.term-plain). The hero terminal's
+     --term-ok is tuned for its dark ground and washes out here, and the palette has no
+     success token to borrow, so this is its own slot - theme-aware like every other. */
+  --term-plain-ok: #2f7d43;
+
   /* Glossary term highlight: a soft parchment-gold (marker swipe) that marks an
      auto-linked glossary term as a distinct kind of thing, not another blue link. Its
      own vars, not --pico-mark-*, so glossary terms never read as transient search hits.
@@ -182,6 +187,7 @@
     --accent-warm-hover: #fdba74;
     --accent-warm-inverse: #0b0e12;
     --brand-dot: #f0aa33;
+    --term-plain-ok: #7fc48d;
 
     /* Glossary term highlight (dark): a translucent amber wash so the marker reads on the
        dark surface while the light body text on top stays legible. Must be repeated here,
@@ -266,6 +272,7 @@
   --accent-warm-hover: #fdba74;
   --accent-warm-inverse: #0b0e12;
   --brand-dot: #f0aa33;
+  --term-plain-ok: #7fc48d;
 
   /* Glossary term highlight (dark): a translucent amber wash so the marker reads on the
      dark surface while the light body text on top stays legible. */
