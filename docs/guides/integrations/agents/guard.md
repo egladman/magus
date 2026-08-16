@@ -80,7 +80,10 @@ the command being RUN: an environment prefix, `env -u GOROOT ...`, a launcher,
 or `bash -c '...'` all reach the same verdict as the bare command.
 
 - **Destructive whole-tree VCS operations**: `git stash`, `git reset --hard`,
-  `git checkout .`, `git restore .`, `git clean -f`. These rules are git-shaped.
+  `git checkout .`, `git restore .`, `git clean -f`. Reading a stash is exempt
+  (`git stash list`, `git stash show`), as is `git stash create`, which returns a
+  commit object without touching the working tree or the stash stack.
+  These rules are git-shaped.
   magus also drives Mercurial and Jujutsu, where recoverability differs - jj
   snapshots the working copy and keeps an operation log, so its nearest
   equivalents are undoable and would not meet this bar. Their commands are not
@@ -140,6 +143,21 @@ An advise verdict carries context your host can inject while the call proceeds.
 - A repo-wide text search (`grep -r`, `rg`, `find -name`): the graph answers
   structural questions from declared sources - `magus refs` for a code symbol,
   `magus query` for a domain entity.
+- A dependency re-resolution (`go get`, `pnpm add`, `cargo update`, `uv lock`,
+  `pip-compile`): the `relock` charm is what grants that write inside magus, and
+  it is deliberately not part of `rw` - `rw` covers output reproducible from a
+  clean checkout, `relock` covers state that depends on what a registry serves
+  today. Applying a lockfile (`npm ci`, `pnpm install --frozen-lockfile`)
+  re-resolves nothing and passes. `go mod tidy` is the one that denies rather
+  than advises, because a spell op renders it, and its deny reason carries the
+  same `relock` route - routing into magus without naming the charm would send
+  you to a target that refuses the write.
+- A tree-identity read (`git rev-parse HEAD`, `git describe`, `git stash
+  create`): `magus vcs checkpoint` prints the revision plus a digest of the
+  uncommitted patch, which identifies a dirty tree where the revision alone
+  cannot, and records it on the activity trail. The layout questions
+  `git rev-parse` also answers (`--show-toplevel`, `--git-dir`, `--abbrev-ref`)
+  pass, because a checkpoint does not replace them.
 - `cd <dir> && magus ...` within the workspace: magus is CWD-relative and the
   project is always an explicit argument, so the `cd` is how the right command
   lands on the wrong project. A `cd` into a temp or scratchpad copy is denied

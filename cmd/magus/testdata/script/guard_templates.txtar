@@ -32,7 +32,8 @@ env GUARD_AGENT_NAME=testscript
 stdin deny-command.json
 exec sh $GUARD_TEMPLATES/magus-guard-command.sh
 stdout '"permissionDecision":"deny"'
-stdout '"permissionDecisionReason":"whole-tree git stash'
+stdout '"permissionDecisionReason":"Verify in place'
+stdout 'whole-tree git stash'
 
 # case: command/advise
 stdin advise-command.json
@@ -84,7 +85,8 @@ cd $WORK
 stdin cursor-shell-deny.json
 exec sh $GUARD_TEMPLATES/cursor-guard.sh
 stdout '"permission":"deny"'
-stdout '"agent_message":"whole-tree git stash'
+stdout '"agent_message":"Verify in place'
+stdout 'whole-tree git stash'
 
 # case: command/pass
 # Cursor is the one host that must answer on an allow rather than stay silent.

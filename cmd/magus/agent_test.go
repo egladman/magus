@@ -501,6 +501,23 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "ls -la"},
 		{command: "git status --porcelain"},
 		{command: "git diff --cached --stat"},
+		// Tree identity: a revision alone cannot identify a dirty tree, and
+		// checkpoint adds the patch digest that can. Advise - reading the revision
+		// is legitimate, and checkpoint is a superset rather than a substitute.
+		{command: "git rev-parse HEAD", context: "magus vcs checkpoint"},
+		{command: "git rev-parse --short HEAD", context: "magus vcs checkpoint"},
+		{command: "git describe --tags", context: "magus vcs checkpoint"},
+		// `git stash create` returns a commit object without touching the working
+		// tree or the stash stack, so it is not the destructive form.
+		{command: "git stash create", context: "magus vcs checkpoint"},
+		// rev-parse answers repository-LAYOUT questions too, and none of those is
+		// asking which revision this is.
+		{command: "git rev-parse --show-toplevel"},
+		{command: "git rev-parse --git-dir"},
+		{command: "git rev-parse --is-inside-work-tree"},
+		// --abbrev-ref takes HEAD and answers with the BRANCH NAME, which a
+		// checkpoint does not replace.
+		{command: "git rev-parse --abbrev-ref HEAD"},
 	}
 	for _, tt := range tests {
 		v := evaluateBashGuard(tt.command)
@@ -599,13 +616,49 @@ func TestRawToolGuardFollowsSpellCatalog(t *testing.T) {
 	assert.False(t, rawToolDenied(guardCommand{Name: "catalog-tool", Args: []string{"other"}}))
 }
 
+// The TOP-LEVEL TARGET is the form to teach, and it cannot be named: the guard
+// ships in a binary and a workspace calls its targets whatever it likes, so the
+// message points at discovery. The resolved spell op appears only as the
+// arg-passthrough escape hatch, which is the one thing the target form does not
+// cover as directly.
 func TestRawToolGuardNamesTheReplacementAndForwarding(t *testing.T) {
 	verdict := evaluateBashGuard("go test ./... -run TestFocused")
 	require.NotEmpty(t, verdict.Deny)
-	assert.Contains(t, verdict.Deny, "Run this instead: `magus run go::go-test`")
-	assert.Contains(t, verdict.Deny, "Tool flags and overrides remain available")
+	assert.Contains(t, verdict.Deny, "`magus run <target> <project>`")
+	assert.Contains(t, verdict.Deny, "magus describe targets")
+	assert.Contains(t, verdict.Deny, "magus run go::go-test")
 	assert.Contains(t, verdict.Deny, "-- <tool-args>")
 	assert.NotContains(t, verdict.Deny, "mise exec")
+
+	// The op form must not lead: it is the exception, and a verdict that opens
+	// with it teaches the dispreferred spelling to every reader.
+	assert.Less(t, strings.Index(verdict.Deny, "magus run <target>"), strings.Index(verdict.Deny, "magus run go::go-test"),
+		"the target form must precede the spell-op form")
+}
+
+// TestGuardVerdictsNameNoCanonicalTarget: test, build, lint, format and generate
+// are THIS repository's target names, not magus vocabulary - another magusfile
+// declares whatever it likes. A verdict compiled into the binary that instructs
+// `magus run test` is therefore wrong in most workspaces it will ever judge, so a
+// message names a target only when it resolved one from the workspace's own
+// declarations (see regenerateAdvice), and otherwise points at discovery. `ci` is
+// exempt: it is the one target name magus enforces (docs/recommendations.md), so
+// `magus affected ci` is valid in every workspace.
+func TestGuardVerdictsNameNoCanonicalTarget(t *testing.T) {
+	canonical := regexp.MustCompile(`magus (?:run|affected) (?:test|build|lint|format|generate)\b`)
+	for _, command := range []string{
+		"go test ./...", "gofmt -w x.go", "go mod tidy",
+		"git stash", "git stash pop", "git reset --hard", "git clean -fd",
+		"git worktree remove ../wt", "git add -A", "git push origin HEAD",
+		"git commit -m x", "git restore cmd/magus/agent.go",
+		"magus describe targets | grep build", "magus run lint . > /tmp/x.txt",
+		"cd /tmp/copy && magus run lint .", "cd libs/foo && magus run test",
+		`grep -rn "funcName" .`, "magus notes edit x", "sed -i 's/a/b/' f.go",
+	} {
+		v := evaluateBashGuard(command)
+		assert.NotRegexp(t, canonical, v.Deny, "%q names a canonical target in its deny reason", command)
+		assert.NotRegexp(t, canonical, v.Context, "%q names a canonical target in its advisory", command)
+	}
 }
 
 // TestGuardAdversarial is the hostile pass: every way found to smuggle a covered
@@ -1679,6 +1732,92 @@ func TestGuardDeniesAuthoringANote(t *testing.T) {
 	// Reading is untouched: the boundary is on authorship, not on access.
 	for _, cmd := range []string{"magus notes ls", "magus notes get foo", "magus notes verify"} {
 		assert.Empty(t, evaluateBashGuard(cmd).Deny, "%q only reads", cmd)
+	}
+}
+
+// TestGuardAdvisesCheckpointOnTreeIdentity pins the scoping, which is the whole
+// difficulty of this rule: `git rev-parse` answers repository-layout questions as
+// well as identity ones, and only the identity forms have a magus superset.
+//
+// A deny would be wrong twice over - reading a revision is legitimate, and
+// checkpoint ADDS to it rather than replacing it.
+func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		"git rev-parse HEAD",
+		"git rev-parse --short HEAD",
+		"git rev-parse --verify HEAD",
+		"git rev-parse HEAD~1",
+		"git rev-parse @",
+		"git describe",
+		"git describe --tags --always",
+		"git stash create",
+		"cd libs/foo && git rev-parse HEAD",
+	} {
+		v := evaluateBashGuard(cmd)
+		assert.Empty(t, v.Deny, "%q reads: advise, never block", cmd)
+		assert.Contains(t, v.Context, "magus vcs checkpoint", "%q must name the superset", cmd)
+	}
+
+	for _, cmd := range []string{
+		"git rev-parse --show-toplevel",
+		"git rev-parse --git-dir",
+		"git rev-parse --is-inside-work-tree",
+		"git rev-parse --show-cdup",
+		"git rev-parse --abbrev-ref HEAD",
+	} {
+		v := evaluateBashGuard(cmd)
+		assert.Empty(t, v.Deny)
+		assert.NotContains(t, v.Context, "magus vcs checkpoint",
+			"%q is not asking which revision this is", cmd)
+	}
+
+	// A destructive stash form is still a deny: adding `create` to the safe list
+	// must not have widened the arm.
+	for _, cmd := range []string{"git stash", "git stash push -u", "git stash pop"} {
+		assert.NotEmpty(t, evaluateBashGuard(cmd).Deny, "%q must still deny", cmd)
+	}
+}
+
+// TestGuardAdvisesRelockOnDependencyMutations covers the one rule that routes to a
+// CHARM rather than a command. Re-resolving dependencies writes state that is not
+// reproducible from a clean checkout, which is the whole line between rw and relock
+// (types.CharmRelock), and relock is under-discoverable: nothing prompts for a
+// reserved charm nobody declared.
+//
+// ADVISE, never deny: the third deny trigger needs an exact equivalent, and there
+// is none - magus has no verb that re-resolves dependencies on its own.
+func TestGuardAdvisesRelockOnDependencyMutations(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		"go get github.com/foo/bar@latest",
+		"pnpm add lodash",
+		"pnpm up",
+		"npm update",
+		"yarn upgrade",
+		"cargo update",
+		"uv lock",
+		"poetry update",
+		"pip-compile",
+		"cd libs/foo && pnpm add lodash",
+	} {
+		v := evaluateBashGuard(cmd)
+		assert.Empty(t, v.Deny, "%q is legitimate work with no magus equivalent: advise, never block", cmd)
+		assert.Contains(t, v.Context, ":relock", "%q must name the charm that makes the write legal", cmd)
+	}
+
+	// A DENIED re-resolution still carries the route. `go mod tidy` is both a covered
+	// spell op and a dependency refresh, and the deny answers first, so without this
+	// the reader is sent to a target that would refuse the write.
+	tidy := evaluateBashGuard("go mod tidy")
+	require.NotEmpty(t, tidy.Deny)
+	assert.Contains(t, tidy.Deny, ":relock")
+
+	// Applying a lockfile is not re-resolving one, and installing a tool is not a
+	// dependency at all. Firing here would put an advisory on the most routine
+	// command in a JS repo.
+	for _, cmd := range []string{"npm ci", "npm install", "pnpm install", "mise install", "go mod vendor", "go mod edit -require=x@v1"} {
+		assert.NotContains(t, evaluateBashGuard(cmd).Context, ":relock", "%q does not re-resolve dependencies", cmd)
 	}
 }
 
