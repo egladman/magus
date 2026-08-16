@@ -3088,7 +3088,11 @@ a code {
 }
 
 .landing-title {
-  font-size: clamp(1.75rem, 1.1rem + 2.4vw, 2.6rem);
+  /* The floor governs at phone widths (the vw term only overtakes it past ~440px), so it
+     is the mobile size. Raised from 1.75rem: at that size the headline read small against
+     the lede beneath it. Raising it costs reserved height - see the rotator below, whose
+     box is the TALLEST headline - so it is a floor bump, not a curve change. */
+  font-size: clamp(2rem, 1.1rem + 2.4vw, 2.6rem);
   line-height: 1.15;
   letter-spacing: -0.02em;
   /* Pico gives an h1 a typographic top margin, which here opens a gap between the
@@ -3385,6 +3389,8 @@ a code {
    Re-theming is one override block because .term declares its palette as custom
    properties on itself - that is what they are for. */
 .term-plain {
+  /* The hero terminal's green is for its dark ground; on this panel it washes out. */
+  --term-ok: var(--term-plain-ok);
   --term-bg: var(--syntax-panel-bg);
   --term-chrome: var(--pico-card-sectioning-background-color);
   --term-fg: var(--pico-code-color);
