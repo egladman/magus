@@ -88,6 +88,13 @@ https://github.com/egladman/magus/compare/v0.3.0...main
   target's own `ctx`; a computed value is rejected at load, because the key is minted
   before the target body runs and a value probed at key time cannot reach it. That
   restriction is why this does not yet convert the image-scan case it was built for.
+- **Third-party dependencies are graph nodes.** `magus query kind:package` lists them;
+  `magus explain package:<manager> <name>` shows a package's version, whether it is
+  indirect or replaced, and which projects require it. Nodes are keyed by manager plus
+  name so an npm and a Go package with one name never share a node, a version bump edits
+  an attribute rather than renaming the node, and two projects pinned to different
+  versions of one package share a node that flags the split. Go modules only in this
+  release; other manifest readers follow.
 - **[MGS1028](reference/codes/magusfile/MGS1028.md) reports a changed file that seeds
   a project it does not key.** Seeding and keying are separate mechanisms and this is the
   case where they disagree: directory containment selects a project, the root project
