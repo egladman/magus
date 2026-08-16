@@ -315,13 +315,18 @@ details.dropdown > summary + ul {
     box-shadow: 0 6px 24px rgba(0, 0, 0, 0.12);
   }
   .js .nav-right.nav-open .nav-links { display: block; }
-  .js .nav-links li { display: block; margin: 0; } /* stack one per row */
+  /* Zero Pico's nav element padding (--pico-nav-element-spacing-vertical, 0.4rem) so
+     the row padding below is the ONLY thing spacing these entries. Left in place it
+     was invisible on the grouped rows - Pico gives details.dropdown a matching
+     negative margin that cancels it - so anchors carried 6.8px the summaries did not,
+     and the gaps came out uneven even once the rows themselves matched. */
+  .js .nav-links li { display: block; margin: 0; padding: 0; } /* stack one per row */
   /* Groups become an ACCORDION here, not a flyout. On the wide bar a group opens an absolutely
      positioned panel beside its neighbors, which is right there and wrong inside this popup:
      measured at 420px, the panel floated over the items beneath it and made Community and
      Console unreachable while a group was open. Static positioning lets an open group push the
      rest of the menu down instead, so everything stays reachable with one thumb. */
-  .js .nav-links details.dropdown { display: block; }
+  .js .nav-links details.dropdown { display: block; margin: 0; }
   /* Full width so the row is tappable end to end, and a flex row so Pico's float:right
      chevron becomes a flex item instead of wrapping to a line of its own - which is exactly
      what it did once the summary spanned the menu. space-between parks it on the trailing
@@ -336,9 +341,14 @@ details.dropdown > summary + ul {
        neighbors, pulled together by the -0.2rem margin meant to keep the nav row
        from growing, and inset 0.1rem less - so Get started and Community read as a
        tighter pair wedged between Documentation and Console. The bar's fixed height
-       goes back to auto so the padding sizes the row. */
+       goes back to auto so the padding sizes the row.
+
+       0.3rem, matching the anchors below: equalizing the two on the anchors' larger
+       0.45rem made every row 40.8px and the popup read airy. Rows sit flush (no
+       margins), so this padding IS the spacing between entries - move both rules or
+       neither. */
     height: auto;
-    padding: 0.45rem 0.6rem;
+    padding: 0.3rem 0.6rem;
     margin: 0;
   }
   /* Pico paints dropdown items with --pico-dropdown-color, the body text color, because in a
@@ -371,7 +381,7 @@ details.dropdown > summary + ul {
   }
   .js .nav-links a {
     display: block;
-    padding: 0.45rem 0.6rem;   /* bigger tap rows; overrides the desktop pill padding */
+    padding: 0.3rem 0.6rem;    /* denser than the tap-row default; see the summary rule above */
     margin: 0;                 /* override the desktop negative margin so rows stack flush */
   }
   /* Closing hint at the foot of the dropdown: quieter than the links (smaller,
