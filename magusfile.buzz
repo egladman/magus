@@ -936,13 +936,12 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
 // that is always wrong. CLAUDE.md has said "edit the sources, not the installed
 // copies" all along; this is the declaration that makes the tooling say it too.
 //
-// AGENTS.md is absent here, and no longer only because declaring it would be
-// wrong: magus does not write that file at all. It is hand-authored prose, the
-// magus block inside it is pasted by a human from `magus agent sample
-// --section`, and `magus graph verify` grades that block's stamp without
-// touching it. This target used to end in an `install-agents-md` call that
-// rewrote the block on every generate, which is what made AGENTS.md a hybrid
-// file and put it at odds with the Markdown formatter.
+// AGENTS.md is absent here because magus does not write that file at all. It is
+// hand-authored prose, the magus block inside it is pasted by a human from
+// `magus agent sample --section`, and `magus graph verify` grades that block's
+// stamp without touching it. An install call here would rewrite the block on
+// every generate, making AGENTS.md a hybrid file at odds with the Markdown
+// formatter.
 // The globs name the SHIPPED skills rather than the whole directory, and that
 // distinction is the point. `.claude/skills/**` also claimed the two skills magus
 // does NOT write - magus-skill-authoring and magus-local-development, both
@@ -1064,9 +1063,7 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
 
 // Renders the insight report (hotspots, affinity, ownership, trend) to stdout. Local
 // only: no workflow invokes this target, and ci-outcome.buzz's volatility-lens step
-// summary is the CI-facing equivalent now. It used to also append to a host path
-// under the `gha` charm; that branch was unreachable (nothing set
-// MAGUS_INSIGHT_OUTPUT_PATH or ran this target in CI) and was removed.
+// summary is the CI-facing equivalent.
 export fun postflight(ctx: magus\Context, args: [str]) > void !> any {
     // A summary built from the typed report rather than the whole Markdown document:
     // this target only ever logged that document locally, so the counts are what a
@@ -1085,11 +1082,11 @@ export fun postflight(ctx: magus\Context, args: [str]) > void !> any {
 // after rather than by asking whether the tree is clean, so the gate works on a dirty
 // tree. An uncommitted-but-current generated file still passes: its bytes do not move.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-    // Hash every already-dirty path BEFORE the generators run. The gate used to require a
-    // clean tree, which disarmed it at exactly the moment it is reached: the documented
-    // pre-push check is run with uncommitted work in the tree, so it printed "skipped" and
-    // exited 0 - a check that cannot fail, which is how drift kept reaching CI after a
-    // local run said it would not. Comparing before against after asks the question that
+    // Hash every already-dirty path BEFORE the generators run. Requiring a clean tree
+    // instead would disarm the gate at exactly the moment it is reached: the documented
+    // pre-push check runs with uncommitted work in the tree, so it would print "skipped"
+    // and exit 0 - a check that cannot fail, which is how drift reaches CI after a
+    // local run says it will not. Comparing before against after asks the question that
     // actually matters (did the generators change anything?) and an unrelated edit no
     // longer hides the answer.
     var dirtyBefore: mut [str] = mut [<str>];
@@ -1191,8 +1188,8 @@ export fun termcast_generate(ctx: magus\Context, args: [str]) > void !> any {
 // a terminal would receive even though the scenario is staged.
 export fun termshots_generate(ctx: magus\Context, args: [str]) > void !> any {
     // internal/cache too: the shots drive the REAL PrettyHandler, so its band
-    // is an input to the picture. Leaving it undeclared meant editing the band
-    // replayed a cached SVG of the band as it used to be.
+    // is an input to the picture. Left undeclared, an edit to the band replays
+    // a cached SVG of the stale band.
     ctx.readsFiles("cmd/magus-termshots/*.go", "internal/interactive/**/*.go",
         "internal/cache/*.go");
     ctx.writesFiles("assets/gen/terminal-*.svg");
@@ -1436,9 +1433,9 @@ fun release_target_platform(goos: str, goarch: str) > [str] !> any {
 //
 // The default is static so that every layer says the same thing: the bare command
 // produces the bare asset, and that asset is the one that runs anywhere - no loader,
-// no glibc, no system libzstd. It used to be inverted, with the bare command producing
-// the cgo build while the bare ARCHIVE was the static one, so `release-build` and
-// `magus_<v>_<os>_<arch>.tar.gz` meant opposite things in the same release.
+// no glibc, no system libzstd. Inverted - the bare command producing the cgo build
+// while the bare ARCHIVE is the static one - `release-build` and
+// `magus_<v>_<os>_<arch>.tar.gz` would mean opposite things in the same release.
 //
 // The charm is named for the property it selects, matching the `_dynamic` asset suffix -
 // not for cgo, which is the mechanism that happens to produce it. Static also
@@ -1686,10 +1683,10 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
         if (deliver) { vcs\cmd(["tag", m["prefix"] + "v" + v]); }
         // Only a Go module is required by the root's go.mod; a library in another
         // language is tag-only, so there is nothing to repoint.
-        // "Go module" used to imply "the root's go.mod requires it". libs/testlayout
-        // breaks that: `golangci-lint custom` compiles it into a binary and magus
-        // never imports it, so there is no require line to repoint. Ask go.mod
-        // directly instead of inferring from the manifest. rewriteRequire still
+        // Inferring "the root's go.mod requires it" from the manifest breaks on
+        // libs/testlayout: `golangci-lint custom` compiles it into a binary and
+        // magus never imports it, so there is no require line to repoint. Ask
+        // go.mod directly. rewriteRequire still
         // throws on a missing line, which is right for a module the root does
         // require and whose line moved.
         if (m["gomodule"] != "" and gomod.indexOf(m["gomodule"] + " v") == null) {
@@ -1814,11 +1811,11 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
 // below, and every magusfile by doctor's magusfile-syntax check. Reviving them means first
 // having standalone Buzz and pinning `buzz` in mise.toml, which is not the case today.
 //
-// That middle claim used to read "every spells/<dir>/spell.buzz by the registry compile
-// that doctor's spell-contract check exercises", and it was false in both halves. The
+// The stronger middle claim - "every spells/<dir>/spell.buzz by the registry compile
+// that doctor's spell-contract check exercises" - is false in both halves. The
 // built-in compile in cmd/magus-utils only sees one directory level and skips anything in
 // its workspaceLocalSpells list; doctor only ever observes spells that REGISTERED, which a
-// spell no magusfile imports never does. Two sources fell through both - see buzz-test.
+// spell no magusfile imports never does. Two sources fall through both - see buzz-test.
 
 // Runs the in-file `test "..." {}` blocks in this repo's own root Buzz modules, through
 // magus's embedded engine.
@@ -1903,11 +1900,11 @@ export fun buzz_test(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// This project deliberately declares NO preflight, and the reason is worth keeping: doctor
-// used to run in one and fail the build on a finding, which made workspace conventions a
-// blocker for everyone downstream. The advice action now reports the same findings on the
-// pull request, non-blocking - and unlike a preflight gate, that works for a consumer who
-// never wired doctor into their own pipeline.
+// This project deliberately declares NO preflight: doctor running in one fails the build
+// on a finding, making workspace conventions a blocker for everyone downstream. The
+// advice action reports the same findings on the pull request, non-blocking - and unlike
+// a preflight gate, that works for a consumer who never wired doctor into their own
+// pipeline.
 //
 // What was left behind was an EMPTY preflight with no callers, which reported `[pass]` for
 // doing nothing. The TypeScript projects keep theirs because it does real work there (an
@@ -2229,8 +2226,8 @@ fun missing_input(path: str, project: str) > str {
 // reproducible locally: run the same three commands, then serve gen/site, and what you see
 // is what publishes.
 //
-// It ASSEMBLES ONLY. It used to drive the two builds itself (magus\run of docs generate and
-// console build) so one command reproduced the deploy, and that tripped MGS3001: a root
+// It ASSEMBLES ONLY. Driving the two builds itself (magus\run of docs generate and
+// console build) would let one command reproduce the deploy, and trips MGS3001: a root
 // target that writes into a descendant project's tree breaks the boundary the cache and the
 // affected set are computed over. The ward is right, and the fix is not to widen the parent's
 // footprint - it is for each project to write its own tree. So the caller runs the two

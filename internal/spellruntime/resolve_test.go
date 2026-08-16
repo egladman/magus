@@ -381,12 +381,11 @@ export fun mgs_listTargets() > {str: fun(Target) Command} {
 // silently: which reduction a contract field's value needs is recorded ON the entry, so it travels
 // with the entry when its Field is renamed.
 //
-// The regression it guards is specific. resolve.go used to decide this with a switch over field
-// name strings. Renaming mgs_listManifests's field updated the contract, the decoder and every
-// spell source - and strings(1) confirmed the regenerated .bo exported the new name - but the
-// switch still named the old field, so pathValues stopped running, the Path objects were never
-// reduced to strings, and the decoded value came back EMPTY with no error anywhere. It cost a
-// revert to find. A second list of these field names is the thing to keep out of this package.
+// The regression it guards is specific: deciding the reduction with a switch over field-name
+// strings in resolve.go means a rename can update the contract, the decoder, and every spell
+// source while the switch still names the old field - pathValues stops running, the Path
+// objects are never reduced to strings, and the decoded value comes back EMPTY with no error
+// anywhere. A second list of these field names is the thing to keep out of this package.
 //
 // The table below states each entry's shape by NAME, which is what holds the invariant through a
 // change of shape: mgs_listManifests sits at ShapeManifests rather than ShapePaths because it
