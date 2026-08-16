@@ -733,6 +733,12 @@ func (v hgVCS) IgnoredFiles(ctx context.Context, dir string, paths []string) ([]
 // hgChurnTemplate opens each commit with its NUL-separated node, author and record date,
 // then lists that commit's files as git-shaped --name-status lines - the stream shape
 // parseChangesByCommit reads, with the leading NUL sentinel supplied by the template itself.
+const hgChurnTemplate = `\0{node}\0{person(author)}\0{date|rfc3339date}\n` + hgChurnFileTail
+
+// hgChurnFileTail lists a changeset's files as git-shaped --name-status lines. Shared with
+// Sapling, whose churn template is byte-identical here, the way hgCommitTemplate already
+// is: Sapling kept Mercurial's template language, so a divergence between the two would be
+// a typo rather than a difference either backend needs.
 //
 // Mercurial groups a changeset's paths by what happened to them instead of tagging each
 // path, so the status letter comes from WHICH keyword emitted the path rather than from the
@@ -741,8 +747,7 @@ func (v hgVCS) IgnoredFiles(ctx context.Context, dir string, paths []string) ([]
 //
 // These keywords do not detect renames, which the ChurnReporter contract allows: a rename
 // arrives as a delete plus an add, costing lineage but staying correct.
-const hgChurnTemplate = `\0{node}\0{person(author)}\0{date|rfc3339date}\n` +
-	`{file_mods % "M\t{file}\n"}{file_adds % "A\t{file}\n"}{file_dels % "D\t{file}\n"}`
+const hgChurnFileTail = `{file_mods % "M\t{file}\n"}{file_adds % "A\t{file}\n"}{file_dels % "D\t{file}\n"}`
 
 // ChangesByCommit implements types.ChurnReporter. `-r` scopes the walk to the working
 // directory's ancestors so a repository with several heads cannot attribute churn from a

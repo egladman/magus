@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2325,
-  "edge_count": 6075,
+  "node_count": 2328,
+  "edge_count": 6081,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -1152,7 +1152,7 @@
       "label": "docs/site",
       "source": "docs/site",
       "attrs": {
-        "dir_files": "21",
+        "dir_files": "22",
         "dir_languages": "buzz"
       }
     },
@@ -1162,7 +1162,7 @@
       "label": "docs/site/diagrams",
       "source": "docs/site/diagrams",
       "attrs": {
-        "dir_files": "12",
+        "dir_files": "13",
         "dir_languages": "buzz"
       }
     },
@@ -5841,6 +5841,15 @@
       }
     },
     {
+      "id": "file:docs/site/diagrams/delegation-loop.buzz",
+      "kind": "file",
+      "label": "docs/site/diagrams/delegation-loop.buzz",
+      "source": "docs/site/diagrams/delegation-loop.buzz",
+      "attrs": {
+        "language": "buzz"
+      }
+    },
+    {
       "id": "file:docs/site/diagrams/dogfood.buzz",
       "kind": "file",
       "label": "docs/site/diagrams/dogfood.buzz",
@@ -9821,7 +9830,7 @@
       "id": "function:docs/site/diagrams/all.buzz:allDiagrams",
       "kind": "function",
       "label": "allDiagrams",
-      "source": "docs/site/diagrams/all.buzz:21",
+      "source": "docs/site/diagrams/all.buzz:22",
       "attrs": {
         "exported": "true"
       }
@@ -9831,7 +9840,7 @@
       "kind": "function",
       "label": "inlinePageDiagrams",
       "doc": "inlinePageDiagrams swaps any diagram reference on a page for the inline SVG. Guarded on the page mentioning one first: renderAll walks every figure in the registry, and a docs build renders hundreds of pages that reference none.",
-      "source": "docs/site/diagrams/all.buzz:66",
+      "source": "docs/site/diagrams/all.buzz:68",
       "attrs": {
         "exported": "true"
       }
@@ -9841,14 +9850,14 @@
       "kind": "function",
       "label": "markedIds",
       "doc": "markedIds pulls each id following a marker. The id runs to the first space or end of line, so a marker may carry a trailing note explaining what the box is called.",
-      "source": "docs/site/diagrams/all.buzz:127"
+      "source": "docs/site/diagrams/all.buzz:129"
     },
     {
       "id": "function:docs/site/diagrams/all.buzz:renderAll",
       "kind": "function",
       "label": "renderAll",
       "doc": "renderAll returns the inline, theme-following SVG for each diagram, keyed by id, ready for inlineDiagrams. Throws on the first diagram that fails validation, which is what makes a crooked figure fail the docs build rather than ship.",
-      "source": "docs/site/diagrams/all.buzz:40",
+      "source": "docs/site/diagrams/all.buzz:42",
       "attrs": {
         "exported": "true"
       }
@@ -9858,7 +9867,7 @@
       "kind": "function",
       "label": "verifyAnchors",
       "doc": "verifyAnchors checks both directions of the diagram-to-code link and returns one message per break, empty when they agree.  Forward: every anchor a diagram declares must still resolve to a path in the tree. This is the half that catches the common rot - a package renamed or deleted while the figure keeps naming it.  Reverse: every magus:diagram marker in the sources must name a diagram that exists. This is the half that catches a diagram being renamed or dropped while call sites still point at it. Neither h",
-      "source": "docs/site/diagrams/all.buzz:93",
+      "source": "docs/site/diagrams/all.buzz:95",
       "attrs": {
         "exported": "true"
       }
@@ -9868,7 +9877,7 @@
       "kind": "function",
       "label": "writeStandalonePair",
       "doc": "writeStandalonePair writes the committed light/dark SVG files for every diagram into dir. These exist for GitHub: a README image is loaded through <img>, which makes it a separate document with no access to the page's CSS variables, so the palette has to be baked in and a second file is the only way to offer a dark one.  Naming follows the terminal recordings already in assets/gen: the unsuffixed file is dark and carries the <img> fallback, `-light` is the prefers-color-scheme: light source.",
-      "source": "docs/site/diagrams/all.buzz:55",
+      "source": "docs/site/diagrams/all.buzz:57",
       "attrs": {
         "exported": "true"
       }
@@ -9904,7 +9913,7 @@
       "id": "function:docs/site/diagrams/daemon-http.buzz:daemonHttpDiagram",
       "kind": "function",
       "label": "daemonHttpDiagram",
-      "source": "docs/site/diagrams/daemon-http.buzz:12",
+      "source": "docs/site/diagrams/daemon-http.buzz:17",
       "attrs": {
         "exported": "true"
       }
@@ -9922,7 +9931,7 @@
       "id": "function:docs/site/diagrams/daemon-share.buzz:daemonShareDiagram",
       "kind": "function",
       "label": "daemonShareDiagram",
-      "source": "docs/site/diagrams/daemon-share.buzz:9",
+      "source": "docs/site/diagrams/daemon-share.buzz:14",
       "attrs": {
         "exported": "true"
       }
@@ -9932,6 +9941,15 @@
       "kind": "function",
       "label": "daemonSocketDiagram",
       "source": "docs/site/diagrams/daemon-socket.buzz:9",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/site/diagrams/delegation-loop.buzz:delegationLoopDiagram",
+      "kind": "function",
+      "label": "delegationLoopDiagram",
+      "source": "docs/site/diagrams/delegation-loop.buzz:17",
       "attrs": {
         "exported": "true"
       }
@@ -15636,6 +15654,14 @@
       "id": "import:site/diagrams/daemon-socket",
       "kind": "import",
       "label": "site/diagrams/daemon-socket",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
+      "id": "import:site/diagrams/delegation-loop",
+      "kind": "import",
+      "label": "site/diagrams/delegation-loop",
       "attrs": {
         "diagnostic": "MGS7001"
       }
@@ -24345,6 +24371,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/site/diagrams/daemon-socket.buzz"
+    },
+    {
+      "source": "dir:docs/site/diagrams",
+      "target": "file:docs/site/diagrams/delegation-loop.buzz",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/diagrams/delegation-loop.buzz"
     },
     {
       "source": "dir:docs/site/diagrams",
@@ -48900,6 +48934,14 @@
     },
     {
       "source": "file:docs/site/diagrams/all.buzz",
+      "target": "import:site/diagrams/delegation-loop",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/diagrams/all.buzz"
+    },
+    {
+      "source": "file:docs/site/diagrams/all.buzz",
       "target": "import:site/diagrams/dogfood",
       "relation": "imports",
       "confidence": "inferred",
@@ -49041,6 +49083,22 @@
       "confidence": "inferred",
       "score": 0.7,
       "provenance": "docs/site/diagrams/daemon-socket.buzz"
+    },
+    {
+      "source": "file:docs/site/diagrams/delegation-loop.buzz",
+      "target": "function:docs/site/diagrams/delegation-loop.buzz:delegationLoopDiagram",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/site/diagrams/delegation-loop.buzz"
+    },
+    {
+      "source": "file:docs/site/diagrams/delegation-loop.buzz",
+      "target": "import:../libs/diagram/diagram",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/diagrams/delegation-loop.buzz"
     },
     {
       "source": "file:docs/site/diagrams/dogfood.buzz",
@@ -67833,6 +67891,14 @@
     },
     {
       "source": "target:docs:diagrams-generate",
+      "target": "file:docs/site/diagrams/delegation-loop.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:diagrams-generate",
       "target": "file:docs/site/diagrams/dogfood.buzz",
       "relation": "consumes",
       "confidence": "extracted",
@@ -68394,6 +68460,14 @@
     {
       "source": "target:docs:site-generate",
       "target": "file:docs/site/diagrams/daemon-socket.buzz",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "file:docs/site/diagrams/delegation-loop.buzz",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,

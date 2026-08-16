@@ -128,17 +128,17 @@ func partitionFlags(fs *flag.FlagSet, args []string) (flags, positionals []strin
 // then returns the first positional as the target and the remaining flags+positionals for
 // the subcommand's own cmdParse. ok is false when there is no positional target at all.
 //
-// local binds the command's OWN flags, and is what keeps the prescan from reading a
+// bind registers the command's OWN flags, and is what keeps the prescan from reading a
 // value-taking local flag as a bool: with the flag unknown here its value is hoisted out
 // as a positional, so `--skip api --skip web` reorders to `--skip --skip api web` and the
 // first flag swallows the second as its value. A command that passes nil accepts that
 // limit - one such flag survives it by luck of ordering, two do not.
-func splitTargetFromArgs(args []string, local func(*flag.FlagSet)) (target string, rest []string, ok bool) {
+func splitTargetFromArgs(args []string, bind func(*flag.FlagSet)) (target string, rest []string, ok bool) {
 	fs := flag.NewFlagSet("prescan", flag.ContinueOnError)
 	gen.BindFlags(fs, &globalCfg)
 	bindDisplayFlags(fs)
-	if local != nil {
-		local(fs)
+	if bind != nil {
+		bind(fs)
 	}
 	flags, positionals := partitionFlags(fs, args)
 	if len(positionals) == 0 || positionals[0] == "--" {

@@ -469,24 +469,10 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 					}
 				}
 				if len(n.Chain) > 0 {
-					if p.TargetChain == nil {
-						p.TargetChain = map[string][]types.ChainStep{}
+					if p.TargetChains == nil {
+						p.TargetChains = map[string][]types.ChainStep{}
 					}
-					steps := make([]types.ChainStep, 0, len(n.Chain))
-					for _, step := range n.Chain {
-						if step.Project != "" {
-							// Unresolvable is unreachable here - the CrossDependencies loop
-							// above already failed the load on it - but a chain that silently
-							// carried a raw import path would print a ref no command accepts.
-							r, rerr := file.ResolveImport(step.Project, p.Path)
-							if rerr != nil {
-								continue
-							}
-							step.Project = r
-						}
-						steps = append(steps, step)
-					}
-					p.TargetChain[n.Name] = steps
+					p.TargetChains[n.Name] = resolveChain(n.Chain, p.Path)
 				}
 				if len(n.EnvAllow) > 0 {
 					if p.TargetEnvAllow == nil {
@@ -714,6 +700,31 @@ func (m *Magus) TargetGraph(ctx context.Context) (types.TargetGraphOutput, error
 	return out, nil
 }
 
+// resolveChain rewrites each step's import path into the workspace-relative form,
+// shared by the two places a chain is built: the project extractor and resolveNodeRefs.
+//
+// A same-project step keeps its empty Project (unlike an input, whose owner is filled
+// in): the chain is read, not joined onto a path, and leaving it empty is what makes a
+// local step render as a bare name.
+//
+// A step whose import path does not resolve KEEPS the raw path rather than being
+// dropped. The chain is the target's shape - what it invokes, in what order - so a
+// silently shortened one misreports that shape, while a raw import path at least names
+// what the magusfile wrote. It is close to unreachable anyway: the cross-dependency
+// resolution ahead of it already fails the load on an unresolvable import.
+func resolveChain(chain []types.ChainStep, projectPath string) []types.ChainStep {
+	out := make([]types.ChainStep, 0, len(chain))
+	for _, step := range chain {
+		if step.Project != "" {
+			if r, err := file.ResolveImport(step.Project, projectPath); err == nil {
+				step.Project = r
+			}
+		}
+		out = append(out, step)
+	}
+	return out
+}
+
 // resolveNodeRefs rewrites each node's cross-project dependency and input owning-project
 // paths into the workspace-relative form the graph keys projects by.
 //
@@ -739,22 +750,7 @@ func resolveNodeRefs(nodes []types.TargetGraphNode, projectPath string) {
 			nodes[i].CrossDependencies = resolved
 		}
 		if len(nodes[i].Chain) > 0 {
-			resolved := make([]types.ChainStep, 0, len(nodes[i].Chain))
-			for _, step := range nodes[i].Chain {
-				// A same-project step keeps its empty Project (unlike an input, whose
-				// owner is filled in): the chain is read, not joined onto a path, and
-				// leaving it empty is what makes a local step render as a bare name.
-				if step.Project == "" {
-					resolved = append(resolved, step)
-					continue
-				}
-				r, err := file.ResolveImport(step.Project, projectPath)
-				if err != nil {
-					continue
-				}
-				resolved = append(resolved, types.ChainStep{Project: r, Target: step.Target})
-			}
-			nodes[i].Chain = resolved
+			nodes[i].Chain = resolveChain(nodes[i].Chain, projectPath)
 		}
 		if len(nodes[i].ReadsFiles) > 0 {
 			resolved := make([]types.InputRef, 0, len(nodes[i].ReadsFiles))
@@ -1034,7 +1030,7 @@ func (m *Magus) EvaluateTarget(ctx context.Context, t types.Target) ([]types.Eva
 			Dir:       p.Dir,
 			Sources:   step.Sources,
 			Outputs:   step.Outputs,
-			Chain:     p.TargetChain[et.Name],
+			Chain:     p.TargetChains[et.Name],
 			DependsOn: p.DependsOn,
 			Charms:    charms,
 			Spells:    spellEntries,

@@ -46,10 +46,8 @@ func (h *LedgerHandler) serve(w http.ResponseWriter, r *http.Request) {
 		http.Error(w, "ledger error: "+err.Error(), http.StatusInternalServerError)
 		return
 	}
-	// An unwritten ledger is [] rather than null: the drawer renders a list, and a
-	// workspace where nobody has delegated yet is empty, not broken.
-	if units == nil {
-		units = []types.DelegationUnit{}
-	}
+	// An unwritten ledger serves "units":[] rather than null - the drawer renders a list,
+	// and a workspace where nobody has delegated yet is empty, not broken. Normalized by
+	// the constructor, so this route and the MCP tool cannot disagree about the shape.
 	writeJSON(w, types.NewDelegationReport(units))
 }

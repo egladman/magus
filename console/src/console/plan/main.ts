@@ -908,11 +908,14 @@ export function activate(host: HTMLElement): PlanInstance {
     if (n.rawState && n.rawState !== n.state) {
       field(dl, "Ledger state", n.rawState + " (unrecognized, shown as declared)");
     }
-    // Every pair this unit is in, naming the OTHER unit and the declarations that intersect. A
-    // fact, and worded as one: magus derived it from two rows an agent wrote, and it blocks
-    // nothing - the list beside it says who to go ask.
+    // Every pair this unit is in, naming the OTHER unit and the paths THAT unit declared. Its
+    // declarations rather than this one's: the reader is already looking at their own owned
+    // paths a few rows up, and what they cannot see is what the other agent claimed. A fact,
+    // and worded as one - magus derived it from two rows an agent wrote, and it blocks nothing.
     for (const o of n.overlaps) {
-      field(dl, "Overlaps", (o.a === n.id ? o.b : o.a) + ": " + o.paths.join(", "));
+      const mine = o.unit_a === n.id;
+      const other = mine ? o.unit_b : o.unit_a;
+      field(dl, "Overlaps", other + ": " + (mine ? o.paths_b : o.paths_a).join(", "));
     }
     releaseField(dl, n.unit.releases ?? []);
     // An absolute time rather than an age: the row list carries the age, which moves, and a sheet

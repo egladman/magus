@@ -21,19 +21,32 @@ func TestDelegationOverlaps(t *testing.T) {
 		{
 			name:  "the same path claimed twice",
 			units: []DelegationUnit{owner("a", StateRunning, "internal/ledger"), owner("b", StateDeclared, "internal/ledger")},
-			want:  []DelegationOverlap{{A: "a", B: "b", Paths: []string{"internal/ledger"}}},
+			want: []DelegationOverlap{
+				{UnitA: "a", UnitB: "b", PathsA: []string{"internal/ledger"}, PathsB: []string{"internal/ledger"}},
+			},
 		},
 		{
 			// The common case a reader most needs told: one unit owns the directory, the
 			// other owns a file inside it, and nothing about either row says so.
 			name:  "a file inside a claimed directory, and both declarations are named",
 			units: []DelegationUnit{owner("a", StateRunning, "internal/ledger"), owner("b", StateRunning, "internal/ledger/store.go")},
-			want:  []DelegationOverlap{{A: "a", B: "b", Paths: []string{"internal/ledger", "internal/ledger/store.go"}}},
+			want: []DelegationOverlap{
+				{
+					UnitA: "a", UnitB: "b",
+					PathsA: []string{"internal/ledger"}, PathsB: []string{"internal/ledger/store.go"},
+				},
+			},
 		},
 		{
 			name:  "a glob is judged by the directories it names",
 			units: []DelegationUnit{owner("a", StateRunning, "console/src/**/*.ts"), owner("b", StateRunning, "console/src/console/plan/main.ts")},
-			want:  []DelegationOverlap{{A: "a", B: "b", Paths: []string{"console/src/**/*.ts", "console/src/console/plan/main.ts"}}},
+			want: []DelegationOverlap{
+				{
+					UnitA: "a", UnitB: "b",
+					PathsA: []string{"console/src/**/*.ts"},
+					PathsB: []string{"console/src/console/plan/main.ts"},
+				},
+			},
 		},
 		{
 			name:  "sibling directories are not an overlap",
@@ -43,6 +56,12 @@ func TestDelegationOverlaps(t *testing.T) {
 			// A prefix that stops mid-segment is a different directory, not a parent.
 			name:  "a shared name prefix inside a segment is not containment",
 			units: []DelegationUnit{owner("a", StateRunning, "internal/led"), owner("b", StateRunning, "internal/ledger/store.go")},
+		},
+		{
+			// A blank entry names nothing. It cleans to ".", and reading THAT as a claim on
+			// the whole tree paired the row holding it with every other unit in the plan.
+			name:  "a blank declaration claims nothing, not everything",
+			units: []DelegationUnit{owner("a", StateRunning, "  ", ""), owner("b", StateRunning, "internal/ledger")},
 		},
 		{
 			name:  "a read-only unit declares no paths, so it collides with nothing",
@@ -58,8 +77,8 @@ func TestDelegationOverlaps(t *testing.T) {
 				owner("c", StateDeclared, "internal/handler"),
 			},
 			want: []DelegationOverlap{
-				{A: "a", B: "b", Paths: []string{"internal", "internal/ledger"}},
-				{A: "a", B: "c", Paths: []string{"internal", "internal/handler"}},
+				{UnitA: "a", UnitB: "b", PathsA: []string{"internal"}, PathsB: []string{"internal/ledger"}},
+				{UnitA: "a", UnitB: "c", PathsA: []string{"internal"}, PathsB: []string{"internal/handler"}},
 			},
 		},
 	}
@@ -68,7 +87,7 @@ func TestDelegationOverlaps(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tt.want, DelegationOverlaps(tt.units))
+			assert.Equal(t, tt.want, delegationOverlaps(tt.units))
 		})
 	}
 }
@@ -85,8 +104,8 @@ func TestDelegationOverlapsSkipsTerminalUnits(t *testing.T) {
 			t.Parallel()
 
 			done := owner("done", state, "internal/ledger")
-			assert.Empty(t, DelegationOverlaps([]DelegationUnit{live, done}))
-			assert.Empty(t, DelegationOverlaps([]DelegationUnit{done, live}), "whichever order the rows sit in")
+			assert.Empty(t, delegationOverlaps([]DelegationUnit{live, done}))
+			assert.Empty(t, delegationOverlaps([]DelegationUnit{done, live}), "whichever order the rows sit in")
 		})
 	}
 }
@@ -103,4 +122,16 @@ func TestNewDelegationReportDerivesOverlapsFromTheRows(t *testing.T) {
 	// row had to be rewritten for that to happen.
 	units[1].State = StatePass
 	assert.Empty(t, NewDelegationReport(units).Overlaps)
+}
+
+// The empty case is settled in the constructor rather than at each read door, so the MCP
+// tool and the console's route cannot disagree about it: an unwritten ledger serves an
+// empty list, never null, whichever door served it.
+func TestNewDelegationReportNormalizesTheEmptyLedger(t *testing.T) {
+	t.Parallel()
+
+	report := NewDelegationReport(nil)
+	assert.NotNil(t, report.Units, "a workspace where nobody has delegated yet is empty, not broken")
+	assert.Empty(t, report.Units)
+	assert.Empty(t, report.Overlaps)
 }

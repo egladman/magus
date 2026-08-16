@@ -157,6 +157,14 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			slog.String("addr", addr.String()))
 	}
 
+	// ONE delegation-ledger store for the whole daemon, built before the MCP handler so
+	// the magus_ledger tool and the console's /api/v1/ledger route below hold the same
+	// object. Two stores over one file each take their own mutex, and the merge Update
+	// performs under a single acquisition then serializes against nothing.
+	if opts.Ledger == nil && opts.Magus != nil {
+		opts.Ledger = ledger.NewStore(ledger.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
+	}
+
 	// Build the MCP handler (validates opts and wires session tracking). No
 	// routes or listener are mounted here - that is this package's job.
 	mcpHandler, err := mcp.HTTPHandler(opts)
@@ -277,7 +285,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// live pool state, the output store for each node's last outcome and its ref - so
 			// it introduces no third notion of what ran.
 			planH := status.NewPlanHandler(svc, outputStore, opts.Magus.Root(), log)
-			ledgerH := status.NewLedgerHandler(ledger.NewStore(opts.Magus.CacheDir(), opts.Magus.Root()), log)
+			ledgerH := status.NewLedgerHandler(opts.Ledger, log)
 
 			bridgeMux := http.NewServeMux()
 			// The JSON /api/v1/status route is GONE: the typed StatusService Connect route

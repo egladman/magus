@@ -115,7 +115,7 @@ func TestResolveTargetsCwdScope(t *testing.T) {
 	}
 
 	t.Run("cwd inside a project scopes to it", func(t *testing.T) {
-		targets, source, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, nil, "/ws/b/api")
+		targets, source, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{cwd: "/ws/b/api"})
 		require.NoError(t, err)
 		assert.Equal(t, "cwd", source)
 		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}}, targets)
@@ -124,14 +124,14 @@ func TestResolveTargetsCwdScope(t *testing.T) {
 	t.Run("cwd outside every project fans out to all", func(t *testing.T) {
 		// A daemon's own cwd (unrelated to workspace B) must not scope B's run - it
 		// falls through to the full fan-out, not a mis-scoped or empty result.
-		targets, source, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, nil, "/tmp/daemon-cwd")
+		targets, source, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{cwd: "/tmp/daemon-cwd"})
 		require.NoError(t, err)
 		assert.Empty(t, source)
 		assert.Len(t, targets, 2)
 	})
 
 	t.Run("empty cwd fans out to all without touching Where", func(t *testing.T) {
-		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, nil, "")
+		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{cwd: ""})
 		require.NoError(t, err)
 		assert.Len(t, targets, 2)
 	})
@@ -149,27 +149,27 @@ func TestResolveTargetsRootOverride(t *testing.T) {
 	}
 
 	t.Run("dot from outside means the workspace root project", func(t *testing.T) {
-		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, []string{"."}, nil, "/ws/other")
+		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{projects: []string{"."}, skips: nil, cwd: "/ws/other"})
 		require.NoError(t, err)
 		assert.Equal(t, []types.Target{{Path: ".", Name: "test"}}, targets)
 	})
 
 	t.Run("dot-relative from outside means the workspace root project", func(t *testing.T) {
-		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, []string{"./api"}, nil, "/ws/other")
+		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{projects: []string{"./api"}, skips: nil, cwd: "/ws/other"})
 		require.NoError(t, err)
 		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}}, targets)
 	})
 
 	// Unchanged: an inside cwd still anchors dot-relative refs at that cwd.
 	t.Run("dot from inside a project still means that project", func(t *testing.T) {
-		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, []string{"."}, nil, "/ws/b/api")
+		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{projects: []string{"."}, skips: nil, cwd: "/ws/b/api"})
 		require.NoError(t, err)
 		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}}, targets)
 	})
 
 	// An escape is still an escape: re-anchoring at the root does not widen what resolves.
 	t.Run("escape from outside is still rejected", func(t *testing.T) {
-		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, []string{"../up"}, nil, "/ws/other")
+		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{projects: []string{"../up"}, skips: nil, cwd: "/ws/other"})
 		require.ErrorContains(t, err, "escapes workspace root")
 	})
 }
@@ -178,7 +178,7 @@ func TestResolveTargetsRootOverride(t *testing.T) {
 // yields zero targets (which runTarget then turns into a loud failure, not a vacuous pass).
 func TestResolveTargetsEmptyWorkspace(t *testing.T) {
 	ws := &resolveWS{root: "/ws/empty", projects: nil, contains: nil}
-	targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, nil, "/ws/empty")
+	targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{cwd: "/ws/empty"})
 	require.NoError(t, err)
 	assert.Empty(t, targets, "an empty workspace resolves no targets; runTarget must fail loudly on this")
 }
@@ -194,13 +194,13 @@ func TestResolveTargetsSkip(t *testing.T) {
 	}
 
 	t.Run("bare invocation skips from the full fan-out", func(t *testing.T) {
-		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, []string{"api"}, "/ws/other")
+		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{skips: []string{"api"}, cwd: "/ws/other"})
 		require.NoError(t, err)
 		assert.Equal(t, []types.Target{{Path: ".", Name: "test"}, {Path: "web", Name: "test"}}, targets)
 	})
 
 	t.Run("repeatable", func(t *testing.T) {
-		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, []string{"api", "web"}, "/ws/other")
+		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{skips: []string{"api", "web"}, cwd: "/ws/other"})
 		require.NoError(t, err)
 		assert.Equal(t, []types.Target{{Path: ".", Name: "test"}}, targets)
 	})
@@ -208,7 +208,7 @@ func TestResolveTargetsSkip(t *testing.T) {
 	// The same grammar as a positional, resolver included: "." from outside the
 	// workspace is the root project, not the cwd.
 	t.Run("dot reference resolves like a positional", func(t *testing.T) {
-		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, []string{"."}, "/ws/other")
+		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{skips: []string{"."}, cwd: "/ws/other"})
 		require.NoError(t, err)
 		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}, {Path: "web", Name: "test"}}, targets)
 	})
@@ -217,57 +217,57 @@ func TestResolveTargetsSkip(t *testing.T) {
 	// never going to run - so it subtracts nothing and stays silent.
 	t.Run("skipping an unselected project is a no-op", func(t *testing.T) {
 		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"},
-			[]string{"api"}, []string{"web"}, "/ws/other")
+			runSelection{projects: []string{"api"}, skips: []string{"web"}, cwd: "/ws/other"})
 		require.NoError(t, err)
 		assert.Equal(t, []types.Target{{Path: "api", Name: "test"}}, targets)
 	})
 
 	t.Run("a reference no project matches is an error", func(t *testing.T) {
-		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, []string{"apo"}, "/ws/other")
+		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{skips: []string{"apo"}, cwd: "/ws/other"})
 		require.ErrorContains(t, err, "--skip apo")
 		require.ErrorIs(t, err, types.ErrUnknownProject)
 	})
 
 	t.Run("skipping a project the command line named is contradictory", func(t *testing.T) {
 		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"},
-			[]string{"api"}, []string{"api"}, "/ws/other")
+			runSelection{projects: []string{"api"}, skips: []string{"api"}, cwd: "/ws/other"})
 		require.ErrorContains(t, err, "--skip api contradicts naming it on the command line")
 	})
 
 	t.Run("skipping every project is an error, not an empty pass", func(t *testing.T) {
-		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil,
-			[]string{".", "api", "web"}, "/ws/other")
+		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"},
+			runSelection{skips: []string{".", "api", "web"}, cwd: "/ws/other"})
 		require.ErrorContains(t, err, "removed every selected project")
 	})
 
 	// "/" is the all-projects sentinel ResolveProject passes through untouched; matched
 	// against project paths it would skip nothing at all.
 	t.Run("the all-projects sentinel is refused", func(t *testing.T) {
-		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, []string{"/"}, "/ws/other")
+		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{skips: []string{"/"}, cwd: "/ws/other"})
 		require.ErrorContains(t, err, "there is no all-projects skip")
 	})
 
 	t.Run("a glob subtracts every project it matches", func(t *testing.T) {
-		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, []string{"a*"}, "/ws/other")
+		targets, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{skips: []string{"a*"}, cwd: "/ws/other"})
 		require.NoError(t, err)
 		assert.Equal(t, []types.Target{{Path: ".", Name: "test"}, {Path: "web", Name: "test"}}, targets)
 	})
 
 	t.Run("a glob matching no project is an error", func(t *testing.T) {
-		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, []string{"z*"}, "/ws/other")
+		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{skips: []string{"z*"}, cwd: "/ws/other"})
 		require.ErrorContains(t, err, "no project matches the glob")
 	})
 
 	t.Run("a glob covering an explicitly named project is contradictory", func(t *testing.T) {
 		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"},
-			[]string{"api"}, []string{"a*"}, "/ws/other")
+			runSelection{projects: []string{"api"}, skips: []string{"a*"}, cwd: "/ws/other"})
 		require.ErrorContains(t, err, "contradicts naming it on the command line")
 	})
 
 	// "*" legitimately matches every single-segment path including ".", so it falls to
 	// the emptied-selection refusal rather than a special case.
 	t.Run("a glob skipping everything is the emptied-selection error", func(t *testing.T) {
-		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, nil, []string{"*"}, "/ws/other")
+		_, _, err := resolveTargets(t.Context(), ws, types.Target{Name: "test"}, runSelection{skips: []string{"*"}, cwd: "/ws/other"})
 		require.ErrorContains(t, err, "removed every selected project")
 	})
 }

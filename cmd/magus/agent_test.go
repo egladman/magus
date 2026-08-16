@@ -506,7 +506,9 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// is legitimate, and checkpoint is a superset rather than a substitute.
 		{command: "git rev-parse HEAD", context: "magus vcs checkpoint"},
 		{command: "git rev-parse --short HEAD", context: "magus vcs checkpoint"},
-		{command: "git describe --tags", context: "magus vcs checkpoint"},
+		// The build-stamp spelling: `git describe --tags` is asking for a version string
+		// to embed, which a checkpoint does not replace.
+		{command: "git describe --tags"},
 		// `git stash create` returns a commit object without touching the working
 		// tree or the stash stack, so it is not the destructive form.
 		{command: "git stash create", context: "magus vcs checkpoint"},
@@ -1750,7 +1752,6 @@ func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
 		"git rev-parse HEAD~1",
 		"git rev-parse @",
 		"git describe",
-		"git describe --tags --always",
 		"git stash create",
 		"cd libs/foo && git rev-parse HEAD",
 	} {
@@ -1765,6 +1766,12 @@ func TestGuardAdvisesCheckpointOnTreeIdentity(t *testing.T) {
 		"git rev-parse --is-inside-work-tree",
 		"git rev-parse --show-cdup",
 		"git rev-parse --abbrev-ref HEAD",
+		// A branch whose NAME starts with those four letters is an ordinary revision.
+		"git rev-parse HEADLESS_BRANCH",
+		// The build-stamp spellings: a version string to embed, not the identity of a
+		// tree being handed to someone. This repository's own go_build target uses both.
+		"git describe --tags --always",
+		"git describe --always",
 	} {
 		v := evaluateBashGuard(cmd)
 		assert.Empty(t, v.Deny)

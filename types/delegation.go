@@ -29,10 +29,11 @@ const (
 	StateNoReturn DelegationState = "no_return"
 )
 
-// Terminal reports whether the unit is done, however it ended. Nothing derives a
-// verdict from it - it is what a reader needs to stop asking about a row, and what
-// keeps a finished unit out of the overlap report below.
-func (s DelegationState) Terminal() bool {
+// terminal reports whether the unit is done, however it ended. Nothing derives a
+// verdict from it - it is what keeps a finished unit out of the overlap report below.
+// Unexported because that is its only reader: a client decides what "done" means from
+// the state string itself, which is the value the wire carries.
+func (s DelegationState) terminal() bool {
 	return s == StatePass || s == StateFail || s == StateNoReturn
 }
 
@@ -117,16 +118,22 @@ type DelegationUnit struct {
 	Updated int64 `json:"updated" yaml:"updated"`
 }
 
-// Release digests that are not a content hash. A digest is `sha256:<hex>` of the
-// file's bytes when the path held one; these two say why it could not be, so a
-// reader is never handed a hash-shaped value that is not a hash.
+// Digests that are not a content hash. A digest is `sha256:<hex>` of the file's bytes
+// when the path held one; these say why it could not be, so a reader is never handed a
+// hash-shaped value that is not a hash. Named for the FIELD they land in
+// (DelegationRelease.Digest) rather than for releases, which they do not classify.
 const (
-	// ReleaseAbsent is a path with nothing on disk when it was released: a file the
+	// DigestAbsent is a path with nothing on disk when it was released: a file the
 	// unit deleted, or a declared glob, which is a pattern rather than a path.
-	ReleaseAbsent = "absent"
-	// ReleaseDir is a directory. A tree has no single content digest, and hashing one
+	DigestAbsent = "absent"
+	// DigestDir is a directory. A tree has no single content digest, and hashing one
 	// on every put would walk it, so the next agent is told to go look instead.
-	ReleaseDir = "dir"
+	DigestDir = "dir"
+	// DigestUnreadable is a path that IS there and could not be hashed: unreadable,
+	// not a regular file, or too large to hash under the store's lock. Distinct from
+	// DigestAbsent because "the releaser deleted it" and "something is there nobody
+	// could read" send the next agent to different places.
+	DigestUnreadable = "unreadable"
 )
 
 // DelegationRelease is one path a unit stopped owning, and the version of it the
@@ -149,14 +156,15 @@ type DelegationRelease struct {
 // meant them to run in sequence, or because nobody noticed. Nothing here blocks,
 // gates, or reorders anything.
 type DelegationOverlap struct {
-	// A and B are the unit ids, in ledger order - A was recorded first.
-	A string `json:"a" yaml:"a"`
-	B string `json:"b" yaml:"b"`
-	// Paths are the declared paths that intersect, A's first, deduped. Both sides are
-	// listed because they are rarely the same string: "internal/ledger" and
-	// "internal/ledger/store.go" intersect, and only showing one of them would hide
-	// which unit claimed what.
-	Paths []string `json:"paths" yaml:"paths"`
+	// UnitA and UnitB are the unit ids, in ledger order - UnitA was recorded first.
+	UnitA string `json:"unit_a" yaml:"unit_a"`
+	UnitB string `json:"unit_b" yaml:"unit_b"`
+	// PathsA and PathsB are the intersecting declarations from each side, deduped and
+	// kept apart. They are rarely the same string - "internal/ledger" and
+	// "internal/ledger/store.go" intersect - so one merged list left a reader unable to
+	// tell which unit claimed which, which is the only thing they can act on.
+	PathsA []string `json:"paths_a" yaml:"paths_a"`
+	PathsB []string `json:"paths_b" yaml:"paths_b"`
 }
 
 // DelegationReport is what a reader of the ledger is served: the recorded rows, plus
@@ -171,53 +179,59 @@ type DelegationReport struct {
 // NewDelegationReport wraps the rows and derives the overlaps. Derived on READ and
 // never stored: an overlap is a relation between two rows, so storing it on either
 // one would mean a row that stopped being true when its neighbour changed.
+//
+// The single door onto a report, which is why the empty case is normalized HERE: an
+// unwritten ledger serves "units":[] rather than null, and the MCP tool and the HTTP
+// route would otherwise each have to decide that for themselves.
 func NewDelegationReport(units []DelegationUnit) DelegationReport {
-	return DelegationReport{Units: units, Overlaps: DelegationOverlaps(units)}
+	if units == nil {
+		units = []DelegationUnit{}
+	}
+	return DelegationReport{Units: units, Overlaps: delegationOverlaps(units)}
 }
 
-// DelegationOverlaps reports every pair of units whose declared owned paths
+// delegationOverlaps reports every pair of units whose declared owned paths
 // intersect, in ledger order.
 //
 // A unit in a terminal state is not in any pair. A released or finished unit is not
 // competing for a path - that is the whole shape of the skill's early-release rule,
 // where a worker shrinks its owned paths so a waiter can start - and reporting one
 // would make the surface noisiest exactly when the plan is winding down.
-func DelegationOverlaps(units []DelegationUnit) []DelegationOverlap {
+func delegationOverlaps(units []DelegationUnit) []DelegationOverlap {
 	var out []DelegationOverlap
 	for i, a := range units {
-		if a.State.Terminal() || len(a.OwnedPaths) == 0 {
+		if a.State.terminal() || len(a.OwnedPaths) == 0 {
 			continue
 		}
 		for _, b := range units[i+1:] {
-			if b.State.Terminal() || len(b.OwnedPaths) == 0 {
+			if b.State.terminal() || len(b.OwnedPaths) == 0 {
 				continue
 			}
-			if paths := intersectingPaths(a.OwnedPaths, b.OwnedPaths); len(paths) > 0 {
-				out = append(out, DelegationOverlap{A: a.ID, B: b.ID, Paths: paths})
+			if pa, pb := intersectingPaths(a.OwnedPaths, b.OwnedPaths); len(pa) > 0 {
+				out = append(out, DelegationOverlap{UnitA: a.ID, UnitB: b.ID, PathsA: pa, PathsB: pb})
 			}
 		}
 	}
 	return out
 }
 
-// intersectingPaths collects the declared paths from both sides that cover common
-// ground, A's before B's.
-func intersectingPaths(a, b []string) []string {
-	var out []string
-	add := func(p string) {
-		if !slices.Contains(out, p) {
-			out = append(out, p)
-		}
-	}
+// intersectingPaths collects the declared paths that cover common ground, each side
+// kept in its own list and deduped.
+func intersectingPaths(a, b []string) (pathsA, pathsB []string) {
 	for _, pa := range a {
 		for _, pb := range b {
-			if pathsIntersect(pa, pb) {
-				add(pa)
-				add(pb)
+			if !pathsIntersect(pa, pb) {
+				continue
+			}
+			if !slices.Contains(pathsA, pa) {
+				pathsA = append(pathsA, pa)
+			}
+			if !slices.Contains(pathsB, pb) {
+				pathsB = append(pathsB, pb)
 			}
 		}
 	}
-	return out
+	return pathsA, pathsB
 }
 
 // pathsIntersect decides whether two DECLARED paths cover common ground. Nothing else
@@ -231,6 +245,12 @@ func intersectingPaths(a, b []string) []string {
 // one path is a solver, and a missed collision costs a reader far more than a pair
 // they look at and dismiss.
 func pathsIntersect(a, b string) bool {
+	// An entry that names nothing claims nothing. It cleans to ".", which the whole-tree
+	// rule below would then read as a claim on everything, pairing a row that holds one
+	// stray blank with every other unit in the plan.
+	if strings.TrimSpace(a) == "" || strings.TrimSpace(b) == "" {
+		return false
+	}
 	a, b = literalPrefix(a), literalPrefix(b)
 	if a == "" || b == "" {
 		// A pattern with no literal prefix ("**/*.go") claims the whole tree.

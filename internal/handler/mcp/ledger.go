@@ -23,7 +23,7 @@ type ledgerTool struct{ store *ledger.Store }
 
 func (t *ledgerTool) Name() string { return ToolLedger.String() }
 
-func (t *ledgerTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
+func (t *ledgerTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spells.InvokeResponse, error) {
 	switch op := paramString(req.Params, "op", "list"); op {
 	case "list":
 		units, err := t.store.List()
@@ -44,7 +44,7 @@ func (t *ledgerTool) Invoke(_ context.Context, req spells.InvokeRequest) (spells
 		// lock. Two concurrent puts on one id (an orchestrator advancing state while a
 		// worker records its checkpoint) would each read the row before the other wrote
 		// it, and the second write would revert the first one's field.
-		stored, err := t.store.Update(strings.TrimSpace(paramString(req.Params, "id", "")), merge)
+		stored, err := t.store.Update(ctx, strings.TrimSpace(paramString(req.Params, "id", "")), merge)
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}

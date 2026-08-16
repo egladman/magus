@@ -240,6 +240,18 @@ func TestParseChangesByCommitMalformed(t *testing.T) {
 	assert.Equal(t, []types.FileChange{{Path: "good.go", Status: types.ChangeModified}}, got[0].Files)
 }
 
+// A "?" is the letter a non-git driver emits for a status IT could not translate (see
+// jjChurnTemplate). Skipping it is the whole point: recorded as an edit - which the
+// default branch would have done - the driver's uncertainty reads back as a fact about
+// the file, and churn attributes work to a path that may not have changed at all.
+func TestParseChangesByCommitSkipsAnUntranslatedStatus(t *testing.T) {
+	out := "\x00abc123\x00Ada\x002026-06-20T10:00:00Z\n\n?\tmystery.go\t mystery.go\nM\tgood.go\n"
+
+	got := parseChangesByCommit(out)
+	require.Len(t, got, 1)
+	assert.Equal(t, []types.FileChange{{Path: "good.go", Status: types.ChangeModified}}, got[0].Files)
+}
+
 // TestParseChangesByCommitEmpty covers a commit that touched no files and a bad date.
 func TestParseChangesByCommitEmpty(t *testing.T) {
 	got := parseChangesByCommit("\x00abc123\x00Ada\x00not-a-date\n\n")

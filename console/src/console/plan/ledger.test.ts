@@ -332,13 +332,25 @@ test("parseOverlaps keeps the pairs it can draw and drops the ones it cannot", (
   assert.deepEqual(
     parseOverlaps({
       overlaps: [
-        { a: "u1", b: "u2", paths: ["internal/ledger", 7] },
-        { a: "u1", b: "u1", paths: [] },
-        { a: "u1" },
+        {
+          unit_a: "u1",
+          unit_b: "u2",
+          paths_a: ["internal/ledger", 7],
+          paths_b: ["internal/ledger/store.go"],
+        },
+        { unit_a: "u1", unit_b: "u1", paths_a: [], paths_b: [] },
+        { unit_a: "u1" },
         null,
       ],
     }),
-    [{ a: "u1", b: "u2", paths: ["internal/ledger"] }],
+    [
+      {
+        unit_a: "u1",
+        unit_b: "u2",
+        paths_a: ["internal/ledger"],
+        paths_b: ["internal/ledger/store.go"],
+      },
+    ],
   );
   // A daemon predating the field sends none, which is an absence and not a failure.
   assert.deepEqual(parseOverlaps({ units: [] }), []);
@@ -347,18 +359,29 @@ test("parseOverlaps keeps the pairs it can draw and drops the ones it cannot", (
 
 // The warning belongs on BOTH rows: either one is where a reader might be standing when they need
 // to know the other exists.
-test("an overlap lands on both units, carrying the other id and the paths", () => {
+test("an overlap lands on both units, carrying the other id and each side's paths", () => {
   const plan = buildPlan(
     [unit({ id: "a", state: "running" }), unit({ id: "b", state: "running" })],
-    [{ a: "a", b: "b", paths: ["internal/ledger"] }],
+    [
+      {
+        unit_a: "a",
+        unit_b: "b",
+        paths_a: ["internal/ledger"],
+        paths_b: ["internal/ledger/store.go"],
+      },
+    ],
   );
   assert.equal(plan.byId.get("a")?.overlaps.length, 1);
-  assert.deepEqual(plan.byId.get("b")?.overlaps[0]?.paths, ["internal/ledger"]);
+  assert.deepEqual(plan.byId.get("b")?.overlaps[0]?.paths_a, ["internal/ledger"]);
+  assert.deepEqual(plan.byId.get("b")?.overlaps[0]?.paths_b, ["internal/ledger/store.go"]);
   assert.equal(plan.overlaps.length, 1);
 });
 
 test("an overlap naming a unit this ledger does not carry is dropped, not half-drawn", () => {
-  const plan = buildPlan([unit({ id: "a" })], [{ a: "a", b: "ghost", paths: ["x"] }]);
+  const plan = buildPlan(
+    [unit({ id: "a" })],
+    [{ unit_a: "a", unit_b: "ghost", paths_a: ["x"], paths_b: ["x"] }],
+  );
   assert.deepEqual(plan.byId.get("a")?.overlaps, []);
   assert.deepEqual(plan.overlaps, []);
 });
@@ -429,12 +452,19 @@ test("a served ledger comes back parsed, overlaps included", async () => {
       json: () =>
         Promise.resolve({
           units: [{ id: "root" }, { id: "b1" }],
-          overlaps: [{ a: "root", b: "b1", paths: ["internal/ledger"] }],
+          overlaps: [
+            {
+              unit_a: "root",
+              unit_b: "b1",
+              paths_a: ["internal/ledger"],
+              paths_b: ["internal/ledger"],
+            },
+          ],
         }),
     }),
     () => loadLedger("127.0.0.1:7391"),
   );
   assert.equal(read.kind, "ok");
   assert.deepEqual(read.kind === "ok" ? read.units.map((u) => u.id) : [], ["root", "b1"]);
-  assert.deepEqual(read.kind === "ok" ? read.overlaps.map((o) => o.b) : [], ["b1"]);
+  assert.deepEqual(read.kind === "ok" ? read.overlaps.map((o) => o.unit_b) : [], ["b1"]);
 });

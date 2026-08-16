@@ -143,6 +143,12 @@ func allMCPTools(opts Options) []spells.Driver {
 		CacheDir:    opts.Config.Cache.Dir,
 		Concurrency: opts.Config.Concurrency,
 	}
+	// A private ledger store only when the caller supplied none. The daemon supplies one
+	// so its two doors - this tool and the console's read route - share a mutex.
+	ledgerStore := opts.Ledger
+	if ledgerStore == nil {
+		ledgerStore = ledger.NewStore(ledger.Location{CacheDir: opts.Magus.CacheDir(), Root: opts.Magus.Root()})
+	}
 	return []spells.Driver{
 		&describeKindTool{ws: opts.Magus, cfg: wsCfg},
 		&describeFileTool{ws: opts.Magus},
@@ -165,7 +171,7 @@ func allMCPTools(opts Options) []spells.Driver {
 		&refsTool{graph: opts.Magus},
 		&diffTool{sessions: opts.DiffSessions, root: opts.Magus.Root(), src: opts.Magus},
 		&vcsCheckpointTool{ws: opts.Magus},
-		&ledgerTool{store: ledger.NewStore(opts.Magus.CacheDir(), opts.Magus.Root())},
+		&ledgerTool{store: ledgerStore},
 	}
 }
 

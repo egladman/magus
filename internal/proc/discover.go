@@ -2,6 +2,7 @@ package proc
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -70,6 +71,12 @@ func LookupStableSocket(ctx context.Context) (string, bool) {
 	return "unix://" + path, true
 }
 
+// ErrMultipleServers reports that discovery found several live proc servers and will not
+// choose between them. A sentinel because a caller has to tell it apart from "nothing is
+// running": several candidates and none send a reader somewhere different, and folding the
+// first into the second reports a busy machine as an idle one.
+var ErrMultipleServers = errors.New("multiple proc servers found; use --socket to select one")
+
 // DiscoverSocket scans SockDir for a live magus-*.sock file, preferring the stable daemon
 // socket. Used where exactly one server has to be chosen to talk to.
 //
@@ -84,7 +91,7 @@ func DiscoverSocket(ctx context.Context) (string, error) {
 		return "", err
 	}
 	if len(addrs) > 1 {
-		return "", fmt.Errorf("multiple proc servers found; use --socket to select one (%s)", strings.Join(addrs, ", "))
+		return "", fmt.Errorf("%w (%s)", ErrMultipleServers, strings.Join(addrs, ", "))
 	}
 	return addrs[0], nil
 }

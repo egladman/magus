@@ -567,18 +567,33 @@ func adviseGeneratedWrite(ctx context.Context, path string) string {
 // The CLAIM's project, not the owner: a cross-project write is attributed to the
 // tree it lands in by FileEntry.Project and to the declarer by FileClaim.Project,
 // and only the declarer can regenerate it.
+//
+// Several targets may declare the same output glob, and the order the claims arrive in
+// is the extractor's. The pick is sorted by project then target so the same path always
+// advises the same command - WHICH of them is named does not matter, since any of them
+// regenerates the file, but an answer that changes between two runs of the same guard
+// does.
 func regenerateAdvice(f types.FileEntry, owner string) string {
+	producers := make([]types.FileClaim, 0, len(f.Claims))
 	for _, c := range f.Claims {
-		if c.Role != "output" || c.Target == "" {
-			continue
+		if c.Role == "output" && c.Target != "" {
+			producers = append(producers, c)
 		}
-		producer := c.Project
-		if producer == "" {
-			producer = owner
-		}
-		return fmt.Sprintf("run `magus run %s %s`", c.Target, producer)
 	}
-	return "run the target that produces it - `magus describe targets` lists what this workspace defines"
+	if len(producers) == 0 {
+		return "run the target that produces it - `magus describe targets` lists what this workspace defines"
+	}
+	slices.SortFunc(producers, func(a, b types.FileClaim) int {
+		if n := strings.Compare(a.Project, b.Project); n != 0 {
+			return n
+		}
+		return strings.Compare(a.Target, b.Target)
+	})
+	producer := producers[0].Project
+	if producer == "" {
+		producer = owner
+	}
+	return fmt.Sprintf("run `magus run %s %s`", producers[0].Target, producer)
 }
 
 // denyNotesWrite blocks a write into the workspace's declared notes store, or returns ""
@@ -1469,23 +1484,27 @@ func guardCommandPrefix(args []string) []string {
 // advisory on the most routine command in a JS repo. `go mod edit` writes go.mod
 // without consulting a registry, for the same reason. `mise install` installs
 // TOOLS, whose versions are pinned in config rather than resolved into a lockfile.
-var guardDependencyMutations = map[string][]string{
-	"go":          {"get", "mod tidy"},
-	"npm":         {"update", "up"},
-	"pnpm":        {"add", "update", "up"},
-	"yarn":        {"add", "upgrade", "up"},
-	"bun":         {"add", "update"},
-	"cargo":       {"update", "add"},
-	"uv":          {"lock", "add"},
-	"poetry":      {"lock", "update", "add"},
-	"pip-compile": {""},
+//
+// Each prefix is spelled as its argv words. Written as a space-joined string it needed
+// re-splitting on every call, and the bare-program case had to be encoded as an empty
+// string - a sentinel indistinguishable from a typo'd entry; here it is the empty prefix
+// {{}}, which is what it means.
+var guardDependencyMutations = map[string][][]string{
+	"go":          {{"get"}, {"mod", "tidy"}},
+	"npm":         {{"update"}, {"up"}},
+	"pnpm":        {{"add"}, {"update"}, {"up"}},
+	"yarn":        {{"add"}, {"upgrade"}, {"up"}},
+	"bun":         {{"add"}, {"update"}},
+	"cargo":       {{"update"}, {"add"}},
+	"uv":          {{"lock"}, {"add"}},
+	"poetry":      {{"lock"}, {"update"}, {"add"}},
+	"pip-compile": {{}},
 }
 
 // isDependencyMutation reports whether one resolved command re-resolves dependency
-// state. An empty prefix matches the program on its own.
+// state. The empty prefix matches the program on its own.
 func isDependencyMutation(c guardCommand) bool {
-	for _, verb := range guardDependencyMutations[c.Name] {
-		want := strings.Fields(verb)
+	for _, want := range guardDependencyMutations[c.Name] {
 		if len(want) == 0 {
 			return true
 		}
@@ -1588,6 +1607,13 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 			// `git restore` targets worktree files by definition.
 			return bashGuardVerdict{Context: revertGuardContext}, true
 		case "describe":
+			// --tags and --always are the build-stamp spelling (this repository's own
+			// go_build target uses both): the caller wants a version string to embed,
+			// not the identity of a tree it is handing to someone. A checkpoint does not
+			// replace that, so the advisory would be noise on every build.
+			if slices.ContainsFunc(rest, func(a string) bool { return a == "--tags" || a == "--always" }) {
+				continue
+			}
 			return bashGuardVerdict{Context: checkpointGuardContext}, true
 		case "stash":
 			if len(rest) > 0 && rest[0] == "create" {
@@ -1610,6 +1636,10 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 // queries, which take no revision at all. `--abbrev-ref` is then excluded
 // explicitly: it takes HEAD and answers with the BRANCH NAME, which a checkpoint
 // does not replace.
+//
+// HEAD-ish is HEAD itself plus the forms that navigate from it (HEAD~2, HEAD^,
+// HEAD@{1}), and NOT every word starting with those four letters: a branch called
+// HEADLESS_BRANCH is an ordinary revision nobody is asking the identity of.
 func isTreeIdentityQuery(args []string) bool {
 	if slices.Contains(args, "--abbrev-ref") {
 		return false
@@ -1618,7 +1648,8 @@ func isTreeIdentityQuery(args []string) bool {
 		if strings.HasPrefix(a, "-") {
 			continue
 		}
-		if a == "@" || strings.HasPrefix(a, "HEAD") {
+		if a == "@" || a == "HEAD" || strings.HasPrefix(a, "HEAD~") ||
+			strings.HasPrefix(a, "HEAD^") || strings.HasPrefix(a, "HEAD@{") {
 			return true
 		}
 	}
@@ -1928,7 +1959,11 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 		// The deny answers first, so it is the only text the reader gets, and
 		// routing into magus without naming the charm that makes the write legal
 		// sends them to a target that would refuse to do it.
-		if isDependencyMutation(rawToolCmd) {
+		//
+		// The WHOLE line is scanned, not just the denied command: `go test ./... &&
+		// npm update` denies on the first half, and the reader was never told the
+		// second half rewrites a lockfile - the deny is the only text they get.
+		if isDependencyMutation(rawToolCmd) || slices.ContainsFunc(cmds, isDependencyMutation) {
 			reason += "\n" + relockAdvice
 		}
 		return bashGuardVerdict{Deny: explainDeny(command, rawToolCmd, reason)}

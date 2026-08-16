@@ -53,7 +53,7 @@ func TestStoreRoundTrip(t *testing.T) {
 				// released by it - see TestStorePutRecordsReleasedPaths.
 				{
 					ID: "a", Goal: "revised", State: types.StatePass,
-					Releases: []types.DelegationRelease{{Path: "internal/a", Digest: types.ReleaseAbsent}},
+					Releases: []types.DelegationRelease{{Path: "internal/a", Digest: types.DigestAbsent}},
 				},
 				unit("b"),
 			},
@@ -74,9 +74,10 @@ func TestStoreRoundTrip(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			s := NewStore(t.TempDir(), t.TempDir())
+			ctx := t.Context()
+			s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
 			for _, u := range tt.puts {
-				stored, err := s.Put(u)
+				stored, err := s.Put(ctx, u)
 				require.NoError(t, err)
 				assert.NotZero(t, stored.Created, "the store stamps Created")
 				assert.NotZero(t, stored.Updated, "the store stamps Updated")
@@ -101,8 +102,9 @@ func TestStoreRoundTrip(t *testing.T) {
 func TestStorePutRequiresAnID(t *testing.T) {
 	t.Parallel()
 
-	s := NewStore(t.TempDir(), t.TempDir())
-	_, err := s.Put(types.DelegationUnit{Goal: "no id"})
+	ctx := t.Context()
+	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
+	_, err := s.Put(ctx, types.DelegationUnit{Goal: "no id"})
 	require.ErrorIs(t, err, ErrNoID, "a row with no id could never be updated or referred to again")
 
 	got, err := s.List()
@@ -113,17 +115,18 @@ func TestStorePutRequiresAnID(t *testing.T) {
 func TestStorePutPreservesCreatedOnUpdate(t *testing.T) {
 	t.Parallel()
 
-	s := NewStore(t.TempDir(), t.TempDir())
-	first, err := s.Put(unit("a"))
+	ctx := t.Context()
+	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
+	first, err := s.Put(ctx, unit("a"))
 	require.NoError(t, err)
 
-	second, err := s.Put(types.DelegationUnit{ID: "a", State: types.StateFail})
+	second, err := s.Put(ctx, types.DelegationUnit{ID: "a", State: types.StateFail})
 	require.NoError(t, err)
 	assert.Equal(t, first.Created, second.Created, "an update keeps the row's original creation time")
 
 	// A caller-supplied timestamp is a fact about the caller's clock, so the store
 	// ignores it rather than recording a time the row was not written at.
-	third, err := s.Put(types.DelegationUnit{ID: "a", Created: 1, Updated: 1})
+	third, err := s.Put(ctx, types.DelegationUnit{ID: "a", Created: 1, Updated: 1})
 	require.NoError(t, err)
 	assert.Equal(t, first.Created, third.Created)
 	assert.NotEqual(t, int64(1), third.Updated)
@@ -136,8 +139,9 @@ func TestStorePutPreservesCreatedOnUpdate(t *testing.T) {
 func TestStoreUpdateMergesUnderOneLock(t *testing.T) {
 	t.Parallel()
 
-	s := NewStore(t.TempDir(), t.TempDir())
-	_, err := s.Put(unit("a"))
+	ctx := t.Context()
+	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
+	_, err := s.Put(ctx, unit("a"))
 	require.NoError(t, err)
 
 	const rounds = 25
@@ -151,7 +155,7 @@ func TestStoreUpdateMergesUnderOneLock(t *testing.T) {
 		go func() {
 			defer wg.Done()
 			for range rounds {
-				_, uerr := s.Update("a", apply)
+				_, uerr := s.Update(ctx, "a", apply)
 				errs <- uerr
 			}
 		}()
@@ -175,14 +179,15 @@ func TestStoreUpdateMergesUnderOneLock(t *testing.T) {
 func TestStoreUpdateCreatesTheRowItMerges(t *testing.T) {
 	t.Parallel()
 
-	s := NewStore(t.TempDir(), t.TempDir())
-	stored, err := s.Update("fresh", func(u *types.DelegationUnit) { u.State = types.StateRunning })
+	ctx := t.Context()
+	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
+	stored, err := s.Update(ctx, "fresh", func(u *types.DelegationUnit) { u.State = types.StateRunning })
 	require.NoError(t, err)
 	assert.Equal(t, "fresh", stored.ID)
 	assert.Equal(t, types.StateRunning, stored.State)
 	assert.NotZero(t, stored.Created)
 
-	_, err = s.Update("", func(*types.DelegationUnit) {})
+	_, err = s.Update(ctx, "", func(*types.DelegationUnit) {})
 	require.ErrorIs(t, err, ErrNoID, "a merge with no id has no row to address")
 }
 
@@ -193,13 +198,14 @@ func TestStoreUpdateCreatesTheRowItMerges(t *testing.T) {
 func TestStorePutRecordsReleasedPaths(t *testing.T) {
 	t.Parallel()
 
+	ctx := t.Context()
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "kept.go"), []byte("package kept\n"), 0o644))
 	require.NoError(t, os.WriteFile(filepath.Join(root, "released.go"), []byte("package released\n"), 0o644))
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg"), 0o755))
 
-	s := NewStore(t.TempDir(), root)
-	_, err := s.Put(types.DelegationUnit{
+	s := NewStore(Location{CacheDir: t.TempDir(), Root: root})
+	_, err := s.Put(ctx, types.DelegationUnit{
 		ID:         "u1",
 		OwnedPaths: []string{"kept.go", "released.go", "pkg", "gone.go"},
 		State:      types.StateRunning,
@@ -209,7 +215,7 @@ func TestStorePutRecordsReleasedPaths(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, before[0].Releases, "declaring a unit releases nothing")
 
-	stored, err := s.Put(types.DelegationUnit{
+	stored, err := s.Put(ctx, types.DelegationUnit{
 		ID:         "u1",
 		OwnedPaths: []string{"kept.go"},
 		State:      types.StateRunning,
@@ -226,10 +232,10 @@ func TestStorePutRecordsReleasedPaths(t *testing.T) {
 	// A directory has no single content digest and a path with nothing on disk has no
 	// content at all; both say so by name rather than by a hash-shaped value.
 	assert.Equal(t, types.DelegationRelease{
-		Path: "pkg", Digest: types.ReleaseDir, ReleasedAt: stored.Releases[1].ReleasedAt,
+		Path: "pkg", Digest: types.DigestDir, ReleasedAt: stored.Releases[1].ReleasedAt,
 	}, stored.Releases[1])
 	assert.Equal(t, types.DelegationRelease{
-		Path: "gone.go", Digest: types.ReleaseAbsent, ReleasedAt: stored.Releases[2].ReleasedAt,
+		Path: "gone.go", Digest: types.DigestAbsent, ReleasedAt: stored.Releases[2].ReleasedAt,
 	}, stored.Releases[2])
 	for _, r := range stored.Releases {
 		assert.NotEqual(t, "kept.go", r.Path, "a path the unit still owns was not released")
@@ -242,32 +248,33 @@ func TestStorePutRecordsReleasedPaths(t *testing.T) {
 func TestStoreReleasesFollowTheOwnedSet(t *testing.T) {
 	t.Parallel()
 
+	ctx := t.Context()
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("one\n"), 0o644))
 
-	s := NewStore(t.TempDir(), root)
-	_, err := s.Put(types.DelegationUnit{ID: "u1", OwnedPaths: []string{"a.go"}})
+	s := NewStore(Location{CacheDir: t.TempDir(), Root: root})
+	_, err := s.Put(ctx, types.DelegationUnit{ID: "u1", OwnedPaths: []string{"a.go"}})
 	require.NoError(t, err)
 
-	released, err := s.Update("u1", func(u *types.DelegationUnit) { u.OwnedPaths = nil })
+	released, err := s.Update(ctx, "u1", func(u *types.DelegationUnit) { u.OwnedPaths = nil })
 	require.NoError(t, err)
 	require.Len(t, released.Releases, 1)
 	first := released.Releases[0].Digest
 
-	advanced, err := s.Update("u1", func(u *types.DelegationUnit) { u.State = types.StateRunning })
+	advanced, err := s.Update(ctx, "u1", func(u *types.DelegationUnit) { u.State = types.StateRunning })
 	require.NoError(t, err)
 	assert.Equal(t, released.Releases, advanced.Releases, "a state advance neither releases nor forgets anything")
 
 	// Owned again, edited, released again: the row keeps ONE entry, carrying the version
 	// the next agent actually inherits.
-	_, err = s.Update("u1", func(u *types.DelegationUnit) { u.OwnedPaths = []string{"a.go"} })
+	_, err = s.Update(ctx, "u1", func(u *types.DelegationUnit) { u.OwnedPaths = []string{"a.go"} })
 	require.NoError(t, err)
 	reowned, err := s.List()
 	require.NoError(t, err)
 	assert.Empty(t, reowned[0].Releases, "a path the unit owns again is not a path it released")
 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("two\n"), 0o644))
-	again, err := s.Update("u1", func(u *types.DelegationUnit) { u.OwnedPaths = nil })
+	again, err := s.Update(ctx, "u1", func(u *types.DelegationUnit) { u.OwnedPaths = nil })
 	require.NoError(t, err)
 	require.Len(t, again.Releases, 1)
 	assert.NotEqual(t, first, again.Releases[0].Digest, "the second release digests the file as it stands now")
@@ -285,12 +292,13 @@ func hashOf(t *testing.T, path string) string {
 func TestStoreClear(t *testing.T) {
 	t.Parallel()
 
-	s := NewStore(t.TempDir(), t.TempDir())
+	ctx := t.Context()
+	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
 	require.NoError(t, s.Clear(), "clearing a ledger that was never written is not an error")
 
-	_, err := s.Put(unit("a"))
+	_, err := s.Put(ctx, unit("a"))
 	require.NoError(t, err)
-	_, err = s.Put(unit("b"))
+	_, err = s.Put(ctx, unit("b"))
 	require.NoError(t, err)
 
 	require.NoError(t, s.Clear())
@@ -299,7 +307,7 @@ func TestStoreClear(t *testing.T) {
 	assert.Empty(t, got, "a fresh plan starts from an empty ledger")
 
 	// One plan per workspace: nothing was archived, so a put after a clear is row one.
-	_, err = s.Put(unit("c"))
+	_, err = s.Put(ctx, unit("c"))
 	require.NoError(t, err)
 	got, err = s.List()
 	require.NoError(t, err)
@@ -310,13 +318,14 @@ func TestStoreClear(t *testing.T) {
 func TestStorePersistsAcrossStores(t *testing.T) {
 	t.Parallel()
 
+	ctx := t.Context()
 	dir := t.TempDir()
-	first := NewStore(dir, t.TempDir())
-	_, err := first.Put(unit("a"))
+	first := NewStore(Location{CacheDir: dir, Root: t.TempDir()})
+	_, err := first.Put(ctx, unit("a"))
 	require.NoError(t, err)
 
 	// The point of the store: a plan outlives the process that declared it.
-	second := NewStore(dir, t.TempDir())
+	second := NewStore(Location{CacheDir: dir, Root: t.TempDir()})
 	got, err := second.List()
 	require.NoError(t, err)
 	require.Len(t, got, 1)
@@ -324,14 +333,15 @@ func TestStorePersistsAcrossStores(t *testing.T) {
 	assert.Equal(t, []string{"internal/a"}, got[0].OwnedPaths)
 
 	_, err = os.Stat(filepath.Join(dir, "ledger", "units.json"))
-	assert.NoError(t, err, "the ledger lives at <stateDir>/ledger/units.json")
+	assert.NoError(t, err, "the ledger lives at <cacheDir>/ledger/units.json")
 }
 
 func TestStoreListReturnsCopies(t *testing.T) {
 	t.Parallel()
 
-	s := NewStore(t.TempDir(), t.TempDir())
-	_, err := s.Put(unit("a"))
+	ctx := t.Context()
+	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
+	_, err := s.Put(ctx, unit("a"))
 	require.NoError(t, err)
 
 	got, err := s.List()
@@ -352,7 +362,7 @@ func TestStoreReportsUnreadableLedger(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(dir, "ledger"), 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, "ledger", "units.json"), []byte("{not json"), 0o644))
 
-	s := NewStore(dir, t.TempDir())
+	s := NewStore(Location{CacheDir: dir, Root: t.TempDir()})
 	_, err := s.List()
 	assert.Error(t, err, "a corrupt ledger is reported, never silently read as empty")
 }

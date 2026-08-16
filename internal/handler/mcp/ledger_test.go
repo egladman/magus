@@ -2,11 +2,15 @@ package mcp
 
 import (
 	"context"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"sync"
 	"testing"
 
+	"github.com/egladman/magus/internal/handler/status"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
@@ -17,7 +21,7 @@ import (
 func TestLedgerTool(t *testing.T) {
 	t.Parallel()
 
-	tool := &ledgerTool{store: ledger.NewStore(t.TempDir(), t.TempDir())}
+	tool := &ledgerTool{store: ledger.NewStore(ledger.Location{CacheDir: t.TempDir(), Root: t.TempDir()})}
 	invoke := func(t *testing.T, params map[string]any) spells.InvokeResponse {
 		t.Helper()
 		resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: params})
@@ -167,7 +171,7 @@ func TestLedgerToolListAnswersOverlapsAndReleases(t *testing.T) {
 	root := t.TempDir()
 	require.NoError(t, os.WriteFile(filepath.Join(root, "shared.go"), []byte("package shared\n"), 0o644))
 
-	tool := &ledgerTool{store: ledger.NewStore(t.TempDir(), root)}
+	tool := &ledgerTool{store: ledger.NewStore(ledger.Location{CacheDir: t.TempDir(), Root: root})}
 	invoke := func(params map[string]any) spells.InvokeResponse {
 		resp, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: params})
 		require.NoError(t, err)
@@ -179,9 +183,10 @@ func TestLedgerToolListAnswersOverlapsAndReleases(t *testing.T) {
 	got, ok := invoke(map[string]any{"op": "list"}).Data.(types.DelegationReport)
 	require.True(t, ok)
 	require.Len(t, got.Overlaps, 1)
-	assert.Equal(t, "u1", got.Overlaps[0].A)
-	assert.Equal(t, "u2", got.Overlaps[0].B)
-	assert.Equal(t, []string{"shared.go"}, got.Overlaps[0].Paths)
+	assert.Equal(t, "u1", got.Overlaps[0].UnitA)
+	assert.Equal(t, "u2", got.Overlaps[0].UnitB)
+	assert.Equal(t, []string{"shared.go"}, got.Overlaps[0].PathsA)
+	assert.Equal(t, []string{"shared.go"}, got.Overlaps[0].PathsB)
 
 	// u1 finishes editing the contested file and announces it by shrinking the row. The
 	// digest is what tells u2 which version it is starting from.
@@ -204,7 +209,7 @@ func TestLedgerToolListAnswersOverlapsAndReleases(t *testing.T) {
 func TestLedgerToolPutMergesConcurrently(t *testing.T) {
 	t.Parallel()
 
-	tool := &ledgerTool{store: ledger.NewStore(t.TempDir(), t.TempDir())}
+	tool := &ledgerTool{store: ledger.NewStore(ledger.Location{CacheDir: t.TempDir(), Root: t.TempDir()})}
 	put := func(params map[string]any) error {
 		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: params})
 		return err
@@ -240,4 +245,29 @@ func TestLedgerToolPutMergesConcurrently(t *testing.T) {
 	assert.Equal(t, types.StateRunning, got[0].State, "the state advance survived the concurrent checkpoint write")
 	assert.Equal(t, "deadbeef", got[0].Checkpoint, "and the checkpoint survived the concurrent state advance")
 	assert.Equal(t, "the declared goal", got[0].Goal, "neither put erased the field it did not name")
+}
+
+// TestLedgerDoorsAgreeOnAnEmptyLedger is the parity the constructor exists to guarantee.
+// The ledger has two read doors - this tool and the console's GET /api/v1/ledger - and an
+// unwritten ledger is the case they used to answer differently, one serving "units":[]
+// because the route normalized it by hand and the other serving null.
+func TestLedgerDoorsAgreeOnAnEmptyLedger(t *testing.T) {
+	t.Parallel()
+
+	store := ledger.NewStore(ledger.Location{CacheDir: t.TempDir(), Root: t.TempDir()})
+	tool := &ledgerTool{store: store}
+	resp, err := tool.Invoke(t.Context(), spells.InvokeRequest{Params: map[string]any{"op": "list"}})
+	require.NoError(t, err)
+	fromTool, err := json.Marshal(resp.Data)
+	require.NoError(t, err)
+
+	w := httptest.NewRecorder()
+	status.NewLedgerHandler(store, nil).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/api/v1/ledger", nil))
+	require.Equal(t, http.StatusOK, w.Code)
+
+	var route, toolBody any
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &route))
+	require.NoError(t, json.Unmarshal(fromTool, &toolBody))
+	assert.Equal(t, route, toolBody)
+	assert.Contains(t, string(fromTool), `"units":[]`)
 }

@@ -482,17 +482,24 @@ func (v jjVCS) TrackedFiles(ctx context.Context, dir string, paths []string) ([]
 // --name-status line per file.
 //
 // jj names its statuses in words, so the template translates them to git's letters. The
-// four-way if is spelled out rather than derived from the word's first letter because
+// five-way if is spelled out rather than derived from the word's first letter because
 // "removed" and "renamed" share one, and a delete read as a rename records the deleted path
 // as one that still exists.
 //
-// Source and target are always both emitted: for anything but a rename or a copy they are
-// the same path, and parseNameStatus reads only the first.
+// "modified" is matched EXPLICITLY and anything else emits "?", the letter parseNameStatus
+// skips. The final branch used to be "M", so a status jj gained after this was written -
+// or one this translation never covered - was recorded as an edit to the path, which is a
+// guess dressed as a fact. Skipping loses the line, which is the documented behaviour for
+// a line magus cannot read.
+//
+// Source and target are always both emitted: parseNameStatus reads the second for a rename
+// or a copy (the path that exists afterwards) and the first for everything else, where jj
+// reports the same path twice anyway.
 const jjChurnTemplate = `"\0" ++ commit_id ++ "\0" ++ author.name() ++ "\0" ++ ` +
 	`committer.timestamp().format("%Y-%m-%dT%H:%M:%S%:z") ++ "\n" ++ ` +
 	`diff.files().map(|f| if(f.status() == "renamed", "R", ` +
 	`if(f.status() == "copied", "C", if(f.status() == "added", "A", ` +
-	`if(f.status() == "removed", "D", "M")))) ++ ` +
+	`if(f.status() == "removed", "D", if(f.status() == "modified", "M", "?"))))) ++ ` +
 	`"\t" ++ f.source().path() ++ "\t" ++ f.target().path()).join("\n") ++ "\n"`
 
 // ChangesByCommit implements types.ChurnReporter. `::@` is the ancestors of the working-copy

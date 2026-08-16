@@ -211,7 +211,7 @@ func lsTargets(ctx context.Context, root string, projectArgs []string) error {
 		return err
 	}
 
-	selection, _, err := resolveTargets(ctx, ws, types.Target{Name: "ls"}, projectArgs, nil, clientCwd(ctx))
+	selection, _, err := resolveTargets(ctx, ws, types.Target{Name: "ls"}, runSelection{projects: projectArgs, cwd: clientCwd(ctx)})
 	if err != nil {
 		return err
 	}

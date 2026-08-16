@@ -137,10 +137,15 @@ export interface UnitRelease {
 // UnitOverlap is one pair of units whose declared owned paths intersect, as the route reports it.
 // Derived there on every read, never stored, and never a verdict: the surface draws it and the
 // reader decides whether their plan meant it.
+//
+// Each side's intersecting declarations come separately, because the two are rarely the same
+// string - "internal/ledger" and "internal/ledger/store.go" intersect - and a reader who cannot
+// tell which unit claimed which has nothing to act on.
 export interface UnitOverlap {
-  readonly a: string;
-  readonly b: string;
-  readonly paths: readonly string[];
+  readonly unit_a: string;
+  readonly unit_b: string;
+  readonly paths_a: readonly string[];
+  readonly paths_b: readonly string[];
 }
 
 // str is the one string coercion both of the surface's parsers read the wire through - the ledger's
@@ -218,10 +223,10 @@ export function parseOverlaps(body: unknown): UnitOverlap[] {
   for (const raw of list) {
     if (typeof raw !== "object" || raw === null) continue;
     const r = raw as Record<string, unknown>;
-    const a = str(r.a);
-    const b = str(r.b);
+    const a = str(r.unit_a);
+    const b = str(r.unit_b);
     if (!a || !b || a === b) continue;
-    out.push({ a, b, paths: strList(r.paths) });
+    out.push({ unit_a: a, unit_b: b, paths_a: strList(r.paths_a), paths_b: strList(r.paths_b) });
   }
   return out;
 }
@@ -339,10 +344,10 @@ export function buildPlan(
   // A pair naming a unit this ledger does not carry is dropped rather than drawn on the one side it
   // can reach: a warning that cannot say who the other party is asks a reader to go find a row that
   // is not on their screen.
-  const kernel = overlaps.filter((o) => byId.has(o.a) && byId.has(o.b));
+  const kernel = overlaps.filter((o) => byId.has(o.unit_a) && byId.has(o.unit_b));
   const overlapsOf = new Map<string, UnitOverlap[]>();
   for (const o of kernel) {
-    for (const id of [o.a, o.b]) {
+    for (const id of [o.unit_a, o.unit_b]) {
       const at = overlapsOf.get(id);
       if (at) at.push(o);
       else overlapsOf.set(id, [o]);

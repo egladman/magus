@@ -713,6 +713,12 @@ func parseNameStatus(line string) (types.FileChange, bool) {
 		return types.FileChange{Path: fields[1], Status: types.ChangeAdded}, true
 	case 'D':
 		return types.FileChange{Path: fields[1], Status: types.ChangeDeleted}, true
+	case '?':
+		// The letter a non-git driver emits for a status IT could not translate (see
+		// jjChurnTemplate). git never writes it, and it has to be skipped explicitly:
+		// the default below would otherwise record the driver's own uncertainty as an
+		// edit to the path.
+		return types.FileChange{}, false
 	default:
 		// M, and the rarer T (type change) / U (unmerged): the path changed in place.
 		return types.FileChange{Path: fields[1], Status: types.ChangeModified}, true

@@ -391,7 +391,14 @@ test("an overlap warns on both rows and names the other unit in the detail", asy
         { id: "b", state: "declared", owned_paths: ["internal/ledger/store.go"] },
         { id: "c", state: "pass" },
       ],
-      [{ a: "a", b: "b", paths: ["internal/ledger", "internal/ledger/store.go"] }],
+      [
+        {
+          unit_a: "a",
+          unit_b: "b",
+          paths_a: ["internal/ledger"],
+          paths_b: ["internal/ledger/store.go"],
+        },
+      ],
     ),
     feeds: true,
   });
@@ -413,7 +420,7 @@ test("an overlap warns on both rows and names the other unit in the detail", asy
     host.querySelector<HTMLElement>('.console-plan-list__item[data-id="a"]')?.click();
     const detail = host.querySelector(".console-plan-detail")?.textContent ?? "";
     assert.match(detail, /Overlaps/);
-    assert.match(detail, /b: internal\/ledger, internal\/ledger\/store\.go/);
+    assert.match(detail, /b: internal\/ledger\/store\.go/);
   } finally {
     teardown();
   }

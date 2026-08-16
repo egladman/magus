@@ -41,6 +41,8 @@ No surface in that table enforces anything. The ledger is a declaration, the
 checkpoint is a reading, and the Plan surface renders both; a worker that writes
 outside its owned paths is caught by the last step, not by the third.
 
+<!--diagram:delegation-loop-->
+
 ## Record the working state
 
 A checkpoint is the identity of the tree right now: the head revision, the
@@ -124,8 +126,10 @@ None of them is enforcement. Each is something an orchestrator would otherwise
 derive by hand from a table it wrote itself, and each leaves the decision where
 it was.
 
-**Overlaps.** A `list` reports every pair of units whose `owned_paths` intersect,
-naming both ids and both declarations. Derived on the read and stored nowhere, so
+**Overlaps.** A `list` reports every pair of units whose `owned_paths` intersect
+as `unit_a`/`unit_b` and `paths_a`/`paths_b` - each side's own declarations, kept
+apart, because they are rarely the same string and which unit claimed which is
+the part a reader acts on. Derived on the read and stored nowhere, so
 it cannot go out of date with the rows. A path is compared by containment - a unit
 owning `internal/ledger` overlaps one owning `internal/ledger/store.go` - and a
 glob is judged by the directories it names, which over-reports rather than misses
@@ -141,8 +145,13 @@ agent wrote.
 
 **Releases.** Shrinking `owned_paths` is how a unit announces it has finished
 editing a path, and the store records each dropped path with the digest that path
-carried at that moment: the file's sha256, or `absent` when nothing is there and
-`dir` for a directory, which have no single content hash. Computed here so no
+carried at that moment: the file's sha256, or one of three words when it cannot
+be one - `absent` when nothing is there, `dir` for a directory, which has no
+single content hash, and `unreadable` for a path that is there and could not be
+hashed (a permission denied, something that is not a regular file, a file over
+the store's size cap). `absent` and `unreadable` are deliberately not the same
+answer: "the releaser deleted it" and "something is there nobody could read"
+send you to different places. Computed here so no
 worker has to hash anything, and so the digest describes the tree the releaser
 actually left rather than the one it believed it left. Hand it to the unit taking
 the path over; a digest that no longer matches at verification time means that

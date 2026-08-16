@@ -13,6 +13,7 @@
 package ledger
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
@@ -38,7 +39,9 @@ var ErrNoID = errors.New("ledger: a unit needs an id")
 // directory. Every operation reads the file, acts, and writes it back, so a Store is
 // cheap to construct and holds no state between calls beyond the path and its lock.
 //
-// The mutex serializes writers within one process, and only for the span of ONE call: a
+// The mutex serializes writers within one process only while they share a Store, which
+// is why the daemon builds exactly one and hands it to both of its doors (the magus_ledger
+// MCP tool and the console's read route). It serializes for the span of ONE call: a
 // caller that merges fields by reading with List and writing back with Put takes the
 // lock twice, and two such merges on one id then lose whichever field the second one
 // read before the first wrote. [Store.Update] is that merge done under a single
@@ -56,14 +59,25 @@ type Store struct {
 	root string
 }
 
-// NewStore returns the ledger rooted at stateDir, writing <stateDir>/ledger/units.json.
-// It touches no disk: the file is created by the first Put.
-//
-// root is the workspace a row's paths are relative to, and it is read for one purpose:
-// digesting a path at the moment a unit releases it (see Update). A Store built with an
-// empty root still records releases - it just cannot say what was in them.
-func NewStore(stateDir, root string) *Store {
-	return &Store{path: filepath.Join(stateDir, "ledger", "units.json"), root: root}
+// Location is where a Store lives: which cache directory holds the file, and which
+// workspace its rows describe. A struct rather than two string params because the two
+// are transposable at every call site and nothing downstream would notice - a ledger
+// written into the workspace and digested against the cache dir reads as an ordinary
+// empty ledger.
+type Location struct {
+	// CacheDir is the workspace's cache directory (magus.CacheDir); the ledger is
+	// written to <CacheDir>/ledger/units.json.
+	CacheDir string
+	// Root is the workspace a row's paths are relative to, read for one purpose:
+	// digesting a path at the moment a unit releases it (see Update). A Store built
+	// with an empty root still records releases - it just cannot say what was in them.
+	Root string
+}
+
+// NewStore returns the ledger at loc. It touches no disk: the file is created by the
+// first Put.
+func NewStore(loc Location) *Store {
+	return &Store{path: filepath.Join(loc.CacheDir, "ledger", "units.json"), root: loc.Root}
 }
 
 // unitsFile is the on-disk envelope. An object rather than a bare array so a later
@@ -80,8 +94,8 @@ type unitsFile struct {
 //
 // It stamps Created on the first write and Updated on every write, ignoring whatever
 // the caller passed for either. The stored row is returned.
-func (s *Store) Put(u types.DelegationUnit) (types.DelegationUnit, error) {
-	return s.Update(u.ID, func(cur *types.DelegationUnit) { *cur = u })
+func (s *Store) Put(ctx context.Context, u types.DelegationUnit) (types.DelegationUnit, error) {
+	return s.Update(ctx, u.ID, func(cur *types.DelegationUnit) { *cur = u })
 }
 
 // Update applies apply to the row with this id and writes the result back, all under a
@@ -104,7 +118,12 @@ func (s *Store) Put(u types.DelegationUnit) (types.DelegationUnit, error) {
 // apply runs while the lock is held, so it must not touch the store, and it cannot fail:
 // anything that could be rejected (an unknown state, a mistyped param) belongs in the
 // caller, before the call.
-func (s *Store) Update(id string, apply func(*types.DelegationUnit)) (types.DelegationUnit, error) {
+//
+// ctx reaches the release digests and nothing else. A cancelled call still WRITES the
+// row - the merge is already done and abandoning it would lose the state change - but it
+// stops hashing files, so a caller that walked away does not keep the store's lock while
+// the disk is read.
+func (s *Store) Update(ctx context.Context, id string, apply func(*types.DelegationUnit)) (types.DelegationUnit, error) {
 	if strings.TrimSpace(id) == "" {
 		return types.DelegationUnit{}, ErrNoID
 	}
@@ -128,7 +147,7 @@ func (s *Store) Update(id string, apply func(*types.DelegationUnit)) (types.Dele
 	now := time.Now().Unix()
 	u.Updated = now
 	u.Created = now
-	u.Releases = s.releases(prev, u, now)
+	u.Releases = s.releases(ctx, prev, u, now)
 	if i >= 0 {
 		u.Created = prev.Created
 		f.Units[i] = u
@@ -174,7 +193,7 @@ func (s *Store) Clear() error {
 // released the same path tells a reader nothing they can act on. A path released twice
 // keeps its position and takes the NEWER digest, because the version the next agent
 // inherits is the one left behind last.
-func (s *Store) releases(prev, next types.DelegationUnit, now int64) []types.DelegationRelease {
+func (s *Store) releases(ctx context.Context, prev, next types.DelegationUnit, now int64) []types.DelegationRelease {
 	out := slices.DeleteFunc(slices.Clone(prev.Releases), func(r types.DelegationRelease) bool {
 		return slices.Contains(next.OwnedPaths, r.Path)
 	})
@@ -182,7 +201,7 @@ func (s *Store) releases(prev, next types.DelegationUnit, now int64) []types.Del
 		if slices.Contains(next.OwnedPaths, p) {
 			continue
 		}
-		rel := types.DelegationRelease{Path: p, Digest: s.digest(p), ReleasedAt: now}
+		rel := types.DelegationRelease{Path: p, Digest: s.digest(ctx, p), ReleasedAt: now}
 		if at := slices.IndexFunc(out, func(r types.DelegationRelease) bool { return r.Path == p }); at >= 0 {
 			out[at] = rel
 			continue
@@ -197,37 +216,72 @@ func (s *Store) releases(prev, next types.DelegationUnit, now int64) []types.Del
 // hash anything, and a digest the releaser supplied would describe the tree it believed
 // it left rather than the one it did.
 //
-// Everything that is not a readable file inside the root answers with one of the two
-// documented markers rather than a hash - types.ReleaseAbsent and types.ReleaseDir say
-// which. A path escaping the root is absent by the same rule: the ledger describes this
-// workspace, so a row is never handed a digest of something outside it.
-func (s *Store) digest(declared string) string {
+// Everything that is not a readable file inside the root answers with one of the three
+// documented markers rather than a hash - types.DigestAbsent, types.DigestDir and
+// types.DigestUnreadable say which. The absent/unreadable split matters to the next
+// agent: "the releaser deleted it" and "something is there nobody could read" are
+// different problems. A path escaping the root is absent by the same rule: the ledger
+// describes this workspace, so a row is never handed a digest of something outside it.
+//
+// Runs under the store's mutex, which is deliberate - reading the previous owned set and
+// recording what it gave up has to be one step - and is why every branch below is bounded.
+func (s *Store) digest(ctx context.Context, declared string) string {
 	if s.root == "" {
-		return types.ReleaseAbsent
+		return types.DigestAbsent
 	}
-	full := filepath.Join(s.root, filepath.FromSlash(declared))
-	rel, err := filepath.Rel(s.root, full)
+	if ctx.Err() != nil {
+		return types.DigestUnreadable
+	}
+	// Symlinks are resolved on BOTH sides before the containment check. A link inside
+	// the root pointing outside it was followed and hashed, which is the one thing this
+	// function promises not to do; and the root is resolved too, or a workspace reached
+	// through a symlinked parent (/tmp on macOS) would read as an escape from itself.
+	root, err := filepath.EvalSymlinks(s.root)
+	if err != nil {
+		return types.DigestAbsent
+	}
+	full, err := filepath.EvalSymlinks(filepath.Join(root, filepath.FromSlash(declared)))
+	if err != nil {
+		// Nothing resolves at the path: a deleted file, a broken link, or a declared
+		// glob, which is a pattern rather than a path.
+		return types.DigestAbsent
+	}
+	rel, err := filepath.Rel(root, full)
 	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return types.ReleaseAbsent
+		return types.DigestAbsent
 	}
 	info, err := os.Stat(full)
 	switch {
 	case err != nil:
-		return types.ReleaseAbsent
+		return types.DigestUnreadable
 	case info.IsDir():
-		return types.ReleaseDir
+		return types.DigestDir
+	case !info.Mode().IsRegular():
+		// A fifo, socket, or device. os.Open on a released named pipe BLOCKS until
+		// somebody writes to it, and it would block holding the store's mutex - one
+		// released fifo would wedge every ledger operation in the daemon.
+		return types.DigestUnreadable
+	case info.Size() > maxDigestBytes:
+		return types.DigestUnreadable
 	}
 	fh, err := os.Open(full)
 	if err != nil {
-		return types.ReleaseAbsent
+		return types.DigestUnreadable
 	}
 	defer fh.Close()
 	sum := sha256.New()
 	if _, err := io.Copy(sum, fh); err != nil {
-		return types.ReleaseAbsent
+		return types.DigestUnreadable
 	}
 	return "sha256:" + hex.EncodeToString(sum.Sum(nil))
 }
+
+// maxDigestBytes bounds one release digest, because the hash is computed while the store
+// holds its mutex. 32 MiB is far above the source files a unit actually releases and far
+// below the build artifact that would otherwise stall every other ledger caller for as
+// long as it takes to read it; a path over the cap records unreadable, which is what it
+// is from the reader's side.
+const maxDigestBytes = 32 << 20
 
 // read loads the file. An absent file is an empty ledger, not a failure: nothing has
 // been recorded yet in this workspace.

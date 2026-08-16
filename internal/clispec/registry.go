@@ -913,7 +913,11 @@ that has been serving the workspace since it was started. A daemon outlives
 the CLI that started it, so upgrading magus leaves the older code running
 until it is restarted - which is the case this command exists to show. The
 daemon line reads "not running" when nothing answers, and --client skips the
-probe entirely for a script that wants the build stamp with no daemon I/O.`,
+probe entirely for a script that wants the build stamp with no daemon I/O.
+
+In json and yaml the daemon key is present only when the probe ran: absent
+means it never ran (--client, or -o name, which prints the bare version and
+renders no daemon), and an empty value means it ran and nothing answered.`,
 	Flags: []Flag{
 		{Name: "client", Kind: FlagBool, Doc: "Print only this binary's version; skip the daemon probe entirely"},
 	},

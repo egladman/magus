@@ -185,9 +185,11 @@ type TargetGraphNode struct {
 	// target names), each carries the other project's path, so the graph can draw a
 	// target -> target edge across project boundaries instead of a coarse project -> project one.
 	CrossDependencies []CrossTargetRef `json:"cross_dependencies,omitempty" yaml:"cross_dependencies,omitempty"`
-	// Chain is the target's composition IN INVOCATION ORDER: one step per ctx.needs
-	// argument, in the order the body writes them, across every ctx.needs call the
-	// target makes. Dependencies and CrossDependencies answer "what does this compose"
+	// Chain is the target's composition IN INVOCATION ORDER: the DISTINCT steps the
+	// body names, in the order it first names them, across every ctx.needs call the
+	// target makes. A step named twice appears once, at its first invocation - the
+	// second mention adds no ordering the first has not already fixed.
+	// Dependencies and CrossDependencies answer "what does this compose"
 	// as two sets keyed by locality; Chain answers "in what order", which is the one
 	// fact the source carries and neither set preserves once the graph merges them.
 	// Empty for a target that composes nothing.
@@ -289,6 +291,14 @@ type TargetGraphNode struct {
 type CrossTargetRef struct {
 	Project string `json:"project" yaml:"project"`
 	Target  string `json:"target"  yaml:"target"`
+}
+
+// Ref spells the reference the way the CLI takes a target ref, "project:target" - the
+// same method ChainStep carries, so a caller printing either kind of reference asks for
+// it the same way. Project is never empty on this type (a cross-project ref names
+// another project by definition), so there is no bare-name form.
+func (r CrossTargetRef) Ref() string {
+	return r.Project + ":" + r.Target
 }
 
 // ChainStep is one target a composed target invokes, in source order. Project is empty

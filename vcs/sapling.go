@@ -379,14 +379,11 @@ func (v saplingVCS) DefaultRef(ctx context.Context, dir string) (string, error) 
 // shape parseChangesByCommit reads from git, minus git's leading NUL sentinel, which is
 // supplied here by the template's own leading \0.
 //
-// Like Mercurial's, Sapling's template groups a commit's paths by what happened to them
-// rather than tagging each path, so the status letter comes from WHICH keyword emitted the
-// path. {files} would be shorter but carries no status, and a bare path is a line
-// parseNameStatus skips - churn would read as zero files touched, silently. The keywords do
-// not detect renames, which the ChurnReporter contract allows: a rename arrives as a delete
-// plus an add, costing lineage but staying correct.
-const saplingChurnTemplate = `\0{node}\0{author|person}\0{date|rfc3339date}\n` +
-	`{file_mods % "M\t{file}\n"}{file_adds % "A\t{file}\n"}{file_dels % "D\t{file}\n"}`
+// The file half is hgChurnFileTail verbatim, shared rather than restated for the reason
+// hgCommitTemplate is: Sapling kept Mercurial's template language. Its rationale - why the
+// status letter comes from which keyword emitted the path, and why renames arrive as a
+// delete plus an add - lives at that constant.
+const saplingChurnTemplate = `\0{node}\0{author|person}\0{date|rfc3339date}\n` + hgChurnFileTail
 
 // ChangesByCommit implements types.ChurnReporter. `-r` scopes the walk to the working
 // copy's ancestors so a repository with several heads cannot attribute churn from a line of

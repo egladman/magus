@@ -83,11 +83,16 @@ func TestLedgerHandler_ReportsOverlappingOwnedPaths(t *testing.T) {
 	if len(out.Overlaps) != 1 {
 		t.Fatalf("want one pair - the finished unit is not competing for anything - got %+v", out.Overlaps)
 	}
-	if out.Overlaps[0].A != "unit-a" || out.Overlaps[0].B != "unit-b" {
+	if out.Overlaps[0].UnitA != "unit-a" || out.Overlaps[0].UnitB != "unit-b" {
 		t.Errorf("want the pair in ledger order, got %+v", out.Overlaps[0])
 	}
-	if len(out.Overlaps[0].Paths) != 2 {
-		t.Errorf("want both declarations named, got %v", out.Overlaps[0].Paths)
+	// Each side's own declaration, kept apart: they are different strings here, and a
+	// reader who cannot tell which unit claimed which has nothing to act on.
+	if len(out.Overlaps[0].PathsA) != 1 || out.Overlaps[0].PathsA[0] != "internal/ledger" {
+		t.Errorf("want unit-a's declaration, got %v", out.Overlaps[0].PathsA)
+	}
+	if len(out.Overlaps[0].PathsB) != 1 || out.Overlaps[0].PathsB[0] != "internal/ledger/store.go" {
+		t.Errorf("want unit-b's declaration, got %v", out.Overlaps[0].PathsB)
 	}
 }
 
