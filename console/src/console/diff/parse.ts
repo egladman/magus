@@ -86,7 +86,7 @@ export function parsePatch(patch: string): DiffFile[] {
   let newNo = 0;
 
   const closeHunk = (): void => {
-    if (cur && hunk) cur.hunks.push(freezeHunk(hunk));
+    if (cur && hunk) cur.hunks.push(hunk);
     hunk = null;
   };
   const closeFile = (): void => {
@@ -288,10 +288,6 @@ function newFile(paths: { oldPath: string; path: string }): MutableFile {
     deletions: 0,
     binary: false,
   };
-}
-
-function freezeHunk(h: MutableHunk): Hunk {
-  return h;
 }
 
 // freezeFile settles the file's identity last, once every header has been seen. A deletion

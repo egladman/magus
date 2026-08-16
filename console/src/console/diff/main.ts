@@ -779,11 +779,6 @@ export function activate(host: HTMLElement): () => void {
     // Smooth scrolling is motion, and for a reader who has asked the OS for less of it, a
     // whole diff sliding past on every `[` is the symptom they turned it off to avoid.
     scroll.scrollTo({ top: i * ROW_HEIGHT, behavior: prefersReducedMotion() ? "auto" : "smooth" });
-    const row = state.rows[i];
-    if (row && row.kind !== "file") {
-      const path = row.kind === "hunk" ? row.hunk : null;
-      void path;
-    }
     // Tell the session where the reader is, so an agent can be useful about it.
     const f = state.rows[i];
     if (f) {
