@@ -3099,14 +3099,14 @@ a code {
    moves as the cycle runs. Keep the lines within two rendered lines of each other
    or that reserved box opens a visible gap under the short ones.
 
-   The pace is deliberately slow: ten seconds a line, one hundred and thirty for a
-   full turn. A headline that changes while you are still reading it is an animation
-   demo, not a headline - the line should have been sitting there long enough that
-   you are not sure whether it moved.
+   Seven seconds a line, ninety-one for a full turn. The swap itself is unchanged and
+   deliberately quick (0.6s in, 0.76s out); what shortened is the hold. Keep the hold
+   comfortably longer than the swap - a line that changes while you are still reading
+   it reads as an animation demo rather than as a headline.
 
    INVARIANT: the duration, the keyframe percentages and the nth-child delays below
-   are computed for exactly THIRTEEN items (100/13 = 7.69% each, 10s apiece over
-   130s). Adding or removing a line in landing.buzz means recomputing all three.
+   are computed for exactly THIRTEEN items (100/13 = 7.69% each, 7s apiece over
+   91s). Adding or removing a line in landing.buzz means recomputing all three.
    A missing delay is not a missing animation: the item falls back to delay 0 and
    rides the FIRST item's timeline, painting two headlines on top of each other. */
 .landing-rotator {
@@ -3120,7 +3120,7 @@ a code {
   /* will-change keeps the transform on its own layer so the rise cannot judder
      against the rest of the page repainting. */
   will-change: opacity, transform;
-  animation: landing-rotate 130s cubic-bezier(0.22, 1, 0.36, 1) infinite;
+  animation: landing-rotate 91s cubic-bezier(0.22, 1, 0.36, 1) infinite;
 }
 
 /* Held opaque for its own slot. The swap is a short rise rather than a plain
@@ -3133,12 +3133,12 @@ a code {
     opacity: 0;
     transform: translateY(0.32em);
   }
-  0.46% {
+  0.66% {
     opacity: 1;
     transform: translateY(0);
     animation-timing-function: cubic-bezier(0.16, 0.84, 0.44, 1);
   }
-  7.11% {
+  6.86% {
     opacity: 1;
     transform: translateY(0);
   }
@@ -3155,18 +3155,18 @@ a code {
 /* Negative delays start every item mid-cycle, one slot apart, so all thirteen share
    one animation and one timeline instead of needing thirteen keyframe blocks. The
    first item takes no rule: its slot IS delay 0. */
-.landing-rotate:nth-child(2) { animation-delay: -10s; }
-.landing-rotate:nth-child(3) { animation-delay: -20s; }
-.landing-rotate:nth-child(4) { animation-delay: -30s; }
-.landing-rotate:nth-child(5) { animation-delay: -40s; }
-.landing-rotate:nth-child(6) { animation-delay: -50s; }
-.landing-rotate:nth-child(7) { animation-delay: -60s; }
-.landing-rotate:nth-child(8) { animation-delay: -70s; }
-.landing-rotate:nth-child(9) { animation-delay: -80s; }
-.landing-rotate:nth-child(10) { animation-delay: -90s; }
-.landing-rotate:nth-child(11) { animation-delay: -100s; }
-.landing-rotate:nth-child(12) { animation-delay: -110s; }
-.landing-rotate:nth-child(13) { animation-delay: -120s; }
+.landing-rotate:nth-child(2) { animation-delay: -7s; }
+.landing-rotate:nth-child(3) { animation-delay: -14s; }
+.landing-rotate:nth-child(4) { animation-delay: -21s; }
+.landing-rotate:nth-child(5) { animation-delay: -28s; }
+.landing-rotate:nth-child(6) { animation-delay: -35s; }
+.landing-rotate:nth-child(7) { animation-delay: -42s; }
+.landing-rotate:nth-child(8) { animation-delay: -49s; }
+.landing-rotate:nth-child(9) { animation-delay: -56s; }
+.landing-rotate:nth-child(10) { animation-delay: -63s; }
+.landing-rotate:nth-child(11) { animation-delay: -70s; }
+.landing-rotate:nth-child(12) { animation-delay: -77s; }
+.landing-rotate:nth-child(13) { animation-delay: -84s; }
 
 /* A headline that will not hold still is a real accessibility problem, not a
    taste one. Under a reduced-motion preference the cycle stops entirely on the
