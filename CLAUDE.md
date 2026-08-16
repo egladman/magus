@@ -36,12 +36,12 @@ that are not derivable from either:
 
 ## Which magus binary
 
-RIGHT NOW the released `magus` on PATH CANNOT load this workspace. `evals/magusfile.buzz`
-declares `no_language`, which no release knows yet, so every command fails at workspace
-load with:
+RIGHT NOW the released `magus` on PATH CANNOT load this workspace. The root magusfile
+imports `./tools/toolchain`, which imports the `proc` module no release carries yet, so
+every command fails at workspace load with:
 
 ```text
-magus.project: unknown option "no_language" (known options: depends_on, exclusive, ...)
+magus: workspace://.: magusfile: exec magusfile.buzz: [BZZ2001] buzz: import "./tools/toolchain": [BZZ2001] buzz: import "proc": module not found
 ```
 
 So build one - `magus run go_build .` - and use `./magus`. This is a temporary state that
