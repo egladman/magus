@@ -400,7 +400,11 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // Parity gate: no previously-shipped URL may silently start 404-ing.
     abandonedLinkCheck(site);
 
-    std\print("done");
+    // A count, not a line per page: the per-page listing was ~250 lines every render,
+    // repeated once per target that reaches generate, and it said nothing a failure
+    // does not say better. The written paths are on disk; the gates above name what
+    // is wrong.
+    std\print("rendered {site.searchRecords.len()} page(s)");
     // Hand the populated state back; the caller threads it into updateUrlLock (no
     // module-global carries it between the two calls).
     return site;

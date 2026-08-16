@@ -696,8 +696,6 @@ export fun renderFile(rel: str, site: Site) > void !> any {
     site.addRecord(url, title, desc, md);
     // Redirect stubs for any old paths this page declares (frontmatter aliases:).
     foreach (a in fm.q("aliases").listValue()) { site.collectAlias(a.stringValue(), url); }
-
-    std\print("  " + rel + " -> " + dir + "/index.html");
 }
 
 

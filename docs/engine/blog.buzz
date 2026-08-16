@@ -151,8 +151,6 @@ export fun renderBlogPost(base: str, site: Site) > void !> any {
         base = base, slug = slug, urlPath = urlPath, title = title,
         date = date, description = desc, url = url, tags = parseTags(md).join("||"),
     });
-
-    std\print("  " + rel + " -> " + site.outDir + "/" + site.blog + "/" + urlPath + "/index.html");
 }
 
 
