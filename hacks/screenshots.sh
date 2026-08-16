@@ -51,6 +51,10 @@ find_chrome() {
 # screenshot; committing one nothing references is just weight in the repo.
 shots=(
   "console-dashboard|console/dashboard/#demo|1280,820"
+  "console-graph|console/graph/#demo|1280,820"
+  "console-logs|console/logs/#demo|1280,820"
+  "console-activity|console/activity/#demo|1280,820"
+  "console-diff|console/diff/#demo|1280,820"
 )
 
 want=${1:-}
@@ -84,8 +88,13 @@ for shot in "${shots[@]}"; do
   IFS='|' read -r name path size <<<"$shot"
   [ -n "$want" ] && [ "$want" != "$name" ] && continue
   echo "==> $name  ($size @${scale}x)"
+  # --force-prefers-reduced-motion is load-bearing, not a preference: a surface with a
+  # perpetual animation loop (the graph's motion layer) never lets virtual time complete,
+  # because --virtual-time-budget must simulate every queued frame. Every surface gates
+  # its loops on prefers-reduced-motion, so forcing it is what makes the budget finite.
   "$chrome" \
     --headless=new --disable-gpu --no-sandbox --hide-scrollbars \
+    --force-prefers-reduced-motion \
     --force-device-scale-factor="$scale" \
     --window-size="$size" \
     --virtual-time-budget=8000 \

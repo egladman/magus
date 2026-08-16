@@ -15,6 +15,8 @@ A fast, cross-platform task orchestrator for polyglot monorepos. One binary, no 
 
 Change a file and magus works out which projects it reaches, rebuilds only those, and caches every result so the same work never runs twice.
 
+magus informs; it never decides. It hands you everything it knows about your repository - what a change reaches, which files are generated, where a symbol is used - and the call stays yours. It was built for humans, not for agents: agents drive it well anyway, because an interface legible to a person is legible to anything, and that ordering is the design.
+
 <!-- Rendered by `magus run termcast-generate` from tapes/core-loop.capture, the raw
      bytes a real magus printed to a real terminal. Re-record with `magus run
      termcast-record` when the CLI's output changes; both files commit together. -->
@@ -62,6 +64,9 @@ guesses about. magus gives them the same fix. Query the
 [knowledge graph](docs/concepts/knowledge.md) instead of grepping, run
 [targets](docs/concepts/targets.md) instead of raw tools, and let `magus affected ci`
 prove what a change touched. For agents, see [Agents](docs/guides/integrations/agents.md).
+
+The longer argument behind that position, and what it was a reaction to, is in
+[I think our tools are the problem](https://eli.gladman.cc/magus/blog/2026/08/03/the-tools-were-the-problem/).
 
 ## Who this is for
 
@@ -173,13 +178,22 @@ content hash, so a replay is a byte-for-byte reproduction of the recorded run.
 
 ### The knowledge graph
 
-Because magus already knows every project, target, spell, and how they relate,
-it exposes that as a graph you can query. `magus query "kind:target lint"` finds
+Most tools that offer you a codebase graph are observers: a separate indexer
+scans the repo, infers the structure, and can be wrong in ways nothing warns you
+about. magus is not observing - it is the thing that builds the repo, so it
+already has to know every project, every target's declared inputs and outputs,
+and what a diff reaches, and getting any of that wrong breaks builds loudly.
+The graph is that same knowledge handed back: a byproduct of being the source
+of truth, never an inference about it. No LLM pass, no fuzzy linking; every
+edge traces to a declaration you can open.
+
+`magus query "kind:target lint"` finds
 nodes, `magus explain <node>` shows a node's edges and what reaches it, and
 `magus refs <symbol>` lists where a symbol is defined and used from a SCIP
 index.[^scip] The same graph answers "is this file generated," "what does my diff
 touch," and "how do these two things relate" without grepping. See the
-[knowledge graph](docs/concepts/knowledge.md).
+[knowledge graph](docs/concepts/knowledge.md), including
+[what this graph deliberately is not](docs/concepts/knowledge.md#what-this-graph-is-not).
 
 ### One vocabulary
 
@@ -388,19 +402,34 @@ reports each one on its own line.
 
 ## The browser console
 
-magus is fully featured from the terminal, so everything here is optional. Alongside the CLI, the daemon can drive four read-only browser apps.
+magus is fully featured from the terminal, so everything here is optional. Alongside the CLI, the daemon can drive a set of read-only browser apps.
 
-> Want to see it first? [Open the live demo](https://eli.gladman.cc/magus/console/): no install, no daemon. It fills the dashboard with synthesized activity, streams a build into the log viewer, and lets you jump between all four apps in demo mode. Everything below runs against your own daemon instead.
+> Want to see it first? [Open the live demo](https://eli.gladman.cc/magus/console/): no install, no daemon. It fills the dashboard with synthesized activity, streams a build into the log viewer, and lets you jump between every app in demo mode. Everything below runs against your own daemon instead.
 
-### The four apps
+### The apps
 
-The four apps ship as one console; each link below opens it on the
+The apps ship as one console; each link below opens it on the
 matching app.
+
+<table>
+  <tr>
+    <td align="center" width="33%"><img src="./assets/screenshots/console-dashboard.png" alt="Dashboard"><br><b>Dashboard</b><br><sub>Pool, cache and daemon health, live</sub></td>
+    <td align="center" width="33%"><img src="./assets/screenshots/console-graph.png" alt="Graph Explorer"><br><b>Graph Explorer</b><br><sub>Targets, spells and their dependencies</sub></td>
+    <td align="center" width="33%"><img src="./assets/screenshots/console-logs.png" alt="Log Viewer"><br><b>Log Viewer</b><br><sub>Any run's captured output, streamed or replayed</sub></td>
+  </tr>
+  <tr>
+    <td align="center" width="33%"><img src="./assets/screenshots/console-activity.png" alt="Activity Trail"><br><b>Activity Trail</b><br><sub>What agents did, and when</sub></td>
+    <td align="center" width="33%"><img src="./assets/screenshots/console-diff.png" alt="Diff"><br><b>Diff</b><br><sub>Review the working tree, paired with an agent</sub></td>
+    <td align="center" width="33%"></td>
+  </tr>
+</table>
 
 - [Dashboard](https://eli.gladman.cc/magus/console/) shows live daemon health, the concurrency pool, running targets, and cache activity.[^app-dashboard]
 - [Graph Explorer](https://eli.gladman.cc/magus/console/) navigates targets, spells, and their dependency graph (`magus graph export --open`).[^app-graph]
 - [Log Viewer](https://eli.gladman.cc/magus/console/) reads or streams any past run's captured output (`magus query output <ref> --open`).[^app-logs]
 - [Activity Trail](https://eli.gladman.cc/magus/console/) shows recent MCP calls, agent-command observations, background jobs, and config changes.[^app-activity]
+- [Diff](https://eli.gladman.cc/magus/console/) annotates the working tree's uncommitted changes - generated vs source, blast radius, coverage - and hosts the human half of a paired review.
+- [Plan](https://eli.gladman.cc/magus/console/) draws the delegation ledger an orchestrating agent declared beside the target DAG a plain run derives.
 
 ### How it stays on your machine
 
@@ -416,9 +445,7 @@ The hosted page talks only to `127.0.0.1`/`[::1]`, a loopback lock it enforces b
 
 ## Working with AI agents
 
-> The fastest way to make your agent better at your code base isn't a smarter model. It's a tighter feedback loop. Most of these are scripts you already have because you had to set up environments for developers. You just need to hook them up the right way.
-
-That hookup is what magus is. The build, test, lint, format, and cache scripts that already run for human developers become the same feedback loop an agent gets - deterministic, fast, and answerable through the knowledge graph instead of through guess and grep.
+A tighter feedback loop does more for an agent working in your code base than a larger model does, and most of that loop already exists: the build, test, lint, format, and cache scripts you wrote so developers could set up an environment. magus is the hookup. Those same scripts become what the agent runs, deterministic and fast.
 
 magus treats an AI agent and a new teammate as the same kind of user: someone who cannot yet trust their guesses about the repo. It ships an agent surface built on the knowledge graph, so an agent asks magus instead of grepping and guessing.
 

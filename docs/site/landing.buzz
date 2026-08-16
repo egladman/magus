@@ -24,6 +24,9 @@ import "engine/meta" as _;
 import "engine/types" as _;
 import "engine/route" as _;
 import "engine/page" as _;
+// isPublishablePost: the one predicate deciding what counts as a post, shared with the
+// blog's own walks so this block and the blog index cannot disagree about a draft.
+import "engine/blog" as _;
 
 // TERMINAL_SESSION is the hero's transcript: `magus run ci` cold, the identical command
 // warm, and `magus affected ci` after one edit. Three commands is the whole pitch - the
@@ -38,7 +41,7 @@ import "engine/page" as _;
 // Classed spans, not ANSI: the terminal's color comes from site.css, so it follows the
 // reader's light/dark theme instead of baking one palette into the markup.
 final TERMINAL_SESSION = `<span class="term-prompt">$</span> <span class="term-cmd">magus affected ci --dry-run</span>
-<span class="term-muted">projects: apps/web (1 of 7)
+<span class="term-muted">projects: apps/web (1 of 5)
 base: git diff vs origin/main
 charms: rw
 cache: local (read+write)
@@ -69,7 +72,7 @@ fun recentPosts(site: Site) > str !> any {
     if (isDirectory(dir) == false) { return ""; }
     var names: mut [str] = mut [<str>];
     foreach (name in fs\listDir(dir)) {
-        if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
+        if (isPublishablePost(site, name)) {
             names.append(name);
         }
     }
@@ -85,9 +88,6 @@ fun recentPosts(site: Site) > str !> any {
         final md = f.readAll();
         f.close();
         final fm = serialize\jsonDecode(markdown\frontmatter(md));
-        // A draft is marked in frontmatter and must not surface here; the blog index
-        // makes the same call, so the two cannot disagree about what is published.
-        if (fm.q("draft").boolean() == true) { continue; }
         var title = fm.q("title").stringValue();
         if (title == "") { title = deriveTitle(md, name); }
         final desc = fm.q("description").stringValue();
@@ -126,6 +126,7 @@ export fun renderLanding(site: Site) > void !> any {
         <span class="landing-rotate" aria-hidden="true">It tells you the plan is bad, then runs it anyway.</span>
         <span class="landing-rotate" aria-hidden="true">Everything it knows, handed over. The call stays yours.</span>
         <span class="landing-rotate" aria-hidden="true">Agents grep faster. Guessing faster is still guessing.</span>
+        <span class="landing-rotate" aria-hidden="true">The graph is not inferred. It is what the build already knew.</span>
         <span class="landing-rotate" aria-hidden="true">A build tool should be boring. Exciting means it moved under you.</span>
         <span class="landing-rotate" aria-hidden="true">One layer between you and the command. Not five.</span>
         <span class="landing-rotate" aria-hidden="true">Explicit by design, debuggable by consequence.</span>
@@ -133,13 +134,14 @@ export fun renderLanding(site: Site) > void !> any {
         <span class="landing-rotate" aria-hidden="true">Offline is not a degraded mode.</span>
       </h1>
       <p class="landing-lede">magus is a task orchestrator: it builds, tests and lints the projects in a repository, works out which ones a change reached, and calls the tools you already run instead of replacing them. One project or two hundred, in whatever languages you already use. It caches what those tools produce, so the same work never runs twice. Ask it what it is going to do and it prints the exact command, arguments and all. When something breaks (and something always breaks), the error comes from <em>your</em> tool, not from ours.</p>
+      <p class="landing-lede landing-lede-cont">It informs; it does not decide. Everything it knows about your repository, handed over as answers - and the call stays yours. It was not built for agents, either: they drive it well because an interface legible to a person is legible to anything, and that ordering is the design.</p>
       <p class="landing-sub">One binary, <a href="https://choosealicense.com/licenses/gpl-3.0/">GPL-3.0</a>, on Linux, macOS and Windows, whatever languages your repository holds. No account, no paid tier, and nowhere to phone home: magus runs no hosted service, and the OpenTelemetry exporter stays off until you point it at a collector of your own.</p>
       <div class="landing-cta">
         <a class="landing-btn landing-btn-primary" href="download/">Install magus</a>
         <a class="landing-btn" href="tour/">Take the tour</a>
       </div>
     </div>
-    <div class="term" data-hero-terminal role="img" aria-label="A terminal session. magus affected ci --dry-run reports that one of four projects is affected, then lists the exact commands it would run in it: pnpm install, pnpm run typecheck, pnpm exec biome check, pnpm run test.">
+    <div class="term" data-hero-terminal role="img" aria-label="A terminal session. magus affected ci --dry-run reports that one of five projects is affected, then lists the exact commands it would run in it: pnpm install, pnpm run typecheck, pnpm exec biome check, pnpm run test.">
       <div class="term-bar">
         <span class="term-dots" aria-hidden="true"><i></i><i></i><i></i></span>
       </div>
