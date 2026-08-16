@@ -3,7 +3,7 @@
 // orchestrator takes at the start is the same one it diffs against at the end, so a unit is
 // verified against what it CLAIMED rather than against whatever the tree looks like later.
 //
-// The centre box is not a step. It is the doctrine the rest of the figure only makes sense
+// The center box is not a step. It is the doctrine the rest of the figure only makes sense
 // under: every box on the ring is a thing magus RECORDS or ANSWERS, and none of them is a
 // thing it prevents. No connector reaches it because it constrains all of them.
 //
