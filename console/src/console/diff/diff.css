@@ -269,14 +269,6 @@
   border-inline-start: 1px solid var(--pf-t--global--border--color--default);
 }
 
-.console-diff-row__side[data-kind="add"] {
-  background: var(--pf-t--global--background--color--status--success--default);
-}
-
-.console-diff-row__side[data-kind="del"] {
-  background: var(--pf-t--global--background--color--status--danger--default);
-}
-
 /* An absent side is a filled cell, not a gap: the two columns must stay aligned row for row.
  *
  * Rendered as faint hatching rather than a solid fill. A solid block is the loudest thing on
