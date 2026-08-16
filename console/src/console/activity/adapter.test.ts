@@ -200,7 +200,11 @@ test("every non-UNSPECIFIED wire kind has a real label and a named group", () =>
 
     const groups = groupEventsByKind([ev({ kind })]);
     assert.equal(groups.length, 1, `Kind.${Kind[kind]} did not produce exactly one group`);
-    assert.notEqual(groups[0].label, "Other", `Kind.${Kind[kind]} is missing from KIND_GROUP_ORDER`);
+    assert.notEqual(
+      groups[0].label,
+      "Other",
+      `Kind.${Kind[kind]} is missing from KIND_GROUP_ORDER`,
+    );
     assert.equal(groups[0].kind, kind);
   }
 });
