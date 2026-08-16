@@ -262,6 +262,14 @@ export object Site {
     // which matches semver descending for vX.Y.Z names).
     releases: mut [Release],
 
+    // Root-relative URL ("blog/YYYY/MM/DD/slug/") of the post whose frontmatter `release:`
+    // names the newest release, or "" when no post claims it. Resolved ONCE before the walk
+    // (findReleasePost, right after loadReleases) rather than read off site.blogPosts inside
+    // renderAnnouncementBar: posts are appended during walkBlog, which runs after most pages
+    // render, so a bar reading that list would link on late pages and not on early ones and
+    // emit two different chromes for one build. Same reason csp/cspHome are precomputed below.
+    releaseBlogURL: str = "",
+
     // The default CSP meta content, computed once by computeCSP() at the top of
     // site_render() and threaded verbatim into every page's head EXCEPT home (non-home
     // pages, render404, writeOffline, playground.html) - none embed the README's status

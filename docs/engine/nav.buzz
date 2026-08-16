@@ -433,7 +433,11 @@ export fun renderSiteFooter(root: str, site: Site) > str !> any {
 // or "" when none has shipped. The version comes from loadReleases (releases/*.yaml), so it
 // is drift-stable; announcement.js hides it once the reader dismisses that version and
 // re-shows it on the next release.
-export fun renderAnnouncementBar(site: Site) > str !> any {
+//
+// Takes root (the relative-depth prefix) like every other chrome renderer, because the
+// optional second link points at a post on this site. The release link stays an absolute
+// GitHub URL, so the bar needed no depth until the post link existed.
+export fun renderAnnouncementBar(root: str, site: Site) > str !> any {
     if (site.releases.len() == 0) { return ""; }
     final ver = site.releases[0].version;
     // data-released lets the client expire the bar; the decision cannot be made here.
@@ -443,12 +447,19 @@ export fun renderAnnouncementBar(site: Site) > str !> any {
     final released = site.releases[0].date;
     final tmpl = `  <div id="announcement-bar" data-version="{{ver}}" data-released="{{released}}">
     <div class="container">
-      <span>magus <strong>{{ver}}</strong> is out. <a href="{{gh}}/releases/tag/{{ver}}">See what's new</a></span>
+      <span>magus <strong>{{ver}}</strong> is out. <a href="{{gh}}/releases/tag/{{ver}}">See what's new</a>{{#hasPost}} &middot; <a href="{{root}}{{post}}">Read the post</a>{{/hasPost}}</span>
       <button class="announcement-close" type="button" aria-label="Dismiss announcement">&times;</button>
     </div>
   </div>
 `;
-    return template\render(tmpl, {"ver": ver, "released": released, "gh": site.config.repoURL});
+    return template\render(tmpl, {
+        "ver": ver,
+        "released": released,
+        "gh": site.config.repoURL,
+        "root": root,
+        "post": site.releaseBlogURL,
+        "hasPost": site.releaseBlogURL != "",
+    });
 }
 
 test "conventionAnchorsIn reads the anchors the injected hints point at" {

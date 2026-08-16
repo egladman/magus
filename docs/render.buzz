@@ -99,13 +99,13 @@ fun esbuild(args: [str]) > void !> any {
     proc\exec("esbuild", args, ".", {});
 }
 
-// walkBlog visits every blog/*.md post (skipping index.md and _underscored fixtures) in
-// fs.list's sorted order, so the walk is deterministic. Posts are flat: no nested subdirs
-// under blog/.
+// walkBlog visits every publishable blog/*.md post (isPublishablePost: not the index, not
+// an _underscored fixture, not `draft: true`) in fs.list's sorted order, so the walk is
+// deterministic. Posts are flat: no nested subdirs under blog/.
 fun walkBlog(site: Site) > void !> any {
     if (isDirectory(site.root + "/" + site.blog) == false) { return; }
     foreach (name in fs\listDir(fs\join(site.root, site.blog))) {
-        if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
+        if (isPublishablePost(site, name)) {
             renderBlogPost(name, site);
         }
     }
@@ -187,7 +187,7 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     site.hasBlogPosts = false;
     if (isDirectory(site.root + "/" + site.blog)) {
         foreach (name in fs\listDir(fs\join(site.root, site.blog))) {
-            if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
+            if (isPublishablePost(site, name)) {
                 site.hasBlogPosts = true;
             }
         }
@@ -314,6 +314,10 @@ export fun site_render(root: str, docs: str, blog: str, outDir: str, targets: Ta
     // tag (advertising a missing feed would trip the asset check). Changelog parsing runs
     // only at release-cut time (cmd/magus-utils cut), not here.
     loadReleases(site);
+    // Resolve the newest release's blog post now, for the same reason: the announcement bar
+    // is part of every page's chrome, starting with the landing below, and walkBlog has not
+    // run yet.
+    findReleasePost(site);
 
     // The front door, then the README as the /development/ landing. renderLanding writes
     // gen/index.html; renderRoot writes gen/development/index.html. Both stay ahead of the

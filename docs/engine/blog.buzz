@@ -1,6 +1,8 @@
 // engine/blog.buzz - the blog: a single post (renderBlogPost, driven per file by
 // walkBlog), the paginated index (renderBlogIndex), and their shared prev/next
-// pager (renderBlogPager). Each post runs through renderPage like any doc.
+// pager (renderBlogPager). Each post runs through renderPage like any doc. Two
+// predicates over the post files sit above them: isPublishablePost, which every walk
+// in the render shares, and findReleasePost, which picks the announcement bar's link.
 namespace blog;
 
 import "markdown";
@@ -16,6 +18,58 @@ import "lib/html" as _;
 import "engine/meta" as _;
 import "engine/types" as _;
 import "engine/page" as _;
+
+// isPublishablePost reports whether blog/<name> should be rendered at all: a .md file that
+// is not the index, not an _underscored fixture, and not marked `draft: true` in its
+// frontmatter.
+//
+// A draft stays committed in the repo and renders NOWHERE - no post page, no blog index
+// entry, no feed item, no announcement-bar link - so unfinished writing can be reviewed in
+// a pull request without shipping to the site. The underscore prefix already skipped a
+// file, but that is the fixture convention and it forces a rename to publish; `draft:` is a
+// one-word edit inside the file and survives the rename.
+//
+// Every place that enumerates posts calls this, which is also why it exists: the name
+// predicate was copied across four walks (walkBlog, the hasBlogPosts precompute,
+// renderBlogPager, the landing's recentPosts) and the draft test lived in exactly one of
+// them, so the front door already hid a draft the blog index went on listing.
+export fun isPublishablePost(site: Site, name: str) > bool !> any {
+    if (name.endsWith(".md") == false or name == "index.md" or name.startsWith("_")) {
+        return false;
+    }
+    final f = io\File.open(site.root + "/" + site.blog + "/" + name, io\FileMode.read);
+    final md = f.readAll();
+    f.close();
+    return serialize\jsonDecode(markdown\frontmatter(md)).q("draft").booleanValue() == false;
+}
+
+// findReleasePost sets site.releaseBlogURL to the post whose frontmatter `release:` names
+// the newest release's version, or leaves it "" when no post claims it.
+//
+// The claim lives on the POST, not on the release manifest: a release need not have a post
+// at all, and releases/*.yaml mirrors the Go ReleaseManifest that freezes index.json's v1
+// schema, so an optional docs-only field has no business there. It also means a post can be
+// written and merged ahead of the tag it names, and starts announcing itself the moment
+// that tag exists.
+export fun findReleasePost(site: Site) > void !> any {
+    // Cleared up front, like loadReleases does with site.releases: `serve` re-renders into
+    // a Site that already ran, and a post that stops claiming the release must stop linking.
+    site.releaseBlogURL = "";
+    if (site.releases.len() == 0) { return; }
+    final ver = site.releases[0].version;
+    final dir = fs\join(site.root, site.blog);
+    if (fs\isDir(dir) == false) { return; }
+    foreach (name in fs\listDir(dir)) {
+        if (isPublishablePost(site, name) == false) { continue; }
+        final f = io\File.open(dir + "/" + name, io\FileMode.read);
+        final md = f.readAll();
+        f.close();
+        if (serialize\jsonDecode(markdown\frontmatter(md)).q("release").stringValue() == ver) {
+            site.releaseBlogURL = site.blog + "/" + blogURLPath(name) + "/";
+            return;
+        }
+    }
+}
 
 // renderBlogPost renders one blog/<file>.md as its own directory-index page. base is the
 // basename (e.g. "2026-07-01-hello-blog.md"); the URL is date-scoped blog/YYYY/MM/DD/slug/
@@ -110,7 +164,7 @@ fun renderBlogPager(base: str, site: Site) > str !> any {
     // during the walk). Newest first.
     var posts: mut [BlogPost] = mut [<BlogPost>];
     foreach (name in fs\listDir(fs\join(site.root, site.blog))) {
-        if (name.endsWith(".md") and name != "index.md" and name.startsWith("_") == false) {
+        if (isPublishablePost(site, name)) {
             final f = io\File.open(site.root + "/" + site.blog + "/" + name, io\FileMode.read);
             final md = f.readAll();
             f.close();

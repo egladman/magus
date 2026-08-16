@@ -491,7 +491,7 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         "bodyClass": bodyClass,
         "root": root,
         "gh": site.config.repoURL,
-        "announcement": renderAnnouncementBar(site),
+        "announcement": renderAnnouncementBar(root, site),
         "nav": renderSiteNav(root, active, true, site.config),
         // The landing's canonical URL is gen's root, so a breadcrumb there would be a trail
         // back to itself. The install page is excluded by name instead: it keeps a real
