@@ -34,6 +34,9 @@ import {
   rowOffsets,
   rowAt,
   fileOfRow,
+  maxLineChars,
+  storyText,
+  LINE_PREFIX_CHARS,
   type Row,
   type ViewMode,
 } from "./rows";
@@ -489,12 +492,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       const who = h("span", "console-diff-row__who");
       who.textContent = row.touch.host || "agent";
       const what = h("span", "console-diff-row__story");
-      // "after reading X, Y" is the whole sentence: it is what the agent was looking at when
-      // it decided to write this, which no forge can say. With no reads recorded the sentence
-      // stops at the author rather than inventing a reason.
-      const read = row.touch.read ?? [];
-      what.textContent =
-        read.length > 0 ? `wrote this after reading ${read.slice(0, 4).join(", ")}` : "wrote this";
+      what.textContent = storyText(row.touch);
       el.append(who, what);
       if (row.touch.transcript) {
         const t = h("span", "console-diff-row__transcript", "transcript");
@@ -631,13 +629,26 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   // paintPinned keeps the file header of whatever is being read at the top of the viewport.
   //
-  // It shows only once the file's REAL header row has scrolled above the top edge, so the two are
-  // never on screen together: while the real row is visible it is the header, and the copy would
-  // just be a duplicate of the line below it.
+  // Vertically, it shows only once the file's REAL header row has scrolled above the top edge,
+  // so the two are never on screen together: while the real row is visible it is the header, and
+  // the copy would just be a duplicate of the line below it.
+  //
+  // Horizontally, the real row's own position:sticky (diff.css) cannot do this job: it lives
+  // inside .console-diff-window, which is transform-translated every scroll frame for the
+  // virtualizer, and a transform on any ancestor breaks position:sticky in every browser - the
+  // row silently scrolls away instead of staying put. This copy sits outside that transformed
+  // subtree (a sibling of .console-diff-scroll), so it is the only thing that CAN track the
+  // reader's horizontal position; show it whenever there is horizontal scroll to cover for, not
+  // only once scrolled past vertically.
   const paintPinned = (top: number): void => {
     const i = state.fileOf[rowAt(state.offsets, top)] ?? -1;
     const row = i >= 0 ? state.rows[i] : undefined;
-    if (!row || row.kind !== "file" || (state.offsets[i] ?? 0) >= top) {
+    if (!row || row.kind !== "file") {
+      pinned.hidden = true;
+      return;
+    }
+    const scrolledPast = (state.offsets[i] ?? 0) < top;
+    if (!scrolledPast && scroll.scrollLeft === 0) {
       pinned.hidden = true;
       return;
     }
@@ -988,6 +999,26 @@ export function activate(host: HTMLElement): SurfaceInstance {
     return ordinals;
   };
 
+  // monoCharWidth measures the mono font's actual character advance, in pixels, so the row-width
+  // floor below can be set in px instead of ch. ch is relative to EACH element's own font, and a
+  // comment or story row renders in the body font (see .console-diff-row--comment), not mono - the
+  // same ch count on those rows resolved to a smaller pixel width than on a code line, so their
+  // background fell short of the scroll width all over again. The probe is measured off-DOM
+  // (position: absolute, visibility: hidden) and over many characters, not one, because a single
+  // glyph's rect can round to a whole pixel and drift the floor over a long line.
+  const monoCharWidth = (): number => {
+    const probe = document.createElement("span");
+    probe.style.cssText =
+      "position:absolute;visibility:hidden;white-space:pre;" +
+      "font-family:var(--pf-t--global--font--family--mono);" +
+      "font-size:var(--pf-t--global--font--size--sm);";
+    probe.textContent = "0".repeat(64);
+    scroll.appendChild(probe);
+    const width = probe.getBoundingClientRect().width / 64;
+    probe.remove();
+    return width;
+  };
+
   const rebuild = async (): Promise<void> => {
     state.files = visibleFiles(state.changeset, state.showGenerated);
     // Touches come from the annotations, so the first paint has none and the stream gains the
@@ -1003,6 +1034,8 @@ export function activate(host: HTMLElement): SurfaceInstance {
     state.offsets = rowOffsets(state.rows);
     state.fileOf = fileOfRow(state.rows);
     spacer.style.height = `${state.offsets[state.rows.length]}px`;
+    const rowFloorPx = (maxLineChars(state.rows) + LINE_PREFIX_CHARS) * monoCharWidth();
+    scroll.style.setProperty("--console-diff-min-row-width", `${rowFloorPx}px`);
     // Rebuilds invalidate row-indexed digest entries.
     state.digestByRow = new Map();
     pendingDigests = new Map();

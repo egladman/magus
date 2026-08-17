@@ -240,3 +240,60 @@ export function rowAt(offsets: readonly number[], y: number): number {
   }
   return lo;
 }
+
+// storyText is the sentence a story row renders (main.ts renderRow reads it too, so the two
+// cannot drift the way a second copy of this composition would). "wrote this after reading X,
+// Y" is the whole point of the row - it is what the agent was looking at when it decided to
+// write this, which no forge can say - and with no reads recorded the sentence stops at the
+// author rather than inventing a reason.
+export function storyText(touch: DiffTouch): string {
+  const read = touch.read ?? [];
+  return read.length > 0 ? `wrote this after reading ${read.slice(0, 4).join(", ")}` : "wrote this";
+}
+
+// LINE_PREFIX_CHARS is what sits before a unified code line's own text: the old and new
+// line-number gutters (5ch each) and the +/- marker (2ch). main.ts adds it to maxLineChars to
+// get the row-width floor described there.
+export const LINE_PREFIX_CHARS = 12;
+
+// TAB_SIZE mirrors the browser's default CSS tab-size, which diff.css never overrides. A tab
+// does not cost one character of width the way every other character does - it advances to the
+// next multiple of TAB_SIZE - so a single leading tab in a code line (column 0 to column 8)
+// costs as much rendered width as seven ordinary characters. columnWidth below has to model
+// that, or a short, deeply-indented line (several leading tabs, little text) can render WIDER
+// than a longer but tab-free line of the same raw .length, becoming a new widest row that the
+// character-count floor never accounted for.
+const TAB_SIZE = 8;
+
+// columnWidth is a string's rendered width in character-columns once tabs expand to their next
+// tab stop, which is what a monospace `white-space: pre` line actually occupies - `.length`
+// alone undercounts every tab.
+function columnWidth(text: string): number {
+  let col = 0;
+  for (const ch of text) col += ch === "\t" ? TAB_SIZE - (col % TAB_SIZE) : 1;
+  return col;
+}
+
+// maxLineChars is the rendered width, in character-columns, of the longest line of text the
+// unified view renders - a code line, but also a hunk header, a comment, or a story, any of
+// which can outrun the longest code line. The renderer turns it into a per-row min-width floor
+// (diff.css), because a virtualized row otherwise sizes to its OWN text and stops there: a
+// row shorter than whichever row is actually widest had its background end at its own last
+// character instead of continuing to the scroll width that widest row established, so
+// scrolling past it exposed untinted background. Measured in character-columns rather than
+// pixels because the row is set in a monospace font, where a column count converts to a CSS
+// `ch` width with no DOM measurement needed.
+export function maxLineChars(rows: readonly Row[]): number {
+  let max = 0;
+  const bump = (text: string): void => {
+    const width = columnWidth(text);
+    if (width > max) max = width;
+  };
+  for (const row of rows) {
+    if (row.kind === "line") bump(row.line.text);
+    else if (row.kind === "hunk") bump(row.hunk.header);
+    else if (row.kind === "comment") bump(row.comment.body);
+    else if (row.kind === "story") bump(storyText(row.touch));
+  }
+  return max;
+}

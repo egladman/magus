@@ -395,6 +395,25 @@
   min-width: max-content; /* long lines extend the scroll width rather than wrapping */
 }
 
+/* max-content alone sizes each row to its OWN text, so a row shorter than the diff's longest
+   line - a code line, a hunk header, a comment, or a story - stopped short of the scroll width
+   that longest line established, and its background (the add/delete tint, or the hunk/comment
+   gray) exposed untinted surface past its own last character when the reader scrolled right.
+   --console-diff-min-row-width (main.ts, from maxLineChars in rows.ts) is that scroll width in
+   PIXELS, not ch: ch is relative to each element's OWN font, and a comment or story row renders
+   in the body font rather than mono, so the same ch count there resolved to a different, smaller
+   pixel width than on a code line and fell short all over again.
+   width:max-content is what still lets a row LONGER than the floor grow past it (a comment
+   longer than any code line, say): min-width alone cannot combine with max-content in one
+   calc()/max() expression - max-content is not a valid operand there - so the fallback has to
+   be a second property instead. --file is excluded because it is chrome, not content, and holds
+   the pane width on purpose (see .console-diff-row--file below); --pair is excluded because its
+   two columns already clip their own overflow instead of extending it. */
+.console-diff-row:not(.console-diff-row--file, .console-diff-row--pair) {
+  width: max-content;
+  min-width: var(--console-diff-min-row-width, 0);
+}
+
 /* Add and delete tint.
  *
  * Mixed from the COLOUR tokens, NOT from --pf-t--global--background--color--status--*: those
@@ -450,13 +469,17 @@
   background: var(--pf-t--global--background--color--secondary--default);
   border-block: 1px solid var(--pf-t--global--border--color--default);
   font-family: var(--pf-t--global--font--family--body);
-  /* Sticky on the INLINE axis only. A vertical `top: 0` cannot work here and did not: every row
-     is a flat sibling of one .console-diff-window, so all the file headers share a single sticky
-     containing block and pile up on the same line instead of pinning one at a time - four of them
-     stacked on the last rows and hid them. Virtualization rules it out independently: scroll into
-     a long file and that file's header row is not in the DOM at all, so there is nothing left to
-     pin. A header that follows the reader down needs its own element outside the virtual window,
-     which is a feature and not this rule. */
+  /* A vertical `top: 0` cannot work here and did not: every row is a flat sibling of one
+     .console-diff-window, so all the file headers share a single sticky containing block and
+     pile up on the same line instead of pinning one at a time - four of them stacked on the last
+     rows and hid them. `left: 0` does not work either, for a different reason: .console-diff-window
+     is transform-translated every scroll frame for the virtualizer, and a transform on any
+     ancestor breaks position:sticky in every browser, so this row scrolls away horizontally
+     exactly like any other row despite the declaration below. Both axes are kept anyway - a
+     harmless no-op - because .console-diff-pinned (main.ts, paintPinned) is the row that actually
+     does this job on both axes: it lives outside the transformed window, so it is the only thing
+     that CAN track the reader vertically past this file and horizontally past this row's own
+     left edge. That header is a feature and not this rule. */
   position: sticky;
   left: 0;
   width: 100%;
@@ -550,10 +573,23 @@
 }
 
 /* Split view: two equal columns that scroll together, divided down the middle. */
+/* Split-view rows must never contribute width beyond the pane: their two columns clip their own
+   overflow (.console-diff-row__side, overflow:hidden) instead of extending it, which is what
+   keeps split view free of horizontal scroll. But CSS grid's max-content query does not respect
+   that clipping - an item with overflow:hidden still contributes ITS content's full intrinsic
+   width to the container's own max-content size, only the LAID-OUT space distribution is
+   suppressed. The base .console-diff-row rule's min-width:max-content therefore floors a pair
+   row to that phantom width whenever one side's raw text happens to be long, letting an outlier
+   pair row set the diff's scrollWidth - and every other row, correctly floored to the diff's
+   real longest line, then fell short of it. width/max-width pin the row to the pane regardless;
+   min-width:0 overrides the inherited max-content floor that caused this. */
 .console-diff-row--pair {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .console-diff-row__side {

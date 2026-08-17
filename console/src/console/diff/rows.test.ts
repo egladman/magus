@@ -13,6 +13,8 @@ import {
   rowAt,
   fileOfRow,
   heightOf,
+  maxLineChars,
+  storyText,
   ROW_HEIGHT,
   FILE_ROW_HEIGHT,
   type Row,
@@ -352,4 +354,114 @@ test("fileOfRow reports -1 for rows before the first file header", () => {
   // pin row 0 of a file the reader has not reached.
   assert.deepEqual(fileOfRow(["comment", "file", "line"].map(rowOfKind)), [-1, 1, 1]);
   assert.deepEqual(fileOfRow([]), []);
+});
+
+const SHORT_LINES = [
+  "diff --git a/x.ts b/x.ts",
+  "--- a/x.ts",
+  "+++ b/x.ts",
+  "@@ -1,1 +1,1 @@",
+  "-old",
+  "+new",
+  "",
+].join("\n");
+
+// A hunk header, a comment, and a story sentence can each be longer than every code line in
+// the diff - main.ts renders all of them as .console-diff-row, sharing the same width floor, so
+// maxLineChars has to consider all four kinds or the shorter ones fall short of whichever one
+// is actually widest (the bug this function exists to prevent).
+test("maxLineChars picks up a hunk header longer than every code line", () => {
+  const longHeader = [
+    "diff --git a/x.ts b/x.ts",
+    "--- a/x.ts",
+    "+++ b/x.ts",
+    "@@ -1,1 +1,1 @@ a hunk header considerably longer than either line below it",
+    "-old",
+    "+new",
+    "",
+  ].join("\n");
+  const rows = buildRows(parsePatch(longHeader), "unified");
+  const hunk = rows.find((r) => r.kind === "hunk");
+  assert.equal(hunk?.hunk.header.length, maxLineChars(rows));
+});
+
+test("maxLineChars picks up a comment longer than every code line", () => {
+  const comments = [
+    {
+      id: "c1",
+      path: "x.ts",
+      hunk: 0,
+      author: "human" as const,
+      body: "a remark considerably longer than either code line in this hunk",
+      resolved: false,
+    },
+  ];
+  const rows = buildRows(parsePatch(SHORT_LINES), "unified", byHunk(comments));
+  assert.equal(maxLineChars(rows), comments[0].body.length);
+});
+
+test("maxLineChars picks up a story sentence longer than every code line", () => {
+  const touches = new Map([
+    [
+      "x.ts",
+      [{ host: "claude-code", read: ["a/very/long/path/that/pushes/this/sentence/out.ts"] }],
+    ],
+  ]);
+  const rows = buildRows(parsePatch(SHORT_LINES), "unified", undefined, touches);
+  const story = rows.find((r) => r.kind === "story");
+  assert.ok(story);
+  assert.equal(maxLineChars(rows), storyText(story.touch).length);
+});
+
+test("maxLineChars applies in split mode too: hunk headers are emitted regardless of view mode", () => {
+  const longHeader = [
+    "diff --git a/x.ts b/x.ts",
+    "--- a/x.ts",
+    "+++ b/x.ts",
+    "@@ -1,1 +1,1 @@ a hunk header considerably longer than either line below it",
+    "-old",
+    "+new",
+    "",
+  ].join("\n");
+  const rows = buildRows(parsePatch(longHeader), "split");
+  const hunk = rows.find((r) => r.kind === "hunk");
+  assert.equal(hunk?.hunk.header.length, maxLineChars(rows));
+});
+
+test("maxLineChars of an empty row set is 0", () => {
+  assert.equal(maxLineChars([]), 0);
+});
+
+// A leading tab in a `white-space: pre` monospace line does not cost one character of width
+// the way every other character does - it advances to the next tab stop (8, by the browser's
+// unoverridden default) - so a short but deeply-indented line can render wider than a longer,
+// tab-free one of equal .length. A plain character count would have under-floored it.
+test("maxLineChars expands tabs to their rendered width rather than counting them as one char", () => {
+  const patch = [
+    "diff --git a/x.go b/x.go",
+    "--- a/x.go",
+    "+++ b/x.go",
+    "@@ -1,2 +1,2 @@",
+    "-\t\t\tx", // three leading tabs: columns 0->8->16->24, then "x" at column 24 = width 25
+    "+a line of plain text with no tabs in it at all", // .length 46, comfortably over 25
+    "",
+  ].join("\n");
+  const rows = buildRows(parsePatch(patch), "unified");
+  // The tab-heavy line (width 25) must NOT win over the 46-character plain line - this pins
+  // that tabs still lose to genuinely longer plain text, not just that they count for something.
+  assert.equal(maxLineChars(rows), "a line of plain text with no tabs in it at all".length);
+});
+
+test("maxLineChars: a short, deeply-indented line can still outrun a longer flat one", () => {
+  const patch = [
+    "diff --git a/x.go b/x.go",
+    "--- a/x.go",
+    "+++ b/x.go",
+    "@@ -1,2 +1,2 @@",
+    "-\t\t\t\t\t\tshort", // six leading tabs: column 48, then "short" = width 53
+    "+a forty-six character line of flat unindented text", // shorter than 53 either way
+    "",
+  ].join("\n");
+  const rows = buildRows(parsePatch(patch), "unified");
+  assert.equal(maxLineChars(rows), 53);
 });
