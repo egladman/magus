@@ -8,9 +8,9 @@
 //
 // Three things it is built around:
 //
-//  1. VIRTUALIZED. The scroll space is a spacer sized to rows x ROW_HEIGHT and only the rows
-//     intersecting the viewport exist as elements, so a ten-thousand-line diff costs what a
-//     hundred-line one does. Fixed row height and no wrapping follow from that.
+//  1. VIRTUALIZED. The scroll space is a spacer sized to the summed row heights and only the
+//     rows intersecting the viewport exist as elements, so a ten-thousand-line diff costs what
+//     a hundred-line one does. Declared row heights and no wrapping follow from that.
 //  2. TWO-PHASE. The patch paints immediately; the annotations decorate it when they land.
 //     Holding a readable diff behind the slower overlay would trade the thing the reader
 //     wants for the thing they have not asked for yet.
@@ -31,6 +31,8 @@ import {
   fileRowIndexes,
   nextIndexAfter,
   prevIndexBefore,
+  rowOffsets,
+  rowAt,
   type Row,
   type ViewMode,
 } from "./rows";
@@ -53,15 +55,6 @@ import { resolveDaemonHost, parseHash, adoptDaemonOrigin, wantsDemo } from "../.
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
 
-// Must equal the row height in diff.css. The virtualizer computes positions from it rather
-// than measuring, so a mismatch shows as rows drifting out of the viewport while scrolling.
-// 24, not 20. The file-header row carries an M/A/D/R badge and at 20px it sat wall-to-wall
-// in its own row with no air around it. Padding cannot buy that room: the row is height-locked
-// (box-sizing is border-box, so padding eats the 20px rather than adding to it) and the
-// virtualizer positions every row at index * ROW_HEIGHT, so a taller file row alone would
-// desynchronise the scroll math. Raising the shared height is the change that keeps the
-// invariant - it gives the badge its margin and the whole stream a little more air.
-const ROW_HEIGHT = 24;
 // Rows rendered beyond the viewport so a fast scroll never shows blank space. Bounded and
 // constant, unlike the diff.
 const OVERSCAN = 24;
@@ -75,6 +68,8 @@ interface State {
   changeset: OrderedChangeset;
   files: DiffFile[];
   rows: Row[];
+  // Derived from rows, and rebuilt with them: row i's top edge, plus a final total. See rowOffsets.
+  offsets: number[];
   hunks: number[];
   fileRows: number[];
   mode: ViewMode;
@@ -239,6 +234,7 @@ export function activate(host: HTMLElement): () => void {
     changeset: { primary: [], generated: [] },
     files: [],
     rows: [],
+    offsets: [0],
     hunks: [],
     fileRows: [],
     mode: modeCell.get() ?? "unified",
@@ -334,9 +330,17 @@ export function activate(host: HTMLElement): () => void {
     if (file.deletions > 0) el.append(label(`-${file.deletions}`, "pf-m-red"));
 
     // The blast rail: what the workspace knows about this file. Evidence, not verdicts.
+    //
+    // Wrapped, and display: contents so the chips still lay out as row children: the wrapper
+    // exists only to give the stylesheet a positional handle, so a narrow pane can drop the
+    // trailing chips whole rather than slicing one down the middle. riskChips emits them
+    // most-important first (public surface, then reach, then churn), so shedding from the END
+    // gives up the least, and "public surface" is the last thing to go.
+    const risks = h("span", "console-diff-row__risks");
     for (const c of riskChips(annotationFor(file.path))) {
-      el.append(label(c.text, TONE_CLASS[c.tone], c.title));
+      risks.append(label(c.text, TONE_CLASS[c.tone], c.title));
     }
+    el.append(risks);
     return el;
   };
 
@@ -430,8 +434,8 @@ export function activate(host: HTMLElement): () => void {
     }
     const top = scroll.scrollTop;
     const height = scroll.clientHeight || 1;
-    const first = Math.max(0, Math.floor(top / ROW_HEIGHT) - OVERSCAN);
-    const last = Math.min(total, Math.ceil((top + height) / ROW_HEIGHT) + OVERSCAN);
+    const first = Math.max(0, rowAt(state.offsets, top) - OVERSCAN);
+    const last = Math.min(total, rowAt(state.offsets, top + height) + 1 + OVERSCAN);
 
     // Virtualization is invisible to assistive tech unless the grid says how big it really
     // is: rows outside the window are not in the DOM, so a screen reader would otherwise
@@ -453,7 +457,7 @@ export function activate(host: HTMLElement): () => void {
       if (i === state.cursor) el.dataset.cursor = "";
       frag.append(el);
     }
-    windowEl.style.transform = `translateY(${first * ROW_HEIGHT}px)`;
+    windowEl.style.transform = `translateY(${state.offsets[first]}px)`;
     windowEl.replaceChildren(frag);
   };
 
@@ -526,7 +530,8 @@ export function activate(host: HTMLElement): () => void {
     state.rows = buildRows(state.files, state.mode, byHunk(state.session?.comments ?? []), touches);
     state.hunks = hunkRowIndexes(state.rows);
     state.fileRows = fileRowIndexes(state.rows);
-    spacer.style.height = `${state.rows.length * ROW_HEIGHT}px`;
+    state.offsets = rowOffsets(state.rows);
+    spacer.style.height = `${state.offsets[state.rows.length]}px`;
 
     // Digest every hunk once, here, so `v` never awaits a hash mid-keypress.
     const digests = new Map<number, string>();
@@ -793,7 +798,10 @@ export function activate(host: HTMLElement): () => void {
     state.cursor = i;
     // Smooth scrolling is motion, and for a reader who has asked the OS for less of it, a
     // whole diff sliding past on every `[` is the symptom they turned it off to avoid.
-    scroll.scrollTo({ top: i * ROW_HEIGHT, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    scroll.scrollTo({
+      top: state.offsets[i] ?? 0,
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+    });
     // Tell the session where the reader is, so an agent can be useful about it.
     const f = state.rows[i];
     if (f) {
@@ -818,7 +826,7 @@ export function activate(host: HTMLElement): () => void {
   };
 
   const step = (dir: 1 | -1, marks: number[]): void => {
-    const from = state.cursor >= 0 ? state.cursor : Math.floor(scroll.scrollTop / ROW_HEIGHT);
+    const from = state.cursor >= 0 ? state.cursor : rowAt(state.offsets, scroll.scrollTop);
     const i = dir === 1 ? nextIndexAfter(marks, from) : prevIndexBefore(marks, from);
     if (i !== null) scrollToRow(i);
   };
@@ -839,7 +847,7 @@ export function activate(host: HTMLElement): () => void {
   };
 
   const currentHunkRow = (): number | null => {
-    const from = state.cursor >= 0 ? state.cursor : Math.floor(scroll.scrollTop / ROW_HEIGHT);
+    const from = state.cursor >= 0 ? state.cursor : rowAt(state.offsets, scroll.scrollTop);
     let best: number | null = null;
     for (const i of state.hunks) {
       if (i <= from) best = i;

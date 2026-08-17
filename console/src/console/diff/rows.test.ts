@@ -9,6 +9,11 @@ import {
   fileRowIndexes,
   nextIndexAfter,
   prevIndexBefore,
+  rowOffsets,
+  rowAt,
+  heightOf,
+  ROW_HEIGHT,
+  FILE_ROW_HEIGHT,
   type Row,
 } from "./rows";
 
@@ -257,4 +262,63 @@ test("a file with no hunks still gets its heading row", () => {
   const rows = buildRows(parsePatch(patch), "unified");
   assert.equal(rows.length, 1);
   assert.equal(at(rows, 0, "rows").kind, "file");
+});
+
+// The virtualizer positions rows from these offsets instead of measuring them, so an error here
+// does not throw - it silently paints rows at the wrong y. These pin the arithmetic.
+
+// A stand-in row of each kind. Only `kind` is read by heightOf, so the rest stays minimal.
+function rowOfKind(kind: string): Row {
+  return { kind } as unknown as Row;
+}
+
+test("a file row is taller than a code row, and heightOf is what says so", () => {
+  assert.equal(heightOf(rowOfKind("file")), FILE_ROW_HEIGHT);
+  assert.equal(heightOf(rowOfKind("line")), ROW_HEIGHT);
+  assert.equal(heightOf(rowOfKind("hunk")), ROW_HEIGHT);
+  assert.ok(FILE_ROW_HEIGHT > ROW_HEIGHT, "the file header must have more room than a code line");
+});
+
+test("rowOffsets accumulates each row's own height and ends with the total", () => {
+  const rows = ["file", "line", "line", "file", "line"].map(rowOfKind);
+  const offs = rowOffsets(rows);
+  assert.deepEqual(offs, [
+    0,
+    FILE_ROW_HEIGHT,
+    FILE_ROW_HEIGHT + ROW_HEIGHT,
+    FILE_ROW_HEIGHT + 2 * ROW_HEIGHT,
+    2 * FILE_ROW_HEIGHT + 2 * ROW_HEIGHT,
+    2 * FILE_ROW_HEIGHT + 3 * ROW_HEIGHT,
+  ]);
+  // The last entry is the spacer height, which is what gives the scrollbar its length.
+  assert.equal(at(offs, rows.length, "total"), 2 * FILE_ROW_HEIGHT + 3 * ROW_HEIGHT);
+});
+
+test("rowOffsets of an empty diff is just the zero total", () => {
+  assert.deepEqual(rowOffsets([]), [0]);
+});
+
+test("rowAt finds the row containing a y, including exactly on a boundary", () => {
+  const rows = ["file", "line", "line"].map(rowOfKind);
+  const offs = rowOffsets(rows); // [0, 40, 64, 88]
+  assert.equal(rowAt(offs, 0), 0);
+  assert.equal(rowAt(offs, FILE_ROW_HEIGHT - 1), 0);
+  // A boundary belongs to the row it STARTS, not the one it ends.
+  assert.equal(rowAt(offs, FILE_ROW_HEIGHT), 1);
+  assert.equal(rowAt(offs, FILE_ROW_HEIGHT + ROW_HEIGHT), 2);
+});
+
+test("rowAt clamps rather than running off either end", () => {
+  const offs = rowOffsets(["file", "line"].map(rowOfKind));
+  assert.equal(rowAt(offs, -50), 0, "a rubber-band scroll goes negative on macOS");
+  assert.equal(rowAt(offs, 999_999), 1, "past the end answers with the last row");
+  assert.equal(rowAt([0], 10), 0, "an empty diff has no row to land on");
+});
+
+test("rowAt inverts rowOffsets for every row", () => {
+  const rows = ["file", "line", "hunk", "file", "line", "line", "comment"].map(rowOfKind);
+  const offs = rowOffsets(rows);
+  for (let i = 0; i < rows.length; i++) {
+    assert.equal(rowAt(offs, at(offs, i, "offset")), i, `row ${i} must round-trip`);
+  }
 });

@@ -105,9 +105,21 @@
 
 .console-diff-main {
   display: grid;
+  /* minmax(0, 1fr), not the implicit auto: an auto track is minmax(min-content,
+     max-content), so it inflates to the widest row - and the rows below set
+     min-width: max-content so long code lines extend the scroll width. The track
+     then grows past this box instead of the scroll container scrolling, and the
+     spill is clipped by .console-diff-layout's overflow: hidden, which eats the
+     trailing file-header chips outright at narrow widths. min-width above does
+     not cover this: it constrains this box as an ITEM of the layout grid, while
+     the column track needs its own zero floor. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr;
   min-height: 0;
   min-width: 0;
+  /* The file header sheds chips against THIS width, not the viewport's: the pane is tiled and
+     its sidebar is collapsible, so the same window yields several different pane widths. */
+  container: diff-main / inline-size;
 }
 
 .console-diff-toolbar {
@@ -163,6 +175,7 @@
   align-items: center;
   height: 24px; /* MUST equal ROW_HEIGHT in main.ts */
   line-height: 24px;
+  box-sizing: border-box;
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--sm);
   white-space: pre;
@@ -205,7 +218,20 @@
   background: color-mix(in srgb, var(--console-diff-del) 22%, var(--console-diff-surface));
 }
 
+/* The header is CHROME, not content, so it holds the pane instead of joining the code's
+   horizontal scroll: width 100% resolves against the visible pane, and min-width undoes the
+   max-content floor every other row wants. Sticky on BOTH axes - top so it survives vertical
+   scrolling, left so scrolling out to a long code line does not slide the file's identity off
+   the screen. Reading metadata should never cost a sideways scroll. */
 .console-diff-row--file {
+  /* MUST equal FILE_ROW_HEIGHT in main.ts. Taller than a code row because the badge and risk
+     chips have to sit INSIDE the row rather than spill out of it.
+     line-height: normal, not the row height - a PF label sizes off line-height, so pinning it
+     to the row makes every chip exactly as tall as the row and the extra height buys nothing.
+     Letting the chips size themselves is what turns the taller row into actual space around
+     them; align-items: center on .console-diff-row does the centring. */
+  height: 40px;
+  line-height: normal;
   gap: var(--pf-t--global--spacer--xs);
   padding-inline: var(--pf-t--global--spacer--sm);
   background: var(--pf-t--global--background--color--secondary--default);
@@ -213,12 +239,55 @@
   font-family: var(--pf-t--global--font--family--body);
   position: sticky;
   top: 0;
+  left: 0;
+  width: 100%;
+  min-width: 0;
   z-index: 1;
 }
 
+/* The path yields first and alone: it is the one part that stays legible truncated, because
+   the tail (the filename) is what identifies it. Every label holds its size, so the squeeze
+   never slices a chip down the middle. */
 .console-diff-row__path {
   font-family: var(--pf-t--global--font--family--mono);
   font-weight: var(--pf-t--global--font--weight--body--bold);
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+.console-diff-row--file > .pf-v6-c-label {
+  flex: none;
+}
+
+/* display: contents - the wrapper is a selector handle only (see renderFileRow); the chips
+   stay direct flex children of the row. */
+.console-diff-row__risks {
+  display: contents;
+}
+
+/* Below these widths the chips stop fitting beside the path. Shed them whole, from the least
+   important end, rather than letting the row overflow and clip one mid-word. The steps are the
+   measured widths at which each trailing chip stops fitting, not round numbers. */
+@container diff-main (max-width: 860px) {
+  .console-diff-row__risks > :nth-child(n + 4) {
+    display: none;
+  }
+}
+
+@container diff-main (max-width: 700px) {
+  .console-diff-row__risks > :nth-child(n + 3) {
+    display: none;
+  }
+}
+
+@container diff-main (max-width: 560px) {
+  .console-diff-row__risks > :nth-child(n + 2) {
+    display: none;
+  }
 }
 
 .console-diff-row--hunk {
