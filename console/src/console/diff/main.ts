@@ -62,6 +62,7 @@ const OVERSCAN = 24;
 
 const daemonCell = persisted<string | null>("dashboard-daemon", null);
 const modeCell = persisted<ViewMode>("diff-view-mode", "unified");
+const sidebarCell = persisted<boolean>("diff-sidebar-collapsed", false);
 
 type Phase = "loading" | "ready" | "empty";
 
@@ -259,6 +260,42 @@ export function activate(host: HTMLElement): () => void {
   const sidebar = h("nav", "console-diff-sidebar");
   sidebar.setAttribute("aria-label", "Changed files");
 
+  // The file index collapses to a rail, the way the activity trail's event index does. The diff
+  // authors its own sheet (see standalone.ts) so it cannot reuse logs.css's panel, but the
+  // affordance is the same one: a chevron in the header hides it, a chevron on the rail brings it
+  // back, and the choice persists - a reader who works in a narrow tile should not re-close it
+  // every visit.
+  const sidebarHead = h("div", "console-diff-sidebar__head");
+  const sidebarTitle = h("span", "console-diff-sidebar__heading", "Files");
+  const hideBtn = h("button", "console-diff-sidebar__toggle");
+  hideBtn.type = "button";
+  hideBtn.title = "Hide the file index";
+  hideBtn.setAttribute("aria-label", "Hide the file index");
+  hideBtn.textContent = "‹";
+  sidebarHead.append(sidebarTitle, hideBtn);
+
+  const reopenBtn = h("button", "console-diff-reopen");
+  reopenBtn.type = "button";
+  reopenBtn.title = "Show the file index";
+  reopenBtn.setAttribute("aria-label", "Show the file index");
+  reopenBtn.textContent = "›";
+
+  const applySidebar = (collapsed: boolean): void => {
+    root.dataset.sidebar = collapsed ? "collapsed" : "open";
+    sidebar.hidden = collapsed;
+    reopenBtn.hidden = !collapsed;
+    hideBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  };
+  hideBtn.addEventListener("click", () => {
+    sidebarCell.set(true);
+    applySidebar(true);
+  });
+  reopenBtn.addEventListener("click", () => {
+    sidebarCell.set(false);
+    applySidebar(false);
+  });
+  sidebar.setAttribute("aria-label", "Changed files");
+
   const main = h("div", "console-diff-main");
   const toolbar = h("div", "console-diff-toolbar");
   const statsEl = h("div", "console-diff-toolbar__stats");
@@ -319,7 +356,8 @@ export function activate(host: HTMLElement): () => void {
   empty.append(emptyContent);
 
   main.append(toolbar, rail, viewport, overview, empty);
-  root.append(sidebar, main);
+  root.append(sidebar, reopenBtn, main);
+  applySidebar(sidebarCell.get() ?? false);
   host.append(root);
   root.dataset.phase = "loading";
 
@@ -478,6 +516,7 @@ export function activate(host: HTMLElement): () => void {
     windowEl.style.transform = `translateY(${state.offsets[first]}px)`;
     windowEl.replaceChildren(frag);
     paintPinned(top);
+    markActiveFile(top);
   };
 
   // paintPinned keeps the file header of whatever is being read at the top of the viewport.
@@ -494,6 +533,18 @@ export function activate(host: HTMLElement): () => void {
     }
     pinned.replaceChildren(renderFileRow(row.file));
     pinned.hidden = false;
+  };
+
+  // markActiveFile keeps the sidebar in step with the stream, in BOTH directions: it is the
+  // acknowledgement that a click landed (a smooth scroll over a long diff is slow enough to read
+  // as nothing happening) and it is a position indicator while scrolling by hand.
+  const markActiveFile = (top: number): void => {
+    const fileRow = state.fileOf[rowAt(state.offsets, top)] ?? -1;
+    const which = state.fileRows.indexOf(fileRow);
+    sidebar.querySelectorAll(".console-diff-sidebar__item").forEach((el, i) => {
+      if (i === which) el.setAttribute("aria-current", "true");
+      else el.removeAttribute("aria-current");
+    });
   };
 
   let ticking = false;
@@ -717,7 +768,7 @@ export function activate(host: HTMLElement): () => void {
       g.addEventListener("click", () => void toggleGenerated());
       frag.append(g);
     }
-    sidebar.replaceChildren(frag);
+    sidebar.replaceChildren(sidebarHead, frag);
   };
 
   // The suggestion rail: an agent asking for attention. It renders as a peripheral affordance

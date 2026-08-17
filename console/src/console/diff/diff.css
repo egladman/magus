@@ -49,10 +49,58 @@
 
 .console-diff-layout {
   display: grid;
-  grid-template-columns: minmax(180px, 18%) 1fr;
+  grid-template-columns: minmax(180px, 18%) minmax(0, 1fr);
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+/* Collapsed, the index gives its column back to the diff and leaves only the reopen rail. The
+   track goes to auto rather than 0 so the rail sizes itself. */
+.console-diff-layout[data-sidebar="collapsed"] {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.console-diff-sidebar__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pf-t--global--spacer--xs);
+  padding-block-end: var(--pf-t--global--spacer--xs);
+}
+
+.console-diff-sidebar__heading {
+  font-size: var(--pf-t--global--font--size--xs);
+  color: var(--pf-t--global--text--color--subtle);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+}
+
+.console-diff-sidebar__toggle,
+.console-diff-reopen {
+  border: none;
+  background: none;
+  color: var(--pf-t--global--text--color--subtle);
+  cursor: pointer;
+  font-size: var(--pf-t--global--font--size--md);
+  line-height: 1;
+  padding: var(--pf-t--global--spacer--xs);
+}
+
+.console-diff-sidebar__toggle:hover,
+.console-diff-reopen:hover {
+  color: var(--pf-t--global--text--color--regular);
+}
+
+.console-diff-reopen {
+  align-self: start;
+  border-inline-end: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--console-diff-panel);
+  height: 100%;
+}
+
+.console-diff-reopen[hidden] {
+  display: none;
 }
 
 .console-diff-sidebar {
@@ -66,6 +114,13 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* The file being read. A left edge rather than a fill: the row already carries a status colour
+   and a reach count, and a block of background would compete with both. */
+.console-diff-sidebar__item[aria-current="true"] {
+  background: var(--pf-t--global--background--color--secondary--default);
+  box-shadow: inset 2px 0 0 var(--console-accent);
 }
 
 .console-diff-sidebar__item {
