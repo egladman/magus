@@ -143,12 +143,32 @@
 
 /* The path truncates from the START: the tail of a path is what distinguishes two files in a
  * monorepo, and clipping it leaves a column of identical prefixes. */
+/* Two lines: the filename identifies, the directory only locates. min-width: 0 so the pair can
+   shrink inside the item grid instead of forcing the column wider. */
+.console-diff-sidebar__file {
+  display: grid;
+  min-width: 0;
+}
+
 .console-diff-sidebar__path {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* Truncated from the START: a directory's LAST segments are what distinguish it, so
+   "...identity/internal/token" keeps the useful half. The filename above never needs this,
+   which is the point of splitting them. */
+.console-diff-sidebar__dir {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   direction: rtl;
-  text-align: start;
+  /* left, NOT start: start follows the direction above, so it would pin the text to the right
+     edge and unalign it from the filename it belongs to. */
+  text-align: left;
+  font-size: var(--pf-t--global--font--size--xs);
+  color: var(--pf-t--global--text--color--subtle);
 }
 
 .console-diff-sidebar__counts {

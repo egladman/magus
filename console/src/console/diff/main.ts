@@ -732,10 +732,21 @@ export function activate(host: HTMLElement): () => void {
       item.type = "button";
       const st = STATUS_COPY[o.file.status];
       item.append(label(st.short, st.modifier, o.file.status));
+      // Filename over directory, because the filename is what identifies the file and the
+      // directory is only context. A single line spent them equally and truncated both, so a
+      // column this narrow showed "...thkit/claims.go" - the half that matters least, cut.
+      const slash = o.file.path.lastIndexOf("/");
+      const wrap = h("span", "console-diff-sidebar__file");
       const name = h("span", "console-diff-sidebar__path");
-      name.textContent = o.file.path;
-      name.title = o.annotation?.hint ?? o.file.path;
-      item.append(name);
+      name.textContent = slash >= 0 ? o.file.path.slice(slash + 1) : o.file.path;
+      wrap.append(name);
+      if (slash > 0) {
+        wrap.append(h("span", "console-diff-sidebar__dir", o.file.path.slice(0, slash)));
+      }
+      item.append(wrap);
+      // The full path FIRST. This used to be the annotation hint alone, so hovering a truncated
+      // path answered with a paragraph about cache keys and never with the path being read.
+      item.title = o.annotation?.hint ? `${o.file.path}\n\n${o.annotation.hint}` : o.file.path;
       if (o.annotation?.surface === "public") item.dataset.surface = "public";
       if (o.annotation?.reach) {
         const r = h("span", "console-diff-sidebar__counts");
