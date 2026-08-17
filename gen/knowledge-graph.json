@@ -7712,7 +7712,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps.",
-      "source": "console/magusfile.buzz:210",
+      "source": "console/magusfile.buzz:207",
       "attrs": {
         "exported": "true"
       }
@@ -7721,8 +7721,8 @@
       "id": "function:console/magusfile.buzz:format",
       "kind": "function",
       "label": "format",
-      "doc": "format is deliberately separate from lint: the read-only spell reports drift by default, while `format:rw` amends the source files named below. Declaring those amendments keeps the target cache honest; they are inputs being maintained, not generated outputs that Magus could replay or clean.",
-      "source": "console/magusfile.buzz:179",
+      "doc": "`format:rw` maintains declared source inputs.",
+      "source": "console/magusfile.buzz:176",
       "attrs": {
         "exported": "true"
       }
@@ -7758,7 +7758,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits the dependency tree against the npm advisory database.  --prod, not the whole tree, and that is the whole design. An unscoped audit reports the dev toolchain too - today a stylelint -> table -> ajv -> fast-uri advisory - which never reaches a browser and cannot be fixed from here. A gate that fails on something you cannot act on is a gate that gets muted, which is how six stale skip_cache workarounds happened. This fails only on what actually ships.  It is NOT folded into lint: lint is cache",
-      "source": "console/magusfile.buzz:203",
+      "source": "console/magusfile.buzz:200",
       "attrs": {
         "exported": "true"
       }
@@ -12711,7 +12711,7 @@
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
-      "source": "magusfile.buzz:2337",
+      "source": "magusfile.buzz:2331",
       "attrs": {
         "exported": "true"
       }
@@ -12790,7 +12790,7 @@
       "kind": "function",
       "label": "toolchain_report",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:2333",
+      "source": "magusfile.buzz:2327",
       "attrs": {
         "exported": "true"
       }
@@ -20505,7 +20505,7 @@
       "id": "target:console:format",
       "kind": "target",
       "label": "format",
-      "doc": "format is deliberately separate from lint: the read-only spell reports drift by default, while `format:rw` amends the source files named below.",
+      "doc": "`format:rw` maintains declared source inputs.",
       "source": "console",
       "attrs": {
         "engine": "buzz"

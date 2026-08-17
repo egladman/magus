@@ -1,10 +1,6 @@
 <main class="console-dashboard-main" id="dash-main">
     <nav class="console-dashboard-related" aria-label="Related work">
       <span class="console-dashboard-related__label">Operations</span>
-      <div class="pf-v6-c-toggle-group console-dashboard-mode" role="group" aria-label="Dashboard view">
-        <button type="button" class="pf-v6-c-toggle-group__button" data-dashboard-mode="overview" aria-pressed="true"><span class="pf-v6-c-toggle-group__text">Overview</span></button>
-        <button type="button" class="pf-v6-c-toggle-group__button" data-dashboard-mode="plan" aria-pressed="false"><span class="pf-v6-c-toggle-group__text">Delegation plan</span></button>
-      </div>
       <button type="button" class="pf-v6-c-button pf-m-link pf-m-inline" data-open-surface="diff"><span class="pf-v6-c-button__text">Review the diff</span></button>
     </nav>
     <div id="dash-overview">
@@ -65,5 +61,8 @@
         </div>
       </div>
     </div>
-    <section id="dash-plan-host" aria-label="Delegation plan" hidden></section>
+    <nav id="dash-plan-controls" class="console-dashboard-plan-controls" aria-label="Dashboard detail" hidden>
+      <button type="button" id="dash-plan-back" class="pf-v6-c-button pf-m-link pf-m-inline"><span class="pf-v6-c-button__text">Back to dashboard</span></button>
+    </nav>
+    <section id="dash-plan-host" aria-label="Work details" hidden></section>
   </main>

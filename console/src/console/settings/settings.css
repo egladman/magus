@@ -17,6 +17,7 @@
   display: flex;
   flex-direction: column;
   gap: var(--pf-t--global--spacer--lg);
+  background: var(--pf-t--global--background--color--primary--default);
 }
 
 /* --- Section sub-tabs: one panel at a time, not one long scroll -----------------------------------
@@ -28,35 +29,33 @@
   gap: var(--pf-t--global--spacer--lg);
 }
 .console-settings-tabs {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--pf-t--global--spacer--xs);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  flex: 0 0 auto;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
 }
-/* Each tab is a bare button with a transparent underline that tints to the accent when current; the
- * -1px bottom margin overlaps the strip's own hairline so the active underline reads as continuous. */
-.console-settings-tabs__tab {
-  appearance: none;
-  margin: 0 0 -1px;
-  border: 0;
-  border-bottom: 2px solid transparent;
-  background: transparent;
-  padding: var(--pf-t--global--spacer--sm) var(--pf-t--global--spacer--md);
-  cursor: pointer;
-  font-size: var(--pf-t--global--font--size--body--default);
+.console-settings-tabs .pf-v6-c-tabs__list {
+  padding-inline: var(--pf-t--global--spacer--sm);
+  gap: var(--pf-t--global--spacer--sm);
+}
+.console-settings-tabs .pf-v6-c-tabs__item {
+  margin-bottom: -1px;
+}
+.console-settings-tabs .pf-v6-c-tabs__link {
+  min-height: 2.5rem;
+  padding-inline: var(--pf-t--global--spacer--md);
   color: var(--pf-t--global--text--color--subtle);
 }
-.console-settings-tabs__tab[hidden] { display: none; }
-.console-settings-tabs__tab:hover { color: var(--pf-t--global--text--color--regular); }
-.console-settings-tabs__tab.pf-m-current {
+.console-settings-tabs .pf-v6-c-tabs__item.pf-m-current .pf-v6-c-tabs__link {
   color: var(--pf-t--global--text--color--regular);
-  border-bottom-color: var(--console-accent);
   font-weight: var(--pf-t--global--font--weight--body--bold);
+}
+.console-settings-tabs .pf-v6-c-tabs__item.pf-m-current .pf-v6-c-tabs__link::after {
+  border-bottom-color: var(--console-accent);
 }
 .console-settings-tabs__tab:focus-visible {
   outline: 2px solid var(--console-accent);
-  outline-offset: -2px;
-  border-radius: var(--pf-t--global--border--radius--small);
+  outline-offset: -3px;
 }
 /* Only the current panel is shown; each is a stacked column of its lede + body. */
 .console-settings-tabs__panel[hidden] { display: none; }

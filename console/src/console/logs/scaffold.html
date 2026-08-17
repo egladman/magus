@@ -20,7 +20,7 @@
             </div>
           </div>
         </div>
-        <div class="pf-v6-c-toolbar__content" id="log-bar-controls" data-control-size="compact">
+        <div class="pf-v6-c-toolbar__content" id="log-bar-controls">
           <div class="pf-v6-c-toolbar__content-section">
             <!-- Filter field + attached "?" help control (PF input-group). The primary control: stays
                  inline at every width and fills the row on a phone. -->
@@ -54,7 +54,7 @@
             <div class="pf-v6-c-toolbar__group pf-m-action-group-inline" aria-label="View">
               <div class="pf-v6-c-toolbar__item">
                 <button id="pause-btn" class="pf-v6-c-button pf-m-secondary" type="button" aria-pressed="false" title="Pause auto-scroll to pin the view while the run streams" disabled>
-                  <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Pause</span>
+                  <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="6" y="4" width="4" height="16"/><rect x="14" y="4" width="4" height="16"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Pause following</span>
                 </button>
               </div>
               <!-- Log|Timeline and Pretty|Raw are PF ToggleGroups (segmented controls). The log
@@ -83,7 +83,7 @@
               </div>
               <div class="pf-v6-c-toolbar__item">
                 <button id="fold-all-btn" class="pf-v6-c-button pf-m-secondary" type="button" title="Collapse or expand every section" disabled>
-                  <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Collapse all</span>
+                  <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="7 13 12 18 17 13"/><polyline points="7 6 12 11 17 6"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Collapse sections</span>
                 </button>
               </div>
             </div>
@@ -139,8 +139,8 @@
               </div>
               <div class="pf-v6-c-toolbar__group pf-m-action-group-inline" aria-label="Open">
                 <div class="pf-v6-c-toolbar__item">
-                  <button id="graph-btn" class="pf-v6-c-button pf-m-secondary" type="button" title="Open this target's node in the knowledge graph explorer (new tab)" disabled>
-                    <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Open in graph</span>
+                  <button id="graph-btn" class="pf-v6-c-button pf-m-secondary" type="button" title="Open the relevant target graph in a new tab" disabled>
+                    <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="18" cy="5" r="3"/><circle cx="6" cy="12" r="3"/><circle cx="18" cy="19" r="3"/><line x1="8.59" y1="13.51" x2="15.42" y2="17.49"/><line x1="15.41" y1="6.51" x2="8.59" y2="10.49"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Open graph</span>
                   </button>
                 </div>
                 <div class="pf-v6-c-toolbar__item">

@@ -30,67 +30,27 @@ export interface Workspace {
 
 export const emptyWorkspace: Workspace = { tabs: [], activeId: null };
 
-export interface PlanDashboardMigration {
-  workspace: Workspace;
-  openedPlan: boolean;
-}
-
-function containsPage(tab: TabState, pageId: string): boolean {
-  const contains = (pane: Pane): boolean =>
-    pane.kind === "leaf" ? pane.pageId === pageId : contains(pane.a) || contains(pane.b);
-  return tab.pageId === pageId || (tab.layout ? contains(tab.layout) : false);
-}
-
-function mapPlanToDashboard(pane: Pane): Pane {
-  if (pane.kind === "leaf") return pane.pageId === "plan" ? { ...pane, pageId: "dashboard" } : pane;
-  const a = mapPlanToDashboard(pane.a);
-  const b = mapPlanToDashboard(pane.b);
-  return a === pane.a && b === pane.b ? pane : { ...pane, a, b };
-}
-
-// Removes legacy Plan leaves from a saved layout.
-function withoutPlan(pane: Pane): Pane | null {
-  if (pane.kind === "leaf") return pane.pageId === "plan" ? null : pane;
-  const a = withoutPlan(pane.a);
-  const b = withoutPlan(pane.b);
-  if (!a) return b;
-  if (!b) return a;
-  return a === pane.a && b === pane.b ? pane : { ...pane, a, b };
-}
-
-// Moves saved Plan tabs into Dashboard delegation mode.
-export function migratePlanToDashboard(ws: Workspace): PlanDashboardMigration {
-  const active = ws.tabs.find((tab) => tab.id === ws.activeId);
-  const openedPlan = active ? containsPage(active, "plan") : false;
-  const dashboard = ws.tabs.find((tab) => containsPage(tab, "dashboard"));
-  const keeper = dashboard ?? ws.tabs.find((tab) => containsPage(tab, "plan"));
-  if (!keeper) return { workspace: ws, openedPlan: false };
-
-  let changed = false;
-  const tabs: TabState[] = [];
-  for (const tab of ws.tabs) {
-    if (!containsPage(tab, "plan")) {
-      tabs.push(tab);
-      continue;
-    }
-    changed = true;
-    if (tab.id === keeper.id && !dashboard) {
-      tabs.push({
-        ...tab,
-        pageId: tab.pageId === "plan" ? "dashboard" : tab.pageId,
-        title: tab.pageId === "plan" ? "Dashboard" : tab.title,
-        ...(tab.layout ? { layout: mapPlanToDashboard(tab.layout) } : {}),
-      });
-      continue;
-    }
-    const layout = tab.layout ? withoutPlan(tab.layout) : null;
-    if (!layout && tab.pageId === "plan") continue;
-    tabs.push({ ...tab, ...(layout ? { layout } : {}) });
-  }
-  if (!changed) return { workspace: ws, openedPlan: false };
-
-  const activeId = tabs.some((tab) => tab.id === ws.activeId) ? ws.activeId : keeper.id;
-  return { workspace: { tabs, activeId }, openedPlan };
+// Start new desktop workspaces with two panes.
+export function desktopStarterWorkspace(): Workspace {
+  const id = "starter";
+  return {
+    activeId: id,
+    tabs: [
+      {
+        id,
+        pageId: "dashboard",
+        title: "Dashboard",
+        layout: {
+          kind: "split",
+          id: "starter-split",
+          dir: "row",
+          ratio: 0.62,
+          a: { kind: "leaf", id: "starter-dashboard", pageId: "dashboard" },
+          b: { kind: "leaf", id: "starter-activity", pageId: "activity" },
+        },
+      },
+    ],
+  };
 }
 
 // openTab appends a tab and activates it. Opening a tab whose id already exists does
@@ -133,7 +93,11 @@ export function setActive(ws: Workspace, id: string): Workspace {
 export function setLayout(ws: Workspace, tabId: string, layout: Pane): Workspace {
   if (!ws.tabs.some((t) => t.id === tabId)) return ws;
   return {
-    tabs: ws.tabs.map((t) => (t.id === tabId ? { ...t, layout } : t)),
+    tabs: ws.tabs.map((t) =>
+      t.id === tabId
+        ? { ...t, pageId: layout.kind === "leaf" ? layout.pageId : t.pageId, layout }
+        : t,
+    ),
     activeId: ws.activeId,
   };
 }

@@ -6,12 +6,12 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   emptyWorkspace,
+  desktopStarterWorkspace,
   openTab,
   closeTab,
   setActive,
   setLayout,
   renameTab,
-  migratePlanToDashboard,
   type Workspace,
 } from "./tabs";
 import type { Pane } from "./tiling";
@@ -23,27 +23,25 @@ test("openTab into an empty workspace appends and activates", () => {
   assert.deepEqual(ws, { tabs: [tab("a")], activeId: "a" });
 });
 
-test("migratePlanToDashboard turns an active legacy Plan tab into Dashboard", () => {
-  const before: Workspace = { tabs: [tab("plan", "plan")], activeId: "plan" };
-  const migrated = migratePlanToDashboard(before);
-  assert.deepEqual(migrated.workspace, {
-    tabs: [{ id: "plan", pageId: "dashboard", title: "Dashboard" }],
-    activeId: "plan",
+test("desktop starter opens Dashboard beside Activity", () => {
+  const ws = desktopStarterWorkspace();
+  const [tab] = ws.tabs;
+  assert.equal(ws.activeId, "starter");
+  assert.equal(tab?.pageId, "dashboard");
+  assert.deepEqual(tab?.layout, {
+    kind: "split",
+    id: "starter-split",
+    dir: "row",
+    ratio: 0.62,
+    a: { kind: "leaf", id: "starter-dashboard", pageId: "dashboard" },
+    b: { kind: "leaf", id: "starter-activity", pageId: "activity" },
   });
-  assert.equal(migrated.openedPlan, true);
 });
 
-test("migratePlanToDashboard removes a duplicate Plan tab when Dashboard already exists", () => {
-  const before: Workspace = {
-    tabs: [tab("dashboard"), tab("plan", "plan")],
-    activeId: "plan",
-  };
-  const migrated = migratePlanToDashboard(before);
-  assert.deepEqual(migrated.workspace, {
-    tabs: [tab("dashboard")],
-    activeId: "dashboard",
-  });
-  assert.equal(migrated.openedPlan, true);
+test("setLayout makes a collapsed pane its tab's primary surface", () => {
+  const leaf: Pane = { kind: "leaf", id: "activity", pageId: "activity" };
+  const ws = setLayout(desktopStarterWorkspace(), "starter", leaf);
+  assert.equal(ws.tabs[0]?.pageId, "activity");
 });
 
 test("openTab appends in order and activates the new tab", () => {

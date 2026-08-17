@@ -14,7 +14,7 @@ import {
   setActive,
   setLayout,
   renameTab,
-  migratePlanToDashboard,
+  desktopStarterWorkspace,
   workspaceStore,
   type TabState,
 } from "./tabs";
@@ -45,6 +45,7 @@ import { checkLocalStorageAlert, startShellWatch } from "../lib/watch";
 import { openSurfaceWindow } from "../lib/appwindow";
 import { persisted } from "../lib/persist";
 import { splitModeCell } from "./layoutPrefs";
+import { surfaceNavigation, surfaceNavigationEvent } from "./surface-navigation";
 import {
   parseHash,
   wantsDemo,
@@ -93,6 +94,15 @@ const CONSOLE_KEYMAP: Keymap = {
   "console.actionBar.open": "mod+k",
 };
 const keymapCell = persisted<Keymap>("keymap", {});
+const DESKTOP_START_QUERY = "(min-width: 64rem)";
+
+function hasSavedWorkspace(): boolean {
+  try {
+    return localStorage.getItem("magus:workspace") !== null;
+  } catch {
+    return false;
+  }
+}
 
 // Keybinding presets: a "start from a preset" SEEDS the editable keymap (keymapCell / the Settings
 // draft) with a full set of bindings you then edit freely - not a persistent mode, just a bulk edit.
@@ -209,8 +219,7 @@ const SURFACES: Launchable[] = [
 // (internal/service/console KnownSurfaces): the daemon serves the console shell for exactly these
 // paths (SPA fallback), so the boot router below opens exactly these from the path. Keep the two
 // lists in step.
-// Preserve legacy Plan links as Dashboard delegation mode.
-const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity", "notes", "diff", "plan"];
+const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity", "notes", "diff"];
 
 // consoleSurfaceFromPath returns the surface a /console/<surface>/ entry path names, or null when
 // the page did not boot on such a path (the bare console root, or any non-surface path). It keys on
@@ -746,12 +755,8 @@ export function startConsole(
 
   loadBuildInfo(); // fetch the build fingerprint once; fills every status bar's version chip
   applyFocusRing(getFocusRing()); // apply the persisted focus-ring preference before anything renders
+  const hadSavedWorkspace = hasSavedWorkspace();
   const ws = workspaceStore();
-  const legacyPlan = migratePlanToDashboard(ws.get());
-  if (legacyPlan.workspace !== ws.get()) ws.set(legacyPlan.workspace);
-  if (legacyPlan.openedPlan)
-    (window as Window & { __magusConsoleDashboardView?: "plan" }).__magusConsoleDashboardView =
-      "plan";
   const mounts = new Map<string, Mounted>(); // tabId -> its mounted tile + status bar
 
   // The launcher is the outlet's EMPTY STATE, not a tab: one element appended straight into the
@@ -1021,9 +1026,9 @@ export function startConsole(
   const settingsBtn = document.getElementById("settings-btn");
   if (settingsBtn) settingsBtn.addEventListener("click", () => open("settings"));
 
-  // Wire the title-bar Applications menu (links back to the docs site + playground). No-ops without
-  // the #console-appmenu markup.
-  initAppMenu();
+  // The app grid derives from the same registry as the launcher and Open commands. Settings keeps
+  // its dedicated gear, while every user-openable workspace surface remains in the escape hatch.
+  initAppMenu(SURFACES.filter((surface) => surface.pageId !== "settings"));
 
   // Wire the title-bar Reference button + its slide-out panel. No-ops without the #console-refdrawer
   // markup. It reads the active surface's [data-ref-section] help blocks (refreshed on tab change). The
@@ -1721,6 +1726,14 @@ export function startConsole(
     else delete conn.dataset.health;
   }
   function pollReadiness(): void {
+    const current = document.getElementById("console-conn");
+    if (current?.dataset.state === "demo") {
+      const hint = "Demo data is synthetic. Click to change the daemon address.";
+      current.title = hint;
+      current.setAttribute("aria-label", hint);
+      delete current.dataset.health;
+      return;
+    }
     const host = resolveDaemonHost();
     if (!host) {
       // No daemon address configured at all: nothing to probe. A surface, if one is docked, owns the text;
@@ -1742,6 +1755,13 @@ export function startConsole(
     fetchReadiness(host).then((report) => {
       const conn = document.getElementById("console-conn");
       if (!conn) return; // momentarily absent between tab swaps
+      if (conn.dataset.state === "demo") {
+        const hint = "Demo data is synthetic. Click to change the daemon address.";
+        conn.title = hint;
+        conn.setAttribute("aria-label", hint);
+        delete conn.dataset.health;
+        return;
+      }
       const ageSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
       // The tooltip is always safe to enrich - no surface writes conn.title, so this never contends.
       conn.title = formatReadinessTitle(report, ageSec, host);
@@ -1802,10 +1822,10 @@ export function startConsole(
 
   // Lazy surface bundles do not import the shell. Cross-links therefore ask the sole owner of
   // tabs, tiling, and focus to reveal a surface rather than inventing a second navigation path.
-  window.addEventListener("console:open-surface", (event) => {
-    const pageId = (event as CustomEvent<{ pageId?: string }>).detail?.pageId;
-    if (pageId === "plan") openDashboardPlan();
-    else if (pageId) open(pageId);
+  window.addEventListener(surfaceNavigationEvent, (event) => {
+    const detail = surfaceNavigation(event);
+    if (detail?.pageId === "dashboard" && detail.dashboardMode === "plan") openDashboardPlan();
+    else if (detail?.pageId) open(detail.pageId);
   });
 
   // tabHostsSurface reports whether a tab already shows a surface, checking its tiled panes when it
@@ -1906,11 +1926,7 @@ export function startConsole(
   // workspace, so a dedicated window never disturbs the main console's saved tabs. Unknown/absent param
   // falls through to the normal restore below.
   const launchApp = new URLSearchParams(location.search).get("app");
-  const appPageId = launchApp === "plan" ? "dashboard" : launchApp;
-  if (launchApp === "plan")
-    (window as Window & { __magusConsoleDashboardView?: "plan" }).__magusConsoleDashboardView =
-      "plan";
-  const appSurface = appPageId ? SURFACES.find((s) => s.pageId === appPageId) : undefined;
+  const appSurface = launchApp ? SURFACES.find((s) => s.pageId === launchApp) : undefined;
   if (appSurface && registry.has(appSurface.pageId)) {
     document.documentElement.dataset.appmode = appSurface.pageId;
     // Must be set before mount(): its show() titles the window, and would otherwise read the
@@ -1943,6 +1959,19 @@ export function startConsole(
     // A phone that just scanned the QR lands on something live immediately rather
     // than an empty launcher: open the Dashboard as the read-only view.
     open("dashboard");
+  } else if (
+    !entrySurface &&
+    !hadSavedWorkspace &&
+    window.matchMedia(DESKTOP_START_QUERY).matches
+  ) {
+    const starter = desktopStarterWorkspace();
+    const [starterTab] = starter.tabs;
+    if (starterTab) {
+      ws.set(starter);
+      mount(starterTab);
+    } else {
+      show(null);
+    }
   } else if (!entrySurface) {
     show(null);
   }
@@ -1951,8 +1980,7 @@ export function startConsole(
   // path back to the console base. The fragment (any #port/#token/content) and query are preserved;
   // only the surface segment is dropped.
   if (entrySurface) {
-    if (entrySurface === "plan") openDashboardPlan();
-    else if (registry.has(entrySurface)) open(entrySurface);
+    if (registry.has(entrySurface)) open(entrySurface);
     history.replaceState(null, "", consoleBasePath() + location.search + location.hash);
   }
 

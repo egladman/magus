@@ -1218,7 +1218,7 @@
         },
         {
           "name": "format",
-          "doc": "format is deliberately separate from lint: the read-only spell reports drift by default, while `format:rw` amends the source files named below.",
+          "doc": "`format:rw` maintains declared source inputs.",
           "dependencies": [
             "preflight"
           ],

@@ -1,11 +1,12 @@
 // Renders the shell-owned status bar from one contribution shape.
 
-export type ConnectionState = "none" | "connecting" | "connected" | "disconnected";
+export type ConnectionState = "none" | "connecting" | "connected" | "disconnected" | "demo";
 
 export interface StatusContribution {
   connection: ConnectionState;
   label: string;
   health?: string;
+  hint?: string;
   count?: string;
   observing?: { text: string; title: string };
 }
@@ -17,6 +18,10 @@ export function publishStatus(contribution: StatusContribution): void {
     conn.dataset.state = contribution.connection;
     if (contribution.health) conn.dataset.health = contribution.health;
     else delete conn.dataset.health;
+    if (contribution.hint !== undefined) {
+      conn.title = contribution.hint;
+      conn.setAttribute("aria-label", contribution.hint);
+    }
   }
   const count = document.getElementById("console-count");
   if (count) {

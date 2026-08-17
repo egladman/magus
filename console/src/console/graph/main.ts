@@ -1,4 +1,5 @@
 import { must, errMessage } from "../../lib/guards";
+import { openSurface } from "../surface-navigation";
 // main.ts - the /graph/ page's interactive knowledge-graph view.
 //
 // The page is DATA-AGNOSTIC (like /playground): it renders whatever node-link
@@ -1477,12 +1478,7 @@ function renderCard(id: string | null) {
   const mermaidCardBtn = cardEl.querySelector<HTMLElement>(".console-graph-card__mermaidlink");
   if (mermaidCardBtn) mermaidCardBtn.addEventListener("click", copyAsMermaid);
   const notesCardBtn = cardEl.querySelector<HTMLElement>(".console-graph-card__noteslink");
-  if (notesCardBtn)
-    notesCardBtn.addEventListener("click", () =>
-      window.dispatchEvent(
-        new CustomEvent("console:open-surface", { detail: { pageId: "notes" } }),
-      ),
-    );
+  if (notesCardBtn) notesCardBtn.addEventListener("click", () => openSurface({ pageId: "notes" }));
 }
 
 // ---- selection, search, list, deep links -----------------------------------

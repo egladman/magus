@@ -41,7 +41,7 @@ import { render, updateTimelineControl } from "./render";
 import { applyTimeRange, clearFocus } from "./waterfall";
 import { applyFilterFromInput, renderFilterChips, setFilter } from "./filter";
 import { clearMarks, runSearch, stepActiveMark } from "./search";
-import { graphTarget, openInGraph, shareLink } from "./share";
+import { graphAvailable, openInGraph, shareLink } from "./share";
 import { connectLive, setLiveVisible } from "./live";
 import { startDemo, stopDemo } from "./demo";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
@@ -399,10 +399,9 @@ function finishLoad(ref: string, statusMsg: string): void {
   if (cmdBtn) (cmdBtn as HTMLButtonElement).disabled = !state.currentRef;
   const shareBtn = el("share-btn");
   if (shareBtn) (shareBtn as HTMLButtonElement).disabled = false;
-  // "Open in graph" only makes sense with a real ref AND a target the graph knows about
-  // (a project + target from the result event); hide it otherwise.
+  // Open Graph once the loaded journal names at least one target in a result event.
   const graphBtn = el("graph-btn");
-  if (graphBtn) (graphBtn as HTMLButtonElement).disabled = !graphTarget();
+  if (graphBtn) (graphBtn as HTMLButtonElement).disabled = !graphAvailable();
 }
 
 // looksLikeRef mirrors the CLI's cache.LooksLikeRef: the "copy as command" buttons
@@ -520,7 +519,7 @@ function wireControls(): void {
         const head = s.querySelector(".console-render-section__head");
         if (head) head.setAttribute("aria-expanded", anyOpen ? "false" : "true");
       }
-      setBtnLabel(foldBtn, anyOpen ? "Expand all" : "Collapse all");
+      setBtnLabel(foldBtn, anyOpen ? "Expand sections" : "Collapse sections");
     });
   }
 
@@ -573,7 +572,7 @@ function wireControls(): void {
   if (pauseBtn) {
     pauseBtn.addEventListener("click", () => {
       state.livePaused = !state.livePaused;
-      setBtnLabel(pauseBtn, state.livePaused ? "Resume" : "Pause");
+      setBtnLabel(pauseBtn, state.livePaused ? "Resume following" : "Pause following");
       pauseBtn.setAttribute("aria-pressed", state.livePaused ? "true" : "false");
       // Resuming jumps back to the tail so the reader rejoins the live edge.
       if (!state.livePaused && scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;

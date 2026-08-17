@@ -193,23 +193,26 @@ function buildSettingsTabs(tabs: SettingsTab[]): {
   setHidden: (id: string, hidden: boolean) => void;
 } {
   const root = h("div", "console-settings-tabs__wrap");
-  const nav = h("div", "console-settings-tabs");
-  nav.setAttribute("role", "tablist");
-  nav.setAttribute("aria-label", "Settings sections");
+  const nav = h("div", "pf-v6-c-tabs console-settings-tabs");
+  const list = h("ul", "pf-v6-c-tabs__list");
+  list.setAttribute("role", "tablist");
+  list.setAttribute("aria-label", "Settings sections");
+  nav.append(list);
   const panelsHost = h("div", "console-settings-tabs__panels");
   const buttons = new Map<string, HTMLButtonElement>();
+  const items = new Map<string, HTMLElement>();
   const panelById = new Map<string, HTMLElement>();
   let activeId = tabs[0].id;
 
   const visibleIds = (): string[] =>
-    tabs.map((t) => t.id).filter((id) => !must(buttons.get(id)).hidden);
+    tabs.map((t) => t.id).filter((id) => !must(items.get(id)).hidden);
 
   function show(id: string): void {
     activeId = id;
     for (const t of tabs) {
       const on = t.id === id;
       const btn = must(buttons.get(t.id));
-      btn.classList.toggle("pf-m-current", on);
+      must(items.get(t.id)).classList.toggle("pf-m-current", on);
       btn.setAttribute("aria-selected", on ? "true" : "false");
       btn.tabIndex = on ? 0 : -1;
       must(panelById.get(t.id)).hidden = !on;
@@ -236,16 +239,19 @@ function buildSettingsTabs(tabs: SettingsTab[]): {
   }
 
   for (const t of tabs) {
-    const btn = h("button", "console-settings-tabs__tab") as HTMLButtonElement;
+    const item = h("li", "pf-v6-c-tabs__item");
+    const btn = h("button", "pf-v6-c-tabs__link console-settings-tabs__tab") as HTMLButtonElement;
     btn.type = "button";
     btn.id = "console-settings-tab-" + t.id;
     btn.setAttribute("role", "tab");
     btn.setAttribute("aria-controls", "console-settings-panel-" + t.id);
-    btn.append(h("span", "console-settings-tabs__label", t.label));
+    btn.append(h("span", "pf-v6-c-tabs__item-text console-settings-tabs__label", t.label));
     btn.addEventListener("click", () => show(t.id));
     btn.addEventListener("keydown", (ev) => onKey(ev, t.id));
     buttons.set(t.id, btn);
-    nav.append(btn);
+    items.set(t.id, item);
+    item.append(btn);
+    list.append(item);
 
     const panel = t.panel;
     panel.classList.add("console-settings-tabs__panel");
@@ -258,9 +264,9 @@ function buildSettingsTabs(tabs: SettingsTab[]): {
   }
 
   function setHidden(id: string, hidden: boolean): void {
-    const btn = buttons.get(id);
-    if (!btn) return;
-    btn.hidden = hidden;
+    const item = items.get(id);
+    if (!item) return;
+    item.hidden = hidden;
     if (hidden && activeId === id) {
       const first = visibleIds()[0];
       if (first) show(first);

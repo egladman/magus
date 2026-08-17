@@ -98,15 +98,7 @@ export function agentsTile(): Tile {
     "Waiting for agent activity",
   );
   const postureDetail = h("span", "console-dashboard-orchestration__detail");
-  const planButton = document.createElement("button");
-  planButton.type = "button";
-  planButton.className =
-    "pf-v6-c-button pf-m-link pf-m-inline console-dashboard-orchestration__plan";
-  planButton.append(h("span", "pf-v6-c-button__text", "Open delegation plan"));
-  planButton.addEventListener("click", () =>
-    window.dispatchEvent(new CustomEvent("console:open-surface", { detail: { pageId: "plan" } })),
-  );
-  posture.append(postureLine, postureDetail, planButton);
+  posture.append(postureLine, postureDetail);
 
   const caption = h(
     "p",
