@@ -792,7 +792,10 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
    first glance, and the console's filled blue already means running work. */
 .console-dashboard-viewbar__bigpicture { flex: 0 0 auto; }
 
-/* ICON BUTTONS: centre the glyph against the LABEL rather than letting it sit on the text baseline.
+/* ICON BUTTONS: centre the glyph against the LABEL rather than letting it sit on the text baseline,
+ * and gap them - the icon carries pf-m-start (PatternFly's own spacing modifier) but that margin is
+ * scoped to a `.pf-v6-c-button` ancestor, and these buttons wear `.pf-v6-c-toggle-group__button`
+ * instead, so the icon landed flush against the label with no space between them.
  *
  * An SVG is an inline replaced element, so by default its bottom edge lands on the baseline and the
  * icon rides visibly high next to the words - 2px, consistently. PatternFly does NOT do this for
@@ -808,6 +811,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 .console-dashboard-activity__open {
   display: inline-flex;
   align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
 }
 .console-dashboard-viewbar__bigpicture .pf-v6-c-button__icon,
 .console-dashboard-activity__open .pf-v6-c-button__icon {
