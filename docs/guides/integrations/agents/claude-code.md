@@ -130,9 +130,9 @@ hand the sub-agent.
 
 ## Notifications
 
-`magus notify` turns a host event into a desktop notification and an entry in
-the shared attention record. Wire `Notification` (it fires on a permission
-prompt and when the agent goes idle waiting for input), and `Stop` or
+`magus notify` turns a host event into a desktop notification. It does not
+send an event to the daemon or Console. Wire `Notification` (it fires on a
+permission prompt and when the agent goes idle waiting for input), and `Stop` or
 `SubagentStop` for completion.
 
 ```json

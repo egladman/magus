@@ -130,7 +130,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `test` | test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and renders a line-coverage badge from the run. |
 | `build` | build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. |
 | `lint` | lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate. |
-| `format` | format is deliberately separate from lint: the read-only spell reports drift by default, while `format:rw` amends the source files named below. |
+| `format` | `format:rw` maintains declared source inputs. |
 | `security` | security audits the dependency tree against the npm advisory database. |
 | `ci` | 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps. |
 | `preflight` |  |
