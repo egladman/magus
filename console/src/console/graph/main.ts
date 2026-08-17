@@ -4568,6 +4568,19 @@ async function bootLive() {
 // window/document lifecycle listeners (via the one AbortController). Idempotent. The standalone
 // page never calls it (the graph lives for the page's lifetime); the console's graph PageModule
 // calls it on deactivate.
+// setVisible is the console's surface contract (page.ts). Here it is not a formality: the force
+// simulation decays toward a small non-zero floor so the drawing keeps gently moving, which
+// deactivate() below calls "the main background CPU drain" - and until now only CLOSING the tab
+// stopped it. A backgrounded graph went on ticking and repainting a canvas nobody could see.
+//
+// Stopped rather than throttled, and restarted at the same idle floor on return, so what comes back
+// is the layout the reader left rather than one that drifted while they were elsewhere.
+export function setVisible(visible: boolean): void {
+  if (!sim) return;
+  if (visible) sim.alphaTarget(idleAlpha()).restart();
+  else sim.stop();
+}
+
 export function deactivate(): void {
   // Forget the selected node: this module is a singleton the console re-activates on reopen, so a
   // stale label left here would name the reopened tab after a node it is no longer showing.

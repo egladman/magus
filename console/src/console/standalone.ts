@@ -33,7 +33,7 @@ const noSearch: SearchProvider<null> = {
 };
 
 // The shape the factory calls on a dynamically imported app bundle. A streaming surface (the
-// dashboard) also exports setVisible so it can suppress its shared-status-bar writes while its tab is
+// dashboard, the log viewer) also exports setVisible so it can suppress its shared-status-bar writes while its tab is
 // hidden. A surface that opens something with a lifetime (a live SSE stream, the graph's force
 // simulation) exports deactivate() to tear it down when its tab/pane closes; a purely static surface
 // omits it.

@@ -54,7 +54,7 @@ test("#demo renders the changeset with no daemon", async () => {
   );
   assert.ok(text.some((t) => t?.includes("Audience []string")));
 
-  dispose();
+  dispose.deactivate();
 });
 
 test("#demo lists the primary files in the sidebar and folds the generated group", async () => {
@@ -79,7 +79,7 @@ test("#demo lists the primary files in the sidebar and folds the generated group
   // "unranked" caveat while claiming a reading order.
   assert.ok(!chips.includes("unranked"));
 
-  dispose();
+  dispose.deactivate();
 });
 
 test("#demo shows the agent's pending suggestions in the rail", async () => {
@@ -96,7 +96,7 @@ test("#demo shows the agent's pending suggestions in the rail", async () => {
   await settle();
   assert.equal(document.querySelectorAll(".console-diff-rail__item").length, 1);
 
-  dispose();
+  dispose.deactivate();
 });
 
 test("without #demo and without a daemon the surface offers the demo instead", async () => {
@@ -113,5 +113,5 @@ test("without #demo and without a daemon the surface offers the demo instead", a
   assert.equal(root?.dataset.phase, "ready");
   assert.ok(document.querySelector(".console-diff-row__path"));
 
-  dispose();
+  dispose.deactivate();
 });
