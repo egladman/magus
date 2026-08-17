@@ -79,6 +79,7 @@ import { wireToolbarOverflow } from "../toolbar";
 import { persisted } from "../../lib/persist";
 import { attachHelpPopover } from "../../ui/help-popover";
 import { signal } from "../view";
+import { publishStatus } from "../status";
 
 // Runtime-only globals the monolith stashes on window: the live-mode "affected" id set that
 // the SSE handler writes for the view code to read, and the PWA File Handling API entry point.
@@ -276,6 +277,9 @@ let liveReconnectDelay = 1000; // ms; doubles on each failure up to 30000
 let liveWorkspaceName: string | null = null; // workspace name from StatusService GetStatus, for badge
 let liveConnected = false; // true while the SSE stream is open; drives the badge style
 let liveFlavor: string | null = null; // null (knowledge) or "targets"
+// Defer hidden live updates until the pane returns.
+let liveRefreshPending = false;
+let surfaceVisible = true;
 
 // Teardown handles for deactivate() (the console unmounting a graph tab/pane): the stage ResizeObserver
 // and one AbortController whose signal wires every window/document lifecycle listener, so a single
@@ -1464,7 +1468,7 @@ function renderCard(id: string | null) {
   // doesn't compete with the canvas toolbar's Copy as Mermaid; still a <button> because
   // it acts (copies to clipboard) rather than navigates.
   html +=
-    '<div class="console-graph-card__actions"><button type="button" class="console-graph-card__mermaidlink" title="Copy this node\'s neighborhood as a Mermaid diagram (double-click the node first to focus its local graph, then copy). Mirrors the CLI: magus graph export -o mermaid --select id"><span class="console-graph-card__copyglyph" aria-hidden="true">&#10697;</span> Copy as Mermaid</button></div>';
+    '<div class="console-graph-card__actions"><button type="button" class="console-graph-card__mermaidlink" title="Copy this node\'s neighborhood as a Mermaid diagram (double-click the node first to focus its local graph, then copy). Mirrors the CLI: magus graph export -o mermaid --select id"><span class="console-graph-card__copyglyph" aria-hidden="true">&#10697;</span> Copy as Mermaid</button><button type="button" class="console-graph-card__noteslink" title="Open the workspace notes that explain decisions around this graph">Open workspace notes</button></div>';
   cardEl.innerHTML = html;
   cardEl.hidden = false;
   cardEl
@@ -1472,6 +1476,13 @@ function renderCard(id: string | null) {
     .forEach((b) => b.addEventListener("click", () => selectNode(b.dataset.id ?? null, true)));
   const mermaidCardBtn = cardEl.querySelector<HTMLElement>(".console-graph-card__mermaidlink");
   if (mermaidCardBtn) mermaidCardBtn.addEventListener("click", copyAsMermaid);
+  const notesCardBtn = cardEl.querySelector<HTMLElement>(".console-graph-card__noteslink");
+  if (notesCardBtn)
+    notesCardBtn.addEventListener("click", () =>
+      window.dispatchEvent(
+        new CustomEvent("console:open-surface", { detail: { pageId: "notes" } }),
+      ),
+    );
 }
 
 // ---- selection, search, list, deep links -----------------------------------
@@ -3651,6 +3662,10 @@ function liveConnect() {
     url,
     headers,
     (eventType) => {
+      if (!surfaceVisible) {
+        liveRefreshPending = true;
+        return;
+      }
       if (eventType === "graph") {
         liveRefetchGraph();
       } else if (eventType === "status") {
@@ -3681,8 +3696,12 @@ function liveConnect() {
       liveReconnectDelay = 1000;
       clearDisconnectBanner();
       updateLiveBadge();
-      liveRefetchGraph();
-      fetchLiveStatus();
+      if (surfaceVisible) {
+        liveRefetchGraph();
+        fetchLiveStatus();
+      } else {
+        liveRefreshPending = true;
+      }
     },
   );
 }
@@ -3724,17 +3743,15 @@ function updateLiveBadge() {
   // Mirror the live state onto the shared console status bar's connection dot, so the graph explorer
   // reads the same as the dashboard and log viewer. A snapshot/demo graph has no live daemon link, so
   // the dot stays at its default "not connected".
-  const conn = document.getElementById("console-conn");
-  if (conn) {
-    if (liveHost) {
-      conn.textContent = liveConnected ? "connected" : "connecting...";
-      conn.dataset.state = liveConnected ? "connected" : "connecting";
-      delete conn.dataset.health;
-    } else {
-      conn.textContent = "not connected";
-      conn.dataset.state = "none";
-      delete conn.dataset.health;
-    }
+  if (surfaceVisible) {
+    publishStatus(
+      liveHost
+        ? {
+            connection: liveConnected ? "connected" : "connecting",
+            label: liveConnected ? "connected" : "connecting...",
+          }
+        : { connection: "none", label: "not connected" },
+    );
   }
 }
 
@@ -4576,9 +4593,18 @@ async function bootLive() {
 // Stopped rather than throttled, and restarted at the same idle floor on return, so what comes back
 // is the layout the reader left rather than one that drifted while they were elsewhere.
 export function setVisible(visible: boolean): void {
-  if (!sim) return;
-  if (visible) sim.alphaTarget(idleAlpha()).restart();
-  else sim.stop();
+  surfaceVisible = visible;
+  if (visible) {
+    if (sim) sim.alphaTarget(idleAlpha()).restart();
+    updateLiveBadge();
+    if (liveRefreshPending) {
+      liveRefreshPending = false;
+      liveRefetchGraph();
+      fetchLiveStatus();
+    }
+  } else if (sim) {
+    sim.stop();
+  }
 }
 
 export function deactivate(): void {

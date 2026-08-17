@@ -100,7 +100,10 @@ export function moduleSurface(s: ModuleSurface): PageModule<null, null> {
         typeof boot === "function" ? { deactivate: boot } : (boot ?? null);
       return {
         search: noSearch,
-        setVisible: instance?.setVisible?.bind(instance),
+        // PageController's lifecycle is mandatory even when a surface is static. The normalizer
+        // makes that contract true for dynamically loaded modules while preserving their simple
+        // standalone entry points.
+        setVisible: instance?.setVisible?.bind(instance) ?? (() => {}),
         deactivate() {
           instance?.deactivate();
           host.replaceChildren();
@@ -152,7 +155,9 @@ export function standaloneSurface(s: StandaloneSurface): PageModule<null, null> 
         // backgrounded - the dashboard (connection pill, observing-since) and the log viewer (a live
         // stream's pill and event count, plus the zoom stepper). A surface that writes none of it
         // leaves this undefined.
-        setVisible: mod.setVisible,
+        // Standalone bundles predate the per-pane contract. Give the shell an unconditional
+        // lifecycle hook so visibility cannot become an optional convention again.
+        setVisible: mod.setVisible ?? (() => {}),
         docTitle: mod.docTitle,
         // Tear down the surface's own lifetimes first (a live SSE stream, the graph's force simulation)
         // via its exported deactivate(), THEN detach its DOM - so closing a tab/pane leaves nothing

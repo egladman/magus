@@ -11,6 +11,7 @@ import {
   setActive,
   setLayout,
   renameTab,
+  migratePlanToDashboard,
   type Workspace,
 } from "./tabs";
 import type { Pane } from "./tiling";
@@ -20,6 +21,29 @@ const tab = (id: string, pageId = id) => ({ id, pageId, title: id });
 test("openTab into an empty workspace appends and activates", () => {
   const ws = openTab(emptyWorkspace, tab("a"));
   assert.deepEqual(ws, { tabs: [tab("a")], activeId: "a" });
+});
+
+test("migratePlanToDashboard turns an active legacy Plan tab into Dashboard", () => {
+  const before: Workspace = { tabs: [tab("plan", "plan")], activeId: "plan" };
+  const migrated = migratePlanToDashboard(before);
+  assert.deepEqual(migrated.workspace, {
+    tabs: [{ id: "plan", pageId: "dashboard", title: "Dashboard" }],
+    activeId: "plan",
+  });
+  assert.equal(migrated.openedPlan, true);
+});
+
+test("migratePlanToDashboard removes a duplicate Plan tab when Dashboard already exists", () => {
+  const before: Workspace = {
+    tabs: [tab("dashboard"), tab("plan", "plan")],
+    activeId: "plan",
+  };
+  const migrated = migratePlanToDashboard(before);
+  assert.deepEqual(migrated.workspace, {
+    tabs: [tab("dashboard")],
+    activeId: "dashboard",
+  });
+  assert.equal(migrated.openedPlan, true);
 });
 
 test("openTab appends in order and activates the new tab", () => {

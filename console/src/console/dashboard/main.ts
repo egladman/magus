@@ -60,6 +60,9 @@ import {
 // strip, settings gear, and status bar. (Its old standalone-only initNav/initSearch/initRefDrawer/
 // initConsoleSettings self-wiring was dropped with the docs-page decoupling.)
 import { getDefaultHost } from "../../lib/settings";
+import { activate as activatePlan } from "../plan/main";
+import type { SurfaceInstance } from "../standalone";
+import { publishStatus } from "../status";
 
 const el = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const opt = (id: string): HTMLElement | null => document.getElementById(id);
@@ -104,9 +107,51 @@ function setConn(conn: ConnView): void {
 // state so the bar catches up on return. Standalone (no console) this stays false, unchanged.
 let surfaceHidden = false;
 let lastState: DashboardState | null = null;
+type DashboardMode = "overview" | "plan";
+type DashboardViewWindow = Window & { __magusConsoleDashboardView?: DashboardMode };
+let dashboardMode: DashboardMode = "overview";
+let planMount: SurfaceInstance | null = null;
+
+function disposePlan(): void {
+  planMount?.deactivate();
+  planMount = null;
+}
+
+function setDashboardMode(mode: DashboardMode): void {
+  const main = el("dash-main");
+  const overview = el("dash-overview");
+  const planHost = el("dash-plan-host");
+  dashboardMode = mode;
+  main.dataset.mode = mode;
+  overview.hidden = mode !== "overview";
+  planHost.hidden = mode !== "plan";
+  document
+    .querySelectorAll<HTMLButtonElement>("#dash-main [data-dashboard-mode]")
+    .forEach((button) => {
+      button.setAttribute("aria-pressed", String(button.dataset.dashboardMode === mode));
+    });
+  if (mode === "plan") {
+    if (!planMount) planMount = activatePlan(planHost);
+    planMount.setVisible?.(!surfaceHidden);
+    return;
+  }
+  // The plan's keyboard commands and poller only make sense while its mode is in front. Rebuilding
+  // it on return is deliberate: it leaves no hidden command owner or retained canvas behind.
+  disposePlan();
+}
+
+function takeDashboardViewIntent(): DashboardMode | null {
+  const win = window as DashboardViewWindow;
+  const mode = win.__magusConsoleDashboardView;
+  delete win.__magusConsoleDashboardView;
+  return mode === "plan" || mode === "overview" ? mode : null;
+}
 
 export function setVisible(visible: boolean): void {
   surfaceHidden = !visible;
+  if (visible) transport.resume();
+  else transport.suspend();
+  planMount?.setVisible?.(visible && dashboardMode === "plan");
   if (visible && lastState) renderStatusBar(lastState);
 }
 
@@ -135,11 +180,13 @@ function renderStatusBar(s: DashboardState): void {
   // amber degraded / red down) so a single element carries both "is it live" and "is it well" - no
   // separate health/mode chips. In demo the board is streaming synthesized data, so the dot reads
   // "connected" (the app-bar "Demo data" chip is what marks it as synthetic).
-  const c = el("console-conn");
+  let connection: "none" | "connecting" | "connected" | "disconnected" = "none";
+  let connectionLabel = "not connected";
+  let health: string | undefined;
   if (demoing) {
-    c.textContent = "connected";
-    c.dataset.state = "connected";
-    c.dataset.health = s.status ? s.status.health.cls : "ok";
+    connection = "connected";
+    connectionLabel = "connected";
+    health = s.status ? s.status.health.cls : "ok";
   } else {
     const map: Record<string, string> = {
       connecting: "connecting...",
@@ -147,32 +194,35 @@ function renderStatusBar(s: DashboardState): void {
       disconnected: s.conn.detail || "reconnecting",
       none: "not connected",
     };
-    c.textContent = map[s.conn.state] || s.conn.state;
-    c.dataset.state = s.conn.state;
+    connectionLabel = map[s.conn.state] || s.conn.state;
+    connection =
+      s.conn.state === "connected" ||
+      s.conn.state === "connecting" ||
+      s.conn.state === "disconnected"
+        ? s.conn.state
+        : "none";
     if (s.conn.state === "connected" && s.status) {
-      c.dataset.health = s.status.health.cls;
-    } else {
-      delete c.dataset.health;
+      health = s.status.health.cls;
     }
   }
 
   // Observing-since: a brief note of when the daemon began collecting these counters, so it is
   // clear the numbers are cumulative from then and are NOT persisted across daemon restarts.
-  const obs = el("console-observing");
+  let observing: { text: string; title: string } | undefined;
   if (s.observingSince) {
     const t = new Date(s.observingSince).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
-    obs.textContent = "observing since " + t;
-    obs.title =
-      "The telemetry and cache counters are cumulative since the daemon started observing (" +
-      t +
-      "). They are not persisted across daemon restarts.";
-    obs.hidden = false;
-  } else {
-    obs.hidden = true;
+    observing = {
+      text: "observing since " + t,
+      title:
+        "The telemetry and cache counters are cumulative since the daemon started observing (" +
+        t +
+        "). They are not persisted across daemon restarts.",
+    };
   }
+  publishStatus({ connection, label: connectionLabel, health, observing });
 }
 
 // ---- notification admission ------------------------------------------------
@@ -223,6 +273,19 @@ function wireNotifications(): void {
 // ---- tiles -----------------------------------------------------------------
 let tiles: Tile[] = [];
 let rotator: Rotator | null = null;
+
+// Board sections label direct panel children.
+function boardSection(label: string, detail: string): HTMLElement {
+  const section = document.createElement("div");
+  section.className = "console-dashboard-section";
+  section.dataset.boardOnly = "";
+  const title = document.createElement("h2");
+  title.textContent = label;
+  const sub = document.createElement("p");
+  sub.textContent = detail;
+  section.append(title, sub);
+  return section;
+}
 // Store subscriptions taken out by mountTiles, and the controller for activate()'s
 // window-level listeners. mountTiles runs again on every reopen (the rotator comment below
 // says so), so without dropping these the previous generation of tiles stays subscribed:
@@ -287,33 +350,59 @@ function mountTiles(): void {
   const sandbox = sandboxTile();
   const mcp = mcpTile();
 
-  // Ordered, full-width by default (pool/cacheStats opt into the half-width pair row).
+  // The board is an operations surface, not a catalog of telemetry. Its reading order is therefore
+  // deliberate: first the decision, then the people/agents carrying it out, then the machine that
+  // enables them. Deep diagnostic families stay available but no longer compete with live work.
   const ordered: Tile[] = [
     attention,
-    activity,
     agents,
+    activity,
+    gantt,
     pool,
     cacheStats,
+    locks,
+    workspaces,
     remote,
-    gantt,
     cacheRate,
     utilization,
     targets,
-    workspaces,
     services,
-    locks,
     config,
     latency,
     buzz,
     sandbox,
     mcp,
   ];
-  for (const t of ordered) host.append(t.el);
+  host.append(
+    boardSection("Live work", "Decide, coordinate, and follow the work that is moving now."),
+  );
+  for (const t of [attention, agents, activity, gantt]) host.append(t.el);
+  host.append(
+    boardSection(
+      "Runtime",
+      "Capacity, locks, and cache health - the constraints around that work.",
+    ),
+  );
+  for (const t of [pool, cacheStats, locks, workspaces, remote, cacheRate, utilization])
+    host.append(t.el);
+  host.append(
+    boardSection(
+      "Diagnostics",
+      "Detailed target, service, and tool health when the live picture needs explanation.",
+    ),
+  );
+  for (const t of [targets, services, config, latency, buzz, sandbox, mcp]) host.append(t.el);
 
   // The Toolchain tile: which binaries this workspace drives and the window each is held
   // to, from magus.tool.v1. Sits beside Insight because both answer "what is this repo
   // like" rather than "what is happening right now", and both ride an on-demand poll.
   const toolchain = toolchainTile();
+  host.append(
+    boardSection(
+      "Workspace intelligence",
+      "Longer-horizon signals that explain why this workspace behaves the way it does.",
+    ),
+  );
   host.append(toolchain.el);
 
   // The Insight section: the five VCS/run-outcome lenses, fed by the on-demand
@@ -403,6 +492,7 @@ function mountTiles(): void {
     toolchain.el,
     insight.el,
     ...insight.tiles.map((t) => t.el),
+    ...[...host.querySelectorAll<HTMLElement>("[data-board-only]")],
   ];
   bind(viewMode, (mode) => {
     const big = mode === "bigPicture";
@@ -614,6 +704,7 @@ export function activate(): void {
   // time the console reopens this surface, and the module (with its store and tile list)
   // outlives the tab.
   releaseTiles();
+  disposePlan();
   lifecycleAbort?.abort();
   lifecycleAbort = new AbortController();
   mountTiles();
@@ -625,6 +716,40 @@ export function activate(): void {
   }
   wireResumeForm();
   wireDemoButton();
+
+  document
+    .querySelectorAll<HTMLButtonElement>("#dash-main [data-dashboard-mode]")
+    .forEach((button) => {
+      button.addEventListener(
+        "click",
+        () => setDashboardMode(button.dataset.dashboardMode === "plan" ? "plan" : "overview"),
+        {
+          signal: lifecycleAbort?.signal,
+        },
+      );
+    });
+  window.addEventListener(
+    "console:dashboard-view",
+    (event) => {
+      const mode = (event as CustomEvent<{ mode?: DashboardMode }>).detail?.mode;
+      if (mode === "plan" || mode === "overview") setDashboardMode(mode);
+    },
+    { signal: lifecycleAbort?.signal },
+  );
+  setDashboardMode(takeDashboardViewIntent() ?? "overview");
+
+  document.querySelectorAll<HTMLElement>("#dash-main [data-open-surface]").forEach((button) => {
+    button.addEventListener(
+      "click",
+      () =>
+        window.dispatchEvent(
+          new CustomEvent("console:open-surface", {
+            detail: { pageId: button.dataset.openSurface },
+          }),
+        ),
+      { signal: lifecycleAbort?.signal },
+    );
+  });
 
   const badge = opt("offline-badge");
   const updateOffline = (): void => {
@@ -696,6 +821,7 @@ export function activate(): void {
 // The standalone page never calls this (the surface lives for the page's lifetime); the console's
 // dashboard PageModule calls it on deactivate.
 export function deactivate(): void {
+  disposePlan();
   transport.stop();
   demo?.stop();
   demo = null;

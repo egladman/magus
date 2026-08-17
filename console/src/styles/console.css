@@ -176,12 +176,22 @@ body[data-console-fill] > main > .console-render-panel {
   padding-inline: 0.4rem;
 }
 #console-outlet div[data-pane-id] > main > .console-graph-app,
-#console-outlet div[data-pane-id] > main > .console-render-panel {
+#console-outlet div[data-pane-id] > main > .console-render-panel,
+/* Activity and Notes build their panel directly in the pane. Keep that implementation detail from changing the Console's outer
+   silhouette: the pane is the frame in every case. */
+#console-outlet div[data-pane-id] > .console-render-panel {
   flex: 1 1 auto;
   min-height: 0;
   height: auto;
   margin: 0;
   position: relative;
+  /* A pane is already the shell's bounded view. Giving just Graph and Log Viewer another rounded
+     card around that view made tab switches change the outer silhouette (and, in dark mode, look
+     like an arbitrary black frame). Dashboard, Diff, and Plan already own only their internal
+     regions, so these two do the same when mounted here. Their standalone-page card fallback
+     remains in each surface sheet. */
+  border: 0;
+  border-radius: 0;
 }
 
 /* Tiling: the divider between two panes, the focused-pane ring, and the in-pane launcher. Class-free:

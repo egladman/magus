@@ -3,6 +3,8 @@
    they do, so it gets the identical ANSI colors, status badges and line markup instead of a plain
    monospace dump. Bundled at build time, so this is an inline, not a runtime request. */
 @import "../render/render.css";
+/* Delegation is a Dashboard mode. */
+@import "../plan/plan.css";
 
 /* dashboard.css - page-scoped styles for the /dashboard/ control surface: the edge-to-edge
    dense tiles and the connect/landing screen.
@@ -23,6 +25,60 @@ body[data-dash-native] { margin: 0; }
    last tile at any scroll position. */
 [data-dash-native] .console-dashboard-main,
 .console-dashboard-main { max-width: none; margin: 0; padding: var(--console-pad); padding-bottom: calc(var(--console-pad) + var(--console-statusbar-h)); }
+
+.console-dashboard-main[data-mode="plan"] {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.console-dashboard-main[data-mode="plan"] #dash-plan-host {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 34rem;
+}
+#dash-plan-host > .console-plan-layout { flex: 1 1 auto; min-height: 0; }
+
+.console-dashboard-related {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.7rem;
+  margin-block-end: var(--console-gap);
+  padding-block-end: var(--pf-t--global--spacer--sm);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-dashboard-related__label { color: var(--pf-t--global--text--color--subtle); font-size: var(--pf-t--global--font--size--sm); }
+.console-dashboard-mode { margin-inline-end: auto; }
+.console-dashboard-mode .pf-v6-c-toggle-group__button[aria-pressed="true"] { background: var(--pf-t--global--background--color--secondary--default); }
+
+/* Board sections prioritize live work. */
+.console-dashboard-section {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  padding-block: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--xs);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-dashboard-section h2 { margin: 0; font-size: var(--pf-t--global--font--size--lg); }
+.console-dashboard-section p { margin: 0; color: var(--pf-t--global--text--color--subtle); font-size: var(--pf-t--global--font--size--sm); }
+@media (max-width: 700px) {
+  .console-dashboard-section { align-items: flex-start; flex-direction: column; gap: 0.15rem; }
+}
+
+.console-dashboard-orchestration {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.15rem 0.7rem;
+  margin-block-end: 0.7rem;
+  padding: 0.65rem 0.75rem;
+  border-inline-start: 3px solid var(--console-status-running);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-dashboard-orchestration[data-state="attention"] { border-inline-start-color: var(--console-status-danger); }
+.console-dashboard-orchestration[data-state="idle"] { border-inline-start-color: var(--pf-t--global--border--color--default); }
+.console-dashboard-orchestration__line { min-width: 0; }
+.console-dashboard-orchestration__detail { color: var(--pf-t--global--text--color--subtle); font-size: var(--pf-t--global--font--size--sm); }
+.console-dashboard-orchestration__plan { grid-column: 2; grid-row: 1 / span 2; align-self: center; }
 
 /* Panels: a responsive 2-column grid. Tiles span the full width by default; a compact tile opts
    into a single column with [data-half] so it pairs with a neighbor instead of eating a whole
@@ -730,7 +786,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 @media (min-aspect-ratio: 8 / 5) {
   [data-bigpicture] #dash-panels {
     grid-template-columns: repeat(12, minmax(0, 1fr));
-    grid-template-rows: repeat(8, minmax(0, 1fr));
+    grid-template-rows: repeat(9, minmax(0, 1fr));
   }
   /* The rotating slot sits UNDER the live-activity column, not in a band of its own.
      A full-width band was the obvious placement and the wrong one: adding rows without taking any
@@ -741,14 +797,19 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
      Every member is placed in the SAME area and stacked; the rotator marks one
      [data-rotate-active] and the rules further down reveal exactly that one. */
   [data-bigpicture] #dash-panels > [data-rotate] {
-    grid-row: 4 / 7;
+    grid-row: 4 / 8;
     grid-column: var(--bp-split-next, 9) / -1;
   }
   [data-bigpicture] #dash-panels > .console-dashboard-hero {
     grid-row: 1 / 3; grid-column: 1 / var(--bp-split-next, 9);
   }
+  /* Orchestration belongs directly under the verdict: on a shared screen, who is carrying the
+     work and whether the guard blocked them outranks machine counters. */
+  [data-bigpicture] #dash-panels > [data-card="agents"] {
+    grid-row: 3 / 5; grid-column: 1 / var(--bp-split-next, 9);
+  }
   [data-bigpicture] #dash-panels > [data-card="gantt"] {
-    grid-row: 3 / 7; grid-column: 1 / var(--bp-split-next, 9);
+    grid-row: 5 / 8; grid-column: 1 / var(--bp-split-next, 9);
   }
   [data-bigpicture] #dash-panels > [data-card="activity"] {
     grid-row: 1 / 4; grid-column: var(--bp-split-next, 9) / -1;
@@ -757,13 +818,12 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
      them as the column above moves would make the whole board shuffle on every drag.
      EVERY panel that Big Picture shows must be placed explicitly here - an unplaced one is
      auto-placed into an implicit row and pushes the canvas past the viewport. */
-  [data-bigpicture] #dash-panels > [data-card="pool"] { grid-row: 7 / 9; grid-column: 1 / 3; }
-  [data-bigpicture] #dash-panels > [data-card="cache-local"] { grid-row: 7 / 9; grid-column: 3 / 6; }
-  /* Three columns, not two: the host names are the content here ("claude-code", "opencode"), and at
-     two they wrapped mid-word into a second line. */
-  [data-bigpicture] #dash-panels > [data-card="agents"] { grid-row: 7 / 9; grid-column: 6 / 9; }
-  [data-bigpicture] #dash-panels > [data-card="workspaces"] { grid-row: 7 / 9; grid-column: 9 / 11; }
-  [data-bigpicture] #dash-panels > [data-card="locks"] { grid-row: 7 / 9; grid-column: 11 / -1; }
+  [data-bigpicture] #dash-panels > [data-card="pool"] { grid-row: 8 / 10; grid-column: 1 / 3; }
+  [data-bigpicture] #dash-panels > [data-card="cache-local"] { grid-row: 8 / 10; grid-column: 3 / 7; }
+  /* The bottom rail is machine state only. Orchestration has its own prominent slot above, and the
+     remaining four rail panels use the full width rather than leaving a dead gap where it used to sit. */
+  [data-bigpicture] #dash-panels > [data-card="workspaces"] { grid-row: 8 / 10; grid-column: 7 / 10; }
+  [data-bigpicture] #dash-panels > [data-card="locks"] { grid-row: 8 / 10; grid-column: 10 / -1; }
   /* The drag affordance is a GRID ITEM, placed in the column the split names and spanning the same
      rows as the two panels it divides. The grid positions it - there is no measuring, no
      ResizeObserver and no absolute positioning, which is how the pane tiler's divider works too
@@ -771,31 +831,34 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
      edge into the middle of the gap; it is static CSS, not a runtime calculation. */
   [data-bigpicture] #dash-panels > .console-dashboard-split {
     display: block;
-    grid-row: 1 / 7;
+    grid-row: 1 / 8;
     grid-column: var(--bp-split-next, 9);
     justify-self: start;
     margin-left: calc((var(--bp-gap) + var(--bp-u) * 0.55) / -2);
   }
 }
 
-/* Square-ish (between 4:5 and 16:10): a portrait monitor, a tablet, a half-tiled window. 6 x 12. */
+/* Square-ish (between 4:5 and 16:10): a portrait monitor, a tablet, a half-tiled window. The
+   rotating diagnostic slot gets a real area here too, rather than spilling every member below the
+   canvas when this breakpoint is active. */
 @media (min-aspect-ratio: 4 / 5) and (max-aspect-ratio: 8 / 5) {
   [data-bigpicture] #dash-panels {
     grid-template-columns: repeat(6, minmax(0, 1fr));
-    grid-template-rows: repeat(14, minmax(0, 1fr));
+    grid-template-rows: repeat(15, minmax(0, 1fr));
     grid-template-areas:
       "verdict verdict verdict verdict verdict verdict"
       "verdict verdict verdict verdict verdict verdict"
-      "runs    runs    runs    runs    runs    runs"
+      "agents  agents  agents  agents  agents  agents"
+      "agents  agents  agents  agents  agents  agents"
       "runs    runs    runs    runs    runs    runs"
       "runs    runs    runs    runs    runs    runs"
       "runs    runs    runs    runs    runs    runs"
       "now     now     now     now     now     now"
       "now     now     now     now     now     now"
+      "rotate  rotate  rotate  rotate  rotate  rotate"
+      "rotate  rotate  rotate  rotate  rotate  rotate"
       "pool    pool    cache   cache   cache   cache"
       "pool    pool    cache   cache   cache   cache"
-      "agents  agents  agents  agents  agents  agents"
-      "agents  agents  agents  agents  agents  agents"
       "ws      ws      ws      locks   locks   locks"
       "ws      ws      ws      locks   locks   locks";
   }
@@ -810,7 +873,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: none;
     grid-auto-rows: minmax(calc(var(--bp-u) * 14), auto);
-    grid-template-areas: "verdict" "runs" "now" "agents" "pool" "cache" "ws" "locks";
+    grid-template-areas: "verdict" "agents" "runs" "now" "rotate" "pool" "cache" "ws" "locks";
     overflow-y: auto;
   }
   /* Stack the hero. It is a space-between row of verdict-and-detail against the three counts, which
@@ -861,6 +924,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   [data-bigpicture] #dash-panels > [data-card="workspaces"] { grid-area: ws; }
   [data-bigpicture] #dash-panels > [data-card="locks"] { grid-area: locks; }
   [data-bigpicture] #dash-panels > [data-card="agents"] { grid-area: agents; }
+  [data-bigpicture] #dash-panels > [data-rotate] { grid-area: rotate; }
 }
 
 /* The split handle: a thin vertical grab strip parked on the boundary between the left stack and
@@ -943,7 +1007,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 /* On the board the rotation attributes mean nothing - every tile is simply itself, in its own row,
    and the mode-only rules above do not apply. Stated so the attributes can never leak a hidden
    panel onto the board if a future change reorders these rules. */
-:not([data-bigpicture]) #dash-panels > [data-rotate] { opacity: 1; visibility: visible; }
+:root:not([data-bigpicture]) #dash-panels > [data-rotate] { opacity: 1; visibility: visible; }
 
 /* Panels fill their slot and clip rather than overflow. min-height: 0 is required: a grid item
    defaults to min-content in the block axis, so without it a tall panel pushes its row past the
@@ -961,6 +1025,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
    on screen - the whole board rendered into a grid with areas for seven of its twenty children,
    and the unplaced ones spilled into implicit rows past the canvas. */
 [data-bigpicture] #dash-panels > [data-view-hide] { display: none; }
+[data-bigpicture] #dash-panels > [data-board-only] { display: none; }
 [data-bigpicture] .pf-v6-c-card__body {
   flex: 1 1 auto;
   min-height: 0;
@@ -1046,6 +1111,15 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
     calc(var(--bp-u) * 1.3);
 }
 [data-bigpicture] .console-dashboard-row { font-size: calc(var(--bp-u) * 1.15); }
+[data-bigpicture] .console-dashboard-orchestration {
+  grid-template-columns: 1fr;
+  gap: calc(var(--bp-u) * 0.3);
+  margin-block-end: calc(var(--bp-u) * 0.55);
+  padding: calc(var(--bp-u) * 0.65) calc(var(--bp-u) * 0.85);
+}
+[data-bigpicture] .console-dashboard-orchestration__line { font-size: calc(var(--bp-u) * 1.35); }
+[data-bigpicture] .console-dashboard-orchestration__detail { font-size: calc(var(--bp-u) * 1.05); }
+[data-bigpicture] .console-dashboard-orchestration__plan { display: none; }
 /* Chunkier in Big Picture, but sized against the panel's HEIGHT rather than its width. The pool
    panel is deliberately the narrowest in the bottom row (two of twelve columns) because a compact
    square block needs far less width than the cache KPIs beside it - so the binding constraint is

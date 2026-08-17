@@ -14,6 +14,7 @@ import {
   setActive,
   setLayout,
   renameTab,
+  migratePlanToDashboard,
   workspaceStore,
   type TabState,
 } from "./tabs";
@@ -187,7 +188,6 @@ const SURFACES: Launchable[] = [
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
   { pageId: "graph", label: "Graph Explorer", hint: "Start exploring the knowledge graph" },
   { pageId: "diff", label: "Diff", hint: "Read what you have changed but not committed" },
-  { pageId: "plan", label: "Plan", hint: "The delegation tree an orchestrating agent is running" },
   // Not "what people wrote about this workspace" - that describes the storage. A note's whole point is
   // that someone who was here before you left it for you, at the spot where it matters.
   { pageId: "notes", label: "Notes", hint: "What people left here for whoever comes next" },
@@ -209,6 +209,7 @@ const SURFACES: Launchable[] = [
 // (internal/service/console KnownSurfaces): the daemon serves the console shell for exactly these
 // paths (SPA fallback), so the boot router below opens exactly these from the path. Keep the two
 // lists in step.
+// Preserve legacy Plan links as Dashboard delegation mode.
 const CLEAN_PATH_SURFACES = ["logs", "dashboard", "graph", "activity", "notes", "diff", "plan"];
 
 // consoleSurfaceFromPath returns the surface a /console/<surface>/ entry path names, or null when
@@ -746,6 +747,11 @@ export function startConsole(
   loadBuildInfo(); // fetch the build fingerprint once; fills every status bar's version chip
   applyFocusRing(getFocusRing()); // apply the persisted focus-ring preference before anything renders
   const ws = workspaceStore();
+  const legacyPlan = migratePlanToDashboard(ws.get());
+  if (legacyPlan.workspace !== ws.get()) ws.set(legacyPlan.workspace);
+  if (legacyPlan.openedPlan)
+    (window as Window & { __magusConsoleDashboardView?: "plan" }).__magusConsoleDashboardView =
+      "plan";
   const mounts = new Map<string, Mounted>(); // tabId -> its mounted tile + status bar
 
   // The launcher is the outlet's EMPTY STATE, not a tab: one element appended straight into the
@@ -1785,6 +1791,23 @@ export function startConsole(
     mount(tab);
   }
 
+  // Dashboard owns the live delegation plan. The ephemeral intent reaches a lazily loaded Dashboard
+  // bundle even on its first mount; the event switches an already-mounted Dashboard immediately.
+  function openDashboardPlan(): void {
+    (window as Window & { __magusConsoleDashboardView?: "plan" }).__magusConsoleDashboardView =
+      "plan";
+    open("dashboard");
+    window.dispatchEvent(new CustomEvent("console:dashboard-view", { detail: { mode: "plan" } }));
+  }
+
+  // Lazy surface bundles do not import the shell. Cross-links therefore ask the sole owner of
+  // tabs, tiling, and focus to reveal a surface rather than inventing a second navigation path.
+  window.addEventListener("console:open-surface", (event) => {
+    const pageId = (event as CustomEvent<{ pageId?: string }>).detail?.pageId;
+    if (pageId === "plan") openDashboardPlan();
+    else if (pageId) open(pageId);
+  });
+
   // tabHostsSurface reports whether a tab already shows a surface, checking its tiled panes when it
   // has a layout and its primary pageId otherwise - so a single-instance surface is never opened twice.
   function tabHostsSurface(t: TabState, pageId: string): boolean {
@@ -1849,18 +1872,6 @@ export function startConsole(
       css: "diff/diff.css",
     }),
   );
-  // Plan authors its own sheet for the same reason Diff does: the stage is a laid-out node/edge
-  // drawing with its own geometry, and PF has no component for one. Its activate() hands back a
-  // per-mount controller carrying setVisible, so each pane's poll stops on its own while that pane
-  // is backgrounded.
-  register(
-    moduleSurface({
-      id: "plan",
-      title: "Plan",
-      bundle: "plan/plan.js",
-      css: "plan/plan.css",
-    }),
-  );
   // Actions is registered from the shell bundle (not a lazy surface bundle) - it is a thin, static
   // catalogue over the console's own live command list + keymap, the same deps the keyboard cheat
   // sheet above reads, so a separate bundle would get nothing but import overhead.
@@ -1895,7 +1906,11 @@ export function startConsole(
   // workspace, so a dedicated window never disturbs the main console's saved tabs. Unknown/absent param
   // falls through to the normal restore below.
   const launchApp = new URLSearchParams(location.search).get("app");
-  const appSurface = launchApp ? SURFACES.find((s) => s.pageId === launchApp) : undefined;
+  const appPageId = launchApp === "plan" ? "dashboard" : launchApp;
+  if (launchApp === "plan")
+    (window as Window & { __magusConsoleDashboardView?: "plan" }).__magusConsoleDashboardView =
+      "plan";
+  const appSurface = appPageId ? SURFACES.find((s) => s.pageId === appPageId) : undefined;
   if (appSurface && registry.has(appSurface.pageId)) {
     document.documentElement.dataset.appmode = appSurface.pageId;
     // Must be set before mount(): its show() titles the window, and would otherwise read the
@@ -1936,7 +1951,8 @@ export function startConsole(
   // path back to the console base. The fragment (any #port/#token/content) and query are preserved;
   // only the surface segment is dropped.
   if (entrySurface) {
-    if (registry.has(entrySurface)) open(entrySurface);
+    if (entrySurface === "plan") openDashboardPlan();
+    else if (registry.has(entrySurface)) open(entrySurface);
     history.replaceState(null, "", consoleBasePath() + location.search + location.hash);
   }
 

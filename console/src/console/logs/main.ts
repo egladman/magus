@@ -18,6 +18,7 @@ import type { Journal } from "../../gen/magus/viewer/v1/viewer_pb";
 import { parseHash, wantsDemo, getLiveToken, daemonAttach } from "../../lib/daemon";
 import { getDefaultHost } from "../../lib/settings";
 import { initRunBrowser, fetchRunOutput, type RunSummary } from "./runtree";
+import { cancelLiveRender } from "./live";
 import { decodeFragmentBytes, viewerParams } from "./fragment";
 import { state, waterfallSource } from "./state";
 import {
@@ -670,6 +671,7 @@ export function deactivate(): void {
     state.liveAbort.abort();
     state.liveAbort = null;
   }
+  cancelLiveRender();
   uninstallKeys?.();
   uninstallKeys = null;
   // The status bar outlives this module - it is a singleton the console re-activates on reopen - so

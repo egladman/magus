@@ -79,10 +79,9 @@ export function eventSection(ev: ActivityEvent): Section {
   const when = clockTime(tsMillis(ev.time));
   const dur = durText(ev.duration);
 
-  // Head: the action and actor lead; the terse meta (kind, outcome, duration, time) trails
-  // after a wide gap so the row scans left-to-right as "what - who ... how it went, when".
+  // Action and actor lead; metadata trails.
   const lead = [ev.action || kind, ev.actor].filter(Boolean).join("  ");
-  const meta = [kind, ok ? "ok" : "error", dur, when].filter(Boolean).join(" - ");
+  const meta = [kind, ok ? "ok" : "error", dur, when].filter(Boolean).join(", ");
   const title = meta ? lead + "   " + meta : lead;
 
   const body: string[] = [];

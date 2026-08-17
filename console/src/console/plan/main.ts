@@ -851,18 +851,19 @@ export function activate(host: HTMLElement): PlanInstance {
       const mark = h("span", "console-plan-list__mark", n.mark);
       mark.dataset.state = n.state;
       const idEl = h("span", "console-plan-list__id", n.text);
-      const metaEl = h("span", "console-plan-list__meta", n.meta.join(" - "));
+      const metaEl = h("span", "console-plan-list__meta");
+      for (const item of n.meta) metaEl.append(h("span", "console-plan-list__meta-item", item));
       btn.append(mark, idEl, metaEl);
       if (n.warn.length) {
         btn.dataset.warn = "";
-        // In words, not in colour alone: the same rule the state mark follows, for the same
-        // reason - this row says something a reader has to be able to read.
-        btn.append(h("span", "console-plan-list__warn", n.warn.join(" - ")));
+        const warning = h("span", "console-plan-list__warn");
+        for (const item of n.warn) warning.append(h("span", "console-plan-list__warn-item", item));
+        btn.append(warning);
       }
       // Filled by syncAges rather than here: age moves on its own, and rebuilding this list to
       // advance a clock would take the focus off whatever row a reader is standing on.
       btn.append(h("span", "console-plan-list__age"));
-      btn.title = n.id + " - " + n.label;
+      btn.title = `${n.id}: ${n.label}`;
       li.append(btn);
       return li;
     });
@@ -948,12 +949,9 @@ export function activate(host: HTMLElement): PlanInstance {
       if (n.id === selected) g.dataset.selected = "";
       g.setAttribute("transform", `translate(${at.x} ${at.y})`);
       const title = svgEl("title");
-      title.textContent =
-        n.id +
-        " - " +
-        n.label +
-        (n.readOnly ? " - read only" : "") +
-        (n.warn.length ? " - " + n.warn.join(" - ") : "");
+      title.textContent = [n.id, n.label, n.readOnly ? "read only" : "", ...n.warn]
+        .filter(Boolean)
+        .join("\n");
       const box = svgEl("rect", "console-plan-node__box");
       box.setAttribute("x", String(-NODE_W / 2));
       box.setAttribute("y", String(-NODE_H / 2));

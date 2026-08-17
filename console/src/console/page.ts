@@ -33,10 +33,9 @@ export interface PageController<S, Q> {
   // than designed away, which is why the hook is the convention and not the exception - a surface
   // with nowhere to put it is a surface that discovers the problem later.
   //
-  // Still optional in the TYPE, because a surface may legitimately have nothing to say; the ones
-  // that do declare it empty with a note saying so, rather than omitting it and leaving the reader
-  // to wonder which case they are in.
-  setVisible?(visible: boolean): void;
+  // Required at the shell boundary. A static surface uses an explicit no-op, but it cannot bypass
+  // the lifecycle: future streams, polling, or status-bar controls start from one enforced place.
+  setVisible(visible: boolean): void;
   // The document this surface currently has open, for the console to title the tab after
   // (see TitleSource). A surface with no document concept omits it and keeps its static title.
   readonly docTitle?: TitleSource;

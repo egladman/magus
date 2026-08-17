@@ -159,7 +159,7 @@ test("no_return is its own state and is never folded into fail", () => {
 test("the overview counts the units, breaks down the states, and calls out no-return", () => {
   assert.equal(
     overviewLine(buildPlan(TREE)),
-    "4 units - 1 declared, 1 running, 1 pass - 1 no-return",
+    "4 units. 1 declared, 1 running, 1 pass. 1 no-return.",
   );
 });
 
@@ -167,9 +167,9 @@ test("the overview counts the units, breaks down the states, and calls out no-re
 test("the no-return call-out is present even when it is zero", () => {
   assert.equal(
     overviewLine(buildPlan([unit({ id: "a", state: "pass" })])),
-    "1 unit - 1 pass - 0 no-return",
+    "1 unit. 1 pass. 0 no-return.",
   );
-  assert.equal(overviewLine(buildPlan([])), "0 units - 0 no-return");
+  assert.equal(overviewLine(buildPlan([])), "0 units. 0 no-return.");
 });
 
 // ---- the heartbeat ---------------------------------------------------------
