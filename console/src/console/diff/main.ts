@@ -1211,11 +1211,15 @@ export function activate(host: HTMLElement): () => void {
 
   // --- load -----------------------------------------------------------------
 
-  const showEmpty = (title: string, body: string, offerDemo = false): void => {
+  // cmd is the trailing "run this" half of an empty state, as a real <code> element the way the
+  // activity trail writes it. Backticks in the string rendered as backticks - textContent does not
+  // read markdown - so this surface was the one telling the reader to type punctuation.
+  const showEmpty = (title: string, body: string, cmd?: string, offerDemo = false): void => {
     state.phase = "empty";
     root.dataset.phase = "empty";
     emptyTitle.textContent = title;
     emptyBody.textContent = body;
+    if (cmd) emptyBody.append(" ", h("code", undefined, cmd), ".");
     emptyFooter.hidden = !offerDemo;
   };
 
@@ -1254,7 +1258,8 @@ export function activate(host: HTMLElement): () => void {
     if (!hp) {
       showEmpty(
         "No daemon connected",
-        "Diff reads the working tree through a local daemon. Start one with `magus server start`.",
+        "Diff reads the working tree through a local daemon. Start one with:",
+        "magus server start",
         true,
       );
       return;

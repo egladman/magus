@@ -69,11 +69,11 @@
   padding-block-end: var(--pf-t--global--spacer--xs);
 }
 
+/* No uppercase, no letter-spacing. Both are shouting devices, and this is the quietest thing on
+   the surface - it labels a column whose contents already say what they are. */
 .console-diff-sidebar__heading {
   font-size: var(--pf-t--global--font--size--xs);
   color: var(--pf-t--global--text--color--subtle);
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
 }
 
 .console-diff-sidebar__toggle,
@@ -141,8 +141,6 @@
   background: var(--pf-t--global--background--color--secondary--hover);
 }
 
-/* The path truncates from the START: the tail of a path is what distinguishes two files in a
- * monorepo, and clipping it leaves a column of identical prefixes. */
 /* The project heading. Sticky, so the answer to "which project am I looking at" survives
    scrolling a long index - one element per group, each in its own containing block, which is the
    arrangement the stream's rows could not have. */
@@ -175,7 +173,7 @@
   text-align: left;
   font-size: var(--pf-t--global--font--size--xs);
   font-weight: var(--pf-t--global--font--weight--body--bold);
-  color: var(--pf-t--global--text--color--regular);
+  color: var(--pf-t--global--text--color--subtle);
 }
 
 .console-diff-sidebar__project-count {
@@ -191,10 +189,15 @@
   min-width: 0;
 }
 
+/* subtle, not regular: regular is pure #ffffff against a #151515 panel, the highest contrast the
+   palette can make, and a column of it is what made this list hard to sit in front of. The
+   launcher tiles never do that - their body text is subtle and reads easier for it. Hierarchy
+   still holds because the directory beneath is smaller and the active row carries an accent. */
 .console-diff-sidebar__path {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  color: var(--pf-t--global--text--color--subtle);
 }
 
 /* Truncated from the START: a directory's LAST segments are what distinguish it, so
