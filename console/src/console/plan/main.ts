@@ -41,8 +41,11 @@ import {
   createDaemonTransport,
   getLiveToken,
   logsLink,
+  parseHash,
   resolveDaemonHost,
+  wantsDemo,
 } from "../../lib/daemon";
+import { demoUnits, demoOverlaps } from "./demo";
 import { registerCommand, unregisterCommand } from "../commands";
 import { h } from "../view";
 // The drawer OWNS the activity row model and the projections onto it (a pool slot, a lock holder, a
@@ -388,6 +391,8 @@ interface Refs {
   detail: HTMLElement;
   emptyTitle: HTMLElement;
   emptyBody: HTMLElement;
+  emptyFooter: HTMLElement;
+  demoBtn: HTMLButtonElement;
   refreshBtn: HTMLButtonElement;
   sourceBtns: [PlanSource, HTMLButtonElement][];
   targetWrap: HTMLElement;
@@ -504,7 +509,19 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   const emptyBodyWrap = h("div", "pf-v6-c-empty-state__body");
   const emptyBody = h("p", undefined, "");
   emptyBodyWrap.append(emptyBody);
-  emptyContent.append(emptyTitle, emptyBodyWrap);
+  // The showcase offer, as the diff surface makes it: someone with no daemon running meets this
+  // first, and a dead end is a worse first impression than a fabricated plan clearly labelled as
+  // one. Hidden unless the caller offers it - "nothing delegated" is a real answer about a real
+  // workspace, and burying it under a demo button would be answering a different question.
+  const emptyFooter = h("div", "pf-v6-c-empty-state__footer");
+  const emptyActions = h("div", "pf-v6-c-empty-state__actions");
+  const demoBtn = h("button", "pf-v6-c-button pf-m-primary");
+  demoBtn.type = "button";
+  demoBtn.append(h("span", "pf-v6-c-button__text", "See the demo"));
+  emptyActions.append(demoBtn);
+  emptyFooter.append(emptyActions);
+  emptyFooter.hidden = true;
+  emptyContent.append(emptyTitle, emptyBodyWrap, emptyFooter);
   empty.append(emptyContent);
 
   root.append(toolbar, tree, stageBox, detail, empty);
@@ -521,6 +538,8 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
     detail,
     emptyTitle,
     emptyBody,
+    emptyFooter,
+    demoBtn,
     refreshBtn,
     sourceBtns,
     targetWrap,
@@ -622,6 +641,9 @@ export function activate(host: HTMLElement): PlanInstance {
   // it for good. Without that latch a reader who chose Declared over an empty ledger would be moved
   // back to Run four seconds later, and again on every tick after that.
   let sourceDecided = false;
+  // The shared #demo fragment, read once at mount. Polling is never started in the demo: there is
+  // no daemon to poll and the fixture does not move.
+  let demo = wantsDemo(parseHash());
   let model: PlanModel = buildPlan([]);
   let join: RunJoin = joinRuns(model, []);
   let runModel: RunPlanModel = emptyRunPlan();
@@ -686,10 +708,13 @@ export function activate(host: HTMLElement): PlanInstance {
     refs.note.hidden = line === "";
   };
 
-  const showEmpty = (title: string, body: string): void => {
+  const showEmpty = (title: string, body: string, cmd?: string, offerDemo = false): void => {
     refs.root.dataset.phase = "empty";
     refs.emptyTitle.textContent = title;
     refs.emptyBody.textContent = body;
+    // A real <code> element, as every other surface writes a command.
+    if (cmd) refs.emptyBody.append(" ", h("code", undefined, cmd), ".");
+    refs.emptyFooter.hidden = !offerDemo;
   };
 
   // signature is what decides whether the plan on screen still matches the plan in hand. The list is
@@ -1283,7 +1308,27 @@ export function activate(host: HTMLElement): PlanInstance {
     render(runOverviewLine(runModel), "");
   };
 
+  // The showcase joins the pipeline one step in, with the ledger the daemon would have returned.
+  // Everything below buildPlan() is the production path, so what it shows off is the surface itself
+  // rather than a rendering of it. No fetch is issued at all, which is what makes
+  // /console/plan/#demo work with no daemon, no workspace and offline.
+  const showDemo = (): void => {
+    stopReading();
+    source = "declared";
+    sourceDecided = true;
+    paintSource();
+    model = buildPlan(demoUnits(Date.now()), demoOverlaps());
+    join = joinRuns(model, []);
+    drawn = declaredDrawn(model);
+    if (selected && !model.byId.has(selected)) selected = null;
+    render(overviewLine(model), "");
+  };
+
   const refresh = async (): Promise<void> => {
+    if (demo) {
+      showDemo();
+      return;
+    }
     const daemonHost = resolveDaemonHost();
     lastHost = daemonHost;
     if (!daemonHost) {
@@ -1294,8 +1339,10 @@ export function activate(host: HTMLElement): PlanInstance {
       showEmpty(
         "No daemon connected",
         source === "declared"
-          ? "The plan view reads the delegation ledger from a local daemon. Start one with: magus server start"
-          : "The run plan comes from a local daemon. Start one with: magus server start",
+          ? "The plan view reads the delegation ledger from a local daemon. Start one with:"
+          : "The run plan comes from a local daemon. Start one with:",
+        "magus server start",
+        true,
       );
       setSummary("Not connected to a daemon.");
       return;
@@ -1317,6 +1364,18 @@ export function activate(host: HTMLElement): PlanInstance {
   // --- events ---------------------------------------------------------------
 
   refs.refreshBtn.addEventListener("click", () => void refresh(), { signal: controller.signal });
+  // Entering the showcase in place, NOT by reloading: inside the console a reload would tear down
+  // the whole SPA (every tab) instead of this one surface. replaceState so a standalone refresh
+  // stays in the demo and the URL reads as a shareable /console/plan/#demo.
+  refs.demoBtn.addEventListener(
+    "click",
+    () => {
+      history.replaceState(null, "", "#demo");
+      demo = true;
+      void refresh();
+    },
+    { signal: controller.signal },
+  );
 
   refs.list.addEventListener(
     "click",
