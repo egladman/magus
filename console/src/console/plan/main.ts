@@ -46,6 +46,7 @@ import {
   wantsDemo,
 } from "../../lib/daemon";
 import { demoUnits, demoOverlaps } from "./demo";
+import { persisted } from "../../lib/persist";
 import { registerCommand, unregisterCommand } from "../commands";
 import { h } from "../view";
 // The drawer OWNS the activity row model and the projections onto it (a pool slot, a lock holder, a
@@ -91,6 +92,10 @@ import {
 // is watched while work moves under it, so the operator's configured dashboard refresh (20s by
 // default) is far too slow to answer "did that unit come back".
 const POLL_MS = 4000;
+
+// The unit index collapses to a rail, as the diff's file index and the activity trail's event index
+// do. Persisted, because a reader working in a narrow tile should not re-close it every visit.
+const treeCell = persisted<boolean>("plan-tree-collapsed", false);
 const FETCH_TIMEOUT_MS = 4000;
 
 const SVG_NS = "http://www.w3.org/2000/svg";
@@ -393,7 +398,9 @@ interface Refs {
   emptyBody: HTMLElement;
   emptyFooter: HTMLElement;
   demoBtn: HTMLButtonElement;
-  refreshBtn: HTMLButtonElement;
+  treeHead: HTMLElement;
+  treeHide: HTMLButtonElement;
+  treeReopen: HTMLButtonElement;
   sourceBtns: [PlanSource, HTMLButtonElement][];
   targetWrap: HTMLElement;
   targetInput: HTMLInputElement;
@@ -459,18 +466,29 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   targetControl.append(targetInput);
   targetWrap.append(targetLabel, targetControl, targetList);
 
-  const refreshBtn = h(
-    "button",
-    "pf-v6-c-button pf-m-plain console-plan-refresh",
-  ) as HTMLButtonElement;
-  refreshBtn.type = "button";
-  refreshBtn.append(h("span", "pf-v6-c-button__text", "Reload"));
-  toolbar.append(sourceGroup, summary, note, targetWrap, refreshBtn);
+  // No Reload control. The surface polls every POLL_MS and pauses while the tab is hidden, so the
+  // plan on screen is already the plan the daemon has; a button that re-asks is chrome implying
+  // the view might be stale when it is not. `plan.refresh` stays registered for the command bar
+  // and its keybinding, which is where a deliberate re-read belongs.
+  toolbar.append(sourceGroup, summary, note, targetWrap);
 
   const tree = h("nav", "console-plan-tree");
+  const treeHead = h("div", "console-plan-tree__head");
+  const treeTitle = h("span", "console-plan-tree__heading", "Units");
+  const treeHide = h("button", "console-plan-tree__toggle") as HTMLButtonElement;
+  treeHide.type = "button";
+  treeHide.title = "Hide the unit index";
+  treeHide.setAttribute("aria-label", "Hide the unit index");
+  treeHide.textContent = "\u2039";
+  treeHead.append(treeTitle, treeHide);
+  const treeReopen = h("button", "console-plan-reopen") as HTMLButtonElement;
+  treeReopen.type = "button";
+  treeReopen.title = "Show the unit index";
+  treeReopen.setAttribute("aria-label", "Show the unit index");
+  treeReopen.textContent = "\u203a";
   const list = h("ul", "console-plan-list");
   list.setAttribute("role", "list");
-  tree.append(list);
+  tree.append(treeHead, list);
 
   const stageBox = h("div", "console-plan-stage");
   const stage = svgEl("svg", "console-plan-stage__svg");
@@ -524,7 +542,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   emptyContent.append(emptyTitle, emptyBodyWrap, emptyFooter);
   empty.append(emptyContent);
 
-  root.append(toolbar, tree, stageBox, detail, empty);
+  root.append(toolbar, tree, treeReopen, stageBox, detail, empty);
   host.append(root);
   return {
     root,
@@ -540,7 +558,9 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
     emptyBody,
     emptyFooter,
     demoBtn,
-    refreshBtn,
+    treeHead,
+    treeHide,
+    treeReopen,
     sourceBtns,
     targetWrap,
     targetInput,
@@ -676,9 +696,6 @@ export function activate(host: HTMLElement): PlanInstance {
     }
     const declared = source === "declared";
     refs.tree.setAttribute("aria-label", declared ? "Delegation units" : "Plan targets");
-    const reload = declared ? "Reload the delegation ledger" : "Reload the run plan";
-    refs.refreshBtn.setAttribute("aria-label", reload);
-    refs.refreshBtn.title = reload;
     refs.targetWrap.hidden = declared;
   };
 
@@ -831,6 +848,23 @@ export function activate(host: HTMLElement): PlanInstance {
     const layout = layoutPlan(drawn);
     refs.stage.setAttribute("viewBox", layout.viewBox);
 
+    // Attach points are FANNED along an edge rather than shared. Every connector leaving
+    // claims-audience used to start at the same pixel, so five lines left as one stroke and only
+    // separated somewhere out in the middle - which is what made the drawing unreadable however
+    // the curves were shaped. Counting them first is what lets each one own a point.
+    const outOf = new Map<string, number>();
+    const intoOf = new Map<string, number>();
+    for (const e of drawn.edges) {
+      outOf.set(e.from, (outOf.get(e.from) ?? 0) + 1);
+      intoOf.set(e.to, (intoOf.get(e.to) ?? 0) + 1);
+    }
+    const outSeen = new Map<string, number>();
+    const inSeen = new Map<string, number>();
+    // Spread over the box's height: point k of n sits at h * k/(n+1), so they are evenly placed
+    // and never land on a corner. NODE_H is 30, so a heavily-fanned node packs tighter than the
+    // 12px an authored diagram would use - still far better than one shared point.
+    const fan = (n: number, k: number): number => (NODE_H * (k + 1)) / (n + 1) - NODE_H / 2;
+
     const paths = drawn.edges.map((e, i) => {
       const a = layout.at.get(e.from);
       const b = layout.at.get(e.to);
@@ -839,16 +873,41 @@ export function activate(host: HTMLElement): PlanInstance {
       if (layout.back.has(i)) path.dataset.back = "";
       path.setAttribute("marker-end", "url(#" + markerBase + "-" + e.kind + ")");
       if (!a || !b) return path;
+
+      const ok = outSeen.get(e.from) ?? 0;
+      const ik = inSeen.get(e.to) ?? 0;
+      outSeen.set(e.from, ok + 1);
+      inSeen.set(e.to, ik + 1);
+
       const sx = a.x + NODE_W / 2;
+      const sy = a.y + fan(outOf.get(e.from) ?? 1, ok);
       const tx = b.x - NODE_W / 2;
-      const dx = tx - sx;
-      // A gentle horizontal-out bezier, the shape the graph explorer's DAG modes draw, so the plan
-      // reads as flow. Too short a span curves into itself, so those stay straight.
+      const ty = b.y + fan(intoOf.get(e.to) ?? 1, ik);
+
+      // ORTHOGONAL elbows with quarter-arc corners, not a bezier. A curve whose shape is a
+      // function of its endpoints gives every connector a different sweep, and a screenful of
+      // them reads as tangle rather than as structure - the house diagram rules call a diagonal
+      // connector an outright failure for exactly this reason. Right angles share one vocabulary:
+      // out, across, in. The eye follows an axis far more easily than it follows an arc, and two
+      // lines running the same leg stay legible because they are parallel rather than nested.
+      //
+      // The run breaks at the midline between the columns, so every connector in a column pair
+      // turns on the same x and the verticals line up into a channel instead of scattering.
+      if (Math.abs(ty - sy) < 0.5) {
+        path.setAttribute("d", `M${sx} ${sy} H${tx}`);
+        return path;
+      }
+      const mx = (sx + tx) / 2;
+      const dir = ty > sy ? 1 : -1;
+      // Never let a corner eat more than half a leg, or the two arcs would overlap into a lump.
+      const r = Math.max(2, Math.min(8, Math.abs(ty - sy) / 2, Math.abs(tx - sx) / 2));
       path.setAttribute(
         "d",
-        Math.abs(dx) > 24
-          ? `M${sx} ${a.y} C${sx + dx * 0.4} ${a.y} ${tx - dx * 0.4} ${b.y} ${tx} ${b.y}`
-          : `M${sx} ${a.y} L${tx} ${b.y}`,
+        `M${sx} ${sy} H${mx - r}` +
+          ` Q${mx} ${sy} ${mx} ${sy + dir * r}` +
+          ` V${ty - dir * r}` +
+          ` Q${mx} ${ty} ${mx + r} ${ty}` +
+          ` H${tx}`,
       );
       return path;
     });
@@ -875,7 +934,10 @@ export function activate(host: HTMLElement): PlanInstance {
       box.setAttribute("y", String(-NODE_H / 2));
       box.setAttribute("width", String(NODE_W));
       box.setAttribute("height", String(NODE_H));
-      box.setAttribute("rx", "2");
+      // 6, on the 4/6/8 radius scale the rest of the console and the house diagram rules use. At 2
+      // the node read as a bare rectangle beside PatternFly's rounded cards and chips, which is
+      // the deviation - not a softer corner.
+      box.setAttribute("rx", "6");
       const mark = svgEl("text", "console-plan-node__mark");
       mark.setAttribute("x", String(-NODE_W / 2 + 8));
       mark.setAttribute("y", "4");
@@ -1363,7 +1425,30 @@ export function activate(host: HTMLElement): PlanInstance {
 
   // --- events ---------------------------------------------------------------
 
-  refs.refreshBtn.addEventListener("click", () => void refresh(), { signal: controller.signal });
+  const applyTree = (collapsed: boolean): void => {
+    refs.root.dataset.tree = collapsed ? "collapsed" : "open";
+    refs.tree.hidden = collapsed;
+    refs.treeReopen.hidden = !collapsed;
+    refs.treeHide.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  };
+  refs.treeHide.addEventListener(
+    "click",
+    () => {
+      treeCell.set(true);
+      applyTree(true);
+    },
+    { signal: controller.signal },
+  );
+  refs.treeReopen.addEventListener(
+    "click",
+    () => {
+      treeCell.set(false);
+      applyTree(false);
+    },
+    { signal: controller.signal },
+  );
+  applyTree(treeCell.get() ?? false);
+
   // Entering the showcase in place, NOT by reloading: inside the console a reload would tear down
   // the whole SPA (every tab) instead of this one surface. replaceState so a standalone refresh
   // stays in the demo and the URL reads as a shareable /console/plan/#demo.

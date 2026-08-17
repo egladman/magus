@@ -975,7 +975,9 @@ test("a repaint that changes nothing leaves the focused output link where it is"
     assert.ok(link, "the running node offers its last log");
     link?.focus();
     assert.equal(document.activeElement, link);
-    host.querySelector<HTMLElement>(".console-plan-refresh")?.click();
+    // The poll is what repaints this surface; plan.refresh drives the same path without waiting
+    // four seconds for a timer. There is no Reload button to click - the surface syncs on its own.
+    dispatchCommand("plan.refresh");
     await settle();
     assert.equal(
       document.activeElement,
@@ -1001,7 +1003,7 @@ test("a changed tier repaints the row that carries it", async () => {
   try {
     await settle();
     assert.match(host.querySelector(".console-plan-list__meta")?.textContent ?? "", /opus/);
-    host.querySelector<HTMLElement>(".console-plan-refresh")?.click();
+    dispatchCommand("plan.refresh");
     await settle();
     assert.match(host.querySelector(".console-plan-list__meta")?.textContent ?? "", /sonnet/);
   } finally {
