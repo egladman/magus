@@ -434,3 +434,26 @@
   background: var(--pf-t--global--background--color--secondary--default);
 }
 .console-plan-reopen[hidden] { display: none; }
+
+/* ---- stage controls -------------------------------------------------------- */
+
+/* The zoom cluster rides the stage's bottom-right corner. Sticky rather than absolute: the stage
+   scrolls when the plan is zoomed in, and a control that scrolls away with the drawing is a
+   control you cannot reach at the moment you want it. */
+.console-plan-zoombar {
+  position: sticky;
+  bottom: 0.4rem;
+  float: right;
+  display: flex;
+  gap: 0.2rem;
+  margin-inline-end: 0.4rem;
+  z-index: 2;
+}
+.console-plan-zoombtn { padding: 0.15rem 0.35rem; }
+.console-plan-zoomicon { width: 0.85rem; height: 0.85rem; }
+
+/* Grab, so the drawing announces that it can be dragged before anybody tries. */
+.console-plan-stage { cursor: grab; }
+.console-plan-stage[data-panning] { cursor: grabbing; }
+/* A pan must not paint a text selection across every label it crosses. */
+.console-plan-stage[data-panning] * { user-select: none; }

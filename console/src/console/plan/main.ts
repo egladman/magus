@@ -412,6 +412,9 @@ interface Refs {
   list: HTMLElement;
   stage: SVGSVGElement;
   stageBox: HTMLElement;
+  zoomOutBtn: HTMLButtonElement;
+  zoomInBtn: HTMLButtonElement;
+  zoomFitBtn: HTMLButtonElement;
   // The stage's two layers, carried rather than re-queried per paint: buildScaffold appends them, so
   // a render that could not find them would mean the scaffold it was handed is not this one.
   edgeLayer: SVGGElement;
@@ -539,7 +542,41 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   const edgeLayer = svgEl("g", "console-plan-edges");
   const nodeLayer = svgEl("g", "console-plan-nodes");
   stage.append(defs, edgeLayer, nodeLayer);
-  stageBox.append(stage);
+  // Zoom controls, sitting on the stage the way a canvas's do. PF small-secondary buttons with an
+  // icon, matching the graph explorer's stage tools rather than inventing a second vocabulary.
+  const zoomBar = h("div", "console-plan-zoombar");
+  const zoomBtn = (label: string, title: string, path: string): HTMLButtonElement => {
+    const b = h("button", "pf-v6-c-button pf-m-secondary pf-m-small console-plan-zoombtn");
+    b.type = "button";
+    b.title = title;
+    b.setAttribute("aria-label", title);
+    const icon = h("span", "pf-v6-c-button__icon");
+    const svg = svgEl("svg", "console-plan-zoomicon");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    const p = svgEl("path");
+    p.setAttribute("d", path);
+    svg.append(p);
+    icon.append(svg);
+    b.append(icon);
+    b.dataset.zoom = label;
+    return b as HTMLButtonElement;
+  };
+  const zoomOutBtn = zoomBtn("out", "Zoom out", "M5 12h14");
+  const zoomInBtn = zoomBtn("in", "Zoom in", "M12 5v14M5 12h14");
+  // The same corners-out glyph the graph explorer's Fit button uses.
+  const zoomFitBtn = zoomBtn(
+    "fit",
+    "Fit the plan to the pane",
+    "M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7",
+  );
+  zoomBar.append(zoomOutBtn, zoomFitBtn, zoomInBtn);
+  stageBox.append(stage, zoomBar);
 
   const detail = h("aside", "console-plan-detail");
   detail.setAttribute("aria-label", "Node detail");
@@ -575,6 +612,9 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
     list,
     stage,
     stageBox,
+    zoomOutBtn,
+    zoomInBtn,
+    zoomFitBtn,
     edgeLayer,
     nodeLayer,
     detail,
@@ -1489,6 +1529,83 @@ export function activate(host: HTMLElement): PlanInstance {
       setZoom(zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
     },
     { passive: false, signal: controller.signal },
+  );
+
+  refs.zoomInBtn.addEventListener("click", () => setZoom(zoom * 1.25), {
+    signal: controller.signal,
+  });
+  refs.zoomOutBtn.addEventListener("click", () => setZoom(zoom / 1.25), {
+    signal: controller.signal,
+  });
+  refs.zoomFitBtn.addEventListener("click", () => setZoom(1), { signal: controller.signal });
+
+  // Drag to pan. The stage is already a scroll container, so panning is just driving its scroll
+  // offsets - no transform to keep in step with the layout, and the scrollbars stay honest about
+  // where you are.
+  //
+  // A drag must not eat a click: the nodes are selectable, and a reader who presses on one and
+  // releases without moving has clicked it. So panning only ENGAGES past a few pixels of travel,
+  // and only a drag that engaged swallows the click that follows it.
+  let panning = false;
+  let moved = false;
+  let startX = 0;
+  let startY = 0;
+  let startLeft = 0;
+  let startTop = 0;
+  const PAN_SLOP = 4;
+  refs.stageBox.addEventListener(
+    "pointerdown",
+    (e) => {
+      if (e.button !== 0) return;
+      // Not from the zoom controls. They sit ON the stage, so without this a press-and-wobble on
+      // a button would start a pan and then swallow its own click.
+      if ((e.target as HTMLElement | null)?.closest(".console-plan-zoombar")) return;
+      panning = true;
+      moved = false;
+      startX = e.clientX;
+      startY = e.clientY;
+      startLeft = refs.stageBox.scrollLeft;
+      startTop = refs.stageBox.scrollTop;
+    },
+    { signal: controller.signal },
+  );
+  refs.stageBox.addEventListener(
+    "pointermove",
+    (e) => {
+      if (!panning) return;
+      const dx = e.clientX - startX;
+      const dy = e.clientY - startY;
+      if (!moved && Math.abs(dx) + Math.abs(dy) < PAN_SLOP) return;
+      if (!moved) {
+        moved = true;
+        refs.stageBox.dataset.panning = "";
+        refs.stageBox.setPointerCapture(e.pointerId);
+      }
+      refs.stageBox.scrollLeft = startLeft - dx;
+      refs.stageBox.scrollTop = startTop - dy;
+    },
+    { signal: controller.signal },
+  );
+  const endPan = (e: PointerEvent): void => {
+    if (!panning) return;
+    panning = false;
+    delete refs.stageBox.dataset.panning;
+    if (refs.stageBox.hasPointerCapture(e.pointerId)) {
+      refs.stageBox.releasePointerCapture(e.pointerId);
+    }
+  };
+  refs.stageBox.addEventListener("pointerup", endPan, { signal: controller.signal });
+  refs.stageBox.addEventListener("pointercancel", endPan, { signal: controller.signal });
+  // Capture phase, so the node's own handler never sees a click that was really the end of a pan.
+  refs.stageBox.addEventListener(
+    "click",
+    (e) => {
+      if (!moved) return;
+      moved = false;
+      e.stopPropagation();
+      e.preventDefault();
+    },
+    { capture: true, signal: controller.signal },
   );
 
   const applyTree = (collapsed: boolean): void => {
