@@ -44,6 +44,7 @@ import { graphTarget, openInGraph, shareLink } from "./share";
 import { connectLive } from "./live";
 import { startDemo, stopDemo } from "./demo";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
+import { mountZoomControl, type ZoomControl } from "../zoomControl";
 import { wireToolbarOverflow } from "../toolbar";
 import { persisted } from "../../lib/persist";
 import { logsZoomCell } from "../layoutPrefs";
@@ -178,6 +179,8 @@ function demoRunText(run: RunSummary): string {
 const ZOOM_MIN = 0.7;
 const ZOOM_MAX = 2.2;
 const ZOOM_STEP = 0.1;
+// The mounted stepper, so applyZoom can repaint its readout after a command or a restore.
+let zoomCtl: ZoomControl | null = null;
 const zoomCell = logsZoomCell;
 
 function clampZoom(z: number): number {
@@ -190,8 +193,7 @@ function applyZoom(): void {
   // SVG so it grows past the panel and the scroll box picks it up. A width:100% SVG would just
   // re-fit under a plain body zoom, so the waterfall needs its own.
   bodyEl.style.setProperty("--log-zoom", String(z));
-  const readout = el("console-log-zoom__readout");
-  if (readout) readout.textContent = Math.round(z * 100) + "%";
+  zoomCtl?.sync();
 }
 
 function setZoom(z: number): void {
@@ -199,45 +201,15 @@ function setZoom(z: number): void {
   applyZoom();
 }
 
-// zoomSeg builds one control as a real <button>: the -/+ steppers and the percent readout (which
-// doubles as the reset control). Keyboard activation and focus come for free from the button; the
-// status-bar styling in logs.css keeps them plain and dense (no PF button chrome).
-function zoomSeg(key: string, label: string, aria: string): HTMLButtonElement {
-  const b = document.createElement("button");
-  b.type = "button";
-  b.className = key === "reset" ? "console-log-zoom__readout" : "console-log-zoom__btn";
-  if (key === "reset") b.id = "console-log-zoom__readout"; // applyZoom updates the percent readout by this id
-  b.dataset.zoom = key;
-  b.textContent = label;
-  b.setAttribute("aria-label", aria);
-  b.title = aria;
-  return b;
-}
-
 function wireZoom(): void {
-  // The control lives in the shared status bar's right cluster, by the event count.
-  const right = document.querySelector("#console-statusbar .console-shell-statusbar__right");
-  if (right) {
-    const ctl = document.createElement("div");
-    ctl.className = "console-log-zoom console-shell-statusbar__item";
-    ctl.setAttribute("role", "group");
-    ctl.setAttribute("aria-label", "Zoom");
-    ctl.append(
-      zoomSeg("out", "-", "Zoom out"),
-      zoomSeg("reset", "100%", "Reset zoom"),
-      zoomSeg("in", "+", "Zoom in"),
-    );
-    // Buttons fire click on Enter/Space natively, so a delegated click handler is all we need.
-    ctl.addEventListener("click", (ev) => {
-      const t = (ev.target as HTMLElement).closest("[data-zoom]") as HTMLElement | null;
-      if (!t) return;
-      const k = t.dataset.zoom;
-      if (k === "in") setZoom(zoomCell.get() + ZOOM_STEP);
-      else if (k === "out") setZoom(zoomCell.get() - ZOOM_STEP);
-      else setZoom(1);
-    });
-    right.prepend(ctl);
-  }
+  // The shared stepper (console/zoomControl.ts), not a local one: the Plan surface docks the same
+  // control in the same place, and two near-identical copies is how they stop being identical.
+  zoomCtl = mountZoomControl({
+    get: () => zoomCell.get(),
+    zoomIn: () => setZoom(zoomCell.get() + ZOOM_STEP),
+    zoomOut: () => setZoom(zoomCell.get() - ZOOM_STEP),
+    reset: () => setZoom(1),
+  });
   registerCommand({
     id: "logs.zoomIn",
     label: "Zoom in",

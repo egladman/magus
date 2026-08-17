@@ -1271,3 +1271,31 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   outline: 2px solid var(--console-accent);
   outline-offset: 2px;
 }
+
+
+/* ---- the zoom stepper (console/zoomControl.ts) ----------------------------------------------
+   Shared chrome, so it lives here rather than in any one surface's sheet: the log viewer and the
+   Plan surface both dock it in the status bar, and a copy per surface is how two controls that
+   should be identical drift apart. */
+.console-zoom {
+  display: inline-flex; align-items: center; gap: 0.1rem; margin: 0;
+  /* Set the zoom cluster apart from the shell's status-bar icon buttons that follow it - flush together
+     they are easy to misclick. A hairline divider plus trailing space (the cluster's own gap adds the
+     rest) gives it clearance. */
+  padding-right: 0.7rem;
+  border-right: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-zoom .console-zoom__btn, .console-zoom .console-zoom__readout {
+  appearance: none; border: 0; background: none; margin: 0; font-family: inherit;
+  cursor: pointer; color: var(--pf-t--global--text--color--subtle); user-select: none;
+  border-radius: var(--pf-t--global--border--radius--small); transition: color 0.12s, background 0.12s;
+}
+.console-zoom .console-zoom__btn {
+  display: inline-flex; align-items: center; justify-content: center; padding: 0;
+  width: 1.15rem; height: 1.15rem; font-size: 0.95rem; line-height: 1;
+}
+.console-zoom .console-zoom__readout { min-width: 2.7rem; text-align: center; font-variant-numeric: tabular-nums; font-size: 0.78rem; padding: 0 0.15rem; }
+.console-zoom .console-zoom__btn:hover, .console-zoom .console-zoom__readout:hover {
+  color: var(--pf-t--global--text--color--regular); background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-zoom :focus-visible { outline: 2px solid var(--console-accent); outline-offset: 1px; }
