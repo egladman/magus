@@ -34,24 +34,27 @@ export interface ZoomControlOpts {
   label?: string;
 }
 
-// mountZoomControl inserts the stepper and returns its handle, or null when there is no status bar
-// to dock into (a surface mounted outside the console shell).
+// SINGLE OWNER. Exactly one status bar is in the document at a time (the shell attaches the active
+// tab's and detaches the rest), so the stepper's slot is a resource with one holder - and mounting is
+// an ACQUIRE that preempts whoever held it. The previous holder is released rather than left in place,
+// which is what makes every way of getting this wrong harmless:
 //
-// LIFETIME. The status bar is per-TAB and only the active tab's is in the document, so this resolves
-// to whichever bar is on screen - which is the right one exactly while the calling surface is the
-// visible one. Callers therefore mount when they become visible and remove when they stop being, NOT
-// once at construction: a surface built while another tab is active would otherwise dock its stepper
-// in that tab's bar.
+//   - the log viewer is a cached singleton whose activate() runs again on every reopen, so it mounts
+//     without having removed. Preemption collapses that to one stepper instead of a stack of them,
+//     each older one silently driving a dead surface.
+//   - a surface built while another tab is active resolves to that tab's bar. It takes the slot, and
+//     hands it straight back on setVisible(false) - the holder at rest is always the visible surface.
 //
-// It also evicts any stepper already in that bar before adding its own. A caller that mounts twice
-// without removing is a bug, but it is an INVISIBLE one - two steppers stack silently and the second
-// drives a dead surface - and the log viewer is a cached singleton whose activate() runs again on
-// every reopen, which is precisely how that happens. Making the mount self-replacing means no caller
-// can produce the duplicate, rather than every caller having to remember not to.
+// A registry rather than a DOM sweep, because "remove any .console-zoom you find" cannot tell a stale
+// node from the live one and would clobber a legitimate holder. release() is idempotent and only ever
+// clears the slot it still owns, so a late remove() from a surface that was already preempted cannot
+// take down its successor.
+let holder: { readonly el: HTMLElement; readonly release: () => void } | null = null;
+
 export function mountZoomControl(opts: ZoomControlOpts): ZoomControl | null {
   const right = document.querySelector("#console-statusbar .console-shell-statusbar__right");
   if (!right) return null;
-  for (const stale of right.querySelectorAll(".console-zoom")) stale.remove();
+  holder?.release();
   const ctl = document.createElement("div");
   ctl.className = "console-zoom console-shell-statusbar__item";
   ctl.setAttribute("role", "group");
@@ -91,8 +94,17 @@ export function mountZoomControl(opts: ZoomControlOpts): ZoomControl | null {
   });
 
   right.prepend(ctl);
+  const release = (): void => {
+    ctl.remove();
+    if (holder?.el === ctl) holder = null;
+  };
+  holder = { el: ctl, release };
   return {
     sync,
-    remove: () => ctl.remove(),
+    // Only releases while this control is still the holder: a surface preempted by a later mount
+    // must not remove its successor's stepper when it eventually tears down.
+    remove: () => {
+      if (holder?.el === ctl) release();
+    },
   };
 }
