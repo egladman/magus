@@ -55,6 +55,7 @@ import { registerCommand, unregisterCommand } from "../commands";
 import { resolveDaemonHost, parseHash, adoptDaemonOrigin, wantsDemo } from "../../lib/daemon";
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
+import type { SurfaceInstance } from "../standalone";
 
 // Rows rendered beyond the viewport so a fast scroll never shows blank space. Bounded and
 // constant, unlike the diff.
@@ -225,7 +226,11 @@ function gutter(n: number | null): HTMLElement {
   return h("span", "console-diff-row__gutter", n === null ? " " : String(n));
 }
 
-export function activate(host: HTMLElement): () => void {
+// The console's surface contract (page.ts): a teardown plus setVisible, so the shell can tell this
+// pane when it stops being the visible one. Every surface hands back this shape - a bare teardown
+// function is still accepted by the normalizer, but it leaves a surface with nowhere to put the
+// hook, which is how the log viewer ended up writing a backgrounded tab's status bar.
+export function activate(host: HTMLElement): SurfaceInstance {
   const controller = new AbortController();
   let disposed = false;
 
@@ -1321,10 +1326,17 @@ export function activate(host: HTMLElement): () => void {
 
   void load();
 
-  return () => {
-    disposed = true;
-    controller.abort();
-    for (const c of COMMANDS) unregisterCommand(c.id);
-    host.replaceChildren();
+  return {
+    // Nothing to suppress yet: this surface owns no slice of the shared status bar and runs no
+    // timer or stream in the background - it loads once and then answers the reader. The hook is
+    // here so that when it grows one (a live session poll is the obvious next step) there is a
+    // defined place for it, rather than a leak discovered later.
+    setVisible(): void {},
+    deactivate(): void {
+      disposed = true;
+      controller.abort();
+      for (const c of COMMANDS) unregisterCommand(c.id);
+      host.replaceChildren();
+    },
   };
 }

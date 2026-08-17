@@ -1,8 +1,8 @@
 /* plan.css - page-scoped styles for the console Plan surface: a plan drawn as the DAG it is, from
  * either of its two sources (the declared delegation ledger, and the derived run plan).
  *
- * PatternFly owns everything it has a component for: the Reload button, the source ToggleGroup, the
- * target override's form control, the empty state, the path chips are PF Labels. What PF has no
+ * PatternFly owns everything it has a component for: the source ToggleGroup, the target override's
+ * form control, the empty state, the path chips are PF Labels. What PF has no
  * component for is the STAGE - a laid-out node/edge drawing - and the dense node list and detail
  * sheet beside it, so those are authored here under the console-plan-* area of the naming formula
  * (README.md). Transient state is data-* throughout (data-phase, data-source, data-state,
@@ -43,6 +43,15 @@
   grid-column: 1 / -1;
 }
 
+/* Compact, so it does not tower over the summary line beside it - the same treatment (and the
+   same reason) as the settings sheet's view toggle. PF's default ToggleGroup is 37px against a
+   0.8rem summary, which made the one control on the bar read as the loudest thing on it. */
+.console-plan-source .pf-v6-c-toggle-group__button {
+  padding-block: 0.15rem;
+  padding-inline: 0.5rem;
+  font-size: var(--pf-t--global--font--size--body--sm);
+}
+
 .console-plan-toolbar {
   grid-area: toolbar;
   display: flex;
@@ -63,10 +72,8 @@
   font-size: 0.75rem;
   color: var(--console-status-warn);
 }
-/* Both carry the auto margin, and only the FIRST of them in the flow can spend the free space: with
-   the target override hidden (the declared source) Reload is pushed right on its own; with it shown
-   the pair travels right together. */
-.console-plan-refresh { margin-inline-start: auto; }
+/* The target override is the only thing after the summary now, so it takes the free space and sits
+   right on its own. */
 .console-plan-target {
   display: flex;
   align-items: center;
@@ -112,8 +119,12 @@
   cursor: pointer;
 }
 .console-plan-list__item:hover { background: var(--pf-t--global--background--color--secondary--hover); }
+/* Secondary plus an accent edge, NOT the highlight token. highlight--default is #ffe072, a
+   saturated yellow that keeps its own value in both themes while the row's text does not - so the
+   selected row was the one row on the surface you could not read, and it collided with the gold
+   the warnings already own. diff.css rejected the same token for the same reason. */
 .console-plan-list__item[aria-current="true"] {
-  background: var(--pf-t--global--background--color--highlight--default);
+  background: var(--pf-t--global--background--color--secondary--hover);
   box-shadow: inset 2px 0 0 var(--console-accent);
 }
 /* The mark is the non-colour channel: the state is readable from the two or four letters alone. */
@@ -221,15 +232,54 @@
 }
 
 .console-plan-node { cursor: pointer; }
+/* FLOATING, not secondary. Secondary is darker than the stage it sits on (#151515 against
+   #292929), so every node read as a hole punched in the surface with a coloured outline round it -
+   an empty black box, not a card. Floating is the token for a surface lifted ABOVE its ground, in
+   both themes, which is what a node on a canvas is. */
 .console-plan-node__box {
-  fill: var(--pf-t--global--background--color--secondary--default);
+  fill: var(--pf-t--global--background--color--floating--default);
   stroke: var(--console-plan-state, var(--pf-t--global--border--color--default));
   stroke-width: 1.4;
 }
 .console-plan-node[data-readonly] .console-plan-node__box { stroke-dasharray: 4 2; }
+
+/* Work in flight breathes. Only the RUNNING state pulses, and only on the box's stroke: it marks
+   the one or two units something is actually happening in, which a static drawing cannot
+   distinguish from the units merely declared around them.
+ *
+ * Slow (2.4s) and shallow (down to 0.45), because this runs for as long as the work does - a fast
+ * or high-contrast blink beside text somebody is reading is an irritant within a minute. Nothing
+ * moves POSITION: the box does not grow, so the pulse cannot be mistaken for the layout shifting
+ * under the reader, and the animation is on a property that neither reflows nor repaints its
+ * neighbours.
+ *
+ * The colour still says "running" on its own; this only adds emphasis, so a reader who never sees
+ * the animation loses nothing. */
+@keyframes console-plan-breathe {
+  0%,
+  100% {
+    stroke-opacity: 1;
+  }
+  50% {
+    stroke-opacity: 0.45;
+  }
+}
+
+.console-plan-node[data-state="running"] .console-plan-node__box {
+  animation: console-plan-breathe 2.4s ease-in-out infinite;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .console-plan-node[data-state="running"] .console-plan-node__box {
+    animation: none;
+  }
+}
 .console-plan-node[data-selected] .console-plan-node__box {
   stroke: var(--console-accent);
   stroke-width: 2.4;
+  /* A node a reader has selected holds still: the accent outline is the answer to "which one is
+     this", and a throbbing outline under a detail pane being read is a distraction. */
+  animation: none;
 }
 /* A warned node keeps its state colour on the box - the state is still what it is - and turns its
    id gold, so a contested or untouched unit is findable in the drawing without reading the list.
@@ -285,14 +335,18 @@
 }
 .console-plan-detail__ro { font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
 .console-plan-detail__hint { margin: 0.3rem 0; color: var(--pf-t--global--text--color--subtle); }
+/* The 0.1rem gap is deliberate and applies WITHIN a pair - a label and the value it names should
+   touch. The separation belongs BETWEEN pairs, and it comes from the label's own margin below;
+   with both set to hairlines every field ran into its neighbours and the pane read as one block. */
 .console-plan-detail__fields { display: grid; grid-template-columns: 1fr; gap: 0.1rem; margin: 0; }
 .console-plan-detail__label {
-  margin-top: 0.45rem;
+  margin-top: 0.9rem;
   font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--pf-t--global--text--color--subtle);
 }
+.console-plan-detail__label:first-child { margin-top: 0; }
 .console-plan-detail__value { margin: 0; overflow-wrap: anywhere; }
 .console-plan-detail__runshead {
   margin: 0.9rem 0 0.2rem;
@@ -340,3 +394,53 @@
   }
   .console-plan-stage { display: none; }
 }
+
+/* ---- the collapsible unit index ------------------------------------------- */
+
+/* Collapsed, the index gives its column back to the stage and leaves only the reopen rail, the
+   same affordance the diff's file index and the activity trail's event index use. */
+.console-plan-layout[data-tree="collapsed"] {
+  grid-template-columns: auto minmax(0, 1fr) 20rem;
+}
+
+.console-plan-tree__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.35rem;
+  padding: 0.3rem 0.5rem;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-plan-tree__heading {
+  font-size: 0.7rem;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-plan-tree__toggle,
+.console-plan-reopen {
+  border: 0;
+  background: none;
+  color: var(--pf-t--global--text--color--subtle);
+  cursor: pointer;
+  font-size: 0.9rem;
+  line-height: 1;
+  padding: 0.2rem 0.3rem;
+}
+.console-plan-tree__toggle:hover,
+.console-plan-reopen:hover { color: var(--pf-t--global--text--color--regular); }
+.console-plan-reopen {
+  grid-area: tree;
+  align-self: stretch;
+  border-right: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-plan-reopen[hidden] { display: none; }
+
+/* ---- stage controls -------------------------------------------------------- */
+
+
+
+/* Grab, so the drawing announces that it can be dragged before anybody tries. */
+.console-plan-stage { cursor: grab; }
+.console-plan-stage[data-panning] { cursor: grabbing; }
+/* A pan must not paint a text selection across every label it crosses. */
+.console-plan-stage[data-panning] * { user-select: none; }

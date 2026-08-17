@@ -38,6 +38,7 @@ import {
 } from "../../lib/daemon";
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
+import type { SurfaceInstance } from "../standalone";
 
 // The SAME key the dashboard remembers its last daemon under, so opening Notes after
 // connecting the dashboard resumes the same loopback host. Read-only here.
@@ -326,7 +327,11 @@ function buildStoreSection(
 // activate builds the surface into host, loads once, and returns a teardown. Every async load
 // checks `stale` before touching the DOM, so a load that resolves after the tab closed is
 // dropped.
-export function activate(host: HTMLElement): () => void {
+// Returns the console's surface shape (page.ts): a teardown plus setVisible, so the shell can tell
+// this pane when it stops being the visible one. Every surface hands back this shape rather than a
+// bare teardown - a surface with nowhere to put the hook is how the log viewer came to write a
+// backgrounded tab's status bar.
+export function activate(host: HTMLElement): SurfaceInstance {
   const refs = buildScaffold(host);
   let stale = false;
 
@@ -390,7 +395,12 @@ export function activate(host: HTMLElement): () => void {
 
   load();
 
-  return () => {
-    stale = true;
+  return {
+    // Nothing to suppress yet: the store is read on mount and written by the reader, and it writes no part of the shared status bar. The hook is
+    // here so the answer is already in place the day it grows one.
+    setVisible(): void {},
+    deactivate(): void {
+      stale = true;
+    },
   };
 }

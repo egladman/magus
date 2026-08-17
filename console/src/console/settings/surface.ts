@@ -1055,6 +1055,11 @@ export function settingsSurface(deps: SettingsDeps): PageModule<null, null> {
       const teardown = buildSettings(host, deps);
       return {
         search: noSearch,
+        // The console's surface contract (page.ts). Settings is a form over persisted cells: no
+        // timer, no stream, and no slice of the shared status bar, so there is nothing to go quiet
+        // about. The hook is declared anyway so every surface answers the same shape and a future
+        // background read has a defined place to be suppressed.
+        setVisible(): void {},
         deactivate(): void {
           teardown();
           host.replaceChildren();

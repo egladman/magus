@@ -145,28 +145,9 @@
 /* Zoom control in the status bar's right cluster (by the event count): a compact -/readout/+ that
    scales the viewer body. Real <button>s (keyboard + focus for free), reset to plain status-bar
    chrome rather than PF button styling since they are a bespoke shell affordance. */
-.console-log-zoom {
-  display: inline-flex; align-items: center; gap: 0.1rem; margin: 0;
-  /* Set the zoom cluster apart from the shell's status-bar icon buttons that follow it - flush together
-     they are easy to misclick. A hairline divider plus trailing space (the cluster's own gap adds the
-     rest) gives it clearance. */
-  padding-right: 0.7rem;
-  border-right: 1px solid var(--pf-t--global--border--color--default);
-}
-.console-log-zoom .console-log-zoom__btn, .console-log-zoom .console-log-zoom__readout {
-  appearance: none; border: 0; background: none; margin: 0; font-family: inherit;
-  cursor: pointer; color: var(--pf-t--global--text--color--subtle); user-select: none;
-  border-radius: var(--pf-t--global--border--radius--small); transition: color 0.12s, background 0.12s;
-}
-.console-log-zoom .console-log-zoom__btn {
-  display: inline-flex; align-items: center; justify-content: center; padding: 0;
-  width: 1.15rem; height: 1.15rem; font-size: 0.95rem; line-height: 1;
-}
-.console-log-zoom .console-log-zoom__readout { min-width: 2.7rem; text-align: center; font-variant-numeric: tabular-nums; font-size: 0.78rem; padding: 0 0.15rem; }
-.console-log-zoom .console-log-zoom__btn:hover, .console-log-zoom .console-log-zoom__readout:hover {
-  color: var(--pf-t--global--text--color--regular); background: var(--pf-t--global--background--color--secondary--default);
-}
-.console-log-zoom :focus-visible { outline: 2px solid var(--console-accent); outline-offset: 1px; }
+/* The zoom stepper moved to console.css as .console-zoom - it is shared with the Plan surface
+   now, and only this sheet is log-viewer-scoped. See console/zoomControl.ts. */
+
 
 /* The parsed-filter chip row (.console-log-filter) sits under the toolbar, inset to the panel
    padding, with a hairline separating it from the header. filter.ts builds each parsed term as a PF

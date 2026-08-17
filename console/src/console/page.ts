@@ -23,10 +23,19 @@ export interface PageController<S, Q> {
   // Tear down anything with a lifetime (chart instances, SSE streams, observers) when
   // the tab/pane closes, so the console can re-compose without leaks.
   deactivate(): void;
-  // Called when this surface's tab becomes active (true) or is hidden by another tab (false). A
-  // surface that writes the SHARED bottom status bar (via #console-conn etc.) must suppress those
-  // writes while hidden, or a background stream (e.g. the dashboard's) leaks into the active tab's
-  // per-tab status bar. Optional: static surfaces need not implement it.
+  // Called when this surface's tab becomes active (true) or is hidden by another tab (false).
+  //
+  // EVERY surface implements this, whether or not it has anything to suppress today. Two things are
+  // only correct while a surface is the visible one: writes to the SHARED bottom status bar (it is
+  // per-tab, and the console detaches the hidden ones, so #console-conn and friends resolve to the
+  // ACTIVE tab's bar), and background work nobody is watching (the graph's force simulation ticked
+  // and repainted an invisible canvas until it grew one of these). Both were found as bugs rather
+  // than designed away, which is why the hook is the convention and not the exception - a surface
+  // with nowhere to put it is a surface that discovers the problem later.
+  //
+  // Still optional in the TYPE, because a surface may legitimately have nothing to say; the ones
+  // that do declare it empty with a note saying so, rather than omitting it and leaving the reader
+  // to wonder which case they are in.
   setVisible?(visible: boolean): void;
   // The document this surface currently has open, for the console to title the tab after
   // (see TitleSource). A surface with no document concept omits it and keeps its static title.
