@@ -656,6 +656,10 @@ export function deactivate(): void {
   }
   uninstallKeys?.();
   uninstallKeys = null;
+  // The status bar outlives this module - it is a singleton the console re-activates on reopen - so
+  // a stepper left behind would sit in the bar driving a surface nobody is looking at.
+  zoomCtl?.remove();
+  zoomCtl = null;
   lifecycleAbort?.abort();
   lifecycleAbort = null;
 }

@@ -36,9 +36,22 @@ export interface ZoomControlOpts {
 
 // mountZoomControl inserts the stepper and returns its handle, or null when there is no status bar
 // to dock into (a surface mounted outside the console shell).
+//
+// LIFETIME. The status bar is per-TAB and only the active tab's is in the document, so this resolves
+// to whichever bar is on screen - which is the right one exactly while the calling surface is the
+// visible one. Callers therefore mount when they become visible and remove when they stop being, NOT
+// once at construction: a surface built while another tab is active would otherwise dock its stepper
+// in that tab's bar.
+//
+// It also evicts any stepper already in that bar before adding its own. A caller that mounts twice
+// without removing is a bug, but it is an INVISIBLE one - two steppers stack silently and the second
+// drives a dead surface - and the log viewer is a cached singleton whose activate() runs again on
+// every reopen, which is precisely how that happens. Making the mount self-replacing means no caller
+// can produce the duplicate, rather than every caller having to remember not to.
 export function mountZoomControl(opts: ZoomControlOpts): ZoomControl | null {
   const right = document.querySelector("#console-statusbar .console-shell-statusbar__right");
   if (!right) return null;
+  for (const stale of right.querySelectorAll(".console-zoom")) stale.remove();
   const ctl = document.createElement("div");
   ctl.className = "console-zoom console-shell-statusbar__item";
   ctl.setAttribute("role", "group");

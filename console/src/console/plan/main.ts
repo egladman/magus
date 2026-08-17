@@ -47,7 +47,7 @@ import {
 } from "../../lib/daemon";
 import { demoUnits, demoOverlaps } from "./demo";
 import { persisted } from "../../lib/persist";
-import { mountZoomControl } from "../zoomControl";
+import { mountZoomControl, type ZoomControl } from "../zoomControl";
 import { registerCommand, unregisterCommand } from "../commands";
 import { h } from "../view";
 // The drawer OWNS the activity row model and the projections onto it (a pool slot, a lock holder, a
@@ -1483,12 +1483,27 @@ export function activate(host: HTMLElement): PlanInstance {
     // repainted once rather than at each call site.
     zoomCtl?.sync();
   };
-  const zoomCtl = mountZoomControl({
-    get: () => zoom,
-    zoomIn: () => setZoom(zoom * 1.25),
-    zoomOut: () => setZoom(zoom / 1.25),
-    reset: () => setZoom(1),
-  });
+  // Mounted on VISIBILITY, not at construction: the status bar is per-tab and the mount resolves to
+  // whichever bar is on screen, so a pane built while another tab is active would dock its stepper in
+  // that tab's bar.
+  let zoomCtl: ZoomControl | null = null;
+  const mountZoom = (): void => {
+    zoomCtl = mountZoomControl({
+      get: () => zoom,
+      zoomIn: () => setZoom(zoom * 1.25),
+      zoomOut: () => setZoom(zoom / 1.25),
+      reset: () => setZoom(1),
+    });
+  };
+  const unmountZoom = (): void => {
+    zoomCtl?.remove();
+    zoomCtl = null;
+  };
+  // Mounted here too, not only on the visibility transition: `visible` starts true (a pane is
+  // constructed focused), so setVisible(true) short-circuits on `v === visible` and would never
+  // reach the mount. A pane that turns out to be backgrounded gets setVisible(false) and gives the
+  // bar straight back.
+  mountZoom();
   // ctrl/cmd + wheel, the gesture every map and canvas already uses - and it leaves a PLAIN wheel
   // scrolling the pane, which is what a reader with a long plan actually wants most of the time.
   refs.stageBox.addEventListener(
@@ -1711,9 +1726,11 @@ export function activate(host: HTMLElement): PlanInstance {
       if (v === visible) return;
       visible = v;
       if (v) {
+        mountZoom();
         void refresh();
         startPolling();
       } else {
+        unmountZoom();
         stopPolling();
       }
     },
@@ -1724,7 +1741,7 @@ export function activate(host: HTMLElement): PlanInstance {
       controller.abort();
       // The status bar outlives this surface, so the stepper has to be taken down by hand -
       // host.replaceChildren() below cannot reach it.
-      zoomCtl?.remove();
+      unmountZoom();
       host.replaceChildren();
     },
   };
