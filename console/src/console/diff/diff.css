@@ -142,6 +142,34 @@
 
 /* The scroll container owns BOTH axes: vertical for the stream, horizontal for long lines.
  * Overflow on an inner element would clip rows against the virtualizer's transform. */
+/* The positioning context for the pinned header. It exists so the header can overlay the
+   scroller without being inside it - anything inside scrolls away, and anything inside the
+   virtualized window gets evicted from the DOM. */
+.console-diff-viewport {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  min-width: 0;
+}
+
+/* The file header of whatever is being read, held at the top edge. It is a copy of a row, so it
+   matches one exactly; pointer-events: none keeps it from swallowing clicks meant for the line
+   it covers, since it is orientation rather than a control. */
+.console-diff-pinned {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 0;
+  z-index: 3;
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
+}
+
+.console-diff-pinned[hidden] {
+  display: none;
+}
+
 .console-diff-scroll {
   overflow: auto;
   min-height: 0;
@@ -438,15 +466,6 @@
   padding: 0 var(--pf-t--global--spacer--xs);
   font-size: var(--pf-t--global--font--size--xs);
   white-space: nowrap;
-}
-
-.console-diff-toolbar__fold {
-  border: 1px solid var(--pf-t--global--border--color--default);
-  background: var(--pf-t--global--background--color--primary--default);
-  color: inherit;
-  cursor: pointer;
-  padding: 0 var(--pf-t--global--spacer--xs);
-  font-size: var(--pf-t--global--font--size--sm);
 }
 
 /* A comment sits in the stream, one row tall like everything else, so it scrolls with the code

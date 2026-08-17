@@ -172,6 +172,19 @@ export function prevIndexBefore(sorted: readonly number[], from: number): number
   return first;
 }
 
+// fileOfRow maps every row index to the index of the file row that governs it, so a scroll
+// position answers "which file am I in" in one lookup. -1 for any row before the first file
+// header, which the changeset's leading rows can be.
+export function fileOfRow(rows: readonly Row[]): number[] {
+  const out = new Array<number>(rows.length);
+  let current = -1;
+  for (let i = 0; i < rows.length; i++) {
+    if ((rows[i] as Row).kind === "file") current = i;
+    out[i] = current;
+  }
+  return out;
+}
+
 // ROW_HEIGHT and FILE_ROW_HEIGHT MUST equal the heights in diff.css. The virtualizer computes
 // positions from them rather than measuring, so a mismatch shows as rows drifting out of the
 // viewport while scrolling.

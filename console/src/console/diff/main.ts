@@ -33,6 +33,7 @@ import {
   prevIndexBefore,
   rowOffsets,
   rowAt,
+  fileOfRow,
   type Row,
   type ViewMode,
 } from "./rows";
@@ -72,6 +73,8 @@ interface State {
   offsets: number[];
   hunks: number[];
   fileRows: number[];
+  // Row index -> the file row governing it, so a scroll position resolves to a file in one lookup.
+  fileOf: number[];
   mode: ViewMode;
   cursor: number;
   session: DiffSession | null;
@@ -237,6 +240,7 @@ export function activate(host: HTMLElement): () => void {
     offsets: [0],
     hunks: [],
     fileRows: [],
+    fileOf: [],
     mode: modeCell.get() ?? "unified",
     cursor: -1,
     session: null,
@@ -279,6 +283,20 @@ export function activate(host: HTMLElement): () => void {
   spacer.append(windowEl);
   scroll.append(spacer);
 
+  // The pinned file header: ONE element, outside the virtualized window and outside the scroll
+  // container, overlaying the top of the viewport. It is what a sticky row cannot be here - the
+  // row for the file being read is evicted from the DOM as soon as it scrolls out, so there is
+  // nothing left to pin. This is always present and re-rendered from whichever file the topmost
+  // visible row belongs to.
+  //
+  // aria-hidden: it is a visual copy of a row assistive tech already reached in the grid, and
+  // announcing the same file header a second time would be noise, not orientation.
+  const viewport = h("div", "console-diff-viewport");
+  const pinned = h("div", "console-diff-pinned");
+  pinned.hidden = true;
+  pinned.setAttribute("aria-hidden", "true");
+  viewport.append(scroll, pinned);
+
   const overview = h("div", "console-diff-overview");
   const empty = h("div", "pf-v6-c-empty-state console-diff-empty");
   const emptyContent = h("div", "pf-v6-c-empty-state__content");
@@ -300,7 +318,7 @@ export function activate(host: HTMLElement): () => void {
   emptyContent.append(emptyTitle, emptyBodyWrap, emptyFooter);
   empty.append(emptyContent);
 
-  main.append(toolbar, rail, scroll, overview, empty);
+  main.append(toolbar, rail, viewport, overview, empty);
   root.append(sidebar, main);
   host.append(root);
   root.dataset.phase = "loading";
@@ -459,6 +477,23 @@ export function activate(host: HTMLElement): () => void {
     }
     windowEl.style.transform = `translateY(${state.offsets[first]}px)`;
     windowEl.replaceChildren(frag);
+    paintPinned(top);
+  };
+
+  // paintPinned keeps the file header of whatever is being read at the top of the viewport.
+  //
+  // It shows only once the file's REAL header row has scrolled above the top edge, so the two are
+  // never on screen together: while the real row is visible it is the header, and the copy would
+  // just be a duplicate of the line below it.
+  const paintPinned = (top: number): void => {
+    const i = state.fileOf[rowAt(state.offsets, top)] ?? -1;
+    const row = i >= 0 ? state.rows[i] : undefined;
+    if (!row || row.kind !== "file" || (state.offsets[i] ?? 0) >= top) {
+      pinned.hidden = true;
+      return;
+    }
+    pinned.replaceChildren(renderFileRow(row.file));
+    pinned.hidden = false;
   };
 
   let ticking = false;
@@ -531,6 +566,7 @@ export function activate(host: HTMLElement): () => void {
     state.hunks = hunkRowIndexes(state.rows);
     state.fileRows = fileRowIndexes(state.rows);
     state.offsets = rowOffsets(state.rows);
+    state.fileOf = fileOfRow(state.rows);
     spacer.style.height = `${state.offsets[state.rows.length]}px`;
 
     // Digest every hunk once, here, so `v` never awaits a hash mid-keypress.
@@ -584,16 +620,17 @@ export function activate(host: HTMLElement): () => void {
       label(`+${s.additions}`, "pf-m-green"),
       label(`-${s.deletions}`, "pf-m-red"),
     );
+    // A LABEL, not a button. This row is a readout - counts and warnings - and the one control
+    // hiding among them read as a different kind of thing because it was one. The fold lives on
+    // the sidebar's "N generated" group, where the files it folds are, and on the . key.
     if (s.generated > 0) {
-      const g = h("button", "console-diff-toolbar__fold");
-      g.type = "button";
-      g.textContent = state.showGenerated
-        ? `hide ${s.generated} generated`
-        : `${s.generated} generated folded`;
-      g.title =
-        "Declared target outputs. Reviewing their diff is reading a machine's restatement of a change made elsewhere - read the source change instead. Press . to toggle.";
-      g.addEventListener("click", () => void toggleGenerated());
-      chips.push(g);
+      chips.push(
+        label(
+          state.showGenerated ? `${s.generated} generated` : `${s.generated} generated folded`,
+          undefined,
+          "Declared target outputs. Reviewing their diff is reading a machine's restatement of a change made elsewhere - read the source change instead. Fold them from the sidebar, or press . to toggle.",
+        ),
+      );
     }
     if (!ranked()) {
       chips.push(label("unranked", "pf-m-orange", UNRANKED_TITLE));

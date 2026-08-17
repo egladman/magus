@@ -11,6 +11,7 @@ import {
   prevIndexBefore,
   rowOffsets,
   rowAt,
+  fileOfRow,
   heightOf,
   ROW_HEIGHT,
   FILE_ROW_HEIGHT,
@@ -321,4 +322,16 @@ test("rowAt inverts rowOffsets for every row", () => {
   for (let i = 0; i < rows.length; i++) {
     assert.equal(rowAt(offs, at(offs, i, "offset")), i, `row ${i} must round-trip`);
   }
+});
+
+test("fileOfRow attributes every row to the file header above it", () => {
+  const rows = ["file", "hunk", "line", "file", "line"].map(rowOfKind);
+  assert.deepEqual(fileOfRow(rows), [0, 0, 0, 3, 3]);
+});
+
+test("fileOfRow reports -1 for rows before the first file header", () => {
+  // The pinned header reads this directly, and -1 is what tells it to stay hidden rather than
+  // pin row 0 of a file the reader has not reached.
+  assert.deepEqual(fileOfRow(["comment", "file", "line"].map(rowOfKind)), [-1, 1, 1]);
+  assert.deepEqual(fileOfRow([]), []);
 });
