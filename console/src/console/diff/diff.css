@@ -237,8 +237,14 @@
   background: var(--pf-t--global--background--color--secondary--default);
   border-block: 1px solid var(--pf-t--global--border--color--default);
   font-family: var(--pf-t--global--font--family--body);
+  /* Sticky on the INLINE axis only. A vertical `top: 0` cannot work here and did not: every row
+     is a flat sibling of one .console-diff-window, so all the file headers share a single sticky
+     containing block and pile up on the same line instead of pinning one at a time - four of them
+     stacked on the last rows and hid them. Virtualization rules it out independently: scroll into
+     a long file and that file's header row is not in the DOM at all, so there is nothing left to
+     pin. A header that follows the reader down needs its own element outside the virtual window,
+     which is a feature and not this rule. */
   position: sticky;
-  top: 0;
   left: 0;
   width: 100%;
   min-width: 0;
