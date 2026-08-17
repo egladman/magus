@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2331,
-  "edge_count": 6091,
+  "node_count": 2333,
+  "edge_count": 6094,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -7712,7 +7712,17 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps.",
-      "source": "console/magusfile.buzz:196",
+      "source": "console/magusfile.buzz:210",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:console/magusfile.buzz:format",
+      "kind": "function",
+      "label": "format",
+      "doc": "format is deliberately separate from lint: the read-only spell reports drift by default, while `format:rw` amends the source files named below. Declaring those amendments keeps the target cache honest; they are inputs being maintained, not generated outputs that Magus could replay or clean.",
+      "source": "console/magusfile.buzz:179",
       "attrs": {
         "exported": "true"
       }
@@ -7748,7 +7758,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits the dependency tree against the npm advisory database.  --prod, not the whole tree, and that is the whole design. An unscoped audit reports the dev toolchain too - today a stylelint -> table -> ajv -> fast-uri advisory - which never reaches a browser and cannot be fixed from here. A gate that fails on something you cannot act on is a gate that gets muted, which is how six stale skip_cache workarounds happened. This fails only on what actually ships.  It is NOT folded into lint: lint is cache",
-      "source": "console/magusfile.buzz:189",
+      "source": "console/magusfile.buzz:203",
       "attrs": {
         "exported": "true"
       }
@@ -12354,7 +12364,7 @@
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:2257",
+      "source": "magusfile.buzz:2284",
       "attrs": {
         "exported": "true"
       }
@@ -12701,7 +12711,7 @@
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
-      "source": "magusfile.buzz:2323",
+      "source": "magusfile.buzz:2337",
       "attrs": {
         "exported": "true"
       }
@@ -12780,7 +12790,7 @@
       "kind": "function",
       "label": "toolchain_report",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:2319",
+      "source": "magusfile.buzz:2333",
       "attrs": {
         "exported": "true"
       }
@@ -19797,7 +19807,7 @@
       "source": "console",
       "attrs": {
         "engine": "buzz",
-        "target_count": "6"
+        "target_count": "7"
       }
     },
     {
@@ -20486,6 +20496,16 @@
       "kind": "target",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps.",
+      "source": "console",
+      "attrs": {
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:console:format",
+      "kind": "target",
+      "label": "format",
+      "doc": "format is deliberately separate from lint: the read-only spell reports drift by default, while `format:rw` amends the source files named below.",
       "source": "console",
       "attrs": {
         "engine": "buzz"
@@ -45340,6 +45360,14 @@
     },
     {
       "source": "file:console/magusfile.buzz",
+      "target": "function:console/magusfile.buzz:format",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "console/magusfile.buzz"
+    },
+    {
+      "source": "file:console/magusfile.buzz",
       "target": "function:console/magusfile.buzz:install",
       "relation": "contains",
       "confidence": "extracted",
@@ -59915,22 +59943,6 @@
       "provenance": "magusfile.buzz"
     },
     {
-      "source": "function:magusfile.buzz:serve",
-      "target": "function:magusfile.buzz:rebuild_console",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "magusfile.buzz"
-    },
-    {
-      "source": "function:magusfile.buzz:serve",
-      "target": "function:magusfile.buzz:rerender_docs",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "magusfile.buzz"
-    },
-    {
       "source": "function:magusfile.buzz:test",
       "target": "function:magusfile.buzz:total_coverage",
       "relation": "calls",
@@ -64277,6 +64289,14 @@
     },
     {
       "source": "project:console",
+      "target": "target:console:format",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "console"
+    },
+    {
+      "source": "project:console",
       "target": "target:console:lint",
       "relation": "contains",
       "confidence": "extracted",
@@ -66738,6 +66758,30 @@
     {
       "source": "target:console:ci",
       "target": "target:console:test",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "console"
+    },
+    {
+      "source": "target:console:format",
+      "target": "op:typescript:biome-format",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "console"
+    },
+    {
+      "source": "target:console:format",
+      "target": "spell:typescript",
+      "relation": "uses",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "console"
+    },
+    {
+      "source": "target:console:format",
+      "target": "target:console:preflight",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,

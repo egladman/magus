@@ -164,12 +164,12 @@ verb, because the ledger has a single author by definition of what it records -
 the one agent doing the orchestrating. The store takes no cross-process lock, so
 do not point two orchestrators at one workspace.
 
-## Watch it: the Plan surface
+## Watch it: Dashboard's Delegation plan
 
-The [console](../../../reference/console.md)'s Plan surface draws a plan as the
-DAG it is, from either of the two places a plan comes from. Both share the
-stage, the state colors, and the accessible node list beside the drawing, so a
-reader does not learn the picture twice.
+The [console](../../../reference/console.md)'s Dashboard includes a Delegation
+plan mode that draws a plan as the DAG it is, from either of the two places a
+plan comes from. Both share the stage, the state colors, and the accessible node
+list beside the drawing, so a reader does not learn the picture twice.
 
 - **The declared plan** is the ledger: one node per unit, indented by `parent`,
   joined to the live activity feeds so a row shows what its worker is doing now.

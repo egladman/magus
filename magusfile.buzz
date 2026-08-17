@@ -2321,28 +2321,9 @@ export fun deploy_generate(ctx: magus\Context, args: [str]) > void !> any {
 // /console/ redirect stub (longest-prefix routing in http.server's mounts mode),
 // exactly like the deploy that assembles docs/gen at the root and console/gen under
 // /console/. It spans both projects, so it lives at the workspace root rather than in
-// either one. On a source change it HOT-REBUILDS the affected project's gen/: a docs
-// or blog edit re-renders docs/gen (the fast docs `render` target, not the heavy
-// drift-gated generate), a console-source edit rebuilds console/gen (pnpm run build).
-// A static file server reads current bytes off disk, so each rebuild is picked up on
-// the next request with no server restart. http.server runs in the background and
-// fs.watch blocks, so the loop stays up until Ctrl-C.
+// Serves prebuilt docs and console under one local origin.
 //
-// This rebuilds docs/console CONTENT, never magus itself - it does NOT trip the
-// self-rebuild anti-pattern CLAUDE.md warns against.
-// toolchain_report observes each wired toolchain against the tags its own project
-// publishes, and prints. It never installs, never selects, never rewrites a pin - see
-// tools/toolchain.buzz for why that boundary is load-bearing.
-//
-// Deliberately OUT of ci, and out of every target ci reaches: it runs `git ls-remote`
-// against half a dozen third-party hosts, so it is neither hermetic nor fast, and
-// nothing it reports is a build failure. Run it by hand, or on the audit cron, which
-// is where the other non-blocking network checks already live.
-//
-// It was unreachable before this: tools/toolchain.buzz exports report() and nothing in
-// the workspace imported it, so a complete, documented feature sat with no caller. It
-// has no test blocks of its own, so buzz-test gating tools/ only proved it parses -
-// this target is what makes it runnable at all.
+// Reports installed toolchains; excluded from CI because it probes remote tags.
 export fun toolchain_report(ctx: magus\Context, args: [str]) > void !> any {
     toolchains\report();
 }
@@ -2360,77 +2341,9 @@ export fun serve(ctx: magus\Context, args: [str]) > void !> any {
     magus\log.info("serving the deploy at http://localhost:{port}/");
     magus\log.info("  /          -> " + DOCS_GEN + "  (docs)");
     magus\log.info("  /console/  -> " + CONSOLE_GEN + "  (console SPA, shadows the docs /console/ redirect)");
-    magus\log.info("watching docs/ + blog/ (re-render docs) and console/ sources (rebuild console); Ctrl-C to stop");
-
-    // Watch SOURCES only, never the gen/ output trees: fs.watch's built-in ignore
-    // prunes any dir named gen/ or node_modules/, so watching docs/, blog/, and
-    // console/ never observes a rebuild's own writes and so cannot self-retrigger a
-    // rebuild loop. Each try/catch keeps a failed rebuild from ending the watch.
-    // Staleness tripwire. This loop regenerates COMMITTED output (docs/gen) from inside a
-    // long-lived process, so if magus itself is rebuilt underneath it, every later rebuild
-    // writes bytes produced by the old logic: fresh mtimes, no error, wrong content. The
-    // daemon's adoption gate (internal/proc/identity.go) cannot catch this - it compares a
-    // client against a server across IPC, and here there is no second party, only one
-    // process that has quietly gone out of date.
-    // Refuse rather than reload: CLAUDE.md forbids a watch-rebuild loop for magus itself,
-    // so the correct move is to stop generating and make the human restart.
-    final exe = os\executable();
-    final exeStamp = fun() > str {
-        try {
-            final st = fs\stat(exe);
-            // Bracket access, not st.size: `size` is a built-in map METHOD, so dot access
-            // returns the method rather than the stat field.
-            return "{st["mtime"]}:{st["size"]}";
-        } catch (e) {
-            // Binary already gone (a `go run` temp build is deleted once up). Nothing to
-            // compare against, so the tripwire simply stays quiet.
-            return "";
-        }
-    };
-    final startStamp = exeStamp();
-
-    fs\watch(["docs", "blog", "console"], fun(changed: [str]) > bool {
-        final nowStamp = exeStamp();
-        if (startStamp != "" and nowStamp != "" and nowStamp != startStamp) {
-            // One record, not four: this is a single event, and each magus.error is its own
-            // log line. The REMEDY stays inside the error rather than moving to magus.hint,
-            // even though a remedy is what hints are for: emitMagusHint only fires when
-            // interactive.Enabled(), so a hint is silently dropped for an agent or in CI -
-            // precisely the callers that cannot infer the fix themselves. The watch is
-            // ending here, so losing the remedy leaves no way forward. Hints carry what is
-            // safe to lose; this is not.
-            magus\log.error("serve: the magus binary changed while this server was running (" + exe
-                + "); this process still runs the OLD code, so anything it regenerates now would be stale."
-                + " Stop it (Ctrl-C) and start it again to pick up the new build.");
-            // Advisory, and safe to lose: the general rule behind this one instance.
-            magus\log.hint("a long-lived magus keeps regenerating with the logic it started with; restart it after a rebuild");
-            return true; // end the watch; a stale generator must not keep writing gen/
-        }
-        var docsHit = false;
-        var consoleHit = false;
-        foreach (p in changed) {
-            if (p.startsWith("console/")) {
-                consoleHit = true;
-            } else {
-                docsHit = true; // docs/* or blog/* re-renders the docs site
-            }
-        }
-        if (docsHit) {
-            magus\log.info("docs/blog change - re-rendering " + DOCS_GEN);
-            try {
-                rerender_docs();
-            } catch (e) {
-                magus\log.warn("docs render failed, still watching: " + e);
-            }
-        }
-        if (consoleHit) {
-            magus\log.info("console change - rebuilding " + CONSOLE_GEN);
-            try {
-                rebuild_console();
-            } catch (e) {
-                magus\log.warn("console build failed, still watching: " + e);
-            }
-        }
-        return false;
-    });
+    magus\log.info("static server only; rebuild docs or console in its owning project, then refresh");
+    // Keep the target alive while http.server owns its background listener. This is a passive
+    // watch: no child project outputs are mutated here, and their owning build target can run
+    // independently while the next request observes the files it produced.
+    fs\watch(["."], fun(changed: [str]) > bool { return false; });
 }

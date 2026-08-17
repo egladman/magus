@@ -426,12 +426,11 @@ matching app.
   </tr>
 </table>
 
-- [Dashboard](https://eli.gladman.cc/magus/console/) shows live daemon health, the concurrency pool, running targets, and cache activity.[^app-dashboard]
+- [Dashboard](https://eli.gladman.cc/magus/console/) shows live daemon health, the concurrency pool, running targets, cache activity, and the live delegation plan.[^app-dashboard]
 - [Graph Explorer](https://eli.gladman.cc/magus/console/) navigates targets, spells, and their dependency graph (`magus graph export --open`).[^app-graph]
 - [Log Viewer](https://eli.gladman.cc/magus/console/) reads or streams any past run's captured output (`magus query output <ref> --open`).[^app-logs]
 - [Activity Trail](https://eli.gladman.cc/magus/console/) shows recent MCP calls, agent-command observations, background jobs, and config changes.[^app-activity]
 - [Diff](https://eli.gladman.cc/magus/console/) annotates the working tree's uncommitted changes - generated vs source, blast radius, coverage - and hosts the human half of a paired review.
-- [Plan](https://eli.gladman.cc/magus/console/) draws the delegation ledger an orchestrating agent declared beside the target DAG a plain run derives.
 
 ### How it stays on your machine
 
