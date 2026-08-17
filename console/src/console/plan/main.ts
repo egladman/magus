@@ -115,6 +115,8 @@ interface PlanCommands {
   reload(): void;
   clearSelection(): void;
   toggleSource(): void;
+  zoomBy(factor: number): void;
+  zoomReset(): void;
 }
 
 // The Plan commands are ONE set of ids however many panes are open: the console's registry is keyed
@@ -155,6 +157,26 @@ const COMMANDS: readonly {
   },
   // No key: the two single letters left are worth more to a reader who is stepping through nodes
   // than to a switch they make once a session, and the toggle itself is a real focusable button.
+  // Zoom is reachable without a pointer, and without a modifier gesture nobody discovers. The
+  // console is keyboard-first, so ctrl/cmd + wheel is the convenience, not the interface.
+  {
+    id: "plan.zoom.in",
+    label: "Plan: zoom in",
+    keys: ["+", "="],
+    run: (c) => c.zoomBy(1.25),
+  },
+  {
+    id: "plan.zoom.out",
+    label: "Plan: zoom out",
+    keys: ["-"],
+    run: (c) => c.zoomBy(1 / 1.25),
+  },
+  {
+    id: "plan.zoom.reset",
+    label: "Plan: fit the plan to the pane",
+    keys: ["0"],
+    run: (c) => c.zoomReset(),
+  },
   {
     id: "plan.source.toggle",
     label: "Plan: switch between the declared and run plans",
@@ -389,6 +411,7 @@ interface Refs {
   tree: HTMLElement;
   list: HTMLElement;
   stage: SVGSVGElement;
+  stageBox: HTMLElement;
   // The stage's two layers, carried rather than re-queried per paint: buildScaffold appends them, so
   // a render that could not find them would mean the scaffold it was handed is not this one.
   edgeLayer: SVGGElement;
@@ -551,6 +574,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
     tree,
     list,
     stage,
+    stageBox,
     edgeLayer,
     nodeLayer,
     detail,
@@ -1425,6 +1449,48 @@ export function activate(host: HTMLElement): PlanInstance {
 
   // --- events ---------------------------------------------------------------
 
+  // Zoom. The stage keeps its viewBox and the SVG's RENDERED size is scaled instead, so the
+  // container's existing overflow does the panning for free and nothing about the layout, the
+  // hit targets or the text rendering has to know a zoom exists.
+  let zoom = 1;
+  const ZOOM_MIN = 0.5;
+  const ZOOM_MAX = 4;
+  const applyZoom = (): void => {
+    const vb = refs.stage.getAttribute("viewBox");
+    if (!vb) return;
+    const parts = vb.split(/\s+/).map(Number);
+    const w = parts[2];
+    const h = parts[3];
+    if (!w || !h) return;
+    if (zoom === 1) {
+      // Back to fitting the pane: drop the inline sizes and let the stylesheet's 100% govern
+      // again, rather than freezing the graph at whatever the pane happened to be.
+      refs.stage.style.removeProperty("width");
+      refs.stage.style.removeProperty("height");
+      return;
+    }
+    const box = refs.stageBox.getBoundingClientRect();
+    refs.stage.style.width = `${Math.round(box.width * zoom)}px`;
+    refs.stage.style.height = `${Math.round(box.height * zoom)}px`;
+  };
+  const setZoom = (next: number): void => {
+    const clamped = Math.min(ZOOM_MAX, Math.max(ZOOM_MIN, Math.round(next * 100) / 100));
+    if (clamped === zoom) return;
+    zoom = clamped;
+    applyZoom();
+  };
+  // ctrl/cmd + wheel, the gesture every map and canvas already uses - and it leaves a PLAIN wheel
+  // scrolling the pane, which is what a reader with a long plan actually wants most of the time.
+  refs.stageBox.addEventListener(
+    "wheel",
+    (e) => {
+      if (!e.ctrlKey && !e.metaKey) return;
+      e.preventDefault();
+      setZoom(zoom * (e.deltaY < 0 ? 1.1 : 1 / 1.1));
+    },
+    { passive: false, signal: controller.signal },
+  );
+
   const applyTree = (collapsed: boolean): void => {
     refs.root.dataset.tree = collapsed ? "collapsed" : "open";
     refs.tree.hidden = collapsed;
@@ -1522,6 +1588,8 @@ export function activate(host: HTMLElement): PlanInstance {
     reload: () => void refresh(),
     clearSelection: () => select(null),
     toggleSource: () => chooseSource(source === "declared" ? "run" : "declared"),
+    zoomBy: (factor) => setZoom(zoom * factor),
+    zoomReset: () => setZoom(1),
   };
   // Commands, so every action appears in the command bar and the Actions surface and can be
   // rebound - a private keydown table would give none of that. The single-letter keys are bound on

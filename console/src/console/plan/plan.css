@@ -1,8 +1,8 @@
 /* plan.css - page-scoped styles for the console Plan surface: a plan drawn as the DAG it is, from
  * either of its two sources (the declared delegation ledger, and the derived run plan).
  *
- * PatternFly owns everything it has a component for: the Reload button, the source ToggleGroup, the
- * target override's form control, the empty state, the path chips are PF Labels. What PF has no
+ * PatternFly owns everything it has a component for: the source ToggleGroup, the target override's
+ * form control, the empty state, the path chips are PF Labels. What PF has no
  * component for is the STAGE - a laid-out node/edge drawing - and the dense node list and detail
  * sheet beside it, so those are authored here under the console-plan-* area of the naming formula
  * (README.md). Transient state is data-* throughout (data-phase, data-source, data-state,
@@ -41,6 +41,15 @@
   display: flex;
   grid-row: 2;
   grid-column: 1 / -1;
+}
+
+/* Compact, so it does not tower over the summary line beside it - the same treatment (and the
+   same reason) as the settings sheet's view toggle. PF's default ToggleGroup is 37px against a
+   0.8rem summary, which made the one control on the bar read as the loudest thing on it. */
+.console-plan-source .pf-v6-c-toggle-group__button {
+  padding-block: 0.15rem;
+  padding-inline: 0.5rem;
+  font-size: var(--pf-t--global--font--size--body--sm);
 }
 
 .console-plan-toolbar {
@@ -110,8 +119,12 @@
   cursor: pointer;
 }
 .console-plan-list__item:hover { background: var(--pf-t--global--background--color--secondary--hover); }
+/* Secondary plus an accent edge, NOT the highlight token. highlight--default is #ffe072, a
+   saturated yellow that keeps its own value in both themes while the row's text does not - so the
+   selected row was the one row on the surface you could not read, and it collided with the gold
+   the warnings already own. diff.css rejected the same token for the same reason. */
 .console-plan-list__item[aria-current="true"] {
-  background: var(--pf-t--global--background--color--highlight--default);
+  background: var(--pf-t--global--background--color--secondary--hover);
   box-shadow: inset 2px 0 0 var(--console-accent);
 }
 /* The mark is the non-colour channel: the state is readable from the two or four letters alone. */
@@ -322,14 +335,18 @@
 }
 .console-plan-detail__ro { font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
 .console-plan-detail__hint { margin: 0.3rem 0; color: var(--pf-t--global--text--color--subtle); }
+/* The 0.1rem gap is deliberate and applies WITHIN a pair - a label and the value it names should
+   touch. The separation belongs BETWEEN pairs, and it comes from the label's own margin below;
+   with both set to hairlines every field ran into its neighbours and the pane read as one block. */
 .console-plan-detail__fields { display: grid; grid-template-columns: 1fr; gap: 0.1rem; margin: 0; }
 .console-plan-detail__label {
-  margin-top: 0.45rem;
+  margin-top: 0.9rem;
   font-size: 0.68rem;
   text-transform: uppercase;
   letter-spacing: 0.04em;
   color: var(--pf-t--global--text--color--subtle);
 }
+.console-plan-detail__label:first-child { margin-top: 0; }
 .console-plan-detail__value { margin: 0; overflow-wrap: anywhere; }
 .console-plan-detail__runshead {
   margin: 0.9rem 0 0.2rem;
