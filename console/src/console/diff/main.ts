@@ -540,9 +540,9 @@ export function activate(host: HTMLElement): () => void {
   // as nothing happening) and it is a position indicator while scrolling by hand.
   const markActiveFile = (top: number): void => {
     const fileRow = state.fileOf[rowAt(state.offsets, top)] ?? -1;
-    const which = state.fileRows.indexOf(fileRow);
-    sidebar.querySelectorAll(".console-diff-sidebar__item").forEach((el, i) => {
-      if (i === which) el.setAttribute("aria-current", "true");
+    sidebar.querySelectorAll(".console-diff-sidebar__item").forEach((el) => {
+      const mine = (el as HTMLElement).dataset.fileRow;
+      if (mine !== undefined && Number(mine) === fileRow) el.setAttribute("aria-current", "true");
       else el.removeAttribute("aria-current");
     });
   };
@@ -727,40 +727,75 @@ export function activate(host: HTMLElement): () => void {
 
   const renderSidebar = (): void => {
     const frag = document.createDocumentFragment();
+
+    // Grouped by PROJECT, not by directory depth. In a monorepo a path answers two questions -
+    // which project owns this, and which file is it - and everything between them is filler that
+    // grows without bound as the tree nests. The project is the bounded, meaningful half, magus
+    // already knows it per file (DiffAnnotation.project, the same unit that decides cache keys
+    // and the affected set), and writing it once per group means the per-file line only ever
+    // carries the path RELATIVE to it. That is one or two segments whether the repo is three
+    // levels deep or ten, so the item stops getting worse as the monorepo grows.
+    const groups = new Map<string, { o: (typeof state.changeset.primary)[number]; i: number }[]>();
     state.changeset.primary.forEach((o, i) => {
-      const item = h("button", "console-diff-sidebar__item");
-      item.type = "button";
-      const st = STATUS_COPY[o.file.status];
-      item.append(label(st.short, st.modifier, o.file.status));
-      // Filename over directory, because the filename is what identifies the file and the
-      // directory is only context. A single line spent them equally and truncated both, so a
-      // column this narrow showed "...thkit/claims.go" - the half that matters least, cut.
-      const slash = o.file.path.lastIndexOf("/");
-      const wrap = h("span", "console-diff-sidebar__file");
-      const name = h("span", "console-diff-sidebar__path");
-      name.textContent = slash >= 0 ? o.file.path.slice(slash + 1) : o.file.path;
-      wrap.append(name);
-      if (slash > 0) {
-        wrap.append(h("span", "console-diff-sidebar__dir", o.file.path.slice(0, slash)));
-      }
-      item.append(wrap);
-      // The full path FIRST. This used to be the annotation hint alone, so hovering a truncated
-      // path answered with a paragraph about cache keys and never with the path being read.
-      item.title = o.annotation?.hint ? `${o.file.path}\n\n${o.annotation.hint}` : o.file.path;
-      if (o.annotation?.surface === "public") item.dataset.surface = "public";
-      if (o.annotation?.reach) {
-        const r = h("span", "console-diff-sidebar__counts");
-        r.textContent = String(o.annotation.reach);
-        r.title = `${o.annotation.reach} files reference the widest changed symbol here`;
-        item.append(r);
-      }
-      item.addEventListener("click", () => {
-        const row = state.fileRows[i];
-        if (row !== undefined) scrollToRow(row);
-        scroll.focus();
-      });
-      frag.append(item);
+      // Falling back to the top-level segment keeps a file magus does not attribute in a sane
+      // group rather than in a nameless one; every demo and real annotation carries a project.
+      const key = o.annotation?.project ?? (o.file.path.split("/")[0] || o.file.path);
+      const bucket = groups.get(key);
+      if (bucket) bucket.push({ o, i });
+      else groups.set(key, [{ o, i }]);
     });
+
+    for (const [project, entries] of groups) {
+      const head = h("div", "console-diff-sidebar__project");
+      const pName = h("span", "console-diff-sidebar__project-name", project);
+      pName.title = project;
+      const pCount = h("span", "console-diff-sidebar__project-count", String(entries.length));
+      head.append(pName, pCount);
+      frag.append(head);
+
+      for (const { o, i } of entries) {
+        const item = h("button", "console-diff-sidebar__item");
+        item.type = "button";
+        const st = STATUS_COPY[o.file.status];
+        item.append(label(st.short, st.modifier, o.file.status));
+        // Filename over directory, because the filename is what identifies the file and the
+        // directory is only context. A single line spent them equally and truncated both, so a
+        // column this narrow showed "...thkit/claims.go" - the half that matters least, cut.
+        const slash = o.file.path.lastIndexOf("/");
+        const wrap = h("span", "console-diff-sidebar__file");
+        const name = h("span", "console-diff-sidebar__path");
+        name.textContent = slash >= 0 ? o.file.path.slice(slash + 1) : o.file.path;
+        wrap.append(name);
+        // Relative to the project heading above, and omitted entirely when the file sits at the
+        // project root - a blank second line would be worse than none.
+        const rel = o.file.path.startsWith(`${project}/`)
+          ? o.file.path.slice(project.length + 1, slash < 0 ? undefined : slash)
+          : slash > 0
+            ? o.file.path.slice(0, slash)
+            : "";
+        if (rel) wrap.append(h("span", "console-diff-sidebar__dir", rel));
+        item.append(wrap);
+        // The full path FIRST. This used to be the annotation hint alone, so hovering a truncated
+        // path answered with a paragraph about cache keys and never with the path being read.
+        item.title = o.annotation?.hint ? `${o.file.path}\n\n${o.annotation.hint}` : o.file.path;
+        if (o.annotation?.surface === "public") item.dataset.surface = "public";
+        if (o.annotation?.reach) {
+          const r = h("span", "console-diff-sidebar__counts");
+          r.textContent = String(o.annotation.reach);
+          r.title = `${o.annotation.reach} files reference the widest changed symbol here`;
+          item.append(r);
+        }
+        // The row index rides on the element. Grouping reorders the sidebar relative to the
+        // changeset, so a positional index would mark the wrong file active.
+        const row = state.fileRows[i];
+        if (row !== undefined) item.dataset.fileRow = String(row);
+        item.addEventListener("click", () => {
+          if (row !== undefined) scrollToRow(row);
+          scroll.focus();
+        });
+        frag.append(item);
+      }
+    }
     if (state.changeset.generated.length > 0) {
       // Same fold affordance as an activity section - the twist caret plus aria-expanded and
       // data-collapsed - so a collapsible in the sidebar reads the way collapsibles read

@@ -143,6 +143,47 @@
 
 /* The path truncates from the START: the tail of a path is what distinguishes two files in a
  * monorepo, and clipping it leaves a column of identical prefixes. */
+/* The project heading. Sticky, so the answer to "which project am I looking at" survives
+   scrolling a long index - one element per group, each in its own containing block, which is the
+   arrangement the stream's rows could not have. */
+.console-diff-sidebar__project {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--pf-t--global--spacer--xs);
+  margin-block-start: var(--pf-t--global--spacer--sm);
+  padding-block: 2px;
+  background: var(--console-diff-panel);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+}
+
+.console-diff-sidebar__project:first-child {
+  margin-block-start: 0;
+}
+
+/* Truncated from the START, and this is the one place that is right: a project path's LAST
+   segments name the project, while the leading ones are the monorepo scaffolding every sibling
+   shares. */
+.console-diff-sidebar__project-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  text-align: left;
+  font-size: var(--pf-t--global--font--size--xs);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  color: var(--pf-t--global--text--color--regular);
+}
+
+.console-diff-sidebar__project-count {
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--xs);
+  color: var(--pf-t--global--text--color--subtle);
+}
+
 /* Two lines: the filename identifies, the directory only locates. min-width: 0 so the pair can
    shrink inside the item grid instead of forcing the column wider. */
 .console-diff-sidebar__file {
