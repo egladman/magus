@@ -44,12 +44,13 @@ export function byHunk(comments: readonly DiffComment[]): Map<string, DiffCommen
 export type Row =
   | { readonly kind: "file"; readonly file: DiffFile }
   | { readonly kind: "hunk"; readonly file: DiffFile; readonly hunk: Hunk; readonly index: number }
-  | { readonly kind: "line"; readonly file: DiffFile; readonly line: DiffLine }
+  | { readonly kind: "line"; readonly file: DiffFile; readonly hunk: Hunk; readonly line: DiffLine }
   | { readonly kind: "comment"; readonly file: DiffFile; readonly comment: DiffComment }
   | { readonly kind: "story"; readonly file: DiffFile; readonly touch: DiffTouch }
   | {
       readonly kind: "pair";
       readonly file: DiffFile;
+      readonly hunk: Hunk;
       readonly left: DiffLine | null;
       readonly right: DiffLine | null;
     };
@@ -82,7 +83,7 @@ export function buildRows(
         rows.push({ kind: "comment", file, comment: c });
       }
       if (mode === "split") pushSplit(rows, file, hunk);
-      else for (const line of hunk.lines) rows.push({ kind: "line", file, line });
+      else for (const line of hunk.lines) rows.push({ kind: "line", file, hunk, line });
     });
   }
   return rows;
@@ -105,7 +106,7 @@ function pushSplit(rows: Row[], file: DiffFile, hunk: Hunk): void {
     // Taking the shorter length here silently drops the tail of an uneven replacement.
     const n = Math.max(dels.length, adds.length);
     for (let i = 0; i < n; i++) {
-      rows.push({ kind: "pair", file, left: dels[i] ?? null, right: adds[i] ?? null });
+      rows.push({ kind: "pair", file, hunk, left: dels[i] ?? null, right: adds[i] ?? null });
     }
     dels = [];
     adds = [];
@@ -126,7 +127,7 @@ function pushSplit(rows: Row[], file: DiffFile, hunk: Hunk): void {
     // Context and meta belong to both sides, so they close any pending replacement and then
     // occupy one full-width row.
     flush();
-    rows.push({ kind: "pair", file, left: line, right: line });
+    rows.push({ kind: "pair", file, hunk, left: line, right: line });
   }
   flush();
 }
@@ -157,19 +158,28 @@ export function fileRowIndexes(rows: readonly Row[]): number[] {
 export function nextIndexAfter(sorted: readonly number[], from: number): number | null {
   const last = sorted[sorted.length - 1];
   if (last === undefined) return null;
-  for (const i of sorted) if (i > from) return i;
-  return last;
+  let lo = 0;
+  let hi = sorted.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if ((sorted[mid] ?? Number.POSITIVE_INFINITY) <= from) lo = mid + 1;
+    else hi = mid;
+  }
+  return sorted[lo] ?? last;
 }
 
 // prevIndexBefore is nextIndexAfter's mirror, clamping at the first entry.
 export function prevIndexBefore(sorted: readonly number[], from: number): number | null {
   const first = sorted[0];
   if (first === undefined) return null;
-  for (let k = sorted.length - 1; k >= 0; k--) {
-    const i = sorted[k];
-    if (i !== undefined && i < from) return i;
+  let lo = 0;
+  let hi = sorted.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if ((sorted[mid] ?? Number.NEGATIVE_INFINITY) < from) lo = mid + 1;
+    else hi = mid;
   }
-  return first;
+  return sorted[lo - 1] ?? first;
 }
 
 // fileOfRow maps every row index to the index of the file row that governs it, so a scroll

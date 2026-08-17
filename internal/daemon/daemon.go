@@ -267,6 +267,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			eventsH := status.NewEventsHandler(svc, opts.Build, nil, inv, 0, 0, log)
 			insightH := status.NewInsightHandler(svc, log)
 			patchH := status.NewPatchHandler(svc, log)
+			contextH := status.NewContextHandler(opts.Magus.Root(), svc, log)
 			// The daemon-wide session store, constructed by the caller so the console routes
 			// below and the magus_diff MCP tool read the SAME object - that sharing is the
 			// pairing. A caller that supplied none gets a local one rather than a nil panic;
@@ -303,6 +304,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// share subset below, because a working diff is unreviewed source and a share link
 			// is handed to a phone.
 			bridgeMux.Handle("/api/v1/diff/patch", cors(patchH))
+			bridgeMux.Handle("/api/v1/diff/context", cors(contextH))
 			// The annotation half: role, blast radius, changed-symbol reach, coverage. Split
 			// from /api/v1/diff/patch because it is far more expensive - see DiffHandler.
 			bridgeMux.Handle("/api/v1/diff", cors(diffH))

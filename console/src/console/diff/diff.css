@@ -108,12 +108,49 @@
      between them. The stream keeps the primary surface because that is where the tints have to
      register; the chrome around it steps back onto secondary. */
   background: var(--console-diff-panel);
-  overflow-y: auto;
+  overflow: hidden;
   border-inline-end: 1px solid var(--pf-t--global--border--color--default);
   padding: var(--pf-t--global--spacer--sm);
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-height: 0;
+}
+
+.console-diff-sidebar__filter {
+  flex: none;
+  min-width: 0;
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--primary--default);
+  color: inherit;
+  padding: 2px var(--pf-t--global--spacer--xs);
+  font: var(--pf-t--global--font--body--sm);
+}
+
+/* Virtualized file index. */
+.console-diff-sidebar__index {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.console-diff-sidebar__spacer {
+  position: relative;
+  min-width: 100%;
+}
+
+.console-diff-sidebar__window {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 0;
+  will-change: transform;
+}
+
+.console-diff-sidebar__generated {
+  flex: none;
 }
 
 /* The file being read. A left edge rather than a fill: the row already carries a status colour
@@ -128,6 +165,8 @@
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: var(--pf-t--global--spacer--xs);
+  box-sizing: border-box;
+  height: 40px; /* MUST equal SIDEBAR_FILE_HEIGHT in main.ts. */
   padding: 2px var(--pf-t--global--spacer--xs);
   background: none;
   border: 0;
@@ -141,25 +180,17 @@
   background: var(--pf-t--global--background--color--secondary--hover);
 }
 
-/* The project heading. Sticky, so the answer to "which project am I looking at" survives
-   scrolling a long index - one element per group, each in its own containing block, which is the
-   arrangement the stream's rows could not have. */
+/* Fixed-height project row in the virtual index. */
 .console-diff-sidebar__project {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--pf-t--global--spacer--xs);
-  margin-block-start: var(--pf-t--global--spacer--sm);
+  box-sizing: border-box;
+  height: 28px; /* MUST equal SIDEBAR_PROJECT_HEIGHT in main.ts. */
   padding-block: 2px;
   background: var(--console-diff-panel);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
-}
-
-.console-diff-sidebar__project:first-child {
-  margin-block-start: 0;
 }
 
 /* Truncated from the START, and this is the one place that is right: a project path's LAST
@@ -257,6 +288,41 @@
   gap: var(--pf-t--global--spacer--xs);
   align-items: center;
   flex-wrap: wrap;
+}
+
+.console-diff-collaboration:not(:empty) {
+  color: var(--pf-t--global--icon--color--status--warning--default);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+/* Bounded in-place code context. */
+.console-diff-context {
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--console-diff-panel);
+  max-block-size: 18rem;
+  overflow: auto;
+}
+.console-diff-context[hidden] { display: none; }
+.console-diff-context__head {
+  position: sticky;
+  inset-block-start: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
+  background: var(--console-diff-panel);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  font: var(--pf-t--global--font--body--sm);
+}
+.console-diff-context__title { font-family: var(--pf-t--global--font--family--mono); }
+.console-diff-context__close { min-inline-size: 1.5rem; }
+.console-diff-context__body {
+  margin: 0;
+  padding: var(--pf-t--global--spacer--sm);
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--sm);
+  line-height: 1.5;
+  white-space: pre;
 }
 
 /* The scroll container owns BOTH axes: vertical for the stream, horizontal for long lines.
@@ -448,6 +514,16 @@
   background: var(--pf-t--global--background--color--secondary--default);
   padding-inline: var(--pf-t--global--spacer--sm);
 }
+.console-diff-row__peek {
+  margin-inline-start: auto;
+  border: 0;
+  background: transparent;
+  color: var(--console-accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--pf-t--global--font--size--xs);
+}
+.console-diff-row__peek:hover { text-decoration: underline; }
 
 /* The gutters are a fixed character width so the code column starts at the same x on every
  * row. tabular-nums keeps a 4-digit line number from being wider than a 4-digit one in a
@@ -569,7 +645,14 @@
   white-space: nowrap;
 }
 
-.console-diff-rail__what {
+.console-diff-rail__where {
+  flex: 0 0 auto;
+  font-family: var(--pf-t--global--font--family--mono);
+  color: var(--pf-t--global--text--color--subtle);
+  white-space: nowrap;
+}
+
+.console-diff-rail__reason {
   flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -586,6 +669,8 @@
   font-size: var(--pf-t--global--font--size--xs);
   white-space: nowrap;
 }
+.console-diff-rail__go:disabled,
+.console-diff-rail__skip:disabled { cursor: not-allowed; opacity: 0.55; }
 
 /* A comment sits in the stream, one row tall like everything else, so it scrolls with the code
  * it is about and costs the virtualizer nothing special. Indented past the gutters so the diff

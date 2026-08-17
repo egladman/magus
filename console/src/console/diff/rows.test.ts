@@ -252,6 +252,24 @@ test("navigation over an empty stream yields null rather than throwing", () => {
   assert.equal(prevIndexBefore([], 0), null);
 });
 
+// Covers virtualized hunk lookup at scale and boundaries.
+test("navigation preserves exact boundaries in a large hunk index", () => {
+  const marks = Array.from({ length: 100_000 }, (_, i) => i * 3 + 1);
+  assert.equal(nextIndexAfter(marks, 150_000), 150_001);
+  assert.equal(prevIndexBefore(marks, 150_000), 149_998);
+  assert.equal(nextIndexAfter(marks, -1), 1);
+  assert.equal(prevIndexBefore(marks, Number.MAX_SAFE_INTEGER), 299_998);
+});
+
+test("content rows retain their hunk for lazy per-hunk rendering work", () => {
+  const rows = buildRows(parsePatch(REPLACEMENT), "unified");
+  const hunk = rows.find((row): row is Extract<Row, { kind: "hunk" }> => row.kind === "hunk");
+  const line = rows.find((row): row is Extract<Row, { kind: "line" }> => row.kind === "line");
+  assert.ok(hunk);
+  assert.ok(line);
+  assert.equal(line.hunk, hunk.hunk);
+});
+
 // A binary or mode-only file has no hunks but must still appear, or it silently vanishes from
 // a review that changed it.
 test("a file with no hunks still gets its heading row", () => {

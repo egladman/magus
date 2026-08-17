@@ -10,8 +10,7 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// DiffSessionHandler serves POST /api/v1/diff/session: the human's half of a paired
-// review - where they are looking, what they have read, and what they have said.
+// DiffSessionHandler serves the live paired-review session.
 //
 // Every write here is stamped DiffAuthorHuman, because this route is only reachable from
 // the console and the CLI. The agent's half lives on the MCP surface and is stamped
@@ -28,7 +27,7 @@ type DiffSessionHandler struct {
 	root     string
 }
 
-// NewDiffSessionHandler returns the POST /api/v1/diff/session handler.
+// NewDiffSessionHandler returns the paired-review handler.
 func NewDiffSessionHandler(sessions *diff.Store, root string, log *slog.Logger) *DiffSessionHandler {
 	h := &DiffSessionHandler{sessions: sessions, root: root}
 	h.Base = handler.New(h.serve, log)
@@ -56,6 +55,15 @@ type reviewSessionRequest struct {
 func (h *DiffSessionHandler) serve(w http.ResponseWriter, r *http.Request) {
 	if r.Method == http.MethodOptions {
 		w.WriteHeader(http.StatusNoContent)
+		return
+	}
+	if r.Method == http.MethodGet {
+		sess := h.sessions.Get(h.root)
+		if sess == nil {
+			http.Error(w, "no review session attached; GET /api/v1/diff first", http.StatusConflict)
+			return
+		}
+		writeJSON(w, sess)
 		return
 	}
 	if r.Method != http.MethodPost {
