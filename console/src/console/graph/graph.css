@@ -354,6 +354,8 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
 }
 .console-graph-card__mermaidlink:hover { text-decoration: underline; }
 .console-graph-card__mermaidlink .console-graph-card__copyglyph { font-size: 0.95em; }
+.console-graph-card__noteslink { margin-inline-start: 0.7rem; padding: 0; border: 0; background: transparent; color: var(--console-accent); cursor: pointer; font: inherit; font-size: 0.78rem; }
+.console-graph-card__noteslink:hover { text-decoration: underline; }
 
 /* Narrow screens: stack the columns; canvas gets a fixed height, the list and card
    flow beneath it. */

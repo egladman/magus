@@ -687,7 +687,7 @@ export function referenceSurface(): PageModule<null, null> {
       }
       root.append(body);
       host.append(root);
-      return { search: noRefSearch, deactivate: () => {} };
+      return { search: noRefSearch, setVisible() {}, deactivate: () => {} };
     },
   };
 }

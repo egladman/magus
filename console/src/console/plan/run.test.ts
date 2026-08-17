@@ -180,7 +180,7 @@ test("the anchor phrase says how the daemon chose, in the daemon's four ways", (
 
 test("a plan whose target the daemon did not name gets no phrase rather than an invented one", () => {
   assert.equal(anchorPhrase(parseRunPlan({ anchor: "running", nodes: [{ id: "a" }] })), "");
-  assert.equal(runOverviewLine(parseRunPlan({ nodes: [{ id: "a" }] })), "1 target - 0 fail");
+  assert.equal(runOverviewLine(parseRunPlan({ nodes: [{ id: "a" }] })), "1 target. 0 fail.");
 });
 
 // ---- the overview line -----------------------------------------------------
@@ -190,7 +190,7 @@ test("a plan whose target the daemon did not name gets no phrase rather than an 
 test("the overview leads with the anchor, then counts the targets and breaks down the states", () => {
   assert.equal(
     runOverviewLine(parseRunPlan(BODY)),
-    "following the running ci - 4 targets - 1 running, 2 pass - 0 fail",
+    "following the running ci. 4 targets. 1 running, 2 pass. 0 fail.",
   );
 });
 
@@ -199,7 +199,7 @@ test("the overview leads with the anchor, then counts the targets and breaks dow
 test("the fail count is present even when it is zero", () => {
   assert.equal(
     runOverviewLine(parseRunPlan({ target: "ci", anchor: "recent", nodes: [{ id: "a" }] })),
-    "last run: ci - 1 target - 0 fail",
+    "last run: ci. 1 target. 0 fail.",
   );
 });
 
@@ -210,7 +210,7 @@ test("idle is not counted in the line, but fail and running are", () => {
     anchor: "default",
     nodes: [{ id: "a" }, { id: "b" }, { id: "c", state: "fail" }, { id: "d", state: "running" }],
   });
-  assert.equal(runOverviewLine(plan), "ci - 4 targets - 1 running - 1 fail");
+  assert.equal(runOverviewLine(plan), "ci. 4 targets. 1 running. 1 fail.");
 });
 
 // ---- placement -------------------------------------------------------------

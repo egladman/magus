@@ -170,6 +170,9 @@ export function createActionsSurface(deps: ActionsSurfaceDeps): PageModule<null,
       host.append(root);
       return {
         search: noSearch,
+        // Static, but still part of the shell lifecycle: this keeps the surface contract
+        // exhaustive when panes are focused, tiled, or backgrounded.
+        setVisible() {},
         deactivate() {
           host.replaceChildren();
         },

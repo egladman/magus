@@ -108,12 +108,49 @@
      between them. The stream keeps the primary surface because that is where the tints have to
      register; the chrome around it steps back onto secondary. */
   background: var(--console-diff-panel);
-  overflow-y: auto;
+  overflow: hidden;
   border-inline-end: 1px solid var(--pf-t--global--border--color--default);
   padding: var(--pf-t--global--spacer--sm);
   display: flex;
   flex-direction: column;
   gap: 2px;
+  min-height: 0;
+}
+
+.console-diff-sidebar__filter {
+  flex: none;
+  min-width: 0;
+  box-sizing: border-box;
+  width: 100%;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--primary--default);
+  color: inherit;
+  padding: 2px var(--pf-t--global--spacer--xs);
+  font: var(--pf-t--global--font--body--sm);
+}
+
+/* Virtualized file index. */
+.console-diff-sidebar__index {
+  position: relative;
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+}
+
+.console-diff-sidebar__spacer {
+  position: relative;
+  min-width: 100%;
+}
+
+.console-diff-sidebar__window {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 0;
+  will-change: transform;
+}
+
+.console-diff-sidebar__generated {
+  flex: none;
 }
 
 /* The file being read. A left edge rather than a fill: the row already carries a status colour
@@ -128,6 +165,8 @@
   grid-template-columns: auto 1fr auto;
   align-items: center;
   gap: var(--pf-t--global--spacer--xs);
+  box-sizing: border-box;
+  height: 40px; /* MUST equal SIDEBAR_FILE_HEIGHT in main.ts. */
   padding: 2px var(--pf-t--global--spacer--xs);
   background: none;
   border: 0;
@@ -141,25 +180,17 @@
   background: var(--pf-t--global--background--color--secondary--hover);
 }
 
-/* The project heading. Sticky, so the answer to "which project am I looking at" survives
-   scrolling a long index - one element per group, each in its own containing block, which is the
-   arrangement the stream's rows could not have. */
+/* Fixed-height project row in the virtual index. */
 .console-diff-sidebar__project {
-  position: sticky;
-  top: 0;
-  z-index: 1;
   display: flex;
   align-items: baseline;
   justify-content: space-between;
   gap: var(--pf-t--global--spacer--xs);
-  margin-block-start: var(--pf-t--global--spacer--sm);
+  box-sizing: border-box;
+  height: 28px; /* MUST equal SIDEBAR_PROJECT_HEIGHT in main.ts. */
   padding-block: 2px;
   background: var(--console-diff-panel);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
-}
-
-.console-diff-sidebar__project:first-child {
-  margin-block-start: 0;
 }
 
 /* Truncated from the START, and this is the one place that is right: a project path's LAST
@@ -259,6 +290,41 @@
   flex-wrap: wrap;
 }
 
+.console-diff-collaboration:not(:empty) {
+  color: var(--pf-t--global--icon--color--status--warning--default);
+  font-size: var(--pf-t--global--font--size--sm);
+}
+
+/* Bounded in-place code context. */
+.console-diff-context {
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--console-diff-panel);
+  max-block-size: 18rem;
+  overflow: auto;
+}
+.console-diff-context[hidden] { display: none; }
+.console-diff-context__head {
+  position: sticky;
+  inset-block-start: 0;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
+  background: var(--console-diff-panel);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  font: var(--pf-t--global--font--body--sm);
+}
+.console-diff-context__title { font-family: var(--pf-t--global--font--family--mono); }
+.console-diff-context__close { min-inline-size: 1.5rem; }
+.console-diff-context__body {
+  margin: 0;
+  padding: var(--pf-t--global--spacer--sm);
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--sm);
+  line-height: 1.5;
+  white-space: pre;
+}
+
 /* The scroll container owns BOTH axes: vertical for the stream, horizontal for long lines.
  * Overflow on an inner element would clip rows against the virtualizer's transform. */
 /* The positioning context for the pinned header. It exists so the header can overlay the
@@ -329,6 +395,25 @@
   min-width: max-content; /* long lines extend the scroll width rather than wrapping */
 }
 
+/* max-content alone sizes each row to its OWN text, so a row shorter than the diff's longest
+   line - a code line, a hunk header, a comment, or a story - stopped short of the scroll width
+   that longest line established, and its background (the add/delete tint, or the hunk/comment
+   gray) exposed untinted surface past its own last character when the reader scrolled right.
+   --console-diff-min-row-width (main.ts, from maxLineChars in rows.ts) is that scroll width in
+   PIXELS, not ch: ch is relative to each element's OWN font, and a comment or story row renders
+   in the body font rather than mono, so the same ch count there resolved to a different, smaller
+   pixel width than on a code line and fell short all over again.
+   width:max-content is what still lets a row LONGER than the floor grow past it (a comment
+   longer than any code line, say): min-width alone cannot combine with max-content in one
+   calc()/max() expression - max-content is not a valid operand there - so the fallback has to
+   be a second property instead. --file is excluded because it is chrome, not content, and holds
+   the pane width on purpose (see .console-diff-row--file below); --pair is excluded because its
+   two columns already clip their own overflow instead of extending it. */
+.console-diff-row:not(.console-diff-row--file, .console-diff-row--pair) {
+  width: max-content;
+  min-width: var(--console-diff-min-row-width, 0);
+}
+
 /* Add and delete tint.
  *
  * Mixed from the COLOUR tokens, NOT from --pf-t--global--background--color--status--*: those
@@ -384,13 +469,17 @@
   background: var(--pf-t--global--background--color--secondary--default);
   border-block: 1px solid var(--pf-t--global--border--color--default);
   font-family: var(--pf-t--global--font--family--body);
-  /* Sticky on the INLINE axis only. A vertical `top: 0` cannot work here and did not: every row
-     is a flat sibling of one .console-diff-window, so all the file headers share a single sticky
-     containing block and pile up on the same line instead of pinning one at a time - four of them
-     stacked on the last rows and hid them. Virtualization rules it out independently: scroll into
-     a long file and that file's header row is not in the DOM at all, so there is nothing left to
-     pin. A header that follows the reader down needs its own element outside the virtual window,
-     which is a feature and not this rule. */
+  /* A vertical `top: 0` cannot work here and did not: every row is a flat sibling of one
+     .console-diff-window, so all the file headers share a single sticky containing block and
+     pile up on the same line instead of pinning one at a time - four of them stacked on the last
+     rows and hid them. `left: 0` does not work either, for a different reason: .console-diff-window
+     is transform-translated every scroll frame for the virtualizer, and a transform on any
+     ancestor breaks position:sticky in every browser, so this row scrolls away horizontally
+     exactly like any other row despite the declaration below. Both axes are kept anyway - a
+     harmless no-op - because .console-diff-pinned (main.ts, paintPinned) is the row that actually
+     does this job on both axes: it lives outside the transformed window, so it is the only thing
+     that CAN track the reader vertically past this file and horizontally past this row's own
+     left edge. That header is a feature and not this rule. */
   position: sticky;
   left: 0;
   width: 100%;
@@ -448,6 +537,16 @@
   background: var(--pf-t--global--background--color--secondary--default);
   padding-inline: var(--pf-t--global--spacer--sm);
 }
+.console-diff-row__peek {
+  margin-inline-start: auto;
+  border: 0;
+  background: transparent;
+  color: var(--console-accent);
+  cursor: pointer;
+  font: inherit;
+  font-size: var(--pf-t--global--font--size--xs);
+}
+.console-diff-row__peek:hover { text-decoration: underline; }
 
 /* The gutters are a fixed character width so the code column starts at the same x on every
  * row. tabular-nums keeps a 4-digit line number from being wider than a 4-digit one in a
@@ -474,10 +573,23 @@
 }
 
 /* Split view: two equal columns that scroll together, divided down the middle. */
+/* Split-view rows must never contribute width beyond the pane: their two columns clip their own
+   overflow (.console-diff-row__side, overflow:hidden) instead of extending it, which is what
+   keeps split view free of horizontal scroll. But CSS grid's max-content query does not respect
+   that clipping - an item with overflow:hidden still contributes ITS content's full intrinsic
+   width to the container's own max-content size, only the LAID-OUT space distribution is
+   suppressed. The base .console-diff-row rule's min-width:max-content therefore floors a pair
+   row to that phantom width whenever one side's raw text happens to be long, letting an outlier
+   pair row set the diff's scrollWidth - and every other row, correctly floored to the diff's
+   real longest line, then fell short of it. width/max-width pin the row to the pane regardless;
+   min-width:0 overrides the inherited max-content floor that caused this. */
 .console-diff-row--pair {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .console-diff-row__side {
@@ -569,7 +681,14 @@
   white-space: nowrap;
 }
 
-.console-diff-rail__what {
+.console-diff-rail__where {
+  flex: 0 0 auto;
+  font-family: var(--pf-t--global--font--family--mono);
+  color: var(--pf-t--global--text--color--subtle);
+  white-space: nowrap;
+}
+
+.console-diff-rail__reason {
   flex: 1 1 auto;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -586,6 +705,8 @@
   font-size: var(--pf-t--global--font--size--xs);
   white-space: nowrap;
 }
+.console-diff-rail__go:disabled,
+.console-diff-rail__skip:disabled { cursor: not-allowed; opacity: 0.55; }
 
 /* A comment sits in the stream, one row tall like everything else, so it scrolls with the code
  * it is about and costs the virtualizer nothing special. Indented past the gutters so the diff

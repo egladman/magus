@@ -27,6 +27,7 @@ function stubDeps(titles: Record<string, ReturnType<typeof signal<string | null>
       return {
         search: { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) },
         docTitle: titles[pageId],
+        setVisible() {},
         deactivate() {},
       };
     },
@@ -135,6 +136,37 @@ test("a background pane's document change does not retitle the tab", async () =>
   logs.set("out-run-2");
   assert.equal(seen.length, after, "a background pane must not emit");
   assert.deepEqual(seen.at(-1), ["magusfile.buzz", "graph"]);
+});
+
+test("only the focused pane owns visibility while a tiled tab is shown", async () => {
+  const titles: Record<string, ReturnType<typeof signal<string | null>>> = {
+    logs: signal<string | null>(null),
+    graph: signal<string | null>(null),
+  };
+  const calls: [string, boolean][] = [];
+  const { deps } = stubDeps(titles);
+  deps.mountSurface = async (pageId) => ({
+    search: { placeholder: "", parse: () => null, apply: () => ({ matches: 0 }) },
+    docTitle: titles[pageId],
+    setVisible(visible) {
+      calls.push([pageId, visible]);
+    },
+    deactivate() {},
+  });
+  const tile = createTileView(deps);
+  await mounted();
+  tile.setVisible(true);
+  assert.deepEqual(calls.at(-1), ["logs", true]);
+
+  tile.adopt("graph");
+  await mounted();
+  assert.deepEqual(calls.slice(-2), [
+    ["logs", false],
+    ["graph", true],
+  ]);
+
+  tile.setVisible(false);
+  assert.deepEqual(calls.at(-1), ["graph", false]);
 });
 
 test("closing the focused pane names the tab after the survivor", async () => {

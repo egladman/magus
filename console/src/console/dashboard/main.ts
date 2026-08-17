@@ -39,6 +39,8 @@ import { sandboxTile } from "./tiles/sandbox";
 import { attentionTile } from "./tiles/attention";
 import { activityTile } from "./tiles/activity";
 import { agentsTile } from "./tiles/agents";
+import { delegationTile } from "./tiles/delegation";
+import { openSurface } from "../surface-navigation";
 import { workspacesTile } from "./tiles/workspaces";
 import { locksTile } from "./tiles/locks";
 import { servicesTile } from "./tiles/services";
@@ -54,12 +56,16 @@ import {
   dashboardHeader,
   activeWorkspace,
   enterBigPictureRoute,
+  resetBigPicture,
 } from "./tiles/bigPicture";
 // The dashboard is only ever mounted as a console surface now (the decoupled console has no standalone
 // docs page), so it wires NO docs-site chrome of its own - the console frame owns the title bar, tab
 // strip, settings gear, and status bar. (Its old standalone-only initNav/initSearch/initRefDrawer/
 // initConsoleSettings self-wiring was dropped with the docs-page decoupling.)
 import { getDefaultHost } from "../../lib/settings";
+import { activate as activatePlan } from "../plan/main";
+import type { SurfaceInstance } from "../standalone";
+import { publishStatus } from "../status";
 
 const el = (id: string): HTMLElement => document.getElementById(id) as HTMLElement;
 const opt = (id: string): HTMLElement | null => document.getElementById(id);
@@ -104,9 +110,49 @@ function setConn(conn: ConnView): void {
 // state so the bar catches up on return. Standalone (no console) this stays false, unchanged.
 let surfaceHidden = false;
 let lastState: DashboardState | null = null;
+type DashboardMode = "overview" | "plan";
+type DashboardViewWindow = Window & { __magusConsoleDashboardView?: DashboardMode };
+let dashboardMode: DashboardMode = "overview";
+let planMount: SurfaceInstance | null = null;
+
+function disposePlan(): void {
+  planMount?.deactivate();
+  planMount = null;
+}
+
+function setDashboardMode(mode: DashboardMode): void {
+  const main = el("dash-main");
+  const overview = el("dash-overview");
+  const planHost = el("dash-plan-host");
+  opt("dash-plan-controls")?.toggleAttribute("hidden", mode !== "plan");
+  dashboardMode = mode;
+  main.dataset.mode = mode;
+  overview.hidden = mode !== "overview";
+  planHost.hidden = mode !== "plan";
+  if (mode === "plan") {
+    if (!planMount) planMount = activatePlan(planHost);
+    planMount.setVisible?.(!surfaceHidden);
+    return;
+  }
+  // The plan's keyboard commands and poller only make sense while its mode is in front. Rebuilding
+  // it on return is deliberate: it leaves no hidden command owner or retained canvas behind.
+  disposePlan();
+}
+
+function takeDashboardViewIntent(): DashboardMode | null {
+  const win = window as DashboardViewWindow;
+  const mode = win.__magusConsoleDashboardView;
+  delete win.__magusConsoleDashboardView;
+  return mode === "plan" || mode === "overview" ? mode : null;
+}
 
 export function setVisible(visible: boolean): void {
   surfaceHidden = !visible;
+  if (visible) transport.resume();
+  else transport.suspend();
+  planMount?.setVisible?.(visible && dashboardMode === "plan");
+  const big = viewMode.get() === "bigPicture";
+  for (const tile of tiles) tile.setVisible?.(visible && (!big || !boardOnlyTiles.has(tile)));
   if (visible && lastState) renderStatusBar(lastState);
 }
 
@@ -130,16 +176,13 @@ function renderStatusBar(s: DashboardState): void {
 
   const demoing = s.conn.state === "demo";
 
-  // Connection dot: ONE indicator - a colored dot that reads "connected" (green) when live, and
-  // "not connected" otherwise. When connected, the dot takes the daemon's HEALTH color (green ok /
-  // amber degraded / red down) so a single element carries both "is it live" and "is it well" - no
-  // separate health/mode chips. In demo the board is streaming synthesized data, so the dot reads
-  // "connected" (the app-bar "Demo data" chip is what marks it as synthetic).
-  const c = el("console-conn");
+  // The status bar distinguishes a live daemon from the synthesized demo feed.
+  let connection: "none" | "connecting" | "connected" | "disconnected" | "demo" = "none";
+  let connectionLabel = "not connected";
+  let health: string | undefined;
   if (demoing) {
-    c.textContent = "connected";
-    c.dataset.state = "connected";
-    c.dataset.health = s.status ? s.status.health.cls : "ok";
+    connection = "demo";
+    connectionLabel = "demo";
   } else {
     const map: Record<string, string> = {
       connecting: "connecting...",
@@ -147,32 +190,41 @@ function renderStatusBar(s: DashboardState): void {
       disconnected: s.conn.detail || "reconnecting",
       none: "not connected",
     };
-    c.textContent = map[s.conn.state] || s.conn.state;
-    c.dataset.state = s.conn.state;
+    connectionLabel = map[s.conn.state] || s.conn.state;
+    connection =
+      s.conn.state === "connected" ||
+      s.conn.state === "connecting" ||
+      s.conn.state === "disconnected"
+        ? s.conn.state
+        : "none";
     if (s.conn.state === "connected" && s.status) {
-      c.dataset.health = s.status.health.cls;
-    } else {
-      delete c.dataset.health;
+      health = s.status.health.cls;
     }
   }
 
   // Observing-since: a brief note of when the daemon began collecting these counters, so it is
   // clear the numbers are cumulative from then and are NOT persisted across daemon restarts.
-  const obs = el("console-observing");
+  let observing: { text: string; title: string } | undefined;
   if (s.observingSince) {
     const t = new Date(s.observingSince).toLocaleTimeString([], {
       hour: "2-digit",
       minute: "2-digit",
     });
-    obs.textContent = "observing since " + t;
-    obs.title =
-      "The telemetry and cache counters are cumulative since the daemon started observing (" +
-      t +
-      "). They are not persisted across daemon restarts.";
-    obs.hidden = false;
-  } else {
-    obs.hidden = true;
+    observing = {
+      text: "observing since " + t,
+      title:
+        "The telemetry and cache counters are cumulative since the daemon started observing (" +
+        t +
+        "). They are not persisted across daemon restarts.",
+    };
   }
+  publishStatus({
+    connection,
+    label: connectionLabel,
+    health,
+    hint: demoing ? "Demo data is synthetic. Click to change the daemon address." : "",
+    observing,
+  });
 }
 
 // ---- notification admission ------------------------------------------------
@@ -223,6 +275,19 @@ function wireNotifications(): void {
 // ---- tiles -----------------------------------------------------------------
 let tiles: Tile[] = [];
 let rotator: Rotator | null = null;
+
+// Board sections label direct panel children.
+function boardSection(label: string, detail: string): HTMLElement {
+  const section = document.createElement("div");
+  section.className = "console-dashboard-section";
+  section.dataset.boardOnly = "";
+  const title = document.createElement("h2");
+  title.textContent = label;
+  const sub = document.createElement("p");
+  sub.textContent = detail;
+  section.append(title, sub);
+  return section;
+}
 // Store subscriptions taken out by mountTiles, and the controller for activate()'s
 // window-level listeners. mountTiles runs again on every reopen (the rotator comment below
 // says so), so without dropping these the previous generation of tiles stays subscribed:
@@ -230,6 +295,8 @@ let rotator: Rotator | null = null;
 // frame, forever. The rotator already handled this one tile at a time; this is the same
 // reasoning applied to the whole set.
 let tileDisposers: (() => void)[] = [];
+let boardDisposers: (() => void)[] = [];
+let boardOnlyTiles = new Set<Tile>();
 let lifecycleAbort: AbortController | null = null;
 
 // releaseTiles drops the previous board: unsubscribe first so nothing can be updated while it
@@ -237,8 +304,11 @@ let lifecycleAbort: AbortController | null = null;
 function releaseTiles(): void {
   for (const off of tileDisposers) off();
   tileDisposers = [];
+  for (const dispose of boardDisposers) dispose();
+  boardDisposers = [];
   for (const t of tiles) t.destroy();
   tiles = [];
+  boardOnlyTiles = new Set();
 }
 
 function mountTiles(): void {
@@ -271,6 +341,7 @@ function mountTiles(): void {
   cacheStats.el.dataset.half = "";
 
   const attention = attentionTile();
+  const delegation = delegationTile();
   const activity = activityTile();
   const agents = agentsTile();
   const gantt = ganttTile(); // the live execution timeline (fed by Status.runs)
@@ -286,128 +357,119 @@ function mountTiles(): void {
   const buzz = buzzTile();
   const sandbox = sandboxTile();
   const mcp = mcpTile();
-
-  // Ordered, full-width by default (pool/cacheStats opt into the half-width pair row).
-  const ordered: Tile[] = [
-    attention,
-    activity,
-    agents,
-    pool,
-    cacheStats,
-    remote,
-    gantt,
-    cacheRate,
-    utilization,
-    targets,
-    workspaces,
-    services,
-    locks,
-    config,
-    latency,
-    buzz,
-    sandbox,
-    mcp,
-  ];
-  for (const t of ordered) host.append(t.el);
-
-  // The Toolchain tile: which binaries this workspace drives and the window each is held
-  // to, from magus.tool.v1. Sits beside Insight because both answer "what is this repo
-  // like" rather than "what is happening right now", and both ride an on-demand poll.
   const toolchain = toolchainTile();
-  host.append(toolchain.el);
-
-  // The Insight section: the five VCS/run-outcome lenses, fed by the on-demand
-  // /api/v1/insight poll. Its refresh button forces an out-of-band refetch.
   const insight = insightSection(() => transport.refreshInsight());
-  host.append(insight.el);
-  for (const t of insight.tiles) host.append(t.el);
 
-  // The Big Picture alert rail. Mounted here rather than inside a tile because it is not one: it
-  // has no slot in the grid, it renders only in Big Picture, and it is driven by NOTIFY_EVENT
-  // rather than by the store. It exists because hiding the console chrome also hides the
-  // notification bell, so without it the failures wireNotifications() raises below would fire into
-  // a surface nobody can see - the mode would go quiet exactly when something went wrong.
+  type BoardSection = "live" | "runtime" | "diagnostics" | "intelligence";
+  type BigPictureMembership = "always" | "rotate" | "board";
+  interface BoardTile {
+    tile: Tile;
+    section: BoardSection;
+    bigPicture: BigPictureMembership;
+  }
+
+  // One composition list owns both reading order and Big Picture membership. A tile never gets a
+  // mode-specific renderer; it only declares whether its existing renderer is permanent, rotated,
+  // or board-only in the presentation layout.
+  const boardTiles: BoardTile[] = [
+    { tile: attention, section: "live", bigPicture: "always" },
+    { tile: delegation, section: "live", bigPicture: "always" },
+    { tile: agents, section: "live", bigPicture: "always" },
+    { tile: activity, section: "live", bigPicture: "always" },
+    { tile: gantt, section: "live", bigPicture: "always" },
+    { tile: pool, section: "runtime", bigPicture: "always" },
+    { tile: cacheStats, section: "runtime", bigPicture: "always" },
+    { tile: locks, section: "runtime", bigPicture: "always" },
+    { tile: workspaces, section: "runtime", bigPicture: "always" },
+    { tile: remote, section: "runtime", bigPicture: "rotate" },
+    { tile: cacheRate, section: "runtime", bigPicture: "rotate" },
+    { tile: utilization, section: "runtime", bigPicture: "rotate" },
+    { tile: targets, section: "diagnostics", bigPicture: "rotate" },
+    { tile: services, section: "diagnostics", bigPicture: "rotate" },
+    { tile: config, section: "diagnostics", bigPicture: "board" },
+    { tile: latency, section: "diagnostics", bigPicture: "board" },
+    { tile: buzz, section: "diagnostics", bigPicture: "board" },
+    { tile: sandbox, section: "diagnostics", bigPicture: "board" },
+    { tile: mcp, section: "diagnostics", bigPicture: "board" },
+    { tile: toolchain, section: "intelligence", bigPicture: "board" },
+    ...insight.tiles.map((tile) => ({
+      tile,
+      section: "intelligence" as const,
+      bigPicture: "board" as const,
+    })),
+  ];
+  const appendSection = (section: BoardSection, title: string, description: string): void => {
+    host.append(boardSection(title, description));
+    for (const item of boardTiles) if (item.section === section) host.append(item.tile.el);
+  };
+  appendSection("live", "Live work", "Decide, coordinate, and follow the work that is moving now.");
+  appendSection(
+    "runtime",
+    "Runtime",
+    "Capacity, locks, and cache health - the constraints around that work.",
+  );
+  appendSection(
+    "diagnostics",
+    "Diagnostics",
+    "Detailed target, service, and tool health when the live picture needs explanation.",
+  );
+  host.append(
+    boardSection(
+      "Workspace intelligence",
+      "Longer-horizon signals that explain why this workspace behaves the way it does.",
+    ),
+  );
+  for (const item of boardTiles) {
+    if (item.section !== "intelligence") continue;
+    if (item.tile === toolchain) host.append(item.tile.el, insight.el);
+    else host.append(item.tile.el);
+  }
+
+  // Big Picture keeps alerts outside the tile grid.
   const alerts = mountAlertRail();
   host.append(alerts.el);
 
-  // The one adjustable dimension of the canvas: where the left stack ends and the live-activity
-  // column begins. Like the rail this is not a tile - it has no slot, renders only in the wide Big
-  // Picture layout, and is driven by a stored preference rather than by the store. It tracks the
-  // activity panel's measured left edge, so it stays correct without re-deriving the grid's own
-  // column arithmetic.
+  // The split handle tracks the activity column.
   const split = mountSplitHandle(host);
   host.append(split.el);
+  boardDisposers = [() => alerts.destroy(), () => split.destroy()];
 
-  tiles = [header, ...ordered, toolchain, ...insight.tiles];
+  tiles = [header, ...boardTiles.map((item) => item.tile)];
+  boardOnlyTiles = new Set(
+    boardTiles.filter((item) => item.bigPicture === "board").map((item) => item.tile),
+  );
 
-  // Chrome first, then tiles: the panels are revealed before a chart tile builds.
+  // Render chrome before tiles.
   tileDisposers.push(store.subscribe(renderStatusBar));
   for (const t of tiles) tileDisposers.push(store.subscribe((s) => t.update(s)));
 
-  // Board vs Big Picture. Big Picture is NOT a separate view: it is THIS SAME SET of tiles with
-  // most of them hidden, re-laid-out by dashboard.css off [data-bigpicture]. So the only decision
-  // made here is membership - which tiles survive the switch - and the tiles themselves neither
-  // know nor care which mode they are being painted in.
-  //
-  // That is what keeps one renderer per concept. The alternative (and what this replaced) was a
-  // bigPictureTile that re-drew the verdict, the counts, and the workspaces itself at TV scale,
-  // which meant every metric had to be written twice and the two copies drifted. Placing the real
-  // attention/pool/cache/workspaces tiles means a fix to any of them lands in both modes at once.
-  //
-  // Membership rule: what answers "is anything wrong, and what is the machine doing" from across a
-  // room. Trends, per-target tables, the heavy metric families, and the on-demand VCS lenses are
-  // lean-in artifacts that cannot be read at that distance, so they sit the mode out.
-  // The panels that share the ROTATING slot. Everything here is material you would look at second:
-  // history and aggregates, worth a turn on a wall display but not worth a permanent slot when the
-  // alternative is losing the run timeline or the verdict. See tiles/rotator.ts for the discipline.
-  const rotating: HTMLElement[] = [
-    utilization.el, // pool occupancy over time
-    cacheRate.el, // hit rate over time
-    targets.el, // which targets cost the most, and which flap
-    remote.el, // the shared cache, when one is configured
-    services.el, // hosted services the daemon is keeping warm
-  ];
+  // Big Picture reuses these tiles; membership controls what remains visible.
+  const rotating = boardTiles
+    .filter((item) => item.bigPicture === "rotate")
+    .map((item) => item.tile.el);
+  const bigPictureEls = new Set(
+    boardTiles.filter((item) => item.bigPicture !== "board").map((item) => item.tile.el),
+  );
 
-  const bigPictureEls = new Set<HTMLElement>([
-    attention.el, // the verdict and the failing/running/queued counts
-    activity.el, // what is running right now
-    gantt.el, // the live execution timeline
-    pool.el, // occupancy, as the airplane-seating grid
-    cacheStats.el, // hit rate and the cache tallies
-    workspaces.el, // which workspaces this daemon is serving
-    locks.el, // a held lock with waiters behind it is exactly a from-across-the-room fact
-    agents.el, // who is driving magus right now, and whether the guard is denying anything
-    ...rotating, // present in the mode; the rotator shows exactly one at a time
-  ]);
-
-  // Rotation freezes whenever the verdict is not "all clear". The hero stamps its own state, so the
-  // rotator reads the SAME judgement the headline shows rather than re-deriving one that could
-  // disagree with it. A board that keeps shuffling while something is failing is working against
-  // the person who just looked up at it.
-  // Torn down and rebuilt with the panel host: mountTiles() runs again when a console tab is closed
-  // and reopened, and a second rotator driving the same elements would fight the first over which
-  // one is showing.
+  // Pause rotation while the verdict needs attention.
   rotator?.destroy();
   rotator = mountRotator(rotating, {
     paused: () => attention.el.dataset.state !== "clear",
   });
 
-  // A data attribute, not .hidden: several tiles (config/services/remote/buzz/sandbox) already
-  // manage their OWN .hidden as a "waiting for data" latch inside update(), which runs on every
-  // store tick AFTER this - fighting over .hidden would flicker the board back on. [data-view-hide]
-  // is touched only here, so the two never collide (dashboard.css draws the actual display:none).
-  // Bound once here, un-disposed on a later remount - the same lifetime the store.subscribe calls
-  // above already have (mountTiles rebuilds the whole panel host on re-mount).
+  // Keep view visibility separate from tile state.
   const boardEls: HTMLElement[] = [
-    ...ordered.map((t) => t.el),
-    toolchain.el,
+    ...boardTiles.map((item) => item.tile.el),
     insight.el,
-    ...insight.tiles.map((t) => t.el),
+    ...[...host.querySelectorAll<HTMLElement>("[data-board-only]")],
   ];
-  bind(viewMode, (mode) => {
-    const big = mode === "bigPicture";
-    for (const e of boardEls) e.toggleAttribute("data-view-hide", big && !bigPictureEls.has(e));
-  });
+  tileDisposers.push(
+    bind(viewMode, (mode) => {
+      const big = mode === "bigPicture";
+      for (const e of boardEls) e.toggleAttribute("data-view-hide", big && !bigPictureEls.has(e));
+      for (const tile of boardOnlyTiles) tile.setVisible?.(!big && !surfaceHidden);
+    }),
+  );
 }
 
 // ---- demo mode -------------------------------------------------------------
@@ -614,6 +676,7 @@ export function activate(): void {
   // time the console reopens this surface, and the module (with its store and tile list)
   // outlives the tab.
   releaseTiles();
+  disposePlan();
   lifecycleAbort?.abort();
   lifecycleAbort = new AbortController();
   mountTiles();
@@ -625,6 +688,30 @@ export function activate(): void {
   }
   wireResumeForm();
   wireDemoButton();
+  opt("dash-plan-back")?.addEventListener("click", () => setDashboardMode("overview"), {
+    signal: lifecycleAbort?.signal,
+  });
+
+  window.addEventListener(
+    "console:dashboard-view",
+    (event) => {
+      const mode = (event as CustomEvent<{ mode?: DashboardMode }>).detail?.mode;
+      if (mode === "plan" || mode === "overview") setDashboardMode(mode);
+    },
+    { signal: lifecycleAbort?.signal },
+  );
+  setDashboardMode(takeDashboardViewIntent() ?? "overview");
+
+  document.querySelectorAll<HTMLElement>("#dash-main [data-open-surface]").forEach((button) => {
+    button.addEventListener(
+      "click",
+      () => {
+        const pageId = button.dataset.openSurface;
+        if (pageId) openSurface({ pageId });
+      },
+      { signal: lifecycleAbort?.signal },
+    );
+  });
 
   const badge = opt("offline-badge");
   const updateOffline = (): void => {
@@ -696,6 +783,8 @@ export function activate(): void {
 // The standalone page never calls this (the surface lives for the page's lifetime); the console's
 // dashboard PageModule calls it on deactivate.
 export function deactivate(): void {
+  resetBigPicture();
+  disposePlan();
   transport.stop();
   demo?.stop();
   demo = null;

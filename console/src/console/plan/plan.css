@@ -145,6 +145,8 @@
 }
 .console-plan-list__meta {
   flex: 0 0 auto;
+  display: inline-flex;
+  gap: var(--pf-t--global--spacer--xs);
   font-size: 0.68rem;
   color: var(--pf-t--global--text--color--subtle);
 }
@@ -159,6 +161,8 @@
 }
 .console-plan-list__warn {
   flex: 0 0 auto;
+  display: inline-flex;
+  gap: var(--pf-t--global--spacer--xs);
   font-size: 0.68rem;
   font-weight: 700;
 }

@@ -4,8 +4,9 @@
 // copies to the clipboard, the graph link rides the graph page's own #node= fragment.
 
 import { create, toBinary } from "@bufbuild/protobuf";
+import { getLiveToken, parseHash, wantsDemo } from "../../lib/daemon";
 import { EventSchema, JournalSchema, Kind } from "../../gen/magus/viewer/v1/viewer_pb";
-import { state } from "./state";
+import { state, waterfallSource } from "./state";
 import { flashBtnLabel } from "./dom";
 import { encodeFragmentBytes } from "./fragment";
 
@@ -47,24 +48,40 @@ function shareBytes(): Uint8Array {
 }
 
 // --- Open in graph: jump to the target's knowledge-graph node -----------------
-// graphTarget reads the (project, target) off the loaded Journal's result event - the pair
-// that names a target node. Only meaningful with a real ref seed; returns null otherwise, so
-// the button stays hidden for pasted/live logs that do not identify a graph target.
+// Only a single-target trace can focus a graph node.
 export function graphTarget(): { project: string; target: string } | null {
-  if (!state.currentRef || !state.currentJournal) return null;
-  for (const ev of state.currentJournal.events || []) {
-    if (ev.kind === Kind.RESULT && ev.project && ev.target)
-      return { project: ev.project, target: ev.target };
+  const targets = new Map<string, { project: string; target: string }>();
+  for (const source of waterfallSource()) {
+    for (const ev of source.events) {
+      if (ev.kind === Kind.RESULT && ev.project && ev.target)
+        targets.set(ev.project + "\u0000" + ev.target, { project: ev.project, target: ev.target });
+    }
   }
-  return null;
+  return targets.size === 1 ? [...targets.values()][0] : null;
+}
+
+export function graphAvailable(): boolean {
+  return waterfallSource().some((source) =>
+    source.events.some((ev) => ev.kind === Kind.RESULT && !!ev.project && !!ev.target),
+  );
 }
 
 // openInGraph builds the knowledge-graph node id exactly as internal/knowledge/id.go targetID
 // spells it ("target:<project>:<target>") and opens the graph explorer on that node in a new
 // tab. The node id rides the graph page's own #node= fragment, so nothing leaves the machine.
 export function openInGraph(): void {
+  if (!graphAvailable()) return;
+  const parts = ["flavor=targets"];
   const t = graphTarget();
-  if (!t) return;
-  const nodeId = "target:" + t.project + ":" + t.target;
-  window.open("../graph/#node=" + encodeURIComponent(nodeId), "_blank");
+  if (t) parts.push("node=" + encodeURIComponent("target:" + t.project + ":" + t.target));
+  const params = parseHash();
+  if (params.port) {
+    parts.push("port=" + encodeURIComponent(params.port));
+    const token = getLiveToken();
+    if (token) parts.push("token=" + encodeURIComponent(token));
+  } else if (state.demoActive || wantsDemo(params)) {
+    parts.unshift("demo");
+  }
+  const base = location.pathname.replace(/\/console(?:\/logs)?\/?$/, "/console/graph/");
+  window.open(base + "#" + parts.join("&"), "_blank", "noopener");
 }

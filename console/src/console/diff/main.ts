@@ -23,7 +23,7 @@
 // single-letter keys are handled on the scroll container rather than as global chords on
 // purpose: a bare "v" must not fire while someone is typing in another surface.
 
-import { parsePatch, type DiffFile, type DiffLine, type FileStatus } from "./parse";
+import { parsePatch, type DiffFile, type DiffLine, type FileStatus, type Hunk } from "./parse";
 import {
   buildRows,
   byHunk,
@@ -34,6 +34,9 @@ import {
   rowOffsets,
   rowAt,
   fileOfRow,
+  maxLineChars,
+  storyText,
+  LINE_PREFIX_CHARS,
   type Row,
   type ViewMode,
 } from "./rows";
@@ -42,9 +45,12 @@ import { emphasis, pairForEmphasis, type Span } from "./words";
 import { languageFor, tokenize, type Language } from "./syntax";
 import {
   fetchPatch,
+  fetchContext,
   fetchSession,
+  fetchReviewSession,
   mutate,
   hunkDigest,
+  patchDigest,
   HttpError,
   type DiffSession,
   type DiffAnnotation,
@@ -61,11 +67,21 @@ import type { SurfaceInstance } from "../standalone";
 // constant, unlike the diff.
 const OVERSCAN = 24;
 
+// Virtualize file rows to keep large changesets responsive.
+const SIDEBAR_FILE_HEIGHT = 40;
+const SIDEBAR_PROJECT_HEIGHT = 28;
+const SIDEBAR_OVERSCAN = 8;
+
+type FileIndexEntry =
+  | { kind: "project"; project: string; count: number }
+  | { kind: "file"; project: string; changeIndex: number };
+
 const daemonCell = persisted<string | null>("dashboard-daemon", null);
 const modeCell = persisted<ViewMode>("diff-view-mode", "unified");
 const sidebarCell = persisted<boolean>("diff-sidebar-collapsed", false);
 
 type Phase = "loading" | "ready" | "empty";
+type CollaborationState = "unavailable" | "live" | "degraded" | "stale";
 
 interface State {
   changeset: OrderedChangeset;
@@ -74,6 +90,9 @@ interface State {
   // Derived from rows, and rebuilt with them: row i's top edge, plus a final total. See rowOffsets.
   offsets: number[];
   hunks: number[];
+  // For any rendered row, its hunk number inside the current file (or -1 before the first
+  // hunk). This keeps collaboration cursor updates O(1) even in a multi-megabyte patch.
+  hunkOrdinalByRow: Int32Array;
   fileRows: number[];
   // Row index -> the file row governing it, so a scroll position resolves to a file in one lookup.
   fileOf: number[];
@@ -87,6 +106,7 @@ interface State {
   showGenerated: boolean;
   overview: boolean;
   phase: Phase;
+  collaboration: CollaborationState;
 }
 
 const STATUS_COPY: Record<FileStatus, { short: string; modifier: string }> = {
@@ -139,34 +159,31 @@ function prefersReducedMotion(): boolean {
 // arbitrary offsets, so recomputing per paint would redo the same work on every scroll frame.
 const emphasisFor = new WeakMap<DiffLine, Span>();
 
-// markEmphasis pairs each run of deleted lines with the run of added lines that follows it and
-// records which part of each changed. Runs of unequal length are left alone - see
-// pairForEmphasis for why inventing that correspondence would be worse than showing nothing.
-function markEmphasis(files: readonly DiffFile[]): void {
-  for (const f of files) {
-    for (const hunk of f.hunks) {
-      let dels: DiffLine[] = [];
-      let adds: DiffLine[] = [];
-      const flush = (): void => {
-        for (const [d, a] of pairForEmphasis(dels, adds)) {
-          const e = emphasis(d.text, a.text);
-          if (e.before) emphasisFor.set(d, e.before);
-          if (e.after) emphasisFor.set(a, e.after);
-        }
-        dels = [];
-        adds = [];
-      };
-      for (const line of hunk.lines) {
-        if (line.kind === "del" && adds.length === 0) dels.push(line);
-        else if (line.kind === "add" && dels.length > 0) adds.push(line);
-        else {
-          flush();
-          if (line.kind === "del") dels.push(line);
-        }
-      }
+// Cache word-level emphasis per immutable hunk.
+const emphasisMarked = new WeakSet<Hunk>();
+function markEmphasis(hunk: Hunk): void {
+  if (emphasisMarked.has(hunk)) return;
+  let dels: DiffLine[] = [];
+  let adds: DiffLine[] = [];
+  const flush = (): void => {
+    for (const [d, a] of pairForEmphasis(dels, adds)) {
+      const e = emphasis(d.text, a.text);
+      if (e.before) emphasisFor.set(d, e.before);
+      if (e.after) emphasisFor.set(a, e.after);
+    }
+    dels = [];
+    adds = [];
+  };
+  for (const line of hunk.lines) {
+    if (line.kind === "del" && adds.length === 0) dels.push(line);
+    else if (line.kind === "add" && dels.length > 0) adds.push(line);
+    else {
       flush();
+      if (line.kind === "del") dels.push(line);
     }
   }
+  flush();
+  emphasisMarked.add(hunk);
 }
 
 // lineText renders a line's text with syntax colour and intra-line emphasis.
@@ -245,6 +262,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     rows: [],
     offsets: [0],
     hunks: [],
+    hunkOrdinalByRow: new Int32Array(),
     fileRows: [],
     fileOf: [],
     mode: modeCell.get() ?? "unified",
@@ -258,6 +276,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     showGenerated: true,
     overview: false,
     phase: "loading",
+    collaboration: demo ? "live" : "unavailable",
   };
 
   // --- scaffold -------------------------------------------------------------
@@ -278,6 +297,22 @@ export function activate(host: HTMLElement): SurfaceInstance {
   hideBtn.setAttribute("aria-label", "Hide the file index");
   hideBtn.textContent = "‹";
   sidebarHead.append(sidebarTitle, hideBtn);
+
+  // Keep filtering in the index at every diff size.
+  const sidebarFilter = h("input", "console-diff-sidebar__filter") as HTMLInputElement;
+  sidebarFilter.type = "search";
+  sidebarFilter.placeholder = "Filter files";
+  sidebarFilter.setAttribute("aria-label", "Filter changed files");
+  sidebarFilter.autocomplete = "off";
+  const sidebarIndex = h("div", "console-diff-sidebar__index");
+  sidebarIndex.setAttribute("role", "list");
+  sidebarIndex.setAttribute("aria-label", "Changed files index");
+  const sidebarSpacer = h("div", "console-diff-sidebar__spacer");
+  const sidebarWindow = h("div", "console-diff-sidebar__window");
+  sidebarSpacer.append(sidebarWindow);
+  sidebarIndex.append(sidebarSpacer);
+  const sidebarGenerated = h("div", "console-diff-sidebar__generated");
+  sidebar.append(sidebarHead, sidebarFilter, sidebarIndex, sidebarGenerated);
 
   const reopenBtn = h("button", "console-diff-reopen");
   reopenBtn.type = "button";
@@ -304,7 +339,29 @@ export function activate(host: HTMLElement): SurfaceInstance {
   const main = h("div", "console-diff-main");
   const toolbar = h("div", "console-diff-toolbar");
   const statsEl = h("div", "console-diff-toolbar__stats");
-  toolbar.append(statsEl);
+  const collaborationNotice = h("span", "console-diff-collaboration");
+  collaborationNotice.setAttribute("role", "status");
+  collaborationNotice.setAttribute("aria-live", "polite");
+  toolbar.append(statsEl, collaborationNotice);
+  // Keep context outside the fixed-height virtual stream.
+  const context = h("aside", "console-diff-context");
+  context.hidden = true;
+  context.tabIndex = -1;
+  context.setAttribute("role", "region");
+  context.setAttribute("aria-label", "Surrounding code");
+  const contextHead = h("div", "console-diff-context__head");
+  const contextTitle = h("span", "console-diff-context__title");
+  const contextClose = h(
+    "button",
+    "pf-v6-c-button pf-m-plain console-diff-context__close",
+  ) as HTMLButtonElement;
+  contextClose.type = "button";
+  contextClose.setAttribute("aria-label", "Close surrounding code");
+  contextClose.textContent = "×";
+  const contextBody = h("pre", "console-diff-context__body");
+  contextBody.setAttribute("aria-live", "polite");
+  contextHead.append(contextTitle, contextClose);
+  context.append(contextHead, contextBody);
 
   const rail = h("div", "console-diff-rail");
   rail.setAttribute("aria-label", "Agent suggestions");
@@ -360,7 +417,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   emptyContent.append(emptyTitle, emptyBodyWrap, emptyFooter);
   empty.append(emptyContent);
 
-  main.append(toolbar, rail, viewport, overview, empty);
+  main.append(toolbar, context, rail, viewport, overview, empty);
   root.append(sidebar, reopenBtn, main);
   applySidebar(sidebarCell.get() ?? false);
   host.append(root);
@@ -412,8 +469,22 @@ export function activate(host: HTMLElement): SurfaceInstance {
       const digest = state.digestByRow.get(index);
       if (digest && state.viewed.has(digest)) el.dataset.viewed = "";
       el.append(h("span", "console-diff-row__text", row.hunk.header));
+      if (!demo && !row.file.binary && row.file.status !== "deleted") {
+        const peek = h(
+          "button",
+          "console-diff-row__peek",
+          "Peek surrounding code",
+        ) as HTMLButtonElement;
+        peek.type = "button";
+        peek.title = "Show the current file around this hunk without leaving the diff";
+        peek.addEventListener("click", (event) => {
+          event.stopPropagation();
+          void showContext(row.file, row.hunk);
+        });
+        el.append(peek);
+      }
       if (digest && state.viewed.has(digest))
-        el.append(label("read", "pf-m-green", "Marked read - press v to unmark"));
+        el.append(label("read", "pf-m-green", "Marked read. Press v to unmark."));
       return el;
     }
     if (row.kind === "story") {
@@ -421,12 +492,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       const who = h("span", "console-diff-row__who");
       who.textContent = row.touch.host || "agent";
       const what = h("span", "console-diff-row__story");
-      // "after reading X, Y" is the whole sentence: it is what the agent was looking at when
-      // it decided to write this, which no forge can say. With no reads recorded the sentence
-      // stops at the author rather than inventing a reason.
-      const read = row.touch.read ?? [];
-      what.textContent =
-        read.length > 0 ? `wrote this after reading ${read.slice(0, 4).join(", ")}` : "wrote this";
+      what.textContent = storyText(row.touch);
       el.append(who, what);
       if (row.touch.transcript) {
         const t = h("span", "console-diff-row__transcript", "transcript");
@@ -452,6 +518,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       return el;
     }
     if (row.kind === "line") {
+      markEmphasis(row.hunk);
       const el = h("div", "console-diff-row");
       el.dataset.kind = row.line.kind;
       const marker = h("span", "console-diff-row__marker", markerFor(row.line.kind));
@@ -462,6 +529,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       el.append(gutter(row.line.oldLine), gutter(row.line.newLine), marker, text);
       return el;
     }
+    markEmphasis(row.hunk);
     const el = h("div", "console-diff-row console-diff-row--pair");
     const lang = languageFor(row.file.path);
     el.append(side(row.left, "left", lang), side(row.right, "right", lang));
@@ -487,10 +555,40 @@ export function activate(host: HTMLElement): SurfaceInstance {
     return cell;
   };
 
-  const paint = (): void => {
+  let paintedFirst = -1;
+  let paintedLast = -1;
+  let digestPaintQueued = false;
+
+  const primeVisibleHunkDigests = (first: number, last: number): void => {
+    // Paint only hunks in the virtual window.
+    let lo = 0;
+    let hi = state.hunks.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if ((state.hunks[mid] ?? Number.POSITIVE_INFINITY) < first) lo = mid + 1;
+      else hi = mid;
+    }
+    for (let i = lo; i < state.hunks.length; i++) {
+      const row = state.hunks[i];
+      if (row === undefined || row >= last) break;
+      if (state.digestByRow.has(row) || pendingDigests.has(row)) continue;
+      void digestForHunk(row).finally(() => {
+        if (digestPaintQueued || disposed) return;
+        digestPaintQueued = true;
+        requestAnimationFrame(() => {
+          digestPaintQueued = false;
+          if (!disposed) paint(true);
+        });
+      });
+    }
+  };
+
+  const paint = (force = false): void => {
     const total = state.rows.length;
     if (total === 0) {
       windowEl.replaceChildren();
+      paintedFirst = -1;
+      paintedLast = -1;
       return;
     }
     const top = scroll.scrollTop;
@@ -504,35 +602,53 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // total, and each row carries its ABSOLUTE 1-based position below.
     scroll.setAttribute("aria-rowcount", String(total));
 
-    const frag = document.createDocumentFragment();
-    for (let i = first; i < last; i++) {
-      const row = state.rows[i];
-      if (!row) continue;
-      const el = renderRow(row, i);
-      el.dataset.row = String(i);
-      // The absolute index, NOT the position within the rendered window. Using the window
-      // position is the classic virtualization bug: it announces "row 1 of 10,000" at every
-      // scroll offset, which is worse than silence because it sounds like an answer.
-      el.setAttribute("role", "row");
-      el.setAttribute("aria-rowindex", String(i + 1));
-      if (i === state.cursor) el.dataset.cursor = "";
-      frag.append(el);
+    if (force || first !== paintedFirst || last !== paintedLast) {
+      const frag = document.createDocumentFragment();
+      for (let i = first; i < last; i++) {
+        const row = state.rows[i];
+        if (!row) continue;
+        const el = renderRow(row, i);
+        el.dataset.row = String(i);
+        // Use the absolute row index for grid semantics.
+        el.setAttribute("role", "row");
+        el.setAttribute("aria-rowindex", String(i + 1));
+        // Expose each virtualized row as a real grid row.
+        for (const cell of el.children) cell.setAttribute("role", "gridcell");
+        if (i === state.cursor) el.dataset.cursor = "";
+        frag.append(el);
+      }
+      windowEl.style.transform = `translateY(${state.offsets[first]}px)`;
+      windowEl.replaceChildren(frag);
+      paintedFirst = first;
+      paintedLast = last;
     }
-    windowEl.style.transform = `translateY(${state.offsets[first]}px)`;
-    windowEl.replaceChildren(frag);
+    primeVisibleHunkDigests(first, last);
     paintPinned(top);
     markActiveFile(top);
   };
 
   // paintPinned keeps the file header of whatever is being read at the top of the viewport.
   //
-  // It shows only once the file's REAL header row has scrolled above the top edge, so the two are
-  // never on screen together: while the real row is visible it is the header, and the copy would
-  // just be a duplicate of the line below it.
+  // Vertically, it shows only once the file's REAL header row has scrolled above the top edge,
+  // so the two are never on screen together: while the real row is visible it is the header, and
+  // the copy would just be a duplicate of the line below it.
+  //
+  // Horizontally, the real row's own position:sticky (diff.css) cannot do this job: it lives
+  // inside .console-diff-window, which is transform-translated every scroll frame for the
+  // virtualizer, and a transform on any ancestor breaks position:sticky in every browser - the
+  // row silently scrolls away instead of staying put. This copy sits outside that transformed
+  // subtree (a sibling of .console-diff-scroll), so it is the only thing that CAN track the
+  // reader's horizontal position; show it whenever there is horizontal scroll to cover for, not
+  // only once scrolled past vertically.
   const paintPinned = (top: number): void => {
     const i = state.fileOf[rowAt(state.offsets, top)] ?? -1;
     const row = i >= 0 ? state.rows[i] : undefined;
-    if (!row || row.kind !== "file" || (state.offsets[i] ?? 0) >= top) {
+    if (!row || row.kind !== "file") {
+      pinned.hidden = true;
+      return;
+    }
+    const scrolledPast = (state.offsets[i] ?? 0) < top;
+    if (!scrolledPast && scroll.scrollLeft === 0) {
       pinned.hidden = true;
       return;
     }
@@ -540,16 +656,138 @@ export function activate(host: HTMLElement): SurfaceInstance {
     pinned.hidden = false;
   };
 
+  // Keep direct button references for active-file updates.
+  const sidebarItems = new Map<number, HTMLButtonElement>();
+  let activeSidebarFile: HTMLButtonElement | undefined;
+  let activeSidebarRow = -1;
+  let sidebarEntries: FileIndexEntry[] = [];
+  let sidebarOffsets = [0];
+  let sidebarPaintedFirst = -1;
+  let sidebarPaintedLast = -1;
+
+  const sidebarEntryHeight = (entry: FileIndexEntry): number =>
+    entry.kind === "project" ? SIDEBAR_PROJECT_HEIGHT : SIDEBAR_FILE_HEIGHT;
+
+  const renderSidebarItem = (
+    o: (typeof state.changeset.primary)[number],
+    index: number,
+    project: string,
+  ): HTMLButtonElement => {
+    const item = h("button", "console-diff-sidebar__item") as HTMLButtonElement;
+    item.type = "button";
+    item.setAttribute("role", "listitem");
+    const st = STATUS_COPY[o.file.status];
+    item.append(label(st.short, st.modifier, o.file.status));
+    // Give the filename priority over its directory.
+    const slash = o.file.path.lastIndexOf("/");
+    const wrap = h("span", "console-diff-sidebar__file");
+    const name = h("span", "console-diff-sidebar__path");
+    name.textContent = slash >= 0 ? o.file.path.slice(slash + 1) : o.file.path;
+    wrap.append(name);
+    // Omit an empty project-relative directory.
+    const rel = o.file.path.startsWith(`${project}/`)
+      ? o.file.path.slice(project.length + 1, slash < 0 ? undefined : slash)
+      : slash > 0
+        ? o.file.path.slice(0, slash)
+        : "";
+    if (rel) wrap.append(h("span", "console-diff-sidebar__dir", rel));
+    item.append(wrap);
+    // Keep the full path in the native tooltip.
+    item.title = o.annotation?.hint ? `${o.file.path}\n\n${o.annotation.hint}` : o.file.path;
+    if (o.annotation?.surface === "public") item.dataset.surface = "public";
+    if (o.annotation?.reach) {
+      const r = h("span", "console-diff-sidebar__counts");
+      r.textContent = String(o.annotation.reach);
+      r.title = `${o.annotation.reach} files reference the widest changed symbol here`;
+      item.append(r);
+    }
+    // Grouping changes order, so retain the source row index.
+    const row = state.fileRows[index];
+    if (row !== undefined) {
+      item.dataset.fileRow = String(row);
+      sidebarItems.set(row, item);
+    }
+    item.addEventListener("click", () => {
+      if (row !== undefined) scrollToRow(row);
+      scroll.focus();
+    });
+    return item;
+  };
+
+  const paintSidebar = (force = false): void => {
+    const total = sidebarEntries.length;
+    if (total === 0) {
+      sidebarWindow.replaceChildren();
+      sidebarPaintedFirst = -1;
+      sidebarPaintedLast = -1;
+      sidebarItems.clear();
+      activeSidebarFile = undefined;
+      activeSidebarRow = -1;
+      return;
+    }
+    const top = sidebarIndex.scrollTop;
+    // Hidden panes report zero height; render a small initial slice.
+    const height = sidebarIndex.clientHeight || 320;
+    const first = Math.max(0, rowAt(sidebarOffsets, top) - SIDEBAR_OVERSCAN);
+    const last = Math.min(total, rowAt(sidebarOffsets, top + height) + 1 + SIDEBAR_OVERSCAN);
+    if (force || first !== sidebarPaintedFirst || last !== sidebarPaintedLast) {
+      const frag = document.createDocumentFragment();
+      sidebarItems.clear();
+      activeSidebarFile = undefined;
+      activeSidebarRow = -1;
+      for (let i = first; i < last; i++) {
+        const entry = sidebarEntries[i];
+        if (!entry) continue;
+        if (entry.kind === "project") {
+          const head = h("div", "console-diff-sidebar__project");
+          head.setAttribute("role", "presentation");
+          const pName = h("span", "console-diff-sidebar__project-name", entry.project);
+          pName.title = entry.project;
+          const pCount = h("span", "console-diff-sidebar__project-count", String(entry.count));
+          head.append(pName, pCount);
+          frag.append(head);
+          continue;
+        }
+        const change = state.changeset.primary[entry.changeIndex];
+        if (change) frag.append(renderSidebarItem(change, entry.changeIndex, entry.project));
+      }
+      sidebarWindow.style.transform = `translateY(${sidebarOffsets[first]}px)`;
+      sidebarWindow.replaceChildren(frag);
+      sidebarPaintedFirst = first;
+      sidebarPaintedLast = last;
+    }
+    markActiveFile(scroll.scrollTop);
+  };
+
+  let sidebarTicking = false;
+  sidebarIndex.addEventListener(
+    "scroll",
+    () => {
+      if (sidebarTicking) return;
+      sidebarTicking = true;
+      requestAnimationFrame(() => {
+        sidebarTicking = false;
+        if (!disposed) paintSidebar();
+      });
+    },
+    { passive: true, signal: controller.signal },
+  );
+  // Repaint the virtual window after layout changes.
+  const sidebarResize =
+    typeof ResizeObserver === "undefined" ? null : new ResizeObserver(() => paintSidebar(true));
+  sidebarResize?.observe(sidebarIndex);
+  controller.signal.addEventListener("abort", () => sidebarResize?.disconnect(), { once: true });
+
   // markActiveFile keeps the sidebar in step with the stream, in BOTH directions: it is the
   // acknowledgement that a click landed (a smooth scroll over a long diff is slow enough to read
   // as nothing happening) and it is a position indicator while scrolling by hand.
   const markActiveFile = (top: number): void => {
     const fileRow = state.fileOf[rowAt(state.offsets, top)] ?? -1;
-    sidebar.querySelectorAll(".console-diff-sidebar__item").forEach((el) => {
-      const mine = (el as HTMLElement).dataset.fileRow;
-      if (mine !== undefined && Number(mine) === fileRow) el.setAttribute("aria-current", "true");
-      else el.removeAttribute("aria-current");
-    });
+    if (fileRow === activeSidebarRow) return;
+    activeSidebarFile?.removeAttribute("aria-current");
+    activeSidebarFile = sidebarItems.get(fileRow);
+    activeSidebarFile?.setAttribute("aria-current", "true");
+    activeSidebarRow = fileRow;
   };
 
   let ticking = false;
@@ -581,33 +819,205 @@ export function activate(host: HTMLElement): SurfaceInstance {
     return resolveDaemonHost(parseHash()) ?? daemonCell.get();
   };
 
-  const sync = (op: Parameters<typeof mutate>[1]): void => {
+  const canCollaborate = (): boolean => demo || state.collaboration === "live";
+  const setCollaboration = (next: CollaborationState): void => {
+    if (state.collaboration === next) return;
+    state.collaboration = next;
+    renderToolbar();
+    renderRail();
+  };
+
+  let contextRequest: AbortController | null = null;
+  let contextRequestID = 0;
+  const closeContext = (): void => {
+    contextRequest?.abort();
+    contextRequest = null;
+    context.hidden = true;
+    scroll.focus();
+  };
+  contextClose.addEventListener("click", closeContext, { signal: controller.signal });
+  controller.signal.addEventListener("abort", () => contextRequest?.abort(), { once: true });
+
+  const showContext = async (
+    file: DiffFile,
+    hunk: { newStart: number; newCount: number },
+    focus = false,
+  ): Promise<void> => {
+    // Demo fixtures cannot provide workspace context.
+    if (demo) return;
+    const asOf = state.session?.as_of;
+    if (!asOf || state.collaboration !== "live") {
+      context.hidden = false;
+      contextTitle.textContent = file.path;
+      contextBody.textContent =
+        "Surrounding code is unavailable until this review is paired to a current snapshot.";
+      if (focus) context.focus();
+      return;
+    }
+    contextRequest?.abort();
+    const request = new AbortController();
+    contextRequest = request;
+    const requestID = ++contextRequestID;
+    context.hidden = false;
+    contextTitle.textContent = file.path;
+    contextBody.textContent = "Loading surrounding code…";
+    if (focus) context.focus();
+    const hp = host_();
+    if (!hp) {
+      contextBody.textContent = "Connect a daemon to read the current working-tree file.";
+      return;
+    }
+    try {
+      const end = hunk.newStart + Math.max(1, hunk.newCount) - 1;
+      const result = await fetchContext(hp, file.path, asOf, hunk.newStart, end, request.signal);
+      if (disposed || requestID !== contextRequestID) return;
+      contextTitle.textContent = `${result.path}:${result.start}`;
+      contextBody.textContent = result.lines
+        .map((line, index) => `${String(result.start + index).padStart(5)}  ${line}`)
+        .join("\n");
+    } catch (error) {
+      if (disposed || requestID !== contextRequestID || request.signal.aborted) return;
+      contextBody.textContent =
+        error instanceof HttpError && error.status === 409
+          ? "The review snapshot changed. Refresh the diff before peeking at surrounding code."
+          : "Could not load surrounding code: " + String(error);
+    }
+  };
+
+  const sync = async (op: Parameters<typeof mutate>[1]): Promise<DiffSession | null> => {
     // In the showcase the store is in memory: the reader's marks, comments and answers have to
     // land somewhere or the affordances read as broken, and there is no daemon to land them in.
     if (demo) {
-      if (state.session) applySession(applyDemoOp(state.session, op));
-      return;
+      if (!state.session) return null;
+      const next = applyDemoOp(state.session, op);
+      applySession(next);
+      return next;
     }
+    if (!canCollaborate()) return null;
     const hp = host_();
-    if (!hp) return;
-    void mutate(hp, op, controller.signal).then((s) => {
-      if (!disposed && s) applySession(s);
-    });
+    if (!hp) {
+      setCollaboration("unavailable");
+      return null;
+    }
+    const s = await mutate(hp, op, controller.signal);
+    if (disposed) return null;
+    if (!s) {
+      setCollaboration("degraded");
+      return null;
+    }
+    applySession(s);
+    return s;
   };
 
   // applySession takes the daemon's copy as authoritative and re-lays the stream, because a
   // comment - the human's or an agent's - is a ROW, so it changes the scroll geometry. Only
   // repainting would leave the new remark invisible until the next unrelated rebuild.
-  const applySession = (s: DiffSession, relayout = true): void => {
+  const applySession = (s: DiffSession, relayout = true): boolean => {
+    if (state.session?.as_of && s.as_of && state.session.as_of !== s.as_of) {
+      setCollaboration("stale");
+      return false;
+    }
     const before = (state.session?.comments ?? []).length;
     state.session = s;
     state.viewed = new Set(s.viewed ?? []);
+    setCollaboration("live");
     renderRail();
     if (relayout && (s.comments ?? []).length !== before) void rebuild();
     else renderToolbar();
+    return true;
   };
 
+  // Keep the patch stable while polling the coordination session.
+  let surfaceVisible = true;
+  let pollTimer: number | null = null;
+  let polling = false;
+  const stopPolling = (): void => {
+    if (pollTimer !== null) window.clearTimeout(pollTimer);
+    pollTimer = null;
+  };
+  const schedulePoll = (): void => {
+    stopPolling();
+    if (demo || disposed || !surfaceVisible || !state.session || state.collaboration === "stale")
+      return;
+    pollTimer = window.setTimeout(() => void pollSession(), 4_000);
+  };
+  const pollSession = async (): Promise<void> => {
+    if (polling || demo || disposed || !surfaceVisible || !state.session) return;
+    const hp = host_();
+    if (!hp) {
+      setCollaboration("unavailable");
+      return;
+    }
+    polling = true;
+    try {
+      const next = await fetchReviewSession(hp, controller.signal);
+      if (!disposed) applySession(next);
+    } catch {
+      if (!disposed) setCollaboration("degraded");
+    } finally {
+      polling = false;
+      schedulePoll();
+    }
+  };
+  const startPolling = (): void => schedulePoll();
+
   // --- model rebuild --------------------------------------------------------
+
+  // Materialize hunk digests only when a review action needs them.
+  let pendingDigests = new Map<number, Promise<string>>();
+  const digestForHunk = async (rowIndex: number): Promise<string | undefined> => {
+    const known = state.digestByRow.get(rowIndex);
+    if (known) return known;
+    const pending = pendingDigests.get(rowIndex);
+    if (pending) return pending;
+    const row = state.rows[rowIndex];
+    if (!row || row.kind !== "hunk") return undefined;
+    const body = row.hunk.lines.map((line) =>
+      line.kind === "meta" ? `\\${line.text}` : `${markerFor(line.kind)}${line.text}`,
+    );
+    const work = hunkDigest(row.file.path, body);
+    pendingDigests.set(rowIndex, work);
+    try {
+      const digest = await work;
+      if (!disposed && state.rows[rowIndex] === row) state.digestByRow.set(rowIndex, digest);
+      return digest;
+    } finally {
+      pendingDigests.delete(rowIndex);
+    }
+  };
+
+  const hunkOrdinal = (rows: readonly Row[]): Int32Array => {
+    const ordinals = new Int32Array(rows.length);
+    let withinFile = -1;
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      if (!row) continue;
+      if (row.kind === "file") withinFile = -1;
+      else if (row.kind === "hunk") withinFile++;
+      ordinals[i] = withinFile;
+    }
+    return ordinals;
+  };
+
+  // monoCharWidth measures the mono font's actual character advance, in pixels, so the row-width
+  // floor below can be set in px instead of ch. ch is relative to EACH element's own font, and a
+  // comment or story row renders in the body font (see .console-diff-row--comment), not mono - the
+  // same ch count on those rows resolved to a smaller pixel width than on a code line, so their
+  // background fell short of the scroll width all over again. The probe is measured off-DOM
+  // (position: absolute, visibility: hidden) and over many characters, not one, because a single
+  // glyph's rect can round to a whole pixel and drift the floor over a long line.
+  const monoCharWidth = (): number => {
+    const probe = document.createElement("span");
+    probe.style.cssText =
+      "position:absolute;visibility:hidden;white-space:pre;" +
+      "font-family:var(--pf-t--global--font--family--mono);" +
+      "font-size:var(--pf-t--global--font--size--sm);";
+    probe.textContent = "0".repeat(64);
+    scroll.appendChild(probe);
+    const width = probe.getBoundingClientRect().width / 64;
+    probe.remove();
+    return width;
+  };
 
   const rebuild = async (): Promise<void> => {
     state.files = visibleFiles(state.changeset, state.showGenerated);
@@ -617,29 +1027,19 @@ export function activate(host: HTMLElement): SurfaceInstance {
     for (const f of state.session?.diff?.files ?? []) {
       if (f.touches?.length) touches.set(f.path, f.touches);
     }
-    markEmphasis(state.files);
     state.rows = buildRows(state.files, state.mode, byHunk(state.session?.comments ?? []), touches);
     state.hunks = hunkRowIndexes(state.rows);
+    state.hunkOrdinalByRow = hunkOrdinal(state.rows);
     state.fileRows = fileRowIndexes(state.rows);
     state.offsets = rowOffsets(state.rows);
     state.fileOf = fileOfRow(state.rows);
     spacer.style.height = `${state.offsets[state.rows.length]}px`;
-
-    // Digest every hunk once, here, so `v` never awaits a hash mid-keypress.
-    const digests = new Map<number, string>();
-    await Promise.all(
-      state.hunks.map(async (i) => {
-        const row = state.rows[i];
-        if (row?.kind !== "hunk") return;
-        const body = row.hunk.lines.map((l) =>
-          l.kind === "meta" ? `\\${l.text}` : `${markerFor(l.kind)}${l.text}`,
-        );
-        digests.set(i, await hunkDigest(row.file.path, body));
-      }),
-    );
-    if (disposed) return;
-    state.digestByRow = digests;
-    paint();
+    const rowFloorPx = (maxLineChars(state.rows) + LINE_PREFIX_CHARS) * monoCharWidth();
+    scroll.style.setProperty("--console-diff-min-row-width", `${rowFloorPx}px`);
+    // Rebuilds invalidate row-indexed digest entries.
+    state.digestByRow = new Map();
+    pendingDigests = new Map();
+    paint(true);
     renderSidebar();
     renderToolbar();
   };
@@ -654,11 +1054,32 @@ export function activate(host: HTMLElement): SurfaceInstance {
     (state.session?.diff?.files ?? []).some((f) => f.reach !== null && f.reach !== undefined);
 
   const UNRANKED_TITLE =
-    "No symbol index, so there is no consequence to rank by. This is path order, not a ranking - build the index with `magus graph build` to order these by what they can break.";
+    "No symbol index. Files use path order. Run magus graph build to order them by impact.";
 
   const renderToolbar = (): void => {
     const s = stats(state.changeset);
     const chips: HTMLElement[] = [];
+    const collaboration = {
+      live: { text: "agent session live", tone: "pf-m-blue", notice: "" },
+      unavailable: {
+        text: "agent session unavailable",
+        tone: "pf-m-orange",
+        notice:
+          "Agent comments and review marks are unavailable until the review session connects.",
+      },
+      degraded: {
+        text: "agent sync unavailable",
+        tone: "pf-m-orange",
+        notice:
+          "Agent collaboration is temporarily unavailable. Review actions are disabled until it reconnects.",
+      },
+      stale: {
+        text: "review snapshot changed",
+        tone: "pf-m-orange",
+        notice:
+          "The shared review now describes a different patch. Refresh the diff before collaborating.",
+      },
+    }[state.collaboration];
     // Demo state is NOT chipped here. Every other surface says it in one place - the shell's
     // connection pill - and a second badge in this toolbar made the diff the one surface that
     // announced it twice, in a style nothing else uses.
@@ -684,7 +1105,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
         label(
           state.showGenerated ? `${s.generated} generated` : `${s.generated} generated folded`,
           undefined,
-          "Declared target outputs. Reviewing their diff is reading a machine's restatement of a change made elsewhere - read the source change instead. Fold them from the sidebar, or press . to toggle.",
+          "Declared target outputs. Review the source change instead. Fold these files in the sidebar or press period.",
         ),
       );
     }
@@ -709,10 +1130,8 @@ export function activate(host: HTMLElement): SurfaceInstance {
         ),
       );
     }
-    const read = state.hunks.filter((i) => {
-      const d = state.digestByRow.get(i);
-      return d && state.viewed.has(d);
-    }).length;
+    // Session state remains authoritative before an off-screen digest exists.
+    const read = state.viewed.size;
     chips.push(
       label(
         `${read}/${state.hunks.length} hunks read`,
@@ -727,12 +1146,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
         "1 unified, 2 split, 0 toggle",
       ),
     );
+    if (state.collaboration !== "live") chips.push(label(collaboration.text, collaboration.tone));
+    collaborationNotice.textContent = collaboration.notice;
     statsEl.replaceChildren(...chips);
   };
 
   const renderSidebar = (): void => {
-    const frag = document.createDocumentFragment();
-
     // Grouped by PROJECT, not by directory depth. In a monorepo a path answers two questions -
     // which project owns this, and which file is it - and everything between them is filler that
     // grows without bound as the tree nests. The project is the bounded, meaningful half, magus
@@ -749,58 +1168,28 @@ export function activate(host: HTMLElement): SurfaceInstance {
       if (bucket) bucket.push({ o, i });
       else groups.set(key, [{ o, i }]);
     });
-
+    const needle = sidebarFilter.value.trim().toLocaleLowerCase();
+    sidebarEntries = [];
     for (const [project, entries] of groups) {
-      const head = h("div", "console-diff-sidebar__project");
-      const pName = h("span", "console-diff-sidebar__project-name", project);
-      pName.title = project;
-      const pCount = h("span", "console-diff-sidebar__project-count", String(entries.length));
-      head.append(pName, pCount);
-      frag.append(head);
-
-      for (const { o, i } of entries) {
-        const item = h("button", "console-diff-sidebar__item");
-        item.type = "button";
-        const st = STATUS_COPY[o.file.status];
-        item.append(label(st.short, st.modifier, o.file.status));
-        // Filename over directory, because the filename is what identifies the file and the
-        // directory is only context. A single line spent them equally and truncated both, so a
-        // column this narrow showed "...thkit/claims.go" - the half that matters least, cut.
-        const slash = o.file.path.lastIndexOf("/");
-        const wrap = h("span", "console-diff-sidebar__file");
-        const name = h("span", "console-diff-sidebar__path");
-        name.textContent = slash >= 0 ? o.file.path.slice(slash + 1) : o.file.path;
-        wrap.append(name);
-        // Relative to the project heading above, and omitted entirely when the file sits at the
-        // project root - a blank second line would be worse than none.
-        const rel = o.file.path.startsWith(`${project}/`)
-          ? o.file.path.slice(project.length + 1, slash < 0 ? undefined : slash)
-          : slash > 0
-            ? o.file.path.slice(0, slash)
-            : "";
-        if (rel) wrap.append(h("span", "console-diff-sidebar__dir", rel));
-        item.append(wrap);
-        // The full path FIRST. This used to be the annotation hint alone, so hovering a truncated
-        // path answered with a paragraph about cache keys and never with the path being read.
-        item.title = o.annotation?.hint ? `${o.file.path}\n\n${o.annotation.hint}` : o.file.path;
-        if (o.annotation?.surface === "public") item.dataset.surface = "public";
-        if (o.annotation?.reach) {
-          const r = h("span", "console-diff-sidebar__counts");
-          r.textContent = String(o.annotation.reach);
-          r.title = `${o.annotation.reach} files reference the widest changed symbol here`;
-          item.append(r);
-        }
-        // The row index rides on the element. Grouping reorders the sidebar relative to the
-        // changeset, so a positional index would mark the wrong file active.
-        const row = state.fileRows[i];
-        if (row !== undefined) item.dataset.fileRow = String(row);
-        item.addEventListener("click", () => {
-          if (row !== undefined) scrollToRow(row);
-          scroll.focus();
-        });
-        frag.append(item);
-      }
+      const shown = needle
+        ? entries.filter(({ o }) =>
+            `${project}/${o.file.path}`.toLocaleLowerCase().includes(needle),
+          )
+        : entries;
+      if (shown.length === 0) continue;
+      sidebarEntries.push({ kind: "project", project, count: shown.length });
+      for (const { i } of shown) sidebarEntries.push({ kind: "file", project, changeIndex: i });
     }
+    sidebarOffsets = [0];
+    for (const entry of sidebarEntries)
+      sidebarOffsets.push((sidebarOffsets.at(-1) ?? 0) + sidebarEntryHeight(entry));
+    sidebarSpacer.style.height = `${sidebarOffsets.at(-1) ?? 0}px`;
+    sidebarTitle.textContent = `Files (${state.changeset.primary.length})`;
+    sidebarIndex.scrollTop = 0;
+    sidebarPaintedFirst = -1;
+    sidebarPaintedLast = -1;
+    paintSidebar(true);
+    const generated = document.createDocumentFragment();
     if (state.changeset.generated.length > 0) {
       // Same fold affordance as an activity section - the twist caret plus aria-expanded and
       // data-collapsed - so a collapsible in the sidebar reads the way collapsibles read
@@ -817,13 +1206,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
         ? "Declared target outputs. Press . to fold."
         : "Declared target outputs, folded. Press . to expand.";
       g.addEventListener("click", () => void toggleGenerated());
-      frag.append(g);
+      generated.append(g);
     }
-    sidebar.replaceChildren(sidebarHead, frag);
+    sidebarGenerated.replaceChildren(generated);
   };
 
-  // The suggestion rail: an agent asking for attention. It renders as a peripheral affordance
-  // the reader accepts with one key and NEVER as a scroll - see types.DiffSuggestion.
+  sidebarFilter.addEventListener("input", () => renderSidebar(), { signal: controller.signal });
+
+  // Suggestions stay separate from the review flow.
   const renderRail = (): void => {
     const pending = (state.session?.suggestions ?? []).filter((s) => !s.accepted && !s.declined);
     if (pending.length === 0) {
@@ -837,17 +1227,22 @@ export function activate(host: HTMLElement): SurfaceInstance {
       const item = h("div", "console-diff-rail__item");
       const who = h("span", "console-diff-rail__who");
       who.textContent = s.agent_name || "agent";
-      const what = h("span", "console-diff-rail__what");
-      what.textContent = `${s.path}${s.hunk >= 0 ? `:${s.hunk}` : ""} - ${s.reason}`;
+      const where = h("span", "console-diff-rail__where");
+      where.textContent = `${s.path}${s.hunk >= 0 ? `:${s.hunk}` : ""}`;
+      const reason = h("span", "console-diff-rail__reason", s.reason);
       const go = h("button", "console-diff-rail__go");
       go.type = "button";
       go.textContent = "go [g]";
+      go.disabled = !canCollaborate();
+      if (go.disabled) go.title = "Agent collaboration is unavailable";
       go.addEventListener("click", () => acceptSuggestion(s.id));
       const skip = h("button", "console-diff-rail__skip");
       skip.type = "button";
       skip.textContent = "skip [x]";
+      skip.disabled = !canCollaborate();
+      if (skip.disabled) skip.title = "Agent collaboration is unavailable";
       skip.addEventListener("click", () => sync({ op: "answer", id: s.id, on: false }));
-      item.append(who, what, go, skip);
+      item.append(who, where, reason, go, skip);
       frag.append(item);
     }
     rail.replaceChildren(frag);
@@ -954,14 +1349,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // is what the session and an agent speak in - a global row index would change meaning the
   // moment the generated group folded.
   const hunkIndexWithinFile = (rowIndex: number): number => {
-    let n = -1;
-    for (let i = 0; i <= rowIndex; i++) {
-      const r = state.rows[i];
-      if (!r) continue;
-      if (r.kind === "file") n = -1;
-      else if (r.kind === "hunk") n++;
-    }
-    return n;
+    return state.hunkOrdinalByRow[rowIndex] ?? -1;
   };
 
   const step = (dir: 1 | -1, marks: number[]): void => {
@@ -972,27 +1360,19 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   // toggleViewed marks the hunk the cursor is in. It is the READER's claim, which is why no
   // agent surface can make it.
-  const toggleViewed = (): void => {
+  const toggleViewed = async (): Promise<void> => {
     const i = currentHunkRow();
     if (i === null) return;
-    const digest = state.digestByRow.get(i);
+    const digest = await digestForHunk(i);
     if (!digest) return;
+    if (!canCollaborate()) return;
     const on = !state.viewed.has(digest);
-    if (on) state.viewed.add(digest);
-    else state.viewed.delete(digest);
-    paint();
-    renderToolbar();
-    sync({ op: "viewed", digest, on });
+    void sync({ op: "viewed", digest, on });
   };
 
   const currentHunkRow = (): number | null => {
     const from = state.cursor >= 0 ? state.cursor : rowAt(state.offsets, scroll.scrollTop);
-    let best: number | null = null;
-    for (const i of state.hunks) {
-      if (i <= from) best = i;
-      else break;
-    }
-    return best ?? state.hunks[0] ?? null;
+    return prevIndexBefore(state.hunks, from + 1) ?? state.hunks[0] ?? null;
   };
 
   // comment opens a one-line composer pinned under the hunk the cursor is in.
@@ -1002,6 +1382,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // the code they are remarking on while they type. The composer sits in the stream for the
   // same reason the comments do.
   const composeComment = (): void => {
+    if (!canCollaborate()) return;
     const i = currentHunkRow();
     if (i === null) return;
     const row = state.rows[i];
@@ -1051,6 +1432,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // resolveHere closes the first unresolved comment on the hunk the cursor is in. Either party
   // may resolve - see the store - so this needs no author check.
   const resolveHere = (): void => {
+    if (!canCollaborate()) return;
     const i = currentHunkRow();
     if (i === null) return;
     const row = state.rows[i];
@@ -1066,13 +1448,18 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const target = id ? pending.find((s) => s.id === id) : pending[0];
     if (!target) return;
     // Accepting is the ONLY path from an agent's suggestion to the reader's viewport.
-    sync({ op: "answer", id: target.id, on: true });
-    const idx = state.changeset.primary.findIndex((o) => o.file.path === target.path);
-    if (idx >= 0) {
-      const row = state.fileRows[idx];
-      if (row !== undefined) scrollToRow(row);
-    }
-    scroll.focus();
+    if (!canCollaborate()) return;
+    void sync({ op: "answer", id: target.id, on: true }).then((saved) => {
+      if (!saved || disposed) return;
+      const row = state.rows.findIndex(
+        (candidate) =>
+          candidate.kind === "hunk" &&
+          candidate.file.path === target.path &&
+          candidate.index === target.hunk,
+      );
+      if (row >= 0) scrollToRow(row);
+      scroll.focus();
+    });
   };
 
   const toggleGenerated = async (): Promise<void> => {
@@ -1120,7 +1507,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
       run: () => step(-1, state.fileRows),
       key: "{",
     },
-    { id: "diff.viewed.toggle", label: "Diff: mark hunk read", run: toggleViewed, key: "v" },
+    {
+      id: "diff.viewed.toggle",
+      label: "Diff: mark hunk read",
+      run: () => void toggleViewed(),
+      key: "v",
+    },
     {
       id: "diff.generated.toggle",
       label: "Diff: fold or unfold generated files",
@@ -1173,9 +1565,22 @@ export function activate(host: HTMLElement): SurfaceInstance {
       key: "r",
     },
     {
+      id: "diff.context.peek",
+      label: "Diff: peek surrounding code for this hunk",
+      run: () => {
+        const i = currentHunkRow();
+        const row = i === null ? undefined : state.rows[i];
+        if (row?.kind === "hunk") void showContext(row.file, row.hunk, true);
+      },
+      key: "p",
+    },
+    {
       id: "diff.overview",
       label: "Diff: changeset overview",
-      run: toggleOverview,
+      run: () => {
+        if (!context.hidden) closeContext();
+        else toggleOverview();
+      },
       key: "Escape",
     },
   ];
@@ -1206,6 +1611,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
     "keydown",
     (e) => {
       if (e.defaultPrevented) return;
+      if (e.key === "Escape" && !context.hidden) {
+        e.preventDefault();
+        closeContext();
+        return;
+      }
       if (e.key === "Escape" && state.overview) {
         e.preventDefault();
         toggleOverview();
@@ -1243,11 +1653,13 @@ export function activate(host: HTMLElement): SurfaceInstance {
   );
 
   const load = async (): Promise<void> => {
+    stopPolling();
     // The showcase joins the same pipeline one step in, with the patch and the session the
     // daemon would have returned. Everything below order() is the production path, so what it
     // shows off is the surface itself rather than a rendering of it. No fetch is issued at all,
     // which is what makes /console/diff/#demo work with no daemon, no workspace and offline.
     if (demo) {
+      state.collaboration = "live";
       const sess = demoSession();
       state.changeset = order(parsePatch(DEMO_PATCH), sess);
       state.phase = "ready";
@@ -1261,6 +1673,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
     const hp = host_();
     if (!hp) {
+      state.collaboration = "unavailable";
       showEmpty(
         "No daemon connected",
         "Diff reads the working tree through a local daemon. Start one with:",
@@ -1273,7 +1686,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     try {
       const res = await fetchPatch(hp, controller.signal);
       if (res.clean) {
-        showEmpty("Nothing to read", "The working tree is clean - every change is committed.");
+        showEmpty("Nothing to read", "The working tree is clean. Every change is committed.");
         return;
       }
       patch = res.patch;
@@ -1310,30 +1723,41 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // PHASE TWO: annotate and attach the session. Failure here leaves a working diff viewer
     // rather than an error - the annotations are the differentiator, not the product.
     try {
+      const snapshot = await patchDigest(patch);
       const sess = await fetchSession(
         hp,
         parsed.map((f) => f.path),
         controller.signal,
       );
       if (disposed) return;
-      applySession(sess);
+      if (sess.as_of && sess.as_of !== snapshot) {
+        // Do not decorate an older patch with a session computed after it moved. The plain reader
+        // remains usable, but all paired affordances are honestly held until the reader refreshes.
+        setCollaboration("stale");
+        return;
+      }
+      if (!applySession(sess)) return;
       state.changeset = order(parsed, sess);
       await rebuild();
+      startPolling();
     } catch {
-      // Leave the un-annotated view standing.
+      // Keep the reader available, but never imply that comments, read marks, or suggestions are
+      // synchronized when the pairing step did not complete.
+      setCollaboration("degraded");
     }
   };
 
   void load();
 
   return {
-    // Nothing to suppress yet: this surface owns no slice of the shared status bar and runs no
-    // timer or stream in the background - it loads once and then answers the reader. The hook is
-    // here so that when it grows one (a live session poll is the obvious next step) there is a
-    // defined place for it, rather than a leak discovered later.
-    setVisible(): void {},
+    setVisible(visible: boolean): void {
+      surfaceVisible = visible;
+      if (visible) startPolling();
+      else stopPolling();
+    },
     deactivate(): void {
       disposed = true;
+      stopPolling();
       controller.abort();
       for (const c of COMMANDS) unregisterCommand(c.id);
       host.replaceChildren();

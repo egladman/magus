@@ -1217,6 +1217,65 @@
           "reads_secrets": false
         },
         {
+          "name": "format",
+          "doc": "`format:rw` maintains declared source inputs.",
+          "dependencies": [
+            "preflight"
+          ],
+          "spells": [
+            {
+              "spell": "typescript",
+              "ops": [
+                "biome-format"
+              ]
+            }
+          ],
+          "chain": [
+            {
+              "target": "preflight"
+            }
+          ],
+          "reads_secrets": false,
+          "modifies_existing_files": [
+            {
+              "glob": "src/**/*.ts"
+            },
+            {
+              "glob": "src/**/*.css"
+            },
+            {
+              "glob": "src/**/*.html"
+            },
+            {
+              "glob": "scripts/**/*.mjs"
+            },
+            {
+              "glob": "index.html"
+            },
+            {
+              "glob": "manifest.webmanifest"
+            },
+            {
+              "glob": "sw.js"
+            },
+            {
+              "glob": "package.json"
+            },
+            {
+              "glob": "tsconfig.json"
+            },
+            {
+              "glob": "tsconfig.test.json"
+            },
+            {
+              "glob": "stylelint.config.mjs"
+            },
+            {
+              "glob": "stylelint-control-sizing.mjs"
+            }
+          ]
+        },
+        {
           "name": "security",
           "doc": "security audits the dependency tree against the npm advisory database.",
           "dependencies": [

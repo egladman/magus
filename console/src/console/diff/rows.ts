@@ -44,12 +44,13 @@ export function byHunk(comments: readonly DiffComment[]): Map<string, DiffCommen
 export type Row =
   | { readonly kind: "file"; readonly file: DiffFile }
   | { readonly kind: "hunk"; readonly file: DiffFile; readonly hunk: Hunk; readonly index: number }
-  | { readonly kind: "line"; readonly file: DiffFile; readonly line: DiffLine }
+  | { readonly kind: "line"; readonly file: DiffFile; readonly hunk: Hunk; readonly line: DiffLine }
   | { readonly kind: "comment"; readonly file: DiffFile; readonly comment: DiffComment }
   | { readonly kind: "story"; readonly file: DiffFile; readonly touch: DiffTouch }
   | {
       readonly kind: "pair";
       readonly file: DiffFile;
+      readonly hunk: Hunk;
       readonly left: DiffLine | null;
       readonly right: DiffLine | null;
     };
@@ -82,7 +83,7 @@ export function buildRows(
         rows.push({ kind: "comment", file, comment: c });
       }
       if (mode === "split") pushSplit(rows, file, hunk);
-      else for (const line of hunk.lines) rows.push({ kind: "line", file, line });
+      else for (const line of hunk.lines) rows.push({ kind: "line", file, hunk, line });
     });
   }
   return rows;
@@ -105,7 +106,7 @@ function pushSplit(rows: Row[], file: DiffFile, hunk: Hunk): void {
     // Taking the shorter length here silently drops the tail of an uneven replacement.
     const n = Math.max(dels.length, adds.length);
     for (let i = 0; i < n; i++) {
-      rows.push({ kind: "pair", file, left: dels[i] ?? null, right: adds[i] ?? null });
+      rows.push({ kind: "pair", file, hunk, left: dels[i] ?? null, right: adds[i] ?? null });
     }
     dels = [];
     adds = [];
@@ -126,7 +127,7 @@ function pushSplit(rows: Row[], file: DiffFile, hunk: Hunk): void {
     // Context and meta belong to both sides, so they close any pending replacement and then
     // occupy one full-width row.
     flush();
-    rows.push({ kind: "pair", file, left: line, right: line });
+    rows.push({ kind: "pair", file, hunk, left: line, right: line });
   }
   flush();
 }
@@ -157,19 +158,28 @@ export function fileRowIndexes(rows: readonly Row[]): number[] {
 export function nextIndexAfter(sorted: readonly number[], from: number): number | null {
   const last = sorted[sorted.length - 1];
   if (last === undefined) return null;
-  for (const i of sorted) if (i > from) return i;
-  return last;
+  let lo = 0;
+  let hi = sorted.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if ((sorted[mid] ?? Number.POSITIVE_INFINITY) <= from) lo = mid + 1;
+    else hi = mid;
+  }
+  return sorted[lo] ?? last;
 }
 
 // prevIndexBefore is nextIndexAfter's mirror, clamping at the first entry.
 export function prevIndexBefore(sorted: readonly number[], from: number): number | null {
   const first = sorted[0];
   if (first === undefined) return null;
-  for (let k = sorted.length - 1; k >= 0; k--) {
-    const i = sorted[k];
-    if (i !== undefined && i < from) return i;
+  let lo = 0;
+  let hi = sorted.length;
+  while (lo < hi) {
+    const mid = (lo + hi) >>> 1;
+    if ((sorted[mid] ?? Number.NEGATIVE_INFINITY) < from) lo = mid + 1;
+    else hi = mid;
   }
-  return first;
+  return sorted[lo - 1] ?? first;
 }
 
 // fileOfRow maps every row index to the index of the file row that governs it, so a scroll
@@ -229,4 +239,61 @@ export function rowAt(offsets: readonly number[], y: number): number {
     else hi = mid - 1;
   }
   return lo;
+}
+
+// storyText is the sentence a story row renders (main.ts renderRow reads it too, so the two
+// cannot drift the way a second copy of this composition would). "wrote this after reading X,
+// Y" is the whole point of the row - it is what the agent was looking at when it decided to
+// write this, which no forge can say - and with no reads recorded the sentence stops at the
+// author rather than inventing a reason.
+export function storyText(touch: DiffTouch): string {
+  const read = touch.read ?? [];
+  return read.length > 0 ? `wrote this after reading ${read.slice(0, 4).join(", ")}` : "wrote this";
+}
+
+// LINE_PREFIX_CHARS is what sits before a unified code line's own text: the old and new
+// line-number gutters (5ch each) and the +/- marker (2ch). main.ts adds it to maxLineChars to
+// get the row-width floor described there.
+export const LINE_PREFIX_CHARS = 12;
+
+// TAB_SIZE mirrors the browser's default CSS tab-size, which diff.css never overrides. A tab
+// does not cost one character of width the way every other character does - it advances to the
+// next multiple of TAB_SIZE - so a single leading tab in a code line (column 0 to column 8)
+// costs as much rendered width as seven ordinary characters. columnWidth below has to model
+// that, or a short, deeply-indented line (several leading tabs, little text) can render WIDER
+// than a longer but tab-free line of the same raw .length, becoming a new widest row that the
+// character-count floor never accounted for.
+const TAB_SIZE = 8;
+
+// columnWidth is a string's rendered width in character-columns once tabs expand to their next
+// tab stop, which is what a monospace `white-space: pre` line actually occupies - `.length`
+// alone undercounts every tab.
+function columnWidth(text: string): number {
+  let col = 0;
+  for (const ch of text) col += ch === "\t" ? TAB_SIZE - (col % TAB_SIZE) : 1;
+  return col;
+}
+
+// maxLineChars is the rendered width, in character-columns, of the longest line of text the
+// unified view renders - a code line, but also a hunk header, a comment, or a story, any of
+// which can outrun the longest code line. The renderer turns it into a per-row min-width floor
+// (diff.css), because a virtualized row otherwise sizes to its OWN text and stops there: a
+// row shorter than whichever row is actually widest had its background end at its own last
+// character instead of continuing to the scroll width that widest row established, so
+// scrolling past it exposed untinted background. Measured in character-columns rather than
+// pixels because the row is set in a monospace font, where a column count converts to a CSS
+// `ch` width with no DOM measurement needed.
+export function maxLineChars(rows: readonly Row[]): number {
+  let max = 0;
+  const bump = (text: string): void => {
+    const width = columnWidth(text);
+    if (width > max) max = width;
+  };
+  for (const row of rows) {
+    if (row.kind === "line") bump(row.line.text);
+    else if (row.kind === "hunk") bump(row.hunk.header);
+    else if (row.kind === "comment") bump(row.comment.body);
+    else if (row.kind === "story") bump(storyText(row.touch));
+  }
+  return max;
 }

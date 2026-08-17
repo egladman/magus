@@ -261,7 +261,7 @@ test("the overview line is the polite live region; the unit list is not", async 
     await settle();
     const summary = host.querySelector(".console-plan-summary");
     assert.equal(summary?.getAttribute("aria-live"), "polite");
-    assert.match(summary?.textContent ?? "", /1 unit - 1 no-return/);
+    assert.match(summary?.textContent ?? "", /1 unit\. 1 no-return\./);
     assert.equal(
       host.querySelector(".console-plan-list")?.getAttribute("aria-live"),
       null,
@@ -612,7 +612,7 @@ test("the overview leads with how the view is anchored", async () => {
     await settle();
     assert.equal(
       summaryText(host),
-      "following the running ci - 3 targets - 1 running, 1 pass - 0 fail",
+      "following the running ci. 3 targets. 1 running, 1 pass. 0 fail.",
     );
     assert.equal(
       host.querySelector(".console-plan-summary")?.getAttribute("aria-live"),

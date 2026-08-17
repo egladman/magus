@@ -30,6 +30,29 @@ export interface Workspace {
 
 export const emptyWorkspace: Workspace = { tabs: [], activeId: null };
 
+// Start new desktop workspaces with two panes.
+export function desktopStarterWorkspace(): Workspace {
+  const id = "starter";
+  return {
+    activeId: id,
+    tabs: [
+      {
+        id,
+        pageId: "dashboard",
+        title: "Dashboard",
+        layout: {
+          kind: "split",
+          id: "starter-split",
+          dir: "row",
+          ratio: 0.62,
+          a: { kind: "leaf", id: "starter-dashboard", pageId: "dashboard" },
+          b: { kind: "leaf", id: "starter-activity", pageId: "activity" },
+        },
+      },
+    ],
+  };
+}
+
 // openTab appends a tab and activates it. Opening a tab whose id already exists does
 // NOT duplicate it - it just activates the existing one (idempotent by id), so a
 // double-open is harmless.
@@ -70,7 +93,11 @@ export function setActive(ws: Workspace, id: string): Workspace {
 export function setLayout(ws: Workspace, tabId: string, layout: Pane): Workspace {
   if (!ws.tabs.some((t) => t.id === tabId)) return ws;
   return {
-    tabs: ws.tabs.map((t) => (t.id === tabId ? { ...t, layout } : t)),
+    tabs: ws.tabs.map((t) =>
+      t.id === tabId
+        ? { ...t, pageId: layout.kind === "leaf" ? layout.pageId : t.pageId, layout }
+        : t,
+    ),
     activeId: ws.activeId,
   };
 }

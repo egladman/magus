@@ -450,7 +450,7 @@ export function overviewLine(model: PlanModel): string {
     if (model.counts[s] > 0) parts.push(model.counts[s] + " " + STATE_LABEL[s]);
   }
   const tail = model.counts.no_return + " " + STATE_LABEL.no_return;
-  return parts.length ? head + " - " + parts.join(", ") + " - " + tail : head + " - " + tail;
+  return [head, parts.join(", "), tail].filter(Boolean).join(". ") + ".";
 }
 
 // ---- the live join ---------------------------------------------------------

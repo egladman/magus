@@ -7,10 +7,38 @@
 // title-bar popovers behave identically. No-ops without the markup.
 import { dispatchCommand } from "../console/commands";
 
-export function initAppMenu(): void {
+export interface AppMenuItem {
+  pageId: string;
+  label: string;
+}
+
+export function initAppMenu(items: readonly AppMenuItem[]): void {
   const btn = document.getElementById("console-appmenu-btn");
   const panel = document.getElementById("console-appmenu");
-  if (!btn || !panel) return;
+  const list = panel?.querySelector<HTMLElement>("[data-app-list]");
+  if (!btn || !panel || !list) return;
+
+  list.replaceChildren(
+    ...items.map((item) => {
+      const row = document.createElement("li");
+      row.className = "pf-v6-c-menu__list-item";
+      row.setAttribute("role", "none");
+      const open = document.createElement("button");
+      open.className = "pf-v6-c-menu__item";
+      open.type = "button";
+      open.setAttribute("role", "menuitem");
+      open.dataset.appOpen = item.pageId;
+      const main = document.createElement("span");
+      main.className = "pf-v6-c-menu__item-main";
+      const text = document.createElement("span");
+      text.className = "pf-v6-c-menu__item-text";
+      text.textContent = item.label;
+      main.append(text);
+      open.append(main);
+      row.append(open);
+      return row;
+    }),
+  );
 
   let open = false;
   const render = (): void => {

@@ -421,7 +421,7 @@ func renderIndex(a api) string {
 
 	b.WriteString("# Daemon API\n\n")
 	b.WriteString("The daemon serves its API over [Connect](https://connectrpc.com), which speaks three protocols on one endpoint: Connect's own browser-native HTTP, gRPC, and gRPC-Web. Anything that can send an HTTP request can call it, so a generated client is optional.\n\n")
-	b.WriteString("This reference is generated from the `.proto` contract, so it cannot drift from what the daemon serves. The console is one consumer of this API and has no privileged access to it - a front end you write yourself can do everything the console does.\n\n")
+	b.WriteString("This reference is generated from the `.proto` contract, so it cannot drift from what the daemon serves. The Console is a reference frontend and has no privileged access to the API. A frontend you build can use the same published contract.\n\n")
 
 	b.WriteString("## Before you call anything\n\n")
 	b.WriteString("Start the daemon with `magus server start`. See [the console reference](../console.md) for the endpoint and port, and [the auth diagnostics](../codes/auth/) for what a rejected token means. Requests carry a hashed, expiring `mgs_` bearer token.\n\n")

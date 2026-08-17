@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hunkDigest } from "./session";
+import { fetchContext, hunkDigest, patchDigest } from "./session";
 
 // The SAME golden vector internal/diff/session_test.go asserts.
 //
@@ -21,4 +21,25 @@ test("hunkDigest changes when the body does", async () => {
     await hunkDigest("a.go", ["-old", "+new"]),
     await hunkDigest("a.go", ["-old", "+newer"]),
   );
+});
+
+test("patchDigest matches the daemon's SHA-256 first-16-byte identity", async () => {
+  assert.equal(await patchDigest("abc"), "ba7816bf8f01cfea414140de5dae2223");
+});
+
+test("context requests carry the reviewed patch identity", async () => {
+  const realFetch = globalThis.fetch;
+  let url = "";
+  globalThis.fetch = (async (input: RequestInfo | URL) => {
+    url = String(input);
+    return new Response(JSON.stringify({ path: "a.go", as_of: "snapshot-a", start: 2, lines: [] }));
+  }) as typeof fetch;
+  try {
+    await fetchContext("127.0.0.1:7391", "a.go", "snapshot-a", 3, 3, new AbortController().signal);
+    const query = new URL(url).searchParams;
+    assert.equal(query.get("path"), "a.go");
+    assert.equal(query.get("as_of"), "snapshot-a");
+  } finally {
+    globalThis.fetch = realFetch;
+  }
 });

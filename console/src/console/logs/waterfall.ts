@@ -21,12 +21,12 @@ import type { Timestamp, Duration } from "@bufbuild/protobuf/wkt";
 
 const WF_NS = "http://www.w3.org/2000/svg";
 const WF_VIEW_W = 900; // viewBox width; the SVG scales to the panel via its viewBox
-const WF_LABEL_W = 230; // left gutter for span labels (indented for steps)
+const WF_LABEL_W = 210; // left gutter for span labels (indented for steps)
 const WF_RIGHT = 64; // right gutter for the per-target duration text
 const WF_AXIS_H = 18; // top strip for the time axis
-const WF_ROW_H = 20; // one span row
-const WF_BAR_H = 11; // a target bar
-const WF_STEP_BAR_H = 7; // a step (child-span) bar
+const WF_ROW_H = 18; // one span row
+const WF_BAR_H = 10; // a target bar
+const WF_STEP_BAR_H = 6; // a step (child-span) bar
 const WF_PLOT_W = WF_VIEW_W - WF_RIGHT - WF_LABEL_W;
 
 // A domain (visible time window) - the full run span or a focus window.
@@ -474,6 +474,17 @@ function drawWfRow(root: SVGSVGElement, row: WfRow, y: number, sp: Domain): void
   rt.textContent = row.label + " - " + durMsText(dur);
   rect.appendChild(rt);
   root.appendChild(rect);
+
+  if (!row.step && row.status && x2 - x1 >= 88) {
+    const meta = wfSvg("text");
+    meta.setAttribute("x", String(x1 + 5));
+    meta.setAttribute("y", String(y + WF_ROW_H / 2 + 3));
+    meta.setAttribute("class", "console-log-waterfall__barlabel");
+    meta.setAttribute("data-status", row.status);
+    if (dim) meta.setAttribute("data-dim", "");
+    meta.textContent = row.status.toUpperCase();
+    root.appendChild(meta);
+  }
 
   // Duration text in the right gutter, target rows only (step rows would crowd it).
   if (!row.step) {

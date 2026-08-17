@@ -3,6 +3,8 @@
    they do, so it gets the identical ANSI colors, status badges and line markup instead of a plain
    monospace dump. Bundled at build time, so this is an inline, not a runtime request. */
 @import "../render/render.css";
+/* Delegation is a Dashboard mode. */
+@import "../plan/plan.css";
 
 /* dashboard.css - page-scoped styles for the /dashboard/ control surface: the edge-to-edge
    dense tiles and the connect/landing screen.
@@ -24,19 +26,175 @@ body[data-dash-native] { margin: 0; }
 [data-dash-native] .console-dashboard-main,
 .console-dashboard-main { max-width: none; margin: 0; padding: var(--console-pad); padding-bottom: calc(var(--console-pad) + var(--console-statusbar-h)); }
 
+.console-dashboard-main[data-mode="plan"] {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+.console-dashboard-main[data-mode="plan"] #dash-plan-host {
+  display: flex;
+  flex: 1 1 auto;
+  min-height: 34rem;
+}
+#dash-plan-host > .console-plan-layout { flex: 1 1 auto; min-height: 0; }
+
+.console-dashboard-related {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.7rem;
+  margin-block-end: var(--console-gap);
+  padding-block-end: var(--pf-t--global--spacer--sm);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-dashboard-related__label { color: var(--pf-t--global--text--color--subtle); font-size: var(--pf-t--global--font--size--sm); }
+.console-dashboard-plan-controls {
+  display: flex;
+  align-items: center;
+  min-height: 2.25rem;
+  margin-block-end: var(--console-gap);
+  padding-block-end: var(--pf-t--global--spacer--sm);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+}
+/* Board sections prioritize live work. */
+.console-dashboard-section {
+  display: flex;
+  align-items: baseline;
+  gap: 0.7rem;
+  padding-block: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--xs);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-dashboard-section h2 { margin: 0; font-size: var(--pf-t--global--font--size--lg); }
+.console-dashboard-section p { margin: 0; color: var(--pf-t--global--text--color--subtle); font-size: var(--pf-t--global--font--size--sm); }
+@media (max-width: 700px) {
+  .console-dashboard-section { align-items: flex-start; flex-direction: column; gap: 0.15rem; }
+}
+
+.console-dashboard-orchestration {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 0.15rem 0.7rem;
+  margin-block-end: 0.7rem;
+  padding: 0.65rem 0.75rem;
+  border-inline-start: 3px solid var(--console-status-running);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-dashboard-orchestration[data-state="attention"] { border-inline-start-color: var(--console-status-danger); }
+.console-dashboard-orchestration[data-state="idle"] { border-inline-start-color: var(--pf-t--global--border--color--default); }
+.console-dashboard-orchestration__line { min-width: 0; }
+.console-dashboard-orchestration__detail { color: var(--pf-t--global--text--color--subtle); font-size: var(--pf-t--global--font--size--sm); }
+
+.console-dashboard-delegation__summary {
+  margin: 0 0 0.75rem;
+  font-size: var(--pf-t--global--font--size--md);
+  font-weight: 600;
+}
+.console-dashboard-delegation__list {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(13rem, 1fr));
+  gap: 0.45rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.console-dashboard-delegation__item {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 0.45rem;
+  align-items: center;
+  padding: 0.4rem 0.5rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-inline-start: 3px solid var(--console-status-running);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-dashboard-delegation__item[data-state="declared"] { border-inline-start-color: var(--console-status-queued); }
+.console-dashboard-delegation__item[data-state="pass"] { border-inline-start-color: var(--console-status-ok); }
+.console-dashboard-delegation__item[data-state="fail"],
+.console-dashboard-delegation__item[data-state="no_return"] { border-inline-start-color: var(--console-status-danger); }
+.console-dashboard-delegation__mark { font-size: 0.68rem; font-weight: 700; color: var(--console-status-running); }
+.console-dashboard-delegation__item[data-state="declared"] .console-dashboard-delegation__mark { color: var(--console-status-queued); }
+.console-dashboard-delegation__item[data-state="pass"] .console-dashboard-delegation__mark { color: var(--console-status-ok); }
+.console-dashboard-delegation__item[data-state="fail"] .console-dashboard-delegation__mark,
+.console-dashboard-delegation__item[data-state="no_return"] .console-dashboard-delegation__mark { color: var(--console-status-danger); }
+.console-dashboard-delegation__id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.console-dashboard-delegation__state { font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); }
+.console-dashboard-delegation__note { min-height: 1.2em; margin: 0.65rem 0 0; color: var(--console-status-warn); font-size: var(--pf-t--global--font--size--sm); }
+
 /* Panels: a responsive 2-column grid. Tiles span the full width by default; a compact tile opts
    into a single column with [data-half] so it pairs with a neighbor instead of eating a whole
-   row. `dense` backfills a leftover column with the next half tile; `align-items: start` stops a
-   short tile from stretching to its taller neighbor. One column on narrow viewports. */
+   row. Paired cards share their row height, so the panel background carries cleanly to the baseline.
+   One column on narrow viewports. */
 #dash-panels {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   grid-auto-flow: row dense;
-  align-items: start;
+  align-items: stretch;
   gap: var(--console-gap);
 }
 #dash-panels > * { grid-column: 1 / -1; }
 #dash-panels > [data-half] { grid-column: span 1; }
+
+@media (min-width: 761px) {
+  /* Keep the live-work story wide; pair supporting diagnostics. */
+  #dash-panels > [data-card="pool"],
+  #dash-panels > [data-card="cache-local"],
+  #dash-panels > [data-card="locks"],
+  #dash-panels > [data-card="workspaces"],
+  #dash-panels > [data-card="remote"],
+  #dash-panels > [data-card="cache"],
+  #dash-panels > [data-card="util"],
+  #dash-panels > [data-card="targets"],
+  #dash-panels > [data-card="services"],
+  #dash-panels > [data-card="config"],
+  #dash-panels > [data-card="latency"],
+  #dash-panels > [data-card="buzz"],
+  #dash-panels > [data-card="sandbox"],
+  #dash-panels > [data-card="mcp"],
+  #dash-panels > [data-card="toolchain"],
+  #dash-panels > [data-card^="insight-"] {
+    grid-column: span 1;
+    min-block-size: clamp(10rem, 20vh, 14rem);
+  }
+
+  #dash-panels > [data-card] > .pf-v6-c-card__body {
+    padding: clamp(0.75rem, 1vw, 1rem);
+  }
+}
+
+@media (min-width: 1180px) {
+  #dash-panels { grid-template-columns: repeat(12, minmax(0, 1fr)); }
+  #dash-panels > [data-card] { grid-column: span 4; }
+
+  #dash-panels > [data-card="delegation"],
+  #dash-panels > [data-card="agents"],
+  #dash-panels > [data-card="activity"],
+  #dash-panels > [data-card="gantt"],
+  #dash-panels > [data-card="targets"],
+  #dash-panels > [data-card="toolchain"] { grid-column: span 6; }
+
+  #dash-panels > [data-card="pool"],
+  #dash-panels > [data-card="cache-local"],
+  #dash-panels > [data-card="locks"],
+  #dash-panels > [data-card="workspaces"] { grid-column: span 3; }
+
+  #dash-panels > [data-card="remote"],
+  #dash-panels > [data-card="cache"],
+  #dash-panels > [data-card="util"] { grid-column: span 4; }
+
+  #dash-panels > [data-card] { min-block-size: 0; }
+  #dash-panels > [data-card="delegation"],
+  #dash-panels > [data-card="activity"],
+  #dash-panels > [data-card="gantt"] { min-block-size: 13rem; }
+
+  /* The board carries orchestration state, not a second activity feed. Keeping the posture,
+     sessions, and host totals here lets the live work row stay compact; individual calls belong
+     in the Activity tile directly below. */
+  :root:not([data-bigpicture]) #dash-panels > [data-card="agents"] .console-dashboard-activity__caption,
+  :root:not([data-bigpicture]) #dash-panels > [data-card="agents"] .console-dashboard-agents__recentwrap,
+  :root:not([data-bigpicture]) #dash-panels > [data-card="agents"] .console-dashboard-agents__grid,
+  :root:not([data-bigpicture]) #dash-panels > [data-card="agents"] .console-dashboard-agents__key { display: none; }
+}
+
 @media (max-width: 760px) {
   /* minmax(0, 1fr), NOT 1fr: a plain 1fr column is min-content-sized, so a tile with wide
      unshrinkable content (a chart/gantt/table) blows the single column past the viewport. */
@@ -83,11 +241,11 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 /* Stat strip: dense KPI tiles, auto-fitting the full width. */
 .console-dashboard-statstrip {
   display: grid; gap: var(--console-gap);
-  grid-template-columns: repeat(auto-fit, minmax(130px, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(156px, 1fr));
 }
 .console-dashboard-stat {
   position: relative; display: flex; flex-direction: column; gap: 0.15rem;
-  padding: 0.55rem 0.7rem 0.6rem;
+  padding: 0.7rem 0.85rem 0.75rem;
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--primary--default);
@@ -128,7 +286,7 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
   justify-content: start;
   gap: 4px;
   margin: 0.1rem 0 0.55rem;
-  max-width: calc(var(--pool-cols, 8) * 2.6rem);
+  max-width: min(100%, 28rem);
 }
 /* Fill the panel's spare height instead of leaving it empty.
  *
@@ -185,7 +343,7 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
    winding down visibly fades rather than vanishing between polls. */
 .console-dashboard-agents__grid {
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(1.1rem, 1.4rem));
+  grid-template-columns: repeat(auto-fill, minmax(1.35rem, 1.8rem));
   gap: 4px;
   margin: 0.1rem 0 0.6rem;
 }
@@ -337,6 +495,14 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
    are the tallest FIXED element in a panel whose other content already knows how to shrink. */
 [data-bigpicture] [data-card="agents"] .console-dashboard-activity__caption,
 [data-bigpicture] [data-card="activity"] .console-dashboard-activity__caption { display: none; }
+[data-bigpicture] [data-card="delegation"] .pf-v6-c-button { display: none; }
+[data-bigpicture] .console-dashboard-delegation__summary { font-size: calc(var(--bp-u) * 1.25); }
+[data-bigpicture] .console-dashboard-delegation__list { gap: calc(var(--bp-u) * 0.35); }
+[data-bigpicture] .console-dashboard-delegation__item { padding: calc(var(--bp-u) * 0.45) calc(var(--bp-u) * 0.6); }
+[data-bigpicture] .console-dashboard-delegation__mark,
+[data-bigpicture] .console-dashboard-delegation__state { font-size: calc(var(--bp-u) * 0.95); }
+[data-bigpicture] .console-dashboard-delegation__id { font-size: calc(var(--bp-u) * 1.05); }
+[data-bigpicture] .console-dashboard-delegation__note { display: none; }
 
 /* Legend swatches, shared by the charts and the utilization grid. */
 .console-dashboard-legend::before { content: ""; display: inline-block; width: 0.6em; height: 0.6em; border-radius: 2px; margin-right: 0.3em; vertical-align: middle; }
@@ -601,6 +767,13 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   align-items: flex-start;
   gap: 0.2rem;
 }
+.console-dashboard-viewbar__view {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.2rem;
+  margin-left: auto;
+}
 /* Quiet - a standing field label, not a heading - but present, because two bare chips reading
    "acme" and "magus" do not say what choosing one does. Sentence case, per the console's
    no-all-caps convention. */
@@ -617,11 +790,12 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 
    Secondary and not primary on purpose - the attention hero is directly below and must win the
    first glance, and the console's filled blue already means running work. */
-.console-dashboard-viewbar__bigpicture {
-  margin-left: auto; flex: 0 0 auto;
-}
+.console-dashboard-viewbar__bigpicture { flex: 0 0 auto; }
 
-/* ICON BUTTONS: centre the glyph against the LABEL rather than letting it sit on the text baseline.
+/* ICON BUTTONS: centre the glyph against the LABEL rather than letting it sit on the text baseline,
+ * and gap them - the icon carries pf-m-start (PatternFly's own spacing modifier) but that margin is
+ * scoped to a `.pf-v6-c-button` ancestor, and these buttons wear `.pf-v6-c-toggle-group__button`
+ * instead, so the icon landed flush against the label with no space between them.
  *
  * An SVG is an inline replaced element, so by default its bottom edge lands on the baseline and the
  * icon rides visibly high next to the words - 2px, consistently. PatternFly does NOT do this for
@@ -637,6 +811,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 .console-dashboard-activity__open {
   display: inline-flex;
   align-items: center;
+  gap: var(--pf-t--global--spacer--xs);
 }
 .console-dashboard-viewbar__bigpicture .pf-v6-c-button__icon,
 .console-dashboard-activity__open .pf-v6-c-button__icon {
@@ -730,7 +905,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 @media (min-aspect-ratio: 8 / 5) {
   [data-bigpicture] #dash-panels {
     grid-template-columns: repeat(12, minmax(0, 1fr));
-    grid-template-rows: repeat(8, minmax(0, 1fr));
+    grid-template-rows: repeat(9, minmax(0, 1fr));
   }
   /* The rotating slot sits UNDER the live-activity column, not in a band of its own.
      A full-width band was the obvious placement and the wrong one: adding rows without taking any
@@ -741,29 +916,35 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
      Every member is placed in the SAME area and stacked; the rotator marks one
      [data-rotate-active] and the rules further down reveal exactly that one. */
   [data-bigpicture] #dash-panels > [data-rotate] {
-    grid-row: 4 / 7;
+    grid-row: 5 / 8;
     grid-column: var(--bp-split-next, 9) / -1;
   }
   [data-bigpicture] #dash-panels > .console-dashboard-hero {
     grid-row: 1 / 3; grid-column: 1 / var(--bp-split-next, 9);
   }
+  /* Delegation belongs directly under the verdict. */
+  [data-bigpicture] #dash-panels > [data-card="delegation"] {
+    grid-row: 3 / 5; grid-column: 1 / var(--bp-split-next, 9);
+  }
+  [data-bigpicture] #dash-panels > [data-card="agents"] {
+    grid-row: 3 / 5; grid-column: var(--bp-split-next, 9) / -1;
+  }
   [data-bigpicture] #dash-panels > [data-card="gantt"] {
-    grid-row: 3 / 7; grid-column: 1 / var(--bp-split-next, 9);
+    grid-row: 5 / 8; grid-column: 1 / var(--bp-split-next, 9);
   }
   [data-bigpicture] #dash-panels > [data-card="activity"] {
-    grid-row: 1 / 4; grid-column: var(--bp-split-next, 9) / -1;
+    grid-row: 1 / 3; grid-column: var(--bp-split-next, 9) / -1;
   }
   /* The bottom rail is independent of the split: these five are read as a strip, and re-cutting
      them as the column above moves would make the whole board shuffle on every drag.
      EVERY panel that Big Picture shows must be placed explicitly here - an unplaced one is
      auto-placed into an implicit row and pushes the canvas past the viewport. */
-  [data-bigpicture] #dash-panels > [data-card="pool"] { grid-row: 7 / 9; grid-column: 1 / 3; }
-  [data-bigpicture] #dash-panels > [data-card="cache-local"] { grid-row: 7 / 9; grid-column: 3 / 6; }
-  /* Three columns, not two: the host names are the content here ("claude-code", "opencode"), and at
-     two they wrapped mid-word into a second line. */
-  [data-bigpicture] #dash-panels > [data-card="agents"] { grid-row: 7 / 9; grid-column: 6 / 9; }
-  [data-bigpicture] #dash-panels > [data-card="workspaces"] { grid-row: 7 / 9; grid-column: 9 / 11; }
-  [data-bigpicture] #dash-panels > [data-card="locks"] { grid-row: 7 / 9; grid-column: 11 / -1; }
+  [data-bigpicture] #dash-panels > [data-card="pool"] { grid-row: 8 / 10; grid-column: 1 / 3; }
+  [data-bigpicture] #dash-panels > [data-card="cache-local"] { grid-row: 8 / 10; grid-column: 3 / 7; }
+  /* The bottom rail is machine state only. Orchestration has its own prominent slot above, and the
+     remaining four rail panels use the full width rather than leaving a dead gap where it used to sit. */
+  [data-bigpicture] #dash-panels > [data-card="workspaces"] { grid-row: 8 / 10; grid-column: 7 / 10; }
+  [data-bigpicture] #dash-panels > [data-card="locks"] { grid-row: 8 / 10; grid-column: 10 / -1; }
   /* The drag affordance is a GRID ITEM, placed in the column the split names and spanning the same
      rows as the two panels it divides. The grid positions it - there is no measuring, no
      ResizeObserver and no absolute positioning, which is how the pane tiler's divider works too
@@ -771,31 +952,34 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
      edge into the middle of the gap; it is static CSS, not a runtime calculation. */
   [data-bigpicture] #dash-panels > .console-dashboard-split {
     display: block;
-    grid-row: 1 / 7;
+    grid-row: 1 / 8;
     grid-column: var(--bp-split-next, 9);
     justify-self: start;
     margin-left: calc((var(--bp-gap) + var(--bp-u) * 0.55) / -2);
   }
 }
 
-/* Square-ish (between 4:5 and 16:10): a portrait monitor, a tablet, a half-tiled window. 6 x 12. */
+/* Square-ish (between 4:5 and 16:10): a portrait monitor, a tablet, a half-tiled window. The
+   rotating diagnostic slot gets a real area here too, rather than spilling every member below the
+   canvas when this breakpoint is active. */
 @media (min-aspect-ratio: 4 / 5) and (max-aspect-ratio: 8 / 5) {
   [data-bigpicture] #dash-panels {
     grid-template-columns: repeat(6, minmax(0, 1fr));
-    grid-template-rows: repeat(14, minmax(0, 1fr));
+    grid-template-rows: repeat(15, minmax(0, 1fr));
     grid-template-areas:
       "verdict verdict verdict verdict verdict verdict"
       "verdict verdict verdict verdict verdict verdict"
-      "runs    runs    runs    runs    runs    runs"
+      "plan    plan    plan    agents  agents  agents"
+      "plan    plan    plan    agents  agents  agents"
       "runs    runs    runs    runs    runs    runs"
       "runs    runs    runs    runs    runs    runs"
       "runs    runs    runs    runs    runs    runs"
       "now     now     now     now     now     now"
       "now     now     now     now     now     now"
+      "rotate  rotate  rotate  rotate  rotate  rotate"
+      "rotate  rotate  rotate  rotate  rotate  rotate"
       "pool    pool    cache   cache   cache   cache"
       "pool    pool    cache   cache   cache   cache"
-      "agents  agents  agents  agents  agents  agents"
-      "agents  agents  agents  agents  agents  agents"
       "ws      ws      ws      locks   locks   locks"
       "ws      ws      ws      locks   locks   locks";
   }
@@ -810,7 +994,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: none;
     grid-auto-rows: minmax(calc(var(--bp-u) * 14), auto);
-    grid-template-areas: "verdict" "runs" "now" "agents" "pool" "cache" "ws" "locks";
+    grid-template-areas: "verdict" "plan" "agents" "runs" "now" "rotate" "pool" "cache" "ws" "locks";
     overflow-y: auto;
   }
   /* Stack the hero. It is a space-between row of verdict-and-detail against the three counts, which
@@ -860,7 +1044,9 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   [data-bigpicture] #dash-panels > [data-card="cache-local"] { grid-area: cache; }
   [data-bigpicture] #dash-panels > [data-card="workspaces"] { grid-area: ws; }
   [data-bigpicture] #dash-panels > [data-card="locks"] { grid-area: locks; }
+  [data-bigpicture] #dash-panels > [data-card="delegation"] { grid-area: plan; }
   [data-bigpicture] #dash-panels > [data-card="agents"] { grid-area: agents; }
+  [data-bigpicture] #dash-panels > [data-rotate] { grid-area: rotate; }
 }
 
 /* The split handle: a thin vertical grab strip parked on the boundary between the left stack and
@@ -943,7 +1129,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 /* On the board the rotation attributes mean nothing - every tile is simply itself, in its own row,
    and the mode-only rules above do not apply. Stated so the attributes can never leak a hidden
    panel onto the board if a future change reorders these rules. */
-:not([data-bigpicture]) #dash-panels > [data-rotate] { opacity: 1; visibility: visible; }
+:root:not([data-bigpicture]) #dash-panels > [data-rotate] { opacity: 1; visibility: visible; }
 
 /* Panels fill their slot and clip rather than overflow. min-height: 0 is required: a grid item
    defaults to min-content in the block axis, so without it a tall panel pushes its row past the
@@ -961,6 +1147,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
    on screen - the whole board rendered into a grid with areas for seven of its twenty children,
    and the unplaced ones spilled into implicit rows past the canvas. */
 [data-bigpicture] #dash-panels > [data-view-hide] { display: none; }
+[data-bigpicture] #dash-panels > [data-board-only] { display: none; }
 [data-bigpicture] .pf-v6-c-card__body {
   flex: 1 1 auto;
   min-height: 0;
@@ -1046,6 +1233,14 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
     calc(var(--bp-u) * 1.3);
 }
 [data-bigpicture] .console-dashboard-row { font-size: calc(var(--bp-u) * 1.15); }
+[data-bigpicture] .console-dashboard-orchestration {
+  grid-template-columns: 1fr;
+  gap: calc(var(--bp-u) * 0.3);
+  margin-block-end: calc(var(--bp-u) * 0.55);
+  padding: calc(var(--bp-u) * 0.65) calc(var(--bp-u) * 0.85);
+}
+[data-bigpicture] .console-dashboard-orchestration__line { font-size: calc(var(--bp-u) * 1.35); }
+[data-bigpicture] .console-dashboard-orchestration__detail { font-size: calc(var(--bp-u) * 1.05); }
 /* Chunkier in Big Picture, but sized against the panel's HEIGHT rather than its width. The pool
    panel is deliberately the narrowest in the bottom row (two of twelve columns) because a compact
    square block needs far less width than the cache KPIs beside it - so the binding constraint is
@@ -1080,6 +1275,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 [data-bigpicture] .console-dashboard-viewbar:focus-within { opacity: 1; }
 /* The workspace picker is a board control; the strip is only an exit. */
 [data-bigpicture] .console-dashboard-viewbar__workspaces { display: none; }
+[data-bigpicture] .console-dashboard-viewbar__view > .console-dashboard-viewbar__label { display: none; }
 
 @media (prefers-reduced-motion: reduce) {
   [data-bigpicture] .console-dashboard-viewbar { transition: none; }
@@ -1498,9 +1694,9 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 /* Metric grid (Buzz, Sandbox): dense captioned groups of label + monospace value. */
 .console-dashboard-metric__groups { display: flex; flex-direction: column; gap: 0.6rem; }
 .console-dashboard-metric__caption { margin: 0 0 0.3rem; font-size: 0.68rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pf-t--global--text--color--subtle); }
-.console-dashboard-metric__grid { display: grid; gap: 0.4rem; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+.console-dashboard-metric__grid { display: grid; gap: 0.55rem; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); }
 .console-dashboard-metric {
-  display: flex; flex-direction: column; gap: 0.1rem; padding: 0.35rem 0.5rem;
+  display: flex; flex-direction: column; gap: 0.15rem; padding: 0.55rem 0.7rem;
   border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
 }

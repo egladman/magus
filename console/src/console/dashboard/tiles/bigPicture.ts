@@ -17,10 +17,8 @@
 // not). Placing the real tiles instead means one renderer per concept, which is the rule any future
 // panel has to keep: a new metric family is one new tile file plus one grid-area line.
 //
-// The switch drives two things that must not disagree: the viewMode signal (which main.ts binds to
-// pick the surviving tiles) and a [data-bigpicture] attribute on the document element (which the
-// stylesheets key every layout and chrome-suppression rule off). A single fullscreenchange listener
-// sets both, so Escape, the browser chrome, and the button itself all stay in sync.
+// setViewMode updates both the mode signal and the document attribute; fullscreen changes feed into
+// it, while route and button entry can use it without fullscreen.
 
 import type { DashboardState, WorkspaceView } from "../state";
 import { persisted } from "../../../lib/persist";
@@ -29,8 +27,7 @@ import type { Tile } from "./card";
 
 export type ViewMode = "board" | "bigPicture";
 
-// viewMode is an in-memory signal, not a persisted cell: it mirrors document.fullscreenElement,
-// which the browser itself resets on reload/navigation, so persisting it would just go stale.
+// viewMode is in-memory because presentation mode ends when the dashboard surface is deactivated.
 export const viewMode = signal<ViewMode>("board");
 
 // "" (not null) so the cell has one plain string type: toggleGroup below binds it directly as a
@@ -100,7 +97,7 @@ function wsAccessMs(w: WorkspaceView): number {
 // overflowItem builds the "+N" chip that ends the toggle group and the menu behind it. Same PF menu
 // vocabulary as the hero's failing-target chips and the activity tile's open picker, so every
 // "choose one of these" on this board looks and behaves the same.
-function overflowItem(rest: WorkspaceView[]): HTMLElement {
+function overflowItem(rest: WorkspaceView[], signal: AbortSignal): HTMLElement {
   const wrap = h("div", "pf-v6-c-toggle-group__item console-dashboard-viewbar__more");
   const btn = document.createElement("button");
   btn.type = "button";
@@ -150,10 +147,14 @@ function overflowItem(rest: WorkspaceView[]): HTMLElement {
   });
   menu.addEventListener("click", (ev) => ev.stopPropagation());
   if (typeof document !== "undefined") {
-    document.addEventListener("click", close);
-    document.addEventListener("keydown", (ev) => {
-      if (ev.key === "Escape") close();
-    });
+    document.addEventListener("click", close, { signal });
+    document.addEventListener(
+      "keydown",
+      (ev) => {
+        if (ev.key === "Escape") close();
+      },
+      { signal },
+    );
   }
   wrap.append(btn, menu);
   return wrap;
@@ -163,10 +164,15 @@ function overflowItem(rest: WorkspaceView[]): HTMLElement {
 // time, painted from a persisted cell.
 // The caller names the group (a visible label element it owns, via aria-labelledby), so this no
 // longer takes an ariaLabel of its own - one control, one name.
+interface ToggleGroup {
+  el: HTMLElement;
+  destroy(): void;
+}
+
 function toggleGroup<T extends string>(
   items: { value: T; label: string; title?: string }[],
   cell: { get(): T; set(v: T): void; subscribe(fn: (v: T) => void): () => void },
-): HTMLElement {
+): ToggleGroup {
   const root = h("div", "pf-v6-c-toggle-group");
   root.setAttribute("role", "group");
   const buttons: { btn: HTMLButtonElement; value: T }[] = [];
@@ -191,8 +197,8 @@ function toggleGroup<T extends string>(
     }
   };
   paint();
-  cell.subscribe(paint);
-  return root;
+  const unsubscribe = cell.subscribe(paint);
+  return { el: root, destroy: unsubscribe };
 }
 
 // bigPictureIcon is the Big Picture button's glyph: a big screen on a stand, built via
@@ -257,6 +263,10 @@ function exitBigPicture(): void {
   if (document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
 }
 
+export function resetBigPicture(): void {
+  exitBigPicture();
+}
+
 // dashboardHeader is the dashboard's always-visible chrome row - not a Card, sitting above the
 // panels (like the attention hero). It holds the active-workspace picker (left, only past a
 // single workspace) and the Big Picture button (right, always present).
@@ -268,39 +278,36 @@ export function dashboardHeader(): Tile {
   wsWrap.hidden = true;
   root.append(wsWrap);
 
-  // A LABELLED, bordered button rather than the bare glyph this used to be.
-  //
-  // The glyph alone was effectively undiscoverable: a muted 1.9rem icon, in the far corner of an
-  // otherwise empty row, that only took on any colour once you were already hovering it. A monitor
-  // outline does not say "present this on a TV" to someone who has not been told, and there was
-  // nothing to prompt them to hover and find the tooltip - so the feature was reachable only by
-  // people who already knew it existed.
-  //
-  // Bordered SECONDARY, not filled primary, and that restraint is deliberate. The attention hero
-  // sits directly below and is what the eye is supposed to land on first; a filled call-to-action
-  // above it would win that contest every time, and the console already spends its filled blue on
-  // running work. Secondary reads unambiguously as a control without competing for the headline.
+  const viewWrap = h("div", "console-dashboard-viewbar__view");
+  const viewLabel = h("span", "console-dashboard-viewbar__label", "View");
+  const viewGroup = h("div", "pf-v6-c-toggle-group");
+  viewGroup.setAttribute("role", "group");
+  const viewItem = h("div", "pf-v6-c-toggle-group__item");
   const bigPictureBtn = document.createElement("button");
   bigPictureBtn.type = "button";
-  bigPictureBtn.className = "pf-v6-c-button pf-m-secondary console-dashboard-viewbar__bigpicture";
+  bigPictureBtn.className = "pf-v6-c-toggle-group__button console-dashboard-viewbar__bigpicture";
   bigPictureBtn.title = "Present this dashboard full-screen, with no console chrome";
   const btnIcon = h("span", "pf-v6-c-button__icon pf-m-start");
   btnIcon.append(bigPictureIcon());
   // The label is what makes the control self-describing, so it carries the accessible name and the
   // aria-label is dropped rather than duplicating it (a label plus an aria-label that says the same
   // thing is just two names for one control, and screen readers announce the override).
-  const btnText = h("span", "pf-v6-c-button__text", "Big Picture");
+  const btnText = h("span", "pf-v6-c-toggle-group__text", "Big Picture");
   bigPictureBtn.append(btnIcon, btnText);
   bigPictureBtn.addEventListener("click", () => {
     if (viewMode.get() === "bigPicture") exitBigPicture();
     else enterBigPicture();
   });
-  root.append(bigPictureBtn);
+  viewItem.append(bigPictureBtn);
+  viewGroup.append(viewItem);
+  viewWrap.append(viewLabel, viewGroup);
+  root.append(viewWrap);
 
-  bind(viewMode, (mode) => {
+  const unbindViewMode = bind(viewMode, (mode) => {
     const active = mode === "bigPicture";
     bigPictureBtn.setAttribute("aria-pressed", String(active));
     bigPictureBtn.toggleAttribute("data-active", active);
+    bigPictureBtn.classList.toggle("pf-m-selected", active);
     // Inside the mode this is the ONLY way out that does not require guessing, because the button
     // is all that the hover-reveal exit strip contains and Escape does nothing when the mode was
     // entered by route rather than by fullscreen. So it says what it will do, not what mode you are
@@ -315,10 +322,16 @@ export function dashboardHeader(): Tile {
 
   let lastWorkspaces: WorkspaceView[] = [];
   let lastRoots = "";
+  let destroyPicker = (): void => {};
   function renderWorkspacePicker(): void {
     const show = viewMode.get() === "board" && lastWorkspaces.length > 1;
     wsWrap.hidden = !show;
-    if (!show) return;
+    if (!show) {
+      destroyPicker();
+      destroyPicker = (): void => {};
+      wsWrap.replaceChildren();
+      return;
+    }
 
     // Keep the pick valid: default to the first workspace, and fall back to it if the
     // previously active root drops out of the set (e.g. it went idle and was pruned).
@@ -356,6 +369,8 @@ export function dashboardHeader(): Tile {
     // pair of tabs. The accessible name was already there; the sighted reader was the one being
     // asked to guess. The label carries the accessible name now (aria-labelledby), so the control
     // has exactly one name rather than a visible one and a different announced one.
+    destroyPicker();
+    const pickerAbort = new AbortController();
     const labelId = "dash-ws-picker-label";
     const label = h("span", "console-dashboard-viewbar__label", "Workspace");
     label.id = labelId;
@@ -363,14 +378,18 @@ export function dashboardHeader(): Tile {
       visible.map((w) => ({ value: w.root, label: wsLabel(w.root), title: w.root })),
       activeWorkspace,
     );
-    group.removeAttribute("aria-label");
-    group.setAttribute("aria-labelledby", labelId);
-    if (overflow.length > 0) group.append(overflowItem(overflow));
-    wsWrap.replaceChildren(label, group);
+    group.el.removeAttribute("aria-label");
+    group.el.setAttribute("aria-labelledby", labelId);
+    if (overflow.length > 0) group.el.append(overflowItem(overflow, pickerAbort.signal));
+    wsWrap.replaceChildren(label, group.el);
+    destroyPicker = (): void => {
+      pickerAbort.abort();
+      group.destroy();
+    };
   }
   // Entering/leaving Big Picture must show/hide the workspace picker immediately, not on the
   // next ~1s status tick.
-  viewMode.subscribe(renderWorkspacePicker);
+  const unbindWorkspacePicker = viewMode.subscribe(renderWorkspacePicker);
 
   return {
     el: root,
@@ -378,6 +397,10 @@ export function dashboardHeader(): Tile {
       lastWorkspaces = s.status ? s.status.workspaces : [];
       renderWorkspacePicker();
     },
-    destroy() {},
+    destroy() {
+      unbindViewMode();
+      unbindWorkspacePicker();
+      destroyPicker();
+    },
   };
 }

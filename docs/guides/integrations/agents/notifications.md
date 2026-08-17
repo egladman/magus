@@ -1,6 +1,6 @@
 ---
 title: Attention hooks
-description: magus notify turns one host event into a desktop notification and a shared attention record, so a blocked or finished agent reaches you - and why this is a hook sink rather than an MCP tool.
+description: magus notify turns one host event into a desktop notification, so a blocked or finished agent reaches you - and why this is a hook sink rather than an MCP tool.
 tags: [agents, notify, hooks, notifications, desktop]
 ---
 
@@ -8,8 +8,10 @@ tags: [agents, notify, hooks, notifications, desktop]
 
 An agent blocked on a permission prompt, or one that finished twenty minutes
 ago, is only useful if you find out. `magus notify` normalizes one host event
-into the shared attention record and, with `--desktop`, into a desktop
-notification.
+and, with `--desktop`, posts a desktop notification.
+
+It does not publish an event to the daemon or Console. Use it to bring a
+person back to the host where the agent needs an answer.
 
 ```sh
 printf '%s\n' "needs your approval" | magus notify --outcome Notification --desktop

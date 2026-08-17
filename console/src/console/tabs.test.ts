@@ -6,6 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   emptyWorkspace,
+  desktopStarterWorkspace,
   openTab,
   closeTab,
   setActive,
@@ -20,6 +21,27 @@ const tab = (id: string, pageId = id) => ({ id, pageId, title: id });
 test("openTab into an empty workspace appends and activates", () => {
   const ws = openTab(emptyWorkspace, tab("a"));
   assert.deepEqual(ws, { tabs: [tab("a")], activeId: "a" });
+});
+
+test("desktop starter opens Dashboard beside Activity", () => {
+  const ws = desktopStarterWorkspace();
+  const [tab] = ws.tabs;
+  assert.equal(ws.activeId, "starter");
+  assert.equal(tab?.pageId, "dashboard");
+  assert.deepEqual(tab?.layout, {
+    kind: "split",
+    id: "starter-split",
+    dir: "row",
+    ratio: 0.62,
+    a: { kind: "leaf", id: "starter-dashboard", pageId: "dashboard" },
+    b: { kind: "leaf", id: "starter-activity", pageId: "activity" },
+  });
+});
+
+test("setLayout makes a collapsed pane its tab's primary surface", () => {
+  const leaf: Pane = { kind: "leaf", id: "activity", pageId: "activity" };
+  const ws = setLayout(desktopStarterWorkspace(), "starter", leaf);
+  assert.equal(ws.tabs[0]?.pageId, "activity");
 });
 
 test("openTab appends in order and activates the new tab", () => {

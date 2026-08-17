@@ -15,6 +15,7 @@ import { collapsedCardsCell } from "../../layoutPrefs";
 export interface Tile {
   readonly el: HTMLElement;
   update(s: DashboardState): void;
+  setVisible?(visible: boolean): void;
   destroy(): void;
 }
 

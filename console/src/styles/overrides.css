@@ -118,12 +118,10 @@
   content: ""; display: inline-block; width: 0.5em; height: 0.5em; margin-right: 0.4em;
   border-radius: 50%; background: var(--console-conn-dot, currentColor); vertical-align: middle;
 }
-/* The three tiers, GREEN/GOLD/RED, cover every state - a not-connected dot is never left the muted
- * default color. connected = green; connecting/reconnecting = gold; and both "disconnected" (a dropped
- * link) and "none" (no live link at all: a snapshot/demo surface, or no daemon host configured) = red,
- * because not connected is not connected whatever the reason. (--console-status-queued IS PF danger red;
- * see tokens.css.) */
+/* The four connection states cover every status-bar dot. Demo uses indigo so it cannot be mistaken
+ * for a live daemon, while live health remains green, gold, or red. */
 #console-conn[data-state="connected"] { --console-conn-dot: var(--console-status-ok); }
+#console-conn[data-state="demo"] { --console-conn-dot: var(--console-indigo); }
 #console-conn[data-state="connecting"],
 #console-conn[data-state="reconnecting"] { --console-conn-dot: var(--console-status-warn); }
 #console-conn[data-state="disconnected"],

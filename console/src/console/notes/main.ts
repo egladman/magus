@@ -43,6 +43,8 @@ import type { SurfaceInstance } from "../standalone";
 // The SAME key the dashboard remembers its last daemon under, so opening Notes after
 // connecting the dashboard resumes the same loopback host. Read-only here.
 const daemonCell = persisted<string | null>("dashboard-daemon", null);
+// Bound initial card DOM for large note stores.
+const NOTES_BATCH = 30;
 
 interface Refs {
   scroll: HTMLElement;
@@ -319,8 +321,26 @@ function buildStoreSection(
   }
 
   const gallery = h("div", "pf-v6-l-gallery pf-m-gutter");
-  for (const n of notes) gallery.append(buildNoteCard(n, loadBody));
-  section.append(gallery);
+  const more = h("button", "pf-v6-c-button pf-m-secondary") as HTMLButtonElement;
+  more.type = "button";
+  let shown = 0;
+  const appendNext = (): void => {
+    const end = Math.min(notes.length, shown + NOTES_BATCH);
+    const batch = document.createDocumentFragment();
+    for (; shown < end; shown++) {
+      const note = notes[shown];
+      if (note) batch.append(buildNoteCard(note, loadBody));
+    }
+    gallery.append(batch);
+    more.hidden = shown >= notes.length;
+    if (!more.hidden) {
+      const remaining = notes.length - shown;
+      more.textContent = `Show ${Math.min(NOTES_BATCH, remaining)} more (${remaining} remaining)`;
+    }
+  };
+  more.addEventListener("click", appendNext);
+  appendNext();
+  section.append(gallery, more);
   return section;
 }
 

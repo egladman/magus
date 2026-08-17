@@ -238,6 +238,10 @@ function renderIndexTree(
 export function activate(host: HTMLElement): SurfaceInstance {
   const refs = buildScaffold(host);
   let stale = false;
+  let loadedEvents: ActivityEvent[] = [];
+  let nextPageToken = "";
+  let loadMore: (() => void) | null = null;
+  let loading = false;
 
   // The event index: the collapsible left panel shared with the log viewer's run browser. Its refresh
   // icon re-runs load(); the "N events" count rides in its header. It starts collapsed on a phone and
@@ -279,6 +283,13 @@ export function activate(host: HTMLElement): SurfaceInstance {
       panel.applyDefault(has);
     }
     revealDeepLink(events, sectionEls);
+    if (nextPageToken && loadMore) {
+      const more = h("button", "pf-v6-c-button pf-m-secondary") as HTMLButtonElement;
+      more.type = "button";
+      more.append(h("span", "pf-v6-c-button__text", "Load older activity"));
+      more.addEventListener("click", loadMore);
+      refs.body.append(more);
+    }
   }
 
   // revealDeepLink honours "#at=<epoch-ms>", which is how the dashboard's agent tile hands an
@@ -310,15 +321,24 @@ export function activate(host: HTMLElement): SurfaceInstance {
     }
   }
 
-  async function loadLive(daemonHost: string): Promise<void> {
-    conn.textContent = "connecting...";
+  async function loadLive(daemonHost: string, pageToken = ""): Promise<void> {
+    if (loading) return;
+    loading = true;
+    if (!pageToken) {
+      conn.textContent = "connecting...";
+      loadedEvents = [];
+      nextPageToken = "";
+    }
     try {
       const client = createClient(ActivityService, createDaemonTransport(daemonHost));
-      const resp = await client.listActivity({ pageSize: PAGE_SIZE });
+      const resp = await client.listActivity({ pageSize: PAGE_SIZE, pageToken });
       if (stale) return;
-      render(resp.events);
+      loadedEvents = loadedEvents.concat(resp.events);
+      nextPageToken = resp.nextPageToken;
+      loadMore = nextPageToken ? () => void loadLive(daemonHost, nextPageToken) : null;
+      render(loadedEvents);
       notifyDenials(resp.events);
-      if (resp.events.length === 0) {
+      if (loadedEvents.length === 0) {
         showEmpty(
           "No activity yet",
           "The daemon is connected but has not recorded any actions in this session.",
@@ -337,6 +357,8 @@ export function activate(host: HTMLElement): SurfaceInstance {
           "). Start it with: magus server start",
         "not connected",
       );
+    } finally {
+      loading = false;
     }
   }
 

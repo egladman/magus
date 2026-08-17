@@ -172,6 +172,17 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("pnpm", ["run", "stylelint"], ".", {});
 }
 
+// `format:rw` maintains declared source inputs.
+export fun format(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(preflight);
+    ctx.modifiesExistingFiles(
+        "src/**/*.ts", "src/**/*.css", "src/**/*.html", "scripts/**/*.mjs",
+        "index.html", "manifest.webmanifest", "sw.js", "package.json",
+        "tsconfig.json", "tsconfig.test.json", "stylelint.config.mjs",
+        "stylelint-control-sizing.mjs");
+    typescript["biome-format"](ctx);
+}
+
 // security audits the dependency tree against the npm advisory database.
 //
 // --prod, not the whole tree, and that is the whole design. An unscoped audit reports the

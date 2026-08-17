@@ -8,7 +8,7 @@ tags: [api, proto, protobuf, connect, grpc, daemon, reference]
 
 The daemon serves its API over [Connect](https://connectrpc.com), which speaks three protocols on one endpoint: Connect's own browser-native HTTP, gRPC, and gRPC-Web. Anything that can send an HTTP request can call it, so a generated client is optional.
 
-This reference is generated from the `.proto` contract, so it cannot drift from what the daemon serves. The console is one consumer of this API and has no privileged access to it - a front end you write yourself can do everything the console does.
+This reference is generated from the `.proto` contract, so it cannot drift from what the daemon serves. The Console is a reference frontend and has no privileged access to the API. A frontend you build can use the same published contract.
 
 ## Before you call anything
 

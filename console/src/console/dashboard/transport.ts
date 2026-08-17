@@ -103,6 +103,11 @@ export class DashboardTransport {
   // true, so a never-connected resume that gives up stops hammering an absent daemon
   // entirely. connect() clears it before starting a fresh set of feeds.
   private stopped = false;
+  // A hidden dashboard retains its latest state but does not retain a live connection or poll
+  // loop. The console calls suspend/resume with pane visibility, so this is not a timer policy
+  // every tile has to rediscover for itself.
+  private host: string | null = null;
+  private suspended = false;
 
   constructor(store: Store<DashboardState>, cb: TransportCallbacks) {
     this.store = store;
@@ -111,6 +116,8 @@ export class DashboardTransport {
 
   connect(host: string): void {
     this.stopped = false;
+    this.suspended = false;
+    this.host = host;
     this.disconnect();
     this.connectStatus(host);
     this.startMetrics(host);
@@ -141,7 +148,21 @@ export class DashboardTransport {
   // request loop runs against a daemon that isn't there. connect() clears the latch.
   stop(): void {
     this.stopped = true;
+    this.host = null;
     this.disconnect();
+  }
+
+  suspend(): void {
+    if (this.suspended || !this.host) return;
+    this.suspended = true;
+    this.disconnect();
+  }
+
+  resume(): void {
+    if (!this.suspended) return;
+    this.suspended = false;
+    const host = this.host;
+    if (host) this.connect(host);
   }
 
   // ---- status SSE ----------------------------------------------------------
@@ -176,7 +197,7 @@ export class DashboardTransport {
   }
 
   private scheduleStatusReconnect(host: string): void {
-    if (this.stopped || this.statusRetry) return;
+    if (this.stopped || this.suspended || this.statusRetry) return;
     this.statusRetry = setTimeout(() => {
       this.statusRetry = null;
       if (this.statusAbort && !this.statusAbort.signal.aborted) this.connectStatus(host);
@@ -274,7 +295,7 @@ export class DashboardTransport {
   }
 
   private async fetchActivity(): Promise<void> {
-    if (this.stopped) return;
+    if (this.stopped || this.suspended) return;
     const host = this.activityHost;
     if (!host) return;
     try {
@@ -330,7 +351,7 @@ export class DashboardTransport {
   }
 
   private async fetchTools(): Promise<void> {
-    if (this.stopped) return;
+    if (this.stopped || this.suspended) return;
     const host = this.toolsHost;
     if (!host) return;
     try {
@@ -387,7 +408,7 @@ export class DashboardTransport {
   }
 
   private async fetchInsight(): Promise<void> {
-    if (this.stopped) return;
+    if (this.stopped || this.suspended) return;
     const host = this.insightHost;
     if (!host) return;
     if (this.insightAbort) this.insightAbort.abort();

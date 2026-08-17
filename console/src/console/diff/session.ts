@@ -97,6 +97,10 @@ export interface DiffSuggestion {
 export interface DiffSession {
   readonly id: string;
   readonly base: string;
+  // The patch identity the daemon used to compute this session. Context requests carry it back
+  // to the server, so a reviewer never sees current-file lines presented as context for an older
+  // patch after the working tree has moved.
+  readonly as_of?: string;
   readonly diff: Diff;
   readonly cursor: { path?: string; hunk: number };
   readonly viewed?: readonly string[];
@@ -107,6 +111,37 @@ export interface DiffSession {
 export interface DiffResponse {
   readonly patch: string;
   readonly clean: boolean;
+}
+
+export interface DiffContext {
+  readonly path: string;
+  readonly as_of: string;
+  readonly start: number;
+  readonly lines: readonly string[];
+}
+
+// Fetches user-requested working-tree context for one hunk.
+export async function fetchContext(
+  host: string,
+  path: string,
+  asOf: string,
+  start: number,
+  end: number,
+  signal: AbortSignal,
+): Promise<DiffContext> {
+  const q = new URLSearchParams({
+    path,
+    as_of: asOf,
+    start: String(start),
+    end: String(end),
+    radius: "12",
+  });
+  const res = await fetch(`http://${host}/api/v1/diff/context?${q}`, {
+    headers: authHeaders(),
+    signal,
+  });
+  if (!res.ok) throw new HttpError(res.status);
+  return (await res.json()) as DiffContext;
 }
 
 // fetchPatch reads the working tree's unified patch. Fast path, painted immediately.
@@ -128,6 +163,13 @@ export async function fetchSession(
 ): Promise<DiffSession> {
   const q = paths.map((p) => `path=${encodeURIComponent(p)}`).join("&");
   const res = await fetch(`http://${host}/api/v1/diff?${q}`, { headers: authHeaders(), signal });
+  if (!res.ok) throw new HttpError(res.status);
+  return (await res.json()) as DiffSession;
+}
+
+// Fetches the live session without replacing the review snapshot.
+export async function fetchReviewSession(host: string, signal: AbortSignal): Promise<DiffSession> {
+  const res = await fetch(`http://${host}/api/v1/diff/session`, { headers: authHeaders(), signal });
   if (!res.ok) throw new HttpError(res.status);
   return (await res.json()) as DiffSession;
 }
@@ -201,4 +243,13 @@ export async function hunkDigest(path: string, lines: readonly string[]): Promis
     .map((b) => b.toString(16).padStart(2, "0"))
     .join("")
     .slice(0, 16);
+}
+
+// Mirrors the server digest for snapshot pairing.
+export async function patchDigest(patch: string): Promise<string> {
+  const hash = await crypto.subtle.digest("SHA-256", new TextEncoder().encode(patch));
+  return Array.from(new Uint8Array(hash))
+    .slice(0, 16)
+    .map((b) => b.toString(16).padStart(2, "0"))
+    .join("");
 }

@@ -84,12 +84,21 @@ function hostLabel(host: string): string {
 }
 
 export function agentsTile(): Tile {
-  const card = new Card("agents", "Agent activity", {
+  const card = new Card("agents", "Orchestration", {
     note: "no agent traffic",
     why:
-      "Who is driving magus, and whether the guard stopped anything. The pool only shows work that" +
-      " got through, so agent calls are invisible there. Denials are the rows worth reading.",
+      "Who is driving magus, what they are doing, and whether the guard stopped anything. This is" +
+      " the bridge between a live delegation plan and the targets actually moving through the pool.",
   });
+
+  const posture = h("div", "console-dashboard-orchestration");
+  const postureLine = h(
+    "strong",
+    "console-dashboard-orchestration__line",
+    "Waiting for agent activity",
+  );
+  const postureDetail = h("span", "console-dashboard-orchestration__detail");
+  posture.append(postureLine, postureDetail);
 
   const caption = h(
     "p",
@@ -123,7 +132,7 @@ export function agentsTile(): Tile {
   // Picture slot by 164px once the list was added.
   const recentWrap = h("div", "console-dashboard-agents__recentwrap");
   recentWrap.append(recentHead, recentList);
-  card.body.append(caption, grid, seatKey, list, recentWrap, empty);
+  card.body.append(posture, caption, grid, seatKey, list, recentWrap, empty);
 
   function renderRecent(view: AgentActivityView, now: number): void {
     const calls = view.recent;
@@ -236,6 +245,25 @@ export function agentsTile(): Tile {
       return;
     }
     const now = Date.now();
+    const activeHosts = view.hosts.filter((host) => now - host.lastMs < RECENT_MS);
+    posture.dataset.state =
+      view.denied > 0 ? "attention" : activeHosts.length > 0 ? "active" : "idle";
+    postureLine.textContent =
+      view.denied > 0
+        ? view.denied +
+          (view.denied === 1 ? " guarded action needs review" : " guarded actions need review")
+        : activeHosts.length > 0
+          ? activeHosts.length +
+            (activeHosts.length === 1
+              ? " agent host coordinating work"
+              : " agent hosts coordinating work")
+          : "Recent agent activity, no active calls";
+    postureDetail.textContent =
+      view.totalSessions +
+      (view.totalSessions === 1 ? " session" : " sessions") +
+      " across " +
+      view.hosts.length +
+      (view.hosts.length === 1 ? " host" : " hosts");
     renderSeats(view, now);
     renderSeatKey(view.hosts);
     renderHosts(view.hosts);

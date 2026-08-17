@@ -99,6 +99,16 @@ test("#demo shows the agent's pending suggestions in the rail", async () => {
   dispose.deactivate();
 });
 
+test("#demo does not advertise workspace context it cannot provide", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.equal(document.querySelectorAll(".console-diff-row__peek").length, 0);
+
+  dispose.deactivate();
+});
+
 test("without #demo and without a daemon the surface offers the demo instead", async () => {
   const dispose = activate(document.body);
   await settle();

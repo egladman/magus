@@ -14,7 +14,10 @@ import { base64ToBytes } from "./fragment";
 import { state, waterfallSource } from "./state";
 import { el, emptyEl, scrollEl, setBtnLabel, setRefIdentity } from "./dom";
 import { buildModelMulti } from "./model";
+import { graphAvailable } from "./share";
 import { render, updateTimelineControl } from "./render";
+import { FrameScheduler } from "../surface-runtime";
+import { publishStatus } from "../status";
 
 // How many live events the tail keeps. The buffer was unbounded, and scheduleLiveRender
 // rebuilds the whole model from every event held and re-appends every node on each animation
@@ -27,6 +30,7 @@ import { render, updateTimelineControl } from "./render";
 // was never the system of record. The remaining half of the fix is rendering incrementally
 // rather than rebuilding, which would lift the cap entirely.
 const LIVE_BUFFER_MAX = 5000;
+const liveFrame = new FrameScheduler();
 
 // The host of the current live stream, stashed so a FAIL notification can deep-link back to the failing
 // ref. A resolved daemon host (loopback, or the LAN-share same-origin host), or null before any
@@ -41,13 +45,16 @@ export function connectLive(host: string, params: ViewerParams): void {
   const token = getLiveToken();
   state.liveEvents = [];
   state.liveInvocation = null;
+  state.currentJournal = null;
+  state.currentJournals = null;
+  state.currentRef = "";
   state.livePaused = false;
   if (emptyEl) emptyEl.hidden = true;
   setRefIdentity("live", false);
   const pauseBtn = el("pause-btn");
   if (pauseBtn) {
     (pauseBtn as HTMLButtonElement).disabled = false;
-    setBtnLabel(pauseBtn, "Pause");
+    setBtnLabel(pauseBtn, "Pause following");
     pauseBtn.setAttribute("aria-pressed", "false");
   }
   setLiveStatus("connecting");
@@ -116,9 +123,8 @@ function onLiveEvent(type: string, data: string): void {
 // scheduleLiveRender coalesces a burst of events into one re-render per frame: rebuild the
 // model from all events so far and render, auto-scrolling to the tail unless paused.
 export function scheduleLiveRender(): void {
-  if (state.liveRenderQueued) return;
   state.liveRenderQueued = true;
-  requestAnimationFrame(() => {
+  liveFrame.schedule(() => {
     state.liveRenderQueued = false;
     const built = buildModelMulti(waterfallSource());
     state.model = { sections: built.sections, titled: built.titled };
@@ -135,6 +141,8 @@ export function scheduleLiveRender(): void {
     if (copyBtn) (copyBtn as HTMLButtonElement).disabled = false;
     const shareBtn = el("share-btn");
     if (shareBtn) (shareBtn as HTMLButtonElement).disabled = false;
+    const graphBtn = el("graph-btn");
+    if (graphBtn) (graphBtn as HTMLButtonElement).disabled = !graphAvailable();
     if (!state.livePaused && scrollEl) scrollEl.scrollTop = scrollEl.scrollHeight;
   });
 }
@@ -151,7 +159,12 @@ let lastLinkState: string | null = null;
 
 export function setLiveVisible(visible: boolean): void {
   surfaceHidden = !visible;
+  liveFrame.setVisible(visible);
   if (visible && lastLinkState) setLiveStatus(lastLinkState);
+}
+
+export function cancelLiveRender(): void {
+  liveFrame.cancel();
 }
 
 export function setLiveStatus(linkState: string): void {
@@ -162,31 +175,20 @@ export function setLiveStatus(linkState: string): void {
   // event count; a finished stream is "done" (still green - it completed cleanly); connecting/
   // disconnected map to those states. A statically loaded log never calls this, so the dot stays at
   // its default "not connected", which is accurate (no live daemon link).
-  const conn = document.getElementById("console-conn");
-  if (!conn) return;
+  let connection: "connected" | "connecting" | "disconnected" = "disconnected";
+  let label = "disconnected";
   if (linkState === "streaming") {
-    conn.textContent = "connected";
-    conn.dataset.state = "connected";
-    delete conn.dataset.health;
+    connection = "connected";
+    label = "connected";
   } else if (linkState === "connecting") {
-    conn.textContent = "connecting...";
-    conn.dataset.state = "connecting";
-    delete conn.dataset.health;
+    connection = "connecting";
+    label = "connecting...";
   } else if (linkState === "done") {
-    conn.textContent = "done";
-    conn.dataset.state = "connected";
-    delete conn.dataset.health;
-  } else if (linkState === "disconnected") {
-    conn.textContent = "disconnected";
-    conn.dataset.state = "disconnected";
-    delete conn.dataset.health;
+    connection = "connected";
+    label = "done";
   }
   // The event count sits on the FAR RIGHT of the bar (its own item, like observing-since), not
   // appended to the connection state.
-  const count = document.getElementById("console-count");
-  if (count) {
-    const n = state.liveEvents.length;
-    count.textContent = n ? n + " events" : "";
-    count.hidden = !n;
-  }
+  const n = state.liveEvents.length;
+  publishStatus({ connection, label, count: n ? n + " events" : undefined });
 }

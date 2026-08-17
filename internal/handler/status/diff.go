@@ -5,6 +5,9 @@ import (
 	"errors"
 	"log/slog"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/diff"
@@ -112,6 +115,131 @@ func (h *DiffHandler) serve(w http.ResponseWriter, r *http.Request) {
 type PatchHandler struct {
 	handler.Base
 	src patchSource
+}
+
+// ContextHandler serves bounded, snapshot-paired file context.
+type ContextHandler struct {
+	handler.Base
+	root string
+	src  patchSource
+}
+
+const maxContextFileBytes = 1 << 20
+
+// NewContextHandler returns the bounded loopback context handler.
+func NewContextHandler(root string, src patchSource, log *slog.Logger) *ContextHandler {
+	h := &ContextHandler{root: root, src: src}
+	h.Base = handler.New(h.serve, log)
+	return h
+}
+
+type contextResponse struct {
+	Path  string   `json:"path"`
+	AsOf  string   `json:"as_of"`
+	Start int      `json:"start"`
+	Lines []string `json:"lines"`
+}
+
+func (h *ContextHandler) serve(w http.ResponseWriter, r *http.Request) {
+	if !allowGet(w, r) {
+		return
+	}
+	path := strings.TrimSpace(r.URL.Query().Get("path"))
+	if path == "" || filepath.IsAbs(path) || path != filepath.Clean(path) || path == "." || path == ".." || strings.HasPrefix(path, ".."+string(filepath.Separator)) {
+		http.Error(w, "context requires a workspace-relative path", http.StatusBadRequest)
+		return
+	}
+	start, _ := strconv.Atoi(r.URL.Query().Get("start"))
+	end, _ := strconv.Atoi(r.URL.Query().Get("end"))
+	if start < 1 || end < start {
+		http.Error(w, "context requires a valid line range", http.StatusBadRequest)
+		return
+	}
+	radius, _ := strconv.Atoi(r.URL.Query().Get("radius"))
+	if radius < 0 {
+		radius = 0
+	}
+	if radius > 32 {
+		radius = 32
+	}
+	asOf := strings.TrimSpace(r.URL.Query().Get("as_of"))
+	if asOf == "" {
+		http.Error(w, "context requires the review snapshot identity", http.StatusBadRequest)
+		return
+	}
+	patch, err := h.src.WorkingDiff(r.Context(), nil)
+	if err != nil {
+		if errors.Is(err, console.ErrNoWorkspace) {
+			http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+			return
+		}
+		http.Error(w, "context snapshot error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if diff.PatchDigest(patch) != asOf {
+		http.Error(w, "review snapshot is stale; refresh the diff", http.StatusConflict)
+		return
+	}
+	changed := false
+	for _, file := range diff.ParseHunks(patch) {
+		if file.Path == path {
+			changed = true
+			break
+		}
+	}
+	if !changed {
+		http.Error(w, "context path is not in the reviewed patch", http.StatusNotFound)
+		return
+	}
+	root, err := filepath.EvalSymlinks(h.root)
+	if err != nil {
+		http.Error(w, "workspace unavailable", http.StatusServiceUnavailable)
+		return
+	}
+	target, err := filepath.EvalSymlinks(filepath.Join(root, path))
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			http.Error(w, "file is not present in the working tree", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "context error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	rel, err := filepath.Rel(root, target)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		http.Error(w, "context path escapes workspace", http.StatusBadRequest)
+		return
+	}
+	info, err := os.Stat(target)
+	if err != nil {
+		http.Error(w, "context error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	if !info.Mode().IsRegular() {
+		http.Error(w, "context requires a regular file", http.StatusBadRequest)
+		return
+	}
+	if info.Size() > maxContextFileBytes {
+		http.Error(w, "context is unavailable for files larger than 1 MiB", http.StatusRequestEntityTooLarge)
+		return
+	}
+	body, err := os.ReadFile(target)
+	if err != nil {
+		if errors.Is(err, os.ErrNotExist) {
+			http.Error(w, "file is not present in the working tree", http.StatusNotFound)
+			return
+		}
+		http.Error(w, "context error: "+err.Error(), http.StatusInternalServerError)
+		return
+	}
+	lines := strings.Split(strings.TrimSuffix(string(body), "\n"), "\n")
+	from := max(1, start-radius)
+	to := min(len(lines), end+radius)
+	if from > len(lines) {
+		writeJSON(w, contextResponse{Path: path, AsOf: asOf, Start: from, Lines: []string{}})
+		return
+	}
+	writeJSON(w, contextResponse{Path: path, AsOf: asOf, Start: from, Lines: lines[from-1 : to]})
 }
 
 // NewPatchHandler returns the GET /api/v1/diff/patch handler reading from src.

@@ -336,7 +336,7 @@ export function createTileView(deps: TileDeps): TileView {
   // pane of a visible tab does; every other pane suppresses its shared-status writes (its tiles keep
   // updating). When the whole tab is hidden, no pane owns the bar. Mirrors the single-tab model.
   function applyVisibility(): void {
-    for (const [id, p] of panes) p.controller?.setVisible?.(tabVisible && id === focusId);
+    for (const [id, p] of panes) p.controller?.setVisible(tabVisible && id === focusId);
   }
 
   // applyTitle keeps the console subscribed to the FOCUSED pane's document title and no other, so

@@ -200,9 +200,9 @@ export function runOverviewLine(model: RunPlanModel): string {
     if (model.counts[s] > 0) parts.push(model.counts[s] + " " + RUN_STATE_LABEL[s]);
   }
   const tail = model.counts.fail + " " + RUN_STATE_LABEL.fail;
-  const body = parts.length ? head + " - " + parts.join(", ") + " - " + tail : head + " - " + tail;
+  const body = [head, parts.join(", "), tail].filter(Boolean).join(". ") + ".";
   const lead = anchorPhrase(model);
-  return lead ? lead + " - " + body : body;
+  return lead ? lead + ". " + body : body;
 }
 
 // ---- the read --------------------------------------------------------------
