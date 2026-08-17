@@ -60,12 +60,11 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | function | 800+ | `magus query kind:function` | `tail`, `sign`, `renderContentHTML` |
 | import | 100+ | `magus query kind:import` | `magus`, `fs`, `std` |
 | rationale | 6 | `magus query kind:rationale` | `TODO`, `WHY`, `NOTE` |
-| package | 100+ | `magus query kind:package` | `github.com/davecgh/go-spew`, `github.com/dlclark/regexp2`, `github.com/ebitengine/purego` |
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
 | . | 43 | `magus query project:.` | `buzz-test`, `generate`, `lint` |
-| console | 6 | `magus query project:console` | `ci`, `preflight`, `build` |
+| console | 7 | `magus query project:console` | `preflight`, `ci`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents | 5 | `magus query project:docs/guides/integrations/agents` | `ci`, `format`, `lint` |
 | libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `generate` |
@@ -130,6 +129,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `test` | test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and renders a line-coverage badge from the run. |
 | `build` | build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. |
 | `lint` | lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate. |
+| `format` | `format:rw` maintains declared source inputs. |
 | `security` | security audits the dependency tree against the npm advisory database. |
 | `ci` | 'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps. |
 | `preflight` |  |
