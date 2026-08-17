@@ -49,10 +49,58 @@
 
 .console-diff-layout {
   display: grid;
-  grid-template-columns: minmax(180px, 18%) 1fr;
+  grid-template-columns: minmax(180px, 18%) minmax(0, 1fr);
   height: 100%;
   min-height: 0;
   overflow: hidden;
+}
+
+/* Collapsed, the index gives its column back to the diff and leaves only the reopen rail. The
+   track goes to auto rather than 0 so the rail sizes itself. */
+.console-diff-layout[data-sidebar="collapsed"] {
+  grid-template-columns: auto minmax(0, 1fr);
+}
+
+.console-diff-sidebar__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--pf-t--global--spacer--xs);
+  padding-block-end: var(--pf-t--global--spacer--xs);
+}
+
+/* No uppercase, no letter-spacing. Both are shouting devices, and this is the quietest thing on
+   the surface - it labels a column whose contents already say what they are. */
+.console-diff-sidebar__heading {
+  font-size: var(--pf-t--global--font--size--xs);
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.console-diff-sidebar__toggle,
+.console-diff-reopen {
+  border: none;
+  background: none;
+  color: var(--pf-t--global--text--color--subtle);
+  cursor: pointer;
+  font-size: var(--pf-t--global--font--size--md);
+  line-height: 1;
+  padding: var(--pf-t--global--spacer--xs);
+}
+
+.console-diff-sidebar__toggle:hover,
+.console-diff-reopen:hover {
+  color: var(--pf-t--global--text--color--regular);
+}
+
+.console-diff-reopen {
+  align-self: start;
+  border-inline-end: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--console-diff-panel);
+  height: 100%;
+}
+
+.console-diff-reopen[hidden] {
+  display: none;
 }
 
 .console-diff-sidebar {
@@ -66,6 +114,13 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* The file being read. A left edge rather than a fill: the row already carries a status colour
+   and a reach count, and a block of background would compete with both. */
+.console-diff-sidebar__item[aria-current="true"] {
+  background: var(--pf-t--global--background--color--secondary--default);
+  box-shadow: inset 2px 0 0 var(--console-accent);
 }
 
 .console-diff-sidebar__item {
@@ -86,14 +141,78 @@
   background: var(--pf-t--global--background--color--secondary--hover);
 }
 
-/* The path truncates from the START: the tail of a path is what distinguishes two files in a
- * monorepo, and clipping it leaves a column of identical prefixes. */
-.console-diff-sidebar__path {
+/* The project heading. Sticky, so the answer to "which project am I looking at" survives
+   scrolling a long index - one element per group, each in its own containing block, which is the
+   arrangement the stream's rows could not have. */
+.console-diff-sidebar__project {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--pf-t--global--spacer--xs);
+  margin-block-start: var(--pf-t--global--spacer--sm);
+  padding-block: 2px;
+  background: var(--console-diff-panel);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+}
+
+.console-diff-sidebar__project:first-child {
+  margin-block-start: 0;
+}
+
+/* Truncated from the START, and this is the one place that is right: a project path's LAST
+   segments name the project, while the leading ones are the monorepo scaffolding every sibling
+   shares. */
+.console-diff-sidebar__project-name {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   direction: rtl;
-  text-align: start;
+  text-align: left;
+  font-size: var(--pf-t--global--font--size--xs);
+  font-weight: var(--pf-t--global--font--weight--body--bold);
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.console-diff-sidebar__project-count {
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: var(--pf-t--global--font--size--xs);
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+/* Two lines: the filename identifies, the directory only locates. min-width: 0 so the pair can
+   shrink inside the item grid instead of forcing the column wider. */
+.console-diff-sidebar__file {
+  display: grid;
+  min-width: 0;
+}
+
+/* subtle, not regular: regular is pure #ffffff against a #151515 panel, the highest contrast the
+   palette can make, and a column of it is what made this list hard to sit in front of. The
+   launcher tiles never do that - their body text is subtle and reads easier for it. Hierarchy
+   still holds because the directory beneath is smaller and the active row carries an accent. */
+.console-diff-sidebar__path {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+/* Truncated from the START: a directory's LAST segments are what distinguish it, so
+   "...identity/internal/token" keeps the useful half. The filename above never needs this,
+   which is the point of splitting them. */
+.console-diff-sidebar__dir {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  direction: rtl;
+  /* left, NOT start: start follows the direction above, so it would pin the text to the right
+     edge and unalign it from the filename it belongs to. */
+  text-align: left;
+  font-size: var(--pf-t--global--font--size--xs);
+  color: var(--pf-t--global--text--color--subtle);
 }
 
 .console-diff-sidebar__counts {
@@ -105,9 +224,21 @@
 
 .console-diff-main {
   display: grid;
+  /* minmax(0, 1fr), not the implicit auto: an auto track is minmax(min-content,
+     max-content), so it inflates to the widest row - and the rows below set
+     min-width: max-content so long code lines extend the scroll width. The track
+     then grows past this box instead of the scroll container scrolling, and the
+     spill is clipped by .console-diff-layout's overflow: hidden, which eats the
+     trailing file-header chips outright at narrow widths. min-width above does
+     not cover this: it constrains this box as an ITEM of the layout grid, while
+     the column track needs its own zero floor. */
+  grid-template-columns: minmax(0, 1fr);
   grid-template-rows: auto 1fr;
   min-height: 0;
   min-width: 0;
+  /* The file header sheds chips against THIS width, not the viewport's: the pane is tiled and
+     its sidebar is collapsible, so the same window yields several different pane widths. */
+  container: diff-main / inline-size;
 }
 
 .console-diff-toolbar {
@@ -130,6 +261,34 @@
 
 /* The scroll container owns BOTH axes: vertical for the stream, horizontal for long lines.
  * Overflow on an inner element would clip rows against the virtualizer's transform. */
+/* The positioning context for the pinned header. It exists so the header can overlay the
+   scroller without being inside it - anything inside scrolls away, and anything inside the
+   virtualized window gets evicted from the DOM. */
+.console-diff-viewport {
+  position: relative;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: minmax(0, 1fr);
+  min-height: 0;
+  min-width: 0;
+}
+
+/* The file header of whatever is being read, held at the top edge. It is a copy of a row, so it
+   matches one exactly; pointer-events: none keeps it from swallowing clicks meant for the line
+   it covers, since it is orientation rather than a control. */
+.console-diff-pinned {
+  position: absolute;
+  inset-inline: 0;
+  inset-block-start: 0;
+  z-index: 3;
+  pointer-events: none;
+  box-shadow: 0 1px 4px rgb(0 0 0 / 25%);
+}
+
+.console-diff-pinned[hidden] {
+  display: none;
+}
+
 .console-diff-scroll {
   overflow: auto;
   min-height: 0;
@@ -161,8 +320,9 @@
 .console-diff-row {
   display: flex;
   align-items: center;
-  height: 20px; /* MUST equal ROW_HEIGHT in main.ts */
-  line-height: 20px;
+  height: 24px; /* MUST equal ROW_HEIGHT in main.ts */
+  line-height: 24px;
+  box-sizing: border-box;
   font-family: var(--pf-t--global--font--family--mono);
   font-size: var(--pf-t--global--font--size--sm);
   white-space: pre;
@@ -205,20 +365,82 @@
   background: color-mix(in srgb, var(--console-diff-del) 22%, var(--console-diff-surface));
 }
 
+/* The header is CHROME, not content, so it holds the pane instead of joining the code's
+   horizontal scroll: width 100% resolves against the visible pane, and min-width undoes the
+   max-content floor every other row wants. Sticky on BOTH axes - top so it survives vertical
+   scrolling, left so scrolling out to a long code line does not slide the file's identity off
+   the screen. Reading metadata should never cost a sideways scroll. */
 .console-diff-row--file {
+  /* MUST equal FILE_ROW_HEIGHT in main.ts. Taller than a code row because the badge and risk
+     chips have to sit INSIDE the row rather than spill out of it.
+     line-height: normal, not the row height - a PF label sizes off line-height, so pinning it
+     to the row makes every chip exactly as tall as the row and the extra height buys nothing.
+     Letting the chips size themselves is what turns the taller row into actual space around
+     them; align-items: center on .console-diff-row does the centring. */
+  height: 40px;
+  line-height: normal;
   gap: var(--pf-t--global--spacer--xs);
   padding-inline: var(--pf-t--global--spacer--sm);
   background: var(--pf-t--global--background--color--secondary--default);
   border-block: 1px solid var(--pf-t--global--border--color--default);
   font-family: var(--pf-t--global--font--family--body);
+  /* Sticky on the INLINE axis only. A vertical `top: 0` cannot work here and did not: every row
+     is a flat sibling of one .console-diff-window, so all the file headers share a single sticky
+     containing block and pile up on the same line instead of pinning one at a time - four of them
+     stacked on the last rows and hid them. Virtualization rules it out independently: scroll into
+     a long file and that file's header row is not in the DOM at all, so there is nothing left to
+     pin. A header that follows the reader down needs its own element outside the virtual window,
+     which is a feature and not this rule. */
   position: sticky;
-  top: 0;
+  left: 0;
+  width: 100%;
+  min-width: 0;
   z-index: 1;
 }
 
+/* The path yields first and alone: it is the one part that stays legible truncated, because
+   the tail (the filename) is what identifies it. Every label holds its size, so the squeeze
+   never slices a chip down the middle. */
 .console-diff-row__path {
   font-family: var(--pf-t--global--font--family--mono);
   font-weight: var(--pf-t--global--font--weight--body--bold);
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  direction: rtl;
+  text-align: left;
+}
+
+.console-diff-row--file > .pf-v6-c-label {
+  flex: none;
+}
+
+/* display: contents - the wrapper is a selector handle only (see renderFileRow); the chips
+   stay direct flex children of the row. */
+.console-diff-row__risks {
+  display: contents;
+}
+
+/* Below these widths the chips stop fitting beside the path. Shed them whole, from the least
+   important end, rather than letting the row overflow and clip one mid-word. The steps are the
+   measured widths at which each trailing chip stops fitting, not round numbers. */
+@container diff-main (max-width: 860px) {
+  .console-diff-row__risks > :nth-child(n + 4) {
+    display: none;
+  }
+}
+
+@container diff-main (max-width: 700px) {
+  .console-diff-row__risks > :nth-child(n + 3) {
+    display: none;
+  }
+}
+
+@container diff-main (max-width: 560px) {
+  .console-diff-row__risks > :nth-child(n + 2) {
+    display: none;
+  }
 }
 
 .console-diff-row--hunk {
@@ -317,7 +539,17 @@
   gap: 2px;
   padding: var(--pf-t--global--spacer--xs) var(--pf-t--global--spacer--sm);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
-  background: var(--pf-t--global--background--color--highlight--default);
+  /* Secondary, not the highlight token - the same call the comment row below makes, and for
+   * the same reasons: highlight is a saturated yellow that dominates in dark mode, drops the
+   * contrast of the text on it (these rows carry blue agent links), and fights the diff for
+   * attention. This rail is meant to be PERIPHERAL until the reader chooses to act on it,
+   * which a full-strength wash contradicts.
+   *
+   * The attention signal moves to a warning-toned rule on the leading edge. Colour on an edge
+   * marks the strip without tinting anything the reader has to read through - the device the
+   * comment row already uses for its own accent. */
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-inline-start: 3px solid var(--pf-t--global--icon--color--status--warning--default);
 }
 
 .console-diff-rail[data-empty] {
@@ -355,15 +587,6 @@
   white-space: nowrap;
 }
 
-.console-diff-toolbar__fold {
-  border: 1px solid var(--pf-t--global--border--color--default);
-  background: var(--pf-t--global--background--color--primary--default);
-  color: inherit;
-  cursor: pointer;
-  padding: 0 var(--pf-t--global--spacer--xs);
-  font-size: var(--pf-t--global--font--size--sm);
-}
-
 /* A comment sits in the stream, one row tall like everything else, so it scrolls with the code
  * it is about and costs the virtualizer nothing special. Indented past the gutters so the diff
  * text stays in one column and the remark reads as attached rather than as another line. */
@@ -384,7 +607,7 @@
    * geometry is fixed and non-negotiable - every row is ROW_HEIGHT - so the TEXT has to fit
    * the row rather than the row growing to fit the text. */
   font-size: var(--pf-t--global--font--size--xs);
-  line-height: 20px;
+  line-height: 24px;
   overflow: hidden;
 }
 
@@ -458,7 +681,7 @@
   color: var(--pf-t--global--text--color--subtle);
   font-family: var(--pf-t--global--font--family--body);
   font-size: var(--pf-t--global--font--size--xs);
-  line-height: 20px;
+  line-height: 24px;
   overflow: hidden;
   border-inline-start: 2px dotted var(--pf-t--global--border--color--subtle);
 }

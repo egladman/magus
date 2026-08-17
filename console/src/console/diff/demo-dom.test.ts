@@ -68,8 +68,10 @@ test("#demo lists the primary files in the sidebar and folds the generated group
   const chips = [...document.querySelectorAll(".console-diff-toolbar__stats .pf-v6-c-label")].map(
     (el) => el.textContent,
   );
-  // The showcase must never pass itself off as the reader's own tree.
-  assert.ok(chips.includes("demo data"));
+  // The showcase must never pass itself off as the reader's own tree - but it says so through
+  // the shell's connection pill, the one place every surface says it. A second badge here made
+  // the diff the only surface announcing demo twice, in a style nothing else uses.
+  assert.ok(!chips.includes("demo data"), "demo state belongs to the connection pill, not a chip");
   assert.ok(chips.includes("7 files"));
   assert.ok(chips.includes("1 public surface"));
   assert.ok(chips.includes("1 untested"));

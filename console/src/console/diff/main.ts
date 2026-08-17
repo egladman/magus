@@ -8,9 +8,9 @@
 //
 // Three things it is built around:
 //
-//  1. VIRTUALIZED. The scroll space is a spacer sized to rows x ROW_HEIGHT and only the rows
-//     intersecting the viewport exist as elements, so a ten-thousand-line diff costs what a
-//     hundred-line one does. Fixed row height and no wrapping follow from that.
+//  1. VIRTUALIZED. The scroll space is a spacer sized to the summed row heights and only the
+//     rows intersecting the viewport exist as elements, so a ten-thousand-line diff costs what
+//     a hundred-line one does. Declared row heights and no wrapping follow from that.
 //  2. TWO-PHASE. The patch paints immediately; the annotations decorate it when they land.
 //     Holding a readable diff behind the slower overlay would trade the thing the reader
 //     wants for the thing they have not asked for yet.
@@ -31,6 +31,9 @@ import {
   fileRowIndexes,
   nextIndexAfter,
   prevIndexBefore,
+  rowOffsets,
+  rowAt,
+  fileOfRow,
   type Row,
   type ViewMode,
 } from "./rows";
@@ -53,15 +56,13 @@ import { resolveDaemonHost, parseHash, adoptDaemonOrigin, wantsDemo } from "../.
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
 
-// Must equal the row height in diff.css. The virtualizer computes positions from it rather
-// than measuring, so a mismatch shows as rows drifting out of the viewport while scrolling.
-const ROW_HEIGHT = 20;
 // Rows rendered beyond the viewport so a fast scroll never shows blank space. Bounded and
 // constant, unlike the diff.
 const OVERSCAN = 24;
 
 const daemonCell = persisted<string | null>("dashboard-daemon", null);
 const modeCell = persisted<ViewMode>("diff-view-mode", "unified");
+const sidebarCell = persisted<boolean>("diff-sidebar-collapsed", false);
 
 type Phase = "loading" | "ready" | "empty";
 
@@ -69,8 +70,12 @@ interface State {
   changeset: OrderedChangeset;
   files: DiffFile[];
   rows: Row[];
+  // Derived from rows, and rebuilt with them: row i's top edge, plus a final total. See rowOffsets.
+  offsets: number[];
   hunks: number[];
   fileRows: number[];
+  // Row index -> the file row governing it, so a scroll position resolves to a file in one lookup.
+  fileOf: number[];
   mode: ViewMode;
   cursor: number;
   session: DiffSession | null;
@@ -233,14 +238,19 @@ export function activate(host: HTMLElement): () => void {
     changeset: { primary: [], generated: [] },
     files: [],
     rows: [],
+    offsets: [0],
     hunks: [],
     fileRows: [],
+    fileOf: [],
     mode: modeCell.get() ?? "unified",
     cursor: -1,
     session: null,
     viewed: new Set(),
     digestByRow: new Map(),
-    showGenerated: false,
+    // Open. The activity view folds its sections shut because a run's output is long and
+    // mostly uninteresting; a changeset's file list is the thing the reader came for, so the
+    // sidebar starts showing everything and folds on request rather than the other way round.
+    showGenerated: true,
     overview: false,
     phase: "loading",
   };
@@ -248,6 +258,42 @@ export function activate(host: HTMLElement): () => void {
   // --- scaffold -------------------------------------------------------------
   const root = h("div", "console-diff-layout");
   const sidebar = h("nav", "console-diff-sidebar");
+  sidebar.setAttribute("aria-label", "Changed files");
+
+  // The file index collapses to a rail, the way the activity trail's event index does. The diff
+  // authors its own sheet (see standalone.ts) so it cannot reuse logs.css's panel, but the
+  // affordance is the same one: a chevron in the header hides it, a chevron on the rail brings it
+  // back, and the choice persists - a reader who works in a narrow tile should not re-close it
+  // every visit.
+  const sidebarHead = h("div", "console-diff-sidebar__head");
+  const sidebarTitle = h("span", "console-diff-sidebar__heading", "Files");
+  const hideBtn = h("button", "console-diff-sidebar__toggle");
+  hideBtn.type = "button";
+  hideBtn.title = "Hide the file index";
+  hideBtn.setAttribute("aria-label", "Hide the file index");
+  hideBtn.textContent = "‹";
+  sidebarHead.append(sidebarTitle, hideBtn);
+
+  const reopenBtn = h("button", "console-diff-reopen");
+  reopenBtn.type = "button";
+  reopenBtn.title = "Show the file index";
+  reopenBtn.setAttribute("aria-label", "Show the file index");
+  reopenBtn.textContent = "›";
+
+  const applySidebar = (collapsed: boolean): void => {
+    root.dataset.sidebar = collapsed ? "collapsed" : "open";
+    sidebar.hidden = collapsed;
+    reopenBtn.hidden = !collapsed;
+    hideBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
+  };
+  hideBtn.addEventListener("click", () => {
+    sidebarCell.set(true);
+    applySidebar(true);
+  });
+  reopenBtn.addEventListener("click", () => {
+    sidebarCell.set(false);
+    applySidebar(false);
+  });
   sidebar.setAttribute("aria-label", "Changed files");
 
   const main = h("div", "console-diff-main");
@@ -274,6 +320,20 @@ export function activate(host: HTMLElement): () => void {
   spacer.append(windowEl);
   scroll.append(spacer);
 
+  // The pinned file header: ONE element, outside the virtualized window and outside the scroll
+  // container, overlaying the top of the viewport. It is what a sticky row cannot be here - the
+  // row for the file being read is evicted from the DOM as soon as it scrolls out, so there is
+  // nothing left to pin. This is always present and re-rendered from whichever file the topmost
+  // visible row belongs to.
+  //
+  // aria-hidden: it is a visual copy of a row assistive tech already reached in the grid, and
+  // announcing the same file header a second time would be noise, not orientation.
+  const viewport = h("div", "console-diff-viewport");
+  const pinned = h("div", "console-diff-pinned");
+  pinned.hidden = true;
+  pinned.setAttribute("aria-hidden", "true");
+  viewport.append(scroll, pinned);
+
   const overview = h("div", "console-diff-overview");
   const empty = h("div", "pf-v6-c-empty-state console-diff-empty");
   const emptyContent = h("div", "pf-v6-c-empty-state__content");
@@ -295,8 +355,9 @@ export function activate(host: HTMLElement): () => void {
   emptyContent.append(emptyTitle, emptyBodyWrap, emptyFooter);
   empty.append(emptyContent);
 
-  main.append(toolbar, rail, scroll, overview, empty);
-  root.append(sidebar, main);
+  main.append(toolbar, rail, viewport, overview, empty);
+  root.append(sidebar, reopenBtn, main);
+  applySidebar(sidebarCell.get() ?? false);
   host.append(root);
   root.dataset.phase = "loading";
 
@@ -325,9 +386,17 @@ export function activate(host: HTMLElement): () => void {
     if (file.deletions > 0) el.append(label(`-${file.deletions}`, "pf-m-red"));
 
     // The blast rail: what the workspace knows about this file. Evidence, not verdicts.
+    //
+    // Wrapped, and display: contents so the chips still lay out as row children: the wrapper
+    // exists only to give the stylesheet a positional handle, so a narrow pane can drop the
+    // trailing chips whole rather than slicing one down the middle. riskChips emits them
+    // most-important first (public surface, then reach, then churn), so shedding from the END
+    // gives up the least, and "public surface" is the last thing to go.
+    const risks = h("span", "console-diff-row__risks");
     for (const c of riskChips(annotationFor(file.path))) {
-      el.append(label(c.text, TONE_CLASS[c.tone], c.title));
+      risks.append(label(c.text, TONE_CLASS[c.tone], c.title));
     }
+    el.append(risks);
     return el;
   };
 
@@ -421,8 +490,8 @@ export function activate(host: HTMLElement): () => void {
     }
     const top = scroll.scrollTop;
     const height = scroll.clientHeight || 1;
-    const first = Math.max(0, Math.floor(top / ROW_HEIGHT) - OVERSCAN);
-    const last = Math.min(total, Math.ceil((top + height) / ROW_HEIGHT) + OVERSCAN);
+    const first = Math.max(0, rowAt(state.offsets, top) - OVERSCAN);
+    const last = Math.min(total, rowAt(state.offsets, top + height) + 1 + OVERSCAN);
 
     // Virtualization is invisible to assistive tech unless the grid says how big it really
     // is: rows outside the window are not in the DOM, so a screen reader would otherwise
@@ -444,8 +513,38 @@ export function activate(host: HTMLElement): () => void {
       if (i === state.cursor) el.dataset.cursor = "";
       frag.append(el);
     }
-    windowEl.style.transform = `translateY(${first * ROW_HEIGHT}px)`;
+    windowEl.style.transform = `translateY(${state.offsets[first]}px)`;
     windowEl.replaceChildren(frag);
+    paintPinned(top);
+    markActiveFile(top);
+  };
+
+  // paintPinned keeps the file header of whatever is being read at the top of the viewport.
+  //
+  // It shows only once the file's REAL header row has scrolled above the top edge, so the two are
+  // never on screen together: while the real row is visible it is the header, and the copy would
+  // just be a duplicate of the line below it.
+  const paintPinned = (top: number): void => {
+    const i = state.fileOf[rowAt(state.offsets, top)] ?? -1;
+    const row = i >= 0 ? state.rows[i] : undefined;
+    if (!row || row.kind !== "file" || (state.offsets[i] ?? 0) >= top) {
+      pinned.hidden = true;
+      return;
+    }
+    pinned.replaceChildren(renderFileRow(row.file));
+    pinned.hidden = false;
+  };
+
+  // markActiveFile keeps the sidebar in step with the stream, in BOTH directions: it is the
+  // acknowledgement that a click landed (a smooth scroll over a long diff is slow enough to read
+  // as nothing happening) and it is a position indicator while scrolling by hand.
+  const markActiveFile = (top: number): void => {
+    const fileRow = state.fileOf[rowAt(state.offsets, top)] ?? -1;
+    sidebar.querySelectorAll(".console-diff-sidebar__item").forEach((el) => {
+      const mine = (el as HTMLElement).dataset.fileRow;
+      if (mine !== undefined && Number(mine) === fileRow) el.setAttribute("aria-current", "true");
+      else el.removeAttribute("aria-current");
+    });
   };
 
   let ticking = false;
@@ -517,7 +616,9 @@ export function activate(host: HTMLElement): () => void {
     state.rows = buildRows(state.files, state.mode, byHunk(state.session?.comments ?? []), touches);
     state.hunks = hunkRowIndexes(state.rows);
     state.fileRows = fileRowIndexes(state.rows);
-    spacer.style.height = `${state.rows.length * ROW_HEIGHT}px`;
+    state.offsets = rowOffsets(state.rows);
+    state.fileOf = fileOfRow(state.rows);
+    spacer.style.height = `${state.offsets[state.rows.length]}px`;
 
     // Digest every hunk once, here, so `v` never awaits a hash mid-keypress.
     const digests = new Map<number, string>();
@@ -553,18 +654,14 @@ export function activate(host: HTMLElement): () => void {
   const renderToolbar = (): void => {
     const s = stats(state.changeset);
     const chips: HTMLElement[] = [];
-    // Said HERE and not only in the shell's status bar: this surface is tileable, so a reader
-    // can be looking at the toolbar with the rest of the console off screen, and every number
-    // beside it would otherwise read as a measurement of their own tree.
-    if (demo) {
-      chips.push(
-        label(
-          "demo data",
-          "pf-m-purple",
-          "A fabricated changeset. This is not your working tree, and no daemon is connected.",
-        ),
-      );
-    }
+    // Demo state is NOT chipped here. Every other surface says it in one place - the shell's
+    // connection pill - and a second badge in this toolbar made the diff the one surface that
+    // announced it twice, in a style nothing else uses.
+    //
+    // The tileable case (toolbar on screen, status bar hidden, numbers reading as your own
+    // tree) is real and is the reason this existed. It is answered by the pill rather than by
+    // a per-surface badge: fixing it here only would leave every other tileable surface with
+    // the same gap and a different answer.
     chips.push(
       label(
         `${s.files} ${s.files === 1 ? "file" : "files"}`,
@@ -574,16 +671,17 @@ export function activate(host: HTMLElement): () => void {
       label(`+${s.additions}`, "pf-m-green"),
       label(`-${s.deletions}`, "pf-m-red"),
     );
+    // A LABEL, not a button. This row is a readout - counts and warnings - and the one control
+    // hiding among them read as a different kind of thing because it was one. The fold lives on
+    // the sidebar's "N generated" group, where the files it folds are, and on the . key.
     if (s.generated > 0) {
-      const g = h("button", "console-diff-toolbar__fold");
-      g.type = "button";
-      g.textContent = state.showGenerated
-        ? `hide ${s.generated} generated`
-        : `${s.generated} generated folded`;
-      g.title =
-        "Declared target outputs. Reviewing their diff is reading a machine's restatement of a change made elsewhere - read the source change instead. Press . to toggle.";
-      g.addEventListener("click", () => void toggleGenerated());
-      chips.push(g);
+      chips.push(
+        label(
+          state.showGenerated ? `${s.generated} generated` : `${s.generated} generated folded`,
+          undefined,
+          "Declared target outputs. Reviewing their diff is reading a machine's restatement of a change made elsewhere - read the source change instead. Fold them from the sidebar, or press . to toggle.",
+        ),
+      );
     }
     if (!ranked()) {
       chips.push(label("unranked", "pf-m-orange", UNRANKED_TITLE));
@@ -629,38 +727,94 @@ export function activate(host: HTMLElement): () => void {
 
   const renderSidebar = (): void => {
     const frag = document.createDocumentFragment();
+
+    // Grouped by PROJECT, not by directory depth. In a monorepo a path answers two questions -
+    // which project owns this, and which file is it - and everything between them is filler that
+    // grows without bound as the tree nests. The project is the bounded, meaningful half, magus
+    // already knows it per file (DiffAnnotation.project, the same unit that decides cache keys
+    // and the affected set), and writing it once per group means the per-file line only ever
+    // carries the path RELATIVE to it. That is one or two segments whether the repo is three
+    // levels deep or ten, so the item stops getting worse as the monorepo grows.
+    const groups = new Map<string, { o: (typeof state.changeset.primary)[number]; i: number }[]>();
     state.changeset.primary.forEach((o, i) => {
-      const item = h("button", "console-diff-sidebar__item");
-      item.type = "button";
-      const st = STATUS_COPY[o.file.status];
-      item.append(label(st.short, st.modifier, o.file.status));
-      const name = h("span", "console-diff-sidebar__path");
-      name.textContent = o.file.path;
-      name.title = o.annotation?.hint ?? o.file.path;
-      item.append(name);
-      if (o.annotation?.surface === "public") item.dataset.surface = "public";
-      if (o.annotation?.reach) {
-        const r = h("span", "console-diff-sidebar__counts");
-        r.textContent = String(o.annotation.reach);
-        r.title = `${o.annotation.reach} files reference the widest changed symbol here`;
-        item.append(r);
-      }
-      item.addEventListener("click", () => {
-        const row = state.fileRows[i];
-        if (row !== undefined) scrollToRow(row);
-        scroll.focus();
-      });
-      frag.append(item);
+      // Falling back to the top-level segment keeps a file magus does not attribute in a sane
+      // group rather than in a nameless one; every demo and real annotation carries a project.
+      const key = o.annotation?.project ?? (o.file.path.split("/")[0] || o.file.path);
+      const bucket = groups.get(key);
+      if (bucket) bucket.push({ o, i });
+      else groups.set(key, [{ o, i }]);
     });
+
+    for (const [project, entries] of groups) {
+      const head = h("div", "console-diff-sidebar__project");
+      const pName = h("span", "console-diff-sidebar__project-name", project);
+      pName.title = project;
+      const pCount = h("span", "console-diff-sidebar__project-count", String(entries.length));
+      head.append(pName, pCount);
+      frag.append(head);
+
+      for (const { o, i } of entries) {
+        const item = h("button", "console-diff-sidebar__item");
+        item.type = "button";
+        const st = STATUS_COPY[o.file.status];
+        item.append(label(st.short, st.modifier, o.file.status));
+        // Filename over directory, because the filename is what identifies the file and the
+        // directory is only context. A single line spent them equally and truncated both, so a
+        // column this narrow showed "...thkit/claims.go" - the half that matters least, cut.
+        const slash = o.file.path.lastIndexOf("/");
+        const wrap = h("span", "console-diff-sidebar__file");
+        const name = h("span", "console-diff-sidebar__path");
+        name.textContent = slash >= 0 ? o.file.path.slice(slash + 1) : o.file.path;
+        wrap.append(name);
+        // Relative to the project heading above, and omitted entirely when the file sits at the
+        // project root - a blank second line would be worse than none.
+        const rel = o.file.path.startsWith(`${project}/`)
+          ? o.file.path.slice(project.length + 1, slash < 0 ? undefined : slash)
+          : slash > 0
+            ? o.file.path.slice(0, slash)
+            : "";
+        if (rel) wrap.append(h("span", "console-diff-sidebar__dir", rel));
+        item.append(wrap);
+        // The full path FIRST. This used to be the annotation hint alone, so hovering a truncated
+        // path answered with a paragraph about cache keys and never with the path being read.
+        item.title = o.annotation?.hint ? `${o.file.path}\n\n${o.annotation.hint}` : o.file.path;
+        if (o.annotation?.surface === "public") item.dataset.surface = "public";
+        if (o.annotation?.reach) {
+          const r = h("span", "console-diff-sidebar__counts");
+          r.textContent = String(o.annotation.reach);
+          r.title = `${o.annotation.reach} files reference the widest changed symbol here`;
+          item.append(r);
+        }
+        // The row index rides on the element. Grouping reorders the sidebar relative to the
+        // changeset, so a positional index would mark the wrong file active.
+        const row = state.fileRows[i];
+        if (row !== undefined) item.dataset.fileRow = String(row);
+        item.addEventListener("click", () => {
+          if (row !== undefined) scrollToRow(row);
+          scroll.focus();
+        });
+        frag.append(item);
+      }
+    }
     if (state.changeset.generated.length > 0) {
-      const g = h("button", "console-diff-sidebar__group");
+      // Same fold affordance as an activity section - the twist caret plus aria-expanded and
+      // data-collapsed - so a collapsible in the sidebar reads the way collapsibles read
+      // everywhere else in the console. It was a bare button styled like nothing else.
+      const g = h("button", "console-diff-sidebar__group console-render-section__head");
       g.type = "button";
-      g.textContent = `${state.changeset.generated.length} generated`;
-      g.title = "Declared target outputs, folded. Press . to expand.";
+      g.setAttribute("aria-expanded", state.showGenerated ? "true" : "false");
+      const twist = h("span", "console-render-section__twist");
+      twist.setAttribute("aria-hidden", "true");
+      const gLabel = h("span", "console-render-section__title");
+      gLabel.textContent = `${state.changeset.generated.length} generated`;
+      g.append(twist, gLabel);
+      g.title = state.showGenerated
+        ? "Declared target outputs. Press . to fold."
+        : "Declared target outputs, folded. Press . to expand.";
       g.addEventListener("click", () => void toggleGenerated());
       frag.append(g);
     }
-    sidebar.replaceChildren(frag);
+    sidebar.replaceChildren(sidebarHead, frag);
   };
 
   // The suggestion rail: an agent asking for attention. It renders as a peripheral affordance
@@ -778,7 +932,10 @@ export function activate(host: HTMLElement): () => void {
     state.cursor = i;
     // Smooth scrolling is motion, and for a reader who has asked the OS for less of it, a
     // whole diff sliding past on every `[` is the symptom they turned it off to avoid.
-    scroll.scrollTo({ top: i * ROW_HEIGHT, behavior: prefersReducedMotion() ? "auto" : "smooth" });
+    scroll.scrollTo({
+      top: state.offsets[i] ?? 0,
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
+    });
     // Tell the session where the reader is, so an agent can be useful about it.
     const f = state.rows[i];
     if (f) {
@@ -803,7 +960,7 @@ export function activate(host: HTMLElement): () => void {
   };
 
   const step = (dir: 1 | -1, marks: number[]): void => {
-    const from = state.cursor >= 0 ? state.cursor : Math.floor(scroll.scrollTop / ROW_HEIGHT);
+    const from = state.cursor >= 0 ? state.cursor : rowAt(state.offsets, scroll.scrollTop);
     const i = dir === 1 ? nextIndexAfter(marks, from) : prevIndexBefore(marks, from);
     if (i !== null) scrollToRow(i);
   };
@@ -824,7 +981,7 @@ export function activate(host: HTMLElement): () => void {
   };
 
   const currentHunkRow = (): number | null => {
-    const from = state.cursor >= 0 ? state.cursor : Math.floor(scroll.scrollTop / ROW_HEIGHT);
+    const from = state.cursor >= 0 ? state.cursor : rowAt(state.offsets, scroll.scrollTop);
     let best: number | null = null;
     for (const i of state.hunks) {
       if (i <= from) best = i;
@@ -1054,11 +1211,15 @@ export function activate(host: HTMLElement): () => void {
 
   // --- load -----------------------------------------------------------------
 
-  const showEmpty = (title: string, body: string, offerDemo = false): void => {
+  // cmd is the trailing "run this" half of an empty state, as a real <code> element the way the
+  // activity trail writes it. Backticks in the string rendered as backticks - textContent does not
+  // read markdown - so this surface was the one telling the reader to type punctuation.
+  const showEmpty = (title: string, body: string, cmd?: string, offerDemo = false): void => {
     state.phase = "empty";
     root.dataset.phase = "empty";
     emptyTitle.textContent = title;
     emptyBody.textContent = body;
+    if (cmd) emptyBody.append(" ", h("code", undefined, cmd), ".");
     emptyFooter.hidden = !offerDemo;
   };
 
@@ -1097,7 +1258,8 @@ export function activate(host: HTMLElement): () => void {
     if (!hp) {
       showEmpty(
         "No daemon connected",
-        "Diff reads the working tree through a local daemon. Start one with `magus server start`.",
+        "Diff reads the working tree through a local daemon. Start one with:",
+        "magus server start",
         true,
       );
       return;

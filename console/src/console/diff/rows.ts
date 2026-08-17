@@ -171,3 +171,62 @@ export function prevIndexBefore(sorted: readonly number[], from: number): number
   }
   return first;
 }
+
+// fileOfRow maps every row index to the index of the file row that governs it, so a scroll
+// position answers "which file am I in" in one lookup. -1 for any row before the first file
+// header, which the changeset's leading rows can be.
+export function fileOfRow(rows: readonly Row[]): number[] {
+  const out = new Array<number>(rows.length);
+  let current = -1;
+  for (let i = 0; i < rows.length; i++) {
+    if ((rows[i] as Row).kind === "file") current = i;
+    out[i] = current;
+  }
+  return out;
+}
+
+// ROW_HEIGHT and FILE_ROW_HEIGHT MUST equal the heights in diff.css. The virtualizer computes
+// positions from them rather than measuring, so a mismatch shows as rows drifting out of the
+// viewport while scrolling.
+//
+// Two heights, because the file header is not a line of code: it carries an M/A/D/R badge and
+// the risk chips. In a 24px row those overflowed their own row by 8px and collided with the line
+// above. Padding cannot buy the room - box-sizing is border-box, so padding eats the height
+// instead of adding to it. Raising the SHARED height was the wrong answer too: it pays for the
+// header's chips out of every code line, and fitting code on the screen is why this virtualizes.
+export const ROW_HEIGHT = 24;
+export const FILE_ROW_HEIGHT = 40;
+
+// heightOf is the single source of truth for a row's height; rowOffsets is derived from it.
+export function heightOf(row: Row): number {
+  return row.kind === "file" ? FILE_ROW_HEIGHT : ROW_HEIGHT;
+}
+
+// rowOffsets is the running y of every row, plus a final entry holding the total, so offsets[i]
+// is row i's top edge and offsets[n] is the full scroll height. Mixed heights mean a position is
+// no longer index * ROW_HEIGHT, and summing per paint would be O(rows) on every scroll frame.
+export function rowOffsets(rows: readonly Row[]): number[] {
+  const offs = new Array<number>(rows.length + 1);
+  let y = 0;
+  for (let i = 0; i < rows.length; i++) {
+    offs[i] = y;
+    y += heightOf(rows[i] as Row);
+  }
+  offs[rows.length] = y;
+  return offs;
+}
+
+// rowAt is the inverse: the index of the row containing y. Binary search, because it runs on
+// every scroll frame. Returns the LAST row whose top is <= y, clamped into range - so a y past
+// the end answers with the final row rather than running off the array.
+export function rowAt(offsets: readonly number[], y: number): number {
+  let lo = 0;
+  let hi = offsets.length - 2;
+  if (hi < 0) return 0;
+  while (lo < hi) {
+    const mid = (lo + hi + 1) >> 1;
+    if ((offsets[mid] as number) <= y) lo = mid;
+    else hi = mid - 1;
+  }
+  return lo;
+}

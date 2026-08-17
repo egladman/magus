@@ -438,7 +438,7 @@ var goldenBuiltins = map[string]spells.Descriptor{
 				Key: spells.VersionKey{UpTo: spells.VersionPatch}},
 		},
 		Language:   "typescript",
-		IgnoreDirs: []string{"node_modules"},
+		IgnoreDirs: []string{"node_modules", ".testcache", ".turbo", ".pnpm-store"},
 		Manifests: []spells.Manifest{
 			{Value: "package.json", LockCandidates: []string{"pnpm-lock.yaml", "package-lock.json", "npm-shrinkwrap.json", "yarn.lock", "bun.lockb"}},
 		},
