@@ -139,7 +139,24 @@ export function scheduleLiveRender(): void {
   });
 }
 
+// The console detaches a backgrounded tab's status bar, so these getElementById lookups resolve to
+// the ACTIVE tab's bar - a log viewer streaming in the background would write its "connected / N
+// events" into whatever surface the reader is actually looking at. page.ts states the rule; the
+// dashboard already follows it, and this is the other surface that writes the shared bar.
+//
+// lastLinkState replays on return, so the bar catches up rather than showing whatever it held when
+// the tab went away.
+let surfaceHidden = false;
+let lastLinkState: string | null = null;
+
+export function setLiveVisible(visible: boolean): void {
+  surfaceHidden = !visible;
+  if (visible && lastLinkState) setLiveStatus(lastLinkState);
+}
+
 export function setLiveStatus(linkState: string): void {
+  lastLinkState = linkState;
+  if (surfaceHidden) return;
   // Drive the shared console status bar's connection dot (the same element the dashboard uses), so
   // the log viewer reads the same as its sibling apps. A live stream is "connected" (green) with the
   // event count; a finished stream is "done" (still green - it completed cleanly); connecting/

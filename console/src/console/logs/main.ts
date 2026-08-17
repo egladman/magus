@@ -41,7 +41,7 @@ import { applyTimeRange, clearFocus } from "./waterfall";
 import { applyFilterFromInput, renderFilterChips, setFilter } from "./filter";
 import { clearMarks, runSearch, stepActiveMark } from "./search";
 import { graphTarget, openInGraph, shareLink } from "./share";
-import { connectLive } from "./live";
+import { connectLive, setLiveVisible } from "./live";
 import { startDemo, stopDemo } from "./demo";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { mountZoomControl, type ZoomControl } from "../zoomControl";
@@ -181,6 +181,13 @@ const ZOOM_MAX = 2.2;
 const ZOOM_STEP = 0.1;
 // The mounted stepper, so applyZoom can repaint its readout after a command or a restore.
 let zoomCtl: ZoomControl | null = null;
+// One definition, so the mount at activate() and the remount on setVisible(true) cannot drift.
+const zoomOpts = () => ({
+  get: () => zoomCell.get(),
+  zoomIn: () => setZoom(zoomCell.get() + ZOOM_STEP),
+  zoomOut: () => setZoom(zoomCell.get() - ZOOM_STEP),
+  reset: () => setZoom(1),
+});
 const zoomCell = logsZoomCell;
 
 function clampZoom(z: number): number {
@@ -204,12 +211,7 @@ function setZoom(z: number): void {
 function wireZoom(): void {
   // The shared stepper (console/zoomControl.ts), not a local one: the Plan surface docks the same
   // control in the same place, and two near-identical copies is how they stop being identical.
-  zoomCtl = mountZoomControl({
-    get: () => zoomCell.get(),
-    zoomIn: () => setZoom(zoomCell.get() + ZOOM_STEP),
-    zoomOut: () => setZoom(zoomCell.get() - ZOOM_STEP),
-    reset: () => setZoom(1),
-  });
+  zoomCtl = mountZoomControl(zoomOpts());
   registerCommand({
     id: "logs.zoomIn",
     label: "Zoom in",
@@ -646,6 +648,20 @@ export function activate(): void {
 // or pane leaves no SSE connection open and nothing bound to the document. Static logs (the common
 // case) never open a stream, so the abort is a no-op then. The console's logs PageModule calls this;
 // the standalone page does not (the surface lives as long as the page).
+// setVisible is the console's contract (page.ts): this surface writes the SHARED status bar - the
+// connection pill, the event count and the zoom stepper - so it has to give all three back while its
+// tab is hidden. Without it a background stream writes the active tab's bar.
+export function setVisible(visible: boolean): void {
+  setLiveVisible(visible);
+  if (visible) {
+    zoomCtl = mountZoomControl(zoomOpts());
+    applyZoom();
+  } else {
+    zoomCtl?.remove();
+    zoomCtl = null;
+  }
+}
+
 export function deactivate(): void {
   // Forget the loaded run: this module is a singleton the console re-activates on reopen, so a
   // stale ref left here would name the reopened tab after a log it is no longer showing.

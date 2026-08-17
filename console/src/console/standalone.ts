@@ -148,8 +148,10 @@ export function standaloneSurface(s: StandaloneSurface): PageModule<null, null> 
       mod.activate();
       return {
         search: noSearch,
-        // A surface that writes the shared status bar (the dashboard) exports setVisible so it can go
-        // quiet while backgrounded; static surfaces (logs/graph) do not, and this stays undefined.
+        // A surface that writes the shared status bar exports setVisible so it can go quiet while
+        // backgrounded - the dashboard (connection pill, observing-since) and the log viewer (a live
+        // stream's pill and event count, plus the zoom stepper). A surface that writes none of it
+        // leaves this undefined.
         setVisible: mod.setVisible,
         docTitle: mod.docTitle,
         // Tear down the surface's own lifetimes first (a live SSE stream, the graph's force simulation)
