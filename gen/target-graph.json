@@ -1457,7 +1457,7 @@
               "glob": "reference/skills/*.md"
             },
             {
-              "glob": "reference/api/*.md"
+              "glob": "reference/api/**/*.md"
             },
             {
               "glob": "changelog.md"

@@ -4,6 +4,7 @@ namespace date;
 
 import "time";
 import "assert";
+import "lib/text" as _;
 
 // formatISO renders an ISO 8601 UTC string as "June 29, 2026, 1:41 AM UTC" (no-JS
 // fallback; client JS rewrites it to the viewer's local zone).
@@ -31,6 +32,17 @@ export fun blogDateAttr(d: str) > str {
     return d.split("T")[0];
 }
 
+// isFuturePost reports whether date falls on a UTC day after asOf's. Same day is not
+// future: a post dated the day of the build publishes that day. An undated post never is.
+//
+// asOf is site.metaStamp (HEAD's commit date), never wall-clock: generate is a drift gate,
+// so the render stays a pure function of the tree rather than of when it ran. Empty asOf
+// fails open, since a missing git stamp should not blank every dated post.
+export fun isFuturePost(date: str, asOf: str) > bool {
+    if (asOf == "") { return false; }
+    return strLess(blogDateAttr(asOf), blogDateAttr(date));
+}
+
 test "blogDateAttr keeps just the calendar day" {
     assert\equal(blogDateAttr("2026-07-01T12:00:00Z"), "2026-07-01", "drops the time part");
     assert\equal(blogDateAttr("2026-07-01"), "2026-07-01", "date-only unchanged");
@@ -44,4 +56,12 @@ test "blogDate renders a calendar byline" {
 test "formatISO renders human-readable UTC" {
     assert\equal(formatISO("2026-06-29T01:41:51Z"), "June 29, 2026, 1:41 AM UTC", "full form");
     assert\equal(formatISOShort("2026-06-29T01:41:51Z"), "Jun 29, 2026", "compact form");
+}
+
+test "isFuturePost gates on the calendar day, inclusive of the day itself" {
+    assert\equal(isFuturePost("2026-08-25", "2026-08-24T23:00:00Z"), true, "a later day is future");
+    assert\equal(isFuturePost("2026-08-25T00:00:00Z", "2026-08-25T23:59:59Z"), false, "same day at any hour is not");
+    assert\equal(isFuturePost("2026-08-24", "2026-08-25T00:00:00Z"), false, "an earlier day is not");
+    assert\equal(isFuturePost("", "2026-08-25T00:00:00Z"), false, "an undated post is not");
+    assert\equal(isFuturePost("2026-08-25", ""), false, "no asOf fails open");
 }
