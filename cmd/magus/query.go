@@ -714,6 +714,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 	if out.Node.Kind != types.KindSymbol {
 		link := liveExplorerLink(url.GraphLinkOpts{View: "blast", Node: out.Node.ID})
 		fmt.Printf("\nView in Graph Explorer: %s\n", link)
+		fmt.Printf("%s\n", tokenHint)
 		fmt.Printf("(start the magus daemon if the graph does not load)\n")
 	}
 	return nil
