@@ -76,7 +76,7 @@ func TestListToolsCarriesBothDeclarationsAndTheIntersection(t *testing.T) {
 	assert.Equal(t, "25", row.Effective.GetBelow())
 	assert.Equal(t, toolv1.Verdict_VERDICT_TOO_NEW, row.Verdict)
 	assert.Equal(t, "MGS3006", row.DiagnosticCode)
-	assert.NotNil(t, row.ProbedAt, "a reading that happened carries its age")
+	assert.NotNil(t, row.ProbeTime, "a reading that happened carries its age")
 }
 
 // A second request inside the TTL must not fork again. This is the only reason the
@@ -91,7 +91,7 @@ func TestListToolsServesTheCacheWithinTheTTL(t *testing.T) {
 	second := list(t, s, "").Projects[0].Tools[0]
 
 	assert.Equal(t, 1, calls, "the second request must be served from the cache")
-	assert.Equal(t, first.ProbedAt.AsTime(), second.ProbedAt.AsTime(), "and it must report the age of the reading it served, not of the request")
+	assert.Equal(t, first.ProbeTime.AsTime(), second.ProbeTime.AsTime(), "and it must report the age of the reading it served, not of the request")
 }
 
 // Past the TTL the reading is taken again, or the view would pin a version installed
@@ -136,7 +136,7 @@ func TestListToolsReportsUnreadableOutputAsUnknown(t *testing.T) {
 
 	row := list(t, s, "").Projects[0].Tools[0]
 	assert.Equal(t, toolv1.Verdict_VERDICT_UNKNOWN, row.Verdict)
-	assert.NotNil(t, row.ProbedAt, "the probe ran, so the row carries when")
+	assert.NotNil(t, row.ProbeTime, "the probe ran, so the row carries when")
 }
 
 // Two spells declaring the same bin ask different questions - the argv comes from the

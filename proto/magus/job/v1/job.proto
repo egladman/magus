@@ -63,7 +63,7 @@ message JobInfo {
 // JobRun is one completed execution of a job.
 message JobRun {
   string invocation_id = 1;
-  google.protobuf.Timestamp finished_at = 2;
+  google.protobuf.Timestamp end_time = 2;
   google.protobuf.Duration duration = 3;
   bool ok = 4;          // false when the run errored
   string error = 5;     // error text when ok is false
@@ -78,8 +78,8 @@ message JobRun {
 // ResourceSize is the current magnitude of a job's target resource, for a caller to show how much
 // there is to maintain (and to judge whether a rotate/clear is worth running).
 message ResourceSize {
-  int64 bytes = 1; // total on-disk bytes
-  int64 count = 2; // logical item count (trail events, cached entries, run logs)
+  int64 size_bytes = 1; // total on-disk bytes
+  int64 item_count = 2; // logical item count (trail events, cached entries, run logs)
 }
 
 message SyncGraphRequest {}

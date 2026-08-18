@@ -157,7 +157,7 @@ func connectorInfo(c auth.ConnectorToken) *tokenv1.TokenInfo {
 		Scope:      tokenv1.TokenScope_TOKEN_SCOPE_CONNECTOR,
 	}
 	if !c.Expires.IsZero() {
-		info.Expires = timestamppb.New(c.Expires)
+		info.ExpireTime = timestamppb.New(c.Expires)
 	}
 	return info
 }
@@ -170,7 +170,7 @@ func shareInfo(i share.TokenInfo) *tokenv1.TokenInfo {
 		Name:       shareTokenLabel,
 		Identifier: i.Fingerprint,
 		Scope:      tokenv1.TokenScope_TOKEN_SCOPE_SHARE_READ,
-		Expires:    timestamppb.New(i.Expires),
+		ExpireTime: timestamppb.New(i.Expires),
 	}
 }
 

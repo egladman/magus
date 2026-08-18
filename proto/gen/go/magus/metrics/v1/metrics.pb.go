@@ -235,9 +235,9 @@ func (*StreamMetricsResponse_Snapshot) isStreamMetricsResponse_Of() {}
 // Snapshot is the derived-metrics view at one instant: each OTel instrument family
 // aggregated for the dashboard.
 type Snapshot struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	CapturedAt *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=captured_at,json=capturedAt,proto3" json:"captured_at,omitempty"`
-	Target     *Latency               `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"` // magus.target.duration + magus.target.runs
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	CaptureTime *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=capture_time,json=captureTime,proto3" json:"capture_time,omitempty"`
+	Target      *Latency               `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"` // magus.target.duration + magus.target.runs
 	// cache is the local Cache.Run family (magus.cache.duration + magus.cache.{hits,misses,errors}).
 	// Named "cache" (not "cache_op") because "op" collides with the Operation glossary term and
 	// this family measures a Cache.Run, not a resolved op.
@@ -283,9 +283,9 @@ func (*Snapshot) Descriptor() ([]byte, []int) {
 	return file_magus_metrics_v1_metrics_proto_rawDescGZIP(), []int{4}
 }
 
-func (x *Snapshot) GetCapturedAt() *timestamppb.Timestamp {
+func (x *Snapshot) GetCaptureTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.CapturedAt
+		return x.CaptureTime
 	}
 	return nil
 }
@@ -443,16 +443,16 @@ func (x *Latency) GetSum() float64 {
 // Remote is the remote-cache instrument family: outcome tallies plus transfer latency and
 // volume.
 type Remote struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Hits          int64                  `protobuf:"varint,1,opt,name=hits,proto3" json:"hits,omitempty"`
-	Misses        int64                  `protobuf:"varint,2,opt,name=misses,proto3" json:"misses,omitempty"`
-	Errors        int64                  `protobuf:"varint,3,opt,name=errors,proto3" json:"errors,omitempty"`
-	DurationP50   float64                `protobuf:"fixed64,4,opt,name=duration_p50,json=durationP50,proto3" json:"duration_p50,omitempty"` // seconds
-	DurationP95   float64                `protobuf:"fixed64,5,opt,name=duration_p95,json=durationP95,proto3" json:"duration_p95,omitempty"` // seconds
-	IoCount       int64                  `protobuf:"varint,6,opt,name=io_count,json=ioCount,proto3" json:"io_count,omitempty"`              // number of get/put operations observed
-	BytesTotal    int64                  `protobuf:"varint,7,opt,name=bytes_total,json=bytesTotal,proto3" json:"bytes_total,omitempty"`     // total bytes transferred (sum of the io.size histogram)
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state            protoimpl.MessageState `protogen:"open.v1"`
+	Hits             int64                  `protobuf:"varint,1,opt,name=hits,proto3" json:"hits,omitempty"`
+	Misses           int64                  `protobuf:"varint,2,opt,name=misses,proto3" json:"misses,omitempty"`
+	Errors           int64                  `protobuf:"varint,3,opt,name=errors,proto3" json:"errors,omitempty"`
+	DurationP50      float64                `protobuf:"fixed64,4,opt,name=duration_p50,json=durationP50,proto3" json:"duration_p50,omitempty"`               // seconds
+	DurationP95      float64                `protobuf:"fixed64,5,opt,name=duration_p95,json=durationP95,proto3" json:"duration_p95,omitempty"`               // seconds
+	IoCount          int64                  `protobuf:"varint,6,opt,name=io_count,json=ioCount,proto3" json:"io_count,omitempty"`                            // number of get/put operations observed
+	TransferredBytes int64                  `protobuf:"varint,7,opt,name=transferred_bytes,json=transferredBytes,proto3" json:"transferred_bytes,omitempty"` // total bytes transferred (sum of the io.size histogram)
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Remote) Reset() {
@@ -527,9 +527,9 @@ func (x *Remote) GetIoCount() int64 {
 	return 0
 }
 
-func (x *Remote) GetBytesTotal() int64 {
+func (x *Remote) GetTransferredBytes() int64 {
 	if x != nil {
-		return x.BytesTotal
+		return x.TransferredBytes
 	}
 	return 0
 }
@@ -1154,7 +1154,7 @@ func (x *Backfill) GetSamples() []*Sample {
 // square per sample by utilization.
 type Sample struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	At            *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=at,proto3" json:"at,omitempty"`
+	SampleTime    *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=sample_time,json=sampleTime,proto3" json:"sample_time,omitempty"`
 	Running       int32                  `protobuf:"varint,2,opt,name=running,proto3" json:"running,omitempty"`                            // pool slots running at this tick
 	Capacity      int32                  `protobuf:"varint,3,opt,name=capacity,proto3" json:"capacity,omitempty"`                          // pool capacity (0 = unlimited)
 	Queued        int32                  `protobuf:"varint,4,opt,name=queued,proto3" json:"queued,omitempty"`                              // tasks queued for a slot
@@ -1195,9 +1195,9 @@ func (*Sample) Descriptor() ([]byte, []int) {
 	return file_magus_metrics_v1_metrics_proto_rawDescGZIP(), []int{12}
 }
 
-func (x *Sample) GetAt() *timestamppb.Timestamp {
+func (x *Sample) GetSampleTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.At
+		return x.SampleTime
 	}
 	return nil
 }
@@ -1256,10 +1256,9 @@ const file_magus_metrics_v1_metrics_proto_rawDesc = "" +
 	"\x15StreamMetricsResponse\x128\n" +
 	"\bbackfill\x18\x01 \x01(\v2\x1a.magus.metrics.v1.BackfillH\x00R\bbackfill\x128\n" +
 	"\bsnapshot\x18\x02 \x01(\v2\x1a.magus.metrics.v1.SnapshotH\x00R\bsnapshotB\x04\n" +
-	"\x02of\"\xaf\x04\n" +
-	"\bSnapshot\x12;\n" +
-	"\vcaptured_at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"capturedAt\x121\n" +
+	"\x02of\"\xb1\x04\n" +
+	"\bSnapshot\x12=\n" +
+	"\fcapture_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\vcaptureTime\x121\n" +
 	"\x06target\x18\x02 \x01(\v2\x19.magus.metrics.v1.LatencyR\x06target\x12/\n" +
 	"\x05cache\x18\x03 \x01(\v2\x19.magus.metrics.v1.LatencyR\x05cache\x126\n" +
 	"\tpool_wait\x18\x04 \x01(\v2\x19.magus.metrics.v1.LatencyR\bpoolWait\x12:\n" +
@@ -1277,16 +1276,15 @@ const file_magus_metrics_v1_metrics_proto_rawDesc = "" +
 	"\x03p95\x18\x03 \x01(\x01R\x03p95\x12\x10\n" +
 	"\x03p99\x18\x04 \x01(\x01R\x03p99\x12\x10\n" +
 	"\x03max\x18\x05 \x01(\x01R\x03max\x12\x10\n" +
-	"\x03sum\x18\x06 \x01(\x01R\x03sum\"\xce\x01\n" +
+	"\x03sum\x18\x06 \x01(\x01R\x03sum\"\xda\x01\n" +
 	"\x06Remote\x12\x12\n" +
 	"\x04hits\x18\x01 \x01(\x03R\x04hits\x12\x16\n" +
 	"\x06misses\x18\x02 \x01(\x03R\x06misses\x12\x16\n" +
 	"\x06errors\x18\x03 \x01(\x03R\x06errors\x12!\n" +
 	"\fduration_p50\x18\x04 \x01(\x01R\vdurationP50\x12!\n" +
 	"\fduration_p95\x18\x05 \x01(\x01R\vdurationP95\x12\x19\n" +
-	"\bio_count\x18\x06 \x01(\x03R\aioCount\x12\x1f\n" +
-	"\vbytes_total\x18\a \x01(\x03R\n" +
-	"bytesTotal\"\xf8\x01\n" +
+	"\bio_count\x18\x06 \x01(\x03R\aioCount\x12+\n" +
+	"\x11transferred_bytes\x18\a \x01(\x03R\x10transferredBytes\"\xf8\x01\n" +
 	"\n" +
 	"TargetStat\x12\x18\n" +
 	"\aproject\x18\x01 \x01(\tR\aproject\x12\x16\n" +
@@ -1361,9 +1359,10 @@ const file_magus_metrics_v1_metrics_proto_rawDesc = "" +
 	"\venv_dropped\x18\t \x01(\x03R\n" +
 	"envDropped\">\n" +
 	"\bBackfill\x122\n" +
-	"\asamples\x18\x01 \x03(\v2\x18.magus.metrics.v1.SampleR\asamples\"\xe5\x01\n" +
-	"\x06Sample\x12*\n" +
-	"\x02at\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\x02at\x12\x18\n" +
+	"\asamples\x18\x01 \x03(\v2\x18.magus.metrics.v1.SampleR\asamples\"\xf6\x01\n" +
+	"\x06Sample\x12;\n" +
+	"\vsample_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"sampleTime\x12\x18\n" +
 	"\arunning\x18\x02 \x01(\x05R\arunning\x12\x1a\n" +
 	"\bcapacity\x18\x03 \x01(\x05R\bcapacity\x12\x16\n" +
 	"\x06queued\x18\x04 \x01(\x05R\x06queued\x12\x1d\n" +
@@ -1411,7 +1410,7 @@ var file_magus_metrics_v1_metrics_proto_depIdxs = []int32{
 	4,  // 0: magus.metrics.v1.GetMetricsResponse.snapshot:type_name -> magus.metrics.v1.Snapshot
 	11, // 1: magus.metrics.v1.StreamMetricsResponse.backfill:type_name -> magus.metrics.v1.Backfill
 	4,  // 2: magus.metrics.v1.StreamMetricsResponse.snapshot:type_name -> magus.metrics.v1.Snapshot
-	13, // 3: magus.metrics.v1.Snapshot.captured_at:type_name -> google.protobuf.Timestamp
+	13, // 3: magus.metrics.v1.Snapshot.capture_time:type_name -> google.protobuf.Timestamp
 	5,  // 4: magus.metrics.v1.Snapshot.target:type_name -> magus.metrics.v1.Latency
 	5,  // 5: magus.metrics.v1.Snapshot.cache:type_name -> magus.metrics.v1.Latency
 	5,  // 6: magus.metrics.v1.Snapshot.pool_wait:type_name -> magus.metrics.v1.Latency
@@ -1422,7 +1421,7 @@ var file_magus_metrics_v1_metrics_proto_depIdxs = []int32{
 	9,  // 11: magus.metrics.v1.Snapshot.buzz:type_name -> magus.metrics.v1.Buzz
 	10, // 12: magus.metrics.v1.Snapshot.sandbox:type_name -> magus.metrics.v1.Sandbox
 	12, // 13: magus.metrics.v1.Backfill.samples:type_name -> magus.metrics.v1.Sample
-	13, // 14: magus.metrics.v1.Sample.at:type_name -> google.protobuf.Timestamp
+	13, // 14: magus.metrics.v1.Sample.sample_time:type_name -> google.protobuf.Timestamp
 	0,  // 15: magus.metrics.v1.MetricsService.GetMetrics:input_type -> magus.metrics.v1.GetMetricsRequest
 	2,  // 16: magus.metrics.v1.MetricsService.StreamMetrics:input_type -> magus.metrics.v1.StreamMetricsRequest
 	1,  // 17: magus.metrics.v1.MetricsService.GetMetrics:output_type -> magus.metrics.v1.GetMetricsResponse

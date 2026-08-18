@@ -50,7 +50,7 @@ func TestSubmit_NewJobIsSubmitted(t *testing.T) {
 	require.Equal(t, "inv-new", resp.Msg.InvocationId)
 	require.Equal(t, "clear-cache", resp.Msg.Job.Name)
 	require.False(t, resp.Msg.Job.Running)
-	require.Equal(t, int64(4096), resp.Msg.Job.Target.Bytes) // clear-cache target is the cache size
+	require.Equal(t, int64(4096), resp.Msg.Job.Target.SizeBytes) // clear-cache target is the cache size
 }
 
 func TestSubmit_CoalescedReportsRunningInvocation(t *testing.T) {
@@ -105,13 +105,13 @@ func TestJobInfo_LastRunFromTrailAndTargetSize(t *testing.T) {
 
 	require.Equal(t, "rotate-activities", got.Name)
 	require.True(t, got.Running)
-	require.Equal(t, int64(3), got.Target.Count) // three trail events on disk
-	require.Positive(t, got.Target.Bytes)
+	require.Equal(t, int64(3), got.Target.ItemCount) // three trail events on disk
+	require.Positive(t, got.Target.SizeBytes)
 
 	wantRun := &jobv1.JobRun{
-		FinishedAt: timestamppb.New(time.UnixMilli(start + 250)),
-		Duration:   durationpb.New(250 * time.Millisecond),
-		Ok:         true,
+		EndTime:  timestamppb.New(time.UnixMilli(start + 250)),
+		Duration: durationpb.New(250 * time.Millisecond),
+		Ok:       true,
 	}
 	require.True(t, proto.Equal(wantRun, got.LastRun), "last_run = %v, want %v", got.LastRun, wantRun)
 }

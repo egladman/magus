@@ -68,7 +68,7 @@ func TestSampleOncePopulatesRingFromPoolAndCounters(t *testing.T) {
 	samples := svc.ring.Snapshot()
 	require.Len(t, samples, 1)
 	want := &metricsv1.Sample{
-		At:          samples[0].At, // timestamp compared separately below
+		SampleTime:  samples[0].SampleTime, // timestamp compared separately below
 		Running:     3,
 		Capacity:    8,
 		Queued:      2,
@@ -82,7 +82,7 @@ func TestSampleOncePopulatesRingFromPoolAndCounters(t *testing.T) {
 	require.Equal(t, want.CacheHits, samples[0].CacheHits)
 	require.Equal(t, want.CacheMisses, samples[0].CacheMisses)
 	require.Equal(t, want.TargetRuns, samples[0].TargetRuns)
-	require.Equal(t, at.Unix(), samples[0].At.AsTime().Unix())
+	require.Equal(t, at.Unix(), samples[0].SampleTime.AsTime().Unix())
 }
 
 func TestStreamMetricsSendsBackfillThenSnapshot(t *testing.T) {

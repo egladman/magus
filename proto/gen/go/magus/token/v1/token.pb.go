@@ -136,7 +136,7 @@ type TokenInfo struct {
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`             // connector name, or a label for the share token
 	Identifier    string                 `protobuf:"bytes,2,opt,name=identifier,proto3" json:"identifier,omitempty"` // prefix-only fingerprint; the Revoke key
 	Scope         TokenScope             `protobuf:"varint,3,opt,name=scope,proto3,enum=magus.token.v1.TokenScope" json:"scope,omitempty"`
-	Expires       *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=expires,proto3" json:"expires,omitempty"` // unset means the token never expires
+	ExpireTime    *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=expire_time,json=expireTime,proto3" json:"expire_time,omitempty"` // unset means the token never expires
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -192,9 +192,9 @@ func (x *TokenInfo) GetScope() TokenScope {
 	return TokenScope_TOKEN_SCOPE_UNSPECIFIED
 }
 
-func (x *TokenInfo) GetExpires() *timestamppb.Timestamp {
+func (x *TokenInfo) GetExpireTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.Expires
+		return x.ExpireTime
 	}
 	return nil
 }
@@ -372,14 +372,15 @@ var File_magus_token_v1_token_proto protoreflect.FileDescriptor
 
 const file_magus_token_v1_token_proto_rawDesc = "" +
 	"\n" +
-	"\x1amagus/token/v1/token.proto\x12\x0emagus.token.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\xc7\x01\n" +
+	"\x1amagus/token/v1/token.proto\x12\x0emagus.token.v1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\xce\x01\n" +
 	"\tTokenInfo\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12\x1e\n" +
 	"\n" +
 	"identifier\x18\x02 \x01(\tR\n" +
 	"identifier\x120\n" +
-	"\x05scope\x18\x03 \x01(\x0e2\x1a.magus.token.v1.TokenScopeR\x05scope\x124\n" +
-	"\aexpires\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\aexpiresJ\x04\b\x04\x10\x05J\x04\b\x06\x10\aR\acreatedR\tlast_used\"\x13\n" +
+	"\x05scope\x18\x03 \x01(\x0e2\x1a.magus.token.v1.TokenScopeR\x05scope\x12;\n" +
+	"\vexpire_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
+	"expireTimeJ\x04\b\x04\x10\x05J\x04\b\x06\x10\aR\acreatedR\tlast_used\"\x13\n" +
 	"\x11ListTokensRequest\"G\n" +
 	"\x12ListTokensResponse\x121\n" +
 	"\x06tokens\x18\x01 \x03(\v2\x19.magus.token.v1.TokenInfoR\x06tokens\"=\n" +
@@ -427,7 +428,7 @@ var file_magus_token_v1_token_proto_goTypes = []any{
 }
 var file_magus_token_v1_token_proto_depIdxs = []int32{
 	0, // 0: magus.token.v1.TokenInfo.scope:type_name -> magus.token.v1.TokenScope
-	6, // 1: magus.token.v1.TokenInfo.expires:type_name -> google.protobuf.Timestamp
+	6, // 1: magus.token.v1.TokenInfo.expire_time:type_name -> google.protobuf.Timestamp
 	1, // 2: magus.token.v1.ListTokensResponse.tokens:type_name -> magus.token.v1.TokenInfo
 	1, // 3: magus.token.v1.RevokeTokenResponse.token:type_name -> magus.token.v1.TokenInfo
 	2, // 4: magus.token.v1.TokenService.ListTokens:input_type -> magus.token.v1.ListTokensRequest

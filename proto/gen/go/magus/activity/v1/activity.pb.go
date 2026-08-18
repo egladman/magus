@@ -606,7 +606,7 @@ func (x *GetPayloadRequest) GetRef() string {
 type GetPayloadResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Body          []byte                 `protobuf:"bytes,1,opt,name=body,proto3" json:"body,omitempty"`
-	Bytes         int64                  `protobuf:"varint,2,opt,name=bytes,proto3" json:"bytes,omitempty"`
+	SizeBytes     int64                  `protobuf:"varint,2,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -648,9 +648,9 @@ func (x *GetPayloadResponse) GetBody() []byte {
 	return nil
 }
 
-func (x *GetPayloadResponse) GetBytes() int64 {
+func (x *GetPayloadResponse) GetSizeBytes() int64 {
 	if x != nil {
-		return x.Bytes
+		return x.SizeBytes
 	}
 	return 0
 }
@@ -694,10 +694,11 @@ const file_magus_activity_v1_activity_proto_rawDesc = "" +
 	"\x06events\x18\x01 \x03(\v2 .magus.activity.v1.ActivityEventR\x06events\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"C\n" +
 	"\x11GetPayloadRequest\x12.\n" +
-	"\x03ref\x18\x01 \x01(\tB\x1c\xbaH\x19r\x172\x15^[a-z]{2,8}[0-9a-f]+$R\x03ref\">\n" +
+	"\x03ref\x18\x01 \x01(\tB\x1c\xbaH\x19r\x172\x15^[a-z]{2,8}[0-9a-f]+$R\x03ref\"G\n" +
 	"\x12GetPayloadResponse\x12\x12\n" +
-	"\x04body\x18\x01 \x01(\fR\x04body\x12\x14\n" +
-	"\x05bytes\x18\x02 \x01(\x03R\x05bytes*\xf7\x01\n" +
+	"\x04body\x18\x01 \x01(\fR\x04body\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x02 \x01(\x03R\tsizeBytes*\xf7\x01\n" +
 	"\x04Kind\x12\x14\n" +
 	"\x10KIND_UNSPECIFIED\x10\x00\x12\x16\n" +
 	"\x12KIND_MCP_TOOL_CALL\x10\x01\x12\f\n" +

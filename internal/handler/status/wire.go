@@ -79,10 +79,10 @@ func serviceToProto(s types.StatusService) *statusv1.Service {
 		Id:         s.ID,
 		Label:      s.Label,
 		Command:    s.Command,
-		Port:       s.Ports,
+		Ports:      s.Ports,
 		State:      string(s.State),
 		Dependents: int32(s.Dependents),
-		StartedAt:  tsFromTime(s.StartedAt),
+		StartTime:  tsFromTime(s.StartedAt),
 	}
 }
 
@@ -91,15 +91,15 @@ func runToProto(r types.StatusRun) *statusv1.Run {
 	out := &statusv1.Run{
 		Inv:       r.Inv,
 		Trigger:   r.Trigger,
-		StartedAt: tsFromTime(r.StartedAt),
+		StartTime: tsFromTime(r.StartedAt),
 	}
 	for _, t := range r.Targets {
 		out.Targets = append(out.Targets, &statusv1.TargetRun{
 			Project:    t.Project,
 			Target:     t.Target,
 			State:      targetStateToProto(t.State),
-			StartedAt:  tsFromTime(t.StartedAt),
-			EndedAt:    tsFromTime(t.EndedAt),
+			StartTime:  tsFromTime(t.StartedAt),
+			EndTime:    tsFromTime(t.EndedAt),
 			OutputRef:  t.OutputRef,
 			DurationMs: t.DurationMs,
 		})

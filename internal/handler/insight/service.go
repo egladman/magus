@@ -101,20 +101,20 @@ func nodeToProto(n types.Node) *insightv1.ProjectNode {
 		Authors:     int32(n.Authors),
 	}
 	if n.LastCommit != nil {
-		p.LastCommit = tsFromTime(*n.LastCommit)
+		p.LastCommitTime = tsFromTime(*n.LastCommit)
 	}
 	return p
 }
 
 func fileHotspotToProto(f types.FileHotspot) *insightv1.FileHotspot {
 	return &insightv1.FileHotspot{
-		Path:       f.Path,
-		Commits:    int32(f.Commits),
-		Complexity: int32(f.Complexity),
-		Score:      int32(f.Score),
-		Authors:    int32(f.Authors),
-		LastCommit: tsFromTime(f.LastCommit),
-		Moves:      int32(f.Moves),
+		Path:           f.Path,
+		Commits:        int32(f.Commits),
+		Complexity:     int32(f.Complexity),
+		Score:          int32(f.Score),
+		Authors:        int32(f.Authors),
+		LastCommitTime: tsFromTime(f.LastCommit),
+		Moves:          int32(f.Moves),
 	}
 }
 
@@ -131,15 +131,15 @@ func coChangeToProto(c types.CoChange) *insightv1.CoChange {
 
 func ownershipToProto(o types.OwnershipEntry) *insightv1.Ownership {
 	return &insightv1.Ownership{
-		Path:         o.Path,
-		Name:         o.Name,
-		Commits:      int32(o.Commits),
-		Authors:      int32(o.Authors),
-		Primary:      o.Primary,
-		PrimaryShare: int32(o.PrimaryShare),
-		BusFactor_1:  o.BusFactor1,
-		Stale:        o.Stale,
-		LastCommit:   tsFromTime(o.LastCommit),
+		Path:           o.Path,
+		Name:           o.Name,
+		Commits:        int32(o.Commits),
+		Authors:        int32(o.Authors),
+		Primary:        o.Primary,
+		PrimaryShare:   int32(o.PrimaryShare),
+		BusFactor_1:    o.BusFactor1,
+		Stale:          o.Stale,
+		LastCommitTime: tsFromTime(o.LastCommit),
 	}
 }
 
@@ -169,7 +169,7 @@ func volatilityToProto(r *types.VolatilityReport) *insightv1.VolatilityReport {
 				Fail:          int32(t.Fail),
 				VolatileCount: int32(t.VolatileCount),
 				Samples:       int32(t.Samples),
-				LastPass:      tsFromTime(t.LastPass),
+				LastPassTime:  tsFromTime(t.LastPass),
 			}
 		}),
 	}

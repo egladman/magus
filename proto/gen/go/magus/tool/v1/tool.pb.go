@@ -171,10 +171,10 @@ type Tool struct {
 	Effective       *VersionBounds `protobuf:"bytes,6,opt,name=effective,proto3" json:"effective,omitempty"`                                    // the intersection actually enforced, narrower wins
 	Verdict         Verdict        `protobuf:"varint,7,opt,name=verdict,proto3,enum=magus.tool.v1.Verdict" json:"verdict,omitempty"`
 	DiagnosticCode  string         `protobuf:"bytes,8,opt,name=diagnostic_code,json=diagnosticCode,proto3" json:"diagnostic_code,omitempty"` // "MGS3005"/"MGS3006" when violated, else empty
-	// probed_at is when this version was read. A console page has no build to piggyback on,
+	// probe_time is when this version was read. A console page has no build to piggyback on,
 	// so the probe behind it may be older than the page; surfacing the age is honest where
 	// implying live is not.
-	ProbedAt      *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=probed_at,json=probedAt,proto3" json:"probed_at,omitempty"`
+	ProbeTime     *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=probe_time,json=probeTime,proto3" json:"probe_time,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -265,9 +265,9 @@ func (x *Tool) GetDiagnosticCode() string {
 	return ""
 }
 
-func (x *Tool) GetProbedAt() *timestamppb.Timestamp {
+func (x *Tool) GetProbeTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ProbedAt
+		return x.ProbeTime
 	}
 	return nil
 }
@@ -430,7 +430,7 @@ const file_magus_tool_v1_tool_proto_rawDesc = "" +
 	"\x18magus/tool/v1/tool.proto\x12\rmagus.tool.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"7\n" +
 	"\rVersionBounds\x12\x10\n" +
 	"\x03min\x18\x01 \x01(\tR\x03min\x12\x14\n" +
-	"\x05below\x18\x02 \x01(\tR\x05below\"\xc5\x03\n" +
+	"\x05below\x18\x02 \x01(\tR\x05below\"\xc7\x03\n" +
 	"\x04Tool\x12\x10\n" +
 	"\x03bin\x18\x01 \x01(\tR\x03bin\x12\x14\n" +
 	"\x05spell\x18\x02 \x01(\tR\x05spell\x12+\n" +
@@ -439,8 +439,9 @@ const file_magus_tool_v1_tool_proto_rawDesc = "" +
 	"\x10workspace_bounds\x18\x05 \x01(\v2\x1c.magus.tool.v1.VersionBoundsR\x0fworkspaceBounds\x12:\n" +
 	"\teffective\x18\x06 \x01(\v2\x1c.magus.tool.v1.VersionBoundsR\teffective\x120\n" +
 	"\averdict\x18\a \x01(\x0e2\x16.magus.tool.v1.VerdictR\averdict\x12'\n" +
-	"\x0fdiagnostic_code\x18\b \x01(\tR\x0ediagnosticCode\x127\n" +
-	"\tprobed_at\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\bprobedAtJ\x04\b\n" +
+	"\x0fdiagnostic_code\x18\b \x01(\tR\x0ediagnosticCode\x129\n" +
+	"\n" +
+	"probe_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\tprobeTimeJ\x04\b\n" +
 	"\x10\vR\benforced\"\\\n" +
 	"\aProject\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
@@ -488,7 +489,7 @@ var file_magus_tool_v1_tool_proto_depIdxs = []int32{
 	1, // 1: magus.tool.v1.Tool.workspace_bounds:type_name -> magus.tool.v1.VersionBounds
 	1, // 2: magus.tool.v1.Tool.effective:type_name -> magus.tool.v1.VersionBounds
 	0, // 3: magus.tool.v1.Tool.verdict:type_name -> magus.tool.v1.Verdict
-	6, // 4: magus.tool.v1.Tool.probed_at:type_name -> google.protobuf.Timestamp
+	6, // 4: magus.tool.v1.Tool.probe_time:type_name -> google.protobuf.Timestamp
 	2, // 5: magus.tool.v1.Project.tools:type_name -> magus.tool.v1.Tool
 	3, // 6: magus.tool.v1.ListToolsResponse.projects:type_name -> magus.tool.v1.Project
 	4, // 7: magus.tool.v1.ToolService.ListTools:input_type -> magus.tool.v1.ListToolsRequest

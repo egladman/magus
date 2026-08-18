@@ -370,8 +370,8 @@ export class DashboardTransport {
             effectiveWindow: renderWindow(tool.effective),
             verdict: verdictLabel(tool.verdict),
             code: tool.diagnosticCode,
-            probedAtMs: tool.probedAt
-              ? Number(tool.probedAt.seconds) * 1000 + Math.floor(tool.probedAt.nanos / 1e6)
+            probedAtMs: tool.probeTime
+              ? Number(tool.probeTime.seconds) * 1000 + Math.floor(tool.probeTime.nanos / 1e6)
               : 0,
           });
         }
@@ -432,7 +432,7 @@ export class DashboardTransport {
     try {
       const client = createClient(StatusService, createDaemonTransport(host, getLiveToken()));
       const resp = await client.getStatus({});
-      const ts = resp.observingSince;
+      const ts = resp.observeStartTime;
       if (ts)
         this.store.set({ observingSince: Number(ts.seconds) * 1000 + Math.floor(ts.nanos / 1e6) });
       if (resp.config) {

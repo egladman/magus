@@ -283,23 +283,23 @@ func (x *HotspotOutput) GetFiles() []*FileHotspot {
 // the dependency edges under the heat. It is NOT magus.graph.v1.Node: that one is a
 // knowledge-graph node (id/kind/relation), this one is a project in the build graph.
 //
-// churn, authors and last_commit are the heatmap overlay and are absent on a plain dependency
+// churn, authors and last_commit_time are the heatmap overlay and are absent on a plain dependency
 // graph; blast_radius and duration_ms come from the graph itself.
 type ProjectNode struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"` // the stable machine key
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"` // the declared display name, empty when the project never set one
-	SpellName     string                 `protobuf:"bytes,3,opt,name=spell_name,json=spellName,proto3" json:"spell_name,omitempty"`
-	Children      []string               `protobuf:"bytes,4,rep,name=children,proto3" json:"children,omitempty"`
-	Dir           string                 `protobuf:"bytes,5,opt,name=dir,proto3" json:"dir,omitempty"`
-	Exclusive     bool                   `protobuf:"varint,6,opt,name=exclusive,proto3" json:"exclusive,omitempty"`
-	BlastRadius   int32                  `protobuf:"varint,7,opt,name=blast_radius,json=blastRadius,proto3" json:"blast_radius,omitempty"`
-	DurationMs    int64                  `protobuf:"varint,8,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
-	Churn         int32                  `protobuf:"varint,9,opt,name=churn,proto3" json:"churn,omitempty"`      // recent commits touching the project
-	Authors       int32                  `protobuf:"varint,10,opt,name=authors,proto3" json:"authors,omitempty"` // distinct authors behind them
-	LastCommit    *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=last_commit,json=lastCommit,proto3" json:"last_commit,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Path           string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"` // the stable machine key
+	Name           string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"` // the declared display name, empty when the project never set one
+	SpellName      string                 `protobuf:"bytes,3,opt,name=spell_name,json=spellName,proto3" json:"spell_name,omitempty"`
+	Children       []string               `protobuf:"bytes,4,rep,name=children,proto3" json:"children,omitempty"`
+	Dir            string                 `protobuf:"bytes,5,opt,name=dir,proto3" json:"dir,omitempty"`
+	Exclusive      bool                   `protobuf:"varint,6,opt,name=exclusive,proto3" json:"exclusive,omitempty"`
+	BlastRadius    int32                  `protobuf:"varint,7,opt,name=blast_radius,json=blastRadius,proto3" json:"blast_radius,omitempty"`
+	DurationMs     int64                  `protobuf:"varint,8,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"`
+	Churn          int32                  `protobuf:"varint,9,opt,name=churn,proto3" json:"churn,omitempty"`      // recent commits touching the project
+	Authors        int32                  `protobuf:"varint,10,opt,name=authors,proto3" json:"authors,omitempty"` // distinct authors behind them
+	LastCommitTime *timestamppb.Timestamp `protobuf:"bytes,11,opt,name=last_commit_time,json=lastCommitTime,proto3" json:"last_commit_time,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *ProjectNode) Reset() {
@@ -402,9 +402,9 @@ func (x *ProjectNode) GetAuthors() int32 {
 	return 0
 }
 
-func (x *ProjectNode) GetLastCommit() *timestamppb.Timestamp {
+func (x *ProjectNode) GetLastCommitTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastCommit
+		return x.LastCommitTime
 	}
 	return nil
 }
@@ -413,13 +413,13 @@ func (x *ProjectNode) GetLastCommit() *timestamppb.Timestamp {
 // commits x complexity, sent rather than derived so a reader ranks by the same number the CLI
 // printed even if the weighting changes.
 type FileHotspot struct {
-	state      protoimpl.MessageState `protogen:"open.v1"`
-	Path       string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Commits    int32                  `protobuf:"varint,2,opt,name=commits,proto3" json:"commits,omitempty"`
-	Complexity int32                  `protobuf:"varint,3,opt,name=complexity,proto3" json:"complexity,omitempty"`
-	Score      int32                  `protobuf:"varint,4,opt,name=score,proto3" json:"score,omitempty"`
-	Authors    int32                  `protobuf:"varint,5,opt,name=authors,proto3" json:"authors,omitempty"`
-	LastCommit *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_commit,json=lastCommit,proto3" json:"last_commit,omitempty"`
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Path           string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Commits        int32                  `protobuf:"varint,2,opt,name=commits,proto3" json:"commits,omitempty"`
+	Complexity     int32                  `protobuf:"varint,3,opt,name=complexity,proto3" json:"complexity,omitempty"`
+	Score          int32                  `protobuf:"varint,4,opt,name=score,proto3" json:"score,omitempty"`
+	Authors        int32                  `protobuf:"varint,5,opt,name=authors,proto3" json:"authors,omitempty"`
+	LastCommitTime *timestamppb.Timestamp `protobuf:"bytes,6,opt,name=last_commit_time,json=lastCommitTime,proto3" json:"last_commit_time,omitempty"`
 	// How many times the file changed path inside the window. commits and moves are
 	// different kinds of churn - one is the contents being rewritten, the other is the
 	// file being moved around - and a reader wants both, because a file doing both at
@@ -495,9 +495,9 @@ func (x *FileHotspot) GetAuthors() int32 {
 	return 0
 }
 
-func (x *FileHotspot) GetLastCommit() *timestamppb.Timestamp {
+func (x *FileHotspot) GetLastCommitTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastCommit
+		return x.LastCommitTime
 	}
 	return nil
 }
@@ -741,18 +741,18 @@ func (x *OwnershipOutput) GetProjects() []*Ownership {
 // wire rather than being recomputed by a reader so the console and the CLI cannot disagree
 // about what counts as abandoned.
 type Ownership struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Path          string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
-	Name          string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
-	Commits       int32                  `protobuf:"varint,3,opt,name=commits,proto3" json:"commits,omitempty"`
-	Authors       int32                  `protobuf:"varint,4,opt,name=authors,proto3" json:"authors,omitempty"`
-	Primary       string                 `protobuf:"bytes,5,opt,name=primary,proto3" json:"primary,omitempty"`                                // the author with the most commits
-	PrimaryShare  int32                  `protobuf:"varint,6,opt,name=primary_share,json=primaryShare,proto3" json:"primary_share,omitempty"` // that author's share, in percent
-	BusFactor_1   bool                   `protobuf:"varint,7,opt,name=bus_factor_1,json=busFactor1,proto3" json:"bus_factor_1,omitempty"`
-	Stale         bool                   `protobuf:"varint,8,opt,name=stale,proto3" json:"stale,omitempty"`
-	LastCommit    *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_commit,json=lastCommit,proto3" json:"last_commit,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state          protoimpl.MessageState `protogen:"open.v1"`
+	Path           string                 `protobuf:"bytes,1,opt,name=path,proto3" json:"path,omitempty"`
+	Name           string                 `protobuf:"bytes,2,opt,name=name,proto3" json:"name,omitempty"`
+	Commits        int32                  `protobuf:"varint,3,opt,name=commits,proto3" json:"commits,omitempty"`
+	Authors        int32                  `protobuf:"varint,4,opt,name=authors,proto3" json:"authors,omitempty"`
+	Primary        string                 `protobuf:"bytes,5,opt,name=primary,proto3" json:"primary,omitempty"`                                // the author with the most commits
+	PrimaryShare   int32                  `protobuf:"varint,6,opt,name=primary_share,json=primaryShare,proto3" json:"primary_share,omitempty"` // that author's share, in percent
+	BusFactor_1    bool                   `protobuf:"varint,7,opt,name=bus_factor_1,json=busFactor1,proto3" json:"bus_factor_1,omitempty"`
+	Stale          bool                   `protobuf:"varint,8,opt,name=stale,proto3" json:"stale,omitempty"`
+	LastCommitTime *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_commit_time,json=lastCommitTime,proto3" json:"last_commit_time,omitempty"`
+	unknownFields  protoimpl.UnknownFields
+	sizeCache      protoimpl.SizeCache
 }
 
 func (x *Ownership) Reset() {
@@ -841,9 +841,9 @@ func (x *Ownership) GetStale() bool {
 	return false
 }
 
-func (x *Ownership) GetLastCommit() *timestamppb.Timestamp {
+func (x *Ownership) GetLastCommitTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastCommit
+		return x.LastCommitTime
 	}
 	return nil
 }
@@ -1068,7 +1068,7 @@ type VolatilityTarget struct {
 	Fail          int32                  `protobuf:"varint,6,opt,name=fail,proto3" json:"fail,omitempty"`
 	VolatileCount int32                  `protobuf:"varint,7,opt,name=volatile_count,json=volatileCount,proto3" json:"volatile_count,omitempty"`
 	Samples       int32                  `protobuf:"varint,8,opt,name=samples,proto3" json:"samples,omitempty"`
-	LastPass      *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_pass,json=lastPass,proto3" json:"last_pass,omitempty"` // the most recent passing run, unset when never
+	LastPassTime  *timestamppb.Timestamp `protobuf:"bytes,9,opt,name=last_pass_time,json=lastPassTime,proto3" json:"last_pass_time,omitempty"` // the most recent passing run, unset when never
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1159,9 +1159,9 @@ func (x *VolatilityTarget) GetSamples() int32 {
 	return 0
 }
 
-func (x *VolatilityTarget) GetLastPass() *timestamppb.Timestamp {
+func (x *VolatilityTarget) GetLastPassTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.LastPass
+		return x.LastPassTime
 	}
 	return nil
 }
@@ -1189,7 +1189,7 @@ const file_magus_insight_v1_insight_proto_rawDesc = "" +
 	"\acommits\x18\x02 \x01(\x05R\acommits\x12\x14\n" +
 	"\x05since\x18\x03 \x01(\tR\x05since\x123\n" +
 	"\x05nodes\x18\x04 \x03(\v2\x1d.magus.insight.v1.ProjectNodeR\x05nodes\x123\n" +
-	"\x05files\x18\x05 \x03(\v2\x1d.magus.insight.v1.FileHotspotR\x05files\"\xd1\x02\n" +
+	"\x05files\x18\x05 \x03(\v2\x1d.magus.insight.v1.FileHotspotR\x05files\"\xda\x02\n" +
 	"\vProjectNode\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x1d\n" +
@@ -1203,9 +1203,8 @@ const file_magus_insight_v1_insight_proto_rawDesc = "" +
 	"durationMs\x12\x14\n" +
 	"\x05churn\x18\t \x01(\x05R\x05churn\x12\x18\n" +
 	"\aauthors\x18\n" +
-	" \x01(\x05R\aauthors\x12;\n" +
-	"\vlast_commit\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"lastCommit\"\xde\x01\n" +
+	" \x01(\x05R\aauthors\x12D\n" +
+	"\x10last_commit_time\x18\v \x01(\v2\x1a.google.protobuf.TimestampR\x0elastCommitTime\"\xe7\x01\n" +
 	"\vFileHotspot\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x18\n" +
 	"\acommits\x18\x02 \x01(\x05R\acommits\x12\x1e\n" +
@@ -1213,9 +1212,8 @@ const file_magus_insight_v1_insight_proto_rawDesc = "" +
 	"complexity\x18\x03 \x01(\x05R\n" +
 	"complexity\x12\x14\n" +
 	"\x05score\x18\x04 \x01(\x05R\x05score\x12\x18\n" +
-	"\aauthors\x18\x05 \x01(\x05R\aauthors\x12;\n" +
-	"\vlast_commit\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"lastCommit\x12\x14\n" +
+	"\aauthors\x18\x05 \x01(\x05R\aauthors\x12D\n" +
+	"\x10last_commit_time\x18\x06 \x01(\v2\x1a.google.protobuf.TimestampR\x0elastCommitTime\x12\x14\n" +
 	"\x05moves\x18\a \x01(\x05R\x05moves\"\x92\x01\n" +
 	"\x0eAffinityOutput\x12\x1e\n" +
 	"\n" +
@@ -1237,7 +1235,7 @@ const file_magus_insight_v1_insight_proto_rawDesc = "" +
 	"definition\x12\x18\n" +
 	"\acommits\x18\x02 \x01(\x05R\acommits\x12\x14\n" +
 	"\x05since\x18\x03 \x01(\tR\x05since\x127\n" +
-	"\bprojects\x18\x04 \x03(\v2\x1b.magus.insight.v1.OwnershipR\bprojects\"\x9b\x02\n" +
+	"\bprojects\x18\x04 \x03(\v2\x1b.magus.insight.v1.OwnershipR\bprojects\"\xa4\x02\n" +
 	"\tOwnership\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12\x18\n" +
@@ -1247,9 +1245,8 @@ const file_magus_insight_v1_insight_proto_rawDesc = "" +
 	"\rprimary_share\x18\x06 \x01(\x05R\fprimaryShare\x12 \n" +
 	"\fbus_factor_1\x18\a \x01(\bR\n" +
 	"busFactor1\x12\x14\n" +
-	"\x05stale\x18\b \x01(\bR\x05stale\x12;\n" +
-	"\vlast_commit\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"lastCommit\"\x92\x01\n" +
+	"\x05stale\x18\b \x01(\bR\x05stale\x12D\n" +
+	"\x10last_commit_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\x0elastCommitTime\"\x92\x01\n" +
 	"\vTrendOutput\x12\x1e\n" +
 	"\n" +
 	"definition\x18\x01 \x01(\tR\n" +
@@ -1265,7 +1262,7 @@ const file_magus_insight_v1_insight_proto_rawDesc = "" +
 	"\x05delta\x18\x05 \x01(\x05R\x05delta\"n\n" +
 	"\x10VolatilityReport\x12\x1c\n" +
 	"\tthreshold\x18\x01 \x01(\x01R\tthreshold\x12<\n" +
-	"\atargets\x18\x02 \x03(\v2\".magus.insight.v1.VolatilityTargetR\atargets\"\x98\x02\n" +
+	"\atargets\x18\x02 \x03(\v2\".magus.insight.v1.VolatilityTargetR\atargets\"\xa1\x02\n" +
 	"\x10VolatilityTarget\x12\x18\n" +
 	"\aproject\x18\x01 \x01(\tR\aproject\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x12\x14\n" +
@@ -1274,8 +1271,8 @@ const file_magus_insight_v1_insight_proto_rawDesc = "" +
 	"\x04pass\x18\x05 \x01(\x05R\x04pass\x12\x12\n" +
 	"\x04fail\x18\x06 \x01(\x05R\x04fail\x12%\n" +
 	"\x0evolatile_count\x18\a \x01(\x05R\rvolatileCount\x12\x18\n" +
-	"\asamples\x18\b \x01(\x05R\asamples\x127\n" +
-	"\tlast_pass\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\blastPass2i\n" +
+	"\asamples\x18\b \x01(\x05R\asamples\x12@\n" +
+	"\x0elast_pass_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\flastPassTime2i\n" +
 	"\x0eInsightService\x12W\n" +
 	"\n" +
 	"GetInsight\x12#.magus.insight.v1.GetInsightRequest\x1a$.magus.insight.v1.GetInsightResponseB\xc9\x01\n" +
@@ -1320,14 +1317,14 @@ var file_magus_insight_v1_insight_proto_depIdxs = []int32{
 	12, // 5: magus.insight.v1.Insight.volatility:type_name -> magus.insight.v1.VolatilityReport
 	4,  // 6: magus.insight.v1.HotspotOutput.nodes:type_name -> magus.insight.v1.ProjectNode
 	5,  // 7: magus.insight.v1.HotspotOutput.files:type_name -> magus.insight.v1.FileHotspot
-	14, // 8: magus.insight.v1.ProjectNode.last_commit:type_name -> google.protobuf.Timestamp
-	14, // 9: magus.insight.v1.FileHotspot.last_commit:type_name -> google.protobuf.Timestamp
+	14, // 8: magus.insight.v1.ProjectNode.last_commit_time:type_name -> google.protobuf.Timestamp
+	14, // 9: magus.insight.v1.FileHotspot.last_commit_time:type_name -> google.protobuf.Timestamp
 	7,  // 10: magus.insight.v1.AffinityOutput.pairs:type_name -> magus.insight.v1.CoChange
 	9,  // 11: magus.insight.v1.OwnershipOutput.projects:type_name -> magus.insight.v1.Ownership
-	14, // 12: magus.insight.v1.Ownership.last_commit:type_name -> google.protobuf.Timestamp
+	14, // 12: magus.insight.v1.Ownership.last_commit_time:type_name -> google.protobuf.Timestamp
 	11, // 13: magus.insight.v1.TrendOutput.projects:type_name -> magus.insight.v1.Trend
 	13, // 14: magus.insight.v1.VolatilityReport.targets:type_name -> magus.insight.v1.VolatilityTarget
-	14, // 15: magus.insight.v1.VolatilityTarget.last_pass:type_name -> google.protobuf.Timestamp
+	14, // 15: magus.insight.v1.VolatilityTarget.last_pass_time:type_name -> google.protobuf.Timestamp
 	0,  // 16: magus.insight.v1.InsightService.GetInsight:input_type -> magus.insight.v1.GetInsightRequest
 	1,  // 17: magus.insight.v1.InsightService.GetInsight:output_type -> magus.insight.v1.GetInsightResponse
 	17, // [17:18] is the sub-list for method output_type

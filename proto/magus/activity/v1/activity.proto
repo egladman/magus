@@ -149,5 +149,5 @@ message GetPayloadRequest {
 }
 message GetPayloadResponse {
   bytes body = 1;
-  int64 bytes = 2;
+  int64 size_bytes = 2;
 }

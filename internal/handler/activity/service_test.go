@@ -183,7 +183,7 @@ func TestGetPayload_RoundTripAndReject(t *testing.T) {
 		connect.NewRequest(&activityv1.GetPayloadRequest{Ref: ref}))
 	require.NoError(t, err)
 	assert.Equal(t, "the result body", string(pr.Msg.GetBody()))
-	assert.Equal(t, int64(len("the result body")), pr.Msg.GetBytes())
+	assert.Equal(t, int64(len("the result body")), pr.Msg.GetSizeBytes())
 
 	_, err = s.GetPayload(context.Background(),
 		connect.NewRequest(&activityv1.GetPayloadRequest{Ref: "mcpdeadbeef"}))

@@ -93,7 +93,7 @@ message TokenInfo {
   string name = 1;             // connector name, or a label for the share token
   string identifier = 2;       // prefix-only fingerprint; the Revoke key
   TokenScope scope = 3;
-  google.protobuf.Timestamp expires = 5;   // unset means the token never expires
+  google.protobuf.Timestamp expire_time = 5;   // unset means the token never expires
 }
 
 message ListTokensRequest {}

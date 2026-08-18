@@ -239,8 +239,8 @@ function mapTargetRun(t: TargetRun): TargetRunView {
     label: t.project ? t.project + ":" + t.target : t.target || "",
     state,
     terminal: state === "passed" || state === "failed" || state === "cached",
-    startMs: t.startedAt ? tsMillisOrNow(t.startedAt) : null,
-    endMs: t.endedAt ? tsMillisOrNow(t.endedAt) : null,
+    startMs: t.startTime ? tsMillisOrNow(t.startTime) : null,
+    endMs: t.endTime ? tsMillisOrNow(t.endTime) : null,
     outputRef: t.outputRef || "",
     durationMs: Number(t.durationMs || 0),
   };
@@ -298,10 +298,10 @@ export function mapStatus(st: Status): StatusView {
       id: sv.id || "",
       label: sv.label || "",
       command: sv.command || "",
-      ports: sv.port || [],
+      ports: sv.ports || [],
       state: sv.state || "",
       dependents: sv.dependents || 0,
-      startedAt: sv.startedAt,
+      startedAt: sv.startTime,
     })),
     locks: (st.locks || []).map((l) => ({
       project: l.project || "",
@@ -371,7 +371,7 @@ function mapRemote(r: Remote | undefined): RemoteView | null {
     durationP50: r.durationP50,
     durationP95: r.durationP95,
     ioCount: Number(r.ioCount),
-    bytesTotal: r.bytesTotal,
+    bytesTotal: r.transferredBytes,
   };
 }
 
@@ -525,7 +525,7 @@ export interface MetricsView {
 
 export function mapSnapshot(snap: Snapshot): MetricsView {
   return {
-    capturedMs: tsMillisOrNow(snap.capturedAt),
+    capturedMs: tsMillisOrNow(snap.captureTime),
     latency: {
       target: mapLat(snap.target),
       cache: mapLat(snap.cache),
@@ -567,7 +567,7 @@ export interface SampleView {
 
 export function mapSample(s: ProtoSample): SampleView {
   return {
-    at: tsMillisOrNow(s.at),
+    at: tsMillisOrNow(s.sampleTime),
     running: s.running,
     capacity: s.capacity,
     queued: s.queued,
@@ -698,7 +698,7 @@ export function mapInsight(w: Insight): InsightView {
       churn: n.churn,
       authors: n.authors,
       blastRadius: n.blastRadius,
-      lastCommit: fmtDate(n.lastCommit),
+      lastCommit: fmtDate(n.lastCommitTime),
     })),
     hotspotFiles: (w.hotspots?.files ?? []).map((f) => ({
       path: f.path,
@@ -707,7 +707,7 @@ export function mapInsight(w: Insight): InsightView {
       score: f.score,
       authors: f.authors,
       moves: f.moves,
-      lastCommit: fmtDate(f.lastCommit),
+      lastCommit: fmtDate(f.lastCommitTime),
     })),
     affinity: (w.affinity?.pairs ?? []).map((p) => ({
       a: p.a,
@@ -740,7 +740,7 @@ export function mapInsight(w: Insight): InsightView {
             fail: v.fail,
             volatileCount: v.volatileCount,
             samples: v.samples,
-            lastPass: fmtDate(v.lastPass),
+            lastPass: fmtDate(v.lastPassTime),
           })),
         }
       : null,

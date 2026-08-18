@@ -73,17 +73,17 @@ const (
 // latency histogram family becomes a Latency (count/sum plus interpolated p50/p95/p99/max),
 // and the remote-cache instruments become a Remote. Missing instruments yield zero-valued
 // (never nil) sub-messages, so the wire shape is stable from the first tick. at stamps
-// captured_at.
+// capture_time.
 func Aggregate(rm metricdata.ResourceMetrics, at time.Time) *metricsv1.Snapshot {
 	snap := &metricsv1.Snapshot{
-		CapturedAt: timestamppb.New(at),
-		Target:     &metricsv1.Latency{},
-		Cache:      &metricsv1.Latency{},
-		PoolWait:   &metricsv1.Latency{},
-		GraphQuery: &metricsv1.Latency{},
-		Remote:     &metricsv1.Remote{},
-		Buzz:       &metricsv1.Buzz{},
-		Sandbox:    &metricsv1.Sandbox{},
+		CaptureTime: timestamppb.New(at),
+		Target:      &metricsv1.Latency{},
+		Cache:       &metricsv1.Latency{},
+		PoolWait:    &metricsv1.Latency{},
+		GraphQuery:  &metricsv1.Latency{},
+		Remote:      &metricsv1.Remote{},
+		Buzz:        &metricsv1.Buzz{},
+		Sandbox:     &metricsv1.Sandbox{},
 	}
 
 	for _, sm := range rm.ScopeMetrics {
@@ -109,7 +109,7 @@ func Aggregate(rm metricdata.ResourceMetrics, at time.Time) *metricsv1.Snapshot 
 				snap.Remote.DurationP95 = lat.P95
 				snap.Remote.IoCount = lat.Count
 			case instRemoteIOSize:
-				snap.Remote.BytesTotal = int64(latencyOf(m.Data).Sum)
+				snap.Remote.TransferredBytes = int64(latencyOf(m.Data).Sum)
 			}
 		}
 	}

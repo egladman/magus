@@ -34,7 +34,7 @@ function scopeLabel(scope: TokenScope): string {
 // expiryLabel renders a token's expiry as a local date-time, or "Never expires" when the
 // expires timestamp is unset (a non-expiring connector token).
 function expiryLabel(t: TokenInfo): string {
-  const ts = t.expires;
+  const ts = t.expireTime;
   if (!ts) return "Never expires";
   const ms = Number(ts.seconds) * 1000 + Math.floor((ts.nanos || 0) / 1e6);
   return new Date(ms).toLocaleString();

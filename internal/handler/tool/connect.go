@@ -126,7 +126,7 @@ func (s *Service) projectTools(ctx context.Context, p *types.Project) []*toolv1.
 			// Only for a reading that happened: a probe that never ran must not carry a
 			// timestamp saying it did.
 			if !pr.at.IsZero() {
-				row.ProbedAt = timestamppb.New(pr.at)
+				row.ProbeTime = timestamppb.New(pr.at)
 			}
 			row.Verdict = verdict(effective, pr.version)
 			row.DiagnosticCode = diagnosticFor(row.Verdict)

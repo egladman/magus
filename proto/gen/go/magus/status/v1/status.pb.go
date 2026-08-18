@@ -493,7 +493,7 @@ type Run struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Inv           string                 `protobuf:"bytes,1,opt,name=inv,proto3" json:"inv,omitempty"`                              // invocation id (inv...); deep-links to the run's live log
 	Trigger       string                 `protobuf:"bytes,2,opt,name=trigger,proto3" json:"trigger,omitempty"`                      // how the run was spawned: run | affected | ci | ...
-	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"` // when the invocation opened
+	StartTime     *timestamppb.Timestamp `protobuf:"bytes,3,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"` // when the invocation opened
 	Targets       []*TargetRun           `protobuf:"bytes,4,rep,name=targets,proto3" json:"targets,omitempty"`                      // per-target execution state within this run
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -543,9 +543,9 @@ func (x *Run) GetTrigger() string {
 	return ""
 }
 
-func (x *Run) GetStartedAt() *timestamppb.Timestamp {
+func (x *Run) GetStartTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartedAt
+		return x.StartTime
 	}
 	return nil
 }
@@ -565,8 +565,8 @@ type TargetRun struct {
 	Project       string                 `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"` // repo-relative project path
 	Target        string                 `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`   // target name (as the CLI spells it)
 	State         TargetRun_State        `protobuf:"varint,3,opt,name=state,proto3,enum=magus.status.v1.TargetRun_State" json:"state,omitempty"`
-	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"`     // when the target began running (unset while QUEUED)
-	EndedAt       *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=ended_at,json=endedAt,proto3" json:"ended_at,omitempty"`           // when the target finished (unset while active)
+	StartTime     *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"`     // when the target began running (unset while QUEUED)
+	EndTime       *timestamppb.Timestamp `protobuf:"bytes,5,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`           // when the target finished (unset while active)
 	OutputRef     string                 `protobuf:"bytes,6,opt,name=output_ref,json=outputRef,proto3" json:"output_ref,omitempty"`     // output reference, once finished
 	DurationMs    int64                  `protobuf:"varint,7,opt,name=duration_ms,json=durationMs,proto3" json:"duration_ms,omitempty"` // wall-clock duration in ms, once finished
 	unknownFields protoimpl.UnknownFields
@@ -624,16 +624,16 @@ func (x *TargetRun) GetState() TargetRun_State {
 	return TargetRun_STATE_UNSPECIFIED
 }
 
-func (x *TargetRun) GetStartedAt() *timestamppb.Timestamp {
+func (x *TargetRun) GetStartTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartedAt
+		return x.StartTime
 	}
 	return nil
 }
 
-func (x *TargetRun) GetEndedAt() *timestamppb.Timestamp {
+func (x *TargetRun) GetEndTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.EndedAt
+		return x.EndTime
 	}
 	return nil
 }
@@ -660,10 +660,10 @@ type Service struct {
 	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`                                // short service id (fingerprint prefix)
 	Label         string                 `protobuf:"bytes,2,opt,name=label,proto3" json:"label,omitempty"`                          // human name: image[:tag] or the binary basename
 	Command       string                 `protobuf:"bytes,3,opt,name=command,proto3" json:"command,omitempty"`                      // full process command, space-joined
-	Port          []string               `protobuf:"bytes,4,rep,name=port,proto3" json:"port,omitempty"`                            // container-side published ports (empty if unknown)
+	Ports         []string               `protobuf:"bytes,4,rep,name=ports,proto3" json:"ports,omitempty"`                          // container-side published ports (empty if unknown)
 	State         string                 `protobuf:"bytes,5,opt,name=state,proto3" json:"state,omitempty"`                          // starting | running | idle | failed
 	Dependents    int32                  `protobuf:"varint,6,opt,name=dependents,proto3" json:"dependents,omitempty"`               // targets currently depending on this service
-	StartedAt     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=started_at,json=startedAt,proto3" json:"started_at,omitempty"` // when the registry began starting this instance
+	StartTime     *timestamppb.Timestamp `protobuf:"bytes,7,opt,name=start_time,json=startTime,proto3" json:"start_time,omitempty"` // when the registry began starting this instance
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -719,9 +719,9 @@ func (x *Service) GetCommand() string {
 	return ""
 }
 
-func (x *Service) GetPort() []string {
+func (x *Service) GetPorts() []string {
 	if x != nil {
-		return x.Port
+		return x.Ports
 	}
 	return nil
 }
@@ -740,9 +740,9 @@ func (x *Service) GetDependents() int32 {
 	return 0
 }
 
-func (x *Service) GetStartedAt() *timestamppb.Timestamp {
+func (x *Service) GetStartTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.StartedAt
+		return x.StartTime
 	}
 	return nil
 }
@@ -1144,14 +1144,14 @@ func (*GetStatusRequest) Descriptor() ([]byte, []int) {
 type GetStatusResponse struct {
 	state  protoimpl.MessageState `protogen:"open.v1"`
 	Status *Status                `protobuf:"bytes,1,opt,name=status,proto3" json:"status,omitempty"`
-	// observing_since and config ride the ONE-SHOT response envelope, NOT the streamed Status frame: they
+	// observe_start_time and config ride the ONE-SHOT response envelope, NOT the streamed Status frame: they
 	// are static per daemon session (Status stays "what is happening right now"), so a dashboard reads them
 	// once via GetStatus rather than on every StreamStatus push. This is the typed home for the two fields
 	// the deprecated JSON /api/v1/status route used to carry.
-	ObservingSince *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=observing_since,json=observingSince,proto3" json:"observing_since,omitempty"` // when this daemon began observing (its start)
-	Config         *Config                `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`                                       // the daemon's resolved, read-only configuration
-	unknownFields  protoimpl.UnknownFields
-	sizeCache      protoimpl.SizeCache
+	ObserveStartTime *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=observe_start_time,json=observeStartTime,proto3" json:"observe_start_time,omitempty"` // when this daemon began observing (its start)
+	Config           *Config                `protobuf:"bytes,3,opt,name=config,proto3" json:"config,omitempty"`                                               // the daemon's resolved, read-only configuration
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *GetStatusResponse) Reset() {
@@ -1191,9 +1191,9 @@ func (x *GetStatusResponse) GetStatus() *Status {
 	return nil
 }
 
-func (x *GetStatusResponse) GetObservingSince() *timestamppb.Timestamp {
+func (x *GetStatusResponse) GetObserveStartTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.ObservingSince
+		return x.ObserveStartTime
 	}
 	return nil
 }
@@ -1384,15 +1384,15 @@ const file_magus_status_v1_status_proto_rawDesc = "" +
 	"\x03inv\x18\x01 \x01(\tR\x03inv\x12\x18\n" +
 	"\atrigger\x18\x02 \x01(\tR\atrigger\x129\n" +
 	"\n" +
-	"started_at\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x124\n" +
+	"start_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x124\n" +
 	"\atargets\x18\x04 \x03(\v2\x1a.magus.status.v1.TargetRunR\atargets\"\xa2\x03\n" +
 	"\tTargetRun\x12\x18\n" +
 	"\aproject\x18\x01 \x01(\tR\aproject\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x126\n" +
 	"\x05state\x18\x03 \x01(\x0e2 .magus.status.v1.TargetRun.StateR\x05state\x129\n" +
 	"\n" +
-	"started_at\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\x125\n" +
-	"\bended_at\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\aendedAt\x12\x1d\n" +
+	"start_time\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\x125\n" +
+	"\bend_time\x18\x05 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x12\x1d\n" +
 	"\n" +
 	"output_ref\x18\x06 \x01(\tR\toutputRef\x12\x1f\n" +
 	"\vduration_ms\x18\a \x01(\x03R\n" +
@@ -1403,18 +1403,18 @@ const file_magus_status_v1_status_proto_rawDesc = "" +
 	"\rSTATE_RUNNING\x10\x02\x12\x10\n" +
 	"\fSTATE_PASSED\x10\x03\x12\x10\n" +
 	"\fSTATE_FAILED\x10\x04\x12\x10\n" +
-	"\fSTATE_CACHED\x10\x05\"\xce\x01\n" +
+	"\fSTATE_CACHED\x10\x05\"\xd0\x01\n" +
 	"\aService\x12\x0e\n" +
 	"\x02id\x18\x01 \x01(\tR\x02id\x12\x14\n" +
 	"\x05label\x18\x02 \x01(\tR\x05label\x12\x18\n" +
-	"\acommand\x18\x03 \x01(\tR\acommand\x12\x12\n" +
-	"\x04port\x18\x04 \x03(\tR\x04port\x12\x14\n" +
+	"\acommand\x18\x03 \x01(\tR\acommand\x12\x14\n" +
+	"\x05ports\x18\x04 \x03(\tR\x05ports\x12\x14\n" +
 	"\x05state\x18\x05 \x01(\tR\x05state\x12\x1e\n" +
 	"\n" +
 	"dependents\x18\x06 \x01(\x05R\n" +
 	"dependents\x129\n" +
 	"\n" +
-	"started_at\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tstartedAt\"\xfd\x02\n" +
+	"start_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\tstartTime\"\xfd\x02\n" +
 	"\x04Pool\x12\x1d\n" +
 	"\n" +
 	"parent_pid\x18\x01 \x01(\x05R\tparentPid\x12%\n" +
@@ -1452,10 +1452,10 @@ const file_magus_status_v1_status_proto_rawDesc = "" +
 	"\n" +
 	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\x12\x1e\n" +
 	"\vsize_cap_mb\x18\x05 \x01(\x05R\tsizeCapMb\"\x12\n" +
-	"\x10GetStatusRequest\"\xba\x01\n" +
+	"\x10GetStatusRequest\"\xbf\x01\n" +
 	"\x11GetStatusResponse\x12/\n" +
-	"\x06status\x18\x01 \x01(\v2\x17.magus.status.v1.StatusR\x06status\x12C\n" +
-	"\x0fobserving_since\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x0eobservingSince\x12/\n" +
+	"\x06status\x18\x01 \x01(\v2\x17.magus.status.v1.StatusR\x06status\x12H\n" +
+	"\x12observe_start_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\x10observeStartTime\x12/\n" +
 	"\x06config\x18\x03 \x01(\v2\x17.magus.status.v1.ConfigR\x06config\"k\n" +
 	"\x06Config\x12%\n" +
 	"\x0edefault_charms\x18\x01 \x03(\tR\rdefaultCharms\x12 \n" +
@@ -1519,12 +1519,12 @@ var file_magus_status_v1_status_proto_depIdxs = []int32{
 	18, // 6: magus.status.v1.Lock.acquire_time:type_name -> google.protobuf.Timestamp
 	4,  // 7: magus.status.v1.Lock.waiters:type_name -> magus.status.v1.LockWaiter
 	18, // 8: magus.status.v1.LockWaiter.wait_time:type_name -> google.protobuf.Timestamp
-	18, // 9: magus.status.v1.Run.started_at:type_name -> google.protobuf.Timestamp
+	18, // 9: magus.status.v1.Run.start_time:type_name -> google.protobuf.Timestamp
 	7,  // 10: magus.status.v1.Run.targets:type_name -> magus.status.v1.TargetRun
 	1,  // 11: magus.status.v1.TargetRun.state:type_name -> magus.status.v1.TargetRun.State
-	18, // 12: magus.status.v1.TargetRun.started_at:type_name -> google.protobuf.Timestamp
-	18, // 13: magus.status.v1.TargetRun.ended_at:type_name -> google.protobuf.Timestamp
-	18, // 14: magus.status.v1.Service.started_at:type_name -> google.protobuf.Timestamp
+	18, // 12: magus.status.v1.TargetRun.start_time:type_name -> google.protobuf.Timestamp
+	18, // 13: magus.status.v1.TargetRun.end_time:type_name -> google.protobuf.Timestamp
+	18, // 14: magus.status.v1.Service.start_time:type_name -> google.protobuf.Timestamp
 	10, // 15: magus.status.v1.Pool.running_targets:type_name -> magus.status.v1.RunningTarget
 	11, // 16: magus.status.v1.Pool.workspaces:type_name -> magus.status.v1.Workspace
 	12, // 17: magus.status.v1.Pool.cache:type_name -> magus.status.v1.Cache
@@ -1533,7 +1533,7 @@ var file_magus_status_v1_status_proto_depIdxs = []int32{
 	18, // 20: magus.status.v1.Workspace.last_access_time:type_name -> google.protobuf.Timestamp
 	12, // 21: magus.status.v1.Workspace.cache:type_name -> magus.status.v1.Cache
 	2,  // 22: magus.status.v1.GetStatusResponse.status:type_name -> magus.status.v1.Status
-	18, // 23: magus.status.v1.GetStatusResponse.observing_since:type_name -> google.protobuf.Timestamp
+	18, // 23: magus.status.v1.GetStatusResponse.observe_start_time:type_name -> google.protobuf.Timestamp
 	15, // 24: magus.status.v1.GetStatusResponse.config:type_name -> magus.status.v1.Config
 	2,  // 25: magus.status.v1.StreamStatusResponse.status:type_name -> magus.status.v1.Status
 	13, // 26: magus.status.v1.StatusService.GetStatus:input_type -> magus.status.v1.GetStatusRequest

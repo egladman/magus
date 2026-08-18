@@ -79,7 +79,7 @@ message BuildInfo {
 message Run {
   string inv = 1;                             // invocation id (inv...); deep-links to the run's live log
   string trigger = 2;                         // how the run was spawned: run | affected | ci | ...
-  google.protobuf.Timestamp started_at = 3;   // when the invocation opened
+  google.protobuf.Timestamp start_time = 3;   // when the invocation opened
   repeated TargetRun targets = 4;             // per-target execution state within this run
 }
 
@@ -105,8 +105,8 @@ message TargetRun {
   string project = 1;                         // repo-relative project path
   string target = 2;                          // target name (as the CLI spells it)
   State state = 3;
-  google.protobuf.Timestamp started_at = 4;   // when the target began running (unset while QUEUED)
-  google.protobuf.Timestamp ended_at = 5;     // when the target finished (unset while active)
+  google.protobuf.Timestamp start_time = 4;   // when the target began running (unset while QUEUED)
+  google.protobuf.Timestamp end_time = 5;     // when the target finished (unset while active)
   string output_ref = 6;                      // output reference, once finished
   int64 duration_ms = 7;                      // wall-clock duration in ms, once finished
 }
@@ -118,10 +118,10 @@ message Service {
   string id = 1;                              // short service id (fingerprint prefix)
   string label = 2;                           // human name: image[:tag] or the binary basename
   string command = 3;                         // full process command, space-joined
-  repeated string port = 4;                   // container-side published ports (empty if unknown)
+  repeated string ports = 4;                  // container-side published ports (empty if unknown)
   string state = 5;                           // starting | running | idle | failed
   int32 dependents = 6;                       // targets currently depending on this service
-  google.protobuf.Timestamp started_at = 7;   // when the registry began starting this instance
+  google.protobuf.Timestamp start_time = 7;   // when the registry began starting this instance
 }
 
 // Pool is the live concurrency pool - the slots and the work occupying them.
@@ -187,11 +187,11 @@ service StatusService {
 message GetStatusRequest {}
 message GetStatusResponse {
   Status status = 1;
-  // observing_since and config ride the ONE-SHOT response envelope, NOT the streamed Status frame: they
+  // observe_start_time and config ride the ONE-SHOT response envelope, NOT the streamed Status frame: they
   // are static per daemon session (Status stays "what is happening right now"), so a dashboard reads them
   // once via GetStatus rather than on every StreamStatus push. This is the typed home for the two fields
   // the deprecated JSON /api/v1/status route used to carry.
-  google.protobuf.Timestamp observing_since = 2; // when this daemon began observing (its start)
+  google.protobuf.Timestamp observe_start_time = 2; // when this daemon began observing (its start)
   Config config = 3;                             // the daemon's resolved, read-only configuration
 }
 

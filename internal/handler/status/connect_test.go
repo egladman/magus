@@ -46,7 +46,7 @@ func TestConnectGetStatusCarriesEnvelopeExtras(t *testing.T) {
 	resp, err := svc.GetStatus(context.Background(), connect.NewRequest(&statusv1.GetStatusRequest{}))
 	require.NoError(t, err)
 
-	assert.Equal(t, since.Unix(), resp.Msg.GetObservingSince().GetSeconds())
+	assert.Equal(t, since.Unix(), resp.Msg.GetObserveStartTime().GetSeconds())
 	cfg := resp.Msg.GetConfig()
 	require.NotNil(t, cfg)
 	assert.Equal(t, []string{"rw"}, cfg.GetDefaultCharms())
@@ -59,7 +59,7 @@ func TestConnectGetStatusOmitsZeroObservingSince(t *testing.T) {
 	svc := NewConnectService(fakeSource{}, types.BuildInfo{}, nil)
 	resp, err := svc.GetStatus(context.Background(), connect.NewRequest(&statusv1.GetStatusRequest{}))
 	require.NoError(t, err)
-	assert.Nil(t, resp.Msg.GetObservingSince(), "zero observing-since must be omitted, not epoch")
+	assert.Nil(t, resp.Msg.GetObserveStartTime(), "zero observing-since must be omitted, not epoch")
 }
 
 // mutableSource lets a test flip the reported snapshot mid-stream so StreamStatus's push-on-change

@@ -121,15 +121,15 @@ func TestStatusProtoMapsRuns(t *testing.T) {
 	run := s.GetRuns()[0]
 	assert.Equal(t, "inv1a2b3c", run.GetInv())
 	assert.Equal(t, "run", run.GetTrigger())
-	assert.Equal(t, int64(1_000), run.GetStartedAt().AsTime().UnixMilli())
+	assert.Equal(t, int64(1_000), run.GetStartTime().AsTime().UnixMilli())
 
 	require.Len(t, run.GetTargets(), 3)
 	assert.Equal(t, statusv1.TargetRun_STATE_PASSED, run.GetTargets()[0].GetState())
 	assert.Equal(t, "outcafef00d", run.GetTargets()[0].GetOutputRef())
 	assert.Equal(t, int64(3_000), run.GetTargets()[0].GetDurationMs())
-	assert.Equal(t, int64(5_000), run.GetTargets()[0].GetEndedAt().AsTime().UnixMilli())
+	assert.Equal(t, int64(5_000), run.GetTargets()[0].GetEndTime().AsTime().UnixMilli())
 	assert.Equal(t, statusv1.TargetRun_STATE_RUNNING, run.GetTargets()[1].GetState())
-	assert.Nil(t, run.GetTargets()[1].GetEndedAt()) // still running: no end
+	assert.Nil(t, run.GetTargets()[1].GetEndTime()) // still running: no end
 	assert.Equal(t, statusv1.TargetRun_STATE_CACHED, run.GetTargets()[2].GetState())
 }
 

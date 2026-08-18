@@ -40,7 +40,7 @@ message StreamMetricsResponse {
 // Snapshot is the derived-metrics view at one instant: each OTel instrument family
 // aggregated for the dashboard.
 message Snapshot {
-  google.protobuf.Timestamp captured_at = 1;
+  google.protobuf.Timestamp capture_time = 1;
   Latency target = 2;       // magus.target.duration + magus.target.runs
   // cache is the local Cache.Run family (magus.cache.duration + magus.cache.{hits,misses,errors}).
   // Named "cache" (not "cache_op") because "op" collides with the Operation glossary term and
@@ -76,7 +76,7 @@ message Remote {
   double duration_p50 = 4;  // seconds
   double duration_p95 = 5;  // seconds
   int64 io_count = 6;       // number of get/put operations observed
-  int64 bytes_total = 7;    // total bytes transferred (sum of the io.size histogram)
+  int64 transferred_bytes = 7; // total bytes transferred (sum of the io.size histogram)
 }
 
 // TargetStat is one per-target rollup: how often a (project, target, spell) ran, its latency
@@ -162,7 +162,7 @@ message Backfill {
 // per tick; the dashboard diffs adjacent samples for per-interval rates and colors one grid
 // square per sample by utilization.
 message Sample {
-  google.protobuf.Timestamp at = 1;
+  google.protobuf.Timestamp sample_time = 1;
   int32 running = 2;       // pool slots running at this tick
   int32 capacity = 3;      // pool capacity (0 = unlimited)
   int32 queued = 4;        // tasks queued for a slot

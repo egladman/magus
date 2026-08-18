@@ -110,25 +110,25 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 			Commits:    42,
 			Since:      "3 months ago",
 			Nodes: []*insightv1.ProjectNode{{
-				Path:        "internal/cache",
-				Name:        "cache",
-				SpellName:   "go",
-				Children:    []string{"types"},
-				Dir:         "internal/cache",
-				Exclusive:   true,
-				BlastRadius: 7,
-				DurationMs:  1200,
-				Churn:       9,
-				Authors:     3,
-				LastCommit:  timestamppb.New(commit),
+				Path:           "internal/cache",
+				Name:           "cache",
+				SpellName:      "go",
+				Children:       []string{"types"},
+				Dir:            "internal/cache",
+				Exclusive:      true,
+				BlastRadius:    7,
+				DurationMs:     1200,
+				Churn:          9,
+				Authors:        3,
+				LastCommitTime: timestamppb.New(commit),
 			}},
 			Files: []*insightv1.FileHotspot{{
-				Path:       "internal/cache/cache.go",
-				Commits:    9,
-				Complexity: 40,
-				Score:      360,
-				Authors:    3,
-				LastCommit: timestamppb.New(commit),
+				Path:           "internal/cache/cache.go",
+				Commits:        9,
+				Complexity:     40,
+				Score:          360,
+				Authors:        3,
+				LastCommitTime: timestamppb.New(commit),
 			}},
 		},
 		Affinity: &insightv1.AffinityOutput{
@@ -140,15 +140,15 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 			Definition: types.OwnershipDefinition,
 			Commits:    42,
 			Projects: []*insightv1.Ownership{{
-				Path:         "internal/cache",
-				Name:         "cache",
-				Commits:      9,
-				Authors:      1,
-				Primary:      "eli",
-				PrimaryShare: 100,
-				BusFactor_1:  true,
-				Stale:        true,
-				LastCommit:   timestamppb.New(commit),
+				Path:           "internal/cache",
+				Name:           "cache",
+				Commits:        9,
+				Authors:        1,
+				Primary:        "eli",
+				PrimaryShare:   100,
+				BusFactor_1:    true,
+				Stale:          true,
+				LastCommitTime: timestamppb.New(commit),
 			}},
 		},
 		Trend: &insightv1.TrendOutput{
@@ -167,7 +167,7 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 				Fail:          2,
 				VolatileCount: 1,
 				Samples:       10,
-				LastPass:      timestamppb.New(lastPass),
+				LastPassTime:  timestamppb.New(lastPass),
 			}},
 		},
 	}}
@@ -207,10 +207,10 @@ func TestGetInsight_ZeroTimeIsUnset(t *testing.T) {
 	}})
 	require.NoError(t, err)
 	hot := got.GetInsight().GetHotspots()
-	require.Nil(t, hot.GetNodes()[0].GetLastCommit())
-	require.Nil(t, hot.GetNodes()[1].GetLastCommit())
-	require.Nil(t, hot.GetFiles()[0].GetLastCommit())
-	require.Nil(t, got.GetInsight().GetVolatility().GetTargets()[0].GetLastPass())
+	require.Nil(t, hot.GetNodes()[0].GetLastCommitTime())
+	require.Nil(t, hot.GetNodes()[1].GetLastCommitTime())
+	require.Nil(t, hot.GetFiles()[0].GetLastCommitTime())
+	require.Nil(t, got.GetInsight().GetVolatility().GetTargets()[0].GetLastPassTime())
 }
 
 func TestGetInsight_NoWorkspaceIsUnavailable(t *testing.T) {

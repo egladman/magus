@@ -61,10 +61,10 @@ message Tool {
   Verdict verdict = 7;
   string diagnostic_code = 8;  // "MGS3005"/"MGS3006" when violated, else empty
 
-  // probed_at is when this version was read. A console page has no build to piggyback on,
+  // probe_time is when this version was read. A console page has no build to piggyback on,
   // so the probe behind it may be older than the page; surfacing the age is honest where
   // implying live is not.
-  google.protobuf.Timestamp probed_at = 9;
+  google.protobuf.Timestamp probe_time = 9;
 
   // Field 10 is deliberately unused. It briefly carried an "enforced" bool meant to say
   // whether a window could actually fail a build here, computed as "some op of this spell

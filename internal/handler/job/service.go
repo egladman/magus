@@ -145,13 +145,13 @@ func (s *Service) jobInfo(j jobs.Job, running map[string]string) *jobv1.JobInfo 
 }
 
 // lastRun maps a trail job Event to the wire JobRun. The trail records the run's start (Ts) and
-// duration, so finished_at is Ts+duration. The trail carries no invocation id or per-run delta,
+// duration, so end_time is Ts+duration. The trail carries no invocation id or per-run delta,
 // so those fields stay zero - additive to fill in later.
 func lastRun(e trail.Event) *jobv1.JobRun {
 	run := &jobv1.JobRun{
-		FinishedAt: timestamppb.New(time.UnixMilli(e.Ts + e.DurMs)),
-		Ok:         e.Outcome == trail.OutcomeOK,
-		Error:      e.Error,
+		EndTime: timestamppb.New(time.UnixMilli(e.Ts + e.DurMs)),
+		Ok:      e.Outcome == trail.OutcomeOK,
+		Error:   e.Error,
 	}
 	if e.DurMs > 0 {
 		run.Duration = durationpb.New(time.Duration(e.DurMs) * time.Millisecond)
@@ -165,12 +165,12 @@ func (s *Service) targetSize(j jobs.Job) *jobv1.ResourceSize {
 	switch j.Name {
 	case jobs.NameRotateActivities:
 		bytes, count := trail.Stat(s.ws.CacheDir())
-		return &jobv1.ResourceSize{Bytes: bytes, Count: count}
+		return &jobv1.ResourceSize{SizeBytes: bytes, ItemCount: count}
 	case jobs.NameRotateLogs:
 		bytes, count := cache.NewOutputStore(s.ws.CacheDir()).RunsStat()
-		return &jobv1.ResourceSize{Bytes: bytes, Count: count}
+		return &jobv1.ResourceSize{SizeBytes: bytes, ItemCount: count}
 	case jobs.NameClearCache:
-		return &jobv1.ResourceSize{Bytes: s.ws.CacheDiskBytes()}
+		return &jobv1.ResourceSize{SizeBytes: s.ws.CacheDiskBytes()}
 	default:
 		return &jobv1.ResourceSize{}
 	}

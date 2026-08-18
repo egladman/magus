@@ -52,9 +52,9 @@ func (s *ConnectService) GetStatus(ctx context.Context, _ *connect.Request[statu
 			Sandbox:       report.Config.Sandbox,
 		},
 	}
-	// observing_since is omitted (zero) when reported by a non-daemon `magus status`; only stamp it when set.
+	// observe_start_time is omitted (zero) when reported by a non-daemon `magus status`; only stamp it when set.
 	if !report.ObservingSince.IsZero() {
-		resp.ObservingSince = timestamppb.New(report.ObservingSince)
+		resp.ObserveStartTime = timestamppb.New(report.ObservingSince)
 	}
 	return connect.NewResponse(resp), nil
 }

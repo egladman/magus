@@ -132,7 +132,7 @@ func TestAggregate(t *testing.T) {
 	got := Aggregate(rm, at)
 
 	// captured_at and the untouched latency families are exact whole-message comparisons.
-	require.True(t, proto.Equal(timestamppb.New(at), got.CapturedAt), "captured_at")
+	require.True(t, proto.Equal(timestamppb.New(at), got.CaptureTime), "captured_at")
 	require.True(t, proto.Equal(&metricsv1.Latency{}, got.Cache), "cache should be zero")
 	require.True(t, proto.Equal(&metricsv1.Latency{}, got.PoolWait), "pool_wait should be zero")
 	require.True(t, proto.Equal(&metricsv1.Latency{}, got.GraphQuery), "graph_query should be zero")
@@ -150,7 +150,7 @@ func TestAggregate(t *testing.T) {
 	require.Equal(t, int64(1), got.Remote.Misses)
 	require.Equal(t, int64(0), got.Remote.Errors)
 	require.Equal(t, int64(3), got.Remote.IoCount)
-	require.Equal(t, int64(4096), got.Remote.BytesTotal)
+	require.Equal(t, int64(4096), got.Remote.TransferredBytes)
 	assert.InDelta(t, 0.05, got.Remote.DurationP50, 1e-9)
 	assert.InDelta(t, 0.095, got.Remote.DurationP95, 1e-9)
 }
@@ -289,14 +289,14 @@ func TestAggregateEmpty(t *testing.T) {
 	at := time.Unix(1_700_000_000, 0).UTC()
 	got := Aggregate(metricdata.ResourceMetrics{}, at)
 	want := &metricsv1.Snapshot{
-		CapturedAt: timestamppb.New(at),
-		Target:     &metricsv1.Latency{},
-		Cache:      &metricsv1.Latency{},
-		PoolWait:   &metricsv1.Latency{},
-		GraphQuery: &metricsv1.Latency{},
-		Remote:     &metricsv1.Remote{},
-		Buzz:       &metricsv1.Buzz{},
-		Sandbox:    &metricsv1.Sandbox{},
+		CaptureTime: timestamppb.New(at),
+		Target:      &metricsv1.Latency{},
+		Cache:       &metricsv1.Latency{},
+		PoolWait:    &metricsv1.Latency{},
+		GraphQuery:  &metricsv1.Latency{},
+		Remote:      &metricsv1.Remote{},
+		Buzz:        &metricsv1.Buzz{},
+		Sandbox:     &metricsv1.Sandbox{},
 	}
 	require.True(t, proto.Equal(want, got), "empty aggregate should be a fully zero Snapshot")
 }

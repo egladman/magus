@@ -162,7 +162,7 @@ func (s *Service) GetPayload(_ context.Context, req *connect.Request[activityv1.
 	for _, w := range s.loaded() {
 		var body []byte
 		if body, err = trail.ReadBlob(w.CacheDir, ref); err == nil {
-			return connect.NewResponse(&activityv1.GetPayloadResponse{Body: body, Bytes: int64(len(body))}), nil
+			return connect.NewResponse(&activityv1.GetPayloadResponse{Body: body, SizeBytes: int64(len(body))}), nil
 		}
 	}
 	if err == nil {

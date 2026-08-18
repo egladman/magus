@@ -43,7 +43,7 @@ func (s *Service) startSampler(ctx context.Context) {
 // or collect failure degrades to the zero values for that field rather than dropping the
 // sample, keeping the ring cadence steady.
 func (s *Service) sampleOnce(ctx context.Context) {
-	smp := &metricsv1.Sample{At: timestamppb.New(s.now())}
+	smp := &metricsv1.Sample{SampleTime: timestamppb.New(s.now())}
 
 	if rep := s.stat.StatusReport(ctx); rep.Pool != nil {
 		smp.Running = int32(rep.Pool.Running)

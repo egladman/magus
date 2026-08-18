@@ -239,7 +239,7 @@ func (x *JobInfo) GetTarget() *ResourceSize {
 type JobRun struct {
 	state        protoimpl.MessageState `protogen:"open.v1"`
 	InvocationId string                 `protobuf:"bytes,1,opt,name=invocation_id,json=invocationId,proto3" json:"invocation_id,omitempty"`
-	FinishedAt   *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=finished_at,json=finishedAt,proto3" json:"finished_at,omitempty"`
+	EndTime      *timestamppb.Timestamp `protobuf:"bytes,2,opt,name=end_time,json=endTime,proto3" json:"end_time,omitempty"`
 	Duration     *durationpb.Duration   `protobuf:"bytes,3,opt,name=duration,proto3" json:"duration,omitempty"`
 	Ok           bool                   `protobuf:"varint,4,opt,name=ok,proto3" json:"ok,omitempty"`      // false when the run errored
 	Error        string                 `protobuf:"bytes,5,opt,name=error,proto3" json:"error,omitempty"` // error text when ok is false
@@ -289,9 +289,9 @@ func (x *JobRun) GetInvocationId() string {
 	return ""
 }
 
-func (x *JobRun) GetFinishedAt() *timestamppb.Timestamp {
+func (x *JobRun) GetEndTime() *timestamppb.Timestamp {
 	if x != nil {
-		return x.FinishedAt
+		return x.EndTime
 	}
 	return nil
 }
@@ -335,8 +335,8 @@ func (x *JobRun) GetBytesReclaimed() int64 {
 // there is to maintain (and to judge whether a rotate/clear is worth running).
 type ResourceSize struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Bytes         int64                  `protobuf:"varint,1,opt,name=bytes,proto3" json:"bytes,omitempty"` // total on-disk bytes
-	Count         int64                  `protobuf:"varint,2,opt,name=count,proto3" json:"count,omitempty"` // logical item count (trail events, cached entries, run logs)
+	SizeBytes     int64                  `protobuf:"varint,1,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"` // total on-disk bytes
+	ItemCount     int64                  `protobuf:"varint,2,opt,name=item_count,json=itemCount,proto3" json:"item_count,omitempty"` // logical item count (trail events, cached entries, run logs)
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -371,16 +371,16 @@ func (*ResourceSize) Descriptor() ([]byte, []int) {
 	return file_magus_job_v1_job_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *ResourceSize) GetBytes() int64 {
+func (x *ResourceSize) GetSizeBytes() int64 {
 	if x != nil {
-		return x.Bytes
+		return x.SizeBytes
 	}
 	return 0
 }
 
-func (x *ResourceSize) GetCount() int64 {
+func (x *ResourceSize) GetItemCount() int64 {
 	if x != nil {
-		return x.Count
+		return x.ItemCount
 	}
 	return 0
 }
@@ -625,19 +625,20 @@ const file_magus_job_v1_job_proto_rawDesc = "" +
 	"\vdescription\x18\x02 \x01(\tR\vdescription\x12\x18\n" +
 	"\arunning\x18\x03 \x01(\bR\arunning\x12/\n" +
 	"\blast_run\x18\x04 \x01(\v2\x14.magus.job.v1.JobRunR\alastRun\x122\n" +
-	"\x06target\x18\x05 \x01(\v2\x1a.magus.job.v1.ResourceSizeR\x06target\"\x95\x02\n" +
+	"\x06target\x18\x05 \x01(\v2\x1a.magus.job.v1.ResourceSizeR\x06target\"\x8f\x02\n" +
 	"\x06JobRun\x12#\n" +
-	"\rinvocation_id\x18\x01 \x01(\tR\finvocationId\x12;\n" +
-	"\vfinished_at\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"finishedAt\x125\n" +
+	"\rinvocation_id\x18\x01 \x01(\tR\finvocationId\x125\n" +
+	"\bend_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\aendTime\x125\n" +
 	"\bduration\x18\x03 \x01(\v2\x19.google.protobuf.DurationR\bduration\x12\x0e\n" +
 	"\x02ok\x18\x04 \x01(\bR\x02ok\x12\x14\n" +
 	"\x05error\x18\x05 \x01(\tR\x05error\x12#\n" +
 	"\ritems_removed\x18\x06 \x01(\x03R\fitemsRemoved\x12'\n" +
-	"\x0fbytes_reclaimed\x18\a \x01(\x03R\x0ebytesReclaimed\":\n" +
-	"\fResourceSize\x12\x14\n" +
-	"\x05bytes\x18\x01 \x01(\x03R\x05bytes\x12\x14\n" +
-	"\x05count\x18\x02 \x01(\x03R\x05count\"\x12\n" +
+	"\x0fbytes_reclaimed\x18\a \x01(\x03R\x0ebytesReclaimed\"L\n" +
+	"\fResourceSize\x12\x1d\n" +
+	"\n" +
+	"size_bytes\x18\x01 \x01(\x03R\tsizeBytes\x12\x1d\n" +
+	"\n" +
+	"item_count\x18\x02 \x01(\x03R\titemCount\"\x12\n" +
 	"\x10SyncGraphRequest\"\x19\n" +
 	"\x17RotateActivitiesRequest\"\x13\n" +
 	"\x11ClearCacheRequest\"\x13\n" +
@@ -694,7 +695,7 @@ var file_magus_job_v1_job_proto_depIdxs = []int32{
 	2,  // 1: magus.job.v1.SubmitJobResponse.job:type_name -> magus.job.v1.JobInfo
 	3,  // 2: magus.job.v1.JobInfo.last_run:type_name -> magus.job.v1.JobRun
 	4,  // 3: magus.job.v1.JobInfo.target:type_name -> magus.job.v1.ResourceSize
-	11, // 4: magus.job.v1.JobRun.finished_at:type_name -> google.protobuf.Timestamp
+	11, // 4: magus.job.v1.JobRun.end_time:type_name -> google.protobuf.Timestamp
 	12, // 5: magus.job.v1.JobRun.duration:type_name -> google.protobuf.Duration
 	2,  // 6: magus.job.v1.ListJobsResponse.jobs:type_name -> magus.job.v1.JobInfo
 	5,  // 7: magus.job.v1.JobService.SyncGraph:input_type -> magus.job.v1.SyncGraphRequest
