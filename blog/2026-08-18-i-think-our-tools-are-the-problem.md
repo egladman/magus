@@ -885,9 +885,9 @@ stuck on the same problems.
 
 ## An invitation
 
-I am one person with opinions about build tools, and some of this is probably
-off. If you work on Nx, Nix, Dagger, or Skaffold and you think I have it wrong, I
-would rather hear it than not. Some of what I described may already be fixed, and some
+I am one person with strong opinions about build tools, and I hold them plainly. Some
+of what I said here is probably off anyway. If you work on Nx, Nix, Dagger, or
+Skaffold and you think I have it wrong, I would rather hear it than not. Some of what I described may already be fixed, and some
 of it I may have misread from outside. Tell me and I will correct the post.
 
 I should say the obvious thing too, since writing a post like this invites it:
