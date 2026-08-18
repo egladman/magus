@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2337,
-  "edge_count": 6021,
+  "edge_count": 6019,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -26451,14 +26451,6 @@
       "provenance": "AGENTS.md"
     },
     {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-doctor.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
       "source": "doc:CLAUDE.md",
       "target": "diagnostic:MGS1002",
       "relation": "documents",
@@ -27241,14 +27233,6 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "cmd/magus/skills/magus-workspace-rules/SKILL.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-doctor.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
     },
     {
       "source": "doc:docs/concepts/cache.md",
