@@ -54,6 +54,14 @@ project (`magus run test web`), or let `magus affected` compute it from the diff
 4. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...)
    for work a target covers. If no target covers it, say so rather than silently
    going around magus.
+5. Rewriting DEPENDENCY state (`go get`, `go mod tidy`, `pnpm add`, `cargo
+   update`, `uv lock`, `pip-compile`) needs the `relock` charm: `magus run
+   <target>:relock <project>`{{if .Full}}, so the rewrite happens inside magus, cached and
+   visible to affected tracking{{end}}. It is reserved and deliberately not part of `rw` -
+   `rw` covers output reproducible from a clean checkout, `relock` covers state that
+   depends on what a registry serves today{{if .Full}}. `ci` strips both, so a gate verifies
+   the committed lockfile rather than refreshing it{{end}}. Applying a lockfile (`npm ci`,
+   `pnpm install --frozen-lockfile`) re-resolves nothing and needs no charm.
 
 ## Command patterns
 
