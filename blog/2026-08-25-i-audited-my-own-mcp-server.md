@@ -45,8 +45,8 @@ corresponds to.
 | `magus_memory`         | `magus memory`            |
 | `magus_diff`           | `magus diff`              |
 | `magus_vcs_checkpoint` | `magus vcs checkpoint`    |
-| `magus_insight`        | nothing. See below        |
-| `magus_ledger`         | nothing. See below        |
+| `magus_insight`        | none. `magus\insight()` in Buzz |
+| `magus_ledger`         | none, anywhere. See below |
 
 Twenty of the twenty-two are a wrapper over something the CLI already does. Not
 loosely equivalent, not a convenience shape over several commands: the same
@@ -56,28 +56,29 @@ Two of them are already duplicated inside the MCP surface itself. `magus_output`
 `magus_tail_log` both fetch a captured run log, and both correspond to
 `magus query output`. I did not notice until I put them in a table.
 
-## The two that are not wrappers are both defects
+## The two that are not wrappers
 
 I expected the leftovers to be the interesting part, the places where a protocol
-layer had earned something. That is not what they turned out to be.
+layer had earned something. What they actually show is where my surfaces have drifted
+apart.
 
-**`magus_insight` wraps a command that no longer exists.** The tool is still exposed,
-still carries its full description, still advertises six lenses: hotspots, files,
-affinity, ownership, trend, unreferenced. `magus insight` was removed from the CLI.
-An agent that calls the tool is reaching for a capability the command line cannot
-reach any more. The MCP surface drifted off the thing it wraps and nothing caught it,
-because nothing was checking that the two agreed.
+**`magus_insight` has no CLI counterpart, but the capability is not gone.**
+`magus insight` was removed as a subcommand. The analysis itself is alive and well:
+`magus\insight()` in the Buzz module returns the whole thing as a typed report, and
+the MCP tool is backed by its own handler rather than by shelling out to a command.
+So nothing here is dangling. What happened is narrower and, for me, more pointed: of
+the three ways into magus, the command line is the one that lost this.
 
-**`magus_ledger` has no CLI equivalent at all.** There is no `magus ledger`
-subcommand. The delegation ledger is reachable over MCP and nowhere else, which
-inverts the rule I claim to hold. It is the one place in this whole surface where the
-MCP server is not redundant, and the reason it is not redundant is that I let a
-capability land there first and never gave it a command. That is not MCP earning its
-place. That is me skipping a step.
+**`magus_ledger` has no counterpart anywhere else.** There is no `magus ledger`
+subcommand and no ledger client in the Buzz module either. The delegation ledger is
+reachable over MCP and nowhere else. That is the one place in this surface where the
+server is genuinely not redundant, and the reason is not that a protocol layer earned
+it. It is that I let a capability land in the newest door and never gave it one
+anywhere else.
 
-So the audit did not find a protocol layer doing work the CLI could not. It found
-twenty duplicates, one stale tool pointing at a deleted command, and one capability
-that went in the wrong door.
+So the audit did not turn up a protocol layer doing work nothing else could. It
+turned up twenty duplicates and two capabilities that a person at a terminal cannot
+reach.
 
 ## The part I got wrong about my own argument
 
@@ -122,10 +123,12 @@ into the CLI, where both readers get it, and then seeing what is left.
 
 ## What I am going to do
 
-Fix the two defects first, because they are bugs regardless of what happens to the
-server. `magus_insight` goes, since the command it wraps is gone. `magus_ledger` gets
-a `magus ledger` subcommand, because a capability reachable only over a protocol
-layer is exactly the thing I spent a whole post arguing against.
+Close the drift first, because it is wrong regardless of what happens to the server.
+The ledger needs a client in the Buzz module, the same way insight has one. That is
+where a capability belongs here: the Buzz module is the layer every surface calls
+into, so putting it there gives a magusfile, a `magus buzz` script, and anything
+built on top of them the same access, rather than reserving it for whichever door I
+happened to build most recently.
 
 Then the interesting one: take the guidance out of the tool descriptions and put it
 in the CLI, as hints and as errors that say what to do next. That is worth doing

@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2334,
-  "edge_count": 6012,
+  "edge_count": 6013,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -26852,6 +26852,14 @@
     {
       "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
       "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-buzz.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
