@@ -212,6 +212,17 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         // a schema edit reaches here through that artifact. Depending on ../proto/**/*.proto
         // directly would drag a network-bound buf step into this project's cache boundary,
         // which is the exact coupling buf.gen.yaml was restructured to remove.
+        // The .proto sources are declared ALONGSIDE the descriptor, not instead of it, and
+        // they are what actually keys this target on the schema: a path that is another
+        // project's declared OUTPUT does not enter a consuming project's cache key, so the
+        // descriptor alone let a schema edit replay stale pages. Verified 2026-08-18 by
+        // editing memory.proto, regenerating the descriptor (new content hash both times),
+        // and watching content-generate report `cached` on two different descriptors;
+        // --no-cache then produced different output. Declaring them costs nothing at
+        // runtime - a read is hashed, not executed, so no buf step is pulled into this
+        // project's boundary; that concern was about DEPENDING on the proto project, which
+        // this already does.
+        workspace.file("proto/magus/**/*.proto"),
         workspace.file("proto/gen/descriptor.binpb"), workspace.file("CHANGELOG.md"));
     // reference/api nests by .proto path (reference/api/token/v1/token.md), so it is the one
     // entry here that needs a recursive glob; every other generator here writes flat.
