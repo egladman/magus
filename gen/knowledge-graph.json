@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2333,
-  "edge_count": 5996,
+  "edge_count": 5997,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -1874,17 +1874,6 @@
       }
     },
     {
-      "id": "doc:blog/2026-08-03-i-think-our-tools-are-the-problem.md",
-      "kind": "doc",
-      "label": "blog/2026-08-03-i-think-our-tools-are-the-problem.md",
-      "source": "blog/2026-08-03-i-think-our-tools-are-the-problem.md",
-      "attrs": {
-        "role": "doc",
-        "tags": "opinion",
-        "title": "I think our tools are the problem"
-      }
-    },
-    {
       "id": "doc:blog/2026-08-04-how-i-actually-use-ai-tooling.md",
       "kind": "doc",
       "label": "blog/2026-08-04-how-i-actually-use-ai-tooling.md",
@@ -1893,6 +1882,17 @@
         "role": "doc",
         "tags": "opinion",
         "title": "How I actually use AI tooling"
+      }
+    },
+    {
+      "id": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
+      "kind": "doc",
+      "label": "blog/2026-08-18-i-think-our-tools-are-the-problem.md",
+      "source": "blog/2026-08-18-i-think-our-tools-are-the-problem.md",
+      "attrs": {
+        "role": "doc",
+        "tags": "opinion",
+        "title": "I think our tools are the problem"
       }
     },
     {
@@ -21696,19 +21696,19 @@
     },
     {
       "source": "dir:blog",
-      "target": "doc:blog/2026-08-03-i-think-our-tools-are-the-problem.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "blog/2026-08-03-i-think-our-tools-are-the-problem.md"
-    },
-    {
-      "source": "dir:blog",
       "target": "doc:blog/2026-08-04-how-i-actually-use-ai-tooling.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "blog/2026-08-04-how-i-actually-use-ai-tooling.md"
+    },
+    {
+      "source": "dir:blog",
+      "target": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
     },
     {
       "source": "dir:cmd",
@@ -26791,36 +26791,44 @@
       "provenance": "benchmarks/README.md"
     },
     {
-      "source": "doc:blog/2026-08-03-i-think-our-tools-are-the-problem.md",
+      "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
+      "target": "doc:docs/reference/manpage/magus-buzz.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
+    },
+    {
+      "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-03-i-think-our-tools-are-the-problem.md"
+      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
     },
     {
-      "source": "doc:blog/2026-08-03-i-think-our-tools-are-the-problem.md",
+      "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
       "target": "doc:docs/reference/manpage/magus-init.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-03-i-think-our-tools-are-the-problem.md"
+      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
     },
     {
-      "source": "doc:blog/2026-08-03-i-think-our-tools-are-the-problem.md",
+      "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
       "target": "doc:docs/reference/manpage/magus-path.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-03-i-think-our-tools-are-the-problem.md"
+      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
     },
     {
-      "source": "doc:blog/2026-08-03-i-think-our-tools-are-the-problem.md",
+      "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
       "target": "doc:docs/reference/manpage/magus-query.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-03-i-think-our-tools-are-the-problem.md"
+      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
     },
     {
       "source": "doc:cmd/magus/agents-section.md",
@@ -67565,7 +67573,7 @@
     },
     {
       "source": "target:docs:site-generate",
-      "target": "doc:blog/2026-08-03-i-think-our-tools-are-the-problem.md",
+      "target": "doc:blog/2026-08-04-how-i-actually-use-ai-tooling.md",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
@@ -67573,7 +67581,7 @@
     },
     {
       "source": "target:docs:site-generate",
-      "target": "doc:blog/2026-08-04-how-i-actually-use-ai-tooling.md",
+      "target": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
