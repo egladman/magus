@@ -93,7 +93,9 @@ Used by: [ListNotes (response)](notes.md#listnotes).
 
 ### Note
 
-Note is one human-authored entry.  There is no author field, and its absence is deliberate rather than an omission: a self-attested author is forgeable by whatever wrote the file, and authorship already comes from git via the @vcs shard for the shared store. A client that wants to show who wrote a shared note should read the graph, not this field, because this field would be a claim the file makes about itself.
+Note is one human-authored entry.
+
+There is no author field, and its absence is deliberate rather than an omission: a self-attested author is forgeable by whatever wrote the file, and authorship already comes from git via the @vcs shard for the shared store. A client that wants to show who wrote a shared note should read the graph, not this field, because this field would be a claim the file makes about itself.
 
 Source: [notes.proto:120](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L120).
 
@@ -149,7 +151,9 @@ Used by: [GetNote (response)](notes.md#getnote), [ListNotes (response)](notes.md
 
 ### AnchorStatus
 
-AnchorStatus is what checking one anchor against the workspace found.  DRIFTED is the case an existence check cannot catch and a reader cannot see: the anchored code still exists and quietly stopped meaning what the note says. UNVERIFIED is a real, distinct answer and must never be rendered as "fine" - it means no fingerprint was recorded (the note predates fingerprinting, or was never re-read) or none could be computed here, and reporting drift from missing data is the false positive that trains a reader to ignore every flag.
+AnchorStatus is what checking one anchor against the workspace found.
+
+DRIFTED is the case an existence check cannot catch and a reader cannot see: the anchored code still exists and quietly stopped meaning what the note says. UNVERIFIED is a real, distinct answer and must never be rendered as "fine" - it means no fingerprint was recorded (the note predates fingerprinting, or was never re-read) or none could be computed here, and reporting drift from missing data is the false positive that trains a reader to ignore every flag.
 
 Source: [notes.proto:72](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L72).
 
@@ -179,7 +183,9 @@ Used by: [GetNote (request)](notes.md#getnote), [GetNote (response)](notes.md#ge
 
 ### Staleness
 
-Staleness is whether the prose was outrun by the thing it describes.  The signal is NOT calendar age: prose about a subsystem nobody has touched is current, and decaying it by age is how a signal earns the right to be ignored. What is measured is DIVERGENCE between two commit dates. UNMEASURED is not "fresh" - it is the honest answer when VCS history is unavailable, when the prose has no history, or when there is no subject to compare against. Every private note is UNMEASURED today, because staleness is keyed by workspace-relative path and a private note's source is absolute.
+Staleness is whether the prose was outrun by the thing it describes.
+
+The signal is NOT calendar age: prose about a subsystem nobody has touched is current, and decaying it by age is how a signal earns the right to be ignored. What is measured is DIVERGENCE between two commit dates. UNMEASURED is not "fresh" - it is the honest answer when VCS history is unavailable, when the prose has no history, or when there is no subject to compare against. Every private note is UNMEASURED today, because staleness is keyed by workspace-relative path and a private note's source is absolute.
 
 Source: [notes.proto:88](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L88).
 

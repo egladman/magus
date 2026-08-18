@@ -160,7 +160,9 @@ Used by: [GetInsight (response)](insight.md#getinsight).
 
 ### ProjectNode
 
-ProjectNode is one project in the heatmap. It mirrors types.Node, the dependency-graph node the hotspots lens reuses, which is why it carries graph shape (children, spell\_name, exclusive) alongside the churn fields - the same message serves a reader that wants to draw the dependency edges under the heat. It is NOT magus.graph.v1.Node: that one is a knowledge-graph node (id/kind/relation), this one is a project in the build graph.  churn, authors and last\_commit are the heatmap overlay and are absent on a plain dependency graph; blast\_radius and duration\_ms come from the graph itself.
+ProjectNode is one project in the heatmap. It mirrors types.Node, the dependency-graph node the hotspots lens reuses, which is why it carries graph shape (children, spell\_name, exclusive) alongside the churn fields - the same message serves a reader that wants to draw the dependency edges under the heat. It is NOT magus.graph.v1.Node: that one is a knowledge-graph node (id/kind/relation), this one is a project in the build graph.
+
+churn, authors and last\_commit are the heatmap overlay and are absent on a plain dependency graph; blast\_radius and duration\_ms come from the graph itself.
 
 Source: [insight.proto:75](https://github.com/egladman/magus/blob/main/proto/magus/insight/v1/insight.proto#L75).
 

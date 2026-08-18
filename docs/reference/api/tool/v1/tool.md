@@ -81,7 +81,9 @@ Used by: [ListTools (response)](tool.md#listtools).
 
 ### VersionBounds
 
-VersionBounds is a version window: an inclusive floor and an exclusive ceiling, each a plain version. Mirrors spells.VersionBounds. Both empty means unconstrained.  below is the first version REJECTED, not the last accepted, so a UI must not render it as "max": below "25" accepts 24.19.0 and rejects 25.0.0.
+VersionBounds is a version window: an inclusive floor and an exclusive ceiling, each a plain version. Mirrors spells.VersionBounds. Both empty means unconstrained.
+
+below is the first version REJECTED, not the last accepted, so a UI must not render it as "max": below "25" accepts 24.19.0 and rejects 25.0.0.
 
 Source: [tool.proto:39](https://github.com/egladman/magus/blob/main/proto/magus/tool/v1/tool.proto#L39).
 

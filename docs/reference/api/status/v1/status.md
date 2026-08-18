@@ -98,7 +98,9 @@ Used by: [GetStatus (response)](status.md#getstatus).
 
 ### Lock
 
-Lock is one held per-project workspace lock and the process holding it.  A held lock is the NORMAL state of a mutating run, so this is state and never a fault: it must not fail a readiness or liveness check, because a run queued behind a peer is waiting correctly and restarting it only sends it to the back of the queue. It is on the wire because an OS file lock carries no identity of its own, so without the holder a blocked run is indistinguishable from a hung one - and a lock is held for exactly as long as its holder lives, which means one held by a process nobody remembers starting blocks everything else silently and forever.
+Lock is one held per-project workspace lock and the process holding it.
+
+A held lock is the NORMAL state of a mutating run, so this is state and never a fault: it must not fail a readiness or liveness check, because a run queued behind a peer is waiting correctly and restarting it only sends it to the back of the queue. It is on the wire because an OS file lock carries no identity of its own, so without the holder a blocked run is indistinguishable from a hung one - and a lock is held for exactly as long as its holder lives, which means one held by a process nobody remembers starting blocks everything else silently and forever.
 
 Source: [status.proto:43](https://github.com/egladman/magus/blob/main/proto/magus/status/v1/status.proto#L43).
 

@@ -209,7 +209,7 @@ func newAPI(set *descriptorpb.FileDescriptorSet) (api, error) {
 		}
 		for i := 0; i < fd.Services().Len(); i++ {
 			sd := fd.Services().Get(i)
-			svcDoc, svcLine := docAndLine(fd, sd)
+			svcDoc, svcLine := bodyDoc(fd, sd)
 			svc := service{
 				Name: string(sd.Name()), Package: pkg, File: fd.Path(),
 				Doc: svcDoc, Line: svcLine,
@@ -217,7 +217,7 @@ func newAPI(set *descriptorpb.FileDescriptorSet) (api, error) {
 			}
 			for j := 0; j < sd.Methods().Len(); j++ {
 				md := sd.Methods().Get(j)
-				mDoc, mLine := docAndLine(fd, md)
+				mDoc, mLine := bodyDoc(fd, md)
 				svc.Methods = append(svc.Methods, method{
 					Name: string(md.Name()), Doc: mDoc, Line: mLine,
 					Input:           string(md.Input().FullName()),
@@ -278,7 +278,7 @@ func (a *api) enumsInPackage(pkg string) []string {
 
 func (a *api) collectMessage(fd protoreflect.FileDescriptor, md protoreflect.MessageDescriptor) {
 	full := string(md.FullName())
-	doc, line := docAndLine(fd, md)
+	doc, line := bodyDoc(fd, md)
 	msg := message{
 		Name: full, Package: string(md.ParentFile().Package()), File: fd.Path(),
 		Doc: doc, Line: line,
@@ -296,7 +296,7 @@ func (a *api) collectMessage(fd protoreflect.FileDescriptor, md protoreflect.Mes
 
 	for i := 0; i < md.Fields().Len(); i++ {
 		fdesc := md.Fields().Get(i)
-		fDoc, _ := docAndLine(fd, fdesc)
+		fDoc := cellDoc(fd, fdesc)
 		fl := field{
 			Name:        string(fdesc.Name()),
 			JSONName:    fdesc.JSONName(),
@@ -347,7 +347,7 @@ func (a *api) collectMessage(fd protoreflect.FileDescriptor, md protoreflect.Mes
 
 func (a *api) collectEnum(fd protoreflect.FileDescriptor, ed protoreflect.EnumDescriptor) {
 	full := string(ed.FullName())
-	doc, line := docAndLine(fd, ed)
+	doc, line := bodyDoc(fd, ed)
 	et := enumType{
 		Name: full, Package: string(ed.ParentFile().Package()), File: fd.Path(),
 		Doc: doc, Line: line,
@@ -356,7 +356,7 @@ func (a *api) collectEnum(fd protoreflect.FileDescriptor, ed protoreflect.EnumDe
 	}
 	for i := 0; i < ed.Values().Len(); i++ {
 		vd := ed.Values().Get(i)
-		vDoc, _ := docAndLine(fd, vd)
+		vDoc := cellDoc(fd, vd)
 		et.Values = append(et.Values, enumValueDef{
 			Name: string(vd.Name()), Number: int32(vd.Number()), Doc: vDoc,
 			Deprecated: isDeprecated(vd.Options()),
@@ -610,12 +610,43 @@ func reservedNote(nums []string, names protoreflect.Names) string {
 // of FileDescriptorProto) directly, via ByPath rather than ByDescriptor.
 func fileDoc(fd protoreflect.FileDescriptor) (string, int32) {
 	loc := fd.SourceLocations().ByPath(protoreflect.SourcePath{2})
-	return cleanComments(loc), int32(loc.StartLine) + 1
+	return bodyComments(loc), int32(loc.StartLine) + 1
 }
 
-func docAndLine(fd protoreflect.FileDescriptor, desc protoreflect.Descriptor) (string, int32) {
+// bodyDoc reads a comment that renders as page PROSE - a service, method, message, or enum
+// doc. It keeps the blank-line paragraph breaks the author wrote, because those carry the
+// summary-then-detail split this schema writes in: Staleness opens with one line saying
+// what it is, then a paragraph on why it is not calendar age, and running them together
+// buries the summary.
+//
+// Fields and enum values keep docAndLine instead. Their prose lands in a table cell, which
+// cannot hold a line break at all, so flattening there is the only option rather than a
+// choice.
+func bodyDoc(fd protoreflect.FileDescriptor, desc protoreflect.Descriptor) (string, int32) {
 	loc := fd.SourceLocations().ByDescriptor(desc)
-	return cleanComments(loc), int32(loc.StartLine) + 1
+	return bodyComments(loc), int32(loc.StartLine) + 1
+}
+
+// cellDoc reads a comment destined for a table cell - a field or an enum value - and
+// flattens it to the single line a cell can hold. No line number: a row carries no source
+// link of its own, only the message or enum heading above it does.
+func cellDoc(fd protoreflect.FileDescriptor, desc protoreflect.Descriptor) string {
+	return cleanComments(fd.SourceLocations().ByDescriptor(desc))
+}
+
+// bodyComments is cleanComments with the author's paragraph breaks kept. Each paragraph
+// still goes through clean(), so the escaping and bare-URL handling are identical to a
+// table cell's - only the breaks between paragraphs survive.
+func bodyComments(loc protoreflect.SourceLocation) string {
+	var paras []string
+	for _, block := range []string{loc.LeadingComments, loc.TrailingComments} {
+		for _, para := range strings.Split(block, "\n\n") {
+			if s := clean(para); s != "" {
+				paras = append(paras, s)
+			}
+		}
+	}
+	return strings.Join(paras, "\n\n")
 }
 
 // cleanComments joins a location's leading and trailing comments. Both are read: this
