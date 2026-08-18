@@ -247,7 +247,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         .split("](docs/").join("](")
         .split("](CONTRIBUTING.md").join("](development/contributing/");
     fs\writeFile("changelog.md",
-        "---\ntitle: Changelog\n"
+        "---\ntitle: Changelog\ngenerated_from: CHANGELOG.md\n"
         + "description: Every released change to magus, newest first, in Keep a Changelog format. Generated from releases/*.yaml.\n"
         + "tags: [changelog, releases, versions, upgrade, breaking-changes]\n---\n\n"
         + changelogMd);

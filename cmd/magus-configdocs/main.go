@@ -36,9 +36,10 @@ func main() {
 func render() string {
 	var b strings.Builder
 	docs.WriteFrontmatter(&b, docs.Frontmatter{
-		Title:       "magus.yaml configuration",
-		Description: "Every magus.yaml config key with its MAGUS_* environment variable, CLI flag, and type. Generated from the config schema.",
-		Tags:        []string{"config", "magus.yaml", "configuration", "environment variables", "flags", "reference"},
+		Title:         "magus.yaml configuration",
+		Description:   "Every magus.yaml config key with its MAGUS_* environment variable, CLI flag, and type. Generated from the config schema.",
+		GeneratedFrom: "internal/config/config.go",
+		Tags:          []string{"config", "magus.yaml", "configuration", "environment variables", "flags", "reference"},
 	})
 
 	fmt.Fprintf(&b, "# Configuration\n\n")

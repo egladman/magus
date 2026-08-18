@@ -1,5 +1,6 @@
 ---
 title: python spell
+generated_from: spells/python/spell.buzz
 description: "Python toolchain spell: pytest, ruff check/format, and uv build/clean as magus ops."
 tags: [python, spell, uv, pytest, ruff, tools]
 ---

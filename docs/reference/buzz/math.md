@@ -1,5 +1,6 @@
 ---
 title: math module
+generated_from: reference/buzz/
 aliases: [modules/math]
 description: Rounding to a decimal place, clamping, and aggregation over a list of numbers.
 tags: [math, module, stdlib, magusfile]

@@ -1,5 +1,6 @@
 ---
 title: sort module
+generated_from: reference/buzz/
 aliases: [modules/sort]
 description: "Ordering for string lists: lexicographic, natural (digit-aware), and semver."
 tags: [sort, module, stdlib, magusfile]

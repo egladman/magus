@@ -1,5 +1,6 @@
 ---
 title: magus describe
+generated_from: internal/clispec/registry.go
 description: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.
 tags: [cli, magus describe, spell, charm, target, project, workspace, introspection]
 ---

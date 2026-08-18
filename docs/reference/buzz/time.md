@@ -1,5 +1,6 @@
 ---
 title: time module
+generated_from: reference/buzz/
 aliases: [modules/time]
 description: Timestamp formatting/parsing and duration parsing (Go time, UTC).
 tags: [time, module, stdlib, magusfile]

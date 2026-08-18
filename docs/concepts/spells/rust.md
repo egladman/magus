@@ -1,5 +1,6 @@
 ---
 title: rust spell
+generated_from: spells/rust/spell.buzz
 description: "Rust toolchain spell: cargo build, test, clippy, fmt, and clean as magus ops."
 tags: [rust, spell, cargo, build, test, tools]
 ---

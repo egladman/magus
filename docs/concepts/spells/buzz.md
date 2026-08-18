@@ -1,5 +1,6 @@
 ---
 title: buzz spell
+generated_from: spells/buzz/spell.buzz
 description: "Buzz spell: check and test .buzz sources, plus run them through the magus interpreter."
 tags: [buzz, spell, gopherbuzz, check, test, tools]
 ---

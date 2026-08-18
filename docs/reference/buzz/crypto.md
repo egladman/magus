@@ -1,5 +1,6 @@
 ---
 title: crypto module
+generated_from: reference/buzz/
 aliases: [modules/crypto]
 description: Content digests (SHA-256/512; SHA-1 and MD5 for legacy-checksum interop) and Ed25519 signing.
 tags: [crypto, module, stdlib, magusfile]

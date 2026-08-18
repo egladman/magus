@@ -1,5 +1,6 @@
 ---
 title: magus where
+generated_from: internal/clispec/registry.go
 description: "Fuzzy-match a project by leaf-anchored substring and print its absolute path, designed for shell substitution like cd \"$(magus where api)\"."
 tags: [cli, magus where, where, project, path, fuzzy match, navigation]
 ---

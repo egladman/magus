@@ -1,5 +1,6 @@
 ---
 title: json module
+generated_from: reference/buzz/
 aliases: [modules/json]
 description: JSON encode/decode.
 tags: [json, module, stdlib, magusfile]

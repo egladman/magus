@@ -1,5 +1,6 @@
 ---
 title: term module
+generated_from: reference/buzz/
 aliases: [modules/term]
 description: "Terminal interaction: capability probes, an interactive picker, and styled output."
 tags: [term, module, stdlib, magusfile]

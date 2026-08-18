@@ -1,5 +1,6 @@
 ---
 title: platform module
+generated_from: reference/buzz/
 aliases: [modules/platform]
 description: Normalize OS/architecture identifiers across naming conventions (aarch64↔arm64, Darwin↔darwin).
 tags: [platform, module, stdlib, magusfile]

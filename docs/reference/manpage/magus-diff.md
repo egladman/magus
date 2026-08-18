@@ -1,5 +1,6 @@
 ---
 title: magus diff
+generated_from: internal/clispec/registry.go
 description: "Report every uncommitted change annotated with what the workspace knows: whether it is generated, how widely its changed symbols are referenced, whether it is public API surface, and what coverage was observed."
 tags: [cli, magus diff, diff, review, changeset, semver]
 ---

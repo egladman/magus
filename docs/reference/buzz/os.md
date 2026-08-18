@@ -1,5 +1,6 @@
 ---
 title: os module
+generated_from: reference/buzz/
 aliases: [modules/os]
 description: "The machine and this process: platform triple, CPU count, hostname, the running magus binary, and the two members that shadow Buzz's own (exit, sleep)."
 tags: [os, module, stdlib, magusfile]

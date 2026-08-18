@@ -1,5 +1,6 @@
 ---
 title: vcs module
+generated_from: reference/buzz/
 aliases: [modules/vcs]
 description: Version-control queries for the current working tree.
 tags: [vcs, module, stdlib, magusfile]

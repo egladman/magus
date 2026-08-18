@@ -1,5 +1,6 @@
 ---
 title: magus graph
+generated_from: internal/clispec/registry.go
 description: "Emit the project dependency DAG, export the knowledge graph for external graph tools, and report the graph's shape (god nodes, orphans, doc coverage)."
 tags: [cli, magus graph, graph, knowledge graph, dependency graph, export, graphml]
 ---

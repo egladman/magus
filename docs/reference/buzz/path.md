@@ -1,5 +1,6 @@
 ---
 title: path module
+generated_from: reference/buzz/
 aliases: [modules/path]
 description: "Pure path-string math: abs, rel, clean, is_abs, expand_user, and glob matching."
 tags: [path, module, stdlib, magusfile]

@@ -1,5 +1,6 @@
 ---
 title: base64 module
+generated_from: reference/buzz/
 aliases: [modules/base64]
 description: Base64 text codec (standard and URL-safe, both padded).
 tags: [base64, module, stdlib, magusfile]

@@ -1,5 +1,6 @@
 ---
 title: semver module
+generated_from: reference/buzz/
 aliases: [modules/semver]
 description: Semantic version parsing and comparison (SemVer 2.0.0).
 tags: [semver, module, stdlib, magusfile]

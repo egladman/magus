@@ -1,5 +1,6 @@
 ---
 title: template module
+generated_from: reference/buzz/
 aliases: [modules/template]
 description: Logic-less Mustache templating (Mustache spec, via github.com/cbroglie/mustache).
 tags: [template, module, stdlib, magusfile]

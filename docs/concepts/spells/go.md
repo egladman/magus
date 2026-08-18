@@ -1,5 +1,6 @@
 ---
 title: go spell
+generated_from: spells/golang/spell.buzz
 description: "Go toolchain spell: build, test, vet, fmt, mod-tidy, golangci-lint, and govulncheck as magus ops."
 tags: [go, spell, golang, build, test, lint, tools]
 ---

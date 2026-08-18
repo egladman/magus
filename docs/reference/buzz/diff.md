@@ -1,5 +1,6 @@
 ---
 title: diff module
+generated_from: reference/buzz/
 aliases: [modules/diff]
 description: Unified line diffs, for reporting what drifted rather than only that something did.
 tags: [diff, module, stdlib, magusfile]

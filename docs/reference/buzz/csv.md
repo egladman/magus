@@ -1,5 +1,6 @@
 ---
 title: csv module
+generated_from: reference/buzz/
 aliases: [modules/csv]
 description: Delimiter-separated tabular text (CSV, TSV) parsing and rendering.
 tags: [csv, module, stdlib, magusfile]

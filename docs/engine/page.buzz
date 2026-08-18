@@ -250,7 +250,53 @@ fun renderPager(rel: str, site: Site) > str !> any {
 // the commit footer and "Suggest an edit" link. description is resolved (frontmatter, else
 // derived, else site default), always non-empty so the meta tag fires. canonUrl is the
 // clean gen-root URL ("" for home). pager is the prev/next nav (may be "").
-export fun renderPage(title: str, description: str, content: str, srcRel: str, pager: str, canonUrl: str, reading: str, tags: [str], site: Site) > str !> any {
+// repoBlobHref resolves a repo-relative path or glob to a GitHub blob URL. GitHub does
+// not resolve glob syntax as a URL, so a glob ("std/**/*.go") links the directory before
+// its first "*" segment instead of the literal (unresolvable) pattern.
+fun repoBlobHref(site: Site, path: str) > str {
+    var target = path;
+    if (path.indexOf("*") != null) {
+        final segs = path.split("/");
+        var kept: mut [str] = mut [<str>];
+        foreach (seg in segs) {
+            if (seg.indexOf("*") != null) { break; }
+            kept.append(seg);
+        }
+        target = kept.join("/");
+    }
+    return site.config.repoURL + "/blob/" + site.metaBranch + "/" + target;
+}
+
+// renderGeneratedChips renders a generated page's provenance as two chips: the existing
+// "generated" status chip, then a link chip naming the source it came from.
+//
+// They stay SEPARATE rather than merging into one linked status chip, because the two
+// styles say different things and the CSS already encodes that: .tag.generated is filled
+// with cursor:help to read as a status (see site.css), while .post-tags a.tag is outlined
+// and fills on hover to read as interactive. A filled chip that is also a link gets no
+// visible hover change and a help cursor - it looks unclickable. Two chips reuse both
+// existing rules unchanged and invent no new chrome.
+//
+// A generatedFrom ending in "/" is an in-site path to the section overview carrying the
+// real source link(s), for a multi-source pipeline (reference/buzz/, reference/api/) with
+// no single file to point at. Otherwise it is one or more comma-joined repo-relative
+// paths; the link chip shows the FIRST (the page's primary source) to stay inside the
+// chip's white-space:nowrap, with the full list in the tooltip.
+fun renderGeneratedChips(generatedFrom: str, root: str, site: Site) > str {
+    final tip = "Generated from source; edit the source, not this page";
+    final status = "<span class=\"tag generated\" data-tooltip=\"" + tip + "\" title=\"" + tip
+        + "\">generated</span>";
+    if (generatedFrom.endsWith("/")) {
+        return status + "<a class=\"tag\" href=\"" + root + generatedFrom + "\">"
+            + escapeAttr(generatedFrom) + "</a>";
+    }
+    final first = generatedFrom.split(", ")[0];
+    return status + "<a class=\"tag\" href=\"" + repoBlobHref(site, first) + "\" data-tooltip=\""
+        + escapeAttr(generatedFrom) + "\" title=\"" + escapeAttr(generatedFrom) + "\">"
+        + escapeAttr(first) + "</a>";
+}
+
+export fun renderPage(title: str, description: str, content: str, srcRel: str, pager: str, canonUrl: str, reading: str, tags: [str], generatedFrom: str, site: Site) > str !> any {
     final root = rootPrefix(srcRel, site);
     // Which top-nav item to mark current. Docs pages hang off the documentation index,
     // except the setup section; the home page (README) highlights nothing.
@@ -299,16 +345,16 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
     if (reading != "") {
         readingHtml = "    <small class=\"reading-time\" title=\"Estimated reading time\">" + reading + "</small>\n";
     }
-    // Frontmatter tags render as chips in the provenance footer. Generated pages
-    // (module/spell/man-page references) lead with a filled "Generated" status chip so
-    // readers know the source of truth is code, not the page - and that "Suggest an edit"
-    // points at generated output.
-    final gen = isGenerated(srcRel, site);
+    // Frontmatter tags render as chips in the provenance footer. A generated page's
+    // "generated" chip is a link to its real source (see renderGeneratedChips) so a reader
+    // lands on the source of truth in one click, instead of a static label only implying
+    // one exists.
+    final gen = generatedFrom != "";
     var tagsHtml = "";
     if (gen or tags.len() > 0) {
         var chips = "";
         if (gen) {
-            chips = chips + "<span class=\"tag generated\" data-tooltip=\"Auto-generated from source; edit the generator, not this page\" title=\"Auto-generated from source; edit the generator, not this page\">auto-generated</span>";
+            chips = chips + renderGeneratedChips(generatedFrom, root, site);
         }
         foreach (t in tags) {
             // A tag carried by two or more pages has a real /tags/<slug>/ page, which is a URL a
@@ -370,11 +416,23 @@ export fun renderPage(title: str, description: str, content: str, srcRel: str, p
         and srcRel.startsWith("public/") == false
         and srcRel != site.blog + "/index.md" and srcRel != "search/index.md" and srcRel != "tour/index.md"
         and srcRel != LANDING_SRC;
+    // A generated page drops "Suggest an edit" entirely: the chips up top
+    // already names and links the real source, and editing the generated .md directly is
+    // wrong - content_generate overwrites it on the next run. "View markdown source"
+    // survives, relabeled, since seeing the raw rendered output is still useful; it just
+    // needs to read as "here's the output" rather than "here's the source".
     var edit = "<small class=\"page-tools-edit\">";
-    if (hasSource) {
-        edit = edit + "<a href=\"index.md\" data-tooltip=\"View this page's Markdown source\" title=\"View this page's Markdown source\">&#182; View markdown source</a> &middot; ";
+    if (gen) {
+        if (hasSource) {
+            edit = edit + "<a href=\"index.md\" data-tooltip=\"View this page's generated Markdown\" title=\"View this page's generated Markdown\">&#182; View generated markdown</a>";
+        }
+    } else {
+        if (hasSource) {
+            edit = edit + "<a href=\"index.md\" data-tooltip=\"View this page's Markdown source\" title=\"View this page's Markdown source\">&#182; View markdown source</a> &middot; ";
+        }
+        edit = edit + "<a href=\"" + site.config.repoURL + "/edit/" + site.metaBranch + "/" + site.metaPrefix + srcRel + "\" data-tooltip=\"Edit this page on GitHub\" title=\"Edit this page on GitHub\">&#x270E; Suggest an edit</a>";
     }
-    edit = edit + "<a href=\"" + site.config.repoURL + "/edit/" + site.metaBranch + "/" + site.metaPrefix + srcRel + "\" data-tooltip=\"Edit this page on GitHub\" title=\"Edit this page on GitHub\">&#x270E; Suggest an edit</a></small>";
+    edit = edit + "</small>";
     // Second row under the search box: "Suggest an edit" hugging the right edge. The search
     // page has no editable source, so it skips the row (the link would 404 on GitHub).
     var secondaryRow = "    <div class=\"page-tools-secondary\">" + edit + "</div>\n";
@@ -579,7 +637,7 @@ export fun renderRoot(site: Site) > void !> any {
     if (desc == "") { desc = deriveDescription(html); }
     if (desc == "") { desc = site.config.description; }
 
-    final doc = renderPage(title, desc, html, "README.md", "", README_URL, readingTime(md), parseTags(md), site);
+    final doc = renderPage(title, desc, html, "README.md", "", README_URL, readingTime(md), parseTags(md), generatedFrom(md), site);
     final dir = site.outDir + "/" + pageDir;
     fs\mkdirAll(dir);
     fs\writeFile(dir + "/index.html", doc);
@@ -678,7 +736,7 @@ export fun renderFile(rel: str, site: Site) > void !> any {
         html = injectDemoCallout(html, relativePath(newCleanDirectory(rel, site), "tour/") + "#" + demo!.anchor);
     }
 
-    final doc = renderPage(title, desc, html, site.docs + "/" + rel, renderPager(rel, site), url, readingTime(md), parseTags(md), site);
+    final doc = renderPage(title, desc, html, site.docs + "/" + rel, renderPager(rel, site), url, readingTime(md), parseTags(md), generatedFrom(md), site);
 
     // Directory-index output: every page is <cleanURL>index.html (extensionless). url is
     // gen-root-relative and ends in a slash, matching search.js/sitemap/canonical.

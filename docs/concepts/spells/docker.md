@@ -1,5 +1,6 @@
 ---
 title: docker spell
+generated_from: spells/docker/spell.buzz
 description: "Docker spell: image build, build-check, buildx, and hadolint Dockerfile linting."
 tags: [docker, spell, container, image, hadolint, tools]
 ---

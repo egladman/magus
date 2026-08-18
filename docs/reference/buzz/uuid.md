@@ -1,5 +1,6 @@
 ---
 title: uuid module
+generated_from: reference/buzz/
 aliases: [modules/uuid]
 description: Unique identifiers and random tokens (v4 random, v7 time-ordered, plus raw random hex/tokens).
 tags: [uuid, module, stdlib, magusfile]

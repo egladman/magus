@@ -137,7 +137,7 @@ export fun renderBlogPost(base: str, site: Site) > void !> any {
     // Reverse-chronological pager: blog posts pair prev/next by date, not filename.
     final pager = renderBlogPager(base, site);
 
-    final doc = renderPage(title, desc, article, rel, pager, url, readingTime(md), parseTags(md), site);
+    final doc = renderPage(title, desc, article, rel, pager, url, readingTime(md), parseTags(md), generatedFrom(md), site);
     makeOutputDir(site.outDir + "/" + site.blog + "/" + urlPath, rel, url);
     final of = io\File.open(site.outDir + "/" + site.blog + "/" + urlPath + "/index.html", io\FileMode.write);
     of.write(doc);
@@ -267,7 +267,7 @@ export fun renderBlogIndex(site: Site) > void !> any {
         final rec = site.metaCommits[site.metaPrefix + site.blog + "/" + sorted[0].base];
         if (rec != null) { site.metaCommits[site.metaPrefix + site.blog + "/index.md"] = rec; }
     }
-    final doc = renderPage(title, desc, body, site.blog + "/index.md", "", url, "", mut [], site);
+    final doc = renderPage(title, desc, body, site.blog + "/index.md", "", url, "", mut [], "", site);
     fs\mkdirAll(fs\join(site.outDir, site.blog));
     final of = io\File.open(site.outDir + "/" + site.blog + "/index.html", io\FileMode.write);
     of.write(doc);

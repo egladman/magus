@@ -1,5 +1,6 @@
 ---
 title: magus notes
+generated_from: internal/clispec/registry.go
 description: "Read the workspace's human-authored notes: prose a person wrote about the code, anchored to graph entities but derived from none of them."
 tags: [cli, magus notes, notes, knowledge, annotations]
 ---

@@ -198,7 +198,7 @@ export fun renderTourPage(site: Site) > void !> any {
 `, {"cards": cards});
     final title = "Tour";
     final desc = "A guided tour of magus: curated, runnable examples from a hello-world magusfile through a full multi-toolchain pipeline, custom targets, and the Buzz standard library.";
-    final doc = renderPage(title, desc, body, "tour/index.md", "", "tour/", "", mut [], site);
+    final doc = renderPage(title, desc, body, "tour/index.md", "", "tour/", "", mut [], "", site);
     fs\mkdirAll(site.outDir + "/tour");
     final of = io\File.open(site.outDir + "/tour/index.html", io\FileMode.write);
     of.write(doc);

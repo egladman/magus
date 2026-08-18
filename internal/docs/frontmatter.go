@@ -13,15 +13,24 @@ import (
 )
 
 // Frontmatter is the frontmatter a generated docs page carries. Title and Tags are
-// always emitted; PageType and Aliases only when set. Key order is fixed (title,
-// page_type, aliases, description, tags) so regenerated output stays byte-stable.
-// The yaml tags let ParseFrontmatter read back a block WriteFrontmatter emitted.
+// always emitted; PageType, GeneratedFrom, and Aliases only when set. Key order is
+// fixed (title, page_type, generated_from, aliases, description, tags) so
+// regenerated output stays byte-stable. The yaml tags let ParseFrontmatter read
+// back a block WriteFrontmatter emitted.
 type Frontmatter struct {
-	Title       string   `yaml:"title"`
-	PageType    string   `yaml:"page_type"` // "overview" for hub/index pages; "" otherwise
-	Aliases     []string `yaml:"aliases"`   // old clean URLs that should redirect here (parity on a move)
-	Description string   `yaml:"description"`
-	Tags        []string `yaml:"tags"`
+	Title    string `yaml:"title"`
+	PageType string `yaml:"page_type"` // "overview" for hub/index pages; "" otherwise
+	// GeneratedFrom names what this page was generated from, so the site can tell a
+	// generated page from a hand-written one without guessing from its path, and can
+	// point "Suggest an edit" at the real source instead of the generated .md. Either
+	// a repo-relative path/glob ("internal/config/config.go", one or more comma-joined
+	// globs) or an in-site section path ending in "/" ("reference/api/") for a page
+	// whose true source has no single file - the renderer tells the two apart by that
+	// trailing slash. "" for a hand-written page.
+	GeneratedFrom string   `yaml:"generated_from"`
+	Aliases       []string `yaml:"aliases"` // old clean URLs that should redirect here (parity on a move)
+	Description   string   `yaml:"description"`
+	Tags          []string `yaml:"tags"`
 }
 
 // ParseFrontmatter reads a leading YAML frontmatter block (a "---" line, the YAML
@@ -78,6 +87,9 @@ func WriteFrontmatter(b *strings.Builder, f Frontmatter) {
 	fmt.Fprintf(b, "title: %s\n", YAMLScalar(f.Title))
 	if f.PageType != "" {
 		fmt.Fprintf(b, "page_type: %s\n", YAMLScalar(f.PageType))
+	}
+	if f.GeneratedFrom != "" {
+		fmt.Fprintf(b, "generated_from: %s\n", YAMLScalar(f.GeneratedFrom))
 	}
 	if len(f.Aliases) > 0 {
 		b.WriteString("aliases: [")

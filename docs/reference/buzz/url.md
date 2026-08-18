@@ -1,5 +1,6 @@
 ---
 title: url module
+generated_from: reference/buzz/
 aliases: [modules/url]
 description: URL percent-encoding, parsing, and building.
 tags: [url, module, stdlib, magusfile]

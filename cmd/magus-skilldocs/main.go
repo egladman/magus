@@ -149,9 +149,9 @@ func renderSkill(cat *agent.Catalog, full, simple agent.AgentSkill) string {
 	for _, old := range agent.FormerNames(full.Name) {
 		aliases += fmt.Sprintf("aliases:\n  - reference/skills/%s\n", old)
 	}
-	fmt.Fprintf(&b, "---\ntitle: %s\ndescription: %q\ntags: [agents, skills, %s]\n%s"+
+	fmt.Fprintf(&b, "---\ntitle: %s\ngenerated_from: cmd/magus/skills/%s/SKILL.md\ndescription: %q\ntags: [agents, skills, %s]\n%s"+
 		"skill_full_bytes: %d\nskill_simple_bytes: %d\n---\n\n",
-		full.Name, firstSentence(full.Description), full.Name, aliases, len(full.Body), len(simple.Body))
+		full.Name, full.Name, firstSentence(full.Description), full.Name, aliases, len(full.Body), len(simple.Body))
 	fmt.Fprintf(&b, "# %s\n\n", full.Name)
 	fmt.Fprintf(&b, "%s\n\n", full.Description)
 	fmt.Fprintf(&b, "Install it, rather than copying from this page:\n\n")

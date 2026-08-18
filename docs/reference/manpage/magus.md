@@ -1,5 +1,6 @@
 ---
 title: magus command
+generated_from: internal/clispec/registry.go
 description: Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.
 tags: [cli, magus, build, monorepo, orchestrator, cache, workspace]
 ---

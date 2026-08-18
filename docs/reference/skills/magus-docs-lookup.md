@@ -1,5 +1,6 @@
 ---
 title: magus-docs-lookup
+generated_from: cmd/magus/skills/magus-docs-lookup/SKILL.md
 description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL."
 tags: [agents, skills, magus-docs-lookup]
 aliases:

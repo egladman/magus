@@ -1,5 +1,6 @@
 ---
 title: podman spell
+generated_from: spells/podman/spell.buzz
 description: "Podman spell: image build, push, manifest assembly, and run for the podman runtime."
 tags: [podman, spell, container, image, oci, buildah, tools]
 ---

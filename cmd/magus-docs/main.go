@@ -230,7 +230,11 @@ func renderModule(m std.Module) string {
 		// The module reference moved from /modules/ to /buzz/modules/; keep the old
 		// URL alive with a redirect so inbound links and bookmarks still land.
 		Aliases: []string{"modules/" + m.Name},
-		Tags:    []string{m.Name, "module", "stdlib", "magusfile"},
+		// Every module page is many-to-one with the host source tree (a module can be
+		// Go- or Buzz-implemented, and its methods can be spread across files) - the
+		// overview page carries the real source link(s) instead of guessing one here.
+		GeneratedFrom: "reference/buzz/",
+		Tags:          []string{m.Name, "module", "stdlib", "magusfile"},
 	})
 	fmt.Fprintf(&b, "# %s\n\n", m.Name)
 	if m.Doc != "" {
@@ -387,11 +391,14 @@ func renderIndex(modules []std.Module) string {
 
 	var b strings.Builder
 	docs.WriteFrontmatter(&b, docs.Frontmatter{
-		Title:       "magus stdlib",
-		PageType:    "overview",
-		Aliases:     []string{"modules"}, // redirect the old /modules/ URL to /buzz/modules/
-		Description: "Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.",
-		Tags:        []string{"stdlib", "modules", "magusfile", "reference", "fs", "os", "http", "json"},
+		Title:    "magus stdlib",
+		PageType: "overview",
+		Aliases:  []string{"modules"}, // redirect the old /modules/ URL to /buzz/modules/
+		// The two source trees behind every module page: std/ for a Buzz-implemented
+		// module, internal/hostmodules/ for a Go-implemented one.
+		GeneratedFrom: "std/**/*.go, internal/hostmodules/**/*.go",
+		Description:   "Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.",
+		Tags:          []string{"stdlib", "modules", "magusfile", "reference", "fs", "os", "http", "json"},
 	})
 	fmt.Fprintf(&b, "# Magusfile Module Reference\n\n")
 	fmt.Fprintf(&b, "These are the runtime utility modules. Import each under its bare name (`import \"fs\"`, then `fs.glob(...)`) with `camelCase` methods. magus layers these host methods onto Buzz's own stdlib, so a single `import \"fs\"` (or `os`, `crypto`) carries both surfaces, and the magus forms are sandbox-aware where Buzz's bare stdlib is not. Methods that are also in Buzz's own standard library are marked with an asterisk (`*`) and a footnote on their page; either form works.\n\n")

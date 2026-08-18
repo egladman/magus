@@ -1,5 +1,6 @@
 ---
 title: fs module
+generated_from: reference/buzz/
 aliases: [modules/fs]
 description: Filesystem and path primitives.
 tags: [fs, module, stdlib, magusfile]

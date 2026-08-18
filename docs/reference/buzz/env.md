@@ -1,5 +1,6 @@
 ---
 title: env module
+generated_from: reference/buzz/
 aliases: [modules/env]
 description: Process environment variable access.
 tags: [env, module, stdlib, magusfile]

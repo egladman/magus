@@ -1,5 +1,6 @@
 ---
 title: magus notify
+generated_from: internal/clispec/registry.go
 description: Raise one canonical attention event from plain text or a JSON envelope, and optionally surface it as an operating-system notification.
 tags: [cli, magus notify, notifications, events, attention, desktop]
 ---

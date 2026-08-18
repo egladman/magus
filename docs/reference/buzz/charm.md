@@ -1,5 +1,6 @@
 ---
 title: charm module
+generated_from: reference/buzz/
 aliases: [modules/charm]
 description: "Constructors for charm values: RFC 6902 JSON Patches over a target's argv (see docs/charms.md)."
 tags: [charm, module, stdlib, magusfile]

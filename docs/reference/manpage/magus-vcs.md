@@ -1,5 +1,6 @@
 ---
 title: magus vcs
+generated_from: internal/clispec/registry.go
 description: "Stage a change the way the workspace's declarations say it should be staged, and settle an in-progress merge's conflicted generated files by regenerating them once."
 tags: [cli, magus vcs, git, merge, conflicts, generated files, staging]
 ---

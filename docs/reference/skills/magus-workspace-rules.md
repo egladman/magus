@@ -1,5 +1,6 @@
 ---
 title: magus-workspace-rules
+generated_from: cmd/magus/skills/magus-workspace-rules/SKILL.md
 description: "Adapt magus's installed agent surface to THIS workspace without breaking it."
 tags: [agents, skills, magus-workspace-rules]
 aliases:

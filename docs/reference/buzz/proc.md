@@ -1,5 +1,6 @@
 ---
 title: proc module
+generated_from: reference/buzz/
 aliases: [modules/proc]
 description: Run other processes.
 tags: [proc, module, stdlib, magusfile]

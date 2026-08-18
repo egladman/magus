@@ -1,5 +1,6 @@
 ---
 title: magus.yaml configuration
+generated_from: internal/config/config.go
 description: Every magus.yaml config key with its MAGUS_* environment variable, CLI flag, and type. Generated from the config schema.
 tags: [config, magus.yaml, configuration, environment variables, flags, reference]
 ---
