@@ -26808,7 +26808,7 @@
     },
     {
       "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
-      "target": "doc:docs/reference/manpage/magus-init.md",
+      "target": "doc:docs/reference/manpage/magus-graph.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -26816,7 +26816,7 @@
     },
     {
       "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
-      "target": "doc:docs/reference/manpage/magus-path.md",
+      "target": "doc:docs/reference/manpage/magus-init.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,

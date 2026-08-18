@@ -122,6 +122,35 @@ that faster than I used to, but coming from Go it was never obvious that I was e
 looking at a Node problem. My suspicion is that people who live in that ecosystem see
 these often enough that they have stopped reading as broken.
 
+### The directory you are standing in
+
+Run a command from a subdirectory and Nx does not care where you are. It resolves
+against the workspace root, and if you want it scoped to where you actually stand,
+you say so, every time. Every other tool I use treats my working directory as
+meaningful. This one asks me to keep restating it, and the cost is not learning one
+flag, it is paying for that flag on every invocation forever.
+
+magus runs where you are standing. `magus run test` from inside a project works on
+that project, the way make has behaved since 1976 and most command line tools have
+since. That is not a feature anybody invented. It is the default behavior of a shell,
+and it survived fifty years because it is right.
+
+Project names have the same shape of problem. An Nx project is called whatever you
+declared, decoupled from where it lives, so the name tells you nothing about how to
+find the thing. A project in magus is its path, with no second name. Give a project a
+separate name and you have created a mapping: something has to store it, keep every
+entry unique, and update it every time a directory moves. Allow arbitrary characters
+in that name and you have also decided, permanently, what quoting every command in
+your repository needs. None of that was a problem anyone had before the naming scheme
+invented it.
+
+This is also where agents fall down, and it is the cleanest example I have of the
+argument in this whole post. Drop an agent into an Nx repo and it has to discover a
+naming scheme that encodes nothing, then discover that its working directory does not
+mean what it means everywhere else. Both are learnable. Both are pure overhead that a
+path would have given away for free. I am told there are AI integrations for this now.
+I would rather the layout not have needed one.
+
 ### The layer I cannot build on
 
 Nx core is MIT, and I want that on the record before I complain.
@@ -440,6 +469,24 @@ that declares what a target may touch, and a content-addressed cache that makes 
 run reproducible from its declared inputs. The constraint sits where it can be
 enforced without anyone having to predict you.
 
+There is a second half to that, and it is where I am happy to be opinionated. A build
+tool sees things you cannot. It is holding the whole dependency graph, every target's
+declared inputs and outputs, and what a given change reaches. When it notices you have
+written something that will cost you a cache hit, staying quiet is not neutrality, it
+is withholding. Permitting every pattern and leaving you to work out the trade-offs
+alone is how a build ends up slow for reasons nobody on the team can explain.
+
+So magus is strict about what it tells you and permissive about what it lets you do.
+More than sixty [diagnostic codes](https://eli.gladman.cc/magus/reference/codes/) each
+carry a page explaining what tripped, what it costs you, and what to do instead. I
+took that straight from ShellCheck, which gives every finding a code and a dedicated
+page, and which taught me more about shell than any document I went looking for. An
+error that only tells you it failed has wasted the one moment you had my attention. None of them stop the build. You can ignore any of
+them and magus will go run the thing you asked for. That split is the design: the
+enforcement lives in the explanation rather than in a veto. It teaches an agent the
+same thing it teaches you, which was not why I built it, though writing the
+explanation down once and having both readers benefit is a good deal.
+
 It is also how you get out of the usual tradeoff. A tool should meet a new user
 where they are without boxing in the person who has been doing this for fifteen
 years, and I do not think those two are opposed. You get both by informing rather
@@ -478,16 +525,20 @@ filling a gap that should never have opened.
 Two caveats, because I am painting broadly here. "Good CLI" is subjective, which is
 why I named consistency and predictability rather than something fuzzier. And the
 whole argument assumes your CLI can actually reach everything, which is not
-automatic: magus has capabilities you get at through `magus buzz` rather than a
-subcommand of their own, and keeping that surface honest is work I have to keep
-doing. Where you are wrapping something you do not own or cannot change, a protocol
+automatic. Some of what magus can do you reach through `magus buzz` rather than a
+subcommand of its own. Those are the same modules a magusfile calls, down the same
+code paths, so it is one surface rather than a side door, but keeping it that way is
+work I have to keep doing. Where you are wrapping something you do not own or cannot change, a protocol
 layer earns its place. But if your CLI needs an MCP server before an agent can drive
 it, the problem is upstream of the MCP server.
 
 ## The PWA is an experiment
 
-magus ships a web console. I built it as an experiment, to find out whether I get
-genuine value out of having one. I am not convinced the answer is yes.
+magus ships a web console, which could fairly be read as feature creep, and I am not
+going to argue that it obviously is not. I built it as an experiment, to find out
+whether I get genuine value out of having one, and I have not reached a verdict. I am
+still using it, still refining it, and still deciding. Do not read this as me having
+quietly concluded no.
 
 I am usually the one giving other people grief about GUIs built on web technology, so
 read this as me testing my own prejudice. What I want to know is whether it can get
@@ -515,8 +566,9 @@ a real thing in my hands instead of a guess.
 
 ## Why Buzz
 
-A magusfile is written in Buzz, which is a strange enough pick that it deserves
-an explanation.
+A magusfile is written in [Buzz](https://buzz-lang.dev/), which is a strange enough
+pick that it deserves an explanation. Worth linking, because it is a small project
+and there is at least one unrelated thing by that name now. I mean this one.
 
 I was not shopping for a language on ideology. I had a hard constraint: I have to
 implement it. magusfiles run on my own Go implementation, so the language had to
@@ -551,6 +603,17 @@ I should own where that taste comes from. I love Go for the same reason, that
 there is usually one way to write a thing, and plenty of people hate Go for
 exactly that. This is a preference of mine, not a proof of anything.
 
+There is a Go proverb for it: [clear is better than
+clever](https://go-proverbs.github.io/). Clever code scratches a real itch. It is
+satisfying to write and it feels like proof you are good at this. It is also, almost
+by definition, a departure from convention, which means the next person has to work
+out what you did and why before they can safely touch it. Good code is code someone
+else can maintain. Where clever genuinely earns its place, and chasing performance is
+the usual case, the price of admission is a comment saying why you left the
+convention behind. magus does that in Go and in Buzz where it has to. You are always
+walking the line between maintainable and fast, and the maintenance cost is not
+abstract: it is the bill you are handing to whoever works on this after you.
+
 Weigh that as my experience rather than a benchmark. It is still the strongest
 evidence I have here: a language an agent has never seen beat the language it has
 seen most, and explicitness is the only variable I can point at.
@@ -564,9 +627,17 @@ I need enough of it to stay useful, and this is where I get the practice.
 I did not build it so an agent could learn my monorepo. I built it so I can walk
 into a repo I have never seen, ask what depends on what, ask why a target runs,
 ask what a change would break, and learn the place myself. `magus query`,
-`magus explain`, `magus path`, `magus insight`. Discovery tooling for someone who
-is lost, which is me most of the time. A teammate on day one and an agent in a
-fresh session have the same problem, and it is the problem I had.
+`magus explain`, `magus graph`. Discovery tooling for someone who is lost, which is
+me most of the time. A teammate on day one and an agent in a fresh session have the
+same problem, and it is the problem I had.
+
+The question I actually keep asking is about blast radius. There are corners of a
+large codebase I do not know and do not touch, and before I change a file in one of
+them I want to know how far the change reaches and what it lands on. I am not a
+machine. I cannot hold the relationships in a repo of that size in my head, and
+guessing is how you find out in code review, or later. Being able to walk the graph
+and get an actual answer is the difference between changing something carefully and
+changing it hopefully.
 
 A lot of projects will turn your codebase into a knowledge graph now, and most of
 them build it with a separate indexer that scans the repo and infers structure. I
@@ -575,11 +646,21 @@ at a particular one.
 
 The approach is what I think is wrong. An outside observer has to guess. It reads
 your files, pattern-matches its way to what it thinks depends on what, and produces
-something that looks authoritative and is actually a best effort. Nothing checks it.
-There is no authority in the loop, because the thing that holds the authority is your
-build tool, and the indexer is not that. So you get a second system that can be
-wrong, and the drift between it and your build stays invisible until it bites
-someone.
+something that looks authoritative and is a best effort. Some guess better than
+others. It is still guessing, because the thing holding the authority is your build
+tool and the indexer is not that. So you get a second system that can be wrong, and
+the drift between it and your build stays invisible until it bites someone.
+
+I should be precise here, because magus indexes code too and someone will point at
+that. It runs a SCIP indexer over your source. The difference is what the index gets
+joined to: magus already knows, from declarations you wrote, what the projects are,
+what every target reads and writes, and what a given change reaches. The index
+enriches something authoritative rather than standing in for it.
+
+That distinction is the one I care about. Gluing a pile of files together and calling
+the result a knowledge base gets you something that looks impressive in a screenshot.
+It is good for social media and for the feeling of productivity. It is no good at the
+moment you need to trust it, because there is nothing underneath making it true.
 
 magus went the other way because it had no choice. A build tool already has to
 know the repo precisely, down to every project, every target's declared inputs
@@ -593,7 +674,7 @@ An agent reading the same graph is a byproduct I am happy about. The day I catch
 myself designing that graph for an agent first is the day I have taken a wrong
 turn.
 
-## These are not new problems
+## None of these are new problems
 
 I want to be honest about something, because it is the thing I find most tiring
 about this whole moment. I do not get the names.
@@ -645,6 +726,47 @@ build tool that knows what it declared, says so in few words, and can hand you a
 answer as text or JSON. That was the goal before, and it would still be the goal if
 none of this had happened.
 
+## What I take from Unix
+
+None of what I am describing is invention. I am building on forty or fifty years of
+people working out how build tools should behave, and make still being the thing I
+reach for is evidence of how much of it they got right the first time.
+
+The Unix idea is one tool that does one thing extremely well, and it does not survive
+contact with a monorepo. A monorepo build tool has to understand several languages,
+every project in the tree, caching, scheduling, and what a change reaches. That is
+already many things. I cannot claim that lineage with a straight face.
+
+What does survive the translation is thinner abstractions. Do less on the user's
+behalf. Sit next to the tools instead of swallowing them. A build tool is in an odd
+meta position, being a tool whose entire job is running other tools, and the most
+useful thing it can do is stay out of the space between you and them.
+
+I have violated this, and the console is the clearest example. It is turning into a
+Swiss army knife. There are already good diff viewers and good log tools, and
+shipping my own version of each is the exact sprawl this section argues against. I am
+experimenting to find out what I reach for, which is an honest reason rather than an
+excuse, and I am still working out where the boundaries of this project should sit.
+The rule I keep coming back to is that if it does not give you genuine value, it
+should not ship. Enable the person using it, help where help is wanted, and otherwise
+stay out of their way.
+
+## What I take from Go
+
+Go is the other obvious influence here, and not only because magus is written in it.
+
+The part I keep returning to is that the toolchain comes in the box. Formatting is
+settled by gofmt and nobody relitigates it. Testing needs no framework decision.
+That is hours per project that nobody spends, permanently, and it is why magus ships
+as a single binary that already contains what it needs instead of a plugin surface
+you have to assemble before you can use it.
+
+The other part is the compatibility promise. Go code from a decade ago still builds,
+and that is a maintained commitment rather than luck. That kind of durability is
+unglamorous and it is most of what makes something safe to put underneath your work.
+It is also why I would rather pay for a rename now, while magus is at 0.x and the
+blast radius is small, than carry an incoherent name I can never take back.
+
 ## What I take from suckless
 
 A philosophy and a group of developers both go by suckless, and the core of it is
@@ -674,18 +796,27 @@ Durability and consistency are what I want a reputation for. The tool that works
 the way it worked last year, that you can put underneath something and stop
 thinking about. You earn that by not moving, over years.
 
+Holding still is not passive, though, and I do not want to make it sound like a
+virtue you get for free. You cannot stay put on top of decisions you did not think
+through, and you cannot stay put while everyone is adding to the surface at once. Not
+moving later is paid for with forethought now, and with keeping the number of hands on
+the design small.
+
 ## A thing I am still working out
 
 This sits under the whole post, so I want to say it out loud, and I would rather
 open a conversation than land on a position.
 
 Some context on where I am standing, because it colors all of this. I am a software
-engineer on a platform engineering team, and the company I work for builds agentic
-tooling. magus is my own project, built on my own time, and these opinions are mine
-alone, but I am not writing about any of it from the outside.
+engineer. I came up on a platform engineering team and my squad now works on agentic
+access, so building tools in this category is my day job as well as my evenings.
+magus is my own project, built on my own time, and these opinions are mine alone. I
+am not writing about any of this from the outside.
 
-I also got here late and reluctantly. I was skeptical of Copilot when it launched,
-and it took me a long time to touch Claude at all.
+I also got here late and reluctantly. I was skeptical of Copilot when it launched and
+it took me a long time to try any of the assistants seriously. I have used a fair
+range of them since, hosted and local, and they are not interchangeable. The point is
+that I arrived as a skeptic, and in a lot of ways I still am one.
 
 I use agents every day and I have not settled how I feel about it. There is a
 pressure now to keep using them, to justify the spend, to show the tokens went
@@ -701,8 +832,8 @@ I read the code, I critique it, I review it, I tweak it. That is real work and I
 won't pretend otherwise. It is not the same as it was. I miss writing code, I
 don't write enough of it now, and I don't like that about how I work.
 
-The worry underneath is atrophy. Skills behave like muscle, and there are some I
-have stopped working. Plenty of what I hand off is remedial and I am glad to skip
+The worry underneath is atrophy. Craft behaves like muscle, and there are parts of
+mine I have stopped working. Plenty of what I hand off is remedial and I am glad to skip
 it. But some of it was the hard part, and the hard part is where I learned. The
 friction, the frustration, the afternoon lost to something stupid, and then the
 click when it lands: that sequence is how I got whatever I know. I might be
@@ -722,9 +853,10 @@ than I do now. What actually got magus here was iteration, breaking a problem in
 smaller and smaller pieces until the shape fell out, then doing it again. I review
 every line at this point. If my name is on it, it is mine.
 
-I am not writing any of this as an authority. I am working it out in public like
-everyone else, and magus only reached a maturity I was comfortable sharing by my
-grinding at it for a long time. Take the whole post as one person's findings so far.
+I am not writing any of this as an authority. This is a personal project on my own
+domain with a handful of stars on it, and I am working things out as I go like
+everyone else. magus only got to a state I was comfortable sharing because I kept
+grinding at it.
 
 Building these tools is how I get back to it. This is the work I still do with my
 hands, and where I have come out for now is this: I build tools for humans that
@@ -752,5 +884,5 @@ to a tool to maintain it, you are also the person least likely to hear that.
 Abstract the amount of complexity your users can carry, print what you resolved and
 where it came from, and the agents will come along for the ride.
 
-Read the [changelog](../../changelog/), or start with the
-[documentation](../../documentation/).
+If any of this made you curious about the tool itself, there is
+[more about magus](https://eli.gladman.cc/magus/).
