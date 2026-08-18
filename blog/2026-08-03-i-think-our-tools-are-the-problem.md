@@ -1,10 +1,9 @@
 ---
 title: "I think our tools are the problem"
-description: A new name every few months for the same complaint. My case for fixing the CLI instead of bolting an AI integration onto it, plus what shipped in this release.
-tags: [release, opinion]
+description: Loop engineering. Context engineering. Graph engineering. A new name every few months for the same complaint. My case for fixing the CLI instead of bolting an AI integration onto it.
+tags: [opinion]
 date: 2026-08-03
-release: v0.4.0
-draft: true
+draft: false
 ---
 
 # I think our tools are the problem
@@ -14,8 +13,8 @@ Every few months I read a new term for the same job, and the conversation moves
 over to it.
 
 I reject all of them. The work under those labels is often real; the labels are
-four names for one complaint, and the complaint is that our developer tools are
-bad.
+four names for one complaint, and the complaint is that our developer tools have
+slipped. They were not always this bad.
 
 The same churn produced a wave of AI-first, agent-first toolkits, announced with
 a paragraph of emoji and shipped without much evidence anyone thought about
@@ -24,7 +23,7 @@ years, and I am not adding to it.
 
 magus is a task orchestrator for polyglot monorepos: one statically linked
 binary, no second toolchain to install. It is built for humans, and it happens to
-work for agents. This post is why, with the release notes at the end.
+work for agents. This post is why.
 
 ## Our tools stopped being idiomatic
 
@@ -42,8 +41,8 @@ failing at it. They blamed themselves and read the docs again.
 ## The loop I keep watching
 
 Your tool has a foot gun. You trip on it, and so does everyone on your team. One
-of you writes a wrapper script, another answers a Stack Overflow question, a
-third publishes a "gotchas" post. Model builders train on that corpus, so the
+of you writes a wrapper script, another answers a Stack Overflow (RIP) question,
+a third publishes a "gotchas" post. Model builders train on all of that, so the
 models learn the workaround and never see the fix. Your agent trips on the same
 idiom you tripped on, having learned it from you. Somebody ships an integration
 to paper over the tool.
@@ -52,7 +51,7 @@ Nothing in that circuit puts pressure on the tool itself.
 
 ## Nx
 
-Nx pushed me into writing my own build tool. I want this aimed at decisions
+[Nx](https://nx.dev) pushed me into writing my own build tool. I want this aimed at decisions
 rather than at the people who made them, and I would rather have the argument
 with those people than about them.
 
@@ -79,8 +78,11 @@ terminal and saw a rendering surface instead of an interface carrying fifty year
 of contract. Frontend instincts pointed at a backend concern, rebuilding a
 problem the terminal settled before I got here.
 
-Three switches turn it off: `--no-tui`, `NX_TUI=false`, and `tui.enabled` in
-`nx.json`. Finding the off switch was the first thing I did.
+magus ships a text interface too, `magus diff --tui`. It renders inline, in your
+scrollback, and it does not take over the screen or the scroll wheel: your
+terminal keeps behaving like your terminal. That is the whole distinction. A
+text interface that fights the terminal it lives in has already lost the
+argument.
 
 ### Everything goes in the box
 
@@ -128,7 +130,7 @@ sell has no reason to move a capability behind a wall later.
 
 ## Nix
 
-Nix frustrated me more than Nx did, for a reason that has nothing to do with the
+[Nix](https://nixos.org) frustrated me more than Nx did, for a reason that has nothing to do with the
 technology. The engineering is impressive and the people behind it are sharper
 than I am.
 
@@ -143,7 +145,7 @@ time.
 
 ## Dagger
 
-Dagger is the one I wanted to love.
+[Dagger](https://dagger.io) is the one I wanted to love.
 
 The ideas are good. Building a container without a Dockerfile, describing it in a
 real language, cuts out a category of foot guns people trip over every day. Their
@@ -230,7 +232,7 @@ we are going to count anything, fewer lines is the number worth promoting.
 
 There is a real market for the opposite approach and I want to be fair to it.
 Tools that abstract the machinery away are a pleasure inside the domain they were
-built for. Nx is good there. Skaffold markets itself well and feels like magic
+built for. Nx is good there. [Skaffold](https://skaffold.dev) markets itself well and feels like magic
 for a week. Stay inside what the authors imagined and you move fast.
 
 Step outside it and the experience degrades all at once. The moment you need
@@ -250,7 +252,7 @@ tool at the bottom, its failure modes, or which of its features layer two quietl
 dropped, so they end up abstracting over a model of the thing rather than the
 thing itself.
 
-Temporal says this out loud, which I respect. Their guidance is to avoid wrapping
+[Temporal](https://temporal.io) says this out loud, which I respect. Their guidance is to avoid wrapping
 their SDKs so deeply that you hide useful features or make them hard to upgrade.
 A thin shim is fine. A friendly layer for newcomers is fine too, as long as those
 people can still reach the SDK directly, and that last condition is what keeps it
@@ -263,11 +265,11 @@ that matters is whether you can work out what happened. Every layer between you
 and the actual command is a layer you have to peel back first, usually while
 something is on fire.
 
-I watched this play out. Someone on my team wrote an Nx executor built tightly
-around one job, and it worked. When it broke, everyone had to go through that one
-person, because they were the only one who could see what it did. That is a bus
-factor of one, manufactured by the design. The person was not the problem; the
-shape was.
+Picture how this plays out. Someone writes an Nx executor built tightly around
+one job, and it works. When it breaks, everyone has to go through that one
+person, because they are the only one who can see what it does. That is a bus
+factor of one, manufactured by the design. The person is not the problem; the
+shape is.
 
 At a large company with deep subject matter experts on every layer, this matters
 less. For everyone else, seeing how the thing works is what lets you pick up the
@@ -303,7 +305,8 @@ consider best practice is not mine to settle, and sometimes the right answer for
 somebody is the half fix they already know is a half fix, because the constraint
 they are working under is a delivery date rather than an engineering one.
 
-Security worked this out fifty years ago. Saltzer and Schroeder listed
+Security worked this out fifty years ago. [Saltzer and
+Schroeder](https://web.mit.edu/Saltzer/www/publications/protection/) listed
 psychological acceptability among their design principles in 1975: if the
 protection mechanism makes the work harder than going without it, people route
 around the mechanism, and the route they find is worse than whatever you were
@@ -319,14 +322,14 @@ run reproducible from its declared inputs. The constraint sits where it can be
 enforced without anyone having to predict you.
 
 It is also how you get out of the usual tradeoff. A tool should meet a new user
-where they are without penning in the person who has been doing this for fifteen
+where they are without boxing in the person who has been doing this for fifteen
 years, and I do not think those two are opposed. You get both by informing rather
 than deciding: the newcomer follows what the tool told them, and the veteran
 reads the same information and does something else with it.
 
 ## What I wanted instead
 
-Bad developer experience gets under my skin and drives me fucking mad. Input
+Bad developer experience gets under my skin and drives me mad. Input
 latency in a command, a tool that makes me wait before I can tell it what I want,
 an error that says something broke without saying what to do about it. I have had
 enough of it, and that is most of why any of this exists.
@@ -343,7 +346,8 @@ faster.
 ## A good CLI does not need an MCP server
 
 magus ships one. I built it, I use it, it works, and for what magus is I have
-come around to thinking it should not need to exist.
+come around to thinking it should not need to exist. I am seriously considering
+removing it.
 
 The CLI already prints structured output: `-o json`, `-o name`,
 `-o template=<go-template>`, and an output reference for anything that ran. An
@@ -401,6 +405,10 @@ I don't think that gap is about the models. Buzz gives you close to one way to
 say a thing, which leaves little room to be clever and be wrong. TypeScript keeps
 adding sugar, and I hate the sugar and what it teaches people to write.
 
+I should own where that taste comes from. I love Go for the same reason, that
+there is usually one way to write a thing, and plenty of people hate Go for
+exactly that. This is a preference of mine, not a proof of anything.
+
 Weigh that as my experience rather than a benchmark. It is still the strongest
 evidence I have here: a language an agent has never seen beat the language it has
 seen most, and explicitness is the only variable I can point at.
@@ -435,15 +443,19 @@ turn.
 
 ## These are not new problems
 
-I want to be blunt about something, because it is the thing I find most tiring
-about this whole moment.
+I want to be honest about something, because it is the thing I find most tiring
+about this whole moment. I do not get the names.
 
-Loop engineering. Graph engineering. Context engineering. The names keep arriving
-and underneath every one of them is a problem computer science has been working on
-for fifty years. Partition work into units that do not conflict. Know what a change
-affects so you can skip the rest. Cache on content instead of timestamps. Give a
-process the smallest amount of state it needs to do its job. None of that is new,
-and calling it new does not help anyone.
+Same names as the ones at the top of this post. A new one arrives every few
+months, and I do not follow what it is naming that the old term did not already
+cover. Underneath each of them is a problem computer science has been
+working on for fifty years. Partition work into units that do not conflict. Know
+what a change affects so you can skip the rest. Cache on content instead of
+timestamps. Give a process the smallest amount of state it needs to do its job.
+Caching is hard. Concurrency is hard. Those are old, hard problems with decades of
+prior art behind them, not new categories that showed up with agents. I am not
+trying to talk down to anyone who reaches for one of these terms - I am saying,
+plainly, that I do not understand why we need them.
 
 `magus affected ci --plan` splits the affected projects into shards that can run at
 the same time. I wrote it to fan CI jobs across runners, and it feeds a GitHub
@@ -492,42 +504,6 @@ Durability and consistency are what I want a reputation for. The tool that works
 the way it worked last year, that you can put underneath something and stop
 thinking about. You earn that by not moving, over years.
 
-## What this release is
-
-I am not reinventing the wheel and I am not revolutionizing anything. There is no
-company behind this and no venture capital in it. I wanted a good tool I could be
-proud of, and this is the release where magus turned into the one I have wanted
-since I started caring about build systems.
-
-So let me show it off.
-
-`magus ls` is what I would put in front of you first. Bare, it lists every
-project in the workspace along with what you can run in each. `magus ls targets`
-narrows to one project and shows the doc and the spell ops behind each target.
-One enumeration verb, on purpose: the alternative was `magus targets`, then
-`magus spells`, then `magus charms`, which is the sprawl I spent this post
-complaining about. One rule to learn, and a new noun costs no new subcommand.
-
-Hints teach the tool while you use it. Misspell a target and magus names the
-canonical spelling once. Every command path inside magus output renders from a
-single declaration, and a test fails the build when one stops resolving to a real
-subcommand, so a hint can never point you at a command that no longer exists.
-
-Fifty diagnostic codes carry their own documentation page. Failures that used to
-pass in silence now have a code and a fix: an invalid charm patch, a `has_charm`
-typo, two charms fighting over the same argument.
-
-`describe target --explain` prints the charm trace behind a resolved command
-line, so you see what will run before it runs. `magus graph` gathers the graphs
-as objects: `deps`, `export`, `stats`, `diff`.
-
-Most of the breaking changes are renames toward coherence. Spells carry the name
-of what they adapt, so `ts` became `typescript`. `magus describe knowledge`
-became `magus graph export`. `magus lsp` became `magus buzz lsp`. `magus tail` is
-gone. `magusfile` stopped pretending to be a spell. I would rather pay that cost
-at 0.x while the blast radius is small than let an incoherent name survive
-because renaming it would disrupt people.
-
 ## A thing I am still working out
 
 This sits under the whole post, so I want to say it out loud, and I would rather
@@ -554,10 +530,12 @@ friction, the frustration, the afternoon lost to something stupid, and then the
 click when it lands: that sequence is how I got whatever I know. I might be
 trading a short jump ahead for being a worse engineer in ten years.
 
-The other side of it is just as true. My head runs a lot of threads at once, and
-ideas used to pile up faster than I could get to them. Now I can hold several and
-ship them, and some of what went out this year exists only because of that. It
-unsettles me about as much as it pleases me. Scary good, but scary.
+The other side of it is just as true. I have ADHD, and my head runs a lot of
+threads at once on a good day. Ideas used to pile up faster than I could get to
+them, and some just got lost before I found the time to write them down. Voice
+dictation and a model close that gap some of the time. Some of what went out
+this year exists only because of that. It unsettles me about as much as it
+pleases me. Scary good, but scary.
 
 For what it is worth: I used voice dictation and a model to get these thoughts
 onto the page, then read every line and reworked it by hand. If my name is on it,

@@ -66,7 +66,7 @@ guesses about. magus gives them the same fix. Query the
 prove what a change touched. For agents, see [Agents](docs/guides/integrations/agents.md).
 
 The longer argument behind that position, and what it was a reaction to, is in
-[I think our tools are the problem](https://eli.gladman.cc/magus/blog/2026/08/03/the-tools-were-the-problem/).
+[I think our tools are the problem](https://eli.gladman.cc/magus/blog/2026/08/03/i-think-our-tools-are-the-problem/).
 
 ## Who this is for
 
