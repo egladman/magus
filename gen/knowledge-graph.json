@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2333,
-  "edge_count": 5997,
+  "node_count": 2334,
+  "edge_count": 6012,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -690,7 +690,7 @@
       "label": "blog",
       "source": "blog",
       "attrs": {
-        "dir_files": "3",
+        "dir_files": "4",
         "dir_languages": "markdown"
       }
     },
@@ -1893,6 +1893,17 @@
         "role": "doc",
         "tags": "opinion",
         "title": "I think our tools are the problem"
+      }
+    },
+    {
+      "id": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "kind": "doc",
+      "label": "blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "attrs": {
+        "role": "doc",
+        "tags": "opinion",
+        "title": "I audited my own MCP server"
       }
     },
     {
@@ -21711,6 +21722,14 @@
       "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
     },
     {
+      "source": "dir:blog",
+      "target": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
       "source": "dir:cmd",
       "target": "dir:cmd/buzz-playground",
       "relation": "contains",
@@ -26829,6 +26848,110 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-config.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-describe.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-explain.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-path.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-query.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-refs.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-where.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
     },
     {
       "source": "doc:cmd/magus/agents-section.md",
@@ -67582,6 +67705,14 @@
     {
       "source": "target:docs:site-generate",
       "target": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,

@@ -508,10 +508,15 @@ Agents can drive that, and I did not build any of it for them. An interface
 legible to me is legible to them. I repeat work all day; an agent repeats it
 faster.
 
-## A good CLI does not need an MCP server
+## An intentionally designed CLI does not need an MCP server
 
 magus ships one. I built it, I use it, it works, and I am seriously considering
 removing it.
+
+To be clear about scope first, because MCP covers a lot of ground: I am talking about
+MCP servers that exist so an AI coding assistant can drive a tool you already have on
+your machine. MCP is used for plenty of other things, some of which I have no
+argument with. This is about the wrapper-around-my-own-CLI case.
 
 The CLI already prints structured output: `-o json`, `-o name`,
 `-o template=<go-template>`, and an output reference for anything that ran. Point an
@@ -521,8 +526,22 @@ left to do. I think we got lazy over the last ten or fifteen years and started
 treating a confusing CLI as the natural state of things, and an MCP server is often
 filling a gap that should never have opened.
 
-Two caveats, because I am painting broadly here. "Good CLI" is subjective, which is
-why I named consistency and predictability rather than something fuzzier. And the
+Datadog shipped a CLI called Pup while I was writing this and marketed it as an
+agentic CLI.[^pup] Look at what it actually does: commands structured so you can
+navigate them without going to the documentation, responses available in JSON and
+YAML, errors carrying detail and hints. That is a well-built command line. It is what
+a command line has owed you for forty years. Calling it agentic is branding stuck on
+table stakes, and it bothers me because it teaches people that structured output is
+an AI feature rather than the baseline it always was.
+
+To be fair, not all of it is branding. Auto-approving confirmation prompts when the
+caller is not a terminal is a real behavior change, and scoped OAuth tokens instead
+of long-lived API keys is a real security decision. Both are worth shipping. Neither
+is what the word agentic is doing in that sentence.
+
+Two caveats, because I am painting broadly here. What counts as a well-designed CLI
+is partly subjective, which is why I named consistency and predictability rather than
+something fuzzier. And the
 whole argument assumes your CLI can actually reach everything, which is not
 automatic. Some of what magus can do you reach through `magus buzz` rather than a
 subcommand of its own. Those are the same modules a magusfile calls, down the same
@@ -906,3 +925,7 @@ If any of this made you curious about the tool itself, there is
 [^karlton]: Attributed to Phil Karlton; Martin Fowler has [collected what is
     actually known](https://martinfowler.com/bliki/TwoHardThings.html) about its
     provenance.
+
+[^pup]: Datadog, [Pup CLI](https://docs.datadoghq.com/cli/), announced as
+    [live Datadog access for AI agents from the command
+    line](https://www.datadoghq.com/blog/give-your-ai-agents-live-datadog-access-from-the-command-line/).
