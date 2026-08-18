@@ -16,8 +16,8 @@ its own - a wiring file points at the same two templates.
 | skills          | `.agents/skills/`                                        |
 | always-on rules | `AGENTS.md` (you paste the block; magus never writes it) |
 | guard wiring    | `~/.codex/hooks.json`, `PreToolUse`                      |
-| command surface | deny and advise both reach the model                     |
-| file surface    | deny and advise both reach the model                     |
+| command surface | deny reaches the model; advise is not sent               |
+| file surface    | deny reaches the model; advise is not sent               |
 | MCP             | `~/.codex/config.toml`, see [MCP](../mcp.md)             |
 
 ## Skills
@@ -78,7 +78,7 @@ pointing at wherever you put your copies of the two templates:
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-command.sh",
+            "command": "GUARD_AGENT_NAME=codex GUARD_NO_ADVISE=1 sh docs/guides/integrations/agents/magus-guard-command.sh",
             "statusMessage": "magus guard: checking command"
           }
         ]
@@ -88,7 +88,7 @@ pointing at wherever you put your copies of the two templates:
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_AGENT_NAME=codex sh docs/guides/integrations/agents/magus-guard-path.sh",
+            "command": "GUARD_AGENT_NAME=codex GUARD_NO_ADVISE=1 sh docs/guides/integrations/agents/magus-guard-path.sh",
             "statusMessage": "magus guard: checking file"
           }
         ]

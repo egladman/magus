@@ -9,6 +9,31 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 See the unreleased changes at
 https://github.com/egladman/magus/compare/v0.4.0...main
 
+### Changed
+
+- Agent guard templates are at version 7; `magus doctor` reports a copy older
+  than that. CODEX USERS MUST ALSO EDIT THEIR WIRING - the fix lives in
+  `hooks.json`, not in the template, so re-downloading the scripts alone changes
+  nothing. Add `GUARD_NO_ADVISE=1` to both hook commands, as
+  `docs/guides/integrations/agents/codex.md` now shows. Every other host needs
+  only the re-download, and its rendered response is byte-identical to before.
+
+### Fixed
+
+- Agent guard: the `relock` advisory reached the model on Claude Code only. An
+  advise is injectable there and nowhere else - Codex rejects the key, Cursor's
+  command surface has no channel, OpenCode can only log it for the person - and
+  the guidance was in no installed skill, so three hosts of four never learned
+  that rewriting dependency state needs the `relock` charm. It is now in the
+  magus-run skill, which every host reads, and a gate keeps every advisory
+  covered there.
+- Agent guard: Codex is no longer sent advisories it rejects. Its PreToolUse
+  treats `additionalContext` as an error and then fails OPEN, so every advisory
+  magus sent it was discarded AND disarmed the guard for that call, on both the
+  command and file surfaces. Codex now declares `advise=none`. The two fail-open
+  NOTICES ("magus guard is NOT running") still carry the key and so still do not
+  reach a Codex reader; that is unchanged and remains a gap.
+
 ## [v0.3.0] - 2026-07-25
 
 See the full changelog at

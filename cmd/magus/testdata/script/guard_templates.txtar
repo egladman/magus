@@ -26,7 +26,7 @@
 
 env GUARD_AGENT_NAME=testscript
 
-# --- magus-guard-command.sh: the Claude Code and Codex shape ------------------
+# --- magus-guard-command.sh: the Claude Code shape ---------------------------
 
 # case: command/deny
 stdin deny-command.json
@@ -40,6 +40,24 @@ stdin advise-command.json
 exec sh $GUARD_TEMPLATES/magus-guard-command.sh
 stdout '"additionalContext":"'
 ! stdout 'permissionDecision'
+
+# case: command/advise
+# The Codex shape. Its PreToolUse REJECTS additionalContext and then fails OPEN,
+# so an advisory it cannot take disarms the guard for that call rather than merely
+# going unread. Suppressed, the advise must render NOTHING - not an empty envelope,
+# which is still a key it would parse. A declaration alone cannot show this; only
+# running the file can, which is what this corpus is for.
+env GUARD_NO_ADVISE=1
+stdin advise-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+! stdout .
+
+# case: command/deny
+# Suppression must not touch the deny arm, which is the whole point of splitting it.
+stdin deny-command.json
+exec sh $GUARD_TEMPLATES/magus-guard-command.sh
+stdout '"permissionDecision":"deny"'
+env GUARD_NO_ADVISE=
 
 # case: command/pass
 # An allowed call must produce NOTHING. A host reads an empty response as allow, so
@@ -56,6 +74,15 @@ stdin advise-path.json
 exec sh $GUARD_TEMPLATES/magus-guard-path.sh
 stdout '"additionalContext":"'
 stdout 'magus memory put'
+
+# case: path/advise
+# Codex wires BOTH surfaces to PreToolUse, so the file surface rejects the key
+# and fails open exactly as the command surface does.
+env GUARD_NO_ADVISE=1
+stdin advise-path.json
+exec sh $GUARD_TEMPLATES/magus-guard-path.sh
+! stdout .
+env GUARD_NO_ADVISE=
 
 # case: path/pass
 stdin pass-path.json
