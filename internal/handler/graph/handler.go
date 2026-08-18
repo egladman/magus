@@ -31,7 +31,7 @@ type graphSource interface {
 //   - ?flavor=targets   -> the describe/target graph (types.TargetGraphOutput)
 //
 // At most one of flavor/level/select may be set; combinations are rejected. Knowledge-graph
-// flavors are written as magus.graph.v1 protojson (snake_case, wire-compatible). The targets
+// flavors are written as magus.graph.v1alpha1 protojson (snake_case, wire-compatible). The targets
 // flavor has no proto twin and is written as its domain JSON. ETag is sha256 of the body;
 // If-None-Match yields a 304. Gzip is applied by the NewGraphHandler wrapper.
 type GraphHandler struct {
@@ -110,7 +110,7 @@ func (h *GraphHandler) serve(w http.ResponseWriter, r *http.Request) {
 // explorer parses.
 var snakeJSON = protojson.MarshalOptions{UseProtoNames: true}
 
-// body serves the requested flavor as bytes. Knowledge-graph flavors ride the magus.graph.v1
+// body serves the requested flavor as bytes. Knowledge-graph flavors ride the magus.graph.v1alpha1
 // proto through protojson; the targets flavor (no proto twin) is written as its domain JSON.
 func (h *GraphHandler) body(ctx context.Context, flavor, level, sel string) ([]byte, error) {
 	if flavor == "targets" {

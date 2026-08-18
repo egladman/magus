@@ -9,8 +9,8 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1/metricsv1connect"
+	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1/metricsv1alpha1connect"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -105,13 +105,13 @@ func TestStreamMetricsSendsBackfillThenSnapshot(t *testing.T) {
 	svc.sampleOnce(context.Background())
 
 	// Exercise the real wire path: the generated handler + client over httptest.
-	path, handler := metricsv1connect.NewMetricsServiceHandler(svc)
+	path, handler := metricsv1alpha1connect.NewMetricsServiceHandler(svc)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	client := metricsv1connect.NewMetricsServiceClient(srv.Client(), srv.URL)
+	client := metricsv1alpha1connect.NewMetricsServiceClient(srv.Client(), srv.URL)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

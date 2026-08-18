@@ -5,15 +5,15 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1/metricsv1connect"
+	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1/metricsv1alpha1connect"
 )
 
 // defaultTick is the sampler and stream cadence: one Sample appended and one Snapshot
 // pushed per second, matching the dashboard's live refresh.
 const defaultTick = time.Second
 
-// Service implements metricsv1connect.MetricsServiceHandler for the /dashboard: it serves
+// Service implements metricsv1alpha1connect.MetricsServiceHandler for the /dashboard: it serves
 // the current derived Snapshot (GetMetrics) and a backfilled live stream (StreamMetrics),
 // reading raw metricdata through a collector and keeping a rolling Sample ring. Construct it
 // with NewService and launch its sampler with Start.
@@ -25,7 +25,7 @@ type Service struct {
 	tick time.Duration
 }
 
-var _ metricsv1connect.MetricsServiceHandler = (*Service)(nil)
+var _ metricsv1alpha1connect.MetricsServiceHandler = (*Service)(nil)
 
 // Option customizes a Service; production callers pass none. Test seams inject a clock, the
 // tick interval, and the ring capacity.

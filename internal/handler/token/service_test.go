@@ -17,8 +17,8 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/share"
-	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/token/v1/tokenv1connect"
+	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
 )
 
 // fakeShare is a stand-in for *share.Manager: it reports a fixed active share (or
@@ -309,20 +309,20 @@ func TestListResponseCarriesNoSecretBytes(t *testing.T) {
 // rejected with 401 before reaching the service, while a valid bearer passes.
 func TestUnauthenticatedCallRejected(t *testing.T) {
 	s := newIsolatedService(t, nil)
-	path, h := tokenv1connect.NewTokenServiceHandler(s)
+	path, h := tokenv1alpha1connect.NewTokenServiceHandler(s)
 	// A fixed verifier standing in for auth.VerifyBearer: accept exactly "good".
 	guarded := httpx.BearerGuard(func(presented string) bool { return presented == "good" }, h)
 	srv := httptest.NewServer(guarded)
 	defer srv.Close()
 
 	// No Authorization header: rejected at the guard, never reaching ListTokens.
-	unauth := tokenv1connect.NewTokenServiceClient(http.DefaultClient, srv.URL)
+	unauth := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL)
 	_, err := unauth.ListTokens(context.Background(), req(&tokenv1.ListTokensRequest{}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 
 	// Valid bearer: the call passes the guard and the service answers.
-	authed := tokenv1connect.NewTokenServiceClient(http.DefaultClient, srv.URL,
+	authed := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL,
 		connect.WithInterceptors(bearer("good")))
 	resp, err := authed.ListTokens(context.Background(), req(&tokenv1.ListTokensRequest{}))
 	require.NoError(t, err)
@@ -360,13 +360,13 @@ func TestTierHierarchyAtGuard(t *testing.T) {
 	// ...but never an operator credential.
 	require.False(t, auth.VerifyCLIBearer(connSecret))
 
-	_, h := tokenv1connect.NewTokenServiceHandler(s)
+	_, h := tokenv1alpha1connect.NewTokenServiceHandler(s)
 	srv := httptest.NewServer(httpx.BearerGuard(auth.VerifyCLIBearer, h))
 	defer srv.Close()
 
-	asConnector := tokenv1connect.NewTokenServiceClient(http.DefaultClient, srv.URL,
+	asConnector := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL,
 		connect.WithInterceptors(bearer(connSecret)))
-	asCLI := tokenv1connect.NewTokenServiceClient(http.DefaultClient, srv.URL,
+	asCLI := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL,
 		connect.WithInterceptors(bearer(cliTok)))
 
 	// Connector token: rejected on both RPCs, before the handler runs.

@@ -20,8 +20,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	store "github.com/egladman/magus/internal/memory"
-	memoryv1 "github.com/egladman/magus/proto/gen/go/magus/memory/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/memory/v1/memoryv1connect"
+	memoryv1 "github.com/egladman/magus/proto/gen/go/magus/memory/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/memory/v1alpha1/memoryv1alpha1connect"
 )
 
 // workspace is the narrow slice of *magus.Magus the handler needs: the workspace root,
@@ -30,7 +30,7 @@ type workspace interface {
 	Root() string
 }
 
-// Service implements memoryv1connect.MemoryServiceHandler over the on-disk record store.
+// Service implements memoryv1alpha1connect.MemoryServiceHandler over the on-disk record store.
 type Service struct {
 	ws workspace
 }
@@ -38,7 +38,7 @@ type Service struct {
 // NewService builds a MemoryService handler over the workspace ws.
 func NewService(ws workspace) *Service { return &Service{ws: ws} }
 
-var _ memoryv1connect.MemoryServiceHandler = (*Service)(nil)
+var _ memoryv1alpha1connect.MemoryServiceHandler = (*Service)(nil)
 
 // ListMemories returns every record in full. Pagination is wired in the contract but the
 // store returns all records today, so next_page_token is always empty.

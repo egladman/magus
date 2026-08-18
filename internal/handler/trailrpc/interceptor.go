@@ -72,7 +72,7 @@ func classify(method string) (mutating, known bool) {
 	return true, false
 }
 
-// methodName extracts the bare method from a Connect procedure path ("/magus.token.v1.TokenService/
+// methodName extracts the bare method from a Connect procedure path ("/magus.token.v1alpha1.TokenService/
 // RevokeToken" -> "RevokeToken"). A path with no slash is returned unchanged.
 func methodName(procedure string) string {
 	if i := strings.LastIndex(procedure, "/"); i >= 0 {

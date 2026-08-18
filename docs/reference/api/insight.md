@@ -8,7 +8,7 @@ tags: [api, proto, connect, grpc, insightservice]
 
 InsightService serves the assembled lenses to the console dashboard. One read-only unary RPC: the four git lenses come from a server-cached scan (~10s TTL) and volatility from a fresh file read, so the client polls rather than subscribes.
 
-Package `magus.insight.v1`, defined in `proto/magus/insight/v1/insight.proto`. Part of the [daemon API](index.md).
+Package `magus.insight.v1alpha1`, defined in `proto/magus/insight/v1alpha1/insight.proto`. Part of the [daemon API](index.md).
 
 ## Methods
 
@@ -16,7 +16,7 @@ Package `magus.insight.v1`, defined in `proto/magus/insight/v1/insight.proto`. P
 
 GetInsight returns every lens in one message.
 
-`POST /magus.insight.v1.InsightService/GetInsight`: unary.
+`POST /magus.insight.v1alpha1.InsightService/GetInsight`: unary.
 
 Takes `GetInsightRequest`, returns `GetInsightResponse`.
 
@@ -57,7 +57,7 @@ FileHotspot is one file's hotspot score: edit frequency weighted by complexity. 
 | `complexity` | int32 | 3 |  |
 | `score` | int32 | 4 |  |
 | `authors` | int32 | 5 |  |
-| `last_commit` | Timestamp | 6 |  |
+| `last_commit_time` | Timestamp | 6 |  |
 | `moves` | int32 | 7 | How many times the file changed path inside the window. commits and moves are different kinds of churn - one is the contents being rewritten, the other is the file being moved around - and a reader wants both, because a file doing both at once is a stronger signal than either count alone. Not derivable from path, which carries only the name the file ends under. |
 
 ### GetInsightRequest
@@ -108,7 +108,7 @@ Ownership is one project's authorship. bus\_factor\_1 and stale are the two risk
 | `primary_share` | int32 | 6 | that author's share, in percent |
 | `bus_factor_1` | bool | 7 |  |
 | `stale` | bool | 8 |  |
-| `last_commit` | Timestamp | 9 |  |
+| `last_commit_time` | Timestamp | 9 |  |
 
 ### OwnershipOutput
 
@@ -123,7 +123,7 @@ OwnershipOutput reports author concentration per project - the knowledge-risk vi
 
 ### ProjectNode
 
-ProjectNode is one project in the heatmap. It mirrors types.Node, the dependency-graph node the hotspots lens reuses, which is why it carries graph shape (children, spell\_name, exclusive) alongside the churn fields - the same message serves a reader that wants to draw the dependency edges under the heat. It is NOT magus.graph.v1.Node: that one is a knowledge-graph node (id/kind/relation), this one is a project in the build graph.  churn, authors and last\_commit are the heatmap overlay and are absent on a plain dependency graph; blast\_radius and duration\_ms come from the graph itself.
+ProjectNode is one project in the heatmap. It mirrors types.Node, the dependency-graph node the hotspots lens reuses, which is why it carries graph shape (children, spell\_name, exclusive) alongside the churn fields - the same message serves a reader that wants to draw the dependency edges under the heat. It is NOT magus.graph.v1alpha1.Node: that one is a knowledge-graph node (id/kind/relation), this one is a project in the build graph.  churn, authors and last\_commit\_time are the heatmap overlay and are absent on a plain dependency graph; blast\_radius and duration\_ms come from the graph itself.
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -137,7 +137,7 @@ ProjectNode is one project in the heatmap. It mirrors types.Node, the dependency
 | `duration_ms` | int64 | 8 |  |
 | `churn` | int32 | 9 | recent commits touching the project |
 | `authors` | int32 | 10 | distinct authors behind them |
-| `last_commit` | Timestamp | 11 |  |
+| `last_commit_time` | Timestamp | 11 |  |
 
 ### Trend
 
@@ -185,5 +185,5 @@ VolatilityTarget is one (project, target) pair's recorded flakiness: the Wilson 
 | `fail` | int32 | 6 |  |
 | `volatile_count` | int32 | 7 |  |
 | `samples` | int32 | 8 |  |
-| `last_pass` | Timestamp | 9 | the most recent passing run, unset when never |
+| `last_pass_time` | Timestamp | 9 | the most recent passing run, unset when never |
 

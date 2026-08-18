@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	store "github.com/egladman/magus/internal/notes"
-	notesv1 "github.com/egladman/magus/proto/gen/go/magus/notes/v1"
+	notesv1 "github.com/egladman/magus/proto/gen/go/magus/notes/v1alpha1"
 )
 
 // coldWorkspace is a workspace whose knowledge graph will not load - the ordinary state on a

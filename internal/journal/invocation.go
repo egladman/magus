@@ -22,7 +22,7 @@ type Command struct {
 // events. It is not stored on its own: it is reconstructed from the stream's lifecycle
 // events (the started event carries the command, version, and start time; the finished
 // event carries the end time and overall outcome), and projected onto the wire as
-// magus.viewer.v1.Invocation.
+// magus.viewer.v1alpha1.Invocation.
 type Invocation struct {
 	ID           string  `json:"id"`
 	Command      Command `json:"command"`

@@ -12,7 +12,7 @@ import {
   type Pool,
   type Run,
   type TargetRun,
-} from "../../gen/magus/status/v1/status_pb";
+} from "../../gen/magus/status/v1alpha1/status_pb";
 import type {
   Snapshot,
   Latency,
@@ -22,8 +22,8 @@ import type {
   Buzz,
   Sandbox,
   Sample as ProtoSample,
-} from "../../gen/magus/metrics/v1/metrics_pb";
-import type { Insight } from "../../gen/magus/insight/v1/insight_pb";
+} from "../../gen/magus/metrics/v1alpha1/metrics_pb";
+import type { Insight } from "../../gen/magus/insight/v1alpha1/insight_pb";
 import type { ConnState } from "../../lib/daemon";
 
 // ---- formatters ------------------------------------------------------------
@@ -179,7 +179,7 @@ export interface ConfigView {
 
 // A target's lifecycle state, as plain view-model strings that double as the gantt
 // tile's CSS class suffixes (.gantt-bar.running, .gantt-bar.passed, ...). Kept in
-// lockstep with magus.status.v1.TargetRun.State but stringly-typed so tiles never
+// lockstep with magus.status.v1alpha1.TargetRun.State but stringly-typed so tiles never
 // import the proto enum.
 export type TargetState = "unspecified" | "queued" | "running" | "passed" | "failed" | "cached";
 
@@ -581,9 +581,9 @@ export function mapSample(s: ProtoSample): SampleView {
   };
 }
 
-// ---- insight view-model (magus.insight.v1) ---------------------------------
+// ---- insight view-model (magus.insight.v1alpha1) ---------------------------------
 // InsightService.GetInsight returns the five lenses as a generated proto message, so
-// this axis has no hand-written wire shape: mapInsight folds magus.insight.v1.Insight
+// this axis has no hand-written wire shape: mapInsight folds magus.insight.v1alpha1.Insight
 // into the camelCase view-models the tiles read. Times are google.protobuf.Timestamp
 // with a zero time.Time mapped to UNSET at the server boundary, so an absent time is
 // simply an absent field rather than the year-0001 sentinel the JSON route emitted.
@@ -649,7 +649,7 @@ export interface VolatilityView {
   targets: VolatilityRowView[];
 }
 
-// ---- toolchain view-model (magus.tool.v1) ----------------------------------
+// ---- toolchain view-model (magus.tool.v1alpha1) ----------------------------------
 //
 // One row per binary a project's spells drive. The three windows stay separate all the
 // way to the table because the first question about a failing bound is who set it - the
@@ -752,7 +752,7 @@ export function mapInsight(w: Insight): InsightView {
 }
 
 // ---- agent activity view-model ---------------------------------------------
-// Derived from the activity trail (magus.activity.v1), which records one event per agent tool
+// Derived from the activity trail (magus.activity.v1alpha1), which records one event per agent tool
 // invocation a guard hook observed, plus one per MCP tool call.
 //
 // WHAT THIS CAN AND CANNOT SAY. A hook fires BEFORE a tool call and there is no matching end
@@ -806,7 +806,7 @@ export interface AgentActivityView {
 // keeping an unbounded slice of a busy daemon's trail in the store.
 const RECENT_CAP = 12;
 
-// The wire shape the poll hands over: the fields of magus.activity.v1.ActivityEvent this reads,
+// The wire shape the poll hands over: the fields of magus.activity.v1alpha1.ActivityEvent this reads,
 // already decoded. Kept structural so state.ts stays free of the generated enums.
 export interface AgentEventWire {
   atMs: number;

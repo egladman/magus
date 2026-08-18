@@ -27,7 +27,7 @@ import {
   type Note,
   type Anchor,
   type StoreStatus,
-} from "../../gen/magus/notes/v1/notes_pb";
+} from "../../gen/magus/notes/v1alpha1/notes_pb";
 import {
   parseHash,
   daemonAttach,

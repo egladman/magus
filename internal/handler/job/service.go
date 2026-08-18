@@ -24,8 +24,8 @@ import (
 	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
-	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/job/v1/jobv1connect"
+	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
 )
 
 // workspace is the narrow slice of *magus.Magus the handler needs: where the trail lives and how
@@ -35,7 +35,7 @@ type workspace interface {
 	CacheDiskBytes() int64
 }
 
-// Service implements jobv1connect.JobServiceHandler. It submits jobs to the daemon's own proc
+// Service implements jobv1alpha1connect.JobServiceHandler. It submits jobs to the daemon's own proc
 // socket (self-dial, so it rides the exact coalescing/journal path an external submit would) and
 // reads the workspace trail + cache for the metadata it returns.
 type Service struct {
@@ -61,7 +61,7 @@ func NewService(ws workspace, version string) *Service {
 	}
 }
 
-var _ jobv1connect.JobServiceHandler = (*Service)(nil)
+var _ jobv1alpha1connect.JobServiceHandler = (*Service)(nil)
 
 func (s *Service) SyncGraph(ctx context.Context, _ *connect.Request[jobv1.SyncGraphRequest]) (*connect.Response[jobv1.SubmitJobResponse], error) {
 	return s.submit(ctx, jobs.NameSyncGraph)

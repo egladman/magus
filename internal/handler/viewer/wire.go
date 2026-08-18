@@ -1,4 +1,4 @@
-// Package viewer holds the magus.viewer.v1 wire contract: the code that maps captured
+// Package viewer holds the magus.viewer.v1alpha1 wire contract: the code that maps captured
 // DOMAIN events onto the versioned protobuf tool-page contract and encodes them for a
 // browser (a URL-fragment blob for a finished run, or a live SSE stream), plus the
 // viewer's filter DSL. It consumes domain types straight from the repositories (e.g. the
@@ -14,7 +14,7 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/render"
-	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1"
+	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 )
 
 // eventToProto maps a captured journal.Event onto the wire message. The domain's string

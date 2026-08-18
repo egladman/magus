@@ -3,10 +3,10 @@
 // subscribe. Two feeds ride alongside each other, both locked to the validated
 // loopback host and both bearing the shared token:
 //
-//   1. /api/v1/events SSE (event: status) -> magus.status.v1.Status: the instantaneous
+//   1. /api/v1/events SSE (event: status) -> magus.status.v1alpha1.Status: the instantaneous
 //      view (health, pool, running targets, workspaces, live cache tallies). Its
 //      open/close is THE connection whose state drives the connected/disconnected pill.
-//   2. magus.metrics.v1.MetricsService.StreamMetrics over ConnectRPC: the developer view
+//   2. magus.metrics.v1alpha1.MetricsService.StreamMetrics over ConnectRPC: the developer view
 //      (latency percentiles, remote cache, per-target/MCP/Buzz/Sandbox families). First
 //      message is a Backfill (Sample history), then a Snapshot per ~1s tick.
 //
@@ -16,11 +16,15 @@
 
 import { fromBinary } from "@bufbuild/protobuf";
 import { createClient, type Client } from "@connectrpc/connect";
-import { StatusSchema, StatusService, type Status } from "../../gen/magus/status/v1/status_pb";
-import { MetricsService } from "../../gen/magus/metrics/v1/metrics_pb";
-import { ActivityService, Kind } from "../../gen/magus/activity/v1/activity_pb";
-import { InsightService } from "../../gen/magus/insight/v1/insight_pb";
-import { ToolService, Verdict } from "../../gen/magus/tool/v1/tool_pb";
+import {
+  StatusSchema,
+  StatusService,
+  type Status,
+} from "../../gen/magus/status/v1alpha1/status_pb";
+import { MetricsService } from "../../gen/magus/metrics/v1alpha1/metrics_pb";
+import { ActivityService, Kind } from "../../gen/magus/activity/v1alpha1/activity_pb";
+import { InsightService } from "../../gen/magus/insight/v1alpha1/insight_pb";
+import { ToolService, Verdict } from "../../gen/magus/tool/v1alpha1/tool_pb";
 import {
   authHeaders,
   createDaemonTransport,
@@ -51,7 +55,7 @@ const RECONNECT_MS = 3000;
 // that window on a busy daemon - an agent mid-task easily produces a few hundred tool calls.
 const ACTIVITY_POLL_MS = 4000;
 const ACTIVITY_PAGE = 500;
-// Insight is an on-demand unary read (magus.insight.v1.InsightService.GetInsight), server-side
+// Insight is an on-demand unary read (magus.insight.v1alpha1.InsightService.GetInsight), server-side
 // cached ~10s. Not on the status SSE: it is polled on a cadence, refetched on open and on a manual
 // refresh. The interval is the operator's configured refresh rate (getPollMs, default 20s - just
 // above the server cache TTL).

@@ -25,9 +25,9 @@ lint:
   # OTHER service that reuses a response type is still a finding.
   ignore_only:
     RPC_REQUEST_RESPONSE_UNIQUE:
-      - magus/job/v1/job.proto
+      - magus/job/v1alpha1/job.proto
     RPC_RESPONSE_STANDARD_NAME:
-      - magus/job/v1/job.proto
+      - magus/job/v1alpha1/job.proto
 breaking:
   use:
     - WIRE_JSON

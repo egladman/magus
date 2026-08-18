@@ -3,7 +3,7 @@ package metrics
 import (
 	"testing"
 
-	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1"
+	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1"
 	"google.golang.org/protobuf/proto"
 )
 

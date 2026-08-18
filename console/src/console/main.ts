@@ -59,7 +59,7 @@ import {
   type ReadinessComponent,
 } from "../lib/daemon";
 import { createClient } from "@connectrpc/connect";
-import { StatusService } from "../gen/magus/status/v1/status_pb";
+import { StatusService } from "../gen/magus/status/v1alpha1/status_pb";
 import { mountSharePanel } from "./share";
 import { mountActivityDrawer } from "./activityDrawer";
 import { applyFocusRing, getFocusRing, getDefaultHost } from "../lib/settings";
@@ -190,7 +190,7 @@ const SURFACES: Launchable[] = [
     pageId: "activity",
     // The bare noun, never "Trail": "audit trail" is the phrase it summons, and that frames the
     // surface as governance, which it is not. It also matches the service behind it
-    // (magus.activity.v1) and survives what is coming - once sessions group and replay, and an
+    // (magus.activity.v1alpha1) and survives what is coming - once sessions group and replay, and an
     // agent's reasoning hangs off the command it led to, "activity" still covers it.
     label: "Activity",
     hint: "Everything that happened here, and what led to it",

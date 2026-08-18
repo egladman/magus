@@ -42,15 +42,15 @@ import (
 	"github.com/egladman/magus/internal/service/console"
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
-	"github.com/egladman/magus/proto/gen/go/magus/activity/v1/activityv1connect"
-	"github.com/egladman/magus/proto/gen/go/magus/insight/v1/insightv1connect"
-	"github.com/egladman/magus/proto/gen/go/magus/job/v1/jobv1connect"
-	"github.com/egladman/magus/proto/gen/go/magus/memory/v1/memoryv1connect"
-	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1/metricsv1connect"
-	"github.com/egladman/magus/proto/gen/go/magus/notes/v1/notesv1connect"
-	"github.com/egladman/magus/proto/gen/go/magus/status/v1/statusv1connect"
-	"github.com/egladman/magus/proto/gen/go/magus/token/v1/tokenv1connect"
-	"github.com/egladman/magus/proto/gen/go/magus/tool/v1/toolv1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1/insightv1alpha1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/memory/v1alpha1/memoryv1alpha1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1/metricsv1alpha1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/notes/v1alpha1/notesv1alpha1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1/statusv1alpha1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/tool/v1alpha1/toolv1alpha1connect"
 	"github.com/egladman/magus/types"
 )
 
@@ -290,7 +290,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 
 			bridgeMux := http.NewServeMux()
 			// The JSON /api/v1/status route is GONE: the typed StatusService Connect route
-			// (magus.status.v1.StatusService/GetStatus, mounted below) is its full replacement -
+			// (magus.status.v1alpha1.StatusService/GetStatus, mounted below) is its full replacement -
 			// it serves the same live snapshot plus observing_since and config on the wire contract,
 			// and the console reads it there now.
 			bridgeMux.Handle("/api/v1/events", cors(eventsH))
@@ -346,13 +346,13 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// bridge Magus collects metrics locally. The daemon shares one provider across
 			// its bridge Magus and every per-workspace registry Magus (WithProvider), so this
 			// collector sees the counts those builds actually recorded; a disabled/export-only
-			// provider yields no collector and the mount is skipped. The Connect route lives at its own /magus.metrics.v1.*
+			// provider yields no collector and the mount is skipped. The Connect route lives at its own /magus.metrics.v1alpha1.*
 			// prefix (not under /api/), so it gets the same rebind + bearer + CORS guards
 			// applied directly rather than via the bridge mux.
 			if coll, ok := opts.Magus.MetricsCollector(); ok {
 				metricsSvc := metricshandler.NewService(coll, svc)
 				metricsSvc.Start(ctx)
-				mPath, mHandler := metricsv1connect.NewMetricsServiceHandler(metricsSvc)
+				mPath, mHandler := metricsv1alpha1connect.NewMetricsServiceHandler(metricsSvc)
 
 				// The dashboard is a cross-origin browser client (served from the hosted site),
 				// so the DNS-rebind accept-list must include the site origin, not just loopback.
@@ -376,7 +376,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// and governance activity, read-only over every loaded workspace's trail. Mounted
 			// with the same cross-origin guards as metrics (the dashboard is a hosted-site
 			// browser client) and unconditionally - the trail is readable even when metrics are off.
-			activityPath, activityHandler := activityv1connect.NewActivityServiceHandler(activityhandler.NewService(s.activityWorkspaces()))
+			activityPath, activityHandler := activityv1alpha1connect.NewActivityServiceHandler(activityhandler.NewService(s.activityWorkspaces()))
 			activityAllowed := allowed
 			if u, uerr := url.Parse(siteOrigin); uerr == nil && u.Host != "" {
 				activityAllowed = allowed.Allow(u.Host)
@@ -387,11 +387,11 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			log.InfoContext(ctx, "[BRIDGE] activity service mounted", slog.String("path", activityPath))
 
 			// Status Connect service: the typed convergence of the JSON /api/v1/status route
-			// onto the wire contract (magus.status.v1.Status). GetStatus is the one-shot the
+			// onto the wire contract (magus.status.v1alpha1.Status). GetStatus is the one-shot the
 			// dashboard reads; StreamStatus is the typed twin of the base64-SSE status frame.
 			// Same cross-origin guards as the other read services (the dashboard is a hosted-site
 			// browser client) and read-only, so it joins the share read surface too.
-			statusPath, statusConnectHandler := statusv1connect.NewStatusServiceHandler(status.NewConnectService(svc, opts.Build, log))
+			statusPath, statusConnectHandler := statusv1alpha1connect.NewStatusServiceHandler(status.NewConnectService(svc, opts.Build, log))
 			httpServer.Handle(statusPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, statusConnectHandler))))
 			shareGuarded[statusPath] = statusConnectHandler
 			log.InfoContext(ctx, "[BRIDGE] status service mounted", slog.String("path", statusPath))
@@ -405,7 +405,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// token handed to a phone on the LAN, not a remote handle for spawning
 			// processes on the operator's machine. The console reaches it over the
 			// authenticated loopback route.
-			toolPath, toolConnectHandler := toolv1connect.NewToolServiceHandler(toolhandler.NewService(opts.Magus))
+			toolPath, toolConnectHandler := toolv1alpha1connect.NewToolServiceHandler(toolhandler.NewService(opts.Magus))
 			httpServer.Handle(toolPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, toolConnectHandler))))
 			log.InfoContext(ctx, "[BRIDGE] tool service mounted", slog.String("path", toolPath))
 
@@ -415,7 +415,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// Same cross-origin guards as the other read services, and read-only, so it joins the
 			// share read surface too - the LAN "share to phone" dashboard renders insight, and it
 			// reaches it over this route now rather than the JSON one.
-			insightPath, insightConnectHandler := insightv1connect.NewInsightServiceHandler(insighthandler.NewService(svc))
+			insightPath, insightConnectHandler := insightv1alpha1connect.NewInsightServiceHandler(insighthandler.NewService(svc))
 			httpServer.Handle(insightPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, insightConnectHandler))))
 			shareGuarded[insightPath] = insightConnectHandler
 			log.InfoContext(ctx, "[BRIDGE] insight service mounted", slog.String("path", insightPath))
@@ -424,7 +424,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// rotate the activity trail, clear the cache). Mounted behind the same bearer guard and
 			// cross-origin allowance as the read services - never unauthenticated - so a browser
 			// client can trigger maintenance without the daemon exposing an open action endpoint.
-			jobPath, jobHandler := jobv1connect.NewJobServiceHandler(jobhandler.NewService(opts.Magus, opts.Version))
+			jobPath, jobHandler := jobv1alpha1connect.NewJobServiceHandler(jobhandler.NewService(opts.Magus, opts.Version))
 			httpServer.Handle(jobPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, jobHandler))))
 			log.InfoContext(ctx, "[BRIDGE] job service mounted", slog.String("path", jobPath))
 
@@ -496,7 +496,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// caller-supplied field. Reads (ListTokens) are not recorded. See internal/handler/trailrpc for
 			// the pattern and the arch-test ratchet that keeps it honest.
 			tokenAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindTokenLifecycle))
-			tokenPath, tokenHandler := tokenv1connect.NewTokenServiceHandler(tokenhandler.NewService(shareMgr), tokenAudit)
+			tokenPath, tokenHandler := tokenv1alpha1connect.NewTokenServiceHandler(tokenhandler.NewService(shareMgr), tokenAudit)
 			httpServer.Handle(tokenPath, httpx.GuardRebind(allowed, cors(httpx.BearerGuard(auth.VerifyCLIBearer, tokenHandler))))
 			log.InfoContext(ctx, "[BRIDGE] token service mounted", slog.String("path", tokenPath))
 
@@ -514,7 +514,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// are audited alongside the edits. The actor is stamped "operator" from the mount tier, never
 			// caller-supplied. The agent/MCP door onto the same files is audited separately.
 			memoryAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindMemory, trailrpc.WithAuditReads()))
-			memoryPath, memoryHandler := memoryv1connect.NewMemoryServiceHandler(memoryhandler.NewService(opts.Magus), memoryAudit)
+			memoryPath, memoryHandler := memoryv1alpha1connect.NewMemoryServiceHandler(memoryhandler.NewService(opts.Magus), memoryAudit)
 			httpServer.Handle(memoryPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, memoryHandler))))
 			log.InfoContext(ctx, "[BRIDGE] memory service mounted", slog.String("path", memoryPath))
 
@@ -532,7 +532,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// Audits READS (WithAuditReads) for the same reason memory does, sharpened by the
 			// private store: this is the only door that serves notes nothing else attributes.
 			notesAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindNotes, trailrpc.WithAuditReads()))
-			notesPath, notesHandler := notesv1connect.NewNotesServiceHandler(noteshandler.NewService(opts.Magus, opts.Config), notesAudit)
+			notesPath, notesHandler := notesv1alpha1connect.NewNotesServiceHandler(noteshandler.NewService(opts.Magus, opts.Config), notesAudit)
 			httpServer.Handle(notesPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyBearer, notesHandler))))
 			log.InfoContext(ctx, "[BRIDGE] notes service mounted", slog.String("path", notesPath))
 

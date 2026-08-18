@@ -33,8 +33,8 @@ import (
 
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/share"
-	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/token/v1/tokenv1connect"
+	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
 )
 
 // shareView is the narrow slice of *share.Manager the handler needs: read the active
@@ -46,7 +46,7 @@ type shareView interface {
 	CloseIf(fingerprint string) bool
 }
 
-// Service implements tokenv1connect.TokenServiceHandler over the shared connector
+// Service implements tokenv1alpha1connect.TokenServiceHandler over the shared connector
 // store and the daemon's share manager. loadStore is injectable so the list/revoke
 // mapping is unit-testable without a live daemon; it defaults to the real store
 // loader.
@@ -79,7 +79,7 @@ func newService(view shareView) *Service {
 	}
 }
 
-var _ tokenv1connect.TokenServiceHandler = (*Service)(nil)
+var _ tokenv1alpha1connect.TokenServiceHandler = (*Service)(nil)
 
 // ListTokens returns every connector token plus the active share token, each as a
 // secret-free TokenInfo. The cli token is deliberately absent: it is neither read

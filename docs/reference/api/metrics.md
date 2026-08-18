@@ -8,7 +8,7 @@ tags: [api, proto, connect, grpc, metricsservice]
 
 MetricsService serves the derived dashboard metrics. Served over ConnectRPC, so one endpoint speaks Connect (browser-native HTTP), gRPC, and gRPC-Web from this one contract.
 
-Package `magus.metrics.v1`, defined in `proto/magus/metrics/v1/metrics.proto`. Part of the [daemon API](index.md).
+Package `magus.metrics.v1alpha1`, defined in `proto/magus/metrics/v1alpha1/metrics.proto`. Part of the [daemon API](index.md).
 
 ## Methods
 
@@ -16,7 +16,7 @@ Package `magus.metrics.v1`, defined in `proto/magus/metrics/v1/metrics.proto`. P
 
 GetMetrics returns the current derived snapshot.
 
-`POST /magus.metrics.v1.MetricsService/GetMetrics`: unary.
+`POST /magus.metrics.v1alpha1.MetricsService/GetMetrics`: unary.
 
 Takes `GetMetricsRequest`, returns `GetMetricsResponse`.
 
@@ -24,7 +24,7 @@ Takes `GetMetricsRequest`, returns `GetMetricsResponse`.
 
 StreamMetrics pushes the rolling history first (one Backfill), then a fresh Snapshot on each tick, so the dashboard's charts and utilization grid start populated and stay live.
 
-`POST /magus.metrics.v1.MetricsService/StreamMetrics`: server streaming.
+`POST /magus.metrics.v1alpha1.MetricsService/StreamMetrics`: server streaming.
 
 Takes `StreamMetricsRequest`, returns `StreamMetricsResponse`.
 
@@ -120,21 +120,21 @@ Remote is the remote-cache instrument family: outcome tallies plus transfer late
 | `duration_p50` | double | 4 | seconds |
 | `duration_p95` | double | 5 | seconds |
 | `io_count` | int64 | 6 | number of get/put operations observed |
-| `bytes_total` | int64 | 7 | total bytes transferred (sum of the io.size histogram) |
+| `transferred_bytes` | int64 | 7 | total bytes transferred (sum of the io.size histogram) |
 
 ### Sample
 
-Sample is one point in the rolling utilization/activity history. The daemon appends one per tick; the dashboard diffs adjacent samples for per-interval rates and colors one grid square per sample by utilization.
+Sample is one point in the rolling utilization/activity history. The daemon appends one per tick; the dashboard diffs adjacent samples for per-interval rates and colors one grid square per sample by utilization.  Every field carries EXPLICIT PRESENCE, and that is the whole point of the message: a tick whose pool read or metric collection failed must record that it did not measure, never a zero. Zero is a measurement. An unset counter in a CUMULATIVE series is the dangerous case - a reader diffing adjacent samples sees one large negative step (indistinguishable from a counter reset) followed by one enormous positive step, so a single failed read corrupts the rate on both sides of it. capacity makes the same point in miniature: 0 already means "unlimited", so a zero written for "we could not read the pool" is not merely imprecise, it asserts the opposite of what happened.  This is the rule STALENESS\_UNMEASURED, VERDICT\_UNKNOWN and ANCHOR\_STATUS\_UNVERIFIED state in the sibling contracts: an unmeasured value must never render as a measured one. A client MUST render an unset field as a break in the series, never as zero and never by carrying the previous value forward.
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
-| `at` | Timestamp | 1 |  |
-| `running` | int32 | 2 | pool slots running at this tick |
-| `capacity` | int32 | 3 | pool capacity (0 = unlimited) |
-| `queued` | int32 | 4 | tasks queued for a slot |
-| `cache_hits` | int64 | 5 | cumulative; diff adjacent samples for a hit rate |
-| `cache_misses` | int64 | 6 | cumulative |
-| `target_runs` | int64 | 7 | cumulative target executions |
+| `sample_time` | Timestamp | 1 |  |
+| `running` | int32 | 2 | _optional_ pool slots running at this tick; unset = pool unreadable |
+| `capacity` | int32 | 3 | _optional_ pool capacity (0 = unlimited); unset = pool unreadable |
+| `queued` | int32 | 4 | _optional_ tasks queued for a slot; unset = pool unreadable |
+| `cache_hits` | int64 | 5 | _optional_ cumulative; diff adjacent samples for a hit rate |
+| `cache_misses` | int64 | 6 | _optional_ cumulative |
+| `target_runs` | int64 | 7 | _optional_ cumulative target executions |
 
 ### Sandbox
 
@@ -158,7 +158,7 @@ Snapshot is the derived-metrics view at one instant: each OTel instrument family
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
-| `captured_at` | Timestamp | 1 |  |
+| `capture_time` | Timestamp | 1 |  |
 | `target` | Latency | 2 | magus.target.duration + magus.target.runs |
 | `cache` | Latency | 3 | cache is the local Cache.Run family (magus.cache.duration + magus.cache.{hits,misses,errors}). Named "cache" (not "cache\_op") because "op" collides with the Operation glossary term and this family measures a Cache.Run, not a resolved op. |
 | `pool_wait` | Latency | 4 | magus.pool.wait.duration |

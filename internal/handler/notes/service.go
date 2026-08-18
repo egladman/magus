@@ -29,8 +29,8 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	store "github.com/egladman/magus/internal/notes"
-	notesv1 "github.com/egladman/magus/proto/gen/go/magus/notes/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/notes/v1/notesv1connect"
+	notesv1 "github.com/egladman/magus/proto/gen/go/magus/notes/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/notes/v1alpha1/notesv1alpha1connect"
 	"github.com/egladman/magus/types"
 )
 
@@ -42,7 +42,7 @@ type workspace interface {
 	KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph, error)
 }
 
-// Service implements notesv1connect.NotesServiceHandler over the on-disk note stores.
+// Service implements notesv1alpha1connect.NotesServiceHandler over the on-disk note stores.
 type Service struct {
 	ws  workspace
 	cfg config.Config
@@ -53,7 +53,7 @@ type Service struct {
 // location the reader never opted in to.
 func NewService(ws workspace, cfg config.Config) *Service { return &Service{ws: ws, cfg: cfg} }
 
-var _ notesv1connect.NotesServiceHandler = (*Service)(nil)
+var _ notesv1alpha1connect.NotesServiceHandler = (*Service)(nil)
 
 // scopedDir pairs one resolved store directory with the scope that says what putting a note
 // there means.

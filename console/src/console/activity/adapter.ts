@@ -1,4 +1,4 @@
-// adapter.ts - maps the daemon's activity trail (magus.activity.v1 ActivityEvent list) into
+// adapter.ts - maps the daemon's activity trail (magus.activity.v1alpha1 ActivityEvent list) into
 // the shared RenderModel (console/render/model), so the activity view paints each recorded
 // action with the SAME foldable, status-accented section renderer the log viewer uses. One
 // event becomes one section: a one-line head (action, actor, outcome, duration, time) over a
@@ -7,7 +7,7 @@
 
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
 import type { Duration } from "@bufbuild/protobuf/wkt";
-import { Kind, Outcome, type ActivityEvent } from "../../gen/magus/activity/v1/activity_pb";
+import { Kind, Outcome, type ActivityEvent } from "../../gen/magus/activity/v1alpha1/activity_pb";
 import type { RenderModel, Section } from "../render/model";
 
 // kindLabel is the short source tag shown in the head (the enum's stable, terse name).

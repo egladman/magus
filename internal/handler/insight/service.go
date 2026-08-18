@@ -1,6 +1,6 @@
 // Package insight is the console-facing InsightService handler: it serves every insight lens
 // (the four VCS-history lenses from one cached git-log scan, plus the run-outcome volatility
-// lens folded in fresh) as the magus.insight.v1 wire type. It is READ-only and maps
+// lens folded in fresh) as the magus.insight.v1alpha1 wire type. It is READ-only and maps
 // types.InsightView to the wire at the boundary - the console service owns assembly and
 // caching, this owns the wire, and types/ stays free of protobuf.
 //
@@ -17,8 +17,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/service/console"
-	insightv1 "github.com/egladman/magus/proto/gen/go/magus/insight/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/insight/v1/insightv1connect"
+	insightv1 "github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1/insightv1alpha1connect"
 	"github.com/egladman/magus/types"
 )
 
@@ -28,7 +28,7 @@ type Source interface {
 	Insight(ctx context.Context) (types.InsightView, error)
 }
 
-// Service implements insightv1connect.InsightServiceHandler over src.
+// Service implements insightv1alpha1connect.InsightServiceHandler over src.
 type Service struct {
 	src Source
 }
@@ -36,7 +36,7 @@ type Service struct {
 // NewService builds the InsightService Connect handler reading from src.
 func NewService(src Source) *Service { return &Service{src: src} }
 
-var _ insightv1connect.InsightServiceHandler = (*Service)(nil)
+var _ insightv1alpha1connect.InsightServiceHandler = (*Service)(nil)
 
 // GetInsight returns every lens in one message. A daemon with no workspace cannot scan
 // anything, which is a transient condition of THIS daemon rather than a bad request or a bug,

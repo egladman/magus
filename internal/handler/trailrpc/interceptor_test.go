@@ -15,18 +15,18 @@ import (
 	// Blank-imported so every magus.*.v1 service descriptor is registered in protoregistry.GlobalFiles
 	// for TestKnownVerbs to enumerate. This is the whole point of the ratchet: a new service/method
 	// linked into the daemon is visible here, so an unclassified verb cannot ship unnoticed.
-	_ "github.com/egladman/magus/proto/gen/go/magus/activity/v1"
-	_ "github.com/egladman/magus/proto/gen/go/magus/graph/v1"
-	_ "github.com/egladman/magus/proto/gen/go/magus/job/v1"
-	_ "github.com/egladman/magus/proto/gen/go/magus/memory/v1"
-	_ "github.com/egladman/magus/proto/gen/go/magus/metrics/v1"
-	_ "github.com/egladman/magus/proto/gen/go/magus/query/v1"
-	_ "github.com/egladman/magus/proto/gen/go/magus/status/v1"
-	_ "github.com/egladman/magus/proto/gen/go/magus/viewer/v1"
+	_ "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
+	_ "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
+	_ "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
+	_ "github.com/egladman/magus/proto/gen/go/magus/memory/v1alpha1"
+	_ "github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1"
+	_ "github.com/egladman/magus/proto/gen/go/magus/query/v1alpha1"
+	_ "github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1"
+	_ "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 
 	"github.com/egladman/magus/internal/trail"
-	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/token/v1/tokenv1connect"
+	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
 )
 
 func TestClassify(t *testing.T) {
@@ -57,7 +57,7 @@ func TestClassify(t *testing.T) {
 }
 
 func TestMethodName(t *testing.T) {
-	if got := methodName("/magus.token.v1.TokenService/RevokeToken"); got != "RevokeToken" {
+	if got := methodName("/magus.token.v1alpha1.TokenService/RevokeToken"); got != "RevokeToken" {
 		t.Errorf("methodName = %q, want RevokeToken", got)
 	}
 	if got := methodName("Bare"); got != "Bare" {
@@ -107,7 +107,7 @@ func (fakeTokenService) RevokeToken(context.Context, *connect.Request[tokenv1.Re
 
 func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 	dir := t.TempDir()
-	path, handler := tokenv1connect.NewTokenServiceHandler(
+	path, handler := tokenv1alpha1connect.NewTokenServiceHandler(
 		fakeTokenService{},
 		connect.WithInterceptors(Interceptor(dir, "operator", trail.KindTokenLifecycle)),
 	)
@@ -116,7 +116,7 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	client := tokenv1connect.NewTokenServiceClient(srv.Client(), srv.URL)
+	client := tokenv1alpha1connect.NewTokenServiceClient(srv.Client(), srv.URL)
 	ctx := context.Background()
 
 	// A read is NOT recorded.
@@ -146,7 +146,7 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 // service (TestInterceptorRecordsMutationSkipsRead) leaves the option off and skips the read.
 func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 	dir := t.TempDir()
-	path, handler := tokenv1connect.NewTokenServiceHandler(
+	path, handler := tokenv1alpha1connect.NewTokenServiceHandler(
 		fakeTokenService{},
 		connect.WithInterceptors(Interceptor(dir, "operator", trail.KindMemory, WithAuditReads())),
 	)
@@ -155,7 +155,7 @@ func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	client := tokenv1connect.NewTokenServiceClient(srv.Client(), srv.URL)
+	client := tokenv1alpha1connect.NewTokenServiceClient(srv.Client(), srv.URL)
 	ctx := context.Background()
 
 	// Both a read and a mutation are recorded when audit-reads is on.
@@ -200,7 +200,7 @@ func (erroringTokenService) RevokeToken(context.Context, *connect.Request[tokenv
 
 func TestInterceptorRecordsFailedMutation(t *testing.T) {
 	dir := t.TempDir()
-	path, handler := tokenv1connect.NewTokenServiceHandler(
+	path, handler := tokenv1alpha1connect.NewTokenServiceHandler(
 		erroringTokenService{},
 		connect.WithInterceptors(Interceptor(dir, "operator", trail.KindTokenLifecycle)),
 	)
@@ -209,7 +209,7 @@ func TestInterceptorRecordsFailedMutation(t *testing.T) {
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	client := tokenv1connect.NewTokenServiceClient(srv.Client(), srv.URL)
+	client := tokenv1alpha1connect.NewTokenServiceClient(srv.Client(), srv.URL)
 	if _, err := client.RevokeToken(context.Background(), connect.NewRequest(&tokenv1.RevokeTokenRequest{Identifier: "x"})); err == nil {
 		t.Fatal("expected RevokeToken to fail")
 	}

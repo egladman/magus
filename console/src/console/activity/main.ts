@@ -1,4 +1,4 @@
-// main.ts - the console's Activity surface: the daemon's audit trail (magus.activity.v1) painted with
+// main.ts - the console's Activity surface: the daemon's audit trail (magus.activity.v1alpha1) painted with
 // the SAME foldable, status-accented sections as the log viewer (buildSection over the shared render
 // model), so a run's output and the trail read as one design. Unlike logs/graph/dashboard it has NO
 // standalone page - it is built fresh into a console host. It lists a page of events via
@@ -15,7 +15,7 @@ import {
   Kind,
   Outcome,
   type ActivityEvent,
-} from "../../gen/magus/activity/v1/activity_pb";
+} from "../../gen/magus/activity/v1alpha1/activity_pb";
 import { activityToModel, groupEventsByKind, tsMillis } from "./adapter";
 import { notify } from "../../lib/notifications";
 import { buildSection } from "../render/sections";

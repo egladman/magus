@@ -28,7 +28,7 @@ func (b BuildInfo) Fingerprint() string {
 
 // StatusReport is the canonical JSON/YAML shape returned by `magus status -o json`.
 // The daemon serves the same data to the console over the typed StatusService (its live
-// fields are projected onto magus.status.v1.Status) so both consumers share one definition.
+// fields are projected onto magus.status.v1alpha1.Status) so both consumers share one definition.
 // Fields are exported so pkg types can be read from internal packages without importing cmd/magus.
 type StatusReport struct {
 	Telemetry TelemetryStatus `json:"telemetry" yaml:"telemetry"`
@@ -231,7 +231,7 @@ type StatusLockWaiter struct {
 }
 
 // TargetRunState is where a target sits in its lifecycle within a run. Values match the
-// magus.status.v1.TargetRun.State enum names (lowercased) so the JSON and the wire agree.
+// magus.status.v1alpha1.TargetRun.State enum names (lowercased) so the JSON and the wire agree.
 type TargetRunState string
 
 const (

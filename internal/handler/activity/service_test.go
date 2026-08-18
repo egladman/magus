@@ -14,8 +14,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/trail"
-	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1"
-	queryv1 "github.com/egladman/magus/proto/gen/go/magus/query/v1"
+	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
+	queryv1 "github.com/egladman/magus/proto/gen/go/magus/query/v1alpha1"
 )
 
 func actions(events []*activityv1.ActivityEvent) []string {

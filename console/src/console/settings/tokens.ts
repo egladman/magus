@@ -1,5 +1,5 @@
 // tokens.ts - the Settings "Access tokens" section: a LIST + REVOKE view over the daemon's
-// connector tokens and the active share token, spoken to over magus.token.v1.TokenService.
+// connector tokens and the active share token, spoken to over magus.token.v1alpha1.TokenService.
 //
 // It is VIEW-AND-REVOKE ONLY, matching the service: there is deliberately NO mint control.
 // Minting a durable credential stays a CLI-only operation (`magus config mcp connector`), so
@@ -12,7 +12,7 @@
 // as HTML, so a token name can carry no markup into the page.
 
 import { createClient, type Client } from "@connectrpc/connect";
-import { TokenService, TokenScope, type TokenInfo } from "../../gen/magus/token/v1/token_pb";
+import { TokenService, TokenScope, type TokenInfo } from "../../gen/magus/token/v1alpha1/token_pb";
 import { createDaemonTransport, getLiveToken, isCapabilityDenied } from "../../lib/daemon";
 import { showToast } from "../../lib/refresh-toast";
 import { h } from "../view";

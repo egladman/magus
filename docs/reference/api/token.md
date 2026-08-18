@@ -8,7 +8,7 @@ tags: [api, proto, connect, grpc, tokenservice]
 
 TokenService is a VIEW-AND-REVOKE surface over the daemon's connector and share tokens: List reveals only fingerprints (never the secret bytes) and Revoke removes a token by its fingerprint or name. There is deliberately no mint RPC - minting is CLI-only, so the browser cannot create a durable credential.
 
-Package `magus.token.v1`, defined in `proto/magus/token/v1/token.proto`. Part of the [daemon API](index.md).
+Package `magus.token.v1alpha1`, defined in `proto/magus/token/v1alpha1/token.proto`. Part of the [daemon API](index.md).
 
 ## Methods
 
@@ -16,7 +16,7 @@ Package `magus.token.v1`, defined in `proto/magus/token/v1/token.proto`. Part of
 
 ListTokens returns every connector token plus the active share token (if any), each described by a prefix-only fingerprint - never the secret bytes.
 
-`POST /magus.token.v1.TokenService/ListTokens`: unary.
+`POST /magus.token.v1alpha1.TokenService/ListTokens`: unary.
 
 Takes `ListTokensRequest`, returns `ListTokensResponse`.
 
@@ -24,7 +24,7 @@ Takes `ListTokensRequest`, returns `ListTokensResponse`.
 
 RevokeToken removes a connector token or the share token by identifier. Revoking the share token also closes its LAN listener. The cli token is not revocable here.
 
-`POST /magus.token.v1.TokenService/RevokeToken`: unary.
+`POST /magus.token.v1alpha1.TokenService/RevokeToken`: unary.
 
 Takes `RevokeTokenRequest`, returns `RevokeTokenResponse`.
 
@@ -61,7 +61,7 @@ TokenInfo describes one manageable token WITHOUT its secret, minimized to exactl
 | `name` | string | 1 | connector name, or a label for the share token |
 | `identifier` | string | 2 | prefix-only fingerprint; the Revoke key |
 | `scope` | TokenScope | 3 |  |
-| `expires` | Timestamp | 5 | unset means the token never expires |
+| `expire_time` | Timestamp | 5 | unset means the token never expires |
 
 ## Enums
 

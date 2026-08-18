@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"connectrpc.com/connect"
-	toolv1 "github.com/egladman/magus/proto/gen/go/magus/tool/v1"
+	toolv1 "github.com/egladman/magus/proto/gen/go/magus/tool/v1alpha1"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"

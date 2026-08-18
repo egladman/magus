@@ -1,14 +1,14 @@
 ---
 title: ActivityService
-description: "ActivityService serves the trail to a viewer, mirroring magus.viewer.v1's shape: List a page of events (newest first), Get a payload blob by ref."
+description: "ActivityService serves the trail to a viewer, mirroring magus.viewer.v1alpha1's shape: List a page of events (newest first), Get a payload blob by ref."
 tags: [api, proto, connect, grpc, activityservice]
 ---
 
 # ActivityService
 
-ActivityService serves the trail to a viewer, mirroring magus.viewer.v1's shape: List a page of events (newest first), Get a payload blob by ref. Mounted on the console's human-facing API surface, never under /mcp (the agent protocol surface).
+ActivityService serves the trail to a viewer, mirroring magus.viewer.v1alpha1's shape: List a page of events (newest first), Get a payload blob by ref. Mounted on the console's human-facing API surface, never under /mcp (the agent protocol surface).
 
-Package `magus.activity.v1`, defined in `proto/magus/activity/v1/activity.proto`. Part of the [daemon API](index.md).
+Package `magus.activity.v1alpha1`, defined in `proto/magus/activity/v1alpha1/activity.proto`. Part of the [daemon API](index.md).
 
 ## Methods
 
@@ -16,7 +16,7 @@ Package `magus.activity.v1`, defined in `proto/magus/activity/v1/activity.proto`
 
 ListActivity returns a page of recent events, newest first, narrowed by filter.
 
-`POST /magus.activity.v1.ActivityService/ListActivity`: unary.
+`POST /magus.activity.v1alpha1.ActivityService/ListActivity`: unary.
 
 Takes `ListActivityRequest`, returns `ListActivityResponse`.
 
@@ -24,7 +24,7 @@ Takes `ListActivityRequest`, returns `ListActivityResponse`.
 
 GetPayload returns a stored request or response body by its ref (from an ActivityEvent).
 
-`POST /magus.activity.v1.ActivityService/GetPayload`: unary.
+`POST /magus.activity.v1alpha1.ActivityService/GetPayload`: unary.
 
 Takes `GetPayloadRequest`, returns `GetPayloadResponse`.
 
@@ -75,7 +75,7 @@ ActivityQuery narrows the listing server-side. Fields AND together; repeated val
 | Field | Type | # | Description |
 |-------|------|---|-------------|
 | `body` | bytes | 1 |  |
-| `bytes` | int64 | 2 |  |
+| `size_bytes` | int64 | 2 |  |
 
 ### ListActivityRequest
 

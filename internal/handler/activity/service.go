@@ -3,7 +3,7 @@
 // viewer. The view is DAEMON-WIDE - it merges the trail of every workspace the daemon has
 // loaded, because the panel exists to answer "what is touching this daemon" and a per-workspace
 // view would silently under-report every other workspace. It is READ-only and maps the on-disk
-// trail.Event (internal/trail) to the magus.activity.v1 wire type at the boundary - the store
+// trail.Event (internal/trail) to the magus.activity.v1alpha1 wire type at the boundary - the store
 // owns the format, this owns the wire.
 // Mounted on the console's human-facing API surface by the daemon, never under /mcp.
 package activity
@@ -20,8 +20,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/trail"
-	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/activity/v1/activityv1connect"
+	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 )
 
 const (
@@ -39,7 +39,7 @@ type Workspace struct {
 	CacheDir string
 }
 
-// Service implements activityv1connect.ActivityServiceHandler over the activity trails of every
+// Service implements activityv1alpha1connect.ActivityServiceHandler over the activity trails of every
 // workspace the daemon has loaded. Read-only: producers (the MCP handler, agent hooks, and later
 // jobs/config/token) write the trails; this reads them.
 type Service struct {
@@ -67,7 +67,7 @@ func (s *Service) loaded() []Workspace {
 	return out
 }
 
-var _ activityv1connect.ActivityServiceHandler = (*Service)(nil)
+var _ activityv1alpha1connect.ActivityServiceHandler = (*Service)(nil)
 
 // ListActivity returns recent events, newest first, narrowed by the request filter. Paging is a
 // simple recent-window today (page_size, capped); page_token is unused, so next_page_token is

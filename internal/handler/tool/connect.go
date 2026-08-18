@@ -17,8 +17,8 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	toolv1 "github.com/egladman/magus/proto/gen/go/magus/tool/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/tool/v1/toolv1connect"
+	toolv1 "github.com/egladman/magus/proto/gen/go/magus/tool/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/tool/v1alpha1/toolv1alpha1connect"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -67,7 +67,7 @@ func NewService(ws workspace) *Service {
 	return &Service{ws: ws, probes: map[string]probe{}, ttl: probeTTL}
 }
 
-var _ toolv1connect.ToolServiceHandler = (*Service)(nil)
+var _ toolv1alpha1connect.ToolServiceHandler = (*Service)(nil)
 
 // ListTools reports every project's tools, or one project's when the request names it.
 func (s *Service) ListTools(ctx context.Context, req *connect.Request[toolv1.ListToolsRequest]) (*connect.Response[toolv1.ListToolsResponse], error) {

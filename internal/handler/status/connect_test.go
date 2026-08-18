@@ -10,8 +10,8 @@ import (
 
 	"connectrpc.com/connect"
 
-	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/status/v1/statusv1connect"
+	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1/statusv1alpha1connect"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -90,13 +90,13 @@ func TestConnectStreamStatusPushesInitialThenOnChange(t *testing.T) {
 	svc := NewConnectService(src, types.BuildInfo{Version: "v1"}, nil)
 	svc.interval = 10 * time.Millisecond // tighten the poll so the test does not wait on the 2s default
 
-	path, handler := statusv1connect.NewStatusServiceHandler(svc)
+	path, handler := statusv1alpha1connect.NewStatusServiceHandler(svc)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	client := statusv1connect.NewStatusServiceClient(srv.Client(), srv.URL)
+	client := statusv1alpha1connect.NewStatusServiceClient(srv.Client(), srv.URL)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()

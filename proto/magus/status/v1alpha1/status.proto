@@ -1,0 +1,209 @@
+syntax = "proto3";
+
+// Package magus.status.v1alpha1 is the versioned wire contract for magus's status/dashboard
+// view, scoped to LIVE state: overall health, the concurrency pool (capacity/running/
+// queued slots), what is running right now - the running targets, their workspace, and
+// how long they have run - and live cache ACTIVITY (hit/miss/error tallies + real on-disk
+// size). Static CONFIG (telemetry, the cache cap/immutability, build flags) is deliberately
+// NOT here; that is `magus status`/config, not "what is happening." Backs a native-feeling
+// /dashboard. A sibling of magus.viewer.v1alpha1. buf-breaking gates this file.
+package magus.status.v1alpha1;
+
+import "google/protobuf/timestamp.proto";
+
+// Health is the at-a-glance rollup a dashboard shows.
+enum Health {
+  HEALTH_UNSPECIFIED = 0;
+  HEALTH_HEALTHY = 1;   // daemon reachable, pool nominal
+  HEALTH_DEGRADED = 2;  // reachable but something is off (pool error, saturation)
+  HEALTH_DOWN = 3;      // no daemon / pool
+}
+
+// Status is the live snapshot.
+message Status {
+  reserved 3;                    // was string magus_version; replaced by the granular BuildInfo below
+  reserved "magus_version";
+  Health health = 1;
+  Pool pool = 2;                 // live concurrency; absent when no daemon/pool is running
+  repeated Run runs = 4;         // runs the daemon is executing right now (adopted dispatches)
+  repeated Service services = 5; // long-running shared services the daemon is hosting right now
+  BuildInfo build = 6;           // the running daemon's build identity
+  repeated Lock locks = 7;       // per-project workspace locks held right now
+}
+
+// Lock is one held per-project workspace lock and the process holding it.
+//
+// A held lock is the NORMAL state of a mutating run, so this is state and never a
+// fault: it must not fail a readiness or liveness check, because a run queued behind
+// a peer is waiting correctly and restarting it only sends it to the back of the
+// queue. It is on the wire because an OS file lock carries no identity of its own, so
+// without the holder a blocked run is indistinguishable from a hung one - and a lock
+// is held for exactly as long as its holder lives, which means one held by a process
+// nobody remembers starting blocks everything else silently and forever.
+message Lock {
+  string project = 1;                            // workspace-relative path; "." is the root
+  int32 pid = 2;                                 // holder's process id
+  string command = 3;                            // holder's argv, for recognizing what it is
+  string dir = 4;                                // holder's working directory; a path that no longer exists means abandoned
+  google.protobuf.Timestamp acquire_time = 5;    // when the holder took it; age is the signal a human reads
+  repeated LockWaiter waiters = 6;               // processes blocked on this lock right now
+  int32 stale_after_seconds = 7;                 // when to read this holder as possibly abandoned rather than busy
+}
+
+// LockWaiter is one process blocked on a lock. A holder answers "who is working"; a
+// waiter answers "who is stalled because of it", which is the question anyone looking
+// at a queue that is not moving is actually asking. Transient by nature, so a snapshot.
+message LockWaiter {
+  string project = 1;                  // reserved for a flattened view; empty inside Lock
+  int32 pid = 2;
+  string command = 3;
+  string dir = 4;
+  google.protobuf.Timestamp wait_time = 5; // when it began waiting
+}
+
+// BuildInfo identifies the running magus binary: the version tag, the commit it was built
+// from, the build date, and the full human fingerprint (what `magus --version` prints).
+// Reported so a dashboard shows exactly which daemon it is talking to. All fields are
+// "unknown" for an unstamped dev build.
+message BuildInfo {
+  string version = 1;     // git describe, e.g. "v0.1.0-3-gabc1234"
+  string commit = 2;      // short commit hash
+  string date = 3;        // build date, RFC3339
+  string fingerprint = 4; // full identity: "magus <version> (<commit>) built <date>"
+}
+
+// Run is one in-flight invocation the daemon has adopted - a `magus run`/`affected`
+// dispatch, keyed by its invocation id. It carries the per-target execution state a
+// dashboard renders as a live run row, so the SAME status stream that shows the pool
+// also shows what each run's targets are doing.
+message Run {
+  string inv = 1;                             // invocation id (inv...); deep-links to the run's live log
+  string trigger = 2;                         // how the run was spawned: run | affected | ci | ...
+  google.protobuf.Timestamp start_time = 3;   // when the invocation opened
+  repeated TargetRun targets = 4;             // per-target execution state within this run
+}
+
+// TargetRun is the execution state of one target within a Run. It advances QUEUED ->
+// RUNNING -> PASSED|FAILED|CACHED as the run emits journal events; a finished target
+// carries its output reference and wall-clock duration.
+message TargetRun {
+  // State is where a target sits in its lifecycle.
+  // Values carry the STATE_ prefix because protobuf enum values share their
+  // PARENT's scope, so an unprefixed CACHED would collide with any other enum
+  // declaring the same name in this package. STATE_UNSPECIFIED always followed the
+  // convention; the rest did not, which buf's ENUM_VALUE_PREFIX rule caught once
+  // proto's lint target started running. Renaming a value leaves the wire
+  // untouched - encoding is by number, and these are unchanged.
+  enum State {
+    STATE_UNSPECIFIED = 0;
+    STATE_QUEUED = 1;   // scheduled, not yet started
+    STATE_RUNNING = 2;  // a subprocess is executing
+    STATE_PASSED = 3;   // finished successfully
+    STATE_FAILED = 4;   // finished with an error
+    STATE_CACHED = 5;   // satisfied from cache (no work run)
+  }
+  string project = 1;                         // repo-relative project path
+  string target = 2;                          // target name (as the CLI spells it)
+  State state = 3;
+  google.protobuf.Timestamp start_time = 4;   // when the target began running (unset while QUEUED)
+  google.protobuf.Timestamp end_time = 5;     // when the target finished (unset while active)
+  string output_ref = 6;                      // output reference, once finished
+  int64 duration_ms = 7;                      // wall-clock duration in ms, once finished
+}
+
+// Service is one long-running shared service the daemon is hosting right now, kept warm
+// across invocations. It carries the derived identity (id/label/command/ports), the live
+// state a dashboard renders, and how many targets currently depend on it.
+message Service {
+  string id = 1;                              // short service id (fingerprint prefix)
+  string label = 2;                           // human name: image[:tag] or the binary basename
+  string command = 3;                         // full process command, space-joined
+  repeated string ports = 4;                  // container-side published ports (empty if unknown)
+  string state = 5;                           // starting | running | idle | failed
+  int32 dependents = 6;                       // targets currently depending on this service
+  google.protobuf.Timestamp start_time = 7;   // when the registry began starting this instance
+}
+
+// Pool is the live concurrency pool - the slots and the work occupying them.
+message Pool {
+  int32 parent_pid = 1;
+  string daemon_version = 2;
+  string mode = 3;             // "daemon" | "proc" | ""
+  int32 capacity = 4;          // total concurrency slots (0 = unlimited)
+  int32 running = 5;           // slots currently running
+  int32 queued = 6;            // tasks queued for a slot
+  repeated RunningTarget running_targets = 7; // what is running right now
+  repeated Workspace workspaces = 8;
+  repeated string affected = 9;
+  Cache cache = 10;            // aggregate cache activity across the warm workspaces
+}
+
+// RunningTarget is one running unit of work in the pool.
+message RunningTarget {
+  repeated string args = 1;                  // the argument vector (carries the target/project)
+  string workspace = 2;
+  google.protobuf.Timestamp start_time = 3;  // when the running target started
+  string step = 4;                           // the cache step currently executing
+  string invocation = 5;                     // the invocation id (inv...) this running target belongs to; deep-links to its live log
+}
+
+// Workspace is one workspace the daemon has loaded.
+message Workspace {
+  string root = 1;
+  google.protobuf.Timestamp load_time = 2;
+  google.protobuf.Timestamp last_access_time = 3;
+  Cache cache = 4;             // this workspace's cache activity
+  // secret_provider is the NAME of the provider spell this workspace's magusfile selected;
+  // empty means no declaration and the built-in environment provider applies. It exists so
+  // a reader can see that credential resolution is wired up and through what - the same
+  // config visibility the cache cap gets.
+  //
+  // The name and nothing else. No reference list, no value: magus does not store secrets,
+  // it reads them through a provider, and publishing what a build CAN reach would be a map
+  // of what to go after.
+  string secret_provider = 5;
+}
+
+// Cache is live cache ACTIVITY: the hit/miss/error tallies a warm cache has served this
+// session plus its real on-disk size. These are running counters (not static config like
+// the cap or immutability), so a dashboard plots hit-rate over time by sampling the stream.
+message Cache {
+  int64 hits = 1;
+  int64 misses = 2;
+  int64 errors = 3;
+  int64 size_bytes = 4;   // real on-disk size of the cache dir (0 = unknown/not computed)
+  int32 size_cap_mb = 5;  // configured cap (MAGUS_CACHE_SIZE_MB; 0 = unlimited)
+}
+
+// StatusService serves the snapshot, and streams it for a live dashboard.
+service StatusService {
+  // GetStatus returns the current snapshot.
+  rpc GetStatus(GetStatusRequest) returns (GetStatusResponse);
+  // StreamStatus pushes a fresh snapshot whenever the pool changes (or on a heartbeat),
+  // so a dashboard reflects what is running without polling.
+  rpc StreamStatus(StreamStatusRequest) returns (stream StreamStatusResponse);
+}
+
+message GetStatusRequest {}
+message GetStatusResponse {
+  Status status = 1;
+  // observe_start_time and config ride the ONE-SHOT response envelope, NOT the streamed Status frame: they
+  // are static per daemon session (Status stays "what is happening right now"), so a dashboard reads them
+  // once via GetStatus rather than on every StreamStatus push. This is the typed home for the two fields
+  // the deprecated JSON /api/v1/status route used to carry.
+  google.protobuf.Timestamp observe_start_time = 2; // when this daemon began observing (its start)
+  Config config = 3;                             // the daemon's resolved, read-only configuration
+}
+
+// Config is the daemon's resolved, read-only configuration a dashboard shows so an operator can see what
+// the daemon is set to do without a terminal round-trip. Static per session, so it rides GetStatusResponse
+// (the one-shot), never the live Status frame.
+message Config {
+  repeated string default_charms = 1; // the charms applied to every run by default
+  int32 concurrency = 2;              // the concurrency cap (0 = unlimited)
+  bool sandbox = 3;                   // whether filesystem sandboxing is on
+}
+message StreamStatusRequest {}
+message StreamStatusResponse {
+  Status status = 1;
+}

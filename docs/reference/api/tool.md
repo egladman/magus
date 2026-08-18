@@ -8,7 +8,7 @@ tags: [api, proto, connect, grpc, toolservice]
 
 ToolService serves the toolchain view. Read-only: nothing here installs, selects, or moves a version.
 
-Package `magus.tool.v1`, defined in `proto/magus/tool/v1/tool.proto`. Part of the [daemon API](index.md).
+Package `magus.tool.v1alpha1`, defined in `proto/magus/tool/v1alpha1/tool.proto`. Part of the [daemon API](index.md).
 
 ## Methods
 
@@ -16,7 +16,7 @@ Package `magus.tool.v1`, defined in `proto/magus/tool/v1/tool.proto`. Part of th
 
 ListTools returns every project's tools with their windows and verdicts.
 
-`POST /magus.tool.v1.ToolService/ListTools`: unary.
+`POST /magus.tool.v1alpha1.ToolService/ListTools`: unary.
 
 Takes `ListToolsRequest`, returns `ListToolsResponse`.
 
@@ -58,7 +58,7 @@ Tool is one binary a spell drives, as this workspace currently sees it.
 | `effective` | VersionBounds | 6 | the intersection actually enforced, narrower wins |
 | `verdict` | Verdict | 7 |  |
 | `diagnostic_code` | string | 8 | "MGS3005"/"MGS3006" when violated, else empty |
-| `probed_at` | Timestamp | 9 | probed\_at is when this version was read. A console page has no build to piggyback on, so the probe behind it may be older than the page; surfacing the age is honest where implying live is not. |
+| `probe_time` | Timestamp | 9 | probe\_time is when this version was read. A console page has no build to piggyback on, so the probe behind it may be older than the page; surfacing the age is honest where implying live is not. |
 
 ### VersionBounds
 

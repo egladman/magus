@@ -13,7 +13,7 @@
 // There is deliberately no "enforced" column. Whether a window can actually fail a build
 // depends on whether the project dispatches a spell op at all, which this view cannot see;
 // an earlier attempt computed "does an op fork this binary", which is a different question
-// and answered it wrongly. See the reserved field in magus/tool/v1/tool.proto.
+// and answered it wrongly. See the reserved field in magus/tool/v1alpha1/tool.proto.
 
 import type { DashboardState, ToolRowView } from "../state";
 import { SortableTable, type Column } from "./widgets";

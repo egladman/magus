@@ -8,7 +8,7 @@ tags: [api, proto, connect, grpc, jobservice]
 
 JobService is the daemon's control surface for background maintenance jobs. Trigger RPCs submit a job and return immediately; ListJobs reports every job's state. Read surfaces stay on the per-domain services - this one only mutates.
 
-Package `magus.job.v1`, defined in `proto/magus/job/v1/job.proto`. Part of the [daemon API](index.md).
+Package `magus.job.v1alpha1`, defined in `proto/magus/job/v1alpha1/job.proto`. Part of the [daemon API](index.md).
 
 ## Methods
 
@@ -16,7 +16,7 @@ Package `magus.job.v1`, defined in `proto/magus/job/v1/job.proto`. Part of the [
 
 SyncGraph reconciles the knowledge graph to current source (rebuild and reindex).
 
-`POST /magus.job.v1.JobService/SyncGraph`: unary.
+`POST /magus.job.v1alpha1.JobService/SyncGraph`: unary.
 
 Takes `SyncGraphRequest`, returns `SubmitJobResponse`.
 
@@ -24,7 +24,7 @@ Takes `SyncGraphRequest`, returns `SubmitJobResponse`.
 
 RotateActivities trims the activity trail to its cap and drops orphaned payload blobs.
 
-`POST /magus.job.v1.JobService/RotateActivities`: unary.
+`POST /magus.job.v1alpha1.JobService/RotateActivities`: unary.
 
 Takes `RotateActivitiesRequest`, returns `SubmitJobResponse`.
 
@@ -32,7 +32,7 @@ Takes `RotateActivitiesRequest`, returns `SubmitJobResponse`.
 
 ClearCache invalidates cached build entries for the workspace.
 
-`POST /magus.job.v1.JobService/ClearCache`: unary.
+`POST /magus.job.v1alpha1.JobService/ClearCache`: unary.
 
 Takes `ClearCacheRequest`, returns `SubmitJobResponse`.
 
@@ -40,7 +40,7 @@ Takes `ClearCacheRequest`, returns `SubmitJobResponse`.
 
 RotateLogs trims the invocation run-log journals back to their cap.
 
-`POST /magus.job.v1.JobService/RotateLogs`: unary.
+`POST /magus.job.v1alpha1.JobService/RotateLogs`: unary.
 
 Takes `RotateLogsRequest`, returns `SubmitJobResponse`.
 
@@ -48,7 +48,7 @@ Takes `RotateLogsRequest`, returns `SubmitJobResponse`.
 
 ListJobs returns every registered job with its running state, last run, and target size.
 
-`POST /magus.job.v1.JobService/ListJobs`: unary.
+`POST /magus.job.v1alpha1.JobService/ListJobs`: unary.
 
 Takes `ListJobsRequest`, returns `ListJobsResponse`.
 
@@ -77,7 +77,7 @@ JobRun is one completed execution of a job.
 | Field | Type | # | Description |
 |-------|------|---|-------------|
 | `invocation_id` | string | 1 |  |
-| `finished_at` | Timestamp | 2 |  |
+| `end_time` | Timestamp | 2 |  |
 | `duration` | Duration | 3 |  |
 | `ok` | bool | 4 | false when the run errored |
 | `error` | string | 5 | error text when ok is false |
@@ -100,8 +100,8 @@ ResourceSize is the current magnitude of a job's target resource, for a caller t
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
-| `bytes` | int64 | 1 | total on-disk bytes |
-| `count` | int64 | 2 | logical item count (trail events, cached entries, run logs) |
+| `size_bytes` | int64 | 1 | total on-disk bytes |
+| `item_count` | int64 | 2 | logical item count (trail events, cached entries, run logs) |
 
 ### RotateActivitiesRequest
 

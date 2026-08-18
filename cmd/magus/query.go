@@ -252,7 +252,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		return nil
 	}
 	if o.open {
-		// The viewer ingests a magus.viewer.v1 Journal, so hand it the ref's display events -
+		// The viewer ingests a magus.viewer.v1alpha1 Journal, so hand it the ref's display events -
 		// the browser renders pretty from structure.
 		data, desc, err := m.OutputByRef(ref)
 		if err != nil {
