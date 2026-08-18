@@ -24,8 +24,8 @@ See [Skills](../../guides/integrations/agents/skills.md) for the difference.
 | [magus-docs-lookup](magus-docs-lookup.md) | 3670 | 2956 | 19% | Traverse magus's own documentation to answer a "how does magus do X / what does Y mean / where is Z documented" question, instead of guessing an answer or a URL. |
 | [magus-handoff-journal](magus-handoff-journal.md) | 4178 | 3506 | 16% | Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions. |
 | [magus-query](magus-query.md) | 10607 | 8397 | 20% | Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs). |
-| [magus-run](magus-run.md) | 9938 | 6481 | 34% | Run builds, tests, lints, and codegen through magus targets. |
+| [magus-run](magus-run.md) | 10578 | 6950 | 34% | Run builds, tests, lints, and codegen through magus targets. |
 | [magus-sdk](magus-sdk.md) | 13323 | 12886 | 3% | Help a Go developer consume magus as a library (import "github.com/egladman/magus") instead of shelling out to the CLI, and audit whether the SDK actually serves them. |
 | [magus-vcs-hygiene](magus-vcs-hygiene.md) | 7482 | 5469 | 26% | Safe git operations in a magus workspace (any repo with magusfile.buzz at the root). |
 | [magus-workspace-rules](magus-workspace-rules.md) | 5436 | 4392 | 19% | Adapt magus's installed agent surface to THIS workspace without breaking it. |
-| **all 13** | **117052** | **91863** | **21%** | |
+| **all 13** | **117692** | **92332** | **21%** | |

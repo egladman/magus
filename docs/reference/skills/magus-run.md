@@ -2,8 +2,8 @@
 title: magus-run
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 9938
-skill_simple_bytes: 6481
+skill_full_bytes: 10578
+skill_simple_bytes: 6950
 ---
 
 # magus-run
@@ -29,7 +29,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `9ce9e1dede84` |
+| `skill-content` | `1d92b76afd16` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
@@ -91,6 +91,14 @@ resolves a name to its path; over MCP, `magus_where`/`magus_describe` ignore the
 4. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...)
    for work a target covers. If no target covers it, say so rather than silently
    going around magus.
+5. Rewriting DEPENDENCY state (`go get`, `go mod tidy`, `pnpm add`, `cargo
+   update`, `uv lock`, `pip-compile`) needs the `relock` charm: `magus run
+   <target>:relock <project>`, so the rewrite happens inside magus, cached and
+   visible to affected tracking. It is reserved and deliberately not part of `rw` -
+   `rw` covers output reproducible from a clean checkout, `relock` covers state that
+   depends on what a registry serves today. `ci` strips both, so a gate verifies
+   the committed lockfile rather than refreshing it. Applying a lockfile (`npm ci`,
+   `pnpm install --frozen-lockfile`) re-resolves nothing and needs no charm.
 
 ## Command patterns
 
@@ -287,6 +295,12 @@ project (`magus run test web`), or let `magus affected` compute it from the diff
 4. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...)
    for work a target covers. If no target covers it, say so rather than silently
    going around magus.
+5. Rewriting DEPENDENCY state (`go get`, `go mod tidy`, `pnpm add`, `cargo
+   update`, `uv lock`, `pip-compile`) needs the `relock` charm: `magus run
+   <target>:relock <project>`. It is reserved and deliberately not part of `rw` -
+   `rw` covers output reproducible from a clean checkout, `relock` covers state that
+   depends on what a registry serves today. Applying a lockfile (`npm ci`,
+   `pnpm install --frozen-lockfile`) re-resolves nothing and needs no charm.
 
 ## Command patterns
 
