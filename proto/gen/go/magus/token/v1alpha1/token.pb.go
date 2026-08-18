@@ -324,50 +324,6 @@ func (x *RevokeTokenRequest) GetIdentifier() string {
 	return ""
 }
 
-type RevokeTokenResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Token         *TokenInfo             `protobuf:"bytes,1,opt,name=token,proto3" json:"token,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *RevokeTokenResponse) Reset() {
-	*x = RevokeTokenResponse{}
-	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[4]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *RevokeTokenResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*RevokeTokenResponse) ProtoMessage() {}
-
-func (x *RevokeTokenResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_token_v1alpha1_token_proto_msgTypes[4]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use RevokeTokenResponse.ProtoReflect.Descriptor instead.
-func (*RevokeTokenResponse) Descriptor() ([]byte, []int) {
-	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{4}
-}
-
-func (x *RevokeTokenResponse) GetToken() *TokenInfo {
-	if x != nil {
-		return x.Token
-	}
-	return nil
-}
-
 var File_magus_token_v1alpha1_token_proto protoreflect.FileDescriptor
 
 const file_magus_token_v1alpha1_token_proto_rawDesc = "" +
@@ -387,19 +343,17 @@ const file_magus_token_v1alpha1_token_proto_rawDesc = "" +
 	"\x12RevokeTokenRequest\x12'\n" +
 	"\n" +
 	"identifier\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
-	"identifier\"L\n" +
-	"\x13RevokeTokenResponse\x125\n" +
-	"\x05token\x18\x01 \x01(\v2\x1f.magus.token.v1alpha1.TokenInfoR\x05token*z\n" +
+	"identifier*z\n" +
 	"\n" +
 	"TokenScope\x12\x1b\n" +
 	"\x17TOKEN_SCOPE_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14TOKEN_SCOPE_OPERATOR\x10\x03\x12\x19\n" +
 	"\x15TOKEN_SCOPE_CONNECTOR\x10\x01\x12\x1a\n" +
-	"\x16TOKEN_SCOPE_SHARE_READ\x10\x022\xd3\x01\n" +
+	"\x16TOKEN_SCOPE_SHARE_READ\x10\x022\xc9\x01\n" +
 	"\fTokenService\x12_\n" +
 	"\n" +
-	"ListTokens\x12'.magus.token.v1alpha1.ListTokensRequest\x1a(.magus.token.v1alpha1.ListTokensResponse\x12b\n" +
-	"\vRevokeToken\x12(.magus.token.v1alpha1.RevokeTokenRequest\x1a).magus.token.v1alpha1.RevokeTokenResponseB\xe3\x01\n" +
+	"ListTokens\x12'.magus.token.v1alpha1.ListTokensRequest\x1a(.magus.token.v1alpha1.ListTokensResponse\x12X\n" +
+	"\vRevokeToken\x12(.magus.token.v1alpha1.RevokeTokenRequest\x1a\x1f.magus.token.v1alpha1.TokenInfoB\xe3\x01\n" +
 	"\x18com.magus.token.v1alpha1B\n" +
 	"TokenProtoP\x01ZIgithub.com/egladman/magus/proto/gen/go/magus/token/v1alpha1;tokenv1alpha1\xa2\x02\x03MTX\xaa\x02\x14Magus.Token.V1alpha1\xca\x02\x14Magus\\Token\\V1alpha1\xe2\x02 Magus\\Token\\V1alpha1\\GPBMetadata\xea\x02\x16Magus::Token::V1alpha1b\x06proto3"
 
@@ -416,30 +370,28 @@ func file_magus_token_v1alpha1_token_proto_rawDescGZIP() []byte {
 }
 
 var file_magus_token_v1alpha1_token_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
-var file_magus_token_v1alpha1_token_proto_msgTypes = make([]protoimpl.MessageInfo, 5)
+var file_magus_token_v1alpha1_token_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
 var file_magus_token_v1alpha1_token_proto_goTypes = []any{
 	(TokenScope)(0),               // 0: magus.token.v1alpha1.TokenScope
 	(*TokenInfo)(nil),             // 1: magus.token.v1alpha1.TokenInfo
 	(*ListTokensRequest)(nil),     // 2: magus.token.v1alpha1.ListTokensRequest
 	(*ListTokensResponse)(nil),    // 3: magus.token.v1alpha1.ListTokensResponse
 	(*RevokeTokenRequest)(nil),    // 4: magus.token.v1alpha1.RevokeTokenRequest
-	(*RevokeTokenResponse)(nil),   // 5: magus.token.v1alpha1.RevokeTokenResponse
-	(*timestamppb.Timestamp)(nil), // 6: google.protobuf.Timestamp
+	(*timestamppb.Timestamp)(nil), // 5: google.protobuf.Timestamp
 }
 var file_magus_token_v1alpha1_token_proto_depIdxs = []int32{
 	0, // 0: magus.token.v1alpha1.TokenInfo.scope:type_name -> magus.token.v1alpha1.TokenScope
-	6, // 1: magus.token.v1alpha1.TokenInfo.expire_time:type_name -> google.protobuf.Timestamp
+	5, // 1: magus.token.v1alpha1.TokenInfo.expire_time:type_name -> google.protobuf.Timestamp
 	1, // 2: magus.token.v1alpha1.ListTokensResponse.tokens:type_name -> magus.token.v1alpha1.TokenInfo
-	1, // 3: magus.token.v1alpha1.RevokeTokenResponse.token:type_name -> magus.token.v1alpha1.TokenInfo
-	2, // 4: magus.token.v1alpha1.TokenService.ListTokens:input_type -> magus.token.v1alpha1.ListTokensRequest
-	4, // 5: magus.token.v1alpha1.TokenService.RevokeToken:input_type -> magus.token.v1alpha1.RevokeTokenRequest
-	3, // 6: magus.token.v1alpha1.TokenService.ListTokens:output_type -> magus.token.v1alpha1.ListTokensResponse
-	5, // 7: magus.token.v1alpha1.TokenService.RevokeToken:output_type -> magus.token.v1alpha1.RevokeTokenResponse
-	6, // [6:8] is the sub-list for method output_type
-	4, // [4:6] is the sub-list for method input_type
-	4, // [4:4] is the sub-list for extension type_name
-	4, // [4:4] is the sub-list for extension extendee
-	0, // [0:4] is the sub-list for field type_name
+	2, // 3: magus.token.v1alpha1.TokenService.ListTokens:input_type -> magus.token.v1alpha1.ListTokensRequest
+	4, // 4: magus.token.v1alpha1.TokenService.RevokeToken:input_type -> magus.token.v1alpha1.RevokeTokenRequest
+	3, // 5: magus.token.v1alpha1.TokenService.ListTokens:output_type -> magus.token.v1alpha1.ListTokensResponse
+	1, // 6: magus.token.v1alpha1.TokenService.RevokeToken:output_type -> magus.token.v1alpha1.TokenInfo
+	5, // [5:7] is the sub-list for method output_type
+	3, // [3:5] is the sub-list for method input_type
+	3, // [3:3] is the sub-list for extension type_name
+	3, // [3:3] is the sub-list for extension extendee
+	0, // [0:3] is the sub-list for field type_name
 }
 
 func init() { file_magus_token_v1alpha1_token_proto_init() }
@@ -453,7 +405,7 @@ func file_magus_token_v1alpha1_token_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_token_v1alpha1_token_proto_rawDesc), len(file_magus_token_v1alpha1_token_proto_rawDesc)),
 			NumEnums:      1,
-			NumMessages:   5,
+			NumMessages:   4,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

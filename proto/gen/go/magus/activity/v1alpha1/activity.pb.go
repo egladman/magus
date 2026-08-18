@@ -603,7 +603,8 @@ func (x *GetPayloadRequest) GetRef() string {
 	return ""
 }
 
-type GetPayloadResponse struct {
+// Payload is one stored request or response body, resolved from an ActivityEvent's ref.
+type Payload struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Body          []byte                 `protobuf:"bytes,1,opt,name=body,proto3" json:"body,omitempty"`
 	SizeBytes     int64                  `protobuf:"varint,2,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`
@@ -611,20 +612,20 @@ type GetPayloadResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetPayloadResponse) Reset() {
-	*x = GetPayloadResponse{}
+func (x *Payload) Reset() {
+	*x = Payload{}
 	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetPayloadResponse) String() string {
+func (x *Payload) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetPayloadResponse) ProtoMessage() {}
+func (*Payload) ProtoMessage() {}
 
-func (x *GetPayloadResponse) ProtoReflect() protoreflect.Message {
+func (x *Payload) ProtoReflect() protoreflect.Message {
 	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -636,19 +637,19 @@ func (x *GetPayloadResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetPayloadResponse.ProtoReflect.Descriptor instead.
-func (*GetPayloadResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use Payload.ProtoReflect.Descriptor instead.
+func (*Payload) Descriptor() ([]byte, []int) {
 	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{5}
 }
 
-func (x *GetPayloadResponse) GetBody() []byte {
+func (x *Payload) GetBody() []byte {
 	if x != nil {
 		return x.Body
 	}
 	return nil
 }
 
-func (x *GetPayloadResponse) GetSizeBytes() int64 {
+func (x *Payload) GetSizeBytes() int64 {
 	if x != nil {
 		return x.SizeBytes
 	}
@@ -694,8 +695,8 @@ const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"\x06events\x18\x01 \x03(\v2&.magus.activity.v1alpha1.ActivityEventR\x06events\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"C\n" +
 	"\x11GetPayloadRequest\x12.\n" +
-	"\x03ref\x18\x01 \x01(\tB\x1c\xbaH\x19r\x172\x15^[a-z]{2,8}[0-9a-f]+$R\x03ref\"G\n" +
-	"\x12GetPayloadResponse\x12\x12\n" +
+	"\x03ref\x18\x01 \x01(\tB\x1c\xbaH\x19r\x172\x15^[a-z]{2,8}[0-9a-f]+$R\x03ref\"<\n" +
+	"\aPayload\x12\x12\n" +
 	"\x04body\x18\x01 \x01(\fR\x04body\x12\x1d\n" +
 	"\n" +
 	"size_bytes\x18\x02 \x01(\x03R\tsizeBytes*\xf7\x01\n" +
@@ -717,11 +718,11 @@ const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"\x13OUTCOME_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +
 	"OUTCOME_OK\x10\x01\x12\x11\n" +
-	"\rOUTCOME_ERROR\x10\x022\xe5\x01\n" +
+	"\rOUTCOME_ERROR\x10\x022\xda\x01\n" +
 	"\x0fActivityService\x12k\n" +
-	"\fListActivity\x12,.magus.activity.v1alpha1.ListActivityRequest\x1a-.magus.activity.v1alpha1.ListActivityResponse\x12e\n" +
+	"\fListActivity\x12,.magus.activity.v1alpha1.ListActivityRequest\x1a-.magus.activity.v1alpha1.ListActivityResponse\x12Z\n" +
 	"\n" +
-	"GetPayload\x12*.magus.activity.v1alpha1.GetPayloadRequest\x1a+.magus.activity.v1alpha1.GetPayloadResponseB\xfb\x01\n" +
+	"GetPayload\x12*.magus.activity.v1alpha1.GetPayloadRequest\x1a .magus.activity.v1alpha1.PayloadB\xfb\x01\n" +
 	"\x1bcom.magus.activity.v1alpha1B\rActivityProtoP\x01ZOgithub.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1;activityv1alpha1\xa2\x02\x03MAX\xaa\x02\x17Magus.Activity.V1alpha1\xca\x02\x17Magus\\Activity\\V1alpha1\xe2\x02#Magus\\Activity\\V1alpha1\\GPBMetadata\xea\x02\x19Magus::Activity::V1alpha1b\x06proto3"
 
 var (
@@ -746,7 +747,7 @@ var file_magus_activity_v1alpha1_activity_proto_goTypes = []any{
 	(*ListActivityRequest)(nil),   // 4: magus.activity.v1alpha1.ListActivityRequest
 	(*ListActivityResponse)(nil),  // 5: magus.activity.v1alpha1.ListActivityResponse
 	(*GetPayloadRequest)(nil),     // 6: magus.activity.v1alpha1.GetPayloadRequest
-	(*GetPayloadResponse)(nil),    // 7: magus.activity.v1alpha1.GetPayloadResponse
+	(*Payload)(nil),               // 7: magus.activity.v1alpha1.Payload
 	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
 	(*durationpb.Duration)(nil),   // 9: google.protobuf.Duration
 	(*v1alpha1.TimeRange)(nil),    // 10: magus.query.v1alpha1.TimeRange
@@ -763,7 +764,7 @@ var file_magus_activity_v1alpha1_activity_proto_depIdxs = []int32{
 	4,  // 8: magus.activity.v1alpha1.ActivityService.ListActivity:input_type -> magus.activity.v1alpha1.ListActivityRequest
 	6,  // 9: magus.activity.v1alpha1.ActivityService.GetPayload:input_type -> magus.activity.v1alpha1.GetPayloadRequest
 	5,  // 10: magus.activity.v1alpha1.ActivityService.ListActivity:output_type -> magus.activity.v1alpha1.ListActivityResponse
-	7,  // 11: magus.activity.v1alpha1.ActivityService.GetPayload:output_type -> magus.activity.v1alpha1.GetPayloadResponse
+	7,  // 11: magus.activity.v1alpha1.ActivityService.GetPayload:output_type -> magus.activity.v1alpha1.Payload
 	10, // [10:12] is the sub-list for method output_type
 	8,  // [8:10] is the sub-list for method input_type
 	8,  // [8:8] is the sub-list for extension type_name

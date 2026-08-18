@@ -58,7 +58,7 @@ const (
 type ViewerServiceClient interface {
 	// GetInvocation returns an invocation's header: its command, lineage, and timing - what
 	// a viewer shows on top. Selected by a ref (one target) or an invocation id (a run).
-	GetInvocation(context.Context, *connect.Request[v1alpha1.GetInvocationRequest]) (*connect.Response[v1alpha1.GetInvocationResponse], error)
+	GetInvocation(context.Context, *connect.Request[v1alpha1.GetInvocationRequest]) (*connect.Response[v1alpha1.Invocation], error)
 	// ListEvents returns a page of an invocation's events; page through with page_token
 	// until next_page_token is empty. filter narrows them server-side (large logs).
 	ListEvents(context.Context, *connect.Request[v1alpha1.ListEventsRequest]) (*connect.Response[v1alpha1.ListEventsResponse], error)
@@ -78,7 +78,7 @@ func NewViewerServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 	baseURL = strings.TrimRight(baseURL, "/")
 	viewerServiceMethods := v1alpha1.File_magus_viewer_v1alpha1_viewer_proto.Services().ByName("ViewerService").Methods()
 	return &viewerServiceClient{
-		getInvocation: connect.NewClient[v1alpha1.GetInvocationRequest, v1alpha1.GetInvocationResponse](
+		getInvocation: connect.NewClient[v1alpha1.GetInvocationRequest, v1alpha1.Invocation](
 			httpClient,
 			baseURL+ViewerServiceGetInvocationProcedure,
 			connect.WithSchema(viewerServiceMethods.ByName("GetInvocation")),
@@ -101,13 +101,13 @@ func NewViewerServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 
 // viewerServiceClient implements ViewerServiceClient.
 type viewerServiceClient struct {
-	getInvocation *connect.Client[v1alpha1.GetInvocationRequest, v1alpha1.GetInvocationResponse]
+	getInvocation *connect.Client[v1alpha1.GetInvocationRequest, v1alpha1.Invocation]
 	listEvents    *connect.Client[v1alpha1.ListEventsRequest, v1alpha1.ListEventsResponse]
 	streamEvents  *connect.Client[v1alpha1.StreamEventsRequest, v1alpha1.StreamEventsResponse]
 }
 
 // GetInvocation calls magus.viewer.v1alpha1.ViewerService.GetInvocation.
-func (c *viewerServiceClient) GetInvocation(ctx context.Context, req *connect.Request[v1alpha1.GetInvocationRequest]) (*connect.Response[v1alpha1.GetInvocationResponse], error) {
+func (c *viewerServiceClient) GetInvocation(ctx context.Context, req *connect.Request[v1alpha1.GetInvocationRequest]) (*connect.Response[v1alpha1.Invocation], error) {
 	return c.getInvocation.CallUnary(ctx, req)
 }
 
@@ -125,7 +125,7 @@ func (c *viewerServiceClient) StreamEvents(ctx context.Context, req *connect.Req
 type ViewerServiceHandler interface {
 	// GetInvocation returns an invocation's header: its command, lineage, and timing - what
 	// a viewer shows on top. Selected by a ref (one target) or an invocation id (a run).
-	GetInvocation(context.Context, *connect.Request[v1alpha1.GetInvocationRequest]) (*connect.Response[v1alpha1.GetInvocationResponse], error)
+	GetInvocation(context.Context, *connect.Request[v1alpha1.GetInvocationRequest]) (*connect.Response[v1alpha1.Invocation], error)
 	// ListEvents returns a page of an invocation's events; page through with page_token
 	// until next_page_token is empty. filter narrows them server-side (large logs).
 	ListEvents(context.Context, *connect.Request[v1alpha1.ListEventsRequest]) (*connect.Response[v1alpha1.ListEventsResponse], error)
@@ -176,7 +176,7 @@ func NewViewerServiceHandler(svc ViewerServiceHandler, opts ...connect.HandlerOp
 // UnimplementedViewerServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedViewerServiceHandler struct{}
 
-func (UnimplementedViewerServiceHandler) GetInvocation(context.Context, *connect.Request[v1alpha1.GetInvocationRequest]) (*connect.Response[v1alpha1.GetInvocationResponse], error) {
+func (UnimplementedViewerServiceHandler) GetInvocation(context.Context, *connect.Request[v1alpha1.GetInvocationRequest]) (*connect.Response[v1alpha1.Invocation], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.viewer.v1alpha1.ViewerService.GetInvocation is not implemented"))
 }
 

@@ -16,17 +16,13 @@ import "google/protobuf/timestamp.proto";
 // endpoint speaks Connect (browser-native HTTP), gRPC, and gRPC-Web from this one contract.
 service MetricsService {
   // GetMetrics returns the current derived snapshot.
-  rpc GetMetrics(GetMetricsRequest) returns (GetMetricsResponse);
+  rpc GetMetrics(GetMetricsRequest) returns (Snapshot);
   // StreamMetrics pushes the rolling history first (one Backfill), then a fresh Snapshot on
   // each tick, so the dashboard's charts and utilization grid start populated and stay live.
   rpc StreamMetrics(StreamMetricsRequest) returns (stream StreamMetricsResponse);
 }
 
 message GetMetricsRequest {}
-message GetMetricsResponse {
-  Snapshot snapshot = 1;
-}
-
 message StreamMetricsRequest {}
 message StreamMetricsResponse {
   // The first streamed message carries the backfill history; every subsequent message

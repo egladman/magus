@@ -25,14 +25,10 @@ import "google/protobuf/timestamp.proto";
 // fresh file read, so the client polls rather than subscribes.
 service InsightService {
   // GetInsight returns every lens in one message.
-  rpc GetInsight(GetInsightRequest) returns (GetInsightResponse);
+  rpc GetInsight(GetInsightRequest) returns (Insight);
 }
 
 message GetInsightRequest {}
-
-message GetInsightResponse {
-  Insight insight = 1;
-}
 
 // Insight bundles the five lenses. volatility is absent (not an empty report) when the
 // workspace has no run-outcome history to score - the distinction matters to a reader, which

@@ -760,50 +760,6 @@ func (x *GetNoteRequest) GetScope() Scope {
 	return Scope_SCOPE_UNSPECIFIED
 }
 
-type GetNoteResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Note          *Note                  `protobuf:"bytes,1,opt,name=note,proto3" json:"note,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetNoteResponse) Reset() {
-	*x = GetNoteResponse{}
-	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[6]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetNoteResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetNoteResponse) ProtoMessage() {}
-
-func (x *GetNoteResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[6]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetNoteResponse.ProtoReflect.Descriptor instead.
-func (*GetNoteResponse) Descriptor() ([]byte, []int) {
-	return file_magus_notes_v1alpha1_notes_proto_rawDescGZIP(), []int{6}
-}
-
-func (x *GetNoteResponse) GetNote() *Note {
-	if x != nil {
-		return x.Note
-	}
-	return nil
-}
-
 var File_magus_notes_v1alpha1_notes_proto protoreflect.FileDescriptor
 
 const file_magus_notes_v1alpha1_notes_proto_rawDesc = "" +
@@ -846,9 +802,7 @@ const file_magus_notes_v1alpha1_notes_proto_rawDesc = "" +
 	"\x06stores\x18\x03 \x03(\v2!.magus.notes.v1alpha1.StoreStatusR\x06stores\"W\n" +
 	"\x0eGetNoteRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x121\n" +
-	"\x05scope\x18\x02 \x01(\x0e2\x1b.magus.notes.v1alpha1.ScopeR\x05scope\"A\n" +
-	"\x0fGetNoteResponse\x12.\n" +
-	"\x04note\x18\x01 \x01(\v2\x1a.magus.notes.v1alpha1.NoteR\x04note*C\n" +
+	"\x05scope\x18\x02 \x01(\x0e2\x1b.magus.notes.v1alpha1.ScopeR\x05scope*C\n" +
 	"\x05Scope\x12\x15\n" +
 	"\x11SCOPE_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fSCOPE_SHARED\x10\x01\x12\x11\n" +
@@ -872,10 +826,10 @@ const file_magus_notes_v1alpha1_notes_proto_rawDesc = "" +
 	"\x14STALENESS_UNMEASURED\x10\x01\x12\x15\n" +
 	"\x11STALENESS_CURRENT\x10\x02\x12\x14\n" +
 	"\x10STALENESS_OUTRUN\x10\x03\x12\x17\n" +
-	"\x13STALENESS_PETRIFIED\x10\x042\xc4\x01\n" +
+	"\x13STALENESS_PETRIFIED\x10\x042\xb9\x01\n" +
 	"\fNotesService\x12\\\n" +
-	"\tListNotes\x12&.magus.notes.v1alpha1.ListNotesRequest\x1a'.magus.notes.v1alpha1.ListNotesResponse\x12V\n" +
-	"\aGetNote\x12$.magus.notes.v1alpha1.GetNoteRequest\x1a%.magus.notes.v1alpha1.GetNoteResponseB\xe3\x01\n" +
+	"\tListNotes\x12&.magus.notes.v1alpha1.ListNotesRequest\x1a'.magus.notes.v1alpha1.ListNotesResponse\x12K\n" +
+	"\aGetNote\x12$.magus.notes.v1alpha1.GetNoteRequest\x1a\x1a.magus.notes.v1alpha1.NoteB\xe3\x01\n" +
 	"\x18com.magus.notes.v1alpha1B\n" +
 	"NotesProtoP\x01ZIgithub.com/egladman/magus/proto/gen/go/magus/notes/v1alpha1;notesv1alpha1\xa2\x02\x03MNX\xaa\x02\x14Magus.Notes.V1alpha1\xca\x02\x14Magus\\Notes\\V1alpha1\xe2\x02 Magus\\Notes\\V1alpha1\\GPBMetadata\xea\x02\x16Magus::Notes::V1alpha1b\x06proto3"
 
@@ -892,7 +846,7 @@ func file_magus_notes_v1alpha1_notes_proto_rawDescGZIP() []byte {
 }
 
 var file_magus_notes_v1alpha1_notes_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_magus_notes_v1alpha1_notes_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
+var file_magus_notes_v1alpha1_notes_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_magus_notes_v1alpha1_notes_proto_goTypes = []any{
 	(Scope)(0),                    // 0: magus.notes.v1alpha1.Scope
 	(AnchorKind)(0),               // 1: magus.notes.v1alpha1.AnchorKind
@@ -904,8 +858,7 @@ var file_magus_notes_v1alpha1_notes_proto_goTypes = []any{
 	(*ListNotesRequest)(nil),      // 7: magus.notes.v1alpha1.ListNotesRequest
 	(*ListNotesResponse)(nil),     // 8: magus.notes.v1alpha1.ListNotesResponse
 	(*GetNoteRequest)(nil),        // 9: magus.notes.v1alpha1.GetNoteRequest
-	(*GetNoteResponse)(nil),       // 10: magus.notes.v1alpha1.GetNoteResponse
-	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
+	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
 }
 var file_magus_notes_v1alpha1_notes_proto_depIdxs = []int32{
 	1,  // 0: magus.notes.v1alpha1.Anchor.kind:type_name -> magus.notes.v1alpha1.AnchorKind
@@ -913,21 +866,20 @@ var file_magus_notes_v1alpha1_notes_proto_depIdxs = []int32{
 	0,  // 2: magus.notes.v1alpha1.Note.scope:type_name -> magus.notes.v1alpha1.Scope
 	4,  // 3: magus.notes.v1alpha1.Note.anchors:type_name -> magus.notes.v1alpha1.Anchor
 	3,  // 4: magus.notes.v1alpha1.Note.staleness:type_name -> magus.notes.v1alpha1.Staleness
-	11, // 5: magus.notes.v1alpha1.Note.modify_time:type_name -> google.protobuf.Timestamp
+	10, // 5: magus.notes.v1alpha1.Note.modify_time:type_name -> google.protobuf.Timestamp
 	0,  // 6: magus.notes.v1alpha1.StoreStatus.scope:type_name -> magus.notes.v1alpha1.Scope
 	5,  // 7: magus.notes.v1alpha1.ListNotesResponse.notes:type_name -> magus.notes.v1alpha1.Note
 	6,  // 8: magus.notes.v1alpha1.ListNotesResponse.stores:type_name -> magus.notes.v1alpha1.StoreStatus
 	0,  // 9: magus.notes.v1alpha1.GetNoteRequest.scope:type_name -> magus.notes.v1alpha1.Scope
-	5,  // 10: magus.notes.v1alpha1.GetNoteResponse.note:type_name -> magus.notes.v1alpha1.Note
-	7,  // 11: magus.notes.v1alpha1.NotesService.ListNotes:input_type -> magus.notes.v1alpha1.ListNotesRequest
-	9,  // 12: magus.notes.v1alpha1.NotesService.GetNote:input_type -> magus.notes.v1alpha1.GetNoteRequest
-	8,  // 13: magus.notes.v1alpha1.NotesService.ListNotes:output_type -> magus.notes.v1alpha1.ListNotesResponse
-	10, // 14: magus.notes.v1alpha1.NotesService.GetNote:output_type -> magus.notes.v1alpha1.GetNoteResponse
-	13, // [13:15] is the sub-list for method output_type
-	11, // [11:13] is the sub-list for method input_type
-	11, // [11:11] is the sub-list for extension type_name
-	11, // [11:11] is the sub-list for extension extendee
-	0,  // [0:11] is the sub-list for field type_name
+	7,  // 10: magus.notes.v1alpha1.NotesService.ListNotes:input_type -> magus.notes.v1alpha1.ListNotesRequest
+	9,  // 11: magus.notes.v1alpha1.NotesService.GetNote:input_type -> magus.notes.v1alpha1.GetNoteRequest
+	8,  // 12: magus.notes.v1alpha1.NotesService.ListNotes:output_type -> magus.notes.v1alpha1.ListNotesResponse
+	5,  // 13: magus.notes.v1alpha1.NotesService.GetNote:output_type -> magus.notes.v1alpha1.Note
+	12, // [12:14] is the sub-list for method output_type
+	10, // [10:12] is the sub-list for method input_type
+	10, // [10:10] is the sub-list for extension type_name
+	10, // [10:10] is the sub-list for extension extendee
+	0,  // [0:10] is the sub-list for field type_name
 }
 
 func init() { file_magus_notes_v1alpha1_notes_proto_init() }
@@ -941,7 +893,7 @@ func file_magus_notes_v1alpha1_notes_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_notes_v1alpha1_notes_proto_rawDesc), len(file_magus_notes_v1alpha1_notes_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   7,
+			NumMessages:   6,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

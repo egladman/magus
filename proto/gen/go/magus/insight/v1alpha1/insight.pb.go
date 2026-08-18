@@ -75,50 +75,6 @@ func (*GetInsightRequest) Descriptor() ([]byte, []int) {
 	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{0}
 }
 
-type GetInsightResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Insight       *Insight               `protobuf:"bytes,1,opt,name=insight,proto3" json:"insight,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetInsightResponse) Reset() {
-	*x = GetInsightResponse{}
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetInsightResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetInsightResponse) ProtoMessage() {}
-
-func (x *GetInsightResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetInsightResponse.ProtoReflect.Descriptor instead.
-func (*GetInsightResponse) Descriptor() ([]byte, []int) {
-	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *GetInsightResponse) GetInsight() *Insight {
-	if x != nil {
-		return x.Insight
-	}
-	return nil
-}
-
 // Insight bundles the five lenses. volatility is absent (not an empty report) when the
 // workspace has no run-outcome history to score - the distinction matters to a reader, which
 // renders "no runs recorded yet" rather than "no volatile targets".
@@ -135,7 +91,7 @@ type Insight struct {
 
 func (x *Insight) Reset() {
 	*x = Insight{}
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[2]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -147,7 +103,7 @@ func (x *Insight) String() string {
 func (*Insight) ProtoMessage() {}
 
 func (x *Insight) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[2]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -160,7 +116,7 @@ func (x *Insight) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Insight.ProtoReflect.Descriptor instead.
 func (*Insight) Descriptor() ([]byte, []int) {
-	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{2}
+	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{1}
 }
 
 func (x *Insight) GetHotspots() *HotspotOutput {
@@ -214,7 +170,7 @@ type HotspotOutput struct {
 
 func (x *HotspotOutput) Reset() {
 	*x = HotspotOutput{}
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[3]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -226,7 +182,7 @@ func (x *HotspotOutput) String() string {
 func (*HotspotOutput) ProtoMessage() {}
 
 func (x *HotspotOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[3]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -239,7 +195,7 @@ func (x *HotspotOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use HotspotOutput.ProtoReflect.Descriptor instead.
 func (*HotspotOutput) Descriptor() ([]byte, []int) {
-	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{3}
+	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *HotspotOutput) GetDefinition() string {
@@ -304,7 +260,7 @@ type ProjectNode struct {
 
 func (x *ProjectNode) Reset() {
 	*x = ProjectNode{}
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[4]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -316,7 +272,7 @@ func (x *ProjectNode) String() string {
 func (*ProjectNode) ProtoMessage() {}
 
 func (x *ProjectNode) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[4]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -329,7 +285,7 @@ func (x *ProjectNode) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ProjectNode.ProtoReflect.Descriptor instead.
 func (*ProjectNode) Descriptor() ([]byte, []int) {
-	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{4}
+	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *ProjectNode) GetPath() string {
@@ -432,7 +388,7 @@ type FileHotspot struct {
 
 func (x *FileHotspot) Reset() {
 	*x = FileHotspot{}
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[5]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -444,7 +400,7 @@ func (x *FileHotspot) String() string {
 func (*FileHotspot) ProtoMessage() {}
 
 func (x *FileHotspot) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[5]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -457,7 +413,7 @@ func (x *FileHotspot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use FileHotspot.ProtoReflect.Descriptor instead.
 func (*FileHotspot) Descriptor() ([]byte, []int) {
-	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{5}
+	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *FileHotspot) GetPath() string {
@@ -522,7 +478,7 @@ type AffinityOutput struct {
 
 func (x *AffinityOutput) Reset() {
 	*x = AffinityOutput{}
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[6]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -534,7 +490,7 @@ func (x *AffinityOutput) String() string {
 func (*AffinityOutput) ProtoMessage() {}
 
 func (x *AffinityOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[6]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -547,7 +503,7 @@ func (x *AffinityOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use AffinityOutput.ProtoReflect.Descriptor instead.
 func (*AffinityOutput) Descriptor() ([]byte, []int) {
-	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{6}
+	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *AffinityOutput) GetDefinition() string {
@@ -597,7 +553,7 @@ type CoChange struct {
 
 func (x *CoChange) Reset() {
 	*x = CoChange{}
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[7]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -609,7 +565,7 @@ func (x *CoChange) String() string {
 func (*CoChange) ProtoMessage() {}
 
 func (x *CoChange) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[7]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -622,7 +578,7 @@ func (x *CoChange) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use CoChange.ProtoReflect.Descriptor instead.
 func (*CoChange) Descriptor() ([]byte, []int) {
-	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{7}
+	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *CoChange) GetA() string {
@@ -680,7 +636,7 @@ type OwnershipOutput struct {
 
 func (x *OwnershipOutput) Reset() {
 	*x = OwnershipOutput{}
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[8]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -692,7 +648,7 @@ func (x *OwnershipOutput) String() string {
 func (*OwnershipOutput) ProtoMessage() {}
 
 func (x *OwnershipOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[8]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -705,7 +661,7 @@ func (x *OwnershipOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use OwnershipOutput.ProtoReflect.Descriptor instead.
 func (*OwnershipOutput) Descriptor() ([]byte, []int) {
-	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{8}
+	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *OwnershipOutput) GetDefinition() string {
@@ -757,7 +713,7 @@ type Ownership struct {
 
 func (x *Ownership) Reset() {
 	*x = Ownership{}
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[9]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -769,7 +725,7 @@ func (x *Ownership) String() string {
 func (*Ownership) ProtoMessage() {}
 
 func (x *Ownership) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[9]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -782,7 +738,7 @@ func (x *Ownership) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Ownership.ProtoReflect.Descriptor instead.
 func (*Ownership) Descriptor() ([]byte, []int) {
-	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{9}
+	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Ownership) GetPath() string {
@@ -862,7 +818,7 @@ type TrendOutput struct {
 
 func (x *TrendOutput) Reset() {
 	*x = TrendOutput{}
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[10]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -874,7 +830,7 @@ func (x *TrendOutput) String() string {
 func (*TrendOutput) ProtoMessage() {}
 
 func (x *TrendOutput) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[10]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -887,7 +843,7 @@ func (x *TrendOutput) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TrendOutput.ProtoReflect.Descriptor instead.
 func (*TrendOutput) Descriptor() ([]byte, []int) {
-	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{10}
+	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *TrendOutput) GetDefinition() string {
@@ -934,7 +890,7 @@ type Trend struct {
 
 func (x *Trend) Reset() {
 	*x = Trend{}
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[11]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -946,7 +902,7 @@ func (x *Trend) String() string {
 func (*Trend) ProtoMessage() {}
 
 func (x *Trend) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[11]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -959,7 +915,7 @@ func (x *Trend) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Trend.ProtoReflect.Descriptor instead.
 func (*Trend) Descriptor() ([]byte, []int) {
-	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{11}
+	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Trend) GetPath() string {
@@ -1012,7 +968,7 @@ type VolatilityReport struct {
 
 func (x *VolatilityReport) Reset() {
 	*x = VolatilityReport{}
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[12]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1024,7 +980,7 @@ func (x *VolatilityReport) String() string {
 func (*VolatilityReport) ProtoMessage() {}
 
 func (x *VolatilityReport) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[12]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1037,7 +993,7 @@ func (x *VolatilityReport) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolatilityReport.ProtoReflect.Descriptor instead.
 func (*VolatilityReport) Descriptor() ([]byte, []int) {
-	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{12}
+	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *VolatilityReport) GetThreshold() float64 {
@@ -1075,7 +1031,7 @@ type VolatilityTarget struct {
 
 func (x *VolatilityTarget) Reset() {
 	*x = VolatilityTarget{}
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[13]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[12]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1087,7 +1043,7 @@ func (x *VolatilityTarget) String() string {
 func (*VolatilityTarget) ProtoMessage() {}
 
 func (x *VolatilityTarget) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[13]
+	mi := &file_magus_insight_v1alpha1_insight_proto_msgTypes[12]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1100,7 +1056,7 @@ func (x *VolatilityTarget) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use VolatilityTarget.ProtoReflect.Descriptor instead.
 func (*VolatilityTarget) Descriptor() ([]byte, []int) {
-	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{13}
+	return file_magus_insight_v1alpha1_insight_proto_rawDescGZIP(), []int{12}
 }
 
 func (x *VolatilityTarget) GetProject() string {
@@ -1171,9 +1127,7 @@ var File_magus_insight_v1alpha1_insight_proto protoreflect.FileDescriptor
 const file_magus_insight_v1alpha1_insight_proto_rawDesc = "" +
 	"\n" +
 	"$magus/insight/v1alpha1/insight.proto\x12\x16magus.insight.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x13\n" +
-	"\x11GetInsightRequest\"O\n" +
-	"\x12GetInsightResponse\x129\n" +
-	"\ainsight\x18\x01 \x01(\v2\x1f.magus.insight.v1alpha1.InsightR\ainsight\"\xdc\x02\n" +
+	"\x11GetInsightRequest\"\xdc\x02\n" +
 	"\aInsight\x12A\n" +
 	"\bhotspots\x18\x01 \x01(\v2%.magus.insight.v1alpha1.HotspotOutputR\bhotspots\x12B\n" +
 	"\baffinity\x18\x02 \x01(\v2&.magus.insight.v1alpha1.AffinityOutputR\baffinity\x12E\n" +
@@ -1272,10 +1226,10 @@ const file_magus_insight_v1alpha1_insight_proto_rawDesc = "" +
 	"\x04fail\x18\x06 \x01(\x05R\x04fail\x12%\n" +
 	"\x0evolatile_count\x18\a \x01(\x05R\rvolatileCount\x12\x18\n" +
 	"\asamples\x18\b \x01(\x05R\asamples\x12@\n" +
-	"\x0elast_pass_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\flastPassTime2u\n" +
-	"\x0eInsightService\x12c\n" +
+	"\x0elast_pass_time\x18\t \x01(\v2\x1a.google.protobuf.TimestampR\flastPassTime2j\n" +
+	"\x0eInsightService\x12X\n" +
 	"\n" +
-	"GetInsight\x12).magus.insight.v1alpha1.GetInsightRequest\x1a*.magus.insight.v1alpha1.GetInsightResponseB\xf3\x01\n" +
+	"GetInsight\x12).magus.insight.v1alpha1.GetInsightRequest\x1a\x1f.magus.insight.v1alpha1.InsightB\xf3\x01\n" +
 	"\x1acom.magus.insight.v1alpha1B\fInsightProtoP\x01ZMgithub.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1;insightv1alpha1\xa2\x02\x03MIX\xaa\x02\x16Magus.Insight.V1alpha1\xca\x02\x16Magus\\Insight\\V1alpha1\xe2\x02\"Magus\\Insight\\V1alpha1\\GPBMetadata\xea\x02\x18Magus::Insight::V1alpha1b\x06proto3"
 
 var (
@@ -1290,48 +1244,46 @@ func file_magus_insight_v1alpha1_insight_proto_rawDescGZIP() []byte {
 	return file_magus_insight_v1alpha1_insight_proto_rawDescData
 }
 
-var file_magus_insight_v1alpha1_insight_proto_msgTypes = make([]protoimpl.MessageInfo, 14)
+var file_magus_insight_v1alpha1_insight_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
 var file_magus_insight_v1alpha1_insight_proto_goTypes = []any{
 	(*GetInsightRequest)(nil),     // 0: magus.insight.v1alpha1.GetInsightRequest
-	(*GetInsightResponse)(nil),    // 1: magus.insight.v1alpha1.GetInsightResponse
-	(*Insight)(nil),               // 2: magus.insight.v1alpha1.Insight
-	(*HotspotOutput)(nil),         // 3: magus.insight.v1alpha1.HotspotOutput
-	(*ProjectNode)(nil),           // 4: magus.insight.v1alpha1.ProjectNode
-	(*FileHotspot)(nil),           // 5: magus.insight.v1alpha1.FileHotspot
-	(*AffinityOutput)(nil),        // 6: magus.insight.v1alpha1.AffinityOutput
-	(*CoChange)(nil),              // 7: magus.insight.v1alpha1.CoChange
-	(*OwnershipOutput)(nil),       // 8: magus.insight.v1alpha1.OwnershipOutput
-	(*Ownership)(nil),             // 9: magus.insight.v1alpha1.Ownership
-	(*TrendOutput)(nil),           // 10: magus.insight.v1alpha1.TrendOutput
-	(*Trend)(nil),                 // 11: magus.insight.v1alpha1.Trend
-	(*VolatilityReport)(nil),      // 12: magus.insight.v1alpha1.VolatilityReport
-	(*VolatilityTarget)(nil),      // 13: magus.insight.v1alpha1.VolatilityTarget
-	(*timestamppb.Timestamp)(nil), // 14: google.protobuf.Timestamp
+	(*Insight)(nil),               // 1: magus.insight.v1alpha1.Insight
+	(*HotspotOutput)(nil),         // 2: magus.insight.v1alpha1.HotspotOutput
+	(*ProjectNode)(nil),           // 3: magus.insight.v1alpha1.ProjectNode
+	(*FileHotspot)(nil),           // 4: magus.insight.v1alpha1.FileHotspot
+	(*AffinityOutput)(nil),        // 5: magus.insight.v1alpha1.AffinityOutput
+	(*CoChange)(nil),              // 6: magus.insight.v1alpha1.CoChange
+	(*OwnershipOutput)(nil),       // 7: magus.insight.v1alpha1.OwnershipOutput
+	(*Ownership)(nil),             // 8: magus.insight.v1alpha1.Ownership
+	(*TrendOutput)(nil),           // 9: magus.insight.v1alpha1.TrendOutput
+	(*Trend)(nil),                 // 10: magus.insight.v1alpha1.Trend
+	(*VolatilityReport)(nil),      // 11: magus.insight.v1alpha1.VolatilityReport
+	(*VolatilityTarget)(nil),      // 12: magus.insight.v1alpha1.VolatilityTarget
+	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
 }
 var file_magus_insight_v1alpha1_insight_proto_depIdxs = []int32{
-	2,  // 0: magus.insight.v1alpha1.GetInsightResponse.insight:type_name -> magus.insight.v1alpha1.Insight
-	3,  // 1: magus.insight.v1alpha1.Insight.hotspots:type_name -> magus.insight.v1alpha1.HotspotOutput
-	6,  // 2: magus.insight.v1alpha1.Insight.affinity:type_name -> magus.insight.v1alpha1.AffinityOutput
-	8,  // 3: magus.insight.v1alpha1.Insight.ownership:type_name -> magus.insight.v1alpha1.OwnershipOutput
-	10, // 4: magus.insight.v1alpha1.Insight.trend:type_name -> magus.insight.v1alpha1.TrendOutput
-	12, // 5: magus.insight.v1alpha1.Insight.volatility:type_name -> magus.insight.v1alpha1.VolatilityReport
-	4,  // 6: magus.insight.v1alpha1.HotspotOutput.nodes:type_name -> magus.insight.v1alpha1.ProjectNode
-	5,  // 7: magus.insight.v1alpha1.HotspotOutput.files:type_name -> magus.insight.v1alpha1.FileHotspot
-	14, // 8: magus.insight.v1alpha1.ProjectNode.last_commit_time:type_name -> google.protobuf.Timestamp
-	14, // 9: magus.insight.v1alpha1.FileHotspot.last_commit_time:type_name -> google.protobuf.Timestamp
-	7,  // 10: magus.insight.v1alpha1.AffinityOutput.pairs:type_name -> magus.insight.v1alpha1.CoChange
-	9,  // 11: magus.insight.v1alpha1.OwnershipOutput.projects:type_name -> magus.insight.v1alpha1.Ownership
-	14, // 12: magus.insight.v1alpha1.Ownership.last_commit_time:type_name -> google.protobuf.Timestamp
-	11, // 13: magus.insight.v1alpha1.TrendOutput.projects:type_name -> magus.insight.v1alpha1.Trend
-	13, // 14: magus.insight.v1alpha1.VolatilityReport.targets:type_name -> magus.insight.v1alpha1.VolatilityTarget
-	14, // 15: magus.insight.v1alpha1.VolatilityTarget.last_pass_time:type_name -> google.protobuf.Timestamp
-	0,  // 16: magus.insight.v1alpha1.InsightService.GetInsight:input_type -> magus.insight.v1alpha1.GetInsightRequest
-	1,  // 17: magus.insight.v1alpha1.InsightService.GetInsight:output_type -> magus.insight.v1alpha1.GetInsightResponse
-	17, // [17:18] is the sub-list for method output_type
-	16, // [16:17] is the sub-list for method input_type
-	16, // [16:16] is the sub-list for extension type_name
-	16, // [16:16] is the sub-list for extension extendee
-	0,  // [0:16] is the sub-list for field type_name
+	2,  // 0: magus.insight.v1alpha1.Insight.hotspots:type_name -> magus.insight.v1alpha1.HotspotOutput
+	5,  // 1: magus.insight.v1alpha1.Insight.affinity:type_name -> magus.insight.v1alpha1.AffinityOutput
+	7,  // 2: magus.insight.v1alpha1.Insight.ownership:type_name -> magus.insight.v1alpha1.OwnershipOutput
+	9,  // 3: magus.insight.v1alpha1.Insight.trend:type_name -> magus.insight.v1alpha1.TrendOutput
+	11, // 4: magus.insight.v1alpha1.Insight.volatility:type_name -> magus.insight.v1alpha1.VolatilityReport
+	3,  // 5: magus.insight.v1alpha1.HotspotOutput.nodes:type_name -> magus.insight.v1alpha1.ProjectNode
+	4,  // 6: magus.insight.v1alpha1.HotspotOutput.files:type_name -> magus.insight.v1alpha1.FileHotspot
+	13, // 7: magus.insight.v1alpha1.ProjectNode.last_commit_time:type_name -> google.protobuf.Timestamp
+	13, // 8: magus.insight.v1alpha1.FileHotspot.last_commit_time:type_name -> google.protobuf.Timestamp
+	6,  // 9: magus.insight.v1alpha1.AffinityOutput.pairs:type_name -> magus.insight.v1alpha1.CoChange
+	8,  // 10: magus.insight.v1alpha1.OwnershipOutput.projects:type_name -> magus.insight.v1alpha1.Ownership
+	13, // 11: magus.insight.v1alpha1.Ownership.last_commit_time:type_name -> google.protobuf.Timestamp
+	10, // 12: magus.insight.v1alpha1.TrendOutput.projects:type_name -> magus.insight.v1alpha1.Trend
+	12, // 13: magus.insight.v1alpha1.VolatilityReport.targets:type_name -> magus.insight.v1alpha1.VolatilityTarget
+	13, // 14: magus.insight.v1alpha1.VolatilityTarget.last_pass_time:type_name -> google.protobuf.Timestamp
+	0,  // 15: magus.insight.v1alpha1.InsightService.GetInsight:input_type -> magus.insight.v1alpha1.GetInsightRequest
+	1,  // 16: magus.insight.v1alpha1.InsightService.GetInsight:output_type -> magus.insight.v1alpha1.Insight
+	16, // [16:17] is the sub-list for method output_type
+	15, // [15:16] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_magus_insight_v1alpha1_insight_proto_init() }
@@ -1345,7 +1297,7 @@ func file_magus_insight_v1alpha1_insight_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_insight_v1alpha1_insight_proto_rawDesc), len(file_magus_insight_v1alpha1_insight_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   14,
+			NumMessages:   13,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

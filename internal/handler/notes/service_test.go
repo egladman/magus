@@ -124,7 +124,7 @@ func TestGetNoteRefusesToGuessTheStore(t *testing.T) {
 		Name: "auth", Scope: notesv1.Scope_SCOPE_SHARED,
 	}))
 	require.NoError(t, err)
-	assert.Equal(t, "why this is true", got.Msg.GetNote().GetBody(), "GetNote is where the prose arrives")
+	assert.Equal(t, "why this is true", got.Msg.GetBody(), "GetNote is where the prose arrives")
 }
 
 // TestGetNoteFromAnUndeclaredStoreIsNotFound: asking the private store for a note when this

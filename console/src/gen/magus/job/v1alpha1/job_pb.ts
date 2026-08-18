@@ -15,6 +15,7 @@
 
 import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
 import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
+import { file_buf_validate_validate } from "../../../buf/validate/validate_pb";
 import type { Duration, Timestamp } from "@bufbuild/protobuf/wkt";
 import { file_google_protobuf_duration, file_google_protobuf_timestamp } from "@bufbuild/protobuf/wkt";
 import type { Message } from "@bufbuild/protobuf";
@@ -23,16 +24,16 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/job/v1alpha1/job.proto.
  */
 export const file_magus_job_v1alpha1_job: GenFile = /*@__PURE__*/
-  fileDesc("ChxtYWd1cy9qb2IvdjFhbHBoYTEvam9iLnByb3RvEhJtYWd1cy5qb2IudjFhbHBoYTEimQEKEVN1Ym1pdEpvYlJlc3BvbnNlEi4KBXN0YXRlGAEgASgOMh8ubWFndXMuam9iLnYxYWxwaGExLlN1Ym1pdFN0YXRlEhUKDWludm9jYXRpb25faWQYAiABKAkSEwoLY29uc29sZV91cmwYAyABKAkSKAoDam9iGAQgASgLMhsubWFndXMuam9iLnYxYWxwaGExLkpvYkluZm8inQEKB0pvYkluZm8SDAoEbmFtZRgBIAEoCRITCgtkZXNjcmlwdGlvbhgCIAEoCRIPCgdydW5uaW5nGAMgASgIEiwKCGxhc3RfcnVuGAQgASgLMhoubWFndXMuam9iLnYxYWxwaGExLkpvYlJ1bhIwCgZ0YXJnZXQYBSABKAsyIC5tYWd1cy5qb2IudjFhbHBoYTEuUmVzb3VyY2VTaXplIsUBCgZKb2JSdW4SFQoNaW52b2NhdGlvbl9pZBgBIAEoCRIsCghlbmRfdGltZRgCIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASKwoIZHVyYXRpb24YAyABKAsyGS5nb29nbGUucHJvdG9idWYuRHVyYXRpb24SCgoCb2sYBCABKAgSDQoFZXJyb3IYBSABKAkSFQoNaXRlbXNfcmVtb3ZlZBgGIAEoAxIXCg9ieXRlc19yZWNsYWltZWQYByABKAMiNgoMUmVzb3VyY2VTaXplEhIKCnNpemVfYnl0ZXMYASABKAMSEgoKaXRlbV9jb3VudBgCIAEoAyISChBTeW5jR3JhcGhSZXF1ZXN0IhkKF1JvdGF0ZUFjdGl2aXRpZXNSZXF1ZXN0IhMKEUNsZWFyQ2FjaGVSZXF1ZXN0IhMKEVJvdGF0ZUxvZ3NSZXF1ZXN0IhEKD0xpc3RKb2JzUmVxdWVzdCI9ChBMaXN0Sm9ic1Jlc3BvbnNlEikKBGpvYnMYASADKAsyGy5tYWd1cy5qb2IudjFhbHBoYTEuSm9iSW5mbyppCgtTdWJtaXRTdGF0ZRIcChhTVUJNSVRfU1RBVEVfVU5TUEVDSUZJRUQQABIaChZTVUJNSVRfU1RBVEVfU1VCTUlUVEVEEAESIAocU1VCTUlUX1NUQVRFX0FMUkVBRFlfUlVOTklORxACMt0DCgpKb2JTZXJ2aWNlElgKCVN5bmNHcmFwaBIkLm1hZ3VzLmpvYi52MWFscGhhMS5TeW5jR3JhcGhSZXF1ZXN0GiUubWFndXMuam9iLnYxYWxwaGExLlN1Ym1pdEpvYlJlc3BvbnNlEmYKEFJvdGF0ZUFjdGl2aXRpZXMSKy5tYWd1cy5qb2IudjFhbHBoYTEuUm90YXRlQWN0aXZpdGllc1JlcXVlc3QaJS5tYWd1cy5qb2IudjFhbHBoYTEuU3VibWl0Sm9iUmVzcG9uc2USWgoKQ2xlYXJDYWNoZRIlLm1hZ3VzLmpvYi52MWFscGhhMS5DbGVhckNhY2hlUmVxdWVzdBolLm1hZ3VzLmpvYi52MWFscGhhMS5TdWJtaXRKb2JSZXNwb25zZRJaCgpSb3RhdGVMb2dzEiUubWFndXMuam9iLnYxYWxwaGExLlJvdGF0ZUxvZ3NSZXF1ZXN0GiUubWFndXMuam9iLnYxYWxwaGExLlN1Ym1pdEpvYlJlc3BvbnNlElUKCExpc3RKb2JzEiMubWFndXMuam9iLnYxYWxwaGExLkxpc3RKb2JzUmVxdWVzdBokLm1hZ3VzLmpvYi52MWFscGhhMS5MaXN0Sm9ic1Jlc3BvbnNlQtMBChZjb20ubWFndXMuam9iLnYxYWxwaGExQghKb2JQcm90b1ABWkVnaXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy9qb2IvdjFhbHBoYTE7am9idjFhbHBoYTGiAgNNSliqAhJNYWd1cy5Kb2IuVjFhbHBoYTHKAhJNYWd1c1xKb2JcVjFhbHBoYTHiAh5NYWd1c1xKb2JcVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhRNYWd1czo6Sm9iOjpWMWFscGhhMWIGcHJvdG8z", [file_google_protobuf_duration, file_google_protobuf_timestamp]);
+  fileDesc("ChxtYWd1cy9qb2IvdjFhbHBoYTEvam9iLnByb3RvEhJtYWd1cy5qb2IudjFhbHBoYTEikgEKDlJ1bkpvYlJlc3BvbnNlEi4KBXN0YXRlGAEgASgOMh8ubWFndXMuam9iLnYxYWxwaGExLlN1Ym1pdFN0YXRlEhUKDWludm9jYXRpb25faWQYAiABKAkSEwoLY29uc29sZV91cmwYAyABKAkSJAoDam9iGAQgASgLMhcubWFndXMuam9iLnYxYWxwaGExLkpvYiKZAQoDSm9iEgwKBG5hbWUYASABKAkSEwoLZGVzY3JpcHRpb24YAiABKAkSDwoHcnVubmluZxgDIAEoCBIsCghsYXN0X3J1bhgEIAEoCzIaLm1hZ3VzLmpvYi52MWFscGhhMS5Kb2JSdW4SMAoGdGFyZ2V0GAUgASgLMiAubWFndXMuam9iLnYxYWxwaGExLlJlc291cmNlU2l6ZSLFAQoGSm9iUnVuEhUKDWludm9jYXRpb25faWQYASABKAkSLAoIZW5kX3RpbWUYAiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEisKCGR1cmF0aW9uGAMgASgLMhkuZ29vZ2xlLnByb3RvYnVmLkR1cmF0aW9uEgoKAm9rGAQgASgIEg0KBWVycm9yGAUgASgJEhUKDWl0ZW1zX3JlbW92ZWQYBiABKAMSFwoPYnl0ZXNfcmVjbGFpbWVkGAcgASgDIjYKDFJlc291cmNlU2l6ZRISCgpzaXplX2J5dGVzGAEgASgDEhIKCml0ZW1fY291bnQYAiABKAMiPAoNUnVuSm9iUmVxdWVzdBIrCgRuYW1lGAEgASgJQh26SBpyGDIWXmpvYnMvW2Etel1bYS16MC05LV0qJCJECg9MaXN0Sm9ic1JlcXVlc3QSHQoJcGFnZV9zaXplGAEgASgFQgq6SAcaBRjoBygAEhIKCnBhZ2VfdG9rZW4YAiABKAkiUgoQTGlzdEpvYnNSZXNwb25zZRIlCgRqb2JzGAEgAygLMhcubWFndXMuam9iLnYxYWxwaGExLkpvYhIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkqaQoLU3VibWl0U3RhdGUSHAoYU1VCTUlUX1NUQVRFX1VOU1BFQ0lGSUVEEAASGgoWU1VCTUlUX1NUQVRFX1NVQk1JVFRFRBABEiAKHFNVQk1JVF9TVEFURV9BTFJFQURZX1JVTk5JTkcQAjK0AQoKSm9iU2VydmljZRJVCghMaXN0Sm9icxIjLm1hZ3VzLmpvYi52MWFscGhhMS5MaXN0Sm9ic1JlcXVlc3QaJC5tYWd1cy5qb2IudjFhbHBoYTEuTGlzdEpvYnNSZXNwb25zZRJPCgZSdW5Kb2ISIS5tYWd1cy5qb2IudjFhbHBoYTEuUnVuSm9iUmVxdWVzdBoiLm1hZ3VzLmpvYi52MWFscGhhMS5SdW5Kb2JSZXNwb25zZULTAQoWY29tLm1hZ3VzLmpvYi52MWFscGhhMUIISm9iUHJvdG9QAVpFZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvam9iL3YxYWxwaGExO2pvYnYxYWxwaGExogIDTUpYqgISTWFndXMuSm9iLlYxYWxwaGExygISTWFndXNcSm9iXFYxYWxwaGEx4gIeTWFndXNcSm9iXFYxYWxwaGExXEdQQk1ldGFkYXRh6gIUTWFndXM6OkpvYjo6VjFhbHBoYTFiBnByb3RvMw", [file_buf_validate_validate, file_google_protobuf_duration, file_google_protobuf_timestamp]);
 
 /**
- * SubmitJobResponse is returned by every trigger RPC: whether the job started or coalesced, the
- * invocation id and console deep-link for its live log, and the job's full metadata snapshot so a
+ * RunJobResponse reports what the submission did: whether the job started or coalesced, the
+ * invocation id and console deep-link for its live log, and the job's fresh metadata snapshot so a
  * caller can render "last rotated 3m ago, trail 2.1 MB" without a follow-up call.
  *
- * @generated from message magus.job.v1alpha1.SubmitJobResponse
+ * @generated from message magus.job.v1alpha1.RunJobResponse
  */
-export type SubmitJobResponse = Message<"magus.job.v1alpha1.SubmitJobResponse"> & {
+export type RunJobResponse = Message<"magus.job.v1alpha1.RunJobResponse"> & {
   /**
    * @generated from field: magus.job.v1alpha1.SubmitState state = 1;
    */
@@ -55,27 +56,28 @@ export type SubmitJobResponse = Message<"magus.job.v1alpha1.SubmitJobResponse"> 
   /**
    * the job's descriptor plus its last-run and current-size metadata
    *
-   * @generated from field: magus.job.v1alpha1.JobInfo job = 4;
+   * @generated from field: magus.job.v1alpha1.Job job = 4;
    */
-  job?: JobInfo;
+  job?: Job;
 };
 
 /**
- * Describes the message magus.job.v1alpha1.SubmitJobResponse.
- * Use `create(SubmitJobResponseSchema)` to create a new message.
+ * Describes the message magus.job.v1alpha1.RunJobResponse.
+ * Use `create(RunJobResponseSchema)` to create a new message.
  */
-export const SubmitJobResponseSchema: GenMessage<SubmitJobResponse> = /*@__PURE__*/
+export const RunJobResponseSchema: GenMessage<RunJobResponse> = /*@__PURE__*/
   messageDesc(file_magus_job_v1alpha1_job, 0);
 
 /**
- * JobInfo is the full picture of one job: what it is, whether an instance is running now, its
+ * Job is the full picture of one job: what it is, whether an instance is running now, its
  * most recent completed run, and the current magnitude of the resource it maintains.
  *
- * @generated from message magus.job.v1alpha1.JobInfo
+ * @generated from message magus.job.v1alpha1.Job
  */
-export type JobInfo = Message<"magus.job.v1alpha1.JobInfo"> & {
+export type Job = Message<"magus.job.v1alpha1.Job"> & {
   /**
-   * stable job name, e.g. "rotate-activities"
+   * name is the resource name, "jobs/{job}" - e.g. "jobs/rotate-activities". The bare job id
+   * is the last segment, and is what the CLI's `server job <name>` leaf takes.
    *
    * @generated from field: string name = 1;
    */
@@ -109,10 +111,10 @@ export type JobInfo = Message<"magus.job.v1alpha1.JobInfo"> & {
 };
 
 /**
- * Describes the message magus.job.v1alpha1.JobInfo.
- * Use `create(JobInfoSchema)` to create a new message.
+ * Describes the message magus.job.v1alpha1.Job.
+ * Use `create(JobSchema)` to create a new message.
  */
-export const JobInfoSchema: GenMessage<JobInfo> = /*@__PURE__*/
+export const JobSchema: GenMessage<Job> = /*@__PURE__*/
   messageDesc(file_magus_job_v1alpha1_job, 1);
 
 /**
@@ -206,61 +208,42 @@ export const ResourceSizeSchema: GenMessage<ResourceSize> = /*@__PURE__*/
   messageDesc(file_magus_job_v1alpha1_job, 3);
 
 /**
- * @generated from message magus.job.v1alpha1.SyncGraphRequest
+ * @generated from message magus.job.v1alpha1.RunJobRequest
  */
-export type SyncGraphRequest = Message<"magus.job.v1alpha1.SyncGraphRequest"> & {
+export type RunJobRequest = Message<"magus.job.v1alpha1.RunJobRequest"> & {
+  /**
+   * name is the job's resource name, "jobs/{job}". An unregistered name is a NotFound error,
+   * not a SubmitState - the enum reports how a VALID submission resolved, and a name nobody
+   * registered never became a submission.
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
 };
 
 /**
- * Describes the message magus.job.v1alpha1.SyncGraphRequest.
- * Use `create(SyncGraphRequestSchema)` to create a new message.
+ * Describes the message magus.job.v1alpha1.RunJobRequest.
+ * Use `create(RunJobRequestSchema)` to create a new message.
  */
-export const SyncGraphRequestSchema: GenMessage<SyncGraphRequest> = /*@__PURE__*/
+export const RunJobRequestSchema: GenMessage<RunJobRequest> = /*@__PURE__*/
   messageDesc(file_magus_job_v1alpha1_job, 4);
 
 /**
- * @generated from message magus.job.v1alpha1.RotateActivitiesRequest
- */
-export type RotateActivitiesRequest = Message<"magus.job.v1alpha1.RotateActivitiesRequest"> & {
-};
-
-/**
- * Describes the message magus.job.v1alpha1.RotateActivitiesRequest.
- * Use `create(RotateActivitiesRequestSchema)` to create a new message.
- */
-export const RotateActivitiesRequestSchema: GenMessage<RotateActivitiesRequest> = /*@__PURE__*/
-  messageDesc(file_magus_job_v1alpha1_job, 5);
-
-/**
- * @generated from message magus.job.v1alpha1.ClearCacheRequest
- */
-export type ClearCacheRequest = Message<"magus.job.v1alpha1.ClearCacheRequest"> & {
-};
-
-/**
- * Describes the message magus.job.v1alpha1.ClearCacheRequest.
- * Use `create(ClearCacheRequestSchema)` to create a new message.
- */
-export const ClearCacheRequestSchema: GenMessage<ClearCacheRequest> = /*@__PURE__*/
-  messageDesc(file_magus_job_v1alpha1_job, 6);
-
-/**
- * @generated from message magus.job.v1alpha1.RotateLogsRequest
- */
-export type RotateLogsRequest = Message<"magus.job.v1alpha1.RotateLogsRequest"> & {
-};
-
-/**
- * Describes the message magus.job.v1alpha1.RotateLogsRequest.
- * Use `create(RotateLogsRequestSchema)` to create a new message.
- */
-export const RotateLogsRequestSchema: GenMessage<RotateLogsRequest> = /*@__PURE__*/
-  messageDesc(file_magus_job_v1alpha1_job, 7);
-
-/**
+ * Paginated by contract so growth never forces a breaking change, though the registry is a
+ * fixed handful today and one page always holds it.
+ *
  * @generated from message magus.job.v1alpha1.ListJobsRequest
  */
 export type ListJobsRequest = Message<"magus.job.v1alpha1.ListJobsRequest"> & {
+  /**
+   * @generated from field: int32 page_size = 1;
+   */
+  pageSize: number;
+
+  /**
+   * @generated from field: string page_token = 2;
+   */
+  pageToken: string;
 };
 
 /**
@@ -268,7 +251,7 @@ export type ListJobsRequest = Message<"magus.job.v1alpha1.ListJobsRequest"> & {
  * Use `create(ListJobsRequestSchema)` to create a new message.
  */
 export const ListJobsRequestSchema: GenMessage<ListJobsRequest> = /*@__PURE__*/
-  messageDesc(file_magus_job_v1alpha1_job, 8);
+  messageDesc(file_magus_job_v1alpha1_job, 5);
 
 /**
  * @generated from message magus.job.v1alpha1.ListJobsResponse
@@ -277,9 +260,16 @@ export type ListJobsResponse = Message<"magus.job.v1alpha1.ListJobsResponse"> & 
   /**
    * every registered job, in a stable order
    *
-   * @generated from field: repeated magus.job.v1alpha1.JobInfo jobs = 1;
+   * @generated from field: repeated magus.job.v1alpha1.Job jobs = 1;
    */
-  jobs: JobInfo[];
+  jobs: Job[];
+
+  /**
+   * empty while one page holds the registry
+   *
+   * @generated from field: string next_page_token = 2;
+   */
+  nextPageToken: string;
 };
 
 /**
@@ -287,7 +277,7 @@ export type ListJobsResponse = Message<"magus.job.v1alpha1.ListJobsResponse"> & 
  * Use `create(ListJobsResponseSchema)` to create a new message.
  */
 export const ListJobsResponseSchema: GenMessage<ListJobsResponse> = /*@__PURE__*/
-  messageDesc(file_magus_job_v1alpha1_job, 9);
+  messageDesc(file_magus_job_v1alpha1_job, 6);
 
 /**
  * SubmitState is the disposition of a trigger RPC. Both values are SUCCESS outcomes returned in a
@@ -332,46 +322,6 @@ export const SubmitStateSchema: GenEnum<SubmitState> = /*@__PURE__*/
  */
 export const JobService: GenService<{
   /**
-   * SyncGraph reconciles the knowledge graph to current source (rebuild and reindex).
-   *
-   * @generated from rpc magus.job.v1alpha1.JobService.SyncGraph
-   */
-  syncGraph: {
-    methodKind: "unary";
-    input: typeof SyncGraphRequestSchema;
-    output: typeof SubmitJobResponseSchema;
-  },
-  /**
-   * RotateActivities trims the activity trail to its cap and drops orphaned payload blobs.
-   *
-   * @generated from rpc magus.job.v1alpha1.JobService.RotateActivities
-   */
-  rotateActivities: {
-    methodKind: "unary";
-    input: typeof RotateActivitiesRequestSchema;
-    output: typeof SubmitJobResponseSchema;
-  },
-  /**
-   * ClearCache invalidates cached build entries for the workspace.
-   *
-   * @generated from rpc magus.job.v1alpha1.JobService.ClearCache
-   */
-  clearCache: {
-    methodKind: "unary";
-    input: typeof ClearCacheRequestSchema;
-    output: typeof SubmitJobResponseSchema;
-  },
-  /**
-   * RotateLogs trims the invocation run-log journals back to their cap.
-   *
-   * @generated from rpc magus.job.v1alpha1.JobService.RotateLogs
-   */
-  rotateLogs: {
-    methodKind: "unary";
-    input: typeof RotateLogsRequestSchema;
-    output: typeof SubmitJobResponseSchema;
-  },
-  /**
    * ListJobs returns every registered job with its running state, last run, and target size.
    *
    * @generated from rpc magus.job.v1alpha1.JobService.ListJobs
@@ -380,6 +330,24 @@ export const JobService: GenService<{
     methodKind: "unary";
     input: typeof ListJobsRequestSchema;
     output: typeof ListJobsResponseSchema;
+  },
+  /**
+   * RunJob submits the named job and returns immediately: whether it started or coalesced
+   * onto an identical in-flight run, where to watch it, and the job's fresh metadata.
+   *
+   * One RPC over N job resources rather than one RPC per job. The four verbs this replaced
+   * were the same operation four times, which is why they had to share a response type and
+   * why buf.yaml had to waive RPC_REQUEST_RESPONSE_UNIQUE and RPC_RESPONSE_STANDARD_NAME to
+   * let them. Both waivers are gone with them. The property that argued for sharing the
+   * response - that adding a job must not touch this file in four places - is stronger here:
+   * a new job is a registry entry and NO schema change at all.
+   *
+   * @generated from rpc magus.job.v1alpha1.JobService.RunJob
+   */
+  runJob: {
+    methodKind: "unary";
+    input: typeof RunJobRequestSchema;
+    output: typeof RunJobResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_magus_job_v1alpha1_job, 0);

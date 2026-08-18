@@ -369,7 +369,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       if (stale) return;
       const loadBody = async (n: Note): Promise<string> => {
         const one = await client.getNote({ name: n.name, scope: n.scope });
-        return one.note?.body ?? "";
+        return one.body ?? "";
       };
       refs.body.replaceChildren();
       for (const store of resp.stores) {

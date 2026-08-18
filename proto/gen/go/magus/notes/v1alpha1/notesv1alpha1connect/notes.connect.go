@@ -69,7 +69,7 @@ type NotesServiceClient interface {
 	// store returns all notes today (bounded by the store's own scan cap).
 	ListNotes(context.Context, *connect.Request[v1alpha1.ListNotesRequest]) (*connect.Response[v1alpha1.ListNotesResponse], error)
 	// GetNote returns one note by scope and name, including its body.
-	GetNote(context.Context, *connect.Request[v1alpha1.GetNoteRequest]) (*connect.Response[v1alpha1.GetNoteResponse], error)
+	GetNote(context.Context, *connect.Request[v1alpha1.GetNoteRequest]) (*connect.Response[v1alpha1.Note], error)
 }
 
 // NewNotesServiceClient constructs a client for the magus.notes.v1alpha1.NotesService service. By
@@ -89,7 +89,7 @@ func NewNotesServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(notesServiceMethods.ByName("ListNotes")),
 			connect.WithClientOptions(opts...),
 		),
-		getNote: connect.NewClient[v1alpha1.GetNoteRequest, v1alpha1.GetNoteResponse](
+		getNote: connect.NewClient[v1alpha1.GetNoteRequest, v1alpha1.Note](
 			httpClient,
 			baseURL+NotesServiceGetNoteProcedure,
 			connect.WithSchema(notesServiceMethods.ByName("GetNote")),
@@ -101,7 +101,7 @@ func NewNotesServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 // notesServiceClient implements NotesServiceClient.
 type notesServiceClient struct {
 	listNotes *connect.Client[v1alpha1.ListNotesRequest, v1alpha1.ListNotesResponse]
-	getNote   *connect.Client[v1alpha1.GetNoteRequest, v1alpha1.GetNoteResponse]
+	getNote   *connect.Client[v1alpha1.GetNoteRequest, v1alpha1.Note]
 }
 
 // ListNotes calls magus.notes.v1alpha1.NotesService.ListNotes.
@@ -110,7 +110,7 @@ func (c *notesServiceClient) ListNotes(ctx context.Context, req *connect.Request
 }
 
 // GetNote calls magus.notes.v1alpha1.NotesService.GetNote.
-func (c *notesServiceClient) GetNote(ctx context.Context, req *connect.Request[v1alpha1.GetNoteRequest]) (*connect.Response[v1alpha1.GetNoteResponse], error) {
+func (c *notesServiceClient) GetNote(ctx context.Context, req *connect.Request[v1alpha1.GetNoteRequest]) (*connect.Response[v1alpha1.Note], error) {
 	return c.getNote.CallUnary(ctx, req)
 }
 
@@ -121,7 +121,7 @@ type NotesServiceHandler interface {
 	// store returns all notes today (bounded by the store's own scan cap).
 	ListNotes(context.Context, *connect.Request[v1alpha1.ListNotesRequest]) (*connect.Response[v1alpha1.ListNotesResponse], error)
 	// GetNote returns one note by scope and name, including its body.
-	GetNote(context.Context, *connect.Request[v1alpha1.GetNoteRequest]) (*connect.Response[v1alpha1.GetNoteResponse], error)
+	GetNote(context.Context, *connect.Request[v1alpha1.GetNoteRequest]) (*connect.Response[v1alpha1.Note], error)
 }
 
 // NewNotesServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -162,6 +162,6 @@ func (UnimplementedNotesServiceHandler) ListNotes(context.Context, *connect.Requ
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.notes.v1alpha1.NotesService.ListNotes is not implemented"))
 }
 
-func (UnimplementedNotesServiceHandler) GetNote(context.Context, *connect.Request[v1alpha1.GetNoteRequest]) (*connect.Response[v1alpha1.GetNoteResponse], error) {
+func (UnimplementedNotesServiceHandler) GetNote(context.Context, *connect.Request[v1alpha1.GetNoteRequest]) (*connect.Response[v1alpha1.Note], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.notes.v1alpha1.NotesService.GetNote is not implemented"))
 }

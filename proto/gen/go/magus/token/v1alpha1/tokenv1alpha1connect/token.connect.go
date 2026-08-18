@@ -82,7 +82,7 @@ type TokenServiceClient interface {
 	// RevokeToken removes a connector token or the share token by identifier.
 	// Revoking the share token also closes its LAN listener. The cli token is not
 	// revocable here.
-	RevokeToken(context.Context, *connect.Request[v1alpha1.RevokeTokenRequest]) (*connect.Response[v1alpha1.RevokeTokenResponse], error)
+	RevokeToken(context.Context, *connect.Request[v1alpha1.RevokeTokenRequest]) (*connect.Response[v1alpha1.TokenInfo], error)
 }
 
 // NewTokenServiceClient constructs a client for the magus.token.v1alpha1.TokenService service. By
@@ -102,7 +102,7 @@ func NewTokenServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(tokenServiceMethods.ByName("ListTokens")),
 			connect.WithClientOptions(opts...),
 		),
-		revokeToken: connect.NewClient[v1alpha1.RevokeTokenRequest, v1alpha1.RevokeTokenResponse](
+		revokeToken: connect.NewClient[v1alpha1.RevokeTokenRequest, v1alpha1.TokenInfo](
 			httpClient,
 			baseURL+TokenServiceRevokeTokenProcedure,
 			connect.WithSchema(tokenServiceMethods.ByName("RevokeToken")),
@@ -114,7 +114,7 @@ func NewTokenServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 // tokenServiceClient implements TokenServiceClient.
 type tokenServiceClient struct {
 	listTokens  *connect.Client[v1alpha1.ListTokensRequest, v1alpha1.ListTokensResponse]
-	revokeToken *connect.Client[v1alpha1.RevokeTokenRequest, v1alpha1.RevokeTokenResponse]
+	revokeToken *connect.Client[v1alpha1.RevokeTokenRequest, v1alpha1.TokenInfo]
 }
 
 // ListTokens calls magus.token.v1alpha1.TokenService.ListTokens.
@@ -123,7 +123,7 @@ func (c *tokenServiceClient) ListTokens(ctx context.Context, req *connect.Reques
 }
 
 // RevokeToken calls magus.token.v1alpha1.TokenService.RevokeToken.
-func (c *tokenServiceClient) RevokeToken(ctx context.Context, req *connect.Request[v1alpha1.RevokeTokenRequest]) (*connect.Response[v1alpha1.RevokeTokenResponse], error) {
+func (c *tokenServiceClient) RevokeToken(ctx context.Context, req *connect.Request[v1alpha1.RevokeTokenRequest]) (*connect.Response[v1alpha1.TokenInfo], error) {
 	return c.revokeToken.CallUnary(ctx, req)
 }
 
@@ -135,7 +135,7 @@ type TokenServiceHandler interface {
 	// RevokeToken removes a connector token or the share token by identifier.
 	// Revoking the share token also closes its LAN listener. The cli token is not
 	// revocable here.
-	RevokeToken(context.Context, *connect.Request[v1alpha1.RevokeTokenRequest]) (*connect.Response[v1alpha1.RevokeTokenResponse], error)
+	RevokeToken(context.Context, *connect.Request[v1alpha1.RevokeTokenRequest]) (*connect.Response[v1alpha1.TokenInfo], error)
 }
 
 // NewTokenServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -176,6 +176,6 @@ func (UnimplementedTokenServiceHandler) ListTokens(context.Context, *connect.Req
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.token.v1alpha1.TokenService.ListTokens is not implemented"))
 }
 
-func (UnimplementedTokenServiceHandler) RevokeToken(context.Context, *connect.Request[v1alpha1.RevokeTokenRequest]) (*connect.Response[v1alpha1.RevokeTokenResponse], error) {
+func (UnimplementedTokenServiceHandler) RevokeToken(context.Context, *connect.Request[v1alpha1.RevokeTokenRequest]) (*connect.Response[v1alpha1.TokenInfo], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.token.v1alpha1.TokenService.RevokeToken is not implemented"))
 }

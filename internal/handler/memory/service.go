@@ -58,7 +58,7 @@ func (s *Service) ListMemories(_ context.Context, _ *connect.Request[memoryv1.Li
 // when absent (the upsert); allow_missing=false rejects an absent record with NotFound. Only
 // a full replace is supported, so a non-empty update_mask is rejected rather than silently
 // dropping the fields the mask omits.
-func (s *Service) UpdateMemory(_ context.Context, req *connect.Request[memoryv1.UpdateMemoryRequest]) (*connect.Response[memoryv1.UpdateMemoryResponse], error) {
+func (s *Service) UpdateMemory(_ context.Context, req *connect.Request[memoryv1.UpdateMemoryRequest]) (*connect.Response[memoryv1.Memory], error) {
 	if paths := req.Msg.GetUpdateMask().GetPaths(); len(paths) > 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("memory: partial update_mask is not supported; send the full record"))
 	}
@@ -81,7 +81,7 @@ func (s *Service) UpdateMemory(_ context.Context, req *connect.Request[memoryv1.
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&memoryv1.UpdateMemoryResponse{Memory: recordToProto(stored)}), nil
+	return connect.NewResponse(recordToProto(stored)), nil
 }
 
 // DeleteMemory removes a record by name. allow_missing=true makes deleting an absent record
@@ -98,17 +98,17 @@ func (s *Service) DeleteMemory(_ context.Context, req *connect.Request[memoryv1.
 }
 
 // GetCursor returns a legacy cursor snapshot for migration. New handoffs use named entries.
-func (s *Service) GetCursor(_ context.Context, _ *connect.Request[memoryv1.GetCursorRequest]) (*connect.Response[memoryv1.GetCursorResponse], error) {
+func (s *Service) GetCursor(_ context.Context, _ *connect.Request[memoryv1.GetCursorRequest]) (*connect.Response[memoryv1.Cursor], error) {
 	content, err := store.ReadCursor(s.ws.Root())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&memoryv1.GetCursorResponse{Content: content}), nil
+	return connect.NewResponse(&memoryv1.Cursor{Content: content}), nil
 }
 
 // UpdateCursor rejects global cursor writes: a shared single snapshot lets one session erase
 // another's handoff. The RPC remains in the schema so older consoles receive a migration hint.
-func (s *Service) UpdateCursor(_ context.Context, _ *connect.Request[memoryv1.UpdateCursorRequest]) (*connect.Response[memoryv1.UpdateCursorResponse], error) {
+func (s *Service) UpdateCursor(_ context.Context, _ *connect.Request[memoryv1.UpdateCursorRequest]) (*connect.Response[memoryv1.Cursor], error) {
 	return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("memory: cursor writes are retired; create or update a named decision or plan entry instead"))
 }
 

@@ -67,50 +67,6 @@ func (*GetMetricsRequest) Descriptor() ([]byte, []int) {
 	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{0}
 }
 
-type GetMetricsResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Snapshot      *Snapshot              `protobuf:"bytes,1,opt,name=snapshot,proto3" json:"snapshot,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *GetMetricsResponse) Reset() {
-	*x = GetMetricsResponse{}
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[1]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *GetMetricsResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*GetMetricsResponse) ProtoMessage() {}
-
-func (x *GetMetricsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[1]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use GetMetricsResponse.ProtoReflect.Descriptor instead.
-func (*GetMetricsResponse) Descriptor() ([]byte, []int) {
-	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{1}
-}
-
-func (x *GetMetricsResponse) GetSnapshot() *Snapshot {
-	if x != nil {
-		return x.Snapshot
-	}
-	return nil
-}
-
 type StreamMetricsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	unknownFields protoimpl.UnknownFields
@@ -119,7 +75,7 @@ type StreamMetricsRequest struct {
 
 func (x *StreamMetricsRequest) Reset() {
 	*x = StreamMetricsRequest{}
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[2]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[1]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -131,7 +87,7 @@ func (x *StreamMetricsRequest) String() string {
 func (*StreamMetricsRequest) ProtoMessage() {}
 
 func (x *StreamMetricsRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[2]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[1]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -144,7 +100,7 @@ func (x *StreamMetricsRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamMetricsRequest.ProtoReflect.Descriptor instead.
 func (*StreamMetricsRequest) Descriptor() ([]byte, []int) {
-	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{2}
+	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{1}
 }
 
 type StreamMetricsResponse struct {
@@ -163,7 +119,7 @@ type StreamMetricsResponse struct {
 
 func (x *StreamMetricsResponse) Reset() {
 	*x = StreamMetricsResponse{}
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[3]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -175,7 +131,7 @@ func (x *StreamMetricsResponse) String() string {
 func (*StreamMetricsResponse) ProtoMessage() {}
 
 func (x *StreamMetricsResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[3]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -188,7 +144,7 @@ func (x *StreamMetricsResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StreamMetricsResponse.ProtoReflect.Descriptor instead.
 func (*StreamMetricsResponse) Descriptor() ([]byte, []int) {
-	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{3}
+	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{2}
 }
 
 func (x *StreamMetricsResponse) GetOf() isStreamMetricsResponse_Of {
@@ -255,7 +211,7 @@ type Snapshot struct {
 
 func (x *Snapshot) Reset() {
 	*x = Snapshot{}
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[4]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -267,7 +223,7 @@ func (x *Snapshot) String() string {
 func (*Snapshot) ProtoMessage() {}
 
 func (x *Snapshot) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[4]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -280,7 +236,7 @@ func (x *Snapshot) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Snapshot.ProtoReflect.Descriptor instead.
 func (*Snapshot) Descriptor() ([]byte, []int) {
-	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{4}
+	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *Snapshot) GetCaptureTime() *timestamppb.Timestamp {
@@ -370,7 +326,7 @@ type Latency struct {
 
 func (x *Latency) Reset() {
 	*x = Latency{}
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[5]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -382,7 +338,7 @@ func (x *Latency) String() string {
 func (*Latency) ProtoMessage() {}
 
 func (x *Latency) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[5]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -395,7 +351,7 @@ func (x *Latency) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Latency.ProtoReflect.Descriptor instead.
 func (*Latency) Descriptor() ([]byte, []int) {
-	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{5}
+	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *Latency) GetCount() int64 {
@@ -457,7 +413,7 @@ type Remote struct {
 
 func (x *Remote) Reset() {
 	*x = Remote{}
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[6]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -469,7 +425,7 @@ func (x *Remote) String() string {
 func (*Remote) ProtoMessage() {}
 
 func (x *Remote) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[6]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -482,7 +438,7 @@ func (x *Remote) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Remote.ProtoReflect.Descriptor instead.
 func (*Remote) Descriptor() ([]byte, []int) {
-	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{6}
+	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *Remote) GetHits() int64 {
@@ -555,7 +511,7 @@ type TargetStat struct {
 
 func (x *TargetStat) Reset() {
 	*x = TargetStat{}
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[7]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -567,7 +523,7 @@ func (x *TargetStat) String() string {
 func (*TargetStat) ProtoMessage() {}
 
 func (x *TargetStat) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[7]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -580,7 +536,7 @@ func (x *TargetStat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use TargetStat.ProtoReflect.Descriptor instead.
 func (*TargetStat) Descriptor() ([]byte, []int) {
-	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{7}
+	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *TargetStat) GetProject() string {
@@ -674,7 +630,7 @@ type MCPToolStat struct {
 
 func (x *MCPToolStat) Reset() {
 	*x = MCPToolStat{}
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[8]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -686,7 +642,7 @@ func (x *MCPToolStat) String() string {
 func (*MCPToolStat) ProtoMessage() {}
 
 func (x *MCPToolStat) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[8]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -699,7 +655,7 @@ func (x *MCPToolStat) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use MCPToolStat.ProtoReflect.Descriptor instead.
 func (*MCPToolStat) Descriptor() ([]byte, []int) {
-	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{8}
+	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{7}
 }
 
 func (x *MCPToolStat) GetTool() string {
@@ -811,7 +767,7 @@ type Buzz struct {
 
 func (x *Buzz) Reset() {
 	*x = Buzz{}
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[9]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -823,7 +779,7 @@ func (x *Buzz) String() string {
 func (*Buzz) ProtoMessage() {}
 
 func (x *Buzz) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[9]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -836,7 +792,7 @@ func (x *Buzz) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Buzz.ProtoReflect.Descriptor instead.
 func (*Buzz) Descriptor() ([]byte, []int) {
-	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{9}
+	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{8}
 }
 
 func (x *Buzz) GetExecCount() int64 {
@@ -1012,7 +968,7 @@ type Sandbox struct {
 
 func (x *Sandbox) Reset() {
 	*x = Sandbox{}
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[10]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1024,7 +980,7 @@ func (x *Sandbox) String() string {
 func (*Sandbox) ProtoMessage() {}
 
 func (x *Sandbox) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[10]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1037,7 +993,7 @@ func (x *Sandbox) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Sandbox.ProtoReflect.Descriptor instead.
 func (*Sandbox) Descriptor() ([]byte, []int) {
-	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{10}
+	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *Sandbox) GetApplyP50() float64 {
@@ -1114,7 +1070,7 @@ type Backfill struct {
 
 func (x *Backfill) Reset() {
 	*x = Backfill{}
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[11]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[10]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1126,7 +1082,7 @@ func (x *Backfill) String() string {
 func (*Backfill) ProtoMessage() {}
 
 func (x *Backfill) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[11]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[10]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1139,7 +1095,7 @@ func (x *Backfill) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Backfill.ProtoReflect.Descriptor instead.
 func (*Backfill) Descriptor() ([]byte, []int) {
-	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{11}
+	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{10}
 }
 
 func (x *Backfill) GetSamples() []*Sample {
@@ -1181,7 +1137,7 @@ type Sample struct {
 
 func (x *Sample) Reset() {
 	*x = Sample{}
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[12]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[11]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -1193,7 +1149,7 @@ func (x *Sample) String() string {
 func (*Sample) ProtoMessage() {}
 
 func (x *Sample) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[12]
+	mi := &file_magus_metrics_v1alpha1_metrics_proto_msgTypes[11]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -1206,7 +1162,7 @@ func (x *Sample) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use Sample.ProtoReflect.Descriptor instead.
 func (*Sample) Descriptor() ([]byte, []int) {
-	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{12}
+	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{11}
 }
 
 func (x *Sample) GetSampleTime() *timestamppb.Timestamp {
@@ -1263,9 +1219,7 @@ var File_magus_metrics_v1alpha1_metrics_proto protoreflect.FileDescriptor
 const file_magus_metrics_v1alpha1_metrics_proto_rawDesc = "" +
 	"\n" +
 	"$magus/metrics/v1alpha1/metrics.proto\x12\x16magus.metrics.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\"\x13\n" +
-	"\x11GetMetricsRequest\"R\n" +
-	"\x12GetMetricsResponse\x12<\n" +
-	"\bsnapshot\x18\x01 \x01(\v2 .magus.metrics.v1alpha1.SnapshotR\bsnapshot\"\x16\n" +
+	"\x11GetMetricsRequest\"\x16\n" +
 	"\x14StreamMetricsRequest\"\x9d\x01\n" +
 	"\x15StreamMetricsResponse\x12>\n" +
 	"\bbackfill\x18\x01 \x01(\v2 .magus.metrics.v1alpha1.BackfillH\x00R\bbackfill\x12>\n" +
@@ -1391,10 +1345,10 @@ const file_magus_metrics_v1alpha1_metrics_proto_rawDesc = "" +
 	"\a_queuedB\r\n" +
 	"\v_cache_hitsB\x0f\n" +
 	"\r_cache_missesB\x0e\n" +
-	"\f_target_runs2\xe5\x01\n" +
-	"\x0eMetricsService\x12c\n" +
+	"\f_target_runs2\xdb\x01\n" +
+	"\x0eMetricsService\x12Y\n" +
 	"\n" +
-	"GetMetrics\x12).magus.metrics.v1alpha1.GetMetricsRequest\x1a*.magus.metrics.v1alpha1.GetMetricsResponse\x12n\n" +
+	"GetMetrics\x12).magus.metrics.v1alpha1.GetMetricsRequest\x1a .magus.metrics.v1alpha1.Snapshot\x12n\n" +
 	"\rStreamMetrics\x12,.magus.metrics.v1alpha1.StreamMetricsRequest\x1a-.magus.metrics.v1alpha1.StreamMetricsResponse0\x01B\xf3\x01\n" +
 	"\x1acom.magus.metrics.v1alpha1B\fMetricsProtoP\x01ZMgithub.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1;metricsv1alpha1\xa2\x02\x03MMX\xaa\x02\x16Magus.Metrics.V1alpha1\xca\x02\x16Magus\\Metrics\\V1alpha1\xe2\x02\"Magus\\Metrics\\V1alpha1\\GPBMetadata\xea\x02\x18Magus::Metrics::V1alpha1b\x06proto3"
 
@@ -1410,48 +1364,46 @@ func file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP() []byte {
 	return file_magus_metrics_v1alpha1_metrics_proto_rawDescData
 }
 
-var file_magus_metrics_v1alpha1_metrics_proto_msgTypes = make([]protoimpl.MessageInfo, 13)
+var file_magus_metrics_v1alpha1_metrics_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
 var file_magus_metrics_v1alpha1_metrics_proto_goTypes = []any{
 	(*GetMetricsRequest)(nil),     // 0: magus.metrics.v1alpha1.GetMetricsRequest
-	(*GetMetricsResponse)(nil),    // 1: magus.metrics.v1alpha1.GetMetricsResponse
-	(*StreamMetricsRequest)(nil),  // 2: magus.metrics.v1alpha1.StreamMetricsRequest
-	(*StreamMetricsResponse)(nil), // 3: magus.metrics.v1alpha1.StreamMetricsResponse
-	(*Snapshot)(nil),              // 4: magus.metrics.v1alpha1.Snapshot
-	(*Latency)(nil),               // 5: magus.metrics.v1alpha1.Latency
-	(*Remote)(nil),                // 6: magus.metrics.v1alpha1.Remote
-	(*TargetStat)(nil),            // 7: magus.metrics.v1alpha1.TargetStat
-	(*MCPToolStat)(nil),           // 8: magus.metrics.v1alpha1.MCPToolStat
-	(*Buzz)(nil),                  // 9: magus.metrics.v1alpha1.Buzz
-	(*Sandbox)(nil),               // 10: magus.metrics.v1alpha1.Sandbox
-	(*Backfill)(nil),              // 11: magus.metrics.v1alpha1.Backfill
-	(*Sample)(nil),                // 12: magus.metrics.v1alpha1.Sample
-	(*timestamppb.Timestamp)(nil), // 13: google.protobuf.Timestamp
+	(*StreamMetricsRequest)(nil),  // 1: magus.metrics.v1alpha1.StreamMetricsRequest
+	(*StreamMetricsResponse)(nil), // 2: magus.metrics.v1alpha1.StreamMetricsResponse
+	(*Snapshot)(nil),              // 3: magus.metrics.v1alpha1.Snapshot
+	(*Latency)(nil),               // 4: magus.metrics.v1alpha1.Latency
+	(*Remote)(nil),                // 5: magus.metrics.v1alpha1.Remote
+	(*TargetStat)(nil),            // 6: magus.metrics.v1alpha1.TargetStat
+	(*MCPToolStat)(nil),           // 7: magus.metrics.v1alpha1.MCPToolStat
+	(*Buzz)(nil),                  // 8: magus.metrics.v1alpha1.Buzz
+	(*Sandbox)(nil),               // 9: magus.metrics.v1alpha1.Sandbox
+	(*Backfill)(nil),              // 10: magus.metrics.v1alpha1.Backfill
+	(*Sample)(nil),                // 11: magus.metrics.v1alpha1.Sample
+	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
 }
 var file_magus_metrics_v1alpha1_metrics_proto_depIdxs = []int32{
-	4,  // 0: magus.metrics.v1alpha1.GetMetricsResponse.snapshot:type_name -> magus.metrics.v1alpha1.Snapshot
-	11, // 1: magus.metrics.v1alpha1.StreamMetricsResponse.backfill:type_name -> magus.metrics.v1alpha1.Backfill
-	4,  // 2: magus.metrics.v1alpha1.StreamMetricsResponse.snapshot:type_name -> magus.metrics.v1alpha1.Snapshot
-	13, // 3: magus.metrics.v1alpha1.Snapshot.capture_time:type_name -> google.protobuf.Timestamp
-	5,  // 4: magus.metrics.v1alpha1.Snapshot.target:type_name -> magus.metrics.v1alpha1.Latency
-	5,  // 5: magus.metrics.v1alpha1.Snapshot.cache:type_name -> magus.metrics.v1alpha1.Latency
-	5,  // 6: magus.metrics.v1alpha1.Snapshot.pool_wait:type_name -> magus.metrics.v1alpha1.Latency
-	5,  // 7: magus.metrics.v1alpha1.Snapshot.graph_query:type_name -> magus.metrics.v1alpha1.Latency
-	6,  // 8: magus.metrics.v1alpha1.Snapshot.remote:type_name -> magus.metrics.v1alpha1.Remote
-	7,  // 9: magus.metrics.v1alpha1.Snapshot.target_stats:type_name -> magus.metrics.v1alpha1.TargetStat
-	8,  // 10: magus.metrics.v1alpha1.Snapshot.mcp_tools:type_name -> magus.metrics.v1alpha1.MCPToolStat
-	9,  // 11: magus.metrics.v1alpha1.Snapshot.buzz:type_name -> magus.metrics.v1alpha1.Buzz
-	10, // 12: magus.metrics.v1alpha1.Snapshot.sandbox:type_name -> magus.metrics.v1alpha1.Sandbox
-	12, // 13: magus.metrics.v1alpha1.Backfill.samples:type_name -> magus.metrics.v1alpha1.Sample
-	13, // 14: magus.metrics.v1alpha1.Sample.sample_time:type_name -> google.protobuf.Timestamp
-	0,  // 15: magus.metrics.v1alpha1.MetricsService.GetMetrics:input_type -> magus.metrics.v1alpha1.GetMetricsRequest
-	2,  // 16: magus.metrics.v1alpha1.MetricsService.StreamMetrics:input_type -> magus.metrics.v1alpha1.StreamMetricsRequest
-	1,  // 17: magus.metrics.v1alpha1.MetricsService.GetMetrics:output_type -> magus.metrics.v1alpha1.GetMetricsResponse
-	3,  // 18: magus.metrics.v1alpha1.MetricsService.StreamMetrics:output_type -> magus.metrics.v1alpha1.StreamMetricsResponse
-	17, // [17:19] is the sub-list for method output_type
-	15, // [15:17] is the sub-list for method input_type
-	15, // [15:15] is the sub-list for extension type_name
-	15, // [15:15] is the sub-list for extension extendee
-	0,  // [0:15] is the sub-list for field type_name
+	10, // 0: magus.metrics.v1alpha1.StreamMetricsResponse.backfill:type_name -> magus.metrics.v1alpha1.Backfill
+	3,  // 1: magus.metrics.v1alpha1.StreamMetricsResponse.snapshot:type_name -> magus.metrics.v1alpha1.Snapshot
+	12, // 2: magus.metrics.v1alpha1.Snapshot.capture_time:type_name -> google.protobuf.Timestamp
+	4,  // 3: magus.metrics.v1alpha1.Snapshot.target:type_name -> magus.metrics.v1alpha1.Latency
+	4,  // 4: magus.metrics.v1alpha1.Snapshot.cache:type_name -> magus.metrics.v1alpha1.Latency
+	4,  // 5: magus.metrics.v1alpha1.Snapshot.pool_wait:type_name -> magus.metrics.v1alpha1.Latency
+	4,  // 6: magus.metrics.v1alpha1.Snapshot.graph_query:type_name -> magus.metrics.v1alpha1.Latency
+	5,  // 7: magus.metrics.v1alpha1.Snapshot.remote:type_name -> magus.metrics.v1alpha1.Remote
+	6,  // 8: magus.metrics.v1alpha1.Snapshot.target_stats:type_name -> magus.metrics.v1alpha1.TargetStat
+	7,  // 9: magus.metrics.v1alpha1.Snapshot.mcp_tools:type_name -> magus.metrics.v1alpha1.MCPToolStat
+	8,  // 10: magus.metrics.v1alpha1.Snapshot.buzz:type_name -> magus.metrics.v1alpha1.Buzz
+	9,  // 11: magus.metrics.v1alpha1.Snapshot.sandbox:type_name -> magus.metrics.v1alpha1.Sandbox
+	11, // 12: magus.metrics.v1alpha1.Backfill.samples:type_name -> magus.metrics.v1alpha1.Sample
+	12, // 13: magus.metrics.v1alpha1.Sample.sample_time:type_name -> google.protobuf.Timestamp
+	0,  // 14: magus.metrics.v1alpha1.MetricsService.GetMetrics:input_type -> magus.metrics.v1alpha1.GetMetricsRequest
+	1,  // 15: magus.metrics.v1alpha1.MetricsService.StreamMetrics:input_type -> magus.metrics.v1alpha1.StreamMetricsRequest
+	3,  // 16: magus.metrics.v1alpha1.MetricsService.GetMetrics:output_type -> magus.metrics.v1alpha1.Snapshot
+	2,  // 17: magus.metrics.v1alpha1.MetricsService.StreamMetrics:output_type -> magus.metrics.v1alpha1.StreamMetricsResponse
+	16, // [16:18] is the sub-list for method output_type
+	14, // [14:16] is the sub-list for method input_type
+	14, // [14:14] is the sub-list for extension type_name
+	14, // [14:14] is the sub-list for extension extendee
+	0,  // [0:14] is the sub-list for field type_name
 }
 
 func init() { file_magus_metrics_v1alpha1_metrics_proto_init() }
@@ -1459,18 +1411,18 @@ func file_magus_metrics_v1alpha1_metrics_proto_init() {
 	if File_magus_metrics_v1alpha1_metrics_proto != nil {
 		return
 	}
-	file_magus_metrics_v1alpha1_metrics_proto_msgTypes[3].OneofWrappers = []any{
+	file_magus_metrics_v1alpha1_metrics_proto_msgTypes[2].OneofWrappers = []any{
 		(*StreamMetricsResponse_Backfill)(nil),
 		(*StreamMetricsResponse_Snapshot)(nil),
 	}
-	file_magus_metrics_v1alpha1_metrics_proto_msgTypes[12].OneofWrappers = []any{}
+	file_magus_metrics_v1alpha1_metrics_proto_msgTypes[11].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_metrics_v1alpha1_metrics_proto_rawDesc), len(file_magus_metrics_v1alpha1_metrics_proto_rawDesc)),
 			NumEnums:      0,
-			NumMessages:   13,
+			NumMessages:   12,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

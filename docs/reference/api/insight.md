@@ -18,7 +18,7 @@ GetInsight returns every lens in one message.
 
 `POST /magus.insight.v1alpha1.InsightService/GetInsight`: unary.
 
-Takes `GetInsightRequest`, returns `GetInsightResponse`.
+Takes `GetInsightRequest`, returns `Insight`.
 
 ## Messages
 
@@ -63,12 +63,6 @@ FileHotspot is one file's hotspot score: edit frequency weighted by complexity. 
 ### GetInsightRequest
 
 No fields.
-
-### GetInsightResponse
-
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `insight` | Insight | 1 |  |
 
 ### HotspotOutput
 

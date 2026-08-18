@@ -52,7 +52,7 @@ const (
 // MetricsServiceClient is a client for the magus.metrics.v1alpha1.MetricsService service.
 type MetricsServiceClient interface {
 	// GetMetrics returns the current derived snapshot.
-	GetMetrics(context.Context, *connect.Request[v1alpha1.GetMetricsRequest]) (*connect.Response[v1alpha1.GetMetricsResponse], error)
+	GetMetrics(context.Context, *connect.Request[v1alpha1.GetMetricsRequest]) (*connect.Response[v1alpha1.Snapshot], error)
 	// StreamMetrics pushes the rolling history first (one Backfill), then a fresh Snapshot on
 	// each tick, so the dashboard's charts and utilization grid start populated and stay live.
 	StreamMetrics(context.Context, *connect.Request[v1alpha1.StreamMetricsRequest]) (*connect.ServerStreamForClient[v1alpha1.StreamMetricsResponse], error)
@@ -69,7 +69,7 @@ func NewMetricsServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 	baseURL = strings.TrimRight(baseURL, "/")
 	metricsServiceMethods := v1alpha1.File_magus_metrics_v1alpha1_metrics_proto.Services().ByName("MetricsService").Methods()
 	return &metricsServiceClient{
-		getMetrics: connect.NewClient[v1alpha1.GetMetricsRequest, v1alpha1.GetMetricsResponse](
+		getMetrics: connect.NewClient[v1alpha1.GetMetricsRequest, v1alpha1.Snapshot](
 			httpClient,
 			baseURL+MetricsServiceGetMetricsProcedure,
 			connect.WithSchema(metricsServiceMethods.ByName("GetMetrics")),
@@ -86,12 +86,12 @@ func NewMetricsServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 
 // metricsServiceClient implements MetricsServiceClient.
 type metricsServiceClient struct {
-	getMetrics    *connect.Client[v1alpha1.GetMetricsRequest, v1alpha1.GetMetricsResponse]
+	getMetrics    *connect.Client[v1alpha1.GetMetricsRequest, v1alpha1.Snapshot]
 	streamMetrics *connect.Client[v1alpha1.StreamMetricsRequest, v1alpha1.StreamMetricsResponse]
 }
 
 // GetMetrics calls magus.metrics.v1alpha1.MetricsService.GetMetrics.
-func (c *metricsServiceClient) GetMetrics(ctx context.Context, req *connect.Request[v1alpha1.GetMetricsRequest]) (*connect.Response[v1alpha1.GetMetricsResponse], error) {
+func (c *metricsServiceClient) GetMetrics(ctx context.Context, req *connect.Request[v1alpha1.GetMetricsRequest]) (*connect.Response[v1alpha1.Snapshot], error) {
 	return c.getMetrics.CallUnary(ctx, req)
 }
 
@@ -103,7 +103,7 @@ func (c *metricsServiceClient) StreamMetrics(ctx context.Context, req *connect.R
 // MetricsServiceHandler is an implementation of the magus.metrics.v1alpha1.MetricsService service.
 type MetricsServiceHandler interface {
 	// GetMetrics returns the current derived snapshot.
-	GetMetrics(context.Context, *connect.Request[v1alpha1.GetMetricsRequest]) (*connect.Response[v1alpha1.GetMetricsResponse], error)
+	GetMetrics(context.Context, *connect.Request[v1alpha1.GetMetricsRequest]) (*connect.Response[v1alpha1.Snapshot], error)
 	// StreamMetrics pushes the rolling history first (one Backfill), then a fresh Snapshot on
 	// each tick, so the dashboard's charts and utilization grid start populated and stay live.
 	StreamMetrics(context.Context, *connect.Request[v1alpha1.StreamMetricsRequest], *connect.ServerStream[v1alpha1.StreamMetricsResponse]) error
@@ -143,7 +143,7 @@ func NewMetricsServiceHandler(svc MetricsServiceHandler, opts ...connect.Handler
 // UnimplementedMetricsServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedMetricsServiceHandler struct{}
 
-func (UnimplementedMetricsServiceHandler) GetMetrics(context.Context, *connect.Request[v1alpha1.GetMetricsRequest]) (*connect.Response[v1alpha1.GetMetricsResponse], error) {
+func (UnimplementedMetricsServiceHandler) GetMetrics(context.Context, *connect.Request[v1alpha1.GetMetricsRequest]) (*connect.Response[v1alpha1.Snapshot], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.metrics.v1alpha1.MetricsService.GetMetrics is not implemented"))
 }
 

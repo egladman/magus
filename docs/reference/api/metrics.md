@@ -18,7 +18,7 @@ GetMetrics returns the current derived snapshot.
 
 `POST /magus.metrics.v1alpha1.MetricsService/GetMetrics`: unary.
 
-Takes `GetMetricsRequest`, returns `GetMetricsResponse`.
+Takes `GetMetricsRequest`, returns `Snapshot`.
 
 ### StreamMetrics
 
@@ -70,12 +70,6 @@ Buzz rolls up the magus.buzz.* families: script exec/compile latency, the native
 ### GetMetricsRequest
 
 No fields.
-
-### GetMetricsResponse
-
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `snapshot` | Snapshot | 1 |  |
 
 ### Latency
 

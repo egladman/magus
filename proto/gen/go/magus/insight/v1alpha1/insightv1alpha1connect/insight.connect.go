@@ -57,7 +57,7 @@ const (
 // InsightServiceClient is a client for the magus.insight.v1alpha1.InsightService service.
 type InsightServiceClient interface {
 	// GetInsight returns every lens in one message.
-	GetInsight(context.Context, *connect.Request[v1alpha1.GetInsightRequest]) (*connect.Response[v1alpha1.GetInsightResponse], error)
+	GetInsight(context.Context, *connect.Request[v1alpha1.GetInsightRequest]) (*connect.Response[v1alpha1.Insight], error)
 }
 
 // NewInsightServiceClient constructs a client for the magus.insight.v1alpha1.InsightService
@@ -71,7 +71,7 @@ func NewInsightServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 	baseURL = strings.TrimRight(baseURL, "/")
 	insightServiceMethods := v1alpha1.File_magus_insight_v1alpha1_insight_proto.Services().ByName("InsightService").Methods()
 	return &insightServiceClient{
-		getInsight: connect.NewClient[v1alpha1.GetInsightRequest, v1alpha1.GetInsightResponse](
+		getInsight: connect.NewClient[v1alpha1.GetInsightRequest, v1alpha1.Insight](
 			httpClient,
 			baseURL+InsightServiceGetInsightProcedure,
 			connect.WithSchema(insightServiceMethods.ByName("GetInsight")),
@@ -82,18 +82,18 @@ func NewInsightServiceClient(httpClient connect.HTTPClient, baseURL string, opts
 
 // insightServiceClient implements InsightServiceClient.
 type insightServiceClient struct {
-	getInsight *connect.Client[v1alpha1.GetInsightRequest, v1alpha1.GetInsightResponse]
+	getInsight *connect.Client[v1alpha1.GetInsightRequest, v1alpha1.Insight]
 }
 
 // GetInsight calls magus.insight.v1alpha1.InsightService.GetInsight.
-func (c *insightServiceClient) GetInsight(ctx context.Context, req *connect.Request[v1alpha1.GetInsightRequest]) (*connect.Response[v1alpha1.GetInsightResponse], error) {
+func (c *insightServiceClient) GetInsight(ctx context.Context, req *connect.Request[v1alpha1.GetInsightRequest]) (*connect.Response[v1alpha1.Insight], error) {
 	return c.getInsight.CallUnary(ctx, req)
 }
 
 // InsightServiceHandler is an implementation of the magus.insight.v1alpha1.InsightService service.
 type InsightServiceHandler interface {
 	// GetInsight returns every lens in one message.
-	GetInsight(context.Context, *connect.Request[v1alpha1.GetInsightRequest]) (*connect.Response[v1alpha1.GetInsightResponse], error)
+	GetInsight(context.Context, *connect.Request[v1alpha1.GetInsightRequest]) (*connect.Response[v1alpha1.Insight], error)
 }
 
 // NewInsightServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -122,6 +122,6 @@ func NewInsightServiceHandler(svc InsightServiceHandler, opts ...connect.Handler
 // UnimplementedInsightServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedInsightServiceHandler struct{}
 
-func (UnimplementedInsightServiceHandler) GetInsight(context.Context, *connect.Request[v1alpha1.GetInsightRequest]) (*connect.Response[v1alpha1.GetInsightResponse], error) {
+func (UnimplementedInsightServiceHandler) GetInsight(context.Context, *connect.Request[v1alpha1.GetInsightRequest]) (*connect.Response[v1alpha1.Insight], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.insight.v1alpha1.InsightService.GetInsight is not implemented"))
 }

@@ -48,7 +48,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/token/v1alpha1/token.proto.
  */
 export const file_magus_token_v1alpha1_token: GenFile = /*@__PURE__*/
-  fileDesc("CiBtYWd1cy90b2tlbi92MWFscGhhMS90b2tlbi5wcm90bxIUbWFndXMudG9rZW4udjFhbHBoYTEirwEKCVRva2VuSW5mbxIMCgRuYW1lGAEgASgJEhIKCmlkZW50aWZpZXIYAiABKAkSLwoFc2NvcGUYAyABKA4yIC5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlblNjb3BlEi8KC2V4cGlyZV90aW1lGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEoECAQQBUoECAYQB1IHY3JlYXRlZFIJbGFzdF91c2VkIhMKEUxpc3RUb2tlbnNSZXF1ZXN0IkUKEkxpc3RUb2tlbnNSZXNwb25zZRIvCgZ0b2tlbnMYASADKAsyHy5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlbkluZm8iMQoSUmV2b2tlVG9rZW5SZXF1ZXN0EhsKCmlkZW50aWZpZXIYASABKAlCB7pIBHICEAEiRQoTUmV2b2tlVG9rZW5SZXNwb25zZRIuCgV0b2tlbhgBIAEoCzIfLm1hZ3VzLnRva2VuLnYxYWxwaGExLlRva2VuSW5mbyp6CgpUb2tlblNjb3BlEhsKF1RPS0VOX1NDT1BFX1VOU1BFQ0lGSUVEEAASGAoUVE9LRU5fU0NPUEVfT1BFUkFUT1IQAxIZChVUT0tFTl9TQ09QRV9DT05ORUNUT1IQARIaChZUT0tFTl9TQ09QRV9TSEFSRV9SRUFEEAIy0wEKDFRva2VuU2VydmljZRJfCgpMaXN0VG9rZW5zEicubWFndXMudG9rZW4udjFhbHBoYTEuTGlzdFRva2Vuc1JlcXVlc3QaKC5tYWd1cy50b2tlbi52MWFscGhhMS5MaXN0VG9rZW5zUmVzcG9uc2USYgoLUmV2b2tlVG9rZW4SKC5tYWd1cy50b2tlbi52MWFscGhhMS5SZXZva2VUb2tlblJlcXVlc3QaKS5tYWd1cy50b2tlbi52MWFscGhhMS5SZXZva2VUb2tlblJlc3BvbnNlQuMBChhjb20ubWFndXMudG9rZW4udjFhbHBoYTFCClRva2VuUHJvdG9QAVpJZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvdG9rZW4vdjFhbHBoYTE7dG9rZW52MWFscGhhMaICA01UWKoCFE1hZ3VzLlRva2VuLlYxYWxwaGExygIUTWFndXNcVG9rZW5cVjFhbHBoYTHiAiBNYWd1c1xUb2tlblxWMWFscGhhMVxHUEJNZXRhZGF0YeoCFk1hZ3VzOjpUb2tlbjo6VjFhbHBoYTFiBnByb3RvMw", [file_google_protobuf_timestamp, file_buf_validate_validate]);
+  fileDesc("CiBtYWd1cy90b2tlbi92MWFscGhhMS90b2tlbi5wcm90bxIUbWFndXMudG9rZW4udjFhbHBoYTEirwEKCVRva2VuSW5mbxIMCgRuYW1lGAEgASgJEhIKCmlkZW50aWZpZXIYAiABKAkSLwoFc2NvcGUYAyABKA4yIC5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlblNjb3BlEi8KC2V4cGlyZV90aW1lGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEoECAQQBUoECAYQB1IHY3JlYXRlZFIJbGFzdF91c2VkIhMKEUxpc3RUb2tlbnNSZXF1ZXN0IkUKEkxpc3RUb2tlbnNSZXNwb25zZRIvCgZ0b2tlbnMYASADKAsyHy5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlbkluZm8iMQoSUmV2b2tlVG9rZW5SZXF1ZXN0EhsKCmlkZW50aWZpZXIYASABKAlCB7pIBHICEAEqegoKVG9rZW5TY29wZRIbChdUT0tFTl9TQ09QRV9VTlNQRUNJRklFRBAAEhgKFFRPS0VOX1NDT1BFX09QRVJBVE9SEAMSGQoVVE9LRU5fU0NPUEVfQ09OTkVDVE9SEAESGgoWVE9LRU5fU0NPUEVfU0hBUkVfUkVBRBACMskBCgxUb2tlblNlcnZpY2USXwoKTGlzdFRva2VucxInLm1hZ3VzLnRva2VuLnYxYWxwaGExLkxpc3RUb2tlbnNSZXF1ZXN0GigubWFndXMudG9rZW4udjFhbHBoYTEuTGlzdFRva2Vuc1Jlc3BvbnNlElgKC1Jldm9rZVRva2VuEigubWFndXMudG9rZW4udjFhbHBoYTEuUmV2b2tlVG9rZW5SZXF1ZXN0Gh8ubWFndXMudG9rZW4udjFhbHBoYTEuVG9rZW5JbmZvQuMBChhjb20ubWFndXMudG9rZW4udjFhbHBoYTFCClRva2VuUHJvdG9QAVpJZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvdG9rZW4vdjFhbHBoYTE7dG9rZW52MWFscGhhMaICA01UWKoCFE1hZ3VzLlRva2VuLlYxYWxwaGExygIUTWFndXNcVG9rZW5cVjFhbHBoYTHiAiBNYWd1c1xUb2tlblxWMWFscGhhMVxHUEJNZXRhZGF0YeoCFk1hZ3VzOjpUb2tlbjo6VjFhbHBoYTFiBnByb3RvMw", [file_google_protobuf_timestamp, file_buf_validate_validate]);
 
 /**
  * TokenInfo describes one manageable token WITHOUT its secret, minimized to exactly
@@ -148,23 +148,6 @@ export const RevokeTokenRequestSchema: GenMessage<RevokeTokenRequest> = /*@__PUR
   messageDesc(file_magus_token_v1alpha1_token, 3);
 
 /**
- * @generated from message magus.token.v1alpha1.RevokeTokenResponse
- */
-export type RevokeTokenResponse = Message<"magus.token.v1alpha1.RevokeTokenResponse"> & {
-  /**
-   * @generated from field: magus.token.v1alpha1.TokenInfo token = 1;
-   */
-  token?: TokenInfo;
-};
-
-/**
- * Describes the message magus.token.v1alpha1.RevokeTokenResponse.
- * Use `create(RevokeTokenResponseSchema)` to create a new message.
- */
-export const RevokeTokenResponseSchema: GenMessage<RevokeTokenResponse> = /*@__PURE__*/
-  messageDesc(file_magus_token_v1alpha1_token, 4);
-
-/**
  * TokenScope names the CLASS a token belongs to in the three-tier credential model,
  * so a client can group and label listed tokens - and so the full taxonomy is named
  * in one place even for the class this service never lists. A connector token is a
@@ -239,7 +222,7 @@ export const TokenService: GenService<{
   revokeToken: {
     methodKind: "unary";
     input: typeof RevokeTokenRequestSchema;
-    output: typeof RevokeTokenResponseSchema;
+    output: typeof TokenInfoSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_magus_token_v1alpha1_token, 0);

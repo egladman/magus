@@ -26,7 +26,7 @@ RevokeToken removes a connector token or the share token by identifier. Revoking
 
 `POST /magus.token.v1alpha1.TokenService/RevokeToken`: unary.
 
-Takes `RevokeTokenRequest`, returns `RevokeTokenResponse`.
+Takes `RevokeTokenRequest`, returns `TokenInfo`.
 
 ## Messages
 
@@ -45,12 +45,6 @@ No fields.
 | Field | Type | # | Description |
 |-------|------|---|-------------|
 | `identifier` | string | 1 | identifier is a token name or fingerprint (as returned in TokenInfo.identifier). |
-
-### RevokeTokenResponse
-
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `token` | TokenInfo | 1 |  |
 
 ### TokenInfo
 

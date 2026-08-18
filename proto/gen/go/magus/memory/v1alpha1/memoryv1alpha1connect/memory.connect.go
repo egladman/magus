@@ -76,14 +76,14 @@ type MemoryServiceClient interface {
 	ListMemories(context.Context, *connect.Request[v1alpha1.ListMemoriesRequest]) (*connect.Response[v1alpha1.ListMemoriesResponse], error)
 	// UpdateMemory upserts a record by name: with allow_missing=true it creates the record
 	// when absent, otherwise it updates in place. An empty update_mask is a full replace.
-	UpdateMemory(context.Context, *connect.Request[v1alpha1.UpdateMemoryRequest]) (*connect.Response[v1alpha1.UpdateMemoryResponse], error)
+	UpdateMemory(context.Context, *connect.Request[v1alpha1.UpdateMemoryRequest]) (*connect.Response[v1alpha1.Memory], error)
 	// DeleteMemory removes a record by name. With allow_missing=true, deleting an absent
 	// record succeeds as a no-op (idempotent).
 	DeleteMemory(context.Context, *connect.Request[v1alpha1.DeleteMemoryRequest]) (*connect.Response[v1alpha1.DeleteMemoryResponse], error)
 	// GetCursor returns the cursor snapshot, empty when never written.
-	GetCursor(context.Context, *connect.Request[v1alpha1.GetCursorRequest]) (*connect.Response[v1alpha1.GetCursorResponse], error)
+	GetCursor(context.Context, *connect.Request[v1alpha1.GetCursorRequest]) (*connect.Response[v1alpha1.Cursor], error)
 	// UpdateCursor overwrites the cursor snapshot.
-	UpdateCursor(context.Context, *connect.Request[v1alpha1.UpdateCursorRequest]) (*connect.Response[v1alpha1.UpdateCursorResponse], error)
+	UpdateCursor(context.Context, *connect.Request[v1alpha1.UpdateCursorRequest]) (*connect.Response[v1alpha1.Cursor], error)
 }
 
 // NewMemoryServiceClient constructs a client for the magus.memory.v1alpha1.MemoryService service.
@@ -103,7 +103,7 @@ func NewMemoryServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(memoryServiceMethods.ByName("ListMemories")),
 			connect.WithClientOptions(opts...),
 		),
-		updateMemory: connect.NewClient[v1alpha1.UpdateMemoryRequest, v1alpha1.UpdateMemoryResponse](
+		updateMemory: connect.NewClient[v1alpha1.UpdateMemoryRequest, v1alpha1.Memory](
 			httpClient,
 			baseURL+MemoryServiceUpdateMemoryProcedure,
 			connect.WithSchema(memoryServiceMethods.ByName("UpdateMemory")),
@@ -115,13 +115,13 @@ func NewMemoryServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 			connect.WithSchema(memoryServiceMethods.ByName("DeleteMemory")),
 			connect.WithClientOptions(opts...),
 		),
-		getCursor: connect.NewClient[v1alpha1.GetCursorRequest, v1alpha1.GetCursorResponse](
+		getCursor: connect.NewClient[v1alpha1.GetCursorRequest, v1alpha1.Cursor](
 			httpClient,
 			baseURL+MemoryServiceGetCursorProcedure,
 			connect.WithSchema(memoryServiceMethods.ByName("GetCursor")),
 			connect.WithClientOptions(opts...),
 		),
-		updateCursor: connect.NewClient[v1alpha1.UpdateCursorRequest, v1alpha1.UpdateCursorResponse](
+		updateCursor: connect.NewClient[v1alpha1.UpdateCursorRequest, v1alpha1.Cursor](
 			httpClient,
 			baseURL+MemoryServiceUpdateCursorProcedure,
 			connect.WithSchema(memoryServiceMethods.ByName("UpdateCursor")),
@@ -133,10 +133,10 @@ func NewMemoryServiceClient(httpClient connect.HTTPClient, baseURL string, opts 
 // memoryServiceClient implements MemoryServiceClient.
 type memoryServiceClient struct {
 	listMemories *connect.Client[v1alpha1.ListMemoriesRequest, v1alpha1.ListMemoriesResponse]
-	updateMemory *connect.Client[v1alpha1.UpdateMemoryRequest, v1alpha1.UpdateMemoryResponse]
+	updateMemory *connect.Client[v1alpha1.UpdateMemoryRequest, v1alpha1.Memory]
 	deleteMemory *connect.Client[v1alpha1.DeleteMemoryRequest, v1alpha1.DeleteMemoryResponse]
-	getCursor    *connect.Client[v1alpha1.GetCursorRequest, v1alpha1.GetCursorResponse]
-	updateCursor *connect.Client[v1alpha1.UpdateCursorRequest, v1alpha1.UpdateCursorResponse]
+	getCursor    *connect.Client[v1alpha1.GetCursorRequest, v1alpha1.Cursor]
+	updateCursor *connect.Client[v1alpha1.UpdateCursorRequest, v1alpha1.Cursor]
 }
 
 // ListMemories calls magus.memory.v1alpha1.MemoryService.ListMemories.
@@ -145,7 +145,7 @@ func (c *memoryServiceClient) ListMemories(ctx context.Context, req *connect.Req
 }
 
 // UpdateMemory calls magus.memory.v1alpha1.MemoryService.UpdateMemory.
-func (c *memoryServiceClient) UpdateMemory(ctx context.Context, req *connect.Request[v1alpha1.UpdateMemoryRequest]) (*connect.Response[v1alpha1.UpdateMemoryResponse], error) {
+func (c *memoryServiceClient) UpdateMemory(ctx context.Context, req *connect.Request[v1alpha1.UpdateMemoryRequest]) (*connect.Response[v1alpha1.Memory], error) {
 	return c.updateMemory.CallUnary(ctx, req)
 }
 
@@ -155,12 +155,12 @@ func (c *memoryServiceClient) DeleteMemory(ctx context.Context, req *connect.Req
 }
 
 // GetCursor calls magus.memory.v1alpha1.MemoryService.GetCursor.
-func (c *memoryServiceClient) GetCursor(ctx context.Context, req *connect.Request[v1alpha1.GetCursorRequest]) (*connect.Response[v1alpha1.GetCursorResponse], error) {
+func (c *memoryServiceClient) GetCursor(ctx context.Context, req *connect.Request[v1alpha1.GetCursorRequest]) (*connect.Response[v1alpha1.Cursor], error) {
 	return c.getCursor.CallUnary(ctx, req)
 }
 
 // UpdateCursor calls magus.memory.v1alpha1.MemoryService.UpdateCursor.
-func (c *memoryServiceClient) UpdateCursor(ctx context.Context, req *connect.Request[v1alpha1.UpdateCursorRequest]) (*connect.Response[v1alpha1.UpdateCursorResponse], error) {
+func (c *memoryServiceClient) UpdateCursor(ctx context.Context, req *connect.Request[v1alpha1.UpdateCursorRequest]) (*connect.Response[v1alpha1.Cursor], error) {
 	return c.updateCursor.CallUnary(ctx, req)
 }
 
@@ -171,14 +171,14 @@ type MemoryServiceHandler interface {
 	ListMemories(context.Context, *connect.Request[v1alpha1.ListMemoriesRequest]) (*connect.Response[v1alpha1.ListMemoriesResponse], error)
 	// UpdateMemory upserts a record by name: with allow_missing=true it creates the record
 	// when absent, otherwise it updates in place. An empty update_mask is a full replace.
-	UpdateMemory(context.Context, *connect.Request[v1alpha1.UpdateMemoryRequest]) (*connect.Response[v1alpha1.UpdateMemoryResponse], error)
+	UpdateMemory(context.Context, *connect.Request[v1alpha1.UpdateMemoryRequest]) (*connect.Response[v1alpha1.Memory], error)
 	// DeleteMemory removes a record by name. With allow_missing=true, deleting an absent
 	// record succeeds as a no-op (idempotent).
 	DeleteMemory(context.Context, *connect.Request[v1alpha1.DeleteMemoryRequest]) (*connect.Response[v1alpha1.DeleteMemoryResponse], error)
 	// GetCursor returns the cursor snapshot, empty when never written.
-	GetCursor(context.Context, *connect.Request[v1alpha1.GetCursorRequest]) (*connect.Response[v1alpha1.GetCursorResponse], error)
+	GetCursor(context.Context, *connect.Request[v1alpha1.GetCursorRequest]) (*connect.Response[v1alpha1.Cursor], error)
 	// UpdateCursor overwrites the cursor snapshot.
-	UpdateCursor(context.Context, *connect.Request[v1alpha1.UpdateCursorRequest]) (*connect.Response[v1alpha1.UpdateCursorResponse], error)
+	UpdateCursor(context.Context, *connect.Request[v1alpha1.UpdateCursorRequest]) (*connect.Response[v1alpha1.Cursor], error)
 }
 
 // NewMemoryServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -243,7 +243,7 @@ func (UnimplementedMemoryServiceHandler) ListMemories(context.Context, *connect.
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.memory.v1alpha1.MemoryService.ListMemories is not implemented"))
 }
 
-func (UnimplementedMemoryServiceHandler) UpdateMemory(context.Context, *connect.Request[v1alpha1.UpdateMemoryRequest]) (*connect.Response[v1alpha1.UpdateMemoryResponse], error) {
+func (UnimplementedMemoryServiceHandler) UpdateMemory(context.Context, *connect.Request[v1alpha1.UpdateMemoryRequest]) (*connect.Response[v1alpha1.Memory], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.memory.v1alpha1.MemoryService.UpdateMemory is not implemented"))
 }
 
@@ -251,10 +251,10 @@ func (UnimplementedMemoryServiceHandler) DeleteMemory(context.Context, *connect.
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.memory.v1alpha1.MemoryService.DeleteMemory is not implemented"))
 }
 
-func (UnimplementedMemoryServiceHandler) GetCursor(context.Context, *connect.Request[v1alpha1.GetCursorRequest]) (*connect.Response[v1alpha1.GetCursorResponse], error) {
+func (UnimplementedMemoryServiceHandler) GetCursor(context.Context, *connect.Request[v1alpha1.GetCursorRequest]) (*connect.Response[v1alpha1.Cursor], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.memory.v1alpha1.MemoryService.GetCursor is not implemented"))
 }
 
-func (UnimplementedMemoryServiceHandler) UpdateCursor(context.Context, *connect.Request[v1alpha1.UpdateCursorRequest]) (*connect.Response[v1alpha1.UpdateCursorResponse], error) {
+func (UnimplementedMemoryServiceHandler) UpdateCursor(context.Context, *connect.Request[v1alpha1.UpdateCursorRequest]) (*connect.Response[v1alpha1.Cursor], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.memory.v1alpha1.MemoryService.UpdateCursor is not implemented"))
 }

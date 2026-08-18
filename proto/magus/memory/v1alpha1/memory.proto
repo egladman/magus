@@ -33,14 +33,14 @@ service MemoryService {
   rpc ListMemories(ListMemoriesRequest) returns (ListMemoriesResponse);
   // UpdateMemory upserts a record by name: with allow_missing=true it creates the record
   // when absent, otherwise it updates in place. An empty update_mask is a full replace.
-  rpc UpdateMemory(UpdateMemoryRequest) returns (UpdateMemoryResponse);
+  rpc UpdateMemory(UpdateMemoryRequest) returns (Memory);
   // DeleteMemory removes a record by name. With allow_missing=true, deleting an absent
   // record succeeds as a no-op (idempotent).
   rpc DeleteMemory(DeleteMemoryRequest) returns (DeleteMemoryResponse);
   // GetCursor returns the cursor snapshot, empty when never written.
-  rpc GetCursor(GetCursorRequest) returns (GetCursorResponse);
+  rpc GetCursor(GetCursorRequest) returns (Cursor);
   // UpdateCursor overwrites the cursor snapshot.
-  rpc UpdateCursor(UpdateCursorRequest) returns (UpdateCursorResponse);
+  rpc UpdateCursor(UpdateCursorRequest) returns (Cursor);
 }
 
 // MemoryType is the subject axis of a record (stable, closed). pointer carries refs only;
@@ -99,10 +99,6 @@ message UpdateMemoryRequest {
   bool allow_missing = 3;                     // true => create when absent (AIP-134 upsert)
 }
 
-message UpdateMemoryResponse {
-  Memory memory = 1;  // the stored record, with server-set timestamps
-}
-
 message DeleteMemoryRequest {
   string name = 1;
   bool allow_missing = 2;  // true => deleting an absent record is a no-op
@@ -112,14 +108,12 @@ message DeleteMemoryResponse {}
 
 message GetCursorRequest {}
 
-message GetCursorResponse {
+// Cursor is the singleton "where did I leave off" snapshot. A singleton per AIP-156: read
+// with GetCursor, overwritten with UpdateCursor, never listed and never created.
+message Cursor {
   string content = 1;  // UNTRUSTED; empty when the cursor was never written
 }
 
 message UpdateCursorRequest {
-  string content = 1;
-}
-
-message UpdateCursorResponse {
   string content = 1;
 }

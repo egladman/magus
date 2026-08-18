@@ -34,7 +34,7 @@ service NotesService {
   // store returns all notes today (bounded by the store's own scan cap).
   rpc ListNotes(ListNotesRequest) returns (ListNotesResponse);
   // GetNote returns one note by scope and name, including its body.
-  rpc GetNote(GetNoteRequest) returns (GetNoteResponse);
+  rpc GetNote(GetNoteRequest) returns (Note);
 }
 
 // Scope is which store a note lives in, and it is the axis a reader must never have to
@@ -176,8 +176,4 @@ message GetNoteRequest {
   // scope disambiguates a name that exists in both stores. Required: guessing which store was
   // meant is the mistake worth refusing, since the two mean different things to a reader.
   Scope scope = 2;
-}
-
-message GetNoteResponse {
-  Note note = 1;
 }

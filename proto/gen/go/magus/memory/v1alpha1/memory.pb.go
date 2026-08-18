@@ -478,50 +478,6 @@ func (x *UpdateMemoryRequest) GetAllowMissing() bool {
 	return false
 }
 
-type UpdateMemoryResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Memory        *Memory                `protobuf:"bytes,1,opt,name=memory,proto3" json:"memory,omitempty"` // the stored record, with server-set timestamps
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UpdateMemoryResponse) Reset() {
-	*x = UpdateMemoryResponse{}
-	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[5]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UpdateMemoryResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UpdateMemoryResponse) ProtoMessage() {}
-
-func (x *UpdateMemoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[5]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UpdateMemoryResponse.ProtoReflect.Descriptor instead.
-func (*UpdateMemoryResponse) Descriptor() ([]byte, []int) {
-	return file_magus_memory_v1alpha1_memory_proto_rawDescGZIP(), []int{5}
-}
-
-func (x *UpdateMemoryResponse) GetMemory() *Memory {
-	if x != nil {
-		return x.Memory
-	}
-	return nil
-}
-
 type DeleteMemoryRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
@@ -532,7 +488,7 @@ type DeleteMemoryRequest struct {
 
 func (x *DeleteMemoryRequest) Reset() {
 	*x = DeleteMemoryRequest{}
-	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[6]
+	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -544,7 +500,7 @@ func (x *DeleteMemoryRequest) String() string {
 func (*DeleteMemoryRequest) ProtoMessage() {}
 
 func (x *DeleteMemoryRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[6]
+	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -557,7 +513,7 @@ func (x *DeleteMemoryRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteMemoryRequest.ProtoReflect.Descriptor instead.
 func (*DeleteMemoryRequest) Descriptor() ([]byte, []int) {
-	return file_magus_memory_v1alpha1_memory_proto_rawDescGZIP(), []int{6}
+	return file_magus_memory_v1alpha1_memory_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *DeleteMemoryRequest) GetName() string {
@@ -582,7 +538,7 @@ type DeleteMemoryResponse struct {
 
 func (x *DeleteMemoryResponse) Reset() {
 	*x = DeleteMemoryResponse{}
-	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[7]
+	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -594,7 +550,7 @@ func (x *DeleteMemoryResponse) String() string {
 func (*DeleteMemoryResponse) ProtoMessage() {}
 
 func (x *DeleteMemoryResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[7]
+	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -607,7 +563,7 @@ func (x *DeleteMemoryResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use DeleteMemoryResponse.ProtoReflect.Descriptor instead.
 func (*DeleteMemoryResponse) Descriptor() ([]byte, []int) {
-	return file_magus_memory_v1alpha1_memory_proto_rawDescGZIP(), []int{7}
+	return file_magus_memory_v1alpha1_memory_proto_rawDescGZIP(), []int{6}
 }
 
 type GetCursorRequest struct {
@@ -618,7 +574,7 @@ type GetCursorRequest struct {
 
 func (x *GetCursorRequest) Reset() {
 	*x = GetCursorRequest{}
-	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[8]
+	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[7]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -630,7 +586,7 @@ func (x *GetCursorRequest) String() string {
 func (*GetCursorRequest) ProtoMessage() {}
 
 func (x *GetCursorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[8]
+	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[7]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -643,31 +599,33 @@ func (x *GetCursorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetCursorRequest.ProtoReflect.Descriptor instead.
 func (*GetCursorRequest) Descriptor() ([]byte, []int) {
-	return file_magus_memory_v1alpha1_memory_proto_rawDescGZIP(), []int{8}
+	return file_magus_memory_v1alpha1_memory_proto_rawDescGZIP(), []int{7}
 }
 
-type GetCursorResponse struct {
+// Cursor is the singleton "where did I leave off" snapshot. A singleton per AIP-156: read
+// with GetCursor, overwritten with UpdateCursor, never listed and never created.
+type Cursor struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Content       string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"` // UNTRUSTED; empty when the cursor was never written
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *GetCursorResponse) Reset() {
-	*x = GetCursorResponse{}
-	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[9]
+func (x *Cursor) Reset() {
+	*x = Cursor{}
+	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[8]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *GetCursorResponse) String() string {
+func (x *Cursor) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*GetCursorResponse) ProtoMessage() {}
+func (*Cursor) ProtoMessage() {}
 
-func (x *GetCursorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[9]
+func (x *Cursor) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[8]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -678,12 +636,12 @@ func (x *GetCursorResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use GetCursorResponse.ProtoReflect.Descriptor instead.
-func (*GetCursorResponse) Descriptor() ([]byte, []int) {
-	return file_magus_memory_v1alpha1_memory_proto_rawDescGZIP(), []int{9}
+// Deprecated: Use Cursor.ProtoReflect.Descriptor instead.
+func (*Cursor) Descriptor() ([]byte, []int) {
+	return file_magus_memory_v1alpha1_memory_proto_rawDescGZIP(), []int{8}
 }
 
-func (x *GetCursorResponse) GetContent() string {
+func (x *Cursor) GetContent() string {
 	if x != nil {
 		return x.Content
 	}
@@ -699,7 +657,7 @@ type UpdateCursorRequest struct {
 
 func (x *UpdateCursorRequest) Reset() {
 	*x = UpdateCursorRequest{}
-	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[10]
+	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[9]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -711,7 +669,7 @@ func (x *UpdateCursorRequest) String() string {
 func (*UpdateCursorRequest) ProtoMessage() {}
 
 func (x *UpdateCursorRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[10]
+	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[9]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -724,54 +682,10 @@ func (x *UpdateCursorRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use UpdateCursorRequest.ProtoReflect.Descriptor instead.
 func (*UpdateCursorRequest) Descriptor() ([]byte, []int) {
-	return file_magus_memory_v1alpha1_memory_proto_rawDescGZIP(), []int{10}
+	return file_magus_memory_v1alpha1_memory_proto_rawDescGZIP(), []int{9}
 }
 
 func (x *UpdateCursorRequest) GetContent() string {
-	if x != nil {
-		return x.Content
-	}
-	return ""
-}
-
-type UpdateCursorResponse struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Content       string                 `protobuf:"bytes,1,opt,name=content,proto3" json:"content,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
-}
-
-func (x *UpdateCursorResponse) Reset() {
-	*x = UpdateCursorResponse{}
-	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[11]
-	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-	ms.StoreMessageInfo(mi)
-}
-
-func (x *UpdateCursorResponse) String() string {
-	return protoimpl.X.MessageStringOf(x)
-}
-
-func (*UpdateCursorResponse) ProtoMessage() {}
-
-func (x *UpdateCursorResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_memory_v1alpha1_memory_proto_msgTypes[11]
-	if x != nil {
-		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
-		if ms.LoadMessageInfo() == nil {
-			ms.StoreMessageInfo(mi)
-		}
-		return ms
-	}
-	return mi.MessageOf(x)
-}
-
-// Deprecated: Use UpdateCursorResponse.ProtoReflect.Descriptor instead.
-func (*UpdateCursorResponse) Descriptor() ([]byte, []int) {
-	return file_magus_memory_v1alpha1_memory_proto_rawDescGZIP(), []int{11}
-}
-
-func (x *UpdateCursorResponse) GetContent() string {
 	if x != nil {
 		return x.Content
 	}
@@ -810,19 +724,15 @@ const file_magus_memory_v1alpha1_memory_proto_rawDesc = "" +
 	"\x06memory\x18\x01 \x01(\v2\x1d.magus.memory.v1alpha1.MemoryR\x06memory\x12;\n" +
 	"\vupdate_mask\x18\x02 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
 	"updateMask\x12#\n" +
-	"\rallow_missing\x18\x03 \x01(\bR\fallowMissing\"M\n" +
-	"\x14UpdateMemoryResponse\x125\n" +
-	"\x06memory\x18\x01 \x01(\v2\x1d.magus.memory.v1alpha1.MemoryR\x06memory\"N\n" +
+	"\rallow_missing\x18\x03 \x01(\bR\fallowMissing\"N\n" +
 	"\x13DeleteMemoryRequest\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x12#\n" +
 	"\rallow_missing\x18\x02 \x01(\bR\fallowMissing\"\x16\n" +
 	"\x14DeleteMemoryResponse\"\x12\n" +
-	"\x10GetCursorRequest\"-\n" +
-	"\x11GetCursorResponse\x12\x18\n" +
+	"\x10GetCursorRequest\"\"\n" +
+	"\x06Cursor\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent\"/\n" +
 	"\x13UpdateCursorRequest\x12\x18\n" +
-	"\acontent\x18\x01 \x01(\tR\acontent\"0\n" +
-	"\x14UpdateCursorResponse\x12\x18\n" +
 	"\acontent\x18\x01 \x01(\tR\acontent*r\n" +
 	"\n" +
 	"MemoryType\x12\x1b\n" +
@@ -836,13 +746,13 @@ const file_magus_memory_v1alpha1_memory_proto_rawDesc = "" +
 	"\x14MEMORY_REF_KIND_NODE\x10\x02\x12\x1a\n" +
 	"\x16MEMORY_REF_KIND_OUTPUT\x10\x03\x12\x1b\n" +
 	"\x17MEMORY_REF_KIND_COMMAND\x10\x04\x12\x17\n" +
-	"\x13MEMORY_REF_KIND_DOC\x10\x052\x93\x04\n" +
+	"\x13MEMORY_REF_KIND_DOC\x10\x052\xec\x03\n" +
 	"\rMemoryService\x12g\n" +
-	"\fListMemories\x12*.magus.memory.v1alpha1.ListMemoriesRequest\x1a+.magus.memory.v1alpha1.ListMemoriesResponse\x12g\n" +
-	"\fUpdateMemory\x12*.magus.memory.v1alpha1.UpdateMemoryRequest\x1a+.magus.memory.v1alpha1.UpdateMemoryResponse\x12g\n" +
-	"\fDeleteMemory\x12*.magus.memory.v1alpha1.DeleteMemoryRequest\x1a+.magus.memory.v1alpha1.DeleteMemoryResponse\x12^\n" +
-	"\tGetCursor\x12'.magus.memory.v1alpha1.GetCursorRequest\x1a(.magus.memory.v1alpha1.GetCursorResponse\x12g\n" +
-	"\fUpdateCursor\x12*.magus.memory.v1alpha1.UpdateCursorRequest\x1a+.magus.memory.v1alpha1.UpdateCursorResponseB\xeb\x01\n" +
+	"\fListMemories\x12*.magus.memory.v1alpha1.ListMemoriesRequest\x1a+.magus.memory.v1alpha1.ListMemoriesResponse\x12Y\n" +
+	"\fUpdateMemory\x12*.magus.memory.v1alpha1.UpdateMemoryRequest\x1a\x1d.magus.memory.v1alpha1.Memory\x12g\n" +
+	"\fDeleteMemory\x12*.magus.memory.v1alpha1.DeleteMemoryRequest\x1a+.magus.memory.v1alpha1.DeleteMemoryResponse\x12S\n" +
+	"\tGetCursor\x12'.magus.memory.v1alpha1.GetCursorRequest\x1a\x1d.magus.memory.v1alpha1.Cursor\x12Y\n" +
+	"\fUpdateCursor\x12*.magus.memory.v1alpha1.UpdateCursorRequest\x1a\x1d.magus.memory.v1alpha1.CursorB\xeb\x01\n" +
 	"\x19com.magus.memory.v1alpha1B\vMemoryProtoP\x01ZKgithub.com/egladman/magus/proto/gen/go/magus/memory/v1alpha1;memoryv1alpha1\xa2\x02\x03MMX\xaa\x02\x15Magus.Memory.V1alpha1\xca\x02\x15Magus\\Memory\\V1alpha1\xe2\x02!Magus\\Memory\\V1alpha1\\GPBMetadata\xea\x02\x17Magus::Memory::V1alpha1b\x06proto3"
 
 var (
@@ -858,7 +768,7 @@ func file_magus_memory_v1alpha1_memory_proto_rawDescGZIP() []byte {
 }
 
 var file_magus_memory_v1alpha1_memory_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
-var file_magus_memory_v1alpha1_memory_proto_msgTypes = make([]protoimpl.MessageInfo, 12)
+var file_magus_memory_v1alpha1_memory_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_magus_memory_v1alpha1_memory_proto_goTypes = []any{
 	(MemoryType)(0),               // 0: magus.memory.v1alpha1.MemoryType
 	(MemoryRefKind)(0),            // 1: magus.memory.v1alpha1.MemoryRefKind
@@ -867,41 +777,38 @@ var file_magus_memory_v1alpha1_memory_proto_goTypes = []any{
 	(*ListMemoriesRequest)(nil),   // 4: magus.memory.v1alpha1.ListMemoriesRequest
 	(*ListMemoriesResponse)(nil),  // 5: magus.memory.v1alpha1.ListMemoriesResponse
 	(*UpdateMemoryRequest)(nil),   // 6: magus.memory.v1alpha1.UpdateMemoryRequest
-	(*UpdateMemoryResponse)(nil),  // 7: magus.memory.v1alpha1.UpdateMemoryResponse
-	(*DeleteMemoryRequest)(nil),   // 8: magus.memory.v1alpha1.DeleteMemoryRequest
-	(*DeleteMemoryResponse)(nil),  // 9: magus.memory.v1alpha1.DeleteMemoryResponse
-	(*GetCursorRequest)(nil),      // 10: magus.memory.v1alpha1.GetCursorRequest
-	(*GetCursorResponse)(nil),     // 11: magus.memory.v1alpha1.GetCursorResponse
-	(*UpdateCursorRequest)(nil),   // 12: magus.memory.v1alpha1.UpdateCursorRequest
-	(*UpdateCursorResponse)(nil),  // 13: magus.memory.v1alpha1.UpdateCursorResponse
-	(*timestamppb.Timestamp)(nil), // 14: google.protobuf.Timestamp
-	(*fieldmaskpb.FieldMask)(nil), // 15: google.protobuf.FieldMask
+	(*DeleteMemoryRequest)(nil),   // 7: magus.memory.v1alpha1.DeleteMemoryRequest
+	(*DeleteMemoryResponse)(nil),  // 8: magus.memory.v1alpha1.DeleteMemoryResponse
+	(*GetCursorRequest)(nil),      // 9: magus.memory.v1alpha1.GetCursorRequest
+	(*Cursor)(nil),                // 10: magus.memory.v1alpha1.Cursor
+	(*UpdateCursorRequest)(nil),   // 11: magus.memory.v1alpha1.UpdateCursorRequest
+	(*timestamppb.Timestamp)(nil), // 12: google.protobuf.Timestamp
+	(*fieldmaskpb.FieldMask)(nil), // 13: google.protobuf.FieldMask
 }
 var file_magus_memory_v1alpha1_memory_proto_depIdxs = []int32{
 	1,  // 0: magus.memory.v1alpha1.MemoryRef.kind:type_name -> magus.memory.v1alpha1.MemoryRefKind
 	0,  // 1: magus.memory.v1alpha1.Memory.type:type_name -> magus.memory.v1alpha1.MemoryType
 	2,  // 2: magus.memory.v1alpha1.Memory.refs:type_name -> magus.memory.v1alpha1.MemoryRef
-	14, // 3: magus.memory.v1alpha1.Memory.create_time:type_name -> google.protobuf.Timestamp
-	14, // 4: magus.memory.v1alpha1.Memory.update_time:type_name -> google.protobuf.Timestamp
+	12, // 3: magus.memory.v1alpha1.Memory.create_time:type_name -> google.protobuf.Timestamp
+	12, // 4: magus.memory.v1alpha1.Memory.update_time:type_name -> google.protobuf.Timestamp
 	3,  // 5: magus.memory.v1alpha1.ListMemoriesResponse.memories:type_name -> magus.memory.v1alpha1.Memory
 	3,  // 6: magus.memory.v1alpha1.UpdateMemoryRequest.memory:type_name -> magus.memory.v1alpha1.Memory
-	15, // 7: magus.memory.v1alpha1.UpdateMemoryRequest.update_mask:type_name -> google.protobuf.FieldMask
-	3,  // 8: magus.memory.v1alpha1.UpdateMemoryResponse.memory:type_name -> magus.memory.v1alpha1.Memory
-	4,  // 9: magus.memory.v1alpha1.MemoryService.ListMemories:input_type -> magus.memory.v1alpha1.ListMemoriesRequest
-	6,  // 10: magus.memory.v1alpha1.MemoryService.UpdateMemory:input_type -> magus.memory.v1alpha1.UpdateMemoryRequest
-	8,  // 11: magus.memory.v1alpha1.MemoryService.DeleteMemory:input_type -> magus.memory.v1alpha1.DeleteMemoryRequest
-	10, // 12: magus.memory.v1alpha1.MemoryService.GetCursor:input_type -> magus.memory.v1alpha1.GetCursorRequest
-	12, // 13: magus.memory.v1alpha1.MemoryService.UpdateCursor:input_type -> magus.memory.v1alpha1.UpdateCursorRequest
-	5,  // 14: magus.memory.v1alpha1.MemoryService.ListMemories:output_type -> magus.memory.v1alpha1.ListMemoriesResponse
-	7,  // 15: magus.memory.v1alpha1.MemoryService.UpdateMemory:output_type -> magus.memory.v1alpha1.UpdateMemoryResponse
-	9,  // 16: magus.memory.v1alpha1.MemoryService.DeleteMemory:output_type -> magus.memory.v1alpha1.DeleteMemoryResponse
-	11, // 17: magus.memory.v1alpha1.MemoryService.GetCursor:output_type -> magus.memory.v1alpha1.GetCursorResponse
-	13, // 18: magus.memory.v1alpha1.MemoryService.UpdateCursor:output_type -> magus.memory.v1alpha1.UpdateCursorResponse
-	14, // [14:19] is the sub-list for method output_type
-	9,  // [9:14] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	13, // 7: magus.memory.v1alpha1.UpdateMemoryRequest.update_mask:type_name -> google.protobuf.FieldMask
+	4,  // 8: magus.memory.v1alpha1.MemoryService.ListMemories:input_type -> magus.memory.v1alpha1.ListMemoriesRequest
+	6,  // 9: magus.memory.v1alpha1.MemoryService.UpdateMemory:input_type -> magus.memory.v1alpha1.UpdateMemoryRequest
+	7,  // 10: magus.memory.v1alpha1.MemoryService.DeleteMemory:input_type -> magus.memory.v1alpha1.DeleteMemoryRequest
+	9,  // 11: magus.memory.v1alpha1.MemoryService.GetCursor:input_type -> magus.memory.v1alpha1.GetCursorRequest
+	11, // 12: magus.memory.v1alpha1.MemoryService.UpdateCursor:input_type -> magus.memory.v1alpha1.UpdateCursorRequest
+	5,  // 13: magus.memory.v1alpha1.MemoryService.ListMemories:output_type -> magus.memory.v1alpha1.ListMemoriesResponse
+	3,  // 14: magus.memory.v1alpha1.MemoryService.UpdateMemory:output_type -> magus.memory.v1alpha1.Memory
+	8,  // 15: magus.memory.v1alpha1.MemoryService.DeleteMemory:output_type -> magus.memory.v1alpha1.DeleteMemoryResponse
+	10, // 16: magus.memory.v1alpha1.MemoryService.GetCursor:output_type -> magus.memory.v1alpha1.Cursor
+	10, // 17: magus.memory.v1alpha1.MemoryService.UpdateCursor:output_type -> magus.memory.v1alpha1.Cursor
+	13, // [13:18] is the sub-list for method output_type
+	8,  // [8:13] is the sub-list for method input_type
+	8,  // [8:8] is the sub-list for extension type_name
+	8,  // [8:8] is the sub-list for extension extendee
+	0,  // [0:8] is the sub-list for field type_name
 }
 
 func init() { file_magus_memory_v1alpha1_memory_proto_init() }
@@ -915,7 +822,7 @@ func file_magus_memory_v1alpha1_memory_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_memory_v1alpha1_memory_proto_rawDesc), len(file_magus_memory_v1alpha1_memory_proto_rawDesc)),
 			NumEnums:      2,
-			NumMessages:   12,
+			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

@@ -18,7 +18,7 @@ GetInvocation returns an invocation's header: its command, lineage, and timing -
 
 `POST /magus.viewer.v1alpha1.ViewerService/GetInvocation`: unary.
 
-Takes `GetInvocationRequest`, returns `GetInvocationResponse`.
+Takes `GetInvocationRequest`, returns `Invocation`.
 
 ### ListEvents
 
@@ -105,12 +105,6 @@ EventQuery filters an invocation's events server-side (for a large log). It is t
 | Field | Type | # | Description |
 |-------|------|---|-------------|
 | `selector` | Selector | 1 |  |
-
-### GetInvocationResponse
-
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `invocation` | Invocation | 1 |  |
 
 ### Invocation
 

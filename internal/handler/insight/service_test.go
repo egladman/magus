@@ -24,7 +24,7 @@ type fakeSource struct {
 
 func (f fakeSource) Insight(context.Context) (types.InsightView, error) { return f.view, f.err }
 
-func get(t *testing.T, src Source) (*insightv1.GetInsightResponse, error) {
+func get(t *testing.T, src Source) (*insightv1.Insight, error) {
 	t.Helper()
 	resp, err := NewService(src).GetInsight(context.Background(), connect.NewRequest(&insightv1.GetInsightRequest{}))
 	if err != nil {
@@ -104,7 +104,7 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 		},
 	}}
 
-	want := &insightv1.GetInsightResponse{Insight: &insightv1.Insight{
+	want := &insightv1.Insight{
 		Hotspots: &insightv1.HotspotOutput{
 			Definition: types.HotspotDefinition,
 			Commits:    42,
@@ -170,7 +170,7 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 				LastPassTime:  timestamppb.New(lastPass),
 			}},
 		},
-	}}
+	}
 
 	got, err := get(t, src)
 	require.NoError(t, err)
@@ -183,14 +183,14 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 func TestGetInsight_NilVolatility(t *testing.T) {
 	got, err := get(t, fakeSource{view: types.InsightView{Hotspots: types.HotspotOutput{Commits: 3}}})
 	require.NoError(t, err)
-	want := &insightv1.GetInsightResponse{Insight: &insightv1.Insight{
+	want := &insightv1.Insight{
 		Hotspots:  &insightv1.HotspotOutput{Commits: 3},
 		Affinity:  &insightv1.AffinityOutput{},
 		Ownership: &insightv1.OwnershipOutput{},
 		Trend:     &insightv1.TrendOutput{},
-	}}
+	}
 	require.True(t, proto.Equal(want, got), "wire mismatch:\ngot  %v\nwant %v", got, want)
-	require.Nil(t, got.GetInsight().GetVolatility(), "a nil report must stay absent on the wire")
+	require.Nil(t, got.GetVolatility(), "a nil report must stay absent on the wire")
 }
 
 // A zero time.Time is UNSET on the wire, not the year-0001 sentinel the JSON route emitted.
@@ -206,11 +206,11 @@ func TestGetInsight_ZeroTimeIsUnset(t *testing.T) {
 		},
 	}})
 	require.NoError(t, err)
-	hot := got.GetInsight().GetHotspots()
+	hot := got.GetHotspots()
 	require.Nil(t, hot.GetNodes()[0].GetLastCommitTime())
 	require.Nil(t, hot.GetNodes()[1].GetLastCommitTime())
 	require.Nil(t, hot.GetFiles()[0].GetLastCommitTime())
-	require.Nil(t, got.GetInsight().GetVolatility().GetTargets()[0].GetLastPassTime())
+	require.Nil(t, got.GetVolatility().GetTargets()[0].GetLastPassTime())
 }
 
 func TestGetInsight_NoWorkspaceIsUnavailable(t *testing.T) {

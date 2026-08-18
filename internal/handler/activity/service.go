@@ -156,13 +156,13 @@ func readMerged(workspaces []Workspace, limit int) []trail.Event {
 // GetPayload serves a stored request or response body by its ref. Refs are content-addressed, so
 // the same ref names the same bytes in whichever workspace's blob store holds it; the first hit
 // across the loaded workspaces answers, and only an unresolvable ref is NotFound.
-func (s *Service) GetPayload(_ context.Context, req *connect.Request[activityv1.GetPayloadRequest]) (*connect.Response[activityv1.GetPayloadResponse], error) {
+func (s *Service) GetPayload(_ context.Context, req *connect.Request[activityv1.GetPayloadRequest]) (*connect.Response[activityv1.Payload], error) {
 	ref := req.Msg.GetRef()
 	var err error
 	for _, w := range s.loaded() {
 		var body []byte
 		if body, err = trail.ReadBlob(w.CacheDir, ref); err == nil {
-			return connect.NewResponse(&activityv1.GetPayloadResponse{Body: body, SizeBytes: int64(len(body))}), nil
+			return connect.NewResponse(&activityv1.Payload{Body: body, SizeBytes: int64(len(body))}), nil
 		}
 	}
 	if err == nil {

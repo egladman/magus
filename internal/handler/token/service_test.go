@@ -127,8 +127,8 @@ func TestRevokeShareTokenClosesListener(t *testing.T) {
 	require.NoError(t, err)
 	assert.True(t, sh.closed, "revoking the share token must close its listener via CloseIf")
 	assert.Equal(t, "feedface", sh.closeIfArg, "the handler must close by the matched fingerprint, not the raw identifier")
-	assert.Equal(t, tokenv1.TokenScope_TOKEN_SCOPE_SHARE_READ, resp.Msg.GetToken().GetScope())
-	assert.Equal(t, "feedface", resp.Msg.GetToken().GetIdentifier())
+	assert.Equal(t, tokenv1.TokenScope_TOKEN_SCOPE_SHARE_READ, resp.Msg.GetScope())
+	assert.Equal(t, "feedface", resp.Msg.GetIdentifier())
 }
 
 // TestRevokeShareLostRaceIsNotFound proves the TOCTOU guard: when the share matched by
@@ -185,9 +185,9 @@ func TestRevokeSharePrefixResolvesToConnector(t *testing.T) {
 	resp, err := s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Identifier: prefix}))
 	require.NoError(t, err)
 	assert.False(t, sh.closed, "a prefix must never silently revoke the share")
-	assert.Equal(t, tokenv1.TokenScope_TOKEN_SCOPE_CONNECTOR, resp.Msg.GetToken().GetScope(),
+	assert.Equal(t, tokenv1.TokenScope_TOKEN_SCOPE_CONNECTOR, resp.Msg.GetScope(),
 		"a prefix that also names the share must resolve to the connector store")
-	assert.Equal(t, conn.Fingerprint, resp.Msg.GetToken().GetIdentifier())
+	assert.Equal(t, conn.Fingerprint, resp.Msg.GetIdentifier())
 }
 
 // TestNilShareManagerConstructor proves NewService given a typed-nil *share.Manager

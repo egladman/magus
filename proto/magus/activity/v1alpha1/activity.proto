@@ -121,7 +121,7 @@ service ActivityService {
   // ListActivity returns a page of recent events, newest first, narrowed by filter.
   rpc ListActivity(ListActivityRequest) returns (ListActivityResponse);
   // GetPayload returns a stored request or response body by its ref (from an ActivityEvent).
-  rpc GetPayload(GetPayloadRequest) returns (GetPayloadResponse);
+  rpc GetPayload(GetPayloadRequest) returns (Payload);
 }
 
 // ActivityQuery narrows the listing server-side. Fields AND together; repeated values within
@@ -147,7 +147,8 @@ message GetPayloadRequest {
   // A provenance-prefixed content ref: a short lowercase source tag followed by hex.
   string ref = 1 [(buf.validate.field).string.pattern = "^[a-z]{2,8}[0-9a-f]+$"];
 }
-message GetPayloadResponse {
+// Payload is one stored request or response body, resolved from an ActivityEvent's ref.
+message Payload {
   bytes body = 1;
   int64 size_bytes = 2;
 }

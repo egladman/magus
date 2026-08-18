@@ -62,12 +62,12 @@ func (s *Service) Start(ctx context.Context) {
 }
 
 // GetMetrics returns the current derived snapshot.
-func (s *Service) GetMetrics(ctx context.Context, _ *connect.Request[metricsv1.GetMetricsRequest]) (*connect.Response[metricsv1.GetMetricsResponse], error) {
+func (s *Service) GetMetrics(ctx context.Context, _ *connect.Request[metricsv1.GetMetricsRequest]) (*connect.Response[metricsv1.Snapshot], error) {
 	snap, err := s.snapshot(ctx)
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&metricsv1.GetMetricsResponse{Snapshot: snap}), nil
+	return connect.NewResponse(snap), nil
 }
 
 // StreamMetrics sends exactly one Backfill (the ring history, oldest-first), then a fresh

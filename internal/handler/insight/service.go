@@ -42,7 +42,7 @@ var _ insightv1alpha1connect.InsightServiceHandler = (*Service)(nil)
 // anything, which is a transient condition of THIS daemon rather than a bad request or a bug,
 // so it maps to CodeUnavailable (the Connect twin of the JSON route's 503) and the client
 // keeps whatever it last rendered.
-func (s *Service) GetInsight(ctx context.Context, _ *connect.Request[insightv1.GetInsightRequest]) (*connect.Response[insightv1.GetInsightResponse], error) {
+func (s *Service) GetInsight(ctx context.Context, _ *connect.Request[insightv1.GetInsightRequest]) (*connect.Response[insightv1.Insight], error) {
 	view, err := s.src.Insight(ctx)
 	if err != nil {
 		if errors.Is(err, console.ErrNoWorkspace) {
@@ -50,7 +50,7 @@ func (s *Service) GetInsight(ctx context.Context, _ *connect.Request[insightv1.G
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&insightv1.GetInsightResponse{Insight: insightToProto(view)}), nil
+	return connect.NewResponse(insightToProto(view)), nil
 }
 
 // insightToProto maps the domain view onto the wire. Every lens is always present; only

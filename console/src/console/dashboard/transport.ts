@@ -420,7 +420,7 @@ export class DashboardTransport {
     try {
       const client = createClient(InsightService, createDaemonTransport(host, getLiveToken()));
       const resp = await client.getInsight({}, { signal: this.insightAbort.signal });
-      if (resp.insight) this.store.set({ insight: mapInsight(resp.insight) });
+      this.store.set({ insight: mapInsight(resp) });
     } catch {
       // An abort, a network blip, or a daemon with no workspace (CodeUnavailable): leave the
       // prior insight in place; the poll retries.

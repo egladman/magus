@@ -123,7 +123,7 @@ func (s *Service) ListNotes(ctx context.Context, _ *connect.Request[notesv1.List
 // GetNote returns one note in full, including its body. scope is required rather than
 // inferred: a name can exist in both stores, and the two mean different things to a reader,
 // so guessing which was meant is the one thing that must not happen.
-func (s *Service) GetNote(ctx context.Context, req *connect.Request[notesv1.GetNoteRequest]) (*connect.Response[notesv1.GetNoteResponse], error) {
+func (s *Service) GetNote(ctx context.Context, req *connect.Request[notesv1.GetNoteRequest]) (*connect.Response[notesv1.Note], error) {
 	want := req.Msg.GetScope()
 	if want == notesv1.Scope_SCOPE_UNSPECIFIED {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
@@ -141,7 +141,7 @@ func (s *Service) GetNote(ctx context.Context, req *connect.Request[notesv1.GetN
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 		res, stale := s.resolver(ctx)
-		return connect.NewResponse(&notesv1.GetNoteResponse{Note: s.toProto(ctx, n, sd, res, stale, true)}), nil
+		return connect.NewResponse(s.toProto(ctx, n, sd, res, stale, true)), nil
 	}
 	return nil, connect.NewError(connect.CodeNotFound,
 		fmt.Errorf("notes: this workspace declares no %s notes store", scopeName(want)))

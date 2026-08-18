@@ -26,7 +26,7 @@ GetNote returns one note by scope and name, including its body.
 
 `POST /magus.notes.v1alpha1.NotesService/GetNote`: unary.
 
-Takes `GetNoteRequest`, returns `GetNoteResponse`.
+Takes `GetNoteRequest`, returns `Note`.
 
 ## Messages
 
@@ -48,12 +48,6 @@ Anchor is one typed attachment from a note to a graph entity, with the result of
 |-------|------|---|-------------|
 | `name` | string | 1 |  |
 | `scope` | Scope | 2 | scope disambiguates a name that exists in both stores. Required: guessing which store was meant is the mistake worth refusing, since the two mean different things to a reader. |
-
-### GetNoteResponse
-
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `note` | Note | 1 |  |
 
 ### ListNotesRequest
 

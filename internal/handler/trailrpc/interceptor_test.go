@@ -101,8 +101,8 @@ type fakeTokenService struct{}
 func (fakeTokenService) ListTokens(context.Context, *connect.Request[tokenv1.ListTokensRequest]) (*connect.Response[tokenv1.ListTokensResponse], error) {
 	return connect.NewResponse(&tokenv1.ListTokensResponse{}), nil
 }
-func (fakeTokenService) RevokeToken(context.Context, *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.RevokeTokenResponse], error) {
-	return connect.NewResponse(&tokenv1.RevokeTokenResponse{}), nil
+func (fakeTokenService) RevokeToken(context.Context, *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.TokenInfo], error) {
+	return connect.NewResponse(&tokenv1.TokenInfo{}), nil
 }
 
 func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
@@ -194,7 +194,7 @@ func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 // mutation is still recorded, with OutcomeError and the error text.
 type erroringTokenService struct{ fakeTokenService }
 
-func (erroringTokenService) RevokeToken(context.Context, *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.RevokeTokenResponse], error) {
+func (erroringTokenService) RevokeToken(context.Context, *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.TokenInfo], error) {
 	return nil, connect.NewError(connect.CodeNotFound, errors.New("no token matches"))
 }
 

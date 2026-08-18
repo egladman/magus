@@ -26,7 +26,7 @@ GetPayload returns a stored request or response body by its ref (from an Activit
 
 `POST /magus.activity.v1alpha1.ActivityService/GetPayload`: unary.
 
-Takes `GetPayloadRequest`, returns `GetPayloadResponse`.
+Takes `GetPayloadRequest`, returns `Payload`.
 
 ## Messages
 
@@ -70,13 +70,6 @@ ActivityQuery narrows the listing server-side. Fields AND together; repeated val
 |-------|------|---|-------------|
 | `ref` | string | 1 | A provenance-prefixed content ref: a short lowercase source tag followed by hex. |
 
-### GetPayloadResponse
-
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `body` | bytes | 1 |  |
-| `size_bytes` | int64 | 2 |  |
-
 ### ListActivityRequest
 
 | Field | Type | # | Description |
@@ -91,6 +84,15 @@ ActivityQuery narrows the listing server-side. Fields AND together; repeated val
 |-------|------|---|-------------|
 | `events` | repeated ActivityEvent | 1 |  |
 | `next_page_token` | string | 2 | set when more events remain |
+
+### Payload
+
+Payload is one stored request or response body, resolved from an ActivityEvent's ref.
+
+| Field | Type | # | Description |
+|-------|------|---|-------------|
+| `body` | bytes | 1 |  |
+| `size_bytes` | int64 | 2 |  |
 
 ### TimeRange
 

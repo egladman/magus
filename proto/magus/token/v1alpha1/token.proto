@@ -50,7 +50,7 @@ service TokenService {
   // RevokeToken removes a connector token or the share token by identifier.
   // Revoking the share token also closes its LAN listener. The cli token is not
   // revocable here.
-  rpc RevokeToken(RevokeTokenRequest) returns (RevokeTokenResponse);
+  rpc RevokeToken(RevokeTokenRequest) returns (TokenInfo);
 }
 
 // TokenScope names the CLASS a token belongs to in the three-tier credential model,
@@ -105,8 +105,4 @@ message ListTokensResponse {
 message RevokeTokenRequest {
   // identifier is a token name or fingerprint (as returned in TokenInfo.identifier).
   string identifier = 1 [(buf.validate.field).string.min_len = 1];
-}
-
-message RevokeTokenResponse {
-  TokenInfo token = 1;
 }

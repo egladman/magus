@@ -110,7 +110,7 @@ func (s *Service) ListTokens(_ context.Context, _ *connect.Request[tokenv1.ListT
 // the revoke reports NotFound rather than tearing down whatever share replaced it.
 // Otherwise it falls to the connector store. The cli token is never consulted, so it
 // cannot be revoked here even if its fingerprint is supplied.
-func (s *Service) RevokeToken(_ context.Context, req *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.RevokeTokenResponse], error) {
+func (s *Service) RevokeToken(_ context.Context, req *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.TokenInfo], error) {
 	id := strings.TrimSpace(req.Msg.GetIdentifier())
 	if id == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("token: identifier is required"))
@@ -119,7 +119,7 @@ func (s *Service) RevokeToken(_ context.Context, req *connect.Request[tokenv1.Re
 	if s.share != nil {
 		if info, ok := s.share.Active(); ok && shareMatches(info, id) {
 			if s.share.CloseIf(info.Fingerprint) {
-				return connect.NewResponse(&tokenv1.RevokeTokenResponse{Token: shareInfo(info)}), nil
+				return connect.NewResponse(shareInfo(info)), nil
 			}
 			// The share we matched was superseded between Active and CloseIf, so there
 			// is nothing of that identity left to revoke; do not fall through to the
@@ -139,7 +139,7 @@ func (s *Service) RevokeToken(_ context.Context, req *connect.Request[tokenv1.Re
 		}
 		return nil, connect.NewError(connect.CodeInvalidArgument, err)
 	}
-	return connect.NewResponse(&tokenv1.RevokeTokenResponse{Token: connectorInfo(removed)}), nil
+	return connect.NewResponse(connectorInfo(removed)), nil
 }
 
 // shareTokenLabel is the display name for the anonymous share token, which carries

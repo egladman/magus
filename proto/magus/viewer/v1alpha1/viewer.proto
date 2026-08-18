@@ -122,7 +122,7 @@ message Journal {
 service ViewerService {
   // GetInvocation returns an invocation's header: its command, lineage, and timing - what
   // a viewer shows on top. Selected by a ref (one target) or an invocation id (a run).
-  rpc GetInvocation(GetInvocationRequest) returns (GetInvocationResponse);
+  rpc GetInvocation(GetInvocationRequest) returns (Invocation);
   // ListEvents returns a page of an invocation's events; page through with page_token
   // until next_page_token is empty. filter narrows them server-side (large logs).
   rpc ListEvents(ListEventsRequest) returns (ListEventsResponse);
@@ -142,9 +142,6 @@ message Selector {
 
 message GetInvocationRequest {
   Selector selector = 1 [(buf.validate.field).required = true];
-}
-message GetInvocationResponse {
-  Invocation invocation = 1;
 }
 
 // EventQuery filters an invocation's events server-side (for a large log). It is the viewer's

@@ -48,7 +48,7 @@ func TestGetMetrics(t *testing.T) {
 
 	resp, err := svc.GetMetrics(context.Background(), connect.NewRequest(&metricsv1.GetMetricsRequest{}))
 	require.NoError(t, err)
-	snap := resp.Msg.Snapshot
+	snap := resp.Msg
 	require.NotNil(t, snap)
 	require.Equal(t, int64(10), snap.Target.Count)
 	require.InDelta(t, 1.5, snap.Target.P50, 1e-9)

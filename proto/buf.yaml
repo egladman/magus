@@ -8,6 +8,25 @@ modules:
 lint:
   use:
     - STANDARD
+  # buf's STANDARD category and Google's AIPs disagree here, head-on, and this repo follows
+  # the AIPs. AIP-131 is unambiguous: "The response message must be the resource itself.
+  # (There is no GetBookResponse.)" RPC_RESPONSE_STANDARD_NAME demands the opposite - that
+  # GetNote return GetNoteResponse - so obeying buf here would mean every Get wraps its
+  # resource in a single-field envelope the caller has to unwrap. Google's own public APIs
+  # fail this rule for the same reason.
+  #
+  # RPC_REQUEST_RESPONSE_UNIQUE falls out of the same choice rather than being a second
+  # decision: once a response IS the resource, any two RPCs returning the same resource share
+  # a type. MemoryService.GetCursor and UpdateCursor both return Cursor, which is exactly what
+  # AIP-156 prescribes for a singleton.
+  #
+  # This is NOT the waiver that used to sit here. That one was ignore_only-scoped to
+  # job.proto to permit four near-identical trigger RPCs - a design smell, since removed by
+  # collapsing them into RunJob. This is a module-wide, principled precedence rule: where buf's
+  # naming convention contradicts an AIP, the AIP wins. Every other STANDARD rule still applies.
+  except:
+    - RPC_RESPONSE_STANDARD_NAME
+    - RPC_REQUEST_RESPONSE_UNIQUE
 breaking:
   use:
     - WIRE_JSON
