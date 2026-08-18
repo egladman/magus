@@ -312,6 +312,15 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "git stash drop", deny: true},
 		{command: "git stash pop stash@{2}"},
 		{command: "git stash apply stash@{0}"},
+		// A PATH-SCOPED push moves only what it names, so the whole-tree reason
+		// does not reach it. This is also the bootstrap-deadlock escape CLAUDE.md
+		// documents - shelve the one hunk an old binary rejects, build, restore -
+		// which this rule denied, putting the documented answer out of reach.
+		{command: "git stash push -- magusfile.buzz"},
+		{command: "git stash push -m wip -- spells/github/actions/spell.buzz"},
+		// Naming nothing still stashes everything, pathspec-less flags included.
+		{command: "git stash push", deny: true},
+		{command: "git stash push -m wip", deny: true},
 		{command: "git stash list"},
 		{command: "git stash show"},
 		// Deleting a worktree takes its uncommitted work with it, and in this repo that

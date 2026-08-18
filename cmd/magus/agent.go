@@ -1548,6 +1548,16 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 			if len(rest) > 1 && slices.Contains([]string{"pop", "apply", "drop", "branch"}, rest[0]) {
 				continue // an explicit stash@{N}: the caller chose which entry
 			}
+			// `git stash push -- <paths>` shelves only what it names, so the whole-tree
+			// reason does not apply: nothing outside those paths moves, and a concurrent
+			// agent's untracked work is untouched. It is also how a workspace escapes a
+			// bootstrap deadlock - shelve the one hunk an old binary rejects, build,
+			// restore - which this rule was denying, putting that answer out of reach.
+			// A bare `git stash push` names nothing and stashes everything, so it stays
+			// denied.
+			if len(rest) > 1 && rest[0] == "push" && slices.Contains(rest, "--") {
+				continue
+			}
 			if len(rest) > 0 && slices.Contains([]string{"pop", "apply", "drop"}, rest[0]) {
 				return bashGuardVerdict{Deny: denySharedStash(rest[0])}, true
 			}
