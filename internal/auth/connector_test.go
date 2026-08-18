@@ -178,26 +178,49 @@ func (s *ConnectorSuite) TestVerifyTwoTier() {
 	t := s.T()
 
 	// No credentials at all: everything is rejected.
-	assert.False(t, VerifyBearer("anything"))
+	assert.False(t, VerifyMCPBearer("anything"))
 
 	// cli token tier.
 	cli, err := Generate()
 	require.NoError(t, err)
 	_, err = SaveNew(cli)
 	require.NoError(t, err)
-	assert.True(t, VerifyBearer(cli), "cli token not accepted")
-	assert.False(t, VerifyBearer(cli+"x"), "near-miss cli token accepted")
+	assert.True(t, VerifyMCPBearer(cli), "cli token not accepted")
+	assert.False(t, VerifyMCPBearer(cli+"x"), "near-miss cli token accepted")
 
 	// connector tier.
 	live, _, err := s.store().Create("live", time.Now().Add(time.Hour))
 	require.NoError(t, err)
-	assert.True(t, VerifyBearer(live), "live connector token not accepted")
+	assert.True(t, VerifyMCPBearer(live), "live connector token not accepted")
 
 	expired, _, err := s.store().Create("expired", time.Now().Add(-time.Hour))
 	require.NoError(t, err)
-	assert.False(t, VerifyBearer(expired), "expired connector token accepted")
+	assert.False(t, VerifyMCPBearer(expired), "expired connector token accepted")
 
-	assert.False(t, VerifyBearer("mgs_not_a_real_token"), "garbage accepted")
+	assert.False(t, VerifyMCPBearer("mgs_not_a_real_token"), "garbage accepted")
+}
+
+// The MCP and console surfaces must not share a credential class. A connector token
+// is minted for an agent, so accepting it on the console would let a leaked agent
+// credential drive the console's mutating routes; the two used to share one verifier
+// and did exactly that. The operator token is the deliberate exception - it is the
+// bootstrap credential and the CLI's own reads depend on it.
+func (s *ConnectorSuite) TestConsoleRejectsConnectorTokens() {
+	t := s.T()
+
+	cli, err := Generate()
+	require.NoError(t, err)
+	_, err = SaveNew(cli)
+	require.NoError(t, err)
+
+	live, _, err := s.store().Create("agent", time.Now().Add(time.Hour))
+	require.NoError(t, err)
+
+	assert.True(t, VerifyMCPBearer(live), "a connector token must still reach /mcp")
+	assert.False(t, VerifyConsoleBearer(live), "a connector token must NOT reach the console")
+
+	assert.True(t, VerifyConsoleBearer(cli), "the operator token opens both surfaces by design")
+	assert.True(t, VerifyMCPBearer(cli))
 }
 
 // TestConcurrentCreateNoLostUpdates proves N independent creates all survive.

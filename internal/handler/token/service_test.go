@@ -310,7 +310,7 @@ func TestListResponseCarriesNoSecretBytes(t *testing.T) {
 func TestUnauthenticatedCallRejected(t *testing.T) {
 	s := newIsolatedService(t, nil)
 	path, h := tokenv1alpha1connect.NewTokenServiceHandler(s)
-	// A fixed verifier standing in for auth.VerifyBearer: accept exactly "good".
+	// A fixed verifier standing in for auth.VerifyMCPBearer: accept exactly "good".
 	guarded := httpx.BearerGuard(func(presented string) bool { return presented == "good" }, h)
 	srv := httptest.NewServer(guarded)
 	defer srv.Close()
@@ -335,7 +335,7 @@ func TestUnauthenticatedCallRejected(t *testing.T) {
 // service behind: the guard is BearerGuard(auth.VerifyCLIBearer, ...) - exactly
 // the daemon's wiring - with a REAL cli token and a REAL non-expired connector
 // token on disk. The connector token, though valid on every data surface
-// (auth.VerifyBearer accepts it), must be rejected on BOTH TokenService RPCs
+// (auth.VerifyMCPBearer accepts it), must be rejected on BOTH TokenService RPCs
 // (List, Revoke): a client credential must never list or revoke credentials. The
 // cli token must pass. (The share token needs no test here: it is only ever
 // verified by the LAN listener's per-session closure, and this service is never
@@ -356,7 +356,7 @@ func TestTierHierarchyAtGuard(t *testing.T) {
 	connSecret, _, err := store.Create("mcp-client", time.Now().Add(time.Hour))
 	require.NoError(t, err)
 	// Sanity: the connector token IS a valid data-surface credential...
-	require.True(t, auth.VerifyBearer(connSecret))
+	require.True(t, auth.VerifyMCPBearer(connSecret))
 	// ...but never an operator credential.
 	require.False(t, auth.VerifyCLIBearer(connSecret))
 
