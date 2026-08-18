@@ -12,6 +12,7 @@ syntax = "proto3";
 // renders a job's state without a second call.
 package magus.job.v1alpha1;
 
+import "buf/validate/validate.proto";
 import "google/protobuf/duration.proto";
 import "google/protobuf/timestamp.proto";
 
@@ -19,16 +20,18 @@ import "google/protobuf/timestamp.proto";
 // submit a job and return immediately; ListJobs reports every job's state. Read surfaces stay on
 // the per-domain services - this one only mutates.
 service JobService {
-  // SyncGraph reconciles the knowledge graph to current source (rebuild and reindex).
-  rpc SyncGraph(SyncGraphRequest) returns (SubmitJobResponse);
-  // RotateActivities trims the activity trail to its cap and drops orphaned payload blobs.
-  rpc RotateActivities(RotateActivitiesRequest) returns (SubmitJobResponse);
-  // ClearCache invalidates cached build entries for the workspace.
-  rpc ClearCache(ClearCacheRequest) returns (SubmitJobResponse);
-  // RotateLogs trims the invocation run-log journals back to their cap.
-  rpc RotateLogs(RotateLogsRequest) returns (SubmitJobResponse);
   // ListJobs returns every registered job with its running state, last run, and target size.
   rpc ListJobs(ListJobsRequest) returns (ListJobsResponse);
+  // RunJob submits the named job and returns immediately: whether it started or coalesced
+  // onto an identical in-flight run, where to watch it, and the job's fresh metadata.
+  //
+  // One RPC over N job resources rather than one RPC per job. The four verbs this replaced
+  // were the same operation four times, which is why they had to share a response type and
+  // why buf.yaml had to waive RPC_REQUEST_RESPONSE_UNIQUE and RPC_RESPONSE_STANDARD_NAME to
+  // let them. Both waivers are gone with them. The property that argued for sharing the
+  // response - that adding a job must not touch this file in four places - is stronger here:
+  // a new job is a registry entry and NO schema change at all.
+  rpc RunJob(RunJobRequest) returns (RunJobResponse);
 }
 
 // SubmitState is the disposition of a trigger RPC. Both values are SUCCESS outcomes returned in a
@@ -40,20 +43,22 @@ enum SubmitState {
   SUBMIT_STATE_ALREADY_RUNNING = 2; // an identical job was already in flight; coalesced, not restarted
 }
 
-// SubmitJobResponse is returned by every trigger RPC: whether the job started or coalesced, the
-// invocation id and console deep-link for its live log, and the job's full metadata snapshot so a
+// RunJobResponse reports what the submission did: whether the job started or coalesced, the
+// invocation id and console deep-link for its live log, and the job's fresh metadata snapshot so a
 // caller can render "last rotated 3m ago, trail 2.1 MB" without a follow-up call.
-message SubmitJobResponse {
+message RunJobResponse {
   SubmitState state = 1;
   string invocation_id = 2; // the running job's invocation id (the new one, or the coalesced one)
   string console_url = 3;   // deep-link to this invocation's live log; empty when no console is mounted
-  JobInfo job = 4;          // the job's descriptor plus its last-run and current-size metadata
+  Job job = 4;              // the job's descriptor plus its last-run and current-size metadata
 }
 
-// JobInfo is the full picture of one job: what it is, whether an instance is running now, its
+// Job is the full picture of one job: what it is, whether an instance is running now, its
 // most recent completed run, and the current magnitude of the resource it maintains.
-message JobInfo {
-  string name = 1;         // stable job name, e.g. "rotate-activities"
+message Job {
+  // name is the resource name, "jobs/{job}" - e.g. "jobs/rotate-activities". The bare job id
+  // is the last segment, and is what the CLI's `server job <name>` leaf takes.
+  string name = 1;
   string description = 2;
   bool running = 3;        // an instance is in flight right now
   JobRun last_run = 4;     // most recent completed run; unset if the job has not run this daemon session
@@ -82,12 +87,20 @@ message ResourceSize {
   int64 item_count = 2; // logical item count (trail events, cached entries, run logs)
 }
 
-message SyncGraphRequest {}
-message RotateActivitiesRequest {}
-message ClearCacheRequest {}
-message RotateLogsRequest {}
+message RunJobRequest {
+  // name is the job's resource name, "jobs/{job}". An unregistered name is a NotFound error,
+  // not a SubmitState - the enum reports how a VALID submission resolved, and a name nobody
+  // registered never became a submission.
+  string name = 1 [(buf.validate.field).string.pattern = "^jobs/[a-z][a-z0-9-]*$"];
+}
 
-message ListJobsRequest {}
+// Paginated by contract so growth never forces a breaking change, though the registry is a
+// fixed handful today and one page always holds it.
+message ListJobsRequest {
+  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 1000}];
+  string page_token = 2;
+}
 message ListJobsResponse {
-  repeated JobInfo jobs = 1; // every registered job, in a stable order
+  repeated Job jobs = 1;      // every registered job, in a stable order
+  string next_page_token = 2; // empty while one page holds the registry
 }

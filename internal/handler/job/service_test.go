@@ -44,11 +44,11 @@ func TestSubmit_NewJobIsSubmitted(t *testing.T) {
 	status := func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil }
 	s := newTestService(ws, submit, status)
 
-	resp, err := s.ClearCache(context.Background(), connect.NewRequest(&jobv1.ClearCacheRequest{}))
+	resp, err := s.RunJob(context.Background(), connect.NewRequest(&jobv1.RunJobRequest{Name: "jobs/clear-cache"}))
 	require.NoError(t, err)
 	require.Equal(t, jobv1.SubmitState_SUBMIT_STATE_SUBMITTED, resp.Msg.State)
 	require.Equal(t, "inv-new", resp.Msg.InvocationId)
-	require.Equal(t, "clear-cache", resp.Msg.Job.Name)
+	require.Equal(t, "jobs/clear-cache", resp.Msg.Job.Name)
 	require.False(t, resp.Msg.Job.Running)
 	require.Equal(t, int64(4096), resp.Msg.Job.Target.SizeBytes) // clear-cache target is the cache size
 }
@@ -62,7 +62,7 @@ func TestSubmit_CoalescedReportsRunningInvocation(t *testing.T) {
 	}
 	s := newTestService(ws, submit, status)
 
-	resp, err := s.RotateActivities(context.Background(), connect.NewRequest(&jobv1.RotateActivitiesRequest{}))
+	resp, err := s.RunJob(context.Background(), connect.NewRequest(&jobv1.RunJobRequest{Name: "jobs/rotate-activities"}))
 	require.NoError(t, err)
 	require.Equal(t, jobv1.SubmitState_SUBMIT_STATE_ALREADY_RUNNING, resp.Msg.State)
 	require.Equal(t, "inv-running", resp.Msg.InvocationId)
@@ -74,8 +74,19 @@ func TestSubmit_ProcErrorIsInternal(t *testing.T) {
 	status := func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil }
 	s := newTestService(fakeWS{dir: t.TempDir()}, submit, status)
 
-	_, err := s.SyncGraph(context.Background(), connect.NewRequest(&jobv1.SyncGraphRequest{}))
+	_, err := s.RunJob(context.Background(), connect.NewRequest(&jobv1.RunJobRequest{Name: "jobs/sync-graph"}))
 	require.Equal(t, connect.CodeInternal, connect.CodeOf(err))
+}
+
+// A name nobody registered is NotFound, not a SubmitState: the enum reports how a valid
+// submission resolved, and this never became one. Reachable only now that the RPC takes a name.
+func TestRunJob_UnknownNameIsNotFound(t *testing.T) {
+	s := newTestService(fakeWS{dir: t.TempDir()},
+		func(context.Context, string, []string, string) (string, error) { return "x", nil },
+		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
+
+	_, err := s.RunJob(context.Background(), connect.NewRequest(&jobv1.RunJobRequest{Name: "jobs/not-a-job"}))
+	require.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 }
 
 func TestSubmit_NoSocketIsUnavailable(t *testing.T) {
@@ -84,7 +95,7 @@ func TestSubmit_NoSocketIsUnavailable(t *testing.T) {
 		func(context.Context, string) (*proc.StatusReply, error) { return &proc.StatusReply{}, nil })
 	s.socket = func() string { return "" } // no daemon socket
 
-	_, err := s.SyncGraph(context.Background(), connect.NewRequest(&jobv1.SyncGraphRequest{}))
+	_, err := s.RunJob(context.Background(), connect.NewRequest(&jobv1.RunJobRequest{Name: "jobs/sync-graph"}))
 	require.Equal(t, connect.CodeUnavailable, connect.CodeOf(err))
 }
 
@@ -101,9 +112,9 @@ func TestJobInfo_LastRunFromTrailAndTargetSize(t *testing.T) {
 
 	j, ok := jobs.Lookup("rotate-activities")
 	require.True(t, ok)
-	got := s.jobInfo(j, running)
+	got := s.job(j, running)
 
-	require.Equal(t, "rotate-activities", got.Name)
+	require.Equal(t, "jobs/rotate-activities", got.Name)
 	require.True(t, got.Running)
 	require.Equal(t, int64(3), got.Target.ItemCount) // three trail events on disk
 	require.Positive(t, got.Target.SizeBytes)
@@ -126,5 +137,5 @@ func TestListJobs_ReturnsEveryRegisteredJob(t *testing.T) {
 	for _, j := range resp.Msg.Jobs {
 		names = append(names, j.Name)
 	}
-	require.Equal(t, []string{"sync-graph", "rotate-activities", "rotate-logs", "clear-cache"}, names)
+	require.Equal(t, []string{"jobs/sync-graph", "jobs/rotate-activities", "jobs/rotate-logs", "jobs/clear-cache"}, names)
 }

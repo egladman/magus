@@ -42,7 +42,7 @@ import (
 // the single source of truth classify() and the arch ratchet share: a method whose leading word is in
 // neither is UNCLASSIFIED - recorded at runtime (fail-closed) and rejected by TestKnownVerbs at build.
 var (
-	mutatingVerbs = []string{"Clear", "Delete", "Put", "Revoke", "Rotate", "Sync", "Create", "Update", "Set", "Submit", "Remove", "Mint"}
+	mutatingVerbs = []string{"Clear", "Delete", "Put", "Revoke", "Rotate", "Run", "Sync", "Create", "Update", "Set", "Submit", "Remove", "Mint"}
 	readVerbs     = []string{"Get", "List", "Stream", "Watch", "Describe", "Export", "Query", "Explain"}
 )
 

@@ -8,26 +8,6 @@ modules:
 lint:
   use:
     - STANDARD
-  # JobService's four trigger RPCs deliberately share one response type. They are
-  # not incidentally similar - they are the same operation (submit a background
-  # job, report whether it started or coalesced, return the job's metadata
-  # snapshot), and job.proto documents that as the contract.
-  #
-  # The rules being waived exist so RPCs can evolve independently, and that
-  # motivation is already met another way here: per-job variation rides on
-  # JobRun.items_removed / bytes_reclaimed, generic delta fields the schema added
-  # precisely so a job can start reporting its own numbers without a contract
-  # change. Splitting into four identical messages would instead put every future
-  # field addition in four places, in a file whose stated rule is that fields may
-  # only ever be ADDED.
-  #
-  # Scoped to the one file with ignore_only rather than waived module-wide: any
-  # OTHER service that reuses a response type is still a finding.
-  ignore_only:
-    RPC_REQUEST_RESPONSE_UNIQUE:
-      - magus/job/v1alpha1/job.proto
-    RPC_RESPONSE_STANDARD_NAME:
-      - magus/job/v1alpha1/job.proto
 breaking:
   use:
     - WIRE_JSON

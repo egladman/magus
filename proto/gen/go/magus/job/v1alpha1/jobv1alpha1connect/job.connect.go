@@ -43,31 +43,26 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// JobServiceSyncGraphProcedure is the fully-qualified name of the JobService's SyncGraph RPC.
-	JobServiceSyncGraphProcedure = "/magus.job.v1alpha1.JobService/SyncGraph"
-	// JobServiceRotateActivitiesProcedure is the fully-qualified name of the JobService's
-	// RotateActivities RPC.
-	JobServiceRotateActivitiesProcedure = "/magus.job.v1alpha1.JobService/RotateActivities"
-	// JobServiceClearCacheProcedure is the fully-qualified name of the JobService's ClearCache RPC.
-	JobServiceClearCacheProcedure = "/magus.job.v1alpha1.JobService/ClearCache"
-	// JobServiceRotateLogsProcedure is the fully-qualified name of the JobService's RotateLogs RPC.
-	JobServiceRotateLogsProcedure = "/magus.job.v1alpha1.JobService/RotateLogs"
 	// JobServiceListJobsProcedure is the fully-qualified name of the JobService's ListJobs RPC.
 	JobServiceListJobsProcedure = "/magus.job.v1alpha1.JobService/ListJobs"
+	// JobServiceRunJobProcedure is the fully-qualified name of the JobService's RunJob RPC.
+	JobServiceRunJobProcedure = "/magus.job.v1alpha1.JobService/RunJob"
 )
 
 // JobServiceClient is a client for the magus.job.v1alpha1.JobService service.
 type JobServiceClient interface {
-	// SyncGraph reconciles the knowledge graph to current source (rebuild and reindex).
-	SyncGraph(context.Context, *connect.Request[v1alpha1.SyncGraphRequest]) (*connect.Response[v1alpha1.SubmitJobResponse], error)
-	// RotateActivities trims the activity trail to its cap and drops orphaned payload blobs.
-	RotateActivities(context.Context, *connect.Request[v1alpha1.RotateActivitiesRequest]) (*connect.Response[v1alpha1.SubmitJobResponse], error)
-	// ClearCache invalidates cached build entries for the workspace.
-	ClearCache(context.Context, *connect.Request[v1alpha1.ClearCacheRequest]) (*connect.Response[v1alpha1.SubmitJobResponse], error)
-	// RotateLogs trims the invocation run-log journals back to their cap.
-	RotateLogs(context.Context, *connect.Request[v1alpha1.RotateLogsRequest]) (*connect.Response[v1alpha1.SubmitJobResponse], error)
 	// ListJobs returns every registered job with its running state, last run, and target size.
 	ListJobs(context.Context, *connect.Request[v1alpha1.ListJobsRequest]) (*connect.Response[v1alpha1.ListJobsResponse], error)
+	// RunJob submits the named job and returns immediately: whether it started or coalesced
+	// onto an identical in-flight run, where to watch it, and the job's fresh metadata.
+	//
+	// One RPC over N job resources rather than one RPC per job. The four verbs this replaced
+	// were the same operation four times, which is why they had to share a response type and
+	// why buf.yaml had to waive RPC_REQUEST_RESPONSE_UNIQUE and RPC_RESPONSE_STANDARD_NAME to
+	// let them. Both waivers are gone with them. The property that argued for sharing the
+	// response - that adding a job must not touch this file in four places - is stronger here:
+	// a new job is a registry entry and NO schema change at all.
+	RunJob(context.Context, *connect.Request[v1alpha1.RunJobRequest]) (*connect.Response[v1alpha1.RunJobResponse], error)
 }
 
 // NewJobServiceClient constructs a client for the magus.job.v1alpha1.JobService service. By
@@ -81,34 +76,16 @@ func NewJobServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 	baseURL = strings.TrimRight(baseURL, "/")
 	jobServiceMethods := v1alpha1.File_magus_job_v1alpha1_job_proto.Services().ByName("JobService").Methods()
 	return &jobServiceClient{
-		syncGraph: connect.NewClient[v1alpha1.SyncGraphRequest, v1alpha1.SubmitJobResponse](
-			httpClient,
-			baseURL+JobServiceSyncGraphProcedure,
-			connect.WithSchema(jobServiceMethods.ByName("SyncGraph")),
-			connect.WithClientOptions(opts...),
-		),
-		rotateActivities: connect.NewClient[v1alpha1.RotateActivitiesRequest, v1alpha1.SubmitJobResponse](
-			httpClient,
-			baseURL+JobServiceRotateActivitiesProcedure,
-			connect.WithSchema(jobServiceMethods.ByName("RotateActivities")),
-			connect.WithClientOptions(opts...),
-		),
-		clearCache: connect.NewClient[v1alpha1.ClearCacheRequest, v1alpha1.SubmitJobResponse](
-			httpClient,
-			baseURL+JobServiceClearCacheProcedure,
-			connect.WithSchema(jobServiceMethods.ByName("ClearCache")),
-			connect.WithClientOptions(opts...),
-		),
-		rotateLogs: connect.NewClient[v1alpha1.RotateLogsRequest, v1alpha1.SubmitJobResponse](
-			httpClient,
-			baseURL+JobServiceRotateLogsProcedure,
-			connect.WithSchema(jobServiceMethods.ByName("RotateLogs")),
-			connect.WithClientOptions(opts...),
-		),
 		listJobs: connect.NewClient[v1alpha1.ListJobsRequest, v1alpha1.ListJobsResponse](
 			httpClient,
 			baseURL+JobServiceListJobsProcedure,
 			connect.WithSchema(jobServiceMethods.ByName("ListJobs")),
+			connect.WithClientOptions(opts...),
+		),
+		runJob: connect.NewClient[v1alpha1.RunJobRequest, v1alpha1.RunJobResponse](
+			httpClient,
+			baseURL+JobServiceRunJobProcedure,
+			connect.WithSchema(jobServiceMethods.ByName("RunJob")),
 			connect.WithClientOptions(opts...),
 		),
 	}
@@ -116,31 +93,8 @@ func NewJobServiceClient(httpClient connect.HTTPClient, baseURL string, opts ...
 
 // jobServiceClient implements JobServiceClient.
 type jobServiceClient struct {
-	syncGraph        *connect.Client[v1alpha1.SyncGraphRequest, v1alpha1.SubmitJobResponse]
-	rotateActivities *connect.Client[v1alpha1.RotateActivitiesRequest, v1alpha1.SubmitJobResponse]
-	clearCache       *connect.Client[v1alpha1.ClearCacheRequest, v1alpha1.SubmitJobResponse]
-	rotateLogs       *connect.Client[v1alpha1.RotateLogsRequest, v1alpha1.SubmitJobResponse]
-	listJobs         *connect.Client[v1alpha1.ListJobsRequest, v1alpha1.ListJobsResponse]
-}
-
-// SyncGraph calls magus.job.v1alpha1.JobService.SyncGraph.
-func (c *jobServiceClient) SyncGraph(ctx context.Context, req *connect.Request[v1alpha1.SyncGraphRequest]) (*connect.Response[v1alpha1.SubmitJobResponse], error) {
-	return c.syncGraph.CallUnary(ctx, req)
-}
-
-// RotateActivities calls magus.job.v1alpha1.JobService.RotateActivities.
-func (c *jobServiceClient) RotateActivities(ctx context.Context, req *connect.Request[v1alpha1.RotateActivitiesRequest]) (*connect.Response[v1alpha1.SubmitJobResponse], error) {
-	return c.rotateActivities.CallUnary(ctx, req)
-}
-
-// ClearCache calls magus.job.v1alpha1.JobService.ClearCache.
-func (c *jobServiceClient) ClearCache(ctx context.Context, req *connect.Request[v1alpha1.ClearCacheRequest]) (*connect.Response[v1alpha1.SubmitJobResponse], error) {
-	return c.clearCache.CallUnary(ctx, req)
-}
-
-// RotateLogs calls magus.job.v1alpha1.JobService.RotateLogs.
-func (c *jobServiceClient) RotateLogs(ctx context.Context, req *connect.Request[v1alpha1.RotateLogsRequest]) (*connect.Response[v1alpha1.SubmitJobResponse], error) {
-	return c.rotateLogs.CallUnary(ctx, req)
+	listJobs *connect.Client[v1alpha1.ListJobsRequest, v1alpha1.ListJobsResponse]
+	runJob   *connect.Client[v1alpha1.RunJobRequest, v1alpha1.RunJobResponse]
 }
 
 // ListJobs calls magus.job.v1alpha1.JobService.ListJobs.
@@ -148,18 +102,25 @@ func (c *jobServiceClient) ListJobs(ctx context.Context, req *connect.Request[v1
 	return c.listJobs.CallUnary(ctx, req)
 }
 
+// RunJob calls magus.job.v1alpha1.JobService.RunJob.
+func (c *jobServiceClient) RunJob(ctx context.Context, req *connect.Request[v1alpha1.RunJobRequest]) (*connect.Response[v1alpha1.RunJobResponse], error) {
+	return c.runJob.CallUnary(ctx, req)
+}
+
 // JobServiceHandler is an implementation of the magus.job.v1alpha1.JobService service.
 type JobServiceHandler interface {
-	// SyncGraph reconciles the knowledge graph to current source (rebuild and reindex).
-	SyncGraph(context.Context, *connect.Request[v1alpha1.SyncGraphRequest]) (*connect.Response[v1alpha1.SubmitJobResponse], error)
-	// RotateActivities trims the activity trail to its cap and drops orphaned payload blobs.
-	RotateActivities(context.Context, *connect.Request[v1alpha1.RotateActivitiesRequest]) (*connect.Response[v1alpha1.SubmitJobResponse], error)
-	// ClearCache invalidates cached build entries for the workspace.
-	ClearCache(context.Context, *connect.Request[v1alpha1.ClearCacheRequest]) (*connect.Response[v1alpha1.SubmitJobResponse], error)
-	// RotateLogs trims the invocation run-log journals back to their cap.
-	RotateLogs(context.Context, *connect.Request[v1alpha1.RotateLogsRequest]) (*connect.Response[v1alpha1.SubmitJobResponse], error)
 	// ListJobs returns every registered job with its running state, last run, and target size.
 	ListJobs(context.Context, *connect.Request[v1alpha1.ListJobsRequest]) (*connect.Response[v1alpha1.ListJobsResponse], error)
+	// RunJob submits the named job and returns immediately: whether it started or coalesced
+	// onto an identical in-flight run, where to watch it, and the job's fresh metadata.
+	//
+	// One RPC over N job resources rather than one RPC per job. The four verbs this replaced
+	// were the same operation four times, which is why they had to share a response type and
+	// why buf.yaml had to waive RPC_REQUEST_RESPONSE_UNIQUE and RPC_RESPONSE_STANDARD_NAME to
+	// let them. Both waivers are gone with them. The property that argued for sharing the
+	// response - that adding a job must not touch this file in four places - is stronger here:
+	// a new job is a registry entry and NO schema change at all.
+	RunJob(context.Context, *connect.Request[v1alpha1.RunJobRequest]) (*connect.Response[v1alpha1.RunJobResponse], error)
 }
 
 // NewJobServiceHandler builds an HTTP handler from the service implementation. It returns the path
@@ -169,48 +130,24 @@ type JobServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewJobServiceHandler(svc JobServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	jobServiceMethods := v1alpha1.File_magus_job_v1alpha1_job_proto.Services().ByName("JobService").Methods()
-	jobServiceSyncGraphHandler := connect.NewUnaryHandler(
-		JobServiceSyncGraphProcedure,
-		svc.SyncGraph,
-		connect.WithSchema(jobServiceMethods.ByName("SyncGraph")),
-		connect.WithHandlerOptions(opts...),
-	)
-	jobServiceRotateActivitiesHandler := connect.NewUnaryHandler(
-		JobServiceRotateActivitiesProcedure,
-		svc.RotateActivities,
-		connect.WithSchema(jobServiceMethods.ByName("RotateActivities")),
-		connect.WithHandlerOptions(opts...),
-	)
-	jobServiceClearCacheHandler := connect.NewUnaryHandler(
-		JobServiceClearCacheProcedure,
-		svc.ClearCache,
-		connect.WithSchema(jobServiceMethods.ByName("ClearCache")),
-		connect.WithHandlerOptions(opts...),
-	)
-	jobServiceRotateLogsHandler := connect.NewUnaryHandler(
-		JobServiceRotateLogsProcedure,
-		svc.RotateLogs,
-		connect.WithSchema(jobServiceMethods.ByName("RotateLogs")),
-		connect.WithHandlerOptions(opts...),
-	)
 	jobServiceListJobsHandler := connect.NewUnaryHandler(
 		JobServiceListJobsProcedure,
 		svc.ListJobs,
 		connect.WithSchema(jobServiceMethods.ByName("ListJobs")),
 		connect.WithHandlerOptions(opts...),
 	)
+	jobServiceRunJobHandler := connect.NewUnaryHandler(
+		JobServiceRunJobProcedure,
+		svc.RunJob,
+		connect.WithSchema(jobServiceMethods.ByName("RunJob")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/magus.job.v1alpha1.JobService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case JobServiceSyncGraphProcedure:
-			jobServiceSyncGraphHandler.ServeHTTP(w, r)
-		case JobServiceRotateActivitiesProcedure:
-			jobServiceRotateActivitiesHandler.ServeHTTP(w, r)
-		case JobServiceClearCacheProcedure:
-			jobServiceClearCacheHandler.ServeHTTP(w, r)
-		case JobServiceRotateLogsProcedure:
-			jobServiceRotateLogsHandler.ServeHTTP(w, r)
 		case JobServiceListJobsProcedure:
 			jobServiceListJobsHandler.ServeHTTP(w, r)
+		case JobServiceRunJobProcedure:
+			jobServiceRunJobHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -220,22 +157,10 @@ func NewJobServiceHandler(svc JobServiceHandler, opts ...connect.HandlerOption) 
 // UnimplementedJobServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedJobServiceHandler struct{}
 
-func (UnimplementedJobServiceHandler) SyncGraph(context.Context, *connect.Request[v1alpha1.SyncGraphRequest]) (*connect.Response[v1alpha1.SubmitJobResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.job.v1alpha1.JobService.SyncGraph is not implemented"))
-}
-
-func (UnimplementedJobServiceHandler) RotateActivities(context.Context, *connect.Request[v1alpha1.RotateActivitiesRequest]) (*connect.Response[v1alpha1.SubmitJobResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.job.v1alpha1.JobService.RotateActivities is not implemented"))
-}
-
-func (UnimplementedJobServiceHandler) ClearCache(context.Context, *connect.Request[v1alpha1.ClearCacheRequest]) (*connect.Response[v1alpha1.SubmitJobResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.job.v1alpha1.JobService.ClearCache is not implemented"))
-}
-
-func (UnimplementedJobServiceHandler) RotateLogs(context.Context, *connect.Request[v1alpha1.RotateLogsRequest]) (*connect.Response[v1alpha1.SubmitJobResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.job.v1alpha1.JobService.RotateLogs is not implemented"))
-}
-
 func (UnimplementedJobServiceHandler) ListJobs(context.Context, *connect.Request[v1alpha1.ListJobsRequest]) (*connect.Response[v1alpha1.ListJobsResponse], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.job.v1alpha1.JobService.ListJobs is not implemented"))
+}
+
+func (UnimplementedJobServiceHandler) RunJob(context.Context, *connect.Request[v1alpha1.RunJobRequest]) (*connect.Response[v1alpha1.RunJobResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.job.v1alpha1.JobService.RunJob is not implemented"))
 }
