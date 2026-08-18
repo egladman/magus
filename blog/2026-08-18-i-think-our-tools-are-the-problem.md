@@ -865,8 +865,8 @@ happen to work for agents, because both are stuck on the same problems.
 ## An invitation
 
 I am one person with opinions about build tools, and some of this is probably
-off. If you work on Nx, Nix, or Dagger and you think I have it wrong, I would
-rather hear it than not. Some of what I described may already be fixed, and some
+off. If you work on Nx, Nix, Dagger, or Skaffold and you think I have it wrong, I
+would rather hear it than not. Some of what I described may already be fixed, and some
 of it I may have misread from outside. Tell me and I will correct the post.
 
 I should say the obvious thing too, since writing a post like this invites it:
