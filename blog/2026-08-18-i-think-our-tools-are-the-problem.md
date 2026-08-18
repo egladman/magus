@@ -875,9 +875,13 @@ domain with a handful of stars on it, and I am working things out as I go like
 everyone else. magus only got to a state I was comfortable sharing because I kept
 grinding at it.
 
-Building these tools is how I get back to it. This is the work I still do with my
-hands, and where I have come out for now is this: I build tools for humans that
-happen to work for agents, because both are stuck on the same problems.
+Dependency resolution is a problem that has pulled at me for as long as I can
+remember, and I have never fully worked out why. Package managers, build graphs,
+what depends on what: I was fascinated by that shape long before any of this. The
+knowledge graph is the same problem in a different coat, and it is where I still
+write the code by hand rather than handing it off. Where I have come out for now is
+this: I build tools for humans that happen to work for agents, because both are
+stuck on the same problems.
 
 ## An invitation
 
