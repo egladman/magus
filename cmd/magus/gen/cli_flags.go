@@ -93,6 +93,12 @@ const (
 	FlagConfigCachePruneOlderThan = "older-than"
 	// config cache prune: --remote
 	FlagConfigCachePruneRemote = "remote"
+	// config console token create: --expires
+	FlagConfigConsoleTokenCreateExpires = "expires"
+	// config console token create: --name
+	FlagConfigConsoleTokenCreateName = "name"
+	// config console token create: --viewer
+	FlagConfigConsoleTokenCreateViewer = "viewer"
 	// config history import: --history
 	FlagConfigHistoryImportHistory = "history"
 	// config history passed: --commit
@@ -109,8 +115,6 @@ const (
 	FlagConfigMCPConnectorCreateExpires = "expires"
 	// config mcp connector create: --name
 	FlagConfigMCPConnectorCreateName = "name"
-	// config mcp connector create: --scope
-	FlagConfigMCPConnectorCreateScope = "scope"
 	// config mcp token generate: --force
 	FlagConfigMCPTokenGenerateForce = "force"
 	// config set: --global
@@ -853,7 +857,6 @@ func BindConfigMCPTokenGenerate(fs *flag.FlagSet) *ConfigMCPTokenGenerateFlags {
 type ConfigMCPConnectorCreateFlags struct {
 	Name    string // --name
 	Expires string // --expires
-	Scope   string // --scope
 }
 
 // BindConfigMCPConnectorCreate registers `magus config mcp connector create`'s flags on fs and returns the destination.
@@ -861,7 +864,22 @@ func BindConfigMCPConnectorCreate(fs *flag.FlagSet) *ConfigMCPConnectorCreateFla
 	var f ConfigMCPConnectorCreateFlags
 	fs.StringVar(&f.Name, FlagConfigMCPConnectorCreateName, "", "Name for this connector token (default: connector-N)")
 	fs.StringVar(&f.Expires, FlagConfigMCPConnectorCreateExpires, "", "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)")
-	fs.StringVar(&f.Scope, FlagConfigMCPConnectorCreateScope, "", "Surface the token may reach: mcp (default), console, or console-read. They are separate: an mcp token is rejected by the console, a console token is rejected by /mcp, and console-read is a viewer that cannot change anything")
+	return &f
+}
+
+// ConfigConsoleTokenCreateFlags are the flags declared for `magus config console token create`.
+type ConfigConsoleTokenCreateFlags struct {
+	Name    string // --name
+	Expires string // --expires
+	Viewer  bool   // --viewer
+}
+
+// BindConfigConsoleTokenCreate registers `magus config console token create`'s flags on fs and returns the destination.
+func BindConfigConsoleTokenCreate(fs *flag.FlagSet) *ConfigConsoleTokenCreateFlags {
+	var f ConfigConsoleTokenCreateFlags
+	fs.StringVar(&f.Name, FlagConfigConsoleTokenCreateName, "", "Name for this console token (default: console-N)")
+	fs.StringVar(&f.Expires, FlagConfigConsoleTokenCreateExpires, "", "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)")
+	fs.BoolVar(&f.Viewer, FlagConfigConsoleTokenCreateViewer, false, "Mint a READ-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share")
 	return &f
 }
 

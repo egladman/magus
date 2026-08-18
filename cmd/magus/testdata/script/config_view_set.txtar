@@ -70,7 +70,7 @@ stderr 'Usage: magus config <subcommand> \[flags\]'
 # An unknown subcommand is the same class of error, and names what is valid.
 ! exec magus config bogus
 stderr 'unknown subcommand "bogus"'
-stderr 'want view, set, history, cache, or mcp'
+stderr 'want view, set, history, cache, mcp, or console'
 
 -- magus.yaml --
 concurrency: 2

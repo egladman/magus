@@ -406,3 +406,39 @@ func TestBase62EncodeOverflowPanics(t *testing.T) {
 	// 62^1 == 62 values fit in width 1 (0..61); 62 does not.
 	assert.Panics(t, func() { base62Encode([]byte{62}, 1) })
 }
+
+// One store, two pools. Every surface that lists or revokes must filter by scope, or
+// an agent credential shows up in a console listing and a console command can delete
+// it. ListScope is what the CLI commands are built on, so this pins the filter itself.
+func (s *ConnectorSuite) TestListScopeSeparatesThePools() {
+	t := s.T()
+	st := s.store()
+
+	_, agent, err := st.Create("agent", time.Time{}, ScopeMCP)
+	require.NoError(t, err)
+	_, pwa, err := st.Create("pwa", time.Time{}, ScopeConsole)
+	require.NoError(t, err)
+	_, phone, err := st.Create("phone", time.Time{}, ScopeConsoleRead)
+	require.NoError(t, err)
+
+	mcpOnly := st.ListScope(ScopeMCP)
+	require.Len(t, mcpOnly, 1)
+	assert.Equal(t, agent.Name, mcpOnly[0].Name)
+
+	consoleOnly := st.ListScope(ScopeConsole, ScopeConsoleRead)
+	require.Len(t, consoleOnly, 2)
+	names := []string{consoleOnly[0].Name, consoleOnly[1].Name}
+	assert.ElementsMatch(t, []string{pwa.Name, phone.Name}, names)
+
+	// The full listing still sees everything - the filter is the caller's choice, not
+	// a property of the store.
+	assert.Len(t, st.List(), 3)
+}
+
+// A record written before ClientScope existed decodes with an empty scope and must
+// read as ScopeMCP: the console tier did not exist when it was minted, so treating it
+// as anything else would silently widen an old agent credential onto the console.
+func (s *ConnectorSuite) TestLegacyRecordDefaultsToMCP() {
+	legacy := ConnectorToken{Name: "old", Scope: ""}
+	assert.Equal(s.T(), ScopeMCP, legacy.EffectiveScope())
+}

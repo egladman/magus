@@ -233,6 +233,26 @@ func (s *ConnectorStore) List() []ConnectorToken {
 	return out
 }
 
+// ListScope returns only the tokens whose scope is in want. One store holds both the
+// MCP and console tiers, so every surface that shows or revokes tokens must filter:
+// listing an agent credential under a console command (or the reverse) would present
+// the two as one pool, which is the confusion the scopes exist to prevent.
+func (s *ConnectorStore) ListScope(want ...ClientScope) []ConnectorToken {
+	allowed := make(map[ClientScope]bool, len(want))
+	for _, w := range want {
+		allowed[w] = true
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]ConnectorToken, 0, len(s.tokens))
+	for _, c := range s.tokens {
+		if allowed[c.EffectiveScope()] {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // Create mints a new connector token named name that expires at expires (a zero
 // time means it never expires), stores its SHA-256, and returns the plaintext
 // secret ONCE - it cannot be recovered later. name must be non-empty and unique

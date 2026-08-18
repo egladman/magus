@@ -747,10 +747,32 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 							Flags: []Flag{
 								{Name: "name", Kind: FlagString, Doc: "Name for this connector token (default: connector-N)"},
 								{Name: "expires", Kind: FlagString, Doc: "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)"},
-								{Name: "scope", Kind: FlagString, Doc: "Surface the token may reach: mcp (default), console, or console-read. They are separate: an mcp token is rejected by the console, a console token is rejected by /mcp, and console-read is a viewer that cannot change anything"},
 							},
 						},
 						{Name: "revoke", Short: "Revoke a connector token"},
+					},
+				},
+			},
+		},
+		{
+			Name:  "console",
+			Short: "Manage the console (PWA) auth tokens",
+			Children: []Command{
+				{
+					Name:  "token",
+					Short: "Manage console tokens",
+					Children: []Command{
+						{
+							Name:  "create",
+							Short: "Mint a console token",
+							Flags: []Flag{
+								{Name: "name", Kind: FlagString, Doc: "Name for this console token (default: console-N)"},
+								{Name: "expires", Kind: FlagString, Doc: "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)"},
+								{Name: "viewer", Kind: FlagBool, Doc: "Mint a READ-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share"},
+							},
+						},
+						{Name: "ls", Short: "List console tokens"},
+						{Name: "revoke", Short: "Revoke a console token"},
 					},
 				},
 			},

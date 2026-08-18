@@ -264,20 +264,6 @@ func configMCPConnectorCreate(args []string) error {
 		return fmt.Errorf("magus config mcp connector create: %w", err)
 	}
 
-	// The scope is what makes this an MCP credential rather than a console one, so an
-	// unknown value is refused rather than defaulted: minting a token for the wrong
-	// surface is exactly the confusion the two scopes exist to prevent.
-	scope := auth.ScopeMCP
-	switch strings.TrimSpace(cf.Scope) {
-	case "", string(auth.ScopeMCP):
-	case string(auth.ScopeConsole):
-		scope = auth.ScopeConsole
-	case string(auth.ScopeConsoleRead):
-		scope = auth.ScopeConsoleRead
-	default:
-		return usagef("magus config mcp connector create: unknown --scope %q (want mcp, console, or console-read)", cf.Scope)
-	}
-
 	store, err := auth.LoadConnectorStore()
 	if err != nil {
 		return err
@@ -287,7 +273,7 @@ func configMCPConnectorCreate(args []string) error {
 		chosen = defaultConnectorName(store)
 	}
 
-	secret, c, err := store.Create(chosen, exp, scope)
+	secret, c, err := store.Create(chosen, exp, auth.ScopeMCP)
 	if err != nil {
 		if errors.Is(err, auth.ErrConnectorExists) {
 			return types.DiagnosticErrorf(types.ConnectorNameExists, "magus config mcp connector create: a connector named %q already exists; pass a different --name", chosen)
@@ -297,7 +283,7 @@ func configMCPConnectorCreate(args []string) error {
 
 	// The secret prints ONCE to stdout (pipeable); all guidance goes to stderr.
 	fmt.Println(secret)
-	fmt.Fprintf(os.Stderr, "\nmagus config mcp connector create: created %q (fingerprint %s, scope %s)\n", c.Name, c.Fingerprint, c.EffectiveScope())
+	fmt.Fprintf(os.Stderr, "\nmagus config mcp connector create: created %q (fingerprint %s)\n", c.Name, c.Fingerprint)
 	if c.Expires.IsZero() {
 		fmt.Fprintln(os.Stderr, "Expires: never")
 	} else {
@@ -311,15 +297,8 @@ func configMCPConnectorCreate(args []string) error {
 	fmt.Fprintln(os.Stderr, "  Authorization: Bearer <token>")
 	// The two scopes reach disjoint surfaces, so naming the wrong one here would send
 	// the reader to an endpoint that will reject the token they just minted.
-	switch c.EffectiveScope() {
-	case auth.ScopeConsole:
-		fmt.Fprintln(os.Stderr, "Scope console: the daemon's console surfaces only. It is REJECTED at /mcp.")
-	case auth.ScopeConsoleRead:
-		fmt.Fprintln(os.Stderr, "Scope console-read: the console's READ routes only. It cannot submit jobs,")
-		fmt.Fprintln(os.Stderr, "edit memory, or open a share, and it is REJECTED at /mcp.")
-	default:
-		fmt.Fprintln(os.Stderr, "Scope mcp: the daemon's /mcp endpoint only. It is REJECTED by the console.")
-	}
+	fmt.Fprintln(os.Stderr, "This token reaches /mcp only. It is REJECTED by the console; mint a console")
+	fmt.Fprintln(os.Stderr, "credential with `magus config console token create`.")
 	return nil
 }
 
@@ -331,7 +310,7 @@ func configMCPConnectorList(args []string) error {
 	if err != nil {
 		return err
 	}
-	conns := store.List()
+	conns := store.ListScope(auth.ScopeMCP)
 	if len(conns) == 0 {
 		fmt.Fprintln(os.Stderr, "no connector tokens; create one with `magus config mcp connector create`")
 		return nil
@@ -373,6 +352,15 @@ func configMCPConnectorRevoke(args []string) error {
 	if err != nil {
 		return err
 	}
+	// Confined to the MCP pool: a console token sharing a name must not be revocable
+	// through the connector command. See config_console.go for the mirror of this.
+	if !matchesScoped(store.ListScope(auth.ScopeMCP), rest[0]) {
+		if matchesScoped(store.ListScope(consoleScopes...), rest[0]) {
+			return usagef("magus config mcp connector revoke: %q is a console token, not an MCP connector; revoke it with `magus config console token revoke %s`", rest[0], rest[0])
+		}
+		return types.DiagnosticErrorf(types.ConnectorNotFound, "magus config mcp connector revoke: no connector matches %q", rest[0])
+	}
+
 	removed, err := store.Revoke(rest[0])
 	if err != nil {
 		if errors.Is(err, auth.ErrConnectorNotFound) {
