@@ -1550,7 +1550,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
     // channel, so naming it would be a word with no alternative to distinguish.
     final deliver = ctx.hasCharm("cd");
     final dirty = vcs\isDirty();
-    final modules = releaser\releasableModules(magus\ls().projects);
+    final modules = releaser\releasableModules(magus\projects().projects);
 
     // Parse `key=version`. Anything unnamed is surveyed, never released.
     var wanted = mut {};
@@ -1976,7 +1976,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // resurface here as ../<sibling>/... paths that no ^-anchored exclusion in
     // .golangci.yml matches - measured: 25 stdversion findings from a sibling failing
     // a tree with zero of its own. A cold analysis per fresh worktree is the price.
-    final lintCache = magus\ls().workspace + "/.magus/golangci-lint";
+    final lintCache = magus\projects().workspace + "/.magus/golangci-lint";
     os\withEnv({"GOLANGCI_LINT_CACHE": lintCache}, fun () > void !> any {
         proc\exec("./custom-gcl", ["run"]);
     });

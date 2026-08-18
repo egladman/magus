@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/libs/diagnostics"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -277,4 +278,124 @@ func TestInsightReportKeepsTheBestEffortSections(t *testing.T) {
 	a.failTrend = true
 	_, err = buildInsightReport(t.Context(), a, types.InsightOptions{})
 	require.Error(t, err)
+}
+
+// fakeLedgerWorkspace is a workspace that can back a delegation-ledger Store: it
+// carries the cache directory ledgerStoreFromContext needs beyond
+// types.WorkspaceRepository's own Root.
+type fakeLedgerWorkspace struct {
+	types.WorkspaceRepository
+	cacheDir string
+	root     string
+}
+
+func (f *fakeLedgerWorkspace) CacheDir() string { return f.cacheDir }
+func (f *fakeLedgerWorkspace) Root() string     { return f.root }
+
+func TestLedgerIsServedInProcess(t *testing.T) {
+	t.Parallel()
+
+	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir()})
+
+	_, err := MagusPutLedger(ctx, "u1", map[string]any{"goal": "ship it", "state": "running"})
+	require.NoError(t, err)
+
+	report, err := MagusListLedger(ctx)
+	require.NoError(t, err, "a workspace with a cache directory answers here, with no subprocess")
+	require.Len(t, report.Units, 1)
+	assert.Equal(t, "u1", report.Units[0].ID)
+	assert.Equal(t, types.StateRunning, report.Units[0].State)
+}
+
+// TestLedgerNeedsAWorkspace mirrors TestInsightNeedsAWorkspace: there is no `magus
+// ledger` CLI subcommand to fall back to, so a caller with no workspace on the context
+// is told so.
+func TestLedgerNeedsAWorkspace(t *testing.T) {
+	t.Parallel()
+
+	_, err := MagusListLedger(t.Context())
+	require.Error(t, err)
+	_, err = MagusPutLedger(t.Context(), "u1", nil)
+	require.Error(t, err)
+	_, err = MagusClearLedger(t.Context())
+	require.Error(t, err)
+}
+
+// TestLedgerNeedsACacheDir covers the workspace that answers the reading verbs
+// (ls, affected, ...) but was never given a cache directory - a test double, not the
+// real *magus.Magus.
+func TestLedgerNeedsACacheDir(t *testing.T) {
+	t.Parallel()
+
+	ctx := types.WithWorkspace(t.Context(), &fakeAnalyzer{})
+	_, err := MagusListLedger(ctx)
+	assert.ErrorContains(t, err, "cache directory")
+}
+
+// TestPutLedgerMergesRatherThanReplaces proves the Buzz binding shares
+// internal/ledger.Merge with the magus_ledger MCP tool: a later put naming only
+// `state` must not erase the goal an earlier put declared.
+func TestPutLedgerMergesRatherThanReplaces(t *testing.T) {
+	t.Parallel()
+
+	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir()})
+
+	_, err := MagusPutLedger(ctx, "u1", map[string]any{"goal": "the declared goal", "owned_paths": "internal/ledger"})
+	require.NoError(t, err)
+
+	got, err := MagusPutLedger(ctx, "u1", map[string]any{"state": "pass"})
+	require.NoError(t, err)
+	assert.Equal(t, types.StatePass, got.State)
+	assert.Equal(t, "the declared goal", got.Goal, "the state advance must not erase the row")
+	assert.Equal(t, []string{"internal/ledger"}, got.OwnedPaths)
+}
+
+// TestPutLedgerRejectsAnUnknownState proves a mistyped state is reported, not
+// silently ignored - internal/ledger.Merge is what enforces this, and this pins that
+// the Buzz binding does not swallow its error.
+func TestPutLedgerRejectsAnUnknownState(t *testing.T) {
+	t.Parallel()
+
+	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir()})
+	_, err := MagusPutLedger(ctx, "u1", map[string]any{"state": "passed"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no_return")
+}
+
+func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
+	t.Parallel()
+
+	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: t.TempDir()})
+	_, err := MagusPutLedger(ctx, "u1", nil)
+	require.NoError(t, err)
+	_, err = MagusPutLedger(ctx, "u2", nil)
+	require.NoError(t, err)
+
+	cleared, err := MagusClearLedger(ctx)
+	require.NoError(t, err)
+	assert.Equal(t, 2, cleared)
+
+	report, err := MagusListLedger(ctx)
+	require.NoError(t, err)
+	assert.Empty(t, report.Units)
+}
+
+// TestLedgerAndTheMCPToolAgree pins that the Buzz binding and the magus_ledger MCP
+// tool are two doors onto the same file: a row put through one is visible through the
+// other, and internal/ledger.Store's own path derivation (CacheDir/ledger/units.json)
+// is what makes that true without either side naming the other.
+func TestLedgerAndTheMCPToolAgree(t *testing.T) {
+	t.Parallel()
+
+	cacheDir := t.TempDir()
+	ctx := types.WithWorkspace(t.Context(), &fakeLedgerWorkspace{cacheDir: cacheDir})
+
+	_, err := MagusPutLedger(ctx, "u1", map[string]any{"goal": "shared row"})
+	require.NoError(t, err)
+
+	store := ledger.NewStore(ledger.Location{CacheDir: cacheDir})
+	units, err := store.List()
+	require.NoError(t, err)
+	require.Len(t, units, 1)
+	assert.Equal(t, "shared row", units[0].Goal)
 }

@@ -83,7 +83,7 @@ That single fact decides which members you may call:
 | either     | `targets`                                                               | **work** - serves the workspace on the context when there is one, forks a nested magus when there is not                                 |
 
 So the rule is: from a spell, fork. `magus\cmd("ls", args: ["-o", "json"])` answers what
-`magus\ls()` would have, at the cost of a subprocess.
+`magus\projects()` would have, at the cost of a subprocess.
 
 Two things that follow, and neither is guessable:
 

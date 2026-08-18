@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/ledger"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/proc/run"
 	"github.com/egladman/magus/libs/diagnostics"
@@ -48,8 +49,12 @@ var Magus = Module{
 		"[Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) " +
 		"and [CI integration](../../guides/integrations/ci.md).\n\n" +
 		"`import \"magus\"` resolves in a `magus buzz` script as well as in a magusfile, and a " +
-		"script run inside a workspace reads that workspace: `ls`, `affected`, `projectGraph`, " +
-		"`where` and `insight` all answer in-process. Only the members that DECLARE into " +
+		"script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, " +
+		"`where` and `insight` all answer in-process, and so does `magus\\ledger` (list, put, " +
+		"clear): the delegation ledger an orchestrating agent declares about work it handed " +
+		"out (see types.DelegationUnit). There is deliberately no `magus ledger` CLI " +
+		"subcommand, so this namespace and the magus_ledger MCP tool are the only doors onto " +
+		"it. Only the members that DECLARE into " +
 		"the workspace being loaded (`magus\\project`, the provider selections above) raise " +
 		"[MGS1022](../codes/magusfile/MGS1022.md) in a script - there is nothing for them to " +
 		"declare into. Run a script outside any workspace and the reading members raise it too, " +
@@ -69,12 +74,18 @@ var Magus = Module{
 			Impl:    MagusCmd,
 		},
 		{
-			Name:    "ls",
-			Doc:     "List the workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus's own type, no import needed) for compile-checked field access. Unlike magus.cmd(\"ls\"), this reads the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip.",
+			// `projects`, not `ls`: the CLI subcommand is still `magus ls`, and this
+			// surface deliberately does not mirror it. A shell verb is abbreviated
+			// because it is TYPED many times a day; a magusfile member is read far more
+			// often than it is written, and reads inside a checked signature next to
+			// `magus\targets()`. Naming the plural noun it returns is what makes the
+			// pair legible - see std.CamelCase, which leaves a single word alone.
+			Name:    "projects",
+			Doc:     "The workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus's own type, no import needed) for compile-checked field access. The sibling of magus.targets(), which answers the same question one level down. Unlike magus.cmd(\"ls\") - the CLI spelling, which this member deliberately does not mirror - it reads the workspace already open on the context: no subprocess, no second workspace load, no JSON round-trip.",
 			Args:    nil,
 			Returns: []Ret{{Type: TypeAnyMap, Object: "Projects"}},
 			Raises:  true,
-			Impl:    MagusLs,
+			Impl:    MagusProjects,
 		},
 		{
 			Name: "targets",
@@ -291,15 +302,17 @@ var Magus = Module{
 			Extern: true,
 		},
 	},
-	// The provider namespaces the runtime assembles. Each is reached THROUGH rather
-	// than called - `magus\cache.remote(<spell>)` - so it is declared as an object
-	// with static extern methods; see std.Namespace for why that, and not a nested
-	// module.
+	// Each namespace below is reached THROUGH rather than called -
+	// `magus\cache.remote(<spell>)` - so it is declared as an object with static
+	// extern methods; see std.Namespace for why that, and not a nested module.
 	//
-	// None of the selection calls is Raises. Every one is made at the TOP LEVEL of a
-	// magusfile, where there is no enclosing function to declare !> and nothing to
-	// catch with, so declaring them raising would make them unwritable - the same
-	// reason magus\project is not Raises.
+	// log/cache/ci/secret/workspace are PROVIDER namespaces: a magusfile selects or
+	// reads through them, and none of those calls is Raises. Every one is made at the
+	// TOP LEVEL of a magusfile, where there is no enclosing function to declare !> and
+	// nothing to catch with, so declaring them raising would make them unwritable -
+	// the same reason magus\project is not Raises. ledger is the one exception: its
+	// methods are ordinary calls made from inside a target or script, not top-level
+	// declarations, so they ARE Raises - the same reason magus\secret.read is too.
 	Namespaces: []Namespace{
 		{
 			Name: "log",
@@ -401,6 +414,71 @@ var Magus = Module{
 				Extern: true,
 			}},
 		},
+		{
+			Name: "ledger",
+			Doc: "The declared delegation ledger: what an orchestrating agent said about work it " +
+				"handed out, recorded so a human can see the plan the agents are running. Rows are " +
+				"DECLARATIONS - magus records them and enforces nothing; see the field docs on " +
+				"types.DelegationUnit. This namespace and the magus_ledger MCP tool are the only " +
+				"doors onto it - there is deliberately no `magus ledger` CLI subcommand. Bound by " +
+				"hand in internal/interp/bindings (buildLedgerNS), not generated: a Namespace's " +
+				"methods are Extern by construction (see std.Namespace), so there is no Impl for " +
+				"codegen to reflect a trampoline from, the same reason magus\\secret.read is hand-bound.",
+			Methods: []Method{
+				{
+					Name: "list",
+					Doc: "Every row as one typed report: {units, overlaps}. units are in the order " +
+						"they were declared; overlaps are derived on this read - every pair of live " +
+						"(non-terminal) units whose declared owned_paths intersect - the same " +
+						"derivation the magus_ledger MCP tool's \"list\" op and the console's " +
+						"/api/v1/ledger route use, so the three cannot disagree about a collision. " +
+						"Annotate the result `> DelegationReport` for compile-checked field access. " +
+						"Read straight off the workspace already open on the context - no subprocess. " +
+						"Works from a magusfile target and from a `magus buzz` script run inside a " +
+						"workspace; raises MGS1022 only when there is no workspace to read.",
+					Returns: []Ret{{Type: TypeAnyMap, Object: "DelegationReport"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name: "put",
+					Doc: "Record or advance one row, merging only the fields opts names: parent, " +
+						"goal, checkpoint, owned_paths, forbidden_paths, depends_on, tier, " +
+						"validation, state (declared, running, pass, fail, no_return), read_only. A " +
+						"key opts omits is left untouched, so a later put in a unit's lifecycle (e.g. " +
+						"{state = \"running\"}) advances it without erasing what an earlier put " +
+						"declared; a key present with an empty value is an explicit clear. id is the " +
+						"row's identity to upsert on - the value an orchestrator should also put in " +
+						"the worker's prompt, so the console can join activity to the row. " +
+						"created/updated/releases are stamped by the store and cannot be set here. " +
+						"Returns the stored row. Read straight off the workspace already open on the " +
+						"context - no subprocess. Works from a magusfile target and from a `magus " +
+						"buzz` script run inside a workspace; raises MGS1022 only when there is no " +
+						"workspace to read.",
+					Args: []Arg{
+						{Name: "id", Type: TypeString},
+						{Name: "opts", Type: TypeAnyMap, Optional: true},
+					},
+					Returns: []Ret{{Type: TypeAnyMap, Object: "DelegationUnit"}},
+					Raises:  true,
+					Extern:  true,
+				},
+				{
+					Name: "clear",
+					Doc: "Drop every row, which is how a fresh plan starts. Returns how many rows " +
+						"it dropped - a fresh or already-empty ledger clears 0, which is not an " +
+						"error. Clearing is also how one orchestrator can silently erase another's " +
+						"plan, so a caller unsure whether it owns the whole ledger should list() " +
+						"first. Read straight off the workspace already open on the context - no " +
+						"subprocess. Works from a magusfile target and from a `magus buzz` script " +
+						"run inside a workspace; raises MGS1022 only when there is no workspace to " +
+						"read.",
+					Returns: []Ret{{Type: TypeInt}},
+					Raises:  true,
+					Extern:  true,
+				},
+			},
+		},
 	},
 }
 
@@ -446,7 +524,7 @@ func errNoWorkspace(member string) error {
 		"magus\\%s: no workspace on the context - it is callable from a magusfile target, not from a spell or a `magus buzz` script; reach for magus\\describe/magus\\cmd instead, which fork a nested magus that discovers the workspace itself", member)
 }
 
-// MagusLs lists the workspace's projects from the workspace already open on ctx.
+// MagusProjects lists the workspace's projects from the workspace already open on ctx.
 //
 // The first of the read-only verbs served IN-PROCESS. The typed methods below it fork a
 // full magus subprocess via runMagus - a spawn, a second workspace load, a JSON encode
@@ -454,10 +532,10 @@ func errNoWorkspace(member string) error {
 //
 // The workspace reaches ctx via types.WithWorkspace in magus.Open's load, so it is
 // present for every magusfile target. A bare Buzz script has none, hence the guard.
-func MagusLs(ctx context.Context) (types.ProjectsOutput, error) {
+func MagusProjects(ctx context.Context) (types.ProjectsOutput, error) {
 	ws := types.WorkspaceFromContext(ctx)
 	if ws == nil {
-		return types.ProjectsOutput{}, errNoWorkspace("ls")
+		return types.ProjectsOutput{}, errNoWorkspace("projects")
 	}
 	return ws.ListProjects(ctx)
 }
@@ -480,7 +558,7 @@ func MagusTargets(ctx context.Context, opts map[string]any) (types.TargetGraphOu
 	return runMagusJSON[types.TargetGraphOutput](ctx, "describe", []string{"graph"}, opts)
 }
 
-// MagusAffected computes the affected project set in-process. See MagusLs for why
+// MagusAffected computes the affected project set in-process. See MagusProjects for why
 // the read-only verbs do not fork.
 //
 // It deliberately does NOT swallow ErrAffectedFallback. When the VCS cannot produce a
@@ -589,7 +667,7 @@ func buzzCause(v any) (string, error) {
 	}
 }
 
-// MagusGraph returns the project dependency graph as a flat object. See MagusLs for
+// MagusGraph returns the project dependency graph as a flat object. See MagusProjects for
 // why the read-only verbs are served in-process.
 func MagusGraph(ctx context.Context) (types.GraphView, error) {
 	ws := types.WorkspaceFromContext(ctx)
@@ -773,6 +851,89 @@ func buildInsightReport(ctx context.Context, a types.InsightAnalyzer, iopts type
 		report.Unreferenced = ur
 	}
 	return report, nil
+}
+
+// ledgerCacheDir is the structural seam for the one capability types.WorkspaceRepository
+// does not carry that opening a delegation-ledger Store needs: the workspace's cache
+// directory. Satisfied by the real *magus.Magus the same way std.Analyzer is - recovered
+// by assertion so std and root magus name neither each other.
+type ledgerCacheDir interface {
+	CacheDir() string
+}
+
+// ledgerStoreFromContext opens the delegation ledger for the workspace already on ctx. A
+// fresh Store per call is deliberate and matches ledger.Store's own documented contract:
+// it holds no state beyond its path and lock, and a cross-process race over the file is
+// already accepted for v1 (see internal/ledger/store.go) - a magusfile target is just
+// another such process.
+func ledgerStoreFromContext(ctx context.Context, member string) (*ledger.Store, error) {
+	ws := types.WorkspaceFromContext(ctx)
+	if ws == nil {
+		// NOT errNoWorkspace: that message ends by pointing at magus\describe/magus\cmd,
+		// which fork a nested magus and rediscover the root. That escape hatch exists for
+		// every other in-process member because each one HAS a CLI subcommand behind it.
+		// The ledger deliberately has none, so the advice would send a reader to a command
+		// that does not exist. Same code, because the constraint is the same one.
+		return nil, types.DiagnosticErrorf(types.MagusfileOnlyMember,
+			"magus\\%s: no workspace on the context - the ledger is read from the workspace magus already has open, so this is callable from a magusfile target or a `magus buzz` script run INSIDE a workspace, not from a spell or a script outside one. There is no `magus ledger` subcommand to fall back to; run from inside the workspace instead",
+			member)
+	}
+	cd, ok := ws.(ledgerCacheDir)
+	if !ok {
+		return nil, fmt.Errorf("%s: this workspace has no cache directory", member)
+	}
+	return ledger.NewStore(ledger.Location{CacheDir: cd.CacheDir(), Root: ws.Root()}), nil
+}
+
+// MagusListLedger backs magus\ledger.list (hand-bound in
+// internal/interp/bindings/ledger_ns.go, since a Namespace method has no Impl for
+// codegen to reflect a trampoline from - see std.Namespace). It answers with one typed
+// report; types.NewDelegationReport is the same constructor the magus_ledger MCP tool's
+// "list" op and the console's /api/v1/ledger route call, so the three doors cannot
+// disagree about the rows or the overlaps derived from them.
+func MagusListLedger(ctx context.Context) (types.DelegationReport, error) {
+	store, err := ledgerStoreFromContext(ctx, "ledger.list")
+	if err != nil {
+		return types.DelegationReport{}, err
+	}
+	units, err := store.List()
+	if err != nil {
+		return types.DelegationReport{}, err
+	}
+	return types.NewDelegationReport(units), nil
+}
+
+// MagusPutLedger backs magus\ledger.put. The field merge is decoded by
+// internal/ledger.Merge, the same decoder the magus_ledger MCP tool's "put" op calls, so
+// a client typing either surface accepts the same fields and rejects the same mistakes.
+func MagusPutLedger(ctx context.Context, id string, opts map[string]any) (types.DelegationUnit, error) {
+	store, err := ledgerStoreFromContext(ctx, "ledger.put")
+	if err != nil {
+		return types.DelegationUnit{}, err
+	}
+	merge, err := ledger.Merge(opts)
+	if err != nil {
+		return types.DelegationUnit{}, err
+	}
+	return store.Update(ctx, strings.TrimSpace(id), merge)
+}
+
+// MagusClearLedger backs magus\ledger.clear, matching the magus_ledger MCP tool's
+// "clear" op: it reports how many rows it dropped rather than nothing, since a
+// destructive op should say what it destroyed.
+func MagusClearLedger(ctx context.Context) (int, error) {
+	store, err := ledgerStoreFromContext(ctx, "ledger.clear")
+	if err != nil {
+		return 0, err
+	}
+	before, err := store.List()
+	if err != nil {
+		return 0, err
+	}
+	if err := store.Clear(); err != nil {
+		return 0, err
+	}
+	return len(before), nil
 }
 
 // MagusDescribeFile classifies paths as generated output, declared source, or
