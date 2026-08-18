@@ -81,6 +81,9 @@ Lifetime: a duration like 90d or 48h, or "never" (default 90d)
 .TP
 \fB\-\-name\fR \fIstring\fR
 Name for this connector token (default: connector\-N)
+.TP
+\fB\-\-scope\fR \fIstring\fR
+Surface the token may reach: mcp (default) or console. They are separate: an mcp token is rejected by the console and a console token is rejected by /mcp
 .RE
 .SH SUBCOMMANDS
 .RS

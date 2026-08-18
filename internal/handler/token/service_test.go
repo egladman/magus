@@ -77,9 +77,9 @@ func TestListNeverContainsSecret(t *testing.T) {
 	// store directly (the same store the handler reads) to stand up the list fixture.
 	store, err := auth.LoadConnectorStore()
 	require.NoError(t, err)
-	secret1, _, err := store.Create("alpha", time.Now().Add(time.Hour))
+	secret1, _, err := store.Create("alpha", time.Now().Add(time.Hour), auth.ScopeMCP)
 	require.NoError(t, err)
-	secret2, _, err := store.Create("beta", time.Now().Add(time.Hour))
+	secret2, _, err := store.Create("beta", time.Now().Add(time.Hour), auth.ScopeMCP)
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(secret1, "mgs_"))
 	require.True(t, strings.HasPrefix(secret2, "mgs_"))
@@ -165,7 +165,7 @@ func TestRevokeSharePrefixResolvesToConnector(t *testing.T) {
 	s := newIsolatedService(t, nil)
 	store, err := auth.LoadConnectorStore()
 	require.NoError(t, err)
-	_, conn, err := store.Create("c1", time.Now().Add(time.Hour))
+	_, conn, err := store.Create("c1", time.Now().Add(time.Hour), auth.ScopeMCP)
 	require.NoError(t, err)
 
 	prefix := conn.Fingerprint[:1]
@@ -221,7 +221,7 @@ func TestOperatorTokenInvisibleAndImmutable(t *testing.T) {
 	// even when the service does return other tokens (it is not merely "empty list").
 	store, err := auth.LoadConnectorStore()
 	require.NoError(t, err)
-	_, conn, err := store.Create("mcp-client", time.Now().Add(time.Hour))
+	_, conn, err := store.Create("mcp-client", time.Now().Add(time.Hour), auth.ScopeMCP)
 	require.NoError(t, err)
 
 	cliTok, err := auth.Generate()
@@ -275,7 +275,7 @@ func TestListResponseCarriesNoSecretBytes(t *testing.T) {
 
 	store, err := auth.LoadConnectorStore()
 	require.NoError(t, err)
-	secret, conn, err := store.Create("client", time.Now().Add(time.Hour))
+	secret, conn, err := store.Create("client", time.Now().Add(time.Hour), auth.ScopeMCP)
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(secret, "mgs_"))
 	require.Len(t, conn.SHA256, 64, "the full hash we hunt for is the 64-char hex digest")
@@ -353,7 +353,7 @@ func TestTierHierarchyAtGuard(t *testing.T) {
 	// Client tier: a real, non-expired connector token minted through the store.
 	store, err := auth.LoadConnectorStore()
 	require.NoError(t, err)
-	connSecret, _, err := store.Create("mcp-client", time.Now().Add(time.Hour))
+	connSecret, _, err := store.Create("mcp-client", time.Now().Add(time.Hour), auth.ScopeMCP)
 	require.NoError(t, err)
 	// Sanity: the connector token IS a valid data-surface credential...
 	require.True(t, auth.VerifyMCPBearer(connSecret))

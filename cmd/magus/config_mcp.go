@@ -264,6 +264,18 @@ func configMCPConnectorCreate(args []string) error {
 		return fmt.Errorf("magus config mcp connector create: %w", err)
 	}
 
+	// The scope is what makes this an MCP credential rather than a console one, so an
+	// unknown value is refused rather than defaulted: minting a token for the wrong
+	// surface is exactly the confusion the two scopes exist to prevent.
+	scope := auth.ScopeMCP
+	switch strings.TrimSpace(cf.Scope) {
+	case "", string(auth.ScopeMCP):
+	case string(auth.ScopeConsole):
+		scope = auth.ScopeConsole
+	default:
+		return usagef("magus config mcp connector create: unknown --scope %q (want mcp or console)", cf.Scope)
+	}
+
 	store, err := auth.LoadConnectorStore()
 	if err != nil {
 		return err
@@ -273,7 +285,7 @@ func configMCPConnectorCreate(args []string) error {
 		chosen = defaultConnectorName(store)
 	}
 
-	secret, c, err := store.Create(chosen, exp)
+	secret, c, err := store.Create(chosen, exp, scope)
 	if err != nil {
 		if errors.Is(err, auth.ErrConnectorExists) {
 			return types.DiagnosticErrorf(types.ConnectorNameExists, "magus config mcp connector create: a connector named %q already exists; pass a different --name", chosen)
@@ -283,7 +295,7 @@ func configMCPConnectorCreate(args []string) error {
 
 	// The secret prints ONCE to stdout (pipeable); all guidance goes to stderr.
 	fmt.Println(secret)
-	fmt.Fprintf(os.Stderr, "\nmagus config mcp connector create: created %q (fingerprint %s)\n", c.Name, c.Fingerprint)
+	fmt.Fprintf(os.Stderr, "\nmagus config mcp connector create: created %q (fingerprint %s, scope %s)\n", c.Name, c.Fingerprint, c.EffectiveScope())
 	if c.Expires.IsZero() {
 		fmt.Fprintln(os.Stderr, "Expires: never")
 	} else {
@@ -293,8 +305,15 @@ func configMCPConnectorCreate(args []string) error {
 	fmt.Fprintln(os.Stderr, "This secret is shown once and cannot be retrieved later. Store it now.")
 	// Deliberately do NOT repeat the secret on stderr: stdout is the sole carrier,
 	// so `... > secret.txt` keeps the plaintext off the terminal and out of logs.
-	fmt.Fprintln(os.Stderr, "The token was printed above (stdout). Configure your MCP client with header:")
+	fmt.Fprintln(os.Stderr, "The token was printed above (stdout). Send it as a header:")
 	fmt.Fprintln(os.Stderr, "  Authorization: Bearer <token>")
+	// The two scopes reach disjoint surfaces, so naming the wrong one here would send
+	// the reader to an endpoint that will reject the token they just minted.
+	if c.EffectiveScope() == auth.ScopeConsole {
+		fmt.Fprintln(os.Stderr, "Scope console: the daemon's console surfaces only. It is REJECTED at /mcp.")
+	} else {
+		fmt.Fprintln(os.Stderr, "Scope mcp: the daemon's /mcp endpoint only. It is REJECTED by the console.")
+	}
 	return nil
 }
 

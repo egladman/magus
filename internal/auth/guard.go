@@ -21,9 +21,9 @@ import (
 //	                revoke credentials (privilege self-replication) - and, since
 //	                this split, never the console either.
 //	console token   the PWA's credential: the console read/control surfaces and
-//	                never /mcp. NOT YET MINTABLE; VerifyConsoleBearer currently
-//	                accepts only the operator tier, which is what the console
-//	                authenticates with today. The store lands next.
+//	                never /mcp. Stored beside connector tokens and told apart by
+//	                ClientScope, which the verifiers filter on - one store, two
+//	                surfaces, no overlap.
 //	share token     read-only viewer credential: lives solely on the ephemeral
 //	                LAN share listener (its own per-session verifier); no verifier
 //	                here ever accepts it.
@@ -44,7 +44,7 @@ func VerifyMCPBearer(presented string) bool {
 	if VerifyCLIBearer(presented) {
 		return true
 	}
-	if store, err := LoadConnectorStore(); err == nil && store.Verify(presented) {
+	if store, err := LoadConnectorStore(); err == nil && store.VerifyScope(presented, ScopeMCP) {
 		return true
 	}
 	return false
@@ -53,17 +53,20 @@ func VerifyMCPBearer(presented string) bool {
 // VerifyConsoleBearer reports whether presented may use the console surfaces: /api/
 // and the console Connect services.
 //
-// It accepts the operator tier only, for now. The console token class does not exist
-// yet, and the console authenticates with the operator token today, so this is not a
-// behavior change for the operator - what it changes is that a CONNECTOR token is no
-// longer accepted here. That is the half of the separation that needs no new storage,
-// which is why it ships first.
+// It accepts the operator tier or a non-expired token minted with ScopeConsole. A
+// CONNECTOR token is rejected: it is scoped to /mcp, and the scan skips it.
 //
 // The operator token stays valid on both surfaces deliberately: it is the bootstrap
 // credential and the CLI's own reads depend on it. That is a named exception, not a
 // residue of the old single-tier design.
 func VerifyConsoleBearer(presented string) bool {
-	return VerifyCLIBearer(presented)
+	if VerifyCLIBearer(presented) {
+		return true
+	}
+	if store, err := LoadConnectorStore(); err == nil && store.VerifyScope(presented, ScopeConsole) {
+		return true
+	}
+	return false
 }
 
 // VerifyCLIBearer reports whether presented is exactly the retrievable cli

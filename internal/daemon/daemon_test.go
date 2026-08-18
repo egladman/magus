@@ -96,7 +96,7 @@ func TestServeBearerGuardTwoTier(t *testing.T) {
 	// A non-expired named connector token is the second accepted tier.
 	store, err := auth.LoadConnectorStore()
 	require.NoError(t, err)
-	connectorTok, _, err := store.Create("test", time.Now().Add(time.Hour))
+	connectorTok, _, err := store.Create("test", time.Now().Add(time.Hour), auth.ScopeMCP)
 	require.NoError(t, err)
 
 	// status issues a GET and returns only the status code. It must NOT read the

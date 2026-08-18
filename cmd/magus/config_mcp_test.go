@@ -47,7 +47,7 @@ func TestDefaultConnectorName(t *testing.T) {
 
 	assert.Equal(t, "connector-1", defaultConnectorName(store))
 
-	_, _, err = store.Create("connector-1", time.Time{})
+	_, _, err = store.Create("connector-1", time.Time{}, auth.ScopeMCP)
 	require.NoError(t, err)
 	// After connector-1 is taken, the next default skips to connector-2.
 	assert.Equal(t, "connector-2", defaultConnectorName(store))
