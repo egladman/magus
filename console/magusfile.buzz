@@ -39,6 +39,16 @@ magus\project({
     // does not use would fail it on a version nobody here runs.
     "tools": {"node": policy.node},
     "spells": [typescript],
+    // ../proto because proto's buf-generate writes src/gen/ (see proto/buf.gen.yaml and the
+    // outputs note below). Without the edge the two are unordered and, worse, a .proto change
+    // does not mark the console affected - so its committed client can sit stale against the
+    // schema while every gate stays green. That is not hypothetical: it happened once against
+    // a viewer.proto field rename, which buf.gen.yaml records, and again here against the
+    // JobService collapse, where the docs copy regenerated and this one did not.
+    //
+    // docs already declares the same edge for the descriptor it reads. This is the write half
+    // of the same relationship, and it was the missing one.
+    "depends_on": ["../proto"],
     // Affected/drift tracks this sources glob, not the import graph, so every input must be named to be
     // watched. The client is TypeScript (esbuild strips the types) plus per-surface CSS and the
     // scaffold fragments the surfaces fetch; the hand-authored shell (index.html/manifest/sw) and the

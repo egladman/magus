@@ -1320,7 +1320,8 @@
       ],
       "depends_on": [
         ".",
-        "libs/textsearch"
+        "libs/textsearch",
+        "proto"
       ]
     },
     {
