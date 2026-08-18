@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2335,
-  "edge_count": 6016,
+  "node_count": 2337,
+  "edge_count": 6021,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -690,7 +690,7 @@
       "label": "blog",
       "source": "blog",
       "attrs": {
-        "dir_files": "4",
+        "dir_files": "6",
         "dir_languages": "markdown"
       }
     },
@@ -1896,14 +1896,36 @@
       }
     },
     {
-      "id": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "id": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "kind": "doc",
-      "label": "blog/2026-08-25-i-audited-my-own-mcp-server.md",
-      "source": "blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "label": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
+      "source": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "attrs": {
         "role": "doc",
         "tags": "opinion",
-        "title": "I audited my own MCP server"
+        "title": "Twenty wrappers and a teaching layer"
+      }
+    },
+    {
+      "id": "doc:blog/2026-09-01-the-best-code-is-still-no-code.md",
+      "kind": "doc",
+      "label": "blog/2026-09-01-the-best-code-is-still-no-code.md",
+      "source": "blog/2026-09-01-the-best-code-is-still-no-code.md",
+      "attrs": {
+        "role": "doc",
+        "tags": "opinion",
+        "title": "The best code is still no code"
+      }
+    },
+    {
+      "id": "doc:blog/2026-09-08-the-console-was-an-experiment.md",
+      "kind": "doc",
+      "label": "blog/2026-09-08-the-console-was-an-experiment.md",
+      "source": "blog/2026-09-08-the-console-was-an-experiment.md",
+      "attrs": {
+        "role": "doc",
+        "tags": "opinion",
+        "title": "The console was an experiment"
       }
     },
     {
@@ -12946,7 +12968,7 @@
       "id": "function:releaser.buzz:releasableModules",
       "kind": "function",
       "label": "releasableModules",
-      "doc": "releasableModules enumerates every independently-versioned project: one whose resolved spells declare a manifest (spells.Spell.Manifests, the language's go.mod/package.json/Cargo.toml/pyproject.toml equivalent) that is actually present in its directory - types.ProjectEntry.Manifests, read by the caller via magus\\ls() and passed in as projects, already did the \"does the candidate file exist\" filesystem check. Taking the inventory as a parameter rather than calling magus\\ls() itself keeps this module doing wh",
+      "doc": "releasableModules enumerates every independently-versioned project: one whose resolved spells declare a manifest (spells.Spell.Manifests, the language's go.mod/package.json/Cargo.toml/pyproject.toml equivalent) that is actually present in its directory - types.ProjectEntry.Manifests, read by the caller via magus\\projects() and passed in as projects, already did the \"does the candidate file exist\" filesystem check. Taking the inventory as a parameter rather than calling magus\\projects() itself keeps this mod",
       "source": "releaser.buzz:52",
       "attrs": {
         "exported": "true"
@@ -16987,15 +17009,6 @@
       }
     },
     {
-      "id": "method:magus.ls",
-      "kind": "method",
-      "label": "magus.ls",
-      "doc": "List the workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus's own type, no import needed) for compile-checked field access. Unlike magus.cmd(\"ls\"), this reads the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip.",
-      "attrs": {
-        "buzz": "magus\\ls() → Projects"
-      }
-    },
-    {
       "id": "method:magus.project",
       "kind": "method",
       "label": "magus.project",
@@ -17011,6 +17024,15 @@
       "doc": "The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOLOGICAL order, so iterating it is already a valid build order; dependsOn gives each node's direct predecessors and blastRadius how many projects it can transitively affect. Served in-process from the workspace on the context - no subprocess.",
       "attrs": {
         "buzz": "magus\\projectGraph() → Graph"
+      }
+    },
+    {
+      "id": "method:magus.projects",
+      "kind": "method",
+      "label": "magus.projects",
+      "doc": "The workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus's own type, no import needed) for compile-checked field access. The sibling of magus.targets(), which answers the same question one level down. Unlike magus.cmd(\"ls\") - the CLI spelling, which this member deliberately does not mirror - it reads the workspace already open on the context: no subprocess, no second workspace load, no JSO",
+      "attrs": {
+        "buzz": "magus\\projects() → Projects"
       }
     },
     {
@@ -21734,11 +21756,27 @@
     },
     {
       "source": "dir:blog",
-      "target": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
+    },
+    {
+      "source": "dir:blog",
+      "target": "doc:blog/2026-09-01-the-best-code-is-still-no-code.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "blog/2026-09-01-the-best-code-is-still-no-code.md"
+    },
+    {
+      "source": "dir:blog",
+      "target": "doc:blog/2026-09-08-the-console-was-an-experiment.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "blog/2026-09-08-the-console-was-an-experiment.md"
     },
     {
       "source": "dir:cmd",
@@ -26413,6 +26451,14 @@
       "provenance": "AGENTS.md"
     },
     {
+      "source": "doc:CHANGELOG.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "CHANGELOG.md"
+    },
+    {
       "source": "doc:CLAUDE.md",
       "target": "diagnostic:MGS1002",
       "relation": "documents",
@@ -26830,14 +26876,6 @@
     },
     {
       "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
-      "target": "doc:docs/reference/manpage/magus-buzz.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
-    },
-    {
-      "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "inferred",
@@ -26869,116 +26907,116 @@
       "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-affected.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-buzz.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-config.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-describe.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-diff.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-path.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-query.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-refs.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-status.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-where.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
       "source": "doc:cmd/magus/agents-section.md",
@@ -27203,6 +27241,14 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "cmd/magus/skills/magus-workspace-rules/SKILL.md"
+    },
+    {
+      "source": "doc:docs/changelog.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/changelog.md"
     },
     {
       "source": "doc:docs/concepts/cache.md",
@@ -61025,13 +61071,6 @@
     },
     {
       "source": "module:magus",
-      "target": "method:magus.ls",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1
-    },
-    {
-      "source": "module:magus",
       "target": "method:magus.project",
       "relation": "contains",
       "confidence": "extracted",
@@ -61040,6 +61079,13 @@
     {
       "source": "module:magus",
       "target": "method:magus.project_graph",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:magus",
+      "target": "method:magus.projects",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
@@ -67747,7 +67793,23 @@
     },
     {
       "source": "target:docs:site-generate",
-      "target": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "doc:blog/2026-09-01-the-best-code-is-still-no-code.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "doc:blog/2026-09-08-the-console-was-an-experiment.md",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
