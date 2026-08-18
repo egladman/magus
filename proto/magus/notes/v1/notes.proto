@@ -25,6 +25,7 @@ syntax = "proto3";
 // be able to read it.
 package magus.notes.v1;
 
+import "buf/validate/validate.proto";
 import "google/protobuf/timestamp.proto";
 
 // NotesService lists the workspace's notes and reads one in full.
@@ -159,7 +160,9 @@ message StoreStatus {
 }
 
 message ListNotesRequest {
-  int32 page_size = 1;   // wired for forward-compat; the store returns all notes today
+  // Bounded at the same tier as ListActivity and ListMemories; see ListMemoriesRequest for
+  // why the three keep their own flat field rather than sharing a pagination message.
+  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 1000}];
   string page_token = 2;
 }
 
@@ -172,10 +175,13 @@ message ListNotesResponse {
 }
 
 message GetNoteRequest {
-  string name = 1;
+  // Non-empty: an empty name matches no note in either store.
+  string name = 1 [(buf.validate.field).string.min_len = 1];
   // scope disambiguates a name that exists in both stores. Required: guessing which store was
   // meant is the mistake worth refusing, since the two mean different things to a reader.
-  Scope scope = 2;
+  // `required` on a field without presence rejects the zero value, so SCOPE_UNSPECIFIED -
+  // the "caller did not choose" case this refuses to guess at - is what it turns away.
+  Scope scope = 2 [(buf.validate.field).required = true];
 }
 
 message GetNoteResponse {

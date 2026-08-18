@@ -28,6 +28,7 @@
 package memoryv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	fieldmaskpb "google.golang.org/protobuf/types/known/fieldmaskpb"
@@ -315,9 +316,14 @@ func (x *Memory) GetUpdateTime() *timestamppb.Timestamp {
 }
 
 type ListMemoriesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"` // wired for forward-compat; the store returns all records today
-	PageToken     string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Bounded at the same tier as ListActivity rather than left open: the store ignores the
+	// field today, so the ceiling costs nothing now and is the request a paginating store
+	// would have to honor later. Not shared with the other list RPCs as a common message -
+	// AIP-158 keeps these flat, and a shared one could carry only a single ceiling for
+	// every caller (ListEvents deliberately allows 5000).
+	PageSize      int32  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -419,8 +425,10 @@ func (x *ListMemoriesResponse) GetNextPageToken() string {
 }
 
 type UpdateMemoryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Memory        *Memory                `protobuf:"bytes,1,opt,name=memory,proto3" json:"memory,omitempty"`                                  // memory.name is the identity to upsert
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Required: the payload IS the request. An upsert with no memory names nothing to
+	// create and carries nothing to write, so it can only be a client bug.
+	Memory        *Memory                `protobuf:"bytes,1,opt,name=memory,proto3" json:"memory,omitempty"`
 	UpdateMask    *fieldmaskpb.FieldMask `protobuf:"bytes,2,opt,name=update_mask,json=updateMask,proto3" json:"update_mask,omitempty"`        // empty = full replace (the only mode today)
 	AllowMissing  bool                   `protobuf:"varint,3,opt,name=allow_missing,json=allowMissing,proto3" json:"allow_missing,omitempty"` // true => create when absent (AIP-134 upsert)
 	unknownFields protoimpl.UnknownFields
@@ -523,9 +531,11 @@ func (x *UpdateMemoryResponse) GetMemory() *Memory {
 }
 
 type DeleteMemoryRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	AllowMissing  bool                   `protobuf:"varint,2,opt,name=allow_missing,json=allowMissing,proto3" json:"allow_missing,omitempty"` // true => deleting an absent record is a no-op
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Non-empty: an empty name identifies no record, and allow_missing would then swallow it
+	// as a silent no-op rather than reporting the mistake.
+	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	AllowMissing  bool   `protobuf:"varint,2,opt,name=allow_missing,json=allowMissing,proto3" json:"allow_missing,omitempty"` // true => deleting an absent record is a no-op
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -782,7 +792,7 @@ var File_magus_memory_v1_memory_proto protoreflect.FileDescriptor
 
 const file_magus_memory_v1_memory_proto_rawDesc = "" +
 	"\n" +
-	"\x1cmagus/memory/v1/memory.proto\x12\x0fmagus.memory.v1\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"W\n" +
+	"\x1cmagus/memory/v1/memory.proto\x12\x0fmagus.memory.v1\x1a\x1bbuf/validate/validate.proto\x1a google/protobuf/field_mask.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"W\n" +
 	"\tMemoryRef\x122\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x1e.magus.memory.v1.MemoryRefKindR\x04kind\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\"\xc3\x02\n" +
@@ -798,23 +808,24 @@ const file_magus_memory_v1_memory_proto_rawDesc = "" +
 	"\vcreate_time\x18\a \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"createTime\x12;\n" +
 	"\vupdate_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"updateTime\"Q\n" +
-	"\x13ListMemoriesRequest\x12\x1b\n" +
-	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"updateTime\"]\n" +
+	"\x13ListMemoriesRequest\x12'\n" +
+	"\tpage_size\x18\x01 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bpageSize\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\x02 \x01(\tR\tpageToken\"s\n" +
 	"\x14ListMemoriesResponse\x123\n" +
 	"\bmemories\x18\x01 \x03(\v2\x17.magus.memory.v1.MemoryR\bmemories\x12&\n" +
-	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xa8\x01\n" +
-	"\x13UpdateMemoryRequest\x12/\n" +
-	"\x06memory\x18\x01 \x01(\v2\x17.magus.memory.v1.MemoryR\x06memory\x12;\n" +
+	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"\xb0\x01\n" +
+	"\x13UpdateMemoryRequest\x127\n" +
+	"\x06memory\x18\x01 \x01(\v2\x17.magus.memory.v1.MemoryB\x06\xbaH\x03\xc8\x01\x01R\x06memory\x12;\n" +
 	"\vupdate_mask\x18\x02 \x01(\v2\x1a.google.protobuf.FieldMaskR\n" +
 	"updateMask\x12#\n" +
 	"\rallow_missing\x18\x03 \x01(\bR\fallowMissing\"G\n" +
 	"\x14UpdateMemoryResponse\x12/\n" +
-	"\x06memory\x18\x01 \x01(\v2\x17.magus.memory.v1.MemoryR\x06memory\"N\n" +
-	"\x13DeleteMemoryRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12#\n" +
+	"\x06memory\x18\x01 \x01(\v2\x17.magus.memory.v1.MemoryR\x06memory\"W\n" +
+	"\x13DeleteMemoryRequest\x12\x1b\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x12#\n" +
 	"\rallow_missing\x18\x02 \x01(\bR\fallowMissing\"\x16\n" +
 	"\x14DeleteMemoryResponse\"\x12\n" +
 	"\x10GetCursorRequest\"-\n" +

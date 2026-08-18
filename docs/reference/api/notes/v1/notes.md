@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, notesservice]
 
 NotesService lists the workspace's notes and reads one in full.
 
-Package `magus.notes.v1`, defined in `proto/magus/notes/v1/notes.proto`. Source: [notes.proto:31](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L31). Part of the [daemon API](../../index.md).
+Package `magus.notes.v1`, defined in `proto/magus/notes/v1/notes.proto`. Source: [notes.proto:32](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L32). Part of the [daemon API](../../index.md).
 
 ## Methods
 
@@ -17,7 +17,7 @@ Package `magus.notes.v1`, defined in `proto/magus/notes/v1/notes.proto`. Source:
 
 ListNotes returns every note in both declared stores, each with its anchors already resolved. Paginated by contract so growth never forces a breaking change, though the store returns all notes today (bounded by the store's own scan cap).
 
-`POST /magus.notes.v1.NotesService/ListNotes`: unary. Source: [notes.proto:35](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L35).
+`POST /magus.notes.v1.NotesService/ListNotes`: unary. Source: [notes.proto:36](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L36).
 
 Takes [ListNotesRequest](#listnotesrequest), returns [ListNotesResponse](#listnotesresponse).
 
@@ -25,7 +25,7 @@ Takes [ListNotesRequest](#listnotesrequest), returns [ListNotesResponse](#listno
 
 GetNote returns one note by scope and name, including its body.
 
-`POST /magus.notes.v1.NotesService/GetNote`: unary. Source: [notes.proto:37](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L37).
+`POST /magus.notes.v1.NotesService/GetNote`: unary. Source: [notes.proto:38](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L38).
 
 Takes [GetNoteRequest](#getnoterequest), returns [GetNoteResponse](#getnoteresponse).
 
@@ -35,7 +35,7 @@ Takes [GetNoteRequest](#getnoterequest), returns [GetNoteResponse](#getnoterespo
 
 Anchor is one typed attachment from a note to a graph entity, with the result of checking it. degrades\_to names the coarser anchor a dangling one falls back to - the demotion is reported rather than guessed, because nothing here searches for a renamed symbol: a low-confidence match is worse than an admitted failure.
 
-Source: [notes.proto:99](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L99).
+Source: [notes.proto:100](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L100).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -49,18 +49,18 @@ Used by: [GetNote (response)](notes.md#getnote), [ListNotes (response)](notes.md
 
 ### GetNoteRequest
 
-Source: [notes.proto:174](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L174).
+Source: [notes.proto:177](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L177).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
-| `name` | string | 1 |  |
-| `scope` | [Scope](#scope) | 2 | scope disambiguates a name that exists in both stores. Required: guessing which store was meant is the mistake worth refusing, since the two mean different things to a reader. |
+| `name` | string | 1 | _string.min_len: 1_ Non-empty: an empty name matches no note in either store. |
+| `scope` | [Scope](#scope) | 2 | _required_ scope disambiguates a name that exists in both stores. Required: guessing which store was meant is the mistake worth refusing, since the two mean different things to a reader. `required` on a field without presence rejects the zero value, so SCOPE\_UNSPECIFIED - the "caller did not choose" case this refuses to guess at - is what it turns away. |
 
 Used by: [GetNote (request)](notes.md#getnote).
 
 ### GetNoteResponse
 
-Source: [notes.proto:181](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L181).
+Source: [notes.proto:187](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L187).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -70,18 +70,18 @@ Used by: [GetNote (response)](notes.md#getnote).
 
 ### ListNotesRequest
 
-Source: [notes.proto:161](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L161).
+Source: [notes.proto:162](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L162).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
-| `page_size` | int32 | 1 | wired for forward-compat; the store returns all notes today |
+| `page_size` | int32 | 1 | _int32.lte: 1000; int32.gte: 0_ Bounded at the same tier as ListActivity and ListMemories; see ListMemoriesRequest for why the three keep their own flat field rather than sharing a pagination message. |
 | `page_token` | string | 2 |  |
 
 Used by: [ListNotes (request)](notes.md#listnotes).
 
 ### ListNotesResponse
 
-Source: [notes.proto:166](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L166).
+Source: [notes.proto:169](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L169).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -95,7 +95,7 @@ Used by: [ListNotes (response)](notes.md#listnotes).
 
 Note is one human-authored entry.  There is no author field, and its absence is deliberate rather than an omission: a self-attested author is forgeable by whatever wrote the file, and authorship already comes from git via the @vcs shard for the shared store. A client that wants to show who wrote a shared note should read the graph, not this field, because this field would be a claim the file makes about itself.
 
-Source: [notes.proto:119](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L119).
+Source: [notes.proto:120](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L120).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -116,7 +116,7 @@ Used by: [GetNote (response)](notes.md#getnote), [ListNotes (response)](notes.md
 
 StoreStatus reports one store's availability, so a client can tell "declared but empty" from "not declared at all" from "declared and broken" - three states that must not collapse into an empty list.
 
-Source: [notes.proto:147](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L147).
+Source: [notes.proto:148](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L148).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -134,7 +134,7 @@ Used by: [ListNotes (response)](notes.md#listnotes).
 
 AnchorKind is the closed set of things a note may attach to. Deliberately absent: any kind carrying a POSITION - a node id is checkable, so its breakage is reportable, while a line number changes on the next edit above it with nothing to detect.
 
-Source: [notes.proto:54](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L54).
+Source: [notes.proto:55](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L55).
 
 | Value | # | Description |
 |-------|---|-------------|
@@ -151,7 +151,7 @@ Used by: [GetNote (response)](notes.md#getnote), [ListNotes (response)](notes.md
 
 AnchorStatus is what checking one anchor against the workspace found.  DRIFTED is the case an existence check cannot catch and a reader cannot see: the anchored code still exists and quietly stopped meaning what the note says. UNVERIFIED is a real, distinct answer and must never be rendered as "fine" - it means no fingerprint was recorded (the note predates fingerprinting, or was never re-read) or none could be computed here, and reporting drift from missing data is the false positive that trains a reader to ignore every flag.
 
-Source: [notes.proto:71](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L71).
+Source: [notes.proto:72](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L72).
 
 | Value | # | Description |
 |-------|---|-------------|
@@ -167,7 +167,7 @@ Used by: [GetNote (response)](notes.md#getnote), [ListNotes (response)](notes.md
 
 Scope is which store a note lives in, and it is the axis a reader must never have to guess: the two mean different things about who can see the note.
 
-Source: [notes.proto:42](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L42).
+Source: [notes.proto:43](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L43).
 
 | Value | # | Description |
 |-------|---|-------------|
@@ -181,7 +181,7 @@ Used by: [GetNote (request)](notes.md#getnote), [GetNote (response)](notes.md#ge
 
 Staleness is whether the prose was outrun by the thing it describes.  The signal is NOT calendar age: prose about a subsystem nobody has touched is current, and decaying it by age is how a signal earns the right to be ignored. What is measured is DIVERGENCE between two commit dates. UNMEASURED is not "fresh" - it is the honest answer when VCS history is unavailable, when the prose has no history, or when there is no subject to compare against. Every private note is UNMEASURED today, because staleness is keyed by workspace-relative path and a private note's source is absolute.
 
-Source: [notes.proto:87](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L87).
+Source: [notes.proto:88](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1/notes.proto#L88).
 
 | Value | # | Description |
 |-------|---|-------------|

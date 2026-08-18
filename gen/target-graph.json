@@ -1432,6 +1432,10 @@
             },
             {
               "project": ".",
+              "glob": "proto/magus/**/*.proto"
+            },
+            {
+              "project": ".",
               "glob": "proto/gen/descriptor.binpb"
             },
             {

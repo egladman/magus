@@ -31,6 +31,7 @@
 package notesv1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -593,9 +594,11 @@ func (x *StoreStatus) GetIssues() []string {
 }
 
 type ListNotesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"` // wired for forward-compat; the store returns all notes today
-	PageToken     string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Bounded at the same tier as ListActivity and ListMemories; see ListMemoriesRequest for
+	// why the three keep their own flat field rather than sharing a pagination message.
+	PageSize      int32  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -708,9 +711,12 @@ func (x *ListNotesResponse) GetStores() []*StoreStatus {
 
 type GetNoteRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
+	// Non-empty: an empty name matches no note in either store.
+	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	// scope disambiguates a name that exists in both stores. Required: guessing which store was
 	// meant is the mistake worth refusing, since the two mean different things to a reader.
+	// `required` on a field without presence rejects the zero value, so SCOPE_UNSPECIFIED -
+	// the "caller did not choose" case this refuses to guess at - is what it turns away.
 	Scope         Scope `protobuf:"varint,2,opt,name=scope,proto3,enum=magus.notes.v1.Scope" json:"scope,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
@@ -808,7 +814,7 @@ var File_magus_notes_v1_notes_proto protoreflect.FileDescriptor
 
 const file_magus_notes_v1_notes_proto_rawDesc = "" +
 	"\n" +
-	"\x1amagus/notes/v1/notes.proto\x12\x0emagus.notes.v1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb7\x01\n" +
+	"\x1amagus/notes/v1/notes.proto\x12\x0emagus.notes.v1\x1a\x1bbuf/validate/validate.proto\x1a\x1fgoogle/protobuf/timestamp.proto\"\xb7\x01\n" +
 	"\x06Anchor\x12.\n" +
 	"\x04kind\x18\x01 \x01(\x0e2\x1a.magus.notes.v1.AnchorKindR\x04kind\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x124\n" +
@@ -835,18 +841,19 @@ const file_magus_notes_v1_notes_proto_rawDesc = "" +
 	"\x04path\x18\x03 \x01(\tR\x04path\x12\x1d\n" +
 	"\n" +
 	"note_count\x18\x04 \x01(\x05R\tnoteCount\x12\x16\n" +
-	"\x06issues\x18\x05 \x03(\tR\x06issues\"N\n" +
-	"\x10ListNotesRequest\x12\x1b\n" +
-	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\x06issues\x18\x05 \x03(\tR\x06issues\"Z\n" +
+	"\x10ListNotesRequest\x12'\n" +
+	"\tpage_size\x18\x01 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bpageSize\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\x02 \x01(\tR\tpageToken\"\x9c\x01\n" +
 	"\x11ListNotesResponse\x12*\n" +
 	"\x05notes\x18\x01 \x03(\v2\x14.magus.notes.v1.NoteR\x05notes\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x123\n" +
-	"\x06stores\x18\x03 \x03(\v2\x1b.magus.notes.v1.StoreStatusR\x06stores\"Q\n" +
-	"\x0eGetNoteRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x12+\n" +
-	"\x05scope\x18\x02 \x01(\x0e2\x15.magus.notes.v1.ScopeR\x05scope\";\n" +
+	"\x06stores\x18\x03 \x03(\v2\x1b.magus.notes.v1.StoreStatusR\x06stores\"b\n" +
+	"\x0eGetNoteRequest\x12\x1b\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name\x123\n" +
+	"\x05scope\x18\x02 \x01(\x0e2\x15.magus.notes.v1.ScopeB\x06\xbaH\x03\xc8\x01\x01R\x05scope\";\n" +
 	"\x0fGetNoteResponse\x12(\n" +
 	"\x04note\x18\x01 \x01(\v2\x14.magus.notes.v1.NoteR\x04note*C\n" +
 	"\x05Scope\x12\x15\n" +
