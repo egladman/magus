@@ -117,26 +117,26 @@ event=$(cat)
 
 case "$event" in
 *'"file_path"'*)
-	# afterFileEdit: cannot block, so a missing magus costs a warning, not safety.
-	if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
-		exit 0
-	fi
-	# Ask for the MESSAGE, not the bare decision word. Several rules judge this
-	# surface now, so a hardcoded explanation here would report the wrong one -
-	# it used to say "that file is a DECLARED OUTPUT" whatever had actually
-	# fired. The template renders the deny reason or the advise context, and
-	# nothing at all for a pass. magus re-roots the absolute path Cursor sends
-	# onto the workspace itself.
-	verdict=$(printf '%s' "$event" | jq -r '.file_path' | "$GUARD_MAGUS_BIN" hook --path --agent-name cursor \
-		-o 'template={{if eq .decision "deny"}}{{.reason}}{{else if eq .decision "advise"}}{{.context}}{{end}}' 2>/dev/null)
-	[ -n "$verdict" ] || exit 0
-	# Cursor surfaces a non-blocking hook's stderr, so the message goes there as
-	# prose rather than as a verdict it would not read. A deny cannot block here
-	# - afterFileEdit fires after the write - so it is reported as what it is.
-	printf '%s\n' "magus: $verdict" \
-		"Cursor has no pre-write hook, so this could only be reported after the fact." >&2
-	exit 0
-	;;
+    # afterFileEdit: cannot block, so a missing magus costs a warning, not safety.
+    if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
+        exit 0
+    fi
+    # Ask for the MESSAGE, not the bare decision word. Several rules judge this
+    # surface now, so a hardcoded explanation here would report the wrong one -
+    # it used to say "that file is a DECLARED OUTPUT" whatever had actually
+    # fired. The template renders the deny reason or the advise context, and
+    # nothing at all for a pass. magus re-roots the absolute path Cursor sends
+    # onto the workspace itself.
+    verdict=$(printf '%s' "$event" | jq -r '.file_path' | "$GUARD_MAGUS_BIN" hook --path --agent-name cursor \
+        -o 'template={{if eq .decision "deny"}}{{.reason}}{{else if eq .decision "advise"}}{{.context}}{{end}}' 2>/dev/null)
+    [ -n "$verdict" ] || exit 0
+    # Cursor surfaces a non-blocking hook's stderr, so the message goes there as
+    # prose rather than as a verdict it would not read. A deny cannot block here
+    # - afterFileEdit fires after the write - so it is reported as what it is.
+    printf '%s\n' "magus: $verdict" \
+        "Cursor has no pre-write hook, so this could only be reported after the fact." >&2
+    exit 0
+    ;;
 esac
 
 # beforeShellExecution. Allow on a missing magus: Cursor already fails open on a
@@ -144,8 +144,8 @@ esac
 # otherwise would give false assurance. For strict behavior, set failClosed on
 # the hook and change this to a deny.
 if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
-	printf '%s' '{"permission":"allow"}'
-	exit 0
+    printf '%s' '{"permission":"allow"}'
+    exit 0
 fi
 
 # Captured and printed rather than piped straight through, because `magus hook` exits
@@ -154,7 +154,7 @@ fi
 # allow, silently, which is the one outcome worse than not installing the guard. Cursor's
 # channel is the JSON on stdout; this exits 0 so that JSON is what it acts on.
 verdict=$(printf '%s' "$event" | jq -r '.command' | "$GUARD_MAGUS_BIN" hook --agent-name cursor \
-	-o 'template={{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}' 2>/dev/null)
+    -o 'template={{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}' 2>/dev/null)
 [ -n "$verdict" ] || verdict='{"permission":"allow"}'
 printf '%s' "$verdict"
 exit 0
