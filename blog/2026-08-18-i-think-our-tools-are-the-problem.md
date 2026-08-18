@@ -81,7 +81,7 @@ every other program in that window, so copying a stack trace out of build output
 turns into a puzzle I have to solve first.
 
 The Nx docs say the interface "is entirely controlled through keyboard
-shortcuts," and tell me to press `?` for the list. To read the output of my own
+shortcuts,"[^tui] and tell me to press `?` for the list. To read the output of my own
 build, I have to learn a keymap. It is the most asinine fucking developer
 experience I have run into in years.
 
@@ -158,7 +158,7 @@ Nx core is MIT, and I want that on the record before I complain.
 Remote caching is most of why anyone adopts a monorepo build tool, and it keeps
 moving. Community task runners, then caching behind a paid Powerpack license in
 v20, then free self-hosted plugins again in 20.8, then those deprecated in May
-2026 over a cache-poisoning vulnerability (CVE-2025-36852) that Nx says is in
+2026 over a cache-poisoning vulnerability (CVE-2025-36852)[^cve] that Nx says is in
 the packages' design and cannot be patched - and which, to be fair to Nx, they
 note affects self-hosted cache plugins across many build systems, not only
 theirs. Today the guidance
@@ -340,12 +340,12 @@ we are going to count anything, fewer lines is the number worth promoting.
 That pressure got worse this year, not better. Writing a feature is close to free
 now, so the only thing between a codebase and endless creep is somebody deciding not
 to add one. Jeff Atwood said it in 2007 and it has only gotten truer:
-[the best code is no code at all](https://blog.codinghorror.com/the-best-code-is-no-code-at-all/),
+the best code is no code at all[^atwood],
 because every line you bring into the world has to be debugged, read, understood, and
 supported. How cheap it was to write changes none of that.
 
 There is research on why we are bad at this.
-[People systematically overlook subtractive changes](https://www.nature.com/articles/s41586-021-03380-y),
+people systematically overlook subtractive changes[^subtract],
 a 2021 Nature paper, found that people handed a problem reach for what they can add
 and barely consider what they could take away, even where removing something is the
 better answer. It has a name, additive bias, and it turns up in every code review I
@@ -453,8 +453,7 @@ consider best practice is not mine to settle, and sometimes the right answer for
 somebody is the half fix they already know is a half fix, because the constraint
 they are working under is a delivery date rather than an engineering one.
 
-Security worked this out fifty years ago. [Saltzer and
-Schroeder](https://web.mit.edu/Saltzer/www/publications/protection/) listed
+Security worked this out fifty years ago. Saltzer and Schroeder[^saltzer] listed
 psychological acceptability among their design principles in 1975: if the
 protection mechanism makes the work harder than going without it, people route
 around the mechanism, and the route they find is worse than whatever you were
@@ -603,8 +602,7 @@ I should own where that taste comes from. I love Go for the same reason, that
 there is usually one way to write a thing, and plenty of people hate Go for
 exactly that. This is a preference of mine, not a proof of anything.
 
-There is a Go proverb for it: [clear is better than
-clever](https://go-proverbs.github.io/). Clever code scratches a real itch. It is
+There is a Go proverb for it: clear is better than clever[^proverbs]. Clever code scratches a real itch. It is
 satisfying to write and it feels like proof you are good at this. It is also, almost
 by definition, a departure from convention, which means the next person has to work
 out what you did and why before they can safely touch it. Good code is code someone
@@ -686,7 +684,7 @@ working on for fifty years. Partition work into units that do not conflict. Know
 what a change affects so you can skip the rest. Cache on content instead of
 timestamps. Give a process the smallest amount of state it needs to do its job.
 Caching is hard. Concurrency is hard. The line usually attributed to Phil Karlton,
-that there are [two hard things in computer science](https://martinfowler.com/bliki/TwoHardThings.html),
+that there are two hard things in computer science[^karlton],
 cache invalidation and naming things, has been a joke for decades precisely because
 it keeps being true. These are old, hard problems with a lot of prior art behind
 them, not new categories that showed up with agents. I am not trying to talk down to
@@ -886,3 +884,25 @@ where it came from, and the agents will come along for the ride.
 
 If any of this made you curious about the tool itself, there is
 [more about magus](https://eli.gladman.cc/magus/).
+
+[^tui]: Nx documentation, [Terminal UI](https://nx.dev/docs/kb/terminal-ui).
+
+[^cve]: [CVE-2025-36852](https://nvd.nist.gov/vuln/detail/CVE-2025-36852), a
+    first-to-cache-wins flaw letting artifacts built in untrusted environments
+    poison the cache trusted ones read.
+
+[^atwood]: Jeff Atwood, [The Best Code is No Code At
+    All](https://blog.codinghorror.com/the-best-code-is-no-code-at-all/), 2007.
+
+[^subtract]: Adams, Converse, Hales and Klotz, [People systematically overlook
+    subtractive changes](https://www.nature.com/articles/s41586-021-03380-y),
+    Nature 592, 2021.
+
+[^saltzer]: Saltzer and Schroeder, [The Protection of Information in Computer
+    Systems](https://web.mit.edu/Saltzer/www/publications/protection/), 1975.
+
+[^proverbs]: [Go Proverbs](https://go-proverbs.github.io/), Rob Pike.
+
+[^karlton]: Attributed to Phil Karlton; Martin Fowler has [collected what is
+    actually known](https://martinfowler.com/bliki/TwoHardThings.html) about its
+    provenance.
