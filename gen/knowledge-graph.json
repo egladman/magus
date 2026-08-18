@@ -11698,7 +11698,7 @@
       "id": "function:libs/diagram/diagram.buzz:layered",
       "kind": "function",
       "label": "layered",
-      "source": "libs/diagram/diagram.buzz:1126",
+      "source": "libs/diagram/diagram.buzz:1132",
       "attrs": {
         "exported": "true"
       }
@@ -11707,7 +11707,7 @@
       "id": "function:libs/diagram/diagram.buzz:layoutWithStagger",
       "kind": "function",
       "label": "layoutWithStagger",
-      "source": "libs/diagram/diagram.buzz:1136"
+      "source": "libs/diagram/diagram.buzz:1142"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:lightPalette",
