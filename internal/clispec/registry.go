@@ -747,7 +747,7 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 							Flags: []Flag{
 								{Name: "name", Kind: FlagString, Doc: "Name for this connector token (default: connector-N)"},
 								{Name: "expires", Kind: FlagString, Doc: "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)"},
-								{Name: "scope", Kind: FlagString, Doc: "Surface the token may reach: mcp (default) or console. They are separate: an mcp token is rejected by the console and a console token is rejected by /mcp"},
+								{Name: "scope", Kind: FlagString, Doc: "Surface the token may reach: mcp (default), console, or console-read. They are separate: an mcp token is rejected by the console, a console token is rejected by /mcp, and console-read is a viewer that cannot change anything"},
 							},
 						},
 						{Name: "revoke", Short: "Revoke a connector token"},

@@ -81,8 +81,14 @@ const (
 	// ScopeMCP reaches /mcp and nothing else. The tier external agents hold.
 	ScopeMCP ClientScope = "mcp"
 	// ScopeConsole reaches the console read/control surfaces and never /mcp, so a
-	// credential handed to a browser cannot drive the agent tool surface.
+	// credential handed to a browser cannot drive the agent tool surface. This is the
+	// tier that can actually change things: submit jobs, edit memory, open a share.
 	ScopeConsole ClientScope = "console"
+	// ScopeConsoleRead is the VIEWER tier: the console's read surface and nothing
+	// else. It is the same route set the LAN share listener exposes (daemon.go's
+	// shareGuarded), defined once and reused, so "what a viewer may see" has exactly
+	// one answer whether the viewer is a phone or a second browser on loopback.
+	ScopeConsoleRead ClientScope = "console-read"
 )
 
 type ConnectorToken struct {

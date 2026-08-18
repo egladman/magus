@@ -223,6 +223,31 @@ func (s *ConnectorSuite) TestConsoleRejectsConnectorTokens() {
 	assert.True(t, VerifyMCPBearer(cli))
 }
 
+// The console's own two tiers: a full console token may change things, a viewer token
+// may only read. The write tier is a SUPERSET of the read tier, not a sibling, so a
+// full console token passes the read guard too - otherwise every read route would need
+// to accept both explicitly and one omission would lock the console out of itself.
+func (s *ConnectorSuite) TestConsoleWriteAndViewerTiers() {
+	t := s.T()
+
+	web, _, err := s.store().Create("pwa", time.Time{}, ScopeConsole)
+	require.NoError(t, err)
+	viewer, _, err := s.store().Create("phone", time.Time{}, ScopeConsoleRead)
+	require.NoError(t, err)
+
+	// The viewer reads and cannot write.
+	assert.True(t, VerifyConsoleReadBearer(viewer), "a viewer token must reach the read routes")
+	assert.False(t, VerifyConsoleBearer(viewer), "a viewer token must NOT reach a mutating route")
+
+	// The write tier covers both.
+	assert.True(t, VerifyConsoleBearer(web))
+	assert.True(t, VerifyConsoleReadBearer(web), "the write tier is a superset of the read tier")
+
+	// Neither console tier reaches the agent surface.
+	assert.False(t, VerifyMCPBearer(web), "a console token must NOT reach /mcp")
+	assert.False(t, VerifyMCPBearer(viewer), "a viewer token must NOT reach /mcp")
+}
+
 // TestConcurrentCreateNoLostUpdates proves N independent creates all survive.
 // It used to prove the store lock closed a read-modify-write race; there is no
 // longer a read-modify-write to race, because each create writes its own file and

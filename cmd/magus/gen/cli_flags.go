@@ -861,7 +861,7 @@ func BindConfigMCPConnectorCreate(fs *flag.FlagSet) *ConfigMCPConnectorCreateFla
 	var f ConfigMCPConnectorCreateFlags
 	fs.StringVar(&f.Name, FlagConfigMCPConnectorCreateName, "", "Name for this connector token (default: connector-N)")
 	fs.StringVar(&f.Expires, FlagConfigMCPConnectorCreateExpires, "", "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)")
-	fs.StringVar(&f.Scope, FlagConfigMCPConnectorCreateScope, "", "Surface the token may reach: mcp (default) or console. They are separate: an mcp token is rejected by the console and a console token is rejected by /mcp")
+	fs.StringVar(&f.Scope, FlagConfigMCPConnectorCreateScope, "", "Surface the token may reach: mcp (default), console, or console-read. They are separate: an mcp token is rejected by the console, a console token is rejected by /mcp, and console-read is a viewer that cannot change anything")
 	return &f
 }
 

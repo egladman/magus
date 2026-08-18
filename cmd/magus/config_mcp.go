@@ -272,8 +272,10 @@ func configMCPConnectorCreate(args []string) error {
 	case "", string(auth.ScopeMCP):
 	case string(auth.ScopeConsole):
 		scope = auth.ScopeConsole
+	case string(auth.ScopeConsoleRead):
+		scope = auth.ScopeConsoleRead
 	default:
-		return usagef("magus config mcp connector create: unknown --scope %q (want mcp or console)", cf.Scope)
+		return usagef("magus config mcp connector create: unknown --scope %q (want mcp, console, or console-read)", cf.Scope)
 	}
 
 	store, err := auth.LoadConnectorStore()
@@ -309,9 +311,13 @@ func configMCPConnectorCreate(args []string) error {
 	fmt.Fprintln(os.Stderr, "  Authorization: Bearer <token>")
 	// The two scopes reach disjoint surfaces, so naming the wrong one here would send
 	// the reader to an endpoint that will reject the token they just minted.
-	if c.EffectiveScope() == auth.ScopeConsole {
+	switch c.EffectiveScope() {
+	case auth.ScopeConsole:
 		fmt.Fprintln(os.Stderr, "Scope console: the daemon's console surfaces only. It is REJECTED at /mcp.")
-	} else {
+	case auth.ScopeConsoleRead:
+		fmt.Fprintln(os.Stderr, "Scope console-read: the console's READ routes only. It cannot submit jobs,")
+		fmt.Fprintln(os.Stderr, "edit memory, or open a share, and it is REJECTED at /mcp.")
+	default:
 		fmt.Fprintln(os.Stderr, "Scope mcp: the daemon's /mcp endpoint only. It is REJECTED by the console.")
 	}
 	return nil

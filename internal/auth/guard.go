@@ -21,9 +21,10 @@ import (
 //	                revoke credentials (privilege self-replication) - and, since
 //	                this split, never the console either.
 //	console token   the PWA's credential: the console read/control surfaces and
-//	                never /mcp. Stored beside connector tokens and told apart by
-//	                ClientScope, which the verifiers filter on - one store, two
-//	                surfaces, no overlap.
+//	                never /mcp. Two tiers - ScopeConsole may change things,
+//	                ScopeConsoleRead is a viewer and reaches only the read routes.
+//	                Stored beside connector tokens and told apart by ClientScope,
+//	                which the verifiers filter on: one store, no overlap.
 //	share token     read-only viewer credential: lives solely on the ephemeral
 //	                LAN share listener (its own per-session verifier); no verifier
 //	                here ever accepts it.
@@ -64,6 +65,24 @@ func VerifyConsoleBearer(presented string) bool {
 		return true
 	}
 	if store, err := LoadConnectorStore(); err == nil && store.VerifyScope(presented, ScopeConsole) {
+		return true
+	}
+	return false
+}
+
+// VerifyConsoleReadBearer guards the console's READ surface: the operator tier, a
+// full console token, or a viewer token (ScopeConsoleRead).
+//
+// A viewer token is accepted HERE and nowhere else, which is what makes it a viewer:
+// the mutating console mounts (JobService, MemoryService, the share trigger) use
+// VerifyConsoleBearer, which does not consult ScopeConsoleRead, so a leaked viewer
+// credential can read the console and change nothing. A full console token is
+// accepted too - the write tier is a superset of the read tier, not a sibling.
+func VerifyConsoleReadBearer(presented string) bool {
+	if VerifyConsoleBearer(presented) {
+		return true
+	}
+	if store, err := LoadConnectorStore(); err == nil && store.VerifyScope(presented, ScopeConsoleRead) {
 		return true
 	}
 	return false

@@ -364,7 +364,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 				if u, uerr := url.Parse(siteOrigin); uerr == nil && u.Host != "" {
 					metricsAllowed = allowed.Allow(u.Host)
 				}
-				httpServer.Handle(mPath, httpx.GuardRebind(metricsAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleBearer, mHandler))))
+				httpServer.Handle(mPath, httpx.GuardRebind(metricsAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, mHandler))))
 				// MetricsService is a read-only stream, so it joins the share read surface.
 				shareGuarded[mPath] = mHandler
 				log.InfoContext(ctx, "[BRIDGE] metrics service mounted", slog.String("path", mPath))
@@ -381,7 +381,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			if u, uerr := url.Parse(siteOrigin); uerr == nil && u.Host != "" {
 				activityAllowed = allowed.Allow(u.Host)
 			}
-			httpServer.Handle(activityPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleBearer, activityHandler))))
+			httpServer.Handle(activityPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, activityHandler))))
 			// ActivityService.ListActivity is read-only, so it joins the share read surface.
 			shareGuarded[activityPath] = activityHandler
 			log.InfoContext(ctx, "[BRIDGE] activity service mounted", slog.String("path", activityPath))
@@ -392,7 +392,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// Same cross-origin guards as the other read services (the dashboard is a hosted-site
 			// browser client) and read-only, so it joins the share read surface too.
 			statusPath, statusConnectHandler := statusv1alpha1connect.NewStatusServiceHandler(status.NewConnectService(svc, opts.Build, log))
-			httpServer.Handle(statusPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleBearer, statusConnectHandler))))
+			httpServer.Handle(statusPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, statusConnectHandler))))
 			shareGuarded[statusPath] = statusConnectHandler
 			log.InfoContext(ctx, "[BRIDGE] status service mounted", slog.String("path", statusPath))
 
@@ -406,7 +406,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// processes on the operator's machine. The console reaches it over the
 			// authenticated loopback route.
 			toolPath, toolConnectHandler := toolv1alpha1connect.NewToolServiceHandler(toolhandler.NewService(opts.Magus))
-			httpServer.Handle(toolPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleBearer, toolConnectHandler))))
+			httpServer.Handle(toolPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, toolConnectHandler))))
 			log.InfoContext(ctx, "[BRIDGE] tool service mounted", slog.String("path", toolPath))
 
 			// Insight Connect service: the typed twin of the JSON /api/v1/insight route, reading
@@ -416,9 +416,27 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// share read surface too - the LAN "share to phone" dashboard renders insight, and it
 			// reaches it over this route now rather than the JSON one.
 			insightPath, insightConnectHandler := insightv1alpha1connect.NewInsightServiceHandler(insighthandler.NewService(svc))
-			httpServer.Handle(insightPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleBearer, insightConnectHandler))))
+			httpServer.Handle(insightPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, insightConnectHandler))))
 			shareGuarded[insightPath] = insightConnectHandler
 			log.InfoContext(ctx, "[BRIDGE] insight service mounted", slog.String("path", insightPath))
+
+			// The four plain-JSON read routes are ALSO mounted here individually, on the
+			// viewer-accepting guard. They are already reachable through the /api/ mux above,
+			// but that mux is mixed (it carries the diff session's mutating ops), so it must
+			// stay on the write tier. Registering these paths explicitly gives a viewer token
+			// the log and output surface - the whole point of a viewer - without widening the
+			// mux: net/http prefers the longer pattern, so /api/v1/events wins over /api/.
+			//
+			// They are the SAME handlers shareGuarded hands the LAN listener, so "what a viewer
+			// may see" has one definition and cannot drift between a phone and a loopback tab.
+			for path, h := range map[string]http.Handler{
+				"/api/v1/events":  eventsH,
+				"/api/v1/insight": insightH,
+				"/api/v1/outputs": outputsH,
+				"/api/v1/output":  outputH,
+			} {
+				httpServer.Handle(path, httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyConsoleReadBearer, h)))
+			}
 
 			// Job control service: the daemon's one MUTATING console surface (submit graph sync,
 			// rotate the activity trail, clear the cache). Mounted behind the same bearer guard and
@@ -533,7 +551,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// private store: this is the only door that serves notes nothing else attributes.
 			notesAudit := connect.WithInterceptors(trailrpc.Interceptor(opts.Magus.CacheDir(), "operator", trail.KindNotes, trailrpc.WithAuditReads()))
 			notesPath, notesHandler := notesv1alpha1connect.NewNotesServiceHandler(noteshandler.NewService(opts.Magus, opts.Config), notesAudit)
-			httpServer.Handle(notesPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleBearer, notesHandler))))
+			httpServer.Handle(notesPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, notesHandler))))
 			log.InfoContext(ctx, "[BRIDGE] notes service mounted", slog.String("path", notesPath))
 
 			log.InfoContext(ctx, "[BRIDGE] console mounted", slog.String("addr", addr.String()))
