@@ -58,6 +58,18 @@ export function cacheRateTile(): Tile {
         rate.push(null);
         continue;
       }
+      // An unmeasured endpoint has no difference to take. Same gap, same reason as the
+      // source boundary above: a rate needs two real readings, and inventing a zero for
+      // the missing one would report "no cache activity" for a minute nobody observed.
+      if (
+        a.cacheHits === null ||
+        b.cacheHits === null ||
+        a.cacheMisses === null ||
+        b.cacheMisses === null
+      ) {
+        rate.push(null);
+        continue;
+      }
       const dh = Math.max(0, b.cacheHits - a.cacheHits);
       const dm = Math.max(0, b.cacheMisses - a.cacheMisses);
       const total = dh + dm;

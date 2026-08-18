@@ -4,16 +4,17 @@ import (
 	"testing"
 
 	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1"
+	"google.golang.org/protobuf/proto"
 )
 
 func sample(runs int64) *metricsv1.Sample {
-	return &metricsv1.Sample{TargetRuns: runs}
+	return &metricsv1.Sample{TargetRuns: proto.Int64(runs)}
 }
 
 func runsOf(samples []*metricsv1.Sample) []int64 {
 	out := make([]int64, len(samples))
 	for i, s := range samples {
-		out[i] = s.TargetRuns
+		out[i] = s.GetTargetRuns()
 	}
 	return out
 }

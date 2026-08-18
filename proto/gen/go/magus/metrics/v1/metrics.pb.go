@@ -1152,15 +1152,29 @@ func (x *Backfill) GetSamples() []*Sample {
 // Sample is one point in the rolling utilization/activity history. The daemon appends one
 // per tick; the dashboard diffs adjacent samples for per-interval rates and colors one grid
 // square per sample by utilization.
+//
+// Every field carries EXPLICIT PRESENCE, and that is the whole point of the message: a tick
+// whose pool read or metric collection failed must record that it did not measure, never a
+// zero. Zero is a measurement. An unset counter in a CUMULATIVE series is the dangerous case -
+// a reader diffing adjacent samples sees one large negative step (indistinguishable from a
+// counter reset) followed by one enormous positive step, so a single failed read corrupts the
+// rate on both sides of it. capacity makes the same point in miniature: 0 already means
+// "unlimited", so a zero written for "we could not read the pool" is not merely imprecise, it
+// asserts the opposite of what happened.
+//
+// This is the rule STALENESS_UNMEASURED, VERDICT_UNKNOWN and ANCHOR_STATUS_UNVERIFIED state
+// in the sibling contracts: an unmeasured value must never render as a measured one. A client
+// MUST render an unset field as a break in the series, never as zero and never by carrying the
+// previous value forward.
 type Sample struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	SampleTime    *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=sample_time,json=sampleTime,proto3" json:"sample_time,omitempty"`
-	Running       int32                  `protobuf:"varint,2,opt,name=running,proto3" json:"running,omitempty"`                            // pool slots running at this tick
-	Capacity      int32                  `protobuf:"varint,3,opt,name=capacity,proto3" json:"capacity,omitempty"`                          // pool capacity (0 = unlimited)
-	Queued        int32                  `protobuf:"varint,4,opt,name=queued,proto3" json:"queued,omitempty"`                              // tasks queued for a slot
-	CacheHits     int64                  `protobuf:"varint,5,opt,name=cache_hits,json=cacheHits,proto3" json:"cache_hits,omitempty"`       // cumulative; diff adjacent samples for a hit rate
-	CacheMisses   int64                  `protobuf:"varint,6,opt,name=cache_misses,json=cacheMisses,proto3" json:"cache_misses,omitempty"` // cumulative
-	TargetRuns    int64                  `protobuf:"varint,7,opt,name=target_runs,json=targetRuns,proto3" json:"target_runs,omitempty"`    // cumulative target executions
+	Running       *int32                 `protobuf:"varint,2,opt,name=running,proto3,oneof" json:"running,omitempty"`                            // pool slots running at this tick; unset = pool unreadable
+	Capacity      *int32                 `protobuf:"varint,3,opt,name=capacity,proto3,oneof" json:"capacity,omitempty"`                          // pool capacity (0 = unlimited); unset = pool unreadable
+	Queued        *int32                 `protobuf:"varint,4,opt,name=queued,proto3,oneof" json:"queued,omitempty"`                              // tasks queued for a slot; unset = pool unreadable
+	CacheHits     *int64                 `protobuf:"varint,5,opt,name=cache_hits,json=cacheHits,proto3,oneof" json:"cache_hits,omitempty"`       // cumulative; diff adjacent samples for a hit rate
+	CacheMisses   *int64                 `protobuf:"varint,6,opt,name=cache_misses,json=cacheMisses,proto3,oneof" json:"cache_misses,omitempty"` // cumulative
+	TargetRuns    *int64                 `protobuf:"varint,7,opt,name=target_runs,json=targetRuns,proto3,oneof" json:"target_runs,omitempty"`    // cumulative target executions
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1203,43 +1217,43 @@ func (x *Sample) GetSampleTime() *timestamppb.Timestamp {
 }
 
 func (x *Sample) GetRunning() int32 {
-	if x != nil {
-		return x.Running
+	if x != nil && x.Running != nil {
+		return *x.Running
 	}
 	return 0
 }
 
 func (x *Sample) GetCapacity() int32 {
-	if x != nil {
-		return x.Capacity
+	if x != nil && x.Capacity != nil {
+		return *x.Capacity
 	}
 	return 0
 }
 
 func (x *Sample) GetQueued() int32 {
-	if x != nil {
-		return x.Queued
+	if x != nil && x.Queued != nil {
+		return *x.Queued
 	}
 	return 0
 }
 
 func (x *Sample) GetCacheHits() int64 {
-	if x != nil {
-		return x.CacheHits
+	if x != nil && x.CacheHits != nil {
+		return *x.CacheHits
 	}
 	return 0
 }
 
 func (x *Sample) GetCacheMisses() int64 {
-	if x != nil {
-		return x.CacheMisses
+	if x != nil && x.CacheMisses != nil {
+		return *x.CacheMisses
 	}
 	return 0
 }
 
 func (x *Sample) GetTargetRuns() int64 {
-	if x != nil {
-		return x.TargetRuns
+	if x != nil && x.TargetRuns != nil {
+		return *x.TargetRuns
 	}
 	return 0
 }
@@ -1359,18 +1373,25 @@ const file_magus_metrics_v1_metrics_proto_rawDesc = "" +
 	"\venv_dropped\x18\t \x01(\x03R\n" +
 	"envDropped\">\n" +
 	"\bBackfill\x122\n" +
-	"\asamples\x18\x01 \x03(\v2\x18.magus.metrics.v1.SampleR\asamples\"\xf6\x01\n" +
+	"\asamples\x18\x01 \x03(\v2\x18.magus.metrics.v1.SampleR\asamples\"\xe8\x02\n" +
 	"\x06Sample\x12;\n" +
 	"\vsample_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"sampleTime\x12\x18\n" +
-	"\arunning\x18\x02 \x01(\x05R\arunning\x12\x1a\n" +
-	"\bcapacity\x18\x03 \x01(\x05R\bcapacity\x12\x16\n" +
-	"\x06queued\x18\x04 \x01(\x05R\x06queued\x12\x1d\n" +
+	"sampleTime\x12\x1d\n" +
+	"\arunning\x18\x02 \x01(\x05H\x00R\arunning\x88\x01\x01\x12\x1f\n" +
+	"\bcapacity\x18\x03 \x01(\x05H\x01R\bcapacity\x88\x01\x01\x12\x1b\n" +
+	"\x06queued\x18\x04 \x01(\x05H\x02R\x06queued\x88\x01\x01\x12\"\n" +
 	"\n" +
-	"cache_hits\x18\x05 \x01(\x03R\tcacheHits\x12!\n" +
-	"\fcache_misses\x18\x06 \x01(\x03R\vcacheMisses\x12\x1f\n" +
-	"\vtarget_runs\x18\a \x01(\x03R\n" +
-	"targetRuns2\xcd\x01\n" +
+	"cache_hits\x18\x05 \x01(\x03H\x03R\tcacheHits\x88\x01\x01\x12&\n" +
+	"\fcache_misses\x18\x06 \x01(\x03H\x04R\vcacheMisses\x88\x01\x01\x12$\n" +
+	"\vtarget_runs\x18\a \x01(\x03H\x05R\n" +
+	"targetRuns\x88\x01\x01B\n" +
+	"\n" +
+	"\b_runningB\v\n" +
+	"\t_capacityB\t\n" +
+	"\a_queuedB\r\n" +
+	"\v_cache_hitsB\x0f\n" +
+	"\r_cache_missesB\x0e\n" +
+	"\f_target_runs2\xcd\x01\n" +
 	"\x0eMetricsService\x12W\n" +
 	"\n" +
 	"GetMetrics\x12#.magus.metrics.v1.GetMetricsRequest\x1a$.magus.metrics.v1.GetMetricsResponse\x12b\n" +
@@ -1442,6 +1463,7 @@ func file_magus_metrics_v1_metrics_proto_init() {
 		(*StreamMetricsResponse_Backfill)(nil),
 		(*StreamMetricsResponse_Snapshot)(nil),
 	}
+	file_magus_metrics_v1_metrics_proto_msgTypes[12].OneofWrappers = []any{}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
 		File: protoimpl.DescBuilder{

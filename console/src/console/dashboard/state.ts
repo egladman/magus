@@ -555,24 +555,28 @@ export function mapSnapshot(snap: Snapshot): MetricsView {
 
 export type CacheSrc = "metrics" | "status";
 
+// A null field is UNMEASURED: the daemon's pool read or metric collection failed on that
+// tick. It is not zero, and a renderer must not draw it as one - an idle-looking square and
+// a square nobody measured are different facts. The live status feed always measures, so
+// nulls only ever arrive on the backfill.
 export interface SampleView {
   at: number; // ms
-  running: number;
-  capacity: number; // 0 = unlimited
-  queued: number;
-  cacheHits: number;
-  cacheMisses: number;
+  running: number | null;
+  capacity: number | null; // 0 = unlimited, null = unmeasured
+  queued: number | null;
+  cacheHits: number | null;
+  cacheMisses: number | null;
   cacheSrc: CacheSrc; // baseline source of cacheHits/cacheMisses
 }
 
 export function mapSample(s: ProtoSample): SampleView {
   return {
     at: tsMillisOrNow(s.sampleTime),
-    running: s.running,
-    capacity: s.capacity,
-    queued: s.queued,
-    cacheHits: Number(s.cacheHits),
-    cacheMisses: Number(s.cacheMisses),
+    running: s.running ?? null,
+    capacity: s.capacity ?? null,
+    queued: s.queued ?? null,
+    cacheHits: s.cacheHits === undefined ? null : Number(s.cacheHits),
+    cacheMisses: s.cacheMisses === undefined ? null : Number(s.cacheMisses),
     cacheSrc: "metrics",
   };
 }
