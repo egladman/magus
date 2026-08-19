@@ -340,6 +340,9 @@
               "glob": ".claude/skills/magus-buzz-write*/**"
             },
             {
+              "glob": ".claude/skills/magus-commit-composition*/**"
+            },
+            {
               "glob": ".claude/skills/magus-change-summary*/**"
             },
             {
@@ -379,6 +382,9 @@
               "glob": ".agents/skills/magus-buzz-write*/**"
             },
             {
+              "glob": ".agents/skills/magus-commit-composition*/**"
+            },
+            {
               "glob": ".agents/skills/magus-change-summary*/**"
             },
             {
@@ -416,6 +422,9 @@
             },
             {
               "glob": ".opencode/skills/magus-buzz-write*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-commit-composition*/**"
             },
             {
               "glob": ".opencode/skills/magus-change-summary*/**"
