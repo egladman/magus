@@ -87,7 +87,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `security` | security audits what actually ships against the npm advisory database. |
 | `ci` |  |
 | `build-playground` | build-playground rebuilds the WebAssembly interpreter the playground loads: the stock Go toolchain compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and Go's own wasm_exec.js glue is copied beside it. |
-| `diagrams-generate` | diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/. |
 | `build-hljs` | build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js. |
 | `build-playground-editor` | build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js. |
 | `render` | render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks. |
@@ -97,3 +96,4 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `site-generate` | site-generate owns publication. |
 | `conventions` | conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved. |
 | `buzz-test` | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. |
+| `diagrams-generate` | diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/. |
