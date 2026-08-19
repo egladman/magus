@@ -1,4 +1,4 @@
-// Package status maps the live status report onto the magus.status.v1 wire message and
+// Package status maps the live status report onto the magus.status.v1alpha1 wire message and
 // base64-encodes it for the dashboard's SSE stream.
 package status
 
@@ -7,12 +7,12 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1"
+	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1"
 	"github.com/egladman/magus/types"
 )
 
 // statusReportToProto maps the LIVE portion of the domain status report (types.StatusReport)
-// onto the magus.status.v1 wire message, deriving the at-a-glance Health from the
+// onto the magus.status.v1alpha1 wire message, deriving the at-a-glance Health from the
 // pool's presence and error state. Static config (telemetry/cache/build) is
 // intentionally not on this dashboard contract - it is `magus status`/config.
 func statusReportToProto(r types.StatusReport, build types.BuildInfo) *statusv1.Status {
@@ -79,10 +79,10 @@ func serviceToProto(s types.StatusService) *statusv1.Service {
 		Id:         s.ID,
 		Label:      s.Label,
 		Command:    s.Command,
-		Port:       s.Ports,
+		Ports:      s.Ports,
 		State:      string(s.State),
 		Dependents: int32(s.Dependents),
-		StartedAt:  tsFromTime(s.StartedAt),
+		StartTime:  tsFromTime(s.StartedAt),
 	}
 }
 
@@ -91,15 +91,15 @@ func runToProto(r types.StatusRun) *statusv1.Run {
 	out := &statusv1.Run{
 		Inv:       r.Inv,
 		Trigger:   r.Trigger,
-		StartedAt: tsFromTime(r.StartedAt),
+		StartTime: tsFromTime(r.StartedAt),
 	}
 	for _, t := range r.Targets {
 		out.Targets = append(out.Targets, &statusv1.TargetRun{
 			Project:    t.Project,
 			Target:     t.Target,
 			State:      targetStateToProto(t.State),
-			StartedAt:  tsFromTime(t.StartedAt),
-			EndedAt:    tsFromTime(t.EndedAt),
+			StartTime:  tsFromTime(t.StartedAt),
+			EndTime:    tsFromTime(t.EndedAt),
 			OutputRef:  t.OutputRef,
 			DurationMs: t.DurationMs,
 		})

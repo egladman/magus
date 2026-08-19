@@ -2,8 +2,8 @@
 title: magus-query
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
-skill_full_bytes: 10607
-skill_simple_bytes: 8397
+skill_full_bytes: 11553
+skill_simple_bytes: 9343
 ---
 
 # magus-query
@@ -27,12 +27,12 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `37` |
+| `agent-skill-version` | `38` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `3ce451d61f54` |
+| `skill-content` | `0a52fd75b017` |
 | `skill-variant` | `full` |
 
-The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
+The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
 
 ## Full form
 
@@ -114,6 +114,21 @@ magus refs <symbol> --occurrences -o json
 
 magus reports the sites; YOU apply the edits. It will not rewrite the tree for you, the
 same way `magus affected` names what a change reaches without touching it.
+
+**Never drive the rewrite from a pattern** - not `sed -i`, not a scripted
+substitute-and-write. A regex cannot tell YOUR symbol from a dependency's symbol of the
+same name, and it writes before anyone reads a diff: a `\.Sum\b` rewrite aimed at one
+proto field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`. The
+index knows which is which. Apply the sites it reports, then let the compiler enumerate
+what still moved; widening the pattern until the errors stop is the same mistake with
+extra steps.
+
+**A not-indexed project is a stop, not an empty result.** `magus refs` says
+`verdict: unknown, not absent` and names the projects it could not see. Run
+`magus graph build` and ask again. Reading that verdict as "no matches" and falling back
+to a text search is how a rename misses every site in an unindexed project - and a fresh
+worktree starts unindexed, so this is the normal state at the moment you most want a
+rename.
 
 Three things decide whether the result is usable, and skipping any of them is how a bulk
 rewrite corrupts a file:
@@ -283,6 +298,21 @@ magus refs <symbol> --occurrences -o json
 
 magus reports the sites; YOU apply the edits. It will not rewrite the tree for you, the
 same way `magus affected` names what a change reaches without touching it.
+
+**Never drive the rewrite from a pattern** - not `sed -i`, not a scripted
+substitute-and-write. A regex cannot tell YOUR symbol from a dependency's symbol of the
+same name, and it writes before anyone reads a diff: a `\.Sum\b` rewrite aimed at one
+proto field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`. The
+index knows which is which. Apply the sites it reports, then let the compiler enumerate
+what still moved; widening the pattern until the errors stop is the same mistake with
+extra steps.
+
+**A not-indexed project is a stop, not an empty result.** `magus refs` says
+`verdict: unknown, not absent` and names the projects it could not see. Run
+`magus graph build` and ask again. Reading that verdict as "no matches" and falling back
+to a text search is how a rename misses every site in an unindexed project - and a fresh
+worktree starts unindexed, so this is the normal state at the moment you most want a
+rename.
 
 Three things decide whether the result is usable, and skipping any of them is how a bulk
 rewrite corrupts a file:

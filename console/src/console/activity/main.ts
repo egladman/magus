@@ -1,8 +1,8 @@
-// main.ts - the console's Activity surface: the daemon's audit trail (magus.activity.v1) painted with
+// main.ts - the console's Activity surface: the daemon's audit trail (magus.activity.v1alpha1) painted with
 // the SAME foldable, status-accented sections as the log viewer (buildSection over the shared render
 // model), so a run's output and the trail read as one design. Unlike logs/graph/dashboard it has NO
 // standalone page - it is built fresh into a console host. It lists a page of events via
-// ActivityService.ListActivity when a daemon is reachable (a #port link, the daemon-origin/shared
+// ActivityService.ListActivityEvents when a daemon is reachable (a #port link, the daemon-origin/shared
 // console, or the last daemon the dashboard connected to), and shows a synthesized demo trail on the
 // shared #demo fragment so the
 // design is inspectable offline. activate(host) builds the scaffold, kicks the initial load, and
@@ -15,7 +15,7 @@ import {
   Kind,
   Outcome,
   type ActivityEvent,
-} from "../../gen/magus/activity/v1/activity_pb";
+} from "../../gen/magus/activity/v1alpha1/activity_pb";
 import { activityToModel, groupEventsByKind, tsMillis } from "./adapter";
 import { notify } from "../../lib/notifications";
 import { buildSection } from "../render/sections";
@@ -331,7 +331,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     }
     try {
       const client = createClient(ActivityService, createDaemonTransport(daemonHost));
-      const resp = await client.listActivity({ pageSize: PAGE_SIZE, pageToken });
+      const resp = await client.listActivityEvents({ pageSize: PAGE_SIZE, pageToken });
       if (stale) return;
       loadedEvents = loadedEvents.concat(resp.events);
       nextPageToken = resp.nextPageToken;

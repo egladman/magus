@@ -8,7 +8,7 @@ tags: [api, proto, connect, grpc, statusservice]
 
 StatusService serves the snapshot, and streams it for a live dashboard.
 
-Package `magus.status.v1`, defined in `proto/magus/status/v1/status.proto`. Part of the [daemon API](index.md).
+Package `magus.status.v1alpha1`, defined in `proto/magus/status/v1alpha1/status.proto`. Part of the [daemon API](index.md).
 
 ## Methods
 
@@ -16,7 +16,7 @@ Package `magus.status.v1`, defined in `proto/magus/status/v1/status.proto`. Part
 
 GetStatus returns the current snapshot.
 
-`POST /magus.status.v1.StatusService/GetStatus`: unary.
+`POST /magus.status.v1alpha1.StatusService/GetStatus`: unary.
 
 Takes `GetStatusRequest`, returns `GetStatusResponse`.
 
@@ -24,7 +24,7 @@ Takes `GetStatusRequest`, returns `GetStatusResponse`.
 
 StreamStatus pushes a fresh snapshot whenever the pool changes (or on a heartbeat), so a dashboard reflects what is running without polling.
 
-`POST /magus.status.v1.StatusService/StreamStatus`: server streaming.
+`POST /magus.status.v1alpha1.StatusService/StreamStatus`: server streaming.
 
 Takes `StreamStatusRequest`, returns `StreamStatusResponse`.
 
@@ -72,7 +72,7 @@ No fields.
 | Field | Type | # | Description |
 |-------|------|---|-------------|
 | `status` | Status | 1 |  |
-| `observing_since` | Timestamp | 2 | observing\_since and config ride the ONE-SHOT response envelope, NOT the streamed Status frame: they are static per daemon session (Status stays "what is happening right now"), so a dashboard reads them once via GetStatus rather than on every StreamStatus push. This is the typed home for the two fields the deprecated JSON /api/v1/status route used to carry. when this daemon began observing (its start) |
+| `observe_start_time` | Timestamp | 2 | observe\_start\_time and config ride the ONE-SHOT response envelope, NOT the streamed Status frame: they are static per daemon session (Status stays "what is happening right now"), so a dashboard reads them once via GetStatus rather than on every StreamStatus push. This is the typed home for the two fields the deprecated JSON /api/v1/status route used to carry. when this daemon began observing (its start) |
 | `config` | Config | 3 | the daemon's resolved, read-only configuration |
 
 ### Lock
@@ -126,7 +126,7 @@ Run is one in-flight invocation the daemon has adopted - a `magus run`/`affected
 |-------|------|---|-------------|
 | `inv` | string | 1 | invocation id (inv...); deep-links to the run's live log |
 | `trigger` | string | 2 | how the run was spawned: run \| affected \| ci \| ... |
-| `started_at` | Timestamp | 3 | when the invocation opened |
+| `start_time` | Timestamp | 3 | when the invocation opened |
 | `targets` | repeated TargetRun | 4 | per-target execution state within this run |
 
 ### RunningTarget
@@ -150,10 +150,10 @@ Service is one long-running shared service the daemon is hosting right now, kept
 | `id` | string | 1 | short service id (fingerprint prefix) |
 | `label` | string | 2 | human name: image[:tag] or the binary basename |
 | `command` | string | 3 | full process command, space-joined |
-| `port` | repeated string | 4 | container-side published ports (empty if unknown) |
+| `ports` | repeated string | 4 | container-side published ports (empty if unknown) |
 | `state` | string | 5 | starting \| running \| idle \| failed |
 | `dependents` | int32 | 6 | targets currently depending on this service |
-| `started_at` | Timestamp | 7 | when the registry began starting this instance |
+| `start_time` | Timestamp | 7 | when the registry began starting this instance |
 
 ### Status
 
@@ -187,8 +187,8 @@ TargetRun is the execution state of one target within a Run. It advances QUEUED 
 | `project` | string | 1 | repo-relative project path |
 | `target` | string | 2 | target name (as the CLI spells it) |
 | `state` | State | 3 |  |
-| `started_at` | Timestamp | 4 | when the target began running (unset while QUEUED) |
-| `ended_at` | Timestamp | 5 | when the target finished (unset while active) |
+| `start_time` | Timestamp | 4 | when the target began running (unset while QUEUED) |
+| `end_time` | Timestamp | 5 | when the target finished (unset while active) |
 | `output_ref` | string | 6 | output reference, once finished |
 | `duration_ms` | int64 | 7 | wall-clock duration in ms, once finished |
 

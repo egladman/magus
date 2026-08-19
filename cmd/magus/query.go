@@ -252,7 +252,7 @@ func queryOutputRef(ctx context.Context, root, ref string, o outputRefOpts) erro
 		return nil
 	}
 	if o.open {
-		// The viewer ingests a magus.viewer.v1 Journal, so hand it the ref's display events -
+		// The viewer ingests a magus.viewer.v1alpha1 Journal, so hand it the ref's display events -
 		// the browser renders pretty from structure.
 		data, desc, err := m.OutputByRef(ref)
 		if err != nil {
@@ -714,6 +714,7 @@ func explainCmd(ctx context.Context, root string, args []string) error {
 	if out.Node.Kind != types.KindSymbol {
 		link := liveExplorerLink(url.GraphLinkOpts{View: "blast", Node: out.Node.ID})
 		fmt.Printf("\nView in Graph Explorer: %s\n", link)
+		fmt.Printf("%s\n", authHint)
 		fmt.Printf("(start the magus daemon if the graph does not load)\n")
 	}
 	return nil

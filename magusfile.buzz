@@ -136,7 +136,8 @@ magus\project({
         // order-sensitive side effect, never a cache replay. exclusive: nothing
         // else should be touching go.mod or the tag namespace while it runs.
         "release": {"skip_cache": "mutates go.mod and creates VCS tags, an order-sensitive side effect", "exclusive": true},
-        // test rewrites assets/coverage.svg; a cache hit would skip the write.
+        // No skip_cache: the badge moved to coverage-badge, so a hit restores only
+        // the coverage profiles, which is what a hit should do.
         // memory_mb measured, not guessed: on a 16GB CI runner this target took
         // available memory from 1137MB to 265MB in two seconds and the runner was
         // killed, leaving no failing target to blame because the MACHINE died rather
@@ -145,10 +146,8 @@ magus\project({
         // that is the number an author can actually know; magus converts it to slots
         // per host, so it throttles peers on a 16GB runner and barely registers on a
         // 64GB workstation without this file naming either machine.
-        "test": {
-            "skip_cache": "rewrites assets/coverage.svg; a hit would skip the write",
-            "memory_mb": 10240,
-        },
+        "test": {"memory_mb": 10240},
+        "coverage-badge": {"skip_cache": "rewrites assets/coverage.svg; a hit would restore a cached badge over the committed one"},
         // The verdict depends on trivy's license classifier, which is not a declared tool
         // version and so is invisible to the cache key: a trivy upgrade that reclassifies a
         // dependency would replay the OLD verdict against unchanged sources.
@@ -788,6 +787,17 @@ export fun image_scan(ctx: magus\Context, args: [str]) > void !> any {
 // The baseline when this landed was 265 findings, all `notice` or `unencumbered` and none
 // forbidden or restricted, so this gate starts green and only speaks up on a regression.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
+    // govulncheck loads PACKAGES, so it parses every .go file this target's sources
+    // glob - generated ones included. Without this edge it is free to run beside the
+    // target writing them: measured 2026-08-18, when it read types/gen/mocks while
+    // mockery was still emitting it and failed with "expected 'package', found 'EOF'"
+    // - a parse error that reads like a broken tree rather than a race.
+    //
+    // lint, build and test already reach generate (via format), so security was the
+    // one member of ci's fan-out without the ordering its siblings have. MGS4004 does
+    // not cover this: it reports CROSS-project undeclared reads, and both targets here
+    // are in the same project.
+    ctx.needs(generate);
     // Both halves of Software Composition Analysis over one dependency inventory:
     // govulncheck asks whether a dependency has a known flaw, trivy whether its terms may
     // legally be here at all. They share this target because they share that input and a
@@ -975,6 +985,7 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
         ".claude/skills/magus-architecture-review*/**",
         ".claude/skills/magus-buzz-review*/**",
         ".claude/skills/magus-buzz-write*/**",
+        ".claude/skills/magus-commit-composition*/**",
         ".claude/skills/magus-change-summary*/**",
         ".claude/skills/magus-context-audit*/**",
         ".claude/skills/magus-delegate-multi-agent*/**",
@@ -988,6 +999,7 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
         ".agents/skills/magus-architecture-review*/**",
         ".agents/skills/magus-buzz-review*/**",
         ".agents/skills/magus-buzz-write*/**",
+        ".agents/skills/magus-commit-composition*/**",
         ".agents/skills/magus-change-summary*/**",
         ".agents/skills/magus-context-audit*/**",
         ".agents/skills/magus-delegate-multi-agent*/**",
@@ -1001,6 +1013,7 @@ export fun skills_generate(ctx: magus\Context, args: [str]) > void !> any {
         ".opencode/skills/magus-architecture-review*/**",
         ".opencode/skills/magus-buzz-review*/**",
         ".opencode/skills/magus-buzz-write*/**",
+        ".opencode/skills/magus-commit-composition*/**",
         ".opencode/skills/magus-change-summary*/**",
         ".opencode/skills/magus-context-audit*/**",
         ".opencode/skills/magus-delegate-multi-agent*/**",
@@ -1568,7 +1581,7 @@ export fun release(ctx: magus\Context, args: [str]) > void !> any {
     // channel, so naming it would be a word with no alternative to distinguish.
     final deliver = ctx.hasCharm("cd");
     final dirty = vcs\isDirty();
-    final modules = releaser\releasableModules(magus\ls().projects);
+    final modules = releaser\releasableModules(magus\projects().projects);
 
     // Parse `key=version`. Anything unnamed is surveyed, never released.
     var wanted = mut {};
@@ -1775,15 +1788,13 @@ export fun advice_test(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// Tests with race detection, coverage, and a drift-gated coverage badge.
+// Tests with race detection and a coverage floor. The badge is coverage_badge's.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(advice_test);
-    // Declared because this target WRITES the badge below and gates on its drift.
-    // Undeclared, a declaration-based staging review would skip it as unclaimed while ci still failed on
-    // it being stale - the workspace's account of itself disagreeing with what a
-    // target actually does, which is the disagreement declarations exist to end.
-    ctx.writesFiles("assets/coverage.svg");
-    final badgeBefore = drift.hashes([fs\join("assets", "coverage.svg")]);
+    // Declared so coverage_badge can read them after a cache HIT: without this the
+    // profiles are undeclared residue, restored by nothing, and the badge target
+    // finds no file to measure whenever the suite replays.
+    ctx.writesFiles("coverage.out", "coverage.hand.out");
     ctx.needs(format, buzz_test);
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
     // Measure hand-written code only. Generated files (protobuf accessors, mocks,
@@ -1796,22 +1807,44 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     fs\writeFile("coverage.hand.out",
         cov\stripGenerated(fs\readFile("coverage.out"),
             prefix: cov\modulePath(fs\readFile("go.mod")) + "/"));
-    final pct = total_coverage(proc\exec("go", ["tool", "cover", "-func=coverage.hand.out"]).stdout);
-    if (std\parseInt(pct.split(".")[0]) < 60) {
-        throw "test: coverage " + pct + "% is below the 60% floor; investigate the regression or lower the floor deliberately";
+    if (std\parseInt(coverage_percent().split(".")[0]) < 60) {
+        throw "test: coverage " + coverage_percent() + "% is below the 60% floor; investigate the regression or lower the floor deliberately";
     }
-    // Whole percent on the BADGE, one decimal for the floor check above. The
-    // module has files that only compile on one platform (hostmem, proc/run), so
-    // the ratio legitimately differs between a macOS laptop and a Linux runner -
-    // 67.4 here, 67.3 there. Committing a tenth of a percent made a generated
-    // artifact gate on the machine that produced it, which no contributor on the
-    // wrong OS could satisfy. A whole number carries the same information and
-    // survives the crossing.
-    fs\writeFile(fs\join("assets", "coverage.svg"),
-        badge\coverage("go coverage", percent: pct.split(".")[0], radius: 3));
-    if (ctx.hasCharm("rw")) { return; }
-    if (drift.changedSince(badgeBefore, [fs\join("assets", "coverage.svg")]).len() > 0) {
-        throw "test: assets/coverage.svg is stale; re-run `magus run test:rw .` and commit the badge";
+}
+
+fun coverage_percent() > str !> any {
+    return total_coverage(proc\exec("go", ["tool", "cover", "-func=coverage.hand.out"]).stdout);
+}
+
+// Writes assets/coverage.svg, and is the only target that may.
+//
+// Split from test so the suite can be CACHED: the badge is a declared output, so a
+// hit would restore a cached one over the committed file, which is what forced
+// skip_cache onto every test run - five minutes and 10GB to re-answer a question
+// whose inputs had not moved.
+//
+// NOT named *-generate, deliberately: `generate` composes ctx.glob("*-generate"),
+// so that suffix would pull a target that needs the race-enabled suite into the
+// drift gate.
+export fun coverage_badge(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(test);
+    ctx.writesFiles("assets/coverage.svg");
+    // Only the CI runner writes or judges it. 105 non-test files carry a //go:build
+    // constraint, so the ratio is a property of the machine: 67.6% on macOS against
+    // 66.9% on Linux for one commit. A laptop that wrote it replaced CI's number.
+    if (!ctx.hasCharm("gha")) { return; }
+    final badgePct = coverage_percent().split(".")[0];
+    final wanted = badge\coverage("go coverage", percent: badgePct, radius: 3);
+    if (ctx.hasCharm("rw")) {
+        fs\writeFile(fs\join("assets", "coverage.svg"), content: wanted);
+        return;
+    }
+    // Compared, never written: a check that mutates the tree it judges leaves its
+    // own output for the next drift gate to read as an edit.
+    if (fs\readFile(fs\join("assets", "coverage.svg")) != wanted) {
+        throw "coverage-badge: assets/coverage.svg does not match this runner's measurement of " + badgePct
+            + "%. This runner's platform set is the authoritative one, so commit a badge for "
+            + badgePct + "% - `badge\\coverage(\"go coverage\", percent: \"" + badgePct + "\", radius: 3)`.";
     }
 }
 
@@ -1994,7 +2027,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // resurface here as ../<sibling>/... paths that no ^-anchored exclusion in
     // .golangci.yml matches - measured: 25 stdversion findings from a sibling failing
     // a tree with zero of its own. A cold analysis per fresh worktree is the price.
-    final lintCache = magus\ls().workspace + "/.magus/golangci-lint";
+    final lintCache = magus\projects().workspace + "/.magus/golangci-lint";
     os\withEnv({"GOLANGCI_LINT_CACHE": lintCache}, fun () > void !> any {
         proc\exec("./custom-gcl", ["run"]);
     });
@@ -2058,7 +2091,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 
 // Runs the CI gates through their declared dependencies.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(lint, build, test, compress_cgo_test, completion_test, security);
+    ctx.needs(lint, build, test, coverage_badge, compress_cgo_test, completion_test, security);
 }
 
 // Exercises the completion scripts magus SHIPS, each inside the official image for its

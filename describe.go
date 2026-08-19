@@ -602,8 +602,8 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 		// project, so two separate invocations never see it at all. Exact-path collisions
 		// only, the same comparison MGS4002 makes: glob-vs-glob overlap is not decidable
 		// in general.
-		if claimant := outputClaimant(op, co); claimant != "" {
-			first, second := min(claimant, co.writer), max(claimant, co.writer)
+		if prior := existingWriter(op, co); prior != "" {
+			first, second := min(prior, co.writer), max(prior, co.writer)
 			return types.DiagnosticErrorf(types.OutputOverlapDetected,
 				"%s: %q is declared as an output by two projects (%s and %s); they cannot be ordered against each other, and each would cache the other's bytes as its own output",
 				co.owner, co.glob, first, second)
@@ -618,12 +618,12 @@ func (m *Magus) applyTargetDepsAndFootprint(ctx context.Context) error {
 // to the OWNER's root. Collected during the walk and applied once every project is known.
 type crossOutput struct{ owner, writer, glob string }
 
-// outputClaimant returns the project already claiming co.glob in the owner's tree, or ""
-// when the path is unclaimed. A claim is either another writer that declared the same
-// inbound path or the owner declaring it for itself - the second matters just as much,
-// since the owner's own build would then produce and clean a file the writer also owns.
-// The writer re-declaring its own glob is not a claim; that is idempotent.
-func outputClaimant(owner *types.Project, co crossOutput) string {
+// existingWriter returns the project already declaring co.glob as an output in the owner's
+// tree, or "" when none does. That is either another writer holding the same inbound path or
+// the owner declaring it for itself - the second matters just as much, since the owner's own
+// build would then produce and clean a file the writer also owns. The writer re-declaring its
+// own glob does not count; that is idempotent.
+func existingWriter(owner *types.Project, co crossOutput) string {
 	for _, writer := range slices.Sorted(maps.Keys(owner.InboundOutputs)) {
 		if writer != co.writer && slices.Contains(owner.InboundOutputs[writer], co.glob) {
 			return writer

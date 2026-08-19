@@ -72,7 +72,7 @@ func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 	body, err := os.ReadFile(filepath.Join(dir, ".agents/skills", anchorSkillRel))
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "license: "+skillLicense)
-	assert.Contains(t, string(body), "skill-content: "+catalog.contentDigest)
+	assert.Contains(t, string(body), "skill-content: "+catalog.SkillDigest("magus-query"))
 
 	statuses := catalog.CheckStatuses(dir)
 	require.Len(t, statuses, 1)
@@ -80,7 +80,7 @@ func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 	assert.True(t, statuses[0].Installed)
 	assert.False(t, statuses[0].Stale)
 
-	stale := strings.Replace(string(body), "skill-content: "+catalog.contentDigest, "skill-content: 000000000000", 1)
+	stale := strings.Replace(string(body), "skill-content: "+catalog.SkillDigest("magus-query"), "skill-content: 000000000000", 1)
 	require.NoError(t, os.WriteFile(filepath.Join(dir, ".agents/skills", anchorSkillRel), []byte(stale), 0o644))
 	assert.True(t, catalog.CheckStatuses(dir)[0].Stale)
 }
@@ -106,7 +106,7 @@ func TestStaleSkillDirsReportsAndPruneRemovesOnlyWhatMagusWrote(t *testing.T) {
 	orphan := filepath.Join(dir, dest, "magus-retired")
 	require.NoError(t, os.MkdirAll(orphan, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(orphan, "SKILL.md"),
-		catalog.StampSkill([]byte("---\nname: magus-retired\n---\n\n# gone\n"), VariantSimple), 0o644))
+		catalog.StampSkill("magus-retired", []byte("---\nname: magus-retired\n---\n\n# gone\n"), VariantSimple), 0o644))
 
 	// A hand-authored skill beside it, and a directory that is not a skill at all.
 	handAuthored := filepath.Join(dir, dest, "magus-local-development")
@@ -207,7 +207,7 @@ func TestSimpleInstallWritesTwinsStampedFull(t *testing.T) {
 	assert.Contains(t, string(twin), "skill-variant: full",
 		"a twin inside a simple install must stamp itself full")
 	// One source body, so both still report the same digest and go stale together.
-	assert.Contains(t, string(twin), "skill-content: "+catalog.contentDigest)
+	assert.Contains(t, string(twin), "skill-content: "+catalog.SkillDigest("magus-query"))
 }
 
 func TestCatalogSkillTarIsByteStable(t *testing.T) {
@@ -225,7 +225,7 @@ func TestCatalogSkillBytesByName(t *testing.T) {
 	body, err := catalog.SkillBytes("magus-architecture-review", VariantFull)
 	require.NoError(t, err)
 	assert.Contains(t, string(body), "name: magus-architecture-review")
-	assert.Contains(t, string(body), "skill-content: "+catalog.contentDigest)
+	assert.Contains(t, string(body), "skill-content: "+catalog.SkillDigest("magus-architecture-review"))
 
 	ultra, err := catalog.SkillBytes("magus-delegate-multi-agent", VariantFull)
 	require.NoError(t, err)
@@ -256,11 +256,91 @@ func TestDelegateUltraVariantsKeepTheSameSafetyContract(t *testing.T) {
 		"--simple must remove at least one fifth of the full skill while preserving its safety contract")
 }
 
+// TestSkillDigestIsPerSkill pins the granularity, which is the whole point of the
+// digest: a catalog-wide one restamped all 26 installed files and all 16 reference
+// pages whenever any skill changed, so a diff could not show which skill moved.
+// TestPlanSkillTreeMatchesTheWriter keeps --dry-run honest: a plan that named
+// different paths than the run would be worse than no plan, because it would be
+// believed.
+func TestPlanSkillTreeMatchesTheWriter(t *testing.T) {
+	catalog := testCatalog(t)
+	dir := t.TempDir()
+
+	planned, err := catalog.PlanSkillTree(dir, ".claude/skills", VariantSimple)
+	require.NoError(t, err)
+	require.NotEmpty(t, planned)
+
+	written, err := catalog.WriteSkillTree(dir, ".claude/skills", false, VariantSimple)
+	require.NoError(t, err)
+
+	assert.Equal(t, written, planned, "the plan must name exactly what the writer writes")
+}
+
+// TestPlanSkillTreeWritesNothing is the property the flag exists for.
+func TestPlanSkillTreeWritesNothing(t *testing.T) {
+	catalog := testCatalog(t)
+	dir := t.TempDir()
+
+	_, err := catalog.PlanSkillTree(dir, ".claude/skills", VariantSimple)
+	require.NoError(t, err)
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "a plan must not create the destination it describes")
+}
+
+func TestCheckDestinationRefusesEscapes(t *testing.T) {
+	dir := t.TempDir()
+
+	assert.NoError(t, checkDestination(dir, ".claude/skills"))
+	assert.NoError(t, checkDestination(dir, "nested/deeper/skills"))
+
+	assert.Error(t, checkDestination(dir, "/etc/skills"), "an absolute path is outside the tree")
+	assert.Error(t, checkDestination(dir, "~/skills"), "a home-relative path is outside the tree")
+	// The one IsAbs and the ~ check both miss: it is relative and does not start
+	// with ~, and only cleaning the joined path reveals where it lands.
+	assert.Error(t, checkDestination(dir, "../../outside"), "a traversal escapes the tree")
+}
+
+func TestInstalledSkillNamesListsOnlyMagusDirs(t *testing.T) {
+	catalog := testCatalog(t)
+	dir := t.TempDir()
+	for _, name := range []string{"magus-run", "magus-query", "magus-query-full", "notes", "README"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, name), 0o755))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus-not-a-dir"), []byte("x"), 0o644))
+
+	// Sorted, so a verify run reports the same order every time; a plain file is
+	// not a skill however it is named.
+	assert.Equal(t, []string{"magus-query", "magus-query-full", "magus-run"}, catalog.installedSkillNames(dir))
+	assert.Nil(t, catalog.installedSkillNames(filepath.Join(dir, "does-not-exist")))
+}
+
+func TestBaseSkillNameResolvesTwins(t *testing.T) {
+	assert.Equal(t, "magus-run", baseSkillName("magus-run"))
+	assert.Equal(t, "magus-run", baseSkillName(FullTwinName("magus-run")))
+}
+
+func TestSkillDigestIsPerSkill(t *testing.T) {
+	catalog := testCatalog(t)
+
+	first := catalog.SkillDigest("magus-query")
+	second := catalog.SkillDigest("magus-run")
+	assert.NotEmpty(t, first)
+	assert.NotEqual(t, first, second, "two skills must not share a digest, or one edit restamps both")
+
+	// A twin is rendered from its primary's body, so the two report the same
+	// value and go stale together - the invariant StampSkill's comment names.
+	assert.Equal(t, first, catalog.SkillDigest(FullTwinName("magus-query")))
+
+	assert.Equal(t, "unreadable", catalog.SkillDigest("magus-not-a-skill"))
+}
+
 func TestCatalogRenderAndStamp(t *testing.T) {
 	catalog := testCatalog(t)
 	rendered := catalog.RenderSkill(AgentSkill{Name: "magus-test", Description: "Does one thing.", Body: "# Test"})
 	assert.Equal(t, "---\nname: magus-test\ndescription: \"Does one thing.\"\n---\n\n# Test\n", string(rendered))
-	stamped := string(catalog.StampSkill(rendered, VariantFull))
+	stamped := string(catalog.StampSkill("magus-test", rendered, VariantFull))
 	assert.Contains(t, stamped, "metadata:\n  source: magus\n")
 	assert.Equal(t, 1, strings.Count(stamped, "generated by: magus agent install"))
 }

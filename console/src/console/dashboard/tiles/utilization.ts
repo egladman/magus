@@ -81,9 +81,15 @@ export function utilizationTile(): Tile {
 
   // utilColor maps a sample to a fill + opacity ramp (a hand-rolled linear scale, no
   // d3-scale dep). A queued sample (queued > 0) switches to the queued color.
+  // An unmeasured tick gets the muted color, NOT the idle ramp: a square nobody measured
+  // must not read as a square that was idle. Both are faint, so they are distinguished by
+  // hue and by the tooltip rather than by opacity alone.
   function utilColor(s: SampleView): { fill: string; opacity: number } {
+    if (s.running === null || s.queued === null) {
+      return { fill: cssVar("--console-fg-muted"), opacity: 0.1 };
+    }
     let u: number;
-    if (s.capacity > 0) u = Math.min(1, s.running / s.capacity);
+    if (s.capacity !== null && s.capacity > 0) u = Math.min(1, s.running / s.capacity);
     else u = s.running > 0 ? Math.min(1, s.running / Math.max(peakRunning, 1)) : 0;
     const base =
       s.queued > 0 ? cssVar("--console-status-queued") : cssVar("--console-status-running");
@@ -93,7 +99,8 @@ export function utilizationTile(): Tile {
 
   function render(): void {
     peakRunning = 1;
-    for (const s of samples) if (s.running > peakRunning) peakRunning = s.running;
+    for (const s of samples)
+      if (s.running !== null && s.running > peakRunning) peakRunning = s.running;
     const SQ = 12,
       GAP = 3;
     const n = samples.length;
@@ -122,8 +129,15 @@ export function utilizationTile(): Tile {
       r.setAttribute("fill-opacity", opacity.toFixed(3));
       r.setAttribute("class", "console-dashboard-util__square");
       const title = document.createElementNS(SVGNS, "title");
-      const cap = s.capacity > 0 ? `${s.running}/${s.capacity}` : `${s.running} (unlimited)`;
-      title.textContent = `${clock(s.at)} - ${cap} running${s.queued > 0 ? ", " + s.queued + " queued" : ""}`;
+      if (s.running === null) {
+        title.textContent = `${clock(s.at)} - not measured`;
+      } else {
+        const cap =
+          s.capacity !== null && s.capacity > 0
+            ? `${s.running}/${s.capacity}`
+            : `${s.running} (unlimited)`;
+        title.textContent = `${clock(s.at)} - ${cap} running${s.queued !== null && s.queued > 0 ? ", " + s.queued + " queued" : ""}`;
+      }
       r.appendChild(title);
       frag.appendChild(r);
     }

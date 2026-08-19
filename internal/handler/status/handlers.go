@@ -25,7 +25,7 @@ type statusSource interface {
 // Events:
 //   - event: graph,  data: {"seq": N}       -- workspace graph changed (N is monotonic)
 //   - event: status, data: <base64 proto>   -- pool state changed; payload is a base64
-//     magus.status.v1.Status (see EncodeStatusEvent), pushed on connect and on change.
+//     magus.status.v1alpha1.Status (see EncodeStatusEvent), pushed on connect and on change.
 //   - event: metrics, data: <base64 proto>  -- current metrics as base64 OTLP
 //     (ExportMetricsServiceRequest); pushed on connect and on change when metrics is set.
 //   - comment-line heartbeat every heartbeat interval.

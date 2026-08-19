@@ -24,7 +24,7 @@ import {
   type Note,
   type Anchor,
   type StoreStatus,
-} from "../../gen/magus/notes/v1/notes_pb";
+} from "../../gen/magus/notes/v1alpha1/notes_pb";
 
 // The shape `magus notes ls --shared --reproducible -o json` writes. Declared here rather than
 // generated because it is the CLI's own output struct, not a proto message: the two are coupled

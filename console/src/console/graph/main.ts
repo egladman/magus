@@ -53,7 +53,7 @@ import {
   parseHash,
 } from "../../lib/daemon";
 import { createClient } from "@connectrpc/connect";
-import { StatusService } from "../../gen/magus/status/v1/status_pb";
+import { StatusService } from "../../gen/magus/status/v1alpha1/status_pb";
 import {
   type GLink,
   type GNode,

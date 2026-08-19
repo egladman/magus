@@ -2,8 +2,8 @@
 title: magus-run
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 9938
-skill_simple_bytes: 6481
+skill_full_bytes: 10877
+skill_simple_bytes: 7113
 ---
 
 # magus-run
@@ -27,12 +27,12 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `37` |
+| `agent-skill-version` | `38` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `3ce451d61f54` |
+| `skill-content` | `a8b8e03490ee` |
 | `skill-variant` | `full` |
 
-The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
+The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
 
 ## Full form
 
@@ -91,6 +91,14 @@ resolves a name to its path; over MCP, `magus_where`/`magus_describe` ignore the
 4. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...)
    for work a target covers. If no target covers it, say so rather than silently
    going around magus.
+5. Rewriting DEPENDENCY state (`go get`, `go mod tidy`, `pnpm add`, `cargo
+   update`, `uv lock`, `pip-compile`) needs the `relock` charm: `magus run
+   <target>:relock <project>`, so the rewrite happens inside magus, cached and
+   visible to affected tracking. It is reserved and deliberately not part of `rw` -
+   `rw` covers output reproducible from a clean checkout, `relock` covers state that
+   depends on what a registry serves today. `ci` strips both, so a gate verifies
+   the committed lockfile rather than refreshing it. Applying a lockfile (`npm ci`,
+   `pnpm install --frozen-lockfile`) re-resolves nothing and needs no charm.
 
 ## Command patterns
 
@@ -118,6 +126,10 @@ truncating it after the fact:
 - `-s` / `--silent`: the default for every CLI run. Progress is dropped; a pass
   is a few lines (result line + output ref), a failure keeps a bounded tail of
   the failing project plus the ref to fetch the rest.
+  DROP it when the question is what RAN versus what replayed: the per-target
+  timings and the `(cached, 320ms)` / `(ran, 5m28s)` verdict only print without
+  it. Reaching for shell `time` around a silent run measures the wall clock magus
+  already reported and hides which targets were cache hits.
 - `-q` / `--quiet`: looser - drops progress, keeps errors and the failing
   project's full output.
 - `-o <fmt>`: `text|json|yaml|jsonl|name|template=<go-template>`. Ask for the
@@ -287,6 +299,12 @@ project (`magus run test web`), or let `magus affected` compute it from the diff
 4. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...)
    for work a target covers. If no target covers it, say so rather than silently
    going around magus.
+5. Rewriting DEPENDENCY state (`go get`, `go mod tidy`, `pnpm add`, `cargo
+   update`, `uv lock`, `pip-compile`) needs the `relock` charm: `magus run
+   <target>:relock <project>`. It is reserved and deliberately not part of `rw` -
+   `rw` covers output reproducible from a clean checkout, `relock` covers state that
+   depends on what a registry serves today. Applying a lockfile (`npm ci`,
+   `pnpm install --frozen-lockfile`) re-resolves nothing and needs no charm.
 
 ## Command patterns
 
@@ -306,6 +324,9 @@ change is done, and a single narrower target only to iterate on a failure.
 
 - `-s` / `--silent`: the default for every CLI run. A pass prints a
   result line plus an output ref; a failure adds a bounded tail.
+  DROP it when the question is what RAN versus what replayed: the per-target
+  timings and the `(cached, 320ms)` / `(ran, 5m28s)` verdict only print without
+  it.
 - `-q` / `--quiet`: looser - drops progress, keeps errors and the failing
   project's full output.
 - `-o <fmt>`: `text|json|yaml|jsonl|name|template=<go-template>`.

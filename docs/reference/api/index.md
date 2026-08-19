@@ -18,16 +18,16 @@ Start the daemon with `magus server start`. See [the console reference](../conso
 
 | Service | Methods | Package |
 |---------|---------|--------|
-| [ActivityService](activity.md) | 2 | `magus.activity.v1` |
-| [InsightService](insight.md) | 1 | `magus.insight.v1` |
-| [JobService](job.md) | 5 | `magus.job.v1` |
-| [MemoryService](memory.md) | 5 | `magus.memory.v1` |
-| [MetricsService](metrics.md) | 2 | `magus.metrics.v1` |
-| [NotesService](notes.md) | 2 | `magus.notes.v1` |
-| [StatusService](status.md) | 2 | `magus.status.v1` |
-| [TokenService](token.md) | 2 | `magus.token.v1` |
-| [ToolService](tool.md) | 1 | `magus.tool.v1` |
-| [ViewerService](viewer.md) | 3 | `magus.viewer.v1` |
+| [ActivityService](activity.md) | 2 | `magus.activity.v1alpha1` |
+| [InsightService](insight.md) | 1 | `magus.insight.v1alpha1` |
+| [JobService](job.md) | 2 | `magus.job.v1alpha1` |
+| [MemoryService](memory.md) | 5 | `magus.memory.v1alpha1` |
+| [MetricsService](metrics.md) | 2 | `magus.metrics.v1alpha1` |
+| [NotesService](notes.md) | 2 | `magus.notes.v1alpha1` |
+| [StatusService](status.md) | 2 | `magus.status.v1alpha1` |
+| [TokenService](token.md) | 3 | `magus.token.v1alpha1` |
+| [ToolService](tool.md) | 1 | `magus.tool.v1alpha1` |
+| [ViewerService](viewer.md) | 3 | `magus.viewer.v1alpha1` |
 
 ## Calling a method without a generated client
 
@@ -38,7 +38,7 @@ curl -X POST \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $MAGUS_TOKEN" \
   -d '{}' \
-  http://127.0.0.1:7391/magus.activity.v1.ActivityService/ListActivity
+  http://127.0.0.1:7391/magus.activity.v1alpha1.ActivityService/ListActivityEvents
 ```
 
 The path is always `/<package>.<Service>/<Method>`, which every page below states per method.

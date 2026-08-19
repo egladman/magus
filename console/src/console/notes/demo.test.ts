@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { AnchorKind, AnchorStatus, Scope, Staleness } from "../../gen/magus/notes/v1/notes_pb";
+import { AnchorKind, AnchorStatus, Scope, Staleness } from "../../gen/magus/notes/v1alpha1/notes_pb";
 import { adaptExport } from "./demo";
 
 const listing = {

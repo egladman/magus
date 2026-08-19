@@ -8,7 +8,7 @@ tags: [api, proto, connect, grpc, memoryservice]
 
 MemoryService lists, upserts, and deletes memory records, plus reads/overwrites the singleton cursor snapshot.
 
-Package `magus.memory.v1`, defined in `proto/magus/memory/v1/memory.proto`. Part of the [daemon API](index.md).
+Package `magus.memory.v1alpha1`, defined in `proto/magus/memory/v1alpha1/memory.proto`. Part of the [daemon API](index.md).
 
 ## Methods
 
@@ -16,7 +16,7 @@ Package `magus.memory.v1`, defined in `proto/magus/memory/v1/memory.proto`. Part
 
 ListMemories returns every record in full (records are small). Paginated by contract so growth never forces a breaking change, though the store returns all records today.
 
-`POST /magus.memory.v1.MemoryService/ListMemories`: unary.
+`POST /magus.memory.v1alpha1.MemoryService/ListMemories`: unary.
 
 Takes `ListMemoriesRequest`, returns `ListMemoriesResponse`.
 
@@ -24,15 +24,15 @@ Takes `ListMemoriesRequest`, returns `ListMemoriesResponse`.
 
 UpdateMemory upserts a record by name: with allow\_missing=true it creates the record when absent, otherwise it updates in place. An empty update\_mask is a full replace.
 
-`POST /magus.memory.v1.MemoryService/UpdateMemory`: unary.
+`POST /magus.memory.v1alpha1.MemoryService/UpdateMemory`: unary.
 
-Takes `UpdateMemoryRequest`, returns `UpdateMemoryResponse`.
+Takes `UpdateMemoryRequest`, returns `Memory`.
 
 ### DeleteMemory
 
 DeleteMemory removes a record by name. With allow\_missing=true, deleting an absent record succeeds as a no-op (idempotent).
 
-`POST /magus.memory.v1.MemoryService/DeleteMemory`: unary.
+`POST /magus.memory.v1alpha1.MemoryService/DeleteMemory`: unary.
 
 Takes `DeleteMemoryRequest`, returns `DeleteMemoryResponse`.
 
@@ -40,19 +40,27 @@ Takes `DeleteMemoryRequest`, returns `DeleteMemoryResponse`.
 
 GetCursor returns the cursor snapshot, empty when never written.
 
-`POST /magus.memory.v1.MemoryService/GetCursor`: unary.
+`POST /magus.memory.v1alpha1.MemoryService/GetCursor`: unary.
 
-Takes `GetCursorRequest`, returns `GetCursorResponse`.
+Takes `GetCursorRequest`, returns `Cursor`.
 
 ### UpdateCursor
 
 UpdateCursor overwrites the cursor snapshot.
 
-`POST /magus.memory.v1.MemoryService/UpdateCursor`: unary.
+`POST /magus.memory.v1alpha1.MemoryService/UpdateCursor`: unary.
 
-Takes `UpdateCursorRequest`, returns `UpdateCursorResponse`.
+Takes `UpdateCursorRequest`, returns `Cursor`.
 
 ## Messages
+
+### Cursor
+
+Cursor is the singleton "where did I leave off" snapshot. A singleton per AIP-156: read with GetCursor, overwritten with UpdateCursor, never listed and never created.
+
+| Field | Type | # | Description |
+|-------|------|---|-------------|
+| `content` | string | 1 | UNTRUSTED; empty when the cursor was never written |
 
 ### DeleteMemoryRequest
 
@@ -68,12 +76,6 @@ No fields.
 ### GetCursorRequest
 
 No fields.
-
-### GetCursorResponse
-
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `content` | string | 1 | UNTRUSTED; empty when the cursor was never written |
 
 ### ListMemoriesRequest
 
@@ -119,12 +121,6 @@ MemoryRef is one typed pointer: the payload of a record.
 |-------|------|---|-------------|
 | `content` | string | 1 |  |
 
-### UpdateCursorResponse
-
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `content` | string | 1 |  |
-
 ### UpdateMemoryRequest
 
 | Field | Type | # | Description |
@@ -132,12 +128,6 @@ MemoryRef is one typed pointer: the payload of a record.
 | `memory` | Memory | 1 | memory.name is the identity to upsert |
 | `update_mask` | FieldMask | 2 | empty = full replace (the only mode today) |
 | `allow_missing` | bool | 3 | true => create when absent (AIP-134 upsert) |
-
-### UpdateMemoryResponse
-
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `memory` | Memory | 1 | the stored record, with server-set timestamps |
 
 ## Enums
 

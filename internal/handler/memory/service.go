@@ -20,8 +20,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	store "github.com/egladman/magus/internal/memory"
-	memoryv1 "github.com/egladman/magus/proto/gen/go/magus/memory/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/memory/v1/memoryv1connect"
+	memoryv1 "github.com/egladman/magus/proto/gen/go/magus/memory/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/memory/v1alpha1/memoryv1alpha1connect"
 )
 
 // workspace is the narrow slice of *magus.Magus the handler needs: the workspace root,
@@ -30,7 +30,7 @@ type workspace interface {
 	Root() string
 }
 
-// Service implements memoryv1connect.MemoryServiceHandler over the on-disk record store.
+// Service implements memoryv1alpha1connect.MemoryServiceHandler over the on-disk record store.
 type Service struct {
 	ws workspace
 }
@@ -38,7 +38,7 @@ type Service struct {
 // NewService builds a MemoryService handler over the workspace ws.
 func NewService(ws workspace) *Service { return &Service{ws: ws} }
 
-var _ memoryv1connect.MemoryServiceHandler = (*Service)(nil)
+var _ memoryv1alpha1connect.MemoryServiceHandler = (*Service)(nil)
 
 // ListMemories returns every record in full. Pagination is wired in the contract but the
 // store returns all records today, so next_page_token is always empty.
@@ -58,7 +58,7 @@ func (s *Service) ListMemories(_ context.Context, _ *connect.Request[memoryv1.Li
 // when absent (the upsert); allow_missing=false rejects an absent record with NotFound. Only
 // a full replace is supported, so a non-empty update_mask is rejected rather than silently
 // dropping the fields the mask omits.
-func (s *Service) UpdateMemory(_ context.Context, req *connect.Request[memoryv1.UpdateMemoryRequest]) (*connect.Response[memoryv1.UpdateMemoryResponse], error) {
+func (s *Service) UpdateMemory(_ context.Context, req *connect.Request[memoryv1.UpdateMemoryRequest]) (*connect.Response[memoryv1.Memory], error) {
 	if paths := req.Msg.GetUpdateMask().GetPaths(); len(paths) > 0 {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("memory: partial update_mask is not supported; send the full record"))
 	}
@@ -81,7 +81,7 @@ func (s *Service) UpdateMemory(_ context.Context, req *connect.Request[memoryv1.
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&memoryv1.UpdateMemoryResponse{Memory: recordToProto(stored)}), nil
+	return connect.NewResponse(recordToProto(stored)), nil
 }
 
 // DeleteMemory removes a record by name. allow_missing=true makes deleting an absent record
@@ -98,17 +98,17 @@ func (s *Service) DeleteMemory(_ context.Context, req *connect.Request[memoryv1.
 }
 
 // GetCursor returns a legacy cursor snapshot for migration. New handoffs use named entries.
-func (s *Service) GetCursor(_ context.Context, _ *connect.Request[memoryv1.GetCursorRequest]) (*connect.Response[memoryv1.GetCursorResponse], error) {
+func (s *Service) GetCursor(_ context.Context, _ *connect.Request[memoryv1.GetCursorRequest]) (*connect.Response[memoryv1.Cursor], error) {
 	content, err := store.ReadCursor(s.ws.Root())
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&memoryv1.GetCursorResponse{Content: content}), nil
+	return connect.NewResponse(&memoryv1.Cursor{Content: content}), nil
 }
 
 // UpdateCursor rejects global cursor writes: a shared single snapshot lets one session erase
 // another's handoff. The RPC remains in the schema so older consoles receive a migration hint.
-func (s *Service) UpdateCursor(_ context.Context, _ *connect.Request[memoryv1.UpdateCursorRequest]) (*connect.Response[memoryv1.UpdateCursorResponse], error) {
+func (s *Service) UpdateCursor(_ context.Context, _ *connect.Request[memoryv1.UpdateCursorRequest]) (*connect.Response[memoryv1.Cursor], error) {
 	return nil, connect.NewError(connect.CodeFailedPrecondition, errors.New("memory: cursor writes are retired; create or update a named decision or plan entry instead"))
 }
 

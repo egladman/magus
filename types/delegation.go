@@ -54,11 +54,11 @@ func (s DelegationState) terminal() bool {
 // one-for-one, so a row an agent writes down and a row it records here cannot describe
 // the same unit differently.
 //
-// Deliberately NOT registered in cmd/magus-utils/boundary_types.go: no host method
-// returns one, so there is no Buzz surface to mirror and registering it would generate
-// a type declaration nothing can produce. VCSCheckpoint - the value Checkpoint holds -
-// deferred the same registration for the same reason. Register both together on the
-// day a magusfile can actually read one.
+// Registered in cmd/magus-utils/boundary_types.go as a RuntimeObject: magus\ledger.put
+// and magus\ledger.list (bound in internal/interp/bindings/ledger_ns.go, backed by
+// std.MagusPutLedger/MagusListLedger) return one. VCSCheckpoint - the value Checkpoint
+// holds - stays unregistered: Checkpoint is a plain string here, the form an
+// orchestrator has at spawn time, so there is no struct to mirror yet.
 type DelegationUnit struct {
 	// ID is the unit's identity within the plan, and the key Put upserts on. The
 	// console joins its drawer rows to agent activity by this value, so an

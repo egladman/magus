@@ -146,12 +146,20 @@
         {
           "name": "security",
           "doc": "Gates on dependency LICENSE terms, which is a separate question from image_scan's vulnerability pass even though both drive trivy.",
+          "dependencies": [
+            "generate"
+          ],
           "spells": [
             {
               "spell": "go",
               "ops": [
                 "govulncheck"
               ]
+            }
+          ],
+          "chain": [
+            {
+              "target": "generate"
             }
           ],
           "reads_secrets": false,
@@ -340,6 +348,9 @@
               "glob": ".claude/skills/magus-buzz-write*/**"
             },
             {
+              "glob": ".claude/skills/magus-commit-composition*/**"
+            },
+            {
               "glob": ".claude/skills/magus-change-summary*/**"
             },
             {
@@ -379,6 +390,9 @@
               "glob": ".agents/skills/magus-buzz-write*/**"
             },
             {
+              "glob": ".agents/skills/magus-commit-composition*/**"
+            },
+            {
               "glob": ".agents/skills/magus-change-summary*/**"
             },
             {
@@ -416,6 +430,9 @@
             },
             {
               "glob": ".opencode/skills/magus-buzz-write*/**"
+            },
+            {
+              "glob": ".opencode/skills/magus-commit-composition*/**"
             },
             {
               "glob": ".opencode/skills/magus-change-summary*/**"
@@ -786,14 +803,11 @@
         },
         {
           "name": "test",
-          "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
+          "doc": "Tests with race detection and a coverage floor.",
           "dependencies": [
             "advice-test",
             "format",
             "buzz-test"
-          ],
-          "charms": [
-            "rw"
           ],
           "spells": [
             {
@@ -817,11 +831,37 @@
           "reads_secrets": false,
           "writes_files": [
             {
-              "glob": "assets/coverage.svg"
+              "glob": "coverage.out"
+            },
+            {
+              "glob": "coverage.hand.out"
             }
           ],
           "exec_overrides": [
             "env:GOEXPERIMENT=jsonv2"
+          ]
+        },
+        {
+          "name": "coverage-badge",
+          "declared": "coverage_badge",
+          "doc": "Writes assets/coverage.svg, and is the only target that may.",
+          "dependencies": [
+            "test"
+          ],
+          "charms": [
+            "gha",
+            "rw"
+          ],
+          "chain": [
+            {
+              "target": "test"
+            }
+          ],
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "assets/coverage.svg"
+            }
           ]
         },
         {
@@ -1033,6 +1073,7 @@
             "lint",
             "build",
             "test",
+            "coverage-badge",
             "compress-cgo-test",
             "completion-test",
             "security"
@@ -1046,6 +1087,9 @@
             },
             {
               "target": "test"
+            },
+            {
+              "target": "coverage-badge"
             },
             {
               "target": "compress-cgo-test"
@@ -1320,7 +1364,8 @@
       ],
       "depends_on": [
         ".",
-        "libs/textsearch"
+        "libs/textsearch",
+        "proto"
       ]
     },
     {
@@ -1567,9 +1612,6 @@
               "glob": "gen/**"
             },
             {
-              "glob": "src/gen/**"
-            },
-            {
               "glob": "active.urls.lock"
             }
           ]
@@ -1581,6 +1623,7 @@
             "preflight",
             "content-generate",
             "index-generate",
+            "diagrams-generate",
             "build-hljs",
             "build-playground-editor",
             "build-playground",
@@ -1608,6 +1651,9 @@
             },
             {
               "target": "index-generate"
+            },
+            {
+              "target": "diagrams-generate"
             },
             {
               "target": "build-hljs"
@@ -2610,6 +2656,9 @@
         {
           "name": "generate",
           "doc": "Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in.",
+          "charms": [
+            "rw"
+          ],
           "spells": [
             {
               "spell": "buf",
@@ -2619,7 +2668,20 @@
               ]
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "gen/**"
+            },
+            {
+              "project": "../docs",
+              "glob": "src/gen/**"
+            },
+            {
+              "project": "../console",
+              "glob": "src/gen/**"
+            }
+          ]
         },
         {
           "name": "lint",

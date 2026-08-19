@@ -1,0 +1,175 @@
+// Merge the base into a PR whose conflicts are all in generated files, settle them by
+// regenerating, and push. Runs the commands merge-conflict.buzz only names, under the same
+// two-party consent as fix-generated-drift.buzz: the workflow enables it, a label asks.
+//
+// Merge, not rebase - see conflictBody in merge-conflict.buzz.
+//
+// Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_REF, PR_HEAD_REPO, FIX_CONFLICTS, FIX_LABEL.
+import "proc";
+import "advice";
+import "std";
+
+final section = "merge-conflict-fix";
+
+// Shared with fix-generated-drift.buzz, so one rule recognizes magus's own commits
+// whichever fixer wrote them.
+final autofix_email = "magus-autofix@users.noreply.github.com";
+final autofix_name = "magus autofix";
+
+fun git(argv: [str], tolerate: bool) > proc\ExecResult !> any {
+    return proc\exec("git", args: argv, dir: ".", opts: {"allow_failure": tolerate});
+}
+
+fun labelled(repo: str, pr: str, want: str) > bool !> any {
+    final listed = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
+        dir: ".", opts: {"quiet": true, "allow_failure": true});
+    if (!listed.ok) { return false; }
+    return listed.stdout.indexOf("\"name\": \"" + want + "\"") != null;
+}
+
+// Not `ls-files -u`: it reports one line per stage, naming a path up to three times.
+fun unmerged() > [str] !> any {
+    final paths = mut [<str>];
+    foreach (line in git(["diff", "--name-only", "--diff-filter=U"], tolerate: false).stdout.split("\n")) {
+        if (line != "") { paths.append(line); }
+    }
+    return paths;
+}
+
+// Pure, so the wording is testable. It warns about stale checks because a GITHUB_TOKEN
+// push starts no workflow run, and green checks then read as a verdict on the merged tree.
+export fun pushedBody(base: str, files: [str], sha: str) > str {
+    final parts = mut ["**Merged `" + base + "` into this branch** and settled the conflicts "
+        + "by regenerating, then pushed `" + sha + "`.\n\nSettled:\n\n"];
+    foreach (f in files) { parts.append("- `" + f + "`\n"); }
+    parts.append("\nPull before you push again, or your next push will conflict with the "
+        + "commit above.\n\nThe checks on this pull request still describe the tree from "
+        + "before the merge - a push made with the CI token does not start a new run. "
+        + "Re-run them to judge what is here now.\n\nRemove the label to stop magus from "
+        + "doing this.\n");
+    return parts.join("");
+}
+
+// Names the conflicts magus does not own; stopping is only useful if it says what at.
+export fun blockedBody(base: str, files: [str]) > str {
+    final parts = mut ["Merged `" + base + "` in and regenerated, and these conflicts are "
+        + "still open - nothing in this workspace generates them, so magus has no better "
+        + "answer than a three-way merge does:\n\n"];
+    foreach (f in files) { parts.append("- `" + f + "`\n"); }
+    parts.append("\nThe merge was left in the working tree of a CI runner and discarded, "
+        + "so this branch is unchanged. Resolve these locally:\n\n```sh\ngit merge origin/"
+        + base + "\nmagus vcs resolve\ngit push\n```\n");
+    return parts.join("");
+}
+
+fun main() > void !> any {
+    // An advisor the workflow never enabled says nothing at all.
+    if (advice\env("FIX_CONFLICTS") != "true") { return; }
+
+    final repo = advice\env("REPO");
+    final pr = advice\env("PR_NUMBER");
+    final base = advice\env("PR_BASE");
+    final headRef = advice\env("PR_HEAD_REF");
+    final headRepo = advice\env("PR_HEAD_REPO");
+    final label = advice\env("FIX_LABEL");
+    if (repo == "" or pr == "" or base == "" or headRef == "") {
+        std\print("fix-merge-conflict: no PR context; nothing to fix");
+        return;
+    }
+
+    if (!labelled(repo, pr: pr, want: label)) {
+        advice\publish(repo, pr: pr, name: section, title: "Merge conflicts", body: "");
+        std\print("fix-merge-conflict: label " + label + " absent; nothing to do");
+        return;
+    }
+
+    // This token cannot write to a fork. Say so rather than fail on a push nobody can grant.
+    if (headRepo != "" and headRepo != repo) {
+        advice\publish(repo, pr: pr, name: section, title: "Merge conflicts",
+            body: "This pull request comes from a fork, so magus cannot push the merge to "
+                + "it - the CI token has no write access to `" + headRepo + "`. Run `git "
+                + "merge origin/" + base + "` and `magus vcs resolve` locally.");
+        return;
+    }
+
+    // A pull_request event checks out refs/pull/N/merge detached - base already merged with
+    // head - and pushing that would land a merge nobody reviewed. Branch name, not head sha:
+    // a fixer that already pushed has moved the sha on purpose.
+    final at = git(["rev-parse", "--abbrev-ref", "HEAD"], tolerate: false).stdout.trim();
+    if (at != headRef) {
+        throw "fix-merge-conflict: checked out " + at + ", not this PR's branch " + headRef
+            + "; the workflow must check the head branch out by name before this step";
+    }
+
+    // Explicit refspec: actions/checkout leaves remote.origin.fetch not covering the base,
+    // so a bare fetch updates FETCH_HEAD and nothing else.
+    final fetched = git(["fetch", "--no-tags", "origin",
+        "+refs/heads/" + base + ":refs/remotes/origin/" + base], tolerate: true);
+    if (!fetched.ok) { throw "fix-merge-conflict: git fetch " + base + ": " + fetched.stderr; }
+
+    git(["config", "user.email", autofix_email], tolerate: false);
+    git(["config", "user.name", autofix_name], tolerate: false);
+
+    // driver=false reproduces what github.com computed. The point is to settle the conflicts
+    // GitHub reports, not to hide them behind a better merge only this job can do.
+    final merged = git(["-c", "merge.magus.driver=false", "merge", "--no-ff", "--no-edit",
+        "origin/" + base], tolerate: true);
+    if (merged.ok) {
+        // Already resolved, or the base moved again. Either way there is no fix to offer.
+        advice\publish(repo, pr: pr, name: section, title: "Merge conflicts", body: "");
+        std\print("fix-merge-conflict: " + base + " merged cleanly; nothing to settle");
+        return;
+    }
+
+    final conflicts = unmerged();
+    if (conflicts.len() == 0) {
+        // Failed for something other than a conflict - a dirty tree, a missing ref.
+        git(["merge", "--abort"], tolerate: true);
+        throw "fix-merge-conflict: git merge failed without conflicts: " + merged.stderr;
+    }
+
+    // magus\cmd, not proc\exec on the binary: no PATH lookup, and no version skew between
+    // the magus advising and the magus regenerating.
+    magus\cmd("vcs", args: ["resolve"], opts: {"allow_failure": true});
+
+    final left = unmerged();
+    if (left.len() > 0) {
+        git(["merge", "--abort"], tolerate: true);
+        advice\publish(repo, pr: pr, name: section, title: "Merge conflicts ({left.len()})",
+            body: blockedBody(base, files: left));
+        std\print("fix-merge-conflict: unresolved: " + left.join(", "));
+        return;
+    }
+
+    git(["commit", "--no-edit"], tolerate: false);
+    final pushed = git(["push", "origin", "HEAD:" + headRef], tolerate: true);
+    if (!pushed.ok) { throw "fix-merge-conflict: git push " + headRef + ": " + pushed.stderr; }
+
+    advice\publish(repo, pr: pr, name: section, title: "Merged {base} and settled {conflicts.len()} conflict(s)",
+        body: pushedBody(base, files: conflicts,
+            sha: git(["rev-parse", "--short", "HEAD"], tolerate: false).stdout.trim()));
+    std\print("fix-merge-conflict: merged " + base + ", settled " + conflicts.join(", "));
+}
+
+
+test "pushedBody names every file, the commit, and how to stop it" {
+    final body = pushedBody("main", files: ["MAGUS.md", "gen/knowledge-graph.json"], sha: "abc1234");
+    std\assert(body.indexOf("- `MAGUS.md`") != null, message: "names the first file");
+    std\assert(body.indexOf("- `gen/knowledge-graph.json`") != null, message: "names the second");
+    std\assert(body.indexOf("abc1234") != null, message: "names the commit it pushed");
+    std\assert(body.indexOf("Remove the label") != null, message: "says how to turn it off");
+}
+
+// The stale-checks sentence is the one thing a reader cannot work out from the page: the
+// checks look like a verdict on the merged tree and are not.
+test "pushedBody warns that the checks predate the merge" {
+    final body = pushedBody("main", files: ["MAGUS.md"], sha: "abc1234");
+    std\assert(body.indexOf("does not start a new run") != null, message: "explains the stale checks");
+}
+
+test "blockedBody names what magus could not settle and leaves the branch alone" {
+    final body = blockedBody("main", files: ["internal/run.go"]);
+    std\assert(body.indexOf("- `internal/run.go`") != null, message: "names the conflict");
+    std\assert(body.indexOf("this branch is unchanged") != null, message: "says nothing was pushed");
+    std\assert(body.indexOf("magus vcs resolve") != null, message: "names the local command");
+}

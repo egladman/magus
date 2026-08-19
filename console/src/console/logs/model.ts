@@ -1,11 +1,11 @@
 // model.ts - builds the {sections,...} render model the pretty/raw views consume, from either
-// a heuristic text parse (a pasted/dropped/#src log has no structure) or a magus.viewer.v1
+// a heuristic text parse (a pasted/dropped/#src log has no structure) or a magus.viewer.v1alpha1
 // event stream (the #data / live / demo paths, where grouping and status are exact, not
 // regex-guessed). Both produce the SAME model shape so render()/search/fold/copy work unchanged.
 // Pure: no DOM, no shared-state mutation - it takes its inputs as arguments.
 
-import { Kind, Status } from "../../gen/magus/viewer/v1/viewer_pb";
-import type { Command } from "../../gen/magus/viewer/v1/viewer_pb";
+import { Kind, Status } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
+import type { Command } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
 import type { Duration } from "@bufbuild/protobuf/wkt";
 import type { BuiltModel, InvocationView, RenderModel, Section, Source } from "./state";
 import { stripAnsi } from "../render/ansi";

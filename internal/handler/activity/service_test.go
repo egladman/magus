@@ -14,8 +14,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/trail"
-	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1"
-	queryv1 "github.com/egladman/magus/proto/gen/go/magus/query/v1"
+	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
+	queryv1 "github.com/egladman/magus/proto/gen/go/magus/query/v1alpha1"
 )
 
 func actions(events []*activityv1.ActivityEvent) []string {
@@ -38,8 +38,8 @@ func svc(dirs ...string) *Service {
 
 func list(t *testing.T, dir string, q *activityv1.ActivityQuery) []*activityv1.ActivityEvent {
 	t.Helper()
-	resp, err := svc(dir).ListActivity(context.Background(),
-		connect.NewRequest(&activityv1.ListActivityRequest{Filter: q}))
+	resp, err := svc(dir).ListActivityEvents(context.Background(),
+		connect.NewRequest(&activityv1.ListActivityEventsRequest{Filter: q}))
 	require.NoError(t, err)
 	return resp.Msg.GetEvents()
 }
@@ -74,10 +74,10 @@ func seedTrail(t *testing.T) (dir, respRef string) {
 	return dir, respRef
 }
 
-func TestListActivity_MapsAndOrdersNewestFirst(t *testing.T) {
+func TestListActivityEvents_MapsAndOrdersNewestFirst(t *testing.T) {
 	dir, _ := seedTrail(t)
-	resp, err := svc(dir).ListActivity(context.Background(),
-		connect.NewRequest(&activityv1.ListActivityRequest{}))
+	resp, err := svc(dir).ListActivityEvents(context.Background(),
+		connect.NewRequest(&activityv1.ListActivityEventsRequest{}))
 	require.NoError(t, err)
 
 	events := resp.Msg.GetEvents()
@@ -124,10 +124,10 @@ func TestEncodeHost_RecordedHostWinsAndMCPFallsBackToUserAgent(t *testing.T) {
 	assert.Empty(t, encodeHost(trail.Event{Kind: trail.KindAgentCommand}))
 }
 
-func TestListActivity_FilterByKind(t *testing.T) {
+func TestListActivityEvents_FilterByKind(t *testing.T) {
 	dir, _ := seedTrail(t)
-	resp, err := svc(dir).ListActivity(context.Background(),
-		connect.NewRequest(&activityv1.ListActivityRequest{
+	resp, err := svc(dir).ListActivityEvents(context.Background(),
+		connect.NewRequest(&activityv1.ListActivityEventsRequest{
 			Filter: &activityv1.ActivityQuery{Kinds: []activityv1.Kind{activityv1.Kind_KIND_MCP_TOOL_CALL}},
 		}))
 	require.NoError(t, err)
@@ -136,7 +136,7 @@ func TestListActivity_FilterByKind(t *testing.T) {
 	assert.Equal(t, "magus_query", events[0].GetAction())
 }
 
-func TestListActivity_FilterAgentCommand(t *testing.T) {
+func TestListActivityEvents_FilterAgentCommand(t *testing.T) {
 	dir, _ := seedTrail(t)
 	events := list(t, dir, &activityv1.ActivityQuery{Kinds: []activityv1.Kind{activityv1.Kind_KIND_AGENT_COMMAND}})
 	require.Len(t, events, 1)
@@ -144,10 +144,10 @@ func TestListActivity_FilterAgentCommand(t *testing.T) {
 	assert.Equal(t, "session:abc", events[0].GetActor())
 }
 
-// TestListActivity_CarriesAgentSpawn proves the delegation record reaches the console over the
+// TestListActivityEvents_CarriesAgentSpawn proves the delegation record reaches the console over the
 // EXISTING listing: a distinct kind, the unit on the row so a reader can join a page to a work
 // ledger without a GetPayload per row, and the handed context reachable only by its ref.
-func TestListActivity_CarriesAgentSpawn(t *testing.T) {
+func TestListActivityEvents_CarriesAgentSpawn(t *testing.T) {
 	dir := t.TempDir()
 	trail.AppendAgentSpawn(t.Context(), dir, trail.AgentSpawn{
 		Workspace: "/ws/a", Host: "claude-code", Session: "abc", Tool: "Task", Child: "Explore",
@@ -183,7 +183,7 @@ func TestGetPayload_RoundTripAndReject(t *testing.T) {
 		connect.NewRequest(&activityv1.GetPayloadRequest{Ref: ref}))
 	require.NoError(t, err)
 	assert.Equal(t, "the result body", string(pr.Msg.GetBody()))
-	assert.Equal(t, int64(len("the result body")), pr.Msg.GetBytes())
+	assert.Equal(t, int64(len("the result body")), pr.Msg.GetSizeBytes())
 
 	_, err = s.GetPayload(context.Background(),
 		connect.NewRequest(&activityv1.GetPayloadRequest{Ref: "mcpdeadbeef"}))
@@ -227,14 +227,14 @@ func TestMatchFilter_TimeWindow(t *testing.T) {
 	assert.Equal(t, []string{"connector.create"}, actions(window)) // exactly Ts==2
 }
 
-func TestListActivity_PageSizeDefaultAndCap(t *testing.T) {
+func TestListActivityEvents_PageSizeDefaultAndCap(t *testing.T) {
 	dir, _ := seedTrail(t)
 	// A negative/zero page size falls back to the default; an over-max size is capped.
 	// Both still return all seeded events (fewer than the cap), proving the request
 	// is accepted rather than rejected.
 	for _, size := range []int32{0, -5, maxPageSize + 100} {
-		resp, err := svc(dir).ListActivity(context.Background(),
-			connect.NewRequest(&activityv1.ListActivityRequest{PageSize: size}))
+		resp, err := svc(dir).ListActivityEvents(context.Background(),
+			connect.NewRequest(&activityv1.ListActivityEventsRequest{PageSize: size}))
 		require.NoError(t, err)
 		assert.Len(t, resp.Msg.GetEvents(), 4, "page_size=%d", size)
 		assert.Empty(t, resp.Msg.GetNextPageToken())
@@ -278,13 +278,13 @@ func seedAt(t *testing.T, ts ...int64) string {
 
 func listAll(t *testing.T, s *Service, pageSize int32) []*activityv1.ActivityEvent {
 	t.Helper()
-	resp, err := s.ListActivity(context.Background(),
-		connect.NewRequest(&activityv1.ListActivityRequest{PageSize: pageSize}))
+	resp, err := s.ListActivityEvents(context.Background(),
+		connect.NewRequest(&activityv1.ListActivityEventsRequest{PageSize: pageSize}))
 	require.NoError(t, err)
 	return resp.Msg.GetEvents()
 }
 
-func TestListActivity_MergesWorkspacesNewestFirst(t *testing.T) {
+func TestListActivityEvents_MergesWorkspacesNewestFirst(t *testing.T) {
 	// Two workspaces whose events interleave in time. Concatenating the trails would group them
 	// by workspace; the merged page must be in time order across both.
 	a, b := seedAt(t, 1, 3, 5), seedAt(t, 2, 4, 6)
@@ -299,7 +299,7 @@ func TestListActivity_MergesWorkspacesNewestFirst(t *testing.T) {
 	}, rows(listAll(t, svc(a, b), 0)))
 }
 
-func TestListActivity_PageSizeCapsTheMergedSet(t *testing.T) {
+func TestListActivityEvents_PageSizeCapsTheMergedSet(t *testing.T) {
 	// page_size=3 over two trails must be the 3 most recent DAEMON-WIDE, not 3 from each.
 	a, b := seedAt(t, 1, 3, 5), seedAt(t, 2, 4, 6)
 
@@ -310,7 +310,7 @@ func TestListActivity_PageSizeCapsTheMergedSet(t *testing.T) {
 	}, rows(listAll(t, svc(a, b), 3)))
 }
 
-func TestListActivity_SkipsUnreadableWorkspace(t *testing.T) {
+func TestListActivityEvents_SkipsUnreadableWorkspace(t *testing.T) {
 	// A workspace that cannot be read must not blank the panel for the ones that can: a cache dir
 	// that is a FILE (every path under it fails), and one that never recorded anything.
 	broken := filepath.Join(t.TempDir(), "not-a-dir")
@@ -324,7 +324,7 @@ func TestListActivity_SkipsUnreadableWorkspace(t *testing.T) {
 	}, rows(listAll(t, svc(broken, ok, silent), 0)))
 }
 
-func TestListActivity_MergePreservesRecordedWorkspaceAndDoesNotInventOne(t *testing.T) {
+func TestListActivityEvents_MergePreservesRecordedWorkspaceAndDoesNotInventOne(t *testing.T) {
 	// Event.Workspace means "the root this action pertained to", and it is deliberately empty for a
 	// daemon-wide action (trail.go). Merging trails must not change that: an earlier revision filled
 	// blanks from the trail that happened to hold them, which made a daemon-wide MCP call or token
@@ -347,7 +347,7 @@ func TestListActivity_MergePreservesRecordedWorkspaceAndDoesNotInventOne(t *test
 	assert.Empty(t, byAction["magus_query"], "a daemon-wide MCP call stays unattributed")
 }
 
-func TestListActivity_SingleWorkspaceAndNoWorkspaces(t *testing.T) {
+func TestListActivityEvents_SingleWorkspaceAndNoWorkspaces(t *testing.T) {
 	// The common case does not regress: one workspace returns its own events...
 	dir, _ := seedTrail(t)
 	assert.Len(t, listAll(t, svc(dir), 0), 4)

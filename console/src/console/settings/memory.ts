@@ -1,6 +1,6 @@
 // memory.ts - the Settings "Agent memory" section: a dense, console-admin view over the
 // durable agent-memory RECORDS the magus_memory MCP tool writes, spoken to over
-// magus.memory.v1.MemoryService.
+// magus.memory.v1alpha1.MemoryService.
 //
 // Memory is a set of discrete records, each a typed POINTER into the magus domain (the refs
 // ARE the payload); only a decision/plan carries a prose caption. The view is a list built
@@ -17,7 +17,7 @@ import {
   MemoryType,
   MemoryRefKind,
   type Memory,
-} from "../../gen/magus/memory/v1/memory_pb";
+} from "../../gen/magus/memory/v1alpha1/memory_pb";
 import { createDaemonTransport, getLiveToken, isCapabilityDenied } from "../../lib/daemon";
 import { showToast } from "../../lib/refresh-toast";
 import { h } from "../view";

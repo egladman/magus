@@ -33,8 +33,8 @@ export function remoteTile(): Tile {
     strip.set("misses", fmtCount(r.misses));
     strip.set("errors", fmtCount(r.errors));
     strip.set("rate", fmtPct(r.hitRate));
-    strip.set("p50", fmtDur(r.durationP50));
-    strip.set("p95", fmtDur(r.durationP95));
+    strip.set("p50", fmtDur(r.durationP50Seconds));
+    strip.set("p95", fmtDur(r.durationP95Seconds));
     strip.set("io", fmtCount(r.ioCount));
     strip.set("bytes", fmtBytes(r.bytesTotal));
   }

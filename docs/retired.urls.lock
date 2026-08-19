@@ -167,6 +167,21 @@ spells/md/
 spells/py/
 spells/rs/
 spells/ts/
+concepts/spells/md/
+concepts/spells/py/
+concepts/spells/rs/
+concepts/spells/ts/
+# Tag indexes that fell to a single carrier when the four duplicate spell pages above
+# went away. A one-page tag gets no /tags/<slug>/ page by design (engine/page.buzz) - the
+# tag stays reachable as a search chip on the page that carries it.
+tags/cargo/
+tags/eslint/
+tags/prettier/
+tags/pytest/
+tags/python/
+tags/ruff/
+tags/uv/
+tags/vitest/
 targets/
 targets/ci/
 telemetry/

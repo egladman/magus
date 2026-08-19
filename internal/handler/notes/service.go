@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -29,8 +30,8 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	store "github.com/egladman/magus/internal/notes"
-	notesv1 "github.com/egladman/magus/proto/gen/go/magus/notes/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/notes/v1/notesv1connect"
+	notesv1 "github.com/egladman/magus/proto/gen/go/magus/notes/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/notes/v1alpha1/notesv1alpha1connect"
 	"github.com/egladman/magus/types"
 )
 
@@ -42,7 +43,7 @@ type workspace interface {
 	KnowledgeGraphWithSymbols(ctx context.Context) (*knowledge.Graph, error)
 }
 
-// Service implements notesv1connect.NotesServiceHandler over the on-disk note stores.
+// Service implements notesv1alpha1connect.NotesServiceHandler over the on-disk note stores.
 type Service struct {
 	ws  workspace
 	cfg config.Config
@@ -53,7 +54,7 @@ type Service struct {
 // location the reader never opted in to.
 func NewService(ws workspace, cfg config.Config) *Service { return &Service{ws: ws, cfg: cfg} }
 
-var _ notesv1connect.NotesServiceHandler = (*Service)(nil)
+var _ notesv1alpha1connect.NotesServiceHandler = (*Service)(nil)
 
 // scopedDir pairs one resolved store directory with the scope that says what putting a note
 // there means.
@@ -120,28 +121,45 @@ func (s *Service) ListNotes(ctx context.Context, _ *connect.Request[notesv1.List
 	return connect.NewResponse(out), nil
 }
 
-// GetNote returns one note in full, including its body. scope is required rather than
-// inferred: a name can exist in both stores, and the two mean different things to a reader,
-// so guessing which was meant is the one thing that must not happen.
-func (s *Service) GetNote(ctx context.Context, req *connect.Request[notesv1.GetNoteRequest]) (*connect.Response[notesv1.GetNoteResponse], error) {
-	want := req.Msg.GetScope()
-	if want == notesv1.Scope_SCOPE_UNSPECIFIED {
+// splitNoteName splits a note resource name into its store and bare id. It reports false
+// for anything that does not name a store, which is the whole point of folding the store
+// into the name: an unprefixed name is ambiguous and must be refused, not guessed.
+func splitNoteName(name string) (notesv1.Scope, string, bool) {
+	store, id, found := strings.Cut(name, "/")
+	if !found || id == "" {
+		return notesv1.Scope_SCOPE_UNSPECIFIED, "", false
+	}
+	switch store {
+	case "shared":
+		return notesv1.Scope_SCOPE_SHARED, id, true
+	case "private":
+		return notesv1.Scope_SCOPE_PRIVATE, id, true
+	}
+	return notesv1.Scope_SCOPE_UNSPECIFIED, "", false
+}
+
+// GetNote returns one note in full, including its body. The store is carried in the name
+// ("shared/x", "private/x") rather than inferred: a bare name can exist in both, and the two
+// mean different things to a reader, so guessing which was meant must not happen.
+func (s *Service) GetNote(ctx context.Context, req *connect.Request[notesv1.GetNoteRequest]) (*connect.Response[notesv1.Note], error) {
+	want, id, ok := splitNoteName(req.Msg.GetName())
+	if !ok {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("notes: scope is required; a name can exist in both stores and they mean different things about who can read the note"))
+			errors.New(`notes: name must be "shared/<note>" or "private/<note>"; the store is part of the name because a bare name can exist in both and they mean different things about who can read the note`))
 	}
 	for _, sd := range s.stores() {
 		if sd.pbScope != want || !sd.declared {
 			continue
 		}
-		n, err := store.Get(sd.dir, req.Msg.GetName())
+		n, err := store.Get(sd.dir, id)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
-				return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("notes: no %s note named %q", sd.scope, req.Msg.GetName()))
+				return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("notes: no %s note named %q", sd.scope, id))
 			}
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}
 		res, stale := s.resolver(ctx)
-		return connect.NewResponse(&notesv1.GetNoteResponse{Note: s.toProto(ctx, n, sd, res, stale, true)}), nil
+		return connect.NewResponse(s.toProto(ctx, n, sd, res, stale, true)), nil
 	}
 	return nil, connect.NewError(connect.CodeNotFound,
 		fmt.Errorf("notes: this workspace declares no %s notes store", scopeName(want)))

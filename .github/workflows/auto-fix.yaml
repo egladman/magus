@@ -1,0 +1,81 @@
+name: Auto-fix
+
+# Settles what magus can settle on a pull request, when a human asks for it by label.
+#
+# Separate from ci.yaml on three counts. TRIGGER: ci runs on push, so a conflict created by
+# main moving under an open PR never reaches it - which is the case worth automating.
+# WRITE: this is the only workflow needing contents: write, and ci stays read-only.
+# COST: labelling would otherwise rerun the whole CI matrix.
+#
+# Nothing here gates a merge. A failure leaves the PR in the state it was already in.
+
+on:
+  pull_request:
+    branches: [main]
+    types: [labeled]
+
+concurrency:
+  group: auto-fix-${{ github.event.pull_request.number }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  MISE_SAFE: '1'
+  GOEXPERIMENT: jsonv2
+
+jobs:
+  fix:
+    # The cheap gate, so labelling a PR `bug` does not build magus from source. The
+    # advisors re-check through the API, which is the authoritative one.
+    if: github.event.label.name == 'magus:auto-fix:requested'
+    name: magus auto-fix
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    permissions:
+      contents: write
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The head BRANCH by name. The default refs/pull/N/merge is base-already-merged,
+          # and for a conflicting PR - this workflow's whole reason - stale or missing.
+          ref: ${{ github.event.pull_request.head.ref }}
+          repository: ${{ github.event.pull_request.head.repo.full_name }}
+          # The fixer merges the base in; a shallow clone has no merge base.
+          fetch-depth: 0
+          filter: blob:none
+
+      - uses: jdx/mise-action@7e36c90d9ab29c415a2384db3006f3ec8a8cc654 # v4.2.4
+        with:
+          version: '2026.4.8'
+          env: false
+
+      - uses: ./.github/actions/setup-magus
+        with:
+          installation-strategy: source
+          source-path: .
+
+      # setup-magus's source build provisions its own Go via actions/setup-go, which
+      # PREPENDS to PATH and outranks mise's. Re-adding mise's puts it back in front.
+      - name: Restore the mise-pinned Go toolchain
+        run: echo "$(mise where go)/bin" >> "$GITHUB_PATH"
+
+      # Only the writing advisors: the read-only ones ran on the last push and a label is
+      # not new information for them.
+      - uses: ./.github/actions/advice
+        with:
+          fix-merge-conflict: 'true'
+          fix-generated-drift: 'true'
+          merge-conflicts: 'false'
+          hand-edited-generated: 'false'
+          target-outputs: 'false'
+          doctor: 'false'
+          version-floor: 'false'
+          blast-radius: 'false'
+          unclaimed: 'false'
+          skip-cache: 'false'
+          conformance: 'false'
+          missing-target: 'false'
+          first-contribution: 'false'

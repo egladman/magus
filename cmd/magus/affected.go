@@ -849,6 +849,7 @@ func printImpactText(out *types.ImpactResult) error {
 		}
 		link := liveExplorerLink(url.GraphLinkOpts{View: "blast", Node: types.KindProject + ":" + seed})
 		fmt.Printf("\nView the blast radius of %s in the Graph Explorer: %s\n", label, link)
+		fmt.Printf("%s\n", authHint)
 		fmt.Printf("(start the magus daemon if the graph does not load)\n")
 	}
 

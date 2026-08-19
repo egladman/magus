@@ -124,6 +124,12 @@ var boundaryTypes = []boundaryType{
 	{Name: "Impact", Type: reflect.TypeFor[types.ImpactResult](), RuntimeObject: true},
 	{Name: "TargetRun", Type: reflect.TypeFor[types.StatusTargetRun](), RuntimeObject: true},
 	{Name: "Run", Type: reflect.TypeFor[types.StatusRun](), RuntimeObject: true},
+	// magus\ledger's bundle (put/list), leaf-first: DelegationUnit.releases and
+	// DelegationReport.overlaps are each a list of the other two.
+	{Name: "DelegationRelease", Type: reflect.TypeFor[types.DelegationRelease](), RuntimeObject: true},
+	{Name: "DelegationUnit", Type: reflect.TypeFor[types.DelegationUnit](), RuntimeObject: true},
+	{Name: "DelegationOverlap", Type: reflect.TypeFor[types.DelegationOverlap](), RuntimeObject: true},
+	{Name: "DelegationReport", Type: reflect.TypeFor[types.DelegationReport](), RuntimeObject: true},
 }
 
 // boundaryEnums declares the Go named string types that mirror as Buzz `enum<str>`

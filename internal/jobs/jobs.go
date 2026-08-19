@@ -1,7 +1,7 @@
 // Package jobs is the registry of the daemon's background maintenance jobs: the single source
 // of truth that maps a job's stable name to the worker argv the daemon runs for it. It is the
 // leaf shared by the producers that must agree on that mapping - the `server job <name>` CLI
-// submitter, the magus.job.v1 JobService RPC handlers, the daemon's job dispatch (which admits
+// submitter, the magus.job.v1alpha1 JobService RPC handlers, the daemon's job dispatch (which admits
 // exactly these worker argvs and rejects anything else submitted as a job), and the maintenance
 // scheduler.
 //

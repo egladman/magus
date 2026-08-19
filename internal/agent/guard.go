@@ -70,7 +70,15 @@ var guardSurfaces = []string{"command", "path"}
 // host takes as allow. And the templates now resolve ./magus before PATH: an older PATH
 // binary does not fail when it lacks a rule, it reads the config key that ARMS the rule
 // as unknown and answers pass, so the guard enforces nothing at exit 0.
-const GuardTemplateVersion = 6
+//
+// 7: the advise arm is now suppressible. A host whose pre-tool-use hook REJECTS
+// the context key - treating it as an error and then failing OPEN - was not merely
+// ignoring an advisory, it was disarmed by one for that call. A copy that predates
+// this keeps sending it and keeps failing open, which no verdict anywhere reveals.
+// Suppression is opt-in per host (GUARD_NO_ADVISE), so the rendered response for a
+// host that keeps the arm is byte-identical to version 6. Which hosts need it is
+// recorded in their own guide pages, not here.
+const GuardTemplateVersion = 7
 
 // GuardTemplateMarker introduces the version line each template carries, and is
 // what a reader greps for in their own copy.

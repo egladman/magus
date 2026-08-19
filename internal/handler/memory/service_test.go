@@ -9,7 +9,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/fieldmaskpb"
 
-	memoryv1 "github.com/egladman/magus/proto/gen/go/magus/memory/v1"
+	memoryv1 "github.com/egladman/magus/proto/gen/go/magus/memory/v1alpha1"
 )
 
 // fakeWorkspace reports a fixed root; the handler only reads Root().
@@ -43,7 +43,7 @@ func TestUpdateIsUpsertAndListRoundTrips(t *testing.T) {
 
 	up, err := s.UpdateMemory(ctx, req(&memoryv1.UpdateMemoryRequest{Memory: pointer("cache-op-surface", "project:magus"), AllowMissing: true}))
 	require.NoError(t, err)
-	assert.NotNil(t, up.Msg.GetMemory().GetCreateTime(), "the store stamps create_time")
+	assert.NotNil(t, up.Msg.GetCreateTime(), "the store stamps create_time")
 
 	list, err := s.ListMemories(ctx, req(&memoryv1.ListMemoriesRequest{}))
 	require.NoError(t, err)

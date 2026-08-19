@@ -67,12 +67,6 @@ Prune the configured remote backend instead of the local cache
 \fB\-\-to\fR \fIstring\fR
 Write the archive to this file (default: stdout)
 .RE
-.SS config mcp token generate options
-.RS
-.TP
-\fB\-\-force\fR
-Overwrite an existing token (rotation)
-.RE
 .SS config mcp connector create options
 .RS
 .TP
@@ -81,6 +75,24 @@ Lifetime: a duration like 90d or 48h, or "never" (default 90d)
 .TP
 \fB\-\-name\fR \fIstring\fR
 Name for this connector token (default: connector\-N)
+.RE
+.SS config token generate options
+.RS
+.TP
+\fB\-\-force\fR
+Overwrite an existing token (rotation)
+.RE
+.SS config console token create options
+.RS
+.TP
+\fB\-\-expires\fR \fIstring\fR
+Lifetime: a duration like 90d or 48h, or "never" (default 90d)
+.TP
+\fB\-\-name\fR \fIstring\fR
+Name for this console token (default: console\-N)
+.TP
+\fB\-\-viewer\fR
+Mint a READ\-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share
 .RE
 .SH SUBCOMMANDS
 .RS
@@ -99,6 +111,12 @@ Manage the build cache (prune)
 .TP
 \fBmcp\fR
 Manage the MCP server auth token
+.TP
+\fBtoken\fR
+Manage the operator token (every surface)
+.TP
+\fBconsole\fR
+Manage the console (PWA) auth tokens
 .RE
 .SH EXAMPLES
 \fIShow effective config\fR

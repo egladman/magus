@@ -31,7 +31,7 @@
 
 import { createClient } from "@connectrpc/connect";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import { StatusService, type Status } from "../gen/magus/status/v1/status_pb";
+import { StatusService, type Status } from "../gen/magus/status/v1alpha1/status_pb";
 import { authHeaders, createDaemonTransport, getLiveToken, resolveDaemonHost } from "../lib/daemon";
 
 // The refresh cadence, and the deadline each read inside one refresh gets. Deliberately NOT the

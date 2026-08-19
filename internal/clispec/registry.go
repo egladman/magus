@@ -725,19 +725,6 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 			Short: "Manage the MCP server auth token",
 			Children: []Command{
 				{
-					Name:  "token",
-					Short: "Manage the CLI's own MCP token",
-					Children: []Command{
-						{
-							Name:  "generate",
-							Short: "Create the CLI token",
-							Flags: []Flag{
-								{Name: "force", Kind: FlagBool, Doc: "Overwrite an existing token (rotation)"},
-							},
-						},
-					},
-				},
-				{
 					Name:  "connector",
 					Short: "Manage connector tokens",
 					Children: []Command{
@@ -750,6 +737,42 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 							},
 						},
 						{Name: "revoke", Short: "Revoke a connector token"},
+					},
+				},
+			},
+		},
+		{
+			Name:  "token",
+			Short: "Manage the operator token (every surface)",
+			Children: []Command{
+				{
+					Name:  "generate",
+					Short: "Create the operator token",
+					Flags: []Flag{
+						{Name: "force", Kind: FlagBool, Doc: "Overwrite an existing token (rotation)"},
+					},
+				},
+			},
+		},
+		{
+			Name:  "console",
+			Short: "Manage the console (PWA) auth tokens",
+			Children: []Command{
+				{
+					Name:  "token",
+					Short: "Manage console tokens",
+					Children: []Command{
+						{
+							Name:  "create",
+							Short: "Mint a console token",
+							Flags: []Flag{
+								{Name: "name", Kind: FlagString, Doc: "Name for this console token (default: console-N)"},
+								{Name: "expires", Kind: FlagString, Doc: "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)"},
+								{Name: "viewer", Kind: FlagBool, Doc: "Mint a READ-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share"},
+							},
+						},
+						{Name: "ls", Short: "List console tokens"},
+						{Name: "revoke", Short: "Revoke a console token"},
 					},
 				},
 			},
@@ -889,6 +912,7 @@ mgs_ contract stubbed, each function documented, and a runnable test block.`,
 	Usage: "magus init [flags]",
 	Flags: []Flag{
 		{Name: "global", Kind: FlagBool, Doc: "Write only the global config; skip the workspace bootstrap"},
+		{Name: "dry-run", Kind: FlagBool, Doc: "Print the config, magusfile, and merge-driver destinations without writing any of them"},
 		{Name: "local", Kind: FlagBool, Doc: "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/"},
 		{Name: "force", Kind: FlagBool, Doc: "Overwrite an existing config file"},
 		{Name: "vcs", Kind: FlagString, Doc: "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY"},
@@ -1263,6 +1287,7 @@ paths-relative-to-<dir> case. Absolute destinations are refused unless
 		{Name: "dir", Kind: FlagString, Default: ".", Doc: "Repo directory to install into (agent install)"},
 		{Name: "force", Kind: FlagBool, Doc: "Overwrite existing installed skill files (agent install)"},
 		{Name: "prune", Kind: FlagBool, Doc: "Also remove installed skills this binary no longer ships; without it they are reported and left in place, and only skills magus wrote are ever candidates (agent install)"},
+		{Name: "dry-run", Kind: FlagBool, Doc: "Print what would be written and removed without touching the filesystem (agent install)"},
 		{Name: "tar", Kind: FlagBool, Doc: "Stream a tar archive to stdout instead of writing files (agent install)"},
 		{Name: "global", Kind: FlagBool, Doc: "Allow absolute destination paths in write mode (agent install)"},
 	},
@@ -1270,6 +1295,7 @@ paths-relative-to-<dir> case. Absolute destinations are refused unless
 		{"Install into a repo's agent skills directory", "magus agent install .claude/skills"},
 		{"Refresh installed skills", "magus agent install .claude/skills --force"},
 		{"Refresh, and drop skills this version no longer ships", "magus agent install .claude/skills --force --prune"},
+		{"See what a prune would remove first", "magus agent install .claude/skills --prune --dry-run"},
 		{"Install anywhere via tar", "magus agent install --tar | tar -xf - -C ~/.config/opencode/skills"},
 		{"Print a starter AGENTS.md", "magus agent sample"},
 	},

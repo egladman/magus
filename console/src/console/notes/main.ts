@@ -27,7 +27,7 @@ import {
   type Note,
   type Anchor,
   type StoreStatus,
-} from "../../gen/magus/notes/v1/notes_pb";
+} from "../../gen/magus/notes/v1alpha1/notes_pb";
 import {
   parseHash,
   wantsDemo,
@@ -381,14 +381,19 @@ export function activate(host: HTMLElement): SurfaceInstance {
     refs.emptySub.textContent = sub;
   }
 
+  // The store is part of a note's resource name ("shared/x", "private/x") rather than a
+  // second request field, so a name and a scope can never arrive disagreeing.
+  const noteResourceName = (n: Note): string =>
+    (n.scope === Scope.PRIVATE ? "private/" : "shared/") + n.name;
+
   async function loadLive(daemonHost: string): Promise<void> {
     const client = createClient(NotesService, createDaemonTransport(daemonHost));
     try {
       const resp = await client.listNotes({});
       if (stale) return;
       const loadBody = async (n: Note): Promise<string> => {
-        const one = await client.getNote({ name: n.name, scope: n.scope });
-        return one.note?.body ?? "";
+        const one = await client.getNote({ name: noteResourceName(n) });
+        return one.body ?? "";
       };
       refs.body.replaceChildren();
       for (const store of resp.stores) {

@@ -7,7 +7,7 @@
 // LogRecord (message->Body, attrs->Attributes, our kind->EventName).
 //
 // The typed [Event] is the schema: it is what the JSONL store persists and what
-// internal/handler maps onto the magus.viewer.v1 wire contract. This package is a leaf
+// internal/handler maps onto the magus.viewer.v1alpha1 wire contract. This package is a leaf
 // (stdlib-only), compiled into the default binary - every run captures.
 package journal
 

@@ -96,6 +96,7 @@ flag affected/timeout
 flag affected/upstream
 flag affected/wait
 flag agent/dir
+flag agent/dry-run
 flag agent/force
 flag agent/global
 flag agent/prune
@@ -118,6 +119,7 @@ flag hook/observe
 flag hook/path
 flag hook/session
 flag hook/transcript
+flag init/dry-run
 flag init/force
 flag init/global
 flag init/local

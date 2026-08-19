@@ -38,3 +38,17 @@ func TestBuildGraphLink(t *testing.T) {
 			got)
 	})
 }
+
+// The printed link must never carry the bearer token. liveExplorerLink used to load it
+// and embed it, which put a live credential in stdout - and so in scrollback, in any
+// captured run log, and in the context of whatever agent ran `magus explain`. This
+// asserts the omission at the seam that actually prints, not just at buildGraphLink,
+// because the regression would be a one-line reintroduction of the auth.Load() call.
+func TestLiveExplorerLinkCarriesNoToken(t *testing.T) {
+	got := liveExplorerLink(url.GraphLinkOpts{View: "blast", Node: "spell:go"})
+	if got == "" {
+		t.Skip("no daemon address configured here, so there is no link to assert on")
+	}
+	require.NotContains(t, got, "token=",
+		"the deep-link must stay unauthenticated; the token is composed in by authHint")
+}

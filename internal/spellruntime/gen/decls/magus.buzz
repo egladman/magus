@@ -330,6 +330,12 @@ export object InsightReport {
     unreferenced: Unreferenced = Unreferenced{},
 }
 
+export object Graph {
+    nodes: [str] = [],
+    dependsOn: {str: [str]} = {},
+    blastRadius: {str: int} = {},
+}
+
 export object ProjectEntry {
     path: str = "",
     name: str = "",
@@ -349,12 +355,6 @@ export object Projects {
     workspace: str = "",
     count: int = 0,
     projects: [ProjectEntry] = [],
-}
-
-export object Graph {
-    nodes: [str] = [],
-    dependsOn: {str: [str]} = {},
-    blastRadius: {str: int} = {},
 }
 
 export object TargetSpellUse {
@@ -419,6 +419,41 @@ export object TargetGraph {
     projects: [TargetGraphProject] = [],
 }
 
+export object DelegationRelease {
+    path: str = "",
+    digest: str = "",
+    releasedAt: int = 0,
+}
+
+export object DelegationUnit {
+    id: str = "",
+    parent: str = "",
+    goal: str = "",
+    checkpoint: str = "",
+    ownedPaths: [str] = [],
+    forbiddenPaths: [str] = [],
+    dependsOn: [str] = [],
+    tier: str = "",
+    validation: str = "",
+    state: str = "",
+    readOnly: bool = false,
+    releases: [DelegationRelease] = [],
+    created: int = 0,
+    updated: int = 0,
+}
+
+export object DelegationOverlap {
+    unitA: str = "",
+    unitB: str = "",
+    pathsA: [str] = [],
+    pathsB: [str] = [],
+}
+
+export object DelegationReport {
+    units: [DelegationUnit] = [],
+    overlaps: [DelegationOverlap] = [],
+}
+
 export extern fun affected(base: str = "") > Affected !> any;
 export extern fun affectedImpact(base: str = "", opts: {str: any} = {<str: any>}) > Impact !> any;
 export extern fun bustCache(project_path: str = "") > void !> any;
@@ -433,9 +468,9 @@ export extern fun doctor(args: [str], opts: {str: any} = {<str: any>}) > DoctorR
 export extern fun fatal(msg: str = "") > void;
 export extern fun hasCharm(name: str) > bool;
 export extern fun insight(opts: {str: any} = {<str: any>}) > InsightReport !> any;
-export extern fun ls() > Projects !> any;
 export extern fun project(config: any, opts: any = null) > void;
 export extern fun projectGraph() > Graph !> any;
+export extern fun projects() > Projects !> any;
 export extern fun pry() > void;
 export extern fun raise(code: str, message: str, opts: {str: any} = {<str: any>}) > void !> any;
 export extern fun run(args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
@@ -470,5 +505,12 @@ export object secret {
 // Workspace-level declarations made from the root magusfile.
 export object workspace {
     static extern fun provider(spell: {str: any}) > void;
+}
+
+// The declared delegation ledger: what an orchestrating agent said about work it handed out, recorded so a human can see the plan the agents are running. Rows are DECLARATIONS - magus records them and enforces nothing; see the field docs on types.DelegationUnit. This namespace and the magus_ledger MCP tool are the only doors onto it - there is deliberately no `magus ledger` CLI subcommand. Bound by hand in internal/interp/bindings (buildLedgerNS), not generated: a Namespace's methods are Extern by construction (see std.Namespace), so there is no Impl for codegen to reflect a trampoline from, the same reason magus\secret.read is hand-bound.
+export object ledger {
+    static extern fun clear() > int !> any;
+    static extern fun list() > DelegationReport !> any;
+    static extern fun put(id: str, opts: {str: any} = {<str: any>}) > DelegationUnit !> any;
 }
 

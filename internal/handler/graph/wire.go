@@ -1,4 +1,4 @@
-// Package graph holds the GET /api/v1/graph route handler and the magus.graph.v1 wire
+// Package graph holds the GET /api/v1/graph route handler and the magus.graph.v1alpha1 wire
 // mapping behind it. It consumes DOMAIN graph values from the console service and maps the
 // knowledge-graph flavors onto the versioned protobuf (encoded as snake_case protojson,
 // wire-compatible with what the browser Graph Explorer already parses). The targets flavor
@@ -6,11 +6,11 @@
 package graph
 
 import (
-	graphv1 "github.com/egladman/magus/proto/gen/go/magus/graph/v1"
+	graphv1 "github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1"
 	"github.com/egladman/magus/types"
 )
 
-// graphToProto maps a domain KnowledgeGraphOutput onto the magus.graph.v1 wire message. The
+// graphToProto maps a domain KnowledgeGraphOutput onto the magus.graph.v1alpha1 wire message. The
 // node-link field names already match (id/kind/label; source/target/relation), so the
 // protojson of the result is byte-shape-compatible with the domain JSON the explorer used to
 // receive; the extra count/flag fields are additive and ignored by the client.

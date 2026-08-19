@@ -1,0 +1,25 @@
+syntax = "proto3";
+
+// Package magus.query.v1alpha1 holds only SHARED query PRIMITIVES - the building blocks each
+// domain composes into its own typed query message. There is deliberately NO generic
+// Query{repeated Term} bag: log fields are not graph fields, so a lowest-common-denominator
+// filter would be dishonest. The viewer composes an EventQuery from these primitives plus its
+// own event fields; a future graph contract composes a GraphQuery from these plus its own.
+package magus.query.v1alpha1;
+
+import "google/protobuf/timestamp.proto";
+
+// StringMatch is one negatable string comparison against whatever field the composing message
+// names it for. negate inverts the match (a leading "-" in the DSL). Matching is
+// case-insensitive; multiple matches on one field AND together.
+message StringMatch {
+  string value = 1;
+  bool negate = 2;
+}
+
+// TimeRange bounds a query to items between since and until (inclusive); either bound may be
+// unset for an open-ended range. since doubles as a live-stream resume cursor.
+message TimeRange {
+  google.protobuf.Timestamp since = 1;
+  google.protobuf.Timestamp until = 2;
+}

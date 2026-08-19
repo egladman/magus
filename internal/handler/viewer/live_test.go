@@ -13,7 +13,7 @@ import (
 
 	"google.golang.org/protobuf/proto"
 
-	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1"
+	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/stretchr/testify/assert"
