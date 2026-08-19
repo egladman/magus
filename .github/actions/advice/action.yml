@@ -158,11 +158,17 @@ inputs:
     default: 'false'
   fix-label:
     description: >
-      The label that consents to a fixer running on a given pull request. One label for
-      both fixers: it means "magus, settle what you can here", not "magus, run this
-      particular script".
+      The label REQUESTING a fix. One label for both fixers: "magus, settle what you can
+      here", not "run this script". Present means outstanding - it is retired for
+      `done-label` once they run, so a PR fixed last week stops reading as asking.
     required: false
-    default: 'magus:auto-fix'
+    default: 'magus:auto-fix:requested'
+  done-label:
+    description: >
+      Records that the fixers ran. Added, and `fix-label` removed, after BOTH finish -
+      never by a fixer itself, which would withdraw consent from the one after it.
+    required: false
+    default: 'magus:auto-fix:done'
   pr-number:
     description: The pull request to comment on.
     required: false
@@ -375,3 +381,17 @@ runs:
         FIX_DRIFT: ${{ inputs.fix-generated-drift }}
         FIX_LABEL: ${{ inputs.fix-label }}
       run: magus buzz "$GITHUB_ACTION_PATH/fix-generated-drift.buzz"
+
+    # After BOTH fixers, never inside one: each reads fix-label as consent. always() so a
+    # failed fixer still retires the request, rather than re-running the same failure.
+    - name: Settle the auto-fix labels
+      if: always() && (inputs.fix-merge-conflict == 'true' || inputs.fix-generated-drift == 'true')
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        FIX_LABEL: ${{ inputs.fix-label }}
+        DONE_LABEL: ${{ inputs.done-label }}
+      run: magus buzz "$GITHUB_ACTION_PATH/settle-fix-labels.buzz"
