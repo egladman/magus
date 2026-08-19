@@ -140,10 +140,10 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Target | What it does |
 |---|---|
-| `generate` | generate is the one public docs publication target. |
+| `generate` | generate owns the COMMITTED derived files, and nothing else. |
 | `format` | Scope dprint by ARGV, not by its config, for the same reason the root project does: dprint DISCOVERS a nested dprint.json and formats that subtree under its own config, and neither this project's `includes` nor an exclude prunes it. |
 | `lint` | lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). |
-| `build` |  |
+| `build` | build renders the site: the tree cd.yaml publishes and deploy-generate assembles. |
 | `test` |  |
 | `security` | security audits what actually ships against the npm advisory database. |
 | `ci` |  |
