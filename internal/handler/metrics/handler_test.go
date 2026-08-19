@@ -51,7 +51,7 @@ func TestGetMetrics(t *testing.T) {
 	snap := resp.Msg
 	require.NotNil(t, snap)
 	require.Equal(t, int64(10), snap.Target.Count)
-	require.InDelta(t, 1.5, snap.Target.P50, 1e-9)
+	require.InDelta(t, 1.5, snap.Target.P50Seconds, 1e-9)
 }
 
 func TestSampleOncePopulatesRingFromPoolAndCounters(t *testing.T) {

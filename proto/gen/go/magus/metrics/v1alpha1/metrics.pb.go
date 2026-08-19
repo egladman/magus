@@ -311,15 +311,17 @@ func (x *Snapshot) GetSandbox() *Sandbox {
 
 // Latency is an operation-family rollup: how many happened and how long they took. The
 // percentiles are interpolated from the OTel histogram's buckets server-side, so the
-// dashboard never re-derives them from raw buckets.
+// dashboard never re-derives them from raw buckets. Every quantity carries its unit in its
+// NAME (AIP-141): a bare p95 cannot tell a reader whether it is seconds or milliseconds,
+// and the dashboard does arithmetic on these.
 type Latency struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Count         int64                  `protobuf:"varint,1,opt,name=count,proto3" json:"count,omitempty"` // number of observations (the operation count)
-	P50           float64                `protobuf:"fixed64,2,opt,name=p50,proto3" json:"p50,omitempty"`    // seconds
-	P95           float64                `protobuf:"fixed64,3,opt,name=p95,proto3" json:"p95,omitempty"`    // seconds
-	P99           float64                `protobuf:"fixed64,4,opt,name=p99,proto3" json:"p99,omitempty"`    // seconds
-	Max           float64                `protobuf:"fixed64,5,opt,name=max,proto3" json:"max,omitempty"`    // seconds (upper bound of the largest populated bucket)
-	Sum           float64                `protobuf:"fixed64,6,opt,name=sum,proto3" json:"sum,omitempty"`    // total seconds observed (for averages / throughput)
+	P50Seconds    float64                `protobuf:"fixed64,2,opt,name=p50_seconds,json=p50Seconds,proto3" json:"p50_seconds,omitempty"`
+	P95Seconds    float64                `protobuf:"fixed64,3,opt,name=p95_seconds,json=p95Seconds,proto3" json:"p95_seconds,omitempty"`
+	P99Seconds    float64                `protobuf:"fixed64,4,opt,name=p99_seconds,json=p99Seconds,proto3" json:"p99_seconds,omitempty"`
+	MaxSeconds    float64                `protobuf:"fixed64,5,opt,name=max_seconds,json=maxSeconds,proto3" json:"max_seconds,omitempty"` // upper bound of the largest populated bucket
+	SumSeconds    float64                `protobuf:"fixed64,6,opt,name=sum_seconds,json=sumSeconds,proto3" json:"sum_seconds,omitempty"` // total observed, for averages / throughput
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -361,37 +363,37 @@ func (x *Latency) GetCount() int64 {
 	return 0
 }
 
-func (x *Latency) GetP50() float64 {
+func (x *Latency) GetP50Seconds() float64 {
 	if x != nil {
-		return x.P50
+		return x.P50Seconds
 	}
 	return 0
 }
 
-func (x *Latency) GetP95() float64 {
+func (x *Latency) GetP95Seconds() float64 {
 	if x != nil {
-		return x.P95
+		return x.P95Seconds
 	}
 	return 0
 }
 
-func (x *Latency) GetP99() float64 {
+func (x *Latency) GetP99Seconds() float64 {
 	if x != nil {
-		return x.P99
+		return x.P99Seconds
 	}
 	return 0
 }
 
-func (x *Latency) GetMax() float64 {
+func (x *Latency) GetMaxSeconds() float64 {
 	if x != nil {
-		return x.Max
+		return x.MaxSeconds
 	}
 	return 0
 }
 
-func (x *Latency) GetSum() float64 {
+func (x *Latency) GetSumSeconds() float64 {
 	if x != nil {
-		return x.Sum
+		return x.SumSeconds
 	}
 	return 0
 }
@@ -399,16 +401,16 @@ func (x *Latency) GetSum() float64 {
 // Remote is the remote-cache instrument family: outcome tallies plus transfer latency and
 // volume.
 type Remote struct {
-	state            protoimpl.MessageState `protogen:"open.v1"`
-	Hits             int64                  `protobuf:"varint,1,opt,name=hits,proto3" json:"hits,omitempty"`
-	Misses           int64                  `protobuf:"varint,2,opt,name=misses,proto3" json:"misses,omitempty"`
-	Errors           int64                  `protobuf:"varint,3,opt,name=errors,proto3" json:"errors,omitempty"`
-	DurationP50      float64                `protobuf:"fixed64,4,opt,name=duration_p50,json=durationP50,proto3" json:"duration_p50,omitempty"`               // seconds
-	DurationP95      float64                `protobuf:"fixed64,5,opt,name=duration_p95,json=durationP95,proto3" json:"duration_p95,omitempty"`               // seconds
-	IoCount          int64                  `protobuf:"varint,6,opt,name=io_count,json=ioCount,proto3" json:"io_count,omitempty"`                            // number of get/put operations observed
-	TransferredBytes int64                  `protobuf:"varint,7,opt,name=transferred_bytes,json=transferredBytes,proto3" json:"transferred_bytes,omitempty"` // total bytes transferred (sum of the io.size histogram)
-	unknownFields    protoimpl.UnknownFields
-	sizeCache        protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Hits               int64                  `protobuf:"varint,1,opt,name=hits,proto3" json:"hits,omitempty"`
+	Misses             int64                  `protobuf:"varint,2,opt,name=misses,proto3" json:"misses,omitempty"`
+	Errors             int64                  `protobuf:"varint,3,opt,name=errors,proto3" json:"errors,omitempty"`
+	DurationP50Seconds float64                `protobuf:"fixed64,4,opt,name=duration_p50_seconds,json=durationP50Seconds,proto3" json:"duration_p50_seconds,omitempty"`
+	DurationP95Seconds float64                `protobuf:"fixed64,5,opt,name=duration_p95_seconds,json=durationP95Seconds,proto3" json:"duration_p95_seconds,omitempty"`
+	IoCount            int64                  `protobuf:"varint,6,opt,name=io_count,json=ioCount,proto3" json:"io_count,omitempty"`                            // number of get/put operations observed
+	TransferredBytes   int64                  `protobuf:"varint,7,opt,name=transferred_bytes,json=transferredBytes,proto3" json:"transferred_bytes,omitempty"` // total bytes transferred (sum of the io.size histogram)
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *Remote) Reset() {
@@ -462,16 +464,16 @@ func (x *Remote) GetErrors() int64 {
 	return 0
 }
 
-func (x *Remote) GetDurationP50() float64 {
+func (x *Remote) GetDurationP50Seconds() float64 {
 	if x != nil {
-		return x.DurationP50
+		return x.DurationP50Seconds
 	}
 	return 0
 }
 
-func (x *Remote) GetDurationP95() float64 {
+func (x *Remote) GetDurationP95Seconds() float64 {
 	if x != nil {
-		return x.DurationP95
+		return x.DurationP95Seconds
 	}
 	return 0
 }
@@ -495,13 +497,13 @@ func (x *Remote) GetTransferredBytes() int64 {
 // histogram's per-(project,spell,target,outcome,cache.hit) data points.
 type TargetStat struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
-	Project       string                 `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`                                   // magus.project attribute
-	Target        string                 `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`                                     // magus.target attribute
-	Spell         string                 `protobuf:"bytes,3,opt,name=spell,proto3" json:"spell,omitempty"`                                       // magus.spell attribute ("" when the project declares none)
-	Count         int64                  `protobuf:"varint,4,opt,name=count,proto3" json:"count,omitempty"`                                      // total executions (including cache replays)
-	P50           float64                `protobuf:"fixed64,5,opt,name=p50,proto3" json:"p50,omitempty"`                                         // seconds
-	P95           float64                `protobuf:"fixed64,6,opt,name=p95,proto3" json:"p95,omitempty"`                                         // seconds
-	P99           float64                `protobuf:"fixed64,7,opt,name=p99,proto3" json:"p99,omitempty"`                                         // seconds
+	Project       string                 `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"` // magus.project attribute
+	Target        string                 `protobuf:"bytes,2,opt,name=target,proto3" json:"target,omitempty"`   // magus.target attribute
+	Spell         string                 `protobuf:"bytes,3,opt,name=spell,proto3" json:"spell,omitempty"`     // magus.spell attribute ("" when the project declares none)
+	Count         int64                  `protobuf:"varint,4,opt,name=count,proto3" json:"count,omitempty"`    // total executions (including cache replays)
+	P50Seconds    float64                `protobuf:"fixed64,5,opt,name=p50_seconds,json=p50Seconds,proto3" json:"p50_seconds,omitempty"`
+	P95Seconds    float64                `protobuf:"fixed64,6,opt,name=p95_seconds,json=p95Seconds,proto3" json:"p95_seconds,omitempty"`
+	P99Seconds    float64                `protobuf:"fixed64,7,opt,name=p99_seconds,json=p99Seconds,proto3" json:"p99_seconds,omitempty"`
 	CacheHitRate  float64                `protobuf:"fixed64,8,opt,name=cache_hit_rate,json=cacheHitRate,proto3" json:"cache_hit_rate,omitempty"` // [0,1]; fraction of runs served from cache
 	Success       int64                  `protobuf:"varint,9,opt,name=success,proto3" json:"success,omitempty"`                                  // runs with outcome=success
 	Errors        int64                  `protobuf:"varint,10,opt,name=errors,proto3" json:"errors,omitempty"`                                   // runs with outcome=error
@@ -567,23 +569,23 @@ func (x *TargetStat) GetCount() int64 {
 	return 0
 }
 
-func (x *TargetStat) GetP50() float64 {
+func (x *TargetStat) GetP50Seconds() float64 {
 	if x != nil {
-		return x.P50
+		return x.P50Seconds
 	}
 	return 0
 }
 
-func (x *TargetStat) GetP95() float64 {
+func (x *TargetStat) GetP95Seconds() float64 {
 	if x != nil {
-		return x.P95
+		return x.P95Seconds
 	}
 	return 0
 }
 
-func (x *TargetStat) GetP99() float64 {
+func (x *TargetStat) GetP99Seconds() float64 {
 	if x != nil {
-		return x.P99
+		return x.P99Seconds
 	}
 	return 0
 }
@@ -612,20 +614,20 @@ func (x *TargetStat) GetErrors() int64 {
 // MCPToolStat is one per-tool rollup of the magus.mcp.tool.* families: call/error tallies,
 // input/output payload sizes, and call duration percentiles.
 type MCPToolStat struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Tool          string                 `protobuf:"bytes,1,opt,name=tool,proto3" json:"tool,omitempty"`
-	Calls         int64                  `protobuf:"varint,2,opt,name=calls,proto3" json:"calls,omitempty"`
-	Errors        int64                  `protobuf:"varint,3,opt,name=errors,proto3" json:"errors,omitempty"`
-	InputP50      float64                `protobuf:"fixed64,4,opt,name=input_p50,json=inputP50,proto3" json:"input_p50,omitempty"`           // bytes
-	InputP95      float64                `protobuf:"fixed64,5,opt,name=input_p95,json=inputP95,proto3" json:"input_p95,omitempty"`           // bytes
-	InputTotal    int64                  `protobuf:"varint,6,opt,name=input_total,json=inputTotal,proto3" json:"input_total,omitempty"`      // total input bytes observed
-	OutputP50     float64                `protobuf:"fixed64,7,opt,name=output_p50,json=outputP50,proto3" json:"output_p50,omitempty"`        // bytes
-	OutputP95     float64                `protobuf:"fixed64,8,opt,name=output_p95,json=outputP95,proto3" json:"output_p95,omitempty"`        // bytes
-	OutputTotal   int64                  `protobuf:"varint,9,opt,name=output_total,json=outputTotal,proto3" json:"output_total,omitempty"`   // total output bytes observed
-	DurationP50   float64                `protobuf:"fixed64,10,opt,name=duration_p50,json=durationP50,proto3" json:"duration_p50,omitempty"` // seconds
-	DurationP95   float64                `protobuf:"fixed64,11,opt,name=duration_p95,json=durationP95,proto3" json:"duration_p95,omitempty"` // seconds
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state              protoimpl.MessageState `protogen:"open.v1"`
+	Tool               string                 `protobuf:"bytes,1,opt,name=tool,proto3" json:"tool,omitempty"`
+	Calls              int64                  `protobuf:"varint,2,opt,name=calls,proto3" json:"calls,omitempty"`
+	Errors             int64                  `protobuf:"varint,3,opt,name=errors,proto3" json:"errors,omitempty"`
+	InputP50Bytes      float64                `protobuf:"fixed64,4,opt,name=input_p50_bytes,json=inputP50Bytes,proto3" json:"input_p50_bytes,omitempty"`
+	InputP95Bytes      float64                `protobuf:"fixed64,5,opt,name=input_p95_bytes,json=inputP95Bytes,proto3" json:"input_p95_bytes,omitempty"`
+	InputTotal         int64                  `protobuf:"varint,6,opt,name=input_total,json=inputTotal,proto3" json:"input_total,omitempty"` // total input bytes observed
+	OutputP50Bytes     float64                `protobuf:"fixed64,7,opt,name=output_p50_bytes,json=outputP50Bytes,proto3" json:"output_p50_bytes,omitempty"`
+	OutputP95Bytes     float64                `protobuf:"fixed64,8,opt,name=output_p95_bytes,json=outputP95Bytes,proto3" json:"output_p95_bytes,omitempty"`
+	OutputTotal        int64                  `protobuf:"varint,9,opt,name=output_total,json=outputTotal,proto3" json:"output_total,omitempty"` // total output bytes observed
+	DurationP50Seconds float64                `protobuf:"fixed64,10,opt,name=duration_p50_seconds,json=durationP50Seconds,proto3" json:"duration_p50_seconds,omitempty"`
+	DurationP95Seconds float64                `protobuf:"fixed64,11,opt,name=duration_p95_seconds,json=durationP95Seconds,proto3" json:"duration_p95_seconds,omitempty"`
+	unknownFields      protoimpl.UnknownFields
+	sizeCache          protoimpl.SizeCache
 }
 
 func (x *MCPToolStat) Reset() {
@@ -679,16 +681,16 @@ func (x *MCPToolStat) GetErrors() int64 {
 	return 0
 }
 
-func (x *MCPToolStat) GetInputP50() float64 {
+func (x *MCPToolStat) GetInputP50Bytes() float64 {
 	if x != nil {
-		return x.InputP50
+		return x.InputP50Bytes
 	}
 	return 0
 }
 
-func (x *MCPToolStat) GetInputP95() float64 {
+func (x *MCPToolStat) GetInputP95Bytes() float64 {
 	if x != nil {
-		return x.InputP95
+		return x.InputP95Bytes
 	}
 	return 0
 }
@@ -700,16 +702,16 @@ func (x *MCPToolStat) GetInputTotal() int64 {
 	return 0
 }
 
-func (x *MCPToolStat) GetOutputP50() float64 {
+func (x *MCPToolStat) GetOutputP50Bytes() float64 {
 	if x != nil {
-		return x.OutputP50
+		return x.OutputP50Bytes
 	}
 	return 0
 }
 
-func (x *MCPToolStat) GetOutputP95() float64 {
+func (x *MCPToolStat) GetOutputP95Bytes() float64 {
 	if x != nil {
-		return x.OutputP95
+		return x.OutputP95Bytes
 	}
 	return 0
 }
@@ -721,16 +723,16 @@ func (x *MCPToolStat) GetOutputTotal() int64 {
 	return 0
 }
 
-func (x *MCPToolStat) GetDurationP50() float64 {
+func (x *MCPToolStat) GetDurationP50Seconds() float64 {
 	if x != nil {
-		return x.DurationP50
+		return x.DurationP50Seconds
 	}
 	return 0
 }
 
-func (x *MCPToolStat) GetDurationP95() float64 {
+func (x *MCPToolStat) GetDurationP95Seconds() float64 {
 	if x != nil {
-		return x.DurationP95
+		return x.DurationP95Seconds
 	}
 	return 0
 }
@@ -738,31 +740,31 @@ func (x *MCPToolStat) GetDurationP95() float64 {
 // Buzz rolls up the magus.buzz.* families: script exec/compile latency, the native-boundary
 // host-call family, session-pool health, import and spell resolution, and VM-level counters.
 type Buzz struct {
-	state                protoimpl.MessageState `protogen:"open.v1"`
-	ExecCount            int64                  `protobuf:"varint,1,opt,name=exec_count,json=execCount,proto3" json:"exec_count,omitempty"`
-	ExecP50              float64                `protobuf:"fixed64,2,opt,name=exec_p50,json=execP50,proto3" json:"exec_p50,omitempty"` // seconds
-	ExecP95              float64                `protobuf:"fixed64,3,opt,name=exec_p95,json=execP95,proto3" json:"exec_p95,omitempty"` // seconds
-	CompileCount         int64                  `protobuf:"varint,4,opt,name=compile_count,json=compileCount,proto3" json:"compile_count,omitempty"`
-	CompileP50           float64                `protobuf:"fixed64,5,opt,name=compile_p50,json=compileP50,proto3" json:"compile_p50,omitempty"` // seconds
-	CompileP95           float64                `protobuf:"fixed64,6,opt,name=compile_p95,json=compileP95,proto3" json:"compile_p95,omitempty"` // seconds
-	HostCallCount        int64                  `protobuf:"varint,7,opt,name=host_call_count,json=hostCallCount,proto3" json:"host_call_count,omitempty"`
-	HostCallP50          float64                `protobuf:"fixed64,8,opt,name=host_call_p50,json=hostCallP50,proto3" json:"host_call_p50,omitempty"`                // seconds
-	HostCallP95          float64                `protobuf:"fixed64,9,opt,name=host_call_p95,json=hostCallP95,proto3" json:"host_call_p95,omitempty"`                // seconds
-	SessionPoolReuse     int64                  `protobuf:"varint,10,opt,name=session_pool_reuse,json=sessionPoolReuse,proto3" json:"session_pool_reuse,omitempty"` // acquires served from an idle session
-	SessionPoolIdle      int64                  `protobuf:"varint,11,opt,name=session_pool_idle,json=sessionPoolIdle,proto3" json:"session_pool_idle,omitempty"`    // current idle sessions (gauge)
-	SessionPoolEvictions int64                  `protobuf:"varint,12,opt,name=session_pool_evictions,json=sessionPoolEvictions,proto3" json:"session_pool_evictions,omitempty"`
-	SessionWarmP50       float64                `protobuf:"fixed64,13,opt,name=session_warm_p50,json=sessionWarmP50,proto3" json:"session_warm_p50,omitempty"` // seconds
-	SessionWarmP95       float64                `protobuf:"fixed64,14,opt,name=session_warm_p95,json=sessionWarmP95,proto3" json:"session_warm_p95,omitempty"` // seconds
-	ImportCount          int64                  `protobuf:"varint,15,opt,name=import_count,json=importCount,proto3" json:"import_count,omitempty"`
-	ImportP50            float64                `protobuf:"fixed64,16,opt,name=import_p50,json=importP50,proto3" json:"import_p50,omitempty"` // seconds
-	ImportP95            float64                `protobuf:"fixed64,17,opt,name=import_p95,json=importP95,proto3" json:"import_p95,omitempty"` // seconds
-	SpellResolveCount    int64                  `protobuf:"varint,18,opt,name=spell_resolve_count,json=spellResolveCount,proto3" json:"spell_resolve_count,omitempty"`
-	SpellResolveP50      float64                `protobuf:"fixed64,19,opt,name=spell_resolve_p50,json=spellResolveP50,proto3" json:"spell_resolve_p50,omitempty"` // seconds
-	SpellResolveP95      float64                `protobuf:"fixed64,20,opt,name=spell_resolve_p95,json=spellResolveP95,proto3" json:"spell_resolve_p95,omitempty"` // seconds
-	JitRuns              int64                  `protobuf:"varint,21,opt,name=jit_runs,json=jitRuns,proto3" json:"jit_runs,omitempty"`
-	VmFaults             int64                  `protobuf:"varint,22,opt,name=vm_faults,json=vmFaults,proto3" json:"vm_faults,omitempty"`
-	unknownFields        protoimpl.UnknownFields
-	sizeCache            protoimpl.SizeCache
+	state                  protoimpl.MessageState `protogen:"open.v1"`
+	ExecCount              int64                  `protobuf:"varint,1,opt,name=exec_count,json=execCount,proto3" json:"exec_count,omitempty"`
+	ExecP50Seconds         float64                `protobuf:"fixed64,2,opt,name=exec_p50_seconds,json=execP50Seconds,proto3" json:"exec_p50_seconds,omitempty"`
+	ExecP95Seconds         float64                `protobuf:"fixed64,3,opt,name=exec_p95_seconds,json=execP95Seconds,proto3" json:"exec_p95_seconds,omitempty"`
+	CompileCount           int64                  `protobuf:"varint,4,opt,name=compile_count,json=compileCount,proto3" json:"compile_count,omitempty"`
+	CompileP50Seconds      float64                `protobuf:"fixed64,5,opt,name=compile_p50_seconds,json=compileP50Seconds,proto3" json:"compile_p50_seconds,omitempty"`
+	CompileP95Seconds      float64                `protobuf:"fixed64,6,opt,name=compile_p95_seconds,json=compileP95Seconds,proto3" json:"compile_p95_seconds,omitempty"`
+	HostCallCount          int64                  `protobuf:"varint,7,opt,name=host_call_count,json=hostCallCount,proto3" json:"host_call_count,omitempty"`
+	HostCallP50Seconds     float64                `protobuf:"fixed64,8,opt,name=host_call_p50_seconds,json=hostCallP50Seconds,proto3" json:"host_call_p50_seconds,omitempty"`
+	HostCallP95Seconds     float64                `protobuf:"fixed64,9,opt,name=host_call_p95_seconds,json=hostCallP95Seconds,proto3" json:"host_call_p95_seconds,omitempty"`
+	SessionPoolReuse       int64                  `protobuf:"varint,10,opt,name=session_pool_reuse,json=sessionPoolReuse,proto3" json:"session_pool_reuse,omitempty"` // acquires served from an idle session
+	SessionPoolIdle        int64                  `protobuf:"varint,11,opt,name=session_pool_idle,json=sessionPoolIdle,proto3" json:"session_pool_idle,omitempty"`    // current idle sessions (gauge)
+	SessionPoolEvictions   int64                  `protobuf:"varint,12,opt,name=session_pool_evictions,json=sessionPoolEvictions,proto3" json:"session_pool_evictions,omitempty"`
+	SessionWarmP50Seconds  float64                `protobuf:"fixed64,13,opt,name=session_warm_p50_seconds,json=sessionWarmP50Seconds,proto3" json:"session_warm_p50_seconds,omitempty"`
+	SessionWarmP95Seconds  float64                `protobuf:"fixed64,14,opt,name=session_warm_p95_seconds,json=sessionWarmP95Seconds,proto3" json:"session_warm_p95_seconds,omitempty"`
+	ImportCount            int64                  `protobuf:"varint,15,opt,name=import_count,json=importCount,proto3" json:"import_count,omitempty"`
+	ImportP50Seconds       float64                `protobuf:"fixed64,16,opt,name=import_p50_seconds,json=importP50Seconds,proto3" json:"import_p50_seconds,omitempty"`
+	ImportP95Seconds       float64                `protobuf:"fixed64,17,opt,name=import_p95_seconds,json=importP95Seconds,proto3" json:"import_p95_seconds,omitempty"`
+	SpellResolveCount      int64                  `protobuf:"varint,18,opt,name=spell_resolve_count,json=spellResolveCount,proto3" json:"spell_resolve_count,omitempty"`
+	SpellResolveP50Seconds float64                `protobuf:"fixed64,19,opt,name=spell_resolve_p50_seconds,json=spellResolveP50Seconds,proto3" json:"spell_resolve_p50_seconds,omitempty"`
+	SpellResolveP95Seconds float64                `protobuf:"fixed64,20,opt,name=spell_resolve_p95_seconds,json=spellResolveP95Seconds,proto3" json:"spell_resolve_p95_seconds,omitempty"`
+	JitRuns                int64                  `protobuf:"varint,21,opt,name=jit_runs,json=jitRuns,proto3" json:"jit_runs,omitempty"`
+	VmFaults               int64                  `protobuf:"varint,22,opt,name=vm_faults,json=vmFaults,proto3" json:"vm_faults,omitempty"`
+	unknownFields          protoimpl.UnknownFields
+	sizeCache              protoimpl.SizeCache
 }
 
 func (x *Buzz) Reset() {
@@ -802,16 +804,16 @@ func (x *Buzz) GetExecCount() int64 {
 	return 0
 }
 
-func (x *Buzz) GetExecP50() float64 {
+func (x *Buzz) GetExecP50Seconds() float64 {
 	if x != nil {
-		return x.ExecP50
+		return x.ExecP50Seconds
 	}
 	return 0
 }
 
-func (x *Buzz) GetExecP95() float64 {
+func (x *Buzz) GetExecP95Seconds() float64 {
 	if x != nil {
-		return x.ExecP95
+		return x.ExecP95Seconds
 	}
 	return 0
 }
@@ -823,16 +825,16 @@ func (x *Buzz) GetCompileCount() int64 {
 	return 0
 }
 
-func (x *Buzz) GetCompileP50() float64 {
+func (x *Buzz) GetCompileP50Seconds() float64 {
 	if x != nil {
-		return x.CompileP50
+		return x.CompileP50Seconds
 	}
 	return 0
 }
 
-func (x *Buzz) GetCompileP95() float64 {
+func (x *Buzz) GetCompileP95Seconds() float64 {
 	if x != nil {
-		return x.CompileP95
+		return x.CompileP95Seconds
 	}
 	return 0
 }
@@ -844,16 +846,16 @@ func (x *Buzz) GetHostCallCount() int64 {
 	return 0
 }
 
-func (x *Buzz) GetHostCallP50() float64 {
+func (x *Buzz) GetHostCallP50Seconds() float64 {
 	if x != nil {
-		return x.HostCallP50
+		return x.HostCallP50Seconds
 	}
 	return 0
 }
 
-func (x *Buzz) GetHostCallP95() float64 {
+func (x *Buzz) GetHostCallP95Seconds() float64 {
 	if x != nil {
-		return x.HostCallP95
+		return x.HostCallP95Seconds
 	}
 	return 0
 }
@@ -879,16 +881,16 @@ func (x *Buzz) GetSessionPoolEvictions() int64 {
 	return 0
 }
 
-func (x *Buzz) GetSessionWarmP50() float64 {
+func (x *Buzz) GetSessionWarmP50Seconds() float64 {
 	if x != nil {
-		return x.SessionWarmP50
+		return x.SessionWarmP50Seconds
 	}
 	return 0
 }
 
-func (x *Buzz) GetSessionWarmP95() float64 {
+func (x *Buzz) GetSessionWarmP95Seconds() float64 {
 	if x != nil {
-		return x.SessionWarmP95
+		return x.SessionWarmP95Seconds
 	}
 	return 0
 }
@@ -900,16 +902,16 @@ func (x *Buzz) GetImportCount() int64 {
 	return 0
 }
 
-func (x *Buzz) GetImportP50() float64 {
+func (x *Buzz) GetImportP50Seconds() float64 {
 	if x != nil {
-		return x.ImportP50
+		return x.ImportP50Seconds
 	}
 	return 0
 }
 
-func (x *Buzz) GetImportP95() float64 {
+func (x *Buzz) GetImportP95Seconds() float64 {
 	if x != nil {
-		return x.ImportP95
+		return x.ImportP95Seconds
 	}
 	return 0
 }
@@ -921,16 +923,16 @@ func (x *Buzz) GetSpellResolveCount() int64 {
 	return 0
 }
 
-func (x *Buzz) GetSpellResolveP50() float64 {
+func (x *Buzz) GetSpellResolveP50Seconds() float64 {
 	if x != nil {
-		return x.SpellResolveP50
+		return x.SpellResolveP50Seconds
 	}
 	return 0
 }
 
-func (x *Buzz) GetSpellResolveP95() float64 {
+func (x *Buzz) GetSpellResolveP95Seconds() float64 {
 	if x != nil {
-		return x.SpellResolveP95
+		return x.SpellResolveP95Seconds
 	}
 	return 0
 }
@@ -952,18 +954,18 @@ func (x *Buzz) GetVmFaults() int64 {
 // Sandbox rolls up the magus.sandbox.* filesystem families: apply latency, the rule counts a
 // sandbox was built from, allow/deny check tallies, and dropped environment variables.
 type Sandbox struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	ApplyP50      float64                `protobuf:"fixed64,1,opt,name=apply_p50,json=applyP50,proto3" json:"apply_p50,omitempty"` // seconds
-	ApplyP95      float64                `protobuf:"fixed64,2,opt,name=apply_p95,json=applyP95,proto3" json:"apply_p95,omitempty"` // seconds
-	RulesRead     int64                  `protobuf:"varint,3,opt,name=rules_read,json=rulesRead,proto3" json:"rules_read,omitempty"`
-	RulesWrite    int64                  `protobuf:"varint,4,opt,name=rules_write,json=rulesWrite,proto3" json:"rules_write,omitempty"`
-	RulesExec     int64                  `protobuf:"varint,5,opt,name=rules_exec,json=rulesExec,proto3" json:"rules_exec,omitempty"`
-	EnvRules      int64                  `protobuf:"varint,6,opt,name=env_rules,json=envRules,proto3" json:"env_rules,omitempty"` // exact + glob env rules
-	ChecksAllow   int64                  `protobuf:"varint,7,opt,name=checks_allow,json=checksAllow,proto3" json:"checks_allow,omitempty"`
-	ChecksDeny    int64                  `protobuf:"varint,8,opt,name=checks_deny,json=checksDeny,proto3" json:"checks_deny,omitempty"`
-	EnvDropped    int64                  `protobuf:"varint,9,opt,name=env_dropped,json=envDropped,proto3" json:"env_dropped,omitempty"`
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state           protoimpl.MessageState `protogen:"open.v1"`
+	ApplyP50Seconds float64                `protobuf:"fixed64,1,opt,name=apply_p50_seconds,json=applyP50Seconds,proto3" json:"apply_p50_seconds,omitempty"`
+	ApplyP95Seconds float64                `protobuf:"fixed64,2,opt,name=apply_p95_seconds,json=applyP95Seconds,proto3" json:"apply_p95_seconds,omitempty"`
+	RulesRead       int64                  `protobuf:"varint,3,opt,name=rules_read,json=rulesRead,proto3" json:"rules_read,omitempty"`
+	RulesWrite      int64                  `protobuf:"varint,4,opt,name=rules_write,json=rulesWrite,proto3" json:"rules_write,omitempty"`
+	RulesExec       int64                  `protobuf:"varint,5,opt,name=rules_exec,json=rulesExec,proto3" json:"rules_exec,omitempty"`
+	EnvRules        int64                  `protobuf:"varint,6,opt,name=env_rules,json=envRules,proto3" json:"env_rules,omitempty"` // exact + glob env rules
+	ChecksAllow     int64                  `protobuf:"varint,7,opt,name=checks_allow,json=checksAllow,proto3" json:"checks_allow,omitempty"`
+	ChecksDeny      int64                  `protobuf:"varint,8,opt,name=checks_deny,json=checksDeny,proto3" json:"checks_deny,omitempty"`
+	EnvDropped      int64                  `protobuf:"varint,9,opt,name=env_dropped,json=envDropped,proto3" json:"env_dropped,omitempty"`
+	unknownFields   protoimpl.UnknownFields
+	sizeCache       protoimpl.SizeCache
 }
 
 func (x *Sandbox) Reset() {
@@ -996,16 +998,16 @@ func (*Sandbox) Descriptor() ([]byte, []int) {
 	return file_magus_metrics_v1alpha1_metrics_proto_rawDescGZIP(), []int{9}
 }
 
-func (x *Sandbox) GetApplyP50() float64 {
+func (x *Sandbox) GetApplyP50Seconds() float64 {
 	if x != nil {
-		return x.ApplyP50
+		return x.ApplyP50Seconds
 	}
 	return 0
 }
 
-func (x *Sandbox) GetApplyP95() float64 {
+func (x *Sandbox) GetApplyP95Seconds() float64 {
 	if x != nil {
-		return x.ApplyP95
+		return x.ApplyP95Seconds
 	}
 	return 0
 }
@@ -1255,83 +1257,85 @@ const file_magus_metrics_v1alpha1_metrics_proto_rawDesc = "" +
 	"\tmcp_tools\x18\b \x03(\v2#.magus.metrics.v1alpha1.MCPToolStatR\bmcpTools\x120\n" +
 	"\x04buzz\x18\t \x01(\v2\x1c.magus.metrics.v1alpha1.BuzzR\x04buzz\x129\n" +
 	"\asandbox\x18\n" +
-	" \x01(\v2\x1f.magus.metrics.v1alpha1.SandboxR\asandbox\"y\n" +
+	" \x01(\v2\x1f.magus.metrics.v1alpha1.SandboxR\asandbox\"\xc4\x01\n" +
 	"\aLatency\x12\x14\n" +
-	"\x05count\x18\x01 \x01(\x03R\x05count\x12\x10\n" +
-	"\x03p50\x18\x02 \x01(\x01R\x03p50\x12\x10\n" +
-	"\x03p95\x18\x03 \x01(\x01R\x03p95\x12\x10\n" +
-	"\x03p99\x18\x04 \x01(\x01R\x03p99\x12\x10\n" +
-	"\x03max\x18\x05 \x01(\x01R\x03max\x12\x10\n" +
-	"\x03sum\x18\x06 \x01(\x01R\x03sum\"\xda\x01\n" +
+	"\x05count\x18\x01 \x01(\x03R\x05count\x12\x1f\n" +
+	"\vp50_seconds\x18\x02 \x01(\x01R\n" +
+	"p50Seconds\x12\x1f\n" +
+	"\vp95_seconds\x18\x03 \x01(\x01R\n" +
+	"p95Seconds\x12\x1f\n" +
+	"\vp99_seconds\x18\x04 \x01(\x01R\n" +
+	"p99Seconds\x12\x1f\n" +
+	"\vmax_seconds\x18\x05 \x01(\x01R\n" +
+	"maxSeconds\x12\x1f\n" +
+	"\vsum_seconds\x18\x06 \x01(\x01R\n" +
+	"sumSeconds\"\xf8\x01\n" +
 	"\x06Remote\x12\x12\n" +
 	"\x04hits\x18\x01 \x01(\x03R\x04hits\x12\x16\n" +
 	"\x06misses\x18\x02 \x01(\x03R\x06misses\x12\x16\n" +
-	"\x06errors\x18\x03 \x01(\x03R\x06errors\x12!\n" +
-	"\fduration_p50\x18\x04 \x01(\x01R\vdurationP50\x12!\n" +
-	"\fduration_p95\x18\x05 \x01(\x01R\vdurationP95\x12\x19\n" +
+	"\x06errors\x18\x03 \x01(\x03R\x06errors\x120\n" +
+	"\x14duration_p50_seconds\x18\x04 \x01(\x01R\x12durationP50Seconds\x120\n" +
+	"\x14duration_p95_seconds\x18\x05 \x01(\x01R\x12durationP95Seconds\x12\x19\n" +
 	"\bio_count\x18\x06 \x01(\x03R\aioCount\x12+\n" +
-	"\x11transferred_bytes\x18\a \x01(\x03R\x10transferredBytes\"\xf8\x01\n" +
+	"\x11transferred_bytes\x18\a \x01(\x03R\x10transferredBytes\"\xa5\x02\n" +
 	"\n" +
 	"TargetStat\x12\x18\n" +
 	"\aproject\x18\x01 \x01(\tR\aproject\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x12\x14\n" +
 	"\x05spell\x18\x03 \x01(\tR\x05spell\x12\x14\n" +
-	"\x05count\x18\x04 \x01(\x03R\x05count\x12\x10\n" +
-	"\x03p50\x18\x05 \x01(\x01R\x03p50\x12\x10\n" +
-	"\x03p95\x18\x06 \x01(\x01R\x03p95\x12\x10\n" +
-	"\x03p99\x18\a \x01(\x01R\x03p99\x12$\n" +
+	"\x05count\x18\x04 \x01(\x03R\x05count\x12\x1f\n" +
+	"\vp50_seconds\x18\x05 \x01(\x01R\n" +
+	"p50Seconds\x12\x1f\n" +
+	"\vp95_seconds\x18\x06 \x01(\x01R\n" +
+	"p95Seconds\x12\x1f\n" +
+	"\vp99_seconds\x18\a \x01(\x01R\n" +
+	"p99Seconds\x12$\n" +
 	"\x0ecache_hit_rate\x18\b \x01(\x01R\fcacheHitRate\x12\x18\n" +
 	"\asuccess\x18\t \x01(\x03R\asuccess\x12\x16\n" +
 	"\x06errors\x18\n" +
-	" \x01(\x03R\x06errors\"\xd1\x02\n" +
+	" \x01(\x03R\x06errors\"\x9b\x03\n" +
 	"\vMCPToolStat\x12\x12\n" +
 	"\x04tool\x18\x01 \x01(\tR\x04tool\x12\x14\n" +
 	"\x05calls\x18\x02 \x01(\x03R\x05calls\x12\x16\n" +
-	"\x06errors\x18\x03 \x01(\x03R\x06errors\x12\x1b\n" +
-	"\tinput_p50\x18\x04 \x01(\x01R\binputP50\x12\x1b\n" +
-	"\tinput_p95\x18\x05 \x01(\x01R\binputP95\x12\x1f\n" +
+	"\x06errors\x18\x03 \x01(\x03R\x06errors\x12&\n" +
+	"\x0finput_p50_bytes\x18\x04 \x01(\x01R\rinputP50Bytes\x12&\n" +
+	"\x0finput_p95_bytes\x18\x05 \x01(\x01R\rinputP95Bytes\x12\x1f\n" +
 	"\vinput_total\x18\x06 \x01(\x03R\n" +
-	"inputTotal\x12\x1d\n" +
-	"\n" +
-	"output_p50\x18\a \x01(\x01R\toutputP50\x12\x1d\n" +
-	"\n" +
-	"output_p95\x18\b \x01(\x01R\toutputP95\x12!\n" +
-	"\foutput_total\x18\t \x01(\x03R\voutputTotal\x12!\n" +
-	"\fduration_p50\x18\n" +
-	" \x01(\x01R\vdurationP50\x12!\n" +
-	"\fduration_p95\x18\v \x01(\x01R\vdurationP95\"\xb7\x06\n" +
+	"inputTotal\x12(\n" +
+	"\x10output_p50_bytes\x18\a \x01(\x01R\x0eoutputP50Bytes\x12(\n" +
+	"\x10output_p95_bytes\x18\b \x01(\x01R\x0eoutputP95Bytes\x12!\n" +
+	"\foutput_total\x18\t \x01(\x03R\voutputTotal\x120\n" +
+	"\x14duration_p50_seconds\x18\n" +
+	" \x01(\x01R\x12durationP50Seconds\x120\n" +
+	"\x14duration_p95_seconds\x18\v \x01(\x01R\x12durationP95Seconds\"\xeb\a\n" +
 	"\x04Buzz\x12\x1d\n" +
 	"\n" +
-	"exec_count\x18\x01 \x01(\x03R\texecCount\x12\x19\n" +
-	"\bexec_p50\x18\x02 \x01(\x01R\aexecP50\x12\x19\n" +
-	"\bexec_p95\x18\x03 \x01(\x01R\aexecP95\x12#\n" +
-	"\rcompile_count\x18\x04 \x01(\x03R\fcompileCount\x12\x1f\n" +
-	"\vcompile_p50\x18\x05 \x01(\x01R\n" +
-	"compileP50\x12\x1f\n" +
-	"\vcompile_p95\x18\x06 \x01(\x01R\n" +
-	"compileP95\x12&\n" +
-	"\x0fhost_call_count\x18\a \x01(\x03R\rhostCallCount\x12\"\n" +
-	"\rhost_call_p50\x18\b \x01(\x01R\vhostCallP50\x12\"\n" +
-	"\rhost_call_p95\x18\t \x01(\x01R\vhostCallP95\x12,\n" +
+	"exec_count\x18\x01 \x01(\x03R\texecCount\x12(\n" +
+	"\x10exec_p50_seconds\x18\x02 \x01(\x01R\x0eexecP50Seconds\x12(\n" +
+	"\x10exec_p95_seconds\x18\x03 \x01(\x01R\x0eexecP95Seconds\x12#\n" +
+	"\rcompile_count\x18\x04 \x01(\x03R\fcompileCount\x12.\n" +
+	"\x13compile_p50_seconds\x18\x05 \x01(\x01R\x11compileP50Seconds\x12.\n" +
+	"\x13compile_p95_seconds\x18\x06 \x01(\x01R\x11compileP95Seconds\x12&\n" +
+	"\x0fhost_call_count\x18\a \x01(\x03R\rhostCallCount\x121\n" +
+	"\x15host_call_p50_seconds\x18\b \x01(\x01R\x12hostCallP50Seconds\x121\n" +
+	"\x15host_call_p95_seconds\x18\t \x01(\x01R\x12hostCallP95Seconds\x12,\n" +
 	"\x12session_pool_reuse\x18\n" +
 	" \x01(\x03R\x10sessionPoolReuse\x12*\n" +
 	"\x11session_pool_idle\x18\v \x01(\x03R\x0fsessionPoolIdle\x124\n" +
-	"\x16session_pool_evictions\x18\f \x01(\x03R\x14sessionPoolEvictions\x12(\n" +
-	"\x10session_warm_p50\x18\r \x01(\x01R\x0esessionWarmP50\x12(\n" +
-	"\x10session_warm_p95\x18\x0e \x01(\x01R\x0esessionWarmP95\x12!\n" +
-	"\fimport_count\x18\x0f \x01(\x03R\vimportCount\x12\x1d\n" +
-	"\n" +
-	"import_p50\x18\x10 \x01(\x01R\timportP50\x12\x1d\n" +
-	"\n" +
-	"import_p95\x18\x11 \x01(\x01R\timportP95\x12.\n" +
-	"\x13spell_resolve_count\x18\x12 \x01(\x03R\x11spellResolveCount\x12*\n" +
-	"\x11spell_resolve_p50\x18\x13 \x01(\x01R\x0fspellResolveP50\x12*\n" +
-	"\x11spell_resolve_p95\x18\x14 \x01(\x01R\x0fspellResolveP95\x12\x19\n" +
+	"\x16session_pool_evictions\x18\f \x01(\x03R\x14sessionPoolEvictions\x127\n" +
+	"\x18session_warm_p50_seconds\x18\r \x01(\x01R\x15sessionWarmP50Seconds\x127\n" +
+	"\x18session_warm_p95_seconds\x18\x0e \x01(\x01R\x15sessionWarmP95Seconds\x12!\n" +
+	"\fimport_count\x18\x0f \x01(\x03R\vimportCount\x12,\n" +
+	"\x12import_p50_seconds\x18\x10 \x01(\x01R\x10importP50Seconds\x12,\n" +
+	"\x12import_p95_seconds\x18\x11 \x01(\x01R\x10importP95Seconds\x12.\n" +
+	"\x13spell_resolve_count\x18\x12 \x01(\x03R\x11spellResolveCount\x129\n" +
+	"\x19spell_resolve_p50_seconds\x18\x13 \x01(\x01R\x16spellResolveP50Seconds\x129\n" +
+	"\x19spell_resolve_p95_seconds\x18\x14 \x01(\x01R\x16spellResolveP95Seconds\x12\x19\n" +
 	"\bjit_runs\x18\x15 \x01(\x03R\ajitRuns\x12\x1b\n" +
-	"\tvm_faults\x18\x16 \x01(\x03R\bvmFaults\"\xa4\x02\n" +
-	"\aSandbox\x12\x1b\n" +
-	"\tapply_p50\x18\x01 \x01(\x01R\bapplyP50\x12\x1b\n" +
-	"\tapply_p95\x18\x02 \x01(\x01R\bapplyP95\x12\x1d\n" +
+	"\tvm_faults\x18\x16 \x01(\x03R\bvmFaults\"\xc2\x02\n" +
+	"\aSandbox\x12*\n" +
+	"\x11apply_p50_seconds\x18\x01 \x01(\x01R\x0fapplyP50Seconds\x12*\n" +
+	"\x11apply_p95_seconds\x18\x02 \x01(\x01R\x0fapplyP95Seconds\x12\x1d\n" +
 	"\n" +
 	"rules_read\x18\x03 \x01(\x03R\trulesRead\x12\x1f\n" +
 	"\vrules_write\x18\x04 \x01(\x03R\n" +

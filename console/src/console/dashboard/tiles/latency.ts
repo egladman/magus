@@ -12,14 +12,14 @@ import type uPlot from "uplot";
 
 interface LatSeries {
   t: number[];
-  p50: number[];
-  p95: number[];
-  p99: number[];
+  p50Seconds: number[];
+  p95Seconds: number[];
+  p99Seconds: number[];
 }
 const CHART_HISTORY = 240; // points kept per chart (~4 min at 1s)
 
 function emptySeries(): LatSeries {
-  return { t: [], p50: [], p95: [], p99: [] };
+  return { t: [], p50Seconds: [], p95Seconds: [], p99Seconds: [] };
 }
 
 export function latencyTile(): Tile {
@@ -78,25 +78,25 @@ export function latencyTile(): Tile {
   card.body.append(gridEl);
 
   function aligned(d: LatSeries): uPlot.AlignedData {
-    return [d.t, d.p50, d.p95, d.p99] as uPlot.AlignedData;
+    return [d.t, d.p50Seconds, d.p95Seconds, d.p99Seconds] as uPlot.AlignedData;
   }
 
   function feed(k: LatKey, tSec: number, lat: LatView): void {
     const d = data[k];
     d.t.push(tSec);
-    d.p50.push(lat.p50);
-    d.p95.push(lat.p95);
-    d.p99.push(lat.p99);
+    d.p50Seconds.push(lat.p50Seconds);
+    d.p95Seconds.push(lat.p95Seconds);
+    d.p99Seconds.push(lat.p99Seconds);
     if (d.t.length > CHART_HISTORY) {
       const drop = d.t.length - CHART_HISTORY;
       d.t.splice(0, drop);
-      d.p50.splice(0, drop);
-      d.p95.splice(0, drop);
-      d.p99.splice(0, drop);
+      d.p50Seconds.splice(0, drop);
+      d.p95Seconds.splice(0, drop);
+      d.p99Seconds.splice(0, drop);
     }
     charts[k].setData(aligned(d));
     readouts[k].textContent =
-      `count ${fmtCount(lat.count)} - p50 ${fmtDur(lat.p50)} - p95 ${fmtDur(lat.p95)} - p99 ${fmtDur(lat.p99)} - max ${fmtDur(lat.max)}`;
+      `count ${fmtCount(lat.count)} - p50 ${fmtDur(lat.p50Seconds)} - p95 ${fmtDur(lat.p95Seconds)} - p99 ${fmtDur(lat.p99Seconds)} - max ${fmtDur(lat.maxSeconds)}`;
   }
 
   const onResize = resizeAll;

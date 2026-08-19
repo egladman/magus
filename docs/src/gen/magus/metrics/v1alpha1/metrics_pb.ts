@@ -21,7 +21,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/metrics/v1alpha1/metrics.proto.
  */
 export const file_magus_metrics_v1alpha1_metrics: GenFile = /*@__PURE__*/
-  fileDesc("CiRtYWd1cy9tZXRyaWNzL3YxYWxwaGExL21ldHJpY3MucHJvdG8SFm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEiEwoRR2V0TWV0cmljc1JlcXVlc3QiFgoUU3RyZWFtTWV0cmljc1JlcXVlc3QiiQEKFVN0cmVhbU1ldHJpY3NSZXNwb25zZRI0CghiYWNrZmlsbBgBIAEoCzIgLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuQmFja2ZpbGxIABI0CghzbmFwc2hvdBgCIAEoCzIgLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuU25hcHNob3RIAEIECgJvZiKHBAoIU25hcHNob3QSMAoMY2FwdHVyZV90aW1lGAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgZ0YXJnZXQYAiABKAsyHy5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLkxhdGVuY3kSLgoFY2FjaGUYAyABKAsyHy5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLkxhdGVuY3kSMgoJcG9vbF93YWl0GAQgASgLMh8ubWFndXMubWV0cmljcy52MWFscGhhMS5MYXRlbmN5EjQKC2dyYXBoX3F1ZXJ5GAUgASgLMh8ubWFndXMubWV0cmljcy52MWFscGhhMS5MYXRlbmN5Ei4KBnJlbW90ZRgGIAEoCzIeLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuUmVtb3RlEjgKDHRhcmdldF9zdGF0cxgHIAMoCzIiLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuVGFyZ2V0U3RhdBI2CgltY3BfdG9vbHMYCCADKAsyIy5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLk1DUFRvb2xTdGF0EioKBGJ1enoYCSABKAsyHC5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLkJ1enoSMAoHc2FuZGJveBgKIAEoCzIfLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuU2FuZGJveCJZCgdMYXRlbmN5Eg0KBWNvdW50GAEgASgDEgsKA3A1MBgCIAEoARILCgNwOTUYAyABKAESCwoDcDk5GAQgASgBEgsKA21heBgFIAEoARILCgNzdW0YBiABKAEijwEKBlJlbW90ZRIMCgRoaXRzGAEgASgDEg4KBm1pc3NlcxgCIAEoAxIOCgZlcnJvcnMYAyABKAMSFAoMZHVyYXRpb25fcDUwGAQgASgBEhQKDGR1cmF0aW9uX3A5NRgFIAEoARIQCghpb19jb3VudBgGIAEoAxIZChF0cmFuc2ZlcnJlZF9ieXRlcxgHIAEoAyKrAQoKVGFyZ2V0U3RhdBIPCgdwcm9qZWN0GAEgASgJEg4KBnRhcmdldBgCIAEoCRINCgVzcGVsbBgDIAEoCRINCgVjb3VudBgEIAEoAxILCgNwNTAYBSABKAESCwoDcDk1GAYgASgBEgsKA3A5ORgHIAEoARIWCg5jYWNoZV9oaXRfcmF0ZRgIIAEoARIPCgdzdWNjZXNzGAkgASgDEg4KBmVycm9ycxgKIAEoAyLfAQoLTUNQVG9vbFN0YXQSDAoEdG9vbBgBIAEoCRINCgVjYWxscxgCIAEoAxIOCgZlcnJvcnMYAyABKAMSEQoJaW5wdXRfcDUwGAQgASgBEhEKCWlucHV0X3A5NRgFIAEoARITCgtpbnB1dF90b3RhbBgGIAEoAxISCgpvdXRwdXRfcDUwGAcgASgBEhIKCm91dHB1dF9wOTUYCCABKAESFAoMb3V0cHV0X3RvdGFsGAkgASgDEhQKDGR1cmF0aW9uX3A1MBgKIAEoARIUCgxkdXJhdGlvbl9wOTUYCyABKAEihwQKBEJ1enoSEgoKZXhlY19jb3VudBgBIAEoAxIQCghleGVjX3A1MBgCIAEoARIQCghleGVjX3A5NRgDIAEoARIVCg1jb21waWxlX2NvdW50GAQgASgDEhMKC2NvbXBpbGVfcDUwGAUgASgBEhMKC2NvbXBpbGVfcDk1GAYgASgBEhcKD2hvc3RfY2FsbF9jb3VudBgHIAEoAxIVCg1ob3N0X2NhbGxfcDUwGAggASgBEhUKDWhvc3RfY2FsbF9wOTUYCSABKAESGgoSc2Vzc2lvbl9wb29sX3JldXNlGAogASgDEhkKEXNlc3Npb25fcG9vbF9pZGxlGAsgASgDEh4KFnNlc3Npb25fcG9vbF9ldmljdGlvbnMYDCABKAMSGAoQc2Vzc2lvbl93YXJtX3A1MBgNIAEoARIYChBzZXNzaW9uX3dhcm1fcDk1GA4gASgBEhQKDGltcG9ydF9jb3VudBgPIAEoAxISCgppbXBvcnRfcDUwGBAgASgBEhIKCmltcG9ydF9wOTUYESABKAESGwoTc3BlbGxfcmVzb2x2ZV9jb3VudBgSIAEoAxIZChFzcGVsbF9yZXNvbHZlX3A1MBgTIAEoARIZChFzcGVsbF9yZXNvbHZlX3A5NRgUIAEoARIQCghqaXRfcnVucxgVIAEoAxIRCgl2bV9mYXVsdHMYFiABKAMivwEKB1NhbmRib3gSEQoJYXBwbHlfcDUwGAEgASgBEhEKCWFwcGx5X3A5NRgCIAEoARISCgpydWxlc19yZWFkGAMgASgDEhMKC3J1bGVzX3dyaXRlGAQgASgDEhIKCnJ1bGVzX2V4ZWMYBSABKAMSEQoJZW52X3J1bGVzGAYgASgDEhQKDGNoZWNrc19hbGxvdxgHIAEoAxITCgtjaGVja3NfZGVueRgIIAEoAxITCgtlbnZfZHJvcHBlZBgJIAEoAyI7CghCYWNrZmlsbBIvCgdzYW1wbGVzGAEgAygLMh4ubWFndXMubWV0cmljcy52MWFscGhhMS5TYW1wbGUi8QIKBlNhbXBsZRIvCgtzYW1wbGVfdGltZRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFAoHcnVubmluZxgCIAEoBUgAiAEBEhUKCGNhcGFjaXR5GAMgASgFSAGIAQESEwoGcXVldWVkGAQgASgFSAKIAQESFwoKY2FjaGVfaGl0cxgFIAEoA0gDiAEBEhkKDGNhY2hlX21pc3NlcxgGIAEoA0gEiAEBEhgKC3RhcmdldF9ydW5zGAcgASgDSAWIAQESOwoSb2JzZXJ2ZV9zdGFydF90aW1lGAggASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEgGiAEBQgoKCF9ydW5uaW5nQgsKCV9jYXBhY2l0eUIJCgdfcXVldWVkQg0KC19jYWNoZV9oaXRzQg8KDV9jYWNoZV9taXNzZXNCDgoMX3RhcmdldF9ydW5zQhUKE19vYnNlcnZlX3N0YXJ0X3RpbWUy2wEKDk1ldHJpY3NTZXJ2aWNlElkKCkdldE1ldHJpY3MSKS5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLkdldE1ldHJpY3NSZXF1ZXN0GiAubWFndXMubWV0cmljcy52MWFscGhhMS5TbmFwc2hvdBJuCg1TdHJlYW1NZXRyaWNzEiwubWFndXMubWV0cmljcy52MWFscGhhMS5TdHJlYW1NZXRyaWNzUmVxdWVzdBotLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuU3RyZWFtTWV0cmljc1Jlc3BvbnNlMAFC8wEKGmNvbS5tYWd1cy5tZXRyaWNzLnYxYWxwaGExQgxNZXRyaWNzUHJvdG9QAVpNZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvbWV0cmljcy92MWFscGhhMTttZXRyaWNzdjFhbHBoYTGiAgNNTViqAhZNYWd1cy5NZXRyaWNzLlYxYWxwaGExygIWTWFndXNcTWV0cmljc1xWMWFscGhhMeICIk1hZ3VzXE1ldHJpY3NcVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhhNYWd1czo6TWV0cmljczo6VjFhbHBoYTFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("CiRtYWd1cy9tZXRyaWNzL3YxYWxwaGExL21ldHJpY3MucHJvdG8SFm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEiEwoRR2V0TWV0cmljc1JlcXVlc3QiFgoUU3RyZWFtTWV0cmljc1JlcXVlc3QiiQEKFVN0cmVhbU1ldHJpY3NSZXNwb25zZRI0CghiYWNrZmlsbBgBIAEoCzIgLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuQmFja2ZpbGxIABI0CghzbmFwc2hvdBgCIAEoCzIgLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuU25hcHNob3RIAEIECgJvZiKHBAoIU25hcHNob3QSMAoMY2FwdHVyZV90aW1lGAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgZ0YXJnZXQYAiABKAsyHy5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLkxhdGVuY3kSLgoFY2FjaGUYAyABKAsyHy5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLkxhdGVuY3kSMgoJcG9vbF93YWl0GAQgASgLMh8ubWFndXMubWV0cmljcy52MWFscGhhMS5MYXRlbmN5EjQKC2dyYXBoX3F1ZXJ5GAUgASgLMh8ubWFndXMubWV0cmljcy52MWFscGhhMS5MYXRlbmN5Ei4KBnJlbW90ZRgGIAEoCzIeLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuUmVtb3RlEjgKDHRhcmdldF9zdGF0cxgHIAMoCzIiLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuVGFyZ2V0U3RhdBI2CgltY3BfdG9vbHMYCCADKAsyIy5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLk1DUFRvb2xTdGF0EioKBGJ1enoYCSABKAsyHC5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLkJ1enoSMAoHc2FuZGJveBgKIAEoCzIfLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuU2FuZGJveCKBAQoHTGF0ZW5jeRINCgVjb3VudBgBIAEoAxITCgtwNTBfc2Vjb25kcxgCIAEoARITCgtwOTVfc2Vjb25kcxgDIAEoARITCgtwOTlfc2Vjb25kcxgEIAEoARITCgttYXhfc2Vjb25kcxgFIAEoARITCgtzdW1fc2Vjb25kcxgGIAEoASKfAQoGUmVtb3RlEgwKBGhpdHMYASABKAMSDgoGbWlzc2VzGAIgASgDEg4KBmVycm9ycxgDIAEoAxIcChRkdXJhdGlvbl9wNTBfc2Vjb25kcxgEIAEoARIcChRkdXJhdGlvbl9wOTVfc2Vjb25kcxgFIAEoARIQCghpb19jb3VudBgGIAEoAxIZChF0cmFuc2ZlcnJlZF9ieXRlcxgHIAEoAyLDAQoKVGFyZ2V0U3RhdBIPCgdwcm9qZWN0GAEgASgJEg4KBnRhcmdldBgCIAEoCRINCgVzcGVsbBgDIAEoCRINCgVjb3VudBgEIAEoAxITCgtwNTBfc2Vjb25kcxgFIAEoARITCgtwOTVfc2Vjb25kcxgGIAEoARITCgtwOTlfc2Vjb25kcxgHIAEoARIWCg5jYWNoZV9oaXRfcmF0ZRgIIAEoARIPCgdzdWNjZXNzGAkgASgDEg4KBmVycm9ycxgKIAEoAyKHAgoLTUNQVG9vbFN0YXQSDAoEdG9vbBgBIAEoCRINCgVjYWxscxgCIAEoAxIOCgZlcnJvcnMYAyABKAMSFwoPaW5wdXRfcDUwX2J5dGVzGAQgASgBEhcKD2lucHV0X3A5NV9ieXRlcxgFIAEoARITCgtpbnB1dF90b3RhbBgGIAEoAxIYChBvdXRwdXRfcDUwX2J5dGVzGAcgASgBEhgKEG91dHB1dF9wOTVfYnl0ZXMYCCABKAESFAoMb3V0cHV0X3RvdGFsGAkgASgDEhwKFGR1cmF0aW9uX3A1MF9zZWNvbmRzGAogASgBEhwKFGR1cmF0aW9uX3A5NV9zZWNvbmRzGAsgASgBIucECgRCdXp6EhIKCmV4ZWNfY291bnQYASABKAMSGAoQZXhlY19wNTBfc2Vjb25kcxgCIAEoARIYChBleGVjX3A5NV9zZWNvbmRzGAMgASgBEhUKDWNvbXBpbGVfY291bnQYBCABKAMSGwoTY29tcGlsZV9wNTBfc2Vjb25kcxgFIAEoARIbChNjb21waWxlX3A5NV9zZWNvbmRzGAYgASgBEhcKD2hvc3RfY2FsbF9jb3VudBgHIAEoAxIdChVob3N0X2NhbGxfcDUwX3NlY29uZHMYCCABKAESHQoVaG9zdF9jYWxsX3A5NV9zZWNvbmRzGAkgASgBEhoKEnNlc3Npb25fcG9vbF9yZXVzZRgKIAEoAxIZChFzZXNzaW9uX3Bvb2xfaWRsZRgLIAEoAxIeChZzZXNzaW9uX3Bvb2xfZXZpY3Rpb25zGAwgASgDEiAKGHNlc3Npb25fd2FybV9wNTBfc2Vjb25kcxgNIAEoARIgChhzZXNzaW9uX3dhcm1fcDk1X3NlY29uZHMYDiABKAESFAoMaW1wb3J0X2NvdW50GA8gASgDEhoKEmltcG9ydF9wNTBfc2Vjb25kcxgQIAEoARIaChJpbXBvcnRfcDk1X3NlY29uZHMYESABKAESGwoTc3BlbGxfcmVzb2x2ZV9jb3VudBgSIAEoAxIhChlzcGVsbF9yZXNvbHZlX3A1MF9zZWNvbmRzGBMgASgBEiEKGXNwZWxsX3Jlc29sdmVfcDk1X3NlY29uZHMYFCABKAESEAoIaml0X3J1bnMYFSABKAMSEQoJdm1fZmF1bHRzGBYgASgDIs8BCgdTYW5kYm94EhkKEWFwcGx5X3A1MF9zZWNvbmRzGAEgASgBEhkKEWFwcGx5X3A5NV9zZWNvbmRzGAIgASgBEhIKCnJ1bGVzX3JlYWQYAyABKAMSEwoLcnVsZXNfd3JpdGUYBCABKAMSEgoKcnVsZXNfZXhlYxgFIAEoAxIRCgllbnZfcnVsZXMYBiABKAMSFAoMY2hlY2tzX2FsbG93GAcgASgDEhMKC2NoZWNrc19kZW55GAggASgDEhMKC2Vudl9kcm9wcGVkGAkgASgDIjsKCEJhY2tmaWxsEi8KB3NhbXBsZXMYASADKAsyHi5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLlNhbXBsZSLxAgoGU2FtcGxlEi8KC3NhbXBsZV90aW1lGAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIUCgdydW5uaW5nGAIgASgFSACIAQESFQoIY2FwYWNpdHkYAyABKAVIAYgBARITCgZxdWV1ZWQYBCABKAVIAogBARIXCgpjYWNoZV9oaXRzGAUgASgDSAOIAQESGQoMY2FjaGVfbWlzc2VzGAYgASgDSASIAQESGAoLdGFyZ2V0X3J1bnMYByABKANIBYgBARI7ChJvYnNlcnZlX3N0YXJ0X3RpbWUYCCABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSAaIAQFCCgoIX3J1bm5pbmdCCwoJX2NhcGFjaXR5QgkKB19xdWV1ZWRCDQoLX2NhY2hlX2hpdHNCDwoNX2NhY2hlX21pc3Nlc0IOCgxfdGFyZ2V0X3J1bnNCFQoTX29ic2VydmVfc3RhcnRfdGltZTLbAQoOTWV0cmljc1NlcnZpY2USWQoKR2V0TWV0cmljcxIpLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuR2V0TWV0cmljc1JlcXVlc3QaIC5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLlNuYXBzaG90Em4KDVN0cmVhbU1ldHJpY3MSLC5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLlN0cmVhbU1ldHJpY3NSZXF1ZXN0Gi0ubWFndXMubWV0cmljcy52MWFscGhhMS5TdHJlYW1NZXRyaWNzUmVzcG9uc2UwAULzAQoaY29tLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTFCDE1ldHJpY3NQcm90b1ABWk1naXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy9tZXRyaWNzL3YxYWxwaGExO21ldHJpY3N2MWFscGhhMaICA01NWKoCFk1hZ3VzLk1ldHJpY3MuVjFhbHBoYTHKAhZNYWd1c1xNZXRyaWNzXFYxYWxwaGEx4gIiTWFndXNcTWV0cmljc1xWMWFscGhhMVxHUEJNZXRhZGF0YeoCGE1hZ3VzOjpNZXRyaWNzOjpWMWFscGhhMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message magus.metrics.v1alpha1.GetMetricsRequest
@@ -169,7 +169,9 @@ export const SnapshotSchema: GenMessage<Snapshot> = /*@__PURE__*/
 /**
  * Latency is an operation-family rollup: how many happened and how long they took. The
  * percentiles are interpolated from the OTel histogram's buckets server-side, so the
- * dashboard never re-derives them from raw buckets.
+ * dashboard never re-derives them from raw buckets. Every quantity carries its unit in its
+ * NAME (AIP-141): a bare p95 cannot tell a reader whether it is seconds or milliseconds,
+ * and the dashboard does arithmetic on these.
  *
  * @generated from message magus.metrics.v1alpha1.Latency
  */
@@ -182,39 +184,33 @@ export type Latency = Message<"magus.metrics.v1alpha1.Latency"> & {
   count: bigint;
 
   /**
-   * seconds
-   *
-   * @generated from field: double p50 = 2;
+   * @generated from field: double p50_seconds = 2;
    */
-  p50: number;
+  p50Seconds: number;
 
   /**
-   * seconds
-   *
-   * @generated from field: double p95 = 3;
+   * @generated from field: double p95_seconds = 3;
    */
-  p95: number;
+  p95Seconds: number;
 
   /**
-   * seconds
-   *
-   * @generated from field: double p99 = 4;
+   * @generated from field: double p99_seconds = 4;
    */
-  p99: number;
+  p99Seconds: number;
 
   /**
-   * seconds (upper bound of the largest populated bucket)
+   * upper bound of the largest populated bucket
    *
-   * @generated from field: double max = 5;
+   * @generated from field: double max_seconds = 5;
    */
-  max: number;
+  maxSeconds: number;
 
   /**
-   * total seconds observed (for averages / throughput)
+   * total observed, for averages / throughput
    *
-   * @generated from field: double sum = 6;
+   * @generated from field: double sum_seconds = 6;
    */
-  sum: number;
+  sumSeconds: number;
 };
 
 /**
@@ -247,18 +243,14 @@ export type Remote = Message<"magus.metrics.v1alpha1.Remote"> & {
   errors: bigint;
 
   /**
-   * seconds
-   *
-   * @generated from field: double duration_p50 = 4;
+   * @generated from field: double duration_p50_seconds = 4;
    */
-  durationP50: number;
+  durationP50Seconds: number;
 
   /**
-   * seconds
-   *
-   * @generated from field: double duration_p95 = 5;
+   * @generated from field: double duration_p95_seconds = 5;
    */
-  durationP95: number;
+  durationP95Seconds: number;
 
   /**
    * number of get/put operations observed
@@ -319,25 +311,19 @@ export type TargetStat = Message<"magus.metrics.v1alpha1.TargetStat"> & {
   count: bigint;
 
   /**
-   * seconds
-   *
-   * @generated from field: double p50 = 5;
+   * @generated from field: double p50_seconds = 5;
    */
-  p50: number;
+  p50Seconds: number;
 
   /**
-   * seconds
-   *
-   * @generated from field: double p95 = 6;
+   * @generated from field: double p95_seconds = 6;
    */
-  p95: number;
+  p95Seconds: number;
 
   /**
-   * seconds
-   *
-   * @generated from field: double p99 = 7;
+   * @generated from field: double p99_seconds = 7;
    */
-  p99: number;
+  p99Seconds: number;
 
   /**
    * [0,1]; fraction of runs served from cache
@@ -391,18 +377,14 @@ export type MCPToolStat = Message<"magus.metrics.v1alpha1.MCPToolStat"> & {
   errors: bigint;
 
   /**
-   * bytes
-   *
-   * @generated from field: double input_p50 = 4;
+   * @generated from field: double input_p50_bytes = 4;
    */
-  inputP50: number;
+  inputP50Bytes: number;
 
   /**
-   * bytes
-   *
-   * @generated from field: double input_p95 = 5;
+   * @generated from field: double input_p95_bytes = 5;
    */
-  inputP95: number;
+  inputP95Bytes: number;
 
   /**
    * total input bytes observed
@@ -412,18 +394,14 @@ export type MCPToolStat = Message<"magus.metrics.v1alpha1.MCPToolStat"> & {
   inputTotal: bigint;
 
   /**
-   * bytes
-   *
-   * @generated from field: double output_p50 = 7;
+   * @generated from field: double output_p50_bytes = 7;
    */
-  outputP50: number;
+  outputP50Bytes: number;
 
   /**
-   * bytes
-   *
-   * @generated from field: double output_p95 = 8;
+   * @generated from field: double output_p95_bytes = 8;
    */
-  outputP95: number;
+  outputP95Bytes: number;
 
   /**
    * total output bytes observed
@@ -433,18 +411,14 @@ export type MCPToolStat = Message<"magus.metrics.v1alpha1.MCPToolStat"> & {
   outputTotal: bigint;
 
   /**
-   * seconds
-   *
-   * @generated from field: double duration_p50 = 10;
+   * @generated from field: double duration_p50_seconds = 10;
    */
-  durationP50: number;
+  durationP50Seconds: number;
 
   /**
-   * seconds
-   *
-   * @generated from field: double duration_p95 = 11;
+   * @generated from field: double duration_p95_seconds = 11;
    */
-  durationP95: number;
+  durationP95Seconds: number;
 };
 
 /**
@@ -467,18 +441,14 @@ export type Buzz = Message<"magus.metrics.v1alpha1.Buzz"> & {
   execCount: bigint;
 
   /**
-   * seconds
-   *
-   * @generated from field: double exec_p50 = 2;
+   * @generated from field: double exec_p50_seconds = 2;
    */
-  execP50: number;
+  execP50Seconds: number;
 
   /**
-   * seconds
-   *
-   * @generated from field: double exec_p95 = 3;
+   * @generated from field: double exec_p95_seconds = 3;
    */
-  execP95: number;
+  execP95Seconds: number;
 
   /**
    * @generated from field: int64 compile_count = 4;
@@ -486,18 +456,14 @@ export type Buzz = Message<"magus.metrics.v1alpha1.Buzz"> & {
   compileCount: bigint;
 
   /**
-   * seconds
-   *
-   * @generated from field: double compile_p50 = 5;
+   * @generated from field: double compile_p50_seconds = 5;
    */
-  compileP50: number;
+  compileP50Seconds: number;
 
   /**
-   * seconds
-   *
-   * @generated from field: double compile_p95 = 6;
+   * @generated from field: double compile_p95_seconds = 6;
    */
-  compileP95: number;
+  compileP95Seconds: number;
 
   /**
    * @generated from field: int64 host_call_count = 7;
@@ -505,18 +471,14 @@ export type Buzz = Message<"magus.metrics.v1alpha1.Buzz"> & {
   hostCallCount: bigint;
 
   /**
-   * seconds
-   *
-   * @generated from field: double host_call_p50 = 8;
+   * @generated from field: double host_call_p50_seconds = 8;
    */
-  hostCallP50: number;
+  hostCallP50Seconds: number;
 
   /**
-   * seconds
-   *
-   * @generated from field: double host_call_p95 = 9;
+   * @generated from field: double host_call_p95_seconds = 9;
    */
-  hostCallP95: number;
+  hostCallP95Seconds: number;
 
   /**
    * acquires served from an idle session
@@ -538,18 +500,14 @@ export type Buzz = Message<"magus.metrics.v1alpha1.Buzz"> & {
   sessionPoolEvictions: bigint;
 
   /**
-   * seconds
-   *
-   * @generated from field: double session_warm_p50 = 13;
+   * @generated from field: double session_warm_p50_seconds = 13;
    */
-  sessionWarmP50: number;
+  sessionWarmP50Seconds: number;
 
   /**
-   * seconds
-   *
-   * @generated from field: double session_warm_p95 = 14;
+   * @generated from field: double session_warm_p95_seconds = 14;
    */
-  sessionWarmP95: number;
+  sessionWarmP95Seconds: number;
 
   /**
    * @generated from field: int64 import_count = 15;
@@ -557,18 +515,14 @@ export type Buzz = Message<"magus.metrics.v1alpha1.Buzz"> & {
   importCount: bigint;
 
   /**
-   * seconds
-   *
-   * @generated from field: double import_p50 = 16;
+   * @generated from field: double import_p50_seconds = 16;
    */
-  importP50: number;
+  importP50Seconds: number;
 
   /**
-   * seconds
-   *
-   * @generated from field: double import_p95 = 17;
+   * @generated from field: double import_p95_seconds = 17;
    */
-  importP95: number;
+  importP95Seconds: number;
 
   /**
    * @generated from field: int64 spell_resolve_count = 18;
@@ -576,18 +530,14 @@ export type Buzz = Message<"magus.metrics.v1alpha1.Buzz"> & {
   spellResolveCount: bigint;
 
   /**
-   * seconds
-   *
-   * @generated from field: double spell_resolve_p50 = 19;
+   * @generated from field: double spell_resolve_p50_seconds = 19;
    */
-  spellResolveP50: number;
+  spellResolveP50Seconds: number;
 
   /**
-   * seconds
-   *
-   * @generated from field: double spell_resolve_p95 = 20;
+   * @generated from field: double spell_resolve_p95_seconds = 20;
    */
-  spellResolveP95: number;
+  spellResolveP95Seconds: number;
 
   /**
    * @generated from field: int64 jit_runs = 21;
@@ -615,18 +565,14 @@ export const BuzzSchema: GenMessage<Buzz> = /*@__PURE__*/
  */
 export type Sandbox = Message<"magus.metrics.v1alpha1.Sandbox"> & {
   /**
-   * seconds
-   *
-   * @generated from field: double apply_p50 = 1;
+   * @generated from field: double apply_p50_seconds = 1;
    */
-  applyP50: number;
+  applyP50Seconds: number;
 
   /**
-   * seconds
-   *
-   * @generated from field: double apply_p95 = 2;
+   * @generated from field: double apply_p95_seconds = 2;
    */
-  applyP95: number;
+  applyP95Seconds: number;
 
   /**
    * @generated from field: int64 rules_read = 3;

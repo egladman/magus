@@ -53,14 +53,16 @@ message Snapshot {
 
 // Latency is an operation-family rollup: how many happened and how long they took. The
 // percentiles are interpolated from the OTel histogram's buckets server-side, so the
-// dashboard never re-derives them from raw buckets.
+// dashboard never re-derives them from raw buckets. Every quantity carries its unit in its
+// NAME (AIP-141): a bare p95 cannot tell a reader whether it is seconds or milliseconds,
+// and the dashboard does arithmetic on these.
 message Latency {
   int64 count = 1;  // number of observations (the operation count)
-  double p50 = 2;   // seconds
-  double p95 = 3;   // seconds
-  double p99 = 4;   // seconds
-  double max = 5;   // seconds (upper bound of the largest populated bucket)
-  double sum = 6;   // total seconds observed (for averages / throughput)
+  double p50_seconds = 2;
+  double p95_seconds = 3;
+  double p99_seconds = 4;
+  double max_seconds = 5;  // upper bound of the largest populated bucket
+  double sum_seconds = 6;  // total observed, for averages / throughput
 }
 
 // Remote is the remote-cache instrument family: outcome tallies plus transfer latency and
@@ -69,8 +71,8 @@ message Remote {
   int64 hits = 1;
   int64 misses = 2;
   int64 errors = 3;
-  double duration_p50 = 4;  // seconds
-  double duration_p95 = 5;  // seconds
+  double duration_p50_seconds = 4;
+  double duration_p95_seconds = 5;
   int64 io_count = 6;       // number of get/put operations observed
   int64 transferred_bytes = 7; // total bytes transferred (sum of the io.size histogram)
 }
@@ -83,9 +85,9 @@ message TargetStat {
   string target = 2;         // magus.target attribute
   string spell = 3;          // magus.spell attribute ("" when the project declares none)
   int64 count = 4;           // total executions (including cache replays)
-  double p50 = 5;            // seconds
-  double p95 = 6;            // seconds
-  double p99 = 7;            // seconds
+  double p50_seconds = 5;
+  double p95_seconds = 6;
+  double p99_seconds = 7;
   double cache_hit_rate = 8; // [0,1]; fraction of runs served from cache
   int64 success = 9;         // runs with outcome=success
   int64 errors = 10;         // runs with outcome=error
@@ -97,39 +99,39 @@ message MCPToolStat {
   string tool = 1;
   int64 calls = 2;
   int64 errors = 3;
-  double input_p50 = 4;    // bytes
-  double input_p95 = 5;    // bytes
+  double input_p50_bytes = 4;
+  double input_p95_bytes = 5;
   int64 input_total = 6;   // total input bytes observed
-  double output_p50 = 7;   // bytes
-  double output_p95 = 8;   // bytes
+  double output_p50_bytes = 7;
+  double output_p95_bytes = 8;
   int64 output_total = 9;  // total output bytes observed
-  double duration_p50 = 10; // seconds
-  double duration_p95 = 11; // seconds
+  double duration_p50_seconds = 10;
+  double duration_p95_seconds = 11;
 }
 
 // Buzz rolls up the magus.buzz.* families: script exec/compile latency, the native-boundary
 // host-call family, session-pool health, import and spell resolution, and VM-level counters.
 message Buzz {
   int64 exec_count = 1;
-  double exec_p50 = 2;              // seconds
-  double exec_p95 = 3;              // seconds
+  double exec_p50_seconds = 2;
+  double exec_p95_seconds = 3;
   int64 compile_count = 4;
-  double compile_p50 = 5;           // seconds
-  double compile_p95 = 6;           // seconds
+  double compile_p50_seconds = 5;
+  double compile_p95_seconds = 6;
   int64 host_call_count = 7;
-  double host_call_p50 = 8;         // seconds
-  double host_call_p95 = 9;         // seconds
+  double host_call_p50_seconds = 8;
+  double host_call_p95_seconds = 9;
   int64 session_pool_reuse = 10;    // acquires served from an idle session
   int64 session_pool_idle = 11;     // current idle sessions (gauge)
   int64 session_pool_evictions = 12;
-  double session_warm_p50 = 13;     // seconds
-  double session_warm_p95 = 14;     // seconds
+  double session_warm_p50_seconds = 13;
+  double session_warm_p95_seconds = 14;
   int64 import_count = 15;
-  double import_p50 = 16;           // seconds
-  double import_p95 = 17;           // seconds
+  double import_p50_seconds = 16;
+  double import_p95_seconds = 17;
   int64 spell_resolve_count = 18;
-  double spell_resolve_p50 = 19;    // seconds
-  double spell_resolve_p95 = 20;    // seconds
+  double spell_resolve_p50_seconds = 19;
+  double spell_resolve_p95_seconds = 20;
   int64 jit_runs = 21;
   int64 vm_faults = 22;
 }
@@ -137,8 +139,8 @@ message Buzz {
 // Sandbox rolls up the magus.sandbox.* filesystem families: apply latency, the rule counts a
 // sandbox was built from, allow/deny check tallies, and dropped environment variables.
 message Sandbox {
-  double apply_p50 = 1;   // seconds
-  double apply_p95 = 2;   // seconds
+  double apply_p50_seconds = 1;
+  double apply_p95_seconds = 2;
   int64 rules_read = 3;
   int64 rules_write = 4;
   int64 rules_exec = 5;

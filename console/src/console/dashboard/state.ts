@@ -325,10 +325,10 @@ export function mapStatus(st: Status): StatusView {
 
 export interface LatView {
   count: number;
-  p50: number;
-  p95: number;
-  p99: number;
-  max: number;
+  p50Seconds: number;
+  p95Seconds: number;
+  p99Seconds: number;
+  maxSeconds: number;
 }
 
 export const LAT_KEYS = ["target", "cache", "poolWait", "graphQuery"] as const;
@@ -344,7 +344,13 @@ export const LAT_META: Record<LatKey, { label: string; term: string }> = {
 
 function mapLat(l: Latency | undefined): LatView | null {
   if (!l) return null;
-  return { count: Number(l.count), p50: l.p50, p95: l.p95, p99: l.p99, max: l.max };
+  return {
+    count: Number(l.count),
+    p50Seconds: l.p50Seconds,
+    p95Seconds: l.p95Seconds,
+    p99Seconds: l.p99Seconds,
+    maxSeconds: l.maxSeconds,
+  };
 }
 
 export interface RemoteView {
@@ -352,8 +358,8 @@ export interface RemoteView {
   misses: number;
   errors: number;
   hitRate: number | null;
-  durationP50: number;
-  durationP95: number;
+  durationP50Seconds: number;
+  durationP95Seconds: number;
   ioCount: number;
   bytesTotal: number | bigint;
 }
@@ -368,8 +374,8 @@ function mapRemote(r: Remote | undefined): RemoteView | null {
     misses,
     errors: Number(r.errors),
     hitRate: total > 0 ? hits / total : null,
-    durationP50: r.durationP50,
-    durationP95: r.durationP95,
+    durationP50Seconds: r.durationP50Seconds,
+    durationP95Seconds: r.durationP95Seconds,
     ioCount: Number(r.ioCount),
     bytesTotal: r.transferredBytes,
   };
@@ -380,9 +386,9 @@ export interface TargetStatView {
   target: string;
   spell: string;
   count: number;
-  p50: number;
-  p95: number;
-  p99: number;
+  p50Seconds: number;
+  p95Seconds: number;
+  p99Seconds: number;
   cacheHitRate: number;
   success: number;
   errors: number;
@@ -394,9 +400,9 @@ function mapTargetStat(t: TargetStat): TargetStatView {
     target: t.target,
     spell: t.spell,
     count: Number(t.count),
-    p50: t.p50,
-    p95: t.p95,
-    p99: t.p99,
+    p50Seconds: t.p50Seconds,
+    p95Seconds: t.p95Seconds,
+    p99Seconds: t.p99Seconds,
     cacheHitRate: t.cacheHitRate,
     success: Number(t.success),
     errors: Number(t.errors),
@@ -407,14 +413,14 @@ export interface McpToolView {
   tool: string;
   calls: number;
   errors: number;
-  inputP50: number;
-  inputP95: number;
+  inputP50Bytes: number;
+  inputP95Bytes: number;
   inputTotal: number | bigint;
-  outputP50: number;
-  outputP95: number;
+  outputP50Bytes: number;
+  outputP95Bytes: number;
   outputTotal: number | bigint;
-  durationP50: number;
-  durationP95: number;
+  durationP50Seconds: number;
+  durationP95Seconds: number;
 }
 
 function mapMcpTool(m: MCPToolStat): McpToolView {
@@ -422,38 +428,38 @@ function mapMcpTool(m: MCPToolStat): McpToolView {
     tool: m.tool,
     calls: Number(m.calls),
     errors: Number(m.errors),
-    inputP50: m.inputP50,
-    inputP95: m.inputP95,
+    inputP50Bytes: m.inputP50Bytes,
+    inputP95Bytes: m.inputP95Bytes,
     inputTotal: m.inputTotal,
-    outputP50: m.outputP50,
-    outputP95: m.outputP95,
+    outputP50Bytes: m.outputP50Bytes,
+    outputP95Bytes: m.outputP95Bytes,
     outputTotal: m.outputTotal,
-    durationP50: m.durationP50,
-    durationP95: m.durationP95,
+    durationP50Seconds: m.durationP50Seconds,
+    durationP95Seconds: m.durationP95Seconds,
   };
 }
 
 export interface BuzzView {
   execCount: number;
-  execP50: number;
-  execP95: number;
+  execP50Seconds: number;
+  execP95Seconds: number;
   compileCount: number;
-  compileP50: number;
-  compileP95: number;
+  compileP50Seconds: number;
+  compileP95Seconds: number;
   hostCallCount: number;
-  hostCallP50: number;
-  hostCallP95: number;
+  hostCallP50Seconds: number;
+  hostCallP95Seconds: number;
   sessionPoolReuse: number;
   sessionPoolIdle: number;
   sessionPoolEvictions: number;
-  sessionWarmP50: number;
-  sessionWarmP95: number;
+  sessionWarmP50Seconds: number;
+  sessionWarmP95Seconds: number;
   importCount: number;
-  importP50: number;
-  importP95: number;
+  importP50Seconds: number;
+  importP95Seconds: number;
   spellResolveCount: number;
-  spellResolveP50: number;
-  spellResolveP95: number;
+  spellResolveP50Seconds: number;
+  spellResolveP95Seconds: number;
   jitRuns: number;
   vmFaults: number;
 }
@@ -462,33 +468,33 @@ function mapBuzz(b: Buzz | undefined): BuzzView | null {
   if (!b) return null;
   return {
     execCount: Number(b.execCount),
-    execP50: b.execP50,
-    execP95: b.execP95,
+    execP50Seconds: b.execP50Seconds,
+    execP95Seconds: b.execP95Seconds,
     compileCount: Number(b.compileCount),
-    compileP50: b.compileP50,
-    compileP95: b.compileP95,
+    compileP50Seconds: b.compileP50Seconds,
+    compileP95Seconds: b.compileP95Seconds,
     hostCallCount: Number(b.hostCallCount),
-    hostCallP50: b.hostCallP50,
-    hostCallP95: b.hostCallP95,
+    hostCallP50Seconds: b.hostCallP50Seconds,
+    hostCallP95Seconds: b.hostCallP95Seconds,
     sessionPoolReuse: Number(b.sessionPoolReuse),
     sessionPoolIdle: Number(b.sessionPoolIdle),
     sessionPoolEvictions: Number(b.sessionPoolEvictions),
-    sessionWarmP50: b.sessionWarmP50,
-    sessionWarmP95: b.sessionWarmP95,
+    sessionWarmP50Seconds: b.sessionWarmP50Seconds,
+    sessionWarmP95Seconds: b.sessionWarmP95Seconds,
     importCount: Number(b.importCount),
-    importP50: b.importP50,
-    importP95: b.importP95,
+    importP50Seconds: b.importP50Seconds,
+    importP95Seconds: b.importP95Seconds,
     spellResolveCount: Number(b.spellResolveCount),
-    spellResolveP50: b.spellResolveP50,
-    spellResolveP95: b.spellResolveP95,
+    spellResolveP50Seconds: b.spellResolveP50Seconds,
+    spellResolveP95Seconds: b.spellResolveP95Seconds,
     jitRuns: Number(b.jitRuns),
     vmFaults: Number(b.vmFaults),
   };
 }
 
 export interface SandboxView {
-  applyP50: number;
-  applyP95: number;
+  applyP50Seconds: number;
+  applyP95Seconds: number;
   rulesRead: number;
   rulesWrite: number;
   rulesExec: number;
@@ -501,8 +507,8 @@ export interface SandboxView {
 function mapSandbox(s: Sandbox | undefined): SandboxView | null {
   if (!s) return null;
   return {
-    applyP50: s.applyP50,
-    applyP95: s.applyP95,
+    applyP50Seconds: s.applyP50Seconds,
+    applyP95Seconds: s.applyP95Seconds,
     rulesRead: Number(s.rulesRead),
     rulesWrite: Number(s.rulesWrite),
     rulesExec: Number(s.rulesExec),

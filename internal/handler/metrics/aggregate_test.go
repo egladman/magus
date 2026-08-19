@@ -139,11 +139,11 @@ func TestAggregate(t *testing.T) {
 
 	// Target: exact count/sum/max, interpolated percentiles within a tight delta.
 	require.Equal(t, int64(10), got.Target.Count)
-	assert.InDelta(t, 15.0, got.Target.Sum, 1e-9)
-	assert.InDelta(t, 1.5, got.Target.P50, 1e-9)
-	assert.InDelta(t, 1.95, got.Target.P95, 1e-9)
-	assert.InDelta(t, 1.99, got.Target.P99, 1e-9)
-	assert.InDelta(t, 2.0, got.Target.Max, 1e-9)
+	assert.InDelta(t, 15.0, got.Target.SumSeconds, 1e-9)
+	assert.InDelta(t, 1.5, got.Target.P50Seconds, 1e-9)
+	assert.InDelta(t, 1.95, got.Target.P95Seconds, 1e-9)
+	assert.InDelta(t, 1.99, got.Target.P99Seconds, 1e-9)
+	assert.InDelta(t, 2.0, got.Target.MaxSeconds, 1e-9)
 
 	// Remote: exact tallies and byte total, interpolated durations within a tight delta.
 	require.Equal(t, int64(2), got.Remote.Hits)
@@ -151,8 +151,8 @@ func TestAggregate(t *testing.T) {
 	require.Equal(t, int64(0), got.Remote.Errors)
 	require.Equal(t, int64(3), got.Remote.IoCount)
 	require.Equal(t, int64(4096), got.Remote.TransferredBytes)
-	assert.InDelta(t, 0.05, got.Remote.DurationP50, 1e-9)
-	assert.InDelta(t, 0.095, got.Remote.DurationP95, 1e-9)
+	assert.InDelta(t, 0.05, got.Remote.DurationP50Seconds, 1e-9)
+	assert.InDelta(t, 0.095, got.Remote.DurationP95Seconds, 1e-9)
 }
 
 // TestTargetStats groups the magus.target.duration histogram's attributed data points into one
@@ -179,9 +179,9 @@ func TestTargetStats(t *testing.T) {
 	assert.Equal(t, int64(8), a.Success)
 	assert.Equal(t, int64(2), a.Errors)
 	assert.InDelta(t, 0.4, a.CacheHitRate, 1e-9) // 4 of 10 runs were cache hits
-	assert.InDelta(t, 1.5, a.P50, 1e-9)
-	assert.InDelta(t, 1.95, a.P95, 1e-9)
-	assert.InDelta(t, 1.99, a.P99, 1e-9)
+	assert.InDelta(t, 1.5, a.P50Seconds, 1e-9)
+	assert.InDelta(t, 1.95, a.P95Seconds, 1e-9)
+	assert.InDelta(t, 1.99, a.P99Seconds, 1e-9)
 
 	bb := rows[1]
 	assert.Equal(t, "//b", bb.Project)
@@ -211,11 +211,11 @@ func TestMCPToolStats(t *testing.T) {
 	assert.Equal(t, int64(1), r.Errors)
 	assert.Equal(t, int64(400), r.InputTotal)
 	assert.Equal(t, int64(800), r.OutputTotal)
-	assert.InDelta(t, 500.0, r.InputP50, 1e-9) // single (0,1000] bucket => 1000*q
-	assert.InDelta(t, 950.0, r.InputP95, 1e-9)
-	assert.InDelta(t, 1000.0, r.OutputP50, 1e-9)
-	assert.InDelta(t, 0.5, r.DurationP50, 1e-9)
-	assert.InDelta(t, 0.95, r.DurationP95, 1e-9)
+	assert.InDelta(t, 500.0, r.InputP50Bytes, 1e-9) // single (0,1000] bucket => 1000*q
+	assert.InDelta(t, 950.0, r.InputP95Bytes, 1e-9)
+	assert.InDelta(t, 1000.0, r.OutputP50Bytes, 1e-9)
+	assert.InDelta(t, 0.5, r.DurationP50Seconds, 1e-9)
+	assert.InDelta(t, 0.95, r.DurationP95Seconds, 1e-9)
 }
 
 // TestBuzzStats rolls the magus.buzz.* families into a single Buzz message.
@@ -241,7 +241,7 @@ func TestBuzzStats(t *testing.T) {
 	assert.Equal(t, int64(1), b.SessionPoolEvictions)
 	assert.Equal(t, int64(9), b.JitRuns)
 	assert.Equal(t, int64(4), b.VmFaults)
-	assert.InDelta(t, 0.5, b.ExecP50, 1e-9)
+	assert.InDelta(t, 0.5, b.ExecP50Seconds, 1e-9)
 }
 
 // TestSandboxStats rolls the magus.sandbox.* families into a single Sandbox message, splitting
@@ -277,10 +277,10 @@ func TestSandboxStats(t *testing.T) {
 	}
 	// Copy the interpolated apply percentiles into want so the rest is an exact whole-message
 	// comparison.
-	want.ApplyP50 = got.ApplyP50
-	want.ApplyP95 = got.ApplyP95
+	want.ApplyP50Seconds = got.ApplyP50Seconds
+	want.ApplyP95Seconds = got.ApplyP95Seconds
 	require.True(t, proto.Equal(want, got), "sandbox rollup mismatch: got %+v", got)
-	assert.InDelta(t, 0.5, got.ApplyP50, 1e-9)
+	assert.InDelta(t, 0.5, got.ApplyP50Seconds, 1e-9)
 }
 
 // TestAggregateEmpty confirms an empty collection yields a fully zero-valued (non-nil)
