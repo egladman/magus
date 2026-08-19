@@ -3,11 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import {
-  AnchorStatus,
-  Scope,
-  Staleness,
-} from "../../gen/magus/notes/v1alpha1/notes_pb";
+import { AnchorStatus, Scope, Staleness } from "../../gen/magus/notes/v1alpha1/notes_pb";
 import { demoNotes } from "./demo";
 
 // A demo of five healthy notes shows nothing the empty state did not. These four properties are

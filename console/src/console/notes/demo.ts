@@ -89,7 +89,8 @@ const NOTES: NoteSpec[] = [
         kind: AnchorKind.SYMBOL,
         target: "m cache/Store#Put().",
         status: AnchorStatus.DRIFTED,
-        detail: "The anchored code still exists and no longer matches the fingerprint recorded here.",
+        detail:
+          "The anchored code still exists and no longer matches the fingerprint recorded here.",
       },
     ],
     staleness: Staleness.OUTRUN,
