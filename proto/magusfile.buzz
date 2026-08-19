@@ -10,6 +10,10 @@
 // everything downstream that consumes the generated code.
 
 import "magus/spell/buf";
+// Handles for the two projects buf.gen.yaml writes the TS client into, so generate can name
+// their trees as its own outputs (see below).
+import "project/../docs" as docs;
+import "project/../console" as console;
 
 magus\project({
     "spells": [buf],
@@ -53,8 +57,24 @@ magus\project({
 // that file to generate the daemon API reference. It is produced HERE, not shelled out to from
 // the generator, so the chain (.proto -> descriptor -> docs pages) is visible to the graph and
 // buf's own version probe enters this project's cache key rather than nothing's.
-// It lands in gen/, already declared as this project's output, so it needs no new declaration.
+// It lands in gen/, which the declaration below restates.
+//
+// buf.gen.yaml writes THREE trees: gen/go here, and the TS client twice, into docs/src/gen and
+// console/src/gen, where esbuild can resolve @bufbuild/protobuf from each consumer's own
+// node_modules. Only the first sits in this project; the other two are declared here, against
+// their owners, rather than by the projects that receive them. A consumer cannot own what it has
+// no target to produce: its own cache hit would replay its own tree and leave the client stale,
+// and `magus clean` would delete a tree it cannot rebuild.
+//
+// Declared here, each is a RequiredOutput - a foreign glob matching nothing is MGS1014 rather
+// than an empty result - each owner gains an ordering edge onto this project, and clean, drift
+// and the merge driver reach the tree through the owner's inbound record. The consumers must NOT
+// also declare them: one path claimed by two projects is MGS4002.
+//
+// gen/** is restated because ctx.writesFiles REPLACES the project and spell baseline for this
+// target rather than adding to it, so the buf spell's own gen/** would otherwise drop out.
 export fun generate(ctx: magus\Context, args: [str]) > void {
+    ctx.writesFiles("gen/**", docs.file("src/gen/**"), console.file("src/gen/**"));
     buf["buf-generate"](ctx);
     buf["buf-build"](ctx, {"args": ["-o", "gen/descriptor.binpb"]});
 }

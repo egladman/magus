@@ -261,7 +261,7 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
         "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json", "retired.urls.lock",
         workspace.file("README.md"), workspace.file("CONTRIBUTING.md"), workspace.file("blog/**"),
         workspace.file("assets/**"), workspace.file("releases/*.yaml"));
-    ctx.writesFiles("gen/**", "src/gen/**", "active.urls.lock");
+    ctx.writesFiles("gen/**", "active.urls.lock");
     renderer\site_publish(ROOT, DOCS, BLOG, OUT,
         magus\targets(), magus\projectGraph(),
         ctx.hasCharm("rw"));

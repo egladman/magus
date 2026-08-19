@@ -61,11 +61,14 @@ magus\project({
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "tsconfig.test.json",
                 "stylelint.config.mjs", "stylelint-control-sizing.mjs",
                 "../gen/knowledge-graph.json", "../gen/target-graph.json"],
-    // src/gen/** is written by proto's buf-generate (see proto/buf.gen.yaml), but is
-    // declared HERE because outputs are confined to the declaring project's subtree.
-    // docs declares its own copy the same way. Without this the tree reads as ordinary
-    // source, so magus cannot tell it has gone stale.
-    "outputs": ["gen/**", "src/gen/**"],
+    // gen/** alone: the esbuild bundle, which this project actually produces. src/gen/** lands
+    // here too, but proto writes it (see proto/buf.gen.yaml) and declares it there against this
+    // project. Claiming it here as well is MGS4002 - two projects declaring one path cannot be
+    // ordered against each other, and each would record the other's bytes as its own output.
+    // The producer's declaration is what makes clean, drift and the merge driver see the tree;
+    // src/**/*.ts above keeps it a cache input, which is the only relationship this project has
+    // to it.
+    "outputs": ["gen/**"],
     "targets": {
         // build rebuilds the committed gen/ and gates on drift, so it must run every time (skip_cache)
         // and alone (exclusive) so a peer mutating gen/ cannot trip its git-status check.
