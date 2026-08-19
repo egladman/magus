@@ -175,7 +175,7 @@ func TestScriptWorkspaceReadersRaiseCoded(t *testing.T) {
 	err := sess.Exec(context.Background(), `
 import "magus";
 
-fun main() > void { magus\ls(); }
+fun main() > void { magus\projects(); }
 main();
 `)
 	require.Error(t, err)

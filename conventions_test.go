@@ -235,6 +235,61 @@ var skillOutputGlob = regexp.MustCompile(`"(\.(?:claude|agents|opencode)/skills/
 // skills too. Naming the shipped skills instead is correct but goes stale on its
 // own, so this is the gate that makes adding a skill fail here rather than ship an
 // installed file magus calls hand-editable.
+// guardAdviceSkillCoverage maps each advisory the guard can emit to a token that
+// must appear in some installed skill.
+//
+// The token is a magus surface name, not a phrase: the skill teaches the same
+// thing in its own words and rewording it should not fail a gate, but dropping
+// the CAPABILITY should.
+var guardAdviceSkillCoverage = map[string]string{
+	"relock":     "relock",
+	"checkpoint": "magus vcs checkpoint",
+	"search":     "magus refs",
+	"cwd":        "magus where",
+}
+
+// TestGuardAdviceHasSkillCoverage keeps the guard's advisories reachable on every
+// host, not just the one that can inject them.
+//
+// An advise reaches the MODEL on Claude Code alone. Codex rejects the
+// additionalContext key outright, Cursor's command surface has no channel for a
+// non-denial, and OpenCode can only log one for the person. That is those hosts'
+// contract and magus cannot widen it - so the guard advisory is a timelier
+// delivery of guidance, never its only copy.
+//
+// The installed skills ARE the common channel: plain files every host reads,
+// carrying no host conditionals. So anything the guard would advise has to be in
+// one, or three hosts out of four never learn it. That was not true when this was
+// written: relockGuardContext existed with `relock` appearing in no skill at all,
+// while the OpenCode plugin's own comment claimed "the same guidance ships in the
+// installed skills, which is why the skills and the guard say the same things".
+//
+// Sources rather than installed copies, because the source is what a contributor
+// edits and what `magus agent install` regenerates from.
+func TestGuardAdviceHasSkillCoverage(t *testing.T) {
+	entries, err := os.ReadDir(embeddedSkillDir)
+	require.NoError(t, err, "read %s", embeddedSkillDir)
+
+	var corpus strings.Builder
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		body, err := os.ReadFile(filepath.Join(embeddedSkillDir, entry.Name(), "SKILL.md"))
+		require.NoError(t, err, "read skill %s", entry.Name())
+		corpus.Write(body)
+	}
+	all := corpus.String()
+
+	for advisory, token := range guardAdviceSkillCoverage {
+		assert.Contains(t, all, token,
+			"the %s advisory teaches %q, and no skill under %s mentions it.\n"+
+				"An advise reaches the model on Claude Code only, so a skill is where the other three\n"+
+				"hosts learn this. Add it to the skill that owns the topic, or drop the advisory.",
+			advisory, token, embeddedSkillDir)
+	}
+}
+
 func TestSkillsGenerateDeclaresEveryShippedSkill(t *testing.T) {
 	body, err := os.ReadFile(rootMagusfile)
 	require.NoError(t, err, "read %s", rootMagusfile)

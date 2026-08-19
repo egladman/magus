@@ -917,3 +917,58 @@ func (v StatusRun) BuzzObject() BuzzObject {
 		"targets":   itemsTargets,
 	}
 }
+
+func (v DelegationRelease) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"path":       v.Path,
+		"digest":     v.Digest,
+		"releasedAt": v.ReleasedAt,
+	}
+}
+
+func (v DelegationUnit) BuzzObject() BuzzObject {
+	itemsReleases := make([]any, len(v.Releases))
+	for indexReleases := range v.Releases {
+		itemsReleases[indexReleases] = v.Releases[indexReleases].BuzzObject()
+	}
+	return BuzzObject{
+		"id":             v.ID,
+		"parent":         v.Parent,
+		"goal":           v.Goal,
+		"checkpoint":     v.Checkpoint,
+		"ownedPaths":     v.OwnedPaths,
+		"forbiddenPaths": v.ForbiddenPaths,
+		"dependsOn":      v.DependsOn,
+		"tier":           v.Tier,
+		"validation":     v.Validation,
+		"state":          string(v.State),
+		"readOnly":       v.ReadOnly,
+		"releases":       itemsReleases,
+		"created":        v.Created,
+		"updated":        v.Updated,
+	}
+}
+
+func (v DelegationOverlap) BuzzObject() BuzzObject {
+	return BuzzObject{
+		"unitA":  v.UnitA,
+		"unitB":  v.UnitB,
+		"pathsA": v.PathsA,
+		"pathsB": v.PathsB,
+	}
+}
+
+func (v DelegationReport) BuzzObject() BuzzObject {
+	itemsUnits := make([]any, len(v.Units))
+	for indexUnits := range v.Units {
+		itemsUnits[indexUnits] = v.Units[indexUnits].BuzzObject()
+	}
+	itemsOverlaps := make([]any, len(v.Overlaps))
+	for indexOverlaps := range v.Overlaps {
+		itemsOverlaps[indexOverlaps] = v.Overlaps[indexOverlaps].BuzzObject()
+	}
+	return BuzzObject{
+		"units":    itemsUnits,
+		"overlaps": itemsOverlaps,
+	}
+}

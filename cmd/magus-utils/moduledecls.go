@@ -411,21 +411,38 @@ func mirrorsFor(mod std.Module) ([]string, error) {
 		order = append(order, name) // after its dependencies: declare-before-use
 		return nil
 	}
-	for _, m := range sortedMethods(mod) {
-		// ARGUMENTS as well as returns. An Arg.Object names a type the declaration
-		// references just as a return does, and emitting only the return side left
-		// http\get's `retry: HttpRetry` pointing at a type the file never declared -
-		// which the checker rejects, taking the whole module's signatures down with
-		// it. encoding\buildUrl never caught this because its URL argument is also
-		// parseUrl's return, so the type came along by accident.
+	// ARGUMENTS as well as returns. An Arg.Object names a type the declaration
+	// references just as a return does, and emitting only the return side left
+	// http\get's `retry: HttpRetry` pointing at a type the file never declared -
+	// which the checker rejects, taking the whole module's signatures down with
+	// it. encoding\buildUrl never caught this because its URL argument is also
+	// parseUrl's return, so the type came along by accident.
+	visitMethod := func(m std.Method) error {
 		for _, a := range m.Args {
 			if err := visit(strings.Trim(a.Object, "[]")); err != nil {
-				return nil, fmt.Errorf("%s: %w", m.Name, err)
+				return fmt.Errorf("%s: %w", m.Name, err)
 			}
 		}
 		for _, r := range m.Returns {
 			if err := visit(strings.Trim(r.Object, "[]")); err != nil {
-				return nil, fmt.Errorf("%s: %w", m.Name, err)
+				return fmt.Errorf("%s: %w", m.Name, err)
+			}
+		}
+		return nil
+	}
+	for _, m := range sortedMethods(mod) {
+		if err := visitMethod(m); err != nil {
+			return nil, err
+		}
+	}
+	// A Namespace member's Args/Returns reference objects the same way a top-level
+	// method's do (magus\ledger.list returns DelegationReport), so it needs the same
+	// declare-before-use walk - otherwise the object never gets emitted and the
+	// namespace's extern signature points at an undeclared type.
+	for _, ns := range mod.Namespaces {
+		for _, m := range sortedNamespaceMethods(ns) {
+			if err := visitMethod(m); err != nil {
+				return nil, fmt.Errorf("namespace %s: %w", ns.Name, err)
 			}
 		}
 	}

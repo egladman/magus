@@ -208,6 +208,25 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	var removed, stale []string
 	for _, dest := range dests {
 		base, leaf := installTarget(af.Dir, dest, af.Global)
+		// Answers the question --prune is dangerous without: which directories go.
+		// Same two lists the real run reports, nothing touched.
+		if af.DryRun {
+			w, err := agentSkills.PlanSkillTree(base, leaf, agent.VariantSimple)
+			if err != nil {
+				return err
+			}
+			written = append(written, w...)
+			s, err := agentSkills.StaleSkillDirs(base, leaf)
+			if err != nil {
+				return err
+			}
+			if af.Prune {
+				removed = append(removed, s...)
+			} else {
+				stale = append(stale, s...)
+			}
+			continue
+		}
 		w, err := agentSkills.WriteSkillTree(base, leaf, af.Force, agent.VariantSimple)
 		if err != nil {
 			return err
@@ -230,21 +249,35 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		stale = append(stale, s...)
 	}
 	for _, p := range written {
+		if af.DryRun {
+			slog.InfoContext(ctx, "agent install: would write", slog.String("path", p))
+			continue
+		}
 		slog.InfoContext(ctx, "agent install: wrote", slog.String("path", p))
 	}
 	// Reported at the same level as a write. A silent delete is how a person loses
 	// a skill they thought they had.
 	for _, p := range removed {
+		if af.DryRun {
+			slog.InfoContext(ctx, "agent install: would remove skill this binary no longer ships", slog.String("path", p))
+			continue
+		}
 		slog.InfoContext(ctx, "agent install: removed skill this binary no longer ships", slog.String("path", p))
 	}
-	printAgentInstallNextSteps(af.Dir, written, stale, agent.VariantSimple)
+	printAgentInstallNextSteps(af.Dir, written, stale, agent.VariantSimple, af.DryRun)
 	return nil
 }
 
 // printAgentInstallNextSteps prints an actionable hint after install, gated on
 // the user-controlled hints preference so MAGUS_HINTS_ENABLED=false silences it.
-func printAgentInstallNextSteps(dir string, written, stale []string, v agent.Variant) {
+func printAgentInstallNextSteps(dir string, written, stale []string, v agent.Variant, dryRun bool) {
 	if !interactive.HintsEnabled() || len(written) == 0 {
+		return
+	}
+	// A rehearsal that claims it installed something stops the reader looking for
+	// the real run.
+	if dryRun {
+		interactive.Emit(os.Stderr, fmt.Sprintf("dry run: %d file(s) would be written; nothing was changed. Re-run without --dry-run to apply", len(written)))
 		return
 	}
 	interactive.Emit(os.Stderr, fmt.Sprintf("installed %d file(s); commit them so your team and agents share them", len(written)))
@@ -1548,6 +1581,16 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 			if len(rest) > 1 && slices.Contains([]string{"pop", "apply", "drop", "branch"}, rest[0]) {
 				continue // an explicit stash@{N}: the caller chose which entry
 			}
+			// `git stash push -- <paths>` shelves only what it names, so the whole-tree
+			// reason does not apply: nothing outside those paths moves, and a concurrent
+			// agent's untracked work is untouched. It is also how a workspace escapes a
+			// bootstrap deadlock - shelve the one hunk an old binary rejects, build,
+			// restore - which this rule was denying, putting that answer out of reach.
+			// A bare `git stash push` names nothing and stashes everything, so it stays
+			// denied.
+			if len(rest) > 1 && rest[0] == "push" && slices.Contains(rest, "--") {
+				continue
+			}
 			if len(rest) > 0 && slices.Contains([]string{"pop", "apply", "drop"}, rest[0]) {
 				return bashGuardVerdict{Deny: denySharedStash(rest[0])}, true
 			}
@@ -1785,6 +1828,10 @@ var (
 	// is what an exit status is for; the echo adds a line that is true by
 	// construction and tells a reader nothing the command did not.
 	guardEchoOnSuccessRe = regexp.MustCompile(`(?:^|[;&|]\s*)(\S*/)?magus\s[^&|;]*&&\s*echo\b`)
+	// Read off the raw line, not the parsed command: the wrapper peeling that lets
+	// `time go test` be judged as `go test` would erase the very token this rule is
+	// about.
+	guardTimedMagusRe = regexp.MustCompile(`(?:^|[;&|]\s*)time\s+(\S*/)?magus\s`)
 
 	// A magus invocation whose own output is truncated or filtered by the shell.
 	// magus has output flags for this; a pipe throws away the parts the agent
@@ -1906,6 +1953,10 @@ const (
 
 	// Advice, not a deny: it wastes a line, it does not break anything.
 	echoOnSuccessAdvice = "Drop the `&& echo ...` and read the exit status - it already says the command passed, and a message that prints only on success adds nothing."
+
+	// Advise, not deny: timing a command is legitimate, and the point is that magus
+	// already answered the question better than the shell can.
+	timedMagusAdvice = "magus times itself: drop `-s` and it prints each target's duration and a `(cached, 320ms)` or `(ran, 5m28s)` verdict. `time` around a silent run measures the wall clock magus already reported, and hides which targets replayed - which is usually the thing being asked."
 )
 
 // denySharedStash explains why an unqualified stash restore is refused.
@@ -2003,6 +2054,8 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 		return bashGuardVerdict{Context: searchGuardReason}
 	case guardEchoOnSuccessRe.MatchString(command):
 		return bashGuardVerdict{Context: echoOnSuccessAdvice}
+	case guardTimedMagusRe.MatchString(command):
+		return bashGuardVerdict{Context: timedMagusAdvice}
 	}
 	// Nothing denied, so a held git advisory is the answer after all.
 	return advisory

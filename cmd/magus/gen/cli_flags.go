@@ -61,6 +61,8 @@ const (
 	FlagAffectedWait = "wait"
 	// agent: --dir
 	FlagAgentDir = "dir"
+	// agent: --dry-run
+	FlagAgentDryRun = "dry-run"
 	// agent: --force
 	FlagAgentForce = "force"
 	// agent: --global
@@ -197,6 +199,8 @@ const (
 	FlagHookSession = "session"
 	// hook: --transcript
 	FlagHookTranscript = "transcript"
+	// init: --dry-run
+	FlagInitDryRun = "dry-run"
 	// init: --force
 	FlagInitForce = "force"
 	// init: --global
@@ -965,6 +969,7 @@ func BindBuzz(fs *flag.FlagSet) *BuzzFlags {
 // InitFlags are the flags declared for `magus init`.
 type InitFlags struct {
 	Global bool   // --global
+	DryRun bool   // --dry-run
 	Local  bool   // --local
 	Force  bool   // --force
 	VCS    string // --vcs
@@ -974,6 +979,7 @@ type InitFlags struct {
 func BindInit(fs *flag.FlagSet) *InitFlags {
 	var f InitFlags
 	fs.BoolVar(&f.Global, FlagInitGlobal, false, "Write only the global config; skip the workspace bootstrap")
+	fs.BoolVar(&f.DryRun, FlagInitDryRun, false, "Print the config, magusfile, and merge-driver destinations without writing any of them")
 	fs.BoolVar(&f.Local, FlagInitLocal, false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")
 	fs.BoolVar(&f.Force, FlagInitForce, false, "Overwrite an existing config file")
 	fs.StringVar(&f.VCS, FlagInitVCS, "", "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY")
@@ -985,6 +991,7 @@ type AgentFlags struct {
 	Dir    string // --dir
 	Force  bool   // --force
 	Prune  bool   // --prune
+	DryRun bool   // --dry-run
 	Tar    bool   // --tar
 	Global bool   // --global
 }
@@ -995,6 +1002,7 @@ func BindAgent(fs *flag.FlagSet) *AgentFlags {
 	fs.StringVar(&f.Dir, FlagAgentDir, ".", "Repo directory to install into (agent install)")
 	fs.BoolVar(&f.Force, FlagAgentForce, false, "Overwrite existing installed skill files (agent install)")
 	fs.BoolVar(&f.Prune, FlagAgentPrune, false, "Also remove installed skills this binary no longer ships; without it they are reported and left in place, and only skills magus wrote are ever candidates (agent install)")
+	fs.BoolVar(&f.DryRun, FlagAgentDryRun, false, "Print what would be written and removed without touching the filesystem (agent install)")
 	fs.BoolVar(&f.Tar, FlagAgentTar, false, "Stream a tar archive to stdout instead of writing files (agent install)")
 	fs.BoolVar(&f.Global, FlagAgentGlobal, false, "Allow absolute destination paths in write mode (agent install)")
 	return &f

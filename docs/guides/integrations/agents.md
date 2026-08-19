@@ -74,7 +74,7 @@ per-host. What differs is how much of a verdict a host's hook surface can carry.
 |             | command rules  | declared-output rule                     | `deny` reaches the model               | `advise` reaches the model |
 | ----------- | -------------- | ---------------------------------------- | -------------------------------------- | -------------------------- |
 | Claude Code | yes (verified) | yes (verified)                           | yes                                    | yes (`additionalContext`)  |
-| Codex       | yes (verified) | yes, per OpenAI's docs (unverified here) | yes                                    | yes (`additionalContext`)  |
+| Codex       | yes (verified) | yes, per OpenAI's docs (unverified here) | yes                                    | no - rejects the key       |
 | Cursor      | yes (verified) | yes, reported after the write (verified) | yes (`user_message` + `agent_message`) | no - collapses to allow    |
 | OpenCode    | yes (verified) | yes (verified)                           | yes (thrown)                           | no - logged for the human  |
 

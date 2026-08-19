@@ -104,7 +104,7 @@ CORRECT: `magus\cmd`, or the typed `magus\run` / `describe` / `insight` / `docto
 Members that need a magusfile raise MGS1022 naming the constraint: the ones
 that declare into a workspace being loaded (`magus\project`, the provider
 selections) have no script equivalent, and the ones that read a loaded workspace
-(`magus\ls`, `targets`, `affected`, `graph`, `where`) are reachable through the
+(`magus\projects`, `targets`, `affected`, `graph`, `where`) are reachable through the
 nested commands above.
 
 ## Two rules that cause most first-try failures

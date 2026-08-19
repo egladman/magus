@@ -10,6 +10,30 @@
 // next plan starts empty. A plan that ended is not archived anywhere, which is the v1
 // scope on purpose - keeping every past plan means deciding what identifies one, and
 // nothing in the vocabulary names a plan yet.
+//
+// "LEDGER" NAMES THE RECONCILIATION, NOT THE DURABILITY, and the difference is worth
+// stating because the word oversells one of them. A financial ledger is append-only and
+// historical; this is neither - Put upserts a row in place, Clear wipes the book, and
+// nothing is archived. What it does share is the part that earns the name: a single
+// author keeps it, and it is written to be checked AGAINST reality later, which is
+// exactly the skill's "compare the ledger against the actual diff since each unit's
+// checkpoint" step. Read it as a book of declared intent kept for reconciliation, not as
+// a durable record of what happened. The vocabulary came from the delegation skill,
+// which is also where the row shape is defined (see types.DelegationUnit).
+//
+// It is the INTENT layer of three, and naming the other two is what keeps them apart -
+// they are flat stores joined by unit id at render time, never a storage hierarchy:
+//
+//   - intent - this package. What an orchestrating agent SAID it would hand out.
+//     Declared up front, mutable, one plan at a time.
+//   - actions - internal/trail. What was actually DONE against the daemon, append-only.
+//     The closest sibling, and the one to reach for when the question is "did it happen"
+//     rather than "was it planned".
+//   - effects - the run itself: the pool, the locks, the outputs a target produced.
+//
+// The two stores that sound related and are NOT: internal/journal is the event stream of
+// one magus invocation (what a build executed), and internal/memory and internal/notes
+// are prose a human or an agent writes to be read later - neither models delegated work.
 package ledger
 
 import (
