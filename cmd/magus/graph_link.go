@@ -12,7 +12,7 @@ import (
 
 // tokenHint is the second line every call site prints under the link. The link is
 // deliberately UNAUTHENTICATED, so this names the one command that completes it.
-const tokenHint = "(append &token=$(magus config mcp token print) to open it authenticated)"
+const tokenHint = "(append &token=$(magus config token print) to open it authenticated)"
 
 // liveExplorerLink formats a daemon-origin Graph Explorer deep-link (served by the
 // running daemon from http://<host>/console/graph/) with the caller's directives

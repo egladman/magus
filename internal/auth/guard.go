@@ -112,7 +112,7 @@ func VerifyCLIBearer(presented string) bool {
 // The secret is deliberately never logged: the daemon's logger commonly lands
 // in journald/nohup.out, and a 256-bit shared secret must not persist there.
 // On generation Resolve logs only a notice; the operator retrieves the value
-// out-of-band via `magus config mcp token print`.
+// out-of-band via `magus config token print`.
 func Resolve(ctx context.Context, log *slog.Logger) (string, error) {
 	tok, err := Load()
 	if err == nil {
@@ -135,7 +135,7 @@ func Resolve(ctx context.Context, log *slog.Logger) (string, error) {
 		}
 		return "", err
 	}
-	log.WarnContext(ctx, "[AGENT] generated a new MCP auth token; retrieve it with `magus config mcp token print`",
+	log.WarnContext(ctx, "[AGENT] generated a new MCP auth token; retrieve it with `magus config token print`",
 		slog.String("path", path),
 	)
 	return tok, nil

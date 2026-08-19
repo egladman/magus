@@ -725,19 +725,6 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 			Short: "Manage the MCP server auth token",
 			Children: []Command{
 				{
-					Name:  "token",
-					Short: "Manage the CLI's own MCP token",
-					Children: []Command{
-						{
-							Name:  "generate",
-							Short: "Create the CLI token",
-							Flags: []Flag{
-								{Name: "force", Kind: FlagBool, Doc: "Overwrite an existing token (rotation)"},
-							},
-						},
-					},
-				},
-				{
 					Name:  "connector",
 					Short: "Manage connector tokens",
 					Children: []Command{
@@ -750,6 +737,19 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 							},
 						},
 						{Name: "revoke", Short: "Revoke a connector token"},
+					},
+				},
+			},
+		},
+		{
+			Name:  "token",
+			Short: "Manage the operator token (every surface)",
+			Children: []Command{
+				{
+					Name:  "generate",
+					Short: "Create the operator token",
+					Flags: []Flag{
+						{Name: "force", Kind: FlagBool, Doc: "Overwrite an existing token (rotation)"},
 					},
 				},
 			},

@@ -115,10 +115,10 @@ const (
 	FlagConfigMCPConnectorCreateExpires = "expires"
 	// config mcp connector create: --name
 	FlagConfigMCPConnectorCreateName = "name"
-	// config mcp token generate: --force
-	FlagConfigMCPTokenGenerateForce = "force"
 	// config set: --global
 	FlagConfigSetGlobal = "global"
+	// config token generate: --force
+	FlagConfigTokenGenerateForce = "force"
 	// describe projects: --e
 	FlagDescribeProjectsE = "e"
 	// describe projects: --evaluated
@@ -841,18 +841,6 @@ func BindConfigCacheExport(fs *flag.FlagSet) *ConfigCacheExportFlags {
 	return &f
 }
 
-// ConfigMCPTokenGenerateFlags are the flags declared for `magus config mcp token generate`.
-type ConfigMCPTokenGenerateFlags struct {
-	Force bool // --force
-}
-
-// BindConfigMCPTokenGenerate registers `magus config mcp token generate`'s flags on fs and returns the destination.
-func BindConfigMCPTokenGenerate(fs *flag.FlagSet) *ConfigMCPTokenGenerateFlags {
-	var f ConfigMCPTokenGenerateFlags
-	fs.BoolVar(&f.Force, FlagConfigMCPTokenGenerateForce, false, "Overwrite an existing token (rotation)")
-	return &f
-}
-
 // ConfigMCPConnectorCreateFlags are the flags declared for `magus config mcp connector create`.
 type ConfigMCPConnectorCreateFlags struct {
 	Name    string // --name
@@ -864,6 +852,18 @@ func BindConfigMCPConnectorCreate(fs *flag.FlagSet) *ConfigMCPConnectorCreateFla
 	var f ConfigMCPConnectorCreateFlags
 	fs.StringVar(&f.Name, FlagConfigMCPConnectorCreateName, "", "Name for this connector token (default: connector-N)")
 	fs.StringVar(&f.Expires, FlagConfigMCPConnectorCreateExpires, "", "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)")
+	return &f
+}
+
+// ConfigTokenGenerateFlags are the flags declared for `magus config token generate`.
+type ConfigTokenGenerateFlags struct {
+	Force bool // --force
+}
+
+// BindConfigTokenGenerate registers `magus config token generate`'s flags on fs and returns the destination.
+func BindConfigTokenGenerate(fs *flag.FlagSet) *ConfigTokenGenerateFlags {
+	var f ConfigTokenGenerateFlags
+	fs.BoolVar(&f.Force, FlagConfigTokenGenerateForce, false, "Overwrite an existing token (rotation)")
 	return &f
 }
 

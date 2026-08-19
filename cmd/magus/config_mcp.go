@@ -12,7 +12,6 @@ import (
 
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
-	"github.com/egladman/magus/internal/interactive/clihint"
 	"github.com/egladman/magus/types"
 )
 
@@ -25,12 +24,13 @@ func configMCPCmd(args []string) error {
 		fmt.Fprintln(os.Stderr, "Manage the MCP server's auth tokens.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Subcommands:")
-		fmt.Fprintln(os.Stderr, "  token      generate, print, revoke, or inspect the retrievable cli token")
 		fmt.Fprintln(os.Stderr, "  connector  create, list, or revoke named connector tokens for external clients")
 		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "The cli token is a single retrievable secret magus's own commands reuse")
-		fmt.Fprintln(os.Stderr, "(e.g. `graph export --open --follow`). Connector tokens are named, hashed-at-rest, and")
-		fmt.Fprintln(os.Stderr, "expiring; mint one per external client (a hosted connector, an IDE).")
+		fmt.Fprintln(os.Stderr, "Connector tokens are named, hashed-at-rest, and expiring; mint one per external")
+		fmt.Fprintln(os.Stderr, "MCP client (a hosted connector, an IDE). They reach /mcp and nothing else.")
+		fmt.Fprintln(os.Stderr, "")
+		fmt.Fprintln(os.Stderr, "The operator token is `magus config token`; console tokens are")
+		fmt.Fprintln(os.Stderr, "`magus config console token`.")
 		fmt.Fprintln(os.Stderr, "")
 		fmt.Fprintln(os.Stderr, "Run `magus config mcp <subcommand> -h` for flags.")
 	}
@@ -45,7 +45,11 @@ func configMCPCmd(args []string) error {
 	sub, subArgs := rest[0], rest[1:]
 	switch sub {
 	case "token":
-		return configMCPToken(subArgs)
+		// Moved to `magus config token`: this is the OPERATOR credential, not an MCP
+		// one, and leaving it here taught every reader the opposite. Same hard-redirect
+		// shape as the list -> ls rename below.
+		return usagef("magus config mcp: the operator token moved to `magus config token` " +
+			"(it is not an MCP credential; for an MCP client use `magus config mcp connector create`)")
 	case "connector":
 		return configMCPConnector(subArgs)
 	case "-h", "--help", "help":
@@ -55,144 +59,6 @@ func configMCPCmd(args []string) error {
 		fs.Usage()
 		return usagef("magus config mcp: unknown subcommand %q", sub)
 	}
-}
-
-func configMCPToken(args []string) error {
-	fs := flag.NewFlagSet("config mcp token", flag.ContinueOnError)
-	bindDisplayFlags(fs)
-	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: magus config mcp token <subcommand> [flags]")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "The MCP HTTP endpoint requires this token as `Authorization: Bearer <token>`.")
-		fmt.Fprintln(os.Stderr, "The daemon also generates one automatically on first start if none exists.")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Subcommands:")
-		fmt.Fprintln(os.Stderr, "  generate   mint a new token (refuses to overwrite unless --force)")
-		fmt.Fprintln(os.Stderr, "  print      print the current token to stdout")
-		fmt.Fprintln(os.Stderr, "  revoke     delete the token (the daemon mints a fresh one on next start)")
-		fmt.Fprintln(os.Stderr, "  status     show whether a token exists and its fingerprint")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Run `magus config mcp token <subcommand> -h` for flags.")
-	}
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-	rest := fs.Args()
-	if len(rest) == 0 {
-		fs.Usage()
-		return nil
-	}
-	sub, subArgs := rest[0], rest[1:]
-	switch sub {
-	case "generate":
-		return configMCPTokenGenerate(subArgs)
-	case "print":
-		return configMCPTokenPrint(subArgs)
-	case "revoke":
-		return configMCPTokenRevoke(subArgs)
-	case "status":
-		return configMCPTokenStatus(subArgs)
-	case "-h", "--help", "help":
-		fs.Usage()
-		return nil
-	default:
-		fs.Usage()
-		return usagef("magus config mcp token: unknown subcommand %q", sub)
-	}
-}
-
-func configMCPTokenGenerate(args []string) error {
-	fs := flag.NewFlagSet("config mcp token generate", flag.ContinueOnError)
-	bindDisplayFlags(fs)
-	gf := gen.BindConfigMCPTokenGenerate(fs)
-	fs.Usage = func() {
-		fmt.Fprintln(os.Stderr, "Usage: magus config mcp token generate [--force]")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Mint a new 256-bit MCP bearer token and store it 0600 in the user state dir.")
-		fmt.Fprintln(os.Stderr, "Refuses to overwrite an existing token unless --force is given. A running")
-		fmt.Fprintln(os.Stderr, "daemon picks up a rotated token automatically - no restart needed.")
-		fmt.Fprintln(os.Stderr, "")
-		fmt.Fprintln(os.Stderr, "Flags:")
-		fs.PrintDefaults()
-	}
-	if err := fs.Parse(args); err != nil {
-		return err
-	}
-
-	tok, err := auth.Generate()
-	if err != nil {
-		return err
-	}
-
-	// Non-force path uses a create-only write so we never clobber a token the
-	// daemon may already be serving; --force is an explicit atomic overwrite.
-	var path string
-	if gf.Force {
-		path, err = auth.Save(tok)
-	} else {
-		path, err = auth.SaveNew(tok)
-		if errors.Is(err, os.ErrExist) {
-			return fmt.Errorf("magus config mcp token generate: a token already exists; pass --force to rotate it")
-		}
-	}
-	if err != nil {
-		return err
-	}
-
-	fmt.Printf("%s\n", tok)
-	fmt.Fprintf(os.Stderr, "\nmagus config mcp token generate: wrote %s\n", path)
-	fmt.Fprintf(os.Stderr, "Configure your MCP client with header:\n  Authorization: Bearer %s\n", tok)
-	fmt.Fprintln(os.Stderr, "A running daemon picks this up automatically - no restart needed.")
-	return nil
-}
-
-func configMCPTokenPrint(args []string) error {
-	if err := noFlags("config mcp token print", args); err != nil {
-		return err
-	}
-	tok, err := auth.Load()
-	if errors.Is(err, auth.ErrNoToken) {
-		return types.DiagnosticErrorf(types.NoAuthToken, "magus config mcp token print: no token configured; run `%s`", clihint.MCPTokenGenerate)
-	}
-	if err != nil {
-		return err
-	}
-	fmt.Println(tok)
-	return nil
-}
-
-func configMCPTokenRevoke(args []string) error {
-	if err := noFlags("config mcp token revoke", args); err != nil {
-		return err
-	}
-	if err := auth.Revoke(); err != nil {
-		return err
-	}
-	fmt.Fprintln(os.Stderr, "magus config mcp token revoke: token removed")
-	return nil
-}
-
-func configMCPTokenStatus(args []string) error {
-	if err := noFlags("config mcp token status", args); err != nil {
-		return err
-	}
-	path, err := auth.Path()
-	if err != nil {
-		return err
-	}
-	tok, err := auth.Load()
-	if errors.Is(err, auth.ErrNoToken) {
-		fmt.Printf("token:       absent (the daemon mints one on next start)\n")
-		fmt.Printf("path:        %s\n", path)
-		return nil
-	}
-	if err != nil {
-		return err
-	}
-	fmt.Printf("token:       present\n")
-	fmt.Printf("fingerprint: %s\n", auth.Fingerprint(tok))
-	fmt.Printf("path:        %s\n", path)
-	return nil
 }
 
 func configMCPConnector(args []string) error {
