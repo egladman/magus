@@ -56,7 +56,12 @@ jobs:
           env: false
 
       - name: Install codec build dependencies
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
+        # Install first, update only on failure; see the note in ci.yaml for why update is the
+        # expensive half and why the image's cached index already satisfies both packages.
+        run: |
+          sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev \
+            || { sudo apt-get update -o Acquire::Retries=3 -o Acquire::Languages=none \
+                 && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev; }
 
       - name: Resolve magus release
         id: resolve_magus
@@ -129,7 +134,12 @@ jobs:
           env: false
 
       - name: Install codec build dependencies
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
+        # Install first, update only on failure; see the note in ci.yaml for why update is the
+        # expensive half and why the image's cached index already satisfies both packages.
+        run: |
+          sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev \
+            || { sudo apt-get update -o Acquire::Retries=3 -o Acquire::Languages=none \
+                 && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev; }
 
       - uses: ./.github/actions/setup-magus
         with:
