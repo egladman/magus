@@ -72,6 +72,9 @@ const (
 	// TokenServiceRevokeTokenProcedure is the fully-qualified name of the TokenService's RevokeToken
 	// RPC.
 	TokenServiceRevokeTokenProcedure = "/magus.token.v1alpha1.TokenService/RevokeToken"
+	// TokenServiceCreateTokenProcedure is the fully-qualified name of the TokenService's CreateToken
+	// RPC.
+	TokenServiceCreateTokenProcedure = "/magus.token.v1alpha1.TokenService/CreateToken"
 )
 
 // TokenServiceClient is a client for the magus.token.v1alpha1.TokenService service.
@@ -83,6 +86,18 @@ type TokenServiceClient interface {
 	// Revoking the share token also closes its LAN listener. The cli token is not
 	// revocable here.
 	RevokeToken(context.Context, *connect.Request[v1alpha1.RevokeTokenRequest]) (*connect.Response[v1alpha1.TokenInfo], error)
+	// CreateToken mints a console or viewer token and returns its secret ONCE.
+	//
+	// It cannot escalate, and that is a property of the MOUNT rather than of any check
+	// here: this whole service sits behind BearerGuard(VerifyCLIBearer), the operator tier
+	// and nothing else, so a console, viewer, or connector token cannot reach this method
+	// to call it at all. The only caller who can already dominates every scope it may mint.
+	//
+	// What it may mint is narrower still, and deliberately: CONSOLE and CONSOLE_READ only.
+	// OPERATOR is refused because that credential lives in a file this service never opens
+	// and is rotated by the CLI; CONNECTOR is refused because minting an /mcp bearer from a
+	// browser would cross the exact tier boundary this model exists to draw.
+	CreateToken(context.Context, *connect.Request[v1alpha1.CreateTokenRequest]) (*connect.Response[v1alpha1.CreateTokenResponse], error)
 }
 
 // NewTokenServiceClient constructs a client for the magus.token.v1alpha1.TokenService service. By
@@ -108,6 +123,12 @@ func NewTokenServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(tokenServiceMethods.ByName("RevokeToken")),
 			connect.WithClientOptions(opts...),
 		),
+		createToken: connect.NewClient[v1alpha1.CreateTokenRequest, v1alpha1.CreateTokenResponse](
+			httpClient,
+			baseURL+TokenServiceCreateTokenProcedure,
+			connect.WithSchema(tokenServiceMethods.ByName("CreateToken")),
+			connect.WithClientOptions(opts...),
+		),
 	}
 }
 
@@ -115,6 +136,7 @@ func NewTokenServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 type tokenServiceClient struct {
 	listTokens  *connect.Client[v1alpha1.ListTokensRequest, v1alpha1.ListTokensResponse]
 	revokeToken *connect.Client[v1alpha1.RevokeTokenRequest, v1alpha1.TokenInfo]
+	createToken *connect.Client[v1alpha1.CreateTokenRequest, v1alpha1.CreateTokenResponse]
 }
 
 // ListTokens calls magus.token.v1alpha1.TokenService.ListTokens.
@@ -127,6 +149,11 @@ func (c *tokenServiceClient) RevokeToken(ctx context.Context, req *connect.Reque
 	return c.revokeToken.CallUnary(ctx, req)
 }
 
+// CreateToken calls magus.token.v1alpha1.TokenService.CreateToken.
+func (c *tokenServiceClient) CreateToken(ctx context.Context, req *connect.Request[v1alpha1.CreateTokenRequest]) (*connect.Response[v1alpha1.CreateTokenResponse], error) {
+	return c.createToken.CallUnary(ctx, req)
+}
+
 // TokenServiceHandler is an implementation of the magus.token.v1alpha1.TokenService service.
 type TokenServiceHandler interface {
 	// ListTokens returns every connector token plus the active share token (if any),
@@ -136,6 +163,18 @@ type TokenServiceHandler interface {
 	// Revoking the share token also closes its LAN listener. The cli token is not
 	// revocable here.
 	RevokeToken(context.Context, *connect.Request[v1alpha1.RevokeTokenRequest]) (*connect.Response[v1alpha1.TokenInfo], error)
+	// CreateToken mints a console or viewer token and returns its secret ONCE.
+	//
+	// It cannot escalate, and that is a property of the MOUNT rather than of any check
+	// here: this whole service sits behind BearerGuard(VerifyCLIBearer), the operator tier
+	// and nothing else, so a console, viewer, or connector token cannot reach this method
+	// to call it at all. The only caller who can already dominates every scope it may mint.
+	//
+	// What it may mint is narrower still, and deliberately: CONSOLE and CONSOLE_READ only.
+	// OPERATOR is refused because that credential lives in a file this service never opens
+	// and is rotated by the CLI; CONNECTOR is refused because minting an /mcp bearer from a
+	// browser would cross the exact tier boundary this model exists to draw.
+	CreateToken(context.Context, *connect.Request[v1alpha1.CreateTokenRequest]) (*connect.Response[v1alpha1.CreateTokenResponse], error)
 }
 
 // NewTokenServiceHandler builds an HTTP handler from the service implementation. It returns the
@@ -157,12 +196,20 @@ func NewTokenServiceHandler(svc TokenServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(tokenServiceMethods.ByName("RevokeToken")),
 		connect.WithHandlerOptions(opts...),
 	)
+	tokenServiceCreateTokenHandler := connect.NewUnaryHandler(
+		TokenServiceCreateTokenProcedure,
+		svc.CreateToken,
+		connect.WithSchema(tokenServiceMethods.ByName("CreateToken")),
+		connect.WithHandlerOptions(opts...),
+	)
 	return "/magus.token.v1alpha1.TokenService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
 		case TokenServiceListTokensProcedure:
 			tokenServiceListTokensHandler.ServeHTTP(w, r)
 		case TokenServiceRevokeTokenProcedure:
 			tokenServiceRevokeTokenHandler.ServeHTTP(w, r)
+		case TokenServiceCreateTokenProcedure:
+			tokenServiceCreateTokenHandler.ServeHTTP(w, r)
 		default:
 			http.NotFound(w, r)
 		}
@@ -178,4 +225,8 @@ func (UnimplementedTokenServiceHandler) ListTokens(context.Context, *connect.Req
 
 func (UnimplementedTokenServiceHandler) RevokeToken(context.Context, *connect.Request[v1alpha1.RevokeTokenRequest]) (*connect.Response[v1alpha1.TokenInfo], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.token.v1alpha1.TokenService.RevokeToken is not implemented"))
+}
+
+func (UnimplementedTokenServiceHandler) CreateToken(context.Context, *connect.Request[v1alpha1.CreateTokenRequest]) (*connect.Response[v1alpha1.CreateTokenResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.token.v1alpha1.TokenService.CreateToken is not implemented"))
 }

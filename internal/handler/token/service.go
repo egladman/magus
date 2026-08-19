@@ -27,6 +27,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -103,6 +104,62 @@ func (s *Service) ListTokens(_ context.Context, _ *connect.Request[tokenv1.ListT
 	return connect.NewResponse(&tokenv1.ListTokensResponse{Tokens: out}), nil
 }
 
+// CreateToken mints a console or viewer token and returns its secret once.
+//
+// There is no caller-class check here on purpose. The service is mounted behind
+// BearerGuard(VerifyCLIBearer) (see internal/daemon), so only the operator tier can
+// reach this method at all, and that tier already dominates both scopes it may mint -
+// there is no escalation to check for. What IS checked is the requested scope, because
+// "operator may mint anything" is not the same claim as "anything may be minted from a
+// browser": OPERATOR is refused because it lives in a file this service never opens, and
+// CONNECTOR because an /mcp bearer must not be mintable from the console surface.
+func (s *Service) CreateToken(_ context.Context, req *connect.Request[tokenv1.CreateTokenRequest]) (*connect.Response[tokenv1.CreateTokenResponse], error) {
+	scope, ok := mintableScope(req.Msg.GetScope())
+	if !ok {
+		return nil, connect.NewError(connect.CodeInvalidArgument,
+			errors.New("token: scope must be TOKEN_SCOPE_CONSOLE or TOKEN_SCOPE_CONSOLE_READ; the operator and connector classes are not mintable here"))
+	}
+
+	store, err := auth.LoadConnectorStore()
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("token: %w", err))
+	}
+	name := strings.TrimSpace(req.Msg.GetName())
+	if name == "" {
+		name = defaultConsoleTokenName(store)
+	}
+	var expires time.Time
+	if req.Msg.ExpireTime != nil {
+		expires = req.Msg.GetExpireTime().AsTime()
+	}
+
+	secret, c, err := store.Create(name, expires, scope)
+	if err != nil {
+		if errors.Is(err, auth.ErrConnectorExists) {
+			return nil, connect.NewError(connect.CodeAlreadyExists,
+				fmt.Errorf("token: a token named %q already exists", name))
+		}
+		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("token: %w", err))
+	}
+	return connect.NewResponse(&tokenv1.CreateTokenResponse{Token: connectorInfo(c), Secret: secret}), nil
+}
+
+// defaultConsoleTokenName picks an unused "console-N" label so a caller that supplies no
+// name cannot collide with an existing token and get AlreadyExists for a name it never
+// chose. The CLI derives its default the same way.
+func defaultConsoleTokenName(store *auth.ConnectorStore) string {
+	taken := map[string]bool{}
+	for _, t := range store.List() {
+		taken[t.Name] = true
+	}
+	for i := 1; ; i++ {
+		candidate := fmt.Sprintf("console-%d", i)
+		if !taken[candidate] {
+			return candidate
+		}
+	}
+}
+
 // RevokeToken removes the token matching identifier. It checks the active share
 // token first: when identifier names it, CloseIf revokes the token AND tears the LAN
 // listener down (the share's own teardown, not a reimplementation), but ONLY if that
@@ -142,6 +199,35 @@ func (s *Service) RevokeToken(_ context.Context, req *connect.Request[tokenv1.Re
 	return connect.NewResponse(connectorInfo(removed)), nil
 }
 
+// wireScope maps a stored token's surface to its wire class. One store holds all three
+// client classes, so reading the record's own scope is what keeps a console token from
+// being listed as a connector - which is what a hardcoded class did, and it mislabelled
+// every console and viewer token the moment the tiers split.
+func wireScope(s auth.ClientScope) tokenv1.TokenScope {
+	switch s {
+	case auth.ScopeConsole:
+		return tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE
+	case auth.ScopeConsoleRead:
+		return tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE_READ
+	default:
+		return tokenv1.TokenScope_TOKEN_SCOPE_CONNECTOR
+	}
+}
+
+// mintableScope maps a requested wire class to the stored scope it may be minted as, and
+// reports false for every class this service refuses to mint. Only the two console tiers
+// are mintable: OPERATOR lives in a file this service never opens, and CONNECTOR would be
+// an /mcp bearer minted from a browser.
+func mintableScope(s tokenv1.TokenScope) (auth.ClientScope, bool) {
+	switch s {
+	case tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE:
+		return auth.ScopeConsole, true
+	case tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE_READ:
+		return auth.ScopeConsoleRead, true
+	}
+	return "", false
+}
+
 // shareTokenLabel is the display name for the anonymous share token, which carries
 // no user-assigned name. It doubles as a revoke alias (revoke "share to phone").
 const shareTokenLabel = "share to phone"
@@ -154,7 +240,7 @@ func connectorInfo(c auth.ConnectorToken) *tokenv1.TokenInfo {
 	info := &tokenv1.TokenInfo{
 		Name:       c.Name,
 		Identifier: c.Fingerprint,
-		Scope:      tokenv1.TokenScope_TOKEN_SCOPE_CONNECTOR,
+		Scope:      wireScope(c.EffectiveScope()),
 	}
 	if !c.Expires.IsZero() {
 		info.ExpireTime = timestamppb.New(c.Expires)

@@ -28,7 +28,32 @@ RevokeToken removes a connector token or the share token by identifier. Revoking
 
 Takes `RevokeTokenRequest`, returns `TokenInfo`.
 
+### CreateToken
+
+CreateToken mints a console or viewer token and returns its secret ONCE.  It cannot escalate, and that is a property of the MOUNT rather than of any check here: this whole service sits behind BearerGuard(VerifyCLIBearer), the operator tier and nothing else, so a console, viewer, or connector token cannot reach this method to call it at all. The only caller who can already dominates every scope it may mint.  What it may mint is narrower still, and deliberately: CONSOLE and CONSOLE\_READ only. OPERATOR is refused because that credential lives in a file this service never opens and is rotated by the CLI; CONNECTOR is refused because minting an /mcp bearer from a browser would cross the exact tier boundary this model exists to draw.
+
+`POST /magus.token.v1alpha1.TokenService/CreateToken`: unary.
+
+Takes `CreateTokenRequest`, returns `CreateTokenResponse`.
+
 ## Messages
+
+### CreateTokenRequest
+
+| Field | Type | # | Description |
+|-------|------|---|-------------|
+| `name` | string | 1 | A human label, unique among stored tokens. Empty asks the daemon to derive one. |
+| `scope` | TokenScope | 2 | Must be TOKEN\_SCOPE\_CONSOLE or TOKEN\_SCOPE\_CONSOLE\_READ; anything else is refused. |
+| `expire_time` | Timestamp | 3 | _optional_ Absent means the token never expires. |
+
+### CreateTokenResponse
+
+CreateTokenResponse keeps a wrapper where AIP-131 would return the bare resource, because the secret is NOT part of the resource: TokenInfo is deliberately secret-free so that listing tokens cannot leak one, and the plaintext exists only in this reply and is unrecoverable afterwards. Returning TokenInfo alone would drop the one value the caller needs; adding the secret TO TokenInfo would put it on every List response.
+
+| Field | Type | # | Description |
+|-------|------|---|-------------|
+| `token` | TokenInfo | 1 |  |
+| `secret` | string | 2 | The plaintext token. Returned once and never retrievable again. |
 
 ### ListTokensRequest
 
@@ -61,12 +86,14 @@ TokenInfo describes one manageable token WITHOUT its secret, minimized to exactl
 
 ### TokenScope
 
-TokenScope names the CLASS a token belongs to in the three-tier credential model, so a client can group and label listed tokens - and so the full taxonomy is named in one place even for the class this service never lists. A connector token is a full MCP bearer minted for an external client; a share-read token is the short-lived, read-only secret behind "share to phone"; the operator token is the built-in cli credential.
+TokenScope names the CLASS a token belongs to in the credential model, so a client can group and label listed tokens - and so the full taxonomy is named in one place even for the class this service never lists. A connector token is a full MCP bearer minted for an external client; a share-read token is the short-lived, read-only secret behind "share to phone"; the operator token is the built-in cli credential.
 
 | Value | # | Description |
 |-------|---|-------------|
 | `TOKEN_SCOPE_UNSPECIFIED` | 0 |  |
 | `TOKEN_SCOPE_OPERATOR` | 3 | TOKEN\_SCOPE\_OPERATOR is the built-in cli token: auto-seeded on first daemon start, the bootstrap "god" credential that authenticates the operator to the daemon. It is managed SOLELY by the CLI and is structurally invisible+immutable to this service - it lives in a store this handler never opens, so it can be neither listed nor revoked here and this value therefore NEVER appears in a ListTokensResponse. It exists in the enum to name the class, not because the wire ever carries it. |
-| `TOKEN_SCOPE_CONNECTOR` | 1 |  |
-| `TOKEN_SCOPE_SHARE_READ` | 2 |  |
+| `TOKEN_SCOPE_CONNECTOR` | 1 | TOKEN\_SCOPE\_CONNECTOR reaches /mcp and nothing else: the tier an external agent holds. |
+| `TOKEN_SCOPE_SHARE_READ` | 2 | TOKEN\_SCOPE\_SHARE\_READ is the short-lived secret behind "share to phone", minted by the LAN share listener rather than stored. Distinct from CONSOLE\_READ, which reaches the same routes but is a stored, named token with its own lifetime. |
+| `TOKEN_SCOPE_CONSOLE` | 4 | TOKEN\_SCOPE\_CONSOLE reaches the console read and write surfaces, never /mcp. |
+| `TOKEN_SCOPE_CONSOLE_READ` | 5 | TOKEN\_SCOPE\_CONSOLE\_READ is the viewer tier: the console's read surface alone. |
 

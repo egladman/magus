@@ -404,3 +404,69 @@ func bearer(token string) connect.UnaryInterceptorFunc {
 		}
 	}
 }
+
+// TestCreateTokenRefusesTheUnmintableClasses is the escalation guard, stated as a test
+// rather than as a comment. The mount already limits this service to the operator tier,
+// so the question a test can still answer is the narrower one: given a caller who IS the
+// operator, which classes can be minted from this surface at all. The operator token is
+// not one of them (it lives in a file this service never opens) and neither is a
+// connector (an /mcp bearer minted through the console surface would cross the one
+// boundary the tier model exists to draw).
+func TestCreateTokenRefusesTheUnmintableClasses(t *testing.T) {
+	s := newIsolatedService(t, nil)
+	for _, scope := range []tokenv1.TokenScope{
+		tokenv1.TokenScope_TOKEN_SCOPE_OPERATOR,
+		tokenv1.TokenScope_TOKEN_SCOPE_CONNECTOR,
+		tokenv1.TokenScope_TOKEN_SCOPE_SHARE_READ,
+		tokenv1.TokenScope_TOKEN_SCOPE_UNSPECIFIED,
+	} {
+		_, err := s.CreateToken(context.Background(), req(&tokenv1.CreateTokenRequest{
+			Name: "escalate", Scope: scope,
+		}))
+		require.Error(t, err, "scope %v must not be mintable here", scope)
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	}
+
+	store, err := auth.LoadConnectorStore()
+	require.NoError(t, err)
+	assert.Empty(t, store.List(), "a refused mint must store nothing")
+}
+
+// TestCreateTokenMintsAConsoleTokenThatCannotReachMCP pins the property that makes the
+// minted credential worth having: it opens the console and is refused at /mcp. A mint
+// that produced something /mcp accepted would hand the console the agent tool surface,
+// which is the whole thing the split prevents.
+func TestCreateTokenMintsAConsoleTokenThatCannotReachMCP(t *testing.T) {
+	s := newIsolatedService(t, nil)
+
+	resp, err := s.CreateToken(context.Background(), req(&tokenv1.CreateTokenRequest{
+		Scope: tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE,
+	}))
+	require.NoError(t, err)
+	secret := resp.Msg.GetSecret()
+	require.NotEmpty(t, secret, "the secret is returned once and is the only copy")
+	assert.Equal(t, tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE, resp.Msg.GetToken().GetScope(),
+		"a console token must be listed as console, not as a connector")
+	assert.NotContains(t, resp.Msg.GetToken().GetIdentifier(), secret,
+		"the wire handle is a fingerprint, never the secret")
+
+	assert.True(t, auth.VerifyConsoleBearer(secret), "a console token must open the console")
+	assert.False(t, auth.VerifyMCPBearer(secret), "a console token must be refused at /mcp")
+}
+
+// TestCreateTokenMintsAViewerThatCannotWrite pins the read/write split on the tier the
+// console hands to a phone: the viewer opens the read surface and is refused by the
+// guard every mutating console mount uses.
+func TestCreateTokenMintsAViewerThatCannotWrite(t *testing.T) {
+	s := newIsolatedService(t, nil)
+
+	resp, err := s.CreateToken(context.Background(), req(&tokenv1.CreateTokenRequest{
+		Scope: tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE_READ,
+	}))
+	require.NoError(t, err)
+	secret := resp.Msg.GetSecret()
+
+	assert.True(t, auth.VerifyConsoleReadBearer(secret), "a viewer must open the console read surface")
+	assert.False(t, auth.VerifyConsoleBearer(secret), "a viewer must be refused by the write guard")
+	assert.False(t, auth.VerifyMCPBearer(secret), "a viewer must be refused at /mcp")
+}

@@ -104,6 +104,9 @@ func (fakeTokenService) ListTokens(context.Context, *connect.Request[tokenv1.Lis
 func (fakeTokenService) RevokeToken(context.Context, *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.TokenInfo], error) {
 	return connect.NewResponse(&tokenv1.TokenInfo{}), nil
 }
+func (fakeTokenService) CreateToken(context.Context, *connect.Request[tokenv1.CreateTokenRequest]) (*connect.Response[tokenv1.CreateTokenResponse], error) {
+	return connect.NewResponse(&tokenv1.CreateTokenResponse{}), nil
+}
 
 func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 	dir := t.TempDir()

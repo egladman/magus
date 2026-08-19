@@ -25,7 +25,7 @@ Start the daemon with `magus server start`. See [the console reference](../conso
 | [MetricsService](metrics.md) | 2 | `magus.metrics.v1alpha1` |
 | [NotesService](notes.md) | 2 | `magus.notes.v1alpha1` |
 | [StatusService](status.md) | 2 | `magus.status.v1alpha1` |
-| [TokenService](token.md) | 2 | `magus.token.v1alpha1` |
+| [TokenService](token.md) | 3 | `magus.token.v1alpha1` |
 | [ToolService](tool.md) | 1 | `magus.tool.v1alpha1` |
 | [ViewerService](viewer.md) | 3 | `magus.viewer.v1alpha1` |
 

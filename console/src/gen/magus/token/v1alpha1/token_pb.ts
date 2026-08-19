@@ -48,7 +48,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/token/v1alpha1/token.proto.
  */
 export const file_magus_token_v1alpha1_token: GenFile = /*@__PURE__*/
-  fileDesc("CiBtYWd1cy90b2tlbi92MWFscGhhMS90b2tlbi5wcm90bxIUbWFndXMudG9rZW4udjFhbHBoYTEirwEKCVRva2VuSW5mbxIMCgRuYW1lGAEgASgJEhIKCmlkZW50aWZpZXIYAiABKAkSLwoFc2NvcGUYAyABKA4yIC5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlblNjb3BlEi8KC2V4cGlyZV90aW1lGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEoECAQQBUoECAYQB1IHY3JlYXRlZFIJbGFzdF91c2VkIhMKEUxpc3RUb2tlbnNSZXF1ZXN0IkUKEkxpc3RUb2tlbnNSZXNwb25zZRIvCgZ0b2tlbnMYASADKAsyHy5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlbkluZm8iKwoSUmV2b2tlVG9rZW5SZXF1ZXN0EhUKBG5hbWUYASABKAlCB7pIBHICEAEqegoKVG9rZW5TY29wZRIbChdUT0tFTl9TQ09QRV9VTlNQRUNJRklFRBAAEhgKFFRPS0VOX1NDT1BFX09QRVJBVE9SEAMSGQoVVE9LRU5fU0NPUEVfQ09OTkVDVE9SEAESGgoWVE9LRU5fU0NPUEVfU0hBUkVfUkVBRBACMskBCgxUb2tlblNlcnZpY2USXwoKTGlzdFRva2VucxInLm1hZ3VzLnRva2VuLnYxYWxwaGExLkxpc3RUb2tlbnNSZXF1ZXN0GigubWFndXMudG9rZW4udjFhbHBoYTEuTGlzdFRva2Vuc1Jlc3BvbnNlElgKC1Jldm9rZVRva2VuEigubWFndXMudG9rZW4udjFhbHBoYTEuUmV2b2tlVG9rZW5SZXF1ZXN0Gh8ubWFndXMudG9rZW4udjFhbHBoYTEuVG9rZW5JbmZvQuMBChhjb20ubWFndXMudG9rZW4udjFhbHBoYTFCClRva2VuUHJvdG9QAVpJZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvdG9rZW4vdjFhbHBoYTE7dG9rZW52MWFscGhhMaICA01UWKoCFE1hZ3VzLlRva2VuLlYxYWxwaGExygIUTWFndXNcVG9rZW5cVjFhbHBoYTHiAiBNYWd1c1xUb2tlblxWMWFscGhhMVxHUEJNZXRhZGF0YeoCFk1hZ3VzOjpUb2tlbjo6VjFhbHBoYTFiBnByb3RvMw", [file_google_protobuf_timestamp, file_buf_validate_validate]);
+  fileDesc("CiBtYWd1cy90b2tlbi92MWFscGhhMS90b2tlbi5wcm90bxIUbWFndXMudG9rZW4udjFhbHBoYTEirwEKCVRva2VuSW5mbxIMCgRuYW1lGAEgASgJEhIKCmlkZW50aWZpZXIYAiABKAkSLwoFc2NvcGUYAyABKA4yIC5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlblNjb3BlEi8KC2V4cGlyZV90aW1lGAUgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcEoECAQQBUoECAYQB1IHY3JlYXRlZFIJbGFzdF91c2VkIhMKEUxpc3RUb2tlbnNSZXF1ZXN0IkUKEkxpc3RUb2tlbnNSZXNwb25zZRIvCgZ0b2tlbnMYASADKAsyHy5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlbkluZm8iowEKEkNyZWF0ZVRva2VuUmVxdWVzdBIMCgRuYW1lGAEgASgJEjkKBXNjb3BlGAIgASgOMiAubWFndXMudG9rZW4udjFhbHBoYTEuVG9rZW5TY29wZUIIukgFggECEAESNAoLZXhwaXJlX3RpbWUYAyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wSACIAQFCDgoMX2V4cGlyZV90aW1lIlUKE0NyZWF0ZVRva2VuUmVzcG9uc2USLgoFdG9rZW4YASABKAsyHy5tYWd1cy50b2tlbi52MWFscGhhMS5Ub2tlbkluZm8SDgoGc2VjcmV0GAIgASgJIisKElJldm9rZVRva2VuUmVxdWVzdBIVCgRuYW1lGAEgASgJQge6SARyAhABKrEBCgpUb2tlblNjb3BlEhsKF1RPS0VOX1NDT1BFX1VOU1BFQ0lGSUVEEAASGAoUVE9LRU5fU0NPUEVfT1BFUkFUT1IQAxIZChVUT0tFTl9TQ09QRV9DT05ORUNUT1IQARIaChZUT0tFTl9TQ09QRV9TSEFSRV9SRUFEEAISFwoTVE9LRU5fU0NPUEVfQ09OU09MRRAEEhwKGFRPS0VOX1NDT1BFX0NPTlNPTEVfUkVBRBAFMq0CCgxUb2tlblNlcnZpY2USXwoKTGlzdFRva2VucxInLm1hZ3VzLnRva2VuLnYxYWxwaGExLkxpc3RUb2tlbnNSZXF1ZXN0GigubWFndXMudG9rZW4udjFhbHBoYTEuTGlzdFRva2Vuc1Jlc3BvbnNlElgKC1Jldm9rZVRva2VuEigubWFndXMudG9rZW4udjFhbHBoYTEuUmV2b2tlVG9rZW5SZXF1ZXN0Gh8ubWFndXMudG9rZW4udjFhbHBoYTEuVG9rZW5JbmZvEmIKC0NyZWF0ZVRva2VuEigubWFndXMudG9rZW4udjFhbHBoYTEuQ3JlYXRlVG9rZW5SZXF1ZXN0GikubWFndXMudG9rZW4udjFhbHBoYTEuQ3JlYXRlVG9rZW5SZXNwb25zZULjAQoYY29tLm1hZ3VzLnRva2VuLnYxYWxwaGExQgpUb2tlblByb3RvUAFaSWdpdGh1Yi5jb20vZWdsYWRtYW4vbWFndXMvcHJvdG8vZ2VuL2dvL21hZ3VzL3Rva2VuL3YxYWxwaGExO3Rva2VudjFhbHBoYTGiAgNNVFiqAhRNYWd1cy5Ub2tlbi5WMWFscGhhMcoCFE1hZ3VzXFRva2VuXFYxYWxwaGEx4gIgTWFndXNcVG9rZW5cVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhZNYWd1czo6VG9rZW46OlYxYWxwaGExYgZwcm90bzM", [file_google_protobuf_timestamp, file_buf_validate_validate]);
 
 /**
  * TokenInfo describes one manageable token WITHOUT its secret, minimized to exactly
@@ -129,6 +129,69 @@ export const ListTokensResponseSchema: GenMessage<ListTokensResponse> = /*@__PUR
   messageDesc(file_magus_token_v1alpha1_token, 2);
 
 /**
+ * @generated from message magus.token.v1alpha1.CreateTokenRequest
+ */
+export type CreateTokenRequest = Message<"magus.token.v1alpha1.CreateTokenRequest"> & {
+  /**
+   * A human label, unique among stored tokens. Empty asks the daemon to derive one.
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+
+  /**
+   * Must be TOKEN_SCOPE_CONSOLE or TOKEN_SCOPE_CONSOLE_READ; anything else is refused.
+   *
+   * @generated from field: magus.token.v1alpha1.TokenScope scope = 2;
+   */
+  scope: TokenScope;
+
+  /**
+   * Absent means the token never expires.
+   *
+   * @generated from field: optional google.protobuf.Timestamp expire_time = 3;
+   */
+  expireTime?: Timestamp;
+};
+
+/**
+ * Describes the message magus.token.v1alpha1.CreateTokenRequest.
+ * Use `create(CreateTokenRequestSchema)` to create a new message.
+ */
+export const CreateTokenRequestSchema: GenMessage<CreateTokenRequest> = /*@__PURE__*/
+  messageDesc(file_magus_token_v1alpha1_token, 3);
+
+/**
+ * CreateTokenResponse keeps a wrapper where AIP-131 would return the bare resource,
+ * because the secret is NOT part of the resource: TokenInfo is deliberately secret-free
+ * so that listing tokens cannot leak one, and the plaintext exists only in this reply and
+ * is unrecoverable afterwards. Returning TokenInfo alone would drop the one value the
+ * caller needs; adding the secret TO TokenInfo would put it on every List response.
+ *
+ * @generated from message magus.token.v1alpha1.CreateTokenResponse
+ */
+export type CreateTokenResponse = Message<"magus.token.v1alpha1.CreateTokenResponse"> & {
+  /**
+   * @generated from field: magus.token.v1alpha1.TokenInfo token = 1;
+   */
+  token?: TokenInfo;
+
+  /**
+   * The plaintext token. Returned once and never retrievable again.
+   *
+   * @generated from field: string secret = 2;
+   */
+  secret: string;
+};
+
+/**
+ * Describes the message magus.token.v1alpha1.CreateTokenResponse.
+ * Use `create(CreateTokenResponseSchema)` to create a new message.
+ */
+export const CreateTokenResponseSchema: GenMessage<CreateTokenResponse> = /*@__PURE__*/
+  messageDesc(file_magus_token_v1alpha1_token, 4);
+
+/**
  * @generated from message magus.token.v1alpha1.RevokeTokenRequest
  */
 export type RevokeTokenRequest = Message<"magus.token.v1alpha1.RevokeTokenRequest"> & {
@@ -147,10 +210,10 @@ export type RevokeTokenRequest = Message<"magus.token.v1alpha1.RevokeTokenReques
  * Use `create(RevokeTokenRequestSchema)` to create a new message.
  */
 export const RevokeTokenRequestSchema: GenMessage<RevokeTokenRequest> = /*@__PURE__*/
-  messageDesc(file_magus_token_v1alpha1_token, 3);
+  messageDesc(file_magus_token_v1alpha1_token, 5);
 
 /**
- * TokenScope names the CLASS a token belongs to in the three-tier credential model,
+ * TokenScope names the CLASS a token belongs to in the credential model,
  * so a client can group and label listed tokens - and so the full taxonomy is named
  * in one place even for the class this service never lists. A connector token is a
  * full MCP bearer minted for an external client; a share-read token is the short-lived,
@@ -178,14 +241,35 @@ export enum TokenScope {
   OPERATOR = 3,
 
   /**
+   * TOKEN_SCOPE_CONNECTOR reaches /mcp and nothing else: the tier an external agent
+   * holds.
+   *
    * @generated from enum value: TOKEN_SCOPE_CONNECTOR = 1;
    */
   CONNECTOR = 1,
 
   /**
+   * TOKEN_SCOPE_SHARE_READ is the short-lived secret behind "share to phone", minted by
+   * the LAN share listener rather than stored. Distinct from CONSOLE_READ, which reaches
+   * the same routes but is a stored, named token with its own lifetime.
+   *
    * @generated from enum value: TOKEN_SCOPE_SHARE_READ = 2;
    */
   SHARE_READ = 2,
+
+  /**
+   * TOKEN_SCOPE_CONSOLE reaches the console read and write surfaces, never /mcp.
+   *
+   * @generated from enum value: TOKEN_SCOPE_CONSOLE = 4;
+   */
+  CONSOLE = 4,
+
+  /**
+   * TOKEN_SCOPE_CONSOLE_READ is the viewer tier: the console's read surface alone.
+   *
+   * @generated from enum value: TOKEN_SCOPE_CONSOLE_READ = 5;
+   */
+  CONSOLE_READ = 5,
 }
 
 /**
@@ -225,6 +309,26 @@ export const TokenService: GenService<{
     methodKind: "unary";
     input: typeof RevokeTokenRequestSchema;
     output: typeof TokenInfoSchema;
+  },
+  /**
+   * CreateToken mints a console or viewer token and returns its secret ONCE.
+   *
+   * It cannot escalate, and that is a property of the MOUNT rather than of any check
+   * here: this whole service sits behind BearerGuard(VerifyCLIBearer), the operator tier
+   * and nothing else, so a console, viewer, or connector token cannot reach this method
+   * to call it at all. The only caller who can already dominates every scope it may mint.
+   *
+   * What it may mint is narrower still, and deliberately: CONSOLE and CONSOLE_READ only.
+   * OPERATOR is refused because that credential lives in a file this service never opens
+   * and is rotated by the CLI; CONNECTOR is refused because minting an /mcp bearer from a
+   * browser would cross the exact tier boundary this model exists to draw.
+   *
+   * @generated from rpc magus.token.v1alpha1.TokenService.CreateToken
+   */
+  createToken: {
+    methodKind: "unary";
+    input: typeof CreateTokenRequestSchema;
+    output: typeof CreateTokenResponseSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_magus_token_v1alpha1_token, 0);
