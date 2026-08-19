@@ -381,7 +381,7 @@ func TestTwoWritersClaimingOnePathAreRejected(t *testing.T) {
 	require.Error(t, err, "two projects declaring one output path must not load")
 	assert.Contains(t, err.Error(), "shared.txt")
 	assert.Contains(t, err.Error(), "p1")
-	assert.Contains(t, err.Error(), "p2", "the error names both claimants, not just the one walked last")
+	assert.Contains(t, err.Error(), "p2", "the error names both writers, not just the one walked last")
 }
 
 // TestWriterClaimingOwnersOwnOutputIsRejected covers the other collision shape: the owner
