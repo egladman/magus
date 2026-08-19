@@ -36,14 +36,24 @@ export fun allDiagrams() > [Diagram] {
     ];
 }
 
+// rendered caches the one result renderAll can ever produce. Not a speed tweak: on the
+// nanbox build every string a render creates is pinned in the global object heap for the
+// life of the process, so each repeat call permanently retained about a megabyte.
+// See plans/reclaim-the-buzz-heap.md.
+var rendered: {str: str}? = null;
+
 // renderAll returns the inline, theme-following SVG for each diagram, keyed by id, ready
 // for inlineDiagrams. Throws on the first diagram that fails validation, which is what
 // makes a crooked figure fail the docs build rather than ship.
+//
+// The result is memoized and shared by every caller, so treat it as read-only.
 export fun renderAll() > {str: str} !> any {
+    if (rendered != null) { return rendered!; }
     final byId: mut {str: str} = mut {<str: str>};
     foreach (d in allDiagrams()) {
         byId[d.id] = renderSvg(d, cssVarPalette());
     }
+    rendered = byId;
     return byId;
 }
 

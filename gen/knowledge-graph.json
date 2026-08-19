@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2334,
-  "edge_count": 6013,
+  "node_count": 2335,
+  "edge_count": 6016,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -1260,7 +1260,7 @@
       "label": "libs/gopherbuzz/docs",
       "source": "libs/gopherbuzz/docs",
       "attrs": {
-        "dir_files": "12",
+        "dir_files": "13",
         "dir_languages": "markdown"
       }
     },
@@ -1270,7 +1270,7 @@
       "label": "libs/gopherbuzz/docs/codes",
       "source": "libs/gopherbuzz/docs/codes",
       "attrs": {
-        "dir_files": "10",
+        "dir_files": "11",
         "dir_languages": "markdown"
       }
     },
@@ -5355,6 +5355,17 @@
         "role": "doc",
         "tags": "BZZ3001,buzz,import,warning,unused",
         "title": "BZZ3001: unused import"
+      }
+    },
+    {
+      "id": "doc:libs/gopherbuzz/docs/codes/BZZ3002.md",
+      "kind": "doc",
+      "label": "libs/gopherbuzz/docs/codes/BZZ3002.md",
+      "source": "libs/gopherbuzz/docs/codes/BZZ3002.md",
+      "attrs": {
+        "role": "doc",
+        "tags": "BZZ3002,buzz,string,loop,performance,warning",
+        "title": "BZZ3002: string accumulated in a loop"
       }
     },
     {
@@ -9881,7 +9892,7 @@
       "kind": "function",
       "label": "inlinePageDiagrams",
       "doc": "inlinePageDiagrams swaps any diagram reference on a page for the inline SVG. Guarded on the page mentioning one first: renderAll walks every figure in the registry, and a docs build renders hundreds of pages that reference none.",
-      "source": "docs/site/diagrams/all.buzz:68",
+      "source": "docs/site/diagrams/all.buzz:78",
       "attrs": {
         "exported": "true"
       }
@@ -9891,14 +9902,14 @@
       "kind": "function",
       "label": "markedIds",
       "doc": "markedIds pulls each id following a marker. The id runs to the first space or end of line, so a marker may carry a trailing note explaining what the box is called.",
-      "source": "docs/site/diagrams/all.buzz:129"
+      "source": "docs/site/diagrams/all.buzz:139"
     },
     {
       "id": "function:docs/site/diagrams/all.buzz:renderAll",
       "kind": "function",
       "label": "renderAll",
-      "doc": "renderAll returns the inline, theme-following SVG for each diagram, keyed by id, ready for inlineDiagrams. Throws on the first diagram that fails validation, which is what makes a crooked figure fail the docs build rather than ship.",
-      "source": "docs/site/diagrams/all.buzz:42",
+      "doc": "renderAll returns the inline, theme-following SVG for each diagram, keyed by id, ready for inlineDiagrams. Throws on the first diagram that fails validation, which is what makes a crooked figure fail the docs build rather than ship.  The result is memoized and shared by every caller, so treat it as read-only.",
+      "source": "docs/site/diagrams/all.buzz:50",
       "attrs": {
         "exported": "true"
       }
@@ -9908,7 +9919,7 @@
       "kind": "function",
       "label": "verifyAnchors",
       "doc": "verifyAnchors checks both directions of the diagram-to-code link and returns one message per break, empty when they agree.  Forward: every anchor a diagram declares must still resolve to a path in the tree. This is the half that catches the common rot - a package renamed or deleted while the figure keeps naming it.  Reverse: every magus:diagram marker in the sources must name a diagram that exists. This is the half that catches a diagram being renamed or dropped while call sites still point at it. Neither h",
-      "source": "docs/site/diagrams/all.buzz:95",
+      "source": "docs/site/diagrams/all.buzz:105",
       "attrs": {
         "exported": "true"
       }
@@ -9918,7 +9929,7 @@
       "kind": "function",
       "label": "writeStandalonePair",
       "doc": "writeStandalonePair writes the committed light/dark SVG files for every diagram into dir. These exist for GitHub: a README image is loaded through <img>, which makes it a separate document with no access to the page's CSS variables, so the palette has to be baked in and a second file is the only way to offer a dark one.  Naming follows the terminal recordings already in assets/gen: the unsuffixed file is dark and carries the <img> fallback, `-light` is the prefers-color-scheme: light source.",
-      "source": "docs/site/diagrams/all.buzz:57",
+      "source": "docs/site/diagrams/all.buzz:67",
       "attrs": {
         "exported": "true"
       }
@@ -11340,7 +11351,7 @@
       "kind": "function",
       "label": "edgeGeometry",
       "doc": "edgeGeometry resolves an edge to [x1, y1, x2, y2, horizontal]. Buzz has no tuple, and a five-int list beats threading five result params through the painters.",
-      "source": "libs/diagram/diagram.buzz:747"
+      "source": "libs/diagram/diagram.buzz:753"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:edgeSegments",
@@ -11373,7 +11384,7 @@
       "id": "function:libs/diagram/diagram.buzz:fitLabel",
       "kind": "function",
       "label": "fitLabel",
-      "source": "libs/diagram/diagram.buzz:1102"
+      "source": "libs/diagram/diagram.buzz:1108"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:iabs",
@@ -11392,7 +11403,7 @@
       "kind": "function",
       "label": "inlineDiagrams",
       "doc": "inlineDiagrams swaps a diagram reference in rendered HTML for the SVG itself, keyed by diagram id. Inlining is what makes a diagram follow the site's manual theme toggle: an <img>-loaded SVG is a separate document and can only ever see prefers-color-scheme.  Two reference forms are recognized, because the two audiences need different markup. A docs page carries `<!--diagram:id-->`, which GitHub renders as nothing and goldmark passes through untouched. The README carries a real <picture> so GitHub shows the",
-      "source": "libs/diagram/diagram.buzz:999",
+      "source": "libs/diagram/diagram.buzz:1005",
       "attrs": {
         "exported": "true"
       }
@@ -11413,7 +11424,7 @@
       "id": "function:libs/diagram/diagram.buzz:layered",
       "kind": "function",
       "label": "layered",
-      "source": "libs/diagram/diagram.buzz:1126",
+      "source": "libs/diagram/diagram.buzz:1132",
       "attrs": {
         "exported": "true"
       }
@@ -11422,7 +11433,7 @@
       "id": "function:libs/diagram/diagram.buzz:layoutWithStagger",
       "kind": "function",
       "label": "layoutWithStagger",
-      "source": "libs/diagram/diagram.buzz:1136"
+      "source": "libs/diagram/diagram.buzz:1142"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:lightPalette",
@@ -11472,46 +11483,46 @@
       "kind": "function",
       "label": "renderDecision",
       "doc": "renderDecision paints the diamond. The label sits on the centre line rather than the stacked layout a box uses: a diamond's widest run is its middle, so a two-line stack would push text out past the sloping sides.",
-      "source": "libs/diagram/diagram.buzz:679"
+      "source": "libs/diagram/diagram.buzz:685"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:renderEdge",
       "kind": "function",
       "label": "renderEdge",
-      "source": "libs/diagram/diagram.buzz:736"
+      "source": "libs/diagram/diagram.buzz:742"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:renderEdgeLabel",
       "kind": "function",
       "label": "renderEdgeLabel",
       "doc": "renderEdgeLabel places the label off the crossing segment with a 6px gap, never on the stroke. Labels are painted before nodes, so one that strays onto a box is covered rather than left sitting on the border as a fragment.",
-      "source": "libs/diagram/diagram.buzz:764"
+      "source": "libs/diagram/diagram.buzz:770"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:renderHeader",
       "kind": "function",
       "label": "renderHeader",
-      "source": "libs/diagram/diagram.buzz:650"
+      "source": "libs/diagram/diagram.buzz:656"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:renderLegend",
       "kind": "function",
       "label": "renderLegend",
       "doc": "renderLegend draws the strip below the figure. The design system puts it outside the diagram area, so callers size the viewBox with 60px of room at the bottom.",
-      "source": "libs/diagram/diagram.buzz:808"
+      "source": "libs/diagram/diagram.buzz:814"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:renderMarkers",
       "kind": "function",
       "label": "renderMarkers",
       "doc": "renderMarkers defines one arrowhead per connector kind. All three are always emitted: an arrowhead referencing a marker that was not defined renders as a bare line, and which kinds a diagram uses is not worth tracking to save 200 bytes.",
-      "source": "libs/diagram/diagram.buzz:638"
+      "source": "libs/diagram/diagram.buzz:644"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:renderNode",
       "kind": "function",
       "label": "renderNode",
-      "source": "libs/diagram/diagram.buzz:692"
+      "source": "libs/diagram/diagram.buzz:698"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:renderSvg",
@@ -11527,14 +11538,14 @@
       "id": "function:libs/diagram/diagram.buzz:renderZone",
       "kind": "function",
       "label": "renderZone",
-      "source": "libs/diagram/diagram.buzz:665"
+      "source": "libs/diagram/diagram.buzz:671"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:replacePicture",
       "kind": "function",
       "label": "replacePicture",
       "doc": "replacePicture rewrites each <picture> element whose markup mentions needle. Scanning for the element bounds beats a regex here: the srcset and img inside carry attributes in no fixed order, and a <picture> that does not mention the needle has to survive untouched.",
-      "source": "libs/diagram/diagram.buzz:1013"
+      "source": "libs/diagram/diagram.buzz:1019"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:resolveSide",
@@ -11569,7 +11580,7 @@
       "kind": "function",
       "label": "twoBox",
       "doc": "twoBox is the smallest sound diagram: two boxes on one row, one connector between them. Tests mutate a copy of it so each one states only the rule it is about.",
-      "source": "libs/diagram/diagram.buzz:828"
+      "source": "libs/diagram/diagram.buzz:834"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:validate",
@@ -24960,6 +24971,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/gopherbuzz/docs/codes/BZZ3001.md"
+    },
+    {
+      "source": "dir:libs/gopherbuzz/docs/codes",
+      "target": "doc:libs/gopherbuzz/docs/codes/BZZ3002.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz/docs/codes/BZZ3002.md"
     },
     {
       "source": "dir:libs/gopherbuzz/examples",
@@ -44272,6 +44291,14 @@
       "confidence": "inferred",
       "score": 0.5,
       "provenance": "libs/gopherbuzz/README.md"
+    },
+    {
+      "source": "doc:libs/gopherbuzz/docs/codes/BZZ3002.md",
+      "target": "doc:libs/gopherbuzz/docs/codes/BZZ3001.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz/docs/codes/BZZ3002.md"
     },
     {
       "source": "doc:libs/gopherbuzz/examples/ffi-c/README.md",
@@ -68641,6 +68668,14 @@
     {
       "source": "target:libs/gopherbuzz:format",
       "target": "doc:libs/gopherbuzz/docs/codes/BZZ3001.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "target:libs/gopherbuzz:format",
+      "target": "doc:libs/gopherbuzz/docs/codes/BZZ3002.md",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
