@@ -1061,6 +1061,24 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
     fs\writeFile(fs\join("gen", "target-graph.json"), targets);
 }
 
+// Exports the SHARED notes store so the console's Notes surface has a demo that is this
+// workspace's real notes. Nothing here is synthesized, and that is the requirement rather
+// than a nicety: a note's only provenance is the person who wrote it, so a fixture note
+// would be prose no person wrote, in the one surface whose whole claim is the opposite (see
+// notes/what-belongs-in-a-note.md).
+//
+// --shared, and never both stores: the private one lives outside the checkout and belongs to
+// whoever ran this, so committing it would publish one person's machine-local prose to
+// everybody. --reproducible drops the mtimes and absolutises nothing, because git rewrites
+// mtimes on checkout and this file is committed - carrying them would fail the drift gate on
+// every fresh clone with a timestamp as the entire diff.
+export fun notes_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.writesFiles("gen/notes.json");
+    fs\mkdirAll("gen");
+    final notes = magus\cmd("notes", args: ["ls", "--shared", "--reproducible", "-o", "json"], opts: {"quiet": true}).stdout;
+    fs\writeFile(fs\join("gen", "notes.json"), notes);
+}
+
 // Renders the insight report (hotspots, affinity, ownership, trend) to stdout. Local
 // only: no workflow invokes this target, and ci-outcome.buzz's volatility-lens step
 // summary is the CI-facing equivalent.

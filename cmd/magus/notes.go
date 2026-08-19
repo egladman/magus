@@ -9,6 +9,7 @@ import (
 	"io"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -173,17 +174,75 @@ func notesScope(shared, private bool) (string, error) {
 type scopedNote struct {
 	store.Note
 	Scope string `json:"scope" yaml:"scope"`
+	// Path is where the note lives, and it is here so a structured listing is enough to
+	// ACT on: without it a consumer knows a note exists and cannot open it, which is the
+	// difference between a report and an export. Same rendering as the notes service
+	// (internal/handler/notes.Service.notePath), so the CLI and the RPC name one file the
+	// same way rather than each having its own idea of where a note is.
+	Path string `json:"path" yaml:"path"`
+	// Modified shadows the embedded store.Note.Modified so an export can OMIT it instead of
+	// emitting a zero timestamp. It is the file's mtime, which git rewrites on checkout, so
+	// a committed export that carries it reports drift on every fresh clone with the
+	// timestamp as the entire diff. A pointer is what makes "absent" expressible.
+	Modified *time.Time `json:"modified,omitempty" yaml:"-"`
+}
+
+// noteModified picks the mtime to serialize. Under --reproducible it is dropped rather than
+// zeroed: a zero time is a value a reader can misread as "never touched", where an absent
+// field says the export chose not to answer.
+func noteModified(n store.Note, reproducible bool) *time.Time {
+	if reproducible {
+		return nil
+	}
+	m := n.Modified
+	return &m
+}
+
+// notePath renders where a note lives: workspace-relative for a shared note, absolute for a
+// private one. The split follows the scope - a private store sits outside the workspace, so a
+// relative path would be a lie about a file the reader still has to find.
+//
+// The path is the one the note was READ from (store.Note.Path), never one rebuilt from its
+// name: a declared id is deliberately independent of the filename, so rebuilding names a
+// file that stops existing the moment someone renames the note.
+func notePath(root string, st notesStore, n store.Note) string {
+	if st.scope != store.ScopeShared {
+		return n.Path
+	}
+	return relativeToRoot(root, n.Path)
+}
+
+// relativeToRoot renders a path inside the workspace as workspace-relative, and leaves one
+// outside it alone - a private store sits anywhere on disk, and a ../../.. walk out of the
+// checkout names the file no more usefully than the absolute path does.
+func relativeToRoot(root, path string) string {
+	rel, err := filepath.Rel(root, path)
+	if err != nil || strings.HasPrefix(rel, "..") {
+		return path
+	}
+	return filepath.ToSlash(rel)
+}
+
+// notesStoreOutput names one declared store in a structured listing. Only DECLARED stores
+// reach a listing at all (notesStores skips the rest), so a consumer reading this knows the
+// location exists; an empty Notes list against a non-empty Stores list is the "declared and
+// empty" case, which is a different fact from "this workspace has nowhere to put a note".
+type notesStoreOutput struct {
+	Scope string `json:"scope" yaml:"scope"`
+	Path  string `json:"path" yaml:"path"`
 }
 
 type notesListOutput struct {
-	Notes  []scopedNote  `json:"notes"`
-	Issues []store.Issue `json:"issues"`
+	Stores []notesStoreOutput `json:"stores"`
+	Notes  []scopedNote       `json:"notes"`
+	Issues []store.Issue      `json:"issues"`
 }
 
 func notesList(root string, args []string) error {
-	var onlyShared, onlyPrivate *bool
+	var onlyShared, onlyPrivate, reproducible *bool
 	_, err := cmdParse("notes ls", args, func(fs *flag.FlagSet) {
 		onlyShared, onlyPrivate = notesScopeFlags(fs)
+		reproducible = fs.Bool("reproducible", false, "Omit values that are real but unstable (file mtimes, absolute paths), so the output can be committed")
 		fs.Usage = func() {
 			fmt.Fprintln(os.Stderr, "Usage: magus notes ls [flags]")
 			fmt.Fprintln(os.Stderr, "")
@@ -206,13 +265,32 @@ func notesList(root string, args []string) error {
 	}
 	var found []scopedNote
 	var issues []store.Issue
+	listed := make([]notesStoreOutput, 0, len(stores))
 	for _, st := range stores {
+		dir := st.dir
+		if *reproducible {
+			dir = relativeToRoot(root, dir)
+		}
+		listed = append(listed, notesStoreOutput{Scope: string(st.scope), Path: dir})
 		ns, is, err := store.Inspect(st.dir)
 		if err != nil {
 			return err
 		}
 		for _, n := range ns {
-			found = append(found, scopedNote{Note: n, Scope: string(st.scope)})
+			found = append(found, scopedNote{
+				Note:     n,
+				Scope:    string(st.scope),
+				Path:     notePath(root, st, n),
+				Modified: noteModified(n, *reproducible),
+			})
+		}
+		if *reproducible {
+			// An issue names the file it is about by absolute path, which identifies the
+			// machine that ran this as much as the note. Relative to the workspace it
+			// still points at the same file for whoever reads the export.
+			for i := range is {
+				is[i].Path = relativeToRoot(root, is[i].Path)
+			}
 		}
 		issues = append(issues, is...)
 	}
@@ -221,7 +299,7 @@ func notesList(root string, args []string) error {
 		return err
 	}
 	if opts.Format != outputText {
-		if err := emitFormatted(opts, notesListOutput{Notes: found, Issues: issues}); err != nil {
+		if err := emitFormatted(opts, notesListOutput{Stores: listed, Notes: found, Issues: issues}); err != nil {
 			return err
 		}
 		return notesIssuesError(issues)
@@ -270,7 +348,12 @@ func notesGet(root string, args []string) error {
 		return err
 	}
 	if opts.Format != outputText {
-		return emitFormatted(opts, scopedNote{Note: n, Scope: string(st.scope)})
+		return emitFormatted(opts, scopedNote{
+			Note:     n,
+			Scope:    string(st.scope),
+			Path:     notePath(root, st, n),
+			Modified: noteModified(n, false),
+		})
 	}
 	printNote(n, st.scope)
 	return nil
