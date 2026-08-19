@@ -251,7 +251,25 @@ jobs:
       # native target does need them, this step fails loudly at compile - which is a
       # better signal than installing them forever on the chance that it might.
       - name: Install native build dependencies (codec)
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev
+        # Install FIRST and update only if that fails, rather than the usual update-then-install.
+        # `apt-get update` refreshes every configured source, and on these runners that is ~10MB of
+        # indexes - universe, restricted, security, four Translation-en files, Microsoft, Chrome,
+        # azure-cli, and arm64 lists on an amd64 box. It costs 9s on a good day and was measured at
+        # 85s on both shards at once when azure.archive.ubuntu.com was slow, which is the correlated
+        # stall that reads as a hang.
+        #
+        # None of it is needed. libzstd-dev already ships in the runner image, liblzma-dev is the one
+        # package actually installed, and it comes from noble/main - whose index the image already
+        # carries. So the cached index resolves both in about two seconds.
+        #
+        # The fallback is what keeps that honest: if the image ever ships without the lists, or its
+        # index goes stale enough that the .deb 404s, the install fails and the update runs for real.
+        # Languages=none drops the Translation files it would otherwise fetch, and Retries absorbs a
+        # flaky mirror instead of stalling against it.
+        run: |
+          sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev \
+            || { sudo apt-get update -o Acquire::Retries=3 -o Acquire::Languages=none \
+                 && sudo apt-get install -y --no-install-recommends liblzma-dev libzstd-dev; }
 
       # `describe <noun> [name]` - the noun comes FIRST, and the template fields
       # are the -o json names. This previously read `describe -o template=... $p`

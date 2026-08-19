@@ -14,6 +14,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
+	"github.com/egladman/magus/internal/interp"
 	"github.com/egladman/magus/types"
 	"github.com/egladman/magus/vcs"
 )
@@ -122,9 +123,26 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 	// registration, which writes the tracked .gitattributes. During a merge that file may
 	// be unmerged, so the refresh would splice a section between conflict markers. It runs
 	// after the markers are gone instead.
-	m, err := loadMagus(withoutMergeDriverRefresh(ctx), root)
+	loadCtx := withoutMergeDriverRefresh(ctx)
+	m, err := loadMagus(loadCtx, root)
+	// A magusfile carrying this merge's conflict markers is not a magusfile magus can parse,
+	// and the declarations it holds are the whole basis for settling anything. The committed
+	// side is a complete copy of those declarations, so retry against it rather than
+	// stopping: the generated conflicts get settled now and the hand-written one waits for a
+	// human, instead of both waiting.
+	stale := false
 	if err != nil {
-		return err
+		overlay := committedMagusfiles(ctx, root)
+		if len(overlay) == 0 {
+			return err
+		}
+		m, err = loadMagus(interp.WithOverlay(loadCtx, overlay), root)
+		if err != nil {
+			return err
+		}
+		stale = true
+		fmt.Printf("vcs resolve: %s still carries this merge's conflict markers, so the committed "+
+			"declarations are being used to settle the rest.\n", strings.Join(slices.Sorted(maps.Keys(overlay)), ", "))
 	}
 	res, err := resolveVCS(ctx, root, m)
 	if err != nil {
@@ -164,7 +182,7 @@ func vcsResolveCmd(ctx context.Context, root string, rc runConfig, args []string
 	if globalCfg.DryRun {
 		return unresolvedError(plan)
 	}
-	return applyResolution(ctx, root, rc, m, res.VCS, resolver, plan)
+	return applyResolution(ctx, root, rc, m, res.VCS, resolver, plan, stale)
 }
 
 // startMergeAgainst begins the merge that --against settles, and returns the function that
@@ -212,14 +230,23 @@ func startMergeAgainst(ctx context.Context, root string, res types.VCSResolution
 // Every step past the first has already mutated the tree, so failures report how far it
 // got. A half-applied resolve otherwise looks like a fresh conflict with the markers
 // missing, which `git status` alone cannot explain.
-func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Magus, driver types.VCSDriver, resolver types.ConflictResolver, plan resolutionPlan) error {
+// staleDecls says the declarations came from the committed magusfile because the working
+// copy's is mid-merge. It suppresses the regeneration step and nothing else: clearing
+// markers and recording paths are decisions ABOUT the conflicts, which either side's
+// declarations answer the same way, while regenerating PRODUCES bytes - and a merge that
+// touched a generator would have this produce output matching neither side.
+func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Magus, driver types.VCSDriver, resolver types.ConflictResolver, plan resolutionPlan, staleDecls bool) error {
 	if err := resolver.KeepIncoming(ctx, m.Root(), slices.Concat(plan.keep, plan.rederive)); err != nil {
 		return fmt.Errorf("vcs resolve: %w", err)
 	}
 	if err := resolver.RemoveConflicts(ctx, m.Root(), plan.gone); err != nil {
 		return fmt.Errorf("vcs resolve: %w\n%s", err, resolveTreeState(plan, "the conflict markers were already cleared"))
 	}
-	if err := runRebuildTargets(ctx, root, rc, plan.rebuild); err != nil {
+	if staleDecls {
+		fmt.Println("vcs resolve: not regenerating - the magusfile is still mid-merge, and a " +
+			"generator it changes would produce bytes matching neither side. Resolve the " +
+			"magusfile, then `magus run generate:rw` to finish.")
+	} else if err := runRebuildTargets(ctx, root, rc, plan.rebuild); err != nil {
 		return fmt.Errorf("vcs resolve: regenerate: %w\n%s", err, resolveTreeState(plan,
 			"the conflict markers were cleared and the deletions recorded, but nothing was marked resolved"))
 	}
@@ -231,11 +258,66 @@ func applyResolution(ctx context.Context, root string, rc runConfig, m *magus.Ma
 	if err != nil {
 		return fmt.Errorf("vcs resolve: %w", err)
 	}
-	if err := resolver.MarkResolved(ctx, m.Root(), settled); err != nil {
+	// stagePaths, not MarkResolved directly: one pathspec matching nothing aborts the whole
+	// call before staging anything, so a single conflict involving a RENAME took the other
+	// forty paths down with it - regeneration complete, index untouched, and an error naming
+	// a file the rename had legitimately removed. filterStageable splits those out first.
+	staged, dropped, err := stagePaths(ctx, m.Root(), driver.Name(), resolver, settled)
+	if err != nil {
 		return fmt.Errorf("vcs resolve: %w\n%s", err, resolveTreeState(plan, "regeneration completed"))
 	}
-	fmt.Printf("\nrecorded %d path(s); review before continuing: git diff --cached --stat\n", len(settled))
+	fmt.Printf("\nrecorded %d path(s); review before continuing: git diff --cached --stat\n", len(staged))
+	// Named, never silent: a path magus settled and could not record is one the caller has
+	// to look at, and the count above would otherwise be the only sign it existed.
+	if len(dropped) > 0 {
+		fmt.Printf("not recorded (gone from disk and untracked, so there is nothing to stage): %s\n",
+			strings.Join(dropped, ", "))
+	}
 	return unresolvedError(plan)
+}
+
+// committedMagusfiles returns the COMMITTED content of every conflicted .buzz file, keyed
+// by absolute path, for interp.WithOverlay.
+//
+// The committed side, not either merge stage: it is the one version guaranteed to parse,
+// and the declarations it carries are the ones the tree had before this merge started.
+//
+// No error return, deliberately: every way this can fail - no VCS, a backend that cannot
+// report conflicts or read a revision, a file the VCS will not hand back - means the same
+// thing to the only caller, which is "carry on with the load failure you already have". An
+// error here could only be discarded, and returning one alongside a nil map is the
+// ambiguity `nilnil` exists to catch. Nothing to overlay is an empty map.
+func committedMagusfiles(ctx context.Context, root string) map[string]string {
+	res, err := vcs.Resolve(ctx, root, "", types.VCSOptions{})
+	if err != nil || res.VCS == nil {
+		return nil
+	}
+	resolver, ok := res.VCS.(types.ConflictResolver)
+	if !ok {
+		return nil
+	}
+	reader, ok := res.VCS.(types.RevisionFileReader)
+	if !ok {
+		return nil
+	}
+	conflicts, err := resolver.Conflicts(ctx, root)
+	if err != nil {
+		return nil
+	}
+	overlay := map[string]string{}
+	for _, c := range conflicts {
+		if !strings.HasSuffix(c.Path, ".buzz") {
+			continue
+		}
+		// "" is the committed revision in whichever backend this is; naming HEAD here
+		// would be correct for git alone.
+		content, rerr := reader.ReadFileAt(ctx, root, "", c.Path)
+		if rerr != nil {
+			return nil
+		}
+		overlay[filepath.Join(root, filepath.FromSlash(c.Path))] = content
+	}
+	return overlay
 }
 
 // resolveTreeState describes how far the resolve got, for an error message.

@@ -3,7 +3,6 @@ package notes
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 )
 
 // Resolver answers whether one anchor still names something that exists.
@@ -65,7 +64,10 @@ func ResolveAnchors(ctx context.Context, dir string, res Resolver) ([]Issue, err
 		if err := ctx.Err(); err != nil {
 			return nil, err
 		}
-		path := filepath.Join(dir, n.Name+".md")
+		// The file the note was read from, not one rebuilt from its name: a note whose
+		// declared id no longer matches its filename would otherwise send a reader to
+		// repair an anchor in a file that does not exist.
+		path := n.Path
 		for _, a := range n.Anchors {
 			if !res.Resolves(ctx, a) {
 				issues = append(issues, Issue{

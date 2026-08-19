@@ -30,6 +30,7 @@ import {
 } from "../../gen/magus/notes/v1alpha1/notes_pb";
 import {
   parseHash,
+  wantsDemo,
   daemonAttach,
   adoptDaemonOrigin,
   validateLoopbackHost,
@@ -39,6 +40,7 @@ import {
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
 import type { SurfaceInstance } from "../standalone";
+import { demoNotes } from "./demo";
 
 // The SAME key the dashboard remembers its last daemon under, so opening Notes after
 // connecting the dashboard resumes the same loopback host. Read-only here.
@@ -52,6 +54,7 @@ interface Refs {
   empty: HTMLElement;
   emptyTitle: HTMLElement;
   emptySub: HTMLElement;
+  demoBtn: HTMLButtonElement;
 }
 
 // SCOPE_COPY names each store by its CONSEQUENCE rather than by its config key. "shared" and
@@ -164,7 +167,22 @@ function buildScaffold(host: HTMLElement): Refs {
   const liveHint = h("span", undefined, "Then open the live link it prints.");
   liveHint.dataset.emptyHint = "";
   wayLive.append(liveLabel, liveCmd, liveHint);
-  emptyActions.append(wayLive);
+
+  // The hint says "sample" before the button is pressed, and loadDemo says it again above the
+  // cards. Twice on purpose: this is the surface where mistaking invented prose for something a
+  // colleague wrote is the costly error, and one notice is one thing to miss.
+  const wayDemo = h("div");
+  wayDemo.dataset.emptyWay = "";
+  const demoLabel = h("span", undefined, "Try the demo");
+  demoLabel.dataset.emptyWayLabel = "";
+  const demoBtn = h("button", "pf-v6-c-button pf-m-primary") as HTMLButtonElement;
+  demoBtn.type = "button";
+  demoBtn.append(h("span", "pf-v6-c-button__text", "See the demo"));
+  const demoHint = h("span", undefined, "Sample notes, no daemon needed.");
+  demoHint.dataset.emptyHint = "";
+  wayDemo.append(demoLabel, demoBtn, demoHint);
+
+  emptyActions.append(wayLive, wayDemo);
 
   emptyBody.append(emptySub, emptyActions);
   emptyContent.append(emptyTitle, emptyBody);
@@ -173,7 +191,7 @@ function buildScaffold(host: HTMLElement): Refs {
   scroll.append(body, empty);
   panel.append(scroll);
   host.append(panel);
-  return { scroll, body, empty, emptyTitle, emptySub };
+  return { scroll, body, empty, emptyTitle, emptySub, demoBtn };
 }
 
 // buildAnchors renders what a note is ABOUT, with each anchor's verdict beside it. An anchor
@@ -392,10 +410,40 @@ export function activate(host: HTMLElement): SurfaceInstance {
     }
   }
 
-  // load resolves which daemon to read: an explicit attach (a #port link or the
-  // daemon-origin console), then the last daemon the dashboard remembered. There is no demo
-  // arm, and its absence is deliberate: a synthesized note would be prose no person wrote,
-  // rendered in the one surface whose entire claim is that a person wrote everything on it.
+  // loadDemo renders invented notes, and the banner above them is not decoration: it is the only
+  // thing between a demo and this surface asserting that a person wrote five things nobody wrote.
+  // Every other surface can show sample data silently; this one cannot, because authorship is the
+  // entire claim a note makes. Warning rather than info, because the reader who skims past an
+  // info stripe and then quotes one of these to a colleague is the failure being prevented.
+  function loadDemo(): void {
+    const demo = demoNotes();
+    const loadBody = (n: Note): Promise<string> => Promise.resolve(demo.body(n.name));
+    refs.body.replaceChildren();
+
+    const banner = h("div", "pf-v6-c-alert pf-m-warning");
+    banner.append(h("p", "pf-v6-c-alert__title", "Sample notes. Nobody wrote these."));
+    const desc = h("div", "pf-v6-c-alert__description");
+    desc.append(
+      h(
+        "p",
+        undefined,
+        "They exist to show what the surface does with anchors, staleness and the two stores. " +
+          "A real note is prose a person wrote and committed under their own name; connect a " +
+          "daemon to read yours.",
+      ),
+    );
+    banner.append(desc);
+    refs.body.append(banner);
+
+    for (const store of demo.stores) {
+      const mine = demo.notes.filter((n) => n.scope === store.scope);
+      refs.body.append(buildStoreSection(store, mine, loadBody));
+    }
+    refs.empty.hidden = true;
+  }
+
+  // load resolves what to read: an explicit #demo, then an explicit daemon attach (a #port link
+  // or the daemon-origin console), then the last daemon the dashboard remembered.
   function load(): void {
     const params = parseHash();
     consumeLiveToken(params);
@@ -405,6 +453,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // that very daemon. Without this the surface works only after the dashboard has persisted a
     // host to localStorage, which is the shape of bug that looks fine on the developer's machine.
     adoptDaemonOrigin();
+    if (wantsDemo(params)) {
+      loadDemo();
+      return;
+    }
     const linked = daemonAttach(params);
     const remembered = daemonCell.get();
     const daemonHost = linked ?? (remembered ? validateLoopbackHost(remembered) : null);
@@ -418,6 +470,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     );
   }
 
+  refs.demoBtn.addEventListener("click", () => loadDemo());
   load();
 
   return {
