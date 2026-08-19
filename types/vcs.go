@@ -643,6 +643,36 @@ func SplitExplainedOutputs(files []FileEntry, alsoChangedIn map[string]bool) (ex
 	return explained, unexplained
 }
 
+// SourcesChangedSinceBase returns every project whose declared SOURCE changed in THIS
+// CHANGE - the branch measured against its base ref, not the working tree.
+//
+// Base-relative is the whole point, and the working tree cannot substitute for it: on a CI
+// runner the checkout is clean, so a dirtiness probe reports nothing and would report every
+// author innocent of everything. A source change that is already COMMITTED explains its
+// output exactly as well as an uncommitted one.
+//
+// nil means COULD NOT TELL - no VCS, no base, an unreadable diff - and is not the same
+// answer as "nothing changed". A caller deciding whether to blame someone must treat it as
+// no evidence rather than as evidence of innocence.
+//
+// One function for the three callers that ask this (the engine's drift gate, `magus vcs
+// add`, and doctor's generated-drift check), because they were three copies of it and a
+// staging decision that disagreed with a gate would be invisible until it mattered.
+func SourcesChangedSinceBase(ctx context.Context, insp Inspector, res VCSResolution, root string) map[string]bool {
+	if insp == nil || res.VCS == nil || res.Base == "" {
+		return nil
+	}
+	paths, err := res.VCS.ChangedFiles(ctx, root, res.Base)
+	if err != nil || len(paths) == 0 {
+		return nil
+	}
+	files, err := insp.ClassifyFiles(ctx, paths)
+	if err != nil {
+		return nil
+	}
+	return SourceProjects(files)
+}
+
 // SourceProjects returns every project whose declared SOURCE glob claims one of these
 // paths. It is how both halves of the explained/unexplained question are computed - the
 // dirty set and the changed-since-base set - so the two cannot answer it differently.

@@ -45,11 +45,11 @@ func TestDiagEventFromError(t *testing.T) {
 	assert.False(t, ok)
 }
 
-func TestMakeHandler_PreflightGenerateFireOnVariantSpellings(t *testing.T) {
-	// makeHandler special-cases the exact strings "preflight"/"generate"
-	// (run.go). types.ParseTarget normalizes the CLI's raw spelling before it
-	// ever reaches makeHandler, so a variant invocation still resolves to the
-	// canonical name the special-casing checks against.
+func TestTargetHandler_NormalizesVariantSpellings(t *testing.T) {
+	// The drift gate no longer keys off the target NAME - every target is eligible, and
+	// the policy plus its declared outputs decide. Normalization still matters: a policy
+	// is looked up by canonical name, so a variant invocation has to resolve to it or the
+	// target silently runs ungated.
 	for _, in := range []string{"preflight", "Preflight", "PREFLIGHT"} {
 		parsed, err := types.ParseTarget(in)
 		assert.NoErrorf(t, err, "ParseTarget(%q)", in)
@@ -62,7 +62,7 @@ func TestMakeHandler_PreflightGenerateFireOnVariantSpellings(t *testing.T) {
 	}
 
 	var m *Magus
-	h := m.makeHandler("generate")
+	h := m.targetHandler("generate")
 	assert.NotNil(t, h)
 }
 
@@ -324,24 +324,24 @@ func TestWithTargetDeadlineCancelReleasesTheTimer(t *testing.T) {
 	}
 }
 
-// verifyReadOnly gates a FailOnDrift target, so the distinction that matters is
+// gateDrift answers for a drift-gated target, so the distinction that matters is
 // "no VCS to check against" (a legitimate pass) versus "the check could not run"
 // (which must not be reported as clean). These pin that split; collapsing them is
 // how the gate previously failed open.
-// verifyReadOnlyFixture builds the minimum Magus the gate needs: it resolves the VCS from
+// gateDriftFixture builds the minimum Magus the gate needs: it resolves the VCS from
 // the WORKSPACE ROOT (not the project dir), so the root is what a test has to set.
-func verifyReadOnlyFixture(t *testing.T) (*Magus, string) {
+func gateDriftFixture(t *testing.T) (*Magus, *types.Project) {
 	t.Helper()
 	dir := t.TempDir()
-	return &Magus{ws: &types.Workspace{Root: dir}}, dir
+	return &Magus{ws: &types.Workspace{Root: dir}}, &types.Project{Path: ".", Dir: dir}
 }
 
-func TestVerifyReadOnlySkipsWhenVCSDisabled(t *testing.T) {
+func TestGateDriftSkipsWhenVCSDisabled(t *testing.T) {
 	t.Setenv("MAGUS_VCS_ENABLED", "false")
-	m, dir := verifyReadOnlyFixture(t)
+	m, p := gateDriftFixture(t)
 
 	ran := false
-	err := m.verifyReadOnly(t.Context(), dir, "generate", func() error { ran = true; return nil })
+	err := m.gateDrift(t.Context(), p, "generate", types.DriftFail, func() error { ran = true; return nil })
 
 	require.NoError(t, err, "no VCS means nothing to diff against, so the check does not apply")
 	require.True(t, ran, "the target still runs; only the drift check is skipped")
@@ -352,35 +352,35 @@ func TestVerifyReadOnlySkipsWhenVCSDisabled(t *testing.T) {
 // VCSSourceDefault, so testing res.VCS alone leaves the promised no-op unreachable and the
 // gate hard-fails with "git could not report working-tree status" on a directory that was
 // never a repository.
-func TestVerifyReadOnlySkipsWhenNothingClaimsTheRoot(t *testing.T) {
+func TestGateDriftSkipsWhenNothingClaimsTheRoot(t *testing.T) {
 	t.Setenv("MAGUS_VCS_ENABLED", "")
 	t.Setenv("MAGUS_VCS_NAME", "")
-	m, dir := verifyReadOnlyFixture(t)
+	m, p := gateDriftFixture(t)
 
 	ran := false
-	err := m.verifyReadOnly(t.Context(), dir, "generate", func() error { ran = true; return nil })
+	err := m.gateDrift(t.Context(), p, "generate", types.DriftFail, func() error { ran = true; return nil })
 
 	require.NoError(t, err, "an unversioned tree has nothing to diff against; the gate must not fail")
 	require.True(t, ran)
 }
 
-func TestVerifyReadOnlyErrorsOnUnresolvableVCS(t *testing.T) {
+func TestGateDriftErrorsOnUnresolvableVCS(t *testing.T) {
 	t.Setenv("MAGUS_VCS_NAME", "nosuchvcs")
-	m, dir := verifyReadOnlyFixture(t)
+	m, p := gateDriftFixture(t)
 
-	err := m.verifyReadOnly(t.Context(), dir, "generate", func() error { return nil })
+	err := m.gateDrift(t.Context(), p, "generate", types.DriftFail, func() error { return nil })
 
 	require.Error(t, err, "an unknown MAGUS_VCS_NAME is misconfiguration, not an absent VCS")
-	require.Contains(t, err.Error(), "FailOnDrift",
+	require.Contains(t, err.Error(), "drift-gated",
 		"the message must name the guarantee that could not be honored, not just the VCS failure")
 }
 
-func TestVerifyReadOnlyPropagatesTargetError(t *testing.T) {
+func TestGateDriftPropagatesTargetError(t *testing.T) {
 	t.Setenv("MAGUS_VCS_ENABLED", "false")
-	m, dir := verifyReadOnlyFixture(t)
+	m, p := gateDriftFixture(t)
 
 	want := errors.New("target blew up")
-	err := m.verifyReadOnly(t.Context(), dir, "generate", func() error { return want })
+	err := m.gateDrift(t.Context(), p, "generate", types.DriftFail, func() error { return want })
 
 	require.ErrorIs(t, err, want, "the target's own failure is returned before any drift check")
 }

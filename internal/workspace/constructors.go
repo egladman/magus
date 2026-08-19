@@ -201,10 +201,14 @@ func IgnoreLiteral(pattern string) types.IgnorePattern {
 	return types.IgnorePattern{Type: types.PatternLiteral, Pattern: pattern}
 }
 
-// FailOnDrift enables the drift gate: fail the run if the working tree is dirty
-// after the target runs.
-func FailOnDrift() TargetOption {
-	return func(t *types.Target) { t.FailOnDrift = true }
+// Drift sets what happens when this target's declared outputs move under a read-only run.
+// The zero policy already gates a target that declares outputs, so this is for stating that
+// out loud, downgrading to a warning, or switching it off with a reason.
+func Drift(policy types.DriftPolicy, reason string) TargetOption {
+	return func(t *types.Target) {
+		t.Drift = policy
+		t.DriftReason = reason
+	}
 }
 
 // RetryOnVolatile returns a TargetOption that enables volatility detection and auto-retry.

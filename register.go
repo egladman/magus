@@ -124,8 +124,12 @@ func IgnoreRegex(pattern string) types.IgnorePattern { return workspace.IgnoreRe
 // IgnoreLiteral constructs a literal ignore pattern matching any path segment at any depth.
 func IgnoreLiteral(pattern string) types.IgnorePattern { return workspace.IgnoreLiteral(pattern) }
 
-// FailOnDrift enables the drift gate: fail if the working tree is dirty after the target.
-func FailOnDrift() TargetOption { return workspace.FailOnDrift() }
+// Drift sets what happens when this target's declared output moves under a read-only run.
+// The zero policy already gates a target that declares output, so this is for stating that
+// out loud, downgrading to a warning, or switching it off with a reason.
+func Drift(policy types.DriftPolicy, reason string) TargetOption {
+	return workspace.Drift(policy, reason)
+}
 
 // Exclusive runs the target alone — no other target runs concurrently while it does.
 func Exclusive() TargetOption { return workspace.Exclusive() }

@@ -96,7 +96,7 @@ func ValidateCharmName(name string) error {
 //   - As a work-unit it carries identity: Path/Name/Charms/Files describe which
 //     project x target to run and against which changed files.
 //   - As a policy bag it carries per-target execution policy
-//     (SkipCache/Exclusive/FailOnDrift/RetryOnVolatile). When used purely as policy
+//     (SkipCache/Exclusive/Drift/RetryOnVolatile). When used purely as policy
 //     (Project.TargetPolicies values, EvaluatedTargetEntry.Policy) only the policy
 //     fields are meaningful; the identity fields are unset/ignored.
 type Target struct {
@@ -121,9 +121,9 @@ type Target struct {
 	Declared       string   `json:"declared,omitempty"`
 	DeclaredCharms []string `json:"declared_charms,omitempty"`
 
-	// Per-target execution policy. SkipCache, Exclusive, and Slots are author-facing,
-	// serialized into the Buzz object Target. FailOnDrift and RetryOnVolatile are CI-only
-	// hooks set via the Go registration API, excluded from the Buzz object (buzz:"-").
+	// Per-target execution policy. SkipCache, Exclusive, Slots, and Drift are
+	// author-facing, serialized into the Buzz object Target. RetryOnVolatile is a CI-only
+	// hook set via the Go registration API, excluded from the Buzz object (buzz:"-").
 	SkipCache bool `json:"skip_cache,omitempty" buzz:"skip_cache"` // opt out of the cache: always run, never replay/snapshot
 	// SkipCacheReason is the prose the magusfile gave for SkipCache. It is required
 	// (a bare `true` is a load error) because opting out is a claim that REPLAYING
@@ -145,9 +145,18 @@ type Target struct {
 	//
 	// Undeclared (0) and an unmeasurable host both mean "take one slot", which is
 	// exactly the behaviour that existed before this field.
-	MemoryMB        int  `json:"memory_mb,omitempty" buzz:"memory_mb"`
-	FailOnDrift     bool `json:"failOnDrift,omitempty" buzz:"-"`     // fail the run if the working tree is dirty after this target (drift gate)
-	RetryOnVolatile bool `json:"retryOnVolatile,omitempty" buzz:"-"` // route through volatility detection + auto-retry
+	MemoryMB int `json:"memory_mb,omitempty" buzz:"memory_mb"`
+	// Drift is what happens when this target's declared outputs move under a read-only
+	// run. Empty is the DEFAULT, which gates any target that declares outputs - see
+	// DriftPolicy for why that is on rather than off.
+	Drift DriftPolicy `json:"drift,omitempty" buzz:"drift"`
+	// DriftReason is the prose the magusfile gave for turning the gate off, and it is
+	// required for exactly the reason SkipCacheReason is: switching off a check that
+	// protects everyone downstream is a claim, not a preference, and a bare "off" leaves
+	// the next reader no way to tell a considered exemption from a workaround somebody
+	// never came back to.
+	DriftReason     string `json:"drift_reason,omitempty" buzz:"drift_reason"`
+	RetryOnVolatile bool   `json:"retryOnVolatile,omitempty" buzz:"-"` // route through volatility detection + auto-retry
 	// IncludeOS and IncludeArch override cache.include.*.enabled for this target.
 	// nil inherits the workspace answer, which is what an undeclared target gets.
 	//
@@ -160,6 +169,64 @@ type Target struct {
 	// reading two optional bools should not walk three structs to find them.
 	IncludeOS   *bool `json:"includeOS,omitempty" buzz:"-"`
 	IncludeArch *bool `json:"includeArch,omitempty" buzz:"-"`
+}
+
+// DriftPolicy says what happens when a target's declared outputs move under a read-only
+// run - the generated file that was never regenerated, and the reason `magus run generate`
+// is a gate at all.
+//
+// It is a policy about the RESPONSE, never about the diagnosis. magus always separates
+// drift this change caused from drift that arrived with the base, because failing an author
+// for bytes they did not move is a bug in the gate rather than a strictness setting; there
+// is deliberately no way to spell that behaviour. See ClassifyDrift.
+//
+// The zero value gates, which is the point: a target that declares an output has already
+// claimed those bytes are a function of its inputs, and checking a claim the workspace
+// volunteered needs no second declaration. A tool whose correctness depends on every author
+// remembering to switch it on has pushed its own conformance onto its users.
+type DriftPolicy string
+
+const (
+	// DriftDefault gates every target that declares outputs, and no others. Written as
+	// the empty string so an undeclared policy IS the default rather than resembling one.
+	DriftDefault DriftPolicy = ""
+	// DriftFail is DriftDefault stated out loud, for a target whose gating a reader
+	// should not have to infer from the presence of an output glob.
+	DriftFail DriftPolicy = "fail"
+	// DriftWarn reports drift and never fails. The migration path: a workspace adopting
+	// magus over a tree with existing drift can see the whole list before it has to be
+	// green, which is the difference between adopting the gate and disabling it.
+	DriftWarn DriftPolicy = "warn"
+	// DriftOff does not check. Requires TargetPolicy.DriftReason.
+	DriftOff DriftPolicy = "off"
+)
+
+// Gates reports whether this policy checks at all. declaresOutputs carries the default's
+// condition, so the caller does not restate it at each site.
+func (d DriftPolicy) Gates(declaresOutputs bool) bool {
+	switch d {
+	case DriftOff:
+		return false
+	case DriftFail, DriftWarn:
+		return true
+	default:
+		return declaresOutputs
+	}
+}
+
+// Fails reports whether drift this change caused should fail the run rather than be
+// reported. Only DriftWarn downgrades it.
+func (d DriftPolicy) Fails() bool { return d != DriftWarn }
+
+// ValidDriftPolicy reports whether s is a policy magus knows. A typo must not read as the
+// default: "of" or "warm" would silently gate or silently not, and the author would find
+// out from a merge rather than from the load.
+func ValidDriftPolicy(s DriftPolicy) bool {
+	switch s {
+	case DriftDefault, DriftFail, DriftWarn, DriftOff:
+		return true
+	}
+	return false
 }
 
 // String returns the canonical "path:target" form.

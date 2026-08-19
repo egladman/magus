@@ -2,8 +2,8 @@
 title: magus-sdk
 description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them."
 tags: [agents, skills, magus-sdk]
-skill_full_bytes: 13323
-skill_simple_bytes: 12886
+skill_full_bytes: 13317
+skill_simple_bytes: 12880
 ---
 
 # magus-sdk
@@ -29,7 +29,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `38` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `3a6776b328cd` |
+| `skill-content` | `afcd9002774b` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -184,7 +184,7 @@ one when the question is about the other's granularity.
 **`types.Target` is dual-role.** As a work-unit, `Path`/`Name`/`Charms`/`Files`
 identify which `path:target` to run. As a policy bag (`Project.TargetPolicies`
 values, `EvaluatedTarget.Policy`), only `SkipCache`/`Exclusive`/`Slots`/
-`FailOnDrift`/`RetryOnVolatile` are meaningful - the other 6 of its 11 fields
+`Drift`/`RetryOnVolatile` are meaningful - the other 6 of its 11 fields
 sit unset and must be ignored (see `types/target.go:95-101` for the type's own
 disclaimer). A function that receives a `types.Target` needs to know which
 role it is playing before reading any field.
@@ -416,7 +416,7 @@ one when the question is about the other's granularity.
 **`types.Target` is dual-role.** As a work-unit, `Path`/`Name`/`Charms`/`Files`
 identify which `path:target` to run. As a policy bag (`Project.TargetPolicies`
 values, `EvaluatedTarget.Policy`), only `SkipCache`/`Exclusive`/`Slots`/
-`FailOnDrift`/`RetryOnVolatile` are meaningful - the other 6 of its 11 fields
+`Drift`/`RetryOnVolatile` are meaningful - the other 6 of its 11 fields
 sit unset and must be ignored (see `types/target.go:95-101` for the type's own
 disclaimer). A function that receives a `types.Target` needs to know which
 role it is playing before reading any field.

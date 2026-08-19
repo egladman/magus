@@ -39,7 +39,7 @@ const StreamAllSentinel = "\x00ALL"
 // Builds run synchronously; batches arriving during a build are merged and run after.
 // StreamAllSentinel triggers a full-workspace build. Per-batch errors go to errFn.
 func (m *Magus) Stream(ctx context.Context, r io.Reader, target string, errFn func(error), opts ...StreamOption) error {
-	handler := m.makeHandler(target)
+	handler := m.targetHandler(target)
 	if errFn == nil {
 		errFn = func(error) {}
 	}
