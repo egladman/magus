@@ -537,9 +537,19 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      desktop window, but here it is 9.6px of dead page grey at each end - the panel visibly stops short
      of the title bar and again of the status bar, which reads as two slim strips the content failed to
      fill rather than as deliberate framing. The two chrome rails already frame the content, and 19px of
-     a phone's height is worth more than the effect. The INLINE gutter stays: flush to the side bezel is
-     genuinely harder to read, and nothing frames the content there. */
+     a phone's height is worth more than the effect. */
   body[data-console-fill] > main { padding-block: 0; }
+  /* Widen the PANE to the bezel once a surface is mounted, and paint it. The title bar casts DOWN
+     onto whatever sits under it, and an opaque box painted after the static header covers the part
+     it overlaps - so an inset pane leaves the cast showing in the two rails beside it, and the
+     phone gets a stub of shadow in each top corner with nothing between them. That reads as a
+     rendering artifact, not as elevation. Widening the pane covers the cast edge to edge; the fill
+     is what does the covering, since the pane is otherwise transparent down to the page grey.
+     The pane's own 0.4rem keeps its content off the bezel - only the shell's 0.6rem goes, so this
+     buys 19px of width without pushing anything flush. The LAUNCHER keeps the shell gutter
+     (data-no-tabs): it has no pane, and its cards want the page grey around them. */
+  html:not([data-no-tabs]) body[data-console-fill] > main { padding-inline: 0; }
+  #console-outlet div[data-pane-id] { background: var(--pf-t--global--background--color--secondary--default); }
   /* Zero open tabs (the launcher screen): the second row would be empty, so collapse back to a single
      row - drop the doubled height and hide the empty tab strip, so the home screen isn't topped by a
      blank bar. data-no-tabs is set in main.ts's show() when the workspace has no active tab. */
