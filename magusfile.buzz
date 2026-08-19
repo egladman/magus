@@ -1775,9 +1775,17 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // detects them by Go's canonical marker, never by path - this repo keeps
     // hand-maintained files inside a gen/ directory. coverage.out stays on disk
     // unfiltered so `go tool cover -html=coverage.out` still shows everything.
+    // Two filters, both narrowing to "code a reader would judge the tests on". Generated
+    // files are hundreds of functions no test will ever call; platform-constrained files
+    // are worse than uncounted, they are INCONSISTENT - `go test` compiles only the half
+    // matching the runner, so the same tree measured 67.3% on macOS and 66.6% on Linux,
+    // and the whole-number badge below straddled that. A committed artifact cannot depend
+    // on who built it.
+    final modPrefix = cov\modulePath(fs\readFile("go.mod")) + "/";
     fs\writeFile("coverage.hand.out",
-        cov\stripGenerated(fs\readFile("coverage.out"),
-            prefix: cov\modulePath(fs\readFile("go.mod")) + "/"));
+        cov\stripPlatform(
+            cov\stripGenerated(fs\readFile("coverage.out"), prefix: modPrefix),
+            prefix: modPrefix));
     final pct = total_coverage(proc\exec("go", ["tool", "cover", "-func=coverage.hand.out"]).stdout);
     if (std\parseInt(pct.split(".")[0]) < 60) {
         throw "test: coverage " + pct + "% is below the 60% floor; investigate the regression or lower the floor deliberately";
