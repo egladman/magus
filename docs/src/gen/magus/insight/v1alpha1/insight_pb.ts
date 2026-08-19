@@ -29,7 +29,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/insight/v1alpha1/insight.proto.
  */
 export const file_magus_insight_v1alpha1_insight: GenFile = /*@__PURE__*/
-  fileDesc("CiRtYWd1cy9pbnNpZ2h0L3YxYWxwaGExL2luc2lnaHQucHJvdG8SFm1hZ3VzLmluc2lnaHQudjFhbHBoYTEiEwoRR2V0SW5zaWdodFJlcXVlc3QiRgoSR2V0SW5zaWdodFJlc3BvbnNlEjAKB2luc2lnaHQYASABKAsyHy5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkluc2lnaHQiqgIKB0luc2lnaHQSNwoIaG90c3BvdHMYASABKAsyJS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkhvdHNwb3RPdXRwdXQSOAoIYWZmaW5pdHkYAiABKAsyJi5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkFmZmluaXR5T3V0cHV0EjoKCW93bmVyc2hpcBgDIAEoCzInLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuT3duZXJzaGlwT3V0cHV0EjIKBXRyZW5kGAQgASgLMiMubWFndXMuaW5zaWdodC52MWFscGhhMS5UcmVuZE91dHB1dBI8Cgp2b2xhdGlsaXR5GAUgASgLMigubWFndXMuaW5zaWdodC52MWFscGhhMS5Wb2xhdGlsaXR5UmVwb3J0IqsBCg1Ib3RzcG90T3V0cHV0EhIKCmRlZmluaXRpb24YASABKAkSDwoHY29tbWl0cxgCIAEoBRINCgVzaW5jZRgDIAEoCRIyCgVub2RlcxgEIAMoCzIjLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuUHJvamVjdE5vZGUSMgoFZmlsZXMYBSADKAsyIy5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkZpbGVIb3RzcG90IvABCgtQcm9qZWN0Tm9kZRIMCgRwYXRoGAEgASgJEgwKBG5hbWUYAiABKAkSEgoKc3BlbGxfbmFtZRgDIAEoCRIQCghjaGlsZHJlbhgEIAMoCRILCgNkaXIYBSABKAkSEQoJZXhjbHVzaXZlGAYgASgIEhQKDGJsYXN0X3JhZGl1cxgHIAEoBRITCgtkdXJhdGlvbl9tcxgIIAEoAxINCgVjaHVybhgJIAEoBRIPCgdhdXRob3JzGAogASgFEjQKEGxhc3RfY29tbWl0X3RpbWUYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIqUBCgtGaWxlSG90c3BvdBIMCgRwYXRoGAEgASgJEg8KB2NvbW1pdHMYAiABKAUSEgoKY29tcGxleGl0eRgDIAEoBRINCgVzY29yZRgEIAEoBRIPCgdhdXRob3JzGAUgASgFEjQKEGxhc3RfY29tbWl0X3RpbWUYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg0KBW1vdmVzGAcgASgFInUKDkFmZmluaXR5T3V0cHV0EhIKCmRlZmluaXRpb24YASABKAkSDwoHY29tbWl0cxgCIAEoBRINCgVzaW5jZRgDIAEoCRIvCgVwYWlycxgEIAMoCzIgLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuQ29DaGFuZ2UiXwoIQ29DaGFuZ2USCQoBYRgBIAEoCRIOCgZhX25hbWUYAiABKAkSCQoBYhgDIAEoCRIOCgZiX25hbWUYBCABKAkSDQoFY291bnQYBSABKAUSDgoGaGlkZGVuGAYgASgIInoKD093bmVyc2hpcE91dHB1dBISCgpkZWZpbml0aW9uGAEgASgJEg8KB2NvbW1pdHMYAiABKAUSDQoFc2luY2UYAyABKAkSMwoIcHJvamVjdHMYBCADKAsyIS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLk93bmVyc2hpcCLMAQoJT3duZXJzaGlwEgwKBHBhdGgYASABKAkSDAoEbmFtZRgCIAEoCRIPCgdjb21taXRzGAMgASgFEg8KB2F1dGhvcnMYBCABKAUSDwoHcHJpbWFyeRgFIAEoCRIVCg1wcmltYXJ5X3NoYXJlGAYgASgFEhQKDGJ1c19mYWN0b3JfMRgHIAEoCBINCgVzdGFsZRgIIAEoCBI0ChBsYXN0X2NvbW1pdF90aW1lGAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJyCgtUcmVuZE91dHB1dBISCgpkZWZpbml0aW9uGAEgASgJEg8KB2NvbW1pdHMYAiABKAUSDQoFc2luY2UYAyABKAkSLwoIcHJvamVjdHMYBCADKAsyHS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLlRyZW5kIlMKBVRyZW5kEgwKBHBhdGgYASABKAkSDAoEbmFtZRgCIAEoCRIOCgZyZWNlbnQYAyABKAUSDwoHZWFybGllchgEIAEoBRINCgVkZWx0YRgFIAEoBSJgChBWb2xhdGlsaXR5UmVwb3J0EhEKCXRocmVzaG9sZBgBIAEoARI5Cgd0YXJnZXRzGAIgAygLMigubWFndXMuaW5zaWdodC52MWFscGhhMS5Wb2xhdGlsaXR5VGFyZ2V0Is0BChBWb2xhdGlsaXR5VGFyZ2V0Eg8KB3Byb2plY3QYASABKAkSDgoGdGFyZ2V0GAIgASgJEg0KBXNjb3JlGAMgASgBEhAKCHZvbGF0aWxlGAQgASgIEgwKBHBhc3MYBSABKAUSDAoEZmFpbBgGIAEoBRIWCg52b2xhdGlsZV9jb3VudBgHIAEoBRIPCgdzYW1wbGVzGAggASgFEjIKDmxhc3RfcGFzc190aW1lGAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcDJ1Cg5JbnNpZ2h0U2VydmljZRJjCgpHZXRJbnNpZ2h0EikubWFndXMuaW5zaWdodC52MWFscGhhMS5HZXRJbnNpZ2h0UmVxdWVzdBoqLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuR2V0SW5zaWdodFJlc3BvbnNlQvMBChpjb20ubWFndXMuaW5zaWdodC52MWFscGhhMUIMSW5zaWdodFByb3RvUAFaTWdpdGh1Yi5jb20vZWdsYWRtYW4vbWFndXMvcHJvdG8vZ2VuL2dvL21hZ3VzL2luc2lnaHQvdjFhbHBoYTE7aW5zaWdodHYxYWxwaGExogIDTUlYqgIWTWFndXMuSW5zaWdodC5WMWFscGhhMcoCFk1hZ3VzXEluc2lnaHRcVjFhbHBoYTHiAiJNYWd1c1xJbnNpZ2h0XFYxYWxwaGExXEdQQk1ldGFkYXRh6gIYTWFndXM6Okluc2lnaHQ6OlYxYWxwaGExYgZwcm90bzM", [file_google_protobuf_timestamp]);
+  fileDesc("CiRtYWd1cy9pbnNpZ2h0L3YxYWxwaGExL2luc2lnaHQucHJvdG8SFm1hZ3VzLmluc2lnaHQudjFhbHBoYTEiEwoRR2V0SW5zaWdodFJlcXVlc3QiqgIKB0luc2lnaHQSNwoIaG90c3BvdHMYASABKAsyJS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkhvdHNwb3RPdXRwdXQSOAoIYWZmaW5pdHkYAiABKAsyJi5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkFmZmluaXR5T3V0cHV0EjoKCW93bmVyc2hpcBgDIAEoCzInLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuT3duZXJzaGlwT3V0cHV0EjIKBXRyZW5kGAQgASgLMiMubWFndXMuaW5zaWdodC52MWFscGhhMS5UcmVuZE91dHB1dBI8Cgp2b2xhdGlsaXR5GAUgASgLMigubWFndXMuaW5zaWdodC52MWFscGhhMS5Wb2xhdGlsaXR5UmVwb3J0IqsBCg1Ib3RzcG90T3V0cHV0EhIKCmRlZmluaXRpb24YASABKAkSDwoHY29tbWl0cxgCIAEoBRINCgVzaW5jZRgDIAEoCRIyCgVub2RlcxgEIAMoCzIjLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuUHJvamVjdE5vZGUSMgoFZmlsZXMYBSADKAsyIy5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLkZpbGVIb3RzcG90IvABCgtQcm9qZWN0Tm9kZRIMCgRwYXRoGAEgASgJEgwKBG5hbWUYAiABKAkSEgoKc3BlbGxfbmFtZRgDIAEoCRIQCghjaGlsZHJlbhgEIAMoCRILCgNkaXIYBSABKAkSEQoJZXhjbHVzaXZlGAYgASgIEhQKDGJsYXN0X3JhZGl1cxgHIAEoBRITCgtkdXJhdGlvbl9tcxgIIAEoAxINCgVjaHVybhgJIAEoBRIPCgdhdXRob3JzGAogASgFEjQKEGxhc3RfY29tbWl0X3RpbWUYCyABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wIqUBCgtGaWxlSG90c3BvdBIMCgRwYXRoGAEgASgJEg8KB2NvbW1pdHMYAiABKAUSEgoKY29tcGxleGl0eRgDIAEoBRINCgVzY29yZRgEIAEoBRIPCgdhdXRob3JzGAUgASgFEjQKEGxhc3RfY29tbWl0X3RpbWUYBiABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEg0KBW1vdmVzGAcgASgFInUKDkFmZmluaXR5T3V0cHV0EhIKCmRlZmluaXRpb24YASABKAkSDwoHY29tbWl0cxgCIAEoBRINCgVzaW5jZRgDIAEoCRIvCgVwYWlycxgEIAMoCzIgLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuQ29DaGFuZ2UiXwoIQ29DaGFuZ2USCQoBYRgBIAEoCRIOCgZhX25hbWUYAiABKAkSCQoBYhgDIAEoCRIOCgZiX25hbWUYBCABKAkSDQoFY291bnQYBSABKAUSDgoGaGlkZGVuGAYgASgIInoKD093bmVyc2hpcE91dHB1dBISCgpkZWZpbml0aW9uGAEgASgJEg8KB2NvbW1pdHMYAiABKAUSDQoFc2luY2UYAyABKAkSMwoIcHJvamVjdHMYBCADKAsyIS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLk93bmVyc2hpcCLMAQoJT3duZXJzaGlwEgwKBHBhdGgYASABKAkSDAoEbmFtZRgCIAEoCRIPCgdjb21taXRzGAMgASgFEg8KB2F1dGhvcnMYBCABKAUSDwoHcHJpbWFyeRgFIAEoCRIVCg1wcmltYXJ5X3NoYXJlGAYgASgFEhQKDGJ1c19mYWN0b3JfMRgHIAEoCBINCgVzdGFsZRgIIAEoCBI0ChBsYXN0X2NvbW1pdF90aW1lGAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcCJyCgtUcmVuZE91dHB1dBISCgpkZWZpbml0aW9uGAEgASgJEg8KB2NvbW1pdHMYAiABKAUSDQoFc2luY2UYAyABKAkSLwoIcHJvamVjdHMYBCADKAsyHS5tYWd1cy5pbnNpZ2h0LnYxYWxwaGExLlRyZW5kIlMKBVRyZW5kEgwKBHBhdGgYASABKAkSDAoEbmFtZRgCIAEoCRIOCgZyZWNlbnQYAyABKAUSDwoHZWFybGllchgEIAEoBRINCgVkZWx0YRgFIAEoBSJgChBWb2xhdGlsaXR5UmVwb3J0EhEKCXRocmVzaG9sZBgBIAEoARI5Cgd0YXJnZXRzGAIgAygLMigubWFndXMuaW5zaWdodC52MWFscGhhMS5Wb2xhdGlsaXR5VGFyZ2V0Is0BChBWb2xhdGlsaXR5VGFyZ2V0Eg8KB3Byb2plY3QYASABKAkSDgoGdGFyZ2V0GAIgASgJEg0KBXNjb3JlGAMgASgBEhAKCHZvbGF0aWxlGAQgASgIEgwKBHBhc3MYBSABKAUSDAoEZmFpbBgGIAEoBRIWCg52b2xhdGlsZV9jb3VudBgHIAEoBRIPCgdzYW1wbGVzGAggASgFEjIKDmxhc3RfcGFzc190aW1lGAkgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcDJqCg5JbnNpZ2h0U2VydmljZRJYCgpHZXRJbnNpZ2h0EikubWFndXMuaW5zaWdodC52MWFscGhhMS5HZXRJbnNpZ2h0UmVxdWVzdBofLm1hZ3VzLmluc2lnaHQudjFhbHBoYTEuSW5zaWdodELzAQoaY29tLm1hZ3VzLmluc2lnaHQudjFhbHBoYTFCDEluc2lnaHRQcm90b1ABWk1naXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy9pbnNpZ2h0L3YxYWxwaGExO2luc2lnaHR2MWFscGhhMaICA01JWKoCFk1hZ3VzLkluc2lnaHQuVjFhbHBoYTHKAhZNYWd1c1xJbnNpZ2h0XFYxYWxwaGEx4gIiTWFndXNcSW5zaWdodFxWMWFscGhhMVxHUEJNZXRhZGF0YeoCGE1hZ3VzOjpJbnNpZ2h0OjpWMWFscGhhMWIGcHJvdG8z", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message magus.insight.v1alpha1.GetInsightRequest
@@ -43,23 +43,6 @@ export type GetInsightRequest = Message<"magus.insight.v1alpha1.GetInsightReques
  */
 export const GetInsightRequestSchema: GenMessage<GetInsightRequest> = /*@__PURE__*/
   messageDesc(file_magus_insight_v1alpha1_insight, 0);
-
-/**
- * @generated from message magus.insight.v1alpha1.GetInsightResponse
- */
-export type GetInsightResponse = Message<"magus.insight.v1alpha1.GetInsightResponse"> & {
-  /**
-   * @generated from field: magus.insight.v1alpha1.Insight insight = 1;
-   */
-  insight?: Insight;
-};
-
-/**
- * Describes the message magus.insight.v1alpha1.GetInsightResponse.
- * Use `create(GetInsightResponseSchema)` to create a new message.
- */
-export const GetInsightResponseSchema: GenMessage<GetInsightResponse> = /*@__PURE__*/
-  messageDesc(file_magus_insight_v1alpha1_insight, 1);
 
 /**
  * Insight bundles the five lenses. volatility is absent (not an empty report) when the
@@ -100,7 +83,7 @@ export type Insight = Message<"magus.insight.v1alpha1.Insight"> & {
  * Use `create(InsightSchema)` to create a new message.
  */
 export const InsightSchema: GenMessage<Insight> = /*@__PURE__*/
-  messageDesc(file_magus_insight_v1alpha1_insight, 2);
+  messageDesc(file_magus_insight_v1alpha1_insight, 1);
 
 /**
  * HotspotOutput ranks where churn meets complexity - the canonical "fix this first" view.
@@ -141,7 +124,7 @@ export type HotspotOutput = Message<"magus.insight.v1alpha1.HotspotOutput"> & {
  * Use `create(HotspotOutputSchema)` to create a new message.
  */
 export const HotspotOutputSchema: GenMessage<HotspotOutput> = /*@__PURE__*/
-  messageDesc(file_magus_insight_v1alpha1_insight, 3);
+  messageDesc(file_magus_insight_v1alpha1_insight, 2);
 
 /**
  * ProjectNode is one project in the heatmap. It mirrors types.Node, the dependency-graph node
@@ -225,7 +208,7 @@ export type ProjectNode = Message<"magus.insight.v1alpha1.ProjectNode"> & {
  * Use `create(ProjectNodeSchema)` to create a new message.
  */
 export const ProjectNodeSchema: GenMessage<ProjectNode> = /*@__PURE__*/
-  messageDesc(file_magus_insight_v1alpha1_insight, 4);
+  messageDesc(file_magus_insight_v1alpha1_insight, 3);
 
 /**
  * FileHotspot is one file's hotspot score: edit frequency weighted by complexity. score is
@@ -282,7 +265,7 @@ export type FileHotspot = Message<"magus.insight.v1alpha1.FileHotspot"> & {
  * Use `create(FileHotspotSchema)` to create a new message.
  */
 export const FileHotspotSchema: GenMessage<FileHotspot> = /*@__PURE__*/
-  messageDesc(file_magus_insight_v1alpha1_insight, 5);
+  messageDesc(file_magus_insight_v1alpha1_insight, 4);
 
 /**
  * AffinityOutput reports projects that change together (temporal coupling).
@@ -316,7 +299,7 @@ export type AffinityOutput = Message<"magus.insight.v1alpha1.AffinityOutput"> & 
  * Use `create(AffinityOutputSchema)` to create a new message.
  */
 export const AffinityOutputSchema: GenMessage<AffinityOutput> = /*@__PURE__*/
-  messageDesc(file_magus_insight_v1alpha1_insight, 6);
+  messageDesc(file_magus_insight_v1alpha1_insight, 5);
 
 /**
  * CoChange is a pair of projects that changed in the same commit, how often, and whether the
@@ -364,7 +347,7 @@ export type CoChange = Message<"magus.insight.v1alpha1.CoChange"> & {
  * Use `create(CoChangeSchema)` to create a new message.
  */
 export const CoChangeSchema: GenMessage<CoChange> = /*@__PURE__*/
-  messageDesc(file_magus_insight_v1alpha1_insight, 7);
+  messageDesc(file_magus_insight_v1alpha1_insight, 6);
 
 /**
  * OwnershipOutput reports author concentration per project - the knowledge-risk view.
@@ -398,7 +381,7 @@ export type OwnershipOutput = Message<"magus.insight.v1alpha1.OwnershipOutput"> 
  * Use `create(OwnershipOutputSchema)` to create a new message.
  */
 export const OwnershipOutputSchema: GenMessage<OwnershipOutput> = /*@__PURE__*/
-  messageDesc(file_magus_insight_v1alpha1_insight, 8);
+  messageDesc(file_magus_insight_v1alpha1_insight, 7);
 
 /**
  * Ownership is one project's authorship. bus_factor_1 and stale are the two risk flags the
@@ -464,7 +447,7 @@ export type Ownership = Message<"magus.insight.v1alpha1.Ownership"> & {
  * Use `create(OwnershipSchema)` to create a new message.
  */
 export const OwnershipSchema: GenMessage<Ownership> = /*@__PURE__*/
-  messageDesc(file_magus_insight_v1alpha1_insight, 9);
+  messageDesc(file_magus_insight_v1alpha1_insight, 8);
 
 /**
  * TrendOutput ranks projects by whether their activity is rising or cooling: the window is
@@ -499,7 +482,7 @@ export type TrendOutput = Message<"magus.insight.v1alpha1.TrendOutput"> & {
  * Use `create(TrendOutputSchema)` to create a new message.
  */
 export const TrendOutputSchema: GenMessage<TrendOutput> = /*@__PURE__*/
-  messageDesc(file_magus_insight_v1alpha1_insight, 10);
+  messageDesc(file_magus_insight_v1alpha1_insight, 9);
 
 /**
  * Trend is one project's churn across the window's two halves. delta is recent - earlier,
@@ -540,7 +523,7 @@ export type Trend = Message<"magus.insight.v1alpha1.Trend"> & {
  * Use `create(TrendSchema)` to create a new message.
  */
 export const TrendSchema: GenMessage<Trend> = /*@__PURE__*/
-  messageDesc(file_magus_insight_v1alpha1_insight, 11);
+  messageDesc(file_magus_insight_v1alpha1_insight, 10);
 
 /**
  * VolatilityReport is the run-outcome lens: the one lens that does not read git. It is
@@ -569,7 +552,7 @@ export type VolatilityReport = Message<"magus.insight.v1alpha1.VolatilityReport"
  * Use `create(VolatilityReportSchema)` to create a new message.
  */
 export const VolatilityReportSchema: GenMessage<VolatilityReport> = /*@__PURE__*/
-  messageDesc(file_magus_insight_v1alpha1_insight, 12);
+  messageDesc(file_magus_insight_v1alpha1_insight, 11);
 
 /**
  * VolatilityTarget is one (project, target) pair's recorded flakiness: the Wilson lower-bound
@@ -635,7 +618,7 @@ export type VolatilityTarget = Message<"magus.insight.v1alpha1.VolatilityTarget"
  * Use `create(VolatilityTargetSchema)` to create a new message.
  */
 export const VolatilityTargetSchema: GenMessage<VolatilityTarget> = /*@__PURE__*/
-  messageDesc(file_magus_insight_v1alpha1_insight, 13);
+  messageDesc(file_magus_insight_v1alpha1_insight, 12);
 
 /**
  * InsightService serves the assembled lenses to the console dashboard. One read-only unary
@@ -653,7 +636,7 @@ export const InsightService: GenService<{
   getInsight: {
     methodKind: "unary";
     input: typeof GetInsightRequestSchema;
-    output: typeof GetInsightResponseSchema;
+    output: typeof InsightSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_magus_insight_v1alpha1_insight, 0);

@@ -1568,9 +1568,6 @@
               "glob": "gen/**"
             },
             {
-              "glob": "src/gen/**"
-            },
-            {
               "glob": "active.urls.lock"
             }
           ]
@@ -2620,7 +2617,20 @@
               ]
             }
           ],
-          "reads_secrets": false
+          "reads_secrets": false,
+          "writes_files": [
+            {
+              "glob": "gen/**"
+            },
+            {
+              "project": "../docs",
+              "glob": "src/gen/**"
+            },
+            {
+              "project": "../console",
+              "glob": "src/gen/**"
+            }
+          ]
         },
         {
           "name": "lint",

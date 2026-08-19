@@ -33,7 +33,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/memory/v1alpha1/memory.proto.
  */
 export const file_magus_memory_v1alpha1_memory: GenFile = /*@__PURE__*/
-  fileDesc("CiJtYWd1cy9tZW1vcnkvdjFhbHBoYTEvbWVtb3J5LnByb3RvEhVtYWd1cy5tZW1vcnkudjFhbHBoYTEiTwoJTWVtb3J5UmVmEjIKBGtpbmQYASABKA4yJC5tYWd1cy5tZW1vcnkudjFhbHBoYTEuTWVtb3J5UmVmS2luZBIOCgZ0YXJnZXQYAiABKAkiiwIKBk1lbW9yeRIMCgRuYW1lGAEgASgJEi8KBHR5cGUYAiABKA4yIS5tYWd1cy5tZW1vcnkudjFhbHBoYTEuTWVtb3J5VHlwZRIuCgRyZWZzGAMgAygLMiAubWFndXMubWVtb3J5LnYxYWxwaGExLk1lbW9yeVJlZhIOCgZzdGF0dXMYBCABKAkSDAoEYm9keRgFIAEoCRISCgpyZWZlcmVuY2VzGAYgAygJEi8KC2NyZWF0ZV90aW1lGAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgt1cGRhdGVfdGltZRgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiPAoTTGlzdE1lbW9yaWVzUmVxdWVzdBIRCglwYWdlX3NpemUYASABKAUSEgoKcGFnZV90b2tlbhgCIAEoCSJgChRMaXN0TWVtb3JpZXNSZXNwb25zZRIvCghtZW1vcmllcxgBIAMoCzIdLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5NZW1vcnkSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIowBChNVcGRhdGVNZW1vcnlSZXF1ZXN0Ei0KBm1lbW9yeRgBIAEoCzIdLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5NZW1vcnkSLwoLdXBkYXRlX21hc2sYAiABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrEhUKDWFsbG93X21pc3NpbmcYAyABKAgiRQoUVXBkYXRlTWVtb3J5UmVzcG9uc2USLQoGbWVtb3J5GAEgASgLMh0ubWFndXMubWVtb3J5LnYxYWxwaGExLk1lbW9yeSI6ChNEZWxldGVNZW1vcnlSZXF1ZXN0EgwKBG5hbWUYASABKAkSFQoNYWxsb3dfbWlzc2luZxgCIAEoCCIWChREZWxldGVNZW1vcnlSZXNwb25zZSISChBHZXRDdXJzb3JSZXF1ZXN0IiQKEUdldEN1cnNvclJlc3BvbnNlEg8KB2NvbnRlbnQYASABKAkiJgoTVXBkYXRlQ3Vyc29yUmVxdWVzdBIPCgdjb250ZW50GAEgASgJIicKFFVwZGF0ZUN1cnNvclJlc3BvbnNlEg8KB2NvbnRlbnQYASABKAkqcgoKTWVtb3J5VHlwZRIbChdNRU1PUllfVFlQRV9VTlNQRUNJRklFRBAAEhcKE01FTU9SWV9UWVBFX1BPSU5URVIQARIYChRNRU1PUllfVFlQRV9ERUNJU0lPThACEhQKEE1FTU9SWV9UWVBFX1BMQU4QAyq3AQoNTWVtb3J5UmVmS2luZBIfChtNRU1PUllfUkVGX0tJTkRfVU5TUEVDSUZJRUQQABIZChVNRU1PUllfUkVGX0tJTkRfUVVFUlkQARIYChRNRU1PUllfUkVGX0tJTkRfTk9ERRACEhoKFk1FTU9SWV9SRUZfS0lORF9PVVRQVVQQAxIbChdNRU1PUllfUkVGX0tJTkRfQ09NTUFORBAEEhcKE01FTU9SWV9SRUZfS0lORF9ET0MQBTKTBAoNTWVtb3J5U2VydmljZRJnCgxMaXN0TWVtb3JpZXMSKi5tYWd1cy5tZW1vcnkudjFhbHBoYTEuTGlzdE1lbW9yaWVzUmVxdWVzdBorLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5MaXN0TWVtb3JpZXNSZXNwb25zZRJnCgxVcGRhdGVNZW1vcnkSKi5tYWd1cy5tZW1vcnkudjFhbHBoYTEuVXBkYXRlTWVtb3J5UmVxdWVzdBorLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5VcGRhdGVNZW1vcnlSZXNwb25zZRJnCgxEZWxldGVNZW1vcnkSKi5tYWd1cy5tZW1vcnkudjFhbHBoYTEuRGVsZXRlTWVtb3J5UmVxdWVzdBorLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5EZWxldGVNZW1vcnlSZXNwb25zZRJeCglHZXRDdXJzb3ISJy5tYWd1cy5tZW1vcnkudjFhbHBoYTEuR2V0Q3Vyc29yUmVxdWVzdBooLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5HZXRDdXJzb3JSZXNwb25zZRJnCgxVcGRhdGVDdXJzb3ISKi5tYWd1cy5tZW1vcnkudjFhbHBoYTEuVXBkYXRlQ3Vyc29yUmVxdWVzdBorLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5VcGRhdGVDdXJzb3JSZXNwb25zZULrAQoZY29tLm1hZ3VzLm1lbW9yeS52MWFscGhhMUILTWVtb3J5UHJvdG9QAVpLZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvbWVtb3J5L3YxYWxwaGExO21lbW9yeXYxYWxwaGExogIDTU1YqgIVTWFndXMuTWVtb3J5LlYxYWxwaGExygIVTWFndXNcTWVtb3J5XFYxYWxwaGEx4gIhTWFndXNcTWVtb3J5XFYxYWxwaGExXEdQQk1ldGFkYXRh6gIXTWFndXM6Ok1lbW9yeTo6VjFhbHBoYTFiBnByb3RvMw", [file_google_protobuf_field_mask, file_google_protobuf_timestamp]);
+  fileDesc("CiJtYWd1cy9tZW1vcnkvdjFhbHBoYTEvbWVtb3J5LnByb3RvEhVtYWd1cy5tZW1vcnkudjFhbHBoYTEiTwoJTWVtb3J5UmVmEjIKBGtpbmQYASABKA4yJC5tYWd1cy5tZW1vcnkudjFhbHBoYTEuTWVtb3J5UmVmS2luZBIOCgZ0YXJnZXQYAiABKAkiiwIKBk1lbW9yeRIMCgRuYW1lGAEgASgJEi8KBHR5cGUYAiABKA4yIS5tYWd1cy5tZW1vcnkudjFhbHBoYTEuTWVtb3J5VHlwZRIuCgRyZWZzGAMgAygLMiAubWFndXMubWVtb3J5LnYxYWxwaGExLk1lbW9yeVJlZhIOCgZzdGF0dXMYBCABKAkSDAoEYm9keRgFIAEoCRISCgpyZWZlcmVuY2VzGAYgAygJEi8KC2NyZWF0ZV90aW1lGAcgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgt1cGRhdGVfdGltZRgIIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAiPAoTTGlzdE1lbW9yaWVzUmVxdWVzdBIRCglwYWdlX3NpemUYASABKAUSEgoKcGFnZV90b2tlbhgCIAEoCSJgChRMaXN0TWVtb3JpZXNSZXNwb25zZRIvCghtZW1vcmllcxgBIAMoCzIdLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5NZW1vcnkSFwoPbmV4dF9wYWdlX3Rva2VuGAIgASgJIowBChNVcGRhdGVNZW1vcnlSZXF1ZXN0Ei0KBm1lbW9yeRgBIAEoCzIdLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5NZW1vcnkSLwoLdXBkYXRlX21hc2sYAiABKAsyGi5nb29nbGUucHJvdG9idWYuRmllbGRNYXNrEhUKDWFsbG93X21pc3NpbmcYAyABKAgiOgoTRGVsZXRlTWVtb3J5UmVxdWVzdBIMCgRuYW1lGAEgASgJEhUKDWFsbG93X21pc3NpbmcYAiABKAgiFgoURGVsZXRlTWVtb3J5UmVzcG9uc2UiEgoQR2V0Q3Vyc29yUmVxdWVzdCIZCgZDdXJzb3ISDwoHY29udGVudBgBIAEoCSImChNVcGRhdGVDdXJzb3JSZXF1ZXN0Eg8KB2NvbnRlbnQYASABKAkqcgoKTWVtb3J5VHlwZRIbChdNRU1PUllfVFlQRV9VTlNQRUNJRklFRBAAEhcKE01FTU9SWV9UWVBFX1BPSU5URVIQARIYChRNRU1PUllfVFlQRV9ERUNJU0lPThACEhQKEE1FTU9SWV9UWVBFX1BMQU4QAyq3AQoNTWVtb3J5UmVmS2luZBIfChtNRU1PUllfUkVGX0tJTkRfVU5TUEVDSUZJRUQQABIZChVNRU1PUllfUkVGX0tJTkRfUVVFUlkQARIYChRNRU1PUllfUkVGX0tJTkRfTk9ERRACEhoKFk1FTU9SWV9SRUZfS0lORF9PVVRQVVQQAxIbChdNRU1PUllfUkVGX0tJTkRfQ09NTUFORBAEEhcKE01FTU9SWV9SRUZfS0lORF9ET0MQBTLsAwoNTWVtb3J5U2VydmljZRJnCgxMaXN0TWVtb3JpZXMSKi5tYWd1cy5tZW1vcnkudjFhbHBoYTEuTGlzdE1lbW9yaWVzUmVxdWVzdBorLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5MaXN0TWVtb3JpZXNSZXNwb25zZRJZCgxVcGRhdGVNZW1vcnkSKi5tYWd1cy5tZW1vcnkudjFhbHBoYTEuVXBkYXRlTWVtb3J5UmVxdWVzdBodLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5NZW1vcnkSZwoMRGVsZXRlTWVtb3J5EioubWFndXMubWVtb3J5LnYxYWxwaGExLkRlbGV0ZU1lbW9yeVJlcXVlc3QaKy5tYWd1cy5tZW1vcnkudjFhbHBoYTEuRGVsZXRlTWVtb3J5UmVzcG9uc2USUwoJR2V0Q3Vyc29yEicubWFndXMubWVtb3J5LnYxYWxwaGExLkdldEN1cnNvclJlcXVlc3QaHS5tYWd1cy5tZW1vcnkudjFhbHBoYTEuQ3Vyc29yElkKDFVwZGF0ZUN1cnNvchIqLm1hZ3VzLm1lbW9yeS52MWFscGhhMS5VcGRhdGVDdXJzb3JSZXF1ZXN0Gh0ubWFndXMubWVtb3J5LnYxYWxwaGExLkN1cnNvckLrAQoZY29tLm1hZ3VzLm1lbW9yeS52MWFscGhhMUILTWVtb3J5UHJvdG9QAVpLZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvbWVtb3J5L3YxYWxwaGExO21lbW9yeXYxYWxwaGExogIDTU1YqgIVTWFndXMuTWVtb3J5LlYxYWxwaGExygIVTWFndXNcTWVtb3J5XFYxYWxwaGEx4gIhTWFndXNcTWVtb3J5XFYxYWxwaGExXEdQQk1ldGFkYXRh6gIXTWFndXM6Ok1lbW9yeTo6VjFhbHBoYTFiBnByb3RvMw", [file_google_protobuf_field_mask, file_google_protobuf_timestamp]);
 
 /**
  * MemoryRef is one typed pointer: the payload of a record.
@@ -209,25 +209,6 @@ export const UpdateMemoryRequestSchema: GenMessage<UpdateMemoryRequest> = /*@__P
   messageDesc(file_magus_memory_v1alpha1_memory, 4);
 
 /**
- * @generated from message magus.memory.v1alpha1.UpdateMemoryResponse
- */
-export type UpdateMemoryResponse = Message<"magus.memory.v1alpha1.UpdateMemoryResponse"> & {
-  /**
-   * the stored record, with server-set timestamps
-   *
-   * @generated from field: magus.memory.v1alpha1.Memory memory = 1;
-   */
-  memory?: Memory;
-};
-
-/**
- * Describes the message magus.memory.v1alpha1.UpdateMemoryResponse.
- * Use `create(UpdateMemoryResponseSchema)` to create a new message.
- */
-export const UpdateMemoryResponseSchema: GenMessage<UpdateMemoryResponse> = /*@__PURE__*/
-  messageDesc(file_magus_memory_v1alpha1_memory, 5);
-
-/**
  * @generated from message magus.memory.v1alpha1.DeleteMemoryRequest
  */
 export type DeleteMemoryRequest = Message<"magus.memory.v1alpha1.DeleteMemoryRequest"> & {
@@ -249,7 +230,7 @@ export type DeleteMemoryRequest = Message<"magus.memory.v1alpha1.DeleteMemoryReq
  * Use `create(DeleteMemoryRequestSchema)` to create a new message.
  */
 export const DeleteMemoryRequestSchema: GenMessage<DeleteMemoryRequest> = /*@__PURE__*/
-  messageDesc(file_magus_memory_v1alpha1_memory, 6);
+  messageDesc(file_magus_memory_v1alpha1_memory, 5);
 
 /**
  * @generated from message magus.memory.v1alpha1.DeleteMemoryResponse
@@ -262,7 +243,7 @@ export type DeleteMemoryResponse = Message<"magus.memory.v1alpha1.DeleteMemoryRe
  * Use `create(DeleteMemoryResponseSchema)` to create a new message.
  */
 export const DeleteMemoryResponseSchema: GenMessage<DeleteMemoryResponse> = /*@__PURE__*/
-  messageDesc(file_magus_memory_v1alpha1_memory, 7);
+  messageDesc(file_magus_memory_v1alpha1_memory, 6);
 
 /**
  * @generated from message magus.memory.v1alpha1.GetCursorRequest
@@ -275,12 +256,15 @@ export type GetCursorRequest = Message<"magus.memory.v1alpha1.GetCursorRequest">
  * Use `create(GetCursorRequestSchema)` to create a new message.
  */
 export const GetCursorRequestSchema: GenMessage<GetCursorRequest> = /*@__PURE__*/
-  messageDesc(file_magus_memory_v1alpha1_memory, 8);
+  messageDesc(file_magus_memory_v1alpha1_memory, 7);
 
 /**
- * @generated from message magus.memory.v1alpha1.GetCursorResponse
+ * Cursor is the singleton "where did I leave off" snapshot. A singleton per AIP-156: read
+ * with GetCursor, overwritten with UpdateCursor, never listed and never created.
+ *
+ * @generated from message magus.memory.v1alpha1.Cursor
  */
-export type GetCursorResponse = Message<"magus.memory.v1alpha1.GetCursorResponse"> & {
+export type Cursor = Message<"magus.memory.v1alpha1.Cursor"> & {
   /**
    * UNTRUSTED; empty when the cursor was never written
    *
@@ -290,11 +274,11 @@ export type GetCursorResponse = Message<"magus.memory.v1alpha1.GetCursorResponse
 };
 
 /**
- * Describes the message magus.memory.v1alpha1.GetCursorResponse.
- * Use `create(GetCursorResponseSchema)` to create a new message.
+ * Describes the message magus.memory.v1alpha1.Cursor.
+ * Use `create(CursorSchema)` to create a new message.
  */
-export const GetCursorResponseSchema: GenMessage<GetCursorResponse> = /*@__PURE__*/
-  messageDesc(file_magus_memory_v1alpha1_memory, 9);
+export const CursorSchema: GenMessage<Cursor> = /*@__PURE__*/
+  messageDesc(file_magus_memory_v1alpha1_memory, 8);
 
 /**
  * @generated from message magus.memory.v1alpha1.UpdateCursorRequest
@@ -311,24 +295,7 @@ export type UpdateCursorRequest = Message<"magus.memory.v1alpha1.UpdateCursorReq
  * Use `create(UpdateCursorRequestSchema)` to create a new message.
  */
 export const UpdateCursorRequestSchema: GenMessage<UpdateCursorRequest> = /*@__PURE__*/
-  messageDesc(file_magus_memory_v1alpha1_memory, 10);
-
-/**
- * @generated from message magus.memory.v1alpha1.UpdateCursorResponse
- */
-export type UpdateCursorResponse = Message<"magus.memory.v1alpha1.UpdateCursorResponse"> & {
-  /**
-   * @generated from field: string content = 1;
-   */
-  content: string;
-};
-
-/**
- * Describes the message magus.memory.v1alpha1.UpdateCursorResponse.
- * Use `create(UpdateCursorResponseSchema)` to create a new message.
- */
-export const UpdateCursorResponseSchema: GenMessage<UpdateCursorResponse> = /*@__PURE__*/
-  messageDesc(file_magus_memory_v1alpha1_memory, 11);
+  messageDesc(file_magus_memory_v1alpha1_memory, 9);
 
 /**
  * MemoryType is the subject axis of a record (stable, closed). pointer carries refs only;
@@ -435,7 +402,7 @@ export const MemoryService: GenService<{
   updateMemory: {
     methodKind: "unary";
     input: typeof UpdateMemoryRequestSchema;
-    output: typeof UpdateMemoryResponseSchema;
+    output: typeof MemorySchema;
   },
   /**
    * DeleteMemory removes a record by name. With allow_missing=true, deleting an absent
@@ -456,7 +423,7 @@ export const MemoryService: GenService<{
   getCursor: {
     methodKind: "unary";
     input: typeof GetCursorRequestSchema;
-    output: typeof GetCursorResponseSchema;
+    output: typeof CursorSchema;
   },
   /**
    * UpdateCursor overwrites the cursor snapshot.
@@ -466,7 +433,7 @@ export const MemoryService: GenService<{
   updateCursor: {
     methodKind: "unary";
     input: typeof UpdateCursorRequestSchema;
-    output: typeof UpdateCursorResponseSchema;
+    output: typeof CursorSchema;
   },
 }> = /*@__PURE__*/
   serviceDesc(file_magus_memory_v1alpha1_memory, 0);

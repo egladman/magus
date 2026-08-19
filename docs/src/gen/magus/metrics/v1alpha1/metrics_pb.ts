@@ -21,7 +21,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/metrics/v1alpha1/metrics.proto.
  */
 export const file_magus_metrics_v1alpha1_metrics: GenFile = /*@__PURE__*/
-  fileDesc("CiRtYWd1cy9tZXRyaWNzL3YxYWxwaGExL21ldHJpY3MucHJvdG8SFm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEiEwoRR2V0TWV0cmljc1JlcXVlc3QiSAoSR2V0TWV0cmljc1Jlc3BvbnNlEjIKCHNuYXBzaG90GAEgASgLMiAubWFndXMubWV0cmljcy52MWFscGhhMS5TbmFwc2hvdCIWChRTdHJlYW1NZXRyaWNzUmVxdWVzdCKJAQoVU3RyZWFtTWV0cmljc1Jlc3BvbnNlEjQKCGJhY2tmaWxsGAEgASgLMiAubWFndXMubWV0cmljcy52MWFscGhhMS5CYWNrZmlsbEgAEjQKCHNuYXBzaG90GAIgASgLMiAubWFndXMubWV0cmljcy52MWFscGhhMS5TbmFwc2hvdEgAQgQKAm9mIocECghTbmFwc2hvdBIwCgxjYXB0dXJlX3RpbWUYASABKAsyGi5nb29nbGUucHJvdG9idWYuVGltZXN0YW1wEi8KBnRhcmdldBgCIAEoCzIfLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuTGF0ZW5jeRIuCgVjYWNoZRgDIAEoCzIfLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuTGF0ZW5jeRIyCglwb29sX3dhaXQYBCABKAsyHy5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLkxhdGVuY3kSNAoLZ3JhcGhfcXVlcnkYBSABKAsyHy5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLkxhdGVuY3kSLgoGcmVtb3RlGAYgASgLMh4ubWFndXMubWV0cmljcy52MWFscGhhMS5SZW1vdGUSOAoMdGFyZ2V0X3N0YXRzGAcgAygLMiIubWFndXMubWV0cmljcy52MWFscGhhMS5UYXJnZXRTdGF0EjYKCW1jcF90b29scxgIIAMoCzIjLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuTUNQVG9vbFN0YXQSKgoEYnV6ehgJIAEoCzIcLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuQnV6ehIwCgdzYW5kYm94GAogASgLMh8ubWFndXMubWV0cmljcy52MWFscGhhMS5TYW5kYm94IlkKB0xhdGVuY3kSDQoFY291bnQYASABKAMSCwoDcDUwGAIgASgBEgsKA3A5NRgDIAEoARILCgNwOTkYBCABKAESCwoDbWF4GAUgASgBEgsKA3N1bRgGIAEoASKPAQoGUmVtb3RlEgwKBGhpdHMYASABKAMSDgoGbWlzc2VzGAIgASgDEg4KBmVycm9ycxgDIAEoAxIUCgxkdXJhdGlvbl9wNTAYBCABKAESFAoMZHVyYXRpb25fcDk1GAUgASgBEhAKCGlvX2NvdW50GAYgASgDEhkKEXRyYW5zZmVycmVkX2J5dGVzGAcgASgDIqsBCgpUYXJnZXRTdGF0Eg8KB3Byb2plY3QYASABKAkSDgoGdGFyZ2V0GAIgASgJEg0KBXNwZWxsGAMgASgJEg0KBWNvdW50GAQgASgDEgsKA3A1MBgFIAEoARILCgNwOTUYBiABKAESCwoDcDk5GAcgASgBEhYKDmNhY2hlX2hpdF9yYXRlGAggASgBEg8KB3N1Y2Nlc3MYCSABKAMSDgoGZXJyb3JzGAogASgDIt8BCgtNQ1BUb29sU3RhdBIMCgR0b29sGAEgASgJEg0KBWNhbGxzGAIgASgDEg4KBmVycm9ycxgDIAEoAxIRCglpbnB1dF9wNTAYBCABKAESEQoJaW5wdXRfcDk1GAUgASgBEhMKC2lucHV0X3RvdGFsGAYgASgDEhIKCm91dHB1dF9wNTAYByABKAESEgoKb3V0cHV0X3A5NRgIIAEoARIUCgxvdXRwdXRfdG90YWwYCSABKAMSFAoMZHVyYXRpb25fcDUwGAogASgBEhQKDGR1cmF0aW9uX3A5NRgLIAEoASKHBAoEQnV6ehISCgpleGVjX2NvdW50GAEgASgDEhAKCGV4ZWNfcDUwGAIgASgBEhAKCGV4ZWNfcDk1GAMgASgBEhUKDWNvbXBpbGVfY291bnQYBCABKAMSEwoLY29tcGlsZV9wNTAYBSABKAESEwoLY29tcGlsZV9wOTUYBiABKAESFwoPaG9zdF9jYWxsX2NvdW50GAcgASgDEhUKDWhvc3RfY2FsbF9wNTAYCCABKAESFQoNaG9zdF9jYWxsX3A5NRgJIAEoARIaChJzZXNzaW9uX3Bvb2xfcmV1c2UYCiABKAMSGQoRc2Vzc2lvbl9wb29sX2lkbGUYCyABKAMSHgoWc2Vzc2lvbl9wb29sX2V2aWN0aW9ucxgMIAEoAxIYChBzZXNzaW9uX3dhcm1fcDUwGA0gASgBEhgKEHNlc3Npb25fd2FybV9wOTUYDiABKAESFAoMaW1wb3J0X2NvdW50GA8gASgDEhIKCmltcG9ydF9wNTAYECABKAESEgoKaW1wb3J0X3A5NRgRIAEoARIbChNzcGVsbF9yZXNvbHZlX2NvdW50GBIgASgDEhkKEXNwZWxsX3Jlc29sdmVfcDUwGBMgASgBEhkKEXNwZWxsX3Jlc29sdmVfcDk1GBQgASgBEhAKCGppdF9ydW5zGBUgASgDEhEKCXZtX2ZhdWx0cxgWIAEoAyK/AQoHU2FuZGJveBIRCglhcHBseV9wNTAYASABKAESEQoJYXBwbHlfcDk1GAIgASgBEhIKCnJ1bGVzX3JlYWQYAyABKAMSEwoLcnVsZXNfd3JpdGUYBCABKAMSEgoKcnVsZXNfZXhlYxgFIAEoAxIRCgllbnZfcnVsZXMYBiABKAMSFAoMY2hlY2tzX2FsbG93GAcgASgDEhMKC2NoZWNrc19kZW55GAggASgDEhMKC2Vudl9kcm9wcGVkGAkgASgDIjsKCEJhY2tmaWxsEi8KB3NhbXBsZXMYASADKAsyHi5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLlNhbXBsZSKdAgoGU2FtcGxlEi8KC3NhbXBsZV90aW1lGAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIUCgdydW5uaW5nGAIgASgFSACIAQESFQoIY2FwYWNpdHkYAyABKAVIAYgBARITCgZxdWV1ZWQYBCABKAVIAogBARIXCgpjYWNoZV9oaXRzGAUgASgDSAOIAQESGQoMY2FjaGVfbWlzc2VzGAYgASgDSASIAQESGAoLdGFyZ2V0X3J1bnMYByABKANIBYgBAUIKCghfcnVubmluZ0ILCglfY2FwYWNpdHlCCQoHX3F1ZXVlZEINCgtfY2FjaGVfaGl0c0IPCg1fY2FjaGVfbWlzc2VzQg4KDF90YXJnZXRfcnVuczLlAQoOTWV0cmljc1NlcnZpY2USYwoKR2V0TWV0cmljcxIpLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuR2V0TWV0cmljc1JlcXVlc3QaKi5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLkdldE1ldHJpY3NSZXNwb25zZRJuCg1TdHJlYW1NZXRyaWNzEiwubWFndXMubWV0cmljcy52MWFscGhhMS5TdHJlYW1NZXRyaWNzUmVxdWVzdBotLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuU3RyZWFtTWV0cmljc1Jlc3BvbnNlMAFC8wEKGmNvbS5tYWd1cy5tZXRyaWNzLnYxYWxwaGExQgxNZXRyaWNzUHJvdG9QAVpNZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvbWV0cmljcy92MWFscGhhMTttZXRyaWNzdjFhbHBoYTGiAgNNTViqAhZNYWd1cy5NZXRyaWNzLlYxYWxwaGExygIWTWFndXNcTWV0cmljc1xWMWFscGhhMeICIk1hZ3VzXE1ldHJpY3NcVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhhNYWd1czo6TWV0cmljczo6VjFhbHBoYTFiBnByb3RvMw", [file_google_protobuf_timestamp]);
+  fileDesc("CiRtYWd1cy9tZXRyaWNzL3YxYWxwaGExL21ldHJpY3MucHJvdG8SFm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEiEwoRR2V0TWV0cmljc1JlcXVlc3QiFgoUU3RyZWFtTWV0cmljc1JlcXVlc3QiiQEKFVN0cmVhbU1ldHJpY3NSZXNwb25zZRI0CghiYWNrZmlsbBgBIAEoCzIgLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuQmFja2ZpbGxIABI0CghzbmFwc2hvdBgCIAEoCzIgLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuU25hcHNob3RIAEIECgJvZiKHBAoIU25hcHNob3QSMAoMY2FwdHVyZV90aW1lGAEgASgLMhouZ29vZ2xlLnByb3RvYnVmLlRpbWVzdGFtcBIvCgZ0YXJnZXQYAiABKAsyHy5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLkxhdGVuY3kSLgoFY2FjaGUYAyABKAsyHy5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLkxhdGVuY3kSMgoJcG9vbF93YWl0GAQgASgLMh8ubWFndXMubWV0cmljcy52MWFscGhhMS5MYXRlbmN5EjQKC2dyYXBoX3F1ZXJ5GAUgASgLMh8ubWFndXMubWV0cmljcy52MWFscGhhMS5MYXRlbmN5Ei4KBnJlbW90ZRgGIAEoCzIeLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuUmVtb3RlEjgKDHRhcmdldF9zdGF0cxgHIAMoCzIiLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuVGFyZ2V0U3RhdBI2CgltY3BfdG9vbHMYCCADKAsyIy5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLk1DUFRvb2xTdGF0EioKBGJ1enoYCSABKAsyHC5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLkJ1enoSMAoHc2FuZGJveBgKIAEoCzIfLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuU2FuZGJveCJZCgdMYXRlbmN5Eg0KBWNvdW50GAEgASgDEgsKA3A1MBgCIAEoARILCgNwOTUYAyABKAESCwoDcDk5GAQgASgBEgsKA21heBgFIAEoARILCgNzdW0YBiABKAEijwEKBlJlbW90ZRIMCgRoaXRzGAEgASgDEg4KBm1pc3NlcxgCIAEoAxIOCgZlcnJvcnMYAyABKAMSFAoMZHVyYXRpb25fcDUwGAQgASgBEhQKDGR1cmF0aW9uX3A5NRgFIAEoARIQCghpb19jb3VudBgGIAEoAxIZChF0cmFuc2ZlcnJlZF9ieXRlcxgHIAEoAyKrAQoKVGFyZ2V0U3RhdBIPCgdwcm9qZWN0GAEgASgJEg4KBnRhcmdldBgCIAEoCRINCgVzcGVsbBgDIAEoCRINCgVjb3VudBgEIAEoAxILCgNwNTAYBSABKAESCwoDcDk1GAYgASgBEgsKA3A5ORgHIAEoARIWCg5jYWNoZV9oaXRfcmF0ZRgIIAEoARIPCgdzdWNjZXNzGAkgASgDEg4KBmVycm9ycxgKIAEoAyLfAQoLTUNQVG9vbFN0YXQSDAoEdG9vbBgBIAEoCRINCgVjYWxscxgCIAEoAxIOCgZlcnJvcnMYAyABKAMSEQoJaW5wdXRfcDUwGAQgASgBEhEKCWlucHV0X3A5NRgFIAEoARITCgtpbnB1dF90b3RhbBgGIAEoAxISCgpvdXRwdXRfcDUwGAcgASgBEhIKCm91dHB1dF9wOTUYCCABKAESFAoMb3V0cHV0X3RvdGFsGAkgASgDEhQKDGR1cmF0aW9uX3A1MBgKIAEoARIUCgxkdXJhdGlvbl9wOTUYCyABKAEihwQKBEJ1enoSEgoKZXhlY19jb3VudBgBIAEoAxIQCghleGVjX3A1MBgCIAEoARIQCghleGVjX3A5NRgDIAEoARIVCg1jb21waWxlX2NvdW50GAQgASgDEhMKC2NvbXBpbGVfcDUwGAUgASgBEhMKC2NvbXBpbGVfcDk1GAYgASgBEhcKD2hvc3RfY2FsbF9jb3VudBgHIAEoAxIVCg1ob3N0X2NhbGxfcDUwGAggASgBEhUKDWhvc3RfY2FsbF9wOTUYCSABKAESGgoSc2Vzc2lvbl9wb29sX3JldXNlGAogASgDEhkKEXNlc3Npb25fcG9vbF9pZGxlGAsgASgDEh4KFnNlc3Npb25fcG9vbF9ldmljdGlvbnMYDCABKAMSGAoQc2Vzc2lvbl93YXJtX3A1MBgNIAEoARIYChBzZXNzaW9uX3dhcm1fcDk1GA4gASgBEhQKDGltcG9ydF9jb3VudBgPIAEoAxISCgppbXBvcnRfcDUwGBAgASgBEhIKCmltcG9ydF9wOTUYESABKAESGwoTc3BlbGxfcmVzb2x2ZV9jb3VudBgSIAEoAxIZChFzcGVsbF9yZXNvbHZlX3A1MBgTIAEoARIZChFzcGVsbF9yZXNvbHZlX3A5NRgUIAEoARIQCghqaXRfcnVucxgVIAEoAxIRCgl2bV9mYXVsdHMYFiABKAMivwEKB1NhbmRib3gSEQoJYXBwbHlfcDUwGAEgASgBEhEKCWFwcGx5X3A5NRgCIAEoARISCgpydWxlc19yZWFkGAMgASgDEhMKC3J1bGVzX3dyaXRlGAQgASgDEhIKCnJ1bGVzX2V4ZWMYBSABKAMSEQoJZW52X3J1bGVzGAYgASgDEhQKDGNoZWNrc19hbGxvdxgHIAEoAxITCgtjaGVja3NfZGVueRgIIAEoAxITCgtlbnZfZHJvcHBlZBgJIAEoAyI7CghCYWNrZmlsbBIvCgdzYW1wbGVzGAEgAygLMh4ubWFndXMubWV0cmljcy52MWFscGhhMS5TYW1wbGUinQIKBlNhbXBsZRIvCgtzYW1wbGVfdGltZRgBIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASFAoHcnVubmluZxgCIAEoBUgAiAEBEhUKCGNhcGFjaXR5GAMgASgFSAGIAQESEwoGcXVldWVkGAQgASgFSAKIAQESFwoKY2FjaGVfaGl0cxgFIAEoA0gDiAEBEhkKDGNhY2hlX21pc3NlcxgGIAEoA0gEiAEBEhgKC3RhcmdldF9ydW5zGAcgASgDSAWIAQFCCgoIX3J1bm5pbmdCCwoJX2NhcGFjaXR5QgkKB19xdWV1ZWRCDQoLX2NhY2hlX2hpdHNCDwoNX2NhY2hlX21pc3Nlc0IOCgxfdGFyZ2V0X3J1bnMy2wEKDk1ldHJpY3NTZXJ2aWNlElkKCkdldE1ldHJpY3MSKS5tYWd1cy5tZXRyaWNzLnYxYWxwaGExLkdldE1ldHJpY3NSZXF1ZXN0GiAubWFndXMubWV0cmljcy52MWFscGhhMS5TbmFwc2hvdBJuCg1TdHJlYW1NZXRyaWNzEiwubWFndXMubWV0cmljcy52MWFscGhhMS5TdHJlYW1NZXRyaWNzUmVxdWVzdBotLm1hZ3VzLm1ldHJpY3MudjFhbHBoYTEuU3RyZWFtTWV0cmljc1Jlc3BvbnNlMAFC8wEKGmNvbS5tYWd1cy5tZXRyaWNzLnYxYWxwaGExQgxNZXRyaWNzUHJvdG9QAVpNZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvbWV0cmljcy92MWFscGhhMTttZXRyaWNzdjFhbHBoYTGiAgNNTViqAhZNYWd1cy5NZXRyaWNzLlYxYWxwaGExygIWTWFndXNcTWV0cmljc1xWMWFscGhhMeICIk1hZ3VzXE1ldHJpY3NcVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhhNYWd1czo6TWV0cmljczo6VjFhbHBoYTFiBnByb3RvMw", [file_google_protobuf_timestamp]);
 
 /**
  * @generated from message magus.metrics.v1alpha1.GetMetricsRequest
@@ -37,23 +37,6 @@ export const GetMetricsRequestSchema: GenMessage<GetMetricsRequest> = /*@__PURE_
   messageDesc(file_magus_metrics_v1alpha1_metrics, 0);
 
 /**
- * @generated from message magus.metrics.v1alpha1.GetMetricsResponse
- */
-export type GetMetricsResponse = Message<"magus.metrics.v1alpha1.GetMetricsResponse"> & {
-  /**
-   * @generated from field: magus.metrics.v1alpha1.Snapshot snapshot = 1;
-   */
-  snapshot?: Snapshot;
-};
-
-/**
- * Describes the message magus.metrics.v1alpha1.GetMetricsResponse.
- * Use `create(GetMetricsResponseSchema)` to create a new message.
- */
-export const GetMetricsResponseSchema: GenMessage<GetMetricsResponse> = /*@__PURE__*/
-  messageDesc(file_magus_metrics_v1alpha1_metrics, 1);
-
-/**
  * @generated from message magus.metrics.v1alpha1.StreamMetricsRequest
  */
 export type StreamMetricsRequest = Message<"magus.metrics.v1alpha1.StreamMetricsRequest"> & {
@@ -64,7 +47,7 @@ export type StreamMetricsRequest = Message<"magus.metrics.v1alpha1.StreamMetrics
  * Use `create(StreamMetricsRequestSchema)` to create a new message.
  */
 export const StreamMetricsRequestSchema: GenMessage<StreamMetricsRequest> = /*@__PURE__*/
-  messageDesc(file_magus_metrics_v1alpha1_metrics, 2);
+  messageDesc(file_magus_metrics_v1alpha1_metrics, 1);
 
 /**
  * @generated from message magus.metrics.v1alpha1.StreamMetricsResponse
@@ -96,7 +79,7 @@ export type StreamMetricsResponse = Message<"magus.metrics.v1alpha1.StreamMetric
  * Use `create(StreamMetricsResponseSchema)` to create a new message.
  */
 export const StreamMetricsResponseSchema: GenMessage<StreamMetricsResponse> = /*@__PURE__*/
-  messageDesc(file_magus_metrics_v1alpha1_metrics, 3);
+  messageDesc(file_magus_metrics_v1alpha1_metrics, 2);
 
 /**
  * Snapshot is the derived-metrics view at one instant: each OTel instrument family
@@ -181,7 +164,7 @@ export type Snapshot = Message<"magus.metrics.v1alpha1.Snapshot"> & {
  * Use `create(SnapshotSchema)` to create a new message.
  */
 export const SnapshotSchema: GenMessage<Snapshot> = /*@__PURE__*/
-  messageDesc(file_magus_metrics_v1alpha1_metrics, 4);
+  messageDesc(file_magus_metrics_v1alpha1_metrics, 3);
 
 /**
  * Latency is an operation-family rollup: how many happened and how long they took. The
@@ -239,7 +222,7 @@ export type Latency = Message<"magus.metrics.v1alpha1.Latency"> & {
  * Use `create(LatencySchema)` to create a new message.
  */
 export const LatencySchema: GenMessage<Latency> = /*@__PURE__*/
-  messageDesc(file_magus_metrics_v1alpha1_metrics, 5);
+  messageDesc(file_magus_metrics_v1alpha1_metrics, 4);
 
 /**
  * Remote is the remote-cache instrument family: outcome tallies plus transfer latency and
@@ -297,7 +280,7 @@ export type Remote = Message<"magus.metrics.v1alpha1.Remote"> & {
  * Use `create(RemoteSchema)` to create a new message.
  */
 export const RemoteSchema: GenMessage<Remote> = /*@__PURE__*/
-  messageDesc(file_magus_metrics_v1alpha1_metrics, 6);
+  messageDesc(file_magus_metrics_v1alpha1_metrics, 5);
 
 /**
  * TargetStat is one per-target rollup: how often a (project, target, spell) ran, its latency
@@ -383,7 +366,7 @@ export type TargetStat = Message<"magus.metrics.v1alpha1.TargetStat"> & {
  * Use `create(TargetStatSchema)` to create a new message.
  */
 export const TargetStatSchema: GenMessage<TargetStat> = /*@__PURE__*/
-  messageDesc(file_magus_metrics_v1alpha1_metrics, 7);
+  messageDesc(file_magus_metrics_v1alpha1_metrics, 6);
 
 /**
  * MCPToolStat is one per-tool rollup of the magus.mcp.tool.* families: call/error tallies,
@@ -469,7 +452,7 @@ export type MCPToolStat = Message<"magus.metrics.v1alpha1.MCPToolStat"> & {
  * Use `create(MCPToolStatSchema)` to create a new message.
  */
 export const MCPToolStatSchema: GenMessage<MCPToolStat> = /*@__PURE__*/
-  messageDesc(file_magus_metrics_v1alpha1_metrics, 8);
+  messageDesc(file_magus_metrics_v1alpha1_metrics, 7);
 
 /**
  * Buzz rolls up the magus.buzz.* families: script exec/compile latency, the native-boundary
@@ -622,7 +605,7 @@ export type Buzz = Message<"magus.metrics.v1alpha1.Buzz"> & {
  * Use `create(BuzzSchema)` to create a new message.
  */
 export const BuzzSchema: GenMessage<Buzz> = /*@__PURE__*/
-  messageDesc(file_magus_metrics_v1alpha1_metrics, 9);
+  messageDesc(file_magus_metrics_v1alpha1_metrics, 8);
 
 /**
  * Sandbox rolls up the magus.sandbox.* filesystem families: apply latency, the rule counts a
@@ -688,7 +671,7 @@ export type Sandbox = Message<"magus.metrics.v1alpha1.Sandbox"> & {
  * Use `create(SandboxSchema)` to create a new message.
  */
 export const SandboxSchema: GenMessage<Sandbox> = /*@__PURE__*/
-  messageDesc(file_magus_metrics_v1alpha1_metrics, 10);
+  messageDesc(file_magus_metrics_v1alpha1_metrics, 9);
 
 /**
  * Backfill is the ring-buffer history the daemon sends once, right after a dashboard
@@ -710,7 +693,7 @@ export type Backfill = Message<"magus.metrics.v1alpha1.Backfill"> & {
  * Use `create(BackfillSchema)` to create a new message.
  */
 export const BackfillSchema: GenMessage<Backfill> = /*@__PURE__*/
-  messageDesc(file_magus_metrics_v1alpha1_metrics, 11);
+  messageDesc(file_magus_metrics_v1alpha1_metrics, 10);
 
 /**
  * Sample is one point in the rolling utilization/activity history. The daemon appends one
@@ -787,7 +770,7 @@ export type Sample = Message<"magus.metrics.v1alpha1.Sample"> & {
  * Use `create(SampleSchema)` to create a new message.
  */
 export const SampleSchema: GenMessage<Sample> = /*@__PURE__*/
-  messageDesc(file_magus_metrics_v1alpha1_metrics, 12);
+  messageDesc(file_magus_metrics_v1alpha1_metrics, 11);
 
 /**
  * MetricsService serves the derived dashboard metrics. Served over ConnectRPC, so one
@@ -804,7 +787,7 @@ export const MetricsService: GenService<{
   getMetrics: {
     methodKind: "unary";
     input: typeof GetMetricsRequestSchema;
-    output: typeof GetMetricsResponseSchema;
+    output: typeof SnapshotSchema;
   },
   /**
    * StreamMetrics pushes the rolling history first (one Backfill), then a fresh Snapshot on
