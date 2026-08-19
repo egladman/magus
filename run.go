@@ -1737,6 +1737,27 @@ func (m *Magus) gateDrift(ctx context.Context, p *types.Project, target string, 
 	if res.VCS == nil || res.Source == types.VCSSourceDefault {
 		return nil
 	}
+	// Only TRACKED outputs can be stale. An ignored one - a build artifact, a bundle, a
+	// dist/ tree - is rewritten by every run by design, and "drift" is not a thing it can
+	// have: there is no committed form for it to disagree with. Gating those was this
+	// check's first false positive, on a `ci` target whose build legitimately rewrites its
+	// own gen/ tree.
+	//
+	// A backend that cannot answer leaves the set alone rather than guessing. Guessing
+	// either way is worse than the question going unasked: assume tracked and every build
+	// artifact becomes a gate failure, assume untracked and the gate covers nothing.
+	if reporter, ok := res.VCS.(types.TrackedFileReporter); ok {
+		tracked, terr := reporter.TrackedFiles(ctx, dir, moved)
+		if terr != nil {
+			return fmt.Errorf("%s: %s is drift-gated but %s could not say which outputs are tracked, so drift was not verified: %w",
+				dir, target, res.VCS.Name(), terr)
+		}
+		moved = tracked
+	}
+	if len(moved) == 0 {
+		return nil
+	}
+
 	// moved is already scoped to declared outputs by the globs it was hashed from. It is
 	// classified anyway, because SplitExplainedOutputs needs each path's owning project to
 	// ask whether that project's sources moved in this change.

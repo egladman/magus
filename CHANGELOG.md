@@ -9,8 +9,33 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 See the unreleased changes at
 https://github.com/egladman/magus/compare/v0.4.0...main
 
+### Removed
+
+- `magus.FailOnDrift()` is gone, with no replacement alias. It named the
+  response rather than the decision, so it could not carry "warn" or "off", and
+  what it checked - whether the working tree was dirty after the target - was
+  disarmed by any unrelated uncommitted edit. Use `magus.Drift(policy, reason)`,
+  or the `drift` key in a magusfile's target policy.
+
 ### Changed
 
+- The drift gate runs for **every** target that declares outputs, and no
+  declaration turns it on. Declaring an output is already the claim that those
+  bytes follow from the target's inputs, so magus checks the claim rather than
+  asking each workspace to opt in. It previously applied only to `preflight` and
+  `generate`, and only when a target declared `FailOnDrift`. Turn it down with
+  `{"drift": "warn"}` or off with `{"drift": "off", "drift_reason": "..."}`; a
+  reason is required to switch it off, as it is for `skip_cache`.
+- The drift gate fails only for output **this change** made stale. Output that
+  drifted with no source change behind it - a merge whose own CI never finished,
+  a generator nobody re-ran - is reported and does not fail the run. Failing it
+  billed whoever opened the next pull request for a decision they were not party
+  to, and they could not fix it without committing bytes they did not produce.
+  This is not configurable: there is no setting that restores the old behavior.
+- The gate now hashes each target's declared outputs before and after the run,
+  rather than asking the VCS what is dirty afterwards. Bytes that did not move
+  are not drift however dirty the surrounding tree is, and detection no longer
+  depends on the VCS at all - only attribution does.
 - Agent guard templates are at version 7. Codex users must also add
   `GUARD_NO_ADVISE=1` to both hook commands in `hooks.json`; re-downloading the
   templates changes nothing on its own. Other hosts render as before.

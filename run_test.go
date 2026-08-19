@@ -388,6 +388,23 @@ func TestGateDriftErrorsOnUnresolvableVCS(t *testing.T) {
 		"the message must name the guarantee that could not be honored, not just the VCS failure")
 }
 
+// An UNTRACKED output cannot be stale: a bundle, a dist/ tree, anything the build rewrites
+// every run has no committed form to disagree with. This was the gate's first false
+// positive when it became default-on - `console:ci` failed on its own gen/sw.js, which is
+// gitignored and rewritten by design.
+//
+// The temp dir here is not a repository, so no backend claims it and the gate returns
+// before the tracked-file question. That is the same no-op an unversioned tree gets, which
+// is what makes an artifact-only project safe by construction rather than by policy.
+func TestGateDriftIgnoresUntrackedOutput(t *testing.T) {
+	t.Setenv("MAGUS_VCS_ENABLED", "")
+	t.Setenv("MAGUS_VCS_NAME", "")
+	m, p, drift := driftingFixture(t)
+
+	require.NoError(t, m.gateDrift(t.Context(), p, "build", types.DriftFail, drift),
+		"an output with no committed form behind it is a build artifact, not drift")
+}
+
 // Nothing moved, so there is nothing to attribute and no reason to consult the VCS at all.
 // This is the half hashing bought: detection no longer depends on the VCS, so a broken one
 // cannot fail a run whose outputs are all exactly where they were.

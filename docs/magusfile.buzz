@@ -279,6 +279,13 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // silently passes. What still gates is every generated file that IS tracked: MAGUS.md,
     // the root CHANGELOG.md, src/gen, assets/gen (the README's diagram pair), and the
     // derived Markdown in CONTENT.
+    //
+    // The engine's drift gate does NOT make this redundant, and the reason is worth keeping:
+    // it hashes each target's declared OUTPUTS, and two of these are not outputs. `magus
+    // describe file` reports CHANGELOG.md and assets/gen as role=source - they are written
+    // through `update` declarations rather than ctx.writesFiles - so a check keyed on
+    // outputs cannot see them however correct it is. MAGUS.md and CONTENT are covered twice
+    // over; these two are covered only here.
     final GENERATED = ["MAGUS.md", ROOT + "/CHANGELOG.md", "src/gen", "assets/gen"] + CONTENT;
     // Hashed before and after, not gated on a clean tree: the old form skipped whenever any
     // of these was already dirty, which is the state you are in while editing a generator.
