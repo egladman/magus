@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2365,
-  "edge_count": 6153,
+  "node_count": 2366,
+  "edge_count": 6072,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -698,7 +698,7 @@
       "label": "blog",
       "source": "blog",
       "attrs": {
-        "dir_files": "3",
+        "dir_files": "4",
         "dir_languages": "markdown"
       }
     },
@@ -2122,17 +2122,6 @@
       }
     },
     {
-      "id": "doc:blog/2026-08-03-the-tools-were-the-problem.md",
-      "kind": "doc",
-      "label": "blog/2026-08-03-the-tools-were-the-problem.md",
-      "source": "blog/2026-08-03-the-tools-were-the-problem.md",
-      "attrs": {
-        "role": "doc",
-        "tags": "release,opinion",
-        "title": "I think our tools are the problem"
-      }
-    },
-    {
       "id": "doc:blog/2026-08-04-how-i-actually-use-ai-tooling.md",
       "kind": "doc",
       "label": "blog/2026-08-04-how-i-actually-use-ai-tooling.md",
@@ -2141,6 +2130,28 @@
         "role": "doc",
         "tags": "opinion",
         "title": "How I actually use AI tooling"
+      }
+    },
+    {
+      "id": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
+      "kind": "doc",
+      "label": "blog/2026-08-18-i-think-our-tools-are-the-problem.md",
+      "source": "blog/2026-08-18-i-think-our-tools-are-the-problem.md",
+      "attrs": {
+        "role": "doc",
+        "tags": "opinion",
+        "title": "I think our tools are the problem"
+      }
+    },
+    {
+      "id": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "kind": "doc",
+      "label": "blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "attrs": {
+        "role": "doc",
+        "tags": "opinion",
+        "title": "I audited my own MCP server"
       }
     },
     {
@@ -22012,19 +22023,27 @@
     },
     {
       "source": "dir:blog",
-      "target": "doc:blog/2026-08-03-the-tools-were-the-problem.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "blog/2026-08-03-the-tools-were-the-problem.md"
-    },
-    {
-      "source": "dir:blog",
       "target": "doc:blog/2026-08-04-how-i-actually-use-ai-tooling.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "blog/2026-08-04-how-i-actually-use-ai-tooling.md"
+    },
+    {
+      "source": "dir:blog",
+      "target": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
+    },
+    {
+      "source": "dir:blog",
+      "target": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
     },
     {
       "source": "dir:cmd",
@@ -26915,390 +26934,6 @@
       "provenance": "AGENTS.md"
     },
     {
-      "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS1002",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS1003",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS1017",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS1020",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS1021",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS1026",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS1028",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS3001",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS3004",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS3005",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS3006",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS3007",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS4003",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS6001",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "diagnostic:MGS8001",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:CONTRIBUTING.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/concepts/compatibility.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/concepts/knowledge.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/concepts/secrets.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/migrating/breaking-changes.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/codes/magusfile/MGS1003.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/codes/magusfile/MGS1017.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/codes/magusfile/MGS1020.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/codes/magusfile/MGS1021.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/codes/magusfile/MGS1028.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-affected.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-buzz.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-clean.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-describe.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-diff.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-doctor.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-explain.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-graph.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-hook.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-ls.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-path.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-query.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-refs.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-version.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "doc:docs/reference/manpage/magus-x.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "spell:buf",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "spell:github-actions",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "spell:go",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "spell:markdown",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "spell:python",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "spell:rust",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "CHANGELOG.md"
-    },
-    {
-      "source": "doc:CHANGELOG.md",
-      "target": "spell:typescript",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "CHANGELOG.md"
-    },
-    {
       "source": "doc:CLAUDE.md",
       "target": "diagnostic:MGS1002",
       "relation": "documents",
@@ -27715,60 +27350,156 @@
       "provenance": "benchmarks/README.md"
     },
     {
-      "source": "doc:blog/2026-08-03-the-tools-were-the-problem.md",
+      "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
+      "target": "doc:docs/reference/manpage/magus-buzz.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
+    },
+    {
+      "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-03-the-tools-were-the-problem.md"
+      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
     },
     {
-      "source": "doc:blog/2026-08-03-the-tools-were-the-problem.md",
+      "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
       "target": "doc:docs/reference/manpage/magus-graph.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-03-the-tools-were-the-problem.md"
+      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
     },
     {
-      "source": "doc:blog/2026-08-03-the-tools-were-the-problem.md",
+      "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
       "target": "doc:docs/reference/manpage/magus-init.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-03-the-tools-were-the-problem.md"
+      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
     },
     {
-      "source": "doc:blog/2026-08-03-the-tools-were-the-problem.md",
-      "target": "doc:docs/reference/manpage/magus-ls.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "blog/2026-08-03-the-tools-were-the-problem.md"
-    },
-    {
-      "source": "doc:blog/2026-08-03-the-tools-were-the-problem.md",
-      "target": "doc:docs/reference/manpage/magus-path.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "blog/2026-08-03-the-tools-were-the-problem.md"
-    },
-    {
-      "source": "doc:blog/2026-08-03-the-tools-were-the-problem.md",
+      "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
       "target": "doc:docs/reference/manpage/magus-query.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-03-the-tools-were-the-problem.md"
+      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
     },
     {
-      "source": "doc:blog/2026-08-03-the-tools-were-the-problem.md",
-      "target": "spell:typescript",
-      "relation": "documents",
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
       "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "blog/2026-08-03-the-tools-were-the-problem.md"
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-buzz.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-config.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-describe.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-diff.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-explain.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-memory.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-path.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-query.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-refs.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-run.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-status.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+    },
+    {
+      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:docs/reference/manpage/magus-where.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
     },
     {
       "source": "doc:cmd/magus/agents-section.md",
@@ -27993,382 +27724,6 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "cmd/magus/skills/magus-workspace-rules/SKILL.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "diagnostic:MGS1002",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "diagnostic:MGS1003",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "diagnostic:MGS1017",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "diagnostic:MGS1020",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "diagnostic:MGS1021",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "diagnostic:MGS1026",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "diagnostic:MGS1028",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "diagnostic:MGS3001",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "diagnostic:MGS3004",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "diagnostic:MGS3005",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "diagnostic:MGS3006",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "diagnostic:MGS3007",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "diagnostic:MGS4003",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "diagnostic:MGS6001",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "diagnostic:MGS8001",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/concepts/compatibility.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/concepts/knowledge.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/concepts/secrets.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/migrating/breaking-changes.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/codes/magusfile/MGS1003.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/codes/magusfile/MGS1017.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/codes/magusfile/MGS1020.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/codes/magusfile/MGS1021.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/codes/magusfile/MGS1028.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-affected.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-buzz.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-clean.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-describe.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-diff.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-doctor.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-explain.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-graph.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-hook.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-ls.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-path.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-query.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-refs.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-status.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-version.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "doc:docs/reference/manpage/magus-x.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "spell:buf",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "spell:github-actions",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "spell:go",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "spell:markdown",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "spell:python",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "spell:rust",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "docs/changelog.md"
-    },
-    {
-      "source": "doc:docs/changelog.md",
-      "target": "spell:typescript",
-      "relation": "documents",
-      "confidence": "inferred",
-      "score": 0.5,
-      "provenance": "docs/changelog.md"
     },
     {
       "source": "doc:docs/concepts/cache.md",
@@ -69137,7 +68492,7 @@
     },
     {
       "source": "target:docs:site-generate",
-      "target": "doc:blog/2026-08-03-the-tools-were-the-problem.md",
+      "target": "doc:blog/2026-08-04-how-i-actually-use-ai-tooling.md",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
@@ -69145,7 +68500,15 @@
     },
     {
       "source": "target:docs:site-generate",
-      "target": "doc:blog/2026-08-04-how-i-actually-use-ai-tooling.md",
+      "target": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
