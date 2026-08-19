@@ -1525,8 +1525,24 @@
           "name": "site-generate",
           "declared": "site_generate",
           "doc": "site-generate owns publication.",
+          "dependencies": [
+            "build-hljs",
+            "build-playground-editor",
+            "build-playground"
+          ],
           "charms": [
             "rw"
+          ],
+          "chain": [
+            {
+              "target": "build-hljs"
+            },
+            {
+              "target": "build-playground-editor"
+            },
+            {
+              "target": "build-playground"
+            }
           ],
           "reads_files": [
             {

@@ -24,6 +24,24 @@ https://github.com/egladman/magus/compare/v0.4.0...main
 
 ### Fixed
 
+- `magus vcs resolve` no longer gives up when the merge left conflict markers in
+  a magusfile. It reads the committed magusfile through the new
+  `types.RevisionFileReader` capability, settles the generated conflicts with
+  those declarations, and leaves the hand-written one for you - rather than
+  reporting the interpreter's verdict on a `<<<<<<<` line and settling nothing.
+  It deliberately does NOT regenerate in that state: a merge that changes a
+  generator would produce bytes matching neither side, so it says to run
+  `magus run generate:rw` once the magusfile is resolved.
+- `magus vcs resolve` no longer loses the whole resolution to one renamed path.
+  It staged with a single call whose pathspecs included files the rename had
+  removed, and one pathspec matching nothing aborts the call before staging
+  anything - so regeneration completed and the index was left untouched. Paths
+  that cannot be staged are now reported by name instead.
+- `docs:site-generate` declares the bundles it needs rather than relying on
+  `generate` to order them first. It was correct as a stage and broken alone, so
+  `magus run site-generate docs` - and `magus vcs resolve`, which invokes the
+  target owning a conflicted output directly - failed the site's asset-integrity
+  check on the playground's missing wasm glue.
 - Agent guard: Codex is no longer sent advisories it rejects. Its PreToolUse
   treats `additionalContext` as an error and then fails open, so each advisory
   was discarded and disarmed the guard for that call. It now declares
