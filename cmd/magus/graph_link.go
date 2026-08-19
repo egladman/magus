@@ -10,9 +10,9 @@ import (
 // when the browser opens it, so the call sites follow it with a start-the-daemon
 // hint rather than probing and omitting the line.
 
-// tokenHint is the second line every call site prints under the link. The link is
+// authHint is the second line every call site prints under the link. The link is
 // deliberately UNAUTHENTICATED, so this names the one command that completes it.
-const tokenHint = "(append &token=$(magus config token print) to open it authenticated)"
+const authHint = "(append &token=$(magus config token print) to open it authenticated)"
 
 // liveExplorerLink formats a daemon-origin Graph Explorer deep-link (served by the
 // running daemon from http://<host>/console/graph/) with the caller's directives
@@ -25,7 +25,7 @@ const tokenHint = "(append &token=$(magus config token print) to open it authent
 // A credential that reaches three sinks nobody audits is leaked regardless of what
 // the browser does with it afterwards.
 //
-// The token stays one shell substitution away (see tokenHint), which keeps the
+// The token stays one shell substitution away (see authHint), which keeps the
 // authenticated URL composable while making its disclosure an explicit act rather
 // than a side effect of asking an unrelated question. Distinct from
 // graphExplorerLink in graph_source.go, which builds a static #src= link.

@@ -50,5 +50,5 @@ func TestLiveExplorerLinkCarriesNoToken(t *testing.T) {
 		t.Skip("no daemon address configured here, so there is no link to assert on")
 	}
 	require.NotContains(t, got, "token=",
-		"the deep-link must stay unauthenticated; the token is composed in by tokenHint")
+		"the deep-link must stay unauthenticated; the token is composed in by authHint")
 }
