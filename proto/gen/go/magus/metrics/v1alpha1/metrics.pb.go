@@ -1123,16 +1123,27 @@ func (x *Backfill) GetSamples() []*Sample {
 // MUST render an unset field as a break in the series, never as zero and never by carrying the
 // previous value forward.
 type Sample struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	SampleTime    *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=sample_time,json=sampleTime,proto3" json:"sample_time,omitempty"`
-	Running       *int32                 `protobuf:"varint,2,opt,name=running,proto3,oneof" json:"running,omitempty"`                            // pool slots running at this tick; unset = pool unreadable
-	Capacity      *int32                 `protobuf:"varint,3,opt,name=capacity,proto3,oneof" json:"capacity,omitempty"`                          // pool capacity (0 = unlimited); unset = pool unreadable
-	Queued        *int32                 `protobuf:"varint,4,opt,name=queued,proto3,oneof" json:"queued,omitempty"`                              // tasks queued for a slot; unset = pool unreadable
-	CacheHits     *int64                 `protobuf:"varint,5,opt,name=cache_hits,json=cacheHits,proto3,oneof" json:"cache_hits,omitempty"`       // cumulative; diff adjacent samples for a hit rate
-	CacheMisses   *int64                 `protobuf:"varint,6,opt,name=cache_misses,json=cacheMisses,proto3,oneof" json:"cache_misses,omitempty"` // cumulative
-	TargetRuns    *int64                 `protobuf:"varint,7,opt,name=target_runs,json=targetRuns,proto3,oneof" json:"target_runs,omitempty"`    // cumulative target executions
-	unknownFields protoimpl.UnknownFields
-	sizeCache     protoimpl.SizeCache
+	state       protoimpl.MessageState `protogen:"open.v1"`
+	SampleTime  *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=sample_time,json=sampleTime,proto3" json:"sample_time,omitempty"`
+	Running     *int32                 `protobuf:"varint,2,opt,name=running,proto3,oneof" json:"running,omitempty"`                            // pool slots running at this tick; unset = pool unreadable
+	Capacity    *int32                 `protobuf:"varint,3,opt,name=capacity,proto3,oneof" json:"capacity,omitempty"`                          // pool capacity (0 = unlimited); unset = pool unreadable
+	Queued      *int32                 `protobuf:"varint,4,opt,name=queued,proto3,oneof" json:"queued,omitempty"`                              // tasks queued for a slot; unset = pool unreadable
+	CacheHits   *int64                 `protobuf:"varint,5,opt,name=cache_hits,json=cacheHits,proto3,oneof" json:"cache_hits,omitempty"`       // cumulative; diff adjacent samples for a hit rate
+	CacheMisses *int64                 `protobuf:"varint,6,opt,name=cache_misses,json=cacheMisses,proto3,oneof" json:"cache_misses,omitempty"` // cumulative
+	TargetRuns  *int64                 `protobuf:"varint,7,opt,name=target_runs,json=targetRuns,proto3,oneof" json:"target_runs,omitempty"`    // cumulative target executions
+	// observe_start_time identifies the GENERATION the cumulative counters above belong to:
+	// the instant the daemon began observing. The counters restart at zero when the daemon
+	// does, so two samples from different generations cannot be differenced - their
+	// difference is not a rate, it is the new process's total minus the old one's.
+	//
+	// Carrying the identity is what lets a consumer BREAK the series at a restart instead of
+	// guessing. Do not infer a restart by comparing values: a decrease is also what an
+	// unreadable collection looks like, and clamping the negative to zero (which is what a
+	// consumer naturally reaches for) reports a restart as "no activity this minute" - a
+	// wrong answer that looks like a real one.
+	ObserveStartTime *timestamppb.Timestamp `protobuf:"bytes,8,opt,name=observe_start_time,json=observeStartTime,proto3,oneof" json:"observe_start_time,omitempty"`
+	unknownFields    protoimpl.UnknownFields
+	sizeCache        protoimpl.SizeCache
 }
 
 func (x *Sample) Reset() {
@@ -1212,6 +1223,13 @@ func (x *Sample) GetTargetRuns() int64 {
 		return *x.TargetRuns
 	}
 	return 0
+}
+
+func (x *Sample) GetObserveStartTime() *timestamppb.Timestamp {
+	if x != nil {
+		return x.ObserveStartTime
+	}
+	return nil
 }
 
 var File_magus_metrics_v1alpha1_metrics_proto protoreflect.FileDescriptor
@@ -1327,7 +1345,7 @@ const file_magus_metrics_v1alpha1_metrics_proto_rawDesc = "" +
 	"\venv_dropped\x18\t \x01(\x03R\n" +
 	"envDropped\"D\n" +
 	"\bBackfill\x128\n" +
-	"\asamples\x18\x01 \x03(\v2\x1e.magus.metrics.v1alpha1.SampleR\asamples\"\xe8\x02\n" +
+	"\asamples\x18\x01 \x03(\v2\x1e.magus.metrics.v1alpha1.SampleR\asamples\"\xce\x03\n" +
 	"\x06Sample\x12;\n" +
 	"\vsample_time\x18\x01 \x01(\v2\x1a.google.protobuf.TimestampR\n" +
 	"sampleTime\x12\x1d\n" +
@@ -1338,14 +1356,16 @@ const file_magus_metrics_v1alpha1_metrics_proto_rawDesc = "" +
 	"cache_hits\x18\x05 \x01(\x03H\x03R\tcacheHits\x88\x01\x01\x12&\n" +
 	"\fcache_misses\x18\x06 \x01(\x03H\x04R\vcacheMisses\x88\x01\x01\x12$\n" +
 	"\vtarget_runs\x18\a \x01(\x03H\x05R\n" +
-	"targetRuns\x88\x01\x01B\n" +
+	"targetRuns\x88\x01\x01\x12M\n" +
+	"\x12observe_start_time\x18\b \x01(\v2\x1a.google.protobuf.TimestampH\x06R\x10observeStartTime\x88\x01\x01B\n" +
 	"\n" +
 	"\b_runningB\v\n" +
 	"\t_capacityB\t\n" +
 	"\a_queuedB\r\n" +
 	"\v_cache_hitsB\x0f\n" +
 	"\r_cache_missesB\x0e\n" +
-	"\f_target_runs2\xdb\x01\n" +
+	"\f_target_runsB\x15\n" +
+	"\x13_observe_start_time2\xdb\x01\n" +
 	"\x0eMetricsService\x12Y\n" +
 	"\n" +
 	"GetMetrics\x12).magus.metrics.v1alpha1.GetMetricsRequest\x1a .magus.metrics.v1alpha1.Snapshot\x12n\n" +
@@ -1395,15 +1415,16 @@ var file_magus_metrics_v1alpha1_metrics_proto_depIdxs = []int32{
 	9,  // 11: magus.metrics.v1alpha1.Snapshot.sandbox:type_name -> magus.metrics.v1alpha1.Sandbox
 	11, // 12: magus.metrics.v1alpha1.Backfill.samples:type_name -> magus.metrics.v1alpha1.Sample
 	12, // 13: magus.metrics.v1alpha1.Sample.sample_time:type_name -> google.protobuf.Timestamp
-	0,  // 14: magus.metrics.v1alpha1.MetricsService.GetMetrics:input_type -> magus.metrics.v1alpha1.GetMetricsRequest
-	1,  // 15: magus.metrics.v1alpha1.MetricsService.StreamMetrics:input_type -> magus.metrics.v1alpha1.StreamMetricsRequest
-	3,  // 16: magus.metrics.v1alpha1.MetricsService.GetMetrics:output_type -> magus.metrics.v1alpha1.Snapshot
-	2,  // 17: magus.metrics.v1alpha1.MetricsService.StreamMetrics:output_type -> magus.metrics.v1alpha1.StreamMetricsResponse
-	16, // [16:18] is the sub-list for method output_type
-	14, // [14:16] is the sub-list for method input_type
-	14, // [14:14] is the sub-list for extension type_name
-	14, // [14:14] is the sub-list for extension extendee
-	0,  // [0:14] is the sub-list for field type_name
+	12, // 14: magus.metrics.v1alpha1.Sample.observe_start_time:type_name -> google.protobuf.Timestamp
+	0,  // 15: magus.metrics.v1alpha1.MetricsService.GetMetrics:input_type -> magus.metrics.v1alpha1.GetMetricsRequest
+	1,  // 16: magus.metrics.v1alpha1.MetricsService.StreamMetrics:input_type -> magus.metrics.v1alpha1.StreamMetricsRequest
+	3,  // 17: magus.metrics.v1alpha1.MetricsService.GetMetrics:output_type -> magus.metrics.v1alpha1.Snapshot
+	2,  // 18: magus.metrics.v1alpha1.MetricsService.StreamMetrics:output_type -> magus.metrics.v1alpha1.StreamMetricsResponse
+	17, // [17:19] is the sub-list for method output_type
+	15, // [15:17] is the sub-list for method input_type
+	15, // [15:15] is the sub-list for extension type_name
+	15, // [15:15] is the sub-list for extension extendee
+	0,  // [0:15] is the sub-list for field type_name
 }
 
 func init() { file_magus_metrics_v1alpha1_metrics_proto_init() }

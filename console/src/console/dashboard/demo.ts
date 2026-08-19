@@ -592,6 +592,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
         cacheHits: h,
         cacheMisses: m,
         cacheSrc: "status",
+        generation: 0, // one synthetic process: never a restart
       });
     }
     hits = h;
@@ -736,6 +737,7 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
       cacheHits: hits,
       cacheMisses: misses,
       cacheSrc: "status",
+      generation: 0, // one synthetic process: never a restart
     });
     if (samples.length > HISTORY + 120) samples.shift();
 

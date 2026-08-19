@@ -48,10 +48,17 @@ func (s *Service) startSampler(ctx context.Context) {
 func (s *Service) sampleOnce(ctx context.Context) {
 	smp := &metricsv1.Sample{SampleTime: timestamppb.New(s.now())}
 
-	if rep := s.stat.StatusReport(ctx); rep.Pool != nil {
+	rep := s.stat.StatusReport(ctx)
+	if rep.Pool != nil {
 		smp.Running = proto.Int32(int32(rep.Pool.Running))
 		smp.Capacity = proto.Int32(int32(rep.Pool.Capacity))
 		smp.Queued = proto.Int32(int32(rep.Pool.Queued))
+	}
+	// The generation these cumulative counters belong to. Left unset when the report
+	// carries no start instant (a non-daemon status), which reads downstream as "unknown
+	// generation" and breaks the series rather than silently joining two processes.
+	if !rep.ObservingSince.IsZero() {
+		smp.ObserveStartTime = timestamppb.New(rep.ObservingSince)
 	}
 	if rm, err := s.coll.Collect(ctx); err == nil {
 		c := counters(rm)

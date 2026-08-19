@@ -567,6 +567,12 @@ export interface SampleView {
   cacheHits: number | null;
   cacheMisses: number | null;
   cacheSrc: CacheSrc; // baseline source of cacheHits/cacheMisses
+  // generation is the daemon's observing-since in ms: the identity of the process whose
+  // cumulative counters these are. Two samples from different generations cannot be
+  // differenced - the counters restarted at zero in between - so the rate chart breaks the
+  // series instead. null means unknown, which breaks it too: joining an unknown generation
+  // to a known one is exactly the guess this field exists to avoid.
+  generation: number | null;
 }
 
 export function mapSample(s: ProtoSample): SampleView {
@@ -578,6 +584,9 @@ export function mapSample(s: ProtoSample): SampleView {
     cacheHits: s.cacheHits === undefined ? null : Number(s.cacheHits),
     cacheMisses: s.cacheMisses === undefined ? null : Number(s.cacheMisses),
     cacheSrc: "metrics",
+    generation: s.observeStartTime
+      ? Number(s.observeStartTime.seconds) * 1000 + Math.floor(s.observeStartTime.nanos / 1e6)
+      : null,
   };
 }
 

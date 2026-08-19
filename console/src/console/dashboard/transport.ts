@@ -222,6 +222,10 @@ export class DashboardTransport {
       // The status pool tallies are a DIFFERENT counter baseline than the metrics
       // Backfill's OTel counter; tag it so cacheRate skips the crossover diff.
       cacheSrc: "status",
+      // The streamed frame does not carry observing-since - it rides the one-shot envelope -
+      // so reuse the value fetched at connect. A daemon restart drops this stream, and the
+      // reconnect re-fetches, so the value cannot outlive the process it identifies.
+      generation: this.observingSinceMs,
     });
     this.store.set({ status: view, samples: this.samples });
   }
@@ -432,13 +436,18 @@ export class DashboardTransport {
   // envelope (not the streamed Status frame) because they are static per session. This replaced the
   // deprecated JSON GET /api/v1/status route. Best-effort: a failure just means no since-caption / config;
   // it never blocks the live view.
+  // The generation the live synthesis stamps on each sample; see onStatus.
+  private observingSinceMs: number | null = null;
+
   private async fetchObservingSince(host: string): Promise<void> {
     try {
       const client = createClient(StatusService, createDaemonTransport(host, getLiveToken()));
       const resp = await client.getStatus({});
       const ts = resp.observeStartTime;
-      if (ts)
-        this.store.set({ observingSince: Number(ts.seconds) * 1000 + Math.floor(ts.nanos / 1e6) });
+      if (ts) {
+        this.observingSinceMs = Number(ts.seconds) * 1000 + Math.floor(ts.nanos / 1e6);
+        this.store.set({ observingSince: this.observingSinceMs });
+      }
       if (resp.config) {
         this.store.set({
           config: {

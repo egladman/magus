@@ -2,13 +2,11 @@
 // per-interval rate is derived by diffing adjacent samples: hits / (hits + misses)
 // over each interval. A quiet interval (no cache activity) plots as a gap (null).
 //
-// The counters do not share a baseline across the backfill/live boundary (see
-// SampleView.cacheSrc): the metrics Backfill uses the global OTel counter, the live
-// status synthesis the warm-workspace sum. Diffing across that one crossover would
-// subtract mismatched baselines and plot a spurious gap or spike, so the crossover
-// interval is emitted as a deliberate gap (null) instead.
+// When two samples may NOT be subtracted - a baseline crossover, a daemon restart, an
+// unmeasured endpoint - lives in cacheRateSeries.ts, which this tile only plots.
 
 import type { DashboardState, SampleView } from "../state";
+import { cacheRateSeries } from "./cacheRateSeries";
 import { TimeChart, onThemeChange } from "../charts/uplot";
 import { Card, h, type Tile } from "./card";
 import type uPlot from "uplot";
@@ -46,36 +44,8 @@ export function cacheRateTile(): Tile {
   });
 
   function derive(samples: SampleView[]): uPlot.AlignedData {
-    const t: number[] = [],
-      rate: (number | null)[] = [];
-    for (let i = 1; i < samples.length; i++) {
-      const a = samples[i - 1],
-        b = samples[i];
-      t.push(b.at / 1000);
-      // Refuse to diff across a counter-source boundary: the two feeds have
-      // different baselines, so their difference is meaningless. Emit a gap.
-      if (a.cacheSrc !== b.cacheSrc) {
-        rate.push(null);
-        continue;
-      }
-      // An unmeasured endpoint has no difference to take. Same gap, same reason as the
-      // source boundary above: a rate needs two real readings, and inventing a zero for
-      // the missing one would report "no cache activity" for a minute nobody observed.
-      if (
-        a.cacheHits === null ||
-        b.cacheHits === null ||
-        a.cacheMisses === null ||
-        b.cacheMisses === null
-      ) {
-        rate.push(null);
-        continue;
-      }
-      const dh = Math.max(0, b.cacheHits - a.cacheHits);
-      const dm = Math.max(0, b.cacheMisses - a.cacheMisses);
-      const total = dh + dm;
-      rate.push(total > 0 ? (dh / total) * 100 : null);
-    }
-    return [t, rate] as uPlot.AlignedData;
+    const pts = cacheRateSeries(samples);
+    return [pts.map((p) => p.atMs / 1000), pts.map((p) => p.rate)] as uPlot.AlignedData;
   }
 
   const onResize = () => chart.resize();
