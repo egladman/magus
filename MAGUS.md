@@ -64,7 +64,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 43 | `magus query project:.` | `generate`, `buzz-test`, `lint` |
+| . | 44 | `magus query project:.` | `generate`, `buzz-test`, `lint` |
 | console | 7 | `magus query project:console` | `preflight`, `ci`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents | 5 | `magus query project:docs/guides/integrations/agents` | `ci`, `format`, `lint` |
@@ -98,7 +98,8 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `release-sign` | Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos). |
 | `release` |  |
 | `watch` | Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive. |
-| `test` | Tests with race detection, coverage, and a drift-gated coverage badge. |
+| `test` | Tests with race detection and a coverage floor. |
+| `coverage-badge` | Writes assets/coverage.svg, and is the only target that may. |
 | `build` | Compiles one artifact: the host binary, or the container image under the `container` charm. |
 | `lint` | Formats and builds the linter first, then golangci-lint, go vet, markdownlint, and shellcheck. |
 | `format` | Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. |

@@ -136,7 +136,8 @@ magus\project({
         // order-sensitive side effect, never a cache replay. exclusive: nothing
         // else should be touching go.mod or the tag namespace while it runs.
         "release": {"skip_cache": "mutates go.mod and creates VCS tags, an order-sensitive side effect", "exclusive": true},
-        // test rewrites assets/coverage.svg; a cache hit would skip the write.
+        // No skip_cache: the badge moved to coverage-badge, so a hit restores only
+        // the coverage profiles, which is what a hit should do.
         // memory_mb measured, not guessed: on a 16GB CI runner this target took
         // available memory from 1137MB to 265MB in two seconds and the runner was
         // killed, leaving no failing target to blame because the MACHINE died rather
@@ -145,10 +146,8 @@ magus\project({
         // that is the number an author can actually know; magus converts it to slots
         // per host, so it throttles peers on a 16GB runner and barely registers on a
         // 64GB workstation without this file naming either machine.
-        "test": {
-            "skip_cache": "rewrites assets/coverage.svg; a hit would skip the write",
-            "memory_mb": 10240,
-        },
+        "test": {"memory_mb": 10240},
+        "coverage-badge": {"skip_cache": "rewrites assets/coverage.svg; a hit would restore a cached badge over the committed one"},
         // The verdict depends on trivy's license classifier, which is not a declared tool
         // version and so is invisible to the cache key: a trivy upgrade that reclassifies a
         // dependency would replay the OLD verdict against unchanged sources.
@@ -1768,15 +1767,13 @@ export fun advice_test(ctx: magus\Context, args: [str]) > void !> any {
     }
 }
 
-// Tests with race detection, coverage, and a drift-gated coverage badge.
+// Tests with race detection and a coverage floor. The badge is coverage_badge's.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(advice_test);
-    // Declared because this target WRITES the badge below and gates on its match.
-    // Undeclared, a declaration-based staging review would skip it as unclaimed while ci still failed on
-    // it being stale - the workspace's account of itself disagreeing with what a
-    // target actually does, which is the disagreement declarations exist to end.
-    // It writes only under the gha charm now; the declaration covers that it may.
-    ctx.writesFiles("assets/coverage.svg");
+    // Declared so coverage_badge can read them after a cache HIT: without this the
+    // profiles are undeclared residue, restored by nothing, and the badge target
+    // finds no file to measure whenever the suite replays.
+    ctx.writesFiles("coverage.out", "coverage.hand.out");
     ctx.needs(format, buzz_test);
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
     // Measure hand-written code only. Generated files (protobuf accessors, mocks,
@@ -1789,41 +1786,42 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     fs\writeFile("coverage.hand.out",
         cov\stripGenerated(fs\readFile("coverage.out"),
             prefix: cov\modulePath(fs\readFile("go.mod")) + "/"));
-    final pct = total_coverage(proc\exec("go", ["tool", "cover", "-func=coverage.hand.out"]).stdout);
-    if (std\parseInt(pct.split(".")[0]) < 60) {
-        throw "test: coverage " + pct + "% is below the 60% floor; investigate the regression or lower the floor deliberately";
+    if (std\parseInt(coverage_percent().split(".")[0]) < 60) {
+        throw "test: coverage " + coverage_percent() + "% is below the 60% floor; investigate the regression or lower the floor deliberately";
     }
-    // The badge belongs to the CI RUNNER, and only it writes or judges the file.
-    //
-    // 105 non-test files here carry a //go:build constraint (hostmem, proc/run's
-    // pty and rusage, the cgo paths), so the denominator is a property of the
-    // machine: measured 2026-08-19, one commit read 67.6% on macOS and 66.9% on
-    // Linux. A whole percent was meant to absorb that and stopped once the gap
-    // reached 0.7pp and straddled an integer - CI demanded 66 while a laptop's
-    // `test:rw` wrote 67, so the remedy the old error named could not be carried
-    // out on the machine reading it, and any laptop run silently replaced CI's
-    // number with a local one.
-    //
-    // Excluding constrained files instead was tried and rejected: it makes the
-    // ratio portable by dropping 105 real source files out of the measurement
-    // forever. The Go answer to a platform-dependent ratio is to MERGE profiles
-    // across runners (go tool covdata merge), which needs a multi-OS matrix; this
-    // workflow is ubuntu-latest only, so there is one authoritative measurement
-    // and the badge should reflect exactly that one.
-    //
-    // The floor check above stays exact everywhere: it is the real gate, and a
-    // whole point of platform drift never approaches it.
-    final badgePct = pct.split(".")[0];
+}
+
+fun coverage_percent() > str !> any {
+    return total_coverage(proc\exec("go", ["tool", "cover", "-func=coverage.hand.out"]).stdout);
+}
+
+// Writes assets/coverage.svg, and is the only target that may.
+//
+// Split from test so the suite can be CACHED: the badge is a declared output, so a
+// hit would restore a cached one over the committed file, which is what forced
+// skip_cache onto every test run - five minutes and 10GB to re-answer a question
+// whose inputs had not moved.
+//
+// NOT named *-generate, deliberately: `generate` composes ctx.glob("*-generate"),
+// so that suffix would pull a target that needs the race-enabled suite into the
+// drift gate.
+export fun coverage_badge(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(test);
+    ctx.writesFiles("assets/coverage.svg");
+    // Only the CI runner writes or judges it. 105 non-test files carry a //go:build
+    // constraint, so the ratio is a property of the machine: 67.6% on macOS against
+    // 66.9% on Linux for one commit. A laptop that wrote it replaced CI's number.
     if (!ctx.hasCharm("gha")) { return; }
+    final badgePct = coverage_percent().split(".")[0];
     final wanted = badge\coverage("go coverage", percent: badgePct, radius: 3);
     if (ctx.hasCharm("rw")) {
         fs\writeFile(fs\join("assets", "coverage.svg"), content: wanted);
         return;
     }
-    // Compared, never written: a check that mutates the tree it is judging leaves
-    // the next drift gate reading this run's output as somebody's edit.
+    // Compared, never written: a check that mutates the tree it judges leaves its
+    // own output for the next drift gate to read as an edit.
     if (fs\readFile(fs\join("assets", "coverage.svg")) != wanted) {
-        throw "test: assets/coverage.svg does not match this runner's measurement of " + badgePct
+        throw "coverage-badge: assets/coverage.svg does not match this runner's measurement of " + badgePct
             + "%. This runner's platform set is the authoritative one, so commit a badge for "
             + badgePct + "% - `badge\\coverage(\"go coverage\", percent: \"" + badgePct + "\", radius: 3)`.";
     }
@@ -2072,7 +2070,7 @@ export fun format(ctx: magus\Context, args: [str]) > void {
 
 // Runs the CI gates through their declared dependencies.
 export fun ci(ctx: magus\Context, args: [str]) > void {
-    ctx.needs(lint, build, test, compress_cgo_test, completion_test, security);
+    ctx.needs(lint, build, test, coverage_badge, compress_cgo_test, completion_test, security);
 }
 
 // Exercises the completion scripts magus SHIPS, each inside the official image for its
