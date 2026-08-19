@@ -336,8 +336,10 @@ func (x *Project) GetTools() []*Tool {
 
 type ListToolsRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// project narrows to one workspace-relative path; empty returns all of them.
-	Project       string `protobuf:"bytes,1,opt,name=project,proto3" json:"project,omitempty"`
+	// The project whose tools these are, as a workspace-relative path; empty returns every
+	// project. Named parent per AIP-132 - a project is a real container here, unlike the
+	// workspace-scoped collections in this API, which have no second value to hold.
+	Parent        string `protobuf:"bytes,1,opt,name=parent,proto3" json:"parent,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -372,9 +374,9 @@ func (*ListToolsRequest) Descriptor() ([]byte, []int) {
 	return file_magus_tool_v1alpha1_tool_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *ListToolsRequest) GetProject() string {
+func (x *ListToolsRequest) GetParent() string {
 	if x != nil {
-		return x.Project
+		return x.Parent
 	}
 	return ""
 }
@@ -446,9 +448,9 @@ const file_magus_tool_v1alpha1_tool_proto_rawDesc = "" +
 	"\aProject\x12\x12\n" +
 	"\x04path\x18\x01 \x01(\tR\x04path\x12\x12\n" +
 	"\x04name\x18\x02 \x01(\tR\x04name\x12/\n" +
-	"\x05tools\x18\x03 \x03(\v2\x19.magus.tool.v1alpha1.ToolR\x05tools\",\n" +
-	"\x10ListToolsRequest\x12\x18\n" +
-	"\aproject\x18\x01 \x01(\tR\aproject\"M\n" +
+	"\x05tools\x18\x03 \x03(\v2\x19.magus.tool.v1alpha1.ToolR\x05tools\"*\n" +
+	"\x10ListToolsRequest\x12\x16\n" +
+	"\x06parent\x18\x01 \x01(\tR\x06parent\"M\n" +
 	"\x11ListToolsResponse\x128\n" +
 	"\bprojects\x18\x01 \x03(\v2\x1c.magus.tool.v1alpha1.ProjectR\bprojects*u\n" +
 	"\aVerdict\x12\x17\n" +

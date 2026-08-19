@@ -196,7 +196,7 @@ export function buildTokensSection(
     if (!confirm(detail)) return;
     btn.disabled = true;
     try {
-      await client.revokeToken({ identifier: t.identifier });
+      await client.revokeToken({ name: t.identifier });
       if (stale) return;
       showToast("Access tokens", "Revoked " + who + ".");
       await renderList();

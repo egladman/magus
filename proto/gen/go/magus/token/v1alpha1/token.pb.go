@@ -281,8 +281,10 @@ func (x *ListTokensResponse) GetTokens() []*TokenInfo {
 
 type RevokeTokenRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	// identifier is a token name or fingerprint (as returned in TokenInfo.identifier).
-	Identifier    string `protobuf:"bytes,1,opt,name=identifier,proto3" json:"identifier,omitempty"`
+	// The token's resource name. TokenInfo.identifier (the display fingerprint) is accepted
+	// here too, since it identifies the same token and is what a listing gives a reader to
+	// copy.
+	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -317,9 +319,9 @@ func (*RevokeTokenRequest) Descriptor() ([]byte, []int) {
 	return file_magus_token_v1alpha1_token_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *RevokeTokenRequest) GetIdentifier() string {
+func (x *RevokeTokenRequest) GetName() string {
 	if x != nil {
-		return x.Identifier
+		return x.Name
 	}
 	return ""
 }
@@ -339,11 +341,9 @@ const file_magus_token_v1alpha1_token_proto_rawDesc = "" +
 	"expireTimeJ\x04\b\x04\x10\x05J\x04\b\x06\x10\aR\acreatedR\tlast_used\"\x13\n" +
 	"\x11ListTokensRequest\"M\n" +
 	"\x12ListTokensResponse\x127\n" +
-	"\x06tokens\x18\x01 \x03(\v2\x1f.magus.token.v1alpha1.TokenInfoR\x06tokens\"=\n" +
-	"\x12RevokeTokenRequest\x12'\n" +
-	"\n" +
-	"identifier\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\n" +
-	"identifier*z\n" +
+	"\x06tokens\x18\x01 \x03(\v2\x1f.magus.token.v1alpha1.TokenInfoR\x06tokens\"1\n" +
+	"\x12RevokeTokenRequest\x12\x1b\n" +
+	"\x04name\x18\x01 \x01(\tB\a\xbaH\x04r\x02\x10\x01R\x04name*z\n" +
 	"\n" +
 	"TokenScope\x12\x1b\n" +
 	"\x17TOKEN_SCOPE_UNSPECIFIED\x10\x00\x12\x18\n" +

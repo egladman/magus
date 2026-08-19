@@ -111,7 +111,7 @@ func (s *Service) ListTokens(_ context.Context, _ *connect.Request[tokenv1.ListT
 // Otherwise it falls to the connector store. The cli token is never consulted, so it
 // cannot be revoked here even if its fingerprint is supplied.
 func (s *Service) RevokeToken(_ context.Context, req *connect.Request[tokenv1.RevokeTokenRequest]) (*connect.Response[tokenv1.TokenInfo], error) {
-	id := strings.TrimSpace(req.Msg.GetIdentifier())
+	id := strings.TrimSpace(req.Msg.GetName())
 	if id == "" {
 		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("token: identifier is required"))
 	}

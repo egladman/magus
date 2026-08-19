@@ -131,17 +131,12 @@ service ViewerService {
   rpc StreamEvents(StreamEventsRequest) returns (stream StreamEventsResponse);
 }
 
-// Selector picks a run: one target's execution (ref) or a whole invocation.
-message Selector {
-  oneof of {
-    option (buf.validate.oneof).required = true;
-    string ref = 1 [(buf.validate.field).string.pattern = "^out[0-9a-f]+$"];
-    string invocation = 2 [(buf.validate.field).string.pattern = "^inv[0-9a-z]+$"];
-  }
-}
-
 message GetInvocationRequest {
-  Selector selector = 1 [(buf.validate.field).required = true];
+  // A run's resource name: an output ref ("out<hex>") or an invocation id ("inv<base36>").
+  // One field rather than a oneof because the two patterns are disjoint, so a single string
+  // still identifies exactly one run - and this service spelled the same identity three ways
+  // before (a oneof here, the same oneof on ListEvents, a bare string on StreamEvents).
+  string name = 1 [(buf.validate.field).string.pattern = "^(out[0-9a-f]+|inv[0-9a-z]+)$"];
 }
 
 // EventQuery filters an invocation's events server-side (for a large log). It is the viewer's
@@ -162,7 +157,8 @@ message EventQuery {
 }
 
 message ListEventsRequest {
-  Selector selector = 1 [(buf.validate.field).required = true];
+  // The run that owns these events - the collection's parent, per AIP-132.
+  string parent = 1 [(buf.validate.field).string.pattern = "^(out[0-9a-f]+|inv[0-9a-z]+)$"];
   int32 page_size = 2 [(buf.validate.field).int32 = {gte: 0, lte: 5000}];
   string page_token = 3;
   EventQuery filter = 4;  // viewer-typed content + time filter
@@ -173,7 +169,9 @@ message ListEventsResponse {
 }
 
 message StreamEventsRequest {
-  string invocation = 1 [(buf.validate.field).string.pattern = "^inv[0-9a-z]+$"];
+  // The invocation whose events stream. Named parent to match ListEvents; only a whole
+  // invocation streams, so this one does not take an output ref.
+  string parent = 1 [(buf.validate.field).string.pattern = "^inv[0-9a-z]+$"];
   EventQuery filter = 2;  // viewer-typed content filter; filter.time.since resumes the stream
 }
 message StreamEventsResponse {

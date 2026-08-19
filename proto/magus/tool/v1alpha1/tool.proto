@@ -93,8 +93,10 @@ service ToolService {
 }
 
 message ListToolsRequest {
-  // project narrows to one workspace-relative path; empty returns all of them.
-  string project = 1;
+  // The project whose tools these are, as a workspace-relative path; empty returns every
+  // project. Named parent per AIP-132 - a project is a real container here, unlike the
+  // workspace-scoped collections in this API, which have no second value to hold.
+  string parent = 1;
 }
 
 message ListToolsResponse {

@@ -31,6 +31,7 @@
 package notesv1alpha1
 
 import (
+	_ "buf.build/gen/go/bufbuild/protovalidate/protocolbuffers/go/buf/validate"
 	protoreflect "google.golang.org/protobuf/reflect/protoreflect"
 	protoimpl "google.golang.org/protobuf/runtime/protoimpl"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
@@ -708,10 +709,11 @@ func (x *ListNotesResponse) GetStores() []*StoreStatus {
 
 type GetNoteRequest struct {
 	state protoimpl.MessageState `protogen:"open.v1"`
-	Name  string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// scope disambiguates a name that exists in both stores. Required: guessing which store was
-	// meant is the mistake worth refusing, since the two mean different things to a reader.
-	Scope         Scope `protobuf:"varint,2,opt,name=scope,proto3,enum=magus.notes.v1alpha1.Scope" json:"scope,omitempty"`
+	// The note's resource name, "shared/{note}" or "private/{note}". The store is part of the
+	// name rather than a second field because a name and a scope arriving separately are a
+	// compound key that can disagree, and the store is the axis a reader must never have to
+	// guess - the two mean different things about who can read the note.
+	Name          string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -753,18 +755,11 @@ func (x *GetNoteRequest) GetName() string {
 	return ""
 }
 
-func (x *GetNoteRequest) GetScope() Scope {
-	if x != nil {
-		return x.Scope
-	}
-	return Scope_SCOPE_UNSPECIFIED
-}
-
 var File_magus_notes_v1alpha1_notes_proto protoreflect.FileDescriptor
 
 const file_magus_notes_v1alpha1_notes_proto_rawDesc = "" +
 	"\n" +
-	" magus/notes/v1alpha1/notes.proto\x12\x14magus.notes.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\"\xc3\x01\n" +
+	" magus/notes/v1alpha1/notes.proto\x12\x14magus.notes.v1alpha1\x1a\x1fgoogle/protobuf/timestamp.proto\x1a\x1bbuf/validate/validate.proto\"\xc3\x01\n" +
 	"\x06Anchor\x124\n" +
 	"\x04kind\x18\x01 \x01(\x0e2 .magus.notes.v1alpha1.AnchorKindR\x04kind\x12\x16\n" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x12:\n" +
@@ -799,10 +794,9 @@ const file_magus_notes_v1alpha1_notes_proto_rawDesc = "" +
 	"\x11ListNotesResponse\x120\n" +
 	"\x05notes\x18\x01 \x03(\v2\x1a.magus.notes.v1alpha1.NoteR\x05notes\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\x129\n" +
-	"\x06stores\x18\x03 \x03(\v2!.magus.notes.v1alpha1.StoreStatusR\x06stores\"W\n" +
-	"\x0eGetNoteRequest\x12\x12\n" +
-	"\x04name\x18\x01 \x01(\tR\x04name\x121\n" +
-	"\x05scope\x18\x02 \x01(\x0e2\x1b.magus.notes.v1alpha1.ScopeR\x05scope*C\n" +
+	"\x06stores\x18\x03 \x03(\v2!.magus.notes.v1alpha1.StoreStatusR\x06stores\"B\n" +
+	"\x0eGetNoteRequest\x120\n" +
+	"\x04name\x18\x01 \x01(\tB\x1c\xbaH\x19r\x172\x15^(shared|private)/.+$R\x04name*C\n" +
 	"\x05Scope\x12\x15\n" +
 	"\x11SCOPE_UNSPECIFIED\x10\x00\x12\x10\n" +
 	"\fSCOPE_SHARED\x10\x01\x12\x11\n" +
@@ -870,16 +864,15 @@ var file_magus_notes_v1alpha1_notes_proto_depIdxs = []int32{
 	0,  // 6: magus.notes.v1alpha1.StoreStatus.scope:type_name -> magus.notes.v1alpha1.Scope
 	5,  // 7: magus.notes.v1alpha1.ListNotesResponse.notes:type_name -> magus.notes.v1alpha1.Note
 	6,  // 8: magus.notes.v1alpha1.ListNotesResponse.stores:type_name -> magus.notes.v1alpha1.StoreStatus
-	0,  // 9: magus.notes.v1alpha1.GetNoteRequest.scope:type_name -> magus.notes.v1alpha1.Scope
-	7,  // 10: magus.notes.v1alpha1.NotesService.ListNotes:input_type -> magus.notes.v1alpha1.ListNotesRequest
-	9,  // 11: magus.notes.v1alpha1.NotesService.GetNote:input_type -> magus.notes.v1alpha1.GetNoteRequest
-	8,  // 12: magus.notes.v1alpha1.NotesService.ListNotes:output_type -> magus.notes.v1alpha1.ListNotesResponse
-	5,  // 13: magus.notes.v1alpha1.NotesService.GetNote:output_type -> magus.notes.v1alpha1.Note
-	12, // [12:14] is the sub-list for method output_type
-	10, // [10:12] is the sub-list for method input_type
-	10, // [10:10] is the sub-list for extension type_name
-	10, // [10:10] is the sub-list for extension extendee
-	0,  // [0:10] is the sub-list for field type_name
+	7,  // 9: magus.notes.v1alpha1.NotesService.ListNotes:input_type -> magus.notes.v1alpha1.ListNotesRequest
+	9,  // 10: magus.notes.v1alpha1.NotesService.GetNote:input_type -> magus.notes.v1alpha1.GetNoteRequest
+	8,  // 11: magus.notes.v1alpha1.NotesService.ListNotes:output_type -> magus.notes.v1alpha1.ListNotesResponse
+	5,  // 12: magus.notes.v1alpha1.NotesService.GetNote:output_type -> magus.notes.v1alpha1.Note
+	11, // [11:13] is the sub-list for method output_type
+	9,  // [9:11] is the sub-list for method input_type
+	9,  // [9:9] is the sub-list for extension type_name
+	9,  // [9:9] is the sub-list for extension extendee
+	0,  // [0:9] is the sub-list for field type_name
 }
 
 func init() { file_magus_notes_v1alpha1_notes_proto_init() }

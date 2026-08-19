@@ -123,7 +123,7 @@ func TestRevokeShareTokenClosesListener(t *testing.T) {
 	}
 	s := newIsolatedService(t, sh)
 
-	resp, err := s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Identifier: "feedface"}))
+	resp, err := s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Name: "feedface"}))
 	require.NoError(t, err)
 	assert.True(t, sh.closed, "revoking the share token must close its listener via CloseIf")
 	assert.Equal(t, "feedface", sh.closeIfArg, "the handler must close by the matched fingerprint, not the raw identifier")
@@ -148,7 +148,7 @@ func TestRevokeShareLostRaceIsNotFound(t *testing.T) {
 	}
 	s := newIsolatedService(t, sh)
 
-	_, err := s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Identifier: "feedface"}))
+	_, err := s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Name: "feedface"}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 	assert.False(t, sh.closed, "a lost race must tear down nothing")
@@ -182,7 +182,7 @@ func TestRevokeSharePrefixResolvesToConnector(t *testing.T) {
 	}
 	s.share = sh
 
-	resp, err := s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Identifier: prefix}))
+	resp, err := s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Name: prefix}))
 	require.NoError(t, err)
 	assert.False(t, sh.closed, "a prefix must never silently revoke the share")
 	assert.Equal(t, tokenv1.TokenScope_TOKEN_SCOPE_CONNECTOR, resp.Msg.GetScope(),
@@ -202,7 +202,7 @@ func TestNilShareManagerConstructor(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, list.Msg.GetTokens(), "no connectors and no share token")
 
-	_, err = s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Identifier: "share to phone"}))
+	_, err = s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Name: "share to phone"}))
 	require.Error(t, err, "with no share manager, the share label matches nothing")
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 }
@@ -241,7 +241,7 @@ func TestOperatorTokenInvisibleAndImmutable(t *testing.T) {
 
 	// A deliberate attempt to revoke the operator token by its fingerprint must fail,
 	// not silently pass: it falls through to the connector store, which does not hold it.
-	_, err = s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Identifier: cliFingerprint}))
+	_, err = s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Name: cliFingerprint}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 
@@ -374,7 +374,7 @@ func TestTierHierarchyAtGuard(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "connector must not list tokens")
 
-	_, err = asConnector.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Identifier: "mcp-client"}))
+	_, err = asConnector.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Name: "mcp-client"}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "connector must not revoke tokens")
 
@@ -390,7 +390,7 @@ func TestTierHierarchyAtGuard(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, list.Msg.GetTokens(), 1)
 
-	_, err = asCLI.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Identifier: "mcp-client"}))
+	_, err = asCLI.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Name: "mcp-client"}))
 	require.NoError(t, err)
 }
 

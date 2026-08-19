@@ -22,6 +22,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -120,23 +121,40 @@ func (s *Service) ListNotes(ctx context.Context, _ *connect.Request[notesv1.List
 	return connect.NewResponse(out), nil
 }
 
-// GetNote returns one note in full, including its body. scope is required rather than
-// inferred: a name can exist in both stores, and the two mean different things to a reader,
-// so guessing which was meant is the one thing that must not happen.
+// splitNoteName splits a note resource name into its store and bare id. It reports false
+// for anything that does not name a store, which is the whole point of folding the store
+// into the name: an unprefixed name is ambiguous and must be refused, not guessed.
+func splitNoteName(name string) (notesv1.Scope, string, bool) {
+	store, id, found := strings.Cut(name, "/")
+	if !found || id == "" {
+		return notesv1.Scope_SCOPE_UNSPECIFIED, "", false
+	}
+	switch store {
+	case "shared":
+		return notesv1.Scope_SCOPE_SHARED, id, true
+	case "private":
+		return notesv1.Scope_SCOPE_PRIVATE, id, true
+	}
+	return notesv1.Scope_SCOPE_UNSPECIFIED, "", false
+}
+
+// GetNote returns one note in full, including its body. The store is carried in the name
+// ("shared/x", "private/x") rather than inferred: a bare name can exist in both, and the two
+// mean different things to a reader, so guessing which was meant must not happen.
 func (s *Service) GetNote(ctx context.Context, req *connect.Request[notesv1.GetNoteRequest]) (*connect.Response[notesv1.Note], error) {
-	want := req.Msg.GetScope()
-	if want == notesv1.Scope_SCOPE_UNSPECIFIED {
+	want, id, ok := splitNoteName(req.Msg.GetName())
+	if !ok {
 		return nil, connect.NewError(connect.CodeInvalidArgument,
-			errors.New("notes: scope is required; a name can exist in both stores and they mean different things about who can read the note"))
+			errors.New(`notes: name must be "shared/<note>" or "private/<note>"; the store is part of the name because a bare name can exist in both and they mean different things about who can read the note`))
 	}
 	for _, sd := range s.stores() {
 		if sd.pbScope != want || !sd.declared {
 			continue
 		}
-		n, err := store.Get(sd.dir, req.Msg.GetName())
+		n, err := store.Get(sd.dir, id)
 		if err != nil {
 			if errors.Is(err, os.ErrNotExist) {
-				return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("notes: no %s note named %q", sd.scope, req.Msg.GetName()))
+				return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("notes: no %s note named %q", sd.scope, id))
 			}
 			return nil, connect.NewError(connect.CodeInternal, err)
 		}

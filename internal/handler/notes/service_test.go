@@ -121,7 +121,7 @@ func TestGetNoteRefusesToGuessTheStore(t *testing.T) {
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 
 	got, err := svc.GetNote(t.Context(), connect.NewRequest(&notesv1.GetNoteRequest{
-		Name: "auth", Scope: notesv1.Scope_SCOPE_SHARED,
+		Name: "shared/auth",
 	}))
 	require.NoError(t, err)
 	assert.Equal(t, "why this is true", got.Msg.GetBody(), "GetNote is where the prose arrives")
@@ -136,7 +136,7 @@ func TestGetNoteFromAnUndeclaredStoreIsNotFound(t *testing.T) {
 		store.Anchor{Kind: store.AnchorProject, Target: "."})
 
 	_, err := sharedOnly(root).GetNote(t.Context(), connect.NewRequest(&notesv1.GetNoteRequest{
-		Name: "auth", Scope: notesv1.Scope_SCOPE_PRIVATE,
+		Name: "private/auth",
 	}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))

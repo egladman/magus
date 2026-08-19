@@ -103,6 +103,8 @@ message ListTokensResponse {
 }
 
 message RevokeTokenRequest {
-  // identifier is a token name or fingerprint (as returned in TokenInfo.identifier).
-  string identifier = 1 [(buf.validate.field).string.min_len = 1];
+  // The token's resource name. TokenInfo.identifier (the display fingerprint) is accepted
+  // here too, since it identifies the same token and is what a listing gives a reader to
+  // copy.
+  string name = 1 [(buf.validate.field).string.min_len = 1];
 }

@@ -40,7 +40,7 @@ func probedProject(path, spellName, bin string, supported spells.VersionBounds, 
 
 func list(t *testing.T, s *Service, project string) *toolv1.ListToolsResponse {
 	t.Helper()
-	resp, err := s.ListTools(t.Context(), connect.NewRequest(&toolv1.ListToolsRequest{Project: project}))
+	resp, err := s.ListTools(t.Context(), connect.NewRequest(&toolv1.ListToolsRequest{Parent: project}))
 	require.NoError(t, err)
 	return resp.Msg
 }
@@ -195,7 +195,7 @@ func TestListToolsFiltersToOneProject(t *testing.T) {
 // indistinguishable from a project that declares no tool.
 func TestListToolsRejectsAnUnknownProject(t *testing.T) {
 	s := NewService(fakeWS{projects: []*types.Project{{Path: ".", Name: "root"}}})
-	_, err := s.ListTools(t.Context(), connect.NewRequest(&toolv1.ListToolsRequest{Project: "nope"}))
+	_, err := s.ListTools(t.Context(), connect.NewRequest(&toolv1.ListToolsRequest{Parent: "nope"}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 }

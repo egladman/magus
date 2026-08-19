@@ -71,7 +71,7 @@ var _ toolv1alpha1connect.ToolServiceHandler = (*Service)(nil)
 
 // ListTools reports every project's tools, or one project's when the request names it.
 func (s *Service) ListTools(ctx context.Context, req *connect.Request[toolv1.ListToolsRequest]) (*connect.Response[toolv1.ListToolsResponse], error) {
-	want := req.Msg.GetProject()
+	want := req.Msg.GetParent()
 	out := &toolv1.ListToolsResponse{}
 	matched := false
 	for _, p := range s.ws.All() {

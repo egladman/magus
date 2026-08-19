@@ -124,7 +124,7 @@ func TestInterceptorRecordsMutationSkipsRead(t *testing.T) {
 		t.Fatalf("ListTokens: %v", err)
 	}
 	// A mutation IS recorded, with the server-stamped actor and the method as the action.
-	if _, err := client.RevokeToken(ctx, connect.NewRequest(&tokenv1.RevokeTokenRequest{Identifier: "abc"})); err != nil {
+	if _, err := client.RevokeToken(ctx, connect.NewRequest(&tokenv1.RevokeTokenRequest{Name: "abc"})); err != nil {
 		t.Fatalf("RevokeToken: %v", err)
 	}
 
@@ -162,7 +162,7 @@ func TestInterceptorAuditReadsRecordsRead(t *testing.T) {
 	if _, err := client.ListTokens(ctx, connect.NewRequest(&tokenv1.ListTokensRequest{})); err != nil {
 		t.Fatalf("ListTokens: %v", err)
 	}
-	if _, err := client.RevokeToken(ctx, connect.NewRequest(&tokenv1.RevokeTokenRequest{Identifier: "abc"})); err != nil {
+	if _, err := client.RevokeToken(ctx, connect.NewRequest(&tokenv1.RevokeTokenRequest{Name: "abc"})); err != nil {
 		t.Fatalf("RevokeToken: %v", err)
 	}
 
@@ -210,7 +210,7 @@ func TestInterceptorRecordsFailedMutation(t *testing.T) {
 	defer srv.Close()
 
 	client := tokenv1alpha1connect.NewTokenServiceClient(srv.Client(), srv.URL)
-	if _, err := client.RevokeToken(context.Background(), connect.NewRequest(&tokenv1.RevokeTokenRequest{Identifier: "x"})); err == nil {
+	if _, err := client.RevokeToken(context.Background(), connect.NewRequest(&tokenv1.RevokeTokenRequest{Name: "x"})); err == nil {
 		t.Fatal("expected RevokeToken to fail")
 	}
 

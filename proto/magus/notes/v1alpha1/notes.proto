@@ -26,6 +26,7 @@ syntax = "proto3";
 package magus.notes.v1alpha1;
 
 import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
 
 // NotesService lists the workspace's notes and reads one in full.
 service NotesService {
@@ -172,8 +173,9 @@ message ListNotesResponse {
 }
 
 message GetNoteRequest {
-  string name = 1;
-  // scope disambiguates a name that exists in both stores. Required: guessing which store was
-  // meant is the mistake worth refusing, since the two mean different things to a reader.
-  Scope scope = 2;
+  // The note's resource name, "shared/{note}" or "private/{note}". The store is part of the
+  // name rather than a second field because a name and a scope arriving separately are a
+  // compound key that can disagree, and the store is the axis a reader must never have to
+  // guess - the two mean different things about who can read the note.
+  string name = 1 [(buf.validate.field).string.pattern = "^(shared|private)/.+$"];
 }
