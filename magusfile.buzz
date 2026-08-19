@@ -1771,12 +1771,12 @@ export fun advice_test(ctx: magus\Context, args: [str]) > void !> any {
 // Tests with race detection, coverage, and a drift-gated coverage badge.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(advice_test);
-    // Declared because this target WRITES the badge below and gates on its drift.
+    // Declared because this target WRITES the badge below and gates on its match.
     // Undeclared, a declaration-based staging review would skip it as unclaimed while ci still failed on
     // it being stale - the workspace's account of itself disagreeing with what a
     // target actually does, which is the disagreement declarations exist to end.
+    // It writes only under the gha charm now; the declaration covers that it may.
     ctx.writesFiles("assets/coverage.svg");
-    final badgeBefore = drift.hashes([fs\join("assets", "coverage.svg")]);
     ctx.needs(format, buzz_test);
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
     // Measure hand-written code only. Generated files (protobuf accessors, mocks,
@@ -1793,18 +1793,39 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     if (std\parseInt(pct.split(".")[0]) < 60) {
         throw "test: coverage " + pct + "% is below the 60% floor; investigate the regression or lower the floor deliberately";
     }
-    // Whole percent on the BADGE, one decimal for the floor check above. The
-    // module has files that only compile on one platform (hostmem, proc/run), so
-    // the ratio legitimately differs between a macOS laptop and a Linux runner -
-    // 67.4 here, 67.3 there. Committing a tenth of a percent made a generated
-    // artifact gate on the machine that produced it, which no contributor on the
-    // wrong OS could satisfy. A whole number carries the same information and
-    // survives the crossing.
-    fs\writeFile(fs\join("assets", "coverage.svg"),
-        badge\coverage("go coverage", percent: pct.split(".")[0], radius: 3));
-    if (ctx.hasCharm("rw")) { return; }
-    if (drift.changedSince(badgeBefore, [fs\join("assets", "coverage.svg")]).len() > 0) {
-        throw "test: assets/coverage.svg is stale; re-run `magus run test:rw .` and commit the badge";
+    // The badge belongs to the CI RUNNER, and only it writes or judges the file.
+    //
+    // 105 non-test files here carry a //go:build constraint (hostmem, proc/run's
+    // pty and rusage, the cgo paths), so the denominator is a property of the
+    // machine: measured 2026-08-19, one commit read 67.6% on macOS and 66.9% on
+    // Linux. A whole percent was meant to absorb that and stopped once the gap
+    // reached 0.7pp and straddled an integer - CI demanded 66 while a laptop's
+    // `test:rw` wrote 67, so the remedy the old error named could not be carried
+    // out on the machine reading it, and any laptop run silently replaced CI's
+    // number with a local one.
+    //
+    // Excluding constrained files instead was tried and rejected: it makes the
+    // ratio portable by dropping 105 real source files out of the measurement
+    // forever. The Go answer to a platform-dependent ratio is to MERGE profiles
+    // across runners (go tool covdata merge), which needs a multi-OS matrix; this
+    // workflow is ubuntu-latest only, so there is one authoritative measurement
+    // and the badge should reflect exactly that one.
+    //
+    // The floor check above stays exact everywhere: it is the real gate, and a
+    // whole point of platform drift never approaches it.
+    final badgePct = pct.split(".")[0];
+    if (!ctx.hasCharm("gha")) { return; }
+    final wanted = badge\coverage("go coverage", percent: badgePct, radius: 3);
+    if (ctx.hasCharm("rw")) {
+        fs\writeFile(fs\join("assets", "coverage.svg"), content: wanted);
+        return;
+    }
+    // Compared, never written: a check that mutates the tree it is judging leaves
+    // the next drift gate reading this run's output as somebody's edit.
+    if (fs\readFile(fs\join("assets", "coverage.svg")) != wanted) {
+        throw "test: assets/coverage.svg does not match this runner's measurement of " + badgePct
+            + "%. This runner's platform set is the authoritative one, so commit a badge for "
+            + badgePct + "% - `badge\\coverage(\"go coverage\", percent: \"" + badgePct + "\", radius: 3)`.";
     }
 }
 

@@ -801,6 +801,7 @@
             "buzz-test"
           ],
           "charms": [
+            "gha",
             "rw"
           ],
           "spells": [
