@@ -3,10 +3,10 @@
 // subscribe. Two feeds ride alongside each other, both locked to the validated
 // loopback host and both bearing the shared token:
 //
-//   1. /api/v1/events SSE (event: status) -> magus.status.v1.Status: the instantaneous
+//   1. /api/v1/events SSE (event: status) -> magus.status.v1alpha1.Status: the instantaneous
 //      view (health, pool, running targets, workspaces, live cache tallies). Its
 //      open/close is THE connection whose state drives the connected/disconnected pill.
-//   2. magus.metrics.v1.MetricsService.StreamMetrics over ConnectRPC: the developer view
+//   2. magus.metrics.v1alpha1.MetricsService.StreamMetrics over ConnectRPC: the developer view
 //      (latency percentiles, remote cache, per-target/MCP/Buzz/Sandbox families). First
 //      message is a Backfill (Sample history), then a Snapshot per ~1s tick.
 //
@@ -16,11 +16,15 @@
 
 import { fromBinary } from "@bufbuild/protobuf";
 import { createClient, type Client } from "@connectrpc/connect";
-import { StatusSchema, StatusService, type Status } from "../../gen/magus/status/v1/status_pb";
-import { MetricsService } from "../../gen/magus/metrics/v1/metrics_pb";
-import { ActivityService, Kind } from "../../gen/magus/activity/v1/activity_pb";
-import { InsightService } from "../../gen/magus/insight/v1/insight_pb";
-import { ToolService, Verdict } from "../../gen/magus/tool/v1/tool_pb";
+import {
+  StatusSchema,
+  StatusService,
+  type Status,
+} from "../../gen/magus/status/v1alpha1/status_pb";
+import { MetricsService } from "../../gen/magus/metrics/v1alpha1/metrics_pb";
+import { ActivityService, Kind } from "../../gen/magus/activity/v1alpha1/activity_pb";
+import { InsightService } from "../../gen/magus/insight/v1alpha1/insight_pb";
+import { ToolService, Verdict } from "../../gen/magus/tool/v1alpha1/tool_pb";
 import {
   authHeaders,
   createDaemonTransport,
@@ -51,7 +55,7 @@ const RECONNECT_MS = 3000;
 // that window on a busy daemon - an agent mid-task easily produces a few hundred tool calls.
 const ACTIVITY_POLL_MS = 4000;
 const ACTIVITY_PAGE = 500;
-// Insight is an on-demand unary read (magus.insight.v1.InsightService.GetInsight), server-side
+// Insight is an on-demand unary read (magus.insight.v1alpha1.InsightService.GetInsight), server-side
 // cached ~10s. Not on the status SSE: it is polled on a cadence, refetched on open and on a manual
 // refresh. The interval is the operator's configured refresh rate (getPollMs, default 20s - just
 // above the server cache TTL).
@@ -218,6 +222,10 @@ export class DashboardTransport {
       // The status pool tallies are a DIFFERENT counter baseline than the metrics
       // Backfill's OTel counter; tag it so cacheRate skips the crossover diff.
       cacheSrc: "status",
+      // The streamed frame does not carry observing-since - it rides the one-shot envelope -
+      // so reuse the value fetched at connect. A daemon restart drops this stream, and the
+      // reconnect re-fetches, so the value cannot outlive the process it identifies.
+      generation: this.observingSinceMs,
     });
     this.store.set({ status: view, samples: this.samples });
   }
@@ -274,7 +282,7 @@ export class DashboardTransport {
 
   // ---- activity trail poll -------------------------------------------------
   //
-  // POLLED, not streamed, and deliberately so for now. ActivityService exposes only ListActivity -
+  // POLLED, not streamed, and deliberately so for now. ActivityService exposes only ListActivityEvents -
   // a request/response page - so a live feed would mean designing and shipping a server-stream
   // first. A page of the most recent events every few seconds is enough for a tile that reports
   // "agents active in the last five minutes", and it needs no proto change at all. If the tile ever
@@ -300,7 +308,7 @@ export class DashboardTransport {
     if (!host) return;
     try {
       const client = createClient(ActivityService, createDaemonTransport(host, getLiveToken()));
-      const resp = await client.listActivity({
+      const resp = await client.listActivityEvents({
         pageSize: ACTIVITY_PAGE,
         // Only the two kinds the tile reads. Filtering server-side keeps a busy daemon's job and
         // memory events from crowding the page and pushing agent events off the end of it.
@@ -370,8 +378,8 @@ export class DashboardTransport {
             effectiveWindow: renderWindow(tool.effective),
             verdict: verdictLabel(tool.verdict),
             code: tool.diagnosticCode,
-            probedAtMs: tool.probedAt
-              ? Number(tool.probedAt.seconds) * 1000 + Math.floor(tool.probedAt.nanos / 1e6)
+            probedAtMs: tool.probeTime
+              ? Number(tool.probeTime.seconds) * 1000 + Math.floor(tool.probeTime.nanos / 1e6)
               : 0,
           });
         }
@@ -416,7 +424,7 @@ export class DashboardTransport {
     try {
       const client = createClient(InsightService, createDaemonTransport(host, getLiveToken()));
       const resp = await client.getInsight({}, { signal: this.insightAbort.signal });
-      if (resp.insight) this.store.set({ insight: mapInsight(resp.insight) });
+      this.store.set({ insight: mapInsight(resp) });
     } catch {
       // An abort, a network blip, or a daemon with no workspace (CodeUnavailable): leave the
       // prior insight in place; the poll retries.
@@ -428,13 +436,18 @@ export class DashboardTransport {
   // envelope (not the streamed Status frame) because they are static per session. This replaced the
   // deprecated JSON GET /api/v1/status route. Best-effort: a failure just means no since-caption / config;
   // it never blocks the live view.
+  // The generation the live synthesis stamps on each sample; see onStatus.
+  private observingSinceMs: number | null = null;
+
   private async fetchObservingSince(host: string): Promise<void> {
     try {
       const client = createClient(StatusService, createDaemonTransport(host, getLiveToken()));
       const resp = await client.getStatus({});
-      const ts = resp.observingSince;
-      if (ts)
-        this.store.set({ observingSince: Number(ts.seconds) * 1000 + Math.floor(ts.nanos / 1e6) });
+      const ts = resp.observeStartTime;
+      if (ts) {
+        this.observingSinceMs = Number(ts.seconds) * 1000 + Math.floor(ts.nanos / 1e6);
+        this.store.set({ observingSince: this.observingSinceMs });
+      }
       if (resp.config) {
         this.store.set({
           config: {

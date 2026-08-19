@@ -1,6 +1,6 @@
 // Package auth manages the shared-secret bearer token that guards the magus
 // MCP HTTP endpoint and provides the HTTP middleware that enforces it. The CLI
-// (`magus config mcp token ...`) and the MCP server resolve and read the exact
+// (`magus config token ...`) and the MCP server resolve and read the exact
 // same token file and share one implementation.
 //
 // The token is a 256-bit random secret, base64url-encoded, stored 0600 in the

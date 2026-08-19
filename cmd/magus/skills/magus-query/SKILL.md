@@ -76,6 +76,21 @@ magus refs <symbol> --occurrences -o json
 magus reports the sites; YOU apply the edits. It will not rewrite the tree for you, the
 same way `magus affected` names what a change reaches without touching it.
 
+**Never drive the rewrite from a pattern** - not `sed -i`, not a scripted
+substitute-and-write. A regex cannot tell YOUR symbol from a dependency's symbol of the
+same name, and it writes before anyone reads a diff: a `\.Sum\b` rewrite aimed at one
+proto field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`. The
+index knows which is which. Apply the sites it reports, then let the compiler enumerate
+what still moved; widening the pattern until the errors stop is the same mistake with
+extra steps.
+
+**A not-indexed project is a stop, not an empty result.** `magus refs` says
+`verdict: unknown, not absent` and names the projects it could not see. Run
+`magus graph build` and ask again. Reading that verdict as "no matches" and falling back
+to a text search is how a rename misses every site in an unindexed project - and a fresh
+worktree starts unindexed, so this is the normal state at the moment you most want a
+rename.
+
 Three things decide whether the result is usable, and skipping any of them is how a bulk
 rewrite corrupts a file:
 

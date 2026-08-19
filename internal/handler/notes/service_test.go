@@ -12,7 +12,7 @@ import (
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/internal/graph/knowledge"
 	store "github.com/egladman/magus/internal/notes"
-	notesv1 "github.com/egladman/magus/proto/gen/go/magus/notes/v1"
+	notesv1 "github.com/egladman/magus/proto/gen/go/magus/notes/v1alpha1"
 )
 
 // coldWorkspace is a workspace whose knowledge graph will not load - the ordinary state on a
@@ -121,10 +121,10 @@ func TestGetNoteRefusesToGuessTheStore(t *testing.T) {
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 
 	got, err := svc.GetNote(t.Context(), connect.NewRequest(&notesv1.GetNoteRequest{
-		Name: "auth", Scope: notesv1.Scope_SCOPE_SHARED,
+		Name: "shared/auth",
 	}))
 	require.NoError(t, err)
-	assert.Equal(t, "why this is true", got.Msg.GetNote().GetBody(), "GetNote is where the prose arrives")
+	assert.Equal(t, "why this is true", got.Msg.GetBody(), "GetNote is where the prose arrives")
 }
 
 // TestGetNoteFromAnUndeclaredStoreIsNotFound: asking the private store for a note when this
@@ -136,7 +136,7 @@ func TestGetNoteFromAnUndeclaredStoreIsNotFound(t *testing.T) {
 		store.Anchor{Kind: store.AnchorProject, Target: "."})
 
 	_, err := sharedOnly(root).GetNote(t.Context(), connect.NewRequest(&notesv1.GetNoteRequest{
-		Name: "auth", Scope: notesv1.Scope_SCOPE_PRIVATE,
+		Name: "private/auth",
 	}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))

@@ -6,7 +6,7 @@
 // the #demo reveal, so scheduleLiveRender is the shared "one re-render per frame" path.
 
 import { fromBinary } from "@bufbuild/protobuf";
-import { EventSchema, Kind, Status } from "../../gen/magus/viewer/v1/viewer_pb";
+import { EventSchema, Kind, Status } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
 import { consumeLiveToken, getLiveToken, fetchSSE, logsLink } from "../../lib/daemon";
 import { notify, matchAuthorMarker } from "../../lib/notifications";
 import type { ViewerParams } from "./fragment";

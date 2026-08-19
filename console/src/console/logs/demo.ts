@@ -1,6 +1,6 @@
 import { must } from "../../lib/guards";
 // demo.ts - the daemon-free showcase (#demo). Replay the shared scenario (demo-scenario.ts) as two
-// magus.viewer.v1 Journals and REVEAL the primary one incrementally so the page feels like a live run
+// magus.viewer.v1alpha1 Journals and REVEAL the primary one incrementally so the page feels like a live run
 // streaming in. The primary (streamed) invocation is the failing services/identity:test run an agent
 // kicked off ~92m ago - the beat where a libs/authkit contract change takes down a downstream token
 // verifier; the completed sibling shown alongside it is the earlier `magus affected ci` sweep, mostly
@@ -15,7 +15,7 @@ import { must } from "../../lib/guards";
 // render path, no transport, nothing fetched.
 
 import { create } from "@bufbuild/protobuf";
-import type { Journal } from "../../gen/magus/viewer/v1/viewer_pb";
+import type { Journal } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
 import {
   EventSchema,
   JournalSchema,
@@ -23,7 +23,7 @@ import {
   Status,
   Stream,
   Trigger,
-} from "../../gen/magus/viewer/v1/viewer_pb";
+} from "../../gen/magus/viewer/v1alpha1/viewer_pb";
 import { state } from "./state";
 import { emptyEl, setRefIdentity } from "./dom";
 import { tsMs } from "./waterfall";

@@ -364,7 +364,7 @@ func daemonDefaultAddr() string {
 }
 
 // serverJob submits a named background maintenance job to a running daemon and returns
-// immediately, the CLI counterpart to the magus.job.v1 JobService RPC. The job set is the
+// immediately, the CLI counterpart to the magus.job.v1alpha1 JobService RPC. The job set is the
 // shared jobs registry (sync-graph, rotate-activities, rotate-logs, clear-cache); `server job`
 // with no name lists them. A no-op when no persistent daemon is running, so the VCS refresh hook (which
 // calls `server job sync-graph`) never blocks or fails a checkout. The daemon coalesces an

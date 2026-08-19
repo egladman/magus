@@ -8,7 +8,7 @@ tags: [api, proto, connect, grpc, notesservice]
 
 NotesService lists the workspace's notes and reads one in full.
 
-Package `magus.notes.v1`, defined in `proto/magus/notes/v1/notes.proto`. Part of the [daemon API](index.md).
+Package `magus.notes.v1alpha1`, defined in `proto/magus/notes/v1alpha1/notes.proto`. Part of the [daemon API](index.md).
 
 ## Methods
 
@@ -16,7 +16,7 @@ Package `magus.notes.v1`, defined in `proto/magus/notes/v1/notes.proto`. Part of
 
 ListNotes returns every note in both declared stores, each with its anchors already resolved. Paginated by contract so growth never forces a breaking change, though the store returns all notes today (bounded by the store's own scan cap).
 
-`POST /magus.notes.v1.NotesService/ListNotes`: unary.
+`POST /magus.notes.v1alpha1.NotesService/ListNotes`: unary.
 
 Takes `ListNotesRequest`, returns `ListNotesResponse`.
 
@@ -24,9 +24,9 @@ Takes `ListNotesRequest`, returns `ListNotesResponse`.
 
 GetNote returns one note by scope and name, including its body.
 
-`POST /magus.notes.v1.NotesService/GetNote`: unary.
+`POST /magus.notes.v1alpha1.NotesService/GetNote`: unary.
 
-Takes `GetNoteRequest`, returns `GetNoteResponse`.
+Takes `GetNoteRequest`, returns `Note`.
 
 ## Messages
 
@@ -46,14 +46,7 @@ Anchor is one typed attachment from a note to a graph entity, with the result of
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
-| `name` | string | 1 |  |
-| `scope` | Scope | 2 | scope disambiguates a name that exists in both stores. Required: guessing which store was meant is the mistake worth refusing, since the two mean different things to a reader. |
-
-### GetNoteResponse
-
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `note` | Note | 1 |  |
+| `name` | string | 1 | The note's resource name, "shared/{note}" or "private/{note}". The store is part of the name rather than a second field because a name and a scope arriving separately are a compound key that can disagree, and the store is the axis a reader must never have to guess - the two mean different things about who can read the note. |
 
 ### ListNotesRequest
 

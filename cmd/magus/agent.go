@@ -1804,6 +1804,18 @@ var (
 	// without the portability trap or the blind write.
 	guardSedInPlaceRe = regexp.MustCompile(`\bsed\b[^|;&]*\s(-[a-zA-Z]*i[a-zA-Z]*\b|--in-place\b)`)
 
+	// A scripted in-place rewrite: an inline interpreter that runs a REGEX SUBSTITUTION
+	// and writes the result back. It is the same edit `sed -i` is refused for, reached by
+	// a route the sed rule cannot see, and it is how a rename escapes the graph in
+	// practice - `sed -i` is denied, so the next thing to hand is a python one-liner.
+	//
+	// Deliberately narrow. An interpreter that merely WRITES a file is ordinary authoring
+	// and must stay available; what is refused is substitute-then-write, because that is
+	// the shape that cannot tell a symbol from a word that looks like one. A rewrite of
+	// prose or a config value is caught too - the false positive costs one explanation,
+	// while the false negative silently rewrote a dependency's identifier.
+	guardScriptedRewriteRe = regexp.MustCompile(`\b(python3?|perl|ruby|node)\b[\s\S]*\b(re\.subn?|str\.replace|\.replace\()[\s\S]*\.write\(|\b(perl|ruby)\s+-[a-zA-Z]*i[a-zA-Z]*\b`)
+
 	// A repo-wide code search. This does NOT claim the agent asked the wrong
 	// question - a hook cannot know that - only that a whole-tree text search has
 	// a better tool here, because the graph answers from DECLARED sources while a
@@ -1866,7 +1878,7 @@ const (
 		"  DOMAIN ENTITY (projects, targets, spells, ops, docs, diagnostics):  magus query \"<terms>\"  with kind:<k> project:<p> relation:<r> filters and -negation\n" +
 		"  ONE node's edges, provenance, blast radius:  magus explain <node>\n" +
 		"  HOW two things connect:  magus path <a> <b>\n" +
-		"`magus query <symbol>` returns 0 for a code symbol - that is refs's job. Searching raw TEXT (a string literal, a comment, a config value) has no magus replacement: carry on with grep. Load the magus-query skill for the full grammar."
+		"`magus query <symbol>` returns 0 for a code symbol - that is refs's job. If refs reports a project not-indexed, that verdict is \"unknown, not absent\": run `magus graph build` and ask again rather than falling back to a text match. Searching raw TEXT (a string literal, a comment, a config value) has no magus replacement: carry on with grep. Load the magus-query skill for the full grammar."
 
 	// `ci` is the one target name magus ENFORCES (docs/recommendations.md), so it is
 	// the one literal a shipped verdict may carry; every other target name is
@@ -1877,6 +1889,13 @@ const (
 	denyNotesAuthor = "Recording a DECISION ABOUT THIS WORKSPACE is what `magus memory put <name>` is for: the agent-writable store, where every entry cites a ref a later reader can re-run.\n" +
 		"Notes are human-authored by design: a note is the one thing in the knowledge graph nothing here corroborates later, so its only provenance is the person who wrote it and signed the commit. That is why it is refused however the write is spelled.\n" +
 		"If the content genuinely belongs in the notes, say so and let the person run it themselves."
+
+	denyScriptedRewrite = "A scripted substitute-and-write is the same edit `sed -i` is refused for, by another route. Use your editor tool for a few sites; for a whole-tree rename use the graph:\n" +
+		"  1. `magus graph build` FIRST if `magus refs` says a project is not-indexed - a cold index answers \"unknown, not absent\", and taking that for \"no matches\" is how a rename misses half its sites.\n" +
+		"  2. `magus refs <symbol> --occurrences` - column-precise, verified sites, per file.\n" +
+		"  3. Edit those sites. Let the compiler enumerate what moved; do not widen the pattern until it goes quiet.\n" +
+		"A regex cannot tell YOUR symbol from a dependency's symbol of the same name: a `\\.Sum\\b` rewrite aimed at one proto field also hits the OTel SDK's `metricdata.Sum` and a histogram's `dp.Sum`, and the damage is written before any diff is read. The graph knows which is which; a pattern never can.\n\n" +
+		"Rewriting raw TEXT (prose, a config value, a string literal) has no graph equivalent - say so and use your editor tool."
 
 	denySedInPlace = "Use your editor tool instead: it reads the file, applies an exact replacement, and reports what changed. For a whole-tree mechanical edit, `magus refs <symbol> --occurrences` gives column-precise sites rather than a pattern that also matches the comment about it.\n" +
 		"`sed -i` is not portable and the two spellings destroy each other's work: GNU reads `sed -i 's/x/y/' f` as an edit, BSD and macOS read that same script as the BACKUP SUFFIX, and `sed -i '' ...` makes GNU edit nothing - so it mangles the file on the next machine, by WRITING, before anyone reads a diff. Reading with sed is untouched."
@@ -1984,6 +2003,9 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 	}
 	if guardSedInPlaceRe.MatchString(command) {
 		return bashGuardVerdict{Deny: denySedInPlace}
+	}
+	if guardScriptedRewriteRe.MatchString(command) {
+		return bashGuardVerdict{Deny: denyScriptedRewrite}
 	}
 	var advisory bashGuardVerdict
 	cmds, parsed := parseGuardCommands(command)

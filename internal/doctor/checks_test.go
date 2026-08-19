@@ -137,7 +137,7 @@ func deadOutputRepo(t *testing.T, built bool) string {
 	// Nested exactly as console/src/gen is, so `src/gen/*` globs to a DIRECTORY. That is
 	// the case the tracked lookup has to survive: ls-files echoes the files underneath a
 	// directory argument, never the directory itself.
-	write("src/gen/magus/activity/v1/activity_pb.ts", "// generated, committed\n")
+	write("src/gen/magus/activity/v1alpha1/activity_pb.ts", "// generated, committed\n")
 	run("init", "-q", "-b", "main")
 	run("add", "-A")
 	run("commit", "-qm", "init")

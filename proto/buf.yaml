@@ -8,26 +8,25 @@ modules:
 lint:
   use:
     - STANDARD
-  # JobService's four trigger RPCs deliberately share one response type. They are
-  # not incidentally similar - they are the same operation (submit a background
-  # job, report whether it started or coalesced, return the job's metadata
-  # snapshot), and job.proto documents that as the contract.
+  # buf's STANDARD category and Google's AIPs disagree here, head-on, and this repo follows
+  # the AIPs. AIP-131 is unambiguous: "The response message must be the resource itself.
+  # (There is no GetBookResponse.)" RPC_RESPONSE_STANDARD_NAME demands the opposite - that
+  # GetNote return GetNoteResponse - so obeying buf here would mean every Get wraps its
+  # resource in a single-field envelope the caller has to unwrap. Google's own public APIs
+  # fail this rule for the same reason.
   #
-  # The rules being waived exist so RPCs can evolve independently, and that
-  # motivation is already met another way here: per-job variation rides on
-  # JobRun.items_removed / bytes_reclaimed, generic delta fields the schema added
-  # precisely so a job can start reporting its own numbers without a contract
-  # change. Splitting into four identical messages would instead put every future
-  # field addition in four places, in a file whose stated rule is that fields may
-  # only ever be ADDED.
+  # RPC_REQUEST_RESPONSE_UNIQUE falls out of the same choice rather than being a second
+  # decision: once a response IS the resource, any two RPCs returning the same resource share
+  # a type. MemoryService.GetCursor and UpdateCursor both return Cursor, which is exactly what
+  # AIP-156 prescribes for a singleton.
   #
-  # Scoped to the one file with ignore_only rather than waived module-wide: any
-  # OTHER service that reuses a response type is still a finding.
-  ignore_only:
-    RPC_REQUEST_RESPONSE_UNIQUE:
-      - magus/job/v1/job.proto
-    RPC_RESPONSE_STANDARD_NAME:
-      - magus/job/v1/job.proto
+  # This is NOT the waiver that used to sit here. That one was ignore_only-scoped to
+  # job.proto to permit four near-identical trigger RPCs - a design smell, since removed by
+  # collapsing them into RunJob. This is a module-wide, principled precedence rule: where buf's
+  # naming convention contradicts an AIP, the AIP wins. Every other STANDARD rule still applies.
+  except:
+    - RPC_RESPONSE_STANDARD_NAME
+    - RPC_REQUEST_RESPONSE_UNIQUE
 breaking:
   use:
     - WIRE_JSON

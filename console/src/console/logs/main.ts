@@ -1,6 +1,6 @@
 import { must } from "../../lib/guards";
 // main.ts - the Log Viewer composition root. A purpose-built, read-only viewer for a magus
-// run's captured output: the #data= fragment carries a magus.viewer.v1 Journal (protobuf,
+// run's captured output: the #data= fragment carries a magus.viewer.v1alpha1 Journal (protobuf,
 // gzip+base64url), decoded here and rendered pretty from its STRUCTURE (per-target groups, exec
 // command boundaries, result status) - no text-heuristic guessing. A pasted / dropped / #src=-
 // fetched log has no structure, so it falls back to the heuristic text parse. Everything is
@@ -13,8 +13,8 @@ import { must } from "../../lib/guards";
 // is a no-op if the scaffold is absent.
 
 import { fromBinary } from "@bufbuild/protobuf";
-import { JournalSchema } from "../../gen/magus/viewer/v1/viewer_pb";
-import type { Journal } from "../../gen/magus/viewer/v1/viewer_pb";
+import { JournalSchema } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
+import type { Journal } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
 import { parseHash, wantsDemo, getLiveToken, daemonAttach } from "../../lib/daemon";
 import { getDefaultHost } from "../../lib/settings";
 import { initRunBrowser, fetchRunOutput, type RunSummary } from "./runtree";
@@ -363,7 +363,7 @@ function loadText(text: string, ref: string): void {
   finishLoad(ref, summarize(text));
 }
 
-// loadJournal renders a magus.viewer.v1 Journal (the structured #data path): it builds the
+// loadJournal renders a magus.viewer.v1alpha1 Journal (the structured #data path): it builds the
 // SAME section model the heuristic produces - so render()/search/fold/copy work unchanged -
 // but from EVENTS, so grouping and status are exact, not regex-guessed.
 function loadJournal(journal: Journal, ref: string): void {

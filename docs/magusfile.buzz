@@ -261,7 +261,7 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
         "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json", "retired.urls.lock",
         workspace.file("README.md"), workspace.file("CONTRIBUTING.md"), workspace.file("blog/**"),
         workspace.file("assets/**"), workspace.file("releases/*.yaml"));
-    ctx.writesFiles("gen/**", "src/gen/**", "active.urls.lock");
+    ctx.writesFiles("gen/**", "active.urls.lock");
     renderer\site_publish(ROOT, DOCS, BLOG, OUT,
         magus\targets(), magus\projectGraph(),
         ctx.hasCharm("rw"));
@@ -277,8 +277,9 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // OUT is deliberately absent. gen/ is ignored now that cd.yaml renders at deploy
     // time, and an ignored path is never "dirty", so listing it would assert a check that
     // silently passes. What still gates is every generated file that IS tracked: MAGUS.md,
-    // the root CHANGELOG.md, src/gen, and the derived Markdown in CONTENT.
-    final GENERATED = ["MAGUS.md", ROOT + "/CHANGELOG.md", "src/gen"] + CONTENT;
+    // the root CHANGELOG.md, src/gen, assets/gen (the README's diagram pair), and the
+    // derived Markdown in CONTENT.
+    final GENERATED = ["MAGUS.md", ROOT + "/CHANGELOG.md", "src/gen", "assets/gen"] + CONTENT;
     // Hashed before and after, not gated on a clean tree: the old form skipped whenever any
     // of these was already dirty, which is the state you are in while editing a generator.
     // It also makes the gate work in a git WORKTREE, where vcs\isDirty does not report
@@ -290,7 +291,15 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(workspace.changelog_generate);
     // These producers own disjoint outputs and can fan out. site-generate then reads
     // their completed artifacts, so it intentionally runs in the following stage.
-    ctx.needs(content_generate, index_generate);
+    //
+    // diagrams-generate joins them rather than staying opt-in. It orders against nothing
+    // here - the site never reads its output - but composing it is what puts those bytes
+    // inside the GENERATED gate above, and what lets cd.yaml's `generate docs` reach the
+    // target at all. Uncomposed, it ran only when typed by hand, so the committed SVGs
+    // README.md embeds could drift from libs/diagram indefinitely with every gate green.
+    // It declares its inputs, so an unchanged tree replays it and the 3s render is paid
+    // on a renderer or diagram edit rather than on every docs build.
+    ctx.needs(content_generate, index_generate, diagrams_generate);
     // The esbuild bundles are a stage of their own, BEFORE site-generate rather than beside
     // it: site-generate hashes gen/ into the service-worker precache and site-manifest, so a
     // bundle written after it would ship with a manifest that does not describe it. They used
@@ -451,8 +460,9 @@ export fun build_playground(ctx: magus\Context, args: [str]) > void !> any {
 // The pair lands under this project rather than beside the terminal recordings in the
 // workspace's assets/gen: docs already depends on the root project, so writing there is
 // MGS1012, a target reading from and writing into the same project. The README reaches
-// them by relative path, which is all GitHub needs. Committed and drift-gated, unlike the
-// untracked gen/ site output.
+// them by relative path, which is all GitHub needs. Committed, and byte-gated by the
+// GENERATED list in generate - which only measures this tree because generate composes
+// this target; a gate cannot see bytes nothing moved.
 export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
     // workspace.file, not a project-relative path: the renderer moved out to
     // libs/diagram, and the stale "lib/diagram.buzz" entry left this target's cache
@@ -463,10 +473,14 @@ export fun diagrams_generate(ctx: magus\Context, args: [str]) > void !> any {
     // exists should fail the target rather than ship a rendered picture of a tree that is
     // gone. Scans the Go sources for back-references too, so deleting a diagram whose id a
     // source file still marks is caught from the other side.
-    final drift = renderer\site_diagram_drift(ROOT, ["internal/**/*.go", "cmd/**/*.go"]);
-    if (drift.len() > 0) {
-        foreach (msg in drift) { magus\log.error(msg); }
-        throw "diagram anchors are stale: {drift.len()} finding(s)";
+    // Named anchors, not drift: this is the SEMANTIC check (does a diagram still name a
+    // real package), which is a different question from whether the rendered bytes moved.
+    // The old name also shadowed the tools/drift module this file imports, so reaching for
+    // drift.hashes inside this function would have failed on a list.
+    final anchors = renderer\site_diagram_drift(ROOT, ["internal/**/*.go", "cmd/**/*.go"]);
+    if (anchors.len() > 0) {
+        foreach (msg in anchors) { magus\log.error(msg); }
+        throw "diagram anchors are stale: {anchors.len()} finding(s)";
     }
     renderer\site_diagrams("assets/gen");
     magus\log.info("rendered the diagram pair into docs/assets/gen");

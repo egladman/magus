@@ -138,7 +138,7 @@ the console logs a warning and does not register its routes.
 The token is the same one the MCP server uses. Retrieve it with:
 
 ```sh
-magus config mcp token print
+magus config token print
 ```
 
 The token is stored on disk (`~/.config/magus/mcp-token`) and never logged.
@@ -208,7 +208,7 @@ log in the address bar).
 
 ```text
 [pass] console: reachable at http://127.0.0.1:7391/api/v1/graph
-    bearer token: magus config mcp token print
+    bearer token: magus config token print
 ```
 
 When the daemon is not running, the check is skipped (not a failure).

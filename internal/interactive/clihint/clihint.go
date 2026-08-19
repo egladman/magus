@@ -77,7 +77,7 @@ var (
 	LsTargets        = cmd("ls", "targets")
 	Where            = cmd("where")
 	Refs             = cmd("refs")
-	MCPTokenGenerate = cmd("config", "mcp", "token", "generate")
+	MCPTokenGenerate = cmd("config", "token", "generate")
 	SelfUpdate       = cmd("self", "update")
 	SelfRefresh      = cmd("self", "refresh")
 	SelfRegistry     = cmd("self", "registry")

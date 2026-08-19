@@ -29,7 +29,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `37` |
+| `agent-skill-version` | `38` |
 | `knowledge-schema-version` | `9` |
 | `skill-content` | `78b37156844a` |
 | `skill-variant` | `full` |

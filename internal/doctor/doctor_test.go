@@ -348,6 +348,26 @@ func TestCheckRedundantFootprintGlobs(t *testing.T) {
 		got := r.checkRedundantFootprintGlobs([]*types.Project{p})
 		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	})
+	t.Run("an output restated alongside one the baseline lacks is required, not redundant", func(t *testing.T) {
+		// ctx.writesFiles REPLACES the baseline, so this target's snapshot is exactly what
+		// it names. Reporting "gen/**" as a duplicate would advise dropping the only thing
+		// keeping it in that snapshot - the check would be arguing for silent data loss.
+		p := &types.Project{Path: "proto", Outputs: []string{"gen/**"},
+			TargetOutputs: map[string][]types.OutputRef{"generate": {
+				{Project: "proto", Glob: "gen/**"},
+				{Project: "docs", Glob: "src/gen/**"},
+			}}}
+		got := r.checkRedundantFootprintGlobs([]*types.Project{p})
+		assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	})
+	t.Run("a declaration restating only baseline globs is genuinely redundant", func(t *testing.T) {
+		// Nothing here is lost by dropping it: replacing the baseline with the same set
+		// leaves the snapshot identical, so the declaration buys nothing.
+		p := &types.Project{Path: ".", Outputs: []string{"gen/**"},
+			TargetOutputs: map[string][]types.OutputRef{"generate": {{Project: ".", Glob: "gen/**"}}}}
+		got := r.checkRedundantFootprintGlobs([]*types.Project{p})
+		assert.Equal(t, types.DoctorFail, got.Status, got.Message)
+	})
 }
 
 func TestCheckMagusfileSyntax(t *testing.T) {

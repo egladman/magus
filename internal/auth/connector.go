@@ -69,6 +69,26 @@ var (
 	ErrConnectorNotFound = errors.New("auth: no matching connector token")
 )
 
+// ClientScope is the SURFACE a stored client token may reach. It is the field that
+// makes MCP and console credentials genuinely different things rather than one secret
+// with two names: the verifiers filter on it, so a token minted for one surface is
+// rejected by the other even though both live in this store.
+type ClientScope string
+
+const (
+	// ScopeMCP reaches /mcp and nothing else. The tier external agents hold.
+	ScopeMCP ClientScope = "mcp"
+	// ScopeConsole reaches the console read/control surfaces and never /mcp, so a
+	// credential handed to a browser cannot drive the agent tool surface. This is the
+	// tier that can actually change things: submit jobs, edit memory, open a share.
+	ScopeConsole ClientScope = "console"
+	// ScopeConsoleRead is the VIEWER tier: the console's read surface and nothing
+	// else. It is the same route set the LAN share listener exposes (daemon.go's
+	// shareGuarded), defined once and reused, so "what a viewer may see" has exactly
+	// one answer whether the viewer is a phone or a second browser on loopback.
+	ScopeConsoleRead ClientScope = "console-read"
+)
+
 // ConnectorToken is one named connector token record. It holds only the hash and
 // a display fingerprint - never the secret.
 type ConnectorToken struct {
@@ -77,6 +97,22 @@ type ConnectorToken struct {
 	Fingerprint string    `json:"fingerprint"` // first 8 hex of SHA256, for display
 	Created     time.Time `json:"created"`     // UTC
 	Expires     time.Time `json:"expires"`     // UTC; zero means never expires
+
+	// compat(until: no store still holds a record written without a scope): records
+	// predate this field, and an absent scope decodes as "". Scope() reads that as
+	// ScopeMCP, which is what every such record was minted for - the console tier did
+	// not exist when they were written. Observe it is safe to drop by checking that
+	// every file under connectors.d carries a "scope" key.
+	Scope ClientScope `json:"scope,omitempty"`
+}
+
+// EffectiveScope reports the token's surface, defaulting a scopeless legacy record to ScopeMCP.
+// Read through this rather than the field so the default lives in exactly one place.
+func (c ConnectorToken) EffectiveScope() ClientScope {
+	if c.Scope == "" {
+		return ScopeMCP
+	}
+	return c.Scope
 }
 
 // expired reports whether the token is past its expiry as of now. A zero
@@ -197,6 +233,26 @@ func (s *ConnectorStore) List() []ConnectorToken {
 	return out
 }
 
+// ListScope returns only the tokens whose scope is in want. One store holds both the
+// MCP and console tiers, so every surface that shows or revokes tokens must filter:
+// listing an agent credential under a console command (or the reverse) would present
+// the two as one pool, which is the confusion the scopes exist to prevent.
+func (s *ConnectorStore) ListScope(want ...ClientScope) []ConnectorToken {
+	allowed := make(map[ClientScope]bool, len(want))
+	for _, w := range want {
+		allowed[w] = true
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := make([]ConnectorToken, 0, len(s.tokens))
+	for _, c := range s.tokens {
+		if allowed[c.EffectiveScope()] {
+			out = append(out, c)
+		}
+	}
+	return out
+}
+
 // Create mints a new connector token named name that expires at expires (a zero
 // time means it never expires), stores its SHA-256, and returns the plaintext
 // secret ONCE - it cannot be recovered later. name must be non-empty and unique
@@ -204,7 +260,7 @@ func (s *ConnectorStore) List() []ConnectorToken {
 // create against the token file itself, not a lock, so a concurrent Create of
 // the same name cannot duplicate it; only the final append to the in-memory
 // snapshot runs under s.mu.
-func (s *ConnectorStore) Create(name string, expires time.Time) (secret string, c ConnectorToken, err error) {
+func (s *ConnectorStore) Create(name string, expires time.Time, scope ClientScope) (secret string, c ConnectorToken, err error) {
 	name = strings.TrimSpace(name)
 	if err := dropin.ValidName(name); err != nil {
 		return "", ConnectorToken{}, fmt.Errorf("auth: connector %w", err)
@@ -221,6 +277,7 @@ func (s *ConnectorStore) Create(name string, expires time.Time) (secret string, 
 		SHA256:      digest,
 		Fingerprint: digest[:8],
 		Created:     time.Now().UTC(),
+		Scope:       scope,
 	}
 	if !expires.IsZero() {
 		c.Expires = expires.UTC()
@@ -356,11 +413,13 @@ func indexConnector(tokens []ConnectorToken, q string) (int, error) {
 	return idx, nil
 }
 
-// Verify reports whether presented is a valid, non-expired connector token. It
-// rejects a malformed or checksum-failing token OFFLINE before any hash work,
-// then compares SHA-256 digests with subtle.ConstantTimeCompare against every
-// non-expired stored record. Expired records never match.
-func (s *ConnectorStore) Verify(presented string) bool {
+// VerifyScope reports whether presented is a valid, non-expired connector token
+// minted for scope. It rejects a malformed or checksum-failing token OFFLINE before
+// any hash work, then compares SHA-256 digests with subtle.ConstantTimeCompare
+// against every non-expired stored record carrying that scope. Expired records never
+// match, and neither does a token minted for a different surface - that filter is
+// what keeps the tiers disjoint rather than merely labelled.
+func (s *ConnectorStore) VerifyScope(presented string, scope ClientScope) bool {
 	if !validTokenFormat(presented) {
 		return false
 	}
@@ -371,7 +430,7 @@ func (s *ConnectorStore) Verify(presented string) bool {
 	defer s.mu.RUnlock()
 	match := false
 	for _, t := range s.tokens {
-		if t.expired(now) {
+		if t.expired(now) || t.EffectiveScope() != scope {
 			continue
 		}
 		// Keep scanning even after a match so total work does not depend on

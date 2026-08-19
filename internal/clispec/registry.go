@@ -725,19 +725,6 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 			Short: "Manage the MCP server auth token",
 			Children: []Command{
 				{
-					Name:  "token",
-					Short: "Manage the CLI's own MCP token",
-					Children: []Command{
-						{
-							Name:  "generate",
-							Short: "Create the CLI token",
-							Flags: []Flag{
-								{Name: "force", Kind: FlagBool, Doc: "Overwrite an existing token (rotation)"},
-							},
-						},
-					},
-				},
-				{
 					Name:  "connector",
 					Short: "Manage connector tokens",
 					Children: []Command{
@@ -750,6 +737,42 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.`,
 							},
 						},
 						{Name: "revoke", Short: "Revoke a connector token"},
+					},
+				},
+			},
+		},
+		{
+			Name:  "token",
+			Short: "Manage the operator token (every surface)",
+			Children: []Command{
+				{
+					Name:  "generate",
+					Short: "Create the operator token",
+					Flags: []Flag{
+						{Name: "force", Kind: FlagBool, Doc: "Overwrite an existing token (rotation)"},
+					},
+				},
+			},
+		},
+		{
+			Name:  "console",
+			Short: "Manage the console (PWA) auth tokens",
+			Children: []Command{
+				{
+					Name:  "token",
+					Short: "Manage console tokens",
+					Children: []Command{
+						{
+							Name:  "create",
+							Short: "Mint a console token",
+							Flags: []Flag{
+								{Name: "name", Kind: FlagString, Doc: "Name for this console token (default: console-N)"},
+								{Name: "expires", Kind: FlagString, Doc: "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)"},
+								{Name: "viewer", Kind: FlagBool, Doc: "Mint a READ-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share"},
+							},
+						},
+						{Name: "ls", Short: "List console tokens"},
+						{Name: "revoke", Short: "Revoke a console token"},
 					},
 				},
 			},

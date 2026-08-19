@@ -1,6 +1,6 @@
 // Package insight is the console-facing InsightService handler: it serves every insight lens
 // (the four VCS-history lenses from one cached git-log scan, plus the run-outcome volatility
-// lens folded in fresh) as the magus.insight.v1 wire type. It is READ-only and maps
+// lens folded in fresh) as the magus.insight.v1alpha1 wire type. It is READ-only and maps
 // types.InsightView to the wire at the boundary - the console service owns assembly and
 // caching, this owns the wire, and types/ stays free of protobuf.
 //
@@ -17,8 +17,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/service/console"
-	insightv1 "github.com/egladman/magus/proto/gen/go/magus/insight/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/insight/v1/insightv1connect"
+	insightv1 "github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1/insightv1alpha1connect"
 	"github.com/egladman/magus/types"
 )
 
@@ -28,7 +28,7 @@ type Source interface {
 	Insight(ctx context.Context) (types.InsightView, error)
 }
 
-// Service implements insightv1connect.InsightServiceHandler over src.
+// Service implements insightv1alpha1connect.InsightServiceHandler over src.
 type Service struct {
 	src Source
 }
@@ -36,13 +36,13 @@ type Service struct {
 // NewService builds the InsightService Connect handler reading from src.
 func NewService(src Source) *Service { return &Service{src: src} }
 
-var _ insightv1connect.InsightServiceHandler = (*Service)(nil)
+var _ insightv1alpha1connect.InsightServiceHandler = (*Service)(nil)
 
 // GetInsight returns every lens in one message. A daemon with no workspace cannot scan
 // anything, which is a transient condition of THIS daemon rather than a bad request or a bug,
 // so it maps to CodeUnavailable (the Connect twin of the JSON route's 503) and the client
 // keeps whatever it last rendered.
-func (s *Service) GetInsight(ctx context.Context, _ *connect.Request[insightv1.GetInsightRequest]) (*connect.Response[insightv1.GetInsightResponse], error) {
+func (s *Service) GetInsight(ctx context.Context, _ *connect.Request[insightv1.GetInsightRequest]) (*connect.Response[insightv1.Insight], error) {
 	view, err := s.src.Insight(ctx)
 	if err != nil {
 		if errors.Is(err, console.ErrNoWorkspace) {
@@ -50,7 +50,7 @@ func (s *Service) GetInsight(ctx context.Context, _ *connect.Request[insightv1.G
 		}
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	return connect.NewResponse(&insightv1.GetInsightResponse{Insight: insightToProto(view)}), nil
+	return connect.NewResponse(insightToProto(view)), nil
 }
 
 // insightToProto maps the domain view onto the wire. Every lens is always present; only
@@ -101,20 +101,20 @@ func nodeToProto(n types.Node) *insightv1.ProjectNode {
 		Authors:     int32(n.Authors),
 	}
 	if n.LastCommit != nil {
-		p.LastCommit = tsFromTime(*n.LastCommit)
+		p.LastCommitTime = tsFromTime(*n.LastCommit)
 	}
 	return p
 }
 
 func fileHotspotToProto(f types.FileHotspot) *insightv1.FileHotspot {
 	return &insightv1.FileHotspot{
-		Path:       f.Path,
-		Commits:    int32(f.Commits),
-		Complexity: int32(f.Complexity),
-		Score:      int32(f.Score),
-		Authors:    int32(f.Authors),
-		LastCommit: tsFromTime(f.LastCommit),
-		Moves:      int32(f.Moves),
+		Path:           f.Path,
+		Commits:        int32(f.Commits),
+		Complexity:     int32(f.Complexity),
+		Score:          int32(f.Score),
+		Authors:        int32(f.Authors),
+		LastCommitTime: tsFromTime(f.LastCommit),
+		Moves:          int32(f.Moves),
 	}
 }
 
@@ -131,15 +131,15 @@ func coChangeToProto(c types.CoChange) *insightv1.CoChange {
 
 func ownershipToProto(o types.OwnershipEntry) *insightv1.Ownership {
 	return &insightv1.Ownership{
-		Path:         o.Path,
-		Name:         o.Name,
-		Commits:      int32(o.Commits),
-		Authors:      int32(o.Authors),
-		Primary:      o.Primary,
-		PrimaryShare: int32(o.PrimaryShare),
-		BusFactor_1:  o.BusFactor1,
-		Stale:        o.Stale,
-		LastCommit:   tsFromTime(o.LastCommit),
+		Path:           o.Path,
+		Name:           o.Name,
+		Commits:        int32(o.Commits),
+		Authors:        int32(o.Authors),
+		Primary:        o.Primary,
+		PrimaryShare:   int32(o.PrimaryShare),
+		BusFactor_1:    o.BusFactor1,
+		Stale:          o.Stale,
+		LastCommitTime: tsFromTime(o.LastCommit),
 	}
 }
 
@@ -169,7 +169,7 @@ func volatilityToProto(r *types.VolatilityReport) *insightv1.VolatilityReport {
 				Fail:          int32(t.Fail),
 				VolatileCount: int32(t.VolatileCount),
 				Samples:       int32(t.Samples),
-				LastPass:      tsFromTime(t.LastPass),
+				LastPassTime:  tsFromTime(t.LastPass),
 			}
 		}),
 	}

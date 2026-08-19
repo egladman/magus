@@ -9,9 +9,9 @@
 // unreachable daemon just means the poll no-ops until the next tick.
 
 import { createClient } from "@connectrpc/connect";
-import { ActivityService, Kind } from "../gen/magus/activity/v1/activity_pb";
-import { StatusService } from "../gen/magus/status/v1/status_pb";
-import { TokenService, TokenScope } from "../gen/magus/token/v1/token_pb";
+import { ActivityService, Kind } from "../gen/magus/activity/v1alpha1/activity_pb";
+import { StatusService } from "../gen/magus/status/v1alpha1/status_pb";
+import { TokenService, TokenScope } from "../gen/magus/token/v1alpha1/token_pb";
 import { createDaemonTransport, getLiveToken, resolveDaemonHost } from "./daemon";
 import { showToast } from "./refresh-toast";
 import {
@@ -61,7 +61,7 @@ async function revokeActiveShareToken(host: string): Promise<void> {
       showToast("Share", "No active share token to revoke.");
       return;
     }
-    await tokens.revokeToken({ identifier: share.identifier });
+    await tokens.revokeToken({ name: share.identifier });
     showToast("Share", "Revoked the share token; the share listener is closed.");
   } catch (e) {
     showToast(
@@ -81,7 +81,7 @@ async function pollShareConnect(
   baselineMs: number,
 ): Promise<void> {
   const activity = createClient(ActivityService, createDaemonTransport(host, getLiveToken()));
-  const resp = await activity.listActivity({
+  const resp = await activity.listActivityEvents({
     pageSize: 20,
     filter: { kinds: [Kind.TOKEN_LIFECYCLE], actions: ["share.open"], actors: [] },
   });

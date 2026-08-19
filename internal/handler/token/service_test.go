@@ -17,8 +17,8 @@ import (
 	"github.com/egladman/magus/internal/auth"
 	"github.com/egladman/magus/internal/httpx"
 	"github.com/egladman/magus/internal/share"
-	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/token/v1/tokenv1connect"
+	tokenv1 "github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/token/v1alpha1/tokenv1alpha1connect"
 )
 
 // fakeShare is a stand-in for *share.Manager: it reports a fixed active share (or
@@ -77,9 +77,9 @@ func TestListNeverContainsSecret(t *testing.T) {
 	// store directly (the same store the handler reads) to stand up the list fixture.
 	store, err := auth.LoadConnectorStore()
 	require.NoError(t, err)
-	secret1, _, err := store.Create("alpha", time.Now().Add(time.Hour))
+	secret1, _, err := store.Create("alpha", time.Now().Add(time.Hour), auth.ScopeMCP)
 	require.NoError(t, err)
-	secret2, _, err := store.Create("beta", time.Now().Add(time.Hour))
+	secret2, _, err := store.Create("beta", time.Now().Add(time.Hour), auth.ScopeMCP)
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(secret1, "mgs_"))
 	require.True(t, strings.HasPrefix(secret2, "mgs_"))
@@ -123,12 +123,12 @@ func TestRevokeShareTokenClosesListener(t *testing.T) {
 	}
 	s := newIsolatedService(t, sh)
 
-	resp, err := s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Identifier: "feedface"}))
+	resp, err := s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Name: "feedface"}))
 	require.NoError(t, err)
 	assert.True(t, sh.closed, "revoking the share token must close its listener via CloseIf")
 	assert.Equal(t, "feedface", sh.closeIfArg, "the handler must close by the matched fingerprint, not the raw identifier")
-	assert.Equal(t, tokenv1.TokenScope_TOKEN_SCOPE_SHARE_READ, resp.Msg.GetToken().GetScope())
-	assert.Equal(t, "feedface", resp.Msg.GetToken().GetIdentifier())
+	assert.Equal(t, tokenv1.TokenScope_TOKEN_SCOPE_SHARE_READ, resp.Msg.GetScope())
+	assert.Equal(t, "feedface", resp.Msg.GetIdentifier())
 }
 
 // TestRevokeShareLostRaceIsNotFound proves the TOCTOU guard: when the share matched by
@@ -148,7 +148,7 @@ func TestRevokeShareLostRaceIsNotFound(t *testing.T) {
 	}
 	s := newIsolatedService(t, sh)
 
-	_, err := s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Identifier: "feedface"}))
+	_, err := s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Name: "feedface"}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 	assert.False(t, sh.closed, "a lost race must tear down nothing")
@@ -165,7 +165,7 @@ func TestRevokeSharePrefixResolvesToConnector(t *testing.T) {
 	s := newIsolatedService(t, nil)
 	store, err := auth.LoadConnectorStore()
 	require.NoError(t, err)
-	_, conn, err := store.Create("c1", time.Now().Add(time.Hour))
+	_, conn, err := store.Create("c1", time.Now().Add(time.Hour), auth.ScopeMCP)
 	require.NoError(t, err)
 
 	prefix := conn.Fingerprint[:1]
@@ -182,12 +182,12 @@ func TestRevokeSharePrefixResolvesToConnector(t *testing.T) {
 	}
 	s.share = sh
 
-	resp, err := s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Identifier: prefix}))
+	resp, err := s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Name: prefix}))
 	require.NoError(t, err)
 	assert.False(t, sh.closed, "a prefix must never silently revoke the share")
-	assert.Equal(t, tokenv1.TokenScope_TOKEN_SCOPE_CONNECTOR, resp.Msg.GetToken().GetScope(),
+	assert.Equal(t, tokenv1.TokenScope_TOKEN_SCOPE_CONNECTOR, resp.Msg.GetScope(),
 		"a prefix that also names the share must resolve to the connector store")
-	assert.Equal(t, conn.Fingerprint, resp.Msg.GetToken().GetIdentifier())
+	assert.Equal(t, conn.Fingerprint, resp.Msg.GetIdentifier())
 }
 
 // TestNilShareManagerConstructor proves NewService given a typed-nil *share.Manager
@@ -202,7 +202,7 @@ func TestNilShareManagerConstructor(t *testing.T) {
 	require.NoError(t, err)
 	assert.Empty(t, list.Msg.GetTokens(), "no connectors and no share token")
 
-	_, err = s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Identifier: "share to phone"}))
+	_, err = s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Name: "share to phone"}))
 	require.Error(t, err, "with no share manager, the share label matches nothing")
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 }
@@ -221,7 +221,7 @@ func TestOperatorTokenInvisibleAndImmutable(t *testing.T) {
 	// even when the service does return other tokens (it is not merely "empty list").
 	store, err := auth.LoadConnectorStore()
 	require.NoError(t, err)
-	_, conn, err := store.Create("mcp-client", time.Now().Add(time.Hour))
+	_, conn, err := store.Create("mcp-client", time.Now().Add(time.Hour), auth.ScopeMCP)
 	require.NoError(t, err)
 
 	cliTok, err := auth.Generate()
@@ -241,7 +241,7 @@ func TestOperatorTokenInvisibleAndImmutable(t *testing.T) {
 
 	// A deliberate attempt to revoke the operator token by its fingerprint must fail,
 	// not silently pass: it falls through to the connector store, which does not hold it.
-	_, err = s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Identifier: cliFingerprint}))
+	_, err = s.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Name: cliFingerprint}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
 
@@ -275,7 +275,7 @@ func TestListResponseCarriesNoSecretBytes(t *testing.T) {
 
 	store, err := auth.LoadConnectorStore()
 	require.NoError(t, err)
-	secret, conn, err := store.Create("client", time.Now().Add(time.Hour))
+	secret, conn, err := store.Create("client", time.Now().Add(time.Hour), auth.ScopeMCP)
 	require.NoError(t, err)
 	require.True(t, strings.HasPrefix(secret, "mgs_"))
 	require.Len(t, conn.SHA256, 64, "the full hash we hunt for is the 64-char hex digest")
@@ -309,20 +309,20 @@ func TestListResponseCarriesNoSecretBytes(t *testing.T) {
 // rejected with 401 before reaching the service, while a valid bearer passes.
 func TestUnauthenticatedCallRejected(t *testing.T) {
 	s := newIsolatedService(t, nil)
-	path, h := tokenv1connect.NewTokenServiceHandler(s)
-	// A fixed verifier standing in for auth.VerifyBearer: accept exactly "good".
+	path, h := tokenv1alpha1connect.NewTokenServiceHandler(s)
+	// A fixed verifier standing in for auth.VerifyMCPBearer: accept exactly "good".
 	guarded := httpx.BearerGuard(func(presented string) bool { return presented == "good" }, h)
 	srv := httptest.NewServer(guarded)
 	defer srv.Close()
 
 	// No Authorization header: rejected at the guard, never reaching ListTokens.
-	unauth := tokenv1connect.NewTokenServiceClient(http.DefaultClient, srv.URL)
+	unauth := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL)
 	_, err := unauth.ListTokens(context.Background(), req(&tokenv1.ListTokensRequest{}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err))
 
 	// Valid bearer: the call passes the guard and the service answers.
-	authed := tokenv1connect.NewTokenServiceClient(http.DefaultClient, srv.URL,
+	authed := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL,
 		connect.WithInterceptors(bearer("good")))
 	resp, err := authed.ListTokens(context.Background(), req(&tokenv1.ListTokensRequest{}))
 	require.NoError(t, err)
@@ -335,7 +335,7 @@ func TestUnauthenticatedCallRejected(t *testing.T) {
 // service behind: the guard is BearerGuard(auth.VerifyCLIBearer, ...) - exactly
 // the daemon's wiring - with a REAL cli token and a REAL non-expired connector
 // token on disk. The connector token, though valid on every data surface
-// (auth.VerifyBearer accepts it), must be rejected on BOTH TokenService RPCs
+// (auth.VerifyMCPBearer accepts it), must be rejected on BOTH TokenService RPCs
 // (List, Revoke): a client credential must never list or revoke credentials. The
 // cli token must pass. (The share token needs no test here: it is only ever
 // verified by the LAN listener's per-session closure, and this service is never
@@ -353,20 +353,20 @@ func TestTierHierarchyAtGuard(t *testing.T) {
 	// Client tier: a real, non-expired connector token minted through the store.
 	store, err := auth.LoadConnectorStore()
 	require.NoError(t, err)
-	connSecret, _, err := store.Create("mcp-client", time.Now().Add(time.Hour))
+	connSecret, _, err := store.Create("mcp-client", time.Now().Add(time.Hour), auth.ScopeMCP)
 	require.NoError(t, err)
 	// Sanity: the connector token IS a valid data-surface credential...
-	require.True(t, auth.VerifyBearer(connSecret))
+	require.True(t, auth.VerifyMCPBearer(connSecret))
 	// ...but never an operator credential.
 	require.False(t, auth.VerifyCLIBearer(connSecret))
 
-	_, h := tokenv1connect.NewTokenServiceHandler(s)
+	_, h := tokenv1alpha1connect.NewTokenServiceHandler(s)
 	srv := httptest.NewServer(httpx.BearerGuard(auth.VerifyCLIBearer, h))
 	defer srv.Close()
 
-	asConnector := tokenv1connect.NewTokenServiceClient(http.DefaultClient, srv.URL,
+	asConnector := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL,
 		connect.WithInterceptors(bearer(connSecret)))
-	asCLI := tokenv1connect.NewTokenServiceClient(http.DefaultClient, srv.URL,
+	asCLI := tokenv1alpha1connect.NewTokenServiceClient(http.DefaultClient, srv.URL,
 		connect.WithInterceptors(bearer(cliTok)))
 
 	// Connector token: rejected on both RPCs, before the handler runs.
@@ -374,7 +374,7 @@ func TestTierHierarchyAtGuard(t *testing.T) {
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "connector must not list tokens")
 
-	_, err = asConnector.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Identifier: "mcp-client"}))
+	_, err = asConnector.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Name: "mcp-client"}))
 	require.Error(t, err)
 	assert.Equal(t, connect.CodeUnauthenticated, connect.CodeOf(err), "connector must not revoke tokens")
 
@@ -390,7 +390,7 @@ func TestTierHierarchyAtGuard(t *testing.T) {
 	require.NoError(t, err)
 	assert.Len(t, list.Msg.GetTokens(), 1)
 
-	_, err = asCLI.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Identifier: "mcp-client"}))
+	_, err = asCLI.RevokeToken(context.Background(), req(&tokenv1.RevokeTokenRequest{Name: "mcp-client"}))
 	require.NoError(t, err)
 }
 
@@ -403,4 +403,70 @@ func bearer(token string) connect.UnaryInterceptorFunc {
 			return next(ctx, ar)
 		}
 	}
+}
+
+// TestCreateTokenRefusesTheUnmintableClasses is the escalation guard, stated as a test
+// rather than as a comment. The mount already limits this service to the operator tier,
+// so the question a test can still answer is the narrower one: given a caller who IS the
+// operator, which classes can be minted from this surface at all. The operator token is
+// not one of them (it lives in a file this service never opens) and neither is a
+// connector (an /mcp bearer minted through the console surface would cross the one
+// boundary the tier model exists to draw).
+func TestCreateTokenRefusesTheUnmintableClasses(t *testing.T) {
+	s := newIsolatedService(t, nil)
+	for _, scope := range []tokenv1.TokenScope{
+		tokenv1.TokenScope_TOKEN_SCOPE_OPERATOR,
+		tokenv1.TokenScope_TOKEN_SCOPE_CONNECTOR,
+		tokenv1.TokenScope_TOKEN_SCOPE_SHARE_READ,
+		tokenv1.TokenScope_TOKEN_SCOPE_UNSPECIFIED,
+	} {
+		_, err := s.CreateToken(context.Background(), req(&tokenv1.CreateTokenRequest{
+			Name: "escalate", Scope: scope,
+		}))
+		require.Error(t, err, "scope %v must not be mintable here", scope)
+		assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	}
+
+	store, err := auth.LoadConnectorStore()
+	require.NoError(t, err)
+	assert.Empty(t, store.List(), "a refused mint must store nothing")
+}
+
+// TestCreateTokenMintsAConsoleTokenThatCannotReachMCP pins the property that makes the
+// minted credential worth having: it opens the console and is refused at /mcp. A mint
+// that produced something /mcp accepted would hand the console the agent tool surface,
+// which is the whole thing the split prevents.
+func TestCreateTokenMintsAConsoleTokenThatCannotReachMCP(t *testing.T) {
+	s := newIsolatedService(t, nil)
+
+	resp, err := s.CreateToken(context.Background(), req(&tokenv1.CreateTokenRequest{
+		Scope: tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE,
+	}))
+	require.NoError(t, err)
+	secret := resp.Msg.GetSecret()
+	require.NotEmpty(t, secret, "the secret is returned once and is the only copy")
+	assert.Equal(t, tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE, resp.Msg.GetToken().GetScope(),
+		"a console token must be listed as console, not as a connector")
+	assert.NotContains(t, resp.Msg.GetToken().GetIdentifier(), secret,
+		"the wire handle is a fingerprint, never the secret")
+
+	assert.True(t, auth.VerifyConsoleBearer(secret), "a console token must open the console")
+	assert.False(t, auth.VerifyMCPBearer(secret), "a console token must be refused at /mcp")
+}
+
+// TestCreateTokenMintsAViewerThatCannotWrite pins the read/write split on the tier the
+// console hands to a phone: the viewer opens the read surface and is refused by the
+// guard every mutating console mount uses.
+func TestCreateTokenMintsAViewerThatCannotWrite(t *testing.T) {
+	s := newIsolatedService(t, nil)
+
+	resp, err := s.CreateToken(context.Background(), req(&tokenv1.CreateTokenRequest{
+		Scope: tokenv1.TokenScope_TOKEN_SCOPE_CONSOLE_READ,
+	}))
+	require.NoError(t, err)
+	secret := resp.Msg.GetSecret()
+
+	assert.True(t, auth.VerifyConsoleReadBearer(secret), "a viewer must open the console read surface")
+	assert.False(t, auth.VerifyConsoleBearer(secret), "a viewer must be refused by the write guard")
+	assert.False(t, auth.VerifyMCPBearer(secret), "a viewer must be refused at /mcp")
 }

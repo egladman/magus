@@ -1,6 +1,6 @@
 // Package metrics is the daemon's derived-dashboard presentation layer for magus's OTel
 // metrics. It rolls raw in-process metricdata (histogram buckets and counters, read via
-// otlp.Collector) into the magus.metrics.v1 wire types the /dashboard consumes,
+// otlp.Collector) into the magus.metrics.v1alpha1 wire types the /dashboard consumes,
 // maintains a rolling sample ring for backfill, and implements the Connect MetricsService.
 // It is the only place the generated metrics proto meets the OTel SDK; observability itself
 // stays proto-free.
@@ -11,7 +11,7 @@ import (
 	"sort"
 	"time"
 
-	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1"
+	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -73,17 +73,17 @@ const (
 // latency histogram family becomes a Latency (count/sum plus interpolated p50/p95/p99/max),
 // and the remote-cache instruments become a Remote. Missing instruments yield zero-valued
 // (never nil) sub-messages, so the wire shape is stable from the first tick. at stamps
-// captured_at.
+// capture_time.
 func Aggregate(rm metricdata.ResourceMetrics, at time.Time) *metricsv1.Snapshot {
 	snap := &metricsv1.Snapshot{
-		CapturedAt: timestamppb.New(at),
-		Target:     &metricsv1.Latency{},
-		Cache:      &metricsv1.Latency{},
-		PoolWait:   &metricsv1.Latency{},
-		GraphQuery: &metricsv1.Latency{},
-		Remote:     &metricsv1.Remote{},
-		Buzz:       &metricsv1.Buzz{},
-		Sandbox:    &metricsv1.Sandbox{},
+		CaptureTime: timestamppb.New(at),
+		Target:      &metricsv1.Latency{},
+		Cache:       &metricsv1.Latency{},
+		PoolWait:    &metricsv1.Latency{},
+		GraphQuery:  &metricsv1.Latency{},
+		Remote:      &metricsv1.Remote{},
+		Buzz:        &metricsv1.Buzz{},
+		Sandbox:     &metricsv1.Sandbox{},
 	}
 
 	for _, sm := range rm.ScopeMetrics {
@@ -105,11 +105,11 @@ func Aggregate(rm metricdata.ResourceMetrics, at time.Time) *metricsv1.Snapshot 
 				snap.Remote.Errors = counterOf(m.Data)
 			case instRemoteDuration:
 				lat := latencyOf(m.Data)
-				snap.Remote.DurationP50 = lat.P50
-				snap.Remote.DurationP95 = lat.P95
+				snap.Remote.DurationP50Seconds = lat.P50Seconds
+				snap.Remote.DurationP95Seconds = lat.P95Seconds
 				snap.Remote.IoCount = lat.Count
 			case instRemoteIOSize:
-				snap.Remote.BytesTotal = int64(latencyOf(m.Data).Sum)
+				snap.Remote.TransferredBytes = int64(latencyOf(m.Data).SumSeconds)
 			}
 		}
 	}
@@ -219,9 +219,9 @@ func targetStats(rm metricdata.ResourceMetrics) []*metricsv1.TargetStat {
 			Target:       k.target,
 			Spell:        k.spell,
 			Count:        int64(a.count),
-			P50:          lat.P50,
-			P95:          lat.P95,
-			P99:          lat.P99,
+			P50Seconds:   lat.P50Seconds,
+			P95Seconds:   lat.P95Seconds,
+			P99Seconds:   lat.P99Seconds,
 			CacheHitRate: rate,
 			Success:      int64(a.success),
 			Errors:       int64(a.errs),
@@ -278,17 +278,17 @@ func mcpToolStats(rm metricdata.ResourceMetrics) []*metricsv1.MCPToolStat {
 		out := latencyOr(outputByTool[t])
 		dur := latencyOr(durByTool[t])
 		rows = append(rows, &metricsv1.MCPToolStat{
-			Tool:        t,
-			Calls:       callsByTool[t],
-			Errors:      errsByTool[t],
-			InputP50:    in.P50,
-			InputP95:    in.P95,
-			InputTotal:  int64(in.Sum),
-			OutputP50:   out.P50,
-			OutputP95:   out.P95,
-			OutputTotal: int64(out.Sum),
-			DurationP50: dur.P50,
-			DurationP95: dur.P95,
+			Tool:               t,
+			Calls:              callsByTool[t],
+			Errors:             errsByTool[t],
+			InputP50Bytes:      in.P50Seconds,
+			InputP95Bytes:      in.P95Seconds,
+			InputTotal:         int64(in.SumSeconds),
+			OutputP50Bytes:     out.P50Seconds,
+			OutputP95Bytes:     out.P95Seconds,
+			OutputTotal:        int64(out.SumSeconds),
+			DurationP50Seconds: dur.P50Seconds,
+			DurationP95Seconds: dur.P95Seconds,
 		})
 	}
 	return rows
@@ -300,15 +300,15 @@ func buzzStats(rm metricdata.ResourceMetrics) *metricsv1.Buzz {
 	b := &metricsv1.Buzz{}
 	if agg, ok := findMetric(rm, instBuzzExec); ok {
 		lat := latencyOf(agg)
-		b.ExecCount, b.ExecP50, b.ExecP95 = lat.Count, lat.P50, lat.P95
+		b.ExecCount, b.ExecP50Seconds, b.ExecP95Seconds = lat.Count, lat.P50Seconds, lat.P95Seconds
 	}
 	if agg, ok := findMetric(rm, instBuzzCompile); ok {
 		lat := latencyOf(agg)
-		b.CompileCount, b.CompileP50, b.CompileP95 = lat.Count, lat.P50, lat.P95
+		b.CompileCount, b.CompileP50Seconds, b.CompileP95Seconds = lat.Count, lat.P50Seconds, lat.P95Seconds
 	}
 	if agg, ok := findMetric(rm, instBuzzHostCallDur); ok {
 		lat := latencyOf(agg)
-		b.HostCallP50, b.HostCallP95 = lat.P50, lat.P95
+		b.HostCallP50Seconds, b.HostCallP95Seconds = lat.P50Seconds, lat.P95Seconds
 	}
 	if agg, ok := findMetric(rm, instBuzzHostCallCount); ok {
 		b.HostCallCount = counterOf(agg)
@@ -324,15 +324,15 @@ func buzzStats(rm metricdata.ResourceMetrics) *metricsv1.Buzz {
 	}
 	if agg, ok := findMetric(rm, instBuzzSessionWarm); ok {
 		lat := latencyOf(agg)
-		b.SessionWarmP50, b.SessionWarmP95 = lat.P50, lat.P95
+		b.SessionWarmP50Seconds, b.SessionWarmP95Seconds = lat.P50Seconds, lat.P95Seconds
 	}
 	if agg, ok := findMetric(rm, instBuzzImport); ok {
 		lat := latencyOf(agg)
-		b.ImportCount, b.ImportP50, b.ImportP95 = lat.Count, lat.P50, lat.P95
+		b.ImportCount, b.ImportP50Seconds, b.ImportP95Seconds = lat.Count, lat.P50Seconds, lat.P95Seconds
 	}
 	if agg, ok := findMetric(rm, instBuzzSpellResolve); ok {
 		lat := latencyOf(agg)
-		b.SpellResolveCount, b.SpellResolveP50, b.SpellResolveP95 = lat.Count, lat.P50, lat.P95
+		b.SpellResolveCount, b.SpellResolveP50Seconds, b.SpellResolveP95Seconds = lat.Count, lat.P50Seconds, lat.P95Seconds
 	}
 	if agg, ok := findMetric(rm, instBuzzJITRuns); ok {
 		b.JitRuns = counterOf(agg)
@@ -348,7 +348,7 @@ func sandboxStats(rm metricdata.ResourceMetrics) *metricsv1.Sandbox {
 	s := &metricsv1.Sandbox{}
 	if agg, ok := findMetric(rm, instSandboxApply); ok {
 		lat := latencyOf(agg)
-		s.ApplyP50, s.ApplyP95 = lat.P50, lat.P95
+		s.ApplyP50Seconds, s.ApplyP95Seconds = lat.P50Seconds, lat.P95Seconds
 	}
 	if agg, ok := findMetric(rm, instSandboxRules); ok {
 		forEachInt64DP(agg, func(set attribute.Set, v int64) {
@@ -514,19 +514,19 @@ func foldHistogram[N int64 | float64](dps []metricdata.HistogramDataPoint[N]) *m
 	}
 
 	lat.Count = int64(count)
-	lat.Sum = sum
+	lat.SumSeconds = sum
 	if count == 0 {
 		return lat
 	}
 
 	buckets := cumulativeBuckets(bounds, bucketCounts)
-	lat.P50 = sanitize(quantileOf(0.50, buckets))
-	lat.P95 = sanitize(quantileOf(0.95, buckets))
-	lat.P99 = sanitize(quantileOf(0.99, buckets))
+	lat.P50Seconds = sanitize(quantileOf(0.50, buckets))
+	lat.P95Seconds = sanitize(quantileOf(0.95, buckets))
+	lat.P99Seconds = sanitize(quantileOf(0.99, buckets))
 	if haveMax {
-		lat.Max = maxObserved
+		lat.MaxSeconds = maxObserved
 	} else {
-		lat.Max = largestPopulatedBound(bounds, bucketCounts)
+		lat.MaxSeconds = largestPopulatedBound(bounds, bucketCounts)
 	}
 	return lat
 }
