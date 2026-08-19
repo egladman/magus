@@ -133,7 +133,11 @@ or `bash -c '...'` all reach the same verdict as the bare command.
 
 ## What magus explains
 
-An advise verdict carries context your host can inject while the call proceeds.
+An advise verdict carries context your host can inject while the call proceeds,
+which only Claude Code does in full. Cursor delivers nothing on a command advise
+and OpenCode logs it for the person. Codex differs in kind rather than degree: its
+PreToolUse REJECTS `additionalContext` and fails open on it, so sending one there
+disarmed the guard for that call, and magus now sends it nothing.
 
 - `git commit` and `git add <paths>`: classify the dirty tree first. Deliberate
   staging is the replacement the rule above points at, so it is never denied.

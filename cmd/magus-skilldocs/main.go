@@ -255,10 +255,11 @@ func firstSentence(s string) string {
 // reads to decide "up to date" or "STALE".
 //
 // The values come from the catalog rather than a literal, so the table cannot
-// drift from what install actually writes. skill-content is the shared digest:
-// both permutations report the SAME one, which is why they go stale together.
+// drift from what install actually writes. skill-content fingerprints THIS skill
+// alone; both of its permutations report the same one, which is why they go
+// stale together and why an edit to a different skill leaves this page alone.
 func writeStampTable(b *strings.Builder, cat *agent.Catalog, skill agent.AgentSkill) {
-	body := string(cat.StampSkill(cat.RenderSkill(skill), agent.VariantFull))
+	body := string(cat.StampSkill(skill.Name, cat.RenderSkill(skill), agent.VariantFull))
 
 	b.WriteString("## What an installed copy carries\n\n")
 	b.WriteString("`magus agent install` writes this frontmatter above the body. " +
@@ -284,6 +285,6 @@ func writeStampTable(b *strings.Builder, cat *agent.Catalog, skill agent.AgentSk
 			break
 		}
 	}
-	b.WriteString("\nThe `skill-content` digest is shared by both permutations below, " +
-		"so they version together: a magus upgrade makes both stale at once, never one silently.\n\n")
+	b.WriteString("\nThe `skill-content` digest covers this skill alone, and both permutations below " +
+		"report it: they go stale together, never one silently, and a change to another skill does not move it.\n\n")
 }

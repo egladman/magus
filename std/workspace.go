@@ -10,7 +10,7 @@ package std
 // has nothing to do with the CLI.
 //
 // A STRUCTURAL interface sidesteps the cycle. The workspace is ALREADY on the context
-// (types.WorkspaceFromContext, what magus\ls and magus\affected read); it is carried as
+// (types.WorkspaceFromContext, what magus\projects and magus\affected read); it is carried as
 // the narrow types.WorkspaceRepository, but the concrete value is the real *magus.Magus,
 // which has the lenses. So the capability is named here in terms of types.* and recovered
 // by assertion, with neither package naming the other. internal/handler/mcp reaches the

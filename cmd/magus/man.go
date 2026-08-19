@@ -27,16 +27,26 @@ func manCmd(args []string) error {
 	bindDisplayFlags(fs)
 	fs.SetOutput(os.Stderr)
 	dir := fs.String("dir", defaultManDir(), "directory for section 1 man pages")
+	dryRun := fs.Bool("dry-run", false, "print what would be written without touching the filesystem")
 	if err := fs.Parse(args[1:]); err != nil {
 		return err
 	}
 	if fs.NArg() != 0 {
 		return fmt.Errorf("magus man install: unexpected argument %q", fs.Arg(0))
 	}
+	pages := clispec.RoffPages("", version)
+	// Before MkdirAll: the destination is usually outside the repo, so describing
+	// it must not create it.
+	if *dryRun {
+		for _, page := range pages {
+			fmt.Fprintf(os.Stdout, "would write %s\n", filepath.Join(*dir, page.Name))
+		}
+		fmt.Fprintf(os.Stdout, "dry run: %d man page(s) would be written to %s; nothing was changed\n", len(pages), *dir)
+		return nil
+	}
 	if err := os.MkdirAll(*dir, 0o755); err != nil {
 		return fmt.Errorf("magus man install: create %s: %w", *dir, err)
 	}
-	pages := clispec.RoffPages("", version)
 	for _, page := range pages {
 		path := filepath.Join(*dir, page.Name)
 		if err := os.WriteFile(path, page.Content, 0o644); err != nil {
@@ -59,7 +69,7 @@ func defaultManDir() string {
 }
 
 func manUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus man install [--dir <path>]")
+	fmt.Fprintln(os.Stderr, "Usage: magus man install [--dir <path>] [--dry-run]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "Write the man pages embedded in this binary.")
 }
