@@ -507,7 +507,28 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 	for i, g := range globs {
 		normalised[i] = filepath.ToSlash(g)
 	}
-	pats := compileGlobs(normalised)
+
+	// A wildcard-free glob names ONE file, so resolve it by stat rather than by the walk
+	// below. The walk prunes whole directories by name (project.IgnoreDirs: gen, vendor,
+	// node_modules, target), and a declaration pointing inside one could therefore never
+	// match - `magus describe target` listed the path as a source while the cache key
+	// silently omitted it, so edits to it replayed a stale entry forever. docs's
+	// content-generate hit exactly that on proto/gen/descriptor.binpb.
+	//
+	// Only exact paths take this route. Letting a PATTERN reach into a pruned dir would
+	// undo the pruning's whole purpose: a project declaring **/*.js would start hashing
+	// every file in node_modules. An exact path cannot expand that way - it is one file,
+	// named deliberately.
+	var exact []string
+	patterns := normalised[:0:0]
+	for _, g := range normalised {
+		if strings.ContainsAny(g, "*?[{") {
+			patterns = append(patterns, g)
+			continue
+		}
+		exact = append(exact, g)
+	}
+	pats := compileGlobs(patterns)
 
 	var exclPats []compiledGlob
 	var prunePrefixes []string
@@ -534,6 +555,28 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 	// the usual doubling. Negligible on huge trees (the per-file rel strings
 	// dominate allocs there) but a free win on the common small-Sources case.
 	out := make([]relAbs, 0, len(globs))
+
+	for _, rel := range exact {
+		abs := filepath.Join(root, filepath.FromSlash(rel))
+		// Lstat, not Stat: the walk below skips symlinks, and an exact path must not be
+		// the one way a link slips into the hash.
+		fi, err := os.Lstat(abs)
+		if err != nil || fi.IsDir() || fi.Mode()&os.ModeSymlink != 0 {
+			// A declared source that does not exist is not an error here: globs are
+			// declared per project and may name a file a given workspace never has.
+			continue
+		}
+		var excluded bool
+		for _, ep := range exclPats {
+			if ep.Match(rel) {
+				excluded = true
+				break
+			}
+		}
+		if !excluded {
+			out = append(out, relAbs{rel: rel, abs: abs})
+		}
+	}
 
 	err := filepath.WalkDir(root, func(path string, d fs.DirEntry, werr error) error {
 		if werr != nil {
@@ -579,6 +622,10 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 		return nil, fmt.Errorf("expandSources walk: %w", err)
 	}
 	slices.SortFunc(out, func(a, b relAbs) int { return cmp.Compare(a.rel, b.rel) })
+	// The walk returns each path once, but an exact declaration and a pattern can both
+	// name one file (["**/*.go", "cmd/x/main.go"]), and hashing it twice would change the
+	// key for a declaration that added no information.
+	out = slices.CompactFunc(out, func(a, b relAbs) bool { return a.rel == b.rel })
 	return out, nil
 }
 

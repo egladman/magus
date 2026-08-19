@@ -212,16 +212,19 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         // a schema edit reaches here through that artifact. Depending on ../proto/**/*.proto
         // directly would drag a network-bound buf step into this project's cache boundary,
         // which is the exact coupling buf.gen.yaml was restructured to remove.
-        // The .proto sources are declared ALONGSIDE the descriptor, not instead of it, and
-        // they are what actually keys this target on the schema: a path that is another
-        // project's declared OUTPUT does not enter a consuming project's cache key, so the
-        // descriptor alone let a schema edit replay stale pages. Verified 2026-08-18 by
-        // editing memory.proto, regenerating the descriptor (new content hash both times),
-        // and watching content-generate report `cached` on two different descriptors;
-        // --no-cache then produced different output. Declaring them costs nothing at
-        // runtime - a read is hashed, not executed, so no buf step is pulled into this
-        // project's boundary; that concern was about DEPENDING on the proto project, which
-        // this already does.
+        // The .proto sources ALONGSIDE the descriptor, not instead of it. Both now reach
+        // the cache key, so this is redundancy rather than the load-bearing declaration it
+        // was for one afternoon: the descriptor lives under gen/, which the expansion walk
+        // prunes by name, and an exact path inside a pruned tree used to be dropped
+        // silently (`describe target` listed it under sources while the key omitted it).
+        // internal/cache now resolves a wildcard-free declaration by stat, and MGS1029
+        // reports the pattern case that still cannot work.
+        //
+        // Kept anyway, because keying on the schema is the more honest statement of what
+        // this target reads: the descriptor is downstream of these files, and a reader
+        // asking why the API reference regenerated is better served by "the .proto
+        // changed" than by "a binary artifact changed". Costs nothing at runtime - a read
+        // is hashed, not executed, so no buf step enters this project's boundary.
         workspace.file("proto/magus/**/*.proto"),
         workspace.file("proto/gen/descriptor.binpb"), workspace.file("CHANGELOG.md"));
     // reference/api nests by .proto path (reference/api/token/v1/token.md), so it is the one
