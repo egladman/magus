@@ -208,6 +208,26 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	var removed, stale []string
 	for _, dest := range dests {
 		base, leaf := installTarget(af.Dir, dest, af.Global)
+		// --dry-run answers the question --prune is dangerous without: which
+		// directories would go. It reports the same two lists the real run does and
+		// touches nothing, so the destructive flag can be rehearsed before it runs.
+		if af.DryRun {
+			w, err := agentSkills.PlanSkillTree(base, leaf, agent.VariantSimple)
+			if err != nil {
+				return err
+			}
+			written = append(written, w...)
+			s, err := agentSkills.StaleSkillDirs(base, leaf)
+			if err != nil {
+				return err
+			}
+			if af.Prune {
+				removed = append(removed, s...)
+			} else {
+				stale = append(stale, s...)
+			}
+			continue
+		}
 		w, err := agentSkills.WriteSkillTree(base, leaf, af.Force, agent.VariantSimple)
 		if err != nil {
 			return err
@@ -230,21 +250,35 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 		stale = append(stale, s...)
 	}
 	for _, p := range written {
+		if af.DryRun {
+			slog.InfoContext(ctx, "agent install: would write", slog.String("path", p))
+			continue
+		}
 		slog.InfoContext(ctx, "agent install: wrote", slog.String("path", p))
 	}
 	// Reported at the same level as a write. A silent delete is how a person loses
 	// a skill they thought they had.
 	for _, p := range removed {
+		if af.DryRun {
+			slog.InfoContext(ctx, "agent install: would remove skill this binary no longer ships", slog.String("path", p))
+			continue
+		}
 		slog.InfoContext(ctx, "agent install: removed skill this binary no longer ships", slog.String("path", p))
 	}
-	printAgentInstallNextSteps(af.Dir, written, stale, agent.VariantSimple)
+	printAgentInstallNextSteps(af.Dir, written, stale, agent.VariantSimple, af.DryRun)
 	return nil
 }
 
 // printAgentInstallNextSteps prints an actionable hint after install, gated on
 // the user-controlled hints preference so MAGUS_HINTS_ENABLED=false silences it.
-func printAgentInstallNextSteps(dir string, written, stale []string, v agent.Variant) {
+func printAgentInstallNextSteps(dir string, written, stale []string, v agent.Variant, dryRun bool) {
 	if !interactive.HintsEnabled() || len(written) == 0 {
+		return
+	}
+	// A rehearsal that claims it installed something is worse than no rehearsal:
+	// the reader stops looking for the real run.
+	if dryRun {
+		interactive.Emit(os.Stderr, fmt.Sprintf("dry run: %d file(s) would be written; nothing was changed. Re-run without --dry-run to apply", len(written)))
 		return
 	}
 	interactive.Emit(os.Stderr, fmt.Sprintf("installed %d file(s); commit them so your team and agents share them", len(written)))

@@ -26,6 +26,9 @@ paths\-relative\-to\-<dir> case. Absolute destinations are refused unless
 \fB\-\-dir\fR \fIstring\fR (default: \&.)
 Repo directory to install into (agent install)
 .TP
+\fB\-\-dry\-run\fR
+Print what would be written and removed without touching the filesystem (agent install)
+.TP
 \fB\-\-force\fR
 Overwrite existing installed skill files (agent install)
 .TP
@@ -64,6 +67,12 @@ magus agent install .claude/skills --force
 .PP
 .EX
 magus agent install .claude/skills --force --prune
+.EE
+.PP
+\fISee what a prune would remove first\fR
+.PP
+.EX
+magus agent install .claude/skills --prune --dry-run
 .EE
 .PP
 \fIInstall anywhere via tar\fR

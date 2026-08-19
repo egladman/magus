@@ -464,21 +464,54 @@ func (c *Catalog) SkillTar(dest string, v Variant) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// PlanSkillTree returns the paths WriteSkillTree would write, writing nothing.
+//
+// It shares destinationRoot with the writer so the two cannot disagree about
+// where a destination resolves - a plan that named different paths than the run
+// would be worse than no plan, because it would be believed.
+//
+// The --force conflict check is deliberately not repeated here: a plan reports
+// what a successful run would produce, and refusing to describe it because a
+// file is already there would answer a question nobody asked.
+func (c *Catalog) PlanSkillTree(dir, dest string, v Variant) ([]string, error) {
+	if _, err := destinationRoot(dir, dest); err != nil {
+		return nil, err
+	}
+	skills, err := c.RenderedSkills(v)
+	if err != nil {
+		return nil, err
+	}
+	planned := make([]string, 0, len(skills))
+	for _, skill := range skills {
+		planned = append(planned, filepath.Join(dest, skill.Name, "SKILL.md"))
+	}
+	return planned, nil
+}
+
+// destinationRoot resolves <dir>/<dest> and refuses anything outside dir.
+//
+// An absolute or ~ destination is rejected outright, and the joined result is
+// cleaned and re-checked because "../../outside" passes both of those and still
+// lands outside the tree.
+func destinationRoot(dir, dest string) (string, error) {
+	if filepath.IsAbs(dest) || strings.HasPrefix(dest, "~") {
+		return "", fmt.Errorf("agent install: destination %q is outside the working tree; pass --global or use --tar | tar -xf - -C <dir>", dest)
+	}
+	joined := filepath.Clean(filepath.Join(dir, dest))
+	if rel, err := filepath.Rel(dir, joined); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("agent install: destination %q escapes the working tree", dest)
+	}
+	return joined, nil
+}
+
 // WriteSkillTree renders the standard Agent Skills format into <dir>/<dest>.
 // The destination must be a path relative to <dir>; absolute paths are
 // refused so magus never silently writes outside the working tree. The
 // caller is responsible for that guard at the CLI surface; this method
 // enforces it for safety.
 func (c *Catalog) WriteSkillTree(dir, dest string, force bool, v Variant) ([]string, error) {
-	if filepath.IsAbs(dest) || strings.HasPrefix(dest, "~") {
-		return nil, fmt.Errorf("agent install: destination %q is outside the working tree; pass --global or use --tar | tar -xf - -C <dir>", dest)
-	}
-	// filepath.IsAbs/~ catches an absolute escape but not "../../outside": Join
-	// with dir still resolves that to a path outside it. Clean the joined result
-	// and confirm it is still under dir before writing anything.
-	joined := filepath.Clean(filepath.Join(dir, dest))
-	if rel, err := filepath.Rel(dir, joined); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return nil, fmt.Errorf("agent install: destination %q escapes the working tree", dest)
+	if _, err := destinationRoot(dir, dest); err != nil {
+		return nil, err
 	}
 	skills, err := c.RenderedSkills(v)
 	if err != nil {

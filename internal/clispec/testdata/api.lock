@@ -96,6 +96,7 @@ flag affected/timeout
 flag affected/upstream
 flag affected/wait
 flag agent/dir
+flag agent/dry-run
 flag agent/force
 flag agent/global
 flag agent/prune

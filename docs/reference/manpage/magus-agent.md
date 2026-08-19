@@ -35,6 +35,9 @@ paths-relative-to-\<dir\> case. Absolute destinations are refused unless
 **--dir** *string* (default: .)
 : Repo directory to install into (agent install)
 
+**--dry-run**
+: Print what would be written and removed without touching the filesystem (agent install)
+
 **--force**
 : Overwrite existing installed skill files (agent install)
 
@@ -73,6 +76,12 @@ magus agent install .claude/skills --force
 
 ```sh
 magus agent install .claude/skills --force --prune
+```
+
+*See what a prune would remove first*
+
+```sh
+magus agent install .claude/skills --prune --dry-run
 ```
 
 *Install anywhere via tar*
