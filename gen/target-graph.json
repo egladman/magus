@@ -1521,8 +1521,24 @@
           "name": "site-generate",
           "declared": "site_generate",
           "doc": "site-generate owns publication.",
+          "dependencies": [
+            "build-hljs",
+            "build-playground-editor",
+            "build-playground"
+          ],
           "charms": [
             "rw"
+          ],
+          "chain": [
+            {
+              "target": "build-hljs"
+            },
+            {
+              "target": "build-playground-editor"
+            },
+            {
+              "target": "build-playground"
+            }
           ],
           "reads_files": [
             {
@@ -1773,23 +1789,11 @@
           "doc": "build renders the site: the tree cd.yaml publishes and deploy-generate assembles.",
           "dependencies": [
             "generate",
-            "build-hljs",
-            "build-playground-editor",
-            "build-playground",
             "site-generate"
           ],
           "chain": [
             {
               "target": "generate"
-            },
-            {
-              "target": "build-hljs"
-            },
-            {
-              "target": "build-playground-editor"
-            },
-            {
-              "target": "build-playground"
             },
             {
               "target": "site-generate"

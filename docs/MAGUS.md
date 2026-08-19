@@ -79,6 +79,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Target | What it does |
 |---|---|
+| `site-generate` | site-generate owns publication. |
 | `generate` | generate owns the COMMITTED derived files, and nothing else. |
 | `format` | Scope dprint by ARGV, not by its config, for the same reason the root project does: dprint DISCOVERS a nested dprint.json and formats that subtree under its own config, and neither this project's `includes` nor an exclude prunes it. |
 | `lint` | lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). |
@@ -93,7 +94,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `preflight` |  |
 | `index-generate` | index-generate refreshes MAGUS.md (the target catalog + dependency graph) from this magusfile, so it stays in lockstep with the targets. |
 | `content-generate` | content-generate regenerates the committed docs Markdown derived from the Go source tree: the Buzz stdlib module reference (cmd/magus-docs, from the host module registry), the built-in spell reference plus the spells.md table (cmd/magus-spelldocs), the Markdown manpages (cmd/magus-manpage -format md, from internal/clispec), and the worked examples in knowledge.md (cmd/magus-examples, captured from a fixture graph). |
-| `site-generate` | site-generate owns publication. |
 | `conventions` | conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved. |
 | `buzz-test` | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. |
 | `diagrams-generate` | diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/. |

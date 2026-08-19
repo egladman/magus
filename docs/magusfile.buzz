@@ -405,12 +405,12 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
 // a byte comparison - see generate's comment for the split.
 //
 // generate first, because site-generate reads the Markdown and catalog it derives. The
-// esbuild bundles are a stage of their own BEFORE site-generate rather than beside it:
-// site-generate hashes gen/ into the service-worker precache and site-manifest, so a bundle
-// written after it would ship with a manifest that does not describe it.
+// esbuild bundles are NOT listed here: site-generate declares them itself, which is what
+// makes it correct when something other than this target invokes it. Repeating them would
+// state the ordering in two places, and the copy that is not load-bearing is the one that
+// goes stale.
 export fun build(ctx: magus\Context, args: [str]) > void {
     ctx.needs(generate);
-    ctx.needs(build_hljs, build_playground_editor, build_playground);
     ctx.needs(site_generate);
 }
 
