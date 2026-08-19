@@ -26,7 +26,7 @@ func TestStringAccumulationWarnsInEveryLoopForm(t *testing.T) {
 		{"while", `var s = ""; var i = 0; while (i < 3) { s = s + "x"; i = i + 1; }`},
 		{"foreach", `var s = ""; foreach (p in ["a"]) { s = s + p; }`},
 		{"for", `var s = ""; for (i: int = 0; i < 3; i = i + 1) { s = s + "x"; }`},
-		{"do until", `var s = ""; var i = 0; do { s = s + "x"; i = i + 1; } until (i > 2)`},
+		{"do until", `var s = ""; var i = 0; do { s = s + "x"; i = i + 1; } until (i > 2);`},
 		{"accumulator on the right", `var s = ""; foreach (p in ["a"]) { s = p + s; }`},
 		{"deep in the concat spine", `var s = ""; foreach (p in ["a"]) { s = "<" + s + p + ">"; }`},
 	} {
