@@ -82,6 +82,64 @@ func eachBackend(t *testing.T, fn func(t *testing.T, b parityBackend)) {
 	}
 }
 
+// Every backend implements RevisionFileReader, and "" means the committed revision in each
+// backend's own spelling - HEAD, `.`, `.`, `@`. A caller asking for the committed side has
+// no way to name that portably, so the empty default is the portability, and a backend that
+// resolved "" to something else would silently hand back the wrong content.
+//
+// `magus vcs resolve` reads the committed magusfile this way when the working copy's is
+// mid-merge, so a backend answering with the CONFLICTED text would defeat the whole point:
+// it would parse as badly as the file on disk.
+func TestParityReadFileAtReturnsCommittedContent(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		reader, ok := b.drv.(types.RevisionFileReader)
+		require.Truef(t, ok, "%s does not implement RevisionFileReader", b.name)
+
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"magusfile.buzz": "committed\n"})
+		require.NoError(t, os.WriteFile(filepath.Join(dir, "magusfile.buzz"), []byte("working\n"), 0o644))
+
+		got, err := reader.ReadFileAt(t.Context(), dir, "", "magusfile.buzz")
+		require.NoErrorf(t, err, "%s ReadFileAt", b.name)
+		assert.Equalf(t, "committed\n", got,
+			"%s returned the working copy, not the committed revision", b.name)
+	})
+}
+
+// Content comes back EXACTLY. The shared output helpers trim, which is right for a status
+// line and wrong for a file: a magusfile whose trailing newline was eaten is not the file
+// the revision holds, and this is the capability whose whole promise is that it is.
+func TestParityReadFileAtDoesNotTrim(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		reader, ok := b.drv.(types.RevisionFileReader)
+		require.Truef(t, ok, "%s does not implement RevisionFileReader", b.name)
+
+		dir := t.TempDir()
+		const body = "  leading\n\ntrailing blank line\n\n"
+		b.init(t, dir, map[string]string{"a.txt": body})
+
+		got, err := reader.ReadFileAt(t.Context(), dir, "", "a.txt")
+		require.NoErrorf(t, err, "%s ReadFileAt", b.name)
+		assert.Equalf(t, body, got, "%s trimmed the content", b.name)
+	})
+}
+
+// A path the revision does not hold is an ERROR, not empty content. A caller building a
+// magusfile overlay would otherwise load an empty magusfile and report a workspace with no
+// projects rather than a file it could not read.
+func TestParityReadFileAtMissingPathErrors(t *testing.T) {
+	eachBackend(t, func(t *testing.T, b parityBackend) {
+		reader, ok := b.drv.(types.RevisionFileReader)
+		require.Truef(t, ok, "%s does not implement RevisionFileReader", b.name)
+
+		dir := t.TempDir()
+		b.init(t, dir, map[string]string{"a.txt": "one\n"})
+
+		_, err := reader.ReadFileAt(t.Context(), dir, "", "nosuchfile.buzz")
+		require.Errorf(t, err, "%s reported no error for a path absent at that revision", b.name)
+	})
+}
+
 // DirtyFiles returns PATHS, not the backend's status lines. Each backend prints a
 // different prefix - git two columns, hg and sl one, jj none - and callers hand the result
 // straight to glob matching and staging, so a line that keeps its "M " matches nothing and

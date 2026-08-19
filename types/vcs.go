@@ -466,6 +466,30 @@ type ConflictResolver interface {
 	IgnoredPaths(ctx context.Context, root string, paths []string) (map[string]bool, error)
 }
 
+// RevisionFileReader is an optional capability for VCSDriver implementations that can read
+// ONE file's content at a revision, without materializing a tree.
+//
+// Sibling of RevisionExporter and deliberately narrower: exporting a whole revision to read
+// a single magusfile costs the size of the repository to answer a question about one file.
+// `magus vcs resolve` reads the committed magusfile this way when the merge in progress left
+// conflict markers in the working copy, which is the only version of it guaranteed to parse.
+//
+// Callers type-assert and degrade when a backend lacks it, like every other capability
+// here - though every backend magus ships does implement it.
+type RevisionFileReader interface {
+	// ReadFileAt returns the content of a root-relative slash path at rev, EXACTLY as the
+	// revision holds it: no trimming, and a trailing newline is part of the file.
+	//
+	// rev is a backend-native revision expression. Empty means "the committed revision",
+	// which each backend spells its own way - HEAD for git, `.` for hg and Sapling, `@`
+	// for jj - so a caller that wants the committed side passes "" rather than picking a
+	// spelling that is only correct for one of them.
+	//
+	// A path absent at that revision is an error, not empty content: the caller cannot
+	// tell those apart otherwise.
+	ReadFileAt(ctx context.Context, root, rev, path string) (string, error)
+}
+
 // RevisionExporter is an optional capability for VCSDriver implementations that can
 // materialize a revision's tracked files into a directory (a "checkout to a throwaway
 // tree" without touching the working copy). Callers type-assert for it and degrade

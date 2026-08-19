@@ -1382,6 +1382,22 @@ func vcsOutputRaw(ctx context.Context, dir, name string, args ...string) (string
 	return strings.TrimRight(string(out), "\n"), nil
 }
 
+// revFileOutput runs a backend's "show this file at this revision" command and returns
+// stdout EXACTLY - no trimming of any kind, unlike vcsOutput and vcsOutputRaw.
+//
+// This is file CONTENT, not a status line. A trailing newline is part of the file, and a
+// helper that ate it would hand back something that is not what the revision holds - which
+// is the one promise ReadFileAt makes.
+func revFileOutput(cmd *exec.Cmd, what string) (string, error) {
+	var out, errBuf bytes.Buffer
+	cmd.Stdout = &out
+	cmd.Stderr = &errBuf
+	if err := cmd.Run(); err != nil {
+		return "", fmt.Errorf("%s: %w: %s", what, err, strings.TrimSpace(errBuf.String()))
+	}
+	return out.String(), nil
+}
+
 func splitLines(out []byte) []string {
 	var lines []string
 	for _, line := range strings.Split(string(out), "\n") {
@@ -1390,6 +1406,22 @@ func splitLines(out []byte) []string {
 		}
 	}
 	return lines
+}
+
+// ReadFileAt implements types.RevisionFileReader via `git show <rev>:<path>`.
+//
+// The path is passed with forward slashes and rooted at the repository, which is how git
+// spells a revision:path pair on every platform - it is an object lookup, not a filesystem
+// one, so filepath.FromSlash here would break it on Windows rather than fix it.
+func (gitVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, error) {
+	if rev == "" {
+		rev = "HEAD"
+	}
+	if err := checkRef(rev); err != nil {
+		return "", err
+	}
+	return revFileOutput(gitExec(ctx, "-C", root, "show", rev+":"+path),
+		fmt.Sprintf("git show %s:%s", rev, path))
 }
 
 // ExportRevision implements types.RevisionExporter. `git -C dir archive <rev> -- .`

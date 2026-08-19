@@ -460,6 +460,21 @@ const saplingArchivalMeta = ".sl_archival.txt"
 //     correctly narrows the contents to that subtree but keeps the full repo-relative paths,
 //     where git's `archive <rev> -- .` re-roots them. dir's prefix is therefore stripped
 //     here, so dstDir mirrors the workspace as of rev the way the interface promises.
+//
+// ReadFileAt implements types.RevisionFileReader via `sl cat -r <rev>`. "" is `.`, the
+// committed revision, matching hg's spelling rather than git's.
+func (v saplingVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, error) {
+	if rev == "" {
+		rev = "."
+	}
+	if err := checkRef(rev); err != nil {
+		return "", err
+	}
+	cmd := exec.CommandContext(ctx, "sl", "cat", "-r", rev, path)
+	cmd.Dir = root
+	return revFileOutput(cmd, fmt.Sprintf("sl cat -r %s %s", rev, path))
+}
+
 func (v saplingVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) error {
 	if rev == "" {
 		rev = "."
