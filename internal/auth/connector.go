@@ -69,8 +69,6 @@ var (
 	ErrConnectorNotFound = errors.New("auth: no matching connector token")
 )
 
-// ConnectorToken is one named connector token record. It holds only the hash and
-// a display fingerprint - never the secret.
 // ClientScope is the SURFACE a stored client token may reach. It is the field that
 // makes MCP and console credentials genuinely different things rather than one secret
 // with two names: the verifiers filter on it, so a token minted for one surface is
@@ -91,6 +89,8 @@ const (
 	ScopeConsoleRead ClientScope = "console-read"
 )
 
+// ConnectorToken is one named connector token record. It holds only the hash and
+// a display fingerprint - never the secret.
 type ConnectorToken struct {
 	Name        string    `json:"name"`
 	SHA256      string    `json:"sha256"`      // hex SHA-256 of the full mgs_ token
@@ -413,10 +413,12 @@ func indexConnector(tokens []ConnectorToken, q string) (int, error) {
 	return idx, nil
 }
 
-// Verify reports whether presented is a valid, non-expired connector token. It
-// rejects a malformed or checksum-failing token OFFLINE before any hash work,
-// then compares SHA-256 digests with subtle.ConstantTimeCompare against every
-// non-expired stored record. Expired records never match.
+// VerifyScope reports whether presented is a valid, non-expired connector token
+// minted for scope. It rejects a malformed or checksum-failing token OFFLINE before
+// any hash work, then compares SHA-256 digests with subtle.ConstantTimeCompare
+// against every non-expired stored record carrying that scope. Expired records never
+// match, and neither does a token minted for a different surface - that filter is
+// what keeps the tiers disjoint rather than merely labelled.
 func (s *ConnectorStore) VerifyScope(presented string, scope ClientScope) bool {
 	if !validTokenFormat(presented) {
 		return false
