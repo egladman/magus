@@ -50,7 +50,7 @@ magus\project({
                 "index.html", "manifest.webmanifest", "sw.js", "scripts/**/*.mjs",
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "tsconfig.test.json",
                 "stylelint.config.mjs", "stylelint-control-sizing.mjs",
-                "../gen/knowledge-graph.json", "../gen/target-graph.json"],
+                "../gen/knowledge-graph.json", "../gen/target-graph.json", "../gen/notes.json"],
     // src/gen/** is written by proto's buf-generate (see proto/buf.gen.yaml), but is
     // declared HERE because outputs are confined to the declaring project's subtree.
     // docs declares its own copy the same way. Without this the tree reads as ordinary

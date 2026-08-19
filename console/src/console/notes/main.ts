@@ -30,6 +30,7 @@ import {
 } from "../../gen/magus/notes/v1/notes_pb";
 import {
   parseHash,
+  wantsDemo,
   daemonAttach,
   adoptDaemonOrigin,
   validateLoopbackHost,
@@ -39,6 +40,7 @@ import {
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
 import type { SurfaceInstance } from "../standalone";
+import { loadDemoNotes } from "./demo";
 
 // The SAME key the dashboard remembers its last daemon under, so opening Notes after
 // connecting the dashboard resumes the same loopback host. Read-only here.
@@ -52,6 +54,7 @@ interface Refs {
   empty: HTMLElement;
   emptyTitle: HTMLElement;
   emptySub: HTMLElement;
+  demoBtn: HTMLButtonElement;
 }
 
 // SCOPE_COPY names each store by its CONSEQUENCE rather than by its config key. "shared" and
@@ -164,7 +167,23 @@ function buildScaffold(host: HTMLElement): Refs {
   const liveHint = h("span", undefined, "Then open the live link it prints.");
   liveHint.dataset.emptyHint = "";
   wayLive.append(liveLabel, liveCmd, liveHint);
-  emptyActions.append(wayLive);
+
+  // The demo way, and its hint is doing real work rather than decorating the button: every
+  // other surface's demo is synthesized, this one is a committed export of magus's own notes,
+  // and a reader who assumes the usual sample data would be wrong about the one surface where
+  // that distinction is the whole point.
+  const wayDemo = h("div");
+  wayDemo.dataset.emptyWay = "";
+  const demoLabel = h("span", undefined, "Try the demo");
+  demoLabel.dataset.emptyWayLabel = "";
+  const demoBtn = h("button", "pf-v6-c-button pf-m-primary") as HTMLButtonElement;
+  demoBtn.type = "button";
+  demoBtn.append(h("span", "pf-v6-c-button__text", "Read magus's own notes"));
+  const demoHint = h("span", undefined, "Really magus's, not samples. No daemon needed.");
+  demoHint.dataset.emptyHint = "";
+  wayDemo.append(demoLabel, demoBtn, demoHint);
+
+  emptyActions.append(wayLive, wayDemo);
 
   emptyBody.append(emptySub, emptyActions);
   emptyContent.append(emptyTitle, emptyBody);
@@ -173,7 +192,7 @@ function buildScaffold(host: HTMLElement): Refs {
   scroll.append(body, empty);
   panel.append(scroll);
   host.append(panel);
-  return { scroll, body, empty, emptyTitle, emptySub };
+  return { scroll, body, empty, emptyTitle, emptySub, demoBtn };
 }
 
 // buildAnchors renders what a note is ABOUT, with each anchor's verdict beside it. An anchor
@@ -387,10 +406,34 @@ export function activate(host: HTMLElement): SurfaceInstance {
     }
   }
 
-  // load resolves which daemon to read: an explicit attach (a #port link or the
-  // daemon-origin console), then the last daemon the dashboard remembered. There is no demo
-  // arm, and its absence is deliberate: a synthesized note would be prose no person wrote,
-  // rendered in the one surface whose entire claim is that a person wrote everything on it.
+  // loadDemo renders the committed export of magus's own shared notes (see ./demo.ts for why the
+  // demo is real notes rather than a fixture). A failure says the export is missing rather than
+  // blaming the daemon: there is no daemon in this path, and "could not reach" would send a
+  // reader to start one that would change nothing.
+  async function loadDemo(): Promise<void> {
+    try {
+      const demo = await loadDemoNotes();
+      if (stale) return;
+      const loadBody = (n: Note): Promise<string> => Promise.resolve(demo.body(n.name));
+      refs.body.replaceChildren();
+      for (const store of demo.stores) {
+        const mine = demo.notes.filter((n) => n.scope === store.scope);
+        refs.body.append(buildStoreSection(store, mine, loadBody));
+      }
+      refs.empty.hidden = true;
+    } catch (e) {
+      if (stale) return;
+      showEmpty(
+        "Could not load the demo notes",
+        "The committed export did not load (" +
+          (e instanceof Error ? e.message : String(e)) +
+          "). It is written by the root notes-generate target.",
+      );
+    }
+  }
+
+  // load resolves what to read: an explicit #demo, then an explicit daemon attach (a #port link
+  // or the daemon-origin console), then the last daemon the dashboard remembered.
   function load(): void {
     const params = parseHash();
     consumeLiveToken(params);
@@ -400,6 +443,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // that very daemon. Without this the surface works only after the dashboard has persisted a
     // host to localStorage, which is the shape of bug that looks fine on the developer's machine.
     adoptDaemonOrigin();
+    if (wantsDemo(params)) {
+      void loadDemo();
+      return;
+    }
     const linked = daemonAttach(params);
     const remembered = daemonCell.get();
     const daemonHost = linked ?? (remembered ? validateLoopbackHost(remembered) : null);
@@ -413,6 +460,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     );
   }
 
+  refs.demoBtn.addEventListener("click", () => void loadDemo());
   load();
 
   return {
