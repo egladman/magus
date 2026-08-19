@@ -451,6 +451,18 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "cd /tmp/copy && magus run lint .", deny: true},
 		{command: "cd /private/tmp/x/scratchpad/repo && magus affected ci", deny: true},
 		{command: "cd /var/folders/ab/xyz/T/repo && magus run test .", deny: true},
+		// Repointing origin at a throwaway. Denied: git remote writes the SHARED
+		// config, so it reaches every linked worktree, and generated output can
+		// carry the remote - a scratchpad origin dropped source_base out of
+		// gen/knowledge-graph.json and the corruption was committed, because every
+		// local drift check read the same wrong value and agreed.
+		{command: "git remote set-url origin /private/tmp/claude-501/x/scratchpad/remote.git", deny: true},
+		{command: "git remote add origin /tmp/fixture/remote.git", deny: true},
+		// A real remote is the ordinary case, and a throwaway under its own name is
+		// the replacement the deny names.
+		{command: "git remote set-url origin git@github.com:egladman/magus.git"},
+		{command: "git remote add scratch /private/tmp/claude-501/x/scratchpad/remote.git"},
+		{command: "git remote -v"},
 		// Timing magus with the shell. Advisory: magus already prints per-target
 		// durations and a cached/ran verdict, and `-s` is what hides them - so the
 		// shell timer measures the one number magus gave you and drops the rest.

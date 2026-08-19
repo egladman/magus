@@ -1595,6 +1595,29 @@ func gitGuard(cmds []guardCommand) (bashGuardVerdict, bool) {
 				return bashGuardVerdict{Deny: denySharedStash(rest[0])}, true
 			}
 			return bashGuardVerdict{Deny: denyWholeTree("git stash")}, true
+		case "remote":
+			// `git remote` writes the SHARED repository config, so repointing origin
+			// reaches every linked worktree at once, including sessions mid-run.
+			//
+			// A throwaway destination is the shape that does real damage, and it is
+			// not limited to sending a push somewhere unread: generated output can
+			// carry the remote. Measured 2026-08-19 - gen/knowledge-graph.json
+			// records a source_base built from the remote URL, so with origin
+			// pointed at a scratchpad the generator dropped the field, every local
+			// drift check compared the wrong file against itself and agreed, and the
+			// corruption was committed. Only CI, with a correct remote, caught it.
+			//
+			// Denied rather than advised because the replacement is exact: give the
+			// throwaway its own name and origin keeps meaning what every other
+			// worktree expects it to mean.
+			if len(rest) > 1 && (rest[0] == "set-url" || rest[0] == "add") && slices.Contains(rest, "origin") {
+				for _, arg := range rest {
+					if throwawayDirRe.MatchString(arg) {
+						return bashGuardVerdict{Deny: "Name it something else: `git remote " + rest[0] + " scratch " + arg + "`, and leave origin pointing at the real remote.\n" +
+							"git remote writes the SHARED config, so this repoints origin for every linked worktree at once. Generated output can carry the remote - gen/knowledge-graph.json records a source_base derived from it - so a throwaway origin silently corrupts committed artifacts, and every local drift check still passes because they all read the same wrong value."}, true
+					}
+				}
+			}
 		case "worktree":
 			if len(rest) > 0 && rest[0] == "remove" {
 				return bashGuardVerdict{Deny: "Check it is clean first - `git -C <path> status` - and remove the worktree from a session that owns it.\n" +
