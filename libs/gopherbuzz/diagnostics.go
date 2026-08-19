@@ -40,6 +40,9 @@ const (
 	// Warnings (parser.go). Unlike every code above, a warning never fails Exec/Compile -
 	// see Severity.
 	UnusedImport diagnostics.Code = "BZZ3001" // an import whose namespace binding is never referenced
+
+	// Warnings (checker.go).
+	StringAccumulation diagnostics.Code = "BZZ3002" // a string rebuilt from itself with + inside a loop
 )
 
 // allBZZCodes enumerates every BZZ code, in ascending order. Kept in sync with the const block above by
@@ -47,14 +50,14 @@ const (
 var allBZZCodes = []diagnostics.Code{
 	UndefinedName, UndefinedType, NonBoolCondition, ArgumentError, TypeMismatch, UnhandledRaise, UnknownMember,
 	UnresolvedImport, FiberMisuse,
-	UnusedImport,
+	UnusedImport, StringAccumulation,
 }
 
 // Severity classifies a BZZ diagnostic. The zero value is SeverityError, so every
 // diagnostic built before Severity existed - and every one the checker still builds
 // without setting it explicitly - keeps its current meaning: it fails Exec/Compile
 // exactly as before this type was introduced. Only a diagnostic that opts in
-// (currently just UnusedImport) is a warning, which Exec/Compile must never fail on.
+// (UnusedImport, StringAccumulation) is a warning, which Exec/Compile must never fail on.
 type Severity int
 
 const (

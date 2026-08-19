@@ -57,6 +57,12 @@ type scopeEntry struct {
 
 type checker struct {
 	errors []typeError
+	// warnings are non-fatal diagnostics; they never fail Exec/Compile. Kept apart from
+	// errors so a caller cannot mistake one for the other by length alone.
+	warnings []typeError
+	// loopDepth counts the enclosing loop bodies being checked, so a statement can ask
+	// whether it runs repeatedly. Only the BODY counts: a for-clause is not a loop body.
+	loopDepth int
 	scopes []map[string]scopeEntry
 	retTyp types.Type
 	// retOptional records that the enclosing function's return annotation ended in
@@ -104,7 +110,7 @@ type checker struct {
 // checker doesn't flag them as undefined. private names are hidden by exports-only
 // import visibility: referencing one is undefined here, but the checker points at
 // the missing `export` instead of a bare "undefined".
-func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, private map[string]bool) []typeError {
+func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.Node, moduleFuncs map[string][]*ast.FunDecl, moduleTypes map[string][]ast.Node, moduleVars map[string][]*ast.DeclStmt, private map[string]bool) (errs []typeError, warnings []typeError) {
 	c := &checker{
 		types:       map[string]types.Type{},
 		moduleFuncs: moduleFuncs,
@@ -129,7 +135,7 @@ func checkWithGlobals(prog *ast.Program, extraGlobals []string, imported []ast.N
 	for _, s := range prog.Stmts {
 		c.checkStmt(s)
 	}
-	return c.errors
+	return c.errors, c.warnings
 }
 
 // registerBuiltins pre-defines the stdlib functions so the checker doesn't
@@ -185,6 +191,15 @@ func (c *checker) errorf(p ast.Pos, format string, args ...any) {
 func (c *checker) errorfc(p ast.Pos, code diagnostics.Code, format string, args ...any) {
 	c.errors = append(c.errors, typeError{
 		Line: p.Line, Col: p.Col, Code: code,
+		Msg: fmt.Sprintf(format, args...),
+	})
+}
+
+// warnfc records a non-fatal diagnostic under a specific BZZ code. Unlike errorfc this
+// never fails a compile; callers read it back through Session.Warnings.
+func (c *checker) warnfc(p ast.Pos, code diagnostics.Code, format string, args ...any) {
+	c.warnings = append(c.warnings, typeError{
+		Line: p.Line, Col: p.Col, Code: code, Severity: SeverityWarning,
 		Msg: fmt.Sprintf(format, args...),
 	})
 }
@@ -437,9 +452,13 @@ func (c *checker) checkStmt(n ast.Node) {
 		if cond != types.Any && cond != types.Unknown && cond != types.Bool {
 			c.errorfc(ast.NodePos(v.Cond), NonBoolCondition, "while condition must be bool, got %s", cond.TypeName())
 		}
+		c.loopDepth++
 		c.checkBlock(v.Body)
+		c.loopDepth--
 	case *ast.DoStmt:
+		c.loopDepth++
 		c.checkBlock(v.Body)
+		c.loopDepth--
 		cond := c.infer(v.Cond)
 		if cond != types.Any && cond != types.Unknown && cond != types.Bool {
 			c.errorfc(ast.NodePos(v.Cond), NonBoolCondition, "do-until condition must be bool, got %s", cond.TypeName())
@@ -458,12 +477,16 @@ func (c *checker) checkStmt(n ast.Node) {
 		for _, post := range v.Post {
 			c.checkStmt(post)
 		}
+		c.loopDepth++
 		for _, s := range v.Body.Stmts {
 			c.checkStmt(s)
 		}
+		c.loopDepth--
 		c.popScope()
 	case *ast.ForEachStmt:
+		c.loopDepth++
 		c.checkForEach(v)
+		c.loopDepth--
 	case *ast.FunDecl:
 		c.checkFunDecl(v)
 	case *ast.TestDecl:
@@ -551,6 +574,7 @@ func (c *checker) checkDecl(v *ast.DeclStmt) {
 }
 
 func (c *checker) checkAssign(v *ast.AssignStmt) {
+	c.flagStringAccumulation(v)
 	if id, ok := v.Target.(*ast.IdentExpr); ok {
 		// `_` is the discard target: accept any value and bind nothing.
 		if id.Name == "_" {
@@ -661,6 +685,51 @@ func (c *checker) checkBlock(b *ast.BlockStmt) {
 	}
 	c.checkUnreachable(b)
 	c.popScope()
+}
+
+// flagStringAccumulation warns on `s = s + part` inside a loop. Every iteration copies the
+// whole string built so far, and on the default nanbox build each intermediate is pinned in
+// the global object heap for the life of the process, so none of those copies is ever
+// reclaimed - the cost is quadratic in time and unbounded in memory. Collecting the parts in
+// a list and joining once is the fix.
+//
+// Deliberately narrow: only a bare `+` spine with the target as one of its operands counts,
+// so `s = trim(s)` or `s = s.sub(1)` stay quiet. Those rebuild s too, but they do not GROW
+// it, and warning on every mention of s on the right would make this noise.
+func (c *checker) flagStringAccumulation(v *ast.AssignStmt) {
+	if c.loopDepth == 0 {
+		return
+	}
+	id, ok := v.Target.(*ast.IdentExpr)
+	if !ok {
+		return
+	}
+	if e, found := c.lookup(id.Name); !found || e.typ != types.Str {
+		return
+	}
+	if !concatSpineRefers(v.Value, id.Name) {
+		return
+	}
+	c.warnfc(v.Pos, StringAccumulation,
+		"%q is rebuilt from itself inside a loop, copying the whole string every iteration; collect the parts in a list and join() it once",
+		id.Name)
+}
+
+// concatSpineRefers reports whether n is a `+` chain carrying name as a direct operand.
+func concatSpineRefers(n ast.Node, name string) bool {
+	bin, ok := n.(*ast.BinaryExpr)
+	if !ok || bin.Op != "+" {
+		return false
+	}
+	for _, side := range []ast.Node{bin.Left, bin.Right} {
+		if id, ok := side.(*ast.IdentExpr); ok && id.Name == name {
+			return true
+		}
+		if concatSpineRefers(side, name) {
+			return true
+		}
+	}
+	return false
 }
 
 func (c *checker) checkForEach(v *ast.ForEachStmt) {
@@ -2608,8 +2677,8 @@ func (c *checker) checkUnusedLocals() {
 // checked for real, and reporting it twice - or reporting a spurious ordering
 // error - is worse than staying quiet.
 func (c *checker) inferUnannotatedReturns(prog *ast.Program) {
-	saved := c.errors
-	defer func() { c.errors = saved }()
+	saved, savedWarnings := c.errors, c.warnings
+	defer func() { c.errors, c.warnings = saved, savedWarnings }()
 	for _, stmt := range prog.Stmts {
 		switch d := stmt.(type) {
 		case *ast.FunDecl:
