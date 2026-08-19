@@ -1094,6 +1094,12 @@ export fun postflight(ctx: magus\Context, args: [str]) > void !> any {
 // Drift = a path whose bytes the generators changed, measured by hashing before and
 // after rather than by asking whether the tree is clean, so the gate works on a dirty
 // tree. An uncommitted-but-current generated file still passes: its bytes do not move.
+//
+// This is NOT the engine's drift gate repeated. The engine hashes each target's DECLARED
+// outputs, which is the right scope for attributing staleness to a change. This one is
+// whole-tree, and that is the point: it composes every *-generate sibling, so it is what
+// catches a generator writing a path nobody declared - which no check keyed on declarations
+// can see, because the declaration is the thing that is missing.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // Hash every already-dirty path BEFORE the generators run. Requiring a clean tree
     // instead would disarm the gate at exactly the moment it is reached: the documented

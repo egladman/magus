@@ -19,8 +19,8 @@ import "magus/spell/markdown";
 import "../../spells/golang/gomod" as gomod;
 
 // proc.exec runs the benchmark; fs reads and writes the profile (Buzz's stdlib has
-// neither streaming exec nor raw file IO). tools/drift.buzz gates regenerated outputs.
-// env.home locates the upstream clone cache for the conformance target.
+// neither streaming exec nor raw file IO). env.home locates the upstream clone cache for
+// the conformance target.
 import "os";
 import "proc";
 import "fs";
@@ -52,25 +52,15 @@ magus\project({
 
 export fun preflight(ctx: magus\Context, args: [str]) > void {}
 
-// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result. Drift is
-// measured by hashing MAGUS.md before and after (tools/drift.buzz), not by asking whether
-// it was clean, so the gate still fires when you already have it uncommitted. A
-// locally-regenerated MAGUS.md passes either way: its bytes do not move.
+// Regenerates MAGUS.md. Use the rw charm to keep the result; without it the engine's drift
+// gate compares what regeneration produced against what is committed. Nothing declares that
+// gate here - index_generate declaring MAGUS.md as its output is the whole declaration
+// magus needs. It hashes before and after rather than asking whether the tree was clean, so
+// an uncommitted-but-current MAGUS.md still passes: its bytes do not move.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     gomod\replaceWorkspaceModules(ctx, go, "libs/gopherbuzz");
-    final before = drift.hashes(["MAGUS.md"]);
     ctx.needs(index_generate);
-    if (ctx.hasCharm("rw")) { return; }
-
-    if (drift.changedSince(before, ["MAGUS.md"]).len() > 0) {
-        // Print the diff, not just the verdict. This gate fires where its reader has
-        // a CI log and no tree, and the index carries workspace-wide counts, so
-        // "drifted" alone cannot say whether a count moved or a whole section did.
-        final body = vcs\dirtyDiff(["MAGUS.md"]);
-        if (body != "") { magus\log.info("generate: what changed on this runner:\n" + body); }
-        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/gopherbuzz` and commit" + drift.secondCause;
-    }
 }
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.

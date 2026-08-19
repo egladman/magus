@@ -336,6 +336,19 @@ func gateDriftFixture(t *testing.T) (*Magus, *types.Project) {
 	return &Magus{ws: &types.Workspace{Root: dir}}, &types.Project{Path: ".", Dir: dir}
 }
 
+// driftingFixture is gateDriftFixture plus a declared output the target actually moves.
+// The VCS is only consulted once something drifted - there is nothing to attribute
+// otherwise - so a test about the VCS half has to produce drift first or it never gets
+// there.
+func driftingFixture(t *testing.T) (*Magus, *types.Project, func() error) {
+	t.Helper()
+	m, p := gateDriftFixture(t)
+	p.Outputs = []string{"out.txt"}
+	path := filepath.Join(p.Dir, "out.txt")
+	require.NoError(t, os.WriteFile(path, []byte("before"), 0o644))
+	return m, p, func() error { return os.WriteFile(path, []byte("after"), 0o644) }
+}
+
 func TestGateDriftSkipsWhenVCSDisabled(t *testing.T) {
 	t.Setenv("MAGUS_VCS_ENABLED", "false")
 	m, p := gateDriftFixture(t)
@@ -366,13 +379,27 @@ func TestGateDriftSkipsWhenNothingClaimsTheRoot(t *testing.T) {
 
 func TestGateDriftErrorsOnUnresolvableVCS(t *testing.T) {
 	t.Setenv("MAGUS_VCS_NAME", "nosuchvcs")
-	m, p := gateDriftFixture(t)
+	m, p, drift := driftingFixture(t)
 
-	err := m.gateDrift(t.Context(), p, "generate", types.DriftFail, func() error { return nil })
+	err := m.gateDrift(t.Context(), p, "generate", types.DriftFail, drift)
 
 	require.Error(t, err, "an unknown MAGUS_VCS_NAME is misconfiguration, not an absent VCS")
 	require.Contains(t, err.Error(), "drift-gated",
 		"the message must name the guarantee that could not be honored, not just the VCS failure")
+}
+
+// Nothing moved, so there is nothing to attribute and no reason to consult the VCS at all.
+// This is the half hashing bought: detection no longer depends on the VCS, so a broken one
+// cannot fail a run whose outputs are all exactly where they were.
+func TestGateDriftIgnoresBrokenVCSWhenNothingMoved(t *testing.T) {
+	t.Setenv("MAGUS_VCS_NAME", "nosuchvcs")
+	m, p := gateDriftFixture(t)
+	p.Outputs = []string{"out.txt"}
+	require.NoError(t, os.WriteFile(filepath.Join(p.Dir, "out.txt"), []byte("stable"), 0o644))
+
+	err := m.gateDrift(t.Context(), p, "generate", types.DriftFail, func() error { return nil })
+
+	require.NoError(t, err, "unmoved bytes are not drift, whatever the VCS is doing")
 }
 
 func TestGateDriftPropagatesTargetError(t *testing.T) {

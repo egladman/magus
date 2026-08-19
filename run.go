@@ -1681,8 +1681,29 @@ func annotateVolatility(project, target, status string, rt *volatility.Runtime) 
 // Skipped when dir has no VCS, so the guard never blocks a non-repo checkout.
 func (m *Magus) gateDrift(ctx context.Context, p *types.Project, target string, policy types.DriftPolicy, fn func() error) error {
 	dir := p.Dir
+	// Hash the declared outputs on both sides rather than asking the VCS what is dirty
+	// afterwards. "Is the tree dirty now" answers a different question: an output you
+	// already had uncommitted reads as this run's doing, and the gate blames the target for
+	// your own work in progress. Bytes that did not move are not drift, however dirty the
+	// tree around them is.
+	//
+	// diff.HashContent expands the globs exactly as the cache snapshot does, so the gate and
+	// the cache cannot disagree about what a declared output IS.
+	globs := []diff.OutputGlobs{{Root: dir, Globs: p.AllOutputs()}}
+	before, err := diff.HashContent(ctx, globs)
+	if err != nil {
+		return fmt.Errorf("%s: %s is drift-gated but its declared outputs could not be read: %w", dir, target, err)
+	}
 	if err := fn(); err != nil {
 		return err
+	}
+	after, err := diff.HashContent(ctx, globs)
+	if err != nil {
+		return fmt.Errorf("%s: %s is drift-gated but its declared outputs could not be re-read: %w", dir, target, err)
+	}
+	moved := diff.DiffContent(before, after)
+	if len(moved) == 0 {
+		return nil
 	}
 	// Resolve the active VCS (git/hg/sl/jj) rather than shelling out to git, so the
 	// cleanliness gate works under any backend.
@@ -1716,19 +1737,10 @@ func (m *Magus) gateDrift(ctx context.Context, p *types.Project, target string, 
 	if res.VCS == nil || res.Source == types.VCSSourceDefault {
 		return nil
 	}
-	paths, err := res.VCS.DirtyFiles(ctx, dir, []string{"."})
-	if err != nil {
-		return fmt.Errorf("%s: %s is drift-gated but %s could not report working-tree status, so drift was not verified: %w",
-			dir, target, res.VCS.Name(), err)
-	}
-	if len(paths) == 0 {
-		return nil
-	}
-
-	// Classify before judging. Only a declared OUTPUT is drift - an unrelated file the run
-	// happened to touch is not this gate's business, and blaming the target for it is how a
-	// gate teaches people to ignore it.
-	classified, err := m.ClassifyFiles(ctx, paths)
+	// moved is already scoped to declared outputs by the globs it was hashed from. It is
+	// classified anyway, because SplitExplainedOutputs needs each path's owning project to
+	// ask whether that project's sources moved in this change.
+	classified, err := m.ClassifyFiles(ctx, moved)
 	if err != nil {
 		return fmt.Errorf("%s: %s is drift-gated but its changed paths could not be classified, so drift was not verified: %w",
 			dir, target, err)
@@ -1753,8 +1765,8 @@ func (m *Magus) gateDrift(ctx context.Context, p *types.Project, target string, 
 	if len(mine) == 0 {
 		return nil
 	}
-	stale := fmt.Sprintf("%s: %s left declared output stale; re-run with the rw charm (%s:rw) and commit:\n%s",
-		dir, target, target, strings.Join(mine, "\n"))
+	stale := fmt.Sprintf("%s: %s left declared output stale; re-run with the rw charm (%s:rw) and commit:\n%s%s",
+		dir, target, target, strings.Join(mine, "\n"), driftDetail(ctx, res, dir, mine))
 	if !policy.Fails() {
 		_ = annotate.Detect(os.Stderr).Annotate(annotate.Annotation{
 			Level:   annotate.LevelWarning,
@@ -1765,6 +1777,27 @@ func (m *Magus) gateDrift(ctx context.Context, p *types.Project, target string, 
 		return nil
 	}
 	return errors.New(stale)
+}
+
+// driftDetail is the diff of what moved, appended to the gate's message.
+//
+// Names alone were not enough twice running: one of them turned out to be a daemon auth
+// token captured into a docs example, which no filename could have shown. This gate fires
+// where its reader has a CI log and no tree, so the bytes have to travel with the verdict.
+//
+// Bounded, because a generated JSON file is one enormous line and would bury a small,
+// readable drift somewhere else in the list. Best effort - a backend that cannot produce a
+// diff still gets the names.
+func driftDetail(ctx context.Context, res types.VCSResolution, dir string, paths []string) string {
+	body, err := res.VCS.DirtyDiff(ctx, dir, paths)
+	if err != nil || body == "" {
+		return ""
+	}
+	const cap = 4000
+	if len(body) > cap {
+		body = body[:cap] + "\n... truncated; the full diff is in this run's captured log"
+	}
+	return "\n\nwhat changed on this runner:\n" + body
 }
 
 // targetHandler returns the handler for a target, wrapped in the drift gate when its
