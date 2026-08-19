@@ -271,7 +271,17 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
 
 // site-generate owns publication. It cannot replay while it reads VCS state; the
 // public generate target still lets the independent content stages fan out first.
+//
+// The bundles are needed HERE, not merely ordered by whoever calls this. They used to be
+// ordered only in `generate`, which made this target correct as a stage and broken on its
+// own: `magus run site-generate docs` - and `magus vcs resolve`, which invokes the target
+// that owns a conflicted output directly - failed on `playground/index.html references
+// missing playground/wasm_exec.js`. A caller cannot be the thing that makes a target
+// correct. The ordering requirement is unchanged and now stated where it holds: the render
+// hashes gen/ into the service-worker precache and the site manifest, so a bundle written
+// after it would ship with a manifest that does not describe it.
 export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
+    ctx.needs(build_hljs, build_playground_editor, build_playground);
     ctx.readsFiles("render.buzz", "lib/**/*.buzz", "engine/**/*.buzz", "site/**/*.buzz", "**/*.md",
         "src/**/*.js", "src/**/*.ts", "src/**/*.css", "playground.html", "tour/*.buzz",
         "package.json", "pnpm-lock.yaml", "tsconfig.json", "biome.json", "retired.urls.lock",

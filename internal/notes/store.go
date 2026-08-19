@@ -114,6 +114,20 @@ type Note struct {
 	// Modified is the file's modification time, filled in on read. It is observed, not
 	// stored, so it cannot disagree with the file it describes.
 	Modified time.Time `json:"modified" yaml:"-"`
+	// Path is the file this note was read FROM, observed on read for the same reason
+	// Modified is: it cannot disagree with the file it describes.
+	//
+	// It exists because Name cannot answer the question. A note that declares an id is
+	// identified by that id, and the id is deliberately independent of where the file
+	// sits - that is the whole point of having one. So joining the store dir to Name
+	// names a real file only while the two happen to agree, and names a file that does
+	// not exist the moment someone renames the note in their vault. Two callers derived
+	// it that way and both were wrong: the console showed a reader a path they could not
+	// open, and `notes edit` scaffolded a SECOND note beside the one being edited.
+	//
+	// Empty on a Note that was built rather than read (Scaffold, a new note from stdin),
+	// where there is no file yet to have a path.
+	Path string `json:"-" yaml:"-"`
 }
 
 // Severity separates the two things verify reports, and the split is load-bearing rather
@@ -516,7 +530,7 @@ func Inspect(dir string) ([]Note, []Issue, error) {
 			}
 			if !known[a.Target] {
 				issues = append(issues, Issue{
-					Severity: SeverityError, Code: CodeMissingNote, Path: filepath.Join(dir, n.Name+".md"), Note: n.Name,
+					Severity: SeverityError, Code: CodeMissingNote, Path: n.Path, Note: n.Name,
 					Message: fmt.Sprintf("anchors to missing note %q", a.Target),
 					Hint:    "Write the referenced note, correct the anchor, or remove it.",
 				})
@@ -565,8 +579,14 @@ func Get(dir, name string) (Note, error) {
 	return n, nil
 }
 
-// Path returns the file a note lives at, without reading it. `magus notes edit` needs
-// this to hand a path to $EDITOR, including for a note that does not exist yet.
+// Path returns where a note of this name WOULD live, without reading anything. `magus notes
+// edit` needs it to hand $EDITOR a path for a note that does not exist yet.
+//
+// It is not where an EXISTING note lives, and the difference is not academic: a note that
+// declares an id is identified by that id rather than by its filename, so for one that has
+// since been renamed this names a file that is not it. Read the note and use Note.Path for
+// that; calling this instead is what had `notes edit` open a blank scaffold beside the note
+// it was asked to edit.
 func Path(dir, name string) (string, error) {
 	if !nameRE.MatchString(name) {
 		return "", fmt.Errorf("notes: invalid name %q", name)
@@ -619,7 +639,21 @@ func Save(dir string, n Note) error {
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("notes: save: %w", err)
 	}
+	// Written back to the file it was READ from, so a note whose declared id no longer
+	// matches its filename is updated in place rather than duplicated at the id's path -
+	// which is what re-attestation did, splitting one note into two and leaving the
+	// original's anchors unfingerprinted. A note with no origin is new (Scaffold, a body
+	// piped in), and there its name is what names the file.
+	//
+	// The origin is honoured only INSIDE dir. A path from the other store would move the
+	// note between scopes, and publishing someone's private note by saving it is not a
+	// thing a save may do.
 	path := filepath.Join(dir, filepath.FromSlash(n.Name)+".md")
+	if n.Path != "" {
+		if rel, relErr := filepath.Rel(dir, n.Path); relErr == nil && !strings.HasPrefix(rel, "..") {
+			path = n.Path
+		}
+	}
 	if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 		return fmt.Errorf("notes: save: %w", err)
 	}
@@ -763,6 +797,7 @@ func readNoteFile(path, name string) (Note, bool, error) {
 		Anchors:  payload.Anchors,
 		Body:     strings.TrimSpace(string(m[2])),
 		Modified: modified,
+		Path:     path,
 	}
 	// A declared id wins over the path, so moving or renaming the file inside the vault
 	// keeps the note's identity and every anchor pointing at it.

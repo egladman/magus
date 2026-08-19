@@ -563,6 +563,32 @@ func (v jjVCS) ChangesByCommit(ctx context.Context, dir string, commits int, sin
 //     repo accumulates one entry per export. The forget runs unconditionally, including on
 //     the failure paths, and uses a context detached from cancellation so a cancelled export
 //     still cleans up after itself.
+//
+// ReadFileAt implements types.RevisionFileReader via `jj file show -r <rev>`.
+//
+// "" is `@-`, NOT `@` as everywhere else in this driver. jj's working copy IS a commit and
+// is snapshotted continuously, so `@` holds the edit in progress - asking it for a file
+// hands back the working copy, which is precisely what a caller asking for the committed
+// revision is trying to avoid. `@-`, its parent, is what git spells HEAD and hg spells `.`.
+// The parity suite caught this: git and sl passed, jj returned the working copy.
+//
+// Every other `@` in this file is deliberate - the working-copy commit IS the subject of a
+// status or a log there. This is the one question about the side that is NOT being edited.
+//
+// `file show`, not the older `cat`: this driver already speaks modern jj elsewhere
+// (bookmarks rather than branches), and `cat` is the spelling that was renamed away.
+func (v jjVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, error) {
+	if rev == "" {
+		rev = "@-"
+	}
+	if err := checkRef(rev); err != nil {
+		return "", err
+	}
+	cmd := exec.CommandContext(ctx, "jj", "file", "show", "-r", rev, path)
+	cmd.Dir = root
+	return revFileOutput(cmd, fmt.Sprintf("jj file show -r %s %s", rev, path))
+}
+
 func (v jjVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) error {
 	if rev == "" {
 		rev = "@"

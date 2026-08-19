@@ -2,6 +2,7 @@ package notes
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -175,6 +176,45 @@ func TestRecordDigestsIsDeliberateAndReportsWhatItDid(t *testing.T) {
 	changed, err = RecordDigests(context.Background(), dir, "pairing", "cafe1234", res)
 	require.NoError(t, err)
 	assert.Equal(t, 0, changed)
+}
+
+// Re-attestation on a note whose declared id no longer matches its filename. Saving to
+// dir/<id>.md would leave the author with two notes and the original still unfingerprinted,
+// which is the failure this whole store exists to avoid: a flag cleared without anyone
+// reading the prose, on a file nobody was looking at.
+func TestRecordDigestsUpdatesTheNoteInPlaceAfterARename(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "Some Note.md")
+	require.NoError(t, os.WriteFile(file,
+		[]byte("---\nmagus:\n  id: pairing\n  title: Two caches\n  anchors:\n    - kind: symbol\n      target: m cache/Put().\n---\n\nProse.\n"), 0o644))
+	res := fakeResolver{
+		live:    map[string]bool{"symbol:m cache/Put().": true},
+		digests: map[string]string{"symbol:m cache/Put().": "bbbbbbbbbbbbbbbb"},
+	}
+
+	changed, err := RecordDigests(context.Background(), dir, "pairing", "cafe1234", res)
+	require.NoError(t, err)
+	assert.Equal(t, 1, changed)
+
+	assert.NoFileExists(t, filepath.Join(dir, "pairing.md"), "re-attestation must not fork the note")
+	found, _, err := Inspect(dir)
+	require.NoError(t, err)
+	require.Len(t, found, 1)
+	assert.Equal(t, file, found[0].Path)
+	assert.Equal(t, "bbbbbbbbbbbbbbbb", found[0].Anchors[0].Digest)
+}
+
+// A verify warning names the file to go and repair, so it has to be the file that exists.
+func TestResolveAnchorsReportsTheRealFileAfterARename(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "Some Note.md")
+	require.NoError(t, os.WriteFile(file,
+		[]byte("---\nmagus:\n  id: pairing\n  title: Two caches\n  anchors:\n    - kind: symbol\n      target: m gone/Removed().\n---\n\nProse.\n"), 0o644))
+
+	issues, err := ResolveAnchors(context.Background(), dir, fakeResolver{})
+	require.NoError(t, err)
+	require.Len(t, issues, 1)
+	assert.Equal(t, file, issues[0].Path)
 }
 
 // TestRecordDigestsSkipsADanglingAnchor: a fingerprint for something that no longer exists
