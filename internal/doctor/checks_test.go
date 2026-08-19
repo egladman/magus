@@ -661,3 +661,39 @@ func TestUndeclaredSeedingFilesWithoutVCS(t *testing.T) {
 
 	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 }
+
+// TestUnmatchableSourceGlobsReportsPatternsIntoPrunedDirs is MGS1029: the expansion
+// walk skips gen/vendor/node_modules/target wholesale, so a PATTERN aimed inside one
+// matches nothing and keys nothing, and the target replays while those files change.
+func TestUnmatchableSourceGlobsReportsPatternsIntoPrunedDirs(t *testing.T) {
+	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	p := &types.Project{Path: "docs", Name: "docs", Dir: "docs", Sources: []string{
+		"proto/gen/*.binpb",
+		"src/**/*.ts",
+	}}
+
+	got := r.checkUnmatchableSourceGlobs([]*types.Project{p})
+
+	require.Equal(t, types.DoctorFail, got.Status, got.Message)
+	require.Len(t, got.Details, 1, "only the glob reaching into gen/ is unmatchable")
+	assert.Contains(t, got.Details[0], "proto/gen/*.binpb")
+	assert.Contains(t, got.Details[0], `prunes "gen"`)
+	assert.Contains(t, got.Message, "MGS1029")
+}
+
+// TestUnmatchableSourceGlobsIgnoresExactPaths is the half that must not regress. A
+// wildcard-free declaration names ONE file and is resolved by stat rather than the
+// walk, so it reaches the cache key from inside a pruned tree normally - reporting it
+// would tell the author to fix something that already works.
+func TestUnmatchableSourceGlobsIgnoresExactPaths(t *testing.T) {
+	r := &runner{root: t.TempDir(), ws: stubWorkspace{}}
+	p := &types.Project{Path: "docs", Name: "docs", Dir: "docs", Sources: []string{
+		"proto/gen/descriptor.binpb",
+		"node_modules/pkg/index.js",
+	}}
+
+	got := r.checkUnmatchableSourceGlobs([]*types.Project{p})
+
+	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
+	assert.Empty(t, got.Details)
+}

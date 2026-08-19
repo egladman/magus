@@ -180,6 +180,7 @@ func (r *runner) run(wsErr error) types.DoctorReport {
 		r.checkRedundantFootprintGlobs(projects),
 		r.checkDeadOutputGlobs(projects),
 		r.checkUndeclaredSeedingFiles(projects),
+		r.checkUnmatchableSourceGlobs(projects),
 		r.checkOutputOwnedByTwoTargets(projects),
 		r.checkSelfStalingOutputs(projects),
 		r.checkCharmTargetCollision(projects),
