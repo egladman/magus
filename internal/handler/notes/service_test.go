@@ -2,6 +2,7 @@ package notes
 
 import (
 	"context"
+	"os"
 	"path/filepath"
 	"testing"
 
@@ -69,6 +70,25 @@ func TestListNotesReportsBothStoresEvenWhenUndeclared(t *testing.T) {
 	assert.Equal(t, notesv1.Scope_SCOPE_SHARED, n.GetScope())
 	assert.Equal(t, "notes/auth.md", n.GetPath(), "a shared note's path is workspace-relative")
 	assert.Empty(t, n.GetBody(), "a listing carries no prose; GetNote fills it")
+}
+
+// The console renders this path as where to open the note, so it has to be the file. A note
+// that declares an id is identified by that id and not by its filename - renaming the file in
+// a vault is the normal case ids exist for - and the path used to be rebuilt from the name,
+// which named a file that stopped existing the moment the two diverged.
+func TestASharedNotePathIsTheFileNotTheId(t *testing.T) {
+	root := t.TempDir()
+	dir := filepath.Join(root, "notes")
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "Some Note.md"),
+		[]byte("---\nmagus:\n  id: cache-pairing\n  title: Two caches\n  anchors:\n    - kind: project\n      target: .\n---\n\nProse.\n"), 0o644))
+
+	resp, err := sharedOnly(root).ListNotes(t.Context(), connect.NewRequest(&notesv1.ListNotesRequest{}))
+	require.NoError(t, err)
+	require.Len(t, resp.Msg.GetNotes(), 1)
+	n := resp.Msg.GetNotes()[0]
+	assert.Equal(t, "cache-pairing", n.GetName(), "the id is the identity")
+	assert.Equal(t, "notes/Some Note.md", n.GetPath(), "and the path is still the file")
 }
 
 // TestAColdGraphNeverReportsAnAnchorAsResolving is the safety property this surface turns on.

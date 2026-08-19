@@ -322,9 +322,17 @@ func loadKnowledgeNotes(root, dir, scope string) []types.KnowledgeNote {
 	// that @vcs can attribute to an author. A private store may be anywhere, so there is
 	// no relative path and no attribution to be had - the absolute path is the honest
 	// Source, and a blank author is the honest answer rather than a fabricated one.
-	rel, err := filepath.Rel(root, dir)
-	if err != nil || strings.HasPrefix(rel, "..") {
-		rel = dir
+	//
+	// Taken from each note's own file rather than rebuilt from its name: a note that
+	// declares an id is identified by that id and not by where the file sits, so a rebuilt
+	// path stops naming a real file the moment someone renames the note - and @vcs then
+	// attributes nothing, because no such path was ever committed.
+	relPath := func(p string) string {
+		r, rerr := filepath.Rel(root, p)
+		if rerr != nil || strings.HasPrefix(r, "..") {
+			return filepath.ToSlash(p)
+		}
+		return filepath.ToSlash(r)
 	}
 	out := make([]types.KnowledgeNote, 0, len(found))
 	for _, n := range found {
@@ -337,7 +345,7 @@ func loadKnowledgeNotes(root, dir, scope string) []types.KnowledgeNote {
 		out = append(out, types.KnowledgeNote{
 			Name:    n.Name,
 			Title:   n.Title,
-			Path:    filepath.ToSlash(filepath.Join(rel, n.Name+".md")),
+			Path:    relPath(n.Path),
 			Tags:    n.Tags,
 			Anchors: anchors,
 		})
