@@ -64,7 +64,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 43 | `magus query project:.` | `buzz-test`, `generate`, `lint` |
+| . | 43 | `magus query project:.` | `generate`, `buzz-test`, `lint` |
 | console | 7 | `magus query project:console` | `preflight`, `ci`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents | 5 | `magus query project:docs/guides/integrations/agents` | `ci`, `format`, `lint` |
@@ -84,6 +84,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `image-registries` | Reports the registries `magus run image-build` under the SAME charms will push to, and whether the credentials each one needs are actually present in the environment. |
 | `image-login` | Logs in to every registry the active mode publishes to, resolving each one's credentials through the workspace's secret provider. |
 | `image-scan` | Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL. |
+| `security` | Gates on dependency LICENSE terms, which is a separate question from image_scan's vulnerability pass even though both drive trivy. |
 | `bindings-generate` | Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations. |
 | `magusfile-api-generate` | Regenerates the magusfile API surface lock: every member a magusfile can call on the magus namespace, one dotted name per line. |
 | `spells-generate` | Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen), the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module host declarations (internal/spellruntime/gen/decls), all driven by the go:generate directives in internal/spellruntime. |
@@ -107,7 +108,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `toolchain-report` | serve is the workspace-root dev loop for BOTH deployables. |
 | `serve` |  |
 | `image-build` | Two axes, one charm each. |
-| `security` | Gates on dependency LICENSE terms, which is a separate question from image_scan's vulnerability pass even though both drive trivy. |
 | `man-generate` | Renders the roff man pages into manpage/ (repo root). |
 | `changelog-generate` | CHANGELOG.md is a root artifact. |
 | `types-generate` | Regenerates the runtime BuzzObject maps before anything imports a host binding. |

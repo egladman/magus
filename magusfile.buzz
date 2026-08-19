@@ -788,6 +788,17 @@ export fun image_scan(ctx: magus\Context, args: [str]) > void !> any {
 // The baseline when this landed was 265 findings, all `notice` or `unencumbered` and none
 // forbidden or restricted, so this gate starts green and only speaks up on a regression.
 export fun security(ctx: magus\Context, args: [str]) > void !> any {
+    // govulncheck loads PACKAGES, so it parses every .go file this target's sources
+    // glob - generated ones included. Without this edge it is free to run beside the
+    // target writing them: measured 2026-08-18, when it read types/gen/mocks while
+    // mockery was still emitting it and failed with "expected 'package', found 'EOF'"
+    // - a parse error that reads like a broken tree rather than a race.
+    //
+    // lint, build and test already reach generate (via format), so security was the
+    // one member of ci's fan-out without the ordering its siblings have. MGS4004 does
+    // not cover this: it reports CROSS-project undeclared reads, and both targets here
+    // are in the same project.
+    ctx.needs(generate);
     // Both halves of Software Composition Analysis over one dependency inventory:
     // govulncheck asks whether a dependency has a known flaw, trivy whether its terms may
     // legally be here at all. They share this target because they share that input and a

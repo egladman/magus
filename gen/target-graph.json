@@ -146,12 +146,20 @@
         {
           "name": "security",
           "doc": "Gates on dependency LICENSE terms, which is a separate question from image_scan's vulnerability pass even though both drive trivy.",
+          "dependencies": [
+            "generate"
+          ],
           "spells": [
             {
               "spell": "go",
               "ops": [
                 "govulncheck"
               ]
+            }
+          ],
+          "chain": [
+            {
+              "target": "generate"
             }
           ],
           "reads_secrets": false,
