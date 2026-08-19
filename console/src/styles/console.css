@@ -848,15 +848,10 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   outline: none;
 }
 
-/* Entrance: the cards fade-and-rise once on load, staggered ~50ms apart. One-shot (forwards), and fully
-   disabled under prefers-reduced-motion (below). Kept subtle - a 0.5rem rise over ~0.45s. */
-#console-outlet [data-surface="home"] .console-launcher-card { opacity: 0; animation: console-launcher-rise 0.45s var(--console-ease, ease) forwards; }
-.console-launcher-card:nth-child(1) { animation-delay: 0.02s; }
-.console-launcher-card:nth-child(2) { animation-delay: 0.07s; }
-.console-launcher-card:nth-child(3) { animation-delay: 0.12s; }
-.console-launcher-card:nth-child(4) { animation-delay: 0.17s; }
-.console-launcher-card:nth-child(5) { animation-delay: 0.22s; }
-.console-launcher-card:nth-child(6) { animation-delay: 0.27s; }
+/* Entrance: the cards fade-and-rise once on load, staggered 50ms apart. One-shot (forwards), and fully
+   disabled under prefers-reduced-motion (below). Kept subtle - a 0.5rem rise over ~0.45s. Keep the step
+   in ms: esbuild --minify rewrites `* 0.05s` to an invalid `/20s` and the whole cascade drops. */
+#console-outlet [data-surface="home"] .console-launcher-card { opacity: 0; animation: console-launcher-rise 0.45s var(--console-ease, ease) forwards; animation-delay: calc((sibling-index() - 1) * 50ms + 20ms); }
 @keyframes console-launcher-rise { from { opacity: 0; transform: translateY(0.6rem); } to { opacity: 1; transform: translateY(0); } }
 
 /* One-shot "living" icon micro-motions on hover - each surface's glyph animates ONCE, in character, and
