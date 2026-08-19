@@ -270,16 +270,13 @@ func NewCatalog(sourceFS fs.FS, agentsSection string, schemaVersion int) *Catalo
 	return c
 }
 
-// SkillDigest fingerprints ONE skill: its body, name, and description, and
-// nothing else in the catalog.
+// SkillDigest fingerprints ONE skill: its body, name, and description.
 //
-// A catalog-wide digest made every skill stale whenever any skill changed, so a
-// one-word edit restamped all 26 installed files and all 16 reference pages, and
-// the resulting diff could not show which skill had actually moved. The two
-// permutations of one skill deliberately still share this value - see StampSkill.
-//
-// The catalog-wide contentDigest survives for the AGENTS.md block alone, which
-// really does depend on the whole set: it routes to every skill by name.
+// A catalog-wide digest restamped all 26 installed files and all 16 reference
+// pages whenever any skill changed, so a diff could not show which one moved.
+// Both permutations of a skill still share this value - see StampSkill. The
+// catalog-wide contentDigest survives for the AGENTS.md block, which routes to
+// every skill by name and so does depend on the whole set.
 func (c *Catalog) SkillDigest(name string) string {
 	// A twin is rendered from its primary's body, so it resolves to the primary's
 	// entry rather than one of its own - that is what makes the two report the
@@ -466,13 +463,9 @@ func (c *Catalog) SkillTar(dest string, v Variant) ([]byte, error) {
 
 // PlanSkillTree returns the paths WriteSkillTree would write, writing nothing.
 //
-// It shares checkDestination with the writer so the two cannot disagree about
-// where a destination resolves - a plan that named different paths than the run
-// would be worse than no plan, because it would be believed.
-//
-// The --force conflict check is deliberately not repeated here: a plan reports
-// what a successful run would produce, and refusing to describe it because a
-// file is already there would answer a question nobody asked.
+// Shares checkDestination with the writer, so a plan cannot name paths the run
+// would not. The --force conflict check is not repeated: a plan reports what a
+// successful run produces.
 func (c *Catalog) PlanSkillTree(dir, dest string, v Variant) ([]string, error) {
 	if err := checkDestination(dir, dest); err != nil {
 		return nil, err
@@ -488,12 +481,8 @@ func (c *Catalog) PlanSkillTree(dir, dest string, v Variant) ([]string, error) {
 	return planned, nil
 }
 
-// checkDestination refuses a destination that lands outside dir.
-//
-// An absolute or ~ destination is rejected outright, and the joined result is
-// cleaned and re-checked because "../../outside" passes both of those and still
-// lands outside the tree. Shared so the writer and the planner cannot disagree
-// about which destinations are legal.
+// checkDestination refuses a destination that lands outside dir. The joined path
+// is cleaned and re-checked because "../../outside" is neither absolute nor ~.
 func checkDestination(dir, dest string) error {
 	if filepath.IsAbs(dest) || strings.HasPrefix(dest, "~") {
 		return fmt.Errorf("agent install: destination %q is outside the working tree; pass --global or use --tar | tar -xf - -C <dir>", dest)
@@ -764,11 +753,9 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 
 // gradeDest grades every magus skill installed under dest, not just the anchor.
 //
-// Reading one skill was sufficient only while the digest covered the whole
-// catalog: any change moved it, so any stale file was stale. A per-skill digest
-// makes that shortcut blind - an outdated magus-run would read as current
-// because magus-query happened not to change - so each file is now graded
-// against its own, and the destination reports the first that is stale.
+// Reading one skill worked only while the digest covered the whole catalog. With
+// a per-skill digest that shortcut goes blind: a stale magus-run reads as current
+// when magus-query happens not to have changed.
 func (c *Catalog) gradeDest(dir, dest string) Status {
 	reinstall := "magus agent install " + dest + " --force"
 	for _, name := range c.installedSkillNames(filepath.Join(dir, dest)) {
@@ -783,9 +770,8 @@ func (c *Catalog) gradeDest(dir, dest string) Status {
 	return Status{Location: dest, Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d)", SkillVersion, c.schemaVersion)}
 }
 
-// installedSkillNames lists the magus skill directories present under path, in
-// a deterministic order. A directory magus no longer ships is included: it is
-// still loaded by the host, so its staleness is still the reader's problem.
+// installedSkillNames lists the magus skill directories under path, sorted. One
+// magus no longer ships is included: the host still loads it.
 func (c *Catalog) installedSkillNames(path string) []string {
 	entries, err := os.ReadDir(path)
 	if err != nil {

@@ -35,9 +35,8 @@ func manCmd(args []string) error {
 		return fmt.Errorf("magus man install: unexpected argument %q", fs.Arg(0))
 	}
 	pages := clispec.RoffPages("", version)
-	// Named before the write, and before MkdirAll: the directory is usually
-	// outside the repo (XDG_DATA_HOME, or ~/.local/share), which is exactly the
-	// kind of destination worth seeing spelled out before anything lands in it.
+	// Before MkdirAll: the destination is usually outside the repo, so describing
+	// it must not create it.
 	if *dryRun {
 		for _, page := range pages {
 			fmt.Fprintf(os.Stdout, "would write %s\n", filepath.Join(*dir, page.Name))

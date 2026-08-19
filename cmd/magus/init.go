@@ -75,11 +75,8 @@ func initCmd(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("init: --global and --local are mutually exclusive")
 	}
 
-	// Ahead of every write, because init is the one command that touches three
-	// places at once - a config file usually OUTSIDE the repo, a magusfile in it,
-	// and the VCS merge driver in git's own config. Seeing those three named is
-	// the difference between bootstrapping a workspace and discovering later that
-	// something rewired your repository.
+	// Ahead of every write: init touches three places at once, and two are outside
+	// the repo - the config, and the merge driver in the VCS's own config.
 	if inf.DryRun {
 		return printInitPlan(inf.Global, inf.Local, inf.Force)
 	}
@@ -129,9 +126,8 @@ func initCmd(ctx context.Context, root string, args []string) error {
 	return nil
 }
 
-// xdgConfigTarget returns $XDG_CONFIG_HOME/magus/magus.yaml and creates
-// nothing, so --dry-run can name the destination without making a directory
-// on the way to describing it.
+// xdgConfigTarget returns $XDG_CONFIG_HOME/magus/magus.yaml, creating nothing,
+// so --dry-run can name the destination without making it.
 func xdgConfigTarget() (string, error) {
 	dir, err := config.UserConfigDir()
 	if err != nil {
@@ -140,8 +136,8 @@ func xdgConfigTarget() (string, error) {
 	return filepath.Join(dir, "magus", config.Filename), nil
 }
 
-// xdgConfigPath returns the same path, creating the directory if it does not
-// exist. This is the form a real run uses.
+// xdgConfigPath returns the same path, creating the directory. The form a real
+// run uses.
 func xdgConfigPath() (string, error) {
 	target, err := xdgConfigTarget()
 	if err != nil {
@@ -154,12 +150,9 @@ func xdgConfigPath() (string, error) {
 	return target, nil
 }
 
-// printInitPlan names every destination a real init would touch, and reports
-// which of them already exist, without creating any of them.
-//
-// It reads state rather than assuming: a config that is already there is only
-// overwritten with --force, and a magusfile is never overwritten at all, so a
-// plan that said "would write" for both would overstate what happens.
+// printInitPlan names every destination a real init would touch, creating none.
+// It reads state rather than assuming: a config is only overwritten with --force
+// and a magusfile never is, so a flat "would write" would overstate both.
 func printInitPlan(global, local, force bool) error {
 	target, err := xdgConfigTarget()
 	if err != nil {
