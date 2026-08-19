@@ -63,8 +63,8 @@ type checker struct {
 	// loopDepth counts the enclosing loop bodies being checked, so a statement can ask
 	// whether it runs repeatedly. Only the BODY counts: a for-clause is not a loop body.
 	loopDepth int
-	scopes []map[string]scopeEntry
-	retTyp types.Type
+	scopes    []map[string]scopeEntry
+	retTyp    types.Type
 	// retOptional records that the enclosing function's return annotation ended in
 	// `?`. Like scopeEntry.optional it exists because ParseAnnot erases the marker.
 	retOptional bool
