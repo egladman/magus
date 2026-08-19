@@ -50,7 +50,12 @@ magus\project({
                 "index.html", "manifest.webmanifest", "sw.js", "scripts/**/*.mjs",
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "tsconfig.test.json",
                 "stylelint.config.mjs", "stylelint-control-sizing.mjs",
-                "../gen/knowledge-graph.json", "../gen/target-graph.json", "../gen/notes.json"],
+                "../gen/knowledge-graph.json", "../gen/target-graph.json"],
+    // TODO: wire the Notes demo export in. It needs ../gen/notes.json declared above and
+    // copied beside the bundle in package.json's copy-static, next to the two graph exports
+    // - both are held back only because gen/notes.json is not committed yet, and an
+    // unconditional cp of a file that does not exist fails the whole build. Run the root
+    // notes-generate target, commit its output, then add both lines back.
     // src/gen/** is written by proto's buf-generate (see proto/buf.gen.yaml), but is
     // declared HERE because outputs are confined to the declaring project's subtree.
     // docs declares its own copy the same way. Without this the tree reads as ordinary
