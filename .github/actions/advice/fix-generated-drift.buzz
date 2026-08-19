@@ -11,7 +11,6 @@
 // Neither alone is enough. The input without the label means the repo allows it and
 // nobody asked for it; the label without the input means someone asked for something the
 // repo never enabled.
-import "os";
 import "proc";
 import "advice";
 import "std";
@@ -49,12 +48,15 @@ fun dirty() > [str] !> any {
 
 // fixedBody is the section text for a successful push. Pure, so the wording is testable.
 export fun fixedBody(files: [str], sha: str) > str {
-    var body = "**Regenerated the files magus generates** and pushed `" + sha + "` to this branch:\n\n";
-    foreach (f in files) { body = body + "- `" + f + "`\n"; }
-    return body
-        + "\nThe drift gate compares regenerated output against what is committed, so this "
-        + "settles it. Pull before you push again, or your next push will conflict with the "
-        + "commit above.\n\nRemove the label to stop magus from doing this.\n";
+    final parts = mut ["**Regenerated the files magus generates** and pushed `" + sha + "` to this branch:\n\n"];
+    foreach (f in files) { parts.append("- `" + f + "`\n"); }
+    parts.append("\nThe drift gate compares regenerated output against what is committed, so "
+        + "this settles it. Pull before you push again, or your next push will conflict with "
+        + "the commit above.\n\nThe checks on this pull request still describe the tree from "
+        + "before this commit - a push made with the CI token does not start a new run. "
+        + "Re-run them to judge what is here now.\n\nRemove the label to stop magus from "
+        + "doing this.\n");
+    return parts.join("");
 }
 
 fun main() > void !> any {
@@ -88,6 +90,15 @@ fun main() > void !> any {
                 + "regenerated files to it - the CI token has no write access to `"
                 + headRepo + "`. Run `magus run generate:rw` locally and commit the result.");
         return;
+    }
+
+    // A pull_request event checks out refs/pull/N/merge detached - base already merged with
+    // head - and pushing that would land a merge nobody reviewed. Branch name, not head sha:
+    // a fixer that ran before this one has moved the sha on purpose.
+    final at = git(["rev-parse", "--abbrev-ref", "HEAD"], tolerate: false).trim();
+    if (at != headRef) {
+        throw "fix-generated-drift: checked out " + at + ", not this PR's branch " + headRef
+            + "; the workflow must check the head branch out by name before this step";
     }
 
     if (git(["log", "-1", "--format=%ae"], tolerate: false).trim() == autofix_email) {
