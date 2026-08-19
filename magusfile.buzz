@@ -1074,7 +1074,6 @@ export fun graph_generate(ctx: magus\Context, args: [str]) > void !> any {
     fs\writeFile(fs\join("gen", "target-graph.json"), targets);
 }
 
-
 // Renders the insight report (hotspots, affinity, ownership, trend) to stdout. Local
 // only: no workflow invokes this target, and ci-outcome.buzz's volatility-lens step
 // summary is the CI-facing equivalent.
