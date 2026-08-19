@@ -40,7 +40,7 @@ import {
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
 import type { SurfaceInstance } from "../standalone";
-import { loadDemoNotes } from "./demo";
+import { demoNotes } from "./demo";
 
 // The SAME key the dashboard remembers its last daemon under, so opening Notes after
 // connecting the dashboard resumes the same loopback host. Read-only here.
@@ -168,18 +168,17 @@ function buildScaffold(host: HTMLElement): Refs {
   liveHint.dataset.emptyHint = "";
   wayLive.append(liveLabel, liveCmd, liveHint);
 
-  // The demo way, and its hint is doing real work rather than decorating the button: every
-  // other surface's demo is synthesized, this one is a committed export of magus's own notes,
-  // and a reader who assumes the usual sample data would be wrong about the one surface where
-  // that distinction is the whole point.
+  // The hint says "sample" before the button is pressed, and loadDemo says it again above the
+  // cards. Twice on purpose: this is the surface where mistaking invented prose for something a
+  // colleague wrote is the costly error, and one notice is one thing to miss.
   const wayDemo = h("div");
   wayDemo.dataset.emptyWay = "";
   const demoLabel = h("span", undefined, "Try the demo");
   demoLabel.dataset.emptyWayLabel = "";
   const demoBtn = h("button", "pf-v6-c-button pf-m-primary") as HTMLButtonElement;
   demoBtn.type = "button";
-  demoBtn.append(h("span", "pf-v6-c-button__text", "Read magus's own notes"));
-  const demoHint = h("span", undefined, "Really magus's, not samples. No daemon needed.");
+  demoBtn.append(h("span", "pf-v6-c-button__text", "See the demo"));
+  const demoHint = h("span", undefined, "Sample notes, no daemon needed.");
   demoHint.dataset.emptyHint = "";
   wayDemo.append(demoLabel, demoBtn, demoHint);
 
@@ -411,30 +410,36 @@ export function activate(host: HTMLElement): SurfaceInstance {
     }
   }
 
-  // loadDemo renders the committed export of magus's own shared notes (see ./demo.ts for why the
-  // demo is real notes rather than a fixture). A failure says the export is missing rather than
-  // blaming the daemon: there is no daemon in this path, and "could not reach" would send a
-  // reader to start one that would change nothing.
-  async function loadDemo(): Promise<void> {
-    try {
-      const demo = await loadDemoNotes();
-      if (stale) return;
-      const loadBody = (n: Note): Promise<string> => Promise.resolve(demo.body(n.name));
-      refs.body.replaceChildren();
-      for (const store of demo.stores) {
-        const mine = demo.notes.filter((n) => n.scope === store.scope);
-        refs.body.append(buildStoreSection(store, mine, loadBody));
-      }
-      refs.empty.hidden = true;
-    } catch (e) {
-      if (stale) return;
-      showEmpty(
-        "Could not load the demo notes",
-        "The committed export did not load (" +
-          (e instanceof Error ? e.message : String(e)) +
-          "). It is written by the root notes-generate target.",
-      );
+  // loadDemo renders invented notes, and the banner above them is not decoration: it is the only
+  // thing between a demo and this surface asserting that a person wrote five things nobody wrote.
+  // Every other surface can show sample data silently; this one cannot, because authorship is the
+  // entire claim a note makes. Warning rather than info, because the reader who skims past an
+  // info stripe and then quotes one of these to a colleague is the failure being prevented.
+  function loadDemo(): void {
+    const demo = demoNotes();
+    const loadBody = (n: Note): Promise<string> => Promise.resolve(demo.body(n.name));
+    refs.body.replaceChildren();
+
+    const banner = h("div", "pf-v6-c-alert pf-m-warning");
+    banner.append(h("p", "pf-v6-c-alert__title", "Sample notes. Nobody wrote these."));
+    const desc = h("div", "pf-v6-c-alert__description");
+    desc.append(
+      h(
+        "p",
+        undefined,
+        "They exist to show what the surface does with anchors, staleness and the two stores. " +
+          "A real note is prose a person wrote and committed under their own name; connect a " +
+          "daemon to read yours.",
+      ),
+    );
+    banner.append(desc);
+    refs.body.append(banner);
+
+    for (const store of demo.stores) {
+      const mine = demo.notes.filter((n) => n.scope === store.scope);
+      refs.body.append(buildStoreSection(store, mine, loadBody));
     }
+    refs.empty.hidden = true;
   }
 
   // load resolves what to read: an explicit #demo, then an explicit daemon attach (a #port link
@@ -449,7 +454,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // host to localStorage, which is the shape of bug that looks fine on the developer's machine.
     adoptDaemonOrigin();
     if (wantsDemo(params)) {
-      void loadDemo();
+      loadDemo();
       return;
     }
     const linked = daemonAttach(params);
@@ -465,7 +470,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     );
   }
 
-  refs.demoBtn.addEventListener("click", () => void loadDemo());
+  refs.demoBtn.addEventListener("click", () => loadDemo());
   load();
 
   return {

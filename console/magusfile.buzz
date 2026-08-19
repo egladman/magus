@@ -61,12 +61,6 @@ magus\project({
                 "package.json", "pnpm-lock.yaml", "tsconfig.json", "tsconfig.test.json",
                 "stylelint.config.mjs", "stylelint-control-sizing.mjs",
                 "../gen/knowledge-graph.json", "../gen/target-graph.json"],
-    // TODO: wire the Notes demo export in. It needs ../gen/notes.json declared above and
-    // copied beside the bundle in package.json's copy-static, next to the two graph exports
-    // - both are held back only because gen/notes.json is not committed yet, and an
-    // unconditional cp of a file that does not exist fails the whole build. Run the root
-    // notes-generate target, commit its output, then add both lines back.
-
     // gen/** alone: the esbuild bundle, which this project actually produces. src/gen/** lands
     // here too, but proto writes it (see proto/buf.gen.yaml) and declares it there against this
     // project. Claiming it here as well is MGS4002 - two projects declaring one path cannot be
