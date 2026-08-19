@@ -5,6 +5,7 @@
   "multigraph": false,
   "node_count": 2340,
   "edge_count": 6028,
+  "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
       "id": "charm:amd64",
