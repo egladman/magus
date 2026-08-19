@@ -451,6 +451,15 @@ func TestEvaluateBashGuard(t *testing.T) {
 		{command: "cd /tmp/copy && magus run lint .", deny: true},
 		{command: "cd /private/tmp/x/scratchpad/repo && magus affected ci", deny: true},
 		{command: "cd /var/folders/ab/xyz/T/repo && magus run test .", deny: true},
+		// Timing magus with the shell. Advisory: magus already prints per-target
+		// durations and a cached/ran verdict, and `-s` is what hides them - so the
+		// shell timer measures the one number magus gave you and drops the rest.
+		{command: "time magus run test .", context: "magus times itself"},
+		{command: "time ./magus run test . -s", context: "cached"},
+		// The wrapper peeling that judges `time go test` as `go test` would erase
+		// the token this rule reads, so it works off the raw line.
+		{command: "time go test ./...", deny: true},
+		{command: "magus run test ."},
 		// A cd WITHIN the workspace stays an advisory: naming the project is the
 		// fix, and the run still describes the tree that ships.
 		{command: "cd libs/gopherbuzz && magus run test .", context: "CWD-relative"},

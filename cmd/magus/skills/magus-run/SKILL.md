@@ -92,6 +92,10 @@ truncating it after the fact:
   is a few lines (result line + output ref), a failure keeps a bounded tail of
   the failing project plus the ref to fetch the rest.{{else}} A pass prints a
   result line plus an output ref; a failure adds a bounded tail.{{end}}
+  DROP it when the question is what RAN versus what replayed: the per-target
+  timings and the `(cached, 320ms)` / `(ran, 5m28s)` verdict only print without
+  it.{{if .Full}} Reaching for shell `time` around a silent run measures the wall clock magus
+  already reported and hides which targets were cache hits.{{end}}
 - `-q` / `--quiet`: looser - drops progress, keeps errors and the failing
   project's full output.
 - `-o <fmt>`: `text|json|yaml|jsonl|name|template=<go-template>`.{{if .Full}} Ask for the

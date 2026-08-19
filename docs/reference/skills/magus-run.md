@@ -2,8 +2,8 @@
 title: magus-run
 description: "Run builds, tests, lints, and codegen through magus targets."
 tags: [agents, skills, magus-run]
-skill_full_bytes: 10578
-skill_simple_bytes: 6950
+skill_full_bytes: 10877
+skill_simple_bytes: 7113
 ---
 
 # magus-run
@@ -29,7 +29,7 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `source` | `magus` |
 | `agent-skill-version` | `37` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `f78e25aa99a4` |
+| `skill-content` | `a8b8e03490ee` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -126,6 +126,10 @@ truncating it after the fact:
 - `-s` / `--silent`: the default for every CLI run. Progress is dropped; a pass
   is a few lines (result line + output ref), a failure keeps a bounded tail of
   the failing project plus the ref to fetch the rest.
+  DROP it when the question is what RAN versus what replayed: the per-target
+  timings and the `(cached, 320ms)` / `(ran, 5m28s)` verdict only print without
+  it. Reaching for shell `time` around a silent run measures the wall clock magus
+  already reported and hides which targets were cache hits.
 - `-q` / `--quiet`: looser - drops progress, keeps errors and the failing
   project's full output.
 - `-o <fmt>`: `text|json|yaml|jsonl|name|template=<go-template>`. Ask for the
@@ -320,6 +324,9 @@ change is done, and a single narrower target only to iterate on a failure.
 
 - `-s` / `--silent`: the default for every CLI run. A pass prints a
   result line plus an output ref; a failure adds a bounded tail.
+  DROP it when the question is what RAN versus what replayed: the per-target
+  timings and the `(cached, 320ms)` / `(ran, 5m28s)` verdict only print without
+  it.
 - `-q` / `--quiet`: looser - drops progress, keeps errors and the failing
   project's full output.
 - `-o <fmt>`: `text|json|yaml|jsonl|name|template=<go-template>`.

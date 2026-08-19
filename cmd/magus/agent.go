@@ -208,9 +208,8 @@ func agentInstallCmd(ctx context.Context, args []string) error {
 	var removed, stale []string
 	for _, dest := range dests {
 		base, leaf := installTarget(af.Dir, dest, af.Global)
-		// --dry-run answers the question --prune is dangerous without: which
-		// directories would go. It reports the same two lists the real run does and
-		// touches nothing, so the destructive flag can be rehearsed before it runs.
+		// Answers the question --prune is dangerous without: which directories go.
+		// Same two lists the real run reports, nothing touched.
 		if af.DryRun {
 			w, err := agentSkills.PlanSkillTree(base, leaf, agent.VariantSimple)
 			if err != nil {
@@ -275,8 +274,8 @@ func printAgentInstallNextSteps(dir string, written, stale []string, v agent.Var
 	if !interactive.HintsEnabled() || len(written) == 0 {
 		return
 	}
-	// A rehearsal that claims it installed something is worse than no rehearsal:
-	// the reader stops looking for the real run.
+	// A rehearsal that claims it installed something stops the reader looking for
+	// the real run.
 	if dryRun {
 		interactive.Emit(os.Stderr, fmt.Sprintf("dry run: %d file(s) would be written; nothing was changed. Re-run without --dry-run to apply", len(written)))
 		return
@@ -1817,6 +1816,10 @@ var (
 	// is what an exit status is for; the echo adds a line that is true by
 	// construction and tells a reader nothing the command did not.
 	guardEchoOnSuccessRe = regexp.MustCompile(`(?:^|[;&|]\s*)(\S*/)?magus\s[^&|;]*&&\s*echo\b`)
+	// Read off the raw line, not the parsed command: the wrapper peeling that lets
+	// `time go test` be judged as `go test` would erase the very token this rule is
+	// about.
+	guardTimedMagusRe = regexp.MustCompile(`(?:^|[;&|]\s*)time\s+(\S*/)?magus\s`)
 
 	// A magus invocation whose own output is truncated or filtered by the shell.
 	// magus has output flags for this; a pipe throws away the parts the agent
@@ -1931,6 +1934,10 @@ const (
 
 	// Advice, not a deny: it wastes a line, it does not break anything.
 	echoOnSuccessAdvice = "Drop the `&& echo ...` and read the exit status - it already says the command passed, and a message that prints only on success adds nothing."
+
+	// Advise, not deny: timing a command is legitimate, and the point is that magus
+	// already answered the question better than the shell can.
+	timedMagusAdvice = "magus times itself: drop `-s` and it prints each target's duration and a `(cached, 320ms)` or `(ran, 5m28s)` verdict. `time` around a silent run measures the wall clock magus already reported, and hides which targets replayed - which is usually the thing being asked."
 )
 
 // denySharedStash explains why an unqualified stash restore is refused.
@@ -2025,6 +2032,8 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 		return bashGuardVerdict{Context: searchGuardReason}
 	case guardEchoOnSuccessRe.MatchString(command):
 		return bashGuardVerdict{Context: echoOnSuccessAdvice}
+	case guardTimedMagusRe.MatchString(command):
+		return bashGuardVerdict{Context: timedMagusAdvice}
 	}
 	// Nothing denied, so a held git advisory is the answer after all.
 	return advisory
