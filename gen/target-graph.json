@@ -793,7 +793,7 @@
             "buzz-test"
           ],
           "charms": [
-            "rw"
+            "cd"
           ],
           "spells": [
             {

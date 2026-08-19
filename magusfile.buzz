@@ -136,7 +136,8 @@ magus\project({
         // order-sensitive side effect, never a cache replay. exclusive: nothing
         // else should be touching go.mod or the tag namespace while it runs.
         "release": {"skip_cache": "mutates go.mod and creates VCS tags, an order-sensitive side effect", "exclusive": true},
-        // test rewrites assets/coverage.svg; a cache hit would skip the write.
+        // test rewrites assets/coverage.svg under the cd charm; a cache hit would skip
+        // the write, and two publishing runs share a key.
         // memory_mb measured, not guessed: on a 16GB CI runner this target took
         // available memory from 1137MB to 265MB in two seconds and the runner was
         // killed, leaving no failing target to blame because the MACHINE died rather
@@ -146,7 +147,7 @@ magus\project({
         // per host, so it throttles peers on a 16GB runner and barely registers on a
         // 64GB workstation without this file naming either machine.
         "test": {
-            "skip_cache": "rewrites assets/coverage.svg; a hit would skip the write",
+            "skip_cache": "rewrites assets/coverage.svg under cd; a hit would skip the write",
             "memory_mb": 10240,
         },
         // The verdict depends on trivy's license classifier, which is not a declared tool
@@ -1760,12 +1761,11 @@ export fun advice_test(ctx: magus\Context, args: [str]) > void !> any {
 // Tests with race detection, coverage, and a drift-gated coverage badge.
 export fun test(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(advice_test);
-    // Declared because this target WRITES the badge below and gates on its drift.
-    // Undeclared, a declaration-based staging review would skip it as unclaimed while ci still failed on
-    // it being stale - the workspace's account of itself disagreeing with what a
-    // target actually does, which is the disagreement declarations exist to end.
+    // Declared because this target WRITES the badge below, under `cd`. Undeclared, a
+    // declaration-based staging review would skip it as unclaimed - the workspace's
+    // account of itself disagreeing with what a target actually does, which is the
+    // disagreement declarations exist to end.
     ctx.writesFiles("assets/coverage.svg");
-    final badgeBefore = drift.hashes([fs\join("assets", "coverage.svg")]);
     ctx.needs(format, buzz_test);
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
     // Measure hand-written code only. Generated files (protobuf accessors, mocks,
@@ -1792,16 +1792,27 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     }
     // Whole percent on the BADGE, one decimal for the floor check above. The
     // module has files that only compile on one platform (hostmem, proc/run), so
-    // the ratio legitimately differs between a macOS laptop and a Linux runner -
-    // 67.4 here, 67.3 there. Committing a tenth of a percent made a generated
-    // artifact gate on the machine that produced it, which no contributor on the
-    // wrong OS could satisfy. A whole number carries the same information and
-    // survives the crossing.
-    fs\writeFile(fs\join("assets", "coverage.svg"),
-        badge\coverage("go coverage", percent: pct.split(".")[0], radius: 3));
-    if (ctx.hasCharm("rw")) { return; }
-    if (drift.changedSince(badgeBefore, [fs\join("assets", "coverage.svg")]).len() > 0) {
-        throw "test: assets/coverage.svg is stale; re-run `magus run test:rw .` and commit the badge";
+    // The badge is written under `cd` only, the same charm image-build gates a registry
+    // push on, and for the same reason: it PUBLISHES a fact rather than deriving one.
+    //
+    // It used to be drift-gated like generated output, and that was a category error.
+    // Every other artifact this repo gates that way is a pure function of the tree, so
+    // any machine reproduces it byte for byte. Coverage is a function of the tree AND the
+    // machine: `go test` compiles only the files whose build constraints match, and ~30
+    // tests skip by platform (landlock on Linux, hostmem/pty on darwin). One tree
+    // measured 67.3% on a macOS laptop and 66.7% on a Linux runner - so an equality gate
+    // fails on whichever machine did not produce the committed badge, permanently, and no
+    // amount of normalising closes it. Stripping the constrained FILES above equalises
+    // the denominator and moved that gap by 0.1; which tests RAN is not something a
+    // filter can reach.
+    //
+    // So the floor below is the gate every run enforces - a threshold survives the
+    // crossing, an equality does not - and the badge is refreshed deliberately by whoever
+    // publishes, exactly as the release index is. A PR never has to satisfy a number
+    // measured somewhere else.
+    if (ctx.hasCharm("cd")) {
+        fs\writeFile(fs\join("assets", "coverage.svg"),
+            badge\coverage("go coverage", percent: pct.split(".")[0], radius: 3));
     }
 }
 
