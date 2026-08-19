@@ -259,6 +259,68 @@ func TestDelegateUltraVariantsKeepTheSameSafetyContract(t *testing.T) {
 // TestSkillDigestIsPerSkill pins the granularity, which is the whole point of the
 // digest: a catalog-wide one restamped all 26 installed files and all 16 reference
 // pages whenever any skill changed, so a diff could not show which skill moved.
+// TestPlanSkillTreeMatchesTheWriter keeps --dry-run honest: a plan that named
+// different paths than the run would be worse than no plan, because it would be
+// believed.
+func TestPlanSkillTreeMatchesTheWriter(t *testing.T) {
+	catalog := testCatalog(t)
+	dir := t.TempDir()
+
+	planned, err := catalog.PlanSkillTree(dir, ".claude/skills", VariantSimple)
+	require.NoError(t, err)
+	require.NotEmpty(t, planned)
+
+	written, err := catalog.WriteSkillTree(dir, ".claude/skills", false, VariantSimple)
+	require.NoError(t, err)
+
+	assert.Equal(t, written, planned, "the plan must name exactly what the writer writes")
+}
+
+// TestPlanSkillTreeWritesNothing is the property the flag exists for.
+func TestPlanSkillTreeWritesNothing(t *testing.T) {
+	catalog := testCatalog(t)
+	dir := t.TempDir()
+
+	_, err := catalog.PlanSkillTree(dir, ".claude/skills", VariantSimple)
+	require.NoError(t, err)
+
+	entries, err := os.ReadDir(dir)
+	require.NoError(t, err)
+	assert.Empty(t, entries, "a plan must not create the destination it describes")
+}
+
+func TestCheckDestinationRefusesEscapes(t *testing.T) {
+	dir := t.TempDir()
+
+	assert.NoError(t, checkDestination(dir, ".claude/skills"))
+	assert.NoError(t, checkDestination(dir, "nested/deeper/skills"))
+
+	assert.Error(t, checkDestination(dir, "/etc/skills"), "an absolute path is outside the tree")
+	assert.Error(t, checkDestination(dir, "~/skills"), "a home-relative path is outside the tree")
+	// The one IsAbs and the ~ check both miss: it is relative and does not start
+	// with ~, and only cleaning the joined path reveals where it lands.
+	assert.Error(t, checkDestination(dir, "../../outside"), "a traversal escapes the tree")
+}
+
+func TestInstalledSkillNamesListsOnlyMagusDirs(t *testing.T) {
+	catalog := testCatalog(t)
+	dir := t.TempDir()
+	for _, name := range []string{"magus-run", "magus-query", "magus-query-full", "notes", "README"} {
+		require.NoError(t, os.MkdirAll(filepath.Join(dir, name), 0o755))
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "magus-not-a-dir"), []byte("x"), 0o644))
+
+	// Sorted, so a verify run reports the same order every time; a plain file is
+	// not a skill however it is named.
+	assert.Equal(t, []string{"magus-query", "magus-query-full", "magus-run"}, catalog.installedSkillNames(dir))
+	assert.Nil(t, catalog.installedSkillNames(filepath.Join(dir, "does-not-exist")))
+}
+
+func TestBaseSkillNameResolvesTwins(t *testing.T) {
+	assert.Equal(t, "magus-run", baseSkillName("magus-run"))
+	assert.Equal(t, "magus-run", baseSkillName(FullTwinName("magus-run")))
+}
+
 func TestSkillDigestIsPerSkill(t *testing.T) {
 	catalog := testCatalog(t)
 
