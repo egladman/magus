@@ -189,6 +189,55 @@ func TestIdSurvivesARename(t *testing.T) {
 	assert.Equal(t, "cache-pairing", found[0].Name, "the id is the identity, not the path")
 }
 
+// The id is the identity, and the FILE is somewhere else. Every caller that wanted to name
+// the file rebuilt it from the identity, which is correct only while the two agree - so this
+// pins the observed path against the rebuilt one, on a note where they cannot agree.
+func TestPathNamesTheFileNotTheId(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "Some Note.md")
+	require.NoError(t, os.WriteFile(file,
+		[]byte("---\nmagus:\n  id: cache-pairing\n  title: Two caches\n  anchors:\n    - kind: project\n      target: .\n---\n\nProse.\n"), 0o644))
+
+	n, err := Get(dir, "cache-pairing")
+	require.NoError(t, err)
+	assert.Equal(t, file, n.Path, "the path is where the note was read from, not dir/<id>.md")
+
+	found, _, err := Inspect(dir)
+	require.NoError(t, err)
+	require.Len(t, found, 1)
+	assert.Equal(t, file, found[0].Path)
+}
+
+// Re-attestation reads a note, stamps its anchors and saves it. Saving to dir/<id>.md would
+// leave TWO notes where there was one, with the original's anchors still unfingerprinted -
+// so a save goes back to the file the note came from.
+func TestSaveWritesBackToTheFileItWasReadFrom(t *testing.T) {
+	dir := t.TempDir()
+	file := filepath.Join(dir, "Some Note.md")
+	require.NoError(t, os.WriteFile(file,
+		[]byte("---\nmagus:\n  id: cache-pairing\n  title: Two caches\n  anchors:\n    - kind: project\n      target: .\n---\n\nProse.\n"), 0o644))
+
+	n, err := Get(dir, "cache-pairing")
+	require.NoError(t, err)
+	n.Anchors[0].Digest = "abc123"
+	require.NoError(t, Save(dir, n))
+
+	assert.NoFileExists(t, filepath.Join(dir, "cache-pairing.md"), "a save must not duplicate the note at its id")
+	found, issues, err := Inspect(dir)
+	require.NoError(t, err)
+	assert.Empty(t, issues)
+	require.Len(t, found, 1, "one note in, one note out")
+	assert.Equal(t, "abc123", found[0].Anchors[0].Digest)
+}
+
+// A note that was never read has no origin, so its name is what names the file. This is the
+// path `notes edit` takes to bring a note into existence.
+func TestSaveNamesANewNoteAfterItsName(t *testing.T) {
+	dir := t.TempDir()
+	require.NoError(t, Save(dir, Scaffold("brand-new")))
+	assert.FileExists(t, filepath.Join(dir, "brand-new.md"))
+}
+
 // TestPathIsTheIdentityWithoutAnId: a hand-written vault note that never declared one is
 // still addressable, just by where it sits.
 func TestPathIsTheIdentityWithoutAnId(t *testing.T) {

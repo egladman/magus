@@ -313,18 +313,27 @@ func notesEdit(ctx context.Context, root string, args []string) error {
 	// declared store (shared when both exist), because team knowledge is the case worth
 	// making easy and a private note is the deliberate exception.
 	target := stores[0]
-	switch _, st, err := findNote(stores, pos[0]); {
+	// existing is the file the note was READ from, and using it is what makes "edited where
+	// it already lives" true. store.Path answers a different question - where a note of this
+	// name WOULD go - and for a note whose declared id no longer matches its filename the two
+	// answers differ, so editing one opened a blank scaffold at the id's path and left the
+	// real note untouched beside it.
+	var existing string
+	switch found, st, err := findNote(stores, pos[0]); {
 	case err == nil:
-		target = st
+		target, existing = st, found.Path
 	case errors.Is(err, errAmbiguousNote):
 		// Never guess which store was meant: the two mean different things to a reader,
 		// and silently editing the shared one is the mistake this error exists to prevent.
 		return err
 	}
 	dir := target.dir
-	path, err := store.Path(dir, pos[0])
-	if err != nil {
-		return fmt.Errorf("magus notes edit: %w", err)
+	path := existing
+	if path == "" {
+		path, err = store.Path(dir, pos[0])
+		if err != nil {
+			return fmt.Errorf("magus notes edit: %w", err)
+		}
 	}
 	// A pipe is the non-interactive way to author a note: `pg_dump ... | magus notes edit`
 	// is the same act as opening the editor, just without a terminal to open one in. It is
