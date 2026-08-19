@@ -8,6 +8,7 @@
 // opened. The four core lenses are real surfaces (logs/graph/dashboard/activity). The launcher
 // (home.ts) is NOT a tab - it is the outlet's empty state, shown whenever zero tabs are open.
 
+import { exchangeOperatorToken } from "../lib/token-exchange";
 import {
   openTab,
   closeTab,
@@ -752,6 +753,20 @@ export function startConsole(
   adoptDaemonOrigin();
   const readOnly = isReadOnly();
   document.documentElement.toggleAttribute("data-read-only", readOnly);
+
+  // Trade an operator token for a console-scoped one, once per token. Fire-and-forget on
+  // purpose: the console works whichever tier it holds, so nothing waits on this and a
+  // failure is never surfaced - the page keeps the credential it already had and the next
+  // load retries. Skipped for a read-only share session, whose share token the
+  // operator-only token mount would refuse anyway.
+  //
+  // Here in the SHELL rather than in a surface because each surface is its own bundle: one
+  // exchange in the composition root covers every tab, and the storage it writes is what
+  // the other bundles read.
+  if (!readOnly) {
+    const daemonHost = resolveDaemonHost();
+    if (daemonHost) void exchangeOperatorToken(daemonHost);
+  }
 
   loadBuildInfo(); // fetch the build fingerprint once; fills every status bar's version chip
   applyFocusRing(getFocusRing()); // apply the persisted focus-ring preference before anything renders
