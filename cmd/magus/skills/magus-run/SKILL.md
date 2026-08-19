@@ -54,6 +54,14 @@ project (`magus run test web`), or let `magus affected` compute it from the diff
 4. Do not run raw language tools (`go test`, `eslint`, `pytest`, `tsc`, ...)
    for work a target covers. If no target covers it, say so rather than silently
    going around magus.
+5. Rewriting DEPENDENCY state (`go get`, `go mod tidy`, `pnpm add`, `cargo
+   update`, `uv lock`, `pip-compile`) needs the `relock` charm: `magus run
+   <target>:relock <project>`{{if .Full}}, so the rewrite happens inside magus, cached and
+   visible to affected tracking{{end}}. It is reserved and deliberately not part of `rw` -
+   `rw` covers output reproducible from a clean checkout, `relock` covers state that
+   depends on what a registry serves today{{if .Full}}. `ci` strips both, so a gate verifies
+   the committed lockfile rather than refreshing it{{end}}. Applying a lockfile (`npm ci`,
+   `pnpm install --frozen-lockfile`) re-resolves nothing and needs no charm.
 
 ## Command patterns
 
@@ -84,6 +92,10 @@ truncating it after the fact:
   is a few lines (result line + output ref), a failure keeps a bounded tail of
   the failing project plus the ref to fetch the rest.{{else}} A pass prints a
   result line plus an output ref; a failure adds a bounded tail.{{end}}
+  DROP it when the question is what RAN versus what replayed: the per-target
+  timings and the `(cached, 320ms)` / `(ran, 5m28s)` verdict only print without
+  it.{{if .Full}} Reaching for shell `time` around a silent run measures the wall clock magus
+  already reported and hides which targets were cache hits.{{end}}
 - `-q` / `--quiet`: looser - drops progress, keeps errors and the failing
   project's full output.
 - `-o <fmt>`: `text|json|yaml|jsonl|name|template=<go-template>`.{{if .Full}} Ask for the

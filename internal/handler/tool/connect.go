@@ -17,8 +17,8 @@ import (
 	"connectrpc.com/connect"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	toolv1 "github.com/egladman/magus/proto/gen/go/magus/tool/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/tool/v1/toolv1connect"
+	toolv1 "github.com/egladman/magus/proto/gen/go/magus/tool/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/tool/v1alpha1/toolv1alpha1connect"
 	"github.com/egladman/magus/spells"
 	"github.com/egladman/magus/types"
 )
@@ -67,11 +67,11 @@ func NewService(ws workspace) *Service {
 	return &Service{ws: ws, probes: map[string]probe{}, ttl: probeTTL}
 }
 
-var _ toolv1connect.ToolServiceHandler = (*Service)(nil)
+var _ toolv1alpha1connect.ToolServiceHandler = (*Service)(nil)
 
 // ListTools reports every project's tools, or one project's when the request names it.
 func (s *Service) ListTools(ctx context.Context, req *connect.Request[toolv1.ListToolsRequest]) (*connect.Response[toolv1.ListToolsResponse], error) {
-	want := req.Msg.GetProject()
+	want := req.Msg.GetParent()
 	out := &toolv1.ListToolsResponse{}
 	matched := false
 	for _, p := range s.ws.All() {
@@ -126,7 +126,7 @@ func (s *Service) projectTools(ctx context.Context, p *types.Project) []*toolv1.
 			// Only for a reading that happened: a probe that never ran must not carry a
 			// timestamp saying it did.
 			if !pr.at.IsZero() {
-				row.ProbedAt = timestamppb.New(pr.at)
+				row.ProbeTime = timestamppb.New(pr.at)
 			}
 			row.Verdict = verdict(effective, pr.version)
 			row.DiagnosticCode = diagnosticFor(row.Verdict)

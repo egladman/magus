@@ -75,6 +75,12 @@ func initCmd(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("init: --global and --local are mutually exclusive")
 	}
 
+	// Ahead of every write: init touches three places at once, and two are outside
+	// the repo - the config, and the merge driver in the VCS's own config.
+	if inf.DryRun {
+		return printInitPlan(inf.Global, inf.Local, inf.Force)
+	}
+
 	// --global: write XDG config only, skip workspace bootstrap.
 	if inf.Global {
 		cfgPath, err := xdgConfigPath()
@@ -120,18 +126,69 @@ func initCmd(ctx context.Context, root string, args []string) error {
 	return nil
 }
 
-// xdgConfigPath returns $XDG_CONFIG_HOME/magus/magus.yaml, creating the
-// directory if it does not exist.
-func xdgConfigPath() (string, error) {
+// xdgConfigTarget returns $XDG_CONFIG_HOME/magus/magus.yaml, creating nothing,
+// so --dry-run can name the destination without making it.
+func xdgConfigTarget() (string, error) {
 	dir, err := config.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("cannot determine config directory: %w", err)
 	}
-	magusDir := filepath.Join(dir, "magus")
+	return filepath.Join(dir, "magus", config.Filename), nil
+}
+
+// xdgConfigPath returns the same path, creating the directory. The form a real
+// run uses.
+func xdgConfigPath() (string, error) {
+	target, err := xdgConfigTarget()
+	if err != nil {
+		return "", err
+	}
+	magusDir := filepath.Dir(target)
 	if err := os.MkdirAll(magusDir, 0o755); err != nil {
 		return "", fmt.Errorf("create config dir %s: %w", magusDir, err)
 	}
-	return filepath.Join(magusDir, config.Filename), nil
+	return target, nil
+}
+
+// printInitPlan names every destination a real init would touch, creating none.
+// It reads state rather than assuming: a config is only overwritten with --force
+// and a magusfile never is, so a flat "would write" would overstate both.
+func printInitPlan(global, local, force bool) error {
+	target, err := xdgConfigTarget()
+	if err != nil {
+		return err
+	}
+	cfgPath := target
+	if local {
+		cfgPath = config.Filename
+	}
+
+	verb := "would write"
+	if _, err := os.Stat(cfgPath); err == nil {
+		verb = "exists, would be left alone (pass --force to overwrite)"
+		if force {
+			verb = "exists, would be OVERWRITTEN (--force)"
+		}
+	}
+	fmt.Fprintf(os.Stdout, "config:       %s - %s\n", cfgPath, verb)
+
+	if global {
+		fmt.Fprintln(os.Stdout, "magusfile:    skipped (--global writes only the config)")
+		fmt.Fprintln(os.Stdout, "merge driver: skipped (--global writes only the config)")
+		fmt.Fprintln(os.Stdout, "dry run: nothing was changed")
+		return nil
+	}
+
+	if magusfilePresent(".") {
+		fmt.Fprintln(os.Stdout, "magusfile:    already present, would be left alone")
+	} else {
+		fmt.Fprintln(os.Stdout, "magusfile:    magusfile.buzz - would write a starter")
+	}
+	// Named as a config write rather than a file write: this is the step that
+	// edits the repository's VCS configuration, and it is the least expected one.
+	fmt.Fprintln(os.Stdout, "merge driver: would wire the magus merge driver into your VCS config")
+	fmt.Fprintln(os.Stdout, "dry run: nothing was changed")
+	return nil
 }
 
 // printInitNextSteps prints actionable hints after a successful init.

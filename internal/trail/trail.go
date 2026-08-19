@@ -1,13 +1,13 @@
 // Package trail is the magus activity trail: a durable, append-only record of consequential
 // actions taken against the daemon - who did what, and did it succeed - kept next to the
-// execution journal under a base directory. It is the store behind the magus.activity.v1
+// execution journal under a base directory. It is the store behind the magus.activity.v1alpha1
 // "activity view"; producers (the MCP handler, agent hooks, and background jobs today; config
 // and token lifecycle later) append events and store payload blobs, and the console's
 // ActivityService reads them for the log viewer.
 //
 // It is the governance sibling of internal/journal (which records what a build executed) and
 // mirrors its Event/JSONL shape: a hand-rolled Event struct, snake_case json, one json.Marshal
-// line per event, plus a content-addressed blob store for large payloads. The magus.activity.v1
+// line per event, plus a content-addressed blob store for large payloads. The magus.activity.v1alpha1
 // proto is the WIRE format only; the handler maps Event to it - this package never depends on
 // the proto or the handler stack.
 //
@@ -56,7 +56,7 @@ const refHexLen = 16
 // producers that most need bounding - short-lived agent hooks - have nowhere to keep one.
 const maxEvents = 10000
 
-// Kind names an action's source; the values map to the magus.activity.v1 Kind enum at the wire.
+// Kind names an action's source; the values map to the magus.activity.v1alpha1 Kind enum at the wire.
 // Readable strings on disk, like the journal's status strings. It is a NAMED string (not a bare string)
 // so a producer or the audit interceptor cannot pass an arbitrary label where a Kind is wanted - the
 // param is type-checked against these consts. MCP tool calls, agent hooks, and jobs have producers today;

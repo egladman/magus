@@ -351,3 +351,22 @@ func TestDriverUsableOnAnOlderBinarysSpelling(t *testing.T) {
 	assert.True(t, driverArgsMatch(deaf+" merge-driver %O %A %B %L %P", olderWanted),
 		"its own spelling still short-circuits")
 }
+
+// TestDriverIsReachableHere: a driver registered by ANOTHER worktree points at a binary
+// that exists and runs, so every rot check passes while merges resolve with a foreign
+// build. Only "is this what I would have chosen" catches it.
+func TestDriverIsReachableHere(t *testing.T) {
+	assert.False(t, driverIsReachableHere(t.Context(), ""))
+	assert.False(t, driverIsReachableHere(t.Context(),
+		"/Users/x/repo/.claude/worktrees/other-8f2a/magus vcs merge-driver %O"),
+		"another worktree's binary is not this one's, however runnable it is")
+
+	assert.True(t, driverIsReachableHere(t.Context(), "magus vcs merge-driver %O"),
+		"a bare name resolves through PATH wherever it runs")
+
+	self, err := os.Executable()
+	require.NoError(t, err)
+	assert.True(t, driverIsReachableHere(t.Context(), self+" vcs merge-driver %O"))
+	assert.True(t, driverIsReachableHere(t.Context(), `"`+self+`" vcs merge-driver %O`),
+		"a quoted path is unwrapped before comparison")
+}

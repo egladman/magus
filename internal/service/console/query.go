@@ -4,8 +4,8 @@ import (
 	"strings"
 
 	"github.com/egladman/magus/internal/journal"
-	queryv1 "github.com/egladman/magus/proto/gen/go/magus/query/v1"
-	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1"
+	queryv1 "github.com/egladman/magus/proto/gen/go/magus/query/v1alpha1"
+	viewerv1 "github.com/egladman/magus/proto/gen/go/magus/viewer/v1alpha1"
 )
 
 // ParseEventQuery parses a viewer filter DSL string into a typed EventQuery: whitespace

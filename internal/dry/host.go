@@ -242,7 +242,7 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 	// run has no workspace, so each is stubbed with its result SHAPE - an empty but
 	// correctly-keyed record - so field access (magus.ls().projects, .affected) still
 	// resolves instead of blowing up on null.
-	m.MapSet("ls", fn("magus.ls", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+	m.MapSet("projects", fn("magus.projects", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("workspace", vm.StrValue(""))
 		res.MapSet("count", vm.IntValue(0))
@@ -376,6 +376,39 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("blastRadius", vm.NewMap())
 		return res, nil
 	}))
+	// magus.ledger.<...>: a namespace in the real module. A dry run neither reads nor
+	// writes the real ledger file, so list() reports it empty and put() echoes a
+	// shaped-but-zero row rather than the one a script asked to record - the same "no
+	// real effect" rule diagnoseDrift documents above.
+	ledgerNS := vm.NewMap()
+	ledgerNS.MapSet("list", fn("magus.ledger.list", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("units", vm.ListValue(nil))
+		res.MapSet("overlaps", vm.ListValue(nil))
+		return res, nil
+	}))
+	ledgerNS.MapSet("put", fn("magus.ledger.put", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("id", vm.StrValue(""))
+		res.MapSet("parent", vm.StrValue(""))
+		res.MapSet("goal", vm.StrValue(""))
+		res.MapSet("checkpoint", vm.StrValue(""))
+		res.MapSet("ownedPaths", vm.ListValue(nil))
+		res.MapSet("forbiddenPaths", vm.ListValue(nil))
+		res.MapSet("dependsOn", vm.ListValue(nil))
+		res.MapSet("tier", vm.StrValue(""))
+		res.MapSet("validation", vm.StrValue(""))
+		res.MapSet("state", vm.StrValue(""))
+		res.MapSet("readOnly", vm.BoolValue(false))
+		res.MapSet("releases", vm.ListValue(nil))
+		res.MapSet("created", vm.IntValue(0))
+		res.MapSet("updated", vm.IntValue(0))
+		return res, nil
+	}))
+	ledgerNS.MapSet("clear", fn("magus.ledger.clear", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		return vm.IntValue(0), nil
+	}))
+	m.MapSet("ledger", ledgerNS)
 
 	addPureMagus(m)
 

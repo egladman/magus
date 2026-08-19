@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2368,
-  "edge_count": 6075,
+  "node_count": 2372,
+  "edge_count": 6092,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -284,14 +284,6 @@
       "label": "MGS1028",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1028/"
-      }
-    },
-    {
-      "id": "diagnostic:MGS1029",
-      "kind": "diagnostic",
-      "label": "MGS1029",
-      "attrs": {
-        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1029/"
       }
     },
     {
@@ -698,7 +690,7 @@
       "label": "blog",
       "source": "blog",
       "attrs": {
-        "dir_files": "4",
+        "dir_files": "6",
         "dir_languages": "markdown"
       }
     },
@@ -708,7 +700,7 @@
       "label": "cmd",
       "source": "cmd",
       "attrs": {
-        "dir_files": "31",
+        "dir_files": "33",
         "dir_languages": "buzz,markdown"
       }
     },
@@ -728,7 +720,7 @@
       "label": "cmd/magus",
       "source": "cmd/magus",
       "attrs": {
-        "dir_files": "29",
+        "dir_files": "31",
         "dir_languages": "buzz,markdown"
       }
     },
@@ -738,7 +730,7 @@
       "label": "cmd/magus/skills",
       "source": "cmd/magus/skills",
       "attrs": {
-        "dir_files": "26",
+        "dir_files": "28",
         "dir_languages": "markdown"
       }
     },
@@ -777,6 +769,16 @@
       "kind": "dir",
       "label": "cmd/magus/skills/magus-change-summary",
       "source": "cmd/magus/skills/magus-change-summary",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:cmd/magus/skills/magus-commit-composition",
+      "kind": "dir",
+      "label": "cmd/magus/skills/magus-commit-composition",
+      "source": "cmd/magus/skills/magus-commit-composition",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "markdown"
@@ -888,7 +890,7 @@
       "label": "docs/concepts",
       "source": "docs/concepts",
       "attrs": {
-        "dir_files": "51",
+        "dir_files": "47",
         "dir_languages": "markdown"
       }
     },
@@ -938,7 +940,7 @@
       "label": "docs/concepts/spells",
       "source": "docs/concepts/spells",
       "attrs": {
-        "dir_files": "15",
+        "dir_files": "11",
         "dir_languages": "markdown"
       }
     },
@@ -1018,7 +1020,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "215",
+        "dir_files": "216",
         "dir_languages": "markdown"
       }
     },
@@ -1043,10 +1045,10 @@
       }
     },
     {
-      "id": "dir:docs/reference/api/activity/v1",
+      "id": "dir:docs/reference/api/activity/v1alpha1",
       "kind": "dir",
-      "label": "docs/reference/api/activity/v1",
-      "source": "docs/reference/api/activity/v1",
+      "label": "docs/reference/api/activity/v1alpha1",
+      "source": "docs/reference/api/activity/v1alpha1",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "markdown"
@@ -1063,10 +1065,10 @@
       }
     },
     {
-      "id": "dir:docs/reference/api/graph/v1",
+      "id": "dir:docs/reference/api/graph/v1alpha1",
       "kind": "dir",
-      "label": "docs/reference/api/graph/v1",
-      "source": "docs/reference/api/graph/v1",
+      "label": "docs/reference/api/graph/v1alpha1",
+      "source": "docs/reference/api/graph/v1alpha1",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "markdown"
@@ -1083,10 +1085,10 @@
       }
     },
     {
-      "id": "dir:docs/reference/api/insight/v1",
+      "id": "dir:docs/reference/api/insight/v1alpha1",
       "kind": "dir",
-      "label": "docs/reference/api/insight/v1",
-      "source": "docs/reference/api/insight/v1",
+      "label": "docs/reference/api/insight/v1alpha1",
+      "source": "docs/reference/api/insight/v1alpha1",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "markdown"
@@ -1103,10 +1105,10 @@
       }
     },
     {
-      "id": "dir:docs/reference/api/job/v1",
+      "id": "dir:docs/reference/api/job/v1alpha1",
       "kind": "dir",
-      "label": "docs/reference/api/job/v1",
-      "source": "docs/reference/api/job/v1",
+      "label": "docs/reference/api/job/v1alpha1",
+      "source": "docs/reference/api/job/v1alpha1",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "markdown"
@@ -1123,10 +1125,10 @@
       }
     },
     {
-      "id": "dir:docs/reference/api/memory/v1",
+      "id": "dir:docs/reference/api/memory/v1alpha1",
       "kind": "dir",
-      "label": "docs/reference/api/memory/v1",
-      "source": "docs/reference/api/memory/v1",
+      "label": "docs/reference/api/memory/v1alpha1",
+      "source": "docs/reference/api/memory/v1alpha1",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "markdown"
@@ -1143,10 +1145,10 @@
       }
     },
     {
-      "id": "dir:docs/reference/api/metrics/v1",
+      "id": "dir:docs/reference/api/metrics/v1alpha1",
       "kind": "dir",
-      "label": "docs/reference/api/metrics/v1",
-      "source": "docs/reference/api/metrics/v1",
+      "label": "docs/reference/api/metrics/v1alpha1",
+      "source": "docs/reference/api/metrics/v1alpha1",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "markdown"
@@ -1163,10 +1165,10 @@
       }
     },
     {
-      "id": "dir:docs/reference/api/notes/v1",
+      "id": "dir:docs/reference/api/notes/v1alpha1",
       "kind": "dir",
-      "label": "docs/reference/api/notes/v1",
-      "source": "docs/reference/api/notes/v1",
+      "label": "docs/reference/api/notes/v1alpha1",
+      "source": "docs/reference/api/notes/v1alpha1",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "markdown"
@@ -1183,10 +1185,10 @@
       }
     },
     {
-      "id": "dir:docs/reference/api/query/v1",
+      "id": "dir:docs/reference/api/query/v1alpha1",
       "kind": "dir",
-      "label": "docs/reference/api/query/v1",
-      "source": "docs/reference/api/query/v1",
+      "label": "docs/reference/api/query/v1alpha1",
+      "source": "docs/reference/api/query/v1alpha1",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "markdown"
@@ -1203,10 +1205,10 @@
       }
     },
     {
-      "id": "dir:docs/reference/api/status/v1",
+      "id": "dir:docs/reference/api/status/v1alpha1",
       "kind": "dir",
-      "label": "docs/reference/api/status/v1",
-      "source": "docs/reference/api/status/v1",
+      "label": "docs/reference/api/status/v1alpha1",
+      "source": "docs/reference/api/status/v1alpha1",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "markdown"
@@ -1223,10 +1225,10 @@
       }
     },
     {
-      "id": "dir:docs/reference/api/token/v1",
+      "id": "dir:docs/reference/api/token/v1alpha1",
       "kind": "dir",
-      "label": "docs/reference/api/token/v1",
-      "source": "docs/reference/api/token/v1",
+      "label": "docs/reference/api/token/v1alpha1",
+      "source": "docs/reference/api/token/v1alpha1",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "markdown"
@@ -1243,10 +1245,10 @@
       }
     },
     {
-      "id": "dir:docs/reference/api/tool/v1",
+      "id": "dir:docs/reference/api/tool/v1alpha1",
       "kind": "dir",
-      "label": "docs/reference/api/tool/v1",
-      "source": "docs/reference/api/tool/v1",
+      "label": "docs/reference/api/tool/v1alpha1",
+      "source": "docs/reference/api/tool/v1alpha1",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "markdown"
@@ -1263,10 +1265,10 @@
       }
     },
     {
-      "id": "dir:docs/reference/api/viewer/v1",
+      "id": "dir:docs/reference/api/viewer/v1alpha1",
       "kind": "dir",
-      "label": "docs/reference/api/viewer/v1",
-      "source": "docs/reference/api/viewer/v1",
+      "label": "docs/reference/api/viewer/v1alpha1",
+      "source": "docs/reference/api/viewer/v1alpha1",
       "attrs": {
         "dir_files": "1",
         "dir_languages": "markdown"
@@ -1388,7 +1390,7 @@
       "label": "docs/reference/skills",
       "source": "docs/reference/skills",
       "attrs": {
-        "dir_files": "14",
+        "dir_files": "15",
         "dir_languages": "markdown"
       }
     },
@@ -1508,7 +1510,7 @@
       "label": "libs/gopherbuzz/docs",
       "source": "libs/gopherbuzz/docs",
       "attrs": {
-        "dir_files": "12",
+        "dir_files": "13",
         "dir_languages": "markdown"
       }
     },
@@ -1518,7 +1520,7 @@
       "label": "libs/gopherbuzz/docs/codes",
       "source": "libs/gopherbuzz/docs/codes",
       "attrs": {
-        "dir_files": "10",
+        "dir_files": "11",
         "dir_languages": "markdown"
       }
     },
@@ -2144,14 +2146,36 @@
       }
     },
     {
-      "id": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "id": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "kind": "doc",
-      "label": "blog/2026-08-25-i-audited-my-own-mcp-server.md",
-      "source": "blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "label": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
+      "source": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "attrs": {
         "role": "doc",
         "tags": "opinion",
-        "title": "I audited my own MCP server"
+        "title": "Twenty wrappers and a teaching layer"
+      }
+    },
+    {
+      "id": "doc:blog/2026-09-01-the-best-code-is-still-no-code.md",
+      "kind": "doc",
+      "label": "blog/2026-09-01-the-best-code-is-still-no-code.md",
+      "source": "blog/2026-09-01-the-best-code-is-still-no-code.md",
+      "attrs": {
+        "role": "doc",
+        "tags": "opinion",
+        "title": "The best code is still no code"
+      }
+    },
+    {
+      "id": "doc:blog/2026-09-08-the-console-was-an-experiment.md",
+      "kind": "doc",
+      "label": "blog/2026-09-08-the-console-was-an-experiment.md",
+      "source": "blog/2026-09-08-the-console-was-an-experiment.md",
+      "attrs": {
+        "role": "doc",
+        "tags": "opinion",
+        "title": "The console was an experiment"
       }
     },
     {
@@ -2195,6 +2219,15 @@
       "kind": "doc",
       "label": "cmd/magus/skills/magus-change-summary/SKILL.md",
       "source": "cmd/magus/skills/magus-change-summary/SKILL.md",
+      "attrs": {
+        "role": "skill"
+      }
+    },
+    {
+      "id": "doc:cmd/magus/skills/magus-commit-composition/SKILL.md",
+      "kind": "doc",
+      "label": "cmd/magus/skills/magus-commit-composition/SKILL.md",
+      "source": "cmd/magus/skills/magus-commit-composition/SKILL.md",
       "attrs": {
         "role": "skill"
       }
@@ -2625,18 +2658,6 @@
       }
     },
     {
-      "id": "doc:docs/concepts/spells/md.md",
-      "kind": "doc",
-      "label": "docs/concepts/spells/md.md",
-      "source": "docs/concepts/spells/md.md",
-      "attrs": {
-        "role": "doc",
-        "section": "concepts",
-        "tags": "md,spell,markdown,docs,prettier,lint,tools",
-        "title": "md spell"
-      }
-    },
-    {
       "id": "doc:docs/concepts/spells/podman.md",
       "kind": "doc",
       "label": "docs/concepts/spells/podman.md",
@@ -2646,18 +2667,6 @@
         "section": "concepts",
         "tags": "podman,spell,container,image,oci,buildah,tools",
         "title": "podman spell"
-      }
-    },
-    {
-      "id": "doc:docs/concepts/spells/py.md",
-      "kind": "doc",
-      "label": "docs/concepts/spells/py.md",
-      "source": "docs/concepts/spells/py.md",
-      "attrs": {
-        "role": "doc",
-        "section": "concepts",
-        "tags": "py,spell,python,uv,pytest,ruff,tools",
-        "title": "py spell"
       }
     },
     {
@@ -2673,18 +2682,6 @@
       }
     },
     {
-      "id": "doc:docs/concepts/spells/rs.md",
-      "kind": "doc",
-      "label": "docs/concepts/spells/rs.md",
-      "source": "docs/concepts/spells/rs.md",
-      "attrs": {
-        "role": "doc",
-        "section": "concepts",
-        "tags": "rs,spell,rust,cargo,build,test,tools",
-        "title": "rs spell"
-      }
-    },
-    {
       "id": "doc:docs/concepts/spells/rust.md",
       "kind": "doc",
       "label": "docs/concepts/spells/rust.md",
@@ -2694,18 +2691,6 @@
         "section": "concepts",
         "tags": "rust,spell,cargo,build,test,tools",
         "title": "rust spell"
-      }
-    },
-    {
-      "id": "doc:docs/concepts/spells/ts.md",
-      "kind": "doc",
-      "label": "docs/concepts/spells/ts.md",
-      "source": "docs/concepts/spells/ts.md",
-      "attrs": {
-        "role": "doc",
-        "section": "concepts",
-        "tags": "ts,spell,typescript,node,eslint,vitest,tools",
-        "title": "ts spell"
       }
     },
     {
@@ -3221,10 +3206,10 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/activity/v1/activity.md",
+      "id": "doc:docs/reference/api/activity/v1alpha1/activity.md",
       "kind": "doc",
-      "label": "docs/reference/api/activity/v1/activity.md",
-      "source": "docs/reference/api/activity/v1/activity.md",
+      "label": "docs/reference/api/activity/v1alpha1/activity.md",
+      "source": "docs/reference/api/activity/v1alpha1/activity.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -3233,15 +3218,15 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/graph/v1/graph.md",
+      "id": "doc:docs/reference/api/graph/v1alpha1/graph.md",
       "kind": "doc",
-      "label": "docs/reference/api/graph/v1/graph.md",
-      "source": "docs/reference/api/graph/v1/graph.md",
+      "label": "docs/reference/api/graph/v1alpha1/graph.md",
+      "source": "docs/reference/api/graph/v1alpha1/graph.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
-        "tags": "api,proto,connect,grpc,graph-v1",
-        "title": "magus.graph.v1"
+        "tags": "api,proto,connect,grpc,graph-v1alpha1",
+        "title": "magus.graph.v1alpha1"
       }
     },
     {
@@ -3257,10 +3242,10 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/insight/v1/insight.md",
+      "id": "doc:docs/reference/api/insight/v1alpha1/insight.md",
       "kind": "doc",
-      "label": "docs/reference/api/insight/v1/insight.md",
-      "source": "docs/reference/api/insight/v1/insight.md",
+      "label": "docs/reference/api/insight/v1alpha1/insight.md",
+      "source": "docs/reference/api/insight/v1alpha1/insight.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -3269,10 +3254,10 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/job/v1/job.md",
+      "id": "doc:docs/reference/api/job/v1alpha1/job.md",
       "kind": "doc",
-      "label": "docs/reference/api/job/v1/job.md",
-      "source": "docs/reference/api/job/v1/job.md",
+      "label": "docs/reference/api/job/v1alpha1/job.md",
+      "source": "docs/reference/api/job/v1alpha1/job.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -3281,10 +3266,10 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/memory/v1/memory.md",
+      "id": "doc:docs/reference/api/memory/v1alpha1/memory.md",
       "kind": "doc",
-      "label": "docs/reference/api/memory/v1/memory.md",
-      "source": "docs/reference/api/memory/v1/memory.md",
+      "label": "docs/reference/api/memory/v1alpha1/memory.md",
+      "source": "docs/reference/api/memory/v1alpha1/memory.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -3293,10 +3278,10 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/metrics/v1/metrics.md",
+      "id": "doc:docs/reference/api/metrics/v1alpha1/metrics.md",
       "kind": "doc",
-      "label": "docs/reference/api/metrics/v1/metrics.md",
-      "source": "docs/reference/api/metrics/v1/metrics.md",
+      "label": "docs/reference/api/metrics/v1alpha1/metrics.md",
+      "source": "docs/reference/api/metrics/v1alpha1/metrics.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -3305,10 +3290,10 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/notes/v1/notes.md",
+      "id": "doc:docs/reference/api/notes/v1alpha1/notes.md",
       "kind": "doc",
-      "label": "docs/reference/api/notes/v1/notes.md",
-      "source": "docs/reference/api/notes/v1/notes.md",
+      "label": "docs/reference/api/notes/v1alpha1/notes.md",
+      "source": "docs/reference/api/notes/v1alpha1/notes.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -3317,22 +3302,22 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/query/v1/query.md",
+      "id": "doc:docs/reference/api/query/v1alpha1/query.md",
       "kind": "doc",
-      "label": "docs/reference/api/query/v1/query.md",
-      "source": "docs/reference/api/query/v1/query.md",
+      "label": "docs/reference/api/query/v1alpha1/query.md",
+      "source": "docs/reference/api/query/v1alpha1/query.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
-        "tags": "api,proto,connect,grpc,query-v1",
-        "title": "magus.query.v1"
+        "tags": "api,proto,connect,grpc,query-v1alpha1",
+        "title": "magus.query.v1alpha1"
       }
     },
     {
-      "id": "doc:docs/reference/api/status/v1/status.md",
+      "id": "doc:docs/reference/api/status/v1alpha1/status.md",
       "kind": "doc",
-      "label": "docs/reference/api/status/v1/status.md",
-      "source": "docs/reference/api/status/v1/status.md",
+      "label": "docs/reference/api/status/v1alpha1/status.md",
+      "source": "docs/reference/api/status/v1alpha1/status.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -3341,10 +3326,10 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/token/v1/token.md",
+      "id": "doc:docs/reference/api/token/v1alpha1/token.md",
       "kind": "doc",
-      "label": "docs/reference/api/token/v1/token.md",
-      "source": "docs/reference/api/token/v1/token.md",
+      "label": "docs/reference/api/token/v1alpha1/token.md",
+      "source": "docs/reference/api/token/v1alpha1/token.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -3353,10 +3338,10 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/tool/v1/tool.md",
+      "id": "doc:docs/reference/api/tool/v1alpha1/tool.md",
       "kind": "doc",
-      "label": "docs/reference/api/tool/v1/tool.md",
-      "source": "docs/reference/api/tool/v1/tool.md",
+      "label": "docs/reference/api/tool/v1alpha1/tool.md",
+      "source": "docs/reference/api/tool/v1alpha1/tool.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -3365,10 +3350,10 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/viewer/v1/viewer.md",
+      "id": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
       "kind": "doc",
-      "label": "docs/reference/api/viewer/v1/viewer.md",
-      "source": "docs/reference/api/viewer/v1/viewer.md",
+      "label": "docs/reference/api/viewer/v1alpha1/viewer.md",
+      "source": "docs/reference/api/viewer/v1alpha1/viewer.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -4294,10 +4279,12 @@
       "label": "docs/reference/codes/magusfile/MGS1029.md",
       "source": "docs/reference/codes/magusfile/MGS1029.md",
       "attrs": {
+        "diagnostic": "MGS7002",
         "role": "doc",
         "section": "reference",
         "tags": "MGS1029,magusfile,sources,cache,globs",
-        "title": "MGS1029: source glob reaches into a pruned directory"
+        "title": "MGS1029: source glob reaches into a pruned directory",
+        "unknown_codes": "MGS1029"
       }
     },
     {
@@ -5249,6 +5236,18 @@
       }
     },
     {
+      "id": "doc:docs/reference/skills/magus-commit-composition.md",
+      "kind": "doc",
+      "label": "docs/reference/skills/magus-commit-composition.md",
+      "source": "docs/reference/skills/magus-commit-composition.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "agents,skills,magus-commit-composition",
+        "title": "magus-commit-composition"
+      }
+    },
+    {
       "id": "doc:docs/reference/skills/magus-context-audit.md",
       "kind": "doc",
       "label": "docs/reference/skills/magus-context-audit.md",
@@ -5639,6 +5638,17 @@
         "role": "doc",
         "tags": "BZZ3001,buzz,import,warning,unused",
         "title": "BZZ3001: unused import"
+      }
+    },
+    {
+      "id": "doc:libs/gopherbuzz/docs/codes/BZZ3002.md",
+      "kind": "doc",
+      "label": "libs/gopherbuzz/docs/codes/BZZ3002.md",
+      "source": "libs/gopherbuzz/docs/codes/BZZ3002.md",
+      "attrs": {
+        "role": "doc",
+        "tags": "BZZ3002,buzz,string,loop,performance,warning",
+        "title": "BZZ3002: string accumulated in a loop"
       }
     },
     {
@@ -8006,7 +8016,7 @@
       "kind": "function",
       "label": "build",
       "doc": "build bundles the whole app into gen/ (esbuild via pnpm: the surface bundles + CSS, then copy-static assembles index/manifest/sw + scaffolds + assets) and gates on drift: a clean checkout only goes dirty when a source edit was not rebuilt and committed. The `rw` charm (`build:rw`) keeps the result instead of gating. esbuild is pinned (mise), so the output is byte-stable and the gate holds.",
-      "source": "console/magusfile.buzz:147",
+      "source": "console/magusfile.buzz:160",
       "attrs": {
         "exported": "true"
       }
@@ -8016,7 +8026,7 @@
       "kind": "function",
       "label": "ci",
       "doc": "'ci' is the anchor `magus affected ci` keys off: the lint gate (tsc), the unit tests, the build-plus-drift-gate, and the advisory audit, all first-class ci steps.",
-      "source": "console/magusfile.buzz:207",
+      "source": "console/magusfile.buzz:220",
       "attrs": {
         "exported": "true"
       }
@@ -8026,7 +8036,7 @@
       "kind": "function",
       "label": "format",
       "doc": "`format:rw` maintains declared source inputs.",
-      "source": "console/magusfile.buzz:176",
+      "source": "console/magusfile.buzz:189",
       "attrs": {
         "exported": "true"
       }
@@ -8036,14 +8046,14 @@
       "kind": "function",
       "label": "install",
       "doc": "pnpm, NOT npm: .npmrc's minimum-release-age supply-chain gate is the reason. Always let pnpm validate the install. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready, handing the missing packages straight to tsc/esbuild. Reached once per invocation through preflight, which every target below already needs, so the unconditional --frozen-lockfile costs about a second on a warm tree and never races itself.",
-      "source": "console/magusfile.buzz:78"
+      "source": "console/magusfile.buzz:91"
     },
     {
       "id": "function:console/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "lint keeps TypeScript, CSS, and source formatting errors out of the console CI gate.",
-      "source": "console/magusfile.buzz:165",
+      "source": "console/magusfile.buzz:178",
       "attrs": {
         "exported": "true"
       }
@@ -8052,7 +8062,7 @@
       "id": "function:console/magusfile.buzz:preflight",
       "kind": "function",
       "label": "preflight",
-      "source": "console/magusfile.buzz:70",
+      "source": "console/magusfile.buzz:83",
       "attrs": {
         "exported": "true"
       }
@@ -8062,7 +8072,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits the dependency tree against the npm advisory database.  --prod, not the whole tree, and that is the whole design. An unscoped audit reports the dev toolchain too - today a stylelint -> table -> ajv -> fast-uri advisory - which never reaches a browser and cannot be fixed from here. A gate that fails on something you cannot act on is a gate that gets muted, which is how six stale skip_cache workarounds happened. This fails only on what actually ships.  It is NOT folded into lint: lint is cache",
-      "source": "console/magusfile.buzz:200",
+      "source": "console/magusfile.buzz:213",
       "attrs": {
         "exported": "true"
       }
@@ -8072,7 +8082,7 @@
       "kind": "function",
       "label": "test",
       "doc": "test runs the node:test suite over the bundled *.test.ts (the shell/view/tiling/keymap unit tests) and renders a line-coverage badge from the run.  The suite runs Node THREE times on purpose and that split is load-bearing: happy-dom installs localStorage/sessionStorage as getter-only, and several tests stub them by assignment, so applying the DOM setup globally (one --import for everything) breaks them. Unifying the runs was tried and reverted.  Which is why the figure needs lcov.mergePercent rather than lc",
-      "source": "console/magusfile.buzz:123",
+      "source": "console/magusfile.buzz:136",
       "attrs": {
         "exported": "true"
       }
@@ -8083,16 +8093,6 @@
       "label": "isGeneratedSource",
       "doc": "isGeneratedSource reports whether a Go source body carries the marker.  The scan stops at the package clause: the convention places the marker in the header, and stopping there keeps a passing mention of the phrase in ordinary code (a comment ABOUT generated files, of which this repo has several) from silently excluding a hand-written file from coverage.",
       "source": "coverage.buzz:60",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:coverage.buzz:isPlatformSource",
-      "kind": "function",
-      "label": "isPlatformSource",
-      "doc": "isPlatformSource reports whether a source path carries a build-constraint suffix, so coverage can exclude it.  Path-based, unlike isGeneratedSource, and deliberately: the suffix IS the constraint for this family - Go applies it without the file saying anything - so there is no marker inside to read. A `//go:build` line with no matching suffix is not caught, and that is the known gap; the suffixed files are what this module actually uses.",
-      "source": "coverage.buzz:189",
       "attrs": {
         "exported": "true"
       }
@@ -8113,16 +8113,6 @@
       "label": "stripGenerated",
       "doc": "stripGenerated removes every coverage block belonging to a generated file.  It rewrites the PROFILE rather than filtering `go tool cover -func` output, because the percentage is a ratio of statements: dropping lines from the rendered report and re-averaging the per-function percentages would weight a one-statement function the same as a hundred-statement one. Keeping the profile as the unit means `go tool cover` still computes the total, and it stays exact.  prefix is the module path plus a trailing slash;",
       "source": "coverage.buzz:83",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:coverage.buzz:stripPlatform",
-      "kind": "function",
-      "label": "stripPlatform",
-      "doc": "stripPlatform drops platform-constrained files from a coverage profile, so the percentage is the same number on every machine that measures it.  Without this the figure is a fact about the RUNNER, not the code: `go test` only compiles the files whose constraints match, so macOS counts available_darwin.go and Linux counts available_linux.go, and both the numerator and the denominator move. This repo measured 67.3% on macOS and 66.6% on Linux from one tree - a 0.7 point spread, enough to straddle a whole numb",
-      "source": "coverage.buzz:215",
       "attrs": {
         "exported": "true"
       }
@@ -9861,7 +9851,7 @@
       "id": "function:docs/magusfile.buzz:build",
       "kind": "function",
       "label": "build",
-      "source": "docs/magusfile.buzz:400",
+      "source": "docs/magusfile.buzz:409",
       "attrs": {
         "exported": "true"
       }
@@ -9871,7 +9861,7 @@
       "kind": "function",
       "label": "build_hljs",
       "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Bump the version in package.json and the next generate picks it up; gen/ is not committed, so generate runs this as one of its stages.",
-      "source": "docs/magusfile.buzz:495",
+      "source": "docs/magusfile.buzz:509",
       "attrs": {
         "exported": "true"
       }
@@ -9881,7 +9871,7 @@
       "kind": "function",
       "label": "build_playground",
       "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: the stock Go toolchain compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and Go's own wasm_exec.js glue is copied beside it. The glue must come from the SAME Go that built the wasm - it is a matched pair.  gen/, not vendor/. Those bytes were committed for one reason: CI had no TinyGo, so it could not reproduce them and they had to be inputs rather than output. CI has Go. So this is ordinary render output now, r",
-      "source": "docs/magusfile.buzz:444",
+      "source": "docs/magusfile.buzz:453",
       "attrs": {
         "exported": "true"
       }
@@ -9891,7 +9881,7 @@
       "kind": "function",
       "label": "build_playground_editor",
       "doc": "build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js. It existed only as a pnpm script before, because the artifact was committed and a human ran it after a version bump. gen/ is no longer committed, so every published byte needs a target CI can run - a script nothing invokes would have shipped a playground with no editor.",
-      "source": "docs/magusfile.buzz:508",
+      "source": "docs/magusfile.buzz:522",
       "attrs": {
         "exported": "true"
       }
@@ -9901,7 +9891,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "buzz-test runs render's in-file `test \"...\" {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises on a non-zero exit, so a failing assertion fails this target.",
-      "source": "docs/magusfile.buzz:405",
+      "source": "docs/magusfile.buzz:414",
       "attrs": {
         "exported": "true"
       }
@@ -9910,7 +9900,7 @@
       "id": "function:docs/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "source": "docs/magusfile.buzz:421",
+      "source": "docs/magusfile.buzz:430",
       "attrs": {
         "exported": "true"
       }
@@ -9930,7 +9920,7 @@
       "kind": "function",
       "label": "conventions",
       "doc": "conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved. See docs/conventions.md for what each rule means.  Its OWN target, not a line inside lint, and it deliberately depends on nothing. A prose nit should name the thing that is wrong; folding it into lint would report a stale path in the README as \"docs lint failed\", and a target that fails for reasons unrelated to",
-      "source": "docs/magusfile.buzz:373",
+      "source": "docs/magusfile.buzz:382",
       "attrs": {
         "exported": "true"
       }
@@ -9940,7 +9930,7 @@
       "kind": "function",
       "label": "diagrams_generate",
       "doc": "diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/. The docs site does NOT read these - it inlines a CSS-variable copy at render time so a diagram follows the theme toggle. This pair is for GitHub, where the README loads an image through <img> and cannot reach the page's CSS at all.  The pair lands under this project rather than beside the terminal recordings in the workspace's assets/gen: docs already depends on the root project, so writing there is MGS1012, a targ",
-      "source": "docs/magusfile.buzz:472",
+      "source": "docs/magusfile.buzz:482",
       "attrs": {
         "exported": "true"
       }
@@ -9950,7 +9940,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Scope dprint by ARGV, not by its config, for the same reason the root project does: dprint DISCOVERS a nested dprint.json and formats that subtree under its own config, and neither this project's `includes` nor an exclude prunes it. Since the guard-hook templates' project under guides/integrations/agents grew Markdown pages of its own, a bare run here reached them - the parent target writing into a descendant project, which magus rejects as MGS3001. That project formats its own pages.  Keep this list in ste",
-      "source": "docs/magusfile.buzz:352",
+      "source": "docs/magusfile.buzz:361",
       "attrs": {
         "exported": "true"
       }
@@ -9987,7 +9977,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both need node_modules, which it reaches through format -> generate -> preflight; proc.exec raises on a non-zero exit, so either gate fails lint.  Markdown formatting is dprint, run once from the root project (its scope is dprint.json at the workspace root), so `format` here is a dependency edge and nothing else. This project only lints prose; see docs/concep",
-      "source": "docs/magusfile.buzz:386",
+      "source": "docs/magusfile.buzz:395",
       "attrs": {
         "exported": "true"
       }
@@ -10006,7 +9996,7 @@
       "kind": "function",
       "label": "render",
       "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
-      "source": "docs/magusfile.buzz:516",
+      "source": "docs/magusfile.buzz:530",
       "attrs": {
         "exported": "true"
       }
@@ -10016,7 +10006,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits what actually ships against the npm advisory database. See console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the .npmrc cooling period is the stronger half of this.",
-      "source": "docs/magusfile.buzz:416",
+      "source": "docs/magusfile.buzz:425",
       "attrs": {
         "exported": "true"
       }
@@ -10035,7 +10025,7 @@
       "id": "function:docs/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "docs/magusfile.buzz:409",
+      "source": "docs/magusfile.buzz:418",
       "attrs": {
         "exported": "true"
       }
@@ -10217,7 +10207,7 @@
       "kind": "function",
       "label": "inlinePageDiagrams",
       "doc": "inlinePageDiagrams swaps any diagram reference on a page for the inline SVG. Guarded on the page mentioning one first: renderAll walks every figure in the registry, and a docs build renders hundreds of pages that reference none.",
-      "source": "docs/site/diagrams/all.buzz:68",
+      "source": "docs/site/diagrams/all.buzz:78",
       "attrs": {
         "exported": "true"
       }
@@ -10227,14 +10217,14 @@
       "kind": "function",
       "label": "markedIds",
       "doc": "markedIds pulls each id following a marker. The id runs to the first space or end of line, so a marker may carry a trailing note explaining what the box is called.",
-      "source": "docs/site/diagrams/all.buzz:129"
+      "source": "docs/site/diagrams/all.buzz:139"
     },
     {
       "id": "function:docs/site/diagrams/all.buzz:renderAll",
       "kind": "function",
       "label": "renderAll",
-      "doc": "renderAll returns the inline, theme-following SVG for each diagram, keyed by id, ready for inlineDiagrams. Throws on the first diagram that fails validation, which is what makes a crooked figure fail the docs build rather than ship.",
-      "source": "docs/site/diagrams/all.buzz:42",
+      "doc": "renderAll returns the inline, theme-following SVG for each diagram, keyed by id, ready for inlineDiagrams. Throws on the first diagram that fails validation, which is what makes a crooked figure fail the docs build rather than ship.  The result is memoized and shared by every caller, so treat it as read-only.",
+      "source": "docs/site/diagrams/all.buzz:50",
       "attrs": {
         "exported": "true"
       }
@@ -10244,7 +10234,7 @@
       "kind": "function",
       "label": "verifyAnchors",
       "doc": "verifyAnchors checks both directions of the diagram-to-code link and returns one message per break, empty when they agree.  Forward: every anchor a diagram declares must still resolve to a path in the tree. This is the half that catches the common rot - a package renamed or deleted while the figure keeps naming it.  Reverse: every magus:diagram marker in the sources must name a diagram that exists. This is the half that catches a diagram being renamed or dropped while call sites still point at it. Neither h",
-      "source": "docs/site/diagrams/all.buzz:95",
+      "source": "docs/site/diagrams/all.buzz:105",
       "attrs": {
         "exported": "true"
       }
@@ -10254,7 +10244,7 @@
       "kind": "function",
       "label": "writeStandalonePair",
       "doc": "writeStandalonePair writes the committed light/dark SVG files for every diagram into dir. These exist for GitHub: a README image is loaded through <img>, which makes it a separate document with no access to the page's CSS variables, so the palette has to be baked in and a second file is the only way to offer a dark one.  Naming follows the terminal recordings already in assets/gen: the unsuffixed file is dark and carries the <img> fallback, `-light` is the prefers-color-scheme: light source.",
-      "source": "docs/site/diagrams/all.buzz:57",
+      "source": "docs/site/diagrams/all.buzz:67",
       "attrs": {
         "exported": "true"
       }
@@ -11676,7 +11666,7 @@
       "kind": "function",
       "label": "edgeGeometry",
       "doc": "edgeGeometry resolves an edge to [x1, y1, x2, y2, horizontal]. Buzz has no tuple, and a five-int list beats threading five result params through the painters.",
-      "source": "libs/diagram/diagram.buzz:747"
+      "source": "libs/diagram/diagram.buzz:753"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:edgeSegments",
@@ -11709,7 +11699,7 @@
       "id": "function:libs/diagram/diagram.buzz:fitLabel",
       "kind": "function",
       "label": "fitLabel",
-      "source": "libs/diagram/diagram.buzz:1102"
+      "source": "libs/diagram/diagram.buzz:1108"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:iabs",
@@ -11728,7 +11718,7 @@
       "kind": "function",
       "label": "inlineDiagrams",
       "doc": "inlineDiagrams swaps a diagram reference in rendered HTML for the SVG itself, keyed by diagram id. Inlining is what makes a diagram follow the site's manual theme toggle: an <img>-loaded SVG is a separate document and can only ever see prefers-color-scheme.  Two reference forms are recognized, because the two audiences need different markup. A docs page carries `<!--diagram:id-->`, which GitHub renders as nothing and goldmark passes through untouched. The README carries a real <picture> so GitHub shows the",
-      "source": "libs/diagram/diagram.buzz:999",
+      "source": "libs/diagram/diagram.buzz:1005",
       "attrs": {
         "exported": "true"
       }
@@ -11749,7 +11739,7 @@
       "id": "function:libs/diagram/diagram.buzz:layered",
       "kind": "function",
       "label": "layered",
-      "source": "libs/diagram/diagram.buzz:1132",
+      "source": "libs/diagram/diagram.buzz:1138",
       "attrs": {
         "exported": "true"
       }
@@ -11758,7 +11748,7 @@
       "id": "function:libs/diagram/diagram.buzz:layoutWithStagger",
       "kind": "function",
       "label": "layoutWithStagger",
-      "source": "libs/diagram/diagram.buzz:1142"
+      "source": "libs/diagram/diagram.buzz:1148"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:lightPalette",
@@ -11808,46 +11798,46 @@
       "kind": "function",
       "label": "renderDecision",
       "doc": "renderDecision paints the diamond. The label sits on the centre line rather than the stacked layout a box uses: a diamond's widest run is its middle, so a two-line stack would push text out past the sloping sides.",
-      "source": "libs/diagram/diagram.buzz:679"
+      "source": "libs/diagram/diagram.buzz:685"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:renderEdge",
       "kind": "function",
       "label": "renderEdge",
-      "source": "libs/diagram/diagram.buzz:736"
+      "source": "libs/diagram/diagram.buzz:742"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:renderEdgeLabel",
       "kind": "function",
       "label": "renderEdgeLabel",
       "doc": "renderEdgeLabel places the label off the crossing segment with a 6px gap, never on the stroke. Labels are painted before nodes, so one that strays onto a box is covered rather than left sitting on the border as a fragment.",
-      "source": "libs/diagram/diagram.buzz:764"
+      "source": "libs/diagram/diagram.buzz:770"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:renderHeader",
       "kind": "function",
       "label": "renderHeader",
-      "source": "libs/diagram/diagram.buzz:650"
+      "source": "libs/diagram/diagram.buzz:656"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:renderLegend",
       "kind": "function",
       "label": "renderLegend",
       "doc": "renderLegend draws the strip below the figure. The design system puts it outside the diagram area, so callers size the viewBox with 60px of room at the bottom.",
-      "source": "libs/diagram/diagram.buzz:808"
+      "source": "libs/diagram/diagram.buzz:814"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:renderMarkers",
       "kind": "function",
       "label": "renderMarkers",
       "doc": "renderMarkers defines one arrowhead per connector kind. All three are always emitted: an arrowhead referencing a marker that was not defined renders as a bare line, and which kinds a diagram uses is not worth tracking to save 200 bytes.",
-      "source": "libs/diagram/diagram.buzz:638"
+      "source": "libs/diagram/diagram.buzz:644"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:renderNode",
       "kind": "function",
       "label": "renderNode",
-      "source": "libs/diagram/diagram.buzz:692"
+      "source": "libs/diagram/diagram.buzz:698"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:renderSvg",
@@ -11863,14 +11853,14 @@
       "id": "function:libs/diagram/diagram.buzz:renderZone",
       "kind": "function",
       "label": "renderZone",
-      "source": "libs/diagram/diagram.buzz:665"
+      "source": "libs/diagram/diagram.buzz:671"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:replacePicture",
       "kind": "function",
       "label": "replacePicture",
       "doc": "replacePicture rewrites each <picture> element whose markup mentions needle. Scanning for the element bounds beats a regex here: the srcset and img inside carry attributes in no fixed order, and a <picture> that does not mention the needle has to survive untouched.",
-      "source": "libs/diagram/diagram.buzz:1013"
+      "source": "libs/diagram/diagram.buzz:1019"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:resolveSide",
@@ -11905,7 +11895,7 @@
       "kind": "function",
       "label": "twoBox",
       "doc": "twoBox is the smallest sound diagram: two boxes on one row, one connector between them. Tests mutate a copy of it so each one states only the rule it is about.",
-      "source": "libs/diagram/diagram.buzz:828"
+      "source": "libs/diagram/diagram.buzz:834"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:validate",
@@ -12570,7 +12560,7 @@
       "kind": "function",
       "label": "advice_test",
       "doc": "Runs the PR advisors' `test \"...\" {}` blocks.  They are the only .buzz sources in this tree that parse standalone: everything else imports magus/magus\\spell and uses embedding-only constructs, which is why the old standalone-Buzz test targets were deleted rather than repointed. The advisors run under a plain `magus buzz` in CI, so upstream-strict is exactly the parse they need checked, and `-t` is the runner.  Run from each script's own directory, not the project root, because they do `import \"advice\"` for",
-      "source": "magusfile.buzz:1752",
+      "source": "magusfile.buzz:1764",
       "attrs": {
         "exported": "true"
       }
@@ -12580,7 +12570,7 @@
       "kind": "function",
       "label": "bindings_generate",
       "doc": "Regenerates the Go host bindings (std -> internal/interp/bindings/gen) from std.Module declarations.",
-      "source": "magusfile.buzz:854",
+      "source": "magusfile.buzz:863",
       "attrs": {
         "exported": "true"
       }
@@ -12590,7 +12580,7 @@
       "kind": "function",
       "label": "build",
       "doc": "Compiles one artifact: the host binary, or the container image under the `container` charm.",
-      "source": "magusfile.buzz:1935",
+      "source": "magusfile.buzz:1949",
       "attrs": {
         "exported": "true"
       }
@@ -12600,27 +12590,27 @@
       "kind": "function",
       "label": "build_date",
       "doc": "Commit record date (RFC3339) for reproducible builds.",
-      "source": "magusfile.buzz:193"
+      "source": "magusfile.buzz:191"
     },
     {
       "id": "function:magusfile.buzz:build_release_variant",
       "kind": "function",
       "label": "build_release_variant",
-      "source": "magusfile.buzz:1312"
+      "source": "magusfile.buzz:1324"
     },
     {
       "id": "function:magusfile.buzz:built_by",
       "kind": "function",
       "label": "built_by",
       "doc": "built_by is the CI workflow that produced the binary, empty for a local build so nothing claims a pedigree it does not have. It should match the job_workflow_ref a keyless signature carries, which is what lets the claim be checked against proof.",
-      "source": "magusfile.buzz:205"
+      "source": "magusfile.buzz:203"
     },
     {
       "id": "function:magusfile.buzz:buzz_test",
       "kind": "function",
       "label": "buzz_test",
       "doc": "Runs the in-file `test \"...\" {}` blocks in this repo's own root Buzz modules, through magus's embedded engine.  NOT the buzz spell's buzz-test op: that one forks the UPSTREAM `buzz` toolchain, which is not reliably on PATH, and it globs `find . -name '*.buzz'` from the project root - which here would sweep in magusfile.buzz, releaser.buzz, every spell and every worktree copy, none of which run standalone (they import magus host modules the bare toolchain cannot resolve). `magus buzz -t` is always present an",
-      "source": "magusfile.buzz:1853",
+      "source": "magusfile.buzz:1867",
       "attrs": {
         "exported": "true"
       }
@@ -12630,7 +12620,7 @@
       "kind": "function",
       "label": "changelog_generate",
       "doc": "CHANGELOG.md is a root artifact. Keeping its generator beside the file avoids a reverse docs -> root output edge while letting docs publication depend on the same execution stage.",
-      "source": "magusfile.buzz:831",
+      "source": "magusfile.buzz:840",
       "attrs": {
         "exported": "true"
       }
@@ -12640,14 +12630,14 @@
       "kind": "function",
       "label": "channel",
       "doc": "The active channel: \"commit\", \"unstable\", or \"stable\".  Naming both channels is rejected up front by exclusive_charms rather than left to the assertions below, which would fail too but report the version rather than the mistake.  `tagged` is the third answer: derive the channel from the release tag instead of naming it. It exists so cutting a release candidate is a tag and nothing else - the alternative was hand-editing `:cd,stable` to `:cd,unstable` in the workflow before every RC and back afterwards, an e",
-      "source": "magusfile.buzz:552"
+      "source": "magusfile.buzz:550"
     },
     {
       "id": "function:magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
       "doc": "Runs the CI gates through their declared dependencies.",
-      "source": "magusfile.buzz:2061",
+      "source": "magusfile.buzz:2075",
       "attrs": {
         "exported": "true"
       }
@@ -12657,7 +12647,7 @@
       "kind": "function",
       "label": "ci_shard",
       "doc": "Translates a `magus affected --plan` (read on stdin) into GitHub Actions shard-matrix outputs; the gha charm writes $GITHUB_OUTPUT, otherwise the matrix is only previewed.",
-      "source": "magusfile.buzz:2137",
+      "source": "magusfile.buzz:2151",
       "attrs": {
         "exported": "true"
       }
@@ -12667,14 +12657,14 @@
       "kind": "function",
       "label": "commit",
       "doc": "try/catch, not a sentinel check. These accessors RAISE when there is no VCS or its metadata cannot be read, which is what an unavailable value should do - \"\" is a value a branch could legitimately hold, so testing for it could never distinguish \"no answer\" from \"the answer is empty\". A build outside a checkout is a real case (a release tarball, a container build context), so it is caught here and named, once, instead of every caller remembering a check the type system never asked for.",
-      "source": "magusfile.buzz:184"
+      "source": "magusfile.buzz:182"
     },
     {
       "id": "function:magusfile.buzz:completion_test",
       "kind": "function",
       "label": "completion_test",
       "doc": "Exercises the completion scripts magus SHIPS, each inside the official image for its shell. Part of ci, and it REQUIRES a docker daemon rather than skipping without one: a gate that silently skips when a tool is missing is how the zsh recipe stayed broken - it told users to append a script to ~/.zshrc that registers nothing, and nothing ever ran it to find out. Its declared footprint keeps the cost off every run: affected only reaches it when the completion scripts or their checks change.  One image per she",
-      "source": "magusfile.buzz:2082",
+      "source": "magusfile.buzz:2096",
       "attrs": {
         "exported": "true"
       }
@@ -12684,7 +12674,7 @@
       "kind": "function",
       "label": "compress_cgo_test",
       "doc": "Runs internal/compress's tests under the CGO tags, which the ordinary test target cannot reach.  `go-test` passes no tags, so it compiles the pure-Go fallbacks and never the ~470 lines of zstd_cgo.go and xz_cgo.go - exactly the files a release binary ships. The coverage figure hid it: 78.9% while the shipped half sat at zero.  It cost correctness. The cgo zstd reader dropped ZSTD_decompressStream's hint, so a stream cut mid-frame returned io.EOF with a NIL error and a truncated cache artifact extracted as a",
-      "source": "magusfile.buzz:2125",
+      "source": "magusfile.buzz:2139",
       "attrs": {
         "exported": "true"
       }
@@ -12694,24 +12684,40 @@
       "kind": "function",
       "label": "config_generate",
       "doc": "Regenerates the CLI config-flag plumbing from internal/config/config.go. One generator invocation, four trees: the flag/bind plumbing beside the CLI, the schema field list, and the env applier next to config itself. All four are declared - undeclared they classified as ordinary source, so magus told a reader they were safe to hand-edit.",
-      "source": "magusfile.buzz:1025",
+      "source": "magusfile.buzz:1037",
       "attrs": {
         "exported": "true"
       }
+    },
+    {
+      "id": "function:magusfile.buzz:coverage_badge",
+      "kind": "function",
+      "label": "coverage_badge",
+      "doc": "Writes assets/coverage.svg, and is the only target that may.  Split from test so the suite can be CACHED: the badge is a declared output, so a hit would restore a cached one over the committed file, which is what forced skip_cache onto every test run - five minutes and 10GB to re-answer a question whose inputs had not moved.  NOT named *-generate, deliberately: `generate` composes ctx.glob(\"*-generate\"), so that suffix would pull a target that needs the race-enabled suite into the drift gate.",
+      "source": "magusfile.buzz:1811",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:magusfile.buzz:coverage_percent",
+      "kind": "function",
+      "label": "coverage_percent",
+      "source": "magusfile.buzz:1797"
     },
     {
       "id": "function:magusfile.buzz:credential_state",
       "kind": "function",
       "label": "credential_state",
       "doc": "Whether both of a registry's credentials can be resolved.  ONLY called under the `verify` charm, and that gating is the point rather than a detail. Checking resolvability means actually RESOLVING, and resolving means asking the provider - which for 1Password or a vault is a biometric or password prompt. A status table that pops an unlock dialog just to print \"ready\" is the single most infuriating thing this feature could do, and it is exactly what an ungated probe would cause: `magus run image-registries` i",
-      "source": "magusfile.buzz:687"
+      "source": "magusfile.buzz:685"
     },
     {
       "id": "function:magusfile.buzz:deploy_generate",
       "kind": "function",
       "label": "deploy_generate",
       "doc": "deploy-generate assembles gen/site: the exact tree the Pages deploy publishes, docs at the root of it and the console app under /console/.  It lives here rather than in the Pages workflow because that workflow is meant to be thin - set up a toolchain, name targets, upload the artifact - and the layout below is portable logic that would otherwise be GitHub-specific shell. It is also what makes the deploy reproducible locally: run the same three commands, then serve gen/site, and what you see is what publishe",
-      "source": "magusfile.buzz:2303",
+      "source": "magusfile.buzz:2317",
       "attrs": {
         "exported": "true"
       }
@@ -12721,7 +12727,7 @@
       "kind": "function",
       "label": "dogfood",
       "doc": "Compiles magus-dev, the binary THIS worktree points its own git tooling at. Paired with hack/install-dogfood.sh, which registers it as the worktree's merge driver.  A second binary rather than reusing ./magus, for one reason: ./magus is rebuilt constantly while iterating, and the merge driver resolves conflicts with whatever binary it was registered against. Rebuilding the driver's binary in the middle of a rebase swaps the tool under a running git operation. magus-dev moves only when install-dogfood is re-",
-      "source": "magusfile.buzz:253",
+      "source": "magusfile.buzz:251",
       "attrs": {
         "exported": "true"
       }
@@ -12731,28 +12737,28 @@
       "kind": "function",
       "label": "escape_module_path",
       "doc": "Applies the module cache's case encoding: an uppercase letter becomes \"!\" plus its lowercase form, so github.com/Masterminds/sprig is stored at github.com/!masterminds/sprig. Without this every capitalised module path looks unlicensed - a false \"missing license\" that would abort a release for no reason.",
-      "source": "magusfile.buzz:1300"
+      "source": "magusfile.buzz:1312"
     },
     {
       "id": "function:magusfile.buzz:exact_release_tag",
       "kind": "function",
       "label": "exact_release_tag",
       "doc": "The release tag HEAD sits EXACTLY on, or \"\" when HEAD is not itself tagged.  version() cannot answer this and must not be asked to. describe() renders an untagged commit as v0.4.0-3-gabc123, whose prerelease component is `3-gabc123`, so a version string alone cannot tell a genuine prerelease (`rc.1`) from mere distance past a stable tag - and reading it as the former would file an ordinary mid-development commit under a published channel. Comparing revision ids is exact and says nothing it cannot know.",
-      "source": "magusfile.buzz:533"
+      "source": "magusfile.buzz:531"
     },
     {
       "id": "function:magusfile.buzz:exclusive_charms",
       "kind": "function",
       "label": "exclusive_charms",
       "doc": "Rejects two charms that answer one question. magus gives no charm precedence over another (they are an unordered set), so a magusfile that reads them in sequence invents one silently - `:amd64,arm64` returned amd64 and dropped the arm64 the caller asked for.  WS is this WORKSPACE's code prefix, documented in docs/recommendations.md. magus.raise refuses the MGS prefix outright, which is what stops a workspace diagnostic from rendering as though magus documented it.",
-      "source": "magusfile.buzz:439"
+      "source": "magusfile.buzz:437"
     },
     {
       "id": "function:magusfile.buzz:format",
       "kind": "function",
       "label": "format",
       "doc": "Regenerates, then formats Go, tidies `go.mod`, and formats Markdown. dprint rather than prettier because it needs no Node in the format path, and rather than biome because biome does not read Markdown at all. Every project with Markdown carries its own dprint.json and runs the op itself; see this project's for what a root-started run covers.",
-      "source": "magusfile.buzz:2037",
+      "source": "magusfile.buzz:2051",
       "attrs": {
         "exported": "true"
       }
@@ -12762,7 +12768,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "Regenerates every *-generate sibling, then gates on drift (exclusive, scoped to cwd). Drift = a path whose bytes the generators changed, measured by hashing before and after rather than by asking whether the tree is clean, so the gate works on a dirty tree. An uncommitted-but-current generated file still passes: its bytes do not move.",
-      "source": "magusfile.buzz:1085",
+      "source": "magusfile.buzz:1097",
       "attrs": {
         "exported": "true"
       }
@@ -12772,7 +12778,7 @@
       "kind": "function",
       "label": "go_build",
       "doc": "Compiles the version-stamped magus binary.",
-      "source": "magusfile.buzz:216",
+      "source": "magusfile.buzz:214",
       "attrs": {
         "exported": "true"
       }
@@ -12782,14 +12788,14 @@
       "kind": "function",
       "label": "goarm_level",
       "doc": "Builds one (goos, goarch) release binary and archives it into dist/, writing a standard one-line <asset>.sha256 sidecar alongside it (sha256sum-compatible format). No cross-job aggregation needed: CD's publish job later does `cat dist/*.sha256 > dist/SHA256SUMS`, a plain shell one-liner, not a magus target. release-build's cgo and static (charm) modes both call this, differing only in CGO_ENABLED and the asset suffix. Maps an ASSET architecture token to the GOARM level it implies, or \"\" for the arches that",
-      "source": "magusfile.buzz:1220"
+      "source": "magusfile.buzz:1232"
     },
     {
       "id": "function:magusfile.buzz:graph_generate",
       "kind": "function",
       "label": "graph_generate",
       "doc": "Exports both graphs the browser Graph Explorer can load, so its demo is this workspace's real graph rather than a fixture that would drift from the wire shape the adapter expects. Written into gen/ because they are generated, not authored: the knowledge graph previously sat at docs/graph.json as a hand-run export with no generating target at all, which made it stale by construction with nothing to say so. Whole-workspace scope is why this lives at the root rather than in docs/ - a describe from inside a pro",
-      "source": "magusfile.buzz:1052",
+      "source": "magusfile.buzz:1064",
       "attrs": {
         "exported": "true"
       }
@@ -12799,7 +12805,7 @@
       "kind": "function",
       "label": "image_build",
       "doc": "Two axes, one charm each. `cd` is magus's built-in deliver switch: without it this loads an image locally and pushes nothing. `stable` and `unstable` pick the channel and assert the version belongs to it (see channel()).  magus run image-build                # local cgo load, pushes nothing magus run image-build:static         # local static load magus run image-build:cd             # GHCR, tagged with the short commit, static only magus run image-build:cd,unstable    # both registries, version only, no flo",
-      "source": "magusfile.buzz:479",
+      "source": "magusfile.buzz:477",
       "attrs": {
         "exported": "true"
       }
@@ -12809,7 +12815,7 @@
       "kind": "function",
       "label": "image_login",
       "doc": "Logs in to every registry the active mode publishes to, resolving each one's credentials through the workspace's secret provider.  magus run image-login:cd,stable           # both, before image-build:cd,stable magus run image-login:cd                   # GHCR only magus run image-login:cd,stable docker.io # just that one  This is the whole reason the references are a field on Registry. A CI step is then one line with no shell parsing a list, the same line that works on a laptop, and it cannot disagree with",
-      "source": "magusfile.buzz:731",
+      "source": "magusfile.buzz:729",
       "attrs": {
         "exported": "true"
       }
@@ -12819,7 +12825,7 @@
       "kind": "function",
       "label": "image_registries",
       "doc": "Reports the registries `magus run image-build` under the SAME charms will push to, and whether the credentials each one needs are actually present in the environment. The diagnostic half of the pair image_login() completes: this one answers \"where does this go and am I set up for it\", touches nothing, and needs no credentials to be useful.  magus run image-registries:cd,stable       # both, for a release magus run image-registries:cd              # GHCR only, for a per-commit image magus run image-registrie",
-      "source": "magusfile.buzz:636",
+      "source": "magusfile.buzz:634",
       "attrs": {
         "exported": "true"
       }
@@ -12829,7 +12835,7 @@
       "kind": "function",
       "label": "image_scan",
       "doc": "Scans the image with trivy; the rw charm writes SARIF and gates on HIGH/CRITICAL.",
-      "source": "magusfile.buzz:748",
+      "source": "magusfile.buzz:746",
       "attrs": {
         "exported": "true"
       }
@@ -12839,20 +12845,20 @@
       "kind": "function",
       "label": "image_stamps",
       "doc": "The build-args every variant stamps into the binary through the Dockerfiles' ldflags.",
-      "source": "magusfile.buzz:334"
+      "source": "magusfile.buzz:332"
     },
     {
       "id": "function:magusfile.buzz:image_tag",
       "kind": "function",
       "label": "image_tag",
-      "source": "magusfile.buzz:331"
+      "source": "magusfile.buzz:329"
     },
     {
       "id": "function:magusfile.buzz:index_generate",
       "kind": "function",
       "label": "index_generate",
       "doc": "Renders MAGUS.md via `magus describe graph`.",
-      "source": "magusfile.buzz:1039",
+      "source": "magusfile.buzz:1051",
       "attrs": {
         "exported": "true"
       }
@@ -12862,7 +12868,7 @@
       "kind": "function",
       "label": "langservice_generate",
       "doc": "Regenerates the host-module snapshot the browser playground's completion and hover read (internal/langservice/manifest_data.go), from the same std declarations bindings_generate reads.  It has a target at all because it did not: the file carried a \"regenerate with `go run`\" header and nothing else, so a std descriptor edit left it stale with only its own drift test to say so, one commit later. A generated file whose only regeneration route is a hand-typed command is a file that rots.",
-      "source": "magusfile.buzz:898",
+      "source": "magusfile.buzz:907",
       "attrs": {
         "exported": "true"
       }
@@ -12871,14 +12877,14 @@
       "id": "function:magusfile.buzz:ld_flags",
       "kind": "function",
       "label": "ld_flags",
-      "source": "magusfile.buzz:207"
+      "source": "magusfile.buzz:205"
     },
     {
       "id": "function:magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
       "doc": "Formats and builds the linter first, then golangci-lint, go vet, markdownlint, and shellcheck. STATIC ANALYSIS only - govulncheck lives in `security` with the other scanners, because a scanner's answer changes when its advisory database does, with no edit to this tree. golangci-lint USED to go through the go spell's op so the spell's version probe (mgs_getVersionProbes) reached the cache key - without it a linter upgrade changes which code passes while every cache entry replays the old verdict. It no longer",
-      "source": "magusfile.buzz:1981",
+      "source": "magusfile.buzz:1995",
       "attrs": {
         "exported": "true"
       }
@@ -12888,7 +12894,7 @@
       "kind": "function",
       "label": "lint_build",
       "doc": "Builds ./custom-gcl, the golangci-lint carrying this repo's own linters. golangci-lint compiles plugins in rather than loading them at runtime, so an in-repo rule only runs through a binary built here.  The build runs in libs/testlayout because `golangci-lint custom` reads .custom-gcl.yml from its working directory and takes no config flag. That file lives with the linter it declares; `destination: ../..` puts the binary back at the root, where .golangci.yml and lint expect it.  No declared outputs, for go-",
-      "source": "magusfile.buzz:1956",
+      "source": "magusfile.buzz:1970",
       "attrs": {
         "exported": "true"
       }
@@ -12898,21 +12904,21 @@
       "kind": "function",
       "label": "load_platform",
       "doc": "The platform a local --load build targets, named EXPLICITLY rather than left to buildx's default.  Single-arch is not a preference here, it is a constraint: `docker buildx build --load` cannot load a multi-platform result into the docker image store, so a local build has exactly one architecture whatever anyone wants. Passing it explicitly means the build log says which one, instead of the reader having to know what the builder's default happens to be on this machine.  The default is the HOST's architecture",
-      "source": "magusfile.buzz:425"
+      "source": "magusfile.buzz:423"
     },
     {
       "id": "function:magusfile.buzz:load_variant",
       "kind": "function",
       "label": "load_variant",
       "doc": "Builds one variant single-arch into the local daemon under image_tag(): no registry, no signature. What `magus run image-build` does outside CI, and what image_scan hands to trivy.",
-      "source": "magusfile.buzz:450"
+      "source": "magusfile.buzz:448"
     },
     {
       "id": "function:magusfile.buzz:magusfile_api_generate",
       "kind": "function",
       "label": "magusfile_api_generate",
       "doc": "Regenerates the magusfile API surface lock: every member a magusfile can call on the magus namespace, one dotted name per line. Named for the magusfile surface rather than \"api\" alone, because two other things in this repo are also an API surface - internal/clispec/testdata/api.lock is the CLI's, and cmd/magus/surface.go drives completions.  The regeneration route is a TEST, not a generator, which is why this target exists: the snapshot is written by TestMagusSurfaceLocked under UPDATE_MAGUS_API_LOCK, so wi",
-      "source": "magusfile.buzz:881",
+      "source": "magusfile.buzz:890",
       "attrs": {
         "exported": "true"
       }
@@ -12922,7 +12928,7 @@
       "kind": "function",
       "label": "man_generate",
       "doc": "Renders the roff man pages into manpage/ (repo root). These are a DISTRIBUTION artifact - the .1 source the `man` command reads, shipped with releases - so they stay owned here at the root, NOT in the docs project. The docs project owns the Markdown manpages (docs/manpage/*.md) instead; both flavors are serialized from the same internal/clispec registry by cmd/magus-manpage (see its -format flag).  It also refreshes api.lock, the drift-gated snapshot of the public CLI surface, because that is serialized fro",
-      "source": "magusfile.buzz:821",
+      "source": "magusfile.buzz:830",
       "attrs": {
         "exported": "true"
       }
@@ -12932,14 +12938,14 @@
       "kind": "function",
       "label": "missing_input",
       "doc": "missing_input phrases a deploy-generate precondition that ANOTHER project owns.  Naming one single-project command teaches the wrong habit: the reader runs it, gets the next precondition, runs another, and learns the set by failing once per producer. So name every producer in one command. `magus run <target> [project...]` takes a LIST - `magus run build docs console` is one dispatch over both - which is the idiom this message teaches.  Deliberately NOT \"magus affected build\" or \"magus run build /\". Both wou",
-      "source": "magusfile.buzz:2237"
+      "source": "magusfile.buzz:2251"
     },
     {
       "id": "function:magusfile.buzz:mocks_generate",
       "kind": "function",
       "label": "mocks_generate",
       "doc": "Regenerates the testify mocks (mockery, driven by .mockery.yaml) into each mocked interface's gen/ subdir. Mocks are committed and drift-gated like every other generated tree; mockery is pinned in the go.mod tool block.",
-      "source": "magusfile.buzz:921",
+      "source": "magusfile.buzz:930",
       "attrs": {
         "exported": "true"
       }
@@ -12948,14 +12954,14 @@
       "id": "function:magusfile.buzz:pad",
       "kind": "function",
       "label": "pad",
-      "source": "magusfile.buzz:704"
+      "source": "magusfile.buzz:702"
     },
     {
       "id": "function:magusfile.buzz:postflight",
       "kind": "function",
       "label": "postflight",
       "doc": "Renders the insight report (hotspots, affinity, ownership, trend) to stdout. Local only: no workflow invokes this target, and ci-outcome.buzz's volatility-lens step summary is the CI-facing equivalent.",
-      "source": "magusfile.buzz:1068",
+      "source": "magusfile.buzz:1080",
       "attrs": {
         "exported": "true"
       }
@@ -12965,34 +12971,34 @@
       "kind": "function",
       "label": "publish_registries",
       "doc": "Which registries the active mode pushes to. image_build and image_registries both read it, so the build and the login step it depends on cannot disagree about which credentials a run needs.  Going through channel() also means the workflow's `image-registries:cd,stable,verify` preflight rejects a bad version before QEMU, buildx and a multi-arch compile run.",
-      "source": "magusfile.buzz:520"
+      "source": "magusfile.buzz:518"
     },
     {
       "id": "function:magusfile.buzz:publish_variant",
       "kind": "function",
       "label": "publish_variant",
       "doc": "Builds one variant, pushes it to every registry, and signs it in each.  `tags` are bare tag names, expanded across `registries` into -t flags on one buildx invocation: the variant is built once no matter how many registries or tags it lands under.  --sbom attaches a per-platform SPDX document and --provenance a max-detail SLSA statement, both as in-toto attestation manifests inside the pushed index, and both produced by the build that was already running - BuildKit scans the filesystem it just assembled rat",
-      "source": "magusfile.buzz:357"
+      "source": "magusfile.buzz:355"
     },
     {
       "id": "function:magusfile.buzz:read_module_license",
       "kind": "function",
       "label": "read_module_license",
       "doc": "Reads one module's license text from the module cache, or \"\" when none is present.",
-      "source": "magusfile.buzz:1286"
+      "source": "magusfile.buzz:1298"
     },
     {
       "id": "function:magusfile.buzz:rebuild_console",
       "kind": "function",
       "label": "rebuild_console",
       "doc": "rebuild_console rebuilds console/gen with the console project's own esbuild build (pnpm run build), installing its deps first on a cold tree. Run from the console/ dir so pnpm resolves that project's package.json. Always let pnpm validate the install, matching console/magusfile.buzz. An interrupted install leaves a node_modules that EXISTS but is incomplete, and the isDir guard this replaced read that as ready and handed the missing packages to esbuild. On a warm tree --frozen-lockfile is about a second and",
-      "source": "magusfile.buzz:2199"
+      "source": "magusfile.buzz:2213"
     },
     {
       "id": "function:magusfile.buzz:release",
       "kind": "function",
       "label": "release",
-      "source": "magusfile.buzz:1546",
+      "source": "magusfile.buzz:1558",
       "attrs": {
         "exported": "true"
       }
@@ -13002,7 +13008,7 @@
       "kind": "function",
       "label": "release_build",
       "doc": "Builds one release binary for one platform. Default is STATIC (CGO_ENABLED=0), and the `dynamic` charm (`magus run release-build:dynamic`) opts into the cgo build.  The default is static so that every layer says the same thing: the bare command produces the bare asset, and that asset is the one that runs anywhere - no loader, no glibc, no system libzstd. Inverted - the bare command producing the cgo build while the bare ARCHIVE is the static one - `release-build` and `magus_<v>_<os>_<arch>.tar.gz` would mea",
-      "source": "magusfile.buzz:1456",
+      "source": "magusfile.buzz:1468",
       "attrs": {
         "exported": "true"
       }
@@ -13012,7 +13018,7 @@
       "kind": "function",
       "label": "release_sign",
       "doc": "Signs dist/SHA256SUMS with the Ed25519 key in the MAGUS_SIGNING_KEY secret (see cmd/magus-utils/sign.go), then self-verifies the signature against the embedded release pubkey (internal/releasekey) before the release goes out — a cheap regression guard, safe to run here (unlike setup-magus, which can't depend on the magus source tree since it's reused by arbitrary external repos).",
-      "source": "magusfile.buzz:1503",
+      "source": "magusfile.buzz:1515",
       "attrs": {
         "exported": "true"
       }
@@ -13022,27 +13028,27 @@
       "kind": "function",
       "label": "release_target_platform",
       "doc": "Resolves which platform to build: the explicit (goos, goarch) args when given, else the current runner's own native platform. So a bare `magus run release-build` (with or without the static charm) builds exactly one binary — the one you're standing on — never a silent \"all 5\" surprise.",
-      "source": "magusfile.buzz:1420"
+      "source": "magusfile.buzz:1432"
     },
     {
       "id": "function:magusfile.buzz:rerender_docs",
       "kind": "function",
       "label": "rerender_docs",
       "doc": "rerender_docs re-renders docs/gen via the docs project's fast `render` target. It shells out to magus rather than calling render.site_render in-process because docs/render.buzz flat-imports its helpers (render_text, render_html, ...) with plain names that resolve relative to the CWD - only inside the docs project dir, never the workspace root - so a sub-invocation (which sets CWD=docs) is the only way those imports resolve. Prefer $MAGUS (the running binary's resolved path, set for magus child processes) an",
-      "source": "magusfile.buzz:2211"
+      "source": "magusfile.buzz:2225"
     },
     {
       "id": "function:magusfile.buzz:resolvable",
       "kind": "function",
       "label": "resolvable",
-      "source": "magusfile.buzz:695"
+      "source": "magusfile.buzz:693"
     },
     {
       "id": "function:magusfile.buzz:security",
       "kind": "function",
       "label": "security",
       "doc": "Gates on dependency LICENSE terms, which is a separate question from image_scan's vulnerability pass even though both drive trivy. magus is GPL-3.0-or-later, so the failure worth catching is a dependency whose terms cannot be combined with that - and the moment to catch it is the pull request that adds it, not the release that ships it.  Gates on trivy's CATEGORY, corrected for the fact that its categories assume a PROPRIETARY consumer. Out of the box trivy calls AGPL `forbidden` and GPL/LGPL `restricted`,",
-      "source": "magusfile.buzz:791",
+      "source": "magusfile.buzz:789",
       "attrs": {
         "exported": "true"
       }
@@ -13052,13 +13058,13 @@
       "kind": "function",
       "label": "select_registries",
       "doc": "Narrows a registry list to one host, for the `magus run image-login:cd,stable docker.io` form. Selection is BY HOST, deliberately not by position: an index silently selects a different registry the moment REGISTRIES is reordered or the charm changes how many there are (`:cd` has one, `:cd,stable` has two, so \"index 1\" is a valid registry under one and out of range under the other), and it is unreadable in a workflow besides. A host that is not in the list is an error naming the ones that are, rather than a",
-      "source": "magusfile.buzz:606"
+      "source": "magusfile.buzz:604"
     },
     {
       "id": "function:magusfile.buzz:serve",
       "kind": "function",
       "label": "serve",
-      "source": "magusfile.buzz:2350",
+      "source": "magusfile.buzz:2364",
       "attrs": {
         "exported": "true"
       }
@@ -13068,7 +13074,7 @@
       "kind": "function",
       "label": "skills_generate",
       "doc": "Reinstalls the agent skills from their embedded sources in cmd/magus/skills.  The installed copies are GENERATED, and declaring them says so: without this they classified as ordinary source, so `magus describe file .claude/skills/...` reported a hand-editable file and the agent guard stayed silent on the one edit that is always wrong. CLAUDE.md has said \"edit the sources, not the installed copies\" all along; this is the declaration that makes the tooling say it too.  AGENTS.md is absent here because magus d",
-      "source": "magusfile.buzz:974",
+      "source": "magusfile.buzz:983",
       "attrs": {
         "exported": "true"
       }
@@ -13078,7 +13084,7 @@
       "kind": "function",
       "label": "spells_generate",
       "doc": "Regenerates the compiled built-in spell bytecode (internal/spellruntime/gen), the Buzz value-type mirrors (internal/spellruntime/gen/types) and the per-module host declarations (internal/spellruntime/gen/decls), all driven by the go:generate directives in internal/spellruntime.  Both trees are declared: undeclared, magus classified them as ordinary source, so `magus describe file` told a reader a generated file was safe to hand-edit and the agent guard's generated-file advisory stayed silent on every one of",
-      "source": "magusfile.buzz:911",
+      "source": "magusfile.buzz:920",
       "attrs": {
         "exported": "true"
       }
@@ -13087,7 +13093,7 @@
       "id": "function:magusfile.buzz:termcast_generate",
       "kind": "function",
       "label": "termcast_generate",
-      "source": "magusfile.buzz:1176",
+      "source": "magusfile.buzz:1188",
       "attrs": {
         "exported": "true"
       }
@@ -13097,7 +13103,7 @@
       "kind": "function",
       "label": "termcast_record",
       "doc": "Re-records tapes/core-loop.capture: the raw bytes a real magus prints to a real pseudo-terminal, driven by tapes/core-loop.session.sh.  Opt-in and NOT named *_generate: `generate` globs that suffix and drift-gates what it finds, and a session is not byte-reproducible, so the gate would be red by construction. The unreproducibility stops at the bytes, though - RENDERING them is arithmetic, which is what termcast_generate gates instead.  Run it when magus's output changes, commit the capture, and let the rend",
-      "source": "magusfile.buzz:1147",
+      "source": "magusfile.buzz:1159",
       "attrs": {
         "exported": "true"
       }
@@ -13107,7 +13113,7 @@
       "kind": "function",
       "label": "termcast_showcase",
       "doc": "Renders tapes/core-loop.capture into the README's animated SVG.  Deterministic - it replays committed bytes through the terminal emulator and emits text - so it can be drift-gated, and is. That gate is the point: a recording nothing checks goes stale in silence, until the README's alt text is describing a project count magus no longer reports. Re-records tapes/showcase.capture: a real INTERACTIVE session, driven by real keystrokes, showing the surfaces a transcript cannot - the pinned band, the failure tree",
-      "source": "magusfile.buzz:1169",
+      "source": "magusfile.buzz:1181",
       "attrs": {
         "exported": "true"
       }
@@ -13117,7 +13123,7 @@
       "kind": "function",
       "label": "termshots_generate",
       "doc": "Renders the still SVGs of magus's interactive terminal surfaces for the docs.  Recorded nothing: these are CONDITIONS - a run stalled on another process's lock, a failed target awaiting a choice - and staging those in a live shell reliably enough to record is painful. The frames come from driving the real Zone, Notifier and picker through the terminal emulator, so the layout is what a terminal would receive even though the scenario is staged.",
-      "source": "magusfile.buzz:1190",
+      "source": "magusfile.buzz:1202",
       "attrs": {
         "exported": "true"
       }
@@ -13126,8 +13132,8 @@
       "id": "function:magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
-      "source": "magusfile.buzz:1762",
+      "doc": "Tests with race detection and a coverage floor. The badge is coverage_badge's.",
+      "source": "magusfile.buzz:1774",
       "attrs": {
         "exported": "true"
       }
@@ -13137,7 +13143,7 @@
       "kind": "function",
       "label": "toolchain_report",
       "doc": "serve is the workspace-root dev loop for BOTH deployables. ONE web server hosts the two rendered gen/ trees (generated, not committed) with the GitHub Pages pathing - \"/\" serves docs/gen and \"/console/\" serves console/gen, where the console SPA SHADOWS the docs render's /console/ redirect stub (longest-prefix routing in http.server's mounts mode), exactly like the deploy that assembles docs/gen at the root and console/gen under /console/. It spans both projects, so it lives at the workspace root rather than",
-      "source": "magusfile.buzz:2346",
+      "source": "magusfile.buzz:2360",
       "attrs": {
         "exported": "true"
       }
@@ -13147,14 +13153,14 @@
       "kind": "function",
       "label": "total_coverage",
       "doc": "Renders a Go coverage badge locally (no third-party service, no network).",
-      "source": "magusfile.buzz:1732"
+      "source": "magusfile.buzz:1744"
     },
     {
       "id": "function:magusfile.buzz:types_generate",
       "kind": "function",
       "label": "types_generate",
       "doc": "Regenerates the runtime BuzzObject maps before anything imports a host binding. Its reflection lives only in magus-utils while writing this Go file; the emitted methods use direct field access, so Magus never reflects at a Buzz boundary. The enum helpers (Values/Valid/String for each boundaryEnum) come from a SECOND directive, and it lives in cmd/magus-utils rather than in types/, so `go generate ./types` never ran it. Adding a boundaryEnums entry therefore left types/enum_gen.go and spells/enum_gen.go stal",
-      "source": "magusfile.buzz:847",
+      "source": "magusfile.buzz:856",
       "attrs": {
         "exported": "true"
       }
@@ -13163,14 +13169,14 @@
       "id": "function:magusfile.buzz:version",
       "kind": "function",
       "label": "version",
-      "source": "magusfile.buzz:168"
+      "source": "magusfile.buzz:166"
     },
     {
       "id": "function:magusfile.buzz:watch",
       "kind": "function",
       "label": "watch",
       "doc": "Rebuilds on every debounced change until interrupted; fs.watch BLOCKS, try/catch keeps it alive.",
-      "source": "magusfile.buzz:1718",
+      "source": "magusfile.buzz:1730",
       "attrs": {
         "exported": "true"
       }
@@ -13180,20 +13186,20 @@
       "kind": "function",
       "label": "write_image_summary",
       "doc": "Appends a runnable summary of what was pushed to the GitHub Actions job summary.  This lives HERE, not in a workflow `run:` block, for the same reason image-login does: the target already knows the references it pushed, so a workflow step that re-derives them (`jq -r '.\"image.name\"' commit-meta.json`) is parsing magus's own output back out of a file magus wrote. That is the shell-parsing shape this magusfile avoids everywhere else, and it drifts the moment the tag scheme changes.  Self-gating on $GITHUB_STE",
-      "source": "magusfile.buzz:391"
+      "source": "magusfile.buzz:389"
     },
     {
       "id": "function:magusfile.buzz:write_notices",
       "kind": "function",
       "label": "write_notices",
       "doc": "Writes THIRD-PARTY-NOTICES beside the staged binary, reading the module list OUT OF THAT BINARY rather than out of go.mod.  That distinction is the whole point. The two variants link different modules - the dynamic build carries ebitengine/purego for FFI, the static build carries ulikunitz/xz for pure-Go compression, and no shipped artifact contains both. A notices file resolved from go.mod would name modules that are not in the archive it sits in, which is the precise inaccuracy this file exists to prevent",
-      "source": "magusfile.buzz:1243"
+      "source": "magusfile.buzz:1255"
     },
     {
       "id": "function:proto/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "source": "proto/magusfile.buzz:62",
+      "source": "proto/magusfile.buzz:135",
       "attrs": {
         "exported": "true"
       }
@@ -13203,7 +13209,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "Self-contained project targets, so `magus affected ci` gates the contract when the proto changes - no other project reaches in. lint checks the schema's shape; ci regenerates first so committed gen/ can never drift from the .proto.  buf-breaking (the backward-compat gate) is DEFERRED until it can be wired correctly. Requirements, all load-bearing: 1. NO hardcoded \"main\" - resolve the default branch dynamically via the existing types.DefaultBranchReporter (vcs/git.go DefaultBranch, from origin/HEAD). 2. GRAC",
-      "source": "proto/magusfile.buzz:57",
+      "source": "proto/magusfile.buzz:96",
       "attrs": {
         "exported": "true"
       }
@@ -13212,7 +13218,7 @@
       "id": "function:proto/magusfile.buzz:lint",
       "kind": "function",
       "label": "lint",
-      "source": "proto/magusfile.buzz:61",
+      "source": "proto/magusfile.buzz:134",
       "attrs": {
         "exported": "true"
       }
@@ -13271,7 +13277,7 @@
       "id": "function:releaser.buzz:releasableModules",
       "kind": "function",
       "label": "releasableModules",
-      "doc": "releasableModules enumerates every independently-versioned project: one whose resolved spells declare a manifest (spells.Spell.Manifests, the language's go.mod/package.json/Cargo.toml/pyproject.toml equivalent) that is actually present in its directory - types.ProjectEntry.Manifests, read by the caller via magus\\ls() and passed in as projects, already did the \"does the candidate file exist\" filesystem check. Taking the inventory as a parameter rather than calling magus\\ls() itself keeps this module doing wh",
+      "doc": "releasableModules enumerates every independently-versioned project: one whose resolved spells declare a manifest (spells.Spell.Manifests, the language's go.mod/package.json/Cargo.toml/pyproject.toml equivalent) that is actually present in its directory - types.ProjectEntry.Manifests, read by the caller via magus\\projects() and passed in as projects, already did the \"does the candidate file exist\" filesystem check. Taking the inventory as a parameter rather than calling magus\\projects() itself keeps this mod",
       "source": "releaser.buzz:52",
       "attrs": {
         "exported": "true"
@@ -15913,6 +15919,22 @@
       }
     },
     {
+      "id": "import:project/../console",
+      "kind": "import",
+      "label": "project/../console",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
+      "id": "import:project/../docs",
+      "kind": "import",
+      "label": "project/../docs",
+      "attrs": {
+        "diagnostic": "MGS7001"
+      }
+    },
+    {
       "id": "import:project/../libs/gopherbuzz",
       "kind": "import",
       "label": "project/../libs/gopherbuzz",
@@ -17312,15 +17334,6 @@
       }
     },
     {
-      "id": "method:magus.ls",
-      "kind": "method",
-      "label": "magus.ls",
-      "doc": "List the workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus's own type, no import needed) for compile-checked field access. Unlike magus.cmd(\"ls\"), this reads the workspace already open on the context - no subprocess, no second workspace load, no JSON round-trip.",
-      "attrs": {
-        "buzz": "magus\\ls() → Projects"
-      }
-    },
-    {
       "id": "method:magus.project",
       "kind": "method",
       "label": "magus.project",
@@ -17336,6 +17349,15 @@
       "doc": "The project dependency DAG as {nodes, dependsOn, blastRadius}. nodes is in TOPOLOGICAL order, so iterating it is already a valid build order; dependsOn gives each node's direct predecessors and blastRadius how many projects it can transitively affect. Served in-process from the workspace on the context - no subprocess.",
       "attrs": {
         "buzz": "magus\\projectGraph() → Graph"
+      }
+    },
+    {
+      "id": "method:magus.projects",
+      "kind": "method",
+      "label": "magus.projects",
+      "doc": "The workspace's projects: {workspace, count, projects}, each project {path, dir, spell, spells, sources, outputs, dependsOn, exclusive}. Annotate the result `> Projects` (magus's own type, no import needed) for compile-checked field access. The sibling of magus.targets(), which answers the same question one level down. Unlike magus.cmd(\"ls\") - the CLI spelling, which this member deliberately does not mirror - it reads the workspace already open on the context: no subprocess, no second workspace load, no JSO",
+      "attrs": {
+        "buzz": "magus\\projects() → Projects"
       }
     },
     {
@@ -20144,7 +20166,7 @@
       "source": ".",
       "attrs": {
         "engine": "buzz",
-        "target_count": "43"
+        "target_count": "44"
       }
     },
     {
@@ -20238,11 +20260,11 @@
       }
     },
     {
-      "id": "rationale:magusfile.buzz:2082:TODO",
+      "id": "rationale:magusfile.buzz:2096:TODO",
       "kind": "rationale",
       "label": "TODO",
       "doc": "zsh is uncovered - it has no official image (zshusers/zsh is community-run), so",
-      "source": "magusfile.buzz:2082"
+      "source": "magusfile.buzz:2096"
     },
     {
       "id": "rationale:spells/aws/s3-cache/spell.buzz:108:WHY",
@@ -20475,6 +20497,17 @@
       "source": ".",
       "attrs": {
         "declared_as": "config_generate",
+        "engine": "buzz"
+      }
+    },
+    {
+      "id": "target:.:coverage-badge",
+      "kind": "target",
+      "label": "coverage-badge",
+      "doc": "Writes assets/coverage.svg, and is the only target that may.",
+      "source": ".",
+      "attrs": {
+        "declared_as": "coverage_badge",
         "engine": "buzz"
       }
     },
@@ -20790,7 +20823,7 @@
       "id": "target:.:test",
       "kind": "target",
       "label": "test",
-      "doc": "Tests with race detection, coverage, and a drift-gated coverage badge.",
+      "doc": "Tests with race detection and a coverage floor.",
       "source": ".",
       "attrs": {
         "engine": "buzz"
@@ -21722,14 +21755,6 @@
       "provenance": "."
     },
     {
-      "source": "charm:cd",
-      "target": "target:.:test",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "."
-    },
-    {
       "source": "charm:container",
       "target": "target:.:build",
       "relation": "references",
@@ -21756,6 +21781,22 @@
     {
       "source": "charm:gha",
       "target": "target:.:ci-shard",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "charm:gha",
+      "target": "target:.:coverage-badge",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "charm:rw",
+      "target": "target:.:coverage-badge",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -21848,6 +21889,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/textsearch"
+    },
+    {
+      "source": "charm:rw",
+      "target": "target:proto:generate",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "proto"
     },
     {
       "source": "charm:stable",
@@ -22059,11 +22108,27 @@
     },
     {
       "source": "dir:blog",
-      "target": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
+    },
+    {
+      "source": "dir:blog",
+      "target": "doc:blog/2026-09-01-the-best-code-is-still-no-code.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "blog/2026-09-01-the-best-code-is-still-no-code.md"
+    },
+    {
+      "source": "dir:blog",
+      "target": "doc:blog/2026-09-08-the-console-was-an-experiment.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "blog/2026-09-08-the-console-was-an-experiment.md"
     },
     {
       "source": "dir:cmd",
@@ -22144,6 +22209,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "cmd/magus/skills/magus-change-summary"
+    },
+    {
+      "source": "dir:cmd/magus/skills",
+      "target": "dir:cmd/magus/skills/magus-commit-composition",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "cmd/magus/skills/magus-commit-composition"
     },
     {
       "source": "dir:cmd/magus/skills",
@@ -22248,6 +22321,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "cmd/magus/skills/magus-change-summary/SKILL.md"
+    },
+    {
+      "source": "dir:cmd/magus/skills/magus-commit-composition",
+      "target": "doc:cmd/magus/skills/magus-commit-composition/SKILL.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "cmd/magus/skills/magus-commit-composition/SKILL.md"
     },
     {
       "source": "dir:cmd/magus/skills/magus-context-audit",
@@ -22651,27 +22732,11 @@
     },
     {
       "source": "dir:docs/concepts/spells",
-      "target": "doc:docs/concepts/spells/md.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/spells/md.md"
-    },
-    {
-      "source": "dir:docs/concepts/spells",
       "target": "doc:docs/concepts/spells/podman.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/concepts/spells/podman.md"
-    },
-    {
-      "source": "dir:docs/concepts/spells",
-      "target": "doc:docs/concepts/spells/py.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/spells/py.md"
     },
     {
       "source": "dir:docs/concepts/spells",
@@ -22683,27 +22748,11 @@
     },
     {
       "source": "dir:docs/concepts/spells",
-      "target": "doc:docs/concepts/spells/rs.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/spells/rs.md"
-    },
-    {
-      "source": "dir:docs/concepts/spells",
       "target": "doc:docs/concepts/spells/rust.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/concepts/spells/rust.md"
-    },
-    {
-      "source": "dir:docs/concepts/spells",
-      "target": "doc:docs/concepts/spells/ts.md",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/spells/ts.md"
     },
     {
       "source": "dir:docs/concepts/spells",
@@ -23267,195 +23316,195 @@
     },
     {
       "source": "dir:docs/reference/api/activity",
-      "target": "dir:docs/reference/api/activity/v1",
+      "target": "dir:docs/reference/api/activity/v1alpha1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/activity/v1"
+      "provenance": "docs/reference/api/activity/v1alpha1"
     },
     {
-      "source": "dir:docs/reference/api/activity/v1",
-      "target": "doc:docs/reference/api/activity/v1/activity.md",
+      "source": "dir:docs/reference/api/activity/v1alpha1",
+      "target": "doc:docs/reference/api/activity/v1alpha1/activity.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/activity/v1/activity.md"
+      "provenance": "docs/reference/api/activity/v1alpha1/activity.md"
     },
     {
       "source": "dir:docs/reference/api/graph",
-      "target": "dir:docs/reference/api/graph/v1",
+      "target": "dir:docs/reference/api/graph/v1alpha1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/graph/v1"
+      "provenance": "docs/reference/api/graph/v1alpha1"
     },
     {
-      "source": "dir:docs/reference/api/graph/v1",
-      "target": "doc:docs/reference/api/graph/v1/graph.md",
+      "source": "dir:docs/reference/api/graph/v1alpha1",
+      "target": "doc:docs/reference/api/graph/v1alpha1/graph.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/graph/v1/graph.md"
+      "provenance": "docs/reference/api/graph/v1alpha1/graph.md"
     },
     {
       "source": "dir:docs/reference/api/insight",
-      "target": "dir:docs/reference/api/insight/v1",
+      "target": "dir:docs/reference/api/insight/v1alpha1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/insight/v1"
+      "provenance": "docs/reference/api/insight/v1alpha1"
     },
     {
-      "source": "dir:docs/reference/api/insight/v1",
-      "target": "doc:docs/reference/api/insight/v1/insight.md",
+      "source": "dir:docs/reference/api/insight/v1alpha1",
+      "target": "doc:docs/reference/api/insight/v1alpha1/insight.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/insight/v1/insight.md"
+      "provenance": "docs/reference/api/insight/v1alpha1/insight.md"
     },
     {
       "source": "dir:docs/reference/api/job",
-      "target": "dir:docs/reference/api/job/v1",
+      "target": "dir:docs/reference/api/job/v1alpha1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/job/v1"
+      "provenance": "docs/reference/api/job/v1alpha1"
     },
     {
-      "source": "dir:docs/reference/api/job/v1",
-      "target": "doc:docs/reference/api/job/v1/job.md",
+      "source": "dir:docs/reference/api/job/v1alpha1",
+      "target": "doc:docs/reference/api/job/v1alpha1/job.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/job/v1/job.md"
+      "provenance": "docs/reference/api/job/v1alpha1/job.md"
     },
     {
       "source": "dir:docs/reference/api/memory",
-      "target": "dir:docs/reference/api/memory/v1",
+      "target": "dir:docs/reference/api/memory/v1alpha1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/memory/v1"
+      "provenance": "docs/reference/api/memory/v1alpha1"
     },
     {
-      "source": "dir:docs/reference/api/memory/v1",
-      "target": "doc:docs/reference/api/memory/v1/memory.md",
+      "source": "dir:docs/reference/api/memory/v1alpha1",
+      "target": "doc:docs/reference/api/memory/v1alpha1/memory.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/memory/v1/memory.md"
+      "provenance": "docs/reference/api/memory/v1alpha1/memory.md"
     },
     {
       "source": "dir:docs/reference/api/metrics",
-      "target": "dir:docs/reference/api/metrics/v1",
+      "target": "dir:docs/reference/api/metrics/v1alpha1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/metrics/v1"
+      "provenance": "docs/reference/api/metrics/v1alpha1"
     },
     {
-      "source": "dir:docs/reference/api/metrics/v1",
-      "target": "doc:docs/reference/api/metrics/v1/metrics.md",
+      "source": "dir:docs/reference/api/metrics/v1alpha1",
+      "target": "doc:docs/reference/api/metrics/v1alpha1/metrics.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/metrics/v1/metrics.md"
+      "provenance": "docs/reference/api/metrics/v1alpha1/metrics.md"
     },
     {
       "source": "dir:docs/reference/api/notes",
-      "target": "dir:docs/reference/api/notes/v1",
+      "target": "dir:docs/reference/api/notes/v1alpha1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/notes/v1"
+      "provenance": "docs/reference/api/notes/v1alpha1"
     },
     {
-      "source": "dir:docs/reference/api/notes/v1",
-      "target": "doc:docs/reference/api/notes/v1/notes.md",
+      "source": "dir:docs/reference/api/notes/v1alpha1",
+      "target": "doc:docs/reference/api/notes/v1alpha1/notes.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/notes/v1/notes.md"
+      "provenance": "docs/reference/api/notes/v1alpha1/notes.md"
     },
     {
       "source": "dir:docs/reference/api/query",
-      "target": "dir:docs/reference/api/query/v1",
+      "target": "dir:docs/reference/api/query/v1alpha1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/query/v1"
+      "provenance": "docs/reference/api/query/v1alpha1"
     },
     {
-      "source": "dir:docs/reference/api/query/v1",
-      "target": "doc:docs/reference/api/query/v1/query.md",
+      "source": "dir:docs/reference/api/query/v1alpha1",
+      "target": "doc:docs/reference/api/query/v1alpha1/query.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/query/v1/query.md"
+      "provenance": "docs/reference/api/query/v1alpha1/query.md"
     },
     {
       "source": "dir:docs/reference/api/status",
-      "target": "dir:docs/reference/api/status/v1",
+      "target": "dir:docs/reference/api/status/v1alpha1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/status/v1"
+      "provenance": "docs/reference/api/status/v1alpha1"
     },
     {
-      "source": "dir:docs/reference/api/status/v1",
-      "target": "doc:docs/reference/api/status/v1/status.md",
+      "source": "dir:docs/reference/api/status/v1alpha1",
+      "target": "doc:docs/reference/api/status/v1alpha1/status.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/status/v1/status.md"
+      "provenance": "docs/reference/api/status/v1alpha1/status.md"
     },
     {
       "source": "dir:docs/reference/api/token",
-      "target": "dir:docs/reference/api/token/v1",
+      "target": "dir:docs/reference/api/token/v1alpha1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/token/v1"
+      "provenance": "docs/reference/api/token/v1alpha1"
     },
     {
-      "source": "dir:docs/reference/api/token/v1",
-      "target": "doc:docs/reference/api/token/v1/token.md",
+      "source": "dir:docs/reference/api/token/v1alpha1",
+      "target": "doc:docs/reference/api/token/v1alpha1/token.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/token/v1/token.md"
+      "provenance": "docs/reference/api/token/v1alpha1/token.md"
     },
     {
       "source": "dir:docs/reference/api/tool",
-      "target": "dir:docs/reference/api/tool/v1",
+      "target": "dir:docs/reference/api/tool/v1alpha1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/tool/v1"
+      "provenance": "docs/reference/api/tool/v1alpha1"
     },
     {
-      "source": "dir:docs/reference/api/tool/v1",
-      "target": "doc:docs/reference/api/tool/v1/tool.md",
+      "source": "dir:docs/reference/api/tool/v1alpha1",
+      "target": "doc:docs/reference/api/tool/v1alpha1/tool.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/tool/v1/tool.md"
+      "provenance": "docs/reference/api/tool/v1alpha1/tool.md"
     },
     {
       "source": "dir:docs/reference/api/viewer",
-      "target": "dir:docs/reference/api/viewer/v1",
+      "target": "dir:docs/reference/api/viewer/v1alpha1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/viewer/v1"
+      "provenance": "docs/reference/api/viewer/v1alpha1"
     },
     {
-      "source": "dir:docs/reference/api/viewer/v1",
-      "target": "doc:docs/reference/api/viewer/v1/viewer.md",
+      "source": "dir:docs/reference/api/viewer/v1alpha1",
+      "target": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/viewer/v1/viewer.md"
+      "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
     },
     {
       "source": "dir:docs/reference/buzz",
@@ -24715,6 +24764,14 @@
     },
     {
       "source": "dir:docs/reference/skills",
+      "target": "doc:docs/reference/skills/magus-commit-composition.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/skills/magus-commit-composition.md"
+    },
+    {
+      "source": "dir:docs/reference/skills",
       "target": "doc:docs/reference/skills/magus-context-audit.md",
       "relation": "contains",
       "confidence": "extracted",
@@ -25512,6 +25569,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "libs/gopherbuzz/docs/codes/BZZ3001.md"
+    },
+    {
+      "source": "dir:libs/gopherbuzz/docs/codes",
+      "target": "doc:libs/gopherbuzz/docs/codes/BZZ3002.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz/docs/codes/BZZ3002.md"
     },
     {
       "source": "dir:libs/gopherbuzz/examples",
@@ -27371,14 +27436,6 @@
     },
     {
       "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
-      "target": "doc:docs/reference/manpage/magus-buzz.md",
-      "relation": "references",
-      "confidence": "inferred",
-      "score": 0.6,
-      "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
-    },
-    {
-      "source": "doc:blog/2026-08-18-i-think-our-tools-are-the-problem.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "inferred",
@@ -27410,116 +27467,116 @@
       "provenance": "blog/2026-08-18-i-think-our-tools-are-the-problem.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-affected.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-buzz.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-config.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-describe.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-diff.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-explain.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-path.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-query.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-refs.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-status.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
-      "source": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "source": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
       "target": "doc:docs/reference/manpage/magus-where.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "blog/2026-08-25-i-audited-my-own-mcp-server.md"
+      "provenance": "blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md"
     },
     {
       "source": "doc:cmd/magus/agents-section.md",
@@ -27668,6 +27725,14 @@
     {
       "source": "doc:cmd/magus/skills/magus-query/SKILL.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "cmd/magus/skills/magus-query/SKILL.md"
+    },
+    {
+      "source": "doc:cmd/magus/skills/magus-query/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-refs.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -29602,14 +29667,6 @@
       "provenance": "docs/concepts/spells/markdown.md"
     },
     {
-      "source": "doc:docs/concepts/spells/md.md",
-      "target": "doc:docs/concepts/charms.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/spells/md.md"
-    },
-    {
       "source": "doc:docs/concepts/spells/podman.md",
       "target": "doc:docs/concepts/charms.md",
       "relation": "references",
@@ -29634,14 +29691,6 @@
       "provenance": "docs/concepts/spells/podman.md"
     },
     {
-      "source": "doc:docs/concepts/spells/py.md",
-      "target": "doc:docs/concepts/charms.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/spells/py.md"
-    },
-    {
       "source": "doc:docs/concepts/spells/python.md",
       "target": "doc:docs/concepts/charms.md",
       "relation": "references",
@@ -29658,14 +29707,6 @@
       "provenance": "docs/concepts/spells/python.md"
     },
     {
-      "source": "doc:docs/concepts/spells/rs.md",
-      "target": "doc:docs/concepts/charms.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/spells/rs.md"
-    },
-    {
       "source": "doc:docs/concepts/spells/rust.md",
       "target": "doc:docs/concepts/charms.md",
       "relation": "references",
@@ -29680,14 +29721,6 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/concepts/spells/rust.md"
-    },
-    {
-      "source": "doc:docs/concepts/spells/ts.md",
-      "target": "doc:docs/concepts/charms.md",
-      "relation": "references",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/concepts/spells/ts.md"
     },
     {
       "source": "doc:docs/concepts/spells/typescript.md",
@@ -32707,7 +32740,7 @@
     },
     {
       "source": "doc:docs/migrating/from-nx.md",
-      "target": "doc:docs/concepts/spells/ts.md",
+      "target": "doc:docs/concepts/spells/typescript.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32786,6 +32819,14 @@
       "provenance": "docs/migrating/from-nx.md"
     },
     {
+      "source": "doc:docs/migrating/from-nx.md",
+      "target": "spell:typescript",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.5,
+      "provenance": "docs/migrating/from-nx.md"
+    },
+    {
       "source": "doc:docs/recommendations.md",
       "target": "doc:docs/concepts/charms.md",
       "relation": "references",
@@ -32842,40 +32883,40 @@
       "provenance": "docs/recommendations.md"
     },
     {
-      "source": "doc:docs/reference/api/activity/v1/activity.md",
-      "target": "doc:docs/reference/api/activity/v1/activity.md",
+      "source": "doc:docs/reference/api/activity/v1alpha1/activity.md",
+      "target": "doc:docs/reference/api/activity/v1alpha1/activity.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/activity/v1/activity.md"
+      "provenance": "docs/reference/api/activity/v1alpha1/activity.md"
     },
     {
-      "source": "doc:docs/reference/api/activity/v1/activity.md",
+      "source": "doc:docs/reference/api/activity/v1alpha1/activity.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/activity/v1/activity.md"
+      "provenance": "docs/reference/api/activity/v1alpha1/activity.md"
     },
     {
-      "source": "doc:docs/reference/api/activity/v1/activity.md",
-      "target": "doc:docs/reference/api/query/v1/query.md",
+      "source": "doc:docs/reference/api/activity/v1alpha1/activity.md",
+      "target": "doc:docs/reference/api/query/v1alpha1/query.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/activity/v1/activity.md"
+      "provenance": "docs/reference/api/activity/v1alpha1/activity.md"
     },
     {
-      "source": "doc:docs/reference/api/graph/v1/graph.md",
+      "source": "doc:docs/reference/api/graph/v1alpha1/graph.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/graph/v1/graph.md"
+      "provenance": "docs/reference/api/graph/v1alpha1/graph.md"
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/activity/v1/activity.md",
+      "target": "doc:docs/reference/api/activity/v1alpha1/activity.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32883,7 +32924,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/graph/v1/graph.md",
+      "target": "doc:docs/reference/api/graph/v1alpha1/graph.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32891,7 +32932,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/insight/v1/insight.md",
+      "target": "doc:docs/reference/api/insight/v1alpha1/insight.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32899,7 +32940,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/job/v1/job.md",
+      "target": "doc:docs/reference/api/job/v1alpha1/job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32907,7 +32948,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/memory/v1/memory.md",
+      "target": "doc:docs/reference/api/memory/v1alpha1/memory.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32915,7 +32956,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/metrics/v1/metrics.md",
+      "target": "doc:docs/reference/api/metrics/v1alpha1/metrics.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32923,7 +32964,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/notes/v1/notes.md",
+      "target": "doc:docs/reference/api/notes/v1alpha1/notes.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32931,7 +32972,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/query/v1/query.md",
+      "target": "doc:docs/reference/api/query/v1alpha1/query.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32939,7 +32980,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/status/v1/status.md",
+      "target": "doc:docs/reference/api/status/v1alpha1/status.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32947,7 +32988,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/token/v1/token.md",
+      "target": "doc:docs/reference/api/token/v1alpha1/token.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32955,7 +32996,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/tool/v1/tool.md",
+      "target": "doc:docs/reference/api/tool/v1alpha1/tool.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32963,7 +33004,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/viewer/v1/viewer.md",
+      "target": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32978,212 +33019,212 @@
       "provenance": "docs/reference/api/index.md"
     },
     {
-      "source": "doc:docs/reference/api/insight/v1/insight.md",
+      "source": "doc:docs/reference/api/insight/v1alpha1/insight.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/insight/v1/insight.md"
+      "provenance": "docs/reference/api/insight/v1alpha1/insight.md"
     },
     {
-      "source": "doc:docs/reference/api/insight/v1/insight.md",
-      "target": "doc:docs/reference/api/insight/v1/insight.md",
+      "source": "doc:docs/reference/api/insight/v1alpha1/insight.md",
+      "target": "doc:docs/reference/api/insight/v1alpha1/insight.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/insight/v1/insight.md"
+      "provenance": "docs/reference/api/insight/v1alpha1/insight.md"
     },
     {
-      "source": "doc:docs/reference/api/job/v1/job.md",
+      "source": "doc:docs/reference/api/job/v1alpha1/job.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/job/v1/job.md"
+      "provenance": "docs/reference/api/job/v1alpha1/job.md"
     },
     {
-      "source": "doc:docs/reference/api/job/v1/job.md",
-      "target": "doc:docs/reference/api/job/v1/job.md",
+      "source": "doc:docs/reference/api/job/v1alpha1/job.md",
+      "target": "doc:docs/reference/api/job/v1alpha1/job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/job/v1/job.md"
+      "provenance": "docs/reference/api/job/v1alpha1/job.md"
     },
     {
-      "source": "doc:docs/reference/api/memory/v1/memory.md",
+      "source": "doc:docs/reference/api/memory/v1alpha1/memory.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/memory/v1/memory.md"
+      "provenance": "docs/reference/api/memory/v1alpha1/memory.md"
     },
     {
-      "source": "doc:docs/reference/api/memory/v1/memory.md",
-      "target": "doc:docs/reference/api/memory/v1/memory.md",
+      "source": "doc:docs/reference/api/memory/v1alpha1/memory.md",
+      "target": "doc:docs/reference/api/memory/v1alpha1/memory.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/memory/v1/memory.md"
+      "provenance": "docs/reference/api/memory/v1alpha1/memory.md"
     },
     {
-      "source": "doc:docs/reference/api/metrics/v1/metrics.md",
+      "source": "doc:docs/reference/api/metrics/v1alpha1/metrics.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/metrics/v1/metrics.md"
+      "provenance": "docs/reference/api/metrics/v1alpha1/metrics.md"
     },
     {
-      "source": "doc:docs/reference/api/metrics/v1/metrics.md",
-      "target": "doc:docs/reference/api/metrics/v1/metrics.md",
+      "source": "doc:docs/reference/api/metrics/v1alpha1/metrics.md",
+      "target": "doc:docs/reference/api/metrics/v1alpha1/metrics.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/metrics/v1/metrics.md"
+      "provenance": "docs/reference/api/metrics/v1alpha1/metrics.md"
     },
     {
-      "source": "doc:docs/reference/api/metrics/v1/metrics.md",
+      "source": "doc:docs/reference/api/metrics/v1alpha1/metrics.md",
       "target": "spell:buzz",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.5,
-      "provenance": "docs/reference/api/metrics/v1/metrics.md"
+      "provenance": "docs/reference/api/metrics/v1alpha1/metrics.md"
     },
     {
-      "source": "doc:docs/reference/api/notes/v1/notes.md",
+      "source": "doc:docs/reference/api/notes/v1alpha1/notes.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/notes/v1/notes.md"
+      "provenance": "docs/reference/api/notes/v1alpha1/notes.md"
     },
     {
-      "source": "doc:docs/reference/api/notes/v1/notes.md",
-      "target": "doc:docs/reference/api/notes/v1/notes.md",
+      "source": "doc:docs/reference/api/notes/v1alpha1/notes.md",
+      "target": "doc:docs/reference/api/notes/v1alpha1/notes.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/notes/v1/notes.md"
+      "provenance": "docs/reference/api/notes/v1alpha1/notes.md"
     },
     {
-      "source": "doc:docs/reference/api/query/v1/query.md",
-      "target": "doc:docs/reference/api/activity/v1/activity.md",
+      "source": "doc:docs/reference/api/query/v1alpha1/query.md",
+      "target": "doc:docs/reference/api/activity/v1alpha1/activity.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/query/v1/query.md"
+      "provenance": "docs/reference/api/query/v1alpha1/query.md"
     },
     {
-      "source": "doc:docs/reference/api/query/v1/query.md",
+      "source": "doc:docs/reference/api/query/v1alpha1/query.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/query/v1/query.md"
+      "provenance": "docs/reference/api/query/v1alpha1/query.md"
     },
     {
-      "source": "doc:docs/reference/api/query/v1/query.md",
-      "target": "doc:docs/reference/api/viewer/v1/viewer.md",
+      "source": "doc:docs/reference/api/query/v1alpha1/query.md",
+      "target": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/query/v1/query.md"
+      "provenance": "docs/reference/api/query/v1alpha1/query.md"
     },
     {
-      "source": "doc:docs/reference/api/status/v1/status.md",
+      "source": "doc:docs/reference/api/status/v1alpha1/status.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/status/v1/status.md"
+      "provenance": "docs/reference/api/status/v1alpha1/status.md"
     },
     {
-      "source": "doc:docs/reference/api/status/v1/status.md",
-      "target": "doc:docs/reference/api/status/v1/status.md",
+      "source": "doc:docs/reference/api/status/v1alpha1/status.md",
+      "target": "doc:docs/reference/api/status/v1alpha1/status.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/status/v1/status.md"
+      "provenance": "docs/reference/api/status/v1alpha1/status.md"
     },
     {
-      "source": "doc:docs/reference/api/status/v1/status.md",
+      "source": "doc:docs/reference/api/status/v1alpha1/status.md",
       "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "docs/reference/api/status/v1/status.md"
+      "provenance": "docs/reference/api/status/v1alpha1/status.md"
     },
     {
-      "source": "doc:docs/reference/api/token/v1/token.md",
+      "source": "doc:docs/reference/api/token/v1alpha1/token.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/token/v1/token.md"
+      "provenance": "docs/reference/api/token/v1alpha1/token.md"
     },
     {
-      "source": "doc:docs/reference/api/token/v1/token.md",
-      "target": "doc:docs/reference/api/token/v1/token.md",
+      "source": "doc:docs/reference/api/token/v1alpha1/token.md",
+      "target": "doc:docs/reference/api/token/v1alpha1/token.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/token/v1/token.md"
+      "provenance": "docs/reference/api/token/v1alpha1/token.md"
     },
     {
-      "source": "doc:docs/reference/api/tool/v1/tool.md",
+      "source": "doc:docs/reference/api/tool/v1alpha1/tool.md",
       "target": "diagnostic:MGS3005",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "docs/reference/api/tool/v1/tool.md"
+      "provenance": "docs/reference/api/tool/v1alpha1/tool.md"
     },
     {
-      "source": "doc:docs/reference/api/tool/v1/tool.md",
+      "source": "doc:docs/reference/api/tool/v1alpha1/tool.md",
       "target": "diagnostic:MGS3006",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "docs/reference/api/tool/v1/tool.md"
+      "provenance": "docs/reference/api/tool/v1alpha1/tool.md"
     },
     {
-      "source": "doc:docs/reference/api/tool/v1/tool.md",
+      "source": "doc:docs/reference/api/tool/v1alpha1/tool.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/tool/v1/tool.md"
+      "provenance": "docs/reference/api/tool/v1alpha1/tool.md"
     },
     {
-      "source": "doc:docs/reference/api/tool/v1/tool.md",
-      "target": "doc:docs/reference/api/tool/v1/tool.md",
+      "source": "doc:docs/reference/api/tool/v1alpha1/tool.md",
+      "target": "doc:docs/reference/api/tool/v1alpha1/tool.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/tool/v1/tool.md"
+      "provenance": "docs/reference/api/tool/v1alpha1/tool.md"
     },
     {
-      "source": "doc:docs/reference/api/viewer/v1/viewer.md",
+      "source": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/viewer/v1/viewer.md"
+      "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
     },
     {
-      "source": "doc:docs/reference/api/viewer/v1/viewer.md",
-      "target": "doc:docs/reference/api/query/v1/query.md",
+      "source": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
+      "target": "doc:docs/reference/api/query/v1alpha1/query.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/viewer/v1/viewer.md"
+      "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
     },
     {
-      "source": "doc:docs/reference/api/viewer/v1/viewer.md",
-      "target": "doc:docs/reference/api/viewer/v1/viewer.md",
+      "source": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
+      "target": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/viewer/v1/viewer.md"
+      "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
     },
     {
       "source": "doc:docs/reference/buzz/archive.md",
@@ -35327,14 +35368,6 @@
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "docs/reference/codes/magusfile/MGS1029.md"
-    },
-    {
-      "source": "doc:docs/reference/codes/magusfile/MGS1029.md",
-      "target": "diagnostic:MGS1029",
-      "relation": "documents",
-      "confidence": "extracted",
-      "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1029.md"
     },
     {
@@ -44211,6 +44244,14 @@
     },
     {
       "source": "doc:docs/reference/skills/index.md",
+      "target": "doc:docs/reference/skills/magus-commit-composition.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/skills/index.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/index.md",
       "target": "doc:docs/reference/skills/magus-context-audit.md",
       "relation": "references",
       "confidence": "extracted",
@@ -44370,6 +44411,14 @@
       "provenance": "docs/reference/skills/magus-change-summary.md"
     },
     {
+      "source": "doc:docs/reference/skills/magus-commit-composition.md",
+      "target": "doc:docs/guides/integrations/agents/skills.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/skills/magus-commit-composition.md"
+    },
+    {
       "source": "doc:docs/reference/skills/magus-context-audit.md",
       "target": "doc:docs/guides/integrations/agents/skills.md",
       "relation": "references",
@@ -44492,6 +44541,14 @@
     {
       "source": "doc:docs/reference/skills/magus-query.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-query.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-query.md",
+      "target": "doc:docs/reference/manpage/magus-refs.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -45000,6 +45057,14 @@
       "confidence": "inferred",
       "score": 0.5,
       "provenance": "libs/gopherbuzz/README.md"
+    },
+    {
+      "source": "doc:libs/gopherbuzz/docs/codes/BZZ3002.md",
+      "target": "doc:libs/gopherbuzz/docs/codes/BZZ3001.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz/docs/codes/BZZ3002.md"
     },
     {
       "source": "doc:libs/gopherbuzz/examples/ffi-c/README.md",
@@ -45611,14 +45676,6 @@
     },
     {
       "source": "file:coverage.buzz",
-      "target": "function:coverage.buzz:isPlatformSource",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "coverage.buzz"
-    },
-    {
-      "source": "file:coverage.buzz",
       "target": "function:coverage.buzz:modulePath",
       "relation": "contains",
       "confidence": "extracted",
@@ -45628,14 +45685,6 @@
     {
       "source": "file:coverage.buzz",
       "target": "function:coverage.buzz:stripGenerated",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "coverage.buzz"
-    },
-    {
-      "source": "file:coverage.buzz",
-      "target": "function:coverage.buzz:stripPlatform",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -52939,6 +52988,22 @@
     },
     {
       "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:coverage_badge",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
+      "target": "function:magusfile.buzz:coverage_percent",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "file:magusfile.buzz",
       "target": "function:magusfile.buzz:credential_state",
       "relation": "contains",
       "confidence": "extracted",
@@ -53571,7 +53636,47 @@
     },
     {
       "source": "file:proto/magusfile.buzz",
+      "target": "import:../tools/drift",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "proto/magusfile.buzz"
+    },
+    {
+      "source": "file:proto/magusfile.buzz",
+      "target": "import:fs",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "proto/magusfile.buzz"
+    },
+    {
+      "source": "file:proto/magusfile.buzz",
       "target": "import:magus/spell/buf",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "proto/magusfile.buzz"
+    },
+    {
+      "source": "file:proto/magusfile.buzz",
+      "target": "import:project/../console",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "proto/magusfile.buzz"
+    },
+    {
+      "source": "file:proto/magusfile.buzz",
+      "target": "import:project/../docs",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "proto/magusfile.buzz"
+    },
+    {
+      "source": "file:proto/magusfile.buzz",
+      "target": "import:vcs",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -57738,14 +57843,6 @@
       "provenance": "coverage.buzz"
     },
     {
-      "source": "function:coverage.buzz:stripPlatform",
-      "target": "function:coverage.buzz:isPlatformSource",
-      "relation": "calls",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "coverage.buzz"
-    },
-    {
       "source": "function:docs/engine/blog.buzz:findReleasePost",
       "target": "function:docs/engine/blog.buzz:isPublishablePost",
       "relation": "calls",
@@ -59834,6 +59931,22 @@
       "provenance": "magusfile.buzz"
     },
     {
+      "source": "function:magusfile.buzz:coverage_badge",
+      "target": "function:magusfile.buzz:coverage_percent",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
+      "source": "function:magusfile.buzz:coverage_percent",
+      "target": "function:magusfile.buzz:total_coverage",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "magusfile.buzz"
+    },
+    {
       "source": "function:magusfile.buzz:credential_state",
       "target": "function:magusfile.buzz:resolvable",
       "relation": "calls",
@@ -60115,7 +60228,7 @@
     },
     {
       "source": "function:magusfile.buzz:test",
-      "target": "function:magusfile.buzz:total_coverage",
+      "target": "function:magusfile.buzz:coverage_percent",
       "relation": "calls",
       "confidence": "extracted",
       "score": 1,
@@ -61814,13 +61927,6 @@
     },
     {
       "source": "module:magus",
-      "target": "method:magus.ls",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1
-    },
-    {
-      "source": "module:magus",
       "target": "method:magus.project",
       "relation": "contains",
       "confidence": "extracted",
@@ -61829,6 +61935,13 @@
     {
       "source": "module:magus",
       "target": "method:magus.project_graph",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1
+    },
+    {
+      "source": "module:magus",
+      "target": "method:magus.projects",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1
@@ -64148,6 +64261,14 @@
     },
     {
       "source": "project:.",
+      "target": "target:.:coverage-badge",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "project:.",
       "target": "target:.:deploy-generate",
       "relation": "contains",
       "confidence": "extracted",
@@ -64437,6 +64558,14 @@
     {
       "source": "project:console",
       "target": "project:libs/textsearch",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "console"
+    },
+    {
+      "source": "project:console",
+      "target": "project:proto",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -65467,12 +65596,12 @@
       "provenance": "proto"
     },
     {
-      "source": "rationale:magusfile.buzz:2082:TODO",
+      "source": "rationale:magusfile.buzz:2096:TODO",
       "target": "function:magusfile.buzz:completion_test",
       "relation": "rationale_for",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "magusfile.buzz:2082"
+      "provenance": "magusfile.buzz:2096"
     },
     {
       "source": "rationale:spells/aws/s3-cache/spell.buzz:108:WHY",
@@ -66296,6 +66425,14 @@
     },
     {
       "source": "target:.:ci",
+      "target": "target:.:coverage-badge",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:ci",
       "target": "target:.:lint",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -66353,6 +66490,14 @@
     {
       "source": "target:.:config-generate",
       "target": "target:.:types-generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
+      "source": "target:.:coverage-badge",
+      "target": "target:.:test",
       "relation": "depends_on",
       "confidence": "extracted",
       "score": 1,
@@ -66799,6 +66944,14 @@
       "provenance": "."
     },
     {
+      "source": "target:.:security",
+      "target": "target:.:generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "."
+    },
+    {
       "source": "target:.:spells-generate",
       "target": "target:.:types-generate",
       "relation": "depends_on",
@@ -67160,6 +67313,14 @@
     },
     {
       "source": "target:docs:content-generate",
+      "target": "doc:cmd/magus/skills/magus-commit-composition/SKILL.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
       "target": "doc:cmd/magus/skills/magus-context-audit/SKILL.md",
       "relation": "consumes",
       "confidence": "extracted",
@@ -67296,23 +67457,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/concepts/spells/md.md",
-      "relation": "produces",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
       "target": "doc:docs/concepts/spells/podman.md",
-      "relation": "produces",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:docs/concepts/spells/py.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -67328,23 +67473,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/concepts/spells/rs.md",
-      "relation": "produces",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
       "target": "doc:docs/concepts/spells/rust.md",
-      "relation": "produces",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs"
-    },
-    {
-      "source": "target:docs:content-generate",
-      "target": "doc:docs/concepts/spells/ts.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -67360,7 +67489,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/activity/v1/activity.md",
+      "target": "doc:docs/reference/api/activity/v1alpha1/activity.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -67368,7 +67497,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/graph/v1/graph.md",
+      "target": "doc:docs/reference/api/graph/v1alpha1/graph.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -67384,7 +67513,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/insight/v1/insight.md",
+      "target": "doc:docs/reference/api/insight/v1alpha1/insight.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -67392,7 +67521,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/job/v1/job.md",
+      "target": "doc:docs/reference/api/job/v1alpha1/job.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -67400,7 +67529,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/memory/v1/memory.md",
+      "target": "doc:docs/reference/api/memory/v1alpha1/memory.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -67408,7 +67537,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/metrics/v1/metrics.md",
+      "target": "doc:docs/reference/api/metrics/v1alpha1/metrics.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -67416,7 +67545,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/notes/v1/notes.md",
+      "target": "doc:docs/reference/api/notes/v1alpha1/notes.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -67424,7 +67553,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/query/v1/query.md",
+      "target": "doc:docs/reference/api/query/v1alpha1/query.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -67432,7 +67561,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/status/v1/status.md",
+      "target": "doc:docs/reference/api/status/v1alpha1/status.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -67440,7 +67569,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/token/v1/token.md",
+      "target": "doc:docs/reference/api/token/v1alpha1/token.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -67448,7 +67577,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/tool/v1/tool.md",
+      "target": "doc:docs/reference/api/tool/v1alpha1/tool.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -67456,7 +67585,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/viewer/v1/viewer.md",
+      "target": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -68048,6 +68177,14 @@
     },
     {
       "source": "target:docs:content-generate",
+      "target": "doc:docs/reference/skills/magus-commit-composition.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
       "target": "doc:docs/reference/skills/magus-context-audit.md",
       "relation": "produces",
       "confidence": "extracted",
@@ -68344,6 +68481,14 @@
     },
     {
       "source": "target:docs:generate",
+      "target": "target:docs:diagrams-generate",
+      "relation": "depends_on",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:generate",
       "target": "target:docs:index-generate",
       "relation": "depends_on",
       "confidence": "extracted",
@@ -68552,7 +68697,23 @@
     },
     {
       "source": "target:docs:site-generate",
-      "target": "doc:blog/2026-08-25-i-audited-my-own-mcp-server.md",
+      "target": "doc:blog/2026-08-25-twenty-wrappers-and-a-teaching-layer.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "doc:blog/2026-09-01-the-best-code-is-still-no-code.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:site-generate",
+      "target": "doc:blog/2026-09-08-the-console-was-an-experiment.md",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,
@@ -69473,6 +69634,14 @@
     {
       "source": "target:libs/gopherbuzz:format",
       "target": "doc:libs/gopherbuzz/docs/codes/BZZ3001.md",
+      "relation": "consumes",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "libs/gopherbuzz"
+    },
+    {
+      "source": "target:libs/gopherbuzz:format",
+      "target": "doc:libs/gopherbuzz/docs/codes/BZZ3002.md",
       "relation": "consumes",
       "confidence": "extracted",
       "score": 1,

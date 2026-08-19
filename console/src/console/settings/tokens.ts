@@ -1,5 +1,5 @@
 // tokens.ts - the Settings "Access tokens" section: a LIST + REVOKE view over the daemon's
-// connector tokens and the active share token, spoken to over magus.token.v1.TokenService.
+// connector tokens and the active share token, spoken to over magus.token.v1alpha1.TokenService.
 //
 // It is VIEW-AND-REVOKE ONLY, matching the service: there is deliberately NO mint control.
 // Minting a durable credential stays a CLI-only operation (`magus config mcp connector`), so
@@ -12,7 +12,7 @@
 // as HTML, so a token name can carry no markup into the page.
 
 import { createClient, type Client } from "@connectrpc/connect";
-import { TokenService, TokenScope, type TokenInfo } from "../../gen/magus/token/v1/token_pb";
+import { TokenService, TokenScope, type TokenInfo } from "../../gen/magus/token/v1alpha1/token_pb";
 import { createDaemonTransport, getLiveToken, isCapabilityDenied } from "../../lib/daemon";
 import { showToast } from "../../lib/refresh-toast";
 import { h } from "../view";
@@ -34,7 +34,7 @@ function scopeLabel(scope: TokenScope): string {
 // expiryLabel renders a token's expiry as a local date-time, or "Never expires" when the
 // expires timestamp is unset (a non-expiring connector token).
 function expiryLabel(t: TokenInfo): string {
-  const ts = t.expires;
+  const ts = t.expireTime;
   if (!ts) return "Never expires";
   const ms = Number(ts.seconds) * 1000 + Math.floor((ts.nanos || 0) / 1e6);
   return new Date(ms).toLocaleString();
@@ -196,7 +196,7 @@ export function buildTokensSection(
     if (!confirm(detail)) return;
     btn.disabled = true;
     try {
-      await client.revokeToken({ identifier: t.identifier });
+      await client.revokeToken({ name: t.identifier });
       if (stale) return;
       showToast("Access tokens", "Revoked " + who + ".");
       await renderList();

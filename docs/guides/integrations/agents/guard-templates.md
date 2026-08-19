@@ -93,6 +93,9 @@ overrides and execs it, so there is one implementation to reason about.
 #   HOST_SESSION_PATH  dot-path to the session id inside your host's event
 #   HOST_TRANSCRIPT_PATH  dot-path to your host's own log of this session
 #   HOST_RESPONSE    Go template rendering your host's reply
+#   HOST_ADVISE_BRANCH  the advise arm of that template
+#   GUARD_NO_ADVISE  set it when the host has no context-injection channel, so
+#                    an advise renders nothing rather than something it rejects
 #   GUARD_AGENT_NAME  the agent host name recorded alongside the observation
 #   GUARD_MAGUS_BIN  path to the binary, when it is not on PATH
 #   GUARD_UNAVAILABLE_RESPONSE  what to print when magus cannot be found, so a
@@ -120,8 +123,9 @@ overrides and execs it, so there is one implementation to reason about.
 # (not delivered). It is machine-read by the host-parity gate, which fails the
 # build when a decision or surface exists in the guard contract that some host
 # was never asked about. Keep it true to what HOST_RESPONSE actually renders.
-# magus-guard-template: 6
-# magus-guard-coverage: schema=1 host=claude-code,codex surface=command deny=model advise=model pass=none
+# magus-guard-template: 7
+# magus-guard-coverage: schema=1 host=claude-code surface=command deny=model advise=model pass=none
+# magus-guard-coverage: schema=1 host=codex surface=command deny=model advise=none pass=none
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}` and
 # the first one would terminate a ${...} expansion, silently truncating it.
@@ -129,7 +133,19 @@ overrides and execs it, so there is one implementation to reason about.
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
 [ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
-[ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
+# The advise arm is split out because not every host has one. Codex's PreToolUse
+# REJECTS additionalContext - it treats the key as an error and the hook then fails
+# OPEN - so an advisory sent there is not merely dropped, it disarms the guard for
+# that call. Codex sets GUARD_NO_ADVISE from codex-hooks.json and declares advise=none.
+# A plain `[ -n ... ] ||` cannot express "deliberately empty" - an empty value looks
+# unset and gets the default back - and ${VAR-default} is unusable here for the same
+# `}` reason as above. So the suppression is its own flag.
+if [ -n "$GUARD_NO_ADVISE" ]; then
+  HOST_ADVISE_BRANCH=''
+else
+  [ -n "$HOST_ADVISE_BRANCH" ] || HOST_ADVISE_BRANCH='{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}'
+fi
+[ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}'"$HOST_ADVISE_BRANCH"'{{end}}'
 # Prefer the workspace's own ./magus over PATH. A repository that builds magus, or pins a
 # newer one than is installed, keeps its RULES in that binary - and an older PATH copy does
 # not fail loudly when it lacks them. It does not recognize the config key that ARMS a rule,
@@ -244,8 +260,9 @@ wasteful, not destructive.
 # Coverage declaration, machine-read by the host-parity gate - see the longer
 # note in magus-guard-command.sh. It records what HOST_RESPONSE RENDERS, not
 # which rules currently fire, so deny=model is true the moment the arm exists.
-# magus-guard-template: 6
-# magus-guard-coverage: schema=1 host=claude-code,codex surface=path deny=model advise=model pass=none
+# magus-guard-template: 7
+# magus-guard-coverage: schema=1 host=claude-code surface=path deny=model advise=model pass=none
+# magus-guard-coverage: schema=1 host=codex surface=path deny=model advise=none pass=none
 
 # Plain assignment, NOT ${VAR:=default}: the response template is full of `}`
 # and the first one would terminate a ${...} expansion.
@@ -253,7 +270,16 @@ wasteful, not destructive.
 [ -n "$HOST_SESSION_PATH" ] || HOST_SESSION_PATH='session_id'
 [ -n "$HOST_TRANSCRIPT_PATH" ] || HOST_TRANSCRIPT_PATH='transcript_path'
 [ -n "$GUARD_AGENT_NAME" ] || GUARD_AGENT_NAME='claude-code'
-[ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
+# Same split, and the same reason, as in magus-guard-command.sh: a host whose
+# PreToolUse rejects additionalContext fails OPEN on one, so an advisory it cannot
+# take disarms the call rather than merely going unread. Codex wires BOTH surfaces
+# to PreToolUse, so it suppresses here too.
+if [ -n "$GUARD_NO_ADVISE" ]; then
+  HOST_ADVISE_BRANCH=''
+else
+  [ -n "$HOST_ADVISE_BRANCH" ] || HOST_ADVISE_BRANCH='{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}'
+fi
+[ -n "$HOST_RESPONSE" ] || HOST_RESPONSE='{{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}'"$HOST_ADVISE_BRANCH"'{{end}}'
 # Prefer the workspace's own ./magus over PATH. A repository that builds magus, or pins a
 # newer one than is installed, keeps its RULES in that binary - and an older PATH copy does
 # not fail loudly when it lacks them. It does not recognize the config key that ARMS a rule,
@@ -361,7 +387,7 @@ surface, and this file carries no verdict on no surface.
 # never denies, never advises, and cannot change what your host does next. The
 # parity gates ask that question only of artifacts that answer it.
 #
-# magus-guard-template: 6
+# magus-guard-template: 7
 
 # NO `set -e`, deliberately, and neither sibling uses it either.
 #

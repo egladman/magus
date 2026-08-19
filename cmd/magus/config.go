@@ -50,12 +50,16 @@ func configCmd(ctx context.Context, root string, cfg config.Config, args []strin
 		return configCacheCmd(ctx, root, subArgs)
 	case "mcp":
 		return configMCPCmd(subArgs)
+	case "console":
+		return configConsoleCmd(subArgs)
+	case "token":
+		return configToken(subArgs)
 	case "-h", "--help", "help":
 		fs.Usage()
 		return nil
 	default:
 		fs.Usage()
-		return usagef("magus config: unknown subcommand %q (want view, set, history, cache, or mcp)", sub)
+		return usagef("magus config: unknown subcommand %q (want view, set, history, cache, token, mcp, or console)", sub)
 	}
 }
 

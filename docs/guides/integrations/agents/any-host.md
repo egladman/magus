@@ -69,7 +69,11 @@ Three decisions are yours to make:
 - **Which channel carries a deny.** Most hosts have one that reaches the model.
 - **Whether an advise can reach the model at all.** Some hosts deliver a message
   only on a denial; there, the advisory nudges live in the installed skills
-  instead.
+  instead. Set `GUARD_NO_ADVISE` when your host does worse than ignore one -
+  Codex treats the `additionalContext` key as an error and then fails OPEN, so
+  sending an advisory it cannot take disarms the guard for that call. Suppressed,
+  an advise renders nothing at all; `HOST_ADVISE_BRANCH` reshapes it instead if
+  your host has some other channel.
 - **What happens when magus cannot be found or cannot judge.** Failing open
   keeps the session usable and is what every shipped template does. Say so
   visibly rather than exiting quietly, because an unguarded session you know

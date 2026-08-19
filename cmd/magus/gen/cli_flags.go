@@ -61,6 +61,8 @@ const (
 	FlagAffectedWait = "wait"
 	// agent: --dir
 	FlagAgentDir = "dir"
+	// agent: --dry-run
+	FlagAgentDryRun = "dry-run"
 	// agent: --force
 	FlagAgentForce = "force"
 	// agent: --global
@@ -93,6 +95,12 @@ const (
 	FlagConfigCachePruneOlderThan = "older-than"
 	// config cache prune: --remote
 	FlagConfigCachePruneRemote = "remote"
+	// config console token create: --expires
+	FlagConfigConsoleTokenCreateExpires = "expires"
+	// config console token create: --name
+	FlagConfigConsoleTokenCreateName = "name"
+	// config console token create: --viewer
+	FlagConfigConsoleTokenCreateViewer = "viewer"
 	// config history import: --history
 	FlagConfigHistoryImportHistory = "history"
 	// config history passed: --commit
@@ -109,10 +117,10 @@ const (
 	FlagConfigMCPConnectorCreateExpires = "expires"
 	// config mcp connector create: --name
 	FlagConfigMCPConnectorCreateName = "name"
-	// config mcp token generate: --force
-	FlagConfigMCPTokenGenerateForce = "force"
 	// config set: --global
 	FlagConfigSetGlobal = "global"
+	// config token generate: --force
+	FlagConfigTokenGenerateForce = "force"
 	// describe projects: --e
 	FlagDescribeProjectsE = "e"
 	// describe projects: --evaluated
@@ -193,6 +201,8 @@ const (
 	FlagHookSession = "session"
 	// hook: --transcript
 	FlagHookTranscript = "transcript"
+	// init: --dry-run
+	FlagInitDryRun = "dry-run"
 	// init: --force
 	FlagInitForce = "force"
 	// init: --global
@@ -839,18 +849,6 @@ func BindConfigCacheExport(fs *flag.FlagSet) *ConfigCacheExportFlags {
 	return &f
 }
 
-// ConfigMCPTokenGenerateFlags are the flags declared for `magus config mcp token generate`.
-type ConfigMCPTokenGenerateFlags struct {
-	Force bool // --force
-}
-
-// BindConfigMCPTokenGenerate registers `magus config mcp token generate`'s flags on fs and returns the destination.
-func BindConfigMCPTokenGenerate(fs *flag.FlagSet) *ConfigMCPTokenGenerateFlags {
-	var f ConfigMCPTokenGenerateFlags
-	fs.BoolVar(&f.Force, FlagConfigMCPTokenGenerateForce, false, "Overwrite an existing token (rotation)")
-	return &f
-}
-
 // ConfigMCPConnectorCreateFlags are the flags declared for `magus config mcp connector create`.
 type ConfigMCPConnectorCreateFlags struct {
 	Name    string // --name
@@ -862,6 +860,34 @@ func BindConfigMCPConnectorCreate(fs *flag.FlagSet) *ConfigMCPConnectorCreateFla
 	var f ConfigMCPConnectorCreateFlags
 	fs.StringVar(&f.Name, FlagConfigMCPConnectorCreateName, "", "Name for this connector token (default: connector-N)")
 	fs.StringVar(&f.Expires, FlagConfigMCPConnectorCreateExpires, "", "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)")
+	return &f
+}
+
+// ConfigTokenGenerateFlags are the flags declared for `magus config token generate`.
+type ConfigTokenGenerateFlags struct {
+	Force bool // --force
+}
+
+// BindConfigTokenGenerate registers `magus config token generate`'s flags on fs and returns the destination.
+func BindConfigTokenGenerate(fs *flag.FlagSet) *ConfigTokenGenerateFlags {
+	var f ConfigTokenGenerateFlags
+	fs.BoolVar(&f.Force, FlagConfigTokenGenerateForce, false, "Overwrite an existing token (rotation)")
+	return &f
+}
+
+// ConfigConsoleTokenCreateFlags are the flags declared for `magus config console token create`.
+type ConfigConsoleTokenCreateFlags struct {
+	Name    string // --name
+	Expires string // --expires
+	Viewer  bool   // --viewer
+}
+
+// BindConfigConsoleTokenCreate registers `magus config console token create`'s flags on fs and returns the destination.
+func BindConfigConsoleTokenCreate(fs *flag.FlagSet) *ConfigConsoleTokenCreateFlags {
+	var f ConfigConsoleTokenCreateFlags
+	fs.StringVar(&f.Name, FlagConfigConsoleTokenCreateName, "", "Name for this console token (default: console-N)")
+	fs.StringVar(&f.Expires, FlagConfigConsoleTokenCreateExpires, "", "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)")
+	fs.BoolVar(&f.Viewer, FlagConfigConsoleTokenCreateViewer, false, "Mint a READ-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share")
 	return &f
 }
 
@@ -947,6 +973,7 @@ func BindBuzz(fs *flag.FlagSet) *BuzzFlags {
 // InitFlags are the flags declared for `magus init`.
 type InitFlags struct {
 	Global bool   // --global
+	DryRun bool   // --dry-run
 	Local  bool   // --local
 	Force  bool   // --force
 	VCS    string // --vcs
@@ -956,6 +983,7 @@ type InitFlags struct {
 func BindInit(fs *flag.FlagSet) *InitFlags {
 	var f InitFlags
 	fs.BoolVar(&f.Global, FlagInitGlobal, false, "Write only the global config; skip the workspace bootstrap")
+	fs.BoolVar(&f.DryRun, FlagInitDryRun, false, "Print the config, magusfile, and merge-driver destinations without writing any of them")
 	fs.BoolVar(&f.Local, FlagInitLocal, false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")
 	fs.BoolVar(&f.Force, FlagInitForce, false, "Overwrite an existing config file")
 	fs.StringVar(&f.VCS, FlagInitVCS, "", "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY")
@@ -967,6 +995,7 @@ type AgentFlags struct {
 	Dir    string // --dir
 	Force  bool   // --force
 	Prune  bool   // --prune
+	DryRun bool   // --dry-run
 	Tar    bool   // --tar
 	Global bool   // --global
 }
@@ -977,6 +1006,7 @@ func BindAgent(fs *flag.FlagSet) *AgentFlags {
 	fs.StringVar(&f.Dir, FlagAgentDir, ".", "Repo directory to install into (agent install)")
 	fs.BoolVar(&f.Force, FlagAgentForce, false, "Overwrite existing installed skill files (agent install)")
 	fs.BoolVar(&f.Prune, FlagAgentPrune, false, "Also remove installed skills this binary no longer ships; without it they are reported and left in place, and only skills magus wrote are ever candidates (agent install)")
+	fs.BoolVar(&f.DryRun, FlagAgentDryRun, false, "Print what would be written and removed without touching the filesystem (agent install)")
 	fs.BoolVar(&f.Tar, FlagAgentTar, false, "Stream a tar archive to stdout instead of writing files (agent install)")
 	fs.BoolVar(&f.Global, FlagAgentGlobal, false, "Allow absolute destination paths in write mode (agent install)")
 	return &f

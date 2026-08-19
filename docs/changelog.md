@@ -16,6 +16,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/).
 See the unreleased changes at
 https://github.com/egladman/magus/compare/v0.4.0...main
 
+### Changed
+
+- Agent guard templates are at version 7. Codex users must also add
+  `GUARD_NO_ADVISE=1` to both hook commands in `hooks.json`; re-downloading the
+  templates changes nothing on its own. Other hosts render as before.
+
+### Fixed
+
+- Agent guard: Codex is no longer sent advisories it rejects. Its PreToolUse
+  treats `additionalContext` as an error and then fails open, so each advisory
+  was discarded and disarmed the guard for that call. It now declares
+  `advise=none`. The two fail-open notices still carry the key.
+- Agent guard: the `relock` charm is now taught in the magus-run skill, and a
+  gate keeps every advisory covered there. An advise injects on one host of
+  four, so guidance carried only by a verdict never reached the rest.
+
 ## [v0.3.0] - 2026-07-25
 
 See the full changelog at

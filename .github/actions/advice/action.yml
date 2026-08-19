@@ -130,10 +130,45 @@ inputs:
       failing.
     required: false
     default: 'false'
-  fix-label:
-    description: The label that consents to fix-generated-drift on a given pull request.
+  offer-fix-label:
+    description: >
+      Name `fix-label` in the merge-conflict comment, so the reader can hand the work to
+      magus instead of doing it locally.
+
+      Its own input rather than a consequence of `fix-merge-conflict`, because the two
+      run in different jobs: the comment is written by a read-only advisor on the pull
+      request's checks, and the fixer needs `contents: write` and a label event, so a
+      repository that honours the label does so from a SEPARATE workflow this one cannot
+      see. Set it where such a workflow exists - an offer nobody can accept is worse than
+      no offer.
     required: false
-    default: 'magus:autofix'
+    default: 'false'
+  fix-merge-conflict:
+    description: >
+      Merge the base branch in and settle the resulting conflicts by regenerating, then
+      PUSH the merge to the pull request branch. Applies only when every conflict is in a
+      file the workspace declares as output; anything else is left for a human and named
+      in the comment.
+
+      OFF by default, for the same reason as fix-generated-drift: it writes. Same two-party
+      consent - this input plus the `fix-label` label. Needs `contents: write`, and the
+      job must check out the PR HEAD BRANCH by name, not the default ephemeral merge ref;
+      the advisor refuses rather than pushing the wrong commit.
+    required: false
+    default: 'false'
+  fix-label:
+    description: >
+      The label REQUESTING a fix. One label for both fixers: "magus, settle what you can
+      here", not "run this script". Present means outstanding - it is retired for
+      `done-label` once they run, so a PR fixed last week stops reading as asking.
+    required: false
+    default: 'magus:auto-fix:requested'
+  done-label:
+    description: >
+      Records that the fixers ran. Added, and `fix-label` removed, after BOTH finish -
+      never by a fixer itself, which would withdraw consent from the one after it.
+    required: false
+    default: 'magus:auto-fix:done'
   pr-number:
     description: The pull request to comment on.
     required: false
@@ -175,6 +210,7 @@ runs:
         PR_NUMBER: ${{ inputs.pr-number }}
         PR_BASE: ${{ inputs.base-ref }}
         PR_HEAD_SHA: ${{ inputs.head-sha }}
+        FIX_LABEL_OFFER: ${{ inputs.offer-fix-label == 'true' && inputs.fix-label || '' }}
       run: magus buzz "$GITHUB_ACTION_PATH/merge-conflict.buzz"
 
     - name: Advise on hand-edited generated files
@@ -309,8 +345,28 @@ runs:
         PR_AUTHOR: ${{ github.event.pull_request.user.login }}
       run: magus buzz "$GITHUB_ACTION_PATH/first-contribution.buzz"
 
-    # Last, and deliberately after the read-only advisors: it can push, which moves the
+    # Last, and deliberately after the read-only advisors: these push, which moves the
     # head every earlier advisor just reported on.
+    #
+    # The merge comes first: regenerating before the base is merged in measures drift
+    # against a tree that is about to change, and the merge would then conflict with the
+    # commit that measurement produced.
+    - name: Settle merge conflicts in generated files
+      if: inputs.fix-merge-conflict == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_BASE: ${{ inputs.base-ref }}
+        PR_HEAD_REF: ${{ github.event.pull_request.head.ref }}
+        PR_HEAD_REPO: ${{ github.event.pull_request.head.repo.full_name }}
+        FIX_CONFLICTS: ${{ inputs.fix-merge-conflict }}
+        FIX_LABEL: ${{ inputs.fix-label }}
+      run: magus buzz "$GITHUB_ACTION_PATH/fix-merge-conflict.buzz"
+
     - name: Fix generated drift
       if: inputs.fix-generated-drift == 'true'
       shell: bash
@@ -325,3 +381,17 @@ runs:
         FIX_DRIFT: ${{ inputs.fix-generated-drift }}
         FIX_LABEL: ${{ inputs.fix-label }}
       run: magus buzz "$GITHUB_ACTION_PATH/fix-generated-drift.buzz"
+
+    # After BOTH fixers, never inside one: each reads fix-label as consent. always() so a
+    # failed fixer still retires the request, rather than re-running the same failure.
+    - name: Settle the auto-fix labels
+      if: always() && (inputs.fix-merge-conflict == 'true' || inputs.fix-generated-drift == 'true')
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        FIX_LABEL: ${{ inputs.fix-label }}
+        DONE_LABEL: ${{ inputs.done-label }}
+      run: magus buzz "$GITHUB_ACTION_PATH/settle-fix-labels.buzz"

@@ -3,7 +3,7 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Kind, Outcome, type ActivityEvent } from "../../gen/magus/activity/v1/activity_pb";
+import { Kind, Outcome, type ActivityEvent } from "../../gen/magus/activity/v1alpha1/activity_pb";
 import { must } from "../../lib/guards";
 import {
   activityToModel,

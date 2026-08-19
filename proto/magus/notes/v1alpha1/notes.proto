@@ -1,0 +1,183 @@
+syntax = "proto3";
+
+// Package magus.notes.v1alpha1 is the console-facing NotesService: a READ-ONLY view over the
+// workspace's human-authored notes, both the shared store in the checkout and the private
+// one on this machine.
+//
+// It is the deliberate opposite of magus.memory.v1alpha1, and the asymmetry is the point. Memory
+// is agent-written, so a human read/edit/delete surface is its safety valve. A note is
+// human-written, and its whole value is that guarantee: a note is the one node class in the
+// knowledge graph that is NOT derived from the workspace, so nothing in the repository
+// corroborates it later and its only provenance is the person who wrote it and signed the
+// commit. A browser-reachable write would put an unattributable author on that store, and
+// undoing the write does not restore the guarantee. So this service has no Update and no
+// Delete, and adding one is a change to the feature's central claim rather than a new RPC.
+//
+// No Delete even though deletion is recoverable for the shared store. The counter-intuitive
+// part is worth stating so nobody "fixes" it later: SHARED notes are the safe ones to delete
+// (git brings them back) and PRIVATE ones are the dangerous ones (nothing does). So if either
+// store ever grew a delete it would be the shared one - which is precisely the store where
+// the CLI and a reviewed commit already do the job better. Neither gets one.
+//
+// Access policy: every RPC requires the daemon bearer token, mounted on loopback behind the
+// same guard as the other cli-token console services, and NEVER on the LAN share listener.
+// The private store is by definition not shared with anyone, and a shared phone view must not
+// be able to read it.
+package magus.notes.v1alpha1;
+
+import "google/protobuf/timestamp.proto";
+import "buf/validate/validate.proto";
+
+// NotesService lists the workspace's notes and reads one in full.
+service NotesService {
+  // ListNotes returns every note in both declared stores, each with its anchors already
+  // resolved. Paginated by contract so growth never forces a breaking change, though the
+  // store returns all notes today (bounded by the store's own scan cap).
+  rpc ListNotes(ListNotesRequest) returns (ListNotesResponse);
+  // GetNote returns one note by scope and name, including its body.
+  rpc GetNote(GetNoteRequest) returns (Note);
+}
+
+// Scope is which store a note lives in, and it is the axis a reader must never have to
+// guess: the two mean different things about who can see the note.
+enum Scope {
+  SCOPE_UNSPECIFIED = 0;
+  // SHARED is the store inside the checkout: committed, reviewed, attributed by git.
+  SCOPE_SHARED = 1;
+  // PRIVATE is this machine only. It is never exported to the shared cache and never
+  // served on the LAN share listener.
+  SCOPE_PRIVATE = 2;
+}
+
+// AnchorKind is the closed set of things a note may attach to. Deliberately absent: any kind
+// carrying a POSITION - a node id is checkable, so its breakage is reportable, while a line
+// number changes on the next edit above it with nothing to detect.
+enum AnchorKind {
+  ANCHOR_KIND_UNSPECIFIED = 0;
+  ANCHOR_KIND_SYMBOL = 1;
+  ANCHOR_KIND_FILE = 2;
+  ANCHOR_KIND_PROJECT = 3;
+  ANCHOR_KIND_TARGET = 4;
+  ANCHOR_KIND_NOTE = 5;
+}
+
+// AnchorStatus is what checking one anchor against the workspace found.
+//
+// DRIFTED is the case an existence check cannot catch and a reader cannot see: the anchored
+// code still exists and quietly stopped meaning what the note says. UNVERIFIED is a real,
+// distinct answer and must never be rendered as "fine" - it means no fingerprint was recorded
+// (the note predates fingerprinting, or was never re-read) or none could be computed here,
+// and reporting drift from missing data is the false positive that trains a reader to ignore
+// every flag.
+enum AnchorStatus {
+  ANCHOR_STATUS_UNSPECIFIED = 0;
+  ANCHOR_STATUS_RESOLVES = 1;
+  ANCHOR_STATUS_DANGLING = 2;
+  ANCHOR_STATUS_DRIFTED = 3;
+  ANCHOR_STATUS_UNVERIFIED = 4;
+}
+
+// Staleness is whether the prose was outrun by the thing it describes.
+//
+// The signal is NOT calendar age: prose about a subsystem nobody has touched is current, and
+// decaying it by age is how a signal earns the right to be ignored. What is measured is
+// DIVERGENCE between two commit dates. UNMEASURED is not "fresh" - it is the honest answer
+// when VCS history is unavailable, when the prose has no history, or when there is no subject
+// to compare against. Every private note is UNMEASURED today, because staleness is keyed by
+// workspace-relative path and a private note's source is absolute.
+enum Staleness {
+  STALENESS_UNSPECIFIED = 0;
+  STALENESS_UNMEASURED = 1;
+  STALENESS_CURRENT = 2;
+  STALENESS_OUTRUN = 3;
+  STALENESS_PETRIFIED = 4;
+}
+
+// Anchor is one typed attachment from a note to a graph entity, with the result of checking
+// it. degrades_to names the coarser anchor a dangling one falls back to - the demotion is
+// reported rather than guessed, because nothing here searches for a renamed symbol: a
+// low-confidence match is worse than an admitted failure.
+message Anchor {
+  AnchorKind kind = 1;
+  string target = 2;
+  AnchorStatus status = 3;
+  // node_id is the graph node this anchor names, so a client can link into the Graph
+  // Explorer. Empty when the anchor does not resolve.
+  string node_id = 4;
+  // detail explains a DANGLING or DRIFTED status in one sentence, and what to do about it.
+  // Empty for the other statuses. UNTRUSTED only in the sense that it is prose; it is
+  // magus-authored, unlike body below.
+  string detail = 5;
+}
+
+// Note is one human-authored entry.
+//
+// There is no author field, and its absence is deliberate rather than an omission: a
+// self-attested author is forgeable by whatever wrote the file, and authorship already comes
+// from git via the @vcs shard for the shared store. A client that wants to show who wrote a
+// shared note should read the graph, not this field, because this field would be a claim the
+// file makes about itself.
+message Note {
+  // name is the note's identity: its declared id when it has one, otherwise its path within
+  // the store.
+  string name = 1;
+  Scope scope = 2;
+  string title = 3;
+  repeated string tags = 4;
+  repeated Anchor anchors = 5;
+  // body is the note's prose. UNTRUSTED: a client must render it as TEXT, never as trusted
+  // HTML. Empty in ListNotes; GetNote fills it.
+  string body = 6;
+  // path is where the note lives on disk. Workspace-relative for a shared note, absolute for
+  // a private one, which is the same distinction the scope carries.
+  string path = 7;
+  Staleness staleness = 8;
+  // outrun_days is how far the subject moved ahead of the prose. The raw number rather than
+  // just the bucket, because it is the evidence: a UI ranking something down owes the reader
+  // "400 days behind its subject" rather than a silent reorder. Zero unless staleness is
+  // OUTRUN or PETRIFIED.
+  int32 outrun_days = 9;
+  // modify_time is the file's modification time, observed rather than stored, so it cannot
+  // disagree with the file it describes. Output only.
+  google.protobuf.Timestamp modify_time = 10;
+}
+
+// StoreStatus reports one store's availability, so a client can tell "declared but empty"
+// from "not declared at all" from "declared and broken" - three states that must not collapse
+// into an empty list.
+message StoreStatus {
+  Scope scope = 1;
+  // declared is false when the workspace declares no path for this scope, which is the
+  // default and is not a failure.
+  bool declared = 2;
+  // path is the store's directory. Empty when it is not declared.
+  string path = 3;
+  // note_count is how many notes this store contributed to the response.
+  int32 note_count = 4;
+  // issues are the problems found while scanning: a malformed entry, a truncated scan. Each
+  // is magus-authored prose naming one file and what to do about it.
+  repeated string issues = 5;
+}
+
+message ListNotesRequest {
+  // Bounded at the same tier as ListActivity and ListMemories; see ListMemoriesRequest for
+  // why the three keep their own flat field rather than sharing a pagination message.
+  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 1000}];
+  string page_token = 2;
+}
+
+message ListNotesResponse {
+  repeated Note notes = 1;
+  string next_page_token = 2;  // always empty until the store paginates
+  // stores reports both scopes whether or not either yielded a note, so a client can render
+  // the empty and undeclared cases honestly instead of showing a blank list.
+  repeated StoreStatus stores = 3;
+}
+
+message GetNoteRequest {
+  // The note's resource name, "shared/{note}" or "private/{note}". The store is part of the
+  // name rather than a second field because a name and a scope arriving separately are a
+  // compound key that can disagree, and the store is the axis a reader must never have to
+  // guess - the two mean different things about who can read the note.
+  string name = 1 [(buf.validate.field).string.pattern = "^(shared|private)/.+$"];
+}

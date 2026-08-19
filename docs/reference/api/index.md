@@ -19,16 +19,16 @@ Start the daemon with `magus server start`. See [the console reference](../conso
 
 | Service | Methods | Package |
 |---------|---------|--------|
-| [ActivityService](activity/v1/activity.md) | 2 | `magus.activity.v1` |
-| [InsightService](insight/v1/insight.md) | 1 | `magus.insight.v1` |
-| [JobService](job/v1/job.md) | 5 | `magus.job.v1` |
-| [MemoryService](memory/v1/memory.md) | 5 | `magus.memory.v1` |
-| [MetricsService](metrics/v1/metrics.md) | 2 | `magus.metrics.v1` |
-| [NotesService](notes/v1/notes.md) | 2 | `magus.notes.v1` |
-| [StatusService](status/v1/status.md) | 2 | `magus.status.v1` |
-| [TokenService](token/v1/token.md) | 2 | `magus.token.v1` |
-| [ToolService](tool/v1/tool.md) | 1 | `magus.tool.v1` |
-| [ViewerService](viewer/v1/viewer.md) | 3 | `magus.viewer.v1` |
+| [ActivityService](activity/v1alpha1/activity.md) | 2 | `magus.activity.v1alpha1` |
+| [InsightService](insight/v1alpha1/insight.md) | 1 | `magus.insight.v1alpha1` |
+| [JobService](job/v1alpha1/job.md) | 2 | `magus.job.v1alpha1` |
+| [MemoryService](memory/v1alpha1/memory.md) | 5 | `magus.memory.v1alpha1` |
+| [MetricsService](metrics/v1alpha1/metrics.md) | 2 | `magus.metrics.v1alpha1` |
+| [NotesService](notes/v1alpha1/notes.md) | 2 | `magus.notes.v1alpha1` |
+| [StatusService](status/v1alpha1/status.md) | 2 | `magus.status.v1alpha1` |
+| [TokenService](token/v1alpha1/token.md) | 3 | `magus.token.v1alpha1` |
+| [ToolService](tool/v1alpha1/tool.md) | 1 | `magus.tool.v1alpha1` |
+| [ViewerService](viewer/v1alpha1/viewer.md) | 3 | `magus.viewer.v1alpha1` |
 
 ## Shared types
 
@@ -36,8 +36,8 @@ A package with no service of its own: its types are documented here instead of o
 
 | Package | File |
 |---------|------|
-| [magus.graph.v1](graph/v1/graph.md) | `proto/magus/graph/v1/graph.proto` |
-| [magus.query.v1](query/v1/query.md) | `proto/magus/query/v1/query.proto` |
+| [magus.graph.v1alpha1](graph/v1alpha1/graph.md) | `proto/magus/graph/v1alpha1/graph.proto` |
+| [magus.query.v1alpha1](query/v1alpha1/query.md) | `proto/magus/query/v1alpha1/query.proto` |
 
 ## Calling a method without a generated client
 
@@ -53,7 +53,7 @@ curl -X POST \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $MAGUS_TOKEN" \
   -d '{"pageSize":0,"pageToken":""}' \
-  http://127.0.0.1:7391/magus.activity.v1.ActivityService/ListActivity
+  http://127.0.0.1:7391/magus.activity.v1alpha1.ActivityService/ListActivityEvents
 ```
 
 The path is always `/<package>.<Service>/<Method>`, which every page below states per method. A request body shown as `{}` takes no fields; a longer one is a shallow skeleton (top-level scalar and enum fields only) and does not attempt to satisfy every field's constraints - a `string.pattern` rule still needs a value matching that pattern.
@@ -62,7 +62,7 @@ The path is always `/<package>.<Service>/<Method>`, which every page below state
 
 A server-streaming method returns a sequence of messages over one HTTP response rather than one body, so a single `curl -d` request cannot cleanly demux it. Use a generated Connect client, or a tool built for streaming RPCs such as [grpcurl](https://github.com/fullstorydev/grpcurl) (`grpcurl -plaintext ... /magus.viewer.v1.ViewerService/StreamEvents`). Streaming methods:
 
-- [MetricsService.StreamMetrics](metrics/v1/metrics.md#streammetrics) (server streaming)
-- [StatusService.StreamStatus](status/v1/status.md#streamstatus) (server streaming)
-- [ViewerService.StreamEvents](viewer/v1/viewer.md#streamevents) (server streaming)
+- [MetricsService.StreamMetrics](metrics/v1alpha1/metrics.md#streammetrics) (server streaming)
+- [StatusService.StreamStatus](status/v1alpha1/status.md#streamstatus) (server streaming)
+- [ViewerService.StreamEvents](viewer/v1alpha1/viewer.md#streamevents) (server streaming)
 

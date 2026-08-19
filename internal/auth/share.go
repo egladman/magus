@@ -8,21 +8,20 @@ import (
 	"time"
 )
 
-// Share tokens are the THIRD auth tier: a single, short-lived, READ-ONLY secret
-// minted for the "share to phone" feature. Unlike the retrievable cli token
-// (token.go) and the persisted connector tokens (connector.go), a share token
-// lives only in the running daemon's memory and only for as long as the
-// ephemeral LAN listener it guards - it is never written to disk. It reuses the
-// mgs_ wire format so a leak scanner still catches it, but carries a distinct
-// read-only SCOPE that VerifyBearer (which guards /mcp and every mutating
-// console route) never consults: a leaked share link can therefore only ever
-// reach the read surface it was minted for, and only for its brief lifetime.
+// Share tokens are the VIEWER tier: a single, short-lived, READ-ONLY secret minted
+// for the "share to phone" feature. Unlike the retrievable cli token (token.go) and
+// the persisted connector tokens (connector.go), a share token lives only in the
+// running daemon's memory and only for as long as the ephemeral LAN listener it
+// guards - it is never written to disk. It reuses the mgs_ wire format so a leak
+// scanner still catches it, but carries a distinct read-only SCOPE.
 //
-// The scope is enforced structurally, not by convention: the loopback daemon
-// verifier (VerifyBearer) matches the cli token and the connector store and
-// NOTHING else, so a share token is rejected there; the LAN listener builds its
-// bearer guard from ONE ShareToken.Verify closure, which additionally requires
-// the read scope and rejects an expired token. The two verifiers never overlap.
+// The scope is enforced structurally, not by convention. NEITHER loopback verifier
+// consults share tokens: VerifyMCPBearer matches the cli token and the connector
+// store, VerifyConsoleBearer matches the cli token, and nothing else in either case.
+// The LAN listener instead builds its bearer guard from ONE ShareToken.Verify
+// closure, which additionally requires the read scope and rejects an expired token.
+// So a leaked share link can only ever reach the read surface it was minted for, and
+// only for its brief lifetime.
 
 // ShareScopeRead is the only scope a share token ever carries: read-only access
 // to the console's read surface. It exists as an explicit, checkable field (not

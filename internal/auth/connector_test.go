@@ -40,7 +40,7 @@ func (s *ConnectorSuite) TestCreateListVerify() {
 	t := s.T()
 	st := s.store()
 
-	secret, c, err := st.Create("claude", time.Now().Add(DefaultConnectorTTL))
+	secret, c, err := st.Create("claude", time.Now().Add(DefaultConnectorTTL), ScopeMCP)
 	require.NoError(t, err)
 	assert.True(t, validTokenFormat(secret), "minted token not well-formed: %q", secret)
 	assert.Equal(t, "claude", c.Name)
@@ -52,40 +52,40 @@ func (s *ConnectorSuite) TestCreateListVerify() {
 	require.Len(t, list, 1)
 	assert.Equal(t, c, list[0])
 
-	assert.True(t, st.Verify(secret), "Verify rejected the freshly minted token")
+	assert.True(t, st.VerifyScope(secret, ScopeMCP), "Verify rejected the freshly minted token")
 
 	// A validly-formatted but never-stored token must not verify.
 	other, err := mintToken()
 	require.NoError(t, err)
 	require.True(t, validTokenFormat(other))
-	assert.False(t, st.Verify(other), "Verify accepted a non-stored token")
+	assert.False(t, st.VerifyScope(other, ScopeMCP), "Verify accepted a non-stored token")
 }
 
 func (s *ConnectorSuite) TestCreateRejectsDuplicateName() {
 	t := s.T()
 	st := s.store()
 
-	_, _, err := st.Create("dup", time.Time{})
+	_, _, err := st.Create("dup", time.Time{}, ScopeMCP)
 	require.NoError(t, err)
-	_, _, err = st.Create("dup", time.Time{})
+	_, _, err = st.Create("dup", time.Time{}, ScopeMCP)
 	assert.ErrorIs(t, err, ErrConnectorExists)
 }
 
 func (s *ConnectorSuite) TestCreateRequiresName() {
-	_, _, err := s.store().Create("   ", time.Time{})
+	_, _, err := s.store().Create("   ", time.Time{}, ScopeMCP)
 	assert.Error(s.T(), err, "Create accepted a blank name")
 }
 
 func (s *ConnectorSuite) TestPersistenceAcrossLoads() {
 	t := s.T()
 
-	secret, _, err := s.store().Create("ide", time.Now().Add(time.Hour))
+	secret, _, err := s.store().Create("ide", time.Now().Add(time.Hour), ScopeMCP)
 	require.NoError(t, err)
 
 	// A fresh load sees the persisted entry and verifies the same secret.
 	reloaded := s.store()
 	require.Len(t, reloaded.List(), 1)
-	assert.True(t, reloaded.Verify(secret))
+	assert.True(t, reloaded.VerifyScope(secret, ScopeMCP))
 
 	// One file per token, named after the token, so revoking is an rm.
 	path := filepath.Join(s.stateDir, "magus", "connectors.d", "ide.json")
@@ -100,7 +100,7 @@ func (s *ConnectorSuite) TestPersistenceAcrossLoads() {
 
 func (s *ConnectorSuite) TestLoadRejectsInsecurePerms() {
 	t := s.T()
-	_, _, err := s.store().Create("x", time.Time{})
+	_, _, err := s.store().Create("x", time.Time{}, ScopeMCP)
 	require.NoError(t, err)
 	path := filepath.Join(s.stateDir, "magus", "connectors.d", "x.json")
 	require.NoError(t, os.Chmod(path, 0o644))
@@ -114,14 +114,14 @@ func (s *ConnectorSuite) TestRevoke() {
 	t := s.T()
 	st := s.store()
 
-	secret, c, err := st.Create("gone", time.Time{})
+	secret, c, err := st.Create("gone", time.Time{}, ScopeMCP)
 	require.NoError(t, err)
 
 	// Revoke by name; the token stops verifying.
 	removed, err := st.Revoke("gone")
 	require.NoError(t, err)
 	assert.Equal(t, c, removed)
-	assert.False(t, st.Verify(secret), "revoked token still verifies")
+	assert.False(t, st.VerifyScope(secret, ScopeMCP), "revoked token still verifies")
 	assert.Empty(t, st.List())
 
 	_, err = st.Revoke("gone")
@@ -132,7 +132,7 @@ func (s *ConnectorSuite) TestRevokeByFingerprintAndPrefix() {
 	t := s.T()
 	st := s.store()
 
-	_, c, err := st.Create("byfp", time.Time{})
+	_, c, err := st.Create("byfp", time.Time{}, ScopeMCP)
 	require.NoError(t, err)
 
 	// Exact fingerprint.
@@ -140,7 +140,7 @@ func (s *ConnectorSuite) TestRevokeByFingerprintAndPrefix() {
 	require.NoError(t, err)
 
 	// Prefix match.
-	_, c2, err := st.Create("byprefix", time.Time{})
+	_, c2, err := st.Create("byprefix", time.Time{}, ScopeMCP)
 	require.NoError(t, err)
 	_, err = st.Revoke(c2.Fingerprint[:4])
 	require.NoError(t, err)
@@ -151,23 +151,23 @@ func (s *ConnectorSuite) TestExpiredTokenDoesNotVerify() {
 	t := s.T()
 	st := s.store()
 
-	past, _, err := st.Create("expired", time.Now().Add(-time.Minute))
+	past, _, err := st.Create("expired", time.Now().Add(-time.Minute), ScopeMCP)
 	require.NoError(t, err)
-	assert.False(t, st.Verify(past), "expired token verified")
+	assert.False(t, st.VerifyScope(past, ScopeMCP), "expired token verified")
 
-	future, _, err := st.Create("live", time.Now().Add(time.Hour))
+	future, _, err := st.Create("live", time.Now().Add(time.Hour), ScopeMCP)
 	require.NoError(t, err)
-	assert.True(t, st.Verify(future), "non-expired token failed to verify")
+	assert.True(t, st.VerifyScope(future, ScopeMCP), "non-expired token failed to verify")
 
-	never, _, err := st.Create("never", time.Time{})
+	never, _, err := st.Create("never", time.Time{}, ScopeMCP)
 	require.NoError(t, err)
-	assert.True(t, st.Verify(never), "never-expiring token failed to verify")
+	assert.True(t, st.VerifyScope(never, ScopeMCP), "never-expiring token failed to verify")
 }
 
 func (s *ConnectorSuite) TestVerifyRejectsGarbageOffline() {
 	st := s.store()
 	for _, bad := range []string{"", "not-a-token", "mgs_short", "ghp_wrongprefix"} {
-		assert.False(s.T(), st.Verify(bad), "Verify accepted garbage %q", bad)
+		assert.False(s.T(), st.VerifyScope(bad, ScopeMCP), "Verify accepted garbage %q", bad)
 	}
 }
 
@@ -178,26 +178,74 @@ func (s *ConnectorSuite) TestVerifyTwoTier() {
 	t := s.T()
 
 	// No credentials at all: everything is rejected.
-	assert.False(t, VerifyBearer("anything"))
+	assert.False(t, VerifyMCPBearer("anything"))
 
 	// cli token tier.
 	cli, err := Generate()
 	require.NoError(t, err)
 	_, err = SaveNew(cli)
 	require.NoError(t, err)
-	assert.True(t, VerifyBearer(cli), "cli token not accepted")
-	assert.False(t, VerifyBearer(cli+"x"), "near-miss cli token accepted")
+	assert.True(t, VerifyMCPBearer(cli), "cli token not accepted")
+	assert.False(t, VerifyMCPBearer(cli+"x"), "near-miss cli token accepted")
 
 	// connector tier.
-	live, _, err := s.store().Create("live", time.Now().Add(time.Hour))
+	live, _, err := s.store().Create("live", time.Now().Add(time.Hour), ScopeMCP)
 	require.NoError(t, err)
-	assert.True(t, VerifyBearer(live), "live connector token not accepted")
+	assert.True(t, VerifyMCPBearer(live), "live connector token not accepted")
 
-	expired, _, err := s.store().Create("expired", time.Now().Add(-time.Hour))
+	expired, _, err := s.store().Create("expired", time.Now().Add(-time.Hour), ScopeMCP)
 	require.NoError(t, err)
-	assert.False(t, VerifyBearer(expired), "expired connector token accepted")
+	assert.False(t, VerifyMCPBearer(expired), "expired connector token accepted")
 
-	assert.False(t, VerifyBearer("mgs_not_a_real_token"), "garbage accepted")
+	assert.False(t, VerifyMCPBearer("mgs_not_a_real_token"), "garbage accepted")
+}
+
+// The MCP and console surfaces must not share a credential class. A connector token
+// is minted for an agent, so accepting it on the console would let a leaked agent
+// credential drive the console's mutating routes; the two used to share one verifier
+// and did exactly that. The operator token is the deliberate exception - it is the
+// bootstrap credential and the CLI's own reads depend on it.
+func (s *ConnectorSuite) TestConsoleRejectsConnectorTokens() {
+	t := s.T()
+
+	cli, err := Generate()
+	require.NoError(t, err)
+	_, err = SaveNew(cli)
+	require.NoError(t, err)
+
+	live, _, err := s.store().Create("agent", time.Now().Add(time.Hour), ScopeMCP)
+	require.NoError(t, err)
+
+	assert.True(t, VerifyMCPBearer(live), "a connector token must still reach /mcp")
+	assert.False(t, VerifyConsoleBearer(live), "a connector token must NOT reach the console")
+
+	assert.True(t, VerifyConsoleBearer(cli), "the operator token opens both surfaces by design")
+	assert.True(t, VerifyMCPBearer(cli))
+}
+
+// The console's own two tiers: a full console token may change things, a viewer token
+// may only read. The write tier is a SUPERSET of the read tier, not a sibling, so a
+// full console token passes the read guard too - otherwise every read route would need
+// to accept both explicitly and one omission would lock the console out of itself.
+func (s *ConnectorSuite) TestConsoleWriteAndViewerTiers() {
+	t := s.T()
+
+	web, _, err := s.store().Create("pwa", time.Time{}, ScopeConsole)
+	require.NoError(t, err)
+	viewer, _, err := s.store().Create("phone", time.Time{}, ScopeConsoleRead)
+	require.NoError(t, err)
+
+	// The viewer reads and cannot write.
+	assert.True(t, VerifyConsoleReadBearer(viewer), "a viewer token must reach the read routes")
+	assert.False(t, VerifyConsoleBearer(viewer), "a viewer token must NOT reach a mutating route")
+
+	// The write tier covers both.
+	assert.True(t, VerifyConsoleBearer(web))
+	assert.True(t, VerifyConsoleReadBearer(web), "the write tier is a superset of the read tier")
+
+	// Neither console tier reaches the agent surface.
+	assert.False(t, VerifyMCPBearer(web), "a console token must NOT reach /mcp")
+	assert.False(t, VerifyMCPBearer(viewer), "a viewer token must NOT reach /mcp")
 }
 
 // TestConcurrentCreateNoLostUpdates proves N independent creates all survive.
@@ -218,7 +266,7 @@ func (s *ConnectorSuite) TestConcurrentCreateNoLostUpdates() {
 				errs[i] = err
 				return
 			}
-			_, _, errs[i] = st.Create(fmt.Sprintf("c%d", i), time.Time{})
+			_, _, errs[i] = st.Create(fmt.Sprintf("c%d", i), time.Time{}, ScopeMCP)
 		}(i)
 	}
 	wg.Wait()
@@ -234,7 +282,7 @@ func (s *ConnectorSuite) TestConcurrentCreateNoLostUpdates() {
 // way an orphaned lock file once did.
 func (s *ConnectorSuite) TestConcurrentCreateNeedsNoLockFile() {
 	t := s.T()
-	_, _, err := s.store().Create("first", time.Time{})
+	_, _, err := s.store().Create("first", time.Time{}, ScopeMCP)
 	require.NoError(t, err)
 
 	entries, err := os.ReadDir(filepath.Join(s.stateDir, "magus", "connectors.d"))
@@ -248,12 +296,12 @@ func (s *ConnectorSuite) TestConcurrentCreateNeedsNoLockFile() {
 // available to perform one.
 func (s *ConnectorSuite) TestRevokeByRemovingTheFile() {
 	t := s.T()
-	secret, _, err := s.store().Create("byhand", time.Time{})
+	secret, _, err := s.store().Create("byhand", time.Time{}, ScopeMCP)
 	require.NoError(t, err)
-	require.True(t, s.store().Verify(secret))
+	require.True(t, s.store().VerifyScope(secret, ScopeMCP))
 
 	require.NoError(t, os.Remove(filepath.Join(s.stateDir, "magus", "connectors.d", "byhand.json")))
-	assert.False(t, s.store().Verify(secret), "a removed file must stop verifying")
+	assert.False(t, s.store().VerifyScope(secret, ScopeMCP), "a removed file must stop verifying")
 	assert.Empty(t, s.store().List())
 }
 
@@ -262,7 +310,7 @@ func (s *ConnectorSuite) TestRevokeByRemovingTheFile() {
 func (s *ConnectorSuite) TestCreateRejectsUnsafeName() {
 	t := s.T()
 	for _, name := range []string{"../escape", "a/b", ".hidden", "has space", "sub/../x"} {
-		_, _, err := s.store().Create(name, time.Time{})
+		_, _, err := s.store().Create(name, time.Time{}, ScopeMCP)
 		require.Error(t, err, "Create accepted unsafe name %q", name)
 	}
 }
@@ -357,4 +405,40 @@ func TestBase62EncodeWidthAndPadding(t *testing.T) {
 func TestBase62EncodeOverflowPanics(t *testing.T) {
 	// 62^1 == 62 values fit in width 1 (0..61); 62 does not.
 	assert.Panics(t, func() { base62Encode([]byte{62}, 1) })
+}
+
+// One store, two pools. Every surface that lists or revokes must filter by scope, or
+// an agent credential shows up in a console listing and a console command can delete
+// it. ListScope is what the CLI commands are built on, so this pins the filter itself.
+func (s *ConnectorSuite) TestListScopeSeparatesThePools() {
+	t := s.T()
+	st := s.store()
+
+	_, agent, err := st.Create("agent", time.Time{}, ScopeMCP)
+	require.NoError(t, err)
+	_, pwa, err := st.Create("pwa", time.Time{}, ScopeConsole)
+	require.NoError(t, err)
+	_, phone, err := st.Create("phone", time.Time{}, ScopeConsoleRead)
+	require.NoError(t, err)
+
+	mcpOnly := st.ListScope(ScopeMCP)
+	require.Len(t, mcpOnly, 1)
+	assert.Equal(t, agent.Name, mcpOnly[0].Name)
+
+	consoleOnly := st.ListScope(ScopeConsole, ScopeConsoleRead)
+	require.Len(t, consoleOnly, 2)
+	names := []string{consoleOnly[0].Name, consoleOnly[1].Name}
+	assert.ElementsMatch(t, []string{pwa.Name, phone.Name}, names)
+
+	// The full listing still sees everything - the filter is the caller's choice, not
+	// a property of the store.
+	assert.Len(t, st.List(), 3)
+}
+
+// A record written before ClientScope existed decodes with an empty scope and must
+// read as ScopeMCP: the console tier did not exist when it was minted, so treating it
+// as anything else would silently widen an old agent credential onto the console.
+func (s *ConnectorSuite) TestLegacyRecordDefaultsToMCP() {
+	legacy := ConnectorToken{Name: "old", Scope: ""}
+	assert.Equal(s.T(), ScopeMCP, legacy.EffectiveScope())
 }

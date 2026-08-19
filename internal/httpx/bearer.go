@@ -10,7 +10,7 @@ import (
 )
 
 // Verifier decides whether a presented bearer token is accepted. It is the one
-// knob that varies across loopback endpoints: the daemon passes auth.VerifyBearer
+// knob that varies across loopback endpoints: the daemon passes auth.VerifyMCPBearer
 // (cli token or a non-expired named connector token), while the ephemeral live
 // and blob servers pass SingleTokenVerifier over their per-run token.
 type Verifier func(presented string) bool
@@ -66,7 +66,8 @@ func guard(verify Verifier, extract func(*http.Request) (string, bool), next htt
 // an attacker-controlled input is itself length-dependent, but that timing
 // channel is independent of the secret.) A load error from expected fails closed.
 // The ephemeral live and blob servers use this with their per-run token; the
-// daemon uses a richer verifier (auth.VerifyBearer) instead.
+// daemon uses a richer, per-surface verifier (auth.VerifyMCPBearer or
+// auth.VerifyConsoleBearer) instead.
 func SingleTokenVerifier(expected func() (string, error)) Verifier {
 	return func(presented string) bool {
 		want, err := expected()

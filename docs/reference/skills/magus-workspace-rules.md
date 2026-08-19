@@ -30,12 +30,12 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `37` |
+| `agent-skill-version` | `38` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `3ce451d61f54` |
+| `skill-content` | `bdb43f8dd1e8` |
 | `skill-variant` | `full` |
 
-The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
+The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
 
 ## Full form
 

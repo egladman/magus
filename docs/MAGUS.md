@@ -47,13 +47,13 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 |---|--:|---|---|
 | project | 10+ | `magus query kind:project` | `magus`, `docs`, `libs/gopherbuzz` |
 | target | 100+ | `magus query kind:target` | `content-generate`, `site-generate`, `format` |
-| spell | 10+ | `magus query kind:spell` | `go`, `markdown`, `docker` |
+| spell | 10+ | `magus query kind:spell` | `go`, `markdown`, `typescript` |
 | op | 60+ | `magus query kind:op` | `go-build`, `go-test`, `dprint` |
 | tool | 20+ | `magus query kind:tool` | `go`, `pnpm`, `buf` |
 | charm | 10+ | `magus query kind:charm` | `rw`, `cd`, `stable` |
 | module | 30+ | `magus query kind:module` | `fs`, `magus`, `charm` |
 | method | 200+ | `magus query kind:method` | `archive.compress`, `archive.list`, `archive.read_file` |
-| diagnostic | 70+ | `magus query kind:diagnostic` | `MGS4001`, `MGS2001`, `MGS1002` |
+| diagnostic | 60+ | `magus query kind:diagnostic` | `MGS4001`, `MGS2001`, `MGS1002` |
 | doc | 300+ | `magus query kind:doc` | `docs/reference/manpage/magus-doctor.md`, `docs/reference/manpage/magus-affected.md`, `docs/reference/manpage/magus-run.md` |
 | dir | 100+ | `magus query kind:dir` | `docs/reference/buzz`, `docs/reference/manpage`, `docs/reference/codes/magusfile` |
 | file | 200+ | `magus query kind:file` | `magusfile.buzz`, `docs/render.buzz`, `libs/diagram/diagram.buzz` |
@@ -64,7 +64,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Project | Targets | Scope a query | Key targets |
 |---|--:|---|---|
-| . | 43 | `magus query project:.` | `buzz-test`, `generate`, `lint` |
+| . | 44 | `magus query project:.` | `generate`, `buzz-test`, `lint` |
 | console | 7 | `magus query project:console` | `preflight`, `ci`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents | 5 | `magus query project:docs/guides/integrations/agents` | `ci`, `format`, `lint` |
@@ -87,7 +87,6 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `security` | security audits what actually ships against the npm advisory database. |
 | `ci` |  |
 | `build-playground` | build-playground rebuilds the WebAssembly interpreter the playground loads: the stock Go toolchain compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and Go's own wasm_exec.js glue is copied beside it. |
-| `diagrams-generate` | diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/. |
 | `build-hljs` | build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js. |
 | `build-playground-editor` | build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js. |
 | `render` | render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks. |
@@ -97,3 +96,4 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | `site-generate` | site-generate owns publication. |
 | `conventions` | conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved. |
 | `buzz-test` | buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. |
+| `diagrams-generate` | diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/. |

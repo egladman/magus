@@ -67,13 +67,13 @@ func TestShareTokenWrongScopeRejected(t *testing.T) {
 	}
 }
 
-// TestVerifyBearerRejectsShareToken is the load-bearing separation test: the
+// TestVerifyMCPBearerRejectsShareToken is the load-bearing separation test: the
 // daemon's own verifier (which guards /mcp and every mutating console route)
 // must NEVER accept a share token, even with a real cli token installed on disk.
-func TestVerifyBearerRejectsShareToken(t *testing.T) {
+func TestVerifyMCPBearerRejectsShareToken(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
-	// Install a real cli token so VerifyBearer has something legitimate to accept:
+	// Install a real cli token so VerifyMCPBearer has something legitimate to accept:
 	// the point is that it accepts THAT and still rejects the share token.
 	cli, err := Generate()
 	if err != nil {
@@ -82,15 +82,15 @@ func TestVerifyBearerRejectsShareToken(t *testing.T) {
 	if _, err := Save(cli); err != nil {
 		t.Fatalf("Save cli token: %v", err)
 	}
-	if !VerifyBearer(cli) {
-		t.Fatalf("VerifyBearer rejected the cli token")
+	if !VerifyMCPBearer(cli) {
+		t.Fatalf("VerifyMCPBearer rejected the cli token")
 	}
 
 	shareSecret, _, err := MintShareToken(time.Minute)
 	if err != nil {
 		t.Fatalf("MintShareToken: %v", err)
 	}
-	if VerifyBearer(shareSecret) {
-		t.Fatalf("VerifyBearer accepted a share token; the read scope must never reach /mcp or a mutating route")
+	if VerifyMCPBearer(shareSecret) {
+		t.Fatalf("VerifyMCPBearer accepted a share token; the read scope must never reach /mcp or a mutating route")
 	}
 }

@@ -79,7 +79,7 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 	// Put the workspace on the script's context when there is one.
 	//
 	// Without this every workspace-reading member of the magus module raised MGS1022 from
-	// a script - `magus\ls`, `affected`, `projectGraph`, `where`, `insight` - and the
+	// a script - `magus\projects`, `affected`, `projectGraph`, `where`, `insight` - and the
 	// error told the reader to reach for the forking `magus\cmd` instead. That advice was
 	// sound only because nothing had put the workspace here: the process had already loaded
 	// one (loadMagus is a sync.Once singleton, so this is the same instance the dispatcher

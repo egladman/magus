@@ -14,7 +14,7 @@ import (
 
 // toolRow is one binary a project's spells drive, with the window it is held to.
 //
-// Field names and verdict values track magus.tool.v1 (proto/magus/tool/v1/tool.proto),
+// Field names and verdict values track magus.tool.v1alpha1 (proto/magus/tool/v1alpha1/tool.proto),
 // which serves the same view to the console. One concept gets one vocabulary, or a script
 // author has to learn which surface they are reading before they can read it.
 type toolRow struct {

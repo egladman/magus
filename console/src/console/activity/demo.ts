@@ -14,7 +14,7 @@ import {
   Kind,
   Outcome,
   type ActivityEvent,
-} from "../../gen/magus/activity/v1/activity_pb";
+} from "../../gen/magus/activity/v1alpha1/activity_pb";
 import { scenarioActivity, type ActKind } from "../demo-scenario";
 
 // The scenario speaks a terse kind tag; the wire enum is the proto Kind. One mapping table keeps the

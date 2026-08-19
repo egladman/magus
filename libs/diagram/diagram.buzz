@@ -614,22 +614,28 @@ export fun renderSvg(d: Diagram, p: Palette, s: Style = Style{}) > str !> str {
     var pad = 0;
     if (d.title != "" or d.eyebrow != "") { pad = HeaderPad; }
     final total = d.height + pad;
-    var svg = "<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {d.width} {total}\""
+    // optimization: collect fragments and join once. `svg = svg + part` copies the entire
+    // document accumulated so far on every element, and on the default nanbox build each
+    // intermediate is pinned in the global object heap for the life of the process, so those
+    // copies are never reclaimed. See plans/reclaim-the-buzz-heap.md.
+    final parts: mut [str] = mut [<str>];
+    parts.append("<svg xmlns=\"http://www.w3.org/2000/svg\" viewBox=\"0 0 {d.width} {total}\""
         + " width=\"{d.width}\" height=\"{total}\" role=\"img\""
-        + " aria-labelledby=\"{d.id}-title {d.id}-desc\" class=\"magus-diagram\">";
-    svg = svg + "<title id=\"{d.id}-title\">" + escapeSvg(d.title) + "</title>";
-    svg = svg + "<desc id=\"{d.id}-desc\">" + escapeSvg(d.desc) + "</desc>";
-    svg = svg + renderMarkers(d, p, s);
-    svg = svg + "<rect width=\"100%\" height=\"100%\" fill=\"{p.paper}\"/>";
-    svg = svg + renderHeader(d, p, s);
-    svg = svg + "<g transform=\"translate(0,{pad})\">";
-    foreach (z in d.zones) { svg = svg + renderZone(z, p, s); }
-    foreach (e in d.edges) { svg = svg + renderEdge(d, e, p, s); }
-    foreach (e in d.edges) { svg = svg + renderEdgeLabel(d, e, p, s); }
-    foreach (n in d.nodes) { svg = svg + renderNode(n, p, s); }
-    svg = svg + renderLegend(d, p, s);
-    svg = svg + "</g>";
-    return svg + "</svg>";
+        + " aria-labelledby=\"{d.id}-title {d.id}-desc\" class=\"magus-diagram\">");
+    parts.append("<title id=\"{d.id}-title\">" + escapeSvg(d.title) + "</title>");
+    parts.append("<desc id=\"{d.id}-desc\">" + escapeSvg(d.desc) + "</desc>");
+    parts.append(renderMarkers(d, p, s));
+    parts.append("<rect width=\"100%\" height=\"100%\" fill=\"{p.paper}\"/>");
+    parts.append(renderHeader(d, p, s));
+    parts.append("<g transform=\"translate(0,{pad})\">");
+    foreach (z in d.zones) { parts.append(renderZone(z, p, s)); }
+    foreach (e in d.edges) { parts.append(renderEdge(d, e, p, s)); }
+    foreach (e in d.edges) { parts.append(renderEdgeLabel(d, e, p, s)); }
+    foreach (n in d.nodes) { parts.append(renderNode(n, p, s)); }
+    parts.append(renderLegend(d, p, s));
+    parts.append("</g>");
+    parts.append("</svg>");
+    return parts.join("");
 }
 
 // renderMarkers defines one arrowhead per connector kind. All three are always emitted:

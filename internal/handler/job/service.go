@@ -24,8 +24,8 @@ import (
 	"github.com/egladman/magus/internal/jobs"
 	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/trail"
-	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/job/v1/jobv1connect"
+	jobv1 "github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
 )
 
 // workspace is the narrow slice of *magus.Magus the handler needs: where the trail lives and how
@@ -35,7 +35,7 @@ type workspace interface {
 	CacheDiskBytes() int64
 }
 
-// Service implements jobv1connect.JobServiceHandler. It submits jobs to the daemon's own proc
+// Service implements jobv1alpha1connect.JobServiceHandler. It submits jobs to the daemon's own proc
 // socket (self-dial, so it rides the exact coalescing/journal path an external submit would) and
 // reads the workspace trail + cache for the metadata it returns.
 type Service struct {
@@ -61,41 +61,41 @@ func NewService(ws workspace, version string) *Service {
 	}
 }
 
-var _ jobv1connect.JobServiceHandler = (*Service)(nil)
+var _ jobv1alpha1connect.JobServiceHandler = (*Service)(nil)
 
-func (s *Service) SyncGraph(ctx context.Context, _ *connect.Request[jobv1.SyncGraphRequest]) (*connect.Response[jobv1.SubmitJobResponse], error) {
-	return s.submit(ctx, jobs.NameSyncGraph)
-}
-
-func (s *Service) RotateActivities(ctx context.Context, _ *connect.Request[jobv1.RotateActivitiesRequest]) (*connect.Response[jobv1.SubmitJobResponse], error) {
-	return s.submit(ctx, jobs.NameRotateActivities)
-}
-
-func (s *Service) ClearCache(ctx context.Context, _ *connect.Request[jobv1.ClearCacheRequest]) (*connect.Response[jobv1.SubmitJobResponse], error) {
-	return s.submit(ctx, jobs.NameClearCache)
-}
-
-func (s *Service) RotateLogs(ctx context.Context, _ *connect.Request[jobv1.RotateLogsRequest]) (*connect.Response[jobv1.SubmitJobResponse], error) {
-	return s.submit(ctx, jobs.NameRotateLogs)
-}
+// jobsPrefix is the resource-name collection segment. A wire name is "jobs/{id}"; the registry
+// and the CLI both speak the bare id, so this is the only place the two spellings meet.
+const jobsPrefix = "jobs/"
 
 // ListJobs returns every registered job with its running state, last run, and target size.
 func (s *Service) ListJobs(ctx context.Context, _ *connect.Request[jobv1.ListJobsRequest]) (*connect.Response[jobv1.ListJobsResponse], error) {
 	running := s.runningByArgv(ctx)
 	all := jobs.All()
-	out := make([]*jobv1.JobInfo, 0, len(all))
+	out := make([]*jobv1.Job, 0, len(all))
 	for _, j := range all {
-		out = append(out, s.jobInfo(j, running))
+		out = append(out, s.job(j, running))
 	}
 	return connect.NewResponse(&jobv1.ListJobsResponse{Jobs: out}), nil
+}
+
+// RunJob submits the named job. An unregistered name is NotFound rather than a SubmitState:
+// the enum reports how a valid submission resolved, and a name nobody registered never became
+// one. That is also why this is the only RPC that can reject its input - the four verbs it
+// replaced took no argument, so they had nothing to get wrong.
+func (s *Service) RunJob(ctx context.Context, req *connect.Request[jobv1.RunJobRequest]) (*connect.Response[jobv1.RunJobResponse], error) {
+	id := strings.TrimPrefix(req.Msg.GetName(), jobsPrefix)
+	if _, ok := jobs.Lookup(id); !ok {
+		return nil, connect.NewError(connect.CodeNotFound, fmt.Errorf("job: unknown job %q", req.Msg.GetName()))
+	}
+	return s.submit(ctx, id)
 }
 
 // submit resolves name to its worker argv, submits it to the daemon, and builds the response.
 // A coalesced submit (empty invocation id back) is ALREADY_RUNNING, not an error: the response
 // still carries the running job's id and its metadata. Only real failures use error codes.
-func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jobv1.SubmitJobResponse], error) {
+func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jobv1.RunJobResponse], error) {
 	j, ok := jobs.Lookup(name)
-	if !ok { // registry and handler are in the same binary, so this is a programmer error
+	if !ok { // RunJob already rejected an unknown name, so reaching here is a programmer error
 		return nil, connect.NewError(connect.CodeInternal, fmt.Errorf("job: unknown job %q", name))
 	}
 	addr := s.socket()
@@ -111,14 +111,14 @@ func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jo
 	if err != nil {
 		return nil, connect.NewError(connect.CodeInternal, err)
 	}
-	info := s.jobInfo(j, running)
+	info := s.job(j, running)
 
 	state := jobv1.SubmitState_SUBMIT_STATE_SUBMITTED
 	if inv == "" { // the daemon coalesced this into an identical in-flight job
 		state = jobv1.SubmitState_SUBMIT_STATE_ALREADY_RUNNING
 		inv = running[argvKey(j.Argv)] // report the already-running invocation
 	}
-	return connect.NewResponse(&jobv1.SubmitJobResponse{
+	return connect.NewResponse(&jobv1.RunJobResponse{
 		State:        state,
 		InvocationId: inv,
 		ConsoleUrl:   "", // TODO: deep-link once the /logs page accepts an invocation fragment
@@ -126,12 +126,12 @@ func (s *Service) submit(ctx context.Context, name string) (*connect.Response[jo
 	}), nil
 }
 
-// jobInfo assembles a job's descriptor plus its running state, last completed run (from the
+// job assembles a job's descriptor plus its running state, last completed run (from the
 // trail), and the current size of what it maintains. running maps a worker-argv key to the live
 // invocation id, so ListJobs and submit share one status query.
-func (s *Service) jobInfo(j jobs.Job, running map[string]string) *jobv1.JobInfo {
-	info := &jobv1.JobInfo{
-		Name:        j.Name,
+func (s *Service) job(j jobs.Job, running map[string]string) *jobv1.Job {
+	info := &jobv1.Job{
+		Name:        jobsPrefix + j.Name,
 		Description: j.Desc,
 		Target:      s.targetSize(j),
 	}
@@ -145,13 +145,13 @@ func (s *Service) jobInfo(j jobs.Job, running map[string]string) *jobv1.JobInfo 
 }
 
 // lastRun maps a trail job Event to the wire JobRun. The trail records the run's start (Ts) and
-// duration, so finished_at is Ts+duration. The trail carries no invocation id or per-run delta,
+// duration, so end_time is Ts+duration. The trail carries no invocation id or per-run delta,
 // so those fields stay zero - additive to fill in later.
 func lastRun(e trail.Event) *jobv1.JobRun {
 	run := &jobv1.JobRun{
-		FinishedAt: timestamppb.New(time.UnixMilli(e.Ts + e.DurMs)),
-		Ok:         e.Outcome == trail.OutcomeOK,
-		Error:      e.Error,
+		EndTime: timestamppb.New(time.UnixMilli(e.Ts + e.DurMs)),
+		Ok:      e.Outcome == trail.OutcomeOK,
+		Error:   e.Error,
 	}
 	if e.DurMs > 0 {
 		run.Duration = durationpb.New(time.Duration(e.DurMs) * time.Millisecond)
@@ -165,12 +165,12 @@ func (s *Service) targetSize(j jobs.Job) *jobv1.ResourceSize {
 	switch j.Name {
 	case jobs.NameRotateActivities:
 		bytes, count := trail.Stat(s.ws.CacheDir())
-		return &jobv1.ResourceSize{Bytes: bytes, Count: count}
+		return &jobv1.ResourceSize{SizeBytes: bytes, ItemCount: count}
 	case jobs.NameRotateLogs:
 		bytes, count := cache.NewOutputStore(s.ws.CacheDir()).RunsStat()
-		return &jobv1.ResourceSize{Bytes: bytes, Count: count}
+		return &jobv1.ResourceSize{SizeBytes: bytes, ItemCount: count}
 	case jobs.NameClearCache:
-		return &jobv1.ResourceSize{Bytes: s.ws.CacheDiskBytes()}
+		return &jobv1.ResourceSize{SizeBytes: s.ws.CacheDiskBytes()}
 	default:
 		return &jobv1.ResourceSize{}
 	}

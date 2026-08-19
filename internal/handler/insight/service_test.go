@@ -12,7 +12,7 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/service/console"
-	insightv1 "github.com/egladman/magus/proto/gen/go/magus/insight/v1"
+	insightv1 "github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1"
 	"github.com/egladman/magus/types"
 )
 
@@ -24,7 +24,7 @@ type fakeSource struct {
 
 func (f fakeSource) Insight(context.Context) (types.InsightView, error) { return f.view, f.err }
 
-func get(t *testing.T, src Source) (*insightv1.GetInsightResponse, error) {
+func get(t *testing.T, src Source) (*insightv1.Insight, error) {
 	t.Helper()
 	resp, err := NewService(src).GetInsight(context.Background(), connect.NewRequest(&insightv1.GetInsightRequest{}))
 	if err != nil {
@@ -104,31 +104,31 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 		},
 	}}
 
-	want := &insightv1.GetInsightResponse{Insight: &insightv1.Insight{
+	want := &insightv1.Insight{
 		Hotspots: &insightv1.HotspotOutput{
 			Definition: types.HotspotDefinition,
 			Commits:    42,
 			Since:      "3 months ago",
 			Nodes: []*insightv1.ProjectNode{{
-				Path:        "internal/cache",
-				Name:        "cache",
-				SpellName:   "go",
-				Children:    []string{"types"},
-				Dir:         "internal/cache",
-				Exclusive:   true,
-				BlastRadius: 7,
-				DurationMs:  1200,
-				Churn:       9,
-				Authors:     3,
-				LastCommit:  timestamppb.New(commit),
+				Path:           "internal/cache",
+				Name:           "cache",
+				SpellName:      "go",
+				Children:       []string{"types"},
+				Dir:            "internal/cache",
+				Exclusive:      true,
+				BlastRadius:    7,
+				DurationMs:     1200,
+				Churn:          9,
+				Authors:        3,
+				LastCommitTime: timestamppb.New(commit),
 			}},
 			Files: []*insightv1.FileHotspot{{
-				Path:       "internal/cache/cache.go",
-				Commits:    9,
-				Complexity: 40,
-				Score:      360,
-				Authors:    3,
-				LastCommit: timestamppb.New(commit),
+				Path:           "internal/cache/cache.go",
+				Commits:        9,
+				Complexity:     40,
+				Score:          360,
+				Authors:        3,
+				LastCommitTime: timestamppb.New(commit),
 			}},
 		},
 		Affinity: &insightv1.AffinityOutput{
@@ -140,15 +140,15 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 			Definition: types.OwnershipDefinition,
 			Commits:    42,
 			Projects: []*insightv1.Ownership{{
-				Path:         "internal/cache",
-				Name:         "cache",
-				Commits:      9,
-				Authors:      1,
-				Primary:      "eli",
-				PrimaryShare: 100,
-				BusFactor_1:  true,
-				Stale:        true,
-				LastCommit:   timestamppb.New(commit),
+				Path:           "internal/cache",
+				Name:           "cache",
+				Commits:        9,
+				Authors:        1,
+				Primary:        "eli",
+				PrimaryShare:   100,
+				BusFactor_1:    true,
+				Stale:          true,
+				LastCommitTime: timestamppb.New(commit),
 			}},
 		},
 		Trend: &insightv1.TrendOutput{
@@ -167,10 +167,10 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 				Fail:          2,
 				VolatileCount: 1,
 				Samples:       10,
-				LastPass:      timestamppb.New(lastPass),
+				LastPassTime:  timestamppb.New(lastPass),
 			}},
 		},
-	}}
+	}
 
 	got, err := get(t, src)
 	require.NoError(t, err)
@@ -183,14 +183,14 @@ func TestGetInsight_MapsEveryLens(t *testing.T) {
 func TestGetInsight_NilVolatility(t *testing.T) {
 	got, err := get(t, fakeSource{view: types.InsightView{Hotspots: types.HotspotOutput{Commits: 3}}})
 	require.NoError(t, err)
-	want := &insightv1.GetInsightResponse{Insight: &insightv1.Insight{
+	want := &insightv1.Insight{
 		Hotspots:  &insightv1.HotspotOutput{Commits: 3},
 		Affinity:  &insightv1.AffinityOutput{},
 		Ownership: &insightv1.OwnershipOutput{},
 		Trend:     &insightv1.TrendOutput{},
-	}}
+	}
 	require.True(t, proto.Equal(want, got), "wire mismatch:\ngot  %v\nwant %v", got, want)
-	require.Nil(t, got.GetInsight().GetVolatility(), "a nil report must stay absent on the wire")
+	require.Nil(t, got.GetVolatility(), "a nil report must stay absent on the wire")
 }
 
 // A zero time.Time is UNSET on the wire, not the year-0001 sentinel the JSON route emitted.
@@ -206,11 +206,11 @@ func TestGetInsight_ZeroTimeIsUnset(t *testing.T) {
 		},
 	}})
 	require.NoError(t, err)
-	hot := got.GetInsight().GetHotspots()
-	require.Nil(t, hot.GetNodes()[0].GetLastCommit())
-	require.Nil(t, hot.GetNodes()[1].GetLastCommit())
-	require.Nil(t, hot.GetFiles()[0].GetLastCommit())
-	require.Nil(t, got.GetInsight().GetVolatility().GetTargets()[0].GetLastPass())
+	hot := got.GetHotspots()
+	require.Nil(t, hot.GetNodes()[0].GetLastCommitTime())
+	require.Nil(t, hot.GetNodes()[1].GetLastCommitTime())
+	require.Nil(t, hot.GetFiles()[0].GetLastCommitTime())
+	require.Nil(t, got.GetVolatility().GetTargets()[0].GetLastPassTime())
 }
 
 func TestGetInsight_NoWorkspaceIsUnavailable(t *testing.T) {

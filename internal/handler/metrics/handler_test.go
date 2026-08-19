@@ -2,14 +2,15 @@ package metrics
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
 	"time"
 
 	"connectrpc.com/connect"
-	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1/metricsv1connect"
+	metricsv1 "github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/metrics/v1alpha1/metricsv1alpha1connect"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -47,10 +48,10 @@ func TestGetMetrics(t *testing.T) {
 
 	resp, err := svc.GetMetrics(context.Background(), connect.NewRequest(&metricsv1.GetMetricsRequest{}))
 	require.NoError(t, err)
-	snap := resp.Msg.Snapshot
+	snap := resp.Msg
 	require.NotNil(t, snap)
 	require.Equal(t, int64(10), snap.Target.Count)
-	require.InDelta(t, 1.5, snap.Target.P50, 1e-9)
+	require.InDelta(t, 1.5, snap.Target.P50Seconds, 1e-9)
 }
 
 func TestSampleOncePopulatesRingFromPoolAndCounters(t *testing.T) {
@@ -67,22 +68,30 @@ func TestSampleOncePopulatesRingFromPoolAndCounters(t *testing.T) {
 
 	samples := svc.ring.Snapshot()
 	require.Len(t, samples, 1)
-	want := &metricsv1.Sample{
-		At:          samples[0].At, // timestamp compared separately below
-		Running:     3,
-		Capacity:    8,
-		Queued:      2,
-		CacheHits:   7,
-		CacheMisses: 3,
-		TargetRuns:  10,
-	}
-	require.Equal(t, want.Running, samples[0].Running)
-	require.Equal(t, want.Capacity, samples[0].Capacity)
-	require.Equal(t, want.Queued, samples[0].Queued)
-	require.Equal(t, want.CacheHits, samples[0].CacheHits)
-	require.Equal(t, want.CacheMisses, samples[0].CacheMisses)
-	require.Equal(t, want.TargetRuns, samples[0].TargetRuns)
-	require.Equal(t, at.Unix(), samples[0].At.AsTime().Unix())
+	require.Equal(t, int32(3), samples[0].GetRunning())
+	require.Equal(t, int32(8), samples[0].GetCapacity())
+	require.Equal(t, int32(2), samples[0].GetQueued())
+	require.Equal(t, int64(7), samples[0].GetCacheHits())
+	require.Equal(t, int64(3), samples[0].GetCacheMisses())
+	require.Equal(t, int64(10), samples[0].GetTargetRuns())
+	require.Equal(t, at.Unix(), samples[0].SampleTime.AsTime().Unix())
+}
+
+// A tick whose collection failed leaves the counters UNSET rather than zero. Zero is a
+// measurement, and in a cumulative series it reads downstream as a counter reset followed
+// by a spike - so this is the difference between "we did not look" and "nothing happened".
+func TestSampleOnceLeavesFailedReadsUnset(t *testing.T) {
+	at := time.Unix(1_700_000_000, 0).UTC()
+	svc := NewService(fakeCollector{err: errors.New("collect boom")}, fakeStatus{},
+		WithClock(func() time.Time { return at }))
+	svc.sampleOnce(context.Background())
+
+	samples := svc.ring.Snapshot()
+	require.Len(t, samples, 1)
+	require.Nil(t, samples[0].CacheHits, "a failed collect must not record a zero")
+	require.Nil(t, samples[0].CacheMisses)
+	require.Nil(t, samples[0].TargetRuns)
+	require.Nil(t, samples[0].Running, "an unreadable pool must not record as idle")
 }
 
 func TestStreamMetricsSendsBackfillThenSnapshot(t *testing.T) {
@@ -96,13 +105,13 @@ func TestStreamMetricsSendsBackfillThenSnapshot(t *testing.T) {
 	svc.sampleOnce(context.Background())
 
 	// Exercise the real wire path: the generated handler + client over httptest.
-	path, handler := metricsv1connect.NewMetricsServiceHandler(svc)
+	path, handler := metricsv1alpha1connect.NewMetricsServiceHandler(svc)
 	mux := http.NewServeMux()
 	mux.Handle(path, handler)
 	srv := httptest.NewServer(mux)
 	defer srv.Close()
 
-	client := metricsv1connect.NewMetricsServiceClient(srv.Client(), srv.URL)
+	client := metricsv1alpha1connect.NewMetricsServiceClient(srv.Client(), srv.URL)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 

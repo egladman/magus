@@ -5,8 +5,8 @@ description: "Write and run Buzz, the language magusfiles, spells, and `magus bu
 tags: [agents, skills, magus-buzz-write]
 aliases:
   - reference/skills/magus-buzz
-skill_full_bytes: 8168
-skill_simple_bytes: 6770
+skill_full_bytes: 8174
+skill_simple_bytes: 6776
 ---
 
 # magus-buzz-write
@@ -30,12 +30,12 @@ An installed copy carries a provenance stamp, so `magus graph verify` can tell y
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `37` |
+| `agent-skill-version` | `38` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `3ce451d61f54` |
+| `skill-content` | `ed8f6112969a` |
 | `skill-variant` | `full` |
 
-The `skill-content` digest is shared by both permutations below, so they version together: a magus upgrade makes both stale at once, never one silently.
+The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
 
 ## Full form
 
@@ -145,7 +145,7 @@ CORRECT: `magus\cmd`, or the typed `magus\run` / `describe` / `insight` / `docto
 Members that need a magusfile raise MGS1022 naming the constraint: the ones
 that declare into a workspace being loaded (`magus\project`, the provider
 selections) have no script equivalent, and the ones that read a loaded workspace
-(`magus\ls`, `targets`, `affected`, `graph`, `where`) are reachable through the
+(`magus\projects`, `targets`, `affected`, `graph`, `where`) are reachable through the
 nested commands above.
 
 ## Two rules that cause most first-try failures
@@ -367,7 +367,7 @@ CORRECT: `magus\cmd`, or the typed `magus\run` / `describe` / `insight` / `docto
 Members that need a magusfile raise MGS1022 naming the constraint: the ones
 that declare into a workspace being loaded (`magus\project`, the provider
 selections) have no script equivalent, and the ones that read a loaded workspace
-(`magus\ls`, `targets`, `affected`, `graph`, `where`) are reachable through the
+(`magus\projects`, `targets`, `affected`, `graph`, `where`) are reachable through the
 nested commands above.
 
 ## Two rules that cause most first-try failures

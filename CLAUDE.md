@@ -73,6 +73,11 @@ chain that fails in a fresh worktree on a missing `docs/gen/index.html`. Then ru
 `./magus <cmd>`. An existing `./magus` newer than the tree (`magus doctor`'s
 "guard binary" check) is fine to keep using; do not rebuild it per command.
 
+NEVER run, copy, or link another worktree's `./magus`: it was linked from that tree's
+sources, so its verdicts describe a tree that exists nowhere and what it regenerates
+lands here unmarked. Nothing enforces this. The trusted spellings are `./magus` and
+bare `magus`; if neither loads the workspace, use the two-hop below or ask.
+
 Bootstrap deadlock: after a magusfile schema change, EVERY magus command fails at
 workspace load, including the one that would build the binary that understands it.
 Escape by shelving just that hunk - `git stash push -- <file>`, `magus run

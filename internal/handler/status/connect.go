@@ -9,8 +9,8 @@ import (
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/status/v1/statusv1connect"
+	statusv1 "github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/status/v1alpha1/statusv1alpha1connect"
 	"github.com/egladman/magus/types"
 )
 
@@ -21,7 +21,7 @@ const defaultStreamInterval = 2 * time.Second
 
 // ConnectService is the typed Connect surface over the SAME live status report the base64-SSE status
 // frame serves. It is the full replacement for the removed hand-shaped JSON /api/v1/status route:
-// the dashboard reads a single typed message (magus.status.v1.Status, plus observing_since and config on
+// the dashboard reads a single typed message (magus.status.v1alpha1.Status, plus observing_since and config on
 // the GetStatus envelope) instead of parsing JSON. Read-only: it only reports, never mutates.
 type ConnectService struct {
 	src      statusSource
@@ -37,9 +37,9 @@ func NewConnectService(src statusSource, build types.BuildInfo, log *slog.Logger
 	return &ConnectService{src: src, build: build, log: log, interval: defaultStreamInterval}
 }
 
-var _ statusv1connect.StatusServiceHandler = (*ConnectService)(nil)
+var _ statusv1alpha1connect.StatusServiceHandler = (*ConnectService)(nil)
 
-// GetStatus returns the current live snapshot as a typed magus.status.v1.Status, plus the two static
+// GetStatus returns the current live snapshot as a typed magus.status.v1alpha1.Status, plus the two static
 // per-session fields (observing_since, config) on the response envelope - the typed replacement for the
 // removed JSON /api/v1/status route, which carried the live status AND those static fields in one body.
 func (s *ConnectService) GetStatus(ctx context.Context, _ *connect.Request[statusv1.GetStatusRequest]) (*connect.Response[statusv1.GetStatusResponse], error) {
@@ -52,9 +52,9 @@ func (s *ConnectService) GetStatus(ctx context.Context, _ *connect.Request[statu
 			Sandbox:       report.Config.Sandbox,
 		},
 	}
-	// observing_since is omitted (zero) when reported by a non-daemon `magus status`; only stamp it when set.
+	// observe_start_time is omitted (zero) when reported by a non-daemon `magus status`; only stamp it when set.
 	if !report.ObservingSince.IsZero() {
-		resp.ObservingSince = timestamppb.New(report.ObservingSince)
+		resp.ObserveStartTime = timestamppb.New(report.ObservingSince)
 	}
 	return connect.NewResponse(resp), nil
 }

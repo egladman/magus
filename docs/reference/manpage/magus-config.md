@@ -73,11 +73,6 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 **--to** *string*
 : Write the archive to this file (default: stdout)
 
-### config mcp token generate options
-
-**--force**
-: Overwrite an existing token (rotation)
-
 ### config mcp connector create options
 
 **--expires** *string*
@@ -85,6 +80,22 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 
 **--name** *string*
 : Name for this connector token (default: connector-N)
+
+### config token generate options
+
+**--force**
+: Overwrite an existing token (rotation)
+
+### config console token create options
+
+**--expires** *string*
+: Lifetime: a duration like 90d or 48h, or "never" (default 90d)
+
+**--name** *string*
+: Name for this console token (default: console-N)
+
+**--viewer**
+: Mint a READ-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share
 
 ## Subcommands
 
@@ -102,6 +113,12 @@ locations are the workspace root and $XDG_CONFIG_HOME/magus/.
 
 **mcp**
 : Manage the MCP server auth token
+
+**token**
+: Manage the operator token (every surface)
+
+**console**
+: Manage the console (PWA) auth tokens
 
 ## Examples
 

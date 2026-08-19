@@ -10,7 +10,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { Timestamp } from "@bufbuild/protobuf/wkt";
-import type { Status } from "../gen/magus/status/v1/status_pb";
+import type { Status } from "../gen/magus/status/v1alpha1/status_pb";
 import {
   fmtMs,
   parseDescriptors,

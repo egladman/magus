@@ -307,60 +307,6 @@ executor produced more files than I could hold in my head, and that was its own 
 to back off. So read the comparison as being about how much a tool hands you at once,
 not as a claim about who owns it afterward.
 
-Packaging is the same argument, and it has nothing to do with the language as a
-language. It is about what your user sees when your CLI fails.
-
-A JavaScript runtime stack trace is not an error message. It is the tool's
-internals dumped on somebody who wanted to know what to do next, with the one
-human-readable line buried in the middle of it, if it is there at all. We are in
-2026 and this is still how a large share of command line tools report failure. I
-do not understand why we are still writing CLIs in TypeScript.
-
-Use the right tool for the job. A CLI is a program a stranger runs on a machine
-you will never see, and that argues for something compiled, self-contained, and
-able to fail in a sentence. magus ships as one statically linked binary. No
-runtime, no `node_modules`, no second toolchain to install.
-
-That last part stopped being a taste argument a while ago. A CLI that pulls a few
-hundred transitive dependencies at install time is a CLI with a few hundred
-chances to hand somebody else's code to your users. The npm ecosystem has been
-learning that in public, repeatedly, through one supply chain compromise after
-another, and the lesson finally looks like it is landing. It is a strange thing
-to feel vindicated about, because everybody downstream paid for the lesson.
-
-The frameworks that grew out of that ecosystem strike me the same way:
-overengineered, and re-deriving things computer science settled decades ago.
-
-We can do better than this as an industry, and I mean that as a challenge rather
-than a complaint. Shipping a pile of code has never been easier, and it has never
-been easier to mistake the pile for progress. Easy to write does not mean good,
-well architected, or worth maintaining. Lines of code measures none of that. If
-we are going to count anything, fewer lines is the number worth promoting.
-
-That pressure got worse this year, not better. Writing a feature is close to free
-now, so the only thing between a codebase and endless creep is somebody deciding not
-to add one. Jeff Atwood said it in 2007 and it has only gotten truer:
-the best code is no code at all[^atwood],
-because every line you bring into the world has to be debugged, read, understood, and
-supported. How cheap it was to write changes none of that.
-
-There is research on why we are bad at this.
-people systematically overlook subtractive changes[^subtract],
-a 2021 Nature paper, found that people handed a problem reach for what they can add
-and barely consider what they could take away, even where removing something is the
-better answer. It has a name, additive bias, and it turns up in every code review I
-sit in. Deleting a feature reads as a loss. It is usually a gift to whoever
-maintains the thing next, and we do not take it seriously enough.
-
-Some of that pressure is financial. A company with investors has to show the line
-going up every quarter, and "the tool is finished, it does what it should" does not
-raise a round. So features keep landing after the useful ones are done, and
-eventually you are shipping change at the people who liked it the way it was.
-Continual growth is not sustainable. Continual feature development is that same
-promise pointed at software, and it breaks the same way. There is a point where
-enough is enough, and as code gets cheaper to write, having the forethought to
-notice that point matters more, not less.
-
 ## Why explicit
 
 There is a real market for the opposite approach, and I should be upfront that I am
@@ -508,80 +454,6 @@ Agents can drive that, and I did not build any of it for them. An interface
 legible to me is legible to them. I repeat work all day; an agent repeats it
 faster.
 
-## An intentionally designed CLI does not need an MCP server
-
-magus ships one. I built it, I use it, it works, and I am seriously considering
-removing it.
-
-To be clear about scope first, because MCP covers a lot of ground: I am talking about
-MCP servers that exist so an AI coding assistant can drive a tool you already have on
-your machine. MCP is used for plenty of other things, some of which I have no
-argument with. This is about the wrapper-around-my-own-CLI case.
-
-The CLI already prints structured output: `-o json`, `-o name`,
-`-o template=<go-template>`, and an output reference for anything that ran. Point an
-agent at `magus ls -o json` and it gets what the MCP tool would have handed it. If
-your CLI is consistent and predictable, a protocol layer on top has close to nothing
-left to do. I think we got lazy over the last ten or fifteen years and started
-treating a confusing CLI as the natural state of things, and an MCP server is often
-filling a gap that should never have opened.
-
-Datadog shipped a CLI called Pup while I was writing this and marketed it as an
-agentic CLI.[^pup] Look at what it actually does: commands structured so you can
-navigate them without going to the documentation, responses available in JSON and
-YAML, errors carrying detail and hints. That is a well-built command line. It is what
-a command line has owed you for forty years. Calling it agentic is branding stuck on
-table stakes, and it bothers me because it teaches people that structured output is
-an AI feature rather than the baseline it always was.
-
-To be fair, not all of it is branding. Auto-approving confirmation prompts when the
-caller is not a terminal is a real behavior change, and scoped OAuth tokens instead
-of long-lived API keys is a real security decision. Both are worth shipping. Neither
-is what the word agentic is doing in that sentence.
-
-Two caveats, because I am painting broadly here. What counts as a well-designed CLI
-is partly subjective, which is why I named consistency and predictability rather than
-something fuzzier. And the
-whole argument assumes your CLI can actually reach everything, which is not
-automatic. Some of what magus can do you reach through `magus buzz` rather than a
-subcommand of its own. Those are the same modules a magusfile calls, down the same
-code paths, so it is one surface rather than a side door, but keeping it that way is
-work I have to keep doing. Where you are wrapping something you do not own or cannot change, a protocol
-layer earns its place. But if your CLI needs an MCP server before an agent can drive
-it, the problem is upstream of the MCP server.
-
-## The PWA is an experiment
-
-magus ships a web console, which could fairly be read as feature creep, and I am not
-going to argue that it obviously is not. I built it as an experiment, to find out
-whether I get genuine value out of having one, and I have not reached a verdict. I am
-still using it, still refining it, and still deciding. Do not read this as me having
-quietly concluded no.
-
-I am usually the one giving other people grief about GUIs built on web technology, so
-read this as me testing my own prejudice. What I want to know is whether it can get
-where I want it on performance, and the only way to find that out was to build enough
-of it to judge.
-
-Shipping it decoupled is what keeps the experiment cheap. It is a static build in its
-own project, and every contract between it and the daemon is declared in protobuf, so
-the surface it leans on can stay stable without me breaking it later. Nothing in the
-CLI depends on it. It costs me very little to try and very little to delete, which is
-the only reason I was willing to find out rather than keep arguing with myself about
-it.
-
-The bar is whether it tells me something I cannot already get. A graph I query from the
-terminal, redrawn as a graph I can click, is not automatically worth maintaining.
-Plenty of tools already draw boxes. If it does not surface a data point the CLI cannot,
-or make one materially faster to reach, then it goes, and I will find that out by
-whether I keep opening it.
-
-This is also where I have found the AI tooling genuinely useful, and I want to be
-specific about it after spending most of this post complaining. The cost of building
-something well enough to judge it used to be high enough that experiments like this
-died as ideas. Now I can run the experiment and answer whether it becomes sticky with
-a real thing in my hands instead of a guess.
-
 ## Why Buzz
 
 A magusfile is written in [Buzz](https://buzz-lang.dev/), which is a strange enough
@@ -635,9 +507,9 @@ Weigh that as my experience rather than a benchmark. It is still the strongest
 evidence I have here: a language an agent has never seen beat the language it has
 seen most, and explicitness is the only variable I can point at.
 
-Someone will open this repo, find the TypeScript in the console, and tell me it
-is bad TypeScript. Fair enough, and you are probably right. I use it at work, so
-I need enough of it to stay useful, and this is where I get the practice.
+Someone will open this repo, find the TypeScript in the web console magus ships,
+and tell me it is bad TypeScript. Fair enough, and you are probably right. I use it
+at work, so I need enough of it to stay useful, and this is where I get the practice.
 
 ## I built the knowledge graph for me
 
@@ -759,7 +631,7 @@ behalf. Sit next to the tools instead of swallowing them. A build tool is in an 
 meta position, being a tool whose entire job is running other tools, and the most
 useful thing it can do is stay out of the space between you and them.
 
-I have violated this, and the console is the clearest example. It is turning into a
+I have violated this, and that console is the clearest example. It is turning into a
 Swiss army knife. There are already good diff viewers and good log tools, and
 shipping my own version of each is the exact sprawl this section argues against. I am
 experimenting to find out what I reach for, which is an honest reason rather than an
@@ -914,13 +786,6 @@ If any of this made you curious about the tool itself, there is
     first-to-cache-wins flaw letting artifacts built in untrusted environments
     poison the cache trusted ones read.
 
-[^atwood]: Jeff Atwood, [The Best Code is No Code At
-    All](https://blog.codinghorror.com/the-best-code-is-no-code-at-all/), 2007.
-
-[^subtract]: Adams, Converse, Hales and Klotz, [People systematically overlook
-    subtractive changes](https://www.nature.com/articles/s41586-021-03380-y),
-    Nature 592, 2021.
-
 [^saltzer]: Saltzer and Schroeder, [The Protection of Information in Computer
     Systems](https://web.mit.edu/Saltzer/www/publications/protection/), 1975.
 
@@ -929,7 +794,3 @@ If any of this made you curious about the tool itself, there is
 [^karlton]: Attributed to Phil Karlton; Martin Fowler has [collected what is
     actually known](https://martinfowler.com/bliki/TwoHardThings.html) about its
     provenance.
-
-[^pup]: Datadog, [Pup CLI](https://docs.datadoghq.com/cli/), announced as
-    [live Datadog access for AI agents from the command
-    line](https://www.datadoghq.com/blog/give-your-ai-agents-live-datadog-access-from-the-command-line/).

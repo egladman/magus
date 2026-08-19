@@ -332,7 +332,13 @@ jobs:
       # Every advisor, each silent unless it has something to say. They live in the
       # action so other workspaces get them with one `uses:` line; turn one off by name
       # (merge-conflicts: 'false') rather than by editing this step.
+      #
+      # The fixers are not here: they write, and this job is contents: read. auto-fix.yaml
+      # runs them on the label - offer-fix-label is what tells the conflict comment that
+      # workflow exists.
       - uses: ./.github/actions/advice
+        with:
+          offer-fix-label: 'true'
 
   report:
     # One job for everything that runs AFTER the shards: the run summary always, and the

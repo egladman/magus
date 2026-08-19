@@ -547,7 +547,9 @@ func describeListRule(name string, fd protoreflect.FieldDescriptor, v protorefle
 func formatScalar(fd protoreflect.FieldDescriptor, v protoreflect.Value) string {
 	switch fd.Kind() {
 	case protoreflect.StringKind, protoreflect.BytesKind:
-		return "`" + v.String() + "`"
+		// A table cell ends at the first unescaped pipe, and a code span does not protect
+		// it, so an alternation pattern like `^(shared|private)/.+$` truncates the row.
+		return "`" + strings.ReplaceAll(v.String(), "|", `\|`) + "`"
 	case protoreflect.EnumKind:
 		if ev := fd.Enum().Values().ByNumber(v.Enum()); ev != nil {
 			return string(ev.Name())

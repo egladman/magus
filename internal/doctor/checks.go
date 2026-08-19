@@ -843,14 +843,27 @@ func (r *runner) checkRedundantFootprintGlobs(projects []*types.Project) types.D
 	var details []string
 	for _, p := range projects {
 		for target, refs := range p.TargetOutputs {
-			for _, ref := range refs {
-				// A cross-project output is never redundant with THIS project's globs:
-				// its glob is relative to the tree it writes into, not to this one.
+			// ctx.writesFiles REPLACES the project and spell baseline for its target rather
+			// than adding to it, so a restated baseline glob is only pointless when the
+			// declaration restates NOTHING ELSE. Once the target names a glob the baseline
+			// lacks - a cross-project tree, a narrower path - dropping the restated one
+			// silently removes it from the target's snapshot, which is the opposite of
+			// what this check would be advising.
+			if !slices.ContainsFunc(refs, func(ref types.OutputRef) bool {
 				if ref.Project != "" && ref.Project != p.Path {
-					continue
+					return true
 				}
-				if slices.Contains(p.Outputs, ref.Glob) {
-					details = append(details, fmt.Sprintf("%s: ctx.writesFiles(%q) already in project outputs", target, ref.Glob))
+				return !slices.Contains(p.Outputs, ref.Glob)
+			}) {
+				for _, ref := range refs {
+					// A cross-project output is never redundant with THIS project's globs:
+					// its glob is relative to the tree it writes into, not to this one.
+					if ref.Project != "" && ref.Project != p.Path {
+						continue
+					}
+					if slices.Contains(p.Outputs, ref.Glob) {
+						details = append(details, fmt.Sprintf("%s: ctx.writesFiles(%q) already in project outputs", target, ref.Glob))
+					}
 				}
 			}
 		}

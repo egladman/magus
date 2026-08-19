@@ -373,6 +373,11 @@ export async function fetchReadiness(
 
 const TOKEN_KEY = "magus-live-token";
 const REMEMBER_KEY = "magus-live-remember";
+// SCOPED_KEY records that the stored bearer has already been exchanged for a
+// console-scoped token, so the exchange runs once rather than minting a fresh token on
+// every page load. It is CLEARED whenever a new token arrives, because a fresh paste may
+// be the operator token again and would then need exchanging in its turn.
+const SCOPED_KEY = "magus-live-scoped";
 
 // consumeLiveToken stashes the bearer token from the URL fragment and strips ONLY
 // the token from the fragment (keeping #port= and any other keys intact so a reload
@@ -389,6 +394,9 @@ export function consumeLiveToken(params: HashParams): void {
     // token, which comes back Unauthenticated and reads to the user as "not available".
     (remembered ? localStorage : sessionStorage).setItem(TOKEN_KEY, params.token);
     (remembered ? sessionStorage : localStorage).removeItem(TOKEN_KEY);
+    // A new token is an unknown tier until something proves otherwise.
+    sessionStorage.removeItem(SCOPED_KEY);
+    localStorage.removeItem(SCOPED_KEY);
   } catch {
     /* storage disabled: token lives only for this call chain */
   }
@@ -407,6 +415,42 @@ export function getLiveToken(): string | null {
     return sessionStorage.getItem(TOKEN_KEY) || localStorage.getItem(TOKEN_KEY) || null;
   } catch {
     return null;
+  }
+}
+
+// setLiveToken replaces the stored bearer. It writes the store isRemembered() selects and
+// clears the other, for the same reason consumeLiveToken does: getLiveToken reads
+// sessionStorage first, so a stale copy left there would outrank the token just written.
+// Returns false when storage is unavailable, which the caller must treat as "not stored"
+// rather than assuming the swap happened.
+export function setLiveToken(token: string): boolean {
+  try {
+    const remembered = isRemembered();
+    (remembered ? localStorage : sessionStorage).setItem(TOKEN_KEY, token);
+    (remembered ? sessionStorage : localStorage).removeItem(TOKEN_KEY);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+// hasScopedToken reports whether the stored bearer has already been exchanged. It is a
+// cache, not a security check: a false negative costs one refused RPC, and the tier is
+// enforced by the daemon either way.
+export function hasScopedToken(): boolean {
+  try {
+    return (sessionStorage.getItem(SCOPED_KEY) || localStorage.getItem(SCOPED_KEY)) === "1";
+  } catch {
+    return false;
+  }
+}
+
+// markScopedToken records a completed exchange, in the same store the token went to.
+export function markScopedToken(): void {
+  try {
+    (isRemembered() ? localStorage : sessionStorage).setItem(SCOPED_KEY, "1");
+  } catch {
+    /* storage disabled: the exchange simply reruns next load */
   }
 }
 

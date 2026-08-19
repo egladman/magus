@@ -1,7 +1,7 @@
 import { must } from "../../lib/guards";
 // waterfall.ts - the trace-waterfall (Timeline) view. A Datadog-style waterfall of the
 // invocation: the magus OTel model is invocation=trace, target-exec=span, step=child span. The
-// magus.viewer.v1 wire format carries no explicit trace_id/span_id, so the span tree is
+// magus.viewer.v1alpha1 wire format carries no explicit trace_id/span_id, so the span tree is
 // reconstructed structurally from what the events DO carry: the Invocation's start/end frame the
 // axis; each (project,target) group is a target span (it ends at its RESULT event's time and
 // starts result.time - result.duration); and the EXEC events within a target are its step
@@ -9,8 +9,8 @@ import { must } from "../../lib/guards";
 // target's end). It renders as inline SVG (presentation attributes + CSS classes, no chart
 // library, no external request), supports drag-to-focus (brush) and a wall-clock preset picker.
 
-import { Kind } from "../../gen/magus/viewer/v1/viewer_pb";
-import type { Event, Status } from "../../gen/magus/viewer/v1/viewer_pb";
+import { Kind } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
+import type { Event, Status } from "../../gen/magus/viewer/v1alpha1/viewer_pb";
 import type { InvocationView, Source, SpanMulti, SpanTree, Step, TargetSpan } from "./state";
 import { state, waterfallSource } from "./state";
 import { bodyEl, el } from "./dom";

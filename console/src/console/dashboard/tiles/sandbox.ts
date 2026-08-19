@@ -18,8 +18,8 @@ export function sandboxTile(): Tile {
     {
       caption: "Apply",
       items: [
-        { key: "applyP50", label: "apply p50" },
-        { key: "applyP95", label: "apply p95" },
+        { key: "applyP50Seconds", label: "apply p50" },
+        { key: "applyP95Seconds", label: "apply p95" },
       ],
     },
     {
@@ -43,8 +43,8 @@ export function sandboxTile(): Tile {
   card.body.append(grid.el);
 
   function render(sb: SandboxView): void {
-    grid.set("applyP50", fmtDur(sb.applyP50));
-    grid.set("applyP95", fmtDur(sb.applyP95));
+    grid.set("applyP50Seconds", fmtDur(sb.applyP50Seconds));
+    grid.set("applyP95Seconds", fmtDur(sb.applyP95Seconds));
     grid.set("rulesRead", fmtCount(sb.rulesRead));
     grid.set("rulesWrite", fmtCount(sb.rulesWrite));
     grid.set("rulesExec", fmtCount(sb.rulesExec));

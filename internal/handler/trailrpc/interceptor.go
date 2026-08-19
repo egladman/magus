@@ -42,7 +42,7 @@ import (
 // the single source of truth classify() and the arch ratchet share: a method whose leading word is in
 // neither is UNCLASSIFIED - recorded at runtime (fail-closed) and rejected by TestKnownVerbs at build.
 var (
-	mutatingVerbs = []string{"Clear", "Delete", "Put", "Revoke", "Rotate", "Sync", "Create", "Update", "Set", "Submit", "Remove", "Mint"}
+	mutatingVerbs = []string{"Clear", "Delete", "Put", "Revoke", "Rotate", "Run", "Sync", "Create", "Update", "Set", "Submit", "Remove", "Mint"}
 	readVerbs     = []string{"Get", "List", "Stream", "Watch", "Describe", "Export", "Query", "Explain"}
 )
 
@@ -72,7 +72,7 @@ func classify(method string) (mutating, known bool) {
 	return true, false
 }
 
-// methodName extracts the bare method from a Connect procedure path ("/magus.token.v1.TokenService/
+// methodName extracts the bare method from a Connect procedure path ("/magus.token.v1alpha1.TokenService/
 // RevokeToken" -> "RevokeToken"). A path with no slash is returned unchanged.
 func methodName(procedure string) string {
 	if i := strings.LastIndex(procedure, "/"); i >= 0 {

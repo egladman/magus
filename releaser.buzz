@@ -22,9 +22,9 @@ import "std"; // assert, for the in-file test blocks below
 // resolved spells declare a manifest (spells.Spell.Manifests, the language's
 // go.mod/package.json/Cargo.toml/pyproject.toml equivalent) that is actually
 // present in its directory - types.ProjectEntry.Manifests, read by the caller via
-// magus\ls() and passed in as projects, already did the "does the candidate file
+// magus\projects() and passed in as projects, already did the "does the candidate file
 // exist" filesystem check. Taking the inventory as a parameter rather than calling
-// magus\ls() itself keeps this module doing what its header promises - COMPUTING,
+// magus\projects() itself keeps this module doing what its header promises - COMPUTING,
 // not reading the workspace - and releaser.buzz has no reason to import "magus"
 // only to hand every entry straight to a foreach.
 //

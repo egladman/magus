@@ -12,7 +12,7 @@ import {
   type Pool,
   type Run,
   type TargetRun,
-} from "../../gen/magus/status/v1/status_pb";
+} from "../../gen/magus/status/v1alpha1/status_pb";
 import type {
   Snapshot,
   Latency,
@@ -22,8 +22,8 @@ import type {
   Buzz,
   Sandbox,
   Sample as ProtoSample,
-} from "../../gen/magus/metrics/v1/metrics_pb";
-import type { Insight } from "../../gen/magus/insight/v1/insight_pb";
+} from "../../gen/magus/metrics/v1alpha1/metrics_pb";
+import type { Insight } from "../../gen/magus/insight/v1alpha1/insight_pb";
 import type { ConnState } from "../../lib/daemon";
 
 // ---- formatters ------------------------------------------------------------
@@ -179,7 +179,7 @@ export interface ConfigView {
 
 // A target's lifecycle state, as plain view-model strings that double as the gantt
 // tile's CSS class suffixes (.gantt-bar.running, .gantt-bar.passed, ...). Kept in
-// lockstep with magus.status.v1.TargetRun.State but stringly-typed so tiles never
+// lockstep with magus.status.v1alpha1.TargetRun.State but stringly-typed so tiles never
 // import the proto enum.
 export type TargetState = "unspecified" | "queued" | "running" | "passed" | "failed" | "cached";
 
@@ -239,8 +239,8 @@ function mapTargetRun(t: TargetRun): TargetRunView {
     label: t.project ? t.project + ":" + t.target : t.target || "",
     state,
     terminal: state === "passed" || state === "failed" || state === "cached",
-    startMs: t.startedAt ? tsMillisOrNow(t.startedAt) : null,
-    endMs: t.endedAt ? tsMillisOrNow(t.endedAt) : null,
+    startMs: t.startTime ? tsMillisOrNow(t.startTime) : null,
+    endMs: t.endTime ? tsMillisOrNow(t.endTime) : null,
     outputRef: t.outputRef || "",
     durationMs: Number(t.durationMs || 0),
   };
@@ -298,10 +298,10 @@ export function mapStatus(st: Status): StatusView {
       id: sv.id || "",
       label: sv.label || "",
       command: sv.command || "",
-      ports: sv.port || [],
+      ports: sv.ports || [],
       state: sv.state || "",
       dependents: sv.dependents || 0,
-      startedAt: sv.startedAt,
+      startedAt: sv.startTime,
     })),
     locks: (st.locks || []).map((l) => ({
       project: l.project || "",
@@ -325,10 +325,10 @@ export function mapStatus(st: Status): StatusView {
 
 export interface LatView {
   count: number;
-  p50: number;
-  p95: number;
-  p99: number;
-  max: number;
+  p50Seconds: number;
+  p95Seconds: number;
+  p99Seconds: number;
+  maxSeconds: number;
 }
 
 export const LAT_KEYS = ["target", "cache", "poolWait", "graphQuery"] as const;
@@ -344,7 +344,13 @@ export const LAT_META: Record<LatKey, { label: string; term: string }> = {
 
 function mapLat(l: Latency | undefined): LatView | null {
   if (!l) return null;
-  return { count: Number(l.count), p50: l.p50, p95: l.p95, p99: l.p99, max: l.max };
+  return {
+    count: Number(l.count),
+    p50Seconds: l.p50Seconds,
+    p95Seconds: l.p95Seconds,
+    p99Seconds: l.p99Seconds,
+    maxSeconds: l.maxSeconds,
+  };
 }
 
 export interface RemoteView {
@@ -352,8 +358,8 @@ export interface RemoteView {
   misses: number;
   errors: number;
   hitRate: number | null;
-  durationP50: number;
-  durationP95: number;
+  durationP50Seconds: number;
+  durationP95Seconds: number;
   ioCount: number;
   bytesTotal: number | bigint;
 }
@@ -368,10 +374,10 @@ function mapRemote(r: Remote | undefined): RemoteView | null {
     misses,
     errors: Number(r.errors),
     hitRate: total > 0 ? hits / total : null,
-    durationP50: r.durationP50,
-    durationP95: r.durationP95,
+    durationP50Seconds: r.durationP50Seconds,
+    durationP95Seconds: r.durationP95Seconds,
     ioCount: Number(r.ioCount),
-    bytesTotal: r.bytesTotal,
+    bytesTotal: r.transferredBytes,
   };
 }
 
@@ -380,9 +386,9 @@ export interface TargetStatView {
   target: string;
   spell: string;
   count: number;
-  p50: number;
-  p95: number;
-  p99: number;
+  p50Seconds: number;
+  p95Seconds: number;
+  p99Seconds: number;
   cacheHitRate: number;
   success: number;
   errors: number;
@@ -394,9 +400,9 @@ function mapTargetStat(t: TargetStat): TargetStatView {
     target: t.target,
     spell: t.spell,
     count: Number(t.count),
-    p50: t.p50,
-    p95: t.p95,
-    p99: t.p99,
+    p50Seconds: t.p50Seconds,
+    p95Seconds: t.p95Seconds,
+    p99Seconds: t.p99Seconds,
     cacheHitRate: t.cacheHitRate,
     success: Number(t.success),
     errors: Number(t.errors),
@@ -407,14 +413,14 @@ export interface McpToolView {
   tool: string;
   calls: number;
   errors: number;
-  inputP50: number;
-  inputP95: number;
+  inputP50Bytes: number;
+  inputP95Bytes: number;
   inputTotal: number | bigint;
-  outputP50: number;
-  outputP95: number;
+  outputP50Bytes: number;
+  outputP95Bytes: number;
   outputTotal: number | bigint;
-  durationP50: number;
-  durationP95: number;
+  durationP50Seconds: number;
+  durationP95Seconds: number;
 }
 
 function mapMcpTool(m: MCPToolStat): McpToolView {
@@ -422,38 +428,38 @@ function mapMcpTool(m: MCPToolStat): McpToolView {
     tool: m.tool,
     calls: Number(m.calls),
     errors: Number(m.errors),
-    inputP50: m.inputP50,
-    inputP95: m.inputP95,
+    inputP50Bytes: m.inputP50Bytes,
+    inputP95Bytes: m.inputP95Bytes,
     inputTotal: m.inputTotal,
-    outputP50: m.outputP50,
-    outputP95: m.outputP95,
+    outputP50Bytes: m.outputP50Bytes,
+    outputP95Bytes: m.outputP95Bytes,
     outputTotal: m.outputTotal,
-    durationP50: m.durationP50,
-    durationP95: m.durationP95,
+    durationP50Seconds: m.durationP50Seconds,
+    durationP95Seconds: m.durationP95Seconds,
   };
 }
 
 export interface BuzzView {
   execCount: number;
-  execP50: number;
-  execP95: number;
+  execP50Seconds: number;
+  execP95Seconds: number;
   compileCount: number;
-  compileP50: number;
-  compileP95: number;
+  compileP50Seconds: number;
+  compileP95Seconds: number;
   hostCallCount: number;
-  hostCallP50: number;
-  hostCallP95: number;
+  hostCallP50Seconds: number;
+  hostCallP95Seconds: number;
   sessionPoolReuse: number;
   sessionPoolIdle: number;
   sessionPoolEvictions: number;
-  sessionWarmP50: number;
-  sessionWarmP95: number;
+  sessionWarmP50Seconds: number;
+  sessionWarmP95Seconds: number;
   importCount: number;
-  importP50: number;
-  importP95: number;
+  importP50Seconds: number;
+  importP95Seconds: number;
   spellResolveCount: number;
-  spellResolveP50: number;
-  spellResolveP95: number;
+  spellResolveP50Seconds: number;
+  spellResolveP95Seconds: number;
   jitRuns: number;
   vmFaults: number;
 }
@@ -462,33 +468,33 @@ function mapBuzz(b: Buzz | undefined): BuzzView | null {
   if (!b) return null;
   return {
     execCount: Number(b.execCount),
-    execP50: b.execP50,
-    execP95: b.execP95,
+    execP50Seconds: b.execP50Seconds,
+    execP95Seconds: b.execP95Seconds,
     compileCount: Number(b.compileCount),
-    compileP50: b.compileP50,
-    compileP95: b.compileP95,
+    compileP50Seconds: b.compileP50Seconds,
+    compileP95Seconds: b.compileP95Seconds,
     hostCallCount: Number(b.hostCallCount),
-    hostCallP50: b.hostCallP50,
-    hostCallP95: b.hostCallP95,
+    hostCallP50Seconds: b.hostCallP50Seconds,
+    hostCallP95Seconds: b.hostCallP95Seconds,
     sessionPoolReuse: Number(b.sessionPoolReuse),
     sessionPoolIdle: Number(b.sessionPoolIdle),
     sessionPoolEvictions: Number(b.sessionPoolEvictions),
-    sessionWarmP50: b.sessionWarmP50,
-    sessionWarmP95: b.sessionWarmP95,
+    sessionWarmP50Seconds: b.sessionWarmP50Seconds,
+    sessionWarmP95Seconds: b.sessionWarmP95Seconds,
     importCount: Number(b.importCount),
-    importP50: b.importP50,
-    importP95: b.importP95,
+    importP50Seconds: b.importP50Seconds,
+    importP95Seconds: b.importP95Seconds,
     spellResolveCount: Number(b.spellResolveCount),
-    spellResolveP50: b.spellResolveP50,
-    spellResolveP95: b.spellResolveP95,
+    spellResolveP50Seconds: b.spellResolveP50Seconds,
+    spellResolveP95Seconds: b.spellResolveP95Seconds,
     jitRuns: Number(b.jitRuns),
     vmFaults: Number(b.vmFaults),
   };
 }
 
 export interface SandboxView {
-  applyP50: number;
-  applyP95: number;
+  applyP50Seconds: number;
+  applyP95Seconds: number;
   rulesRead: number;
   rulesWrite: number;
   rulesExec: number;
@@ -501,8 +507,8 @@ export interface SandboxView {
 function mapSandbox(s: Sandbox | undefined): SandboxView | null {
   if (!s) return null;
   return {
-    applyP50: s.applyP50,
-    applyP95: s.applyP95,
+    applyP50Seconds: s.applyP50Seconds,
+    applyP95Seconds: s.applyP95Seconds,
     rulesRead: Number(s.rulesRead),
     rulesWrite: Number(s.rulesWrite),
     rulesExec: Number(s.rulesExec),
@@ -525,7 +531,7 @@ export interface MetricsView {
 
 export function mapSnapshot(snap: Snapshot): MetricsView {
   return {
-    capturedMs: tsMillisOrNow(snap.capturedAt),
+    capturedMs: tsMillisOrNow(snap.captureTime),
     latency: {
       target: mapLat(snap.target),
       cache: mapLat(snap.cache),
@@ -555,31 +561,44 @@ export function mapSnapshot(snap: Snapshot): MetricsView {
 
 export type CacheSrc = "metrics" | "status";
 
+// A null field is UNMEASURED: the daemon's pool read or metric collection failed on that
+// tick. It is not zero, and a renderer must not draw it as one - an idle-looking square and
+// a square nobody measured are different facts. The live status feed always measures, so
+// nulls only ever arrive on the backfill.
 export interface SampleView {
   at: number; // ms
-  running: number;
-  capacity: number; // 0 = unlimited
-  queued: number;
-  cacheHits: number;
-  cacheMisses: number;
+  running: number | null;
+  capacity: number | null; // 0 = unlimited, null = unmeasured
+  queued: number | null;
+  cacheHits: number | null;
+  cacheMisses: number | null;
   cacheSrc: CacheSrc; // baseline source of cacheHits/cacheMisses
+  // generation is the daemon's observing-since in ms: the identity of the process whose
+  // cumulative counters these are. Two samples from different generations cannot be
+  // differenced - the counters restarted at zero in between - so the rate chart breaks the
+  // series instead. null means unknown, which breaks it too: joining an unknown generation
+  // to a known one is exactly the guess this field exists to avoid.
+  generation: number | null;
 }
 
 export function mapSample(s: ProtoSample): SampleView {
   return {
-    at: tsMillisOrNow(s.at),
-    running: s.running,
-    capacity: s.capacity,
-    queued: s.queued,
-    cacheHits: Number(s.cacheHits),
-    cacheMisses: Number(s.cacheMisses),
+    at: tsMillisOrNow(s.sampleTime),
+    running: s.running ?? null,
+    capacity: s.capacity ?? null,
+    queued: s.queued ?? null,
+    cacheHits: s.cacheHits === undefined ? null : Number(s.cacheHits),
+    cacheMisses: s.cacheMisses === undefined ? null : Number(s.cacheMisses),
     cacheSrc: "metrics",
+    generation: s.observeStartTime
+      ? Number(s.observeStartTime.seconds) * 1000 + Math.floor(s.observeStartTime.nanos / 1e6)
+      : null,
   };
 }
 
-// ---- insight view-model (magus.insight.v1) ---------------------------------
+// ---- insight view-model (magus.insight.v1alpha1) ---------------------------------
 // InsightService.GetInsight returns the five lenses as a generated proto message, so
-// this axis has no hand-written wire shape: mapInsight folds magus.insight.v1.Insight
+// this axis has no hand-written wire shape: mapInsight folds magus.insight.v1alpha1.Insight
 // into the camelCase view-models the tiles read. Times are google.protobuf.Timestamp
 // with a zero time.Time mapped to UNSET at the server boundary, so an absent time is
 // simply an absent field rather than the year-0001 sentinel the JSON route emitted.
@@ -645,7 +664,7 @@ export interface VolatilityView {
   targets: VolatilityRowView[];
 }
 
-// ---- toolchain view-model (magus.tool.v1) ----------------------------------
+// ---- toolchain view-model (magus.tool.v1alpha1) ----------------------------------
 //
 // One row per binary a project's spells drive. The three windows stay separate all the
 // way to the table because the first question about a failing bound is who set it - the
@@ -698,7 +717,7 @@ export function mapInsight(w: Insight): InsightView {
       churn: n.churn,
       authors: n.authors,
       blastRadius: n.blastRadius,
-      lastCommit: fmtDate(n.lastCommit),
+      lastCommit: fmtDate(n.lastCommitTime),
     })),
     hotspotFiles: (w.hotspots?.files ?? []).map((f) => ({
       path: f.path,
@@ -707,7 +726,7 @@ export function mapInsight(w: Insight): InsightView {
       score: f.score,
       authors: f.authors,
       moves: f.moves,
-      lastCommit: fmtDate(f.lastCommit),
+      lastCommit: fmtDate(f.lastCommitTime),
     })),
     affinity: (w.affinity?.pairs ?? []).map((p) => ({
       a: p.a,
@@ -740,7 +759,7 @@ export function mapInsight(w: Insight): InsightView {
             fail: v.fail,
             volatileCount: v.volatileCount,
             samples: v.samples,
-            lastPass: fmtDate(v.lastPass),
+            lastPass: fmtDate(v.lastPassTime),
           })),
         }
       : null,
@@ -748,7 +767,7 @@ export function mapInsight(w: Insight): InsightView {
 }
 
 // ---- agent activity view-model ---------------------------------------------
-// Derived from the activity trail (magus.activity.v1), which records one event per agent tool
+// Derived from the activity trail (magus.activity.v1alpha1), which records one event per agent tool
 // invocation a guard hook observed, plus one per MCP tool call.
 //
 // WHAT THIS CAN AND CANNOT SAY. A hook fires BEFORE a tool call and there is no matching end
@@ -802,7 +821,7 @@ export interface AgentActivityView {
 // keeping an unbounded slice of a busy daemon's trail in the store.
 const RECENT_CAP = 12;
 
-// The wire shape the poll hands over: the fields of magus.activity.v1.ActivityEvent this reads,
+// The wire shape the poll hands over: the fields of magus.activity.v1alpha1.ActivityEvent this reads,
 // already decoded. Kept structural so state.ts stays free of the generated enums.
 export interface AgentEventWire {
   atMs: number;

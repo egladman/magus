@@ -30,7 +30,9 @@ import (
 // (see fullTwinSuffix), and both entries carry a cross-reference in their
 // description. The content digest cannot catch this on its own - it hashes the
 // SOURCE bodies, which did not change, while what an install writes did.
-const SkillVersion = 37
+// 38: magus-commit-composition - restructuring an unpushed branch into reviewable
+// commits from project ownership, declared outputs and blast radius.
+const SkillVersion = 38
 
 const skillLicense = "GPL-3.0-or-later"
 
@@ -243,6 +245,7 @@ var skillSources = []skillSource{
 	{name: "magus-buzz-write", description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in. Use when writing or debugging a magusfile target, a spell, or a .buzz file, and when a one-off script is needed in a magus workspace - Buzz is already installed with the whole magus host surface (fs, http, json, yaml, template, vcs, ...), so it needs no dependency install. Also use when Buzz syntax surprises you: namespace access is a backslash, object literals use `=`, and `magus buzz` runs upstream-strict (no top-level control flow, every argument after the first must be labeled).", bodyPath: "skills/magus-buzz-write/SKILL.md", formerNames: []string{"magus-buzz"}},
 	{name: "magus-buzz-review", description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance. Use when asked to review, audit, or critique a .buzz file or change, or when a finding needs to say whether it holds anywhere Buzz runs (UPSTREAM), only under gopherbuzz (GOPHERBUZZ), or runs here but not upstream (PORTABILITY). Fans out the three lenses via the Agent tool and merges the results, the same shape go-review-ultra uses for Go. Does NOT cover magusfile/target/spell contracts - caching, ctx.needs, wards, charms; use magus-buzz-write for those.", bodyPath: "skills/magus-buzz-review/SKILL.md"},
 	{name: "magus-change-summary", description: "Summarize what changed in a magus workspace, write it up, or answer a granular diff question. Use for \"what's been merged lately?\", \"catch me up since last week\", \"add this to the CHANGELOG\", and \"what exactly did this branch change?\" Covers three outputs: a short evidence-backed brief, a Keep a Changelog entry in the repo's existing shape, and per-question diff commands. Always answer through magus surfaces (graph diff, describe file, affected --impact/--explain) rather than reading a raw diff; do not infer features from commit subjects alone.", bodyPath: "skills/magus-change-summary/SKILL.md", formerNames: []string{"magus-changes"}},
+	{name: "magus-commit-composition", description: "Restructure an UNPUSHED branch so each commit is one reviewable idea, using the workspace's own boundaries (project ownership, declared outputs, blast radius) rather than guessing from paths. Use when a branch has accumulated commits in the order the work occurred, before opening a PR, when asked to reconsolidate/squash/reword/clean up commits, or when a reviewer would meet a rename split across commits and a fix buried in a regeneration. Do NOT use on pushed commits, and do NOT use it to write a single message - that is idiomatic-commit-messages; this decides what goes IN each commit.", bodyPath: "skills/magus-commit-composition/SKILL.md"},
 	{name: "magus-context-audit", description: "Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do. Use after changing a guard rule, a denied command, or a documented workflow; before shipping a change to the agent surface; and when an agent has been behaving inconsistently or ignoring a rule. This is a lens over INSTRUCTIONS, not over code: it reports ranked findings for a human to act on and never edits anything itself.", bodyPath: "skills/magus-context-audit/SKILL.md"},
 	{name: "magus-delegate-multi-agent", description: "Split work across agents in a magus workspace as an acceptance-criteria loop: partition by WRITE SET using graph evidence (magus refs --occurrences, explain, affected --plan --stdin), prove the units cannot collide, bound fan-out depth, and match each unit's model to the work it needs. Use when a change needs several disjoint groups of files edited, when an audit or review covers a tree, or when the user says \"fan this out\" or \"spin up an agent per package\" - you do not need to be asked. Do NOT fan out one coherent edit just because it invalidates many projects: a shard plan partitions VALIDATION, not editing, so it can veto a fan-out but never license one.", bodyPath: "skills/magus-delegate-multi-agent/SKILL.md", formerNames: []string{"magus-delegate-ultra"}},
 	{name: "magus-docs-lookup", description: "Traverse magus's own documentation to answer a \"how does magus do X / what does Y mean / where is Z documented\" question, instead of guessing an answer or a URL. Use when you need authoritative magus behavior (a CLI flag, a spell op, a diagnostic code, a config key, a stdlib module) and the workspace graph cannot give it. Do NOT use for facts about THIS workspace (use magus-query) or to run work (use magus-run).", bodyPath: "skills/magus-docs-lookup/SKILL.md", formerNames: []string{"magus-docs"}},
@@ -260,12 +263,55 @@ type Catalog struct {
 	agentsSection string
 	schemaVersion int
 	contentDigest string
+	skillDigests  map[string]string
 }
 
 func NewCatalog(sourceFS fs.FS, agentsSection string, schemaVersion int) *Catalog {
 	c := &Catalog{sourceFS: sourceFS, agentsSection: agentsSection, schemaVersion: schemaVersion}
 	c.contentDigest = c.computeContentDigest()
+	c.skillDigests = c.computeSkillDigests()
 	return c
+}
+
+// SkillDigest fingerprints ONE skill: its body, name, and description.
+//
+// A catalog-wide digest restamped all 26 installed files and all 16 reference
+// pages whenever any skill changed, so a diff could not show which one moved.
+// Both permutations of a skill still share this value - see StampSkill. The
+// catalog-wide contentDigest survives for the AGENTS.md block, which routes to
+// every skill by name and so does depend on the whole set.
+func (c *Catalog) SkillDigest(name string) string {
+	// A twin is rendered from its primary's body, so it resolves to the primary's
+	// entry rather than one of its own - that is what makes the two report the
+	// same digest and go stale together.
+	if d, ok := c.skillDigests[baseSkillName(name)]; ok {
+		return d
+	}
+	return "unreadable"
+}
+
+func (c *Catalog) computeSkillDigests() map[string]string {
+	out := make(map[string]string, len(skillSources))
+	for _, source := range skillSources {
+		body, err := fs.ReadFile(c.sourceFS, source.bodyPath)
+		if err != nil {
+			out[source.name] = "unreadable"
+			continue
+		}
+		h := sha256.New()
+		// The name and description are stamped alongside the body and are what a
+		// host lists a skill by, so a description edit has to move the digest too.
+		if _, err := fmt.Fprintf(h, "%s\n%s\n", source.name, source.description); err != nil {
+			out[source.name] = "unreadable"
+			continue
+		}
+		if _, err := h.Write(body); err != nil {
+			out[source.name] = "unreadable"
+			continue
+		}
+		out[source.name] = hex.EncodeToString(h.Sum(nil))[:12]
+	}
+	return out
 }
 
 // EmbeddedSkills returns every embedded skill's canonical, unrendered
@@ -357,7 +403,7 @@ func (c *Catalog) SkillBytes(name string, v Variant) ([]byte, error) {
 	}
 	for _, skill := range skills {
 		if skill.Name == name {
-			return c.StampSkill(c.RenderSkill(skill), skill.Variant), nil
+			return c.StampSkill(skill.Name, c.RenderSkill(skill), skill.Variant), nil
 		}
 	}
 	return nil, fmt.Errorf("unknown skill %q", name)
@@ -396,7 +442,7 @@ func (c *Catalog) SkillTar(dest string, v Variant) ([]byte, error) {
 	tw := tar.NewWriter(&buf)
 	epoch := time.Unix(0, 0).UTC()
 	for _, skill := range skills {
-		body := c.StampSkill(c.RenderSkill(skill), skill.Variant)
+		body := c.StampSkill(skill.Name, c.RenderSkill(skill), skill.Variant)
 		hdr := &tar.Header{
 			Name:    filepath.ToSlash(filepath.Join(dest, skill.Name, "SKILL.md")),
 			Mode:    0o644,
@@ -418,21 +464,47 @@ func (c *Catalog) SkillTar(dest string, v Variant) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
+// PlanSkillTree returns the paths WriteSkillTree would write, writing nothing.
+//
+// Shares checkDestination with the writer, so a plan cannot name paths the run
+// would not. The --force conflict check is not repeated: a plan reports what a
+// successful run produces.
+func (c *Catalog) PlanSkillTree(dir, dest string, v Variant) ([]string, error) {
+	if err := checkDestination(dir, dest); err != nil {
+		return nil, err
+	}
+	skills, err := c.RenderedSkills(v)
+	if err != nil {
+		return nil, err
+	}
+	planned := make([]string, 0, len(skills))
+	for _, skill := range skills {
+		planned = append(planned, filepath.Join(dest, skill.Name, "SKILL.md"))
+	}
+	return planned, nil
+}
+
+// checkDestination refuses a destination that lands outside dir. The joined path
+// is cleaned and re-checked because "../../outside" is neither absolute nor ~.
+func checkDestination(dir, dest string) error {
+	if filepath.IsAbs(dest) || strings.HasPrefix(dest, "~") {
+		return fmt.Errorf("agent install: destination %q is outside the working tree; pass --global or use --tar | tar -xf - -C <dir>", dest)
+	}
+	joined := filepath.Clean(filepath.Join(dir, dest))
+	if rel, err := filepath.Rel(dir, joined); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return fmt.Errorf("agent install: destination %q escapes the working tree", dest)
+	}
+	return nil
+}
+
 // WriteSkillTree renders the standard Agent Skills format into <dir>/<dest>.
 // The destination must be a path relative to <dir>; absolute paths are
 // refused so magus never silently writes outside the working tree. The
 // caller is responsible for that guard at the CLI surface; this method
 // enforces it for safety.
 func (c *Catalog) WriteSkillTree(dir, dest string, force bool, v Variant) ([]string, error) {
-	if filepath.IsAbs(dest) || strings.HasPrefix(dest, "~") {
-		return nil, fmt.Errorf("agent install: destination %q is outside the working tree; pass --global or use --tar | tar -xf - -C <dir>", dest)
-	}
-	// filepath.IsAbs/~ catches an absolute escape but not "../../outside": Join
-	// with dir still resolves that to a path outside it. Clean the joined result
-	// and confirm it is still under dir before writing anything.
-	joined := filepath.Clean(filepath.Join(dir, dest))
-	if rel, err := filepath.Rel(dir, joined); err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return nil, fmt.Errorf("agent install: destination %q escapes the working tree", dest)
+	if err := checkDestination(dir, dest); err != nil {
+		return nil, err
 	}
 	skills, err := c.RenderedSkills(v)
 	if err != nil {
@@ -452,7 +524,7 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool, v Variant) ([]str
 		if err := os.MkdirAll(filepath.Dir(outPath), 0o755); err != nil {
 			return nil, err
 		}
-		if err := os.WriteFile(outPath, c.StampSkill(c.RenderSkill(skill), skill.Variant), 0o644); err != nil {
+		if err := os.WriteFile(outPath, c.StampSkill(skill.Name, c.RenderSkill(skill), skill.Variant), 0o644); err != nil {
 			return nil, fmt.Errorf("agent install: write %s: %w", outPath, err)
 		}
 		written = append(written, filepath.Join(dest, rel))
@@ -563,12 +635,12 @@ func (c *Catalog) AgentsBlock() string {
 	return c.agentsSectionBegin() + "\n\n" + strings.TrimSpace(c.agentsSection) + "\n\n" + agentsSectionEnd + "\n"
 }
 
-func (c *Catalog) provenance(v Variant) string {
-	return fmt.Sprintf("license: %s\ncompatibility: any-agent\nmetadata:\n  source: magus\n  agent-skill-version: %d\n  knowledge-schema-version: %d\n  skill-content: %s\n  skill-variant: %s\n", skillLicense, SkillVersion, c.schemaVersion, c.contentDigest, v)
+func (c *Catalog) provenance(name string, v Variant) string {
+	return fmt.Sprintf("license: %s\ncompatibility: any-agent\nmetadata:\n  source: magus\n  agent-skill-version: %d\n  knowledge-schema-version: %d\n  skill-content: %s\n  skill-variant: %s\n", skillLicense, SkillVersion, c.schemaVersion, c.SkillDigest(name), v)
 }
 
-func (c *Catalog) footer(v Variant) string {
-	return fmt.Sprintf("\n<!-- generated by: magus agent install; agent-skill-version: %d; knowledge-schema-version: %d; skill-content: %s; skill-variant: %s; do not edit, re-run to update -->\n", SkillVersion, c.schemaVersion, c.contentDigest, v)
+func (c *Catalog) footer(name string, v Variant) string {
+	return fmt.Sprintf("\n<!-- generated by: magus agent install; agent-skill-version: %d; knowledge-schema-version: %d; skill-content: %s; skill-variant: %s; do not edit, re-run to update -->\n", SkillVersion, c.schemaVersion, c.SkillDigest(name), v)
 }
 
 // StampSkill injects provenance frontmatter and appends a generated-by footer.
@@ -577,12 +649,12 @@ func (c *Catalog) footer(v Variant) string {
 // both permutations come from one body, so they must report the same digest and go
 // stale together. A per-variant digest would let a simple install look current
 // against a source its full sibling had already outgrown.
-func (c *Catalog) StampSkill(body []byte, v Variant) []byte {
-	body = c.injectProvenance(body, v)
-	return append([]byte(strings.TrimRight(string(body), "\n")+"\n"), c.footer(v)...)
+func (c *Catalog) StampSkill(name string, body []byte, v Variant) []byte {
+	body = c.injectProvenance(name, body, v)
+	return append([]byte(strings.TrimRight(string(body), "\n")+"\n"), c.footer(name, v)...)
 }
 
-func (c *Catalog) injectProvenance(body []byte, v Variant) []byte {
+func (c *Catalog) injectProvenance(name string, body []byte, v Variant) []byte {
 	s := string(body)
 	if !strings.HasPrefix(s, "---\n") {
 		return body
@@ -592,7 +664,7 @@ func (c *Catalog) injectProvenance(body []byte, v Variant) []byte {
 		return body
 	}
 	closeAt := len("---\n") + rel + 1
-	return []byte(s[:closeAt] + c.provenance(v) + s[closeAt:])
+	return []byte(s[:closeAt] + c.provenance(name, v) + s[closeAt:])
 }
 
 func (c *Catalog) computeContentDigest() string {
@@ -655,8 +727,10 @@ var footerDigestRe = regexp.MustCompile(`skill-content: ([0-9a-f]+|unreadable)`)
 func (c *Catalog) CheckStatuses(dir string) []Status {
 	var out []Status
 	for _, dest := range wellKnownSkillDirs {
+		// The anchor decides only whether magus is installed HERE; grading is
+		// per-skill below, so its contents are not read.
 		path := filepath.Join(dir, dest, anchorSkillRel)
-		body, err := os.ReadFile(path)
+		_, err := os.Stat(path)
 		if err != nil {
 			if os.IsNotExist(err) {
 				continue
@@ -664,7 +738,7 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 			out = append(out, Status{Location: dest, Installed: true, Stale: true, Detail: "cannot read installed skill: " + err.Error()})
 			continue
 		}
-		out = append(out, c.gradeStamp(dest, "magus agent install "+dest+" --force", string(body)))
+		out = append(out, c.gradeDest(dir, dest))
 	}
 	if body, err := os.ReadFile(filepath.Join(dir, "AGENTS.md")); err == nil {
 		if section := agentsSectionRe.Find(body); section != nil {
@@ -673,14 +747,56 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 			// string has been wrong before - it once named a flag that does not
 			// parse - and a stale stamp whose one job is to hand you the command
 			// that fixes it is worth checking against `magus agent -h`.
-			out = append(out, c.gradeStamp("AGENTS.md", "magus agent sample (prints the current block; magus does not write this file, so replace the stale one between the markers yourself)", string(section)))
+			out = append(out, c.gradeStamp("AGENTS.md", "magus agent sample (prints the current block; magus does not write this file, so replace the stale one between the markers yourself)", string(section), c.contentDigest))
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Location < out[j].Location })
 	return out
 }
 
-func (c *Catalog) gradeStamp(location, reinstall, body string) Status {
+// gradeDest grades every magus skill installed under dest, not just the anchor.
+//
+// Reading one skill worked only while the digest covered the whole catalog. With
+// a per-skill digest that shortcut goes blind: a stale magus-run reads as current
+// when magus-query happens not to have changed.
+func (c *Catalog) gradeDest(dir, dest string) Status {
+	reinstall := "magus agent install " + dest + " --force"
+	for _, name := range c.installedSkillNames(filepath.Join(dir, dest)) {
+		body, err := os.ReadFile(filepath.Join(dir, dest, name, "SKILL.md"))
+		if err != nil {
+			continue
+		}
+		if st := c.gradeStamp(dest, reinstall, string(body), c.SkillDigest(baseSkillName(name))); st.Stale {
+			return Status{Location: dest, Installed: true, Stale: true, Detail: name + ": " + st.Detail}
+		}
+	}
+	return Status{Location: dest, Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d)", SkillVersion, c.schemaVersion)}
+}
+
+// installedSkillNames lists the magus skill directories under path, sorted. One
+// magus no longer ships is included: the host still loads it.
+func (c *Catalog) installedSkillNames(path string) []string {
+	entries, err := os.ReadDir(path)
+	if err != nil {
+		return nil
+	}
+	var names []string
+	for _, e := range entries {
+		if e.IsDir() && strings.HasPrefix(e.Name(), "magus-") {
+			names = append(names, e.Name())
+		}
+	}
+	sort.Strings(names)
+	return names
+}
+
+// baseSkillName maps an installed directory to the skill it was rendered from,
+// so a `-full` twin grades against its primary's digest rather than missing.
+func baseSkillName(dir string) string {
+	return strings.TrimSuffix(dir, fullTwinSuffix)
+}
+
+func (c *Catalog) gradeStamp(location, reinstall, body, wantDigest string) Status {
 	m := footerVersionRe.FindStringSubmatch(body)
 	if m == nil {
 		return Status{Location: location, Installed: true, Stale: true, Detail: "installed skill has no version stamp; re-run: " + reinstall}
@@ -694,10 +810,10 @@ func (c *Catalog) gradeStamp(location, reinstall, body string) Status {
 	if d == nil {
 		return Status{Location: location, Installed: true, Stale: true, Detail: "installed by a magus that predates the content fingerprint; re-run: " + reinstall}
 	}
-	if d[1] != c.contentDigest {
-		return Status{Location: location, Installed: true, Stale: true, Detail: fmt.Sprintf("content differs from this binary's embedded skills (installed %s, binary %s); re-run: %s", d[1], c.contentDigest, reinstall)}
+	if d[1] != wantDigest {
+		return Status{Location: location, Installed: true, Stale: true, Detail: fmt.Sprintf("content differs from this binary's embedded skills (installed %s, binary %s); re-run: %s", d[1], wantDigest, reinstall)}
 	}
-	return Status{Location: location, Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d, content %s)", skillVersion, schemaVersion, c.contentDigest)}
+	return Status{Location: location, Installed: true, Detail: fmt.Sprintf("up to date (skill v%d, schema v%d, content %s)", skillVersion, schemaVersion, wantDigest)}
 }
 
 // Section returns the provider-neutral always-on AGENTS.md guidance.
@@ -722,7 +838,7 @@ func (c *Catalog) VariantSize(v Variant) (int64, error) {
 		if err != nil {
 			return 0, err
 		}
-		total += int64(len(c.StampSkill(c.RenderSkill(rendered), v)))
+		total += int64(len(c.StampSkill(rendered.Name, c.RenderSkill(rendered), v)))
 	}
 	return total, nil
 }

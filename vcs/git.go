@@ -769,7 +769,8 @@ func (v gitVCS) EnsureMergeDriver(ctx context.Context, root string, outputGlobs 
 	registered := v.registeredDriver(ctx, root)
 	attrsPresent := v.attrsSectionPresent(root)
 	if attrsCurrent == attrsWanted && registered != "" && attrsPresent &&
-		driverExeExists(registered) && driverUsable(ctx, registered) {
+		driverExeExists(registered) && driverIsReachableHere(ctx, registered) &&
+		driverUsable(ctx, registered) {
 		return false, nil
 	}
 	return true, v.InstallMergeDriver(ctx, root, outputGlobs)
@@ -981,12 +982,46 @@ func driverExeExists(registered string) bool {
 	return err == nil
 }
 
+// writeGitConfig scopes the registration per worktree where git allows it. The value is
+// usually THIS worktree's binary - gitMergeDriverCommand falls back to os.Executable()
+// when PATH holds no magus that answers - so a shared write points every other worktree at
+// this build, and a merge there silently resolves with the wrong tool. Reading stays
+// unscoped; `git config <key>` already prefers worktree config.
 func (v gitVCS) writeGitConfig(ctx context.Context, root string) error {
-	cmd := gitExec(ctx, "-C", root, "config", "merge.magus.driver", gitMergeDriverCommand(ctx))
-	if out, err := cmd.CombinedOutput(); err != nil {
+	args := []string{"-C", root, "config"}
+	if v.worktreeConfigEnabled(ctx, root) {
+		args = append(args, "--worktree")
+	}
+	args = append(args, "merge.magus.driver", gitMergeDriverCommand(ctx))
+	if out, err := gitExec(ctx, args...).CombinedOutput(); err != nil {
 		return fmt.Errorf("git config merge.magus.driver: %w\n%s", err, out)
 	}
 	return nil
+}
+
+// worktreeConfigEnabled reports whether per-worktree config is available: without the
+// extension, `git config --worktree` is an error.
+func (v gitVCS) worktreeConfigEnabled(ctx context.Context, root string) bool {
+	out, err := gitExec(ctx, "-C", root, "config", "--get", "extensions.worktreeConfig").Output()
+	return err == nil && strings.TrimSpace(string(out)) == "true"
+}
+
+// driverIsReachableHere reports whether the registered executable is one this process would
+// choose. Anything else is another worktree's build, and counting it as current is how the
+// first worktree to register wins permanently.
+func driverIsReachableHere(ctx context.Context, registered string) bool {
+	exe, _ := splitDriver(registered)
+	if exe == "" {
+		return false
+	}
+	if !strings.ContainsRune(exe, filepath.Separator) {
+		return true // a bare name resolves through PATH wherever it runs
+	}
+	if p, err := exec.LookPath("magus"); err == nil && p == exe && driverExeAnswers(ctx, exe) {
+		return true
+	}
+	self, err := os.Executable()
+	return err == nil && self == exe
 }
 
 // InstallRefreshHook implements types.RefreshHookInstaller: it writes (or refreshes) the

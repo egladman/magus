@@ -34,7 +34,7 @@
 // host and returns the controller for that mount.
 
 import { createClient } from "@connectrpc/connect";
-import { StatusService, type Status } from "../../gen/magus/status/v1/status_pb";
+import { StatusService, type Status } from "../../gen/magus/status/v1alpha1/status_pb";
 import {
   adoptDaemonOrigin,
   authHeaders,

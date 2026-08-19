@@ -93,7 +93,7 @@ export fun replaceArgs(currentJSON: str, modules: [any]) > [str] !> any {
 // (`magus/spell/go` is bound only for magusfiles), which is also why this file's header
 // says the caller supplies the two ops it needs.
 fun workspace_go_mods(ctx: magus\Context, go: any) > [any] !> any {
-    final projects: Projects = magus\ls();
+    final projects: Projects = magus\projects();
     var modules: mut [any] = mut [<any>];
     foreach (project in projects.projects) {
         if (fs\exists(project.dir + "/go.mod")) {

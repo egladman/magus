@@ -3,7 +3,7 @@
 // viewer. The view is DAEMON-WIDE - it merges the trail of every workspace the daemon has
 // loaded, because the panel exists to answer "what is touching this daemon" and a per-workspace
 // view would silently under-report every other workspace. It is READ-only and maps the on-disk
-// trail.Event (internal/trail) to the magus.activity.v1 wire type at the boundary - the store
+// trail.Event (internal/trail) to the magus.activity.v1alpha1 wire type at the boundary - the store
 // owns the format, this owns the wire.
 // Mounted on the console's human-facing API surface by the daemon, never under /mcp.
 package activity
@@ -20,8 +20,8 @@ import (
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/egladman/magus/internal/trail"
-	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1"
-	"github.com/egladman/magus/proto/gen/go/magus/activity/v1/activityv1connect"
+	activityv1 "github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1"
+	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
 )
 
 const (
@@ -39,7 +39,7 @@ type Workspace struct {
 	CacheDir string
 }
 
-// Service implements activityv1connect.ActivityServiceHandler over the activity trails of every
+// Service implements activityv1alpha1connect.ActivityServiceHandler over the activity trails of every
 // workspace the daemon has loaded. Read-only: producers (the MCP handler, agent hooks, and later
 // jobs/config/token) write the trails; this reads them.
 type Service struct {
@@ -67,12 +67,12 @@ func (s *Service) loaded() []Workspace {
 	return out
 }
 
-var _ activityv1connect.ActivityServiceHandler = (*Service)(nil)
+var _ activityv1alpha1connect.ActivityServiceHandler = (*Service)(nil)
 
-// ListActivity returns recent events, newest first, narrowed by the request filter. Paging is a
+// ListActivityEvents returns recent events, newest first, narrowed by the request filter. Paging is a
 // simple recent-window today (page_size, capped); page_token is unused, so next_page_token is
 // always empty - enough for the dashboard's "recent activity" view.
-func (s *Service) ListActivity(_ context.Context, req *connect.Request[activityv1.ListActivityRequest]) (*connect.Response[activityv1.ListActivityResponse], error) {
+func (s *Service) ListActivityEvents(_ context.Context, req *connect.Request[activityv1.ListActivityEventsRequest]) (*connect.Response[activityv1.ListActivityEventsResponse], error) {
 	limit := int(req.Msg.GetPageSize())
 	if limit <= 0 {
 		limit = defaultPageSize
@@ -109,7 +109,7 @@ func (s *Service) ListActivity(_ context.Context, req *connect.Request[activityv
 		}
 		out = append(out, pe)
 	}
-	return connect.NewResponse(&activityv1.ListActivityResponse{Events: out}), nil
+	return connect.NewResponse(&activityv1.ListActivityEventsResponse{Events: out}), nil
 }
 
 // readMerged returns the limit most recent events across every workspace's trail, newest first.
@@ -156,13 +156,13 @@ func readMerged(workspaces []Workspace, limit int) []trail.Event {
 // GetPayload serves a stored request or response body by its ref. Refs are content-addressed, so
 // the same ref names the same bytes in whichever workspace's blob store holds it; the first hit
 // across the loaded workspaces answers, and only an unresolvable ref is NotFound.
-func (s *Service) GetPayload(_ context.Context, req *connect.Request[activityv1.GetPayloadRequest]) (*connect.Response[activityv1.GetPayloadResponse], error) {
+func (s *Service) GetPayload(_ context.Context, req *connect.Request[activityv1.GetPayloadRequest]) (*connect.Response[activityv1.Payload], error) {
 	ref := req.Msg.GetRef()
 	var err error
 	for _, w := range s.loaded() {
 		var body []byte
 		if body, err = trail.ReadBlob(w.CacheDir, ref); err == nil {
-			return connect.NewResponse(&activityv1.GetPayloadResponse{Body: body, Bytes: int64(len(body))}), nil
+			return connect.NewResponse(&activityv1.Payload{Body: body, SizeBytes: int64(len(body))}), nil
 		}
 	}
 	if err == nil {
