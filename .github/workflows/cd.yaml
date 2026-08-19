@@ -89,12 +89,14 @@ jobs:
       # that wrote into docs/ trips MGS3001, because a parent writing into a descendant
       # project breaks the boundary the cache and affected set are computed over.
       #
-      # generate docs renders derived Markdown, the esbuild bundles, the site itself, and
-      # the integrity/orphan/abandoned-URL gates. TinyGo is NOT needed: the playground
-      # wasm and its glue are committed under docs/vendor/playground/ and copied in by the
-      # render, because they are the only published bytes CI cannot reproduce.
+      # build docs renders the site: derived Markdown and the catalog through generate, then
+      # the esbuild bundles, the render, and the integrity/orphan/abandoned-URL gates.
+      # generate alone stops at the committed files and no longer produces gen/. TinyGo is
+      # NOT needed: the playground wasm and its glue are committed under
+      # docs/vendor/playground/ and copied in by the render, because they are the only
+      # published bytes CI cannot reproduce.
       - name: Render the docs site
-        run: magus run generate docs
+        run: magus run build docs
 
       - name: Build the console app
         run: magus run build console
