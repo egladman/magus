@@ -23,6 +23,8 @@ type sourceCtxKey struct{}
 
 type projectPathCtxKey struct{}
 
+type overlayCtxKey struct{}
+
 // TargetContextGlobal is the session-global name under which the bindings layer
 // stashes the shared magus.Context value (see bindings.registerAllBuzz). A target
 // function receives it as its first argument; execBuzzSrc fetches it with GetGlobal and
@@ -168,6 +170,34 @@ func WithSource(ctx context.Context, src *Source) context.Context {
 func SourceFromContext(ctx context.Context) *Source {
 	v, _ := ctx.Value(sourceCtxKey{}).(*Source)
 	return v
+}
+
+// WithOverlay supplies magusfile CONTENT for absolute paths, read instead of the file on
+// disk. Paths not named here are read normally, and no overlay is the ordinary load.
+//
+// It exists for the one caller that has to load a workspace whose magusfile it cannot read:
+// `magus vcs resolve`, during a merge that left conflict markers in the magusfile itself.
+// Everything that command does rests on the declarations - which target rebuilds which
+// output - so a magusfile it cannot parse leaves it unable to settle even the conflicts it
+// does own. The committed side of the merge is a complete, parseable copy of exactly those
+// declarations, and reading it here is what lets the command do its half of the work while
+// the hand-written conflict waits for a human.
+//
+// An overlay, rather than swapping the file on disk and restoring it: a crash between the
+// two would leave the user's conflict replaced by one side of it, and the merge state is
+// not something a tool should be able to lose on the way to reporting an error.
+func WithOverlay(ctx context.Context, files map[string]string) context.Context {
+	return context.WithValue(ctx, overlayCtxKey{}, files)
+}
+
+// readSource reads path, preferring an overlay entry when the caller supplied one.
+func readSource(ctx context.Context, path string) ([]byte, error) {
+	if files, _ := ctx.Value(overlayCtxKey{}).(map[string]string); files != nil {
+		if content, ok := files[path]; ok {
+			return []byte(content), nil
+		}
+	}
+	return os.ReadFile(path)
 }
 
 // WithProjectPath stores the workspace-relative path of the project whose
@@ -506,7 +536,7 @@ func execBuzzSrc(ctx context.Context, src *Source, parseMode bool) (*loadedBuzz,
 		if relErr != nil {
 			rel = path
 		}
-		data, err := os.ReadFile(path)
+		data, err := readSource(ctx, path)
 		if err != nil {
 			_ = buzzSess.Close()
 			return nil, fmt.Errorf("magusfile: read %s: %w", rel, err)

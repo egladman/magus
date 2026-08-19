@@ -217,14 +217,17 @@ func (s *Service) toProto(ctx context.Context, n store.Note, sd scopedDir, res *
 // notePath renders where the note lives. Workspace-relative for a shared note, absolute for a
 // private one - the same distinction the scope carries, and the reason a private note is
 // never staleness-annotated (the VCS index is keyed by workspace-relative path).
+//
+// The path comes from the note rather than from its name: a note that declares an id is
+// identified by that id and NOT by where its file sits, so joining the store dir to the name
+// named a file that does not exist as soon as the two diverged.
 func (s *Service) notePath(n store.Note, sd scopedDir) string {
-	path := filepath.Join(sd.dir, filepath.FromSlash(n.Name)+".md")
 	if sd.scope != store.ScopeShared {
-		return path
+		return n.Path
 	}
-	rel, err := filepath.Rel(s.ws.Root(), path)
+	rel, err := filepath.Rel(s.ws.Root(), n.Path)
 	if err != nil {
-		return path
+		return n.Path
 	}
 	return filepath.ToSlash(rel)
 }
