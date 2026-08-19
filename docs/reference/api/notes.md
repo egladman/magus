@@ -46,8 +46,7 @@ Anchor is one typed attachment from a note to a graph entity, with the result of
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
-| `name` | string | 1 |  |
-| `scope` | Scope | 2 | scope disambiguates a name that exists in both stores. Required: guessing which store was meant is the mistake worth refusing, since the two mean different things to a reader. |
+| `name` | string | 1 | The note's resource name, "shared/{note}" or "private/{note}". The store is part of the name rather than a second field because a name and a scope arriving separately are a compound key that can disagree, and the store is the axis a reader must never have to guess - the two mean different things about who can read the note. |
 
 ### ListNotesRequest
 

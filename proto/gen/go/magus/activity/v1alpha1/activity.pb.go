@@ -446,7 +446,7 @@ func (x *ActivityQuery) GetTime() *v1alpha1.TimeRange {
 	return nil
 }
 
-type ListActivityRequest struct {
+type ListActivityEventsRequest struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
 	PageToken     string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
@@ -455,20 +455,20 @@ type ListActivityRequest struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListActivityRequest) Reset() {
-	*x = ListActivityRequest{}
+func (x *ListActivityEventsRequest) Reset() {
+	*x = ListActivityEventsRequest{}
 	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[2]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListActivityRequest) String() string {
+func (x *ListActivityEventsRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListActivityRequest) ProtoMessage() {}
+func (*ListActivityEventsRequest) ProtoMessage() {}
 
-func (x *ListActivityRequest) ProtoReflect() protoreflect.Message {
+func (x *ListActivityEventsRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[2]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -480,33 +480,33 @@ func (x *ListActivityRequest) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListActivityRequest.ProtoReflect.Descriptor instead.
-func (*ListActivityRequest) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListActivityEventsRequest.ProtoReflect.Descriptor instead.
+func (*ListActivityEventsRequest) Descriptor() ([]byte, []int) {
 	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{2}
 }
 
-func (x *ListActivityRequest) GetPageSize() int32 {
+func (x *ListActivityEventsRequest) GetPageSize() int32 {
 	if x != nil {
 		return x.PageSize
 	}
 	return 0
 }
 
-func (x *ListActivityRequest) GetPageToken() string {
+func (x *ListActivityEventsRequest) GetPageToken() string {
 	if x != nil {
 		return x.PageToken
 	}
 	return ""
 }
 
-func (x *ListActivityRequest) GetFilter() *ActivityQuery {
+func (x *ListActivityEventsRequest) GetFilter() *ActivityQuery {
 	if x != nil {
 		return x.Filter
 	}
 	return nil
 }
 
-type ListActivityResponse struct {
+type ListActivityEventsResponse struct {
 	state         protoimpl.MessageState `protogen:"open.v1"`
 	Events        []*ActivityEvent       `protobuf:"bytes,1,rep,name=events,proto3" json:"events,omitempty"`
 	NextPageToken string                 `protobuf:"bytes,2,opt,name=next_page_token,json=nextPageToken,proto3" json:"next_page_token,omitempty"` // set when more events remain
@@ -514,20 +514,20 @@ type ListActivityResponse struct {
 	sizeCache     protoimpl.SizeCache
 }
 
-func (x *ListActivityResponse) Reset() {
-	*x = ListActivityResponse{}
+func (x *ListActivityEventsResponse) Reset() {
+	*x = ListActivityEventsResponse{}
 	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
 
-func (x *ListActivityResponse) String() string {
+func (x *ListActivityEventsResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ListActivityResponse) ProtoMessage() {}
+func (*ListActivityEventsResponse) ProtoMessage() {}
 
-func (x *ListActivityResponse) ProtoReflect() protoreflect.Message {
+func (x *ListActivityEventsResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_magus_activity_v1alpha1_activity_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -539,19 +539,19 @@ func (x *ListActivityResponse) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ListActivityResponse.ProtoReflect.Descriptor instead.
-func (*ListActivityResponse) Descriptor() ([]byte, []int) {
+// Deprecated: Use ListActivityEventsResponse.ProtoReflect.Descriptor instead.
+func (*ListActivityEventsResponse) Descriptor() ([]byte, []int) {
 	return file_magus_activity_v1alpha1_activity_proto_rawDescGZIP(), []int{3}
 }
 
-func (x *ListActivityResponse) GetEvents() []*ActivityEvent {
+func (x *ListActivityEventsResponse) GetEvents() []*ActivityEvent {
 	if x != nil {
 		return x.Events
 	}
 	return nil
 }
 
-func (x *ListActivityResponse) GetNextPageToken() string {
+func (x *ListActivityEventsResponse) GetNextPageToken() string {
 	if x != nil {
 		return x.NextPageToken
 	}
@@ -684,14 +684,14 @@ const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"\x05kinds\x18\x01 \x03(\x0e2\x1d.magus.activity.v1alpha1.KindR\x05kinds\x12\x16\n" +
 	"\x06actors\x18\x02 \x03(\tR\x06actors\x12\x18\n" +
 	"\aactions\x18\x03 \x03(\tR\aactions\x123\n" +
-	"\x04time\x18\x04 \x01(\v2\x1f.magus.query.v1alpha1.TimeRangeR\x04time\"\x9d\x01\n" +
-	"\x13ListActivityRequest\x12'\n" +
+	"\x04time\x18\x04 \x01(\v2\x1f.magus.query.v1alpha1.TimeRangeR\x04time\"\xa3\x01\n" +
+	"\x19ListActivityEventsRequest\x12'\n" +
 	"\tpage_size\x18\x01 \x01(\x05B\n" +
 	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bpageSize\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\x02 \x01(\tR\tpageToken\x12>\n" +
-	"\x06filter\x18\x03 \x01(\v2&.magus.activity.v1alpha1.ActivityQueryR\x06filter\"~\n" +
-	"\x14ListActivityResponse\x12>\n" +
+	"\x06filter\x18\x03 \x01(\v2&.magus.activity.v1alpha1.ActivityQueryR\x06filter\"\x84\x01\n" +
+	"\x1aListActivityEventsResponse\x12>\n" +
 	"\x06events\x18\x01 \x03(\v2&.magus.activity.v1alpha1.ActivityEventR\x06events\x12&\n" +
 	"\x0fnext_page_token\x18\x02 \x01(\tR\rnextPageToken\"C\n" +
 	"\x11GetPayloadRequest\x12.\n" +
@@ -718,9 +718,9 @@ const file_magus_activity_v1alpha1_activity_proto_rawDesc = "" +
 	"\x13OUTCOME_UNSPECIFIED\x10\x00\x12\x0e\n" +
 	"\n" +
 	"OUTCOME_OK\x10\x01\x12\x11\n" +
-	"\rOUTCOME_ERROR\x10\x022\xda\x01\n" +
-	"\x0fActivityService\x12k\n" +
-	"\fListActivity\x12,.magus.activity.v1alpha1.ListActivityRequest\x1a-.magus.activity.v1alpha1.ListActivityResponse\x12Z\n" +
+	"\rOUTCOME_ERROR\x10\x022\xec\x01\n" +
+	"\x0fActivityService\x12}\n" +
+	"\x12ListActivityEvents\x122.magus.activity.v1alpha1.ListActivityEventsRequest\x1a3.magus.activity.v1alpha1.ListActivityEventsResponse\x12Z\n" +
 	"\n" +
 	"GetPayload\x12*.magus.activity.v1alpha1.GetPayloadRequest\x1a .magus.activity.v1alpha1.PayloadB\xfb\x01\n" +
 	"\x1bcom.magus.activity.v1alpha1B\rActivityProtoP\x01ZOgithub.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1;activityv1alpha1\xa2\x02\x03MAX\xaa\x02\x17Magus.Activity.V1alpha1\xca\x02\x17Magus\\Activity\\V1alpha1\xe2\x02#Magus\\Activity\\V1alpha1\\GPBMetadata\xea\x02\x19Magus::Activity::V1alpha1b\x06proto3"
@@ -740,17 +740,17 @@ func file_magus_activity_v1alpha1_activity_proto_rawDescGZIP() []byte {
 var file_magus_activity_v1alpha1_activity_proto_enumTypes = make([]protoimpl.EnumInfo, 2)
 var file_magus_activity_v1alpha1_activity_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
 var file_magus_activity_v1alpha1_activity_proto_goTypes = []any{
-	(Kind)(0),                     // 0: magus.activity.v1alpha1.Kind
-	(Outcome)(0),                  // 1: magus.activity.v1alpha1.Outcome
-	(*ActivityEvent)(nil),         // 2: magus.activity.v1alpha1.ActivityEvent
-	(*ActivityQuery)(nil),         // 3: magus.activity.v1alpha1.ActivityQuery
-	(*ListActivityRequest)(nil),   // 4: magus.activity.v1alpha1.ListActivityRequest
-	(*ListActivityResponse)(nil),  // 5: magus.activity.v1alpha1.ListActivityResponse
-	(*GetPayloadRequest)(nil),     // 6: magus.activity.v1alpha1.GetPayloadRequest
-	(*Payload)(nil),               // 7: magus.activity.v1alpha1.Payload
-	(*timestamppb.Timestamp)(nil), // 8: google.protobuf.Timestamp
-	(*durationpb.Duration)(nil),   // 9: google.protobuf.Duration
-	(*v1alpha1.TimeRange)(nil),    // 10: magus.query.v1alpha1.TimeRange
+	(Kind)(0),                          // 0: magus.activity.v1alpha1.Kind
+	(Outcome)(0),                       // 1: magus.activity.v1alpha1.Outcome
+	(*ActivityEvent)(nil),              // 2: magus.activity.v1alpha1.ActivityEvent
+	(*ActivityQuery)(nil),              // 3: magus.activity.v1alpha1.ActivityQuery
+	(*ListActivityEventsRequest)(nil),  // 4: magus.activity.v1alpha1.ListActivityEventsRequest
+	(*ListActivityEventsResponse)(nil), // 5: magus.activity.v1alpha1.ListActivityEventsResponse
+	(*GetPayloadRequest)(nil),          // 6: magus.activity.v1alpha1.GetPayloadRequest
+	(*Payload)(nil),                    // 7: magus.activity.v1alpha1.Payload
+	(*timestamppb.Timestamp)(nil),      // 8: google.protobuf.Timestamp
+	(*durationpb.Duration)(nil),        // 9: google.protobuf.Duration
+	(*v1alpha1.TimeRange)(nil),         // 10: magus.query.v1alpha1.TimeRange
 }
 var file_magus_activity_v1alpha1_activity_proto_depIdxs = []int32{
 	8,  // 0: magus.activity.v1alpha1.ActivityEvent.time:type_name -> google.protobuf.Timestamp
@@ -759,11 +759,11 @@ var file_magus_activity_v1alpha1_activity_proto_depIdxs = []int32{
 	9,  // 3: magus.activity.v1alpha1.ActivityEvent.duration:type_name -> google.protobuf.Duration
 	0,  // 4: magus.activity.v1alpha1.ActivityQuery.kinds:type_name -> magus.activity.v1alpha1.Kind
 	10, // 5: magus.activity.v1alpha1.ActivityQuery.time:type_name -> magus.query.v1alpha1.TimeRange
-	3,  // 6: magus.activity.v1alpha1.ListActivityRequest.filter:type_name -> magus.activity.v1alpha1.ActivityQuery
-	2,  // 7: magus.activity.v1alpha1.ListActivityResponse.events:type_name -> magus.activity.v1alpha1.ActivityEvent
-	4,  // 8: magus.activity.v1alpha1.ActivityService.ListActivity:input_type -> magus.activity.v1alpha1.ListActivityRequest
+	3,  // 6: magus.activity.v1alpha1.ListActivityEventsRequest.filter:type_name -> magus.activity.v1alpha1.ActivityQuery
+	2,  // 7: magus.activity.v1alpha1.ListActivityEventsResponse.events:type_name -> magus.activity.v1alpha1.ActivityEvent
+	4,  // 8: magus.activity.v1alpha1.ActivityService.ListActivityEvents:input_type -> magus.activity.v1alpha1.ListActivityEventsRequest
 	6,  // 9: magus.activity.v1alpha1.ActivityService.GetPayload:input_type -> magus.activity.v1alpha1.GetPayloadRequest
-	5,  // 10: magus.activity.v1alpha1.ActivityService.ListActivity:output_type -> magus.activity.v1alpha1.ListActivityResponse
+	5,  // 10: magus.activity.v1alpha1.ActivityService.ListActivityEvents:output_type -> magus.activity.v1alpha1.ListActivityEventsResponse
 	7,  // 11: magus.activity.v1alpha1.ActivityService.GetPayload:output_type -> magus.activity.v1alpha1.Payload
 	10, // [10:12] is the sub-list for method output_type
 	8,  // [8:10] is the sub-list for method input_type

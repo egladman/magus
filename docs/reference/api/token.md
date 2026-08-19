@@ -44,7 +44,7 @@ No fields.
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
-| `identifier` | string | 1 | identifier is a token name or fingerprint (as returned in TokenInfo.identifier). |
+| `name` | string | 1 | The token's resource name. TokenInfo.identifier (the display fingerprint) is accepted here too, since it identifies the same token and is what a listing gives a reader to copy. |
 
 ### TokenInfo
 

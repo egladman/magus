@@ -104,7 +104,7 @@ EventQuery filters an invocation's events server-side (for a large log). It is t
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
-| `selector` | Selector | 1 |  |
+| `name` | string | 1 | A run's resource name: an output ref ("out<hex>") or an invocation id ("inv<base36>"). One field rather than a oneof because the two patterns are disjoint, so a single string still identifies exactly one run - and this service spelled the same identity three ways before (a oneof here, the same oneof on ListEvents, a bare string on StreamEvents). |
 
 ### Invocation
 
@@ -122,7 +122,7 @@ Invocation is one `magus` command, launch to exit - the thing that produces a Jo
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
-| `selector` | Selector | 1 |  |
+| `parent` | string | 1 | The run that owns these events - the collection's parent, per AIP-132. |
 | `page_size` | int32 | 2 |  |
 | `page_token` | string | 3 |  |
 | `filter` | EventQuery | 4 | viewer-typed content + time filter |
@@ -134,20 +134,11 @@ Invocation is one `magus` command, launch to exit - the thing that produces a Jo
 | `events` | repeated Event | 1 |  |
 | `next_page_token` | string | 2 | set when more events remain |
 
-### Selector
-
-Selector picks a run: one target's execution (ref) or a whole invocation.
-
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `ref` | string | 1 | _one of `of`_ |
-| `invocation` | string | 2 | _one of `of`_ |
-
 ### StreamEventsRequest
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
-| `invocation` | string | 1 |  |
+| `parent` | string | 1 | The invocation whose events stream. Named parent to match ListEvents; only a whole invocation streams, so this one does not take an output ref. |
 | `filter` | EventQuery | 2 | viewer-typed content filter; filter.time.since resumes the stream |
 
 ### StreamEventsResponse

@@ -44,9 +44,9 @@ const (
 // reflection-formatted method names, remove the leading slash and convert the remaining slash to a
 // period.
 const (
-	// ActivityServiceListActivityProcedure is the fully-qualified name of the ActivityService's
-	// ListActivity RPC.
-	ActivityServiceListActivityProcedure = "/magus.activity.v1alpha1.ActivityService/ListActivity"
+	// ActivityServiceListActivityEventsProcedure is the fully-qualified name of the ActivityService's
+	// ListActivityEvents RPC.
+	ActivityServiceListActivityEventsProcedure = "/magus.activity.v1alpha1.ActivityService/ListActivityEvents"
 	// ActivityServiceGetPayloadProcedure is the fully-qualified name of the ActivityService's
 	// GetPayload RPC.
 	ActivityServiceGetPayloadProcedure = "/magus.activity.v1alpha1.ActivityService/GetPayload"
@@ -55,7 +55,7 @@ const (
 // ActivityServiceClient is a client for the magus.activity.v1alpha1.ActivityService service.
 type ActivityServiceClient interface {
 	// ListActivity returns a page of recent events, newest first, narrowed by filter.
-	ListActivity(context.Context, *connect.Request[v1alpha1.ListActivityRequest]) (*connect.Response[v1alpha1.ListActivityResponse], error)
+	ListActivityEvents(context.Context, *connect.Request[v1alpha1.ListActivityEventsRequest]) (*connect.Response[v1alpha1.ListActivityEventsResponse], error)
 	// GetPayload returns a stored request or response body by its ref (from an ActivityEvent).
 	GetPayload(context.Context, *connect.Request[v1alpha1.GetPayloadRequest]) (*connect.Response[v1alpha1.Payload], error)
 }
@@ -71,10 +71,10 @@ func NewActivityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 	baseURL = strings.TrimRight(baseURL, "/")
 	activityServiceMethods := v1alpha1.File_magus_activity_v1alpha1_activity_proto.Services().ByName("ActivityService").Methods()
 	return &activityServiceClient{
-		listActivity: connect.NewClient[v1alpha1.ListActivityRequest, v1alpha1.ListActivityResponse](
+		listActivityEvents: connect.NewClient[v1alpha1.ListActivityEventsRequest, v1alpha1.ListActivityEventsResponse](
 			httpClient,
-			baseURL+ActivityServiceListActivityProcedure,
-			connect.WithSchema(activityServiceMethods.ByName("ListActivity")),
+			baseURL+ActivityServiceListActivityEventsProcedure,
+			connect.WithSchema(activityServiceMethods.ByName("ListActivityEvents")),
 			connect.WithClientOptions(opts...),
 		),
 		getPayload: connect.NewClient[v1alpha1.GetPayloadRequest, v1alpha1.Payload](
@@ -88,13 +88,13 @@ func NewActivityServiceClient(httpClient connect.HTTPClient, baseURL string, opt
 
 // activityServiceClient implements ActivityServiceClient.
 type activityServiceClient struct {
-	listActivity *connect.Client[v1alpha1.ListActivityRequest, v1alpha1.ListActivityResponse]
-	getPayload   *connect.Client[v1alpha1.GetPayloadRequest, v1alpha1.Payload]
+	listActivityEvents *connect.Client[v1alpha1.ListActivityEventsRequest, v1alpha1.ListActivityEventsResponse]
+	getPayload         *connect.Client[v1alpha1.GetPayloadRequest, v1alpha1.Payload]
 }
 
-// ListActivity calls magus.activity.v1alpha1.ActivityService.ListActivity.
-func (c *activityServiceClient) ListActivity(ctx context.Context, req *connect.Request[v1alpha1.ListActivityRequest]) (*connect.Response[v1alpha1.ListActivityResponse], error) {
-	return c.listActivity.CallUnary(ctx, req)
+// ListActivityEvents calls magus.activity.v1alpha1.ActivityService.ListActivityEvents.
+func (c *activityServiceClient) ListActivityEvents(ctx context.Context, req *connect.Request[v1alpha1.ListActivityEventsRequest]) (*connect.Response[v1alpha1.ListActivityEventsResponse], error) {
+	return c.listActivityEvents.CallUnary(ctx, req)
 }
 
 // GetPayload calls magus.activity.v1alpha1.ActivityService.GetPayload.
@@ -106,7 +106,7 @@ func (c *activityServiceClient) GetPayload(ctx context.Context, req *connect.Req
 // service.
 type ActivityServiceHandler interface {
 	// ListActivity returns a page of recent events, newest first, narrowed by filter.
-	ListActivity(context.Context, *connect.Request[v1alpha1.ListActivityRequest]) (*connect.Response[v1alpha1.ListActivityResponse], error)
+	ListActivityEvents(context.Context, *connect.Request[v1alpha1.ListActivityEventsRequest]) (*connect.Response[v1alpha1.ListActivityEventsResponse], error)
 	// GetPayload returns a stored request or response body by its ref (from an ActivityEvent).
 	GetPayload(context.Context, *connect.Request[v1alpha1.GetPayloadRequest]) (*connect.Response[v1alpha1.Payload], error)
 }
@@ -118,10 +118,10 @@ type ActivityServiceHandler interface {
 // and JSON codecs. They also support gzip compression.
 func NewActivityServiceHandler(svc ActivityServiceHandler, opts ...connect.HandlerOption) (string, http.Handler) {
 	activityServiceMethods := v1alpha1.File_magus_activity_v1alpha1_activity_proto.Services().ByName("ActivityService").Methods()
-	activityServiceListActivityHandler := connect.NewUnaryHandler(
-		ActivityServiceListActivityProcedure,
-		svc.ListActivity,
-		connect.WithSchema(activityServiceMethods.ByName("ListActivity")),
+	activityServiceListActivityEventsHandler := connect.NewUnaryHandler(
+		ActivityServiceListActivityEventsProcedure,
+		svc.ListActivityEvents,
+		connect.WithSchema(activityServiceMethods.ByName("ListActivityEvents")),
 		connect.WithHandlerOptions(opts...),
 	)
 	activityServiceGetPayloadHandler := connect.NewUnaryHandler(
@@ -132,8 +132,8 @@ func NewActivityServiceHandler(svc ActivityServiceHandler, opts ...connect.Handl
 	)
 	return "/magus.activity.v1alpha1.ActivityService/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		switch r.URL.Path {
-		case ActivityServiceListActivityProcedure:
-			activityServiceListActivityHandler.ServeHTTP(w, r)
+		case ActivityServiceListActivityEventsProcedure:
+			activityServiceListActivityEventsHandler.ServeHTTP(w, r)
 		case ActivityServiceGetPayloadProcedure:
 			activityServiceGetPayloadHandler.ServeHTTP(w, r)
 		default:
@@ -145,8 +145,8 @@ func NewActivityServiceHandler(svc ActivityServiceHandler, opts ...connect.Handl
 // UnimplementedActivityServiceHandler returns CodeUnimplemented from all methods.
 type UnimplementedActivityServiceHandler struct{}
 
-func (UnimplementedActivityServiceHandler) ListActivity(context.Context, *connect.Request[v1alpha1.ListActivityRequest]) (*connect.Response[v1alpha1.ListActivityResponse], error) {
-	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.activity.v1alpha1.ActivityService.ListActivity is not implemented"))
+func (UnimplementedActivityServiceHandler) ListActivityEvents(context.Context, *connect.Request[v1alpha1.ListActivityEventsRequest]) (*connect.Response[v1alpha1.ListActivityEventsResponse], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.activity.v1alpha1.ActivityService.ListActivityEvents is not implemented"))
 }
 
 func (UnimplementedActivityServiceHandler) GetPayload(context.Context, *connect.Request[v1alpha1.GetPayloadRequest]) (*connect.Response[v1alpha1.Payload], error) {

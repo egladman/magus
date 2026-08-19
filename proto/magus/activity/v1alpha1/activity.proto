@@ -119,7 +119,7 @@ message ActivityEvent {
 // human-facing API surface, never under /mcp (the agent protocol surface).
 service ActivityService {
   // ListActivity returns a page of recent events, newest first, narrowed by filter.
-  rpc ListActivity(ListActivityRequest) returns (ListActivityResponse);
+  rpc ListActivityEvents(ListActivityEventsRequest) returns (ListActivityEventsResponse);
   // GetPayload returns a stored request or response body by its ref (from an ActivityEvent).
   rpc GetPayload(GetPayloadRequest) returns (Payload);
 }
@@ -133,12 +133,12 @@ message ActivityQuery {
   magus.query.v1alpha1.TimeRange time = 4;   // action-time window
 }
 
-message ListActivityRequest {
+message ListActivityEventsRequest {
   int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 1000}];
   string page_token = 2;
   ActivityQuery filter = 3;
 }
-message ListActivityResponse {
+message ListActivityEventsResponse {
   repeated ActivityEvent events = 1;
   string next_page_token = 2;  // set when more events remain
 }

@@ -382,7 +382,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 				activityAllowed = allowed.Allow(u.Host)
 			}
 			httpServer.Handle(activityPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, activityHandler))))
-			// ActivityService.ListActivity is read-only, so it joins the share read surface.
+			// ActivityService.ListActivityEvents is read-only, so it joins the share read surface.
 			shareGuarded[activityPath] = activityHandler
 			log.InfoContext(ctx, "[BRIDGE] activity service mounted", slog.String("path", activityPath))
 

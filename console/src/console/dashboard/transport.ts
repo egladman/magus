@@ -278,7 +278,7 @@ export class DashboardTransport {
 
   // ---- activity trail poll -------------------------------------------------
   //
-  // POLLED, not streamed, and deliberately so for now. ActivityService exposes only ListActivity -
+  // POLLED, not streamed, and deliberately so for now. ActivityService exposes only ListActivityEvents -
   // a request/response page - so a live feed would mean designing and shipping a server-stream
   // first. A page of the most recent events every few seconds is enough for a tile that reports
   // "agents active in the last five minutes", and it needs no proto change at all. If the tile ever
@@ -304,7 +304,7 @@ export class DashboardTransport {
     if (!host) return;
     try {
       const client = createClient(ActivityService, createDaemonTransport(host, getLiveToken()));
-      const resp = await client.listActivity({
+      const resp = await client.listActivityEvents({
         pageSize: ACTIVITY_PAGE,
         // Only the two kinds the tile reads. Filtering server-side keeps a busy daemon's job and
         // memory events from crowding the page and pushing agent events off the end of it.

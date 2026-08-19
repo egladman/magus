@@ -14,7 +14,7 @@ Package `magus.tool.v1alpha1`, defined in `proto/magus/tool/v1alpha1/tool.proto`
 
 ### ListTools
 
-ListTools returns every project's tools with their windows and verdicts.
+ListTools returns every project's tools with their windows and verdicts.  The name does not match the repeated field (projects), which AIP-132 would have it do. Left deliberately: this returns a two-level view, projects each carrying their tools, because a tool version is a per-project fact and the dashboard renders it grouped that way. Flattening to `repeated Tool` to satisfy the rule would make every Tool carry its own project path and lose the grouping; renaming this ListProjects would leave the toolchain service with no RPC that mentions a tool. AIP-132 governs a collection of one resource, and this is not one.
 
 `POST /magus.tool.v1alpha1.ToolService/ListTools`: unary.
 
@@ -26,7 +26,7 @@ Takes `ListToolsRequest`, returns `ListToolsResponse`.
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
-| `project` | string | 1 | project narrows to one workspace-relative path; empty returns all of them. |
+| `parent` | string | 1 | The project whose tools these are, as a workspace-relative path; empty returns every project. Named parent per AIP-132 - a project is a real container here, unlike the workspace-scoped collections in this API, which have no second value to hold. |
 
 ### ListToolsResponse
 

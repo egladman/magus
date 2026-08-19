@@ -81,7 +81,7 @@ async function pollShareConnect(
   baselineMs: number,
 ): Promise<void> {
   const activity = createClient(ActivityService, createDaemonTransport(host, getLiveToken()));
-  const resp = await activity.listActivity({
+  const resp = await activity.listActivityEvents({
     pageSize: 20,
     filter: { kinds: [Kind.TOKEN_LIFECYCLE], actions: ["share.open"], actors: [] },
   });

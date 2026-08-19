@@ -12,13 +12,13 @@ Package `magus.activity.v1alpha1`, defined in `proto/magus/activity/v1alpha1/act
 
 ## Methods
 
-### ListActivity
+### ListActivityEvents
 
 ListActivity returns a page of recent events, newest first, narrowed by filter.
 
-`POST /magus.activity.v1alpha1.ActivityService/ListActivity`: unary.
+`POST /magus.activity.v1alpha1.ActivityService/ListActivityEvents`: unary.
 
-Takes `ListActivityRequest`, returns `ListActivityResponse`.
+Takes `ListActivityEventsRequest`, returns `ListActivityEventsResponse`.
 
 ### GetPayload
 
@@ -70,7 +70,7 @@ ActivityQuery narrows the listing server-side. Fields AND together; repeated val
 |-------|------|---|-------------|
 | `ref` | string | 1 | A provenance-prefixed content ref: a short lowercase source tag followed by hex. |
 
-### ListActivityRequest
+### ListActivityEventsRequest
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -78,7 +78,7 @@ ActivityQuery narrows the listing server-side. Fields AND together; repeated val
 | `page_token` | string | 2 |  |
 | `filter` | ActivityQuery | 3 |  |
 
-### ListActivityResponse
+### ListActivityEventsResponse
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|

@@ -38,7 +38,7 @@ curl -X POST \
   -H "Content-Type: application/json" \
   -H "Authorization: Bearer $MAGUS_TOKEN" \
   -d '{}' \
-  http://127.0.0.1:7391/magus.activity.v1alpha1.ActivityService/ListActivity
+  http://127.0.0.1:7391/magus.activity.v1alpha1.ActivityService/ListActivityEvents
 ```
 
 The path is always `/<package>.<Service>/<Method>`, which every page below states per method.

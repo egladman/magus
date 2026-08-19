@@ -69,10 +69,10 @@ func (s *Service) loaded() []Workspace {
 
 var _ activityv1alpha1connect.ActivityServiceHandler = (*Service)(nil)
 
-// ListActivity returns recent events, newest first, narrowed by the request filter. Paging is a
+// ListActivityEvents returns recent events, newest first, narrowed by the request filter. Paging is a
 // simple recent-window today (page_size, capped); page_token is unused, so next_page_token is
 // always empty - enough for the dashboard's "recent activity" view.
-func (s *Service) ListActivity(_ context.Context, req *connect.Request[activityv1.ListActivityRequest]) (*connect.Response[activityv1.ListActivityResponse], error) {
+func (s *Service) ListActivityEvents(_ context.Context, req *connect.Request[activityv1.ListActivityEventsRequest]) (*connect.Response[activityv1.ListActivityEventsResponse], error) {
 	limit := int(req.Msg.GetPageSize())
 	if limit <= 0 {
 		limit = defaultPageSize
@@ -109,7 +109,7 @@ func (s *Service) ListActivity(_ context.Context, req *connect.Request[activityv
 		}
 		out = append(out, pe)
 	}
-	return connect.NewResponse(&activityv1.ListActivityResponse{Events: out}), nil
+	return connect.NewResponse(&activityv1.ListActivityEventsResponse{Events: out}), nil
 }
 
 // readMerged returns the limit most recent events across every workspace's trail, newest first.
