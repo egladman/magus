@@ -1891,3 +1891,45 @@ func TestInstallTargetLeavesRelativeAlone(t *testing.T) {
 	assert.Equal(t, "repo", base)
 	assert.Equal(t, "../../outside", leaf)
 }
+
+// TestGuardDeniesScriptedRewrite: `sed -i` is denied, so the next thing to hand is a
+// python one-liner that substitutes and writes - the same edit, by a route the sed rule
+// cannot see. This is not hypothetical: a `\.Sum\b` rewrite aimed at one proto field also
+// rewrote the OTel SDK's metricdata.Sum and a histogram data point's dp.Sum, because a
+// pattern cannot tell one project's symbol from a dependency's symbol of the same name.
+//
+// The negative cases matter as much: an interpreter that only WRITES is ordinary authoring
+// and must stay available, or the guard costs more than the mistake it prevents.
+func TestGuardDeniesScriptedRewrite(t *testing.T) {
+	t.Parallel()
+	for _, cmd := range []string{
+		`python3 -c "import io,re; s=io.open('f.go').read(); s=re.sub(r'\bA\b','B',s); io.open('f.go','w').write(s)"`,
+		`python3 - <<'PY'` + "\n" + `s=re.subn(r'\bP50\b','P50Seconds',s)` + "\n" + `io.open(p,'w').write(s)` + "\nPY",
+		`perl -pi -e 's/a/b/' f.go`,
+		`perl -i.bak -pe s/a/b/ f`,
+		`ruby -i -pe 'gsub(/a/,"b")' f.rb`,
+	} {
+		assert.NotEmpty(t, evaluateBashGuard(cmd).Deny, "expected a deny for %q", cmd)
+	}
+	for _, cmd := range []string{
+		// Authoring a file is not a rewrite: no substitution, nothing to mis-target.
+		`python3 -c "io.open('new.go','w').write(body)"`,
+		// Reading and reporting, however it greps, writes nothing.
+		`python3 -c "print(re.sub(r'a','b',s))"`,
+		`perl -ne 'print if /a/' f.go`,
+		`node -e "console.log(x.replace(/a/,'b'))"`,
+	} {
+		assert.Empty(t, evaluateBashGuard(cmd).Deny, "%q does not substitute-and-write: %q", cmd, cmd)
+	}
+}
+
+// TestSearchGuardRoutesAColdIndex pins the half of the routing that decides whether an
+// agent trusts the graph at all. `magus refs` answers "unknown, not absent" when a project
+// is not indexed, and an agent that reads that as "no matches" falls back to a text match -
+// which is exactly the fallback the advisory exists to prevent.
+func TestSearchGuardRoutesAColdIndex(t *testing.T) {
+	t.Parallel()
+	v := evaluateBashGuard(`grep -rn "someFunc" .`)
+	assert.Contains(t, v.Context, "magus graph build", "a cold index must name the command that fixes it")
+	assert.Contains(t, v.Context, "unknown, not absent", "the verdict's meaning is the point, not just the command")
+}
