@@ -159,6 +159,16 @@ func main() {
 			os.Exit(1)
 		}
 	}
+	// Renaming a spell used to leave its page behind, because this walked the registry
+	// and only ever wrote. `ts` became `typescript` (with py/rs/md) and the four stale
+	// pages stayed committed and still linked, so nothing looked wrong until a
+	// `magus clean docs` swept them - they are declared outputs - and the site's link
+	// gate then failed on pages every checkout still had. Prune here so the rename in
+	// the registry is the only edit a rename needs.
+	if err := pruneUnregistered(*outDir, names); err != nil {
+		fmt.Fprintf(os.Stderr, "magus-spelldocs: %v\n", err)
+		os.Exit(1)
+	}
 	// The at-a-glance list of all spells lives on the concept page (docs/spells.md,
 	// the /spells/ landing) rather than a separate index, so /spells/ both explains
 	// what a spell is and lists every one. Injected between markers so it stays
@@ -181,6 +191,30 @@ func resolvedArgv(op spells.Op) string {
 		return ""
 	}
 	return strings.TrimSpace(op.Bin + " " + strings.Join(op.Args, " "))
+}
+
+// pruneUnregistered removes page files in dir that no spell in keep claims, so a
+// renamed or deleted spell cannot leave a reachable page behind. It removes only *.md,
+// and dir is content-generate's declared output rather than a place anything is
+// authored by hand, so there is nothing else there to lose.
+func pruneUnregistered(dir string, keep []string) error {
+	entries, err := os.ReadDir(dir)
+	if err != nil {
+		return err
+	}
+	for _, e := range entries {
+		name := e.Name()
+		if e.IsDir() || !strings.HasSuffix(name, ".md") {
+			continue
+		}
+		if slices.Contains(keep, strings.TrimSuffix(name, ".md")) {
+			continue
+		}
+		if err := os.Remove(filepath.Join(dir, name)); err != nil {
+			return fmt.Errorf("prune %s: %w", name, err)
+		}
+	}
+	return nil
 }
 
 func renderSpell(d spells.Descriptor) string {
