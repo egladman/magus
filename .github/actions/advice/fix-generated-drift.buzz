@@ -29,14 +29,6 @@ fun git(argv: [str], tolerate: bool) > str !> any {
     return proc\exec("git", args: argv, dir: ".", opts: {"allow_failure": tolerate}).stdout;
 }
 
-// labelled reports whether the PR carries the consent label.
-fun labelled(repo: str, pr: str, want: str) > bool !> any {
-    final listed = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
-        dir: ".", opts: {"quiet": true, "allow_failure": true});
-    if (!listed.ok) { return false; }
-    return listed.stdout.indexOf("\"name\": \"" + want + "\"") != null;
-}
-
 // dirty lists the paths regeneration changed, tracked files only.
 fun dirty() > [str] !> any {
     var paths = mut [];
@@ -74,7 +66,7 @@ fun main() > void !> any {
         return;
     }
 
-    if (!labelled(repo, pr: pr, want: label)) {
+    if (!advice\carries(repo, pr: pr, want: label)) {
         // No consent for this change. Retract any section left by an earlier push, so the
         // comment never claims a fix that is no longer on offer.
         advice\publish(repo, pr: pr, name: section, title: "Generated drift", body: "");

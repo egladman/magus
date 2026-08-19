@@ -310,16 +310,43 @@ export fun silences(labels: [str], name: str) > bool {
     return false;
 }
 
-// silenced asks GitHub for this pull request's labels and applies the rule above.
-export fun silenced(repo: str, pr: str, name: str) > bool !> any {
+// labels lists this pull request's label names, DECODED rather than pattern-matched.
+//
+// The one place that reads them, because a hand-rolled match on the raw body is a bug that
+// tests clean by hand and is false on every runner: `gh api` pretty-prints to a terminal
+// (`"name": "x"`) and prints compact JSON to a pipe (`"name":"x"`), and CI is always the
+// pipe. The fixers each carried their own `indexOf("\"name\": \"" + want + "\"")`, so their
+// consent check never once returned true in CI - both of them, plus the label retirement,
+// reported "nothing to do" on every run and looked healthy doing it.
+export fun labels(repo: str, pr: str) > [str] !> any {
     final res = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
         dir: ".", opts: {"quiet": true, "allow_failure": true});
-    if (!res.ok) { return false; }
-    var labels = mut [];
-    foreach (l in serialize\jsonDecode(res.stdout).listValue()) {
-        labels.append(l.q("name").stringValue());
+    if (!res.ok) { return mut [<str>]; }
+    return namesFrom(res.stdout);
+}
+
+// namesFrom reads gh's label list. Split from labels so the DECODE is testable without a
+// repository - the bug this closes lived here, not in the matching rule the tests covered,
+// which is exactly why they stayed green through it.
+export fun namesFrom(body: str) > [str] !> any {
+    final names = mut [<str>];
+    foreach (l in serialize\jsonDecode(body).listValue()) {
+        names.append(l.q("name").stringValue());
     }
-    return silences(labels, name: name);
+    return names;
+}
+
+// carries reports whether the pull request has a label, by exact name. An absent label and
+// an unreadable label list are the same answer on purpose: a fixer that writes must not act
+// on a consent it could not confirm.
+export fun carries(repo: str, pr: str, want: str) > bool !> any {
+    foreach (l in labels(repo, pr: pr)) { if (l == want) { return true; } }
+    return false;
+}
+
+// silenced asks GitHub for this pull request's labels and applies the rule above.
+export fun silenced(repo: str, pr: str, name: str) > bool !> any {
+    return silences(labels(repo, pr: pr), name: name);
 }
 
 // find returns the id of our comment on this PR, or "" when we have not commented yet.
@@ -478,6 +505,20 @@ test "silences mutes everything with the bare label" {
 test "silences ignores unrelated labels" {
     std\assert(!silences(["bug", "magus:autofix"], name: "doctor"), message: "not a silence label");
     std\assert(!silences([], name: "doctor"), message: "no labels at all");
+}
+
+// BOTH spellings, because the difference is invisible when you try it by hand: `gh api`
+// pretty-prints to a terminal and prints compact JSON to a pipe, and CI is always the pipe.
+// A matcher written against the pretty form read every runner's labels as empty.
+test "namesFrom reads gh's label list in either spelling" {
+    final compact = namesFrom("[\{\"id\":1,\"name\":\"magus:auto-fix:requested\",\"color\":\"6CA44D\"\}]");
+    std\assert(compact.len() == 1, message: "one label from the compact form");
+    std\assert(compact[0] == "magus:auto-fix:requested", message: "compact name decoded");
+
+    final pretty = namesFrom("[\n  \{\n    \"id\": 1,\n    \"name\": \"magus:auto-fix:requested\"\n  \}\n]");
+    std\assert(pretty[0] == "magus:auto-fix:requested", message: "pretty name decoded");
+
+    std\assert(namesFrom("[]").len() == 0, message: "no labels is not a label");
 }
 
 test "a comment carries exactly one footer however many advisors write to it" {

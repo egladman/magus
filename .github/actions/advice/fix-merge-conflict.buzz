@@ -20,13 +20,6 @@ fun git(argv: [str], tolerate: bool) > proc\ExecResult !> any {
     return proc\exec("git", args: argv, dir: ".", opts: {"allow_failure": tolerate});
 }
 
-fun labelled(repo: str, pr: str, want: str) > bool !> any {
-    final listed = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
-        dir: ".", opts: {"quiet": true, "allow_failure": true});
-    if (!listed.ok) { return false; }
-    return listed.stdout.indexOf("\"name\": \"" + want + "\"") != null;
-}
-
 // Not `ls-files -u`: it reports one line per stage, naming a path up to three times.
 fun unmerged() > [str] !> any {
     final paths = mut [<str>];
@@ -77,7 +70,7 @@ fun main() > void !> any {
         return;
     }
 
-    if (!labelled(repo, pr: pr, want: label)) {
+    if (!advice\carries(repo, pr: pr, want: label)) {
         advice\publish(repo, pr: pr, name: section, title: "Merge conflicts", body: "");
         std\print("fix-merge-conflict: label " + label + " absent; nothing to do");
         return;
