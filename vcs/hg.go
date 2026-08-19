@@ -812,6 +812,20 @@ const hgArchivalMeta = ".hg_archival.txt"
 // whole-tree export without one, and hg does not. Both inject a provenance file, and both
 // keep repository-relative paths where git's `archive <rev> -- .` re-roots them, so dir's
 // prefix is stripped here to give the caller the subtree it asked about.
+// ReadFileAt implements types.RevisionFileReader via `hg cat -r <rev>`. "" is `.`, hg's
+// spelling of the working directory's parent - the committed revision, as HEAD is for git.
+func (v hgVCS) ReadFileAt(ctx context.Context, root, rev, path string) (string, error) {
+	if rev == "" {
+		rev = "."
+	}
+	if err := checkRef(rev); err != nil {
+		return "", err
+	}
+	cmd := exec.CommandContext(ctx, "hg", "cat", "-r", rev, path)
+	cmd.Dir = root
+	return revFileOutput(cmd, fmt.Sprintf("hg cat -r %s %s", rev, path))
+}
+
 func (v hgVCS) ExportRevision(ctx context.Context, dir, rev, dstDir string) error {
 	if rev == "" {
 		rev = "."
