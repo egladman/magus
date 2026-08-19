@@ -49,6 +49,9 @@ step at a time.
 **--explain**
 : For a ref with charms: show the per-charm argv trace (base then each charm)
 
+**--inputs**
+: With --cache: list every key input line, so you can confirm a declared file was actually hashed
+
 **--no-default-charms**
 : With --cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)
 

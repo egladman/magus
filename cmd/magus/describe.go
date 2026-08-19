@@ -585,10 +585,14 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "magus describe target: --explain traces the rendered command and --cache keys the inputs; run them separately")
 			return errSilent{exitCode: 2}
 		}
-		return describeTargetCache(ctx, root, pos, tf.Against, tf.NoDefaultCharms)
+		return describeTargetCache(ctx, root, pos, tf.Against, tf.NoDefaultCharms, tf.Inputs)
 	}
 	if tf.NoDefaultCharms {
 		fmt.Fprintln(os.Stderr, "magus describe target: --no-default-charms applies only to --cache")
+		return errSilent{exitCode: 2}
+	}
+	if tf.Inputs {
+		fmt.Fprintln(os.Stderr, "magus describe target: --inputs applies only to --cache")
 		return errSilent{exitCode: 2}
 	}
 	if len(pos) == 0 {
@@ -609,7 +613,12 @@ type targetCacheReport struct {
 	KeyVersion   int                 `json:"key_version"`
 	Ref          string              `json:"ref"`
 	ClassDigests []cache.ClassDigest `json:"class_digests"`
-	Against      *targetCacheAgainst `json:"against,omitempty"`
+	// KeyInputs is the masked line-by-line key, present only with --inputs. The class
+	// digests say a class changed; these say WHICH line - and, read as a list, which
+	// files a declaration actually resolved to. A `src:` line missing for a file the
+	// target declares is the whole bug class this exists to make visible.
+	KeyInputs []string            `json:"key_inputs,omitempty"`
+	Against   *targetCacheAgainst `json:"against,omitempty"`
 }
 
 type targetCacheAgainst struct {
@@ -625,7 +634,7 @@ type targetCacheAgainst struct {
 // --against diffs the live key inputs against the redacted lines stored behind an
 // output ref. This is the CLI half of the portable-ref debugging story: two machines
 // print different refs for one target; this names the line that disagrees.
-func describeTargetCache(ctx context.Context, root string, pos []string, against string, noDefaultCharms bool) error {
+func describeTargetCache(ctx context.Context, root string, pos []string, against string, noDefaultCharms, showInputs bool) error {
 	if len(pos) == 0 {
 		fmt.Fprintln(os.Stderr, "magus describe target --cache: requires a <target> [project] argument")
 		return errSilent{exitCode: 2}
@@ -706,6 +715,9 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 			Ref:          cache.PortableRef(key),
 			ClassDigests: cache.ClassDigests(lines),
 		}
+		if showInputs {
+			r.KeyInputs = lines
+		}
 		if against != "" {
 			// The VERDICT is key equality, never the line diff: DiffKeyInputs is a
 			// set difference (multiplicity and order collapse), so an empty diff
@@ -762,6 +774,12 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 				noun = "line"
 			}
 			fmt.Printf("    %-16s %s  %d %s\n", d.Class, d.Digest, d.Count, noun)
+		}
+		if len(r.KeyInputs) > 0 {
+			fmt.Println("  key inputs:")
+			for _, line := range r.KeyInputs {
+				fmt.Printf("    %s\n", line)
+			}
 		}
 		if r.Against == nil {
 			fmt.Println()
