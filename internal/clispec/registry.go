@@ -889,6 +889,7 @@ mgs_ contract stubbed, each function documented, and a runnable test block.`,
 	Usage: "magus init [flags]",
 	Flags: []Flag{
 		{Name: "global", Kind: FlagBool, Doc: "Write only the global config; skip the workspace bootstrap"},
+		{Name: "dry-run", Kind: FlagBool, Doc: "Print the config, magusfile, and merge-driver destinations without writing any of them"},
 		{Name: "local", Kind: FlagBool, Doc: "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/"},
 		{Name: "force", Kind: FlagBool, Doc: "Overwrite an existing config file"},
 		{Name: "vcs", Kind: FlagString, Doc: "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY"},

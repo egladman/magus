@@ -32,6 +32,9 @@ mgs_ contract stubbed, each function documented, and a runnable test block.
 
 ## Options
 
+**--dry-run**
+: Print the config, magusfile, and merge-driver destinations without writing any of them
+
 **--force**
 : Overwrite an existing config file
 

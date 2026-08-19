@@ -193,6 +193,8 @@ const (
 	FlagHookSession = "session"
 	// hook: --transcript
 	FlagHookTranscript = "transcript"
+	// init: --dry-run
+	FlagInitDryRun = "dry-run"
 	// init: --force
 	FlagInitForce = "force"
 	// init: --global
@@ -945,6 +947,7 @@ func BindBuzz(fs *flag.FlagSet) *BuzzFlags {
 // InitFlags are the flags declared for `magus init`.
 type InitFlags struct {
 	Global bool   // --global
+	DryRun bool   // --dry-run
 	Local  bool   // --local
 	Force  bool   // --force
 	VCS    string // --vcs
@@ -954,6 +957,7 @@ type InitFlags struct {
 func BindInit(fs *flag.FlagSet) *InitFlags {
 	var f InitFlags
 	fs.BoolVar(&f.Global, FlagInitGlobal, false, "Write only the global config; skip the workspace bootstrap")
+	fs.BoolVar(&f.DryRun, FlagInitDryRun, false, "Print the config, magusfile, and merge-driver destinations without writing any of them")
 	fs.BoolVar(&f.Local, FlagInitLocal, false, "Write config into the repo (CWD) instead of $XDG_CONFIG_HOME/magus/")
 	fs.BoolVar(&f.Force, FlagInitForce, false, "Overwrite an existing config file")
 	fs.StringVar(&f.VCS, FlagInitVCS, "", "VCS to wire the merge driver for (git|hg); prompts when omitted on a TTY")
