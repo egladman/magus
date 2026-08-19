@@ -167,12 +167,14 @@ ignore file is a list that rots silently, because nothing checks it against the 
 
 ## Adding a generated artifact
 
-1. Declare it with `ctx.writesFiles`, so magus, `.gitattributes`, and `magus clean`
+1. Produce it from `generate`, not `build` - committing the output is what makes the
+   drift gate able to check it. See [`generate` or `build`?](targets.md) in targets.
+2. Declare it with `ctx.writesFiles`, so magus, `.gitattributes`, and `magus clean`
    all learn about it from one place.
-2. Make the generator emit formatter-normal output.
-3. Leave it in the formatter's scope. Do not add an ignore entry.
-4. Add it to the linters' ignore, with a comment saying the fix belongs upstream.
-5. Do not write a test that re-runs the generator and byte-compares. The `generate`
+3. Make the generator emit formatter-normal output.
+4. Leave it in the formatter's scope. Do not add an ignore entry.
+5. Add it to the linters' ignore, with a comment saying the fix belongs upstream.
+6. Do not write a test that re-runs the generator and byte-compares. The `generate`
    target already drift-gates every generated file in the workspace; a per-artifact
    copy of that check is redundant and drifts from the real directive.
 
