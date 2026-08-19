@@ -149,8 +149,9 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
 .console-graph-nodelist__pill:hover { border-color: var(--console-accent); background: var(--pf-t--global--background--color--primary--default); }
 .console-graph-nodelist__pill[aria-current="true"] { border-color: var(--console-accent); box-shadow: inset 0 0 0 1px var(--console-accent); }
 .console-graph-nodelist__label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--pf-t--global--font--family--mono); }
-/* The "+N more" hint is a real box (not display:contents), spanning the row. */
+/* The "+N more" hint and the no-matches line are real boxes (not display:contents), spanning the row. */
 #node-list li.console-graph-nodelist__more { display: block; flex-basis: 100%; width: 100%; padding: 0.35rem 0.2rem 0; font-size: 0.68rem; color: var(--pf-t--global--text--color--subtle); }
+#node-list li.console-graph-nodelist__empty { display: block; flex-basis: 100%; width: 100%; padding: 0.15rem 0.2rem; font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
 
 .console-graph-stage { position: relative; min-width: 0; overflow: hidden; }
 #graph-canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }

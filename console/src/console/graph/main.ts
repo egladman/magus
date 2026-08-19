@@ -1965,6 +1965,16 @@ function renderList() {
       graph.links.length +
       " edge" +
       (graph.links.length === 1 ? "" : "s");
+  // An empty pool still needs a row: a query reveals this panel, and on a phone the panel is a
+  // fixed overlay carrying its own border, fill and shadow, so no rows reads as a stray white
+  // card floating over the canvas rather than as "nothing matched".
+  if (!pool.length) {
+    listEl.innerHTML =
+      '<li class="console-graph-nodelist__empty">' +
+      (matchSet ? "No matches. Widen the search, or clear it." : "Nothing to list.") +
+      "</li>";
+    return;
+  }
   // Compact rows: a kind-colored dot (keyed to the legend) + the label. The kind
   // name lives in the title tooltip rather than a column, to keep rows dense.
   listEl.innerHTML = shown
