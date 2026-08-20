@@ -24,7 +24,6 @@
 // mounted SURFACE ROOT, and the rail lives inside #console-outlet where those rules apply - a row
 // named data-surface="actions" picks up the Shortcuts surface's own layout and breaks.
 
-import type { Persisted } from "../lib/persist";
 import { tabHostsSurface, type Workspace } from "./tabs";
 import { bind, scope, type Scope, type Signal } from "./view";
 import { surfaceIconSvg, type Launchable } from "./home";
@@ -73,7 +72,6 @@ export function pulseTitle(p: PulseView): string {
 }
 
 export interface Sidebar {
-  el: HTMLElement;
   destroy: () => void;
 }
 
@@ -125,6 +123,30 @@ function railAction(label: string, iconSvg: string, run: () => void): HTMLLIElem
   return item;
 }
 
+// railLink is railAction's counterpart for a destination OUTSIDE the console. An anchor, not a button
+// running window.open: the docs are a page, so middle-click, "copy link", and "open in new tab" have
+// to work the way they do on every other link.
+function railLink(label: string, iconSvg: string, href: string): HTMLLIElement {
+  const item = document.createElement("li");
+  item.className = "pf-v6-c-nav__item";
+  const link = document.createElement("a");
+  link.className = "pf-v6-c-nav__link";
+  link.href = href;
+  link.target = "_blank";
+  link.rel = "noopener noreferrer";
+  link.title = label;
+  link.setAttribute("aria-label", label + " (opens the docs site in a new tab)");
+  const icon = document.createElement("span");
+  icon.className = "pf-v6-c-nav__link-icon";
+  icon.innerHTML = iconSvg;
+  const text = document.createElement("span");
+  text.className = "pf-v6-c-nav__link-text";
+  text.textContent = label;
+  link.append(icon, text);
+  item.append(link);
+  return item;
+}
+
 // The chevron points the way the rail will MOVE, the convention every dock and drawer uses: right to
 // grow, left to shrink back to icons.
 function chevron(expanded: boolean): string {
@@ -136,6 +158,19 @@ function chevron(expanded: boolean): string {
     d +
     '"/></svg>'
   );
+}
+
+// What the rail reads. Every cell is a Signal rather than the Persisted it usually arrives as: the
+// rail only ever reads, writes and subscribes, and naming the wider type would make a caller supply
+// persistOnly and flushed that nothing here calls - which is exactly what the DOM tests had to
+// fabricate before this narrowed.
+export interface SidebarState {
+  ws: Signal<Workspace>;
+  expanded: Signal<boolean>;
+  pulse: Signal<PulseView | null>;
+  focused: Signal<string | null>;
+  badges: Signal<Record<string, Badge>>;
+  surfaces: readonly Launchable[];
 }
 
 // createSidebar fills `host` (the #console-sidebar element the page supplies) and keeps it in step
@@ -150,14 +185,10 @@ function chevron(expanded: boolean): string {
 // is fixed, so rebuilding the list would throw away focus mid-keyboard-navigation for nothing.
 export function createSidebar(
   host: HTMLElement,
-  ws: Persisted<Workspace>,
-  expanded: Persisted<boolean>,
-  pulse: Signal<PulseView | null>,
-  focused: Signal<string | null>,
-  badges: Signal<Record<string, Badge>>,
-  surfaces: readonly Launchable[],
+  state: SidebarState,
   cb: SidebarCallbacks,
 ): Sidebar {
+  const { ws, expanded, pulse, focused, badges, surfaces } = state;
   const sc: Scope = scope();
 
   // One menu, moved to the pointer, living on <body> rather than in the rail - the same arrangement
@@ -173,8 +204,13 @@ export function createSidebar(
   menuContent.className = "pf-v6-c-menu__content";
   menuContent.append(menuList);
   menu.append(menuContent);
+  // The row the menu was opened from, so focus has somewhere to land when it closes. Hiding the menu
+  // while focus is inside it drops focus to the body, and the next Tab restarts at the top of the page.
+  let menuInvoker: HTMLElement | null = null;
   const closeMenu = (): void => {
+    if (!menu.hidden && menu.contains(document.activeElement)) menuInvoker?.focus();
     menu.hidden = true;
+    menuInvoker = null;
   };
   const menuItem = (label: string, run: () => void): HTMLLIElement => {
     const li = document.createElement("li");
@@ -199,6 +235,7 @@ export function createSidebar(
     return li;
   };
   const openMenu = (pageId: string, label: string, x: number, y: number): void => {
+    menuInvoker = document.activeElement instanceof HTMLElement ? document.activeElement : null;
     menuList.replaceChildren(
       menuItem("Open " + label, () => cb.onOpen(pageId)),
       menuItem("Open in new window", () => openSurfaceWindow(pageId)),
@@ -216,7 +253,8 @@ export function createSidebar(
   document.addEventListener(
     "click",
     (e) => {
-      if (!menu.hidden && !menu.contains(e.target as Node)) closeMenu();
+      const target = e.target instanceof Node ? e.target : null;
+      if (!menu.hidden && !menu.contains(target)) closeMenu();
     },
     { signal: ac.signal },
   );
@@ -338,6 +376,19 @@ export function createSidebar(
     () => dispatchCommand("console.actionBar.open"),
   );
   utilityList.prepend(paletteItem);
+  // The Documentation link lives ONLY in the applications menu, and the rail hides that menu above
+  // 48rem - so without a copy here, taking the menu away took the docs with it on every desktop
+  // window. Same destination and same new-tab behavior as the menu item it stands in for.
+  utilityList.append(
+    railLink(
+      "Documentation",
+      '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<path d="M4 5a2 2 0 0 1 2-2h9l5 5v11a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2z"/>' +
+        '<path d="M14 3v6h6M8 13h8M8 17h5"/></svg>',
+      "../documentation/",
+    ),
+  );
   utilityList.append(toggleItem);
   host.replaceChildren(list, pulseEl, utilityList);
 
@@ -418,5 +469,5 @@ export function createSidebar(
   sc.add(bind(pulse, paintPulse));
   sc.add(expanded.subscribe(paintPulse));
 
-  return { el: host, destroy: () => sc.dispose() };
+  return { destroy: () => sc.dispose() };
 }

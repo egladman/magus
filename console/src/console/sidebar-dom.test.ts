@@ -10,31 +10,6 @@ import type { Workspace } from "./tabs";
 import type { PulseView } from "./pulse";
 import type { Badge } from "./badges";
 import { signal } from "./view";
-import type { Persisted } from "../lib/persist";
-
-// The rail only reads and subscribes; the durable half is persist.ts's own business. This is that
-// cell without localStorage.
-function cell<T>(initial: T): Persisted<T> {
-  let value = initial;
-  const listeners = new Set<(v: T) => void>();
-  return {
-    get: () => value,
-    set(v) {
-      value = v;
-      for (const fn of [...listeners]) fn(v);
-    },
-    update(fn) {
-      this.set(fn(value));
-    },
-    persistOnly() {},
-    subscribe(fn) {
-      listeners.add(fn);
-      return () => listeners.delete(fn);
-    },
-    flushed: () => Promise.resolve(),
-  };
-}
-
 const SURFACES: Launchable[] = [
   { pageId: "dashboard", label: "Dashboard", hint: "What magus is doing right now" },
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
@@ -43,15 +18,17 @@ const SURFACES: Launchable[] = [
 
 function mount(ws: Workspace, expanded = false, focusedPageId: string | null = null) {
   const host = document.createElement("nav");
-  const wsCell = cell<Workspace>(ws);
-  const expCell = cell<boolean>(expanded);
+  const wsCell = signal<Workspace>(ws);
+  const expCell = signal<boolean>(expanded);
   const pulse = signal<PulseView | null>(null);
   const focused = signal<string | null>(focusedPageId);
   const badges = signal<Record<string, Badge>>({});
   const opened: string[] = [];
-  const bar = createSidebar(host, wsCell, expCell, pulse, focused, badges, SURFACES, {
-    onOpen: (id) => opened.push(id),
-  });
+  const bar = createSidebar(
+    host,
+    { ws: wsCell, expanded: expCell, pulse, focused, badges, surfaces: SURFACES },
+    { onOpen: (id: string) => opened.push(id) },
+  );
   return { host, wsCell, expCell, pulse, focused, badges, opened, bar };
 }
 
