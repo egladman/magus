@@ -29,6 +29,7 @@ const baseLayout: LayoutSettings = {
   bigPictureSplit: { v: 1, cols: 9 },
   logsZoom: 1.3,
   collapsedCards: ["cache", "services"],
+  sidebarExpanded: true,
 };
 
 test("buildSettingsEnvelope: wraps the snapshot in the versioned envelope", () => {
@@ -46,6 +47,7 @@ test("buildSettingsEnvelope: wraps the snapshot in the versioned envelope", () =
       bigPictureSplit: { v: 1, cols: 9 },
       logsZoom: 1.3,
       collapsedCards: ["cache", "services"],
+      sidebarExpanded: true,
     },
   });
 });
@@ -326,6 +328,7 @@ test("layout: round-trips through the envelope onto a different current", () => 
     bigPictureSplit: { v: 1, cols: 6 },
     logsZoom: 1,
     collapsedCards: [],
+    sidebarExpanded: false,
   };
   const res = importSettings(raw, base, other);
   assert.ok(res.ok);
@@ -334,8 +337,23 @@ test("layout: round-trips through the envelope onto a different current", () => 
     "bigPictureSplit",
     "collapsedCards",
     "logsZoom",
+    "sidebarExpanded",
     "splitMode",
   ]);
+});
+
+// false is a real choice here, not an absent one - the rail's default is collapsed, so a boolean
+// that fell through a truthiness check would silently drop the only value worth carrying.
+test("layout: an expanded rail of false imports rather than reading as absent", () => {
+  const raw = JSON.stringify({
+    schemaVersion: SETTINGS_SCHEMA_VERSION,
+    settings: {},
+    layout: { sidebarExpanded: false },
+  });
+  const res = importSettings(raw, base, { ...baseLayout, sidebarExpanded: true });
+  assert.ok(res.ok);
+  assert.equal(res.nextLayout.sidebarExpanded, false);
+  assert.ok(res.appliedLayout.includes("sidebarExpanded"));
 });
 
 // A file exported before the layout section existed, or one hand-trimmed to preferences only,

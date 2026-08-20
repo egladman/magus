@@ -31,6 +31,7 @@ import {
   bigPictureSplitCell,
   collapsedCardsCell,
   logsZoomCell,
+  sidebarExpandedCell,
   splitModeCell,
   SPLIT_DEFAULT,
   SPLIT_SCHEMA,
@@ -115,6 +116,7 @@ function readLayout(): LayoutSettings {
     bigPictureSplit: { ...bigPictureSplitCell.get() },
     logsZoom: logsZoomCell.get(),
     collapsedCards: collapsedCardsCell.get(),
+    sidebarExpanded: sidebarExpandedCell.get(),
   };
 }
 
@@ -126,6 +128,7 @@ function writeLayout(next: LayoutSettings): void {
   });
   logsZoomCell.set(next.logsZoom);
   collapsedCardsCell.set(next.collapsedCards);
+  sidebarExpandedCell.set(next.sidebarExpanded);
 }
 
 // buildFormGroup wraps a control in a PF horizontal FormGroup. The label is a real <label for> when the
