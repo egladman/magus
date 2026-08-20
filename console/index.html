@@ -39,6 +39,20 @@
      them per tab. The title bar is a Window-Controls-Overlay drag region (-webkit-app-region, console.css);
      every interactive child opts back out to no-drag so tabs/gear stay clickable in the installed PWA. -->
 <body data-console-app data-console-fill>
+  <!-- The left navigation rail: every surface the console can open, always on screen, with the one the
+       active tab is showing marked (pf-m-current) and the ones that merely have a tab open flagged
+       (data-tab-open). console.js's createSidebar() fills this host - the surface list is the same
+       registry the launcher and the Applications menu read, so the three can never disagree.
+       Collapsed to icons by default (data-expanded absent) because the Graph Explorer and the Diff
+       surface carry their OWN left sidebars inside the pane; the width lives in console.css.
+       Named "Applications" to a screen reader, not "Surfaces": surface is the code's word for these
+       (pageId, PageModule, SURFACES) and appears in no other user-facing string - the window calls
+       them apps, in the Applications menu that lists this same set.
+       A direct child of <body>, BEFORE the title bar, because it spans the window's full height: the
+       shell is a grid and the rail occupies the leading column across every row, so the title bar and
+       the content both begin to its right. That is the macOS rule - one leading sidebar may span the
+       full height and take the space from the titlebar - and it is why this is not inside <main>. -->
+  <nav id="console-sidebar" class="pf-v6-c-nav" aria-label="Applications"></nav>
   <header id="console-titlebar">
     <div id="console-tabs"></div>
     <!-- Title-bar-right control group: PatternFly plain (borderless) icon Buttons sitting ON the tab row
@@ -105,18 +119,6 @@
        Reference button (#console-refbtn) toggles it; pinned it stays open across tab switches
        (persisted). PF Drawer does not dim - there is no backdrop by design. -->
   <main id="console-outlet">
-    <!-- The left navigation rail: every surface the console can open, always on screen, with the one the
-         active tab is showing marked (pf-m-current) and the ones that merely have a tab open flagged
-         (data-tab-open). console.js's createSidebar() fills this host - the surface list is the same
-         registry the launcher and the Applications menu read, so the three can never disagree.
-         Collapsed to icons by default (data-expanded absent) because the Graph Explorer and the Diff
-         surface carry their OWN left sidebars inside the pane; the width lives in console.css.
-         Named "Applications" to a screen reader, not "Surfaces": surface is the code's word for these
-         (pageId, PageModule, SURFACES) and appears in no other user-facing string - the window calls
-         them apps, in the Applications menu that lists this same set. It sits
-         INSIDE #console-outlet, before the Drawer, so the rail and the right-hand Reference panel bracket
-         the tab content instead of either one overlapping it. -->
-    <nav id="console-sidebar" class="pf-v6-c-nav" aria-label="Applications"></nav>
     <div id="console-refdrawer" class="pf-v6-c-drawer pf-m-panel-right">
       <div class="pf-v6-c-drawer__main">
         <div id="console-outlet-content" class="pf-v6-c-drawer__content"></div>

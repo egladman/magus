@@ -105,14 +105,23 @@ body[data-console-fill] {
   /* An explicit themed page background so the app never relies on the browser's default canvas (which
      follows the OS, so a "light" choice on a dark OS showed through as a dark page). */
   background: var(--pf-t--global--background--color--secondary--default);
-  /* The flex column is exactly the viewport minus the fixed status bar, so the card region
-     ends at the status bar's top edge - no overlap, no reserved-padding guesswork. */
+  /* Exactly the viewport minus the fixed status bar, so the card region ends at the status bar's top
+     edge - no overlap, no reserved-padding guesswork.
+     A GRID, not a flex column, because the navigation rail spans the full height: it takes the leading
+     column across both rows while the title bar and the content stack in the trailing one. The macOS
+     rule is that a single leading sidebar may run the full height and take that space from the
+     titlebar, which is why the rail is a child of <body> rather than of <main>. With no rail in the
+     document (a standalone surface page) the leading column resolves to zero and the two rows behave
+     exactly as the old column did. */
   height: calc(100svh - var(--console-statusbar-h));
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr);
   overflow: hidden;
 }
-body[data-console-fill] > header { flex: 0 0 auto; } /* the app bar keeps its natural height */
+body[data-console-fill] > header { flex: 0 0 auto; grid-column: 2; grid-row: 1; } /* the app bar keeps its natural height */
+body[data-console-fill] > main { grid-column: 2; grid-row: 2; }
+body[data-console-fill] > #console-sidebar { grid-column: 1; grid-row: 1 / -1; }
 body[data-console-fill] > main {
   flex: 1 1 auto;
   min-height: 0;            /* let the card shrink to fit rather than forcing a page scroll */
@@ -685,13 +694,6 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-sidebar {
   flex: 0 0 auto;
   width: var(--console-sidebar-w);
-  /* Out through the shell gutter: a dock reads as part of the WINDOW, so it runs flush to the left
-     edge and butts against the title bar and status bar. Inside the gutter it floated as a second
-     card beside the content card, with page grey showing above and to the left of it - two floating
-     things sharing an edge, which is what made the frame look unresolved. The content card keeps its
-     gutter; only the rail steps out of it. */
-  margin-block: calc(-1 * var(--console-shell-gutter));
-  margin-inline-start: calc(-1 * var(--console-shell-gutter));
   display: flex; flex-direction: column;
   overflow: hidden; /* labels are clipped, not wrapped, while the width animates */
   border-right: 1px solid var(--pf-t--global--border--color--default);
