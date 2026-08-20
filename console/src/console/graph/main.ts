@@ -28,7 +28,7 @@ import {
   forceY,
   type Simulation,
 } from "d3-force";
-import { zoom as d3zoom, zoomIdentity, type ZoomBehavior } from "d3-zoom";
+import { zoom as d3zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } from "d3-zoom";
 import { drag as d3drag } from "d3-drag";
 import { select } from "d3-selection";
 // The loopback lock, the shared bearer token, and the fetch-based SSE reader used to
@@ -908,6 +908,40 @@ function resizeCanvas() {
   return { w: rect.width, h: rect.height, dpr };
 }
 
+// seedBigBang collapses every node onto one point so the simulation blows them outward into
+// place: the first thing a freshly loaded graph does is build its own shape in front of you,
+// with the load-time reveal pulling the camera back to keep the expanding cloud framed.
+//
+// It only seeds POSITIONS - d3-force uses a node's existing x/y when it has one and falls back
+// to its own phyllotaxis spiral otherwise, so this replaces that seed and nothing else.
+//
+// A DISC, not a point. Many-body repulsion grows without bound as distance goes to zero, so
+// stacking a few thousand nodes on one coordinate fires them out at a speed nothing recovers
+// from: the weakly-held ones - and this workspace has 556 with no dependency edge at all - keep
+// going until the fit clamps to its minimum scale and the graph reads as a starburst of
+// streaks. The radius grows with the square root of the node count, which is how the settled
+// area grows, so the burst stays proportionate on a small graph and a large one alike.
+//
+// Force mode only (the DAG layouts compute final coordinates, so there is nothing to expand
+// from), and never under prefers-reduced-motion, where a burst of movement is precisely the
+// thing being opted out of.
+function seedBigBang() {
+  if (isDagMode() || reducedMotion.matches || !graph?.nodes.length) return;
+  const { w, h } = resizeCanvas();
+  const c = usableCenter(w, h, stageInsets());
+  const radius = 24 + Math.sqrt(graph.nodes.length) * 3;
+  for (const n of graph.nodes) {
+    // sqrt() on the radius keeps the disc evenly filled instead of clumping at the centre,
+    // which is the same singularity in miniature.
+    const a = Math.random() * 2 * Math.PI;
+    const r = Math.sqrt(Math.random()) * radius;
+    n.x = c.x + Math.cos(a) * r;
+    n.y = c.y + Math.sin(a) * r;
+    n.vx = 0;
+    n.vy = 0;
+  }
+}
+
 function startSimulation() {
   if (sim) sim?.stop(); // stop the prior run (e.g. after loading a new file) - its timer would keep ticking
   const { w, h } = resizeCanvas();
@@ -931,6 +965,10 @@ function startSimulation() {
     .force("x", forceX(simCenter.x).strength(0.02))
     .force("y", forceY(simCenter.y).strength(0.02))
     .alphaTarget(idleAlpha()) // decay toward a small floor, not 0, so it keeps gently moving
+    // d3's default decay spends about 300 ticks - five seconds - reaching that floor, which is
+    // a long time to watch a graph wobble before it is worth reading, and far too long for the
+    // opening burst to feel like one event. This settles in roughly a second.
+    .alphaDecay(0.06)
     .on("tick", draw);
 }
 
@@ -1430,7 +1468,10 @@ function setupZoomDrag() {
       // sourceEvent is null for the programmatic transforms fitView applies; a real wheel or
       // drag means the operator has framed the graph themselves and the load-time reveal must
       // stop moving the camera under their hands.
-      if (event.sourceEvent) cameraOwnedByOperator = true;
+      if (event.sourceEvent) {
+        cameraOwnedByOperator = true;
+        centeredOn = null; // panning away from a centred node ends the follow
+      }
       transform = event.transform;
       draw();
     });
@@ -1483,10 +1524,20 @@ function setupZoomDrag() {
     const n = nodeAtPointer(event);
     const id = n ? n.id : null;
     if (id !== hoverId) {
+      releaseHoverPin();
       hoverId = id;
+      pinHovered(id);
       canvas.style.cursor = id ? "pointer" : "grab";
       draw();
     }
+  });
+  // A pointer that leaves the canvas fires no further mousemove, so without this the node it was
+  // last over stays pinned for good - frozen out of the simulation with nothing to unfreeze it.
+  canvas.addEventListener("mouseleave", () => {
+    if (!hoverId && !hoverPinned) return;
+    releaseHoverPin();
+    hoverId = null;
+    draw();
   });
 }
 
@@ -1706,13 +1757,23 @@ function selectNode(id: string | null, center: boolean) {
 function centerOn(id: string) {
   const n = graph.byId.get(id);
   if (!n || n.x == null || !zoomBehavior) return;
+  // Putting a node in the middle is a camera the operator asked for, so it is theirs from here.
+  // Selecting also OPENS the explain card, which narrows the stage: the resize lands AFTER this
+  // runs, so the centring is computed against the wider canvas and would be half a card off by
+  // the time it is seen - and the resize re-frame would refit the whole match set on top of
+  // that, sailing the node just clicked off the screen. Remembering the subject lets the resize
+  // re-centre on it instead.
+  cameraOwnedByOperator = true;
+  centeredOn = id;
   const { w, h } = resizeCanvas();
-  transform = zoomIdentity
-    .translate(w / 2 - n.x * transform.k, h / 2 - n.y * transform.k)
-    .scale(transform.k);
-  // Drive the REAL zoom behavior (not a throwaway d3zoom()) so a later pan/zoom
-  // continues from here instead of snapping back to a stale internal transform.
-  select(canvas).call(zoomBehavior.transform, transform);
+  // Centre in the part of the canvas the legend and toolbar leave visible, not the raw middle.
+  const c = usableCenter(w, h, stageInsets());
+  // Shorter than a fit: this is a small move to a node the operator is already looking at, and
+  // a long glide there would feel like the view hesitating.
+  glideTo(
+    zoomIdentity.translate(c.x - n.x * transform.k, c.y - n.y * transform.k).scale(transform.k),
+    260,
+  );
 }
 
 // fitView frames a set of nodes (or all when ids is null) in the viewport - the
@@ -1745,13 +1806,89 @@ function stageInsets(): Insets {
 // Set once the operator pans or zooms by hand. The reveal below stops re-framing after that:
 // a camera that keeps moving while someone is reading is worse than a frame that came out loose.
 let cameraOwnedByOperator = false;
+// The node the camera is currently holding in the middle, if any. A stage resize re-centres on
+// it rather than re-framing, and a pan, zoom or fit releases it.
+let centeredOn: string | null = null;
+
+// The node currently held still because the pointer is on it. The simulation never fully cools -
+// that gentle drift is deliberate - but it means a node can wander out from under a stationary
+// cursor, dropping the highlight and darkening the neighbourhood while the reader did nothing.
+// So the thing being pointed at stops; its neighbours carry on moving around it.
+let hoverPinned: string | null = null;
+
+function pinHovered(id: string | null) {
+  // Force mode only. The DAG layouts and radial pin every node themselves and run with the
+  // simulation stopped, so nothing drifts there and a pin of ours would be indistinguishable
+  // from theirs when it came time to release it.
+  if (!id || isDagMode() || layoutMode === "radial") return;
+  const n = graph?.byId.get(id);
+  // Only pin what is NOT already pinned: a parked node, or one held by a drag, belongs to
+  // whoever pinned it, and releasing that on mouseout would undo their work.
+  if (!n || n.fx != null) return;
+  n.fx = n.x;
+  n.fy = n.y;
+  hoverPinned = id;
+}
+
+function releaseHoverPin() {
+  if (!hoverPinned) return;
+  const n = graph?.byId.get(hoverPinned);
+  if (n && n.fx !== PARKED_X) {
+    n.fx = null;
+    n.fy = null;
+  }
+  hoverPinned = null;
+}
+
+// Camera moves GLIDE. fitView and centerOn used to write straight to the zoom behavior, and the
+// load reveal fires three fits inside the first second and a half - three instant jumps read as
+// the view being yanked about rather than as one camera moving. d3-transition would do this and
+// is not a dependency here; the easing is short enough to keep.
+let cameraTween = 0;
+
+function applyTransform(t: ZoomTransform) {
+  transform = t;
+  // Drive the REAL zoom behavior (not a throwaway d3zoom()) so a later pan/zoom continues from
+  // here instead of snapping back to a stale internal transform. sourceEvent is null on these,
+  // which is how the zoom handler tells them from a gesture and leaves cameraOwnedByOperator be.
+  if (zoomBehavior) select(canvas).call(zoomBehavior.transform, t);
+}
+
+// glideTo eases the camera to `to`. Scale interpolates GEOMETRICALLY - zoom is multiplicative,
+// so a linear ramp between two scales races at one end and crawls at the other.
+function glideTo(to: ZoomTransform, ms = 340) {
+  if (cameraTween) {
+    cancelAnimationFrame(cameraTween);
+    cameraTween = 0;
+  }
+  if (!zoomBehavior) return;
+  const from = transform;
+  const still = Math.abs(from.k - to.k) < 1e-4 && Math.hypot(from.x - to.x, from.y - to.y) < 0.5;
+  if (ms <= 0 || still || reducedMotion.matches) {
+    applyTransform(to);
+    return;
+  }
+  const started = performance.now();
+  const ratio = to.k / from.k;
+  const step = () => {
+    const p = Math.min(1, (performance.now() - started) / ms);
+    const e = 1 - (1 - p) ** 3; // ease-out cubic: fast to start, settles rather than stops
+    applyTransform(
+      zoomIdentity
+        .translate(from.x + (to.x - from.x) * e, from.y + (to.y - from.y) * e)
+        .scale(from.k * ratio ** e),
+    );
+    cameraTween = p < 1 ? requestAnimationFrame(step) : 0;
+  };
+  cameraTween = requestAnimationFrame(step);
+}
 
 // Frames at which the load-time reveal re-checks the framing of a FORCE layout. A cold force
 // layout keeps spreading for seconds, so a single early fit frames a cloud that then grows
 // straight back out of view - which is how a 2373-node graph came to land cropped to a corner.
 // The first beat is quick feedback, the last one catches the settled extent. A DAG layout needs
 // none of this: layoutLayered places every node in one pass, so its extent is final at once.
-const REVEAL_BEATS_MS = [700, 1800, 3200];
+const REVEAL_BEATS_MS = [300, 750, 1400];
 
 // revealWholeGraph frames the graph on load so it lands centered instead of cropped. Radial
 // frames itself in applyRadialMode, and a projection is already its own subset.
@@ -1845,10 +1982,10 @@ function fitView(ids: Set<string> | null) {
     minY = Math.min(minY, n.y - hh);
     maxY = Math.max(maxY, n.y + hh);
   }
+  centeredOn = null; // framing a set supersedes holding one node in the middle
   const { w, h } = resizeCanvas();
   const t = fitTransform({ minX, minY, maxX, maxY }, w, h, stageInsets());
-  transform = zoomIdentity.translate(t.x, t.y).scale(t.k);
-  select(canvas).call(zoomBehavior.transform, transform);
+  glideTo(zoomIdentity.translate(t.x, t.y).scale(t.k));
   draw();
 }
 
@@ -2648,6 +2785,7 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   }
   selected = null;
   hoverId = null;
+  hoverPinned = null; // the pinned node belonged to the graph being replaced
   focusId = null;
   matchSet = null;
   radialCenter = null;
@@ -4344,6 +4482,7 @@ function applyLayoutAndSimulation(requestedLayout: string, flavor: GraphFlavor) 
   layoutPickedByHand = false; // a fresh graph resets to its flavor default; so does the override
   wavesMeta = null;
   syncLayoutToggle();
+  seedBigBang();
   startSimulation();
   if (isDagMode()) {
     sim?.stop();
@@ -4832,12 +4971,13 @@ function bootWireEvents() {
         sim.force("center", forceCenter(c.x, c.y));
         sim.alpha(0.1).restart();
       }
-      // Re-frame only while the camera is still the app's. Selecting a node narrows the stage
-      // by the explain card's width, and a DAG layout keeps its pinned coordinates through
-      // that, so the framing goes stale with nothing to correct it. Once the operator has
-      // panned or zoomed, the camera is theirs: moving it on a resize would yank the view out
-      // from under a click.
-      if (!cameraOwnedByOperator) fitView(matchSet);
+      // Selecting a node narrows the stage by the explain card's width, and a DAG layout keeps
+      // its pinned coordinates through that, so the framing goes stale with nothing to correct
+      // it. What the correction should BE depends on what the camera was doing: holding one
+      // node in the middle, re-centre on it in the new box; framing the graph, re-fit; being
+      // driven by hand, leave it alone - moving it then yanks the view out from under a click.
+      if (centeredOn) centerOn(centeredOn);
+      else if (!cameraOwnedByOperator) fitView(matchSet);
       else draw();
     });
   };
