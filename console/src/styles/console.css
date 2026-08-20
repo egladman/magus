@@ -1084,10 +1084,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem;
 }
 /* The chosen row. Selection is not the same act as confirming, so it has to LOOK settled while the
-   dialog is still open - a focus ring alone reads as "the cursor is here", not "this is my answer". */
+   dialog is still open - a focus ring alone reads as "the cursor is here", not "this is my answer".
+   Only the background is set here: PatternFly's own .pf-m-selected already draws a 1px inset ring and
+   wins the cascade over anything declared here, and since that ring reads the brand token it is
+   already spruce. Measured with focus removed - an inset bar declared here computed to PF's ring. */
 .console-shell-signin__choice[aria-checked="true"] {
   background: var(--pf-t--global--background--color--secondary--default);
-  box-shadow: inset 3px 0 0 0 var(--console-accent);
 }
 .console-shell-signin__footer { display: flex; justify-content: flex-end; padding-block-start: 0.5rem; }
 /* A disabled confirm is the first visit with nothing remembered: an actual choice has to happen, so
