@@ -275,11 +275,12 @@ const LABEL_MIN_ZOOM = 1.6;
 // the moment the floor is crossed.
 const LABEL_MIN_NODE_PX = 8;
 
-// Cards render for the targets flavor in the DAG-shaped modes only; the
-// knowledge constellation keeps circles (density makes cards unreadable).
-// Radial also stays circles for targets - rings are round, wide cards don't fit.
-const cardsActive = () =>
-  graphFlavor === "targets" && (layoutMode === "layered" || layoutMode === "waves");
+// Cards render in the DAG-shaped modes, either flavor. The density that makes cards
+// unreadable is the FULL knowledge constellation, and neither DAG mode ever draws it:
+// applyLayeredMode / applyWavesMode refuse above LAYERED_MAX, so what reaches a card here is
+// at most 500 nodes on a 240-wide column grid - the same order as a targets DAG, which has
+// drawn cards all along. Radial stays circles: rings are round, wide cards do not fit.
+const cardsActive = () => layoutMode === "layered" || layoutMode === "waves";
 
 // isDagMode is true for the deterministic Sugiyama-family layouts (layered and
 // waves): the force sim stays stopped, edges route through dummy bend points,
@@ -874,6 +875,11 @@ function switchLayout(mode: LayoutMode) {
       // Don't write layout=<mode> to the hash.
       updateHash();
       draw();
+    } else if (mode === "layered") {
+      // Clear the refusal a previous, wider attempt left standing. Nothing else clears it, so
+      // narrowing the query and switching again succeeded under a banner still saying the
+      // layout was refused - the arrangement the operator is looking at, captioned as impossible.
+      setStatus("");
     } else if (mode === "waves" && wavesMeta) {
       const widest = wavesMeta.reduce((m, ids) => Math.max(m, ids.length), 0);
       setStatus(
