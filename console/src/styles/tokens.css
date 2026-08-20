@@ -12,6 +12,40 @@
  */
 
 :root {
+  /* --- 0. The brand ramp: spruce, not PatternFly blue ----------------------------------
+     The console's functional primary - buttons, focus rings, links, the active rail row - is ONE
+     muted hue. Blue reads generic, and the identity is the earthy palette in section 4, which is
+     DECORATIVE and per-surface; this is the one functional hue that carries it.
+
+     Overriding the RAMP rather than the ~36 sites that consume --console-accent, because PatternFly's
+     own components (a pf-m-primary button most of all) read these tokens directly and never see the
+     console's slot - pointing --console-accent at spruce alone left spruce focus rings beside blue
+     buttons. Both ramps are declared here in :root: PF's dark selector aliases --brand--default to
+     --dark--color--brand--100, so redefining that primitive is what moves dark.
+
+     Derived at the recorded spruce hue (H165 light / H166 dark) with the base steps anchored to the
+     exact palette hexes - brand--200 IS #3f6b60, dark--brand--100 IS #6f9d92 - so this ramp and the
+     decorative --console-spruce below can never drift apart. Contrast measured, not assumed: white on
+     brand--200 is 6.03:1 and black on dark--brand--100 is 6.91:1, both clear of AA.
+
+     Blue survives only where it is a convention rather than a choice: links keep it, and
+     --console-status-running stays the info hue because a busy pool is a status, not the brand. */
+  --pf-t--global--color--brand--100: #579485;
+  --pf-t--global--color--brand--200: #3f6b60; /* default: the recorded spruce, exactly */
+  --pf-t--global--color--brand--300: #33574e; /* hover / clicked */
+  --pf-t--global--color--brand--400: #28433d;
+  --pf-t--global--color--brand--500: #1e332e;
+  --pf-t--global--color--brand--subtle--100: #eff6f4;
+  --pf-t--global--color--brand--subtle--200: #dfece9;
+  --pf-t--global--color--brand--subtle--300: #b2d2ca;
+  --pf-t--global--color--brand--subtle--400: #8bbbaf;
+  --pf-t--global--dark--color--brand--100: #6f9d92; /* default on dark: the recorded spruce, exactly */
+  --pf-t--global--dark--color--brand--200: #8fb3aa; /* hover / clicked */
+  --pf-t--global--dark--color--brand--300: #adc7c1;
+  --pf-t--global--dark--color--brand--subtle--100: #2b403b;
+  --pf-t--global--dark--color--brand--subtle--200: #38524c;
+  --pf-t--global--dark--color--brand--subtle--300: #5d897e;
+
   /* --- 1. Two-tier corner radius -------------------------------------------------------
      PatternFly builds every component's radius from a small set of global primitives
      (--...--radius--100..500) plus semantic aliases (small/medium/large/pill/...). We do NOT
