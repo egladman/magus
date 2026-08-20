@@ -660,8 +660,17 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    so an inherited override never reaches it. */
 #console-tabs .pf-v6-c-tabs__item,
 #console-tabs .pf-v6-c-tabs__link { border-radius: 0; }
+/* The current tab wears the colour of the CONTENT it shows, and the others wear the bar's - the
+   browser-tab logic, where the active tab is contiguous with the page below it and the rest sit back
+   in the strip.
+   These were the other way round, and identically in both themes: the current tab took the title bar's
+   own primary (255 light / 41 dark, the exact colour it sits on) while the inactive ones took the page
+   (242 / 21). So the selected tab was the invisible one and the unselected ones read as raised. The
+   rounded top corners were the only cue still separating them, which is why squaring the tabs exposed
+   this rather than caused it. */
+#console-tabs .pf-v6-c-tabs__item { background: transparent; }
 #console-tabs .pf-v6-c-tabs__item.pf-m-current {
-  background: var(--pf-t--global--background--color--primary--default);
+  background: var(--pf-t--global--background--color--secondary--default);
 }
 #console-tabs .pf-v6-c-tabs__item.pf-m-current .pf-v6-c-tabs__link { color: var(--pf-t--global--text--color--regular); }
 #console-tabs .pf-v6-c-tabs__item:not(.pf-m-current) .pf-v6-c-tabs__link { color: var(--pf-t--global--text--color--subtle); }
