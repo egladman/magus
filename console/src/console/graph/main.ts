@@ -2257,11 +2257,30 @@ function renderLegend() {
 // hash WITHOUT clobbering a #data= fragment (round-tripping the whole graph
 // through history on every click would break the private-data contract).
 let suppressHash = false;
+
+// Fragment keys that name the GRAPH rather than the view: updateHash copies these through
+// rather than rewriting them. `data` is absent on purpose - it bails out of updateHash entirely.
+const SOURCE_HASH_KEYS = ["src", "port", "demo", "flavor"];
+
 function updateHash() {
   if (suppressHash) return;
   const params = hashParams();
-  if (params.data || params.src || params.port !== undefined) return; // keep fragment data/loopback/attach links intact
+  // #data= carries the whole gzipped graph. Rewriting a six-figure fragment through
+  // history.replaceState on every hover and click is not worth the shareability, so that one
+  // transport keeps its link untouched and its view state stays local.
+  if (params.data) return;
+  // The fragment carries two kinds of key and updateHash owns only one of them. SOURCE keys
+  // say which graph is loaded (where it came from, which flavor, whether this is the demo);
+  // they belong to whoever wrote the link and are copied through untouched. VIEW keys say what
+  // is being looked at, and are rewritten from live state below. Dropping the source keys is
+  // what left a `magus graph export --open --serve` session unable to share the view it was
+  // showing, and a reload of the demo landing on the empty state.
   const parts = [];
+  for (const key of SOURCE_HASH_KEYS) {
+    const v = params[key];
+    if (v === undefined) continue;
+    parts.push(v === "" ? key : key + "=" + encodeURIComponent(v));
+  }
   if (activeView) {
     parts.push("view=" + encodeURIComponent(activeView));
     if (viewNode) parts.push("node=" + encodeURIComponent(viewNode));
@@ -3057,6 +3076,13 @@ function applyPreferredMode(view: string) {
 }
 
 function askQuestion(view: string) {
+  // The empty state is dismissed before the graph finishes arriving, so the chips are live for
+  // a beat over no data. Answering then writes a wrong answer that nothing recomputes once the
+  // nodes land - "Nothing has a dependent" over a graph with six thousand edges.
+  if (!graph?.nodes.length) {
+    setStatus("No graph loaded yet.", true);
+    return;
+  }
   applyPreferredMode(view);
   if (view === "blast" || view === "trace") {
     // Enter picking mode: status tells user to click a node. Bypasses
@@ -3266,7 +3292,10 @@ function viewCommandStr(name: string | null, nodeId?: string | null, nodeTo?: st
       if (!nodeId) return "magus explain <node-id>";
       return "magus explain " + shellQuote(nodeId);
     case "trace":
-      if (!nodeId || !nodeTo) return "magus path <a> <b>";
+      // Half-picked: name the node already chosen rather than printing a command that throws
+      // away what the surface knows.
+      if (!nodeId) return "magus path <a> <b>";
+      if (!nodeTo) return "magus path " + shellQuote(nodeId) + " <b>";
       return "magus path " + shellQuote(nodeId) + " " + shellQuote(nodeTo);
     default:
       return null; // no valid CLI equivalent
