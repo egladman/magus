@@ -735,6 +735,28 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    that scrolls when the surfaces outgrow the window) otherwise spreads the rows over the full height
    and each one comes out as tall as the space allows. */
 #console-sidebar .pf-v6-c-nav__list { flex: 1 1 auto; align-content: start; overflow-y: auto; overflow-x: hidden; padding-block-start: 0.25rem; }
+/* A row's count. Square and normal-case like every other chip in this shell - PatternFly's Badge is a
+   pill, and pills are off the house style, so this is authored rather than borrowed.
+   Collapsed it overlays the icon's top-trailing corner, the dock convention (VS Code, and every OS
+   dock badge): there is no room beside a 44px icon, and the number has to stay legible at that size.
+   Expanded it leaves the overlay and sits at the row's trailing edge, where a list puts its counts. */
+#console-sidebar [data-rail-badge] {
+  position: absolute; inset-block-start: 0.3rem; inset-inline-end: 0.15rem;
+  min-inline-size: 1rem; padding-inline: 0.2rem;
+  font-size: 0.65rem; line-height: 1rem; text-align: center;
+  border-radius: 2px;
+  background: var(--console-spruce); color: var(--pf-t--global--text--color--on-brand--default);
+}
+#console-sidebar[data-expanded] [data-rail-badge] {
+  position: static; justify-self: end; margin-inline-end: 0.5rem;
+}
+/* The expanded row grows a third column for it, so a long label is truncated by the count rather than
+   running under it. */
+#console-sidebar[data-expanded] .pf-v6-c-nav__link:has([data-rail-badge]:not([hidden])) {
+  grid-template-columns: 1.5rem minmax(0, 1fr) auto;
+}
+#console-sidebar [data-rail-badge][hidden] { display: none; }
+
 /* The utility group sits at the foot rather than growing with the list above it, so Settings stays in
    the same place whether six lenses are listed or sixteen. A hairline separates the two vocabularies -
    the same rule the pool reading and the collapse control already use, so the rail's foot reads as one

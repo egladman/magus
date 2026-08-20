@@ -30,6 +30,7 @@ import { bind, scope, type Scope, type Signal } from "./view";
 import { surfaceIconSvg, type Launchable } from "./home";
 import { openSurfaceWindow } from "../lib/appwindow";
 import type { PulseView } from "./pulse";
+import { badgeLabel, type Badge } from "./badges";
 
 // One row of the rail: the surface it opens, and what the workspace currently makes of it.
 // `open` means some tab hosts that surface; `current` means the ACTIVE tab does. They are separate
@@ -129,6 +130,7 @@ export function createSidebar(
   expanded: Persisted<boolean>,
   pulse: Signal<PulseView | null>,
   focused: Signal<string | null>,
+  badges: Signal<Record<string, Badge>>,
   surfaces: readonly Launchable[],
   cb: SidebarCallbacks,
 ): Sidebar {
@@ -217,6 +219,8 @@ export function createSidebar(
 
   // pageId -> its row's link, so the state pass is a map lookup rather than a re-query per change.
   const links = new Map<string, HTMLButtonElement>();
+  const badgeEls = new Map<string, HTMLElement>();
+  const labels = new Map<string, string>();
 
   for (const s of surfaces) {
     const item = document.createElement("li");
@@ -241,7 +245,10 @@ export function createSidebar(
     text.className = "pf-v6-c-nav__link-text";
     text.textContent = s.label;
 
-    link.append(icon, text);
+    const badge = document.createElement("span");
+    badge.dataset.railBadge = "";
+    badge.hidden = true;
+    link.append(icon, text, badge);
     link.addEventListener("click", () => cb.onOpen(s.pageId));
     // Right-click for the one thing a row cannot say on its own. The launcher card carried this on a
     // kebab and the tab strip carries it on its own context menu; without it here the rail would be
@@ -253,6 +260,8 @@ export function createSidebar(
     item.append(link);
     (s.utility ? utilityList : list).append(item);
     links.set(s.pageId, link);
+    badgeEls.set(s.pageId, badge);
+    labels.set(s.pageId, s.label);
   }
 
   // The live reading sits at the foot, between the apps and the toggle: it is about the workspace
@@ -299,6 +308,31 @@ export function createSidebar(
   // Two sources decide a row's state: which tabs exist, and which pane has focus inside the active one.
   sc.add(bind(ws, paintRows));
   sc.add(focused.subscribe(paintRows));
+
+  // A surface with nothing waiting carries NO badge rather than a zero: the badge answers "how much is
+  // waiting", and nothing waiting is not a quantity worth a mark on the rail. An absent reading (no
+  // daemon, an older one) is indistinguishable from that here on purpose - both mean "say nothing".
+  sc.add(
+    bind(badges, (counts) => {
+      for (const [pageId, el] of badgeEls) {
+        const b = counts[pageId];
+        const show = b != null && b.count > 0;
+        el.hidden = !show;
+        const link = links.get(pageId);
+        const label = labels.get(pageId) ?? "";
+        if (!show) {
+          link?.setAttribute("aria-label", label);
+          continue;
+        }
+        el.textContent = badgeLabel(b.count);
+        // The count joins the row's NAME rather than riding as text inside it: aria-label wins over
+        // an element's contents, so a badge left as bare text is announced to nobody.
+        const spoken = label + ", " + b.count + " " + b.noun;
+        link?.setAttribute("aria-label", spoken);
+        el.title = spoken;
+      }
+    }),
+  );
 
   // One attribute on the root carries the whole expanded state, so console.css can key the width and
   // the label visibility off it and expanding costs a CSS transition rather than a re-render.

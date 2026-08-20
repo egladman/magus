@@ -23,6 +23,7 @@ import {
 import { createTabBar } from "./tabBar";
 import { createSidebar } from "./sidebar";
 import { fetchPulse, type PulseView } from "./pulse";
+import { fetchDiffCount, type Badge } from "./badges";
 import { buildLauncher, type Launchable } from "./home";
 import { standaloneSurface, moduleSurface } from "./standalone";
 import {
@@ -1076,11 +1077,21 @@ export function startConsole(
   // several at once, so "the active tab's surfaces" is not an answer to "where am I"; focus is.
   // Null with no tab open (the launcher), so nothing is marked.
   const focusedSurface = signal<string | null>(null);
+  // Per-surface counts the rail hangs on a row. Diff only for now - see badges.ts for why a count
+  // earns a badge and a static one does not.
+  const railBadges = signal<Record<string, Badge>>({});
   const sidebarHost = document.getElementById("console-sidebar");
   if (sidebarHost) {
-    createSidebar(sidebarHost, ws, sidebarExpandedCell, pulse, focusedSurface, SURFACES, {
-      onOpen: (id) => open(id),
-    });
+    createSidebar(
+      sidebarHost,
+      ws,
+      sidebarExpandedCell,
+      pulse,
+      focusedSurface,
+      railBadges,
+      SURFACES,
+      { onOpen: (id) => open(id) },
+    );
   }
 
   // Wire the title-bar Reference button + its slide-out panel. No-ops without the #console-refdrawer
@@ -1795,11 +1806,13 @@ export function startConsole(
       current.setAttribute("aria-label", hint);
       delete current.dataset.health;
       pulse.set(null); // synthetic surfaces, no pool: a leftover count would read as this daemon's
+      railBadges.set({});
       return;
     }
     const host = resolveDaemonHost();
     if (!host) {
       pulse.set(null); // a count with no daemon behind it outlives the thing it described
+      railBadges.set({});
       // No daemon address configured at all: nothing to probe. A surface, if one is docked, owns the text;
       // but the launcher's own bar (zero tabs) has no surface behind it, so say so plainly - RED, via the
       // not-connected "none" state - rather than leaving whatever a prior host's probe left.
@@ -1815,9 +1828,12 @@ export function startConsole(
       }
       return;
     }
-    // The rail's pool reading rides THIS interval rather than starting one of its own: the shell is
-    // already asking this daemon a question every 15s, and the rail's number is the same freshness.
+    // The rail's readings ride THIS interval rather than starting their own: the shell is already
+    // asking this daemon a question every 15s, and the rail's numbers are the same freshness.
     void fetchPulse(host).then((p) => pulse.set(p));
+    void fetchDiffCount(host).then((count) => {
+      railBadges.set(count == null ? {} : { diff: { count, noun: "changed files" } });
+    });
     const startedAt = Date.now();
     fetchReadiness(host).then((report) => {
       const conn = document.getElementById("console-conn");

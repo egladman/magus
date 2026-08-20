@@ -8,6 +8,7 @@ import { createSidebar } from "./sidebar";
 import { buildLauncher, type Launchable } from "./home";
 import type { Workspace } from "./tabs";
 import type { PulseView } from "./pulse";
+import type { Badge } from "./badges";
 import { signal } from "./view";
 import type { Persisted } from "../lib/persist";
 
@@ -46,11 +47,12 @@ function mount(ws: Workspace, expanded = false, focusedPageId: string | null = n
   const expCell = cell<boolean>(expanded);
   const pulse = signal<PulseView | null>(null);
   const focused = signal<string | null>(focusedPageId);
+  const badges = signal<Record<string, Badge>>({});
   const opened: string[] = [];
-  const bar = createSidebar(host, wsCell, expCell, pulse, focused, SURFACES, {
+  const bar = createSidebar(host, wsCell, expCell, pulse, focused, badges, SURFACES, {
     onOpen: (id) => opened.push(id),
   });
-  return { host, wsCell, expCell, pulse, focused, opened, bar };
+  return { host, wsCell, expCell, pulse, focused, badges, opened, bar };
 }
 
 function link(host: HTMLElement, pageId: string): HTMLButtonElement {
@@ -328,4 +330,40 @@ test("destroy takes the row menu with it", () => {
   assert.ok(document.querySelector(".console-shell-railmenu"));
   bar.destroy();
   assert.equal(document.querySelector(".console-shell-railmenu"), null);
+});
+
+// A badge answers "how much is waiting". Nothing waiting is not a quantity, so it carries no mark -
+// a zero on the rail would be a permanent decoration that never means anything.
+test("a count of zero carries no badge", () => {
+  const { host, badges } = mount({ tabs: [], activeId: null });
+  const badge = () => link(host, "logs").querySelector<HTMLElement>("[data-rail-badge]");
+  assert.equal(badge()?.hidden, true);
+  badges.set({ logs: { count: 0, noun: "runs" } });
+  assert.equal(badge()?.hidden, true, "zero is not a badge");
+  badges.set({ logs: { count: 3, noun: "runs" } });
+  assert.equal(badge()?.hidden, false);
+  assert.equal(badge()?.textContent, "3");
+});
+
+// aria-label wins over an element's contents, so a badge left as bare text is announced to nobody.
+// The count has to join the row's NAME, with its noun, or a screen reader hears "Log Viewer" whether
+// three things are waiting or none.
+test("the count joins the row's spoken name", () => {
+  const { host, badges } = mount({ tabs: [], activeId: null });
+  const row = link(host, "logs");
+  assert.equal(row.getAttribute("aria-label"), "Log Viewer");
+  badges.set({ logs: { count: 3, noun: "changed files" } });
+  assert.equal(row.getAttribute("aria-label"), "Log Viewer, 3 changed files");
+  // ...and it goes back when the count does, rather than stranding a stale number in the name.
+  badges.set({});
+  assert.equal(row.getAttribute("aria-label"), "Log Viewer");
+});
+
+// The collapsed rail is 44px, so a four-digit count would either overflow or shrink past reading.
+test("a large count is capped rather than overflowing the rail", () => {
+  const { host, badges } = mount({ tabs: [], activeId: null });
+  badges.set({ logs: { count: 1240, noun: "runs" } });
+  assert.equal(link(host, "logs").querySelector("[data-rail-badge]")?.textContent, "99+");
+  // The SPOKEN name keeps the real number - the cap is a width constraint, not a measurement.
+  assert.equal(link(host, "logs").getAttribute("aria-label"), "Log Viewer, 1240 runs");
 });
