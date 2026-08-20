@@ -711,6 +711,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      on all four corners under the Apple platform scale, so the one rounded thing on screen was the
      rail sitting inside square chrome. */
   --pf-v6-c-nav__link--BorderRadius: 0;
+  /* FLUSH. PatternFly separates nav rows by a spacer, which suits a padded macOS-style source list
+     where each row is an inset rounded pill. This shell is not that: the tab strip's items butt at 0px
+     and the panes meet on a divider, so gapped rows read as floating chips rather than as one
+     continuous dock. Same reasoning as the square corners above - take the structure from the shell,
+     not from PatternFly's default. */
+  --pf-v6-c-nav__list--RowGap: 0;
 }
 #console-sidebar[data-expanded] {
   width: var(--console-sidebar-expanded-w);
@@ -784,8 +790,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    idle pool says nothing about. */
 #console-sidebar #console-sidebar-pulse[data-state="running"] .pf-v6-c-nav__link-icon { background: var(--console-status-running); }
 #console-sidebar #console-sidebar-pulse[data-state="queued"] .pf-v6-c-nav__link-icon { background: var(--console-status-warn); }
+/* The collapse control stays a SQUARE on the icon column, at both widths. Stretched to the expanded
+   rail's full width it became a 183px slab with a lone chevron adrift in it - the one control here that
+   is not a row of the list, so it should not take a row's shape. Sitting on the icon column means it
+   lands under the same vertical line every glyph above it uses, whether or not labels are showing. */
 #console-sidebar #console-sidebar-toggle {
-  flex: 0 0 auto; min-height: var(--console-sidebar-w);
+  flex: 0 0 auto;
+  inline-size: var(--console-sidebar-w); block-size: var(--console-sidebar-w);
   border-top: 1px solid var(--pf-t--global--border--color--default);
   border-radius: 0; justify-content: center;
 }
