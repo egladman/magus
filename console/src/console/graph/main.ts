@@ -216,6 +216,12 @@ function isLayoutMode(s: string): s is LayoutMode {
   return s === "force" || s === "layered" || s === "waves" || s === "radial";
 }
 let layoutMode: LayoutMode = "force";
+// Set once the operator picks a display mode from the [data-layout] toggle (or the layout
+// keybinding). askQuestion consults it: a question may auto-switch the arrangement while the
+// mode is still the flavor default, but once the operator has chosen one by hand it is a manual
+// override and a question emphasizes within it instead of moving it underneath them. Reset when
+// a new graph loads, since the mode resets to that flavor's default with it.
+let layoutPickedByHand = false;
 let graphFlavor: GraphFlavor = "knowledge"; // "knowledge" | "targets"; set in boot/replaceGraph
 // Per-wave membership from the last layoutWaves() call (wavesMeta[i] = the ids in
 // wave i - the array index IS the wave number), for draw()'s column bands/headers
@@ -736,6 +742,7 @@ function cycleLayout() {
   for (let i = 1; i <= LAYOUT_ORDER.length; i++) {
     const next = LAYOUT_ORDER[(start + i) % LAYOUT_ORDER.length];
     if (!layoutBlockedReason(next)) {
+      layoutPickedByHand = true;
       switchLayout(next);
       return;
     }
@@ -938,11 +945,20 @@ function draw() {
     }
   }
 
+  // Two emphasis layers, COMPOSED rather than one overriding the other:
+  //   scope     - matchSet, set by the query box, a view, or local-graph focus. What the user
+  //               asked to see. Out-of-scope nodes fade and their edges are skipped.
+  //   highlight - the selected or hovered node. A spotlight that ADDS its own neighborhood on
+  //               top of the scope, reaching outside it when the clicked node is not a match.
+  // The highlight must never suppress the scope: a selection left over from an earlier click
+  // would otherwise cancel the emphasis of every view and query run after it, so a chain the
+  // result line reports would not be the thing drawn on the canvas.
   const highlight = selected || hoverId;
   const near = neighbors(highlight);
+  const lit = (id: string) => id === highlight || !!near?.has(id);
 
   // Edges first, under the nodes. Dim edges not touching the highlighted node;
-  // under a query filter (no selection), dim edges not between two matches, so the
+  // under a query filter, dim edges not between two matches, so the
   // matching subgraph stands out instead of a full bright web.
   // projectionActive: hide all non-projection nodes/edges from the draw.
   // (Same flag computed below for nodes; computed here first for edges.)
@@ -952,6 +968,9 @@ function draw() {
     !projectionUnfolded && projectionSet && !query && !focusId && !activeView
       ? projectionSet
       : null;
+  // The projection is its own visibility rule (nodes outside it are absent, not dim), so it
+  // stands in for the scope while it is active.
+  const scope = matchSet && !projectionActive ? matchSet : null;
   for (const e of graph.links) {
     // By draw time d3-force has resolved source/target from id strings to the node objects.
     const s = e.source as GNode,
@@ -975,13 +994,15 @@ function draw() {
       if (t.w) tx = sLeft ? t.x - t.w / 2 : t.x + t.w / 2;
     }
     let active;
-    if (highlight) active = s.id === highlight || t.id === highlight;
-    else if (matchSet && !projectionActive) {
-      // Under a query filter, draw ONLY edges between two matches - skipping the
-      // rest keeps the matching subgraph clean instead of a faint full-web haze.
-      if (!(matchSet.has(s.id) && matchSet.has(t.id))) continue;
+    if (scope) {
+      // Under a filter, draw ONLY edges between two matches - skipping the rest keeps the
+      // matching subgraph clean instead of a faint full-web haze - plus the highlight's own
+      // edges, so clicking a node outside the filter still shows what it touches.
+      const inScope = scope.has(s.id) && scope.has(t.id);
+      if (!inScope && !(s.id === highlight || t.id === highlight)) continue;
       active = true;
-    } else active = true;
+    } else if (highlight) active = s.id === highlight || t.id === highlight;
+    else active = true;
     // Critical-path emphasis: an edge between two nodes both on the current
     // critical chain reads as the spine - thicker and at full alpha instead
     // of the default muted stroke.
@@ -1100,8 +1121,8 @@ function draw() {
     // Default projection: hide non-project nodes entirely (not dimmed; truly absent).
     if (projectionActive && !projectionActive.has(n.id)) continue;
     let alpha = 1;
-    if (highlight) alpha = n.id === highlight || (near && near.has(n.id)) ? 1 : 0.15;
-    else if (matchSet && !projectionActive) alpha = matchSet.has(n.id) ? 1 : 0.12;
+    if (scope) alpha = scope.has(n.id) || lit(n.id) ? 1 : 0.12;
+    else if (highlight) alpha = lit(n.id) ? 1 : 0.15;
     if (cardsActive() && n.w) {
       const kindColor = groupColorFor(n) || th.kindColor[n.kind] || "#888";
       drawCard(ctx, n, {
@@ -2219,6 +2240,7 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
         ? "layered"
         : "force";
   layoutMode = requestedLayout;
+  layoutPickedByHand = false; // a fresh graph resets to its flavor default; so does the override
   if (layoutMode === "radial") selected = fragParams.node;
   wavesMeta = null;
   syncLayoutToggle();
@@ -2857,9 +2879,19 @@ function preferredModeForView(view: string): LayoutMode | null {
 // everything else goes through activateView. This only fires from an EXPLICIT
 // chip click; switchLayout calls from the [data-layout] toggle never call
 // this, so a manual mode pick is never second-guessed.
-function askQuestion(view: string) {
+// applyPreferredMode runs the arrangement half of a question: switch to the mode the view
+// reads best in, unless the operator has picked one by hand or the mode is unavailable at this
+// scale. Shared with the empty-state suggestion chips, which ask the same questions and so must
+// not behave differently from the Explore chips that ask them.
+function applyPreferredMode(view: string) {
   const want = preferredModeForView(view);
-  if (want && want !== layoutMode && !layoutBlockedReason(want)) switchLayout(want);
+  if (want && want !== layoutMode && !layoutPickedByHand && !layoutBlockedReason(want)) {
+    switchLayout(want);
+  }
+}
+
+function askQuestion(view: string) {
+  applyPreferredMode(view);
   if (view === "blast" || view === "trace") {
     // Enter picking mode: status tells user to click a node. Bypasses
     // activateView (no node picked yet), so clear any flow left over from
@@ -2895,7 +2927,9 @@ function askQuestion(view: string) {
     return;
   }
   activateView(view);
-  if (view === "critical" && graphHasDurations && activePreset !== "duration") {
+  // Only fill an EMPTY preset slot: a preset the operator picked is theirs, and the timing
+  // colors are a convenience for reading the chain, not a requirement of the view.
+  if (view === "critical" && graphHasDurations && activePreset === null) {
     applyPreset("duration");
   }
 }
@@ -3136,7 +3170,10 @@ function renderSuggestions() {
   if (graphFlavor === "targets") {
     chips.push({
       text: "See the build order: what runs in parallel?",
-      action: () => switchLayout("waves"),
+      action: () => {
+        layoutPickedByHand = true; // an explicit "show me this arrangement", same as the chip
+        switchLayout("waves");
+      },
     });
   }
 
@@ -3146,7 +3183,10 @@ function renderSuggestions() {
     if (top && top.degree > 0) {
       chips.push({
         text: top.label + " is the biggest hub: what depends on it?",
-        action: () => activateView("blast", top.id),
+        action: () => {
+          applyPreferredMode("blast");
+          activateView("blast", top.id);
+        },
       });
     }
   }
@@ -3159,7 +3199,15 @@ function renderSuggestions() {
     const src = cycleEdge ? endpointId(cycleEdge.source) : null;
     chips.push({
       text: "A dependency cycle was detected: trace its path?",
-      action: src ? () => activateView("trace", src) : () => activateView("hubs"),
+      action: src
+        ? () => {
+            applyPreferredMode("trace");
+            activateView("trace", src);
+          }
+        : () => {
+            applyPreferredMode("hubs");
+            activateView("hubs");
+          },
     });
   }
 
@@ -3172,7 +3220,10 @@ function renderSuggestions() {
         " node" +
         (orphans.length === 1 ? "" : "s") +
         " with no edges: what's dead?",
-      action: () => activateView("orphans"),
+      action: () => {
+        applyPreferredMode("orphans");
+        activateView("orphans");
+      },
     });
   }
 
@@ -3837,6 +3888,7 @@ function applyLayoutAndSimulation(requestedLayout: string, flavor: GraphFlavor) 
   if (layoutMode === "radial") {
     layoutMode = flavor === "targets" ? "layered" : "force";
   }
+  layoutPickedByHand = false; // a fresh graph resets to its flavor default; so does the override
   wavesMeta = null;
   syncLayoutToggle();
   startSimulation();
@@ -4398,7 +4450,9 @@ function bootWireEvents() {
     btn.addEventListener("click", () => {
       if (btn.disabled) return;
       const mode = btn.dataset.layout;
-      if (mode && isLayoutMode(mode)) switchLayout(mode);
+      if (!mode || !isLayoutMode(mode)) return;
+      layoutPickedByHand = true;
+      switchLayout(mode);
     });
   });
 
@@ -4419,7 +4473,9 @@ function bootWireEvents() {
   document.querySelectorAll<HTMLElement>("[data-layoutjump]").forEach((b) => {
     b.addEventListener("click", () => {
       const mode = b.dataset.layoutjump;
-      if (mode && isLayoutMode(mode)) switchLayout(mode);
+      if (!mode || !isLayoutMode(mode)) return;
+      layoutPickedByHand = true;
+      switchLayout(mode);
     });
   });
 
