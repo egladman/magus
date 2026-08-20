@@ -21,11 +21,12 @@
   --console-topchrome-h: var(--console-titlebar-h);
   --console-statusbar-h: 2.2rem;
   --console-refdrawer-w: 22rem;
-  /* The gutter that insets the app card from the window. Named rather than inlined so the two axes
-     cannot drift apart - they are meant to match, and the block/inline pair below is the only place
-     it is read. (It was extracted when the navigation rail sat inside this padding and had to cancel
-     it; the rail is a sibling of <main> now and cancels nothing.) */
-  --console-shell-gutter: 0.6rem;
+  /* ZERO. The content used to be inset from the chrome by this much, which left a band of chrome
+     colour between the content and everything around it - under the tab strip, beside the rail, above
+     the status bar - so the content read as a slab dropped into the window rather than part of it.
+     Kept as a name rather than deleted because the padding pair below is what it feeds, and a literal
+     0 in two places is the drift this name exists to prevent. */
+  --console-shell-gutter: 0;
   /* The left navigation rail, collapsed and expanded. Collapsed is 2.75rem for the same reason the
      title bar is: every row is a tap target. Expanded stays deliberately narrow - the Graph Explorer
      and the Diff surface open their OWN left sidebars inside the pane, and two wide left columns
@@ -707,13 +708,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    padding, so painting the card there put the gutter INSIDE the card and left a ring of card colour
    around the content - a light strip above it, below it, and beside the tab strip. The gutter belongs
    between the frame and the card, so it has to stay outside the painted box.
-   Rounded on ALL FOUR corners: the gutter runs around every edge, so the card floats free of the tab
-   strip rather than joining it. (It was square at the top-left to let the current tab flow into the
-   card, which was true only while the card was painted on the padded box and reached the strip.) */
+   SQUARE and FLUSH: it meets the rail, the tab strip and the status bar directly, so it joins the
+   frame instead of floating in it. A radius here would cut a notch of chrome colour out of each
+   corner - the gap this change exists to remove, reintroduced four times over. */
 #console-outlet > #console-refdrawer {
   background: var(--pf-t--global--background--color--primary--default);
-  overflow: hidden; /* so the corners actually clip what is inside them */
-  border-radius: var(--pf-t--global--border--radius--medium);
+  overflow: hidden;
 }
 #console-refdrawer { flex: 1 1 auto; min-height: 0; }
 
@@ -762,7 +762,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* align-content:start because PF's nav list is a GRID: growing it to fill the rail (so it is the part
    that scrolls when the surfaces outgrow the window) otherwise spreads the rows over the full height
    and each one comes out as tall as the space allows. */
-#console-sidebar .pf-v6-c-nav__list { flex: 1 1 auto; align-content: start; overflow-y: auto; overflow-x: hidden; padding-block-start: 0.25rem; }
+#console-sidebar .pf-v6-c-nav__list { flex: 1 1 auto; align-content: start; overflow-y: auto; overflow-x: hidden; }
 /* A row's count. Square and normal-case like every other chip in this shell - PatternFly's Badge is a
    pill, and pills are off the house style, so this is authored rather than borrowed.
    Collapsed it overlays the icon's top-trailing corner, the dock convention (VS Code, and every OS
