@@ -1733,22 +1733,39 @@ function revealWholeGraph() {
   const p = hashParams();
   if (p.view || p.q || p.node) return;
   cameraOwnedByOperator = false;
-  if (isDagMode()) {
-    // The layout is final in one pass, but at boot the console mounts this surface into a host
-    // that has not laid out yet, so the canvas can still measure zero - and a fit against a
-    // zero-width viewport clamps to the minimum scale and parks the graph in the corner.
-    void waitForCanvasWidth().then(() => {
-      if (!cameraOwnedByOperator && isDagMode()) fitView(matchSet);
-    });
-    return;
-  }
-  for (const at of REVEAL_BEATS_MS) {
-    setTimeout(() => {
-      // Re-check the mode too: a beat can land after the operator switched layout or ran a view.
-      if (cameraOwnedByOperator || isDagMode() || activeView || focusId || query) return;
-      fitView(null);
-    }, at);
-  }
+  // The beats are measured from when the canvas HAS A SIZE, not from now. The console can mount
+  // this surface into a pane that is still display:none, and it stays zero-width for as long as
+  // that takes - measured at over three seconds, past every beat. Scheduling on the wall clock
+  // meant all of them fired against a zero viewport, fitView refused each one, and the graph
+  // kept whatever framing the cold layout happened to leave it with.
+  void whenCanvasSized().then(() => {
+    // One pass places every node in a DAG layout, so its extent is final immediately.
+    if (isDagMode()) {
+      if (!cameraOwnedByOperator) fitView(matchSet);
+      return;
+    }
+    for (const at of REVEAL_BEATS_MS) {
+      setTimeout(() => {
+        // Re-check the mode too: a beat can land after the operator switched layout or ran a view.
+        if (cameraOwnedByOperator || isDagMode() || activeView || focusId || query) return;
+        fitView(null);
+      }, at);
+    }
+  });
+}
+
+// whenCanvasSized resolves once the canvas has a non-zero box, or gives up after ~20s of frames.
+// Distinct from waitForCanvasWidth, whose ~1s cap suits a load the operator is already watching;
+// this one waits out a surface mounted hidden, where there is nothing to be late for.
+function whenCanvasSized(): Promise<void> {
+  return new Promise((resolve) => {
+    let frames = 0;
+    const check = () => {
+      if (canvas.clientWidth > 0 || ++frames > 1200) resolve();
+      else requestAnimationFrame(check);
+    };
+    check();
+  });
 }
 
 function fitView(ids: Set<string> | null) {
