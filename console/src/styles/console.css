@@ -1065,12 +1065,31 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 .console-shell-signin__value { font-size: 0.8rem; min-inline-size: 0; overflow-wrap: anywhere; }
 .console-shell-signin__lede { margin-block: 0.35rem 0; font-size: 0.82rem; color: var(--pf-t--global--text--color--subtle); }
-/* Stacked full-width, not a row: the path under each name is the only way to tell two checkouts with
-   the same leaf name apart, and a row would truncate exactly that. */
-.console-shell-signin__list { display: flex; flex-direction: column; gap: 0.4rem; margin-block: 0.9rem; }
+/* One bordered menu holding the choices, rather than a stack of outlined buttons: two bordered cards
+   read as two things to study, and four became a wall. The border belongs to the container so the rows
+   inside stay light and only the hovered one carries weight. */
+.console-shell-signin__menu {
+  margin-block: 0.9rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  box-shadow: none;
+}
+.console-shell-signin__list { margin: 0; padding: 0; }
+/* Stacked, not a row: the path under each name is the only way to tell two checkouts with the same
+   leaf name apart, and a row would truncate exactly that. */
 .console-shell-signin__choice {
-  display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem;
   inline-size: 100%; text-align: start;
+}
+.console-shell-signin__choice .pf-v6-c-menu__item-main {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem;
+}
+/* The remembered pick, marked but never applied - a scope nobody chose is the failure this screen
+   exists to prevent, so this is a hint about where the cursor starts, not a selection. */
+.console-shell-signin__choice[data-suggested] .pf-v6-c-menu__item-text::after {
+  content: "last used";
+  margin-inline-start: 0.5rem;
+  font-size: 0.66rem; font-weight: 600; letter-spacing: 0.02em;
+  color: var(--pf-t--global--text--color--subtle);
 }
 .console-shell-signin__path {
   font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle);

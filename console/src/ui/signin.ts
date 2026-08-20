@@ -124,8 +124,22 @@ function ask(roots: readonly string[]): void {
     "This daemon is serving " +
     roots.length +
     " workspaces. Pick the one this window follows - runs and activity are filtered to it. Pool, cache and latency stay daemon-wide.";
-  const list = document.createElement("div");
-  list.className = "console-shell-signin__list";
+  // Menu rows, not a stack of outlined buttons. Two choices rendered as two bordered cards read as two
+  // things to STUDY rather than two things to pick, and at four or five they became a wall. Same PF
+  // menu vocabulary as the title bar's own workspace control, so the place you first choose a
+  // workspace and the place you change it afterwards look like one system.
+  //
+  // Still a list rather than a dropdown: this is asked once per browser tab, and a dropdown would cost
+  // a click to reveal options that fit on screen anyway.
+  const menu = document.createElement("div");
+  menu.className = "pf-v6-c-menu console-shell-signin__menu";
+  const menuContent = document.createElement("div");
+  menuContent.className = "pf-v6-c-menu__content";
+  const list = document.createElement("ul");
+  list.className = "pf-v6-c-menu__list console-shell-signin__list";
+  list.setAttribute("role", "menu");
+  menuContent.append(list);
+  menu.append(menuContent);
 
   const choose = (root: string): void => {
     // Only an explicit workspace pick moves the preselection. Escape and "Watch all workspaces" both
@@ -139,20 +153,30 @@ function ask(roots: readonly string[]): void {
 
   const suggested = lastPick();
   for (const root of roots) {
+    const li = document.createElement("li");
+    li.className = "pf-v6-c-menu__list-item";
+    li.setAttribute("role", "none");
     const b = document.createElement("button");
     b.type = "button";
-    b.className = "pf-v6-c-button pf-m-secondary console-shell-signin__choice";
+    b.className = "pf-v6-c-menu__item console-shell-signin__choice";
+    b.setAttribute("role", "menuitem");
     b.title = root;
+    const main = document.createElement("span");
+    main.className = "pf-v6-c-menu__item-main";
     const name = document.createElement("span");
-    name.className = "pf-v6-c-button__text";
+    name.className = "pf-v6-c-menu__item-text";
     name.textContent = shortName(root);
+    // The path is the ONLY way to tell two checkouts sharing a leaf name apart, so it stays on its own
+    // line under the name rather than becoming a tooltip.
     const path = document.createElement("span");
     path.className = "console-shell-signin__path";
     path.textContent = root;
-    b.append(name, path);
+    main.append(name, path);
+    b.append(main);
     if (root === suggested) b.dataset.suggested = "";
     b.addEventListener("click", () => choose(root));
-    list.append(b);
+    li.append(b);
+    list.append(li);
   }
 
   // Offered plainly, not buried: watching every workspace is a legitimate way to work, and hiding it
@@ -166,7 +190,7 @@ function ask(roots: readonly string[]): void {
   all.append(allText);
   all.addEventListener("click", () => choose(ALL_WORKSPACES));
 
-  body.append(connWrap, wsLabel, lede, list, all);
+  body.append(connWrap, wsLabel, lede, menu, all);
   box.append(header, body);
   bullseye.append(box);
   backdrop.append(bullseye);
