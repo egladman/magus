@@ -92,7 +92,12 @@ export interface Verdict {
 // yours. So when a scope is on, the numbers name whose they are. Without that the board says "5
 // targets running" directly above a tile saying nothing is running in your workspace, and the reader
 // has to work out which one is lying. Neither is; they are answering different questions.
-export function verdictFor(status: StatusView, failing: number, scoped = false): Verdict {
+export function verdictFor(
+  status: StatusView,
+  failing: number,
+  opts: { scoped?: boolean } = {},
+): Verdict {
+  const scoped = opts.scoped ?? false;
   const running = status.pool.running;
   const whose = scoped ? " on this daemon" : "";
   const down = status.health.cls === "fail";
@@ -353,7 +358,17 @@ export function attentionTile(): Tile {
     runWrap.dataset.n = running > 0 ? "some" : "none";
     queueWrap.dataset.n = queued > 0 ? "some" : "none";
 
-    const v = verdictFor(status, failing, workspaceScope() !== ALL_WORKSPACES);
+    const scoped = workspaceScope() !== ALL_WORKSPACES;
+    // The verdict's sub-line already says whose these counts are; say it on the figures too. People
+    // read the three numbers first and the sentence under them second, and it is the numbers that
+    // look like they contradict a scoped tile reporting nothing running.
+    if (scoped) {
+      metrics.title =
+        "Pool counts are daemon-wide: one pool serves every workspace on this daemon.";
+    } else {
+      metrics.removeAttribute("title");
+    }
+    const v = verdictFor(status, failing, { scoped });
     root.dataset.state = v.state;
     verdict.textContent = v.line;
     detail.textContent = v.sub;
