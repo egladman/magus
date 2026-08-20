@@ -1832,6 +1832,11 @@ var (
 	// `time go test` be judged as `go test` would erase the very token this rule is
 	// about.
 	guardTimedMagusRe = regexp.MustCompile(`(?:^|[;&|]\s*)time\s+(\S*/)?magus\s`)
+	// `timeout 300 magus run ci .`, read off the raw line for the same reason as the
+	// rule above: `timeout` is a peeled wrapper. Narrowed to run and affected, the
+	// only two subcommands carrying --timeout - naming it on `magus graph build`
+	// would advise a flag that does not exist there.
+	guardTimeoutMagusRe = regexp.MustCompile(`(?:^|[;&|]\s*)timeout\s+[^;&|]*?\s(\S*/)?magus\s+(?:run|affected)\b`)
 
 	// A magus invocation whose own output is truncated or filtered by the shell.
 	// magus has output flags for this; a pipe throws away the parts the agent
@@ -1957,6 +1962,12 @@ const (
 	// Advise, not deny: timing a command is legitimate, and the point is that magus
 	// already answered the question better than the shell can.
 	timedMagusAdvice = "magus times itself: drop `-s` and it prints each target's duration and a `(cached, 320ms)` or `(ran, 5m28s)` verdict. `time` around a silent run measures the wall clock magus already reported, and hides which targets replayed - which is usually the thing being asked."
+
+	// Advise, not deny: bounding a run is legitimate, and no deny trigger applies -
+	// nothing is unrecoverable, nothing is written, and the equivalent is close but
+	// not exact.
+	timeoutMagusAdvice = "magus has its own: `magus run <target> <project> --timeout 5m` (and the same flag on `magus affected`). It cancels the run rather than signalling the process, so the error names the target - `run ci: timed out after 5m` - and it logs elapsed/remaining heartbeats while the run is still going.\n" +
+		"An external `timeout` sees one opaque process: it cannot say which target was still running, and the SIGTERM lands wherever the run happened to be."
 )
 
 // denySharedStash explains why an unqualified stash restore is refused.
@@ -2056,6 +2067,8 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 		return bashGuardVerdict{Context: echoOnSuccessAdvice}
 	case guardTimedMagusRe.MatchString(command):
 		return bashGuardVerdict{Context: timedMagusAdvice}
+	case guardTimeoutMagusRe.MatchString(command):
+		return bashGuardVerdict{Context: timeoutMagusAdvice}
 	}
 	// Nothing denied, so a held git advisory is the answer after all.
 	return advisory

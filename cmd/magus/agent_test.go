@@ -459,6 +459,13 @@ func TestEvaluateBashGuard(t *testing.T) {
 		// The wrapper peeling that judges `time go test` as `go test` would erase
 		// the token this rule reads, so it works off the raw line.
 		{command: "time go test ./...", deny: true},
+		// Bounding magus with the shell. Advisory: run and affected take --timeout,
+		// which cancels the run instead of signalling the process.
+		{command: "timeout 300 magus run ci .", context: "--timeout 5m"},
+		{command: "timeout -k 10s 5m ./magus affected ci --no-default-charms", context: "names the target"},
+		{command: "timeout 60 sleep 30"},
+		// Only run and affected carry the flag, so nothing else is advised toward it.
+		{command: "timeout 60 magus graph build"},
 		{command: "magus run test ."},
 		// A cd WITHIN the workspace stays an advisory: naming the project is the
 		// fix, and the run still describes the tree that ships.
