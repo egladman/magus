@@ -21,6 +21,10 @@
   --console-topchrome-h: var(--console-titlebar-h);
   --console-statusbar-h: 2.2rem;
   --console-refdrawer-w: 22rem;
+  /* The gutter that insets the app card from the window. Named because the navigation rail has to
+     cancel exactly it to sit flush, and two copies of the number would drift the first time one
+     changed - the same trap the title-bar height note above describes. */
+  --console-shell-gutter: 0.6rem;
   /* The left navigation rail, collapsed and expanded. Collapsed is 2.75rem for the same reason the
      title bar is: every row is a tap target. Expanded stays deliberately narrow - the Graph Explorer
      and the Diff surface open their OWN left sidebars inside the pane, and two wide left columns
@@ -113,8 +117,8 @@ body[data-console-fill] > main {
   flex: 1 1 auto;
   min-height: 0;            /* let the card shrink to fit rather than forcing a page scroll */
   overflow: hidden;
-  padding-block: 0.6rem;    /* tight vertical gutter so the card reads as full-bleed */
-  padding-inline: 0.6rem;   /* slim the side gutter (Pico's .container-fluid is ~1rem) to match the block gutter */
+  padding-block: var(--console-shell-gutter);  /* tight vertical gutter so the card reads as full-bleed */
+  padding-inline: var(--console-shell-gutter); /* slim the side gutter (Pico's .container-fluid is ~1rem) to match the block gutter */
   display: flex;
   flex-direction: column;   /* the single app card stretches as a flex child (below) */
   /* Full-bleed: the tool pages (logs/graph) cap main.container-fluid to --content-wide and
@@ -681,6 +685,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-sidebar {
   flex: 0 0 auto;
   width: var(--console-sidebar-w);
+  /* Out through the shell gutter: a dock reads as part of the WINDOW, so it runs flush to the left
+     edge and butts against the title bar and status bar. Inside the gutter it floated as a second
+     card beside the content card, with page grey showing above and to the left of it - two floating
+     things sharing an edge, which is what made the frame look unresolved. The content card keeps its
+     gutter; only the rail steps out of it. */
+  margin-block: calc(-1 * var(--console-shell-gutter));
+  margin-inline-start: calc(-1 * var(--console-shell-gutter));
   display: flex; flex-direction: column;
   overflow: hidden; /* labels are clipped, not wrapped, while the width animates */
   border-right: 1px solid var(--pf-t--global--border--color--default);
@@ -692,6 +703,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   --pf-v6-c-nav__link--PaddingInlineStart: 0;
   --pf-v6-c-nav__link--PaddingInlineEnd: 0;
   --pf-v6-c-nav__link--ColumnGap: 0;
+  --pf-v6-c-nav--PaddingBlockStart: 0;
+  --pf-v6-c-nav--PaddingBlockEnd: 0;
 }
 #console-sidebar[data-expanded] {
   width: var(--console-sidebar-expanded-w);
@@ -709,9 +722,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   /* Collapsed, the row is a square target and the icon has to sit dead centre of it; expanded, the
      icon keeps that column and the label runs on beside it, so the icons stay on one vertical line
      through the whole transition instead of sliding sideways. */
-  display: grid; grid-template-columns: var(--console-sidebar-w) 1fr; align-items: center; justify-items: center;
+  display: grid; grid-template-columns: var(--console-sidebar-w) minmax(0, 1fr); align-items: center; justify-items: center;
 }
-#console-sidebar[data-expanded] .pf-v6-c-nav__link { grid-template-columns: 1.5rem 1fr; justify-items: start; }
+#console-sidebar[data-expanded] .pf-v6-c-nav__link { grid-template-columns: 1.5rem minmax(0, 1fr); justify-items: start; }
 #console-sidebar .pf-v6-c-nav__link-icon { display: flex; }
 /* The label is present in the DOM in both states and clipped by the rail's overflow when collapsed;
    it is never the accessible name (that is the button's aria-label), so clipping it costs nothing. */
