@@ -27,10 +27,6 @@ import {
   forceX,
   forceY,
   type Simulation,
-  type ForceManyBody,
-  type ForceLink,
-  type ForceX,
-  type ForceY,
 } from "d3-force";
 import { zoom as d3zoom, zoomIdentity, type ZoomBehavior } from "d3-zoom";
 import { drag as d3drag } from "d3-drag";
@@ -1904,10 +1900,6 @@ function syncConditionalViews() {
   document.querySelectorAll<HTMLElement>("[data-preset='duration']").forEach((btn) => {
     btn.toggleAttribute("data-conditional", !graphHasDurations);
   });
-  // The "What runs in parallel?" chip only makes sense for target graphs.
-  document.querySelectorAll<HTMLElement>("[data-layoutjump]").forEach((btn) => {
-    btn.hidden = graphFlavor !== "targets";
-  });
   syncAffectedView();
 }
 
@@ -2529,20 +2521,6 @@ function syncLayoutToggle() {
     btn.disabled = !!reason && !current;
     btn.title = reason ?? LAYOUT_TITLES[mode] ?? "";
   });
-  // Gray the force sliders out rather than removing them: a panel titled "Colors and forces"
-  // that contains no forces reads as a rendering bug, and the controls' absence carries no
-  // reason the way a disabled control with a title does.
-  const forceControls = document.querySelector<HTMLElement>(".console-graph-display__forces");
-  if (forceControls) {
-    const off = layoutMode !== "force";
-    forceControls.toggleAttribute("data-inactive", off);
-    forceControls.title = off
-      ? "Layout forces apply in Force mode; this graph is " + layoutMode
-      : "";
-    forceControls.querySelectorAll("input").forEach((input) => {
-      input.disabled = off;
-    });
-  }
 }
 
 // The graph-kind toggle group's per-kind titles when live. Mirrors scaffold.html's
@@ -3481,16 +3459,21 @@ function renderSuggestions() {
     return;
   }
   wrap.hidden = false;
-  wrap.innerHTML = chips
-    .map(
-      (c, i) =>
-        '<button type="button" class="console-graph-views__chip console-graph-sidebar__suggestion" data-i="' +
-        i +
-        '">' +
-        escapeHtml(c.text) +
-        "</button>",
-    )
-    .join("");
+  // The heading rides in the same innerHTML as the chips so it appears and disappears with them;
+  // without it these read as a third, unlabelled group of Ask chips rather than as facts already
+  // computed about the graph in front of you.
+  wrap.innerHTML =
+    '<p class="console-graph-sidebar__viewslabel">In this graph</p>' +
+    chips
+      .map(
+        (c, i) =>
+          '<button type="button" class="console-graph-views__chip console-graph-sidebar__suggestion" data-i="' +
+          i +
+          '">' +
+          escapeHtml(c.text) +
+          "</button>",
+      )
+      .join("");
   wrap.querySelectorAll<HTMLElement>(".console-graph-sidebar__suggestion").forEach((b) => {
     b.addEventListener("click", () => {
       chips[Number(b.dataset.i)].action();
@@ -4468,31 +4451,6 @@ function bootWireEvents() {
     });
   });
 
-  // Live force sliders: adjust the running simulation and gently reheat.
-  const wireForce = (id: string, apply: (v: number) => void) => {
-    const input = el(id) as HTMLInputElement | null;
-    if (!input) return;
-    input.addEventListener("input", () => {
-      if (sim) {
-        apply(+input.value);
-        sim?.alpha(0.3).restart();
-      }
-    });
-  };
-  // d3's untyped `force(name)` accessor returns the base Force; cast to the concrete
-  // force type to reach its strength/distance setters. sim is non-null when wireForce
-  // invokes these (it guards on it), so the optional chain never short-circuits.
-  wireForce("force-charge", (v) =>
-    (sim?.force("charge") as ForceManyBody<GNode> | undefined)?.strength(-v),
-  );
-  wireForce("force-link", (v) =>
-    (sim?.force("link") as ForceLink<GNode, GLink> | undefined)?.distance(v),
-  );
-  wireForce("force-gravity", (v) => {
-    (sim?.force("x") as ForceX<GNode> | undefined)?.strength(v / 100);
-    (sim?.force("y") as ForceY<GNode> | undefined)?.strength(v / 100);
-  });
-
   // Esc clears a focus/query. It stays a raw listener rather than a registered command because
   // it is the conventional global dismiss and has to fire while the search box has focus, which
   // the keybinding layer deliberately suppresses (isTyping). The focus-depth keys DID live here
@@ -4724,18 +4682,6 @@ function bootWireEvents() {
     });
   });
   syncGraphKindToggle();
-
-  // The Ask panel's "What runs in parallel?" chip is a layout jump, not a view:
-  // it carries no data-view attr, so the .console-graph-views__chip wiring
-  // above skips it.
-  document.querySelectorAll<HTMLElement>("[data-layoutjump]").forEach((b) => {
-    b.addEventListener("click", () => {
-      const mode = b.dataset.layoutjump;
-      if (!mode || !isLayoutMode(mode)) return;
-      layoutPickedByHand = true;
-      switchLayout(mode);
-    });
-  });
 
   // The Ask panel's "What's around this?" chip: jump straight to radial when a
   // node is already selected/focused, else enter a one-shot pick mode

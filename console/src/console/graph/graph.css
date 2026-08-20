@@ -444,15 +444,6 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
    carry the teaching per the discoverability phase). */
 .console-graph-display__layoutgroup { margin-top: 0.1rem; }
 
-/* Live layout-force sliders (the "alive" wobble is tunable). Stacked one per row so each label and
-   its slider fit the narrow drawer instead of wrapping mid-control. */
-.console-graph-display__forces { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.2rem; }
-.console-graph-display__forces label { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); margin: 0; }
-.console-graph-display__forces input[type="range"] { width: 8rem; flex: 0 0 auto; margin: 0; }
-/* Outside Force mode the sliders drive nothing. They gray out rather than disappearing: an
-   empty "Colors and forces" panel reads as a rendering fault, and only a present control can
-   carry the title explaining why it is inert. */
-.console-graph-display__forces[data-inactive] { opacity: 0.45; cursor: not-allowed; }
 
 /* Color groups: paint query matches a chosen color on top of the kind palette.
    The swatch color is genuinely dynamic (a user pick), so it rides an inline style
@@ -649,29 +640,15 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
   padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-graph-sidebar__views .console-graph-views__body { gap: 0.3rem; }
+/* The second group's label needs air above it; the first is flush with the section padding. */
+.console-graph-sidebar__views .console-graph-views__body + .console-graph-sidebar__viewslabel {
+  margin-top: 0.6rem;
+}
 .console-graph-sidebar__viewslabel {
   margin: 0 0 0.35rem; padding: 0;
   font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
   color: var(--pf-t--global--text--color--subtle);
 }
-
-/* Colors and forces: a collapsed disclosure sitting in the sidebar alongside the other
-   framed sections (Display mode, Explore) - same padding/bottom-divider rhythm, but a
-   <details> since these controls are secondary (tuning, not the main flow) and stay
-   out of the way until opened. The summary matches the other sidebar section labels
-   (small, muted, tracked uppercase) rather than the bordered reference-panel summary. */
-.console-graph-sidebar__panel {
-  padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
-}
-.console-graph-sidebar__panel > summary {
-  cursor: pointer; list-style: none;
-  margin: 0; padding: 0;
-  font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--pf-t--global--text--color--subtle);
-}
-.console-graph-sidebar__panel > summary::-webkit-details-marker { display: none; }
-.console-graph-sidebar__panel[open] > summary { margin-bottom: 0.5rem; }
-.console-graph-sidebar__panelbody { display: flex; flex-direction: column; }
 
 /* Phase 5: projection unfold button. Shown when default projection is active. A PF link Button,
    centered as a full-width sidebar row with the same bottom-border divider as the count row; PF
