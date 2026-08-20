@@ -4,11 +4,12 @@
 // 	protoc        (unknown)
 // source: magus/graph/v1alpha1/graph.proto
 
-// Package magus.graph.v1alpha1 is the versioned wire contract for the knowledge-graph output the
-// daemon serves to the browser Graph Explorer (/api/v1/graph): an induced subgraph of nodes
-// and edges plus its shape metadata. It mirrors types.KnowledgeGraphOutput; field names match
-// that type's JSON so a protojson encoding is wire-compatible with the JSON the page already
-// consumes. A sibling of magus.viewer.v1alpha1 and magus.status.v1alpha1. buf-breaking gates this file.
+// Package magus.graph.v1alpha1 is the versioned wire contract for the knowledge graph the daemon
+// serves to the browser Graph Explorer. Two surfaces share it: the bulk subgraph document behind
+// GET /api/v1/graph (Graph/Node/Edge, mirroring types.KnowledgeGraphOutput - field names match
+// that type's JSON so a protojson encoding is wire-compatible with what the page already
+// consumes), and GraphService, the ranked-retrieval verbs below. A sibling of
+// magus.viewer.v1alpha1 and magus.status.v1alpha1. buf-breaking gates this file.
 
 package graphv1alpha1
 
@@ -26,6 +27,55 @@ const (
 	// Verify that runtime/protoimpl is sufficiently up-to-date.
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
+
+type EdgeDirection int32
+
+const (
+	EdgeDirection_EDGE_DIRECTION_UNSPECIFIED EdgeDirection = 0
+	EdgeDirection_EDGE_DIRECTION_OUT         EdgeDirection = 1 // the focus node is the edge's source
+	EdgeDirection_EDGE_DIRECTION_IN          EdgeDirection = 2 // the focus node is the edge's target
+)
+
+// Enum value maps for EdgeDirection.
+var (
+	EdgeDirection_name = map[int32]string{
+		0: "EDGE_DIRECTION_UNSPECIFIED",
+		1: "EDGE_DIRECTION_OUT",
+		2: "EDGE_DIRECTION_IN",
+	}
+	EdgeDirection_value = map[string]int32{
+		"EDGE_DIRECTION_UNSPECIFIED": 0,
+		"EDGE_DIRECTION_OUT":         1,
+		"EDGE_DIRECTION_IN":          2,
+	}
+)
+
+func (x EdgeDirection) Enum() *EdgeDirection {
+	p := new(EdgeDirection)
+	*p = x
+	return p
+}
+
+func (x EdgeDirection) String() string {
+	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
+}
+
+func (EdgeDirection) Descriptor() protoreflect.EnumDescriptor {
+	return file_magus_graph_v1alpha1_graph_proto_enumTypes[0].Descriptor()
+}
+
+func (EdgeDirection) Type() protoreflect.EnumType {
+	return &file_magus_graph_v1alpha1_graph_proto_enumTypes[0]
+}
+
+func (x EdgeDirection) Number() protoreflect.EnumNumber {
+	return protoreflect.EnumNumber(x)
+}
+
+// Deprecated: Use EdgeDirection.Descriptor instead.
+func (EdgeDirection) EnumDescriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{0}
+}
 
 // Graph is a knowledge-graph projection: nodes, edges (links), and shape metadata.
 type Graph struct {
@@ -310,6 +360,1256 @@ func (x *Edge) GetProvenance() string {
 	return ""
 }
 
+type QueryNodesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`    // the magus query grammar, verbatim
+	Budget        int32                  `protobuf:"varint,2,opt,name=budget,proto3" json:"budget,omitempty"` // neighborhood node budget; 0 = server default
+	Offset        int32                  `protobuf:"varint,3,opt,name=offset,proto3" json:"offset,omitempty"`
+	PageSize      int32                  `protobuf:"varint,4,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"` // 0 = every match from offset on
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryNodesRequest) Reset() {
+	*x = QueryNodesRequest{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[3]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryNodesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryNodesRequest) ProtoMessage() {}
+
+func (x *QueryNodesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[3]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryNodesRequest.ProtoReflect.Descriptor instead.
+func (*QueryNodesRequest) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{3}
+}
+
+func (x *QueryNodesRequest) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+func (x *QueryNodesRequest) GetBudget() int32 {
+	if x != nil {
+		return x.Budget
+	}
+	return 0
+}
+
+func (x *QueryNodesRequest) GetOffset() int32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *QueryNodesRequest) GetPageSize() int32 {
+	if x != nil {
+		return x.PageSize
+	}
+	return 0
+}
+
+type QueryNodesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Query         string                 `protobuf:"bytes,1,opt,name=query,proto3" json:"query,omitempty"`
+	Budget        int32                  `protobuf:"varint,2,opt,name=budget,proto3" json:"budget,omitempty"`
+	MatchCount    int32                  `protobuf:"varint,3,opt,name=match_count,json=matchCount,proto3" json:"match_count,omitempty"` // TOTAL matches, not this page
+	Offset        int32                  `protobuf:"varint,4,opt,name=offset,proto3" json:"offset,omitempty"`
+	Matches       []*Match               `protobuf:"bytes,5,rep,name=matches,proto3" json:"matches,omitempty"`
+	Nodes         []*Node                `protobuf:"bytes,6,rep,name=nodes,proto3" json:"nodes,omitempty"`
+	Links         []*Edge                `protobuf:"bytes,7,rep,name=links,proto3" json:"links,omitempty"`
+	Answer        *Answer                `protobuf:"bytes,8,opt,name=answer,proto3" json:"answer,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *QueryNodesResponse) Reset() {
+	*x = QueryNodesResponse{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[4]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *QueryNodesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*QueryNodesResponse) ProtoMessage() {}
+
+func (x *QueryNodesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[4]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use QueryNodesResponse.ProtoReflect.Descriptor instead.
+func (*QueryNodesResponse) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{4}
+}
+
+func (x *QueryNodesResponse) GetQuery() string {
+	if x != nil {
+		return x.Query
+	}
+	return ""
+}
+
+func (x *QueryNodesResponse) GetBudget() int32 {
+	if x != nil {
+		return x.Budget
+	}
+	return 0
+}
+
+func (x *QueryNodesResponse) GetMatchCount() int32 {
+	if x != nil {
+		return x.MatchCount
+	}
+	return 0
+}
+
+func (x *QueryNodesResponse) GetOffset() int32 {
+	if x != nil {
+		return x.Offset
+	}
+	return 0
+}
+
+func (x *QueryNodesResponse) GetMatches() []*Match {
+	if x != nil {
+		return x.Matches
+	}
+	return nil
+}
+
+func (x *QueryNodesResponse) GetNodes() []*Node {
+	if x != nil {
+		return x.Nodes
+	}
+	return nil
+}
+
+func (x *QueryNodesResponse) GetLinks() []*Edge {
+	if x != nil {
+		return x.Links
+	}
+	return nil
+}
+
+func (x *QueryNodesResponse) GetAnswer() *Answer {
+	if x != nil {
+		return x.Answer
+	}
+	return nil
+}
+
+type ResolveNodesRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Reference     string                 `protobuf:"bytes,1,opt,name=reference,proto3" json:"reference,omitempty"`
+	Limit         int32                  `protobuf:"varint,2,opt,name=limit,proto3" json:"limit,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveNodesRequest) Reset() {
+	*x = ResolveNodesRequest{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[5]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveNodesRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveNodesRequest) ProtoMessage() {}
+
+func (x *ResolveNodesRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[5]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveNodesRequest.ProtoReflect.Descriptor instead.
+func (*ResolveNodesRequest) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{5}
+}
+
+func (x *ResolveNodesRequest) GetReference() string {
+	if x != nil {
+		return x.Reference
+	}
+	return ""
+}
+
+func (x *ResolveNodesRequest) GetLimit() int32 {
+	if x != nil {
+		return x.Limit
+	}
+	return 0
+}
+
+type ResolveNodesResponse struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Matches       []*Match               `protobuf:"bytes,1,rep,name=matches,proto3" json:"matches,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ResolveNodesResponse) Reset() {
+	*x = ResolveNodesResponse{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[6]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ResolveNodesResponse) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ResolveNodesResponse) ProtoMessage() {}
+
+func (x *ResolveNodesResponse) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[6]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ResolveNodesResponse.ProtoReflect.Descriptor instead.
+func (*ResolveNodesResponse) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{6}
+}
+
+func (x *ResolveNodesResponse) GetMatches() []*Match {
+	if x != nil {
+		return x.Matches
+	}
+	return nil
+}
+
+// Match is one ranked node. staleness/outrun_days carry the EVIDENCE for a prose match that
+// ranked down because the thing it describes moved on without it, so the weight is never silent.
+// Empty on anything not penalized.
+type Match struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	Score         int32                  `protobuf:"varint,4,opt,name=score,proto3" json:"score,omitempty"`
+	Staleness     string                 `protobuf:"bytes,5,opt,name=staleness,proto3" json:"staleness,omitempty"`
+	OutrunDays    int32                  `protobuf:"varint,6,opt,name=outrun_days,json=outrunDays,proto3" json:"outrun_days,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Match) Reset() {
+	*x = Match{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[7]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Match) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Match) ProtoMessage() {}
+
+func (x *Match) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[7]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Match.ProtoReflect.Descriptor instead.
+func (*Match) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{7}
+}
+
+func (x *Match) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Match) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *Match) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *Match) GetScore() int32 {
+	if x != nil {
+		return x.Score
+	}
+	return 0
+}
+
+func (x *Match) GetStaleness() string {
+	if x != nil {
+		return x.Staleness
+	}
+	return ""
+}
+
+func (x *Match) GetOutrunDays() int32 {
+	if x != nil {
+		return x.OutrunDays
+	}
+	return 0
+}
+
+type ExplainNodeRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Name          string                 `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"` // a node id, or any reference ResolveNodes accepts
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *ExplainNodeRequest) Reset() {
+	*x = ExplainNodeRequest{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[8]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *ExplainNodeRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*ExplainNodeRequest) ProtoMessage() {}
+
+func (x *ExplainNodeRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[8]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use ExplainNodeRequest.ProtoReflect.Descriptor instead.
+func (*ExplainNodeRequest) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{8}
+}
+
+func (x *ExplainNodeRequest) GetName() string {
+	if x != nil {
+		return x.Name
+	}
+	return ""
+}
+
+type NodeContext struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Node          *Node                  `protobuf:"bytes,1,opt,name=node,proto3" json:"node,omitempty"`
+	BlastRadius   int32                  `protobuf:"varint,2,opt,name=blast_radius,json=blastRadius,proto3" json:"blast_radius,omitempty"`
+	Out           []*EdgeRef             `protobuf:"bytes,3,rep,name=out,proto3" json:"out,omitempty"`
+	In            []*EdgeRef             `protobuf:"bytes,4,rep,name=in,proto3" json:"in,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *NodeContext) Reset() {
+	*x = NodeContext{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[9]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *NodeContext) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*NodeContext) ProtoMessage() {}
+
+func (x *NodeContext) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[9]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use NodeContext.ProtoReflect.Descriptor instead.
+func (*NodeContext) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{9}
+}
+
+func (x *NodeContext) GetNode() *Node {
+	if x != nil {
+		return x.Node
+	}
+	return nil
+}
+
+func (x *NodeContext) GetBlastRadius() int32 {
+	if x != nil {
+		return x.BlastRadius
+	}
+	return 0
+}
+
+func (x *NodeContext) GetOut() []*EdgeRef {
+	if x != nil {
+		return x.Out
+	}
+	return nil
+}
+
+func (x *NodeContext) GetIn() []*EdgeRef {
+	if x != nil {
+		return x.In
+	}
+	return nil
+}
+
+// EdgeRef is one edge seen FROM a focus node, so direction is relative to that node.
+type EdgeRef struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Relation      string                 `protobuf:"bytes,1,opt,name=relation,proto3" json:"relation,omitempty"`
+	Direction     EdgeDirection          `protobuf:"varint,2,opt,name=direction,proto3,enum=magus.graph.v1alpha1.EdgeDirection" json:"direction,omitempty"`
+	Other         string                 `protobuf:"bytes,3,opt,name=other,proto3" json:"other,omitempty"`
+	OtherKind     string                 `protobuf:"bytes,4,opt,name=other_kind,json=otherKind,proto3" json:"other_kind,omitempty"`
+	OtherLabel    string                 `protobuf:"bytes,5,opt,name=other_label,json=otherLabel,proto3" json:"other_label,omitempty"`
+	Provenance    string                 `protobuf:"bytes,6,opt,name=provenance,proto3" json:"provenance,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *EdgeRef) Reset() {
+	*x = EdgeRef{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[10]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *EdgeRef) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*EdgeRef) ProtoMessage() {}
+
+func (x *EdgeRef) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[10]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use EdgeRef.ProtoReflect.Descriptor instead.
+func (*EdgeRef) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{10}
+}
+
+func (x *EdgeRef) GetRelation() string {
+	if x != nil {
+		return x.Relation
+	}
+	return ""
+}
+
+func (x *EdgeRef) GetDirection() EdgeDirection {
+	if x != nil {
+		return x.Direction
+	}
+	return EdgeDirection_EDGE_DIRECTION_UNSPECIFIED
+}
+
+func (x *EdgeRef) GetOther() string {
+	if x != nil {
+		return x.Other
+	}
+	return ""
+}
+
+func (x *EdgeRef) GetOtherKind() string {
+	if x != nil {
+		return x.OtherKind
+	}
+	return ""
+}
+
+func (x *EdgeRef) GetOtherLabel() string {
+	if x != nil {
+		return x.OtherLabel
+	}
+	return ""
+}
+
+func (x *EdgeRef) GetProvenance() string {
+	if x != nil {
+		return x.Provenance
+	}
+	return ""
+}
+
+type FindPathRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	From          string                 `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
+	To            string                 `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *FindPathRequest) Reset() {
+	*x = FindPathRequest{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[11]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *FindPathRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*FindPathRequest) ProtoMessage() {}
+
+func (x *FindPathRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[11]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use FindPathRequest.ProtoReflect.Descriptor instead.
+func (*FindPathRequest) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{11}
+}
+
+func (x *FindPathRequest) GetFrom() string {
+	if x != nil {
+		return x.From
+	}
+	return ""
+}
+
+func (x *FindPathRequest) GetTo() string {
+	if x != nil {
+		return x.To
+	}
+	return ""
+}
+
+type Path struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	From          string                 `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
+	To            string                 `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
+	Found         bool                   `protobuf:"varint,3,opt,name=found,proto3" json:"found,omitempty"`
+	Steps         []*PathStep            `protobuf:"bytes,4,rep,name=steps,proto3" json:"steps,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Path) Reset() {
+	*x = Path{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[12]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Path) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Path) ProtoMessage() {}
+
+func (x *Path) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[12]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Path.ProtoReflect.Descriptor instead.
+func (*Path) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{12}
+}
+
+func (x *Path) GetFrom() string {
+	if x != nil {
+		return x.From
+	}
+	return ""
+}
+
+func (x *Path) GetTo() string {
+	if x != nil {
+		return x.To
+	}
+	return ""
+}
+
+func (x *Path) GetFound() bool {
+	if x != nil {
+		return x.Found
+	}
+	return false
+}
+
+func (x *Path) GetSteps() []*PathStep {
+	if x != nil {
+		return x.Steps
+	}
+	return nil
+}
+
+// PathStep is one hop as WALKED (from -> to). forward=false means the path traversed the
+// underlying edge against its own direction.
+type PathStep struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	From          string                 `protobuf:"bytes,1,opt,name=from,proto3" json:"from,omitempty"`
+	To            string                 `protobuf:"bytes,2,opt,name=to,proto3" json:"to,omitempty"`
+	Relation      string                 `protobuf:"bytes,3,opt,name=relation,proto3" json:"relation,omitempty"`
+	Forward       bool                   `protobuf:"varint,4,opt,name=forward,proto3" json:"forward,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *PathStep) Reset() {
+	*x = PathStep{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[13]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *PathStep) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*PathStep) ProtoMessage() {}
+
+func (x *PathStep) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[13]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use PathStep.ProtoReflect.Descriptor instead.
+func (*PathStep) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{13}
+}
+
+func (x *PathStep) GetFrom() string {
+	if x != nil {
+		return x.From
+	}
+	return ""
+}
+
+func (x *PathStep) GetTo() string {
+	if x != nil {
+		return x.To
+	}
+	return ""
+}
+
+func (x *PathStep) GetRelation() string {
+	if x != nil {
+		return x.Relation
+	}
+	return ""
+}
+
+func (x *PathStep) GetForward() bool {
+	if x != nil {
+		return x.Forward
+	}
+	return false
+}
+
+type GetGraphStatsRequest struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"` // optional filter; empty = all kinds
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GetGraphStatsRequest) Reset() {
+	*x = GetGraphStatsRequest{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[14]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GetGraphStatsRequest) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GetGraphStatsRequest) ProtoMessage() {}
+
+func (x *GetGraphStatsRequest) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[14]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GetGraphStatsRequest.ProtoReflect.Descriptor instead.
+func (*GetGraphStatsRequest) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{14}
+}
+
+func (x *GetGraphStatsRequest) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+type GraphStats struct {
+	state                protoimpl.MessageState `protogen:"open.v1"`
+	NodeCount            int32                  `protobuf:"varint,1,opt,name=node_count,json=nodeCount,proto3" json:"node_count,omitempty"`
+	EdgeCount            int32                  `protobuf:"varint,2,opt,name=edge_count,json=edgeCount,proto3" json:"edge_count,omitempty"`
+	Gods                 []*GodNode             `protobuf:"bytes,3,rep,name=gods,proto3" json:"gods,omitempty"`
+	Orphans              []*Orphan              `protobuf:"bytes,4,rep,name=orphans,proto3" json:"orphans,omitempty"`
+	Coverage             []*DocCoverage         `protobuf:"bytes,5,rep,name=coverage,proto3" json:"coverage,omitempty"`
+	IsolatedCount        int32                  `protobuf:"varint,6,opt,name=isolated_count,json=isolatedCount,proto3" json:"isolated_count,omitempty"`
+	ComponentCount       int32                  `protobuf:"varint,7,opt,name=component_count,json=componentCount,proto3" json:"component_count,omitempty"`
+	LargestComponentSize int32                  `protobuf:"varint,8,opt,name=largest_component_size,json=largestComponentSize,proto3" json:"largest_component_size,omitempty"`
+	unknownFields        protoimpl.UnknownFields
+	sizeCache            protoimpl.SizeCache
+}
+
+func (x *GraphStats) Reset() {
+	*x = GraphStats{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[15]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GraphStats) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GraphStats) ProtoMessage() {}
+
+func (x *GraphStats) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[15]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GraphStats.ProtoReflect.Descriptor instead.
+func (*GraphStats) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{15}
+}
+
+func (x *GraphStats) GetNodeCount() int32 {
+	if x != nil {
+		return x.NodeCount
+	}
+	return 0
+}
+
+func (x *GraphStats) GetEdgeCount() int32 {
+	if x != nil {
+		return x.EdgeCount
+	}
+	return 0
+}
+
+func (x *GraphStats) GetGods() []*GodNode {
+	if x != nil {
+		return x.Gods
+	}
+	return nil
+}
+
+func (x *GraphStats) GetOrphans() []*Orphan {
+	if x != nil {
+		return x.Orphans
+	}
+	return nil
+}
+
+func (x *GraphStats) GetCoverage() []*DocCoverage {
+	if x != nil {
+		return x.Coverage
+	}
+	return nil
+}
+
+func (x *GraphStats) GetIsolatedCount() int32 {
+	if x != nil {
+		return x.IsolatedCount
+	}
+	return 0
+}
+
+func (x *GraphStats) GetComponentCount() int32 {
+	if x != nil {
+		return x.ComponentCount
+	}
+	return 0
+}
+
+func (x *GraphStats) GetLargestComponentSize() int32 {
+	if x != nil {
+		return x.LargestComponentSize
+	}
+	return 0
+}
+
+type GodNode struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	Degree        int32                  `protobuf:"varint,4,opt,name=degree,proto3" json:"degree,omitempty"` // in + out
+	In            int32                  `protobuf:"varint,5,opt,name=in,proto3" json:"in,omitempty"`
+	Out           int32                  `protobuf:"varint,6,opt,name=out,proto3" json:"out,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *GodNode) Reset() {
+	*x = GodNode{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[16]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *GodNode) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*GodNode) ProtoMessage() {}
+
+func (x *GodNode) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[16]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use GodNode.ProtoReflect.Descriptor instead.
+func (*GodNode) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{16}
+}
+
+func (x *GodNode) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *GodNode) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *GodNode) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *GodNode) GetDegree() int32 {
+	if x != nil {
+		return x.Degree
+	}
+	return 0
+}
+
+func (x *GodNode) GetIn() int32 {
+	if x != nil {
+		return x.In
+	}
+	return 0
+}
+
+func (x *GodNode) GetOut() int32 {
+	if x != nil {
+		return x.Out
+	}
+	return 0
+}
+
+// Orphan is a node missing the connection its KIND implies - a doc that documents nothing, a
+// spell no target uses - with the reason in plain English. Not the same as "no edges at all":
+// the reason is what makes it actionable.
+type Orphan struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Id            string                 `protobuf:"bytes,1,opt,name=id,proto3" json:"id,omitempty"`
+	Kind          string                 `protobuf:"bytes,2,opt,name=kind,proto3" json:"kind,omitempty"`
+	Label         string                 `protobuf:"bytes,3,opt,name=label,proto3" json:"label,omitempty"`
+	Reason        string                 `protobuf:"bytes,4,opt,name=reason,proto3" json:"reason,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Orphan) Reset() {
+	*x = Orphan{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[17]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Orphan) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Orphan) ProtoMessage() {}
+
+func (x *Orphan) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[17]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Orphan.ProtoReflect.Descriptor instead.
+func (*Orphan) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{17}
+}
+
+func (x *Orphan) GetId() string {
+	if x != nil {
+		return x.Id
+	}
+	return ""
+}
+
+func (x *Orphan) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *Orphan) GetLabel() string {
+	if x != nil {
+		return x.Label
+	}
+	return ""
+}
+
+func (x *Orphan) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+// DocCoverage is doc coverage for one documentable kind. undocumented is a capped sample, not
+// the full set.
+type DocCoverage struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Kind          string                 `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	Total         int32                  `protobuf:"varint,2,opt,name=total,proto3" json:"total,omitempty"`
+	Documented    int32                  `protobuf:"varint,3,opt,name=documented,proto3" json:"documented,omitempty"`
+	Percent       int32                  `protobuf:"varint,4,opt,name=percent,proto3" json:"percent,omitempty"`
+	Undocumented  []string               `protobuf:"bytes,5,rep,name=undocumented,proto3" json:"undocumented,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *DocCoverage) Reset() {
+	*x = DocCoverage{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[18]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *DocCoverage) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*DocCoverage) ProtoMessage() {}
+
+func (x *DocCoverage) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[18]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use DocCoverage.ProtoReflect.Descriptor instead.
+func (*DocCoverage) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{18}
+}
+
+func (x *DocCoverage) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *DocCoverage) GetTotal() int32 {
+	if x != nil {
+		return x.Total
+	}
+	return 0
+}
+
+func (x *DocCoverage) GetDocumented() int32 {
+	if x != nil {
+		return x.Documented
+	}
+	return 0
+}
+
+func (x *DocCoverage) GetPercent() int32 {
+	if x != nil {
+		return x.Percent
+	}
+	return 0
+}
+
+func (x *DocCoverage) GetUndocumented() []string {
+	if x != nil {
+		return x.Undocumented
+	}
+	return nil
+}
+
+// Answer classifies a result against what magus could actually search. A stated reason or any
+// gap makes the verdict unknown WHETHER OR NOT the lookup matched - that is the difference from
+// a plain emptiness check, and it is why a bare term matching nothing says nothing about whether
+// a code symbol by that name exists.
+type Answer struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	Verdict       string                 `protobuf:"bytes,1,opt,name=verdict,proto3" json:"verdict,omitempty"`
+	Reason        string                 `protobuf:"bytes,2,opt,name=reason,proto3" json:"reason,omitempty"`
+	Gaps          []*SymbolGap           `protobuf:"bytes,3,rep,name=gaps,proto3" json:"gaps,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Answer) Reset() {
+	*x = Answer{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[19]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Answer) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Answer) ProtoMessage() {}
+
+func (x *Answer) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[19]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Answer.ProtoReflect.Descriptor instead.
+func (*Answer) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{19}
+}
+
+func (x *Answer) GetVerdict() string {
+	if x != nil {
+		return x.Verdict
+	}
+	return ""
+}
+
+func (x *Answer) GetReason() string {
+	if x != nil {
+		return x.Reason
+	}
+	return ""
+}
+
+func (x *Answer) GetGaps() []*SymbolGap {
+	if x != nil {
+		return x.Gaps
+	}
+	return nil
+}
+
+// SymbolGap is one project whose declared symbol index magus could not read: the evidence behind
+// an unknown verdict. The project is flattened to its two wire fields rather than nested,
+// because ProjectRef's third field is an absolute host path that never leaves the daemon.
+type SymbolGap struct {
+	state         protoimpl.MessageState `protogen:"open.v1"`
+	ProjectPath   string                 `protobuf:"bytes,1,opt,name=project_path,json=projectPath,proto3" json:"project_path,omitempty"` // workspace-relative; "." is the root
+	ProjectName   string                 `protobuf:"bytes,2,opt,name=project_name,json=projectName,proto3" json:"project_name,omitempty"` // the human label, which differs from the path only at the root
+	State         string                 `protobuf:"bytes,3,opt,name=state,proto3" json:"state,omitempty"`
+	Detail        string                 `protobuf:"bytes,4,opt,name=detail,proto3" json:"detail,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *SymbolGap) Reset() {
+	*x = SymbolGap{}
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[20]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *SymbolGap) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*SymbolGap) ProtoMessage() {}
+
+func (x *SymbolGap) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_graph_v1alpha1_graph_proto_msgTypes[20]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use SymbolGap.ProtoReflect.Descriptor instead.
+func (*SymbolGap) Descriptor() ([]byte, []int) {
+	return file_magus_graph_v1alpha1_graph_proto_rawDescGZIP(), []int{20}
+}
+
+func (x *SymbolGap) GetProjectPath() string {
+	if x != nil {
+		return x.ProjectPath
+	}
+	return ""
+}
+
+func (x *SymbolGap) GetProjectName() string {
+	if x != nil {
+		return x.ProjectName
+	}
+	return ""
+}
+
+func (x *SymbolGap) GetState() string {
+	if x != nil {
+		return x.State
+	}
+	return ""
+}
+
+func (x *SymbolGap) GetDetail() string {
+	if x != nil {
+		return x.Detail
+	}
+	return ""
+}
+
 var File_magus_graph_v1alpha1_graph_proto protoreflect.FileDescriptor
 
 const file_magus_graph_v1alpha1_graph_proto_rawDesc = "" +
@@ -353,7 +1653,120 @@ const file_magus_graph_v1alpha1_graph_proto_rawDesc = "" +
 	"\x05score\x18\x05 \x01(\x01R\x05score\x12\x1e\n" +
 	"\n" +
 	"provenance\x18\x06 \x01(\tR\n" +
-	"provenanceB\xe3\x01\n" +
+	"provenance\"v\n" +
+	"\x11QueryNodesRequest\x12\x14\n" +
+	"\x05query\x18\x01 \x01(\tR\x05query\x12\x16\n" +
+	"\x06budget\x18\x02 \x01(\x05R\x06budget\x12\x16\n" +
+	"\x06offset\x18\x03 \x01(\x05R\x06offset\x12\x1b\n" +
+	"\tpage_size\x18\x04 \x01(\x05R\bpageSize\"\xcc\x02\n" +
+	"\x12QueryNodesResponse\x12\x14\n" +
+	"\x05query\x18\x01 \x01(\tR\x05query\x12\x16\n" +
+	"\x06budget\x18\x02 \x01(\x05R\x06budget\x12\x1f\n" +
+	"\vmatch_count\x18\x03 \x01(\x05R\n" +
+	"matchCount\x12\x16\n" +
+	"\x06offset\x18\x04 \x01(\x05R\x06offset\x125\n" +
+	"\amatches\x18\x05 \x03(\v2\x1b.magus.graph.v1alpha1.MatchR\amatches\x120\n" +
+	"\x05nodes\x18\x06 \x03(\v2\x1a.magus.graph.v1alpha1.NodeR\x05nodes\x120\n" +
+	"\x05links\x18\a \x03(\v2\x1a.magus.graph.v1alpha1.EdgeR\x05links\x124\n" +
+	"\x06answer\x18\b \x01(\v2\x1c.magus.graph.v1alpha1.AnswerR\x06answer\"I\n" +
+	"\x13ResolveNodesRequest\x12\x1c\n" +
+	"\treference\x18\x01 \x01(\tR\treference\x12\x14\n" +
+	"\x05limit\x18\x02 \x01(\x05R\x05limit\"M\n" +
+	"\x14ResolveNodesResponse\x125\n" +
+	"\amatches\x18\x01 \x03(\v2\x1b.magus.graph.v1alpha1.MatchR\amatches\"\x96\x01\n" +
+	"\x05Match\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12\x14\n" +
+	"\x05score\x18\x04 \x01(\x05R\x05score\x12\x1c\n" +
+	"\tstaleness\x18\x05 \x01(\tR\tstaleness\x12\x1f\n" +
+	"\voutrun_days\x18\x06 \x01(\x05R\n" +
+	"outrunDays\"(\n" +
+	"\x12ExplainNodeRequest\x12\x12\n" +
+	"\x04name\x18\x01 \x01(\tR\x04name\"\xc0\x01\n" +
+	"\vNodeContext\x12.\n" +
+	"\x04node\x18\x01 \x01(\v2\x1a.magus.graph.v1alpha1.NodeR\x04node\x12!\n" +
+	"\fblast_radius\x18\x02 \x01(\x05R\vblastRadius\x12/\n" +
+	"\x03out\x18\x03 \x03(\v2\x1d.magus.graph.v1alpha1.EdgeRefR\x03out\x12-\n" +
+	"\x02in\x18\x04 \x03(\v2\x1d.magus.graph.v1alpha1.EdgeRefR\x02in\"\xde\x01\n" +
+	"\aEdgeRef\x12\x1a\n" +
+	"\brelation\x18\x01 \x01(\tR\brelation\x12A\n" +
+	"\tdirection\x18\x02 \x01(\x0e2#.magus.graph.v1alpha1.EdgeDirectionR\tdirection\x12\x14\n" +
+	"\x05other\x18\x03 \x01(\tR\x05other\x12\x1d\n" +
+	"\n" +
+	"other_kind\x18\x04 \x01(\tR\totherKind\x12\x1f\n" +
+	"\vother_label\x18\x05 \x01(\tR\n" +
+	"otherLabel\x12\x1e\n" +
+	"\n" +
+	"provenance\x18\x06 \x01(\tR\n" +
+	"provenance\"5\n" +
+	"\x0fFindPathRequest\x12\x12\n" +
+	"\x04from\x18\x01 \x01(\tR\x04from\x12\x0e\n" +
+	"\x02to\x18\x02 \x01(\tR\x02to\"v\n" +
+	"\x04Path\x12\x12\n" +
+	"\x04from\x18\x01 \x01(\tR\x04from\x12\x0e\n" +
+	"\x02to\x18\x02 \x01(\tR\x02to\x12\x14\n" +
+	"\x05found\x18\x03 \x01(\bR\x05found\x124\n" +
+	"\x05steps\x18\x04 \x03(\v2\x1e.magus.graph.v1alpha1.PathStepR\x05steps\"d\n" +
+	"\bPathStep\x12\x12\n" +
+	"\x04from\x18\x01 \x01(\tR\x04from\x12\x0e\n" +
+	"\x02to\x18\x02 \x01(\tR\x02to\x12\x1a\n" +
+	"\brelation\x18\x03 \x01(\tR\brelation\x12\x18\n" +
+	"\aforward\x18\x04 \x01(\bR\aforward\"*\n" +
+	"\x14GetGraphStatsRequest\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\"\xfa\x02\n" +
+	"\n" +
+	"GraphStats\x12\x1d\n" +
+	"\n" +
+	"node_count\x18\x01 \x01(\x05R\tnodeCount\x12\x1d\n" +
+	"\n" +
+	"edge_count\x18\x02 \x01(\x05R\tedgeCount\x121\n" +
+	"\x04gods\x18\x03 \x03(\v2\x1d.magus.graph.v1alpha1.GodNodeR\x04gods\x126\n" +
+	"\aorphans\x18\x04 \x03(\v2\x1c.magus.graph.v1alpha1.OrphanR\aorphans\x12=\n" +
+	"\bcoverage\x18\x05 \x03(\v2!.magus.graph.v1alpha1.DocCoverageR\bcoverage\x12%\n" +
+	"\x0eisolated_count\x18\x06 \x01(\x05R\risolatedCount\x12'\n" +
+	"\x0fcomponent_count\x18\a \x01(\x05R\x0ecomponentCount\x124\n" +
+	"\x16largest_component_size\x18\b \x01(\x05R\x14largestComponentSize\"}\n" +
+	"\aGodNode\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12\x16\n" +
+	"\x06degree\x18\x04 \x01(\x05R\x06degree\x12\x0e\n" +
+	"\x02in\x18\x05 \x01(\x05R\x02in\x12\x10\n" +
+	"\x03out\x18\x06 \x01(\x05R\x03out\"Z\n" +
+	"\x06Orphan\x12\x0e\n" +
+	"\x02id\x18\x01 \x01(\tR\x02id\x12\x12\n" +
+	"\x04kind\x18\x02 \x01(\tR\x04kind\x12\x14\n" +
+	"\x05label\x18\x03 \x01(\tR\x05label\x12\x16\n" +
+	"\x06reason\x18\x04 \x01(\tR\x06reason\"\x95\x01\n" +
+	"\vDocCoverage\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x14\n" +
+	"\x05total\x18\x02 \x01(\x05R\x05total\x12\x1e\n" +
+	"\n" +
+	"documented\x18\x03 \x01(\x05R\n" +
+	"documented\x12\x18\n" +
+	"\apercent\x18\x04 \x01(\x05R\apercent\x12\"\n" +
+	"\fundocumented\x18\x05 \x03(\tR\fundocumented\"o\n" +
+	"\x06Answer\x12\x18\n" +
+	"\averdict\x18\x01 \x01(\tR\averdict\x12\x16\n" +
+	"\x06reason\x18\x02 \x01(\tR\x06reason\x123\n" +
+	"\x04gaps\x18\x03 \x03(\v2\x1f.magus.graph.v1alpha1.SymbolGapR\x04gaps\"\x7f\n" +
+	"\tSymbolGap\x12!\n" +
+	"\fproject_path\x18\x01 \x01(\tR\vprojectPath\x12!\n" +
+	"\fproject_name\x18\x02 \x01(\tR\vprojectName\x12\x14\n" +
+	"\x05state\x18\x03 \x01(\tR\x05state\x12\x16\n" +
+	"\x06detail\x18\x04 \x01(\tR\x06detail*^\n" +
+	"\rEdgeDirection\x12\x1e\n" +
+	"\x1aEDGE_DIRECTION_UNSPECIFIED\x10\x00\x12\x16\n" +
+	"\x12EDGE_DIRECTION_OUT\x10\x01\x12\x15\n" +
+	"\x11EDGE_DIRECTION_IN\x10\x022\xe0\x03\n" +
+	"\fGraphService\x12_\n" +
+	"\n" +
+	"QueryNodes\x12'.magus.graph.v1alpha1.QueryNodesRequest\x1a(.magus.graph.v1alpha1.QueryNodesResponse\x12e\n" +
+	"\fResolveNodes\x12).magus.graph.v1alpha1.ResolveNodesRequest\x1a*.magus.graph.v1alpha1.ResolveNodesResponse\x12Z\n" +
+	"\vExplainNode\x12(.magus.graph.v1alpha1.ExplainNodeRequest\x1a!.magus.graph.v1alpha1.NodeContext\x12M\n" +
+	"\bFindPath\x12%.magus.graph.v1alpha1.FindPathRequest\x1a\x1a.magus.graph.v1alpha1.Path\x12]\n" +
+	"\rGetGraphStats\x12*.magus.graph.v1alpha1.GetGraphStatsRequest\x1a .magus.graph.v1alpha1.GraphStatsB\xe3\x01\n" +
 	"\x18com.magus.graph.v1alpha1B\n" +
 	"GraphProtoP\x01ZIgithub.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1;graphv1alpha1\xa2\x02\x03MGX\xaa\x02\x14Magus.Graph.V1alpha1\xca\x02\x14Magus\\Graph\\V1alpha1\xe2\x02 Magus\\Graph\\V1alpha1\\GPBMetadata\xea\x02\x16Magus::Graph::V1alpha1b\x06proto3"
 
@@ -369,22 +1782,66 @@ func file_magus_graph_v1alpha1_graph_proto_rawDescGZIP() []byte {
 	return file_magus_graph_v1alpha1_graph_proto_rawDescData
 }
 
-var file_magus_graph_v1alpha1_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 4)
+var file_magus_graph_v1alpha1_graph_proto_enumTypes = make([]protoimpl.EnumInfo, 1)
+var file_magus_graph_v1alpha1_graph_proto_msgTypes = make([]protoimpl.MessageInfo, 22)
 var file_magus_graph_v1alpha1_graph_proto_goTypes = []any{
-	(*Graph)(nil), // 0: magus.graph.v1alpha1.Graph
-	(*Node)(nil),  // 1: magus.graph.v1alpha1.Node
-	(*Edge)(nil),  // 2: magus.graph.v1alpha1.Edge
-	nil,           // 3: magus.graph.v1alpha1.Node.AttrsEntry
+	(EdgeDirection)(0),           // 0: magus.graph.v1alpha1.EdgeDirection
+	(*Graph)(nil),                // 1: magus.graph.v1alpha1.Graph
+	(*Node)(nil),                 // 2: magus.graph.v1alpha1.Node
+	(*Edge)(nil),                 // 3: magus.graph.v1alpha1.Edge
+	(*QueryNodesRequest)(nil),    // 4: magus.graph.v1alpha1.QueryNodesRequest
+	(*QueryNodesResponse)(nil),   // 5: magus.graph.v1alpha1.QueryNodesResponse
+	(*ResolveNodesRequest)(nil),  // 6: magus.graph.v1alpha1.ResolveNodesRequest
+	(*ResolveNodesResponse)(nil), // 7: magus.graph.v1alpha1.ResolveNodesResponse
+	(*Match)(nil),                // 8: magus.graph.v1alpha1.Match
+	(*ExplainNodeRequest)(nil),   // 9: magus.graph.v1alpha1.ExplainNodeRequest
+	(*NodeContext)(nil),          // 10: magus.graph.v1alpha1.NodeContext
+	(*EdgeRef)(nil),              // 11: magus.graph.v1alpha1.EdgeRef
+	(*FindPathRequest)(nil),      // 12: magus.graph.v1alpha1.FindPathRequest
+	(*Path)(nil),                 // 13: magus.graph.v1alpha1.Path
+	(*PathStep)(nil),             // 14: magus.graph.v1alpha1.PathStep
+	(*GetGraphStatsRequest)(nil), // 15: magus.graph.v1alpha1.GetGraphStatsRequest
+	(*GraphStats)(nil),           // 16: magus.graph.v1alpha1.GraphStats
+	(*GodNode)(nil),              // 17: magus.graph.v1alpha1.GodNode
+	(*Orphan)(nil),               // 18: magus.graph.v1alpha1.Orphan
+	(*DocCoverage)(nil),          // 19: magus.graph.v1alpha1.DocCoverage
+	(*Answer)(nil),               // 20: magus.graph.v1alpha1.Answer
+	(*SymbolGap)(nil),            // 21: magus.graph.v1alpha1.SymbolGap
+	nil,                          // 22: magus.graph.v1alpha1.Node.AttrsEntry
 }
 var file_magus_graph_v1alpha1_graph_proto_depIdxs = []int32{
-	1, // 0: magus.graph.v1alpha1.Graph.nodes:type_name -> magus.graph.v1alpha1.Node
-	2, // 1: magus.graph.v1alpha1.Graph.links:type_name -> magus.graph.v1alpha1.Edge
-	3, // 2: magus.graph.v1alpha1.Node.attrs:type_name -> magus.graph.v1alpha1.Node.AttrsEntry
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	2,  // 0: magus.graph.v1alpha1.Graph.nodes:type_name -> magus.graph.v1alpha1.Node
+	3,  // 1: magus.graph.v1alpha1.Graph.links:type_name -> magus.graph.v1alpha1.Edge
+	22, // 2: magus.graph.v1alpha1.Node.attrs:type_name -> magus.graph.v1alpha1.Node.AttrsEntry
+	8,  // 3: magus.graph.v1alpha1.QueryNodesResponse.matches:type_name -> magus.graph.v1alpha1.Match
+	2,  // 4: magus.graph.v1alpha1.QueryNodesResponse.nodes:type_name -> magus.graph.v1alpha1.Node
+	3,  // 5: magus.graph.v1alpha1.QueryNodesResponse.links:type_name -> magus.graph.v1alpha1.Edge
+	20, // 6: magus.graph.v1alpha1.QueryNodesResponse.answer:type_name -> magus.graph.v1alpha1.Answer
+	8,  // 7: magus.graph.v1alpha1.ResolveNodesResponse.matches:type_name -> magus.graph.v1alpha1.Match
+	2,  // 8: magus.graph.v1alpha1.NodeContext.node:type_name -> magus.graph.v1alpha1.Node
+	11, // 9: magus.graph.v1alpha1.NodeContext.out:type_name -> magus.graph.v1alpha1.EdgeRef
+	11, // 10: magus.graph.v1alpha1.NodeContext.in:type_name -> magus.graph.v1alpha1.EdgeRef
+	0,  // 11: magus.graph.v1alpha1.EdgeRef.direction:type_name -> magus.graph.v1alpha1.EdgeDirection
+	14, // 12: magus.graph.v1alpha1.Path.steps:type_name -> magus.graph.v1alpha1.PathStep
+	17, // 13: magus.graph.v1alpha1.GraphStats.gods:type_name -> magus.graph.v1alpha1.GodNode
+	18, // 14: magus.graph.v1alpha1.GraphStats.orphans:type_name -> magus.graph.v1alpha1.Orphan
+	19, // 15: magus.graph.v1alpha1.GraphStats.coverage:type_name -> magus.graph.v1alpha1.DocCoverage
+	21, // 16: magus.graph.v1alpha1.Answer.gaps:type_name -> magus.graph.v1alpha1.SymbolGap
+	4,  // 17: magus.graph.v1alpha1.GraphService.QueryNodes:input_type -> magus.graph.v1alpha1.QueryNodesRequest
+	6,  // 18: magus.graph.v1alpha1.GraphService.ResolveNodes:input_type -> magus.graph.v1alpha1.ResolveNodesRequest
+	9,  // 19: magus.graph.v1alpha1.GraphService.ExplainNode:input_type -> magus.graph.v1alpha1.ExplainNodeRequest
+	12, // 20: magus.graph.v1alpha1.GraphService.FindPath:input_type -> magus.graph.v1alpha1.FindPathRequest
+	15, // 21: magus.graph.v1alpha1.GraphService.GetGraphStats:input_type -> magus.graph.v1alpha1.GetGraphStatsRequest
+	5,  // 22: magus.graph.v1alpha1.GraphService.QueryNodes:output_type -> magus.graph.v1alpha1.QueryNodesResponse
+	7,  // 23: magus.graph.v1alpha1.GraphService.ResolveNodes:output_type -> magus.graph.v1alpha1.ResolveNodesResponse
+	10, // 24: magus.graph.v1alpha1.GraphService.ExplainNode:output_type -> magus.graph.v1alpha1.NodeContext
+	13, // 25: magus.graph.v1alpha1.GraphService.FindPath:output_type -> magus.graph.v1alpha1.Path
+	16, // 26: magus.graph.v1alpha1.GraphService.GetGraphStats:output_type -> magus.graph.v1alpha1.GraphStats
+	22, // [22:27] is the sub-list for method output_type
+	17, // [17:22] is the sub-list for method input_type
+	17, // [17:17] is the sub-list for extension type_name
+	17, // [17:17] is the sub-list for extension extendee
+	0,  // [0:17] is the sub-list for field type_name
 }
 
 func init() { file_magus_graph_v1alpha1_graph_proto_init() }
@@ -397,13 +1854,14 @@ func file_magus_graph_v1alpha1_graph_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_graph_v1alpha1_graph_proto_rawDesc), len(file_magus_graph_v1alpha1_graph_proto_rawDesc)),
-			NumEnums:      0,
-			NumMessages:   4,
+			NumEnums:      1,
+			NumMessages:   22,
 			NumExtensions: 0,
-			NumServices:   0,
+			NumServices:   1,
 		},
 		GoTypes:           file_magus_graph_v1alpha1_graph_proto_goTypes,
 		DependencyIndexes: file_magus_graph_v1alpha1_graph_proto_depIdxs,
+		EnumInfos:         file_magus_graph_v1alpha1_graph_proto_enumTypes,
 		MessageInfos:      file_magus_graph_v1alpha1_graph_proto_msgTypes,
 	}.Build()
 	File_magus_graph_v1alpha1_graph_proto = out.File

@@ -1,10 +1,11 @@
 syntax = "proto3";
 
-// Package magus.graph.v1alpha1 is the versioned wire contract for the knowledge-graph output the
-// daemon serves to the browser Graph Explorer (/api/v1/graph): an induced subgraph of nodes
-// and edges plus its shape metadata. It mirrors types.KnowledgeGraphOutput; field names match
-// that type's JSON so a protojson encoding is wire-compatible with the JSON the page already
-// consumes. A sibling of magus.viewer.v1alpha1 and magus.status.v1alpha1. buf-breaking gates this file.
+// Package magus.graph.v1alpha1 is the versioned wire contract for the knowledge graph the daemon
+// serves to the browser Graph Explorer. Two surfaces share it: the bulk subgraph document behind
+// GET /api/v1/graph (Graph/Node/Edge, mirroring types.KnowledgeGraphOutput - field names match
+// that type's JSON so a protojson encoding is wire-compatible with what the page already
+// consumes), and GraphService, the ranked-retrieval verbs below. A sibling of
+// magus.viewer.v1alpha1 and magus.status.v1alpha1. buf-breaking gates this file.
 package magus.graph.v1alpha1;
 
 // Graph is a knowledge-graph projection: nodes, edges (links), and shape metadata.
@@ -42,4 +43,187 @@ message Edge {
   string confidence = 4;
   double score = 5;
   string provenance = 6;
+}
+
+// GraphService answers the questions the CLI's query/explain/path/stats verbs answer, over the
+// same knowledge graph. It exists so the browser stops reimplementing them: the Graph Explorer's
+// filter was a second, divergent copy of the query grammar, scoring by raw degree over a payload
+// the daemon had already sent whole.
+//
+// Every verb is read-only, so the daemon mounts the service behind the console read bearer.
+//
+// The definition and schema_version fields every domain output carries are deliberately absent
+// here. The proto package IS the version and buf-breaking gates it, so a second version number
+// could only ever disagree with the first; definition is CLI help prose, re-sent on every
+// response to a typed client that already knows what it called.
+//
+// GET /api/v1/graph is NOT superseded. It is the bulk subgraph fetch - a whole document - which
+// is a different job from ranked retrieval, and the page already speaks it.
+service GraphService {
+  // QueryNodes resolves search terms to ranked matches plus the induced neighborhood, collected
+  // up to a node budget. Paginated: page with offset + len(matches) against match_count, which
+  // is the TOTAL, not the page size.
+  rpc QueryNodes(QueryNodesRequest) returns (QueryNodesResponse);
+  // ResolveNodes returns the ranked candidates for a partial reference, for completion. Cheaper
+  // than QueryNodes: matches only, no neighborhood.
+  rpc ResolveNodes(ResolveNodesRequest) returns (ResolveNodesResponse);
+  // ExplainNode returns one node's context: its data, its in/out edges with provenance, and how
+  // many nodes transitively reach it. A name that resolves to nothing is NOT_FOUND.
+  rpc ExplainNode(ExplainNodeRequest) returns (NodeContext);
+  // FindPath returns the shortest chain between two nodes, edges walked in either direction.
+  // found=false is an answer, not an error; an endpoint that resolves to nothing is NOT_FOUND.
+  rpc FindPath(FindPathRequest) returns (Path);
+  // GetGraphStats returns where the workspace concentrates, neglects, and fragments.
+  rpc GetGraphStats(GetGraphStatsRequest) returns (GraphStats);
+}
+
+message QueryNodesRequest {
+  string query = 1;  // the magus query grammar, verbatim
+  int32 budget = 2;  // neighborhood node budget; 0 = server default
+  int32 offset = 3;
+  int32 page_size = 4;  // 0 = every match from offset on
+}
+
+message QueryNodesResponse {
+  string query = 1;
+  int32 budget = 2;
+  int32 match_count = 3;  // TOTAL matches, not this page
+  int32 offset = 4;
+  repeated Match matches = 5;
+  repeated Node nodes = 6;
+  repeated Edge links = 7;
+  Answer answer = 8;
+}
+
+message ResolveNodesRequest {
+  string reference = 1;
+  int32 limit = 2;
+}
+
+message ResolveNodesResponse {
+  repeated Match matches = 1;
+}
+
+// Match is one ranked node. staleness/outrun_days carry the EVIDENCE for a prose match that
+// ranked down because the thing it describes moved on without it, so the weight is never silent.
+// Empty on anything not penalized.
+message Match {
+  string id = 1;
+  string kind = 2;
+  string label = 3;
+  int32 score = 4;
+  string staleness = 5;
+  int32 outrun_days = 6;
+}
+
+message ExplainNodeRequest {
+  string name = 1;  // a node id, or any reference ResolveNodes accepts
+}
+
+message NodeContext {
+  Node node = 1;
+  int32 blast_radius = 2;
+  repeated EdgeRef out = 3;
+  repeated EdgeRef in = 4;
+}
+
+// EdgeRef is one edge seen FROM a focus node, so direction is relative to that node.
+message EdgeRef {
+  string relation = 1;
+  EdgeDirection direction = 2;
+  string other = 3;
+  string other_kind = 4;
+  string other_label = 5;
+  string provenance = 6;
+}
+
+enum EdgeDirection {
+  EDGE_DIRECTION_UNSPECIFIED = 0;
+  EDGE_DIRECTION_OUT = 1;  // the focus node is the edge's source
+  EDGE_DIRECTION_IN = 2;   // the focus node is the edge's target
+}
+
+message FindPathRequest {
+  string from = 1;
+  string to = 2;
+}
+
+message Path {
+  string from = 1;
+  string to = 2;
+  bool found = 3;
+  repeated PathStep steps = 4;
+}
+
+// PathStep is one hop as WALKED (from -> to). forward=false means the path traversed the
+// underlying edge against its own direction.
+message PathStep {
+  string from = 1;
+  string to = 2;
+  string relation = 3;
+  bool forward = 4;
+}
+
+message GetGraphStatsRequest {
+  string kind = 1;  // optional filter; empty = all kinds
+}
+
+message GraphStats {
+  int32 node_count = 1;
+  int32 edge_count = 2;
+  repeated GodNode gods = 3;
+  repeated Orphan orphans = 4;
+  repeated DocCoverage coverage = 5;
+  int32 isolated_count = 6;
+  int32 component_count = 7;
+  int32 largest_component_size = 8;
+}
+
+message GodNode {
+  string id = 1;
+  string kind = 2;
+  string label = 3;
+  int32 degree = 4;  // in + out
+  int32 in = 5;
+  int32 out = 6;
+}
+
+// Orphan is a node missing the connection its KIND implies - a doc that documents nothing, a
+// spell no target uses - with the reason in plain English. Not the same as "no edges at all":
+// the reason is what makes it actionable.
+message Orphan {
+  string id = 1;
+  string kind = 2;
+  string label = 3;
+  string reason = 4;
+}
+
+// DocCoverage is doc coverage for one documentable kind. undocumented is a capped sample, not
+// the full set.
+message DocCoverage {
+  string kind = 1;
+  int32 total = 2;
+  int32 documented = 3;
+  int32 percent = 4;
+  repeated string undocumented = 5;
+}
+
+// Answer classifies a result against what magus could actually search. A stated reason or any
+// gap makes the verdict unknown WHETHER OR NOT the lookup matched - that is the difference from
+// a plain emptiness check, and it is why a bare term matching nothing says nothing about whether
+// a code symbol by that name exists.
+message Answer {
+  string verdict = 1;
+  string reason = 2;
+  repeated SymbolGap gaps = 3;
+}
+
+// SymbolGap is one project whose declared symbol index magus could not read: the evidence behind
+// an unknown verdict. The project is flattened to its two wire fields rather than nested,
+// because ProjectRef's third field is an absolute host path that never leaves the daemon.
+message SymbolGap {
+  string project_path = 1;  // workspace-relative; "." is the root
+  string project_name = 2;  // the human label, which differs from the path only at the root
+  string state = 3;
+  string detail = 4;
 }
