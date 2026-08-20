@@ -646,13 +646,19 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    content panel behind the strip to fill it), so the only selection cue was a thin accent line
    floating on the title bar - it read as debris, not a selected tab. Instead: drop that accent line
    (PF token -> transparent), give the current tab a raised fill one step lighter than the darker
-   title bar, round its top corners, and brighten its label. Inactive tabs stay flat with a muted
-   label and a quiet hover. This is the native "the selected tab is a raised card" look. */
+   title bar, and brighten its label. Inactive tabs stay flat with a muted label and a quiet hover.
+   SQUARE, like the rest of this chrome. The top corners used to be rounded to read as a "raised card",
+   but a card is a container and a tab is frame - the status bar, the panes and the navigation rail are
+   all 0, so those two corners were the only curve left in the shell. The raised fill and the brightened
+   label carry the selection on their own; the radius was never what said "current".
+   The link's own radius goes too: it is transparent at rest, so its 9px only ever showed as a stray
+   curve under a focus ring. */
 #console-tabs { --pf-v6-c-tabs__link--after--BorderColor: transparent; }
-#console-tabs .pf-v6-c-tabs__item {
-  border-top-left-radius: var(--pf-t--global--border--radius--medium);
-  border-top-right-radius: var(--pf-t--global--border--radius--medium);
-}
+/* The link's radius is set as a property rather than through PF's --pf-v6-c-tabs__link--BorderRadius,
+   because PatternFly declares that variable on .pf-v6-c-tabs itself - a closer ancestor than this host,
+   so an inherited override never reaches it. */
+#console-tabs .pf-v6-c-tabs__item,
+#console-tabs .pf-v6-c-tabs__link { border-radius: 0; }
 #console-tabs .pf-v6-c-tabs__item.pf-m-current {
   background: var(--pf-t--global--background--color--primary--default);
 }
