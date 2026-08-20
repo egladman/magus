@@ -301,9 +301,9 @@ function buildScaffold(host: HTMLElement): Refs {
   liveHint.dataset.emptyHint = "";
   wayLive.append(liveLabel, liveCmd, liveHint);
 
-  // The hint says "sample" here, and the banner says it again above the list. Twice on purpose:
-  // this is the surface where mistaking invented prose for something a colleague wrote is the
-  // costly error, and one notice is one thing to miss.
+  // The hint says "sample" here, and the status-bar tag says it again for as long as the data is
+  // on screen. Twice on purpose: this is the surface where mistaking invented prose for something
+  // a colleague wrote is the costly error, and one notice is one thing to miss.
   //
   // No button, matching every other surface - the Workspace menu is the one way in.
   const wayDemo = h("div");
