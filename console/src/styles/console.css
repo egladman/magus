@@ -106,23 +106,27 @@ body[data-console-fill] {
   /* An explicit themed page background so the app never relies on the browser's default canvas (which
      follows the OS, so a "light" choice on a dark OS showed through as a dark page). */
   background: var(--pf-t--global--background--color--secondary--default);
-  /* Exactly the viewport minus the fixed status bar, so the card region ends at the status bar's top
-     edge - no overlap, no reserved-padding guesswork.
-     A GRID, not a flex column, because the navigation rail spans the full height: it takes the leading
-     column across both rows while the title bar and the content stack in the trailing one. The macOS
-     rule is that a single leading sidebar may run the full height and take that space from the
-     titlebar, which is why the rail is a child of <body> rather than of <main>. With no rail in the
-     document (a standalone surface page) the leading column resolves to zero and the two rows behave
-     exactly as the old column did. */
-  height: calc(100svh - var(--console-statusbar-h));
+  /* The whole viewport, in a grid: the navigation rail takes the leading column across EVERY row, so
+     it runs unbroken from the top of the window to the bottom, and the title bar, the content and the
+     status bar all stack in the trailing column beside it. The macOS rule is that a single leading
+     sidebar may run the full height and take that space from the titlebar; carrying it past the status
+     bar too is what makes the chrome read as one continuous surface wrapping the content rather than
+     three bars that happen to meet.
+     The status bar is a grid ROW here rather than a fixed overlay, which is what lets the rail pass
+     beside it - a fixed bar spans the window and would cut the rail off short. That is also why the
+     height is the full 100svh now instead of the viewport minus a reserved strip.
+     With no rail in the document (a standalone surface page, or any width where it is hidden) the
+     leading column resolves to zero and the three rows behave exactly as the old column did. */
+  height: 100svh;
   display: grid;
   grid-template-columns: auto minmax(0, 1fr);
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
 }
 body[data-console-fill] > header { flex: 0 0 auto; grid-column: 2; grid-row: 1; } /* the app bar keeps its natural height */
 body[data-console-fill] > main { grid-column: 2; grid-row: 2; }
 body[data-console-fill] > #console-sidebar { grid-column: 1; grid-row: 1 / -1; }
+body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
 body[data-console-fill] > main {
   flex: 1 1 auto;
   min-height: 0;            /* let the card shrink to fit rather than forcing a page scroll */
@@ -509,16 +513,17 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      chrome, not a page section, so zero both. Without this the border-box height collapses the
      content area to a ~2px sliver and the tabs render as a clipped, unreadable strip. */
   margin: 0; padding: 0;
-  /* White top rail: the chrome bars (this and the status bar) are lighter than the grey content page,
-     so together they frame the internal content top and bottom. */
-  background: var(--pf-t--global--background--color--primary--default);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  /* ONE chrome surface. The title bar, the navigation rail and the status bar all take this same
+     recessive tone, so they read as a single frame wrapping the content down the left and along the
+     top and bottom - the shape Firefox uses - rather than as three bars meeting at corners. The
+     content is what steps forward out of it (see the outlet's card below); the frame stays back.
+     No bottom border, and no cast: a seam here would cut the continuous surface in two. */
+  background: var(--pf-t--global--background--color--secondary--default);
   /* A soft cast DOWN over the content, so a surface scrolling under the bar passes beneath
      something rather than meeting a flat seam. The hairline above stays: it is what holds the
      edge crisp at rest, and the shadow only reads once there is content behind it. PF's
      directional token rather than a hand-rolled rgba, so it tracks the theme like every other
      elevation here. */
-  box-shadow: var(--pf-t--global--box-shadow--sm--bottom);
   -webkit-app-region: drag; app-region: drag;
 }
 /* Interactive title-bar children opt out of the drag region so a click activates them (a drag region
@@ -670,7 +675,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    this rather than caused it. */
 #console-tabs .pf-v6-c-tabs__item { background: transparent; }
 #console-tabs .pf-v6-c-tabs__item.pf-m-current {
-  background: var(--pf-t--global--background--color--secondary--default);
+  background: var(--pf-t--global--background--color--primary--default);
 }
 #console-tabs .pf-v6-c-tabs__item.pf-m-current .pf-v6-c-tabs__link { color: var(--pf-t--global--text--color--regular); }
 #console-tabs .pf-v6-c-tabs__item:not(.pf-m-current) .pf-v6-c-tabs__link { color: var(--pf-t--global--text--color--subtle); }
@@ -695,7 +700,17 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* ROW explicitly: `body[data-console-fill] > main` sets flex-direction:column for the standalone
    single-card pages, and the outlet inherits that rule. It did not matter while the outlet had one
    child; with the navigation rail beside the Drawer, column stacks them vertically. */
-#console-outlet { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: row; }
+#console-outlet {
+  flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: row;
+  /* The content is a CARD sitting in the chrome frame, and the only curved thing in the shell. That
+     is the split the whole frame rests on: chrome is square and recessive, containers are raised and
+     rounded. Rounded on the three edges that meet the frame; square where it meets the tab strip, so
+     the current tab and the card it belongs to read as one continuous surface. */
+  background: var(--pf-t--global--background--color--primary--default);
+  border-start-end-radius: var(--pf-t--global--border--radius--medium);
+  border-end-end-radius: var(--pf-t--global--border--radius--medium);
+  border-end-start-radius: var(--pf-t--global--border--radius--medium);
+}
 #console-refdrawer { flex: 1 1 auto; min-height: 0; }
 
 /* --- The left navigation rail (#console-sidebar, sidebar.ts) -------------------------------------
@@ -712,7 +727,6 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   width: var(--console-sidebar-w);
   display: flex; flex-direction: column;
   overflow: hidden; /* labels are clipped, not wrapped, while the width animates */
-  border-right: 1px solid var(--pf-t--global--border--color--default);
   background: var(--pf-t--global--background--color--secondary--default);
   transition: width 0.14s ease;
   /* PF centres a nav link's icon against a baseline and pads it for a full-width row. Neither suits a
@@ -852,7 +866,6 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-sidebar #console-sidebar-toggle {
   flex: 0 0 auto;
   inline-size: var(--console-sidebar-w); block-size: var(--console-sidebar-w);
-  border-top: 1px solid var(--pf-t--global--border--color--default);
   border-radius: 0; justify-content: center;
 }
 /* No rail on a phone. Even collapsed it is a permanent 44px bite out of a screen that is already

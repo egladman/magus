@@ -22,18 +22,16 @@
  * is here. The console swaps ONE tab's status bar into #console-statusbar at a time (main.ts), and
  * that wrapper (a bare <div>) fills the rail. */
 #console-statusbar {
-  position: fixed; left: 0; right: 0; bottom: 0; z-index: 20;
+  /* A grid row in the shell (console.css), NOT a fixed overlay: fixed spans the whole window, which
+     would cut the navigation rail off above it. In the grid the bar sits in the trailing column and
+     the rail runs past it to the window's bottom edge, so the chrome is continuous down the left. */
+  z-index: 20;
   display: flex; align-items: center; gap: 0.9rem;
   min-height: var(--console-statusbar-h);
   padding: 0.1rem var(--console-pad);
-  /* The status bar stays the page's own grey - quiet, not a bright rail. Only the TOP bar goes white
-     to frame the content; the bottom stays recessive so it does not draw the eye. */
+  /* The same recessive tone as the title bar and the navigation rail - the three are one continuous
+     chrome surface wrapping the content, so there is no seam between them to draw. */
   background: var(--pf-t--global--background--color--secondary--default);
-  border-top: 1px solid var(--pf-t--global--border--color--default);
-  /* The mirror of the title bar's cast, pointing UP. Deliberately the same sm step: the
-     status bar is the recessive rail (see the background note above), so a heavier shadow
-     here would give the quieter bar the stronger presence. */
-  box-shadow: var(--pf-t--global--box-shadow--sm--top);
   font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle);
   overflow: hidden; /* a stray long value truncates with the bar, never scrolls the page */
   -webkit-user-select: none; user-select: none; /* chrome rail, like a native window edge */
