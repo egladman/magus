@@ -9,6 +9,7 @@
 // (openSurfaceWindow) - an EXPLICIT opt-in, never the plain-click default, so a card can still never
 // strand you in a window you did not ask for.
 import { openSurfaceWindow } from "../lib/appwindow";
+import { formatChord, isMac } from "./commands";
 
 // A surface the launcher can open: the pageId the console registered it under, and a human label.
 export interface Launchable {
@@ -394,6 +395,48 @@ export function buildLauncher(
     '<span class="console-launcher-demo__label">Launch the demo</span>';
   demo.addEventListener("click", () => launchDemo());
 
-  root.append(title, sub, gallery, demo);
+  // What the zero-tab screen says once there IS a rail: the console's shared cold-state shape (a row
+  // of "ways" out of it, [data-empty-way] in console.css) rather than a second copy of the rail's own
+  // eight destinations. Both compositions are built; console.css shows exactly one, on the same 48rem
+  // edge the rail uses - above it the rail navigates and this speaks, below it there is no rail so the
+  // card grid navigates and this would name a control that is not on screen.
+  const ways = document.createElement("div");
+  ways.dataset.launcherWays = "";
+  ways.className = "pf-v6-c-empty-state__actions";
+  ways.setAttribute("data-empty-ways", "");
+
+  const pickWay = document.createElement("div");
+  pickWay.setAttribute("data-empty-way", "");
+  const pickLabel = document.createElement("span");
+  pickLabel.setAttribute("data-empty-way-label", "");
+  pickLabel.textContent = "Open an app";
+  const pickHint = document.createElement("span");
+  pickHint.setAttribute("data-empty-hint", "");
+  // Names the rail because this composition only ever renders at a width where the rail exists.
+  pickHint.textContent =
+    "Pick one from the rail, or press " + formatChord("mod+k", isMac()) + " for the palette.";
+  pickWay.append(pickLabel, pickHint);
+
+  const demoWay = document.createElement("div");
+  demoWay.setAttribute("data-empty-way", "");
+  const demoLabel = document.createElement("span");
+  demoLabel.setAttribute("data-empty-way-label", "");
+  demoLabel.textContent = "Try the demo";
+  const demoBtn = document.createElement("button");
+  demoBtn.type = "button";
+  demoBtn.className = "pf-v6-c-button pf-m-primary";
+  const demoBtnText = document.createElement("span");
+  demoBtnText.className = "pf-v6-c-button__text";
+  demoBtnText.textContent = "See the demo";
+  demoBtn.append(demoBtnText);
+  demoBtn.addEventListener("click", launchDemo);
+  const demoHint = document.createElement("span");
+  demoHint.setAttribute("data-empty-hint", "");
+  demoHint.textContent = "Sample data, no daemon needed.";
+  demoWay.append(demoLabel, demoBtn, demoHint);
+
+  ways.append(pickWay, demoWay);
+
+  root.append(title, sub, ways, gallery, demo);
   return root;
 }

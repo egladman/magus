@@ -862,6 +862,22 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    moment the cards overflow - which is exactly the mobile case, leaving the pill flush against the last
    card. A margin-bottom here cannot collapse, so the pill keeps its own space at every card count. */
 #console-outlet [data-surface="home"] .pf-v6-l-gallery { margin-bottom: 2.5rem; }
+/* The launcher grid and the rail are the SAME eight destinations. Which one is the navigator is a
+   question of width, and exactly one answers it at a time - the same complementary pair the rail and
+   the Applications menu form, on the same 48rem edge.
+   Above it the rail is the navigator, so the grid retires and a one-line pointer takes its place;
+   below it there is no rail, so the grid IS the navigator and the pointer would name a control that
+   is not on screen. Showing both was the same eight glyphs twice over (three times, counting each
+   card's watermark), which is what VS Code's activity-bar guidance and NN/G's duplicate-links
+   findings both warn against. */
+#console-outlet [data-surface="home"] [data-launcher-ways] { display: none; }
+@media (min-width: 48rem) {
+  #console-outlet [data-surface="home"] .pf-v6-l-gallery { display: none; }
+  /* The demo pill goes with the grid: the demo is one of the two ways below, and offering it twice on
+     one screen is the duplication this whole change is about. */
+  #console-outlet [data-surface="home"] .console-launcher-demo { display: none; }
+  #console-outlet [data-surface="home"] [data-launcher-ways] { display: grid; margin-inline: 0; }
+}
 /* Bigger cards on a desktop window. The PF Gallery sizes its columns from a minimum, so raising the
    minimum is what fills the extra width - the grid keeps choosing the column count itself, and the
    layout never becomes a fixed count that breaks at the next window size. It is deliberately NOT the
