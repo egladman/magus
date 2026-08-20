@@ -37,7 +37,7 @@ import type { Message } from "@bufbuild/protobuf";
  * Describes the file magus/notes/v1alpha1/notes.proto.
  */
 export const file_magus_notes_v1alpha1_notes: GenFile = /*@__PURE__*/
-  fileDesc("CiBtYWd1cy9ub3Rlcy92MWFscGhhMS9ub3Rlcy5wcm90bxIUbWFndXMubm90ZXMudjFhbHBoYTEinQEKBkFuY2hvchIuCgRraW5kGAEgASgOMiAubWFndXMubm90ZXMudjFhbHBoYTEuQW5jaG9yS2luZBIOCgZ0YXJnZXQYAiABKAkSMgoGc3RhdHVzGAMgASgOMiIubWFndXMubm90ZXMudjFhbHBoYTEuQW5jaG9yU3RhdHVzEg8KB25vZGVfaWQYBCABKAkSDgoGZGV0YWlsGAUgASgJIqICCgROb3RlEgwKBG5hbWUYASABKAkSKgoFc2NvcGUYAiABKA4yGy5tYWd1cy5ub3Rlcy52MWFscGhhMS5TY29wZRINCgV0aXRsZRgDIAEoCRIMCgR0YWdzGAQgAygJEi0KB2FuY2hvcnMYBSADKAsyHC5tYWd1cy5ub3Rlcy52MWFscGhhMS5BbmNob3ISDAoEYm9keRgGIAEoCRIMCgRwYXRoGAcgASgJEjIKCXN0YWxlbmVzcxgIIAEoDjIfLm1hZ3VzLm5vdGVzLnYxYWxwaGExLlN0YWxlbmVzcxITCgtvdXRydW5fZGF5cxgJIAEoBRIvCgttb2RpZnlfdGltZRgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAifQoLU3RvcmVTdGF0dXMSKgoFc2NvcGUYASABKA4yGy5tYWd1cy5ub3Rlcy52MWFscGhhMS5TY29wZRIQCghkZWNsYXJlZBgCIAEoCBIMCgRwYXRoGAMgASgJEhIKCm5vdGVfY291bnQYBCABKAUSDgoGaXNzdWVzGAUgAygJIkUKEExpc3ROb3Rlc1JlcXVlc3QSHQoJcGFnZV9zaXplGAEgASgFQgq6SAcaBRjoBygAEhIKCnBhZ2VfdG9rZW4YAiABKAkiigEKEUxpc3ROb3Rlc1Jlc3BvbnNlEikKBW5vdGVzGAEgAygLMhoubWFndXMubm90ZXMudjFhbHBoYTEuTm90ZRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSMQoGc3RvcmVzGAMgAygLMiEubWFndXMubm90ZXMudjFhbHBoYTEuU3RvcmVTdGF0dXMiPAoOR2V0Tm90ZVJlcXVlc3QSKgoEbmFtZRgBIAEoCUIcukgZchcyFV4oc2hhcmVkfHByaXZhdGUpLy4rJCpDCgVTY29wZRIVChFTQ09QRV9VTlNQRUNJRklFRBAAEhAKDFNDT1BFX1NIQVJFRBABEhEKDVNDT1BFX1BSSVZBVEUQAiqeAQoKQW5jaG9yS2luZBIbChdBTkNIT1JfS0lORF9VTlNQRUNJRklFRBAAEhYKEkFOQ0hPUl9LSU5EX1NZTUJPTBABEhQKEEFOQ0hPUl9LSU5EX0ZJTEUQAhIXChNBTkNIT1JfS0lORF9QUk9KRUNUEAMSFgoSQU5DSE9SX0tJTkRfVEFSR0VUEAQSFAoQQU5DSE9SX0tJTkRfTk9URRAFKp4BCgxBbmNob3JTdGF0dXMSHQoZQU5DSE9SX1NUQVRVU19VTlNQRUNJRklFRBAAEhoKFkFOQ0hPUl9TVEFUVVNfUkVTT0xWRVMQARIaChZBTkNIT1JfU1RBVFVTX0RBTkdMSU5HEAISGQoVQU5DSE9SX1NUQVRVU19EUklGVEVEEAMSHAoYQU5DSE9SX1NUQVRVU19VTlZFUklGSUVEEAQqhgEKCVN0YWxlbmVzcxIZChVTVEFMRU5FU1NfVU5TUEVDSUZJRUQQABIYChRTVEFMRU5FU1NfVU5NRUFTVVJFRBABEhUKEVNUQUxFTkVTU19DVVJSRU5UEAISFAoQU1RBTEVORVNTX09VVFJVThADEhcKE1NUQUxFTkVTU19QRVRSSUZJRUQQBDK5AQoMTm90ZXNTZXJ2aWNlElwKCUxpc3ROb3RlcxImLm1hZ3VzLm5vdGVzLnYxYWxwaGExLkxpc3ROb3Rlc1JlcXVlc3QaJy5tYWd1cy5ub3Rlcy52MWFscGhhMS5MaXN0Tm90ZXNSZXNwb25zZRJLCgdHZXROb3RlEiQubWFndXMubm90ZXMudjFhbHBoYTEuR2V0Tm90ZVJlcXVlc3QaGi5tYWd1cy5ub3Rlcy52MWFscGhhMS5Ob3RlQuMBChhjb20ubWFndXMubm90ZXMudjFhbHBoYTFCCk5vdGVzUHJvdG9QAVpJZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvbm90ZXMvdjFhbHBoYTE7bm90ZXN2MWFscGhhMaICA01OWKoCFE1hZ3VzLk5vdGVzLlYxYWxwaGExygIUTWFndXNcTm90ZXNcVjFhbHBoYTHiAiBNYWd1c1xOb3Rlc1xWMWFscGhhMVxHUEJNZXRhZGF0YeoCFk1hZ3VzOjpOb3Rlczo6VjFhbHBoYTFiBnByb3RvMw", [file_google_protobuf_timestamp, file_buf_validate_validate]);
+  fileDesc("CiBtYWd1cy9ub3Rlcy92MWFscGhhMS9ub3Rlcy5wcm90bxIUbWFndXMubm90ZXMudjFhbHBoYTEinQEKBkFuY2hvchIuCgRraW5kGAEgASgOMiAubWFndXMubm90ZXMudjFhbHBoYTEuQW5jaG9yS2luZBIOCgZ0YXJnZXQYAiABKAkSMgoGc3RhdHVzGAMgASgOMiIubWFndXMubm90ZXMudjFhbHBoYTEuQW5jaG9yU3RhdHVzEg8KB25vZGVfaWQYBCABKAkSDgoGZGV0YWlsGAUgASgJItACCgROb3RlEgwKBG5hbWUYASABKAkSKgoFc2NvcGUYAiABKA4yGy5tYWd1cy5ub3Rlcy52MWFscGhhMS5TY29wZRINCgV0aXRsZRgDIAEoCRIMCgR0YWdzGAQgAygJEi0KB2FuY2hvcnMYBSADKAsyHC5tYWd1cy5ub3Rlcy52MWFscGhhMS5BbmNob3ISDAoEYm9keRgGIAEoCRIMCgRwYXRoGAcgASgJEjIKCXN0YWxlbmVzcxgIIAEoDjIfLm1hZ3VzLm5vdGVzLnYxYWxwaGExLlN0YWxlbmVzcxITCgtvdXRydW5fZGF5cxgJIAEoBRIvCgttb2RpZnlfdGltZRgKIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXASLAoGc291cmNlGAsgASgLMhwubWFndXMubm90ZXMudjFhbHBoYTEuU291cmNlImAKBlNvdXJjZRIMCgRraW5kGAEgASgJEgsKA3JlZhgCIAEoCRINCgVhc19vZhgDIAEoCRIsCghjYXB0dXJlZBgEIAEoCzIaLmdvb2dsZS5wcm90b2J1Zi5UaW1lc3RhbXAifQoLU3RvcmVTdGF0dXMSKgoFc2NvcGUYASABKA4yGy5tYWd1cy5ub3Rlcy52MWFscGhhMS5TY29wZRIQCghkZWNsYXJlZBgCIAEoCBIMCgRwYXRoGAMgASgJEhIKCm5vdGVfY291bnQYBCABKAUSDgoGaXNzdWVzGAUgAygJIkUKEExpc3ROb3Rlc1JlcXVlc3QSHQoJcGFnZV9zaXplGAEgASgFQgq6SAcaBRjoBygAEhIKCnBhZ2VfdG9rZW4YAiABKAkiigEKEUxpc3ROb3Rlc1Jlc3BvbnNlEikKBW5vdGVzGAEgAygLMhoubWFndXMubm90ZXMudjFhbHBoYTEuTm90ZRIXCg9uZXh0X3BhZ2VfdG9rZW4YAiABKAkSMQoGc3RvcmVzGAMgAygLMiEubWFndXMubm90ZXMudjFhbHBoYTEuU3RvcmVTdGF0dXMiPAoOR2V0Tm90ZVJlcXVlc3QSKgoEbmFtZRgBIAEoCUIcukgZchcyFV4oc2hhcmVkfHByaXZhdGUpLy4rJCpDCgVTY29wZRIVChFTQ09QRV9VTlNQRUNJRklFRBAAEhAKDFNDT1BFX1NIQVJFRBABEhEKDVNDT1BFX1BSSVZBVEUQAiqeAQoKQW5jaG9yS2luZBIbChdBTkNIT1JfS0lORF9VTlNQRUNJRklFRBAAEhYKEkFOQ0hPUl9LSU5EX1NZTUJPTBABEhQKEEFOQ0hPUl9LSU5EX0ZJTEUQAhIXChNBTkNIT1JfS0lORF9QUk9KRUNUEAMSFgoSQU5DSE9SX0tJTkRfVEFSR0VUEAQSFAoQQU5DSE9SX0tJTkRfTk9URRAFKp4BCgxBbmNob3JTdGF0dXMSHQoZQU5DSE9SX1NUQVRVU19VTlNQRUNJRklFRBAAEhoKFkFOQ0hPUl9TVEFUVVNfUkVTT0xWRVMQARIaChZBTkNIT1JfU1RBVFVTX0RBTkdMSU5HEAISGQoVQU5DSE9SX1NUQVRVU19EUklGVEVEEAMSHAoYQU5DSE9SX1NUQVRVU19VTlZFUklGSUVEEAQqhgEKCVN0YWxlbmVzcxIZChVTVEFMRU5FU1NfVU5TUEVDSUZJRUQQABIYChRTVEFMRU5FU1NfVU5NRUFTVVJFRBABEhUKEVNUQUxFTkVTU19DVVJSRU5UEAISFAoQU1RBTEVORVNTX09VVFJVThADEhcKE1NUQUxFTkVTU19QRVRSSUZJRUQQBDK5AQoMTm90ZXNTZXJ2aWNlElwKCUxpc3ROb3RlcxImLm1hZ3VzLm5vdGVzLnYxYWxwaGExLkxpc3ROb3Rlc1JlcXVlc3QaJy5tYWd1cy5ub3Rlcy52MWFscGhhMS5MaXN0Tm90ZXNSZXNwb25zZRJLCgdHZXROb3RlEiQubWFndXMubm90ZXMudjFhbHBoYTEuR2V0Tm90ZVJlcXVlc3QaGi5tYWd1cy5ub3Rlcy52MWFscGhhMS5Ob3RlQuMBChhjb20ubWFndXMubm90ZXMudjFhbHBoYTFCCk5vdGVzUHJvdG9QAVpJZ2l0aHViLmNvbS9lZ2xhZG1hbi9tYWd1cy9wcm90by9nZW4vZ28vbWFndXMvbm90ZXMvdjFhbHBoYTE7bm90ZXN2MWFscGhhMaICA01OWKoCFE1hZ3VzLk5vdGVzLlYxYWxwaGExygIUTWFndXNcTm90ZXNcVjFhbHBoYTHiAiBNYWd1c1xOb3Rlc1xWMWFscGhhMVxHUEJNZXRhZGF0YeoCFk1hZ3VzOjpOb3Rlczo6VjFhbHBoYTFiBnByb3RvMw", [file_google_protobuf_timestamp, file_buf_validate_validate]);
 
 /**
  * Anchor is one typed attachment from a note to a graph entity, with the result of checking
@@ -166,6 +166,19 @@ export type Note = Message<"magus.notes.v1alpha1.Note"> & {
    * @generated from field: google.protobuf.Timestamp modify_time = 10;
    */
   modifyTime?: Timestamp;
+
+  /**
+   * source is set when the prose was quoted rather than written - a captured review thread.
+   * Absent on a note a person wrote, which is the overwhelming majority.
+   *
+   * A client MUST render a note carrying this differently from one without it. The whole
+   * claim a note makes is that somebody stands behind it; a capture's claim is the opposite,
+   * that nobody does and the source can be re-read instead. A surface that presents the two
+   * identically tells the reader the one thing this field exists to prevent.
+   *
+   * @generated from field: magus.notes.v1alpha1.Source source = 11;
+   */
+  source?: Source;
 };
 
 /**
@@ -174,6 +187,55 @@ export type Note = Message<"magus.notes.v1alpha1.Note"> & {
  */
 export const NoteSchema: GenMessage<Note> = /*@__PURE__*/
   messageDesc(file_magus_notes_v1alpha1_notes, 1);
+
+/**
+ * Source is the provenance of prose a note did not originate.
+ *
+ * @generated from message magus.notes.v1alpha1.Source
+ */
+export type Source = Message<"magus.notes.v1alpha1.Source"> & {
+  /**
+   * kind names what the note is a transcript OF ("review-thread").
+   *
+   * A string and not an enum, deliberately. An enum rejects what it does not know, and the
+   * client that meets a kind its binary predates is far better served by showing the reader
+   * an unfamiliar word than by dropping the one field that says this prose is quoted.
+   *
+   * @generated from field: string kind = 1;
+   */
+  kind: string;
+
+  /**
+   * ref identifies the conversation within kind - a review session id. Opaque to a client.
+   *
+   * @generated from field: string ref = 2;
+   */
+  ref: string;
+
+  /**
+   * as_of is the subject's identity at capture time: for a review thread, the digest of the
+   * patch the comments were written against. It is what makes a stale capture detectable
+   * rather than merely old.
+   *
+   * @generated from field: string as_of = 3;
+   */
+  asOf: string;
+
+  /**
+   * captured is when the transcript was taken. NOT the file's modify_time: editing a
+   * capture's surrounding prose moves the mtime and must not move this.
+   *
+   * @generated from field: google.protobuf.Timestamp captured = 4;
+   */
+  captured?: Timestamp;
+};
+
+/**
+ * Describes the message magus.notes.v1alpha1.Source.
+ * Use `create(SourceSchema)` to create a new message.
+ */
+export const SourceSchema: GenMessage<Source> = /*@__PURE__*/
+  messageDesc(file_magus_notes_v1alpha1_notes, 2);
 
 /**
  * StoreStatus reports one store's availability, so a client can tell "declared but empty"
@@ -224,7 +286,7 @@ export type StoreStatus = Message<"magus.notes.v1alpha1.StoreStatus"> & {
  * Use `create(StoreStatusSchema)` to create a new message.
  */
 export const StoreStatusSchema: GenMessage<StoreStatus> = /*@__PURE__*/
-  messageDesc(file_magus_notes_v1alpha1_notes, 2);
+  messageDesc(file_magus_notes_v1alpha1_notes, 3);
 
 /**
  * @generated from message magus.notes.v1alpha1.ListNotesRequest
@@ -249,7 +311,7 @@ export type ListNotesRequest = Message<"magus.notes.v1alpha1.ListNotesRequest"> 
  * Use `create(ListNotesRequestSchema)` to create a new message.
  */
 export const ListNotesRequestSchema: GenMessage<ListNotesRequest> = /*@__PURE__*/
-  messageDesc(file_magus_notes_v1alpha1_notes, 3);
+  messageDesc(file_magus_notes_v1alpha1_notes, 4);
 
 /**
  * @generated from message magus.notes.v1alpha1.ListNotesResponse
@@ -281,7 +343,7 @@ export type ListNotesResponse = Message<"magus.notes.v1alpha1.ListNotesResponse"
  * Use `create(ListNotesResponseSchema)` to create a new message.
  */
 export const ListNotesResponseSchema: GenMessage<ListNotesResponse> = /*@__PURE__*/
-  messageDesc(file_magus_notes_v1alpha1_notes, 4);
+  messageDesc(file_magus_notes_v1alpha1_notes, 5);
 
 /**
  * @generated from message magus.notes.v1alpha1.GetNoteRequest
@@ -303,7 +365,7 @@ export type GetNoteRequest = Message<"magus.notes.v1alpha1.GetNoteRequest"> & {
  * Use `create(GetNoteRequestSchema)` to create a new message.
  */
 export const GetNoteRequestSchema: GenMessage<GetNoteRequest> = /*@__PURE__*/
-  messageDesc(file_magus_notes_v1alpha1_notes, 5);
+  messageDesc(file_magus_notes_v1alpha1_notes, 6);
 
 /**
  * Scope is which store a note lives in, and it is the axis a reader must never have to

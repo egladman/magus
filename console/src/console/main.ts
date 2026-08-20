@@ -2094,15 +2094,15 @@ export function startConsole(
       css: "logs/logs.css",
     }),
   );
-  // Notes reuses logs.css rather than authoring its own: it renders on PF components plus the
-  // shared console-render-* frame the log viewer and the trail already load, so a third sheet
-  // would be a copy of rules that are already there.
+  // Notes authors its own sheet. It shares a panel-frame shape with the log viewer and the
+  // trail, but not their typography: .console-render-body is a monospace grid sized for log
+  // lines, and a note is human prose that has to wrap to a reading measure.
   register(
     moduleSurface({
       id: "notes",
       title: "Notes",
       bundle: "notes/notes.js",
-      css: "logs/logs.css",
+      css: "notes/notes.css",
     }),
   );
   // Review authors its own sheet rather than reusing logs.css: the hunk stream is virtualized

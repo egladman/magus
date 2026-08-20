@@ -15,6 +15,7 @@
 // Six identical healthy notes would show nothing the empty state did not.
 
 import { create } from "@bufbuild/protobuf";
+import { timestampFromMs } from "@bufbuild/protobuf/wkt";
 import {
   Scope,
   AnchorKind,
@@ -45,6 +46,11 @@ interface NoteSpec {
   body: string;
   staleness?: Staleness;
   outrunDays?: number;
+  // editedDaysAgo is a RELATIVE age, resolved against the clock when demoNotes() runs. A fixed
+  // date would drift into "4 years ago" and make the sample set read as an abandoned store.
+  // It is not outrunDays: how far a note's subject ran ahead of its prose and when the file was
+  // last touched are different measurements, and the surface shows them in different places.
+  editedDaysAgo: number;
 }
 
 function anchor(spec: AnchorSpec): Anchor {
@@ -52,8 +58,8 @@ function anchor(spec: AnchorSpec): Anchor {
     kind: spec.kind,
     target: spec.target,
     status: spec.status,
-    // A node id only for one that resolves: the card puts it in the title tooltip so a reader
-    // can carry it to the Graph Explorer, and a dangling anchor has nothing to carry.
+    // A node id only for one that resolves: the surface prints it beside the anchor so a
+    // reader can carry it to the Graph Explorer, and a dangling anchor has nothing to carry.
     nodeId: spec.status === AnchorStatus.RESOLVES ? spec.kind + ":" + spec.target : "",
     detail: spec.detail ?? "",
   });
@@ -62,6 +68,7 @@ function anchor(spec: AnchorSpec): Anchor {
 const NOTES: NoteSpec[] = [
   {
     name: "why-the-cache-keys-on-declared-inputs",
+    editedDaysAgo: 6,
     title: "Why the cache keys on declared inputs, not the tree",
     scope: Scope.SHARED,
     path: "notes/why-the-cache-keys-on-declared-inputs.md",
@@ -80,6 +87,7 @@ const NOTES: NoteSpec[] = [
   },
   {
     name: "two-caches-and-why-they-pair",
+    editedDaysAgo: 41,
     title: "Two caches, and why they pair",
     scope: Scope.SHARED,
     path: "notes/two-caches-and-why-they-pair.md",
@@ -102,6 +110,7 @@ const NOTES: NoteSpec[] = [
   },
   {
     name: "rejected-a-second-lockfile-format",
+    editedDaysAgo: 240,
     title: "Rejected: a second lockfile format",
     scope: Scope.SHARED,
     path: "notes/rejected-a-second-lockfile-format.md",
@@ -124,6 +133,7 @@ const NOTES: NoteSpec[] = [
   },
   {
     name: "the-sandbox-is-off-by-default",
+    editedDaysAgo: 12,
     title: "The sandbox is off by default, so the env passthrough is inert",
     scope: Scope.SHARED,
     path: "notes/the-sandbox-is-off-by-default.md",
@@ -144,6 +154,7 @@ const NOTES: NoteSpec[] = [
   },
   {
     name: "my-local-toolchain-pins",
+    editedDaysAgo: 3,
     title: "My local toolchain pins",
     scope: Scope.PRIVATE,
     path: "/Users/you/notes/my-local-toolchain-pins.md",
@@ -178,7 +189,7 @@ const STORES: { scope: Scope; path: string; issues: string[] }[] = [
 export interface DemoNotes {
   stores: StoreStatus[];
   notes: Note[];
-  // body resolves the prose the card's Read button expands, with no daemon behind it.
+  // body resolves the prose the reading pane shows, with no daemon behind it.
   body(name: string): string;
 }
 
@@ -192,6 +203,7 @@ function build(spec: NoteSpec): Note {
     anchors: spec.anchors.map(anchor),
     staleness: spec.staleness ?? Staleness.UNMEASURED,
     outrunDays: spec.outrunDays ?? 0,
+    modifyTime: timestampFromMs(Date.now() - spec.editedDaysAgo * 86400000),
   });
 }
 
@@ -204,6 +216,10 @@ export function demoNotes(): DemoNotes {
         declared: true,
         path: s.path,
         issues: s.issues,
+        // The live handler counts what it contributed to the response, and the scope filter
+        // reads that rather than re-deriving it. A demo that left it at zero would render the
+        // filter as "Shared 0" over four visible notes.
+        noteCount: NOTES.filter((n) => n.scope === s.scope).length,
       }),
     ),
     notes: NOTES.map(build),

@@ -152,6 +152,7 @@ body[data-console-fill] > main {
    percentage height against a flex parent, and it drops the apps' fixed heights + tall
    min-heights + Pico's section margin so short viewports still fit without a page scroll. */
 body[data-console-fill] > main > .console-graph-app,
+body[data-console-fill] > main > .console-notes-app,
 body[data-console-fill] > main > .console-render-panel {
   flex: 1 1 auto;
   min-height: 0;
@@ -209,7 +210,9 @@ body[data-console-fill] > main > .console-render-panel {
 #console-outlet div[data-pane-id] > main > .console-graph-app,
 #console-outlet div[data-pane-id] > main > .console-render-panel,
 /* Activity and Notes build their panel directly in the pane. Keep that implementation detail from changing the Console's outer
-   silhouette: the pane is the frame in every case. */
+   silhouette: the pane is the frame in every case. Notes carries its own root class because it
+   owns its own sheet; Activity still builds the shared .console-render-panel. */
+#console-outlet div[data-pane-id] > .console-notes-app,
 #console-outlet div[data-pane-id] > .console-render-panel {
   flex: 1 1 auto;
   min-height: 0;

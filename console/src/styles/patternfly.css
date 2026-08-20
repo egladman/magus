@@ -37,6 +37,10 @@
  *   EmptyState - the connect/front-door screen (#dash-connect) when no daemon is streaming.
  * Card + Gallery (already above) cover the dashboard tiles and the app-waffle launcher. */
 @import "@patternfly/patternfly/components/EmptyState/empty-state.css";
+/* Notes - the scope banners and the store repair warnings. Alert is the one component the
+ * console mounts whose absence is silent: an undeclared alert still renders its text, just as
+ * an unstyled paragraph, so the Notes surface shipped with every banner reading as body prose. */
+@import "@patternfly/patternfly/components/Alert/alert.css";
 /* W3 log viewer - the log viewer surface's added components:
  *   Toolbar - the file/query bar: the ref identity strip plus the filter field + action buttons.
  * Button (above) covers the toolbar/section action buttons; FormControl (above) the filter field
