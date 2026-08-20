@@ -229,7 +229,7 @@ test("no reading hides the pulse rather than showing a zero", () => {
   assert.ok(el);
   assert.equal(el.hidden, true);
 
-  pulse.set({ running: 0, queued: 0 });
+  pulse.set({ running: 0, queued: 0, workspaces: [] });
   assert.equal(el.hidden, false, "an idle pool is a real reading and shows");
   assert.equal(el.dataset.state, "idle");
 
@@ -245,7 +245,7 @@ test("the reading is nameable and announces itself", () => {
   const el = host.querySelector<HTMLElement>("#console-sidebar-pulse");
   assert.ok(el);
   assert.equal(el.getAttribute("role"), "status");
-  pulse.set({ running: 1, queued: 0 });
+  pulse.set({ running: 1, queued: 0, workspaces: [] });
   assert.equal(el.getAttribute("aria-label"), "1 running on this daemon");
 });
 
@@ -255,13 +255,13 @@ test("an unchanged reading is not rewritten", () => {
   const { host, pulse } = mount({ tabs: [], activeId: null });
   const el = host.querySelector<HTMLElement>("#console-sidebar-pulse");
   assert.ok(el);
-  pulse.set({ running: 2, queued: 0 });
+  pulse.set({ running: 2, queued: 0, workspaces: [] });
   const txt = el.querySelector(".pf-v6-c-nav__link-text");
   assert.ok(txt);
   let writes = 0;
   const observer = new MutationObserver(() => writes++);
   observer.observe(txt, { childList: true, characterData: true, subtree: true });
-  pulse.set({ running: 2, queued: 0 });
+  pulse.set({ running: 2, queued: 0, workspaces: [] });
   observer.disconnect();
   assert.equal(writes, 0, "the same reading was written to the live region again");
 });
@@ -272,7 +272,7 @@ test("the reading follows the pool and the rail's own width", () => {
   assert.ok(el);
   const text = () => el.querySelector(".pf-v6-c-nav__link-text")?.textContent;
 
-  pulse.set({ running: 2, queued: 0 });
+  pulse.set({ running: 2, queued: 0, workspaces: [] });
   assert.equal(text(), "2");
   assert.equal(el.dataset.state, "running");
   assert.equal(el.getAttribute("aria-label"), "2 running on this daemon");
@@ -281,7 +281,7 @@ test("the reading follows the pool and the rail's own width", () => {
   expCell.set(true);
   assert.equal(text(), "2 running");
 
-  pulse.set({ running: 2, queued: 5 });
+  pulse.set({ running: 2, queued: 5, workspaces: [] });
   assert.equal(text(), "2 running, 5 queued");
   assert.equal(el.dataset.state, "queued");
 });

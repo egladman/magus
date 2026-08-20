@@ -29,6 +29,7 @@
 // it, while route and button entry can use it without fullscreen.
 
 import type { DashboardState, WorkspaceView } from "../state";
+import { onWorkspaceScope, setWorkspaceScope, workspaceScope } from "../../../lib/scope";
 import { persisted } from "../../../lib/persist";
 import { signal, bind, h } from "../../view";
 import type { Tile } from "./card";
@@ -42,7 +43,16 @@ export const viewMode = signal<ViewMode>("board");
 // ToggleGroup<string> cell, no null-vs-string cast at the call site. "" reads as "nothing picked yet".
 // Unlike viewMode this DOES persist - which workspace an operator was looking at is worth
 // remembering across a reload, the way the collapsed-card picks are.
-export const activeWorkspace = persisted<string>("dashboard-active-workspace", "");
+// The dashboard no longer owns which workspace you are looking at - the browser TAB does, through the
+// title bar's scope picker (lib/scope.ts). This adapter keeps the tiles that anchor on a workspace
+// reading the same answer as the rest of the window, rather than a second persisted pick that could
+// disagree with it. The old "dashboard-active-workspace" cell is gone: two controls for one fact is
+// the ambiguity this change exists to remove.
+export const activeWorkspace = {
+  get: workspaceScope,
+  set: setWorkspaceScope,
+  subscribe: onWorkspaceScope,
+};
 
 // [data-bigpicture] on the DOCUMENT element is what every stylesheet keys off: dashboard.css turns
 // the panels container into the fixed canvas, and console.css suppresses the console's own chrome
@@ -332,7 +342,14 @@ export function dashboardHeader(): Tile {
   let lastRoots = "";
   let destroyPicker = (): void => {};
   function renderWorkspacePicker(): void {
-    const show = viewMode.get() === "board" && lastWorkspaces.length > 1;
+    // RETIRED. Which workspace you are looking at is a property of the browser TAB now, chosen in the
+    // title bar (ui/scope-picker.ts), so every surface in the window answers for the same one. A
+    // second control here would be a second place to change one fact, and the two would disagree the
+    // moment someone used the other - which is the ambiguity that sent this whole thing back to the
+    // drawing board. The machinery below (recency ordering, overflow, the memo key) is left in place
+    // rather than deleted so the chip-row treatment can be lifted into the title-bar menu if the
+    // list ever outgrows a plain menu; nothing calls it while this returns.
+    const show = false;
     wsWrap.hidden = !show;
     if (!show) {
       destroyPicker();

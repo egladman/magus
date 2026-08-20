@@ -1011,6 +1011,23 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   #console-outlet [data-surface="home"] .pf-v6-l-gallery { --pf-v6-l-gallery--GridTemplateColumns--min: 17rem; }
 }
 
+/* The workspace scope control in the title bar (ui/scope-picker.ts). Square and normal-case like every
+   other chip in this shell; it names the workspace this BROWSER TAB is scoped to, and hides itself
+   entirely until the daemon reports more than one. */
+#console-scope-btn {
+  inline-size: auto; padding-inline: 0.5rem;
+  font-size: 0.78rem; color: var(--pf-t--global--text--color--regular);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  white-space: nowrap;
+}
+#console-scope-btn[hidden] { display: none; }
+.console-shell-scope__menu {
+  position: absolute; inset-block-start: var(--console-titlebar-h); inset-inline-end: 0.5rem;
+  z-index: var(--pf-t--global--z-index--400);
+  min-inline-size: 14rem;
+}
+
 /* App-drawer section label: the "Menu" group heading above the app entries - smaller, uppercase, muted,
    and non-interactive-looking, so it reads as a divider label rather than a menu row. */
 .console-appmenu__group-title {

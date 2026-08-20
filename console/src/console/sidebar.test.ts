@@ -113,21 +113,24 @@ test("no focused surface leaves nothing current", () => {
 // Collapsed there is room for one number, and it is the running count - a queue depth means nothing
 // without knowing whether anything holds the slots.
 test("collapsed, the reading is the running count alone", () => {
-  assert.equal(pulseLabel({ running: 3, queued: 2 }, false), "3");
-  assert.equal(pulseLabel({ running: 0, queued: 0 }, false), "0");
+  assert.equal(pulseLabel({ running: 3, queued: 2, workspaces: [] }, false), "3");
+  assert.equal(pulseLabel({ running: 0, queued: 0, workspaces: [] }, false), "0");
 });
 
 // An empty queue is left OFF rather than shown as "0 queued", so the second clause appearing is
 // itself the signal that work is backing up.
 test("expanded, the queue joins the reading only once there is one", () => {
-  assert.equal(pulseLabel({ running: 3, queued: 0 }, true), "3 running");
-  assert.equal(pulseLabel({ running: 3, queued: 2 }, true), "3 running, 2 queued");
+  assert.equal(pulseLabel({ running: 3, queued: 0, workspaces: [] }, true), "3 running");
+  assert.equal(pulseLabel({ running: 3, queued: 2, workspaces: [] }, true), "3 running, 2 queued");
 });
 
 // Collapsed, a bare "3" is not something a screen reader can make sense of, so the full sentence is
 // the accessible name in BOTH states. It says DAEMON, not workspace: the pool is daemon-wide, and a
 // workspace-scoped reading would attribute a sibling workspace's runs to the one you are looking at.
 test("the spoken reading is the full sentence, scoped to the daemon", () => {
-  assert.equal(pulseTitle({ running: 1, queued: 0 }), "1 running on this daemon");
-  assert.equal(pulseTitle({ running: 1, queued: 4 }), "1 running on this daemon, 4 queued");
+  assert.equal(pulseTitle({ running: 1, queued: 0, workspaces: [] }), "1 running on this daemon");
+  assert.equal(
+    pulseTitle({ running: 1, queued: 4, workspaces: [] }),
+    "1 running on this daemon, 4 queued",
+  );
 });

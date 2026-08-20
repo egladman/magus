@@ -128,6 +128,11 @@ export interface RunningTargetView {
   step: string;
   startTime?: Timestamp;
   invocation: string;
+  // Which workspace this unit of work belongs to. The wire has carried it all along; the mapping
+  // dropped it, which is why nothing downstream could be scoped to a workspace. Running targets and
+  // activity events are the ONLY two things the daemon attributes - runs, pool counts and every
+  // metric family are daemon-wide by construction, one pool and one cache behind every workspace.
+  workspace: string;
 }
 export interface WorkspaceView {
   root: string;
@@ -284,6 +289,7 @@ export function mapStatus(st: Status): StatusView {
       step: c.step || "",
       startTime: c.startTime,
       invocation: c.invocation || "",
+      workspace: c.workspace || "",
     })),
     runs: (st.runs || []).map(mapRun),
     workspaces: ((pool && pool.workspaces) || []).map((w) => ({

@@ -5,13 +5,19 @@ import type { DashboardState, WorkspaceView } from "../state";
 import { relTime } from "../state";
 import { Card, h, type Tile } from "./card";
 import { fitRows } from "./density";
-import type { Persisted } from "../../../lib/persist";
+// The scope this tile highlights against. Narrowed to what it actually reads - a value and a
+// subscription - so it can be fed either a persisted cell or the shell's per-tab workspace scope
+// without either having to pretend to be the other.
+export interface ScopeReader {
+  get(): string;
+  subscribe(fn: (value: string) => void): () => void;
+}
 
-// activeWorkspace, when given, is the dashboard header's active-workspace picker pick
-// (tiles/bigPicture.ts): the matching row gets [data-active] so picking a workspace there has a
-// visible effect here - the one place per-workspace data (this daemon's cache tallies) actually
-// exists to scope to. Optional: the standalone case (no picker wired) renders unhighlighted.
-export function workspacesTile(activeWorkspace?: Persisted<string>): Tile {
+// activeWorkspace, when given, is the workspace THIS BROWSER TAB is scoped to (lib/scope.ts, driven
+// by the title bar's scope picker): the matching row gets [data-active], so the tab's scope has a
+// visible anchor here - the one place per-workspace data (this daemon's cache tallies) actually
+// exists to scope to. Optional: the standalone case renders unhighlighted.
+export function workspacesTile(activeWorkspace?: ScopeReader): Tile {
   const card = new Card("workspaces", "Workspaces", {
     term: "Workspace",
     label: "workspaces",

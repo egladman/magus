@@ -17,6 +17,10 @@ import { createDaemonTransport, getLiveToken, isCapabilityDenied } from "../lib/
 export interface PulseView {
   running: number;
   queued: number;
+  // Every workspace this daemon has loaded, by root path. The shell's scope selector is built from
+  // this - it rides the reading that is already being fetched rather than a second call, and it is
+  // the only place the shell learns that more than one workspace exists at all.
+  workspaces: string[];
 }
 
 // Daemons that answered "I do not serve this", by host. GetStatus is newer than the shipped releases
@@ -36,7 +40,12 @@ async function getPool(host: string): Promise<PulseView | null> {
   const client = createClient(StatusService, createDaemonTransport(host, getLiveToken()));
   const resp = await client.getStatus({});
   const pool = resp.status?.pool;
-  return pool ? { running: pool.running, queued: pool.queued } : null;
+  if (!pool) return null;
+  return {
+    running: pool.running,
+    queued: pool.queued,
+    workspaces: pool.workspaces.map((w) => w.root).filter((r) => r !== ""),
+  };
 }
 
 // fetchPulse reads the daemon's live pool occupancy, or resolves null when there is nothing to show -

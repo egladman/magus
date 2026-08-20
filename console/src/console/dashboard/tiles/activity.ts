@@ -13,6 +13,7 @@
 // (future work), which we deliberately do not invent here.
 
 import type { DashboardState, RunningTargetView } from "../state";
+import { inScope, onWorkspaceScope } from "../../../lib/scope";
 import { fmtArgs, relTime } from "../state";
 import { glossaryLink } from "../../../lib/glossary";
 import { logsLink } from "../../../lib/daemon";
@@ -348,12 +349,28 @@ export function activityTile(): Tile {
     }
   }
 
+  // Repaint when the browser tab's workspace scope changes, not only when the daemon pushes: the
+  // scope decides which of these running targets belong to you, and it can change with no new frame.
+  let latest: DashboardState | null = null;
+  const repaint = (): void => {
+    if (!latest?.status) return;
+    render(
+      latest.status.runningTargets.filter((t) => inScope(t.workspace)),
+      latest.liveHost,
+      latest.logLines,
+      latest.conn.state === "demo",
+    );
+  };
+  const offScope = onWorkspaceScope(repaint);
+
   return {
     el: card.el,
     update(s: DashboardState) {
-      if (s.status)
-        render(s.status.runningTargets, s.liveHost, s.logLines, s.conn.state === "demo");
+      latest = s;
+      repaint();
     },
-    destroy() {},
+    destroy() {
+      offScope();
+    },
   };
 }

@@ -633,6 +633,9 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
           step: t.target === "test" ? "go test ./..." : "",
           startTime: t.startMs != null ? timestampFromMs(t.startMs) : undefined,
           invocation: run.inv,
+          // All of the scenario's work belongs to acme; magus sits idle beside it. That is what makes
+          // the workspace scope demonstrable offline - scope to magus and the live list empties.
+          workspace: WORKSPACE_ROOT,
         })),
     );
     // Derive the pool counts from the SAME runs the Live activity shows, so the hero's RUNNING count

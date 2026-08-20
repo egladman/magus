@@ -45,6 +45,7 @@ import { createTileView, type TileView } from "./tileView";
 import { leaves, type Pane, type Leaf, type Split } from "./tiling";
 import { initRefDrawer, referenceSurface } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
+import { initScopePicker } from "../ui/scope-picker";
 import { mountNotificationCenter, notify } from "../lib/notifications";
 import { checkLocalStorageAlert, startShellWatch } from "../lib/watch";
 import { openSurfaceWindow } from "../lib/appwindow";
@@ -1080,6 +1081,12 @@ export function startConsole(
   // Per-surface counts the rail hangs on a row. Diff only for now - see badges.ts for why a count
   // earns a badge and a static one does not.
   const railBadges = signal<Record<string, Badge>>({});
+  // The workspace scope control, in the title bar's action group. It hides itself until the daemon
+  // reports more than one workspace, so a single-workspace console never grows a control for a
+  // decision with one answer.
+  const actionsHost = document.getElementById("console-actions");
+  const scopePicker = actionsHost ? initScopePicker(actionsHost) : null;
+
   const sidebarHost = document.getElementById("console-sidebar");
   if (sidebarHost) {
     createSidebar(
@@ -1830,7 +1837,10 @@ export function startConsole(
     }
     // The rail's readings ride THIS interval rather than starting their own: the shell is already
     // asking this daemon a question every 15s, and the rail's numbers are the same freshness.
-    void fetchPulse(host).then((p) => pulse.set(p));
+    void fetchPulse(host).then((p) => {
+      pulse.set(p);
+      scopePicker?.setWorkspaces(p?.workspaces ?? []);
+    });
     // Only while the rail is actually on screen. It is hidden on a phone and in an app-mode window,
     // where this would be a request every 15s for a number nobody can see - and a phone is exactly
     // where that is worth not doing. Read from the rendered width rather than re-testing the 48rem
