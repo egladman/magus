@@ -100,3 +100,77 @@ export function disconnected(nodes: readonly GNode[], links: readonly GLink[]): 
     })
     .map((n) => n.id);
 }
+
+/**
+ * projectOwners maps each node to the project that CONTAINS it, following `contains` edges.
+ * Nodes no project contains - workspace-global things like spells, diagnostics and modules -
+ * are absent from the result rather than attributed to a root project that merely sits above
+ * them in the tree.
+ *
+ * The nesting order is what makes the answer useful, so projects are flooded DEEPEST FIRST and
+ * each claims only nodes still unclaimed. Distance cannot decide it: a root project often
+ * reaches a file in one hop while the nested project that actually owns it reaches the same
+ * file through a directory, and the more specific project is the right answer either way.
+ *
+ * This has to come from the EDGES: no node in a knowledge graph carries an `attrs.project`, so
+ * anything deriving project membership from ids alone sees a project plus its targets and misses
+ * the dirs, docs and functions that make up the rest of it.
+ *
+ * Cost is O(projects x containsEdges) in the worst case. Projects are the coarsest entity a
+ * workspace has - tens, not thousands - so the product stays small.
+ */
+export function projectOwners(
+  nodes: readonly GNode[],
+  links: readonly GLink[],
+): Map<string, string> {
+  const children = new Map<string, string[]>();
+  for (const e of links) {
+    if (e.relation !== "contains") continue;
+    const s = endpointId(e.source);
+    const list = children.get(s);
+    if (list) list.push(endpointId(e.target));
+    else children.set(s, [endpointId(e.target)]);
+  }
+  const projects = nodes.filter((n) => n.kind === "project").map((n) => n.id);
+  const projectSet = new Set(projects);
+
+  // reach(root) walks contains from root; `stop` ends a branch, which keeps a project's flood
+  // out of a nested project's subtree and makes the walk terminate on a containment cycle.
+  const reach = (root: string, stop: (id: string) => boolean, visit: (id: string) => void) => {
+    const seen = new Set([root]);
+    const queue = [root];
+    for (let i = 0; i < queue.length; i++) {
+      for (const next of children.get(queue[i]) ?? []) {
+        if (seen.has(next)) continue;
+        seen.add(next);
+        visit(next);
+        if (!stop(next)) queue.push(next);
+      }
+    }
+  };
+
+  // How many projects contain this one; deeper means more specific.
+  const depth = new Map<string, number>(projects.map((id) => [id, 0]));
+  for (const p of projects) {
+    reach(
+      p,
+      () => false,
+      (id) => {
+        if (projectSet.has(id)) depth.set(id, (depth.get(id) ?? 0) + 1);
+      },
+    );
+  }
+
+  const owner = new Map<string, string>();
+  for (const p of [...projects].sort((a, b) => (depth.get(b) ?? 0) - (depth.get(a) ?? 0))) {
+    if (!owner.has(p)) owner.set(p, p); // a project owns itself unless a nested one already did
+    reach(
+      p,
+      (id) => projectSet.has(id), // a nested project owns its own subtree
+      (id) => {
+        if (!owner.has(id)) owner.set(id, p);
+      },
+    );
+  }
+  return owner;
+}

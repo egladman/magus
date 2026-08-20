@@ -4,7 +4,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { GLink, GNode } from "./types";
-import { dependencyDegrees, disconnected, mostDependedOn } from "./views";
+import { dependencyDegrees, disconnected, mostDependedOn, projectOwners } from "./views";
 
 function node(id: string): GNode {
   return { id, kind: "target", label: id } as unknown as GNode;
@@ -135,4 +135,56 @@ test("a self-dependency counts on both sides and is not dead", () => {
 test("an empty graph yields empty answers", () => {
   assert.deepEqual(mostDependedOn([], [], 12), []);
   assert.deepEqual(disconnected([], []), []);
+});
+
+// projectOwners: who contains what. A knowledge graph carries no attrs.project, so the answer
+// has to come from the `contains` edges.
+
+const proj = (id: string): GNode => ({ id, kind: "project", label: id }) as unknown as GNode;
+
+test("a project owns what it contains, transitively", () => {
+  const nodes = [proj("project:web"), node("dir:src"), node("file:a.ts"), node("fn:a.ts:go")];
+  const links = [
+    link("project:web", "dir:src", "contains"),
+    link("dir:src", "file:a.ts", "contains"),
+    link("file:a.ts", "fn:a.ts:go", "contains"),
+  ];
+  const owner = projectOwners(nodes, links);
+  assert.equal(owner.get("fn:a.ts:go"), "project:web", "ownership reaches three hops down");
+  assert.equal(owner.get("project:web"), "project:web", "a project owns itself");
+});
+
+test("a nested project wins over the parent that also reaches it", () => {
+  const nodes = [proj("project:."), proj("project:libs/x"), node("file:libs/x/a.ts")];
+  const links = [
+    link("project:.", "project:libs/x", "contains"),
+    link("project:libs/x", "file:libs/x/a.ts", "contains"),
+    link("project:.", "file:libs/x/a.ts", "contains"),
+  ];
+  const owner = projectOwners(nodes, links);
+  assert.equal(owner.get("project:libs/x"), "project:libs/x", "a nested project owns itself");
+  assert.equal(owner.get("file:libs/x/a.ts"), "project:libs/x");
+});
+
+test("only contains edges confer ownership", () => {
+  const nodes = [proj("project:web"), node("spell:go")];
+  const owner = projectOwners(nodes, [link("project:web", "spell:go", "uses")]);
+  assert.equal(owner.has("spell:go"), false, "using a spell does not make it project-owned");
+});
+
+test("a node no project contains is absent rather than attributed upward", () => {
+  const nodes = [proj("project:."), node("diagnostic:MGS1001")];
+  const owner = projectOwners(nodes, []);
+  assert.deepEqual([...owner.keys()], ["project:."]);
+});
+
+test("a containment cycle terminates", () => {
+  const nodes = [proj("project:web"), node("a"), node("b")];
+  const links = [
+    link("project:web", "a", "contains"),
+    link("a", "b", "contains"),
+    link("b", "a", "contains"),
+  ];
+  const owner = projectOwners(nodes, links);
+  assert.equal(owner.get("b"), "project:web");
 });

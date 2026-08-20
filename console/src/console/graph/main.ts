@@ -82,7 +82,7 @@ import {
   overlayInsets,
   usableCenter,
 } from "./viewport.js";
-import { disconnected, mostDependedOn } from "./views.js";
+import { disconnected, mostDependedOn, projectOwners as computeProjectOwners } from "./views.js";
 import { flavorOf, isTargetGraph, targetGraphToNodeLink } from "./target-adapter.js";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { wireToolbarOverflow } from "../toolbar";
@@ -135,12 +135,15 @@ const KINDS = [
 // Relations, for grouping edges in the explain card. Order = display order.
 const RELATIONS = [
   "depends_on",
+  "produces",
+  "consumes",
   "contains",
   "imports",
   "calls",
   "uses",
   "references",
   "documents",
+  "annotates",
   "rationale_for",
 ];
 
@@ -197,6 +200,7 @@ interface Graph {
   sourceBase: string;
   relIndex?: Map<string, Set<string>>;
   adj?: Map<string, Set<string>>;
+  projectOf?: Map<string, string>;
 }
 // graph is null until the first load, but every reader runs post-load (boot gates on it),
 // so it is typed non-null - `null as any` keeps the runtime null + the `if (!graph)` guards
@@ -589,6 +593,13 @@ function adjacency() {
   }
   return graph.adj;
 }
+// Cached on the graph like adjacency(): the project: filter runs it once per node over the whole
+// list. prepareGraph returns a fresh object on every load, so the cache resets with the data.
+function projectOwners() {
+  if (!graph.projectOf) graph.projectOf = computeProjectOwners(graph.nodes, graph.links);
+  return graph.projectOf;
+}
+
 function neighbors(id: string | null) {
   return id ? adjacency().get(id) || null : null;
 }
@@ -1475,7 +1486,11 @@ function relSectionHtml(title: string, rows: IncidentRow[]) {
     byRel.get(r.rel)?.push(r);
   }
   let html = "<dt>" + escapeHtml(title) + "</dt><dd>";
-  const rels = [...byRel.keys()].sort((a, b) => RELATIONS.indexOf(a) - RELATIONS.indexOf(b));
+  const relRank = (r: string) => {
+    const i = RELATIONS.indexOf(r);
+    return i < 0 ? RELATIONS.length : i; // a relation this list predates trails the ones it names
+  };
+  const rels = [...byRel.keys()].sort((a, b) => relRank(a) - relRank(b) || (a < b ? -1 : 1));
   for (const rel of rels) {
     const items = byRel.get(rel);
     if (!items) continue;
@@ -2004,7 +2019,11 @@ function termMatches(node: GNode, term: QueryTerm) {
         node.id === "project:" + v ||
         (node.kind === "target" && node.id.toLowerCase().startsWith("target:" + v + ":")) ||
         (node.attrs && (node.attrs.project || "").toLowerCase() === v) ||
-        node.id.toLowerCase() === v;
+        node.id.toLowerCase() === v ||
+        // Everything the project CONTAINS, transitively - its dirs, docs, files and the
+        // functions inside them. The id comparisons above only ever reach the project node
+        // and its targets.
+        (projectOwners().get(node.id) ?? "").toLowerCase() === "project:" + v;
       break;
     case "relation": {
       // relIndex is always built by the callers that run relation queries; treat an
