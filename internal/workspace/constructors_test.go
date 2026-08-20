@@ -67,12 +67,16 @@ func TestWithWatchIgnore_ValidLiteral(t *testing.T) {
 	assert.Len(t, p.WatchIgnores, 1)
 }
 
-func TestWithTarget_CheckClean(t *testing.T) {
+func TestWithTarget_Drift(t *testing.T) {
 	p := &types.Project{Path: "."}
-	opt := WithTarget("test", FailOnDrift())
-	require.NoError(t, opt(p))
-	pol := p.TargetPolicies["test"]
-	assert.True(t, pol.FailOnDrift)
+	require.NoError(t, WithTarget("test", Drift(types.DriftWarn, ""))(p))
+	assert.Equal(t, types.DriftWarn, p.TargetPolicies["test"].Drift)
+
+	// Off carries its reason, which is the half a bare policy cannot state.
+	q := &types.Project{Path: "."}
+	require.NoError(t, WithTarget("image", Drift(types.DriftOff, "bakes a build timestamp"))(q))
+	assert.Equal(t, types.DriftOff, q.TargetPolicies["image"].Drift)
+	assert.Equal(t, "bakes a build timestamp", q.TargetPolicies["image"].DriftReason)
 }
 
 func TestWithTarget_TrackVolatile(t *testing.T) {

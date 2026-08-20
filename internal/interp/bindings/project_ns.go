@@ -56,7 +56,7 @@ var knownToolBoundKeys = []string{"min", "below"}
 
 // knownTargetPolicyKeys are the recognized per-target policy keys inside
 // magus.project's "targets" map.
-var knownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots", "memory_mb", "cache"}
+var knownTargetPolicyKeys = []string{"skip_cache", "exclusive", "slots", "memory_mb", "cache", "drift", "drift_reason"}
 
 // rejectUnknownKeys errors on the first key in m absent from known, so a typo
 // like "skip_cache" or "depend_on" is a loud load error instead of a silently
@@ -358,6 +358,34 @@ func parseBuzzProjectOpts(ctx context.Context, v vm.Value) ([]workspace.ProjectO
 			}
 			if ev, ok := pv.MapGet("exclusive"); ok && ev.Bool() {
 				opts = append(opts, workspace.WithTarget(name, workspace.Exclusive()))
+			}
+			// drift says what happens when this target's declared output moves under a
+			// read-only run. Absent means the default, which already gates a target that
+			// declares output - so this key exists to downgrade or switch off, not to
+			// switch on.
+			//
+			// An unknown value is a load error rather than the default: "of" or "warm"
+			// would silently gate or silently not, and the author would learn which from
+			// a merge rather than from the load.
+			if dv, ok := pv.MapGet("drift"); ok {
+				policy := types.DriftPolicy(strings.TrimSpace(dv.AsString()))
+				if !types.ValidDriftPolicy(policy) {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].drift is %q; it takes \"fail\" (the default for a target that declares output), \"warn\" to report without failing, or \"off\"",
+						name, dv.AsString())
+				}
+				var reason string
+				if rv, ok := pv.MapGet("drift_reason"); ok && rv.IsStr() {
+					reason = strings.TrimSpace(rv.AsString())
+				}
+				// Same bar skip_cache sets: switching a check off is a claim about this
+				// target, and the next reader cannot tell a considered exemption from an
+				// abandoned workaround unless the claim is written down.
+				if policy == types.DriftOff && reason == "" {
+					return nil, fmt.Errorf(
+						"magus.project: targets[%q].drift is \"off\" but drift_reason is empty; say why this target's output cannot be checked, e.g. \"writes a timestamped artifact no two runs can match\"", name)
+				}
+				opts = append(opts, workspace.WithTarget(name, workspace.Drift(policy, reason)))
 			}
 			// Nested to mirror magus.yaml's cache.include.*.enabled exactly, so the
 			// same decision reads the same way wherever it is written:

@@ -196,8 +196,14 @@ clean, so drift ships and CI catches it later - or does not.
 **magus:** [charms](../charms.md) make writing and verifying the same target with
 different intent. Locally a `generate` target carries `rw` and writes; in CI the
 default charm is stripped (`--no-default-charms`) and the same target acts as a
-pure drift gate. A target can also set `FailOnDrift` to fail outright when it
-leaves the tree dirty.
+pure drift gate. No declaration turns that on: a target that declares output has
+already claimed those bytes follow from its inputs, so magus checks the claim. The
+`drift` policy exists to downgrade it to a warning or switch it off with a reason.
+
+The gate answers for what THIS change caused. Output that drifted with no source
+change behind it - a merge whose own CI never finished, a generator nobody re-ran -
+is reported and does not fail the run, because failing it would bill whoever opens
+the next pull request for a decision they were not party to.
 
 ### A volatile test fails the pipeline
 

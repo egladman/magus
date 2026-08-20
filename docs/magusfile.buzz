@@ -293,19 +293,33 @@ export fun site_generate(ctx: magus\Context, args: [str]) > void !> any {
         ctx.hasCharm("rw"));
 }
 
-// generate is the one public docs publication target. Its small drift gate always runs;
-// its content, catalog, changelog, and site stages replay independently when unchanged.
+// generate owns the COMMITTED derived files, and nothing else. That is the line between
+// generate and build here: generate's output is in the repository, so CI can re-run it and
+// fail when the bytes move, and the drift gate below is that check. build's output is not
+// committed, so no comparison can gate it - it is verified by rendering without error.
+//
+// The site render, the esbuild bundles, and the WebAssembly playground all write the ignored
+// gen/ tree, so they live in build. They used to run here, which cost every `affected ci` a
+// full 536-page render to gate bytes that are not tracked.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
-	magus\log.hint("docs generate refreshes derived content and bundles; unchanged stages replay from cache; for a docs/blog preview use `magus run render docs`");
+	magus\log.hint("docs generate refreshes the committed derived content; `magus run build docs` renders the site itself, and `magus run render docs` is the fast docs/blog preview");
     ctx.needs(preflight);
     final CONTENT = ["reference/buzz", "reference/config.md", "concepts/spells", "concepts/spells.md",
         "concepts/knowledge.md", "reference/manpage", "reference/skills", "reference/api", "changelog.md"];
-    // OUT is deliberately absent. gen/ is ignored now that cd.yaml renders at deploy
-    // time, and an ignored path is never "dirty", so listing it would assert a check that
-    // silently passes. What still gates is every generated file that IS tracked: MAGUS.md,
-    // the root CHANGELOG.md, src/gen, assets/gen (the README's diagram pair), and the
-    // derived Markdown in CONTENT.
-    final GENERATED = ["MAGUS.md", ROOT + "/CHANGELOG.md", "src/gen", "assets/gen"] + CONTENT;
+    // Every path here is TRACKED, which is what lets the gate fail: MAGUS.md, the root
+    // CHANGELOG.md, assets/gen (the README's diagram pair), and the derived Markdown in
+    // CONTENT. gen/ is absent because it is ignored, and an ignored path is never dirty, so
+    // listing it would assert a check that silently passes. src/gen is absent because
+    // proto:generate declares and gates it - nothing in THIS chain regenerates it, so the
+    // hash either side would always match.
+    //
+    // The engine's drift gate does NOT make this one redundant. It hashes each target's
+    // declared OUTPUTS, and two of these are not outputs: `magus describe file` reports
+    // CHANGELOG.md and assets/gen as role=source, because they are written through `update`
+    // declarations rather than ctx.writesFiles. A check keyed on outputs cannot see them
+    // however correct it is. MAGUS.md and CONTENT are covered twice over; those two are
+    // covered only here.
+    final GENERATED = ["MAGUS.md", ROOT + "/CHANGELOG.md", "assets/gen"] + CONTENT;
     // Hashed before and after, not gated on a clean tree: the old form skipped whenever any
     // of these was already dirty, which is the state you are in while editing a generator.
     // It also makes the gate work in a git WORKTREE, where vcs\isDirty does not report
@@ -319,20 +333,13 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // their completed artifacts, so it intentionally runs in the following stage.
     //
     // diagrams-generate joins them rather than staying opt-in. It orders against nothing
-    // here - the site never reads its output - but composing it is what puts those bytes
-    // inside the GENERATED gate above, and what lets cd.yaml's `generate docs` reach the
-    // target at all. Uncomposed, it ran only when typed by hand, so the committed SVGs
-    // README.md embeds could drift from libs/diagram indefinitely with every gate green.
-    // It declares its inputs, so an unchanged tree replays it and the 3s render is paid
-    // on a renderer or diagram edit rather than on every docs build.
+    // here - the site never reads its output - but it writes assets/gen, which is committed,
+    // so composing it is what puts those bytes inside the GENERATED gate above. Uncomposed,
+    // it ran only when typed by hand, so the committed SVGs README.md embeds could drift
+    // from libs/diagram indefinitely with every gate green. It declares its inputs, so an
+    // unchanged tree replays it and the 3s render is paid on a renderer or diagram edit
+    // rather than on every docs build.
     ctx.needs(content_generate, index_generate, diagrams_generate);
-    // The esbuild bundles are a stage of their own, BEFORE site-generate rather than beside
-    // it: site-generate hashes gen/ into the service-worker precache and site-manifest, so a
-    // bundle written after it would ship with a manifest that does not describe it. They used
-    // to be run by hand and committed; with gen/ untracked, generate is what produces them.
-    ctx.needs(build_hljs, build_playground_editor, build_playground);
-    ctx.needs(site_generate);
-    // site_generate owns the full render, bundle, and manifest artifact.
     if (ctx.hasCharm("rw")) { return; }
     // Name the files, not the set. "MAGUS.md or CHANGELOG.md or generated docs Markdown
     // drifted" tells a reader only that one of nine things moved, and this gate fires
@@ -416,7 +423,19 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     proc\exec("pnpm", ["run", "typecheck"], ".", {});
     proc\exec("pnpm", ["exec", "biome", "check", "src"], ".", {});
 }
-export fun build(ctx: magus\Context, args: [str]) > void { ctx.needs(generate); }
+// build renders the site: the tree cd.yaml publishes and deploy-generate assembles. None of
+// it is committed, so unlike generate it is gated by producing without error rather than by
+// a byte comparison - see generate's comment for the split.
+//
+// generate first, because site-generate reads the Markdown and catalog it derives. The
+// esbuild bundles are NOT listed here: site-generate declares them itself, which is what
+// makes it correct when something other than this target invokes it. Repeating them would
+// state the ordering in two places, and the copy that is not load-bearing is the one that
+// goes stale.
+export fun build(ctx: magus\Context, args: [str]) > void {
+    ctx.needs(generate);
+    ctx.needs(site_generate);
+}
 
 // buzz-test runs render's in-file `test "..." {}` blocks through `magus buzz`, in
 // --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises

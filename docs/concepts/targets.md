@@ -91,12 +91,27 @@ Two consequences:
 | Name        | Meaning                                          |
 | ----------- | ------------------------------------------------ |
 | `preflight` | pre-run checks (workspace health, missing tools) |
-| `build`     | compile / produce artifacts                      |
+| `build`     | produce artifacts that are NOT committed         |
 | `test`      | run the test suite                               |
 | `lint`      | static analysis, type-check                      |
 | `format`    | format source files                              |
 | `clean`     | remove local build artifacts                     |
-| `generate`  | run code generators                              |
+| `generate`  | produce files that ARE committed                 |
+
+### `generate` or `build`?
+
+Both produce files, so the table above splits them on the only difference that changes what CI can do: **is the output committed?**
+
+`generate`'s output is in the repository, so CI can re-run the generator and fail when the bytes move. That drift gate is the whole point of the name - it is what catches a page nobody regenerated after editing its source. `build`'s output is ignored or thrown away, so no comparison is possible; it is verified by producing without error.
+
+The test is the artifact, not the verb. "It runs a generator" is not the question - a code generator writing an ignored `dist/` belongs in `build`, and a renderer writing a committed SVG belongs in `generate`.
+
+Two failure modes follow, and both are quiet:
+
+- **Uncommitted output in `generate`** makes every `magus affected ci` pay for work no gate can check. It looks like coverage and is not.
+- **Committed output in `build`** leaves a tracked file with nothing verifying it, so it drifts from its source indefinitely with every gate green.
+
+When one phase feeds the other, `build` depends on `generate` rather than repeating it - the ordering falls out, and `generate` stays runnable on its own as the fast gate.
 
 `ci` itself is an ordinary magusfile-defined target, not a hardcoded chain - you compose its stages yourself with `magus\needs`. What makes it the one required name is that `Magus.RunCI` treats it specially in exactly three ways: it strips the `rw` charm (ci always runs read-only), it is the anchor `magus affected ci` and `magus affected --plan` key off, and it must not silently no-op - a selected scope with no project declaring `ci` is a load error (see [dependencies.md](dependencies.md)), not a quiet success.
 

@@ -171,7 +171,7 @@ func (m *Magus) runResolved(ctx context.Context, targets []types.Target, o run) 
 	stages := make([]stage, 0, len(groups))
 	for _, g := range groups {
 		projects := m.targetProjects(g.targets)
-		handler := m.makeHandler(g.name)
+		handler := m.targetHandler(g.name)
 		if o.Spell != "" {
 			handler = m.makeSpellFilteredHandler(g.name, o.Spell)
 		}
@@ -680,10 +680,10 @@ func toolVersionMode() string {
 // CurrentRevision resolves the workspace's active VCS revision (full hash) and dirty
 // state, collapsing BOTH a resolution error and no VCS into ("", false).
 //
-// That differs from verifyReadOnly, which treats a vcs.Resolve error as a hard failure,
-// and it is correct here because this is provenance metadata rather than a drift gate: a
-// target that never declared FailOnDrift never asked to have its VCS state checked, so a
-// missing revision is "unknown", never a reason to fail the caller.
+// That differs from gateDrift, which treats a vcs.Resolve error as a hard failure, and it
+// is correct here because this is provenance metadata rather than a drift gate: a target
+// with nothing to gate never asked to have its VCS state checked, so a missing revision is
+// "unknown", never a reason to fail the caller.
 //
 // executeStages resolves it ONCE per invocation and copies it onto every step, as
 // toolVersionsByProject does - probing per target would spawn a VCS subprocess per step.
@@ -1665,13 +1665,45 @@ func annotateVolatility(project, target, status string, rt *volatility.Runtime) 
 	})
 }
 
-// verifyReadOnly runs fn - a target expected to be read-only (preflight/generate
-// without the rw charm) - then fails if it left uncommitted changes in dir, i.e. it
-// wrote when it should only have checked (the error points the user at the rw charm).
+// gateDrift runs fn, then answers for any declared output it moved.
+//
+// It asks whether THIS CHANGE moved them, not merely whether they moved. A generated file
+// can be stale because the author edited its source and did not regenerate - their problem,
+// and the gate's reason to exist - or because it arrived stale on the base, from a merge
+// whose own CI never finished. Failing the second case bills whoever opens the next pull
+// request for a decision they were not party to, and they cannot fix it without committing
+// bytes they did not produce.
+//
+// That distinction is not a policy: there is no setting that restores blaming the wrong
+// person. policy decides only what happens to drift that IS this change's - see
+// types.DriftPolicy.
+//
 // Skipped when dir has no VCS, so the guard never blocks a non-repo checkout.
-func (m *Magus) verifyReadOnly(ctx context.Context, dir, target string, fn func() error) error {
+func (m *Magus) gateDrift(ctx context.Context, p *types.Project, target string, policy types.DriftPolicy, fn func() error) error {
+	dir := p.Dir
+	// Hash the declared outputs on both sides rather than asking the VCS what is dirty
+	// afterwards. "Is the tree dirty now" answers a different question: an output you
+	// already had uncommitted reads as this run's doing, and the gate blames the target for
+	// your own work in progress. Bytes that did not move are not drift, however dirty the
+	// tree around them is.
+	//
+	// diff.HashContent expands the globs exactly as the cache snapshot does, so the gate and
+	// the cache cannot disagree about what a declared output IS.
+	globs := []diff.OutputGlobs{{Root: dir, Globs: p.AllOutputs()}}
+	before, err := diff.HashContent(ctx, globs)
+	if err != nil {
+		return fmt.Errorf("%s: %s is drift-gated but its declared outputs could not be read: %w", dir, target, err)
+	}
 	if err := fn(); err != nil {
 		return err
+	}
+	after, err := diff.HashContent(ctx, globs)
+	if err != nil {
+		return fmt.Errorf("%s: %s is drift-gated but its declared outputs could not be re-read: %w", dir, target, err)
+	}
+	moved := diff.DiffContent(before, after)
+	if len(moved) == 0 {
+		return nil
 	}
 	// Resolve the active VCS (git/hg/sl/jj) rather than shelling out to git, so the
 	// cleanliness gate works under any backend.
@@ -1687,14 +1719,14 @@ func (m *Magus) verifyReadOnly(ctx context.Context, dir, target string, fn func(
 	// The outcomes below are deliberately not collapsed, following the rule this file
 	// already applies to a missing ci target: "definitely absent" and "could not tell" are
 	// different answers, and only the first is safe to read as a pass. A target reaches
-	// here only by declaring FailOnDrift, so it has explicitly asked to be checked;
-	// reporting "clean" when the check never ran would silently retract that guarantee.
+	// here because it declares output, so it has already claimed those bytes are a function
+	// of its inputs; reporting "clean" when the check never ran would silently retract that.
 	res, err := vcs.Resolve(ctx, m.ws.Root, "", m.ws.VCSOptions)
 	if err != nil {
 		// Resolve fails only for an explicitly requested VCS that does not exist
 		// (MAGUS_VCS_NAME naming an unknown backend). That is misconfiguration, not
 		// an absent VCS, and silently skipping it would hide the typo forever.
-		return fmt.Errorf("%s: %s declares FailOnDrift but the VCS could not be resolved: %w", dir, target, err)
+		return fmt.Errorf("%s: %s is drift-gated but the VCS could not be resolved: %w", dir, target, err)
 	}
 	// VCS disabled, or NO backend claimed the root. The second half is what actually keeps
 	// magus usable outside a repository (a container build, an extracted tarball): Resolve
@@ -1705,35 +1737,115 @@ func (m *Magus) verifyReadOnly(ctx context.Context, dir, target string, fn func(
 	if res.VCS == nil || res.Source == types.VCSSourceDefault {
 		return nil
 	}
-	files, err := res.VCS.DirtyFiles(ctx, dir, []string{"."})
+	// Only TRACKED outputs can be stale. An ignored one - a build artifact, a bundle, a
+	// dist/ tree - is rewritten by every run by design, and "drift" is not a thing it can
+	// have: there is no committed form for it to disagree with. Gating those was this
+	// check's first false positive, on a `ci` target whose build legitimately rewrites its
+	// own gen/ tree.
+	//
+	// A backend that cannot answer leaves the set alone rather than guessing. Guessing
+	// either way is worse than the question going unasked: assume tracked and every build
+	// artifact becomes a gate failure, assume untracked and the gate covers nothing.
+	if reporter, ok := res.VCS.(types.TrackedFileReporter); ok {
+		tracked, terr := reporter.TrackedFiles(ctx, dir, moved)
+		if terr != nil {
+			return fmt.Errorf("%s: %s is drift-gated but %s could not say which outputs are tracked, so drift was not verified: %w",
+				dir, target, res.VCS.Name(), terr)
+		}
+		moved = tracked
+	}
+	if len(moved) == 0 {
+		return nil
+	}
+
+	// moved is already scoped to declared outputs by the globs it was hashed from. It is
+	// classified anyway, because SplitExplainedOutputs needs each path's owning project to
+	// ask whether that project's sources moved in this change.
+	classified, err := m.ClassifyFiles(ctx, moved)
 	if err != nil {
-		return fmt.Errorf("%s: %s declares FailOnDrift but %s could not report working-tree status, so drift was not verified: %w",
-			dir, target, res.VCS.Name(), err)
+		return fmt.Errorf("%s: %s is drift-gated but its changed paths could not be classified, so drift was not verified: %w",
+			dir, target, err)
 	}
-	if len(files) > 0 {
-		return fmt.Errorf("%s: %s produced uncommitted changes; re-run with the rw charm (%s:rw) to apply:\n%s",
-			dir, target, target, strings.Join(files, "\n"))
+	mine, theirs := types.SplitExplainedOutputs(classified, types.SourcesChangedSinceBase(ctx, m, res, m.ws.Root))
+	if len(mine) == 0 && len(theirs) == 0 {
+		return nil
 	}
-	return nil
+
+	// theirs is drift no source change in this branch accounts for. Report it and carry on:
+	// naming it keeps it visible without making it this author's gate to satisfy.
+	if len(theirs) > 0 {
+		code, msg := types.ClassifyDrift(false, types.MagusVersionFromContext(ctx))
+		_ = annotate.Detect(os.Stderr).Annotate(annotate.Annotation{
+			Level:   annotate.LevelWarning,
+			Title:   "magus: pre-existing drift",
+			File:    dir,
+			Code:    string(code),
+			Message: fmt.Sprintf("%s: %s did not cause this - %s:\n%s", target, msg, code, strings.Join(theirs, "\n")),
+		})
+	}
+	if len(mine) == 0 {
+		return nil
+	}
+	stale := fmt.Sprintf("%s: %s left declared output stale; re-run with the rw charm (%s:rw) and commit:\n%s%s",
+		dir, target, target, strings.Join(mine, "\n"), driftDetail(ctx, res, dir, mine))
+	if !policy.Fails() {
+		_ = annotate.Detect(os.Stderr).Annotate(annotate.Annotation{
+			Level:   annotate.LevelWarning,
+			Title:   "magus: drift",
+			File:    dir,
+			Message: stale,
+		})
+		return nil
+	}
+	return errors.New(stale)
 }
 
-func (m *Magus) makeHandler(name string) TargetHandler {
-	if name == "preflight" || name == "generate" {
-		return func(ctx context.Context, p *types.Project) error {
-			ctx, cancel := m.withTargetDeadline(ctx)
-			defer cancel()
-			run := func() error { return runTarget(ctx, p, name) }
-			pol := p.TargetPolicies[name]
-			if pol.FailOnDrift && !types.HasCharm(ctx, types.CharmReadWrite) {
-				return m.verifyReadOnly(ctx, p.Dir, name, run)
-			}
-			return run()
-		}
+// driftDetail is the diff of what moved, appended to the gate's message.
+//
+// Names alone were not enough twice running: one of them turned out to be a daemon auth
+// token captured into a docs example, which no filename could have shown. This gate fires
+// where its reader has a CI log and no tree, so the bytes have to travel with the verdict.
+//
+// Bounded, because a generated JSON file is one enormous line and would bury a small,
+// readable drift somewhere else in the list. Best effort - a backend that cannot produce a
+// diff still gets the names.
+func driftDetail(ctx context.Context, res types.VCSResolution, dir string, paths []string) string {
+	body, err := res.VCS.DirtyDiff(ctx, dir, paths)
+	if err != nil || body == "" {
+		return ""
 	}
+	const cap = 4000
+	if len(body) > cap {
+		body = body[:cap] + "\n... truncated; the full diff is in this run's captured log"
+	}
+	return "\n\nwhat changed on this runner:\n" + body
+}
+
+// targetHandler returns the handler for a target, wrapped in the drift gate when its
+// policy asks for one.
+//
+// Every target, not the two names this used to hard-code: whether output can go stale is a
+// property of declaring output, and `preflight`/`generate` were never more than the two
+// places it had been noticed. A workspace whose `build` writes a committed artifact had no
+// way to gate it.
+func (m *Magus) targetHandler(name string) TargetHandler {
 	return func(ctx context.Context, p *types.Project) error {
 		ctx, cancel := m.withTargetDeadline(ctx)
 		defer cancel()
-		return runTarget(ctx, p, name)
+		run := func() error { return runTarget(ctx, p, name) }
+		pol := p.TargetPolicies[name]
+		// rw is the charm that says "keep what you wrote", so there is nothing to gate:
+		// the write was the point.
+		if types.HasCharm(ctx, types.CharmReadWrite) {
+			return run()
+		}
+		// Either spelling of "this target writes committed bytes": the project-wide globs,
+		// or this target's own ctx.writesFiles refs.
+		declares := len(p.Outputs) > 0 || len(p.TargetOutputs[name]) > 0
+		if !pol.Drift.Gates(declares) {
+			return run()
+		}
+		return m.gateDrift(ctx, p, name, pol.Drift, run)
 	}
 }
 
