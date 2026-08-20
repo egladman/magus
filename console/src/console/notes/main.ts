@@ -50,6 +50,7 @@ import { h } from "../view";
 import type { SurfaceInstance } from "../standalone";
 import { demoNotes } from "./demo";
 import { parseTranscript, type Transcript } from "./transcript";
+import { renderMarkdown } from "./markdown";
 
 // The SAME key the dashboard remembers its last daemon under, so opening Notes after
 // connecting the dashboard resumes the same loopback host. Read-only here.
@@ -663,9 +664,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
       read.append(h("p", "console-notes-app__prose", transcript.preamble));
       read.append(buildTranscript(transcript));
     } else {
-      // textContent, never innerHTML: this is prose out of a file on disk, and the surface that
-      // renders it must not become a way to run markup someone pasted into a note.
-      read.append(h("p", "console-notes-app__prose", body));
+      // A note IS a markdown file, so it is rendered as one. renderMarkdown builds nodes rather
+      // than markup - no innerHTML, no HTML string anywhere - which keeps the untrusted-body
+      // guarantee structural while letting a hard-wrapped paragraph reflow to the pane.
+      const prose = h("div", "console-notes-app__prose");
+      prose.append(renderMarkdown(body));
+      read.append(prose);
     }
 
     const facts = h("div", "console-notes-app__facts");

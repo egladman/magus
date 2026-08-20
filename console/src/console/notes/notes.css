@@ -203,15 +203,55 @@
 .console-notes-app__subtitle [data-staleness="outrun"] { color: var(--console-status-warn); }
 .console-notes-app__subtitle [data-staleness="petrified"] { color: var(--console-status-danger); }
 
-/* pre-wrap, never pre: a note's prose is written to a measure the reader's pane does not share,
-   and `pre` clips it rather than wrapping. Paragraph breaks still survive. This governs how the
-   body wraps and not whether it is trusted - main.ts sets it through textContent either way. */
+/* Rendered markdown, so normal wrapping: markdown's soft-break rule means a single newline
+   inside a paragraph reflows, and renderMarkdown has already joined those lines. `pre-wrap`
+   here would undo that and put the author's hard wrapping back. */
 .console-notes-app__prose {
   margin: 0; font-size: 0.9rem; line-height: 1.6;
-  white-space: pre-wrap; overflow-wrap: anywhere;
+  overflow-wrap: anywhere;
   font-family: var(--pf-t--global--font--family--body);
   color: var(--pf-t--global--text--color--regular);
 }
+.console-notes-app__md-p { margin: 0 0 0.7rem; }
+.console-notes-app__prose > :last-child { margin-bottom: 0; }
+/* Headings inside a note sit BELOW its title, which is the h2 above this prose - so they are
+   sized down rather than competing with it. */
+.console-notes-app__md-h {
+  margin: 1.1rem 0 0.35rem; line-height: 1.3; text-wrap: balance;
+  font-size: 0.95rem; font-weight: 700;
+}
+.console-notes-app__prose > .console-notes-app__md-h:first-child { margin-top: 0; }
+.console-notes-app__md-list { margin: 0 0 0.7rem; padding-left: 1.3rem; }
+.console-notes-app__md-list li { margin-bottom: 0.2rem; }
+/* Code keeps its own wrapping and scrolls rather than reflowing: a wrapped command is a command
+   that cannot be copied and run. */
+.console-notes-app__md-code {
+  margin: 0 0 0.7rem; padding: 0.5rem 0.6rem; overflow-x: auto;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-notes-app__md-code code {
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.78rem;
+  white-space: pre; overflow-wrap: normal;
+}
+.console-notes-app__prose :not(pre) > code {
+  padding: 0.05em 0.3em;
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+.console-notes-app__md-quote {
+  margin: 0 0 0.7rem; padding-left: 0.7rem;
+  border-left: 2px solid var(--pf-t--global--border--color--default);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-notes-app__md-rule {
+  margin: 1rem 0; border: 0;
+  border-top: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-notes-app__prose a { color: var(--console-accent); }
 
 .console-notes-app__facts {
   margin-top: 1rem; padding-top: 0.6rem;
