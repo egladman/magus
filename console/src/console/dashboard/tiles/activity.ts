@@ -13,7 +13,13 @@
 // (future work), which we deliberately do not invent here.
 
 import type { DashboardState, RunningTargetView } from "../state";
-import { inScope, onWorkspaceScope } from "../../../lib/scope";
+import {
+  ALL_WORKSPACES,
+  inScope,
+  onWorkspaceScope,
+  shortName,
+  workspaceScope,
+} from "../../../lib/scope";
 import { fmtArgs, relTime } from "../state";
 import { glossaryLink } from "../../../lib/glossary";
 import { logsLink } from "../../../lib/daemon";
@@ -354,12 +360,25 @@ export function activityTile(): Tile {
   let latest: DashboardState | null = null;
   const repaint = (): void => {
     if (!latest?.status) return;
-    render(
-      latest.status.runningTargets.filter((t) => inScope(t.workspace)),
-      latest.liveHost,
-      latest.logLines,
-      latest.conn.state === "demo",
-    );
+    const all = latest.status.runningTargets;
+    const mine = all.filter((t) => inScope(t.workspace));
+    // "Where is my stuff" is the failure a scope invites, and this is the moment someone asks it: a
+    // scoped tile that is empty while the daemon is busy looks identical to an idle daemon. Saying
+    // how much is running ELSEWHERE turns a dead end into a signpost - it is the sentence AWS's
+    // region picker never says, and the reason people think they have lost data rather than moved.
+    const elsewhere = all.length - mine.length;
+    const scoped = workspaceScope() !== ALL_WORKSPACES;
+    if (mine.length === 0 && scoped && elsewhere > 0) {
+      empty.textContent =
+        "Nothing running in " +
+        shortName(workspaceScope()) +
+        ". " +
+        (elsewhere === 1 ? "1 target is" : elsewhere + " targets are") +
+        " running in other workspaces.";
+    } else {
+      empty.textContent = "Pool is idle. Nothing running right now.";
+    }
+    render(mine, latest.liveHost, latest.logLines, latest.conn.state === "demo");
   };
   const offScope = onWorkspaceScope(repaint);
 

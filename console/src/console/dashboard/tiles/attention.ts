@@ -9,6 +9,7 @@
 // board's headline, not a foldable panel.
 
 import type { DashboardState, StatusView } from "../state";
+import { ALL_WORKSPACES, onWorkspaceScope, workspaceScope } from "../../../lib/scope";
 import { h, helpGlyph, type Tile } from "./card";
 import { logsLink } from "../../../lib/daemon";
 import { showToast } from "../../../lib/refresh-toast";
@@ -86,15 +87,23 @@ export interface Verdict {
 // verdictFor derives the one-line headline + detail from a status frame and its failing count, in
 // priority order: failing targets, then an unhealthy daemon, then all clear. Exported so the
 // Big Picture tile can show the identical verdict at TV scale without re-deriving the rule.
-export function verdictFor(status: StatusView, failing: number): Verdict {
+// `scoped` says the reader has narrowed this tab to one workspace. These counts CANNOT narrow with
+// them - there is one pool behind every workspace on a daemon, and pool.running is its occupancy, not
+// yours. So when a scope is on, the numbers name whose they are. Without that the board says "5
+// targets running" directly above a tile saying nothing is running in your workspace, and the reader
+// has to work out which one is lying. Neither is; they are answering different questions.
+export function verdictFor(status: StatusView, failing: number, scoped = false): Verdict {
   const running = status.pool.running;
+  const whose = scoped ? " on this daemon" : "";
   const down = status.health.cls === "fail";
   const degraded = status.health.cls === "warn";
   if (failing > 0) {
     return {
       state: "attention",
       line: "Attention needed",
-      sub: failing === 1 ? "1 target is failing" : failing + " targets are failing",
+      sub:
+        (failing === 1 ? "1 target is failing" : failing + " targets are failing") +
+        (scoped ? " on this daemon" : ""),
     };
   }
   if (down || degraded) {
@@ -109,9 +118,9 @@ export function verdictFor(status: StatusView, failing: number): Verdict {
     line: "All clear",
     sub:
       running > 0
-        ? running === 1
-          ? "1 target running, nothing failing"
-          : running + " targets running, nothing failing"
+        ? (running === 1 ? "1 target running" : running + " targets running") +
+          whose +
+          ", nothing failing"
         : "Nothing failing, pool is idle",
   };
 }
@@ -344,7 +353,7 @@ export function attentionTile(): Tile {
     runWrap.dataset.n = running > 0 ? "some" : "none";
     queueWrap.dataset.n = queued > 0 ? "some" : "none";
 
-    const v = verdictFor(status, failing);
+    const v = verdictFor(status, failing, workspaceScope() !== ALL_WORKSPACES);
     root.dataset.state = v.state;
     verdict.textContent = v.line;
     detail.textContent = v.sub;
@@ -456,11 +465,22 @@ export function attentionTile(): Tile {
     failList.replaceChildren(...rows);
   }
 
+  // The verdict names whose counts these are, so it has to repaint when the tab's scope changes and
+  // not only when the daemon pushes a frame.
+  let latest: DashboardState | null = null;
+  const repaint = (): void => {
+    if (latest?.status) render(latest.status, latest.liveHost, latest.conn.state === "demo");
+  };
+  const offScope = onWorkspaceScope(repaint);
+
   return {
     el: root,
     update(s: DashboardState) {
-      if (s.status) render(s.status, s.liveHost, s.conn.state === "demo");
+      latest = s;
+      repaint();
     },
-    destroy() {},
+    destroy() {
+      offScope();
+    },
   };
 }
