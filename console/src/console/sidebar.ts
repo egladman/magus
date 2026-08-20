@@ -29,6 +29,7 @@ import { tabHostsSurface, type Workspace } from "./tabs";
 import { bind, scope, type Scope, type Signal } from "./view";
 import { surfaceIconSvg, type Launchable } from "./home";
 import { openSurfaceWindow } from "../lib/appwindow";
+import { dispatchCommand } from "./commands";
 import type { PulseView } from "./pulse";
 import { badgeLabel, type Badge } from "./badges";
 
@@ -99,6 +100,29 @@ export function sidebarItems(
     open: ws.tabs.some((t) => tabHostsSurface(t, s.pageId)),
     current: focusedPageId === s.pageId,
   }));
+}
+
+// railAction builds a rail row that RUNS something rather than opening a surface. Same markup as a
+// surface row, so the two read and behave identically; it simply carries no data-rail-surface hook,
+// which is what keeps it out of the current/open bookkeeping that only surfaces have.
+function railAction(label: string, iconSvg: string, run: () => void): HTMLLIElement {
+  const item = document.createElement("li");
+  item.className = "pf-v6-c-nav__item";
+  const link = document.createElement("button");
+  link.type = "button";
+  link.className = "pf-v6-c-nav__link";
+  link.setAttribute("aria-label", label);
+  link.title = label;
+  const icon = document.createElement("span");
+  icon.className = "pf-v6-c-nav__link-icon";
+  icon.innerHTML = iconSvg;
+  const text = document.createElement("span");
+  text.className = "pf-v6-c-nav__link-text";
+  text.textContent = label;
+  link.append(icon, text);
+  link.addEventListener("click", run);
+  item.append(link);
+  return item;
 }
 
 // The chevron points the way the rail will MOVE, the convention every dock and drawer uses: right to
@@ -301,6 +325,19 @@ export function createSidebar(
   toggleItem.append(toggle);
   toggle.addEventListener("click", () => expanded.set(!expanded.get()));
 
+  // The Command Palette leads the utility group. It is an ACTION rather than a destination, which by
+  // the strict reading belongs in a toolbar - but it is the "go anywhere" control, and it earns its
+  // place beside the navigation it substitutes for when you would rather type than point. Routed
+  // through the registered command (the same seam the Applications menu uses) rather than a threaded
+  // callback, so the rail cannot become a second way of opening the palette that drifts from the first.
+  const paletteItem = railAction(
+    "Command Palette",
+    '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.7" ' +
+      'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+      '<rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 10l3 3-3 3M13 16h4"/></svg>',
+    () => dispatchCommand("console.actionBar.open"),
+  );
+  utilityList.prepend(paletteItem);
   utilityList.append(toggleItem);
   host.replaceChildren(list, pulseEl, utilityList);
 

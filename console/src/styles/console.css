@@ -896,6 +896,10 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      own activity-bar guidance names outright: "Don't duplicate an existing icon."
      Below this width the rail is gone and the gear is the only way in, so it comes back. */
   #settings-btn { display: none; }
+  /* The Command Palette moves into the rail's utility group at this width, above Shortcuts, so the
+     three things you reach for by name sit together. Below it the rail is gone and the title bar is
+     the only home it has. */
+  #console-commandbar-btn { display: none; }
 }
 /* min-width:0 lets the drawer content shrink so the inline Reference panel fits: on desktop the
    content insets by the panel's 22rem, and on a narrow/mobile screen it shrinks to zero so the panel
