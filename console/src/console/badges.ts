@@ -8,7 +8,7 @@
 //
 // Same contract as pulse.ts, for the same reasons: best-effort, hidden rather than zeroed when there
 // is no answer, and latched off per host once the daemon says it does not serve the route.
-import { authHeaders } from "../lib/daemon";
+import { authHeaders, validateLoopbackHost } from "../lib/daemon";
 
 // Hosts whose daemon has no diff route. A plain fetch 404 is NOT a ConnectError, so daemon.ts's
 // isCapabilityDenied cannot classify it - the status code is the only signal, and it has to be read
@@ -54,14 +54,36 @@ export async function fetchDiffCount(
 
 // Thrown when the daemon answers "no such route", so fetchDiffCount can tell a permanent absence from
 // a passing outage without the transport leaking into it.
-export class RoutelessError extends Error {}
+export class RoutelessError extends Error {
+  // Without this every stack trace and console line reads "Error", which is the one thing the class
+  // exists to distinguish.
+  override name = "RoutelessError";
+}
+
+// How long to wait before giving up on one read. Matches lib/daemon.ts's readiness probe, which rides
+// the same interval: without it a hung connection leaves a request pending per tick, unbounded.
+const TIMEOUT_MS = 3000;
 
 async function getDiffCount(host: string): Promise<number | null> {
-  const res = await fetch(`http://${host}/api/v1/diff/session`, { headers: authHeaders() });
+  // Defense in depth, mirroring lib/daemon.ts's fetchReadiness: the caller passes an already-resolved
+  // host, but re-verify it is literal loopback OR the page's OWN origin before attaching the bearer
+  // token, so a future caller that ever passes a raw string cannot send the token to a third party.
+  // The LAN-share host is same-origin, so it passes here where validateLoopbackHost alone would not.
+  const safe =
+    validateLoopbackHost(host) ??
+    (typeof location !== "undefined" && host === location.host ? host : null);
+  if (!safe) return null;
+  const res = await fetch(`http://${safe}/api/v1/diff/session`, {
+    headers: authHeaders(),
+    signal: AbortSignal.timeout(TIMEOUT_MS),
+  });
   if (res.status === 404 || res.status === 501) throw new RoutelessError(String(res.status));
   if (!res.ok) throw new Error(String(res.status));
-  const session = (await res.json()) as { diff?: { files?: readonly unknown[] } };
-  return session.diff?.files?.length ?? null;
+  const session: unknown = await res.json();
+  const files = (session as { diff?: { files?: unknown } })?.diff?.files;
+  // A shape change upstream must read as "no answer" rather than as a count: the alternative is a
+  // badge asserting a number nobody measured.
+  return Array.isArray(files) ? files.length : null;
 }
 
 // resetRoutelessHosts drops the latch. Exported for the tests, which would otherwise leak one case's
