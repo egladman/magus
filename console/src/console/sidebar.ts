@@ -147,16 +147,21 @@ function railLink(label: string, iconSvg: string, href: string): HTMLLIElement {
   return item;
 }
 
-// The chevron points the way the rail will MOVE, the convention every dock and drawer uses: right to
-// grow, left to shrink back to icons.
-function chevron(expanded: boolean): string {
-  const d = expanded ? "M15 6l-6 6 6 6" : "M9 6l6 6-6 6";
+// A PANEL, not a chevron. A chevron is a direction - next, back, more - and every other one in this
+// console means exactly that, so on the rail's foot it read as navigation rather than as a control
+// over the rail itself. This is the glyph editors settled on for the same job: the frame is the
+// window, the filled column is the rail, and which side is filled says which state pressing it
+// produces. Same shape in both states, so the target does not appear to change identity mid-toggle.
+function panelToggle(expanded: boolean): string {
   return (
-    '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" ' +
+    '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" ' +
     'stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-    '<path d="' +
-    d +
-    '"/></svg>'
+    '<rect x="3" y="4" width="18" height="16" rx="2"/>' +
+    '<line x1="9" y1="4" x2="9" y2="20"/>' +
+    (expanded
+      ? '<rect x="3" y="4" width="6" height="16" rx="2" fill="currentColor" stroke="none"/>'
+      : "") +
+    "</svg>"
   );
 }
 
@@ -438,7 +443,7 @@ export function createSidebar(
   sc.add(
     bind(expanded, (on) => {
       host.toggleAttribute("data-expanded", on);
-      toggleIcon.innerHTML = chevron(on);
+      toggleIcon.innerHTML = panelToggle(on);
       const label = on ? "Collapse the navigation rail" : "Expand the navigation rail";
       toggleText.textContent = on ? "Collapse" : "Expand";
       toggle.setAttribute("aria-label", label);
