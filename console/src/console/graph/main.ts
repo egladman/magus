@@ -848,6 +848,10 @@ function switchLayout(mode: LayoutMode) {
           " targets (max parallelism)",
       );
     }
+    // Frame the new arrangement. Here and not in applyLayeredMode/applyWavesMode, which
+    // liveApplyGraphUpdate re-runs on every SSE refresh - re-framing there would yank the
+    // camera out from under someone reading.
+    if (ok) fitView(matchSet);
   } else if (mode === "radial") {
     applyRadialMode();
   } else {
@@ -1652,18 +1656,33 @@ function stageInsets(): Insets {
 // a camera that keeps moving while someone is reading is worse than a frame that came out loose.
 let cameraOwnedByOperator = false;
 
-// Frames at which the load-time reveal re-checks the framing. A cold force layout keeps
-// spreading for seconds, so a single early fit frames a cloud that then grows straight back out
-// of view - which is how a 2373-node graph came to land cropped to a corner. The first beat is
-// quick feedback, the last one catches the settled extent.
+// Frames at which the load-time reveal re-checks the framing of a FORCE layout. A cold force
+// layout keeps spreading for seconds, so a single early fit frames a cloud that then grows
+// straight back out of view - which is how a 2373-node graph came to land cropped to a corner.
+// The first beat is quick feedback, the last one catches the settled extent. A DAG layout needs
+// none of this: layoutLayered places every node in one pass, so its extent is final at once.
 const REVEAL_BEATS_MS = [700, 1800, 3200];
 
-// revealWholeGraph frames the whole graph as the cold force layout spreads, so it lands centered
-// instead of cropped. Force mode only: the DAG layouts frame themselves in applyLayeredMode,
-// radial in applyRadialMode, and a projection is already its own subset.
+// revealWholeGraph frames the graph on load so it lands centered instead of cropped. Radial
+// frames itself in applyRadialMode, and a projection is already its own subset.
 function revealWholeGraph() {
-  if (!projectionUnfolded || isDagMode() || !graph?.nodes.length) return;
+  if (!projectionUnfolded || !graph?.nodes.length) return;
+  // Only view/q/node name a SUBSET whose own framing must win. #data= and #src= say where the
+  // graph came from, not what to look at, so treating them as directives left every
+  // `magus graph open` link - and the whole targets flavor, which arrives that way - opening on
+  // an unframed corner of its own layout.
+  const p = hashParams();
+  if (p.view || p.q || p.node) return;
   cameraOwnedByOperator = false;
+  if (isDagMode()) {
+    // The layout is final in one pass, but at boot the console mounts this surface into a host
+    // that has not laid out yet, so the canvas can still measure zero - and a fit against a
+    // zero-width viewport clamps to the minimum scale and parks the graph in the corner.
+    void waitForCanvasWidth().then(() => {
+      if (!cameraOwnedByOperator && isDagMode()) fitView(matchSet);
+    });
+    return;
+  }
   for (const at of REVEAL_BEATS_MS) {
     setTimeout(() => {
       // Re-check the mode too: a beat can land after the operator switched layout or ran a view.
@@ -1675,7 +1694,9 @@ function revealWholeGraph() {
 
 function fitView(ids: Set<string> | null) {
   const pts = graph.nodes.filter((n) => n.x != null && (!ids || ids.has(n.id)));
-  if (!pts.length || !zoomBehavior) return;
+  // No zoom behavior means setupZoomDrag has not run; no width means the canvas has not been
+  // laid out. Framing against either writes a transform that has to be undone by hand.
+  if (!pts.length || !zoomBehavior || canvas.clientWidth <= 0) return;
   let minX = Infinity,
     minY = Infinity,
     maxX = -Infinity,
@@ -4142,7 +4163,6 @@ function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void
   applyLayoutAndSimulation(initialParams.layout, flavor);
   parkHiddenNodes();
 
-  if (!hasFragmentDirective) revealWholeGraph(); // a deep link frames its own subset
   syncGraphKindToggle();
 }
 
@@ -4213,6 +4233,9 @@ export async function activate() {
   // demo button re-run just the render (renderLoadedGraph) in place, without re-wiring listeners.
   renderLoadedGraph(loaded);
   finishInteractiveSetup();
+  // AFTER the wiring: fitView needs the zoom behavior setupZoomDrag installs and returns
+  // silently without it, so a reveal from inside renderLoadedGraph never framed anything.
+  revealWholeGraph();
 
   // Empty state: nothing loaded (no #data/#src, no live attach), so show the prompt instead. The pipeline ran on
   // an empty graph, so interactions are wired; a dropped file arrives via replaceGraph and dismisses
