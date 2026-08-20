@@ -32,6 +32,16 @@ export interface WorkspacePicker {
 }
 
 export function initWorkspacePicker(host: HTMLElement): WorkspacePicker {
+  // A VISIBLE caption, not just the accessible name. The button's text is the workspace ITSELF
+  // ("acme", "All workspaces"), which in a row of icon buttons says nothing about what picking one
+  // does - it reads as a title, a filter, or a pair of tabs. The accessible name already carried
+  // "Workspace:", so the sighted reader was the only one being asked to guess. Named via
+  // aria-labelledby so the control has ONE name rather than a visible one and a different spoken one.
+  const caption = document.createElement("span");
+  caption.className = "console-shell-scope__caption";
+  caption.id = "console-scope-caption";
+  caption.textContent = "Workspace";
+
   const btn = document.createElement("button");
   btn.id = "console-scope-btn";
   btn.type = "button";
@@ -68,17 +78,16 @@ export function initWorkspacePicker(host: HTMLElement): WorkspacePicker {
     // be an always-present reminder of a decision with one possible answer.
     const relevant = roots.length > 1;
     btn.hidden = !relevant;
+    caption.hidden = !relevant;
     if (!relevant) {
       setOpen(false);
       return;
     }
     label.textContent = shortName(scope);
     const name = scope === ALL_WORKSPACES ? "all workspaces" : shortName(scope);
-    btn.title = "Workspace: " + name;
-    btn.setAttribute(
-      "aria-label",
-      "Workspace: " + name + ". Change which workspace this tab shows.",
-    );
+    btn.title = "Workspace: " + name + ". Change which workspace this tab shows.";
+    // The caption supplies the "Workspace" half of the name; the button's own text supplies the value.
+    btn.setAttribute("aria-labelledby", "console-scope-caption " + btn.id);
   };
 
   const rebuild = (): void => {
@@ -154,6 +163,7 @@ export function initWorkspacePicker(host: HTMLElement): WorkspacePicker {
 
   host.prepend(menu);
   host.prepend(btn);
+  host.prepend(caption);
   // The control has to follow the scope, not just set it: the scope can change from anywhere in the
   // tab, and without this the button kept announcing the workspace you left.
   const unsubscribe = onWorkspaceScope(paint);
@@ -171,6 +181,7 @@ export function initWorkspacePicker(host: HTMLElement): WorkspacePicker {
     destroy() {
       listeners.abort();
       unsubscribe();
+      caption.remove();
       btn.remove();
       menu.remove();
     },

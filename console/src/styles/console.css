@@ -1022,6 +1022,18 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   white-space: nowrap;
 }
 #console-scope-btn[hidden] { display: none; }
+/* Names the control for the sighted reader; the button beside it carries the value. Subtle and small
+   so it reads as a field label rather than as another control competing with the chip. */
+.console-shell-scope__caption {
+  font-size: 0.72rem; font-weight: 600; color: var(--pf-t--global--text--color--subtle);
+  margin-inline-end: 0.35rem; white-space: nowrap;
+}
+.console-shell-scope__caption[hidden] { display: none; }
+/* Below the rail's breakpoint the title bar is fighting for room and the chip's own text still names
+   a workspace; the caption is the part that can go. */
+@media (width < 48rem) {
+  .console-shell-scope__caption { display: none; }
+}
 .console-shell-scope__menu {
   position: absolute; inset-block-start: var(--console-titlebar-h); inset-inline-end: 0.5rem;
   z-index: var(--pf-t--global--z-index--400);

@@ -37,14 +37,32 @@ describe("the workspace scope control", () => {
   // With one workspace loaded, scoped and unscoped show the same thing - the control would be a
   // permanent reminder of a decision with one possible answer.
   test("the control stays hidden until scope is a real question", () => {
-    const { picker, btn } = mount();
+    const { host, picker, btn } = mount();
+    const caption = host.querySelector<HTMLElement>(".console-shell-scope__caption");
+    assert.ok(caption);
     assert.equal(btn.hidden, true, "nothing published yet");
+    assert.equal(caption.hidden, true, "the caption must not outlive the control it names");
 
     picker.setWorkspaces([ACME]);
     assert.equal(btn.hidden, true, "one workspace is one answer");
+    assert.equal(caption.hidden, true);
 
     picker.setWorkspaces(BOTH);
     assert.equal(btn.hidden, false);
+    assert.equal(caption.hidden, false);
+  });
+
+  // The button's own text is the VALUE ("acme"), which in a row of icon buttons could be a title, a
+  // filter, or a pair of tabs. The caption is what tells a sighted reader what picking one does.
+  test("a visible caption names the control, and the control is named by it", () => {
+    const { host, picker, btn } = mount();
+    picker.setWorkspaces(BOTH);
+    const caption = host.querySelector<HTMLElement>(".console-shell-scope__caption");
+    assert.ok(caption);
+    assert.equal(caption.textContent, "Workspace");
+    // One name, not a visible one and a different spoken one.
+    assert.equal(btn.getAttribute("aria-labelledby"), "console-scope-caption " + btn.id);
+    assert.equal(btn.getAttribute("aria-label"), null, "aria-label would override the pair");
   });
 
   test("the menu offers the daemon-wide view first, then each workspace", () => {
@@ -103,6 +121,11 @@ describe("the workspace scope control", () => {
 
     picker.destroy();
     assert.equal(host.querySelector("#console-scope-btn"), null, "the control should be gone");
+    assert.equal(
+      host.querySelector(".console-shell-scope__caption"),
+      null,
+      "a caption naming a control that no longer exists is worse than none",
+    );
 
     // The subscription is a window listener, so it outlives the element unless destroy drops it.
     setWorkspaceScope(MAGUS);
