@@ -60,7 +60,21 @@ test("the affected chip ships hidden until a live affected set exists", () => {
   // No status producer populates StatusOutput.Affected (see main.ts fetchLiveStatus), so the
   // chip hides on the same [data-conditional] footing as the critical chip. Shipping it
   // visible-and-disabled instead would be a control the user can see and never reach.
-  assert.ok(chip.hasAttribute("hidden"), "affected chip must start hidden");
   assert.ok(chip.hasAttribute("data-conditional"), "affected chip must be conditional");
   assert.ok(!chip.hasAttribute("disabled"), "hide the chip rather than shipping it disabled");
+});
+
+test("data-conditional is the only mechanism for data-backed visibility", () => {
+  // The marker used to mean two things: a CSS rule scoped to .console-graph-views__chip, plus a
+  // separately-set `hidden` for anything else (a PF button outspecifies a bare attribute
+  // selector). One unscoped !important rule now covers every element, so nothing should still
+  // be carrying both.
+  const host = parse();
+  for (const el of host.querySelectorAll<HTMLElement>("[data-conditional]")) {
+    assert.ok(
+      !el.hasAttribute("hidden"),
+      "[data-conditional] already hides this; the extra hidden is the old second mechanism: " +
+        el.outerHTML.slice(0, 80),
+    );
+  }
 });

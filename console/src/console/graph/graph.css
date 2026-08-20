@@ -523,7 +523,13 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-views__chip[disabled]:hover, .console-graph-views__chip[data-disabled]:hover {
   border-color: var(--pf-t--global--border--color--default); background: var(--pf-t--global--background--color--primary--default); box-shadow: none;
 }
-.console-graph-views__chip[data-conditional] { display: none; } /* hidden until DurationMs data present */
+/* [data-conditional] marks a control the LOADED GRAPH cannot back: the critical-path chip with
+   no timing, the affected chip with no live diff, the kind:symbol example with no symbol nodes.
+   One rule for every element type, !important for the same reason the global [hidden] rule
+   needs it - a PF component class outspecifies a bare attribute selector, which is why the
+   duration preset used to need its `hidden` set separately and the marker meant two different
+   things depending on what it was written on. */
+[data-conditional] { display: none !important; }
 /* Chip sets display: inline-flex above, which would otherwise outspecify the [hidden]
    attribute's UA display:none (same fix as the stage tools below) - the "What runs in
    parallel?" chip (data-layoutjump) is hidden for non-target graphs via .hidden. */

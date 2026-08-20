@@ -1818,15 +1818,13 @@ function syncKindList(counts: Map<string, number>) {
       slot.textContent = kinds.join(", ");
     }
   }
+  const noSymbols = !counts.has("symbol");
   for (const ex of document.querySelectorAll<HTMLElement>('[data-q="kind:symbol"]')) {
     const row = ex.closest("dt");
-    const hide = !counts.has("symbol");
-    ex.hidden = hide;
-    if (row) {
-      row.hidden = hide;
-      const dd = row.nextElementSibling;
-      if (dd instanceof HTMLElement) dd.hidden = hide;
-    }
+    ex.toggleAttribute("data-conditional", noSymbols);
+    row?.toggleAttribute("data-conditional", noSymbols);
+    const dd = row?.nextElementSibling;
+    if (dd instanceof HTMLElement) dd.toggleAttribute("data-conditional", noSymbols);
   }
 }
 
@@ -1838,15 +1836,10 @@ function syncConditionalViews() {
   document.querySelectorAll<HTMLElement>("[data-view='critical']").forEach((btn) => {
     btn.toggleAttribute("data-conditional", !graphHasDurations);
   });
-  // The "Color by duration" preset shares the same conditional as the
-  // critical-path view: both need timing data to mean anything. It is a PF
-  // button, not a `.console-graph-views__chip`, so graph.css has no
-  // `[data-conditional]` display rule for it - set `hidden` directly (the
-  // global `[hidden] { display: none !important; }` override covers it),
-  // keeping `data-conditional` too as the same semantic marker the chip uses.
+  // The "Color by duration" preset shares the same conditional as the critical-path view: both
+  // need timing data to mean anything.
   document.querySelectorAll<HTMLElement>("[data-preset='duration']").forEach((btn) => {
     btn.toggleAttribute("data-conditional", !graphHasDurations);
-    btn.hidden = !graphHasDurations;
   });
   // The "What runs in parallel?" chip only makes sense for target graphs.
   document.querySelectorAll<HTMLElement>("[data-layoutjump]").forEach((btn) => {
@@ -1865,7 +1858,6 @@ function syncAffectedView() {
   const has = !!window._liveAffectedIds?.size;
   document.querySelectorAll<HTMLElement>("[data-view='affected']").forEach((btn) => {
     btn.toggleAttribute("data-conditional", !has);
-    btn.hidden = !has;
   });
   if (!has && activeView === "affected") clearView();
 }

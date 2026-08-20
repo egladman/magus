@@ -46,8 +46,8 @@
         <dd>Quote a value with spaces to keep it one term: <code>"spell op"</code>.</dd>
         <dt><button type="button" class="console-graph-help__example" data-q="kind:target -id:generate">Combine terms</button></dt>
         <dd>All terms must match: <code>kind:target -id:generate</code> lists targets whose id lacks "generate".</dd>
-        <dt hidden><button type="button" class="console-graph-help__example" data-q="kind:symbol" hidden>Show code symbols</button></dt>
-        <dd hidden><code>kind:symbol</code>: SCIP code-symbol nodes (from <code>magus refs</code>). Shown only when the loaded graph carries them - the live daemon graph excludes the @symbols shards.</dd>
+        <dt data-conditional><button type="button" class="console-graph-help__example" data-q="kind:symbol" data-conditional>Show code symbols</button></dt>
+        <dd data-conditional><code>kind:symbol</code>: SCIP code-symbol nodes (from <code>magus refs</code>). Shown only when the loaded graph carries them - the live daemon graph excludes the @symbols shards.</dd>
       </dl>
       <p>A query dims non-matching nodes and hides edges except those between two matches, so the matching subgraph stands out. The same string works as <code>magus query "&lt;terms&gt;"</code> on the command line, or as a <code>#q=</code> deep link on this page.</p>
       <p><b>Local graph:</b> double-click any node (on the canvas or a pill) to isolate its neighborhood; <kbd>[</kbd>/<kbd>]</kbd> change depth, <kbd>Esc</kbd> clears. <b>Fit</b> frames everything (or the current matches).</p>
@@ -124,7 +124,7 @@
             <button type="button" class="console-graph-views__chip" data-radialpick title="Pick a target to see its neighborhood as rings by distance.">See a target's neighbors</button>
             <button type="button" class="console-graph-views__chip" data-view="hubs" title="The nodes the most other nodes depend on, ranked by how many. Containment does not count, so a project never outranks the code.">Show the most depended-on nodes</button>
             <button type="button" class="console-graph-views__chip" data-view="orphans" title="Nodes with no dependency in either direction, among the kinds that carry dependencies at all. Potentially dead or unconfigured.">Show what depends on nothing</button>
-            <button type="button" class="console-graph-views__chip" data-view="affected" data-conditional hidden title="What your working-tree diff would rebuild. Appears in live mode once the daemon reports an affected set.">See what my last change affects</button>
+            <button type="button" class="console-graph-views__chip" data-view="affected" data-conditional title="What your working-tree diff would rebuild. Appears in live mode once the daemon reports an affected set.">See what my last change affects</button>
             <button type="button" id="clear-view-btn" class="console-graph-views__clear" hidden>Clear</button>
           </div>
         </div>
@@ -147,7 +147,7 @@
               <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="spell" title="Color each spell a distinct hue: shows toolchain as architectural layer"><span class="pf-v6-c-button__text">Color by spell</span></button>
               <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="project" title="Color each project a distinct hue: shows project boundaries"><span class="pf-v6-c-button__text">Color by project</span></button>
               <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="depth" title="Color by DAG depth (longest-path layer index from the layered layout): shows architectural layers"><span class="pf-v6-c-button__text">Color by DAG depth</span></button>
-              <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="duration" data-conditional hidden title="Color by run duration: hot is slow. Shown when the graph carries timing (run a build first: magus graph deps -o json)."><span class="pf-v6-c-button__text">Color by duration</span></button>
+              <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="duration" data-conditional title="Color by run duration: hot is slow. Shown when the graph carries timing (run a build first: magus graph deps -o json)."><span class="pf-v6-c-button__text">Color by duration</span></button>
             </div>
           </div>
         </details>
