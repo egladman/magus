@@ -730,11 +730,14 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    it is never the accessible name (that is the button's aria-label), so clipping it costs nothing. */
 #console-sidebar .pf-v6-c-nav__link-text { white-space: nowrap; opacity: 1; transition: opacity 0.1s ease; }
 #console-sidebar:not([data-expanded]) .pf-v6-c-nav__link-text { opacity: 0; }
-/* A surface with a tab open but not in view: a dot on the rail edge, the dock idiom for "running".
-   Distinct from pf-m-current, which PF already paints for the surface the active tab is showing. */
-#console-sidebar .pf-v6-c-nav__link[data-tab-open]::before {
-  content: ""; position: absolute; inset-inline-start: 0; inline-size: 2px; block-size: 1rem;
-  background: var(--console-accent); border-radius: 0 2px 2px 0;
+/* A surface open in a BACKGROUND tab. Only there: pf-m-current already carries the same fill the tab
+   bar's active item uses, and current implies open - painting both on one row stacked two markers for
+   one fact, which is what made the rail read as busier than the rest of the app.
+   Inset from the rail's leading edge rather than flush to it: the rail now runs to the window edge, and
+   a 2px accent sliver at x=0 reads as something bleeding off-screen rather than as a deliberate mark. */
+#console-sidebar .pf-v6-c-nav__link[data-tab-open]:not(.pf-m-current)::before {
+  content: ""; position: absolute; inset-inline-start: 0.25rem; inline-size: 2px; block-size: 1rem;
+  background: var(--console-accent); border-radius: 2px;
 }
 /* The live pool reading at the rail's foot. It borrows the nav link's grid so its dot sits on the same
    vertical line as every app icon above it - a second alignment here would read as a stray element
