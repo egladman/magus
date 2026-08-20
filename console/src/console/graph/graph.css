@@ -51,9 +51,11 @@
   --gk-op: var(--console-node-op); --gk-tool: var(--console-node-tool);
   --gk-function: var(--console-node-function); --gk-method: var(--console-node-method);
   --gk-import: var(--console-node-import); --gk-package: var(--console-node-package);
+  --gk-symbol: var(--console-node-symbol);
   --gk-doc: var(--console-node-doc); --gk-rationale: var(--console-node-rationale);
+  --gk-note: var(--console-node-note);
   --gk-diagnostic: var(--console-node-diagnostic); --gk-charm: var(--console-node-charm);
-  --gk-symbol: var(--console-node-symbol); --gk-note: var(--console-node-note);
+  --gk-owner: var(--console-node-owner); --gk-author: var(--console-node-author);
 }
 
 .console-graph-pagetitle { margin-bottom: 0.6rem; }
@@ -91,7 +93,12 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
      spilled over the canvas and the legend button, overlapping the graph. */
   overflow-y: auto; overflow-x: hidden;
   border-right: 1px solid var(--pf-t--global--border--color--default);
-  background: var(--pf-t--global--background--color--secondary--default);
+  /* PRIMARY, not secondary. Secondary resolves to the same value the page body uses, so the
+     sidebar was not a panel sitting on the page - it WAS the page, and the app's white ended at
+     the canvas. Every white chip inside then read as a card floating on nothing. The border-right
+     and each section's border-bottom are what separate this column from the stage; the fill does
+     not have to, and when it tries it only says "outside the app". */
+  background: var(--pf-t--global--background--color--primary--default);
 }
 /* A quiet filter, not a headline search: the site search field's look (left
    magnifier, angular radius) but small and muted - the canvas is the main event. */
@@ -318,12 +325,14 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
 .console-graph-kinddot[data-kind="method"] { background: var(--gk-method); }
 .console-graph-kinddot[data-kind="import"] { background: var(--gk-import); }
 .console-graph-kinddot[data-kind="package"] { background: var(--gk-package); }
+.console-graph-kinddot[data-kind="symbol"] { background: var(--gk-symbol); }
 .console-graph-kinddot[data-kind="doc"] { background: var(--gk-doc); }
 .console-graph-kinddot[data-kind="rationale"] { background: var(--gk-rationale); }
+.console-graph-kinddot[data-kind="note"] { background: var(--gk-note); }
 .console-graph-kinddot[data-kind="diagnostic"] { background: var(--gk-diagnostic); }
 .console-graph-kinddot[data-kind="charm"] { background: var(--gk-charm); }
-.console-graph-kinddot[data-kind="symbol"] { background: var(--gk-symbol); }
-.console-graph-kinddot[data-kind="note"] { background: var(--gk-note); }
+.console-graph-kinddot[data-kind="owner"] { background: var(--gk-owner); }
+.console-graph-kinddot[data-kind="author"] { background: var(--gk-author); }
 
 /* Explain card: a third column on wide screens; plain HTML dl content. */
 #explain-card {
@@ -628,6 +637,22 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-sidebar__modes {
   padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
+/* Colour and Graph side by side. Both are short toggle groups; stacked, they spent two rows of a
+   20rem column on controls that together do not fill one, and the column is the scarce axis here
+   (Arrangement stays full-width - it is the one group that genuinely needs the room). */
+.console-graph-sidebar__viewpair {
+  display: grid; grid-template-columns: auto auto; justify-content: start;
+  column-gap: 0.9rem; row-gap: 0.2rem; margin-top: 0.55rem;
+}
+.console-graph-sidebar__viewcell { min-width: 0; }
+/* Why a control cannot be used, stated under it. Subtle, because it is a fact about the session
+   rather than a warning - it must not read as "something is wrong", so it takes the subtle text
+   colour and not a status one. */
+.console-graph-display__unavailable {
+  margin: 0.2rem 0 0; font-size: 0.68rem; font-style: italic;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-graph-sidebar__viewcell .console-graph-display__sublabel { margin-top: 0; }
 .console-graph-sidebar__modeslabel {
   margin: 0 0 0.35rem; padding: 0;
   font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
@@ -705,17 +730,29 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
   width: 100%; text-align: left; white-space: normal; font-size: 0.7rem; line-height: 1.35;
 }
 
-/* Phase 5: color preset buttons - PF secondary small Buttons. The pressed/active coding (set by
-   JS via data-active) fills the button with the accent by overriding PF's own button color vars,
-   so the active state reads at a glance and rides on top of PF's secondary styling in both themes. */
-.console-graph-colorgroup__presetrow { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.3rem; }
+/* Colour presets: a PF ToggleGroup, the SAME component as Arrangement and Graph above and below
+   it. They were loose pf-m-small Buttons, which made one of three sibling control groups a
+   different height in a column where the other two agreed - and the odd height read as the odd
+   control, which it is not: all three are one setting with several values.
+   The active state rides data-active (set by JS, not PF's pf-m-selected, because a preset also
+   CLEARS on a second click) so it fills with the accent through the toggle-group's own vars. */
+/* No flex-wrap: a wrapped toggle group is not a toggle group, it is two stubs with the joined
+   segment look broken across a line break and the end caps landing mid-row. */
+.console-graph-colorgroup__presetrow { margin-top: 0.1rem; margin-bottom: 0.3rem; flex-wrap: nowrap; }
+/* PF rounds the group's ends off :first-child / :last-child. Duration is hidden unless the graph
+   carries timing, and a hidden cell is still the last child - so the end cap lands on a cell
+   nobody can see and the row reads as cut off. Give the last VISIBLE item the cap instead. */
+.console-graph-colorgroup__presetrow
+  .pf-v6-c-toggle-group__item:not([data-conditional]):has(+ [data-conditional])
+  .pf-v6-c-toggle-group__button {
+  border-start-end-radius: var(--pf-t--global--border--radius--control--default);
+  border-end-end-radius: var(--pf-t--global--border--radius--control--default);
+}
 .console-graph-colorgroup__preset[data-active] {
-  --pf-v6-c-button--BackgroundColor: var(--console-accent);
-  --pf-v6-c-button--Color: var(--pf-t--global--text--color--on-brand--default);
-  --pf-v6-c-button--BorderColor: var(--console-accent);
-  --pf-v6-c-button--hover--BackgroundColor: var(--console-accent);
-  --pf-v6-c-button--hover--Color: var(--pf-t--global--text--color--on-brand--default);
-  --pf-v6-c-button--hover--BorderColor: var(--console-accent);
+  --pf-v6-c-toggle-group__button--m-selected--BackgroundColor: var(--console-accent);
+  --pf-v6-c-toggle-group__button--m-selected--Color: var(--pf-t--global--text--color--on-brand--default);
+  background-color: var(--console-accent);
+  color: var(--pf-t--global--text--color--on-brand--default);
 }
 .console-graph-display__controlhint { margin: -0.15rem 0 0.3rem; font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
 

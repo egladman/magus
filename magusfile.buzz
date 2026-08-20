@@ -1783,6 +1783,13 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // profiles are undeclared residue, restored by nothing, and the badge target
     // finds no file to measure whenever the suite replays.
     ctx.writesFiles("coverage.out", "coverage.hand.out");
+    // types/kindpalette_drift_test.go reads CONSOLE sources to lock the node-kind palette to
+    // the Kind* constants. None of those paths is a declared source of this project, so
+    // without this the suite replays from cache on every console-only edit and the gate stays
+    // green while the thing it measures drifts underneath it. Measured: deleting a palette
+    // entry from tokens.css left `magus run test .` passing.
+    ctx.readsFiles("console/src/styles/tokens.css", "console/src/console/graph/graph.css",
+                   "console/src/console/graph/main.ts");
     ctx.needs(format, buzz_test);
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
     // Measure hand-written code only. Generated files (protobuf accessors, mocks,

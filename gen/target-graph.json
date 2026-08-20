@@ -828,6 +828,20 @@
               "target": "buzz-test"
             }
           ],
+          "reads_files": [
+            {
+              "project": ".",
+              "glob": "console/src/styles/tokens.css"
+            },
+            {
+              "project": ".",
+              "glob": "console/src/console/graph/graph.css"
+            },
+            {
+              "project": ".",
+              "glob": "console/src/console/graph/main.ts"
+            }
+          ],
           "reads_secrets": false,
           "writes_files": [
             {

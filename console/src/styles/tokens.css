@@ -213,14 +213,13 @@
   /* --- 6. Graph node-kind palette (categorical) ----------------------------------------
      The graph explorer (console/graph) colors every node by its kind. PatternFly ships 9
      "nonstatus" (data-viz) color FAMILIES - teal, blue, yellow, orange, green, orangered,
-     purple, red, gray - and the graph emits 18 kinds, so each family carries exactly two at
-     two shades: --300 is the vivid one (saturated in light, bright in dark), --200 the
-     sibling. Every pair is SEMANTICALLY ADJACENT, so the one confusion the palette can
-     produce (two kinds on one hue) never crosses a meaningful boundary: workspace units on
-     teal, filesystem on blue, build declarations on yellow, toolchain on orange, code on
-     green, dependencies on orangered, prose on purple, problems on red, and on gray the two
-     kinds that appear only when something is specially loaded (symbol from the @symbols
-     shards, note hand-authored).
+     purple, red, gray - and types/knowledge.go declares 20 kinds, so each family carries two
+     (--300 vivid, --200 the sibling) and two carry a third at --100. Every group is
+     SEMANTICALLY ADJACENT, so the one confusion the palette can produce (two kinds on one hue)
+     never crosses a meaningful boundary: workspace units on teal, filesystem on blue, build
+     declarations on yellow, toolchain on orange, code on green (function/method/symbol),
+     dependencies on orangered, prose on purple (doc/rationale/note), problems on red, people
+     on gray.
      WHICH family a pair lands on is not free, though: two heavy kinds on adjacent hues make
      the whole canvas read as one color. doc is 331 nodes of high degree, so it draws the big
      circles, and next to import on yellow/orange it turned the graph warm end to end. It is on
@@ -229,6 +228,9 @@
      above is load-bearing rather than trivia: this list said 14 while the graph emitted 17,
      and dir/package/tool/note drew as an anonymous grey mass a quarter of the graph wide -
      alongside doc, which was deliberately neutral and so could not be told apart from them.
+     Count against types/knowledge.go's Kind* constants, NOT against a legend: the legend is
+     built from the kinds present in the LOADED graph, so a kind nothing in the demo happens
+     to emit (author, until a live workspace showed two) is invisible until it is not.
      graph/main.ts reads these at paint time as --gk-<kind> (aliased in graph.css); the
      legend/pill swatches read them through the .k-<kind> classes. THIS is the graph's
      silent-regression surface - keep the pairings distinct if you re-map. */
@@ -244,12 +246,14 @@
   --console-node-method: var(--pf-t--global--color--nonstatus--green--200);
   --console-node-import: var(--pf-t--global--color--nonstatus--orangered--300);   /* dependencies    */
   --console-node-package: var(--pf-t--global--color--nonstatus--orangered--200);
+  --console-node-symbol: var(--pf-t--global--color--nonstatus--green--100);
   --console-node-doc: var(--pf-t--global--color--nonstatus--purple--300);         /* prose           */
   --console-node-rationale: var(--pf-t--global--color--nonstatus--purple--200);
+  --console-node-note: var(--pf-t--global--color--nonstatus--purple--100);
   --console-node-diagnostic: var(--pf-t--global--color--nonstatus--red--300);     /* problems        */
   --console-node-charm: var(--pf-t--global--color--nonstatus--red--200);
-  --console-node-symbol: var(--pf-t--global--color--nonstatus--gray--300);        /* specially loaded */
-  --console-node-note: var(--pf-t--global--color--nonstatus--gray--200);
+  --console-node-owner: var(--pf-t--global--color--nonstatus--gray--300);         /* people          */
+  --console-node-author: var(--pf-t--global--color--nonstatus--gray--200);
 }
 
 /* Dark-theme node palette. PatternFly's PLAIN --...--color--nonstatus--* tokens are NOT theme-aware
@@ -296,10 +300,12 @@
   --console-node-method: var(--pf-t--global--dark--color--nonstatus--green--200);
   --console-node-import: var(--pf-t--global--dark--color--nonstatus--orangered--300);
   --console-node-package: var(--pf-t--global--dark--color--nonstatus--orangered--200);
+  --console-node-symbol: var(--pf-t--global--dark--color--nonstatus--green--100);
   --console-node-doc: var(--pf-t--global--dark--color--nonstatus--purple--300);
   --console-node-rationale: var(--pf-t--global--dark--color--nonstatus--purple--200);
+  --console-node-note: var(--pf-t--global--dark--color--nonstatus--purple--100);
   --console-node-diagnostic: var(--pf-t--global--dark--color--nonstatus--red--300);
   --console-node-charm: var(--pf-t--global--dark--color--nonstatus--red--200);
-  --console-node-symbol: var(--pf-t--global--dark--color--nonstatus--gray--300);
-  --console-node-note: var(--pf-t--global--dark--color--nonstatus--gray--200);
+  --console-node-owner: var(--pf-t--global--dark--color--nonstatus--gray--300);
+  --console-node-author: var(--pf-t--global--dark--color--nonstatus--gray--200);
 }

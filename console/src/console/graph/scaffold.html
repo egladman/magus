@@ -131,41 +131,47 @@
              override for the arrangement axis, and main.ts drives selection and each button's
              disabled/title from syncLayoutToggle. -->
         <div class="console-graph-sidebar__modes">
-          <p class="console-graph-sidebar__modeslabel">Arrangement</p>
-          <div class="pf-v6-c-toggle-group console-graph-display__layoutgroup" role="group" aria-label="Layout">
+          <p class="console-graph-sidebar__modeslabel" id="arrangement-label">Arrangement</p>
+          <div class="pf-v6-c-toggle-group console-graph-display__layoutgroup" role="group" aria-labelledby="arrangement-label">
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="force" title="Free-floating physics layout: clusters and highly-connected hubs pop out. Best for exploring the whole graph."><span class="pf-v6-c-toggle-group__text">Force</span></button></div>
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="layered" title="Left-to-right dependency flow: what depends on what, arranged in tiers. Best for reading direction."><span class="pf-v6-c-toggle-group__text">Layered</span></button></div>
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="waves" title="Build order: each column is a set of targets magus can run in parallel. Best for seeing what runs when."><span class="pf-v6-c-toggle-group__text">Waves</span></button></div>
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="radial" title="Rings around one node by distance: its neighborhood at a glance. Pick a node first."><span class="pf-v6-c-toggle-group__text">Radial</span></button></div>
           </div>
-          <p class="console-graph-display__sublabel">Colour</p>
-          <p class="console-graph-display__controlhint">Over the kind palette. Click an active one to clear it.</p>
-          <div class="console-graph-colorgroup__presetrow">
-            <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="project" title="Color each project a distinct hue: shows project boundaries"><span class="pf-v6-c-button__text">By project</span></button>
-            <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="spell" title="Color each spell a distinct hue: shows toolchain as architectural layer"><span class="pf-v6-c-button__text">By spell</span></button>
-            <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="depth" title="Color by DAG depth (longest-path layer index from the layered layout): shows architectural layers"><span class="pf-v6-c-button__text">By DAG depth</span></button>
-            <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="duration" data-conditional title="Color by run duration: hot is slow. Shown when the graph carries timing (run a build first: magus graph deps -o json)."><span class="pf-v6-c-button__text">By duration</span></button>
+          <!-- Colour and Graph pair on one row: each is a short toggle group, and stacked they
+               spent two full rows of a 20rem column on controls that together do not fill one. -->
+          <div class="console-graph-sidebar__viewpair">
+          <div class="console-graph-sidebar__viewcell">
+          <p class="console-graph-display__sublabel" id="colour-label">Colour</p>
+          <div class="pf-v6-c-toggle-group console-graph-colorgroup__presetrow" role="group" aria-labelledby="colour-label">
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="project" title="Give each project its own hue, so project boundaries show on the canvas."><span class="pf-v6-c-toggle-group__text">Project</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="spell" title="Give each spell its own hue, so the toolchain shows as an architectural layer."><span class="pf-v6-c-toggle-group__text">Spell</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="depth" title="Shade by how deep a node sits in the dependency chain: pale depends on nothing, dark depends on the most. Same number the layer: query field matches."><span class="pf-v6-c-toggle-group__text">Depth</span></button></div>
+            <div class="pf-v6-c-toggle-group__item" data-conditional data-preset-item="duration"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="duration" title="Shade by how long a node took to run: hot is slow. Shown once the graph carries timing (run a build first)."><span class="pf-v6-c-toggle-group__text">Duration</span></button></div>
           </div>
-        </div>
-        <!-- SOURCE: which graph is loaded. It sits at the FOOT because it is switchable only
-             against a live daemon that serves both flavors - in a snapshot, a dropped file or the
-             demo both buttons are disabled, which is most sessions, and it was holding the panel's
-             best real estate to offer nothing. Loading a different graph entirely is the stage
-             toolbar's Open file. main.ts drives selection and disabled/title from
-             syncGraphKindToggle/switchGraphKind. -->
-        <div class="console-graph-sidebar__source">
-          <p class="console-graph-sidebar__sourcelabel">Graph</p>
-          <div class="pf-v6-c-toggle-group console-graph-display__kindgroup" role="group" aria-label="Graph">
+          </div>
+          <!-- SOURCE: which graph is loaded. Switchable only against a live daemon that serves
+               both flavors - in a snapshot, a dropped file or the demo both buttons are disabled,
+               which is most sessions, so it shares a row rather than taking one. Loading a
+               different graph entirely is the stage toolbar's Open file. main.ts drives selection
+               and disabled/title from syncGraphKindToggle/switchGraphKind. -->
+          <div class="console-graph-sidebar__viewcell">
+          <p class="console-graph-display__sublabel" id="graphkind-label">Graph</p>
+          <div class="pf-v6-c-toggle-group console-graph-display__kindgroup" role="group" aria-labelledby="graphkind-label">
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="targets" title="The target graph: targets and what they depend on. Switch requires a live workspace (magus graph export --open --follow)."><span class="pf-v6-c-toggle-group__text">Target</span></button></div>
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="knowledge" title="The full code graph: projects, targets, spells, modules, files, docs. Switch requires a live workspace (magus graph export --open --follow)."><span class="pf-v6-c-toggle-group__text">Knowledge</span></button></div>
           </div>
+          <p id="graphkind-note" class="console-graph-display__unavailable" hidden></p>
+          </div>
+          </div>
+          <p class="console-graph-display__controlhint">Colour paints over the kind palette; click an active one to clear it.</p>
         </div>
       </aside>
 
       <div class="console-graph-stage">
         <div id="live-disconnect-banner" class="console-graph-live__banner" hidden role="alert"></div>
         <!-- Stage tools: a RESPONSIVE PatternFly Toolbar overlaid on the canvas, collapsing the SAME
-             way as the log viewer (shared ../toolbar.ts). The Fit / Open file / Copy as Mermaid /
+             way as the log viewer (shared ../toolbar.ts). The Fit / Open file /
              Fullscreen actions sit in a pf-m-toggle-group pf-m-show-on-lg: below lg they fold behind
              the single kebab toggle into the __expandable-content dropdown; at lg+ they sit inline.
              The provenance badges (live/snapshot, usually hidden) stay put. -->
@@ -176,7 +182,7 @@
               <span id="snapshot-badge" class="pf-v6-c-label pf-m-grey pf-m-compact" hidden aria-live="polite"><span class="pf-v6-c-label__content"></span></span>
               <div class="pf-v6-c-toolbar__group pf-m-toggle-group pf-m-show-on-lg" data-overflow-group="graphtools">
                 <div class="pf-v6-c-toolbar__toggle">
-                  <button class="pf-v6-c-button pf-m-plain" type="button" data-overflow-toggle aria-expanded="false" aria-label="Stage tools" title="Fit, open a graph file, copy as Mermaid, fullscreen">
+                  <button class="pf-v6-c-button pf-m-plain" type="button" data-overflow-toggle aria-expanded="false" aria-label="Stage tools" title="Fit, open a graph file, fullscreen">
                     <span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></span>
                   </button>
                 </div>
@@ -185,9 +191,6 @@
                 </div>
                 <div class="pf-v6-c-toolbar__item">
                   <button id="open-file-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Load a graph.json you exported with `magus graph export -o json` (or drag one onto the canvas)"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Open file</span></button>
-                </div>
-                <div class="pf-v6-c-toolbar__item">
-                  <button id="copy-mermaid-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Copy the current selection (or focus neighborhood) as a Mermaid diagram: paste into a GitHub PR or docs. Refused over 150 nodes; narrow first."><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Copy as Mermaid</span></button>
                 </div>
                 <div class="pf-v6-c-toolbar__item">
                   <button id="fullscreen-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-pressed="false" title="Expand the explorer to fill the screen"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m10 0h3a2 2 0 0 0 2-2v-3"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Fullscreen</span></button>

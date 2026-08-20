@@ -50,6 +50,7 @@ import {
 } from "../../lib/daemon";
 import { createClient } from "@connectrpc/connect";
 import { StatusService } from "../../gen/magus/status/v1alpha1/status_pb";
+import { GraphService } from "../../gen/magus/graph/v1alpha1/graph_pb";
 import {
   type GLink,
   type GNode,
@@ -69,7 +70,6 @@ import {
   tick as particlesTick,
   type FlowEdge,
 } from "./particles.js";
-import { toMermaid } from "./mermaid.js";
 import {
   type Insets,
   NO_INSETS,
@@ -130,14 +130,16 @@ const KINDS = [
   "tool",
   "function",
   "method",
+  "symbol",
   "import",
   "package",
   "doc",
   "rationale",
+  "note",
   "diagnostic",
   "charm",
-  "symbol",
-  "note",
+  "owner",
+  "author",
 ];
 
 // Relations, for grouping edges in the explain card. Order = display order.
@@ -275,12 +277,19 @@ const LABEL_MIN_ZOOM = 1.6;
 // the moment the floor is crossed.
 const LABEL_MIN_NODE_PX = 8;
 
-// Cards render in the DAG-shaped modes, either flavor. The density that makes cards
-// unreadable is the FULL knowledge constellation, and neither DAG mode ever draws it:
-// applyLayeredMode / applyWavesMode refuse above LAYERED_MAX, so what reaches a card here is
-// at most 500 nodes on a 240-wide column grid - the same order as a targets DAG, which has
-// drawn cards all along. Radial stays circles: rings are round, wide cards do not fit.
-const cardsActive = () => layoutMode === "layered" || layoutMode === "waves";
+// Cards render for the targets flavor in the DAG-shaped modes only; the knowledge
+// constellation keeps circles. Radial stays circles for targets too - rings are round, wide
+// cards don't fit.
+//
+// The flavor condition looks like it is about density, and it is not. draw() paints a card
+// only for a node carrying n.w, and measureCards stamps n.w on the LAID-OUT SUBSET - which in
+// the knowledge graph is the match set, not the graph. Turning cards on here therefore draws
+// the matches as rectangles and everything else as circles, on one canvas, with the shape
+// carrying no meaning; and n.w is sticky, so nodes keep their rectangle after the match set
+// moves on. A targets DAG lays out every node it has, so the split never surfaces there.
+// Making this flavor-blind needs measureCards to cover every node first.
+const cardsActive = () =>
+  graphFlavor === "targets" && (layoutMode === "layered" || layoutMode === "waves");
 
 // isDagMode is true for the deterministic Sugiyama-family layouts (layered and
 // waves): the force sim stays stopped, edges route through dummy bend points,
@@ -1693,20 +1702,13 @@ function renderCard(id: string | null) {
   html += relSectionHtml("outgoing", out);
   html += relSectionHtml("incoming", inc);
   html += "</dl>";
-  // Copy as Mermaid: copies the focus neighborhood (or current match set) as mermaid.
-  // It lives in the card so it is immediately reachable when a node is selected. It is
-  // a link-styled action (not a chunky button) so it sits quietly in the dense card and
-  // doesn't compete with the canvas toolbar's Copy as Mermaid; still a <button> because
-  // it acts (copies to clipboard) rather than navigates.
   html +=
-    '<div class="console-graph-card__actions"><button type="button" class="console-graph-card__mermaidlink" title="Copy this node\'s neighborhood as a Mermaid diagram (double-click the node first to focus its local graph, then copy). Mirrors the CLI: magus graph export -o mermaid --select id"><span class="console-graph-card__copyglyph" aria-hidden="true">&#10697;</span> Copy as Mermaid</button><button type="button" class="console-graph-card__noteslink" title="Open the workspace notes that explain decisions around this graph">Open workspace notes</button></div>';
+    '<div class="console-graph-card__actions"><button type="button" class="console-graph-card__noteslink" title="Open the workspace notes that explain decisions around this graph">Open workspace notes</button></div>';
   cardEl.innerHTML = html;
   cardEl.hidden = false;
   cardEl
     .querySelectorAll<HTMLElement>(".console-graph-card__ref")
     .forEach((b) => b.addEventListener("click", () => selectNode(b.dataset.id ?? null, true)));
-  const mermaidCardBtn = cardEl.querySelector<HTMLElement>(".console-graph-card__mermaidlink");
-  if (mermaidCardBtn) mermaidCardBtn.addEventListener("click", copyAsMermaid);
   const notesCardBtn = cardEl.querySelector<HTMLElement>(".console-graph-card__noteslink");
   if (notesCardBtn) notesCardBtn.addEventListener("click", () => openSurface({ pageId: "notes" }));
 }
@@ -2185,10 +2187,12 @@ function syncConditionalViews() {
   document.querySelectorAll<HTMLElement>("[data-view='critical']").forEach((btn) => {
     btn.toggleAttribute("data-conditional", !graphHasDurations);
   });
-  // The "Color by duration" preset shares the same conditional as the critical-path view: both
-  // need timing data to mean anything.
-  document.querySelectorAll<HTMLElement>("[data-preset='duration']").forEach((btn) => {
-    btn.toggleAttribute("data-conditional", !graphHasDurations);
+  // The "Colour by duration" preset shares the same conditional as the critical-path view: both
+  // need timing data to mean anything. The attribute rides the toggle-group ITEM, not the button
+  // inside it: hiding only the button leaves an empty cell holding the group's :last-child end
+  // cap, so the row renders squared off mid-air with the rounding on a cell nobody can see.
+  document.querySelectorAll<HTMLElement>("[data-preset-item='duration']").forEach((item) => {
+    item.toggleAttribute("data-conditional", !graphHasDurations);
   });
   syncAffectedView();
 }
@@ -2352,8 +2356,62 @@ function termMatches(node: GNode, term: QueryTerm) {
   return term.negated ? !hit : hit;
 }
 
+// serverScores is the rank the daemon gave each id for the CURRENT query, when a daemon
+// answered. Null offline, before the first answer, and whenever the query moves on - so the
+// list falls back to degree rather than ranking by a previous question's scores.
+let serverScores: Map<string, number> | null = null;
+
+// queryGeneration invalidates an in-flight refinement. Bumped by every applyQuery, including
+// the offline ones, so a slow answer can never land on top of a newer query.
+let queryGeneration = 0;
+
+// refineQueryFromServer replaces the locally-computed match set with the daemon's, which is
+// the actual magus query grammar rather than the subset reimplemented below.
+//
+// The local pass still runs FIRST and is what the operator sees while typing: a round trip per
+// keystroke would make the box feel broken, and the local answer is a good approximation of
+// the server's. This supersedes it when it lands.
+//
+// Only in LIVE mode, and only for the knowledge flavor. A snapshot (#data=/#src=) or the demo
+// is not the daemon's graph even when a daemon happens to be running, and GraphService answers
+// about the knowledge graph, not the target graph - refining either against it would filter
+// the canvas by a query run over a different graph entirely.
+async function refineQueryFromServer(q: string, gen: number) {
+  if (!liveHost || !liveToken || graphFlavor === "targets") return;
+  try {
+    const client = createClient(GraphService, createDaemonTransport(liveHost, liveToken));
+    const res = await client.queryNodes({ query: q });
+    if (gen !== queryGeneration) return; // a newer query won the race
+    // The daemon searches the WHOLE graph; the canvas holds what it was sent. Symbols in
+    // particular are excluded from the browser's payload, so a symbol query can match on the
+    // server and have nothing to light up here. Intersect, then say what was left out - a
+    // silently smaller match count is the same lie the old local-only filter told.
+    const present = res.matches.filter((m) => graph.byId.has(m.id));
+    matchSet = new Set(present.map((m) => m.id));
+    serverScores = new Map(present.map((m) => [m.id, m.score]));
+    const offCanvas = res.matches.length - present.length;
+    const verdict = res.answer?.verdict ?? "";
+    const notes: string[] = [];
+    if (offCanvas > 0) notes.push(offCanvas + " more matched but are not in this graph");
+    if (verdict === "unknown") notes.push("coverage unknown (" + (res.answer?.reason ?? "") + ")");
+    if (notes.length)
+      setStatus(matchSet.size + " shown; " + notes.join("; "), verdict === "unknown");
+    setListExpanded(true);
+    renderList();
+    syncLayoutToggle();
+    draw();
+  } catch {
+    // A refinement that cannot reach the daemon leaves the local answer standing, which is
+    // the offline behavior and already on screen. Nothing to report.
+  }
+}
+
 // matchSetFor resolves a query string to the set of ids it matches, or null when the query
 // is empty. null means NO FILTER, which is not the same as a filter that matched nothing.
+//
+// This is a REIMPLEMENTATION of the magus query grammar, and a partial one. It stays because
+// the explorer runs with no daemon on every static path - the demo, a #data= snapshot, the
+// docs site - where there is nothing to ask. refineQueryFromServer supersedes it in live mode.
 function matchSetFor(q: string): Set<string> | null {
   const terms = q ? parseQuery(q) : [];
   if (!terms.length) return null;
@@ -2389,6 +2447,9 @@ function applyQuery(q: string) {
   }
   query = q.trim();
   matchSet = matchSetFor(query);
+  serverScores = null;
+  const gen = ++queryGeneration;
+  if (query) void refineQueryFromServer(query, gen);
   if (matchSet) setListExpanded(true); // a query reveals its matches
   renderList();
   updateHash();
@@ -2490,8 +2551,16 @@ function renderList() {
   const ms = matchSet;
   const pool = ms ? graph.nodes.filter((n) => ms.has(n.id)) : graph.nodes.slice();
   const metric = rowMetric();
+  const scores = serverScores;
   if (metric) {
     pool.sort((a, b) => metric.sort(b) - metric.sort(a) || a.label.localeCompare(b.label));
+  } else if (scores) {
+    // The daemon's own relevance ranking, which is what `magus query` orders by. Degree below
+    // is the offline stand-in: it ranks the best-connected node first whether or not it has
+    // anything to do with what was typed.
+    pool.sort(
+      (a, b) => (scores.get(b.id) ?? 0) - (scores.get(a.id) ?? 0) || a.label.localeCompare(b.label),
+    );
   } else {
     pool.sort((a, b) => b.degree - a.degree || a.label.localeCompare(b.label));
   }
@@ -2580,10 +2649,79 @@ function legendKinds(counts: Map<string, number>): string[] {
   return [...known, ...rest];
 }
 
+// legendTitleEl is the legend's heading. It names what the SWATCHES mean, which stops being
+// "node kinds" the moment a colour preset repaints the canvas by something else.
+function setLegendTitle(text: string) {
+  const t = document.querySelector<HTMLElement>(".console-graph-legend__title");
+  if (t) t.textContent = text;
+  if (legendEl) legendEl.setAttribute("aria-label", text);
+}
+
+// renderGroupLegend lists the ACTIVE colour grouping - one row per project, spell or depth band
+// with the hue it was given. A colour preset repaints every node, and the kind legend beside it
+// then describes a palette that is no longer on the canvas: the one panel whose whole job is to
+// say what the colours mean is the one saying something false. Rows are not clickable here, and
+// deliberately: a kind row filters to kind:<k>, but these groups already ARE the whole graph
+// partitioned, so "filter to this group" is the query box's job, not a legend click.
+function renderGroupLegend(preset: string) {
+  const counts = new Array<number>(groups.length).fill(0);
+  for (const n of graph.nodes) {
+    for (let i = 0; i < groups.length; i++) {
+      const g = groups[i];
+      const hit = g.nodeSet
+        ? g.nodeSet.has(n.id)
+        : g.terms.length > 0 && g.terms.every((t) => termMatches(n, t));
+      if (hit) {
+        counts[i]++;
+        break; // first match wins, exactly as groupColorFor resolves it
+      }
+    }
+  }
+  setLegendTitle(GROUP_LEGEND_TITLES[preset] ?? "Colour groups");
+  legendEl.innerHTML = groups
+    .map((g, i) =>
+      counts[i] === 0
+        ? ""
+        : '<li><span class="console-graph-legend__row" role="presentation">' +
+          '<span class="console-graph-kinddot" style="background:' +
+          escapeHtml(g.color) +
+          '"></span>' +
+          escapeHtml(groupLabel(g.query)) +
+          ' <span class="console-graph-legend__count">' +
+          counts[i] +
+          "</span></span></li>",
+    )
+    .join("");
+}
+
+// The legend heading for each preset: what one swatch MEANS, in the reader's terms.
+const GROUP_LEGEND_TITLES: Record<string, string> = {
+  project: "Projects",
+  spell: "Spells (toolchain)",
+  depth: "Dependency depth",
+  duration: "Run duration",
+};
+
+// groupLabel strips the field prefix a group's query carries ("project:console" -> "console"),
+// because the heading above already says which field this is. `layer:N` reads as "depth N": the
+// number is a position in the dependency chain, and the bare integer says nothing.
+function groupLabel(q: string): string {
+  const i = q.indexOf(":");
+  if (i < 0) return q;
+  const field = q.slice(0, i);
+  const value = q.slice(i + 1);
+  return field === "layer" ? "depth " + value : value;
+}
+
 function renderLegend() {
   const counts = new Map<string, number>();
   for (const n of graph.nodes) counts.set(n.kind, (counts.get(n.kind) || 0) + 1);
   syncKindList(counts);
+  if (activePreset && groups.length) {
+    renderGroupLegend(activePreset);
+    return;
+  }
+  setLegendTitle("Node kinds");
   // Each legend row is a button that filters to kind:<k> (the CLI query it maps to),
   // so clicking a color isolates that kind - a quick, Obsidian-style filter.
   legendEl.innerHTML = legendKinds(counts)
@@ -2990,6 +3128,15 @@ function syncGraphKindToggle() {
     btn.disabled = !liveHost;
     btn.title = liveHost ? GRAPHKIND_TITLES[kind] : GRAPHKIND_LIVE_HINT;
   });
+  // Say WHY on the surface, not only on hover. A disabled control with the reason buried in a
+  // title attribute reads as broken: you click Target, nothing happens, and the explanation is
+  // somewhere you have to already suspect. Most sessions are a snapshot or the demo, so this is
+  // the common case, not the edge one.
+  const note = el("graphkind-note");
+  if (note) {
+    note.textContent = liveHost ? "" : "Live workspace only";
+    note.hidden = !!liveHost;
+  }
 }
 
 // switchGraphKind switches the live-loaded graph between the target and knowledge
@@ -3693,74 +3840,6 @@ function buildQueryCmd(queryStr: string) {
   return "magus query " + (needsDDash ? "-- " : "") + shellQuote(queryStr);
 }
 
-// ---- Copy as Mermaid (toMermaid lives in mermaid.ts) -----------------------
-
-// Compute the node/link scope for "Copy as Mermaid": local-graph if a focus/ego
-// view is active, else current query matches, else all nodes (refused if >150).
-// Returns { nodes, links, refused } where refused is a plain-ASCII string or null.
-function mermaidScope() {
-  if (!graph) return { nodes: [], links: [], refused: "no graph loaded" };
-
-  let nodeIds;
-  if (focusId) {
-    // Local/ego view is active: use the focus neighborhood.
-    nodeIds = neighborhood(focusId, focusDepth);
-  } else if (matchSet) {
-    // Query filter or lens is active: use the match set.
-    nodeIds = matchSet;
-  } else {
-    // No filter: check size guard.
-    if (graph.nodes.length > 150) {
-      return {
-        nodes: [],
-        links: [],
-        refused: "narrow your focus first (double-click a node or add a query)",
-      };
-    }
-    nodeIds = null; // all
-  }
-
-  const nodes = nodeIds ? graph.nodes.filter((n) => nodeIds.has(n.id)) : graph.nodes;
-  if (nodes.length > 150) {
-    return {
-      nodes: [],
-      links: [],
-      refused: "narrow your focus first (double-click a node or add a query)",
-    };
-  }
-  const nodeSet = new Set(nodes.map((n) => n.id));
-  const links = graph.links.filter((e) => {
-    const s = endpointId(e.source),
-      t = endpointId(e.target);
-    return nodeSet.has(s) && nodeSet.has(t);
-  });
-  return { nodes, links, refused: null };
-}
-
-// copyAsMermaid: compute scope, emit mermaid, copy to clipboard, set status.
-function copyAsMermaid() {
-  if (!navigator.clipboard) {
-    setStatus("clipboard unavailable in this context", true);
-    return;
-  }
-  const { nodes, links, refused } = mermaidScope();
-  if (refused) {
-    setStatus(refused, true);
-    return;
-  }
-  const text = toMermaid(nodes, links, graphFlavor);
-  navigator.clipboard
-    .writeText("```mermaid\n" + text + "\n```")
-    .then(() => {
-      setStatus(
-        "Mermaid diagram copied (" + nodes.length + " nodes): paste into a GitHub comment or PR.",
-      );
-    })
-    .catch((err) => {
-      setStatus("Could not copy to clipboard: " + err.message, true);
-    });
-}
-
 // Build the full CLI command string for copy-to-clipboard.
 function viewCommandStr(name: string | null, nodeId?: string | null, nodeTo?: string | null) {
   switch (name) {
@@ -4090,6 +4169,8 @@ function applyPreset(presetId: string) {
     document
       .querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset")
       .forEach((b) => b.removeAttribute("data-active"));
+    renderLegend(); // back to the kind palette, which is what the canvas shows again
+    setStatus("Back to colouring by node kind.");
     draw();
     updateHash();
     return;
@@ -4107,9 +4188,36 @@ function applyPreset(presetId: string) {
     if (g.nodeSet) entry.nodeSet = g.nodeSet;
     groups.push(entry);
   }
+  // Repaint the legend onto the new grouping and SAY what changed. A preset recolours every
+  // node on the canvas and, before this, reported that nowhere: the legend kept describing the
+  // kind palette and the only trace of the click was the button's own fill.
+  renderLegend();
+  // The bottom status bar carries this, NOT the floating result line over the canvas. The result
+  // line is a strip centred on the stage: it lands on top of the legend - the one panel a reader
+  // is looking at when they change the colouring - and it puts the explanation nowhere near the
+  // control that produced it. The status bar already spans the foot of the app.
+  setStatus(
+    (PRESET_RESULT_LINES[presetId] ?? "Recoloured.") +
+      " " +
+      newGroups.length +
+      " group" +
+      (newGroups.length === 1 ? "" : "s") +
+      "; the legend lists them. Click " +
+      presetId +
+      " again to go back to node kinds.",
+  );
   draw();
   updateHash();
 }
+
+// One line per preset saying what the canvas now MEANS - not what the control is called. These
+// read on the result bar above the canvas, where the eye already is.
+const PRESET_RESULT_LINES: Record<string, string> = {
+  project: "Coloured by project: one hue per project, so boundaries show.",
+  spell: "Coloured by spell: one hue per toolchain, so layers show.",
+  depth: "Coloured by dependency depth: pale depends on nothing, dark depends on the most.",
+  duration: "Coloured by run duration: hot is slow.",
+};
 
 // ---- live mode -------------------------------------------------------------
 
@@ -4966,10 +5074,6 @@ function bootWireEvents() {
     },
     { signal: lifecycleSignal },
   );
-
-  // "Copy as Mermaid" toolbar button: emit the current scope as a mermaid diagram.
-  const copyMermaidBtn = el("copy-mermaid-btn");
-  if (copyMermaidBtn) copyMermaidBtn.addEventListener("click", copyAsMermaid);
 
   // "Open file" toolbar button proxies to the hidden <input type=file>.
   const openBtn = el("open-file-btn");
