@@ -42,7 +42,7 @@ import { settingsSurface } from "./settings/surface";
 import { createCheatsheet } from "./cheatsheet";
 import { createActionsSurface } from "./actions";
 import { createTileView, type TileView } from "./tileView";
-import { leaves, type Pane, type Leaf, type Split } from "./tiling";
+import { leafShowing, type Pane, type Leaf, type Split } from "./tiling";
 import { initRefDrawer, referenceSurface } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
 import { initWorkspacePicker } from "../ui/workspace-picker";
@@ -1959,14 +1959,10 @@ export function startConsole(
     const hostTab = ws.get().tabs.find((t) => tabHostsSurface(t, pageId));
     if (hostTab) {
       activateTab(hostTab.id);
-      // ...and land IN it. A tiled tab holds several surfaces, so activating the tab answers "which
-      // tab" and leaves "which pane" to whatever was focused last - ask for the Graph and you could
-      // arrive with the cursor in the Diff beside it, with the rail marking Diff as current. Focus the
-      // pane actually showing what was asked for.
+      // ...and land IN it, rather than wherever focus happened to be. leafShowing carries the why.
       const tile = mounts.get(hostTab.id)?.tile;
       if (tile) {
-        const shot = tile.snapshot();
-        const leaf = leaves(shot.tree).find((l) => l.pageId === pageId);
+        const leaf = leafShowing(tile.snapshot().tree, pageId);
         if (leaf) tile.focusLeaf(leaf.id);
       }
       return;

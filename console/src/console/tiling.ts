@@ -90,6 +90,18 @@ export function leaves(p: Pane): Leaf[] {
   return [...leaves(p.a), ...leaves(p.b)];
 }
 
+// leafShowing answers "which pane is showing this surface", or null when none is. Document order, so
+// a surface tiled twice resolves to the leftmost/topmost copy - the one a reader scanning the tab
+// finds first.
+//
+// The rail navigates by SURFACE while a tab holds several, so activating the tab answers "which tab"
+// and leaves "which pane" to whatever had focus last: ask for the Graph and you could arrive with the
+// cursor in the Diff beside it, with the rail marking Diff as current. This is the lookup that lets
+// the caller land in the pane actually showing what was asked for.
+export function leafShowing(root: Pane, pageId: string): Leaf | null {
+  return leaves(root).find((l) => l.pageId === pageId) ?? null;
+}
+
 // splitLeaf replaces the leaf `targetId` with a split of [that leaf, a new leaf], so
 // the surface stays put and the new one appears beside/below it. `first` puts the new
 // leaf on the a-side (left/top) rather than the b-side. An unknown target returns the

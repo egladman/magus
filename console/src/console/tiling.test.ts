@@ -6,6 +6,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   leaves,
+  leafShowing,
   splitLeaf,
   closePane,
   setRatio,
@@ -28,6 +29,34 @@ test("leaves lists every leaf in order", () => {
     leaves(t).map((l) => l.id),
     ["a", "b"],
   );
+});
+
+// What the navigation rail needs to land in the right pane. The rail navigates by SURFACE and a tab
+// can hold several, so without this, clicking Graph activated the tab and left the cursor wherever it
+// was - in the Diff beside it, with the rail then marking Diff as current.
+test("leafShowing finds the pane a surface is in", () => {
+  const t = splitLeaf(leaf("p1", "graph"), "p1", "row", "s1", { id: "p2", pageId: "diff" });
+  assert.equal(leafShowing(t, "graph")?.id, "p1");
+  assert.equal(leafShowing(t, "diff")?.id, "p2");
+});
+
+// The caller guards on null rather than focusing something arbitrary: a surface open in ANOTHER tab
+// is not in this tree, and focusing a pane at random would move the cursor somewhere nobody asked for.
+test("leafShowing reports a surface this tab does not hold", () => {
+  const t = splitLeaf(leaf("p1", "graph"), "p1", "row", "s1", { id: "p2", pageId: "diff" });
+  assert.equal(leafShowing(t, "logs"), null);
+});
+
+test("a single-pane tab is found the same way", () => {
+  assert.equal(leafShowing(leaf("only", "dashboard"), "dashboard")?.id, "only");
+});
+
+// Document order, so the same surface tiled twice resolves to the one a reader scanning the tab finds
+// first. Arbitrary of the two, but STABLE - focus must not move between panes on repeated clicks.
+test("a surface tiled twice resolves to the first pane", () => {
+  const t = splitLeaf(leaf("p1", "graph"), "p1", "row", "s1", { id: "p2", pageId: "graph" });
+  assert.equal(leafShowing(t, "graph")?.id, "p1");
+  assert.equal(leafShowing(t, "graph")?.id, "p1", "repeated lookups must not alternate");
 });
 
 test("splitLeaf replaces the target leaf with a split of [old, new]", () => {
