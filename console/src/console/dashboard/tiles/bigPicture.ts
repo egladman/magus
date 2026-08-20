@@ -28,8 +28,7 @@
 // setViewMode updates both the mode signal and the document attribute; fullscreen changes feed into
 // it, while route and button entry can use it without fullscreen.
 
-import type { DashboardState, WorkspaceView } from "../state";
-import { onWorkspaceScope, setWorkspaceScope, workspaceScope } from "../../../lib/scope";
+import { onWorkspaceScope, workspaceScope } from "../../../lib/scope";
 import { persisted } from "../../../lib/persist";
 import { signal, bind, h } from "../../view";
 import type { Tile } from "./card";
@@ -50,7 +49,6 @@ export const viewMode = signal<ViewMode>("board");
 // the ambiguity this change exists to remove.
 export const activeWorkspace = {
   get: workspaceScope,
-  set: setWorkspaceScope,
   subscribe: onWorkspaceScope,
 };
 
@@ -93,130 +91,6 @@ if (typeof document !== "undefined") {
     }
     if (!pinned) setViewMode("board");
   });
-}
-
-// wsLabel shortens a workspace root to its last path segment for the compact chip/card
-// label; the full root stays available as a title tooltip.
-function wsLabel(root: string): string {
-  const parts = root.replace(/\/+$/, "").split("/");
-  return parts[parts.length - 1] || root;
-}
-
-// How many workspaces get a chip before the rest fold into the overflow menu. Three fits beside the
-// label and the Big Picture button at a phone width without the row wrapping.
-const VISIBLE_WORKSPACES = 3;
-
-// wsAccessMs is a workspace's last-touched instant in epoch ms, 0 when the daemon did not report
-// one, so an unreported workspace sorts to the end rather than to the front.
-function wsAccessMs(w: WorkspaceView): number {
-  return w.lastAccessTime ? Number(w.lastAccessTime.seconds) * 1000 : 0;
-}
-
-// overflowItem builds the "+N" chip that ends the toggle group and the menu behind it. Same PF menu
-// vocabulary as the hero's failing-target chips and the activity tile's open picker, so every
-// "choose one of these" on this board looks and behaves the same.
-function overflowItem(rest: WorkspaceView[], signal: AbortSignal): HTMLElement {
-  const wrap = h("div", "pf-v6-c-toggle-group__item console-dashboard-viewbar__more");
-  const btn = document.createElement("button");
-  btn.type = "button";
-  btn.className = "pf-v6-c-toggle-group__button";
-  btn.setAttribute("aria-haspopup", "menu");
-  btn.setAttribute("aria-expanded", "false");
-  // The count, not a bare ellipsis: "+4" says how much is hidden, which is the thing a reader
-  // wants before deciding whether opening the menu is worth it.
-  btn.append(h("span", "pf-v6-c-toggle-group__text", "+" + rest.length));
-  btn.title = rest.length + " more workspace" + (rest.length === 1 ? "" : "s");
-
-  const menu = h("div", "pf-v6-c-menu console-dashboard-viewbar__moremenu");
-  menu.hidden = true;
-  menu.setAttribute("role", "menu");
-  const list = h("ul", "pf-v6-c-menu__list");
-  const content = h("div", "pf-v6-c-menu__content");
-  content.append(list);
-  menu.append(content);
-  const close = (): void => {
-    menu.hidden = true;
-    btn.setAttribute("aria-expanded", "false");
-  };
-  list.replaceChildren(
-    ...rest.map((w) => {
-      const li = h("li", "pf-v6-c-menu__list-item");
-      const item = document.createElement("button");
-      item.type = "button";
-      item.className = "pf-v6-c-menu__item";
-      item.setAttribute("role", "menuitem");
-      item.title = w.root;
-      item.append(h("span", "pf-v6-c-menu__item-main", wsLabel(w.root)));
-      item.addEventListener("click", () => {
-        close();
-        // Selecting promotes it into the visible chips on the next paint, because the picker always
-        // keeps the active workspace visible.
-        activeWorkspace.set(w.root);
-      });
-      li.append(item);
-      return li;
-    }),
-  );
-  btn.addEventListener("click", (ev) => {
-    ev.stopPropagation();
-    const open = menu.hidden;
-    menu.hidden = !open;
-    btn.setAttribute("aria-expanded", String(open));
-  });
-  menu.addEventListener("click", (ev) => ev.stopPropagation());
-  if (typeof document !== "undefined") {
-    document.addEventListener("click", close, { signal });
-    document.addEventListener(
-      "keydown",
-      (ev) => {
-        if (ev.key === "Escape") close();
-      },
-      { signal },
-    );
-  }
-  wrap.append(btn, menu);
-  return wrap;
-}
-
-// A small PF ToggleGroup builder for the workspace picker: N labeled buttons, one selected at a
-// time, painted from a persisted cell.
-// The caller names the group (a visible label element it owns, via aria-labelledby), so this no
-// longer takes an ariaLabel of its own - one control, one name.
-interface ToggleGroup {
-  el: HTMLElement;
-  destroy(): void;
-}
-
-function toggleGroup<T extends string>(
-  items: { value: T; label: string; title?: string }[],
-  cell: { get(): T; set(v: T): void; subscribe(fn: (v: T) => void): () => void },
-): ToggleGroup {
-  const root = h("div", "pf-v6-c-toggle-group");
-  root.setAttribute("role", "group");
-  const buttons: { btn: HTMLButtonElement; value: T }[] = [];
-  for (const item of items) {
-    const wrap = h("div", "pf-v6-c-toggle-group__item");
-    const btn = document.createElement("button");
-    btn.type = "button";
-    btn.className = "pf-v6-c-toggle-group__button";
-    if (item.title) btn.title = item.title;
-    btn.append(h("span", "pf-v6-c-toggle-group__text", item.label));
-    btn.addEventListener("click", () => cell.set(item.value));
-    wrap.append(btn);
-    root.append(wrap);
-    buttons.push({ btn, value: item.value });
-  }
-  const paint = (): void => {
-    const current = cell.get();
-    for (const { btn, value } of buttons) {
-      const on = value === current;
-      btn.classList.toggle("pf-m-selected", on);
-      btn.setAttribute("aria-pressed", String(on));
-    }
-  };
-  paint();
-  const unsubscribe = cell.subscribe(paint);
-  return { el: root, destroy: unsubscribe };
 }
 
 // bigPictureIcon is the Big Picture button's glyph: a big screen on a stand, built via
@@ -292,10 +166,6 @@ export function dashboardHeader(): Tile {
   const root = h("div", "console-dashboard-viewbar");
   root.setAttribute("aria-label", "Dashboard controls");
 
-  const wsWrap = h("div", "console-dashboard-viewbar__workspaces");
-  wsWrap.hidden = true;
-  root.append(wsWrap);
-
   const viewWrap = h("div", "console-dashboard-viewbar__view");
   const viewLabel = h("span", "console-dashboard-viewbar__label", "View");
   const viewGroup = h("div", "pf-v6-c-toggle-group");
@@ -338,94 +208,13 @@ export function dashboardHeader(): Tile {
       : "Present this dashboard full-screen, with no console chrome";
   });
 
-  let lastWorkspaces: WorkspaceView[] = [];
-  let lastRoots = "";
-  let destroyPicker = (): void => {};
-  function renderWorkspacePicker(): void {
-    // RETIRED. Which workspace you are looking at is a property of the browser TAB now, chosen in the
-    // title bar (ui/scope-picker.ts), so every surface in the window answers for the same one. A
-    // second control here would be a second place to change one fact, and the two would disagree the
-    // moment someone used the other - which is the ambiguity that sent this whole thing back to the
-    // drawing board. The machinery below (recency ordering, overflow, the memo key) is left in place
-    // rather than deleted so the chip-row treatment can be lifted into the title-bar menu if the
-    // list ever outgrows a plain menu; nothing calls it while this returns.
-    const show = false;
-    wsWrap.hidden = !show;
-    if (!show) {
-      destroyPicker();
-      destroyPicker = (): void => {};
-      wsWrap.replaceChildren();
-      return;
-    }
-
-    // Keep the pick valid: default to the first workspace, and fall back to it if the
-    // previously active root drops out of the set (e.g. it went idle and was pruned).
-    if (!activeWorkspace.get() || !lastWorkspaces.some((w) => w.root === activeWorkspace.get())) {
-      activeWorkspace.set(lastWorkspaces[0].root);
-    }
-
-    // Order by recency and show only the first few as chips; the rest go behind an overflow menu.
-    //
-    // A ToggleGroup with one chip per workspace is fine at two and unusable at ten: it is a single
-    // unwrapped row sharing the bar with the Big Picture button, so every extra workspace squeezes
-    // the others until the row overflows. Recency is the right cut because the workspaces an
-    // operator switches between are the ones the daemon has touched lately, and the long tail is
-    // typically checkouts that were adopted once and went idle.
-    const ordered = [...lastWorkspaces].sort((a, b) => wsAccessMs(b) - wsAccessMs(a));
-    const active = activeWorkspace.get();
-    let visible = ordered.slice(0, VISIBLE_WORKSPACES);
-    // The ACTIVE workspace is always a chip, even when it is not among the most recent. Otherwise
-    // the one workspace whose name the reader most needs to see is the one hidden in the menu, and
-    // the bar shows a selection that appears to be nothing at all.
-    if (!visible.some((w) => w.root === active)) {
-      const activeView = ordered.find((w) => w.root === active);
-      if (activeView) visible = [...visible.slice(0, VISIBLE_WORKSPACES - 1), activeView];
-    }
-    const overflow = ordered.filter((w) => !visible.some((v) => v.root === w.root));
-
-    // The memo key includes the ACTIVE root, not just the set: which workspaces are visible depends
-    // on the selection, so keying on the set alone would leave a stale chip row after a switch.
-    const roots = active + " " + ordered.map((w) => w.root).join("\n");
-    if (roots === lastRoots) return; // same set and same selection: the bar already reflects it
-    lastRoots = roots;
-
-    // A VISIBLE label, not just the group's aria-label. Two bare chips reading "acme" and "magus"
-    // say nothing about what picking one does - they could as easily be a filter, a theme, or a
-    // pair of tabs. The accessible name was already there; the sighted reader was the one being
-    // asked to guess. The label carries the accessible name now (aria-labelledby), so the control
-    // has exactly one name rather than a visible one and a different announced one.
-    destroyPicker();
-    const pickerAbort = new AbortController();
-    const labelId = "dash-ws-picker-label";
-    const label = h("span", "console-dashboard-viewbar__label", "Workspace");
-    label.id = labelId;
-    const group = toggleGroup<string>(
-      visible.map((w) => ({ value: w.root, label: wsLabel(w.root), title: w.root })),
-      activeWorkspace,
-    );
-    group.el.removeAttribute("aria-label");
-    group.el.setAttribute("aria-labelledby", labelId);
-    if (overflow.length > 0) group.el.append(overflowItem(overflow, pickerAbort.signal));
-    wsWrap.replaceChildren(label, group.el);
-    destroyPicker = (): void => {
-      pickerAbort.abort();
-      group.destroy();
-    };
-  }
-  // Entering/leaving Big Picture must show/hide the workspace picker immediately, not on the
-  // next ~1s status tick.
-  const unbindWorkspacePicker = viewMode.subscribe(renderWorkspacePicker);
-
   return {
     el: root,
-    update(s: DashboardState) {
-      lastWorkspaces = s.status ? s.status.workspaces : [];
-      renderWorkspacePicker();
-    },
+    // The header holds no per-frame state. Its one control is the Big Picture button, which follows
+    // viewMode rather than the status stream.
+    update() {},
     destroy() {
       unbindViewMode();
-      unbindWorkspacePicker();
-      destroyPicker();
     },
   };
 }
