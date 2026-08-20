@@ -39,16 +39,17 @@ const SURFACES: Launchable[] = [
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
 ];
 
-function mount(ws: Workspace, expanded = false) {
+function mount(ws: Workspace, expanded = false, focusedPageId: string | null = null) {
   const host = document.createElement("nav");
   const wsCell = cell<Workspace>(ws);
   const expCell = cell<boolean>(expanded);
   const pulse = signal<PulseView | null>(null);
+  const focused = signal<string | null>(focusedPageId);
   const opened: string[] = [];
-  const bar = createSidebar(host, wsCell, expCell, pulse, SURFACES, {
+  const bar = createSidebar(host, wsCell, expCell, pulse, focused, SURFACES, {
     onOpen: (id) => opened.push(id),
   });
-  return { host, wsCell, expCell, pulse, opened, bar };
+  return { host, wsCell, expCell, pulse, focused, opened, bar };
 }
 
 function link(host: HTMLElement, pageId: string): HTMLButtonElement {
@@ -114,14 +115,18 @@ test("clicking a row asks the console to open that surface", () => {
   assert.deepEqual(opened, ["logs"]);
 });
 
-test("the active tab's surface is current, an open one is only marked open", () => {
-  const { host } = mount({
-    tabs: [
-      { id: "a", pageId: "dashboard", title: "Dashboard" },
-      { id: "b", pageId: "logs", title: "Log Viewer" },
-    ],
-    activeId: "b",
-  });
+test("the focused surface is current, an open one is only marked open", () => {
+  const { host } = mount(
+    {
+      tabs: [
+        { id: "a", pageId: "dashboard", title: "Dashboard" },
+        { id: "b", pageId: "logs", title: "Log Viewer" },
+      ],
+      activeId: "b",
+    },
+    false,
+    "logs",
+  );
   const logs = link(host, "logs");
   const dash = link(host, "dashboard");
   assert.equal(logs.classList.contains("pf-m-current"), true);
@@ -132,16 +137,58 @@ test("the active tab's surface is current, an open one is only marked open", () 
 });
 
 test("a workspace change repaints the rows in place", () => {
-  const { host, wsCell } = mount({
-    tabs: [{ id: "a", pageId: "dashboard", title: "Dashboard" }],
-    activeId: "a",
-  });
+  const { host, wsCell, focused } = mount(
+    { tabs: [{ id: "a", pageId: "dashboard", title: "Dashboard" }], activeId: "a" },
+    false,
+    "dashboard",
+  );
   const before = link(host, "dashboard");
   wsCell.set({ tabs: [{ id: "b", pageId: "logs", title: "Log Viewer" }], activeId: "b" });
+  focused.set("logs");
   assert.equal(link(host, "dashboard"), before, "the row element was rebuilt rather than updated");
   assert.equal(before.classList.contains("pf-m-current"), false);
   assert.equal(before.hasAttribute("data-tab-open"), false);
   assert.equal(link(host, "logs").classList.contains("pf-m-current"), true);
+});
+
+// Moving focus between panes of ONE tiled tab changes nothing about which tabs exist, so the rail has
+// to follow focus on its own or it keeps pointing at the pane you just left.
+test("moving focus inside a tiled tab moves the current row", () => {
+  const { host, focused } = mount(
+    {
+      tabs: [
+        {
+          id: "a",
+          pageId: "dashboard",
+          title: "Dashboard",
+          layout: {
+            kind: "split",
+            id: "s",
+            dir: "row",
+            ratio: 0.5,
+            a: { kind: "leaf", id: "l1", pageId: "dashboard" },
+            b: { kind: "leaf", id: "l2", pageId: "logs" },
+          },
+        },
+      ],
+      activeId: "a",
+    },
+    false,
+    "dashboard",
+  );
+  assert.equal(link(host, "dashboard").classList.contains("pf-m-current"), true);
+  assert.equal(link(host, "logs").classList.contains("pf-m-current"), false);
+  assert.equal(link(host, "logs").hasAttribute("data-tab-open"), true, "both panes are open");
+
+  focused.set("logs");
+  assert.equal(link(host, "dashboard").classList.contains("pf-m-current"), false);
+  assert.equal(link(host, "logs").classList.contains("pf-m-current"), true);
+  assert.equal(
+    host.querySelectorAll("#console-sidebar .pf-m-current, [data-rail-surface].pf-m-current")
+      .length,
+    1,
+    "exactly one row is ever current",
+  );
 });
 
 test("the toggle drives the expanded cell, and the cell drives the rail", () => {
@@ -163,9 +210,9 @@ test("the toggle drives the expanded cell, and the cell drives the rail", () => 
 });
 
 test("destroy stops the rail following the workspace", () => {
-  const { host, wsCell, bar } = mount({ tabs: [], activeId: null });
+  const { host, focused, bar } = mount({ tabs: [], activeId: null });
   bar.destroy();
-  wsCell.set({ tabs: [{ id: "a", pageId: "logs", title: "Log Viewer" }], activeId: "a" });
+  focused.set("logs");
   assert.equal(link(host, "logs").classList.contains("pf-m-current"), false);
 });
 

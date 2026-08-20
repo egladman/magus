@@ -837,7 +837,12 @@ export function startConsole(
       surfaces: SURFACES,
       mountSurface,
       onLayoutChange: (tree) => ws.set(setLayout(ws.get(), tab.id, tree)),
-      onTitleChange: (title, pageId) => retitleTab(tab.id, title, pageId),
+      onTitleChange: (title, pageId) => {
+        retitleTab(tab.id, title, pageId);
+        // Fires when focus moves to a pane showing a different surface - exactly when the rail's
+        // current row changes. Guarded on the tab being active so a background tab cannot claim it.
+        if (ws.get().activeId === tab.id) focusedSurface.set(pageId || null);
+      },
     });
     host.append(tile.el);
     mounts.set(tab.id, { host, status: makeStatusBar(), tile });
@@ -940,6 +945,10 @@ export function startConsole(
     // second row on the launcher screen.
     document.documentElement.toggleAttribute("data-no-tabs", active == null);
     statusHost.replaceChildren(active ? active.status : launcherStatus);
+    // Switching tabs moves focus without the tile emitting: it is the same focused pane it always had,
+    // so nothing inside it changed. Read it here instead.
+    const shot = active?.tile.snapshot();
+    focusedSurface.set(shot ? (active?.tile.leafPageId(shot.focusId) ?? null) : null);
     syncWindowTitle();
     // Let a docked Reference panel re-read the now-active surface's help sections.
     document.dispatchEvent(new CustomEvent("console:activetab", { detail: { id } }));
@@ -1057,9 +1066,13 @@ export function startConsole(
   // The rail's live pool reading. Held here rather than in the rail so the poller below owns one
   // source of it; null until the first answer, and back to null whenever the daemon stops answering.
   const pulse = signal<PulseView | null>(null);
+  // The surface the FOCUSED pane is showing - what the rail marks as current. A tiled tab holds
+  // several at once, so "the active tab's surfaces" is not an answer to "where am I"; focus is.
+  // Null with no tab open (the launcher), so nothing is marked.
+  const focusedSurface = signal<string | null>(null);
   const sidebarHost = document.getElementById("console-sidebar");
   if (sidebarHost) {
-    createSidebar(sidebarHost, ws, sidebarExpandedCell, pulse, SURFACES, {
+    createSidebar(sidebarHost, ws, sidebarExpandedCell, pulse, focusedSurface, SURFACES, {
       onOpen: (id) => open(id),
     });
   }

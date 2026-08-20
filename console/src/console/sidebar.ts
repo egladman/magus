@@ -79,14 +79,23 @@ export interface Sidebar {
 //
 // The surface list drives the order, NOT the workspace: the rail is the fixed set of places you can
 // go, so a row must never move because a tab opened. Only its state changes.
-export function sidebarItems(ws: Workspace, surfaces: readonly Launchable[]): SidebarItem[] {
-  const active = ws.tabs.find((t) => t.id === ws.activeId) ?? null;
+//
+// EXACTLY ONE row is current, and it is the FOCUSED pane's surface - not every surface the active tab
+// holds. A tiled tab shows several at once, and marking them all made a starter workspace open with
+// two rows lit and no way to tell which one input would reach. Focus is the thing that answers "where
+// am I", so focus is what the rail reflects; `focusedPageId` comes from the tile that owns it
+// (tileView's onTitleChange), because the persisted Workspace does not carry runtime focus.
+export function sidebarItems(
+  ws: Workspace,
+  surfaces: readonly Launchable[],
+  focusedPageId: string | null,
+): SidebarItem[] {
   return surfaces.map((s) => ({
     pageId: s.pageId,
     label: s.label,
     hint: s.hint,
     open: ws.tabs.some((t) => tabHostsSurface(t, s.pageId)),
-    current: active != null && tabHostsSurface(active, s.pageId),
+    current: focusedPageId === s.pageId,
   }));
 }
 
@@ -118,6 +127,7 @@ export function createSidebar(
   ws: Persisted<Workspace>,
   expanded: Persisted<boolean>,
   pulse: Signal<PulseView | null>,
+  focused: Signal<string | null>,
   surfaces: readonly Launchable[],
   cb: SidebarCallbacks,
 ): Sidebar {
@@ -188,20 +198,21 @@ export function createSidebar(
 
   host.replaceChildren(list, pulseEl, toggle);
 
-  sc.add(
-    bind(ws, (w) => {
-      for (const item of sidebarItems(w, surfaces)) {
-        const link = links.get(item.pageId);
-        if (!link) continue;
-        link.classList.toggle("pf-m-current", item.current);
-        // The pair to pf-m-current: the class is what a sighted reader sees, this is what a screen
-        // reader hears, and they must never disagree.
-        if (item.current) link.setAttribute("aria-current", "page");
-        else link.removeAttribute("aria-current");
-        link.toggleAttribute("data-tab-open", item.open);
-      }
-    }),
-  );
+  const paintRows = (): void => {
+    for (const item of sidebarItems(ws.get(), surfaces, focused.get())) {
+      const link = links.get(item.pageId);
+      if (!link) continue;
+      link.classList.toggle("pf-m-current", item.current);
+      // The pair to pf-m-current: the class is what a sighted reader sees, this is what a screen
+      // reader hears, and they must never disagree.
+      if (item.current) link.setAttribute("aria-current", "page");
+      else link.removeAttribute("aria-current");
+      link.toggleAttribute("data-tab-open", item.open);
+    }
+  };
+  // Two sources decide a row's state: which tabs exist, and which pane has focus inside the active one.
+  sc.add(bind(ws, paintRows));
+  sc.add(focused.subscribe(paintRows));
 
   // One attribute on the root carries the whole expanded state, so console.css can key the width and
   // the label visibility off it and expanding costs a CSS transition rather than a re-render.

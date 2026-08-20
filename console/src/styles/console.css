@@ -705,6 +705,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   --pf-v6-c-nav__link--ColumnGap: 0;
   --pf-v6-c-nav--PaddingBlockStart: 0;
   --pf-v6-c-nav--PaddingBlockEnd: 0;
+  /* SQUARE. The rail is chrome, and chrome in this console is square - the status bar and the panes
+     are 0, and a tab rounds only its two top corners because that is a tab shape. Rounding belongs to
+     CONTAINERS (cards sit at 7px). PatternFly gives a nav link the action radius, which lands at 9px
+     on all four corners under the Apple platform scale, so the one rounded thing on screen was the
+     rail sitting inside square chrome. */
+  --pf-v6-c-nav__link--BorderRadius: 0;
 }
 #console-sidebar[data-expanded] {
   width: var(--console-sidebar-expanded-w);
@@ -744,7 +750,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      itself becomes spruce this can collapse back to var(--console-accent).
      Semantic colour is a separate vocabulary and stays where it is - the pool dot below is a status
      reading, so it keeps the status tokens. */
-  background: var(--console-spruce); border-radius: 2px;
+  background: var(--console-spruce);
 }
 /* The live pool reading at the rail's foot. It borrows the nav link's grid so its dot sits on the same
    vertical line as every app icon above it - a second alignment here would read as a stray element

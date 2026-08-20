@@ -14,7 +14,7 @@ const SURFACES: Launchable[] = [
 ];
 
 test("every surface gets a row, in the surface list's order", () => {
-  const items = sidebarItems({ tabs: [], activeId: null }, SURFACES);
+  const items = sidebarItems({ tabs: [], activeId: null }, SURFACES, null);
   assert.deepEqual(
     items.map((i) => i.pageId),
     ["dashboard", "logs", "graph"],
@@ -25,7 +25,7 @@ test("every surface gets a row, in the surface list's order", () => {
   );
 });
 
-test("a tab marks its surface open, and the active tab's surface current", () => {
+test("a tab marks its surface open, and the focused surface current", () => {
   const ws: Workspace = {
     tabs: [
       { id: "a", pageId: "logs", title: "Log Viewer" },
@@ -33,7 +33,7 @@ test("a tab marks its surface open, and the active tab's surface current", () =>
     ],
     activeId: "b",
   };
-  const by = new Map(sidebarItems(ws, SURFACES).map((i) => [i.pageId, i]));
+  const by = new Map(sidebarItems(ws, SURFACES, "graph").map((i) => [i.pageId, i]));
   assert.deepEqual(
     { open: by.get("logs")?.open, current: by.get("logs")?.current },
     { open: true, current: false },
@@ -70,9 +70,13 @@ test("a tiled tab marks every surface in its layout", () => {
     ],
     activeId: "a",
   };
-  const by = new Map(sidebarItems(ws, SURFACES).map((i) => [i.pageId, i]));
+  // A tiled tab holds BOTH surfaces, so both are open - but only the focused one is current. Marking
+  // every surface in the tab lit two rows at once with nothing saying where input would land.
+  const by = new Map(sidebarItems(ws, SURFACES, "logs").map((i) => [i.pageId, i]));
   assert.equal(by.get("logs")?.open, true);
   assert.equal(by.get("logs")?.current, true);
+  assert.equal(by.get("dashboard")?.open, true, "the tab's other pane is open");
+  assert.equal(by.get("dashboard")?.current, false, "but it is not the focused one");
   assert.equal(by.get("graph")?.open, false);
 });
 
@@ -86,19 +90,19 @@ test("a background tab is open but not current", () => {
     ],
     activeId: "a",
   };
-  const by = new Map(sidebarItems(ws, SURFACES).map((i) => [i.pageId, i]));
+  const by = new Map(sidebarItems(ws, SURFACES, "logs").map((i) => [i.pageId, i]));
   assert.equal(by.get("graph")?.open, true);
   assert.equal(by.get("graph")?.current, false);
 });
 
 // activeId can name a tab that is no longer in the list (a close that raced a restore). Nothing may
 // be current then, and the rail must still render every row rather than throwing.
-test("an activeId with no tab leaves nothing current", () => {
+test("no focused surface leaves nothing current", () => {
   const ws: Workspace = {
     tabs: [{ id: "a", pageId: "logs", title: "Log Viewer" }],
     activeId: "gone",
   };
-  const items = sidebarItems(ws, SURFACES);
+  const items = sidebarItems(ws, SURFACES, null);
   assert.equal(
     items.some((i) => i.current),
     false,
