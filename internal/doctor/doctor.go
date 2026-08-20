@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
 	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/schema"
@@ -48,6 +49,7 @@ type options struct {
 	cfg        config.Config
 	daemonInfo *DaemonInfo
 	probe      bool
+	skills     *agent.Catalog
 }
 
 // Option configures a [Run] call.
@@ -60,6 +62,11 @@ func WithConfig(c config.Config) Option { return func(o *options) { o.cfg = c } 
 // Pass a nil-pointer-equivalent (empty DaemonInfo with Reachable=false) when
 // the daemon is not running; this is not an error.
 func WithDaemonInfo(d DaemonInfo) Option { return func(o *options) { o.daemonInfo = &d } }
+
+// WithSkillCatalog supplies the agent skill catalog so the installed copies can be graded
+// against this binary. The sources are embedded in the CLI, so a caller without them (the
+// SDK, this package's tests) passes nothing and the check reports itself skipped.
+func WithSkillCatalog(c *agent.Catalog) Option { return func(o *options) { o.skills = c } }
 
 // WithProbe RUNS each declared readiness probe rather than only listing it.
 //
@@ -166,6 +173,7 @@ func (r *runner) run(wsErr error) types.DoctorReport {
 		r.checkGuardBinary(),
 		r.checkObserverRecording(),
 		r.checkGuardWiring(),
+		r.checkAgentSkills(),
 		r.checkReleaseIndexExpiry(),
 		r.checkRegistryFreshness(),
 		r.checkSymlinks(),

@@ -1966,6 +1966,105 @@ func checkGuardWiring(ctx context.Context, root, home string, budget time.Durati
 	}
 }
 
+// checkAgentSkills grades the INSTALLED agent skills against the running binary. An
+// upgrade that bumps the skill or knowledge-schema version leaves every checkout's copy
+// behind, and a stale skill does not fail loudly - it quietly teaches an agent last
+// release's verbs.
+//
+// AGENTS.md is graded too but can only ever be ADVICE: magus does not write that file, so
+// failing a check whose fix magus cannot apply would make --fix a liar.
+func (r *runner) checkAgentSkills() types.DoctorCheck {
+	const name = "agent skills"
+
+	if r.opts.skills == nil {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no skill catalog supplied; check skipped"}
+	}
+	root := r.ws.Root()
+	statuses := r.opts.skills.CheckStatuses(root)
+	if len(statuses) == 0 {
+		return types.DoctorCheck{
+			Name:    name,
+			Status:  types.DoctorAdvice,
+			Message: "not installed, so agents in this checkout have no magus vocabulary",
+			Details: []string{"install them: magus agent install .claude/skills"},
+		}
+	}
+
+	var stale, details []string
+	var pastedStale bool
+	for _, st := range statuses {
+		details = append(details, st.Location+": "+st.Detail)
+		switch {
+		case !st.Stale:
+		case st.Location == agent.AgentsFile:
+			pastedStale = true
+		default:
+			stale = append(stale, st.Location)
+		}
+	}
+
+	switch {
+	case len(stale) > 0:
+		// An ORPHANED skill - one a rename left behind - stays stale however often it is
+		// reinstalled, because --force rewrites only the names magus ships. Naming it as
+		// the remedy would make --fix run forever. No Fix rather than a pruning one:
+		// --prune deletes directories the caller has not reviewed, which is the
+		// judgement case the Fix contract reserves for a report.
+		if orphans := r.orphanedSkillDirs(root, stale); len(orphans) > 0 {
+			return types.DoctorCheck{
+				Name:    name,
+				Status:  types.DoctorFail,
+				Message: "installed skills are behind this binary, and a reinstall alone will not fix it: " + strings.Join(stale, ", "),
+				Details: append(details,
+					"a rename left these behind, and your agent host still loads them: "+strings.Join(orphans, ", "),
+					"review that list, then: magus agent install "+stale[0]+" --force --prune --dir "+root),
+			}
+		}
+		// One check carries one remedy, so two stale locations need --fix twice; the
+		// message lists them all.
+		//
+		// --dir pins the base, because install resolves a destination against the
+		// CALLER's directory and doctor runs from anywhere. It must be the RESOLVED
+		// root: r.root is the root as asked for, and is empty whenever the caller let
+		// magus discover it.
+		return types.DoctorCheck{
+			Name:    name,
+			Status:  types.DoctorFail,
+			Message: "installed skills are behind this binary: " + strings.Join(stale, ", "),
+			Details: details,
+			Fix:     []string{"agent", "install", stale[0], "--force", "--dir", root},
+		}
+	case pastedStale:
+		return types.DoctorCheck{
+			Name:    name,
+			Status:  types.DoctorAdvice,
+			Message: agent.AgentsFile + " carries an older managed block; magus does not write that file, so replace it yourself",
+			Details: append(details, "print the current block: magus agent sample --section"),
+		}
+	}
+	return types.DoctorCheck{
+		Name:    name,
+		Status:  types.DoctorOK,
+		Message: fmt.Sprintf("%d install location(s) current with this binary", len(statuses)),
+		Details: details,
+	}
+}
+
+// orphanedSkillDirs returns the installed skill directories this binary no longer ships,
+// across the given locations. A read error reports no orphans: guessing yes on a
+// directory it could not read would withhold a remedy that works.
+func (r *runner) orphanedSkillDirs(root string, locations []string) []string {
+	var out []string
+	for _, loc := range locations {
+		dirs, err := r.opts.skills.StaleSkillDirs(root, loc)
+		if err != nil {
+			continue
+		}
+		out = append(out, dirs...)
+	}
+	return out
+}
+
 // selfStalingScanLimits bound what checkSelfStalingOutputs is willing to read. A workspace
 // can declare thousands of output files, and doctor runs interactively, so an unbounded scan
 // would turn a health check into a build step. The caps are generous enough that a real

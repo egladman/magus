@@ -948,7 +948,7 @@ export fun mocks_generate(ctx: magus\Context, args: [str]) > void !> any {
 //
 // AGENTS.md is absent here because magus does not write that file at all. It is
 // hand-authored prose, the magus block inside it is pasted by a human from
-// `magus agent sample --section`, and `magus graph verify` grades that block's
+// `magus agent sample --section`, and `magus doctor` grades that block's
 // stamp without touching it. An install call here would rewrite the block on
 // every generate, making AGENTS.md a hybrid file at odds with the Markdown
 // formatter.

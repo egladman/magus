@@ -36,7 +36,7 @@ import (
 // merged knowledge graph for external tools (export), and report its shape
 // (stats). One home instead of surfaces scattered across describe and insight.
 
-var graphSubs = []string{"build", "deps", "export", "stats", "diff", "verify"}
+var graphSubs = []string{"build", "deps", "export", "stats", "diff"}
 
 func graphCmd(ctx context.Context, root string, args []string) error {
 	if len(args) == 0 || args[0] == "-h" || args[0] == "--help" || args[0] == "help" {
@@ -56,7 +56,13 @@ func graphCmd(ctx context.Context, root string, args []string) error {
 	case "diff":
 		return graphDiff(ctx, root, rest)
 	case "verify":
-		return graphVerify(ctx, root, rest)
+		// compat(until: no installed skill or published doc still names `graph verify` -
+		// observe by grepping a fresh `magus agent install` tree and the released docs
+		// for the string): every checkout whose skills predate v39 still tells an agent
+		// to run this, and "unknown subcommand" routes them nowhere.
+		//
+		// Absent from graphSubs on purpose: suggesting it would teach the name back.
+		return fmt.Errorf("magus graph verify has moved: run `magus doctor` and read its `agent skills` check, which grades the same installs and adds a --fix that reinstalls them")
 	default:
 		fmt.Fprintf(os.Stderr, "magus graph: unknown subcommand %q\n", sub)
 		if sug := interactive.SuggestNearest(sub, graphSubs); sug != "" {
@@ -80,7 +86,6 @@ func graphUsage() {
 	fmt.Fprintln(os.Stderr, "  export   merged knowledge graph (-o json|graphml; --select for a dot|mermaid neighborhood)")
 	fmt.Fprintln(os.Stderr, "  stats    knowledge-graph shape: god nodes, orphans, doc coverage (--kind to scope)")
 	fmt.Fprintln(os.Stderr, "  diff     nodes/edges added/removed/changed vs a baseline export or --rev; PR blast-radius")
-	fmt.Fprintln(os.Stderr, "  verify   check derived artifacts for drift (installed agent skill vs this binary); CI guard")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "See also: magus query/explain/path (read the graph).")
 }

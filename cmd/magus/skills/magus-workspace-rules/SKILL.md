@@ -22,7 +22,7 @@ and a generator overwrites without asking.{{end}}
 An installed skill carries a content stamp{{if .Full}} in its frontmatter and footer{{end}}.
 Two things happen to an edit you make there, both silent:
 
-- `magus graph verify` reports the file as stale and tells you to reinstall.
+- `magus doctor` reports the file as stale and tells you to reinstall.
 - `magus agent install <dir> --force` erases it.
 
 The rule that follows is absolute: if a file's frontmatter says `source: magus`,

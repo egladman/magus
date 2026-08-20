@@ -166,13 +166,13 @@ person.
 
 ```sh
 magus doctor
-magus graph verify
 ```
 
 `doctor`'s **guard binary** check names the binary a hook would actually run and
 fails when it is older than your working tree; **guard wiring** runs a canary
 command through it and then looks for a host config that invokes a current
-template. `graph verify` grades the installed skills against the running binary.
+template; **agent skills** grades the installed copies against the running binary
+and `--fix` reinstalls whatever it reports stale.
 
 Commit `.claude/settings.json` once you are happy with it. Until a checkout has
 that file, its guard rules are correct and entirely unenforced, with nothing in

@@ -32,21 +32,29 @@ import (
 // SOURCE bodies, which did not change, while what an install writes did.
 // 38: magus-commit-composition - restructuring an unpushed branch into reviewable
 // commits from project ownership, declared outputs and blast radius.
-const SkillVersion = 38
+// 39: `magus graph verify` is gone; the installed copies are graded by `magus
+// doctor`'s agent skills check, which every skill that named the old verb now
+// points at.
+const SkillVersion = 39
 
 const skillLicense = "GPL-3.0-or-later"
 
 const anchorSkillRel = "magus-query/SKILL.md"
 
+// AgentsFile is the repo-root instruction file magus prints a managed block for but never
+// writes, and the [Status.Location] CheckStatuses reports that block under - so a caller
+// can tell the one location whose remedy magus cannot run.
+const AgentsFile = "AGENTS.md"
+
 // LocalSkillName is reserved for a workspace's OWN rules, and magus must never
 // ship a skill by that name.
 //
 // Nothing in the installer or the verifier knows this constant, and that is the
-// design rather than an omission: install writes only the names in
-// skillSources, and CheckStatuses grades only the anchor, so any name magus
-// does not ship is already untouchable. The reservation exists so it stays that
-// way - a future shipped skill called magus-local-development would, on the
-// first --force after the upgrade, silently overwrite every early adopter's
+// design rather than an omission: install writes only the names in skillSources,
+// and grading skips any file magus did not write, so a name magus does not ship
+// is untouchable by structure rather than by exception. The reservation exists so
+// it stays that way - a future shipped skill called magus-local-development would,
+// on the first --force after the upgrade, silently overwrite every early adopter's
 // file.
 // TestLocalSkillNameIsReserved is what makes the promise enforceable.
 const LocalSkillName = "magus-local-development"
@@ -240,7 +248,7 @@ func FormerNames(name string) []string {
 }
 
 var skillSources = []skillSource{
-	{name: "magus-workspace-rules", description: "Adapt magus's installed agent surface to THIS workspace without breaking it. Use when repeated friction is not covered by a shipped skill, when tempted to edit an installed magus-* SKILL.md (they are stamped: `magus graph verify` reports the edit as drift and the next `magus agent install --force` erases it), and when deciding whether a workspace rule should graduate upstream as a pull request or an issue. Workspace-specific rules belong in a local magus-local-development skill, stamped with their evidence and a retire-when condition.", bodyPath: "skills/magus-workspace-rules/SKILL.md", formerNames: []string{"magus-adapt"}},
+	{name: "magus-workspace-rules", description: "Adapt magus's installed agent surface to THIS workspace without breaking it. Use when repeated friction is not covered by a shipped skill, when tempted to edit an installed magus-* SKILL.md (they are stamped: `magus doctor` reports the edit as drift and the next `magus agent install --force` erases it), and when deciding whether a workspace rule should graduate upstream as a pull request or an issue. Workspace-specific rules belong in a local magus-local-development skill, stamped with their evidence and a retire-when condition.", bodyPath: "skills/magus-workspace-rules/SKILL.md", formerNames: []string{"magus-adapt"}},
 	{name: "magus-architecture-review", description: "Ground refactoring and structure proposals in the magus knowledge graph instead of intuition. Use when suggesting directory structure, package layout, or module boundaries, when deciding where new code belongs, when assessing the blast radius or risk of a refactor, or when asked where a magus workspace's coupling and churn concentrate.", bodyPath: "skills/magus-architecture-review/SKILL.md", formerNames: []string{"magus-architecture"}},
 	{name: "magus-buzz-write", description: "Write and run Buzz, the language magusfiles, spells, and `magus buzz` scripts are written in. Use when writing or debugging a magusfile target, a spell, or a .buzz file, and when a one-off script is needed in a magus workspace - Buzz is already installed with the whole magus host surface (fs, http, json, yaml, template, vcs, ...), so it needs no dependency install. Also use when Buzz syntax surprises you: namespace access is a backslash, object literals use `=`, and `magus buzz` runs upstream-strict (no top-level control flow, every argument after the first must be labeled).", bodyPath: "skills/magus-buzz-write/SKILL.md", formerNames: []string{"magus-buzz"}},
 	{name: "magus-buzz-review", description: "Review Buzz code - a magusfile, a spell, or a standalone .buzz script - across three lenses run in parallel: idiom/style, skeptic/correctness, and upstream-Buzz conformance. Use when asked to review, audit, or critique a .buzz file or change, or when a finding needs to say whether it holds anywhere Buzz runs (UPSTREAM), only under gopherbuzz (GOPHERBUZZ), or runs here but not upstream (PORTABILITY). Fans out the three lenses via the Agent tool and merges the results, the same shape go-review-ultra uses for Go. Does NOT cover magusfile/target/spell contracts - caching, ctx.needs, wards, charms; use magus-buzz-write for those.", bodyPath: "skills/magus-buzz-review/SKILL.md"},
@@ -550,16 +558,9 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool, v Variant) ([]str
 // workspace's own magus-local-development both live there) and is never a candidate
 // even though the catalog does not name it.
 func (c *Catalog) StaleSkillDirs(dir, dest string) ([]string, error) {
-	skills, err := c.RenderedSkills(VariantSimple)
+	shipped, err := c.shipped()
 	if err != nil {
 		return nil, err
-	}
-	// Both variants, so a tree installed under either one is judged by what the
-	// catalog SHIPS rather than by which permutation last wrote it.
-	shipped := make(map[string]bool, len(skills)*2)
-	for _, s := range skills {
-		shipped[s.Name] = true
-		shipped[FullTwinName(s.Name)] = true
 	}
 
 	root := filepath.Join(dir, dest)
@@ -740,14 +741,14 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 		}
 		out = append(out, c.gradeDest(dir, dest))
 	}
-	if body, err := os.ReadFile(filepath.Join(dir, "AGENTS.md")); err == nil {
+	if body, err := os.ReadFile(filepath.Join(dir, AgentsFile)); err == nil {
 		if section := agentsSectionRe.Find(body); section != nil {
 			// The fix names a PRINTING command, because magus does not write this
 			// file: the block is the developer's to paste over the stale one. The
 			// string has been wrong before - it once named a flag that does not
 			// parse - and a stale stamp whose one job is to hand you the command
 			// that fixes it is worth checking against `magus agent -h`.
-			out = append(out, c.gradeStamp("AGENTS.md", "magus agent sample (prints the current block; magus does not write this file, so replace the stale one between the markers yourself)", string(section), c.contentDigest))
+			out = append(out, c.gradeStamp(AgentsFile, "magus agent sample (prints the current block; magus does not write this file, so replace the stale one between the markers yourself)", string(section), c.contentDigest))
 		}
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Location < out[j].Location })
@@ -761,9 +762,23 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 // when magus-query happens not to have changed.
 func (c *Catalog) gradeDest(dir, dest string) Status {
 	reinstall := "magus agent install " + dest + " --force"
+	// An unusable shipped set grades EVERYTHING rather than skipping: the skip below
+	// reads an unknown name as "not magus's", which would silently drop a
+	// pre-versioning install of a shipped skill - the one case that must still report.
+	shipped, shippedErr := c.shipped()
 	for _, name := range c.installedSkillNames(filepath.Join(dir, dest)) {
 		body, err := os.ReadFile(filepath.Join(dir, dest, name, "SKILL.md"))
 		if err != nil {
+			continue
+		}
+		// Not ours to grade: a workspace's own skill sits here by design, and grading it
+		// reported drift no reinstall could clear, since install writes only the names
+		// magus ships.
+		//
+		// BOTH conditions, and neither alone is the test. A missing marker also
+		// describes an install PREDATING versioning, which must still read as stale; an
+		// unshipped name also describes a skill a rename orphaned, which magus wrote.
+		if shippedErr == nil && !shipped[name] && !bytes.Contains(body, []byte(generatedSkillMarker)) {
 			continue
 		}
 		if st := c.gradeStamp(dest, reinstall, string(body), c.SkillDigest(baseSkillName(name))); st.Stale {
@@ -788,6 +803,26 @@ func (c *Catalog) installedSkillNames(path string) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// shipped is the set of directory names an install of this catalog writes. Both
+// variants are included, so a tree installed under either one is judged by what the
+// catalog SHIPS rather than by which permutation last wrote it.
+//
+// The error is propagated rather than absorbed into an empty set: callers read this
+// as "magus did not write that", and an empty set says it of every skill magus owns -
+// which would make StaleSkillDirs offer the whole installed tree for deletion.
+func (c *Catalog) shipped() (map[string]bool, error) {
+	skills, err := c.RenderedSkills(VariantSimple)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(skills)*2)
+	for _, s := range skills {
+		out[s.Name] = true
+		out[FullTwinName(s.Name)] = true
+	}
+	return out, nil
 }
 
 // baseSkillName maps an installed directory to the skill it was rendered from,

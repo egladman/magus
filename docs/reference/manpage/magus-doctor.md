@@ -22,6 +22,7 @@ results. Checks include:
   - A defined ci target and clean magusfile syntax
   - Dependency graph cycles
   - Workspace-escaping symlinks
+  - Installed agent skills still current with this binary
   - Recognized MAGUS_\* environment variables (typo detection)
   - Charm/target name collisions
   - Consistent target naming convention (any casing, but pick one)

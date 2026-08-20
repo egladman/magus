@@ -126,7 +126,7 @@ work rather than doing it here.
 Three generated copies must land in the SAME commit as any SKILL.md edit:
 
 - `.claude/skills/magus-delegate-multi-agent*` (stamped, checked by
-  `magus graph verify`): `magus agent install .claude/skills --force`
+  `magus doctor`): `magus agent install .claude/skills --force`
 - `evals/fixtures/{full,simple}/.claude/skills/...` (pinned by
   `cmd/magus/evalfixtures_test.go`), BOTH variants:
   `MAGUS_UPDATE_EVAL_FIXTURES=1 magus run go::go-test . -- -run TestEvalFixturesMatchTheEmbeddedSkills`

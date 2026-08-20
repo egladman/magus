@@ -289,7 +289,7 @@ strain it.
 writes agent skills into the directories you name (`.claude/skills/`,
 `.agents/skills/`, `.opencode/skills/`), each stamped with a magus-internal
 version. It does NOT write `AGENTS.md`: that file is yours, so install prints
-the managed block for you to paste. `magus graph verify` reports on both
+the managed block for you to paste. `magus doctor` reports on both
 surfaces, the pasted block included:
 
 ```text

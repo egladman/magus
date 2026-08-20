@@ -157,9 +157,9 @@ func hookUsage(w io.Writer) {
 // --tar | tar -xf - -C <absolute path>`.
 func agentInstallCmd(ctx context.Context, args []string) error {
 	fset := flag.NewFlagSet("agent install", flag.ContinueOnError)
-	// See graph_verify.go: the display flags are global, so every command takes
-	// them. `agent install ... -s` previously died on an undefined flag, and with
-	// stderr redirected that looked exactly like a successful install - the
+	// The display flags are global, so every command takes them - one gap decays the
+	// whole convention. `agent install ... -s` previously died on an undefined flag,
+	// and with stderr redirected that looked exactly like a successful install: the
 	// skills were never written and nothing said so.
 	bindDisplayFlags(fset)
 	af := gen.BindAgent(fset)
@@ -315,7 +315,7 @@ func printAgentInstallNextSteps(dir string, written, stale []string, v agent.Var
 func printAgentsBlockToPaste(dir string) {
 	verb := "add it to AGENTS.md at your repo root"
 	for _, s := range agentSkills.CheckStatuses(dir) {
-		if s.Location != "AGENTS.md" {
+		if s.Location != agent.AgentsFile {
 			continue
 		}
 		if !s.Stale {
@@ -335,7 +335,7 @@ const vcsSafetyRule = "Version control is the orchestrator's job: do it yourself
 // agentSampleDoc returns an AGENTS.md starter for a developer to paste and own.
 //
 // The magus guidance arrives inside its begin/end markers - the same bytes
-// install prints - so `magus graph verify` can grade it once pasted.
+// install prints - so `magus doctor` can grade it once pasted.
 func agentSampleDoc() string {
 	return "# AGENTS.md\n\n" +
 		"<!-- A starter for AI agents working in this repo. Own and edit this file:\n" +
@@ -755,7 +755,7 @@ func adviseMemoryWrite(path string) string {
 
 // adviseInstalledSkillWrite explains that an installed skill is generated, or
 // "" when the path is not one. The other path advisories catch a write that is
-// wasted; this one catches a write that DISAPPEARS - `graph verify` reports it
+// wasted; this one catches a write that DISAPPEARS - `magus doctor` reports it
 // as drift and the next `install --force` erases it.
 //
 // The STAMP is the discriminator, not the path: a workspace's own skill sits in
@@ -785,7 +785,7 @@ func adviseInstalledSkillWrite(path string) string {
 		return ""
 	}
 	return "magus workspace: put rules that belong to THIS workspace in a local skill beside the installed ones - a directory magus does not ship, conventionally magus-local-development, which install and verify both leave alone.\n" +
-		"That file is an INSTALLED skill, generated from magus's embedded sources and stamped with a content digest: `magus graph verify` reports your edit as stale rather than reading it, and the next `magus agent install <dir> --force` overwrites it.\n" +
+		"That file is an INSTALLED skill, generated from magus's embedded sources and stamped with a content digest: `magus doctor` reports your edit as stale rather than reading it, and the next `magus agent install <dir> --force` overwrites it.\n" +
 		"Stamp each rule with its evidence and the condition that retires it. Load the magus-workspace-rules skill for the format."
 }
 
@@ -1832,6 +1832,11 @@ var (
 	// `time go test` be judged as `go test` would erase the very token this rule is
 	// about.
 	guardTimedMagusRe = regexp.MustCompile(`(?:^|[;&|]\s*)time\s+(\S*/)?magus\s`)
+	// `timeout 300 magus run ci .`, read off the raw line for the same reason as the
+	// rule above: `timeout` is a peeled wrapper. Narrowed to run and affected, the
+	// only two subcommands carrying --timeout - naming it on `magus graph build`
+	// would advise a flag that does not exist there.
+	guardTimeoutMagusRe = regexp.MustCompile(`(?:^|[;&|]\s*)timeout\s+[^;&|]*?\s(\S*/)?magus\s+(?:run|affected)\b`)
 
 	// A magus invocation whose own output is truncated or filtered by the shell.
 	// magus has output flags for this; a pipe throws away the parts the agent
@@ -1957,6 +1962,12 @@ const (
 	// Advise, not deny: timing a command is legitimate, and the point is that magus
 	// already answered the question better than the shell can.
 	timedMagusAdvice = "magus times itself: drop `-s` and it prints each target's duration and a `(cached, 320ms)` or `(ran, 5m28s)` verdict. `time` around a silent run measures the wall clock magus already reported, and hides which targets replayed - which is usually the thing being asked."
+
+	// Advise, not deny: bounding a run is legitimate, and no deny trigger applies -
+	// nothing is unrecoverable, nothing is written, and the equivalent is close but
+	// not exact.
+	timeoutMagusAdvice = "magus has its own: `magus run <target> <project> --timeout 5m` (and the same flag on `magus affected`). It cancels the run rather than signalling the process, so the error names the target - `run ci: timed out after 5m` - and it logs elapsed/remaining heartbeats while the run is still going.\n" +
+		"An external `timeout` sees one opaque process: it cannot say which target was still running, and the SIGTERM lands wherever the run happened to be."
 )
 
 // denySharedStash explains why an unqualified stash restore is refused.
@@ -2056,6 +2067,8 @@ func evaluateBashGuard(command string) bashGuardVerdict {
 		return bashGuardVerdict{Context: echoOnSuccessAdvice}
 	case guardTimedMagusRe.MatchString(command):
 		return bashGuardVerdict{Context: timedMagusAdvice}
+	case guardTimeoutMagusRe.MatchString(command):
+		return bashGuardVerdict{Context: timeoutMagusAdvice}
 	}
 	// Nothing denied, so a held git advisory is the answer after all.
 	return advisory

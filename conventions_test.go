@@ -490,7 +490,7 @@ func TestEveryShippedTemplateIsRegistered(t *testing.T) {
 //
 // This is the hook templates' answer to the fingerprint an installed skill
 // carries. The two artifacts differ in who owns them - a skill is generated and
-// regraded on every `graph verify`, a template is copied into a host's config
+// regraded on every `magus doctor`, a template is copied into a host's config
 // and owned by its reader from then on - so the marker cannot be a content
 // digest without flagging every customization the templates explicitly invite.
 // A version survives editing and still answers the one question that matters to

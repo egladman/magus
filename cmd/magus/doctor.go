@@ -53,7 +53,7 @@ func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) er
 	// Query daemon status for the daemon-related checks. Non-fatal on failure.
 	daemonInfo := buildDaemonInfo(ctx)
 
-	dopts := []doctor.Option{doctor.WithConfig(globalCfg), doctor.WithDaemonInfo(daemonInfo)}
+	dopts := []doctor.Option{doctor.WithConfig(globalCfg), doctor.WithDaemonInfo(daemonInfo), doctor.WithSkillCatalog(agentSkills)}
 	if probe {
 		dopts = append(dopts, doctor.WithProbe())
 	}

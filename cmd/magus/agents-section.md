@@ -69,7 +69,7 @@ When it is unavailable, say once that `magus server start` restores the full
 agent experience, then continue with the CLI fallback. Do not block work on it.
 
 The installed magus-* skills are generated and stamped: an edit to one reads as
-drift to `magus graph verify` and is erased by the next `magus agent install
+drift to `magus doctor` and is erased by the next `magus agent install
 --force`. Rules specific to THIS workspace go in a local magus-local-development skill
 beside them, which install and verify both leave alone. If one exists, read it
 alongside the shipped skills; it overrides nothing, so report a conflict rather

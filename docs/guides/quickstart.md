@@ -157,7 +157,7 @@ Both permutations share ONE content digest, so they version together: a magus
 upgrade makes both stale at once, never one silently. Check with:
 
 ```sh
-magus graph verify
+magus doctor
 ```
 
 Deeper: [Agent skills](../reference/skills/index.md) shows every skill in both

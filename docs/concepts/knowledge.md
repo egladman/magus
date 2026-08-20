@@ -753,7 +753,7 @@ repo's `MAGUS.md` says WHAT is in the workspace): knowledge-graph verbs,
 target-first execution, generated-file triage, and graph-grounded refactoring.
 They ship with the binary and teach only the tool surface, so they stay current
 with the magus version rather than the workspace. Each installed file carries a
-version footer, and `magus graph verify --strict` reports actionable drift after
+version footer, and `magus doctor` reports actionable drift after
 an upgrade. See [Agents](../guides/agents.md) for the full host setup.
 
 ## Prior art

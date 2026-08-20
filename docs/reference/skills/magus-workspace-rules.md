@@ -5,13 +5,13 @@ description: "Adapt magus's installed agent surface to THIS workspace without br
 tags: [agents, skills, magus-workspace-rules]
 aliases:
   - reference/skills/magus-adapt
-skill_full_bytes: 5436
-skill_simple_bytes: 4392
+skill_full_bytes: 5430
+skill_simple_bytes: 4386
 ---
 
 # magus-workspace-rules
 
-Adapt magus's installed agent surface to THIS workspace without breaking it. Use when repeated friction is not covered by a shipped skill, when tempted to edit an installed magus-* SKILL.md (they are stamped: `magus graph verify` reports the edit as drift and the next `magus agent install --force` erases it), and when deciding whether a workspace rule should graduate upstream as a pull request or an issue. Workspace-specific rules belong in a local magus-local-development skill, stamped with their evidence and a retire-when condition.
+Adapt magus's installed agent surface to THIS workspace without breaking it. Use when repeated friction is not covered by a shipped skill, when tempted to edit an installed magus-* SKILL.md (they are stamped: `magus doctor` reports the edit as drift and the next `magus agent install --force` erases it), and when deciding whether a workspace rule should graduate upstream as a pull request or an issue. Workspace-specific rules belong in a local magus-local-development skill, stamped with their evidence and a retire-when condition.
 
 Install it, rather than copying from this page:
 
@@ -19,20 +19,20 @@ Install it, rather than copying from this page:
 magus agent install .claude/skills   # writes both forms below
 ```
 
-An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
+An installed copy carries a provenance stamp, so `magus doctor` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
 
 ## What an installed copy carries
 
-`magus agent install` writes this frontmatter above the body. `magus graph verify` reads it to report whether your installed skills are current.
+`magus agent install` writes this frontmatter above the body. `magus doctor` reads it to report whether your installed skills are current.
 
 | field | value |
 | --- | --- |
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `38` |
+| `agent-skill-version` | `39` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `bdb43f8dd1e8` |
+| `skill-content` | `debdcbb39c92` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -65,7 +65,7 @@ generator overwrites its output without asking.
 An installed skill carries a content stamp in its frontmatter and footer.
 Two things happen to an edit you make there, both silent:
 
-- `magus graph verify` reports the file as stale and tells you to reinstall.
+- `magus doctor` reports the file as stale and tells you to reinstall.
 - `magus agent install <dir> --force` erases it.
 
 The rule that follows is absolute: if a file's frontmatter says `source: magus`,
@@ -184,7 +184,7 @@ and a generator overwrites without asking.
 An installed skill carries a content stamp.
 Two things happen to an edit you make there, both silent:
 
-- `magus graph verify` reports the file as stale and tells you to reinstall.
+- `magus doctor` reports the file as stale and tells you to reinstall.
 - `magus agent install <dir> --force` erases it.
 
 The rule that follows is absolute: if a file's frontmatter says `source: magus`,

@@ -309,5 +309,4 @@ uses; see [Attention hooks](notifications.md).
 ```sh
 opencode debug config
 magus doctor
-magus graph verify
 ```

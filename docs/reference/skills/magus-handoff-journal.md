@@ -19,18 +19,18 @@ Install it, rather than copying from this page:
 magus agent install .claude/skills   # writes both forms below
 ```
 
-An installed copy carries a provenance stamp, so `magus graph verify` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
+An installed copy carries a provenance stamp, so `magus doctor` can tell you when a magus upgrade has made it stale. Text copied from this page carries none.
 
 ## What an installed copy carries
 
-`magus agent install` writes this frontmatter above the body. `magus graph verify` reads it to report whether your installed skills are current.
+`magus agent install` writes this frontmatter above the body. `magus doctor` reads it to report whether your installed skills are current.
 
 | field | value |
 | --- | --- |
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `38` |
+| `agent-skill-version` | `39` |
 | `knowledge-schema-version` | `9` |
 | `skill-content` | `86a22f9ac0c8` |
 | `skill-variant` | `full` |

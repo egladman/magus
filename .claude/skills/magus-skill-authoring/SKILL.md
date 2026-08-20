@@ -190,5 +190,5 @@ has to infer will be inferred differently by every model that reads it.
   Read status and decisions before re-litigating anything.
 - After editing skills: `go test ./cmd/magus/` (frontmatter, ASCII,
   byte-identity, install/verify testscripts), reinstall the dogfooded copy,
-  confirm `magus graph verify` says up to date, and run `magus affected ci`
+  confirm `magus doctor` says up to date, and run `magus affected ci`
   before calling the work done.
