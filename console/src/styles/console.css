@@ -729,6 +729,21 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    that scrolls when the surfaces outgrow the window) otherwise spreads the rows over the full height
    and each one comes out as tall as the space allows. */
 #console-sidebar .pf-v6-c-nav__list { flex: 1 1 auto; align-content: start; overflow-y: auto; overflow-x: hidden; padding-block-start: 0.25rem; }
+/* The utility group sits at the foot rather than growing with the list above it, so Settings stays in
+   the same place whether six lenses are listed or sixteen. A hairline separates the two vocabularies -
+   the same rule the pool reading and the collapse control already use, so the rail's foot reads as one
+   stack of trailing controls rather than three unrelated bands. */
+#console-sidebar [data-rail-utility] {
+  flex: 0 0 auto; align-content: end; overflow: visible;
+  padding-block-start: 0;
+  border-top: 1px solid var(--pf-t--global--border--color--default);
+}
+/* The rail's row menu. PF Menu positioned at the pointer; above the drawer content/panel and the
+   title-bar popovers, on PF's own z-index scale like every other layer in this shell. */
+.console-shell-railmenu {
+  position: fixed; z-index: var(--pf-t--global--z-index--400);
+  min-inline-size: 12rem;
+}
 #console-sidebar .pf-v6-c-nav__link {
   position: relative; /* the open-tab marker below is absolutely placed against the row */
   width: 100%; min-height: var(--console-sidebar-w);

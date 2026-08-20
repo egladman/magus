@@ -217,8 +217,14 @@ const SURFACES: Launchable[] = [
     pageId: "actions",
     label: "Shortcuts",
     hint: "Every command, its keys, and where to change them",
+    utility: true,
   },
-  { pageId: "settings", label: "Settings", hint: "Console settings and keybindings" },
+  {
+    pageId: "settings",
+    label: "Settings",
+    hint: "Console settings and keybindings",
+    utility: true,
+  },
 ];
 
 // CLEAN_PATH_SURFACES are the surfaces reachable by the canonical clean path /console/<surface>/,

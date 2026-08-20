@@ -16,6 +16,11 @@ export interface Launchable {
   pageId: string;
   label: string;
   hint: string;
+  // A meta surface rather than a lens on the workspace - Settings and Shortcuts, the two you consult
+  // rather than work in. The navigation rail pins these to its foot, away from the six you switch
+  // between constantly; the launcher grid and the Applications menu ignore the flag and list
+  // everything, because neither has a foot to pin them to.
+  utility?: boolean;
 }
 
 // The launcher lede rotates a small tagline each fresh load - a quiet sign of polish, not a slogan.

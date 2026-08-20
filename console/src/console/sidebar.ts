@@ -28,6 +28,7 @@ import type { Persisted } from "../lib/persist";
 import { tabHostsSurface, type Workspace } from "./tabs";
 import { bind, scope, type Scope, type Signal } from "./view";
 import { surfaceIconSvg, type Launchable } from "./home";
+import { openSurfaceWindow } from "../lib/appwindow";
 import type { PulseView } from "./pulse";
 
 // One row of the rail: the surface it opens, and what the workspace currently makes of it.
@@ -133,8 +134,86 @@ export function createSidebar(
 ): Sidebar {
   const sc: Scope = scope();
 
+  // One menu, moved to the pointer, living on <body> rather than in the rail - the same arrangement
+  // tabBar.ts uses and for the same reason: a menu parented to a list that gets rebuilt is a menu torn
+  // out from under the pointer. Its document listeners ride an AbortSignal that destroy() fires.
+  const menu = document.createElement("div");
+  menu.className = "pf-v6-c-menu console-shell-railmenu";
+  menu.hidden = true;
+  const menuList = document.createElement("ul");
+  menuList.className = "pf-v6-c-menu__list";
+  menuList.setAttribute("role", "menu");
+  const menuContent = document.createElement("div");
+  menuContent.className = "pf-v6-c-menu__content";
+  menuContent.append(menuList);
+  menu.append(menuContent);
+  const closeMenu = (): void => {
+    menu.hidden = true;
+  };
+  const menuItem = (label: string, run: () => void): HTMLLIElement => {
+    const li = document.createElement("li");
+    li.className = "pf-v6-c-menu__list-item";
+    li.setAttribute("role", "none");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "pf-v6-c-menu__item";
+    b.setAttribute("role", "menuitem");
+    const main = document.createElement("span");
+    main.className = "pf-v6-c-menu__item-main";
+    const text = document.createElement("span");
+    text.className = "pf-v6-c-menu__item-text";
+    text.textContent = label;
+    main.append(text);
+    b.append(main);
+    b.addEventListener("click", () => {
+      closeMenu();
+      run();
+    });
+    li.append(b);
+    return li;
+  };
+  const openMenu = (pageId: string, label: string, x: number, y: number): void => {
+    menuList.replaceChildren(
+      menuItem("Open " + label, () => cb.onOpen(pageId)),
+      menuItem("Open in new window", () => openSurfaceWindow(pageId)),
+    );
+    menu.hidden = false;
+    // Measured after unhiding so the box has a real size, then pulled back inside the viewport - a row
+    // near the bottom edge would otherwise open its menu off-screen.
+    const r = menu.getBoundingClientRect();
+    menu.style.left = Math.min(x, window.innerWidth - r.width - 4) + "px";
+    menu.style.top = Math.min(y, window.innerHeight - r.height - 4) + "px";
+    menu.querySelector<HTMLElement>("button")?.focus();
+  };
+  document.body.append(menu);
+  const ac = new AbortController();
+  document.addEventListener(
+    "click",
+    (e) => {
+      if (!menu.hidden && !menu.contains(e.target as Node)) closeMenu();
+    },
+    { signal: ac.signal },
+  );
+  document.addEventListener(
+    "keydown",
+    (e: KeyboardEvent) => {
+      if (e.key === "Escape" && !menu.hidden) closeMenu();
+    },
+    { signal: ac.signal },
+  );
+  sc.add(() => {
+    ac.abort();
+    menu.remove();
+  });
+
+  // Two lists, one vocabulary: the lenses you work in, then the meta surfaces you consult. The split
+  // is what keeps Settings out of the path of the six rows above it, and it is the arrangement both
+  // VS Code (gear pinned under the view icons) and macOS sidebars use.
   const list = document.createElement("ul");
   list.className = "pf-v6-c-nav__list";
+  const utilityList = document.createElement("ul");
+  utilityList.className = "pf-v6-c-nav__list";
+  utilityList.dataset.railUtility = "";
 
   // pageId -> its row's link, so the state pass is a map lookup rather than a re-query per change.
   const links = new Map<string, HTMLButtonElement>();
@@ -164,8 +243,15 @@ export function createSidebar(
 
     link.append(icon, text);
     link.addEventListener("click", () => cb.onOpen(s.pageId));
+    // Right-click for the one thing a row cannot say on its own. The launcher card carried this on a
+    // kebab and the tab strip carries it on its own context menu; without it here the rail would be
+    // the only way to reach a surface that could not also send it to its own window.
+    link.addEventListener("contextmenu", (ev) => {
+      ev.preventDefault();
+      openMenu(s.pageId, s.label, ev.clientX, ev.clientY);
+    });
     item.append(link);
-    list.append(item);
+    (s.utility ? utilityList : list).append(item);
     links.set(s.pageId, link);
   }
 
@@ -196,7 +282,7 @@ export function createSidebar(
   toggle.append(toggleIcon);
   toggle.addEventListener("click", () => expanded.set(!expanded.get()));
 
-  host.replaceChildren(list, pulseEl, toggle);
+  host.replaceChildren(list, utilityList, pulseEl, toggle);
 
   const paintRows = (): void => {
     for (const item of sidebarItems(ws.get(), surfaces, focused.get())) {

@@ -37,6 +37,7 @@ function cell<T>(initial: T): Persisted<T> {
 const SURFACES: Launchable[] = [
   { pageId: "dashboard", label: "Dashboard", hint: "What magus is doing right now" },
   { pageId: "logs", label: "Log Viewer", hint: "Read a run's captured output" },
+  { pageId: "settings", label: "Settings", hint: "Console settings", utility: true },
 ];
 
 function mount(ws: Workspace, expanded = false, focusedPageId: string | null = null) {
@@ -60,7 +61,7 @@ function link(host: HTMLElement, pageId: string): HTMLButtonElement {
 
 test("renders one PF nav row per surface", () => {
   const { host } = mount({ tabs: [], activeId: null });
-  assert.equal(host.querySelectorAll(".pf-v6-c-nav__item").length, 2);
+  assert.equal(host.querySelectorAll(".pf-v6-c-nav__item").length, 3);
   assert.equal(link(host, "dashboard").querySelector("svg") != null, true);
   assert.equal(
     link(host, "dashboard").querySelector(".pf-v6-c-nav__link-text")?.textContent,
@@ -279,4 +280,52 @@ test("the reading follows the pool and the rail's own width", () => {
   pulse.set({ running: 2, queued: 5 });
   assert.equal(text(), "2 running, 5 queued");
   assert.equal(el.dataset.state, "queued");
+});
+
+// A meta surface belongs at the foot, out of the path of the lenses above it - the arrangement VS Code
+// and macOS sidebars both use. The flag lives on the surface list so the rail is not a second place
+// deciding what counts as utility.
+test("utility surfaces are pinned in their own group", () => {
+  const { host } = mount({ tabs: [], activeId: null });
+  const utility = host.querySelector("[data-rail-utility]");
+  assert.ok(utility);
+  assert.equal(utility.querySelectorAll("[data-rail-surface]").length, 1);
+  assert.equal(
+    utility.querySelector("[data-rail-surface]")?.getAttribute("data-rail-surface"),
+    "settings",
+  );
+  // ...and the lenses are NOT in it.
+  assert.equal(utility.querySelector('[data-rail-surface="dashboard"]'), null);
+  // The utility group comes after the main list, so it renders at the foot.
+  const lists = [...host.querySelectorAll(".pf-v6-c-nav__list")];
+  assert.equal(lists[lists.length - 1], utility);
+});
+
+test("right-clicking a row offers to open it, here or in its own window", () => {
+  const { host, opened } = mount({ tabs: [], activeId: null });
+  link(host, "logs").dispatchEvent(
+    new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+  );
+  const menu = document.querySelector(".console-shell-railmenu");
+  assert.ok(menu);
+  assert.equal((menu as HTMLElement).hidden, false);
+  const items = [...menu.querySelectorAll(".pf-v6-c-menu__item-text")].map((n) => n.textContent);
+  assert.deepEqual(items, ["Open Log Viewer", "Open in new window"]);
+
+  // The first item routes through the same callback a plain click uses, rather than a second path.
+  menu.querySelector<HTMLButtonElement>("button")?.click();
+  assert.deepEqual(opened, ["logs"]);
+  assert.equal((menu as HTMLElement).hidden, true, "acting on an item closes the menu");
+});
+
+// The menu lives on <body>, so a destroyed rail that left it behind would leak a menu AND the document
+// listeners that drive it.
+test("destroy takes the row menu with it", () => {
+  const { host, bar } = mount({ tabs: [], activeId: null });
+  link(host, "logs").dispatchEvent(
+    new MouseEvent("contextmenu", { bubbles: true, cancelable: true }),
+  );
+  assert.ok(document.querySelector(".console-shell-railmenu"));
+  bar.destroy();
+  assert.equal(document.querySelector(".console-shell-railmenu"), null);
 });
