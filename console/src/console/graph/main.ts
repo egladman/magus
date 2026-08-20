@@ -255,11 +255,18 @@ let radialRings: string[][] | null = null;
 // selectNode with an id, or cleared on Esc/query/view activation.
 let pendingRadialPick = false;
 
-// On-screen radius, in CSS pixels, a node must reach before its label is worth drawing. Below
-// this the node is one indistinguishable dot among thousands and the name points at nothing.
-// The cutoff is sharp on a real graph and 8 sits in the gap: framing all 2373 nodes of magus's
-// own workspace, 7px would still admit 38 names into the dense core while 8px admits 6 - the
-// root project, magusfile.buzz and a few of the biggest docs. Zooming in reveals the rest.
+// Below this zoom NOTHING is labelled. At the scale that frames a whole workspace the overview's
+// job is shape, and no amount of legibility work makes a name useful there: it cannot be tied to
+// the dot it belongs to, so it is just text laid over the thing the reader is trying to see.
+// Framing magus's own 2373 nodes lands near k=0.45. The floor is well above that rather than
+// just above it, because "the whole cloud still fits on screen" is still the overview: at k=1
+// every one of this workspace's 74 hubs clears the size rule at once and the core goes back to
+// being a wall of text. Labels wait until the view is inspecting a REGION.
+const LABEL_MIN_ZOOM = 1.6;
+
+// Once labelling is on at all, this is the on-screen radius in CSS pixels a node must reach to
+// earn one - so names arrive biggest-hub-first as the view goes deeper, rather than all at once
+// the moment the floor is crossed.
 const LABEL_MIN_NODE_PX = 8;
 
 // Cards render for the targets flavor in the DAG-shaped modes only; the
@@ -1303,17 +1310,14 @@ function draw() {
     if (n.x == null) continue;
     if (projectionActive && !projectionActive.has(n.id)) continue;
     if (cardsActive() && n.w) continue; // the label is painted inside the card
+    // Two exemptions from the zoom floor, both cases where the reader ASKED for a name: the node
+    // under the cursor or selection, and radial, which exists to name one node's neighbours and
+    // never places more than a few dozen.
     const show =
       n.id === highlight ||
-      // A hub only earns a label once it is big enough on screen to be the thing the label
-      // points AT. `n.degree > 24` alone is zoom-independent, so framing the whole graph put
-      // all 74 of this workspace's hubs into the dense core at once - a smear of white text
-      // over a cloud of 3px dots, naming nodes the reader cannot pick out anyway. Keying on
-      // the drawn radius also orders the reveal by importance for free: the biggest hubs get
-      // their names back first as the view zooms in.
-      (n.degree > 24 && n.r * transform.k >= LABEL_MIN_NODE_PX) ||
-      transform.k > 2.2 ||
-      (layoutMode === "radial" && radialPlacedCount <= 60);
+      (layoutMode === "radial" && radialPlacedCount <= 60) ||
+      (transform.k >= LABEL_MIN_ZOOM &&
+        (transform.k > 2.2 || (n.degree > 24 && n.r * transform.k >= LABEL_MIN_NODE_PX)));
     if (!show) continue;
     if (matchSet && !projectionActive && !matchSet.has(n.id) && n.id !== highlight) continue;
     // Viewport cull (CSS px): drop off-screen labels so the greedy scan below only
