@@ -1298,6 +1298,7 @@ function draw() {
   // the selection, or a zoomed-in view; and culled to the viewport first so the overlap
   // scan stays cheap. Boxes are compared in world units (the same scale as the on-screen
   // 11px text), so the overlap test is zoom-consistent.
+  ctx.fillStyle = th.text;
   ctx.font = "500 " + 11 / transform.k + "px " + th.font;
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
@@ -1346,14 +1347,6 @@ function draw() {
     }
     if (clash) continue;
     placedLabels.push({ x: lx, y: ly, w: lw });
-    // Halo first: light text over a dense node cloud loses its edges against whatever it
-    // happens to cross. A stroke in the page background separates the glyphs from the graph
-    // without a label box, which at this density would hide more than it names.
-    ctx.lineJoin = "round";
-    ctx.lineWidth = 3 / transform.k;
-    ctx.strokeStyle = th.bg;
-    ctx.strokeText(n.label, lx, n.y);
-    ctx.fillStyle = th.text;
     ctx.fillText(n.label, lx, n.y);
   }
   ctx.restore();
