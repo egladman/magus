@@ -121,8 +121,9 @@ test("expanded, the queue joins the reading only once there is one", () => {
 });
 
 // Collapsed, a bare "3" is not something a screen reader can make sense of, so the full sentence is
-// the accessible name in BOTH states.
-test("the spoken reading is the full sentence either way", () => {
-  assert.equal(pulseTitle({ running: 1, queued: 0 }), "1 running in this workspace");
-  assert.equal(pulseTitle({ running: 1, queued: 4 }), "1 running in this workspace, 4 queued");
+// the accessible name in BOTH states. It says DAEMON, not workspace: the pool is daemon-wide, and a
+// workspace-scoped reading would attribute a sibling workspace's runs to the one you are looking at.
+test("the spoken reading is the full sentence, scoped to the daemon", () => {
+  assert.equal(pulseTitle({ running: 1, queued: 0 }), "1 running on this daemon");
+  assert.equal(pulseTitle({ running: 1, queued: 4 }), "1 running on this daemon, 4 queued");
 });

@@ -194,7 +194,7 @@ test("the reading follows the pool and the rail's own width", () => {
   pulse.set({ running: 2, queued: 0 });
   assert.equal(text(), "2");
   assert.equal(el.dataset.state, "running");
-  assert.equal(el.getAttribute("aria-label"), "2 running in this workspace");
+  assert.equal(el.getAttribute("aria-label"), "2 running on this daemon");
 
   // Expanding must repaint the reading, not just the rows - the collapsed form is a bare number.
   expCell.set(true);

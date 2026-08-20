@@ -59,9 +59,14 @@ export function pulseLabel(p: PulseView, expanded: boolean): string {
 
 // The full sentence, for the tooltip and the accessible name, in both states - collapsed, the visible
 // "3" is not a thing a screen reader can make sense of on its own.
+//
+// "on this daemon", NOT "in this workspace": the pool is daemon-wide and one daemon serves several
+// workspaces, so a workspace-scoped reading would attribute another workspace's runs to yours. The
+// wire carries no per-workspace run attribution to narrow it with (see the dashboard's bigPicture.ts,
+// which is why its workspace picker filters nothing either).
 export function pulseTitle(p: PulseView): string {
   const queued = p.queued > 0 ? ", " + p.queued + " queued" : "";
-  return p.running + " running in this workspace" + queued;
+  return p.running + " running on this daemon" + queued;
 }
 
 export interface Sidebar {
