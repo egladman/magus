@@ -49,8 +49,7 @@ function lastPick(): string {
 
 function rememberPick(root: string): void {
   try {
-    if (root) localStorage.setItem(LAST_KEY, root);
-    else localStorage.removeItem(LAST_KEY);
+    localStorage.setItem(LAST_KEY, root);
   } catch {
     // A forgotten preselection costs one extra click next time.
   }
@@ -129,7 +128,10 @@ function ask(roots: readonly string[]): void {
   list.className = "console-shell-signin__list";
 
   const choose = (root: string): void => {
-    rememberPick(root);
+    // Only an explicit workspace pick moves the preselection. Escape and "Watch all workspaces" both
+    // arrive here with ALL_WORKSPACES, and letting either clear it would cost the NEXT browser tab its
+    // one-click answer as the price of dismissing this one.
+    if (root !== ALL_WORKSPACES) rememberPick(root);
     setWorkspaceScope(root);
     markAsked();
     close();
@@ -171,7 +173,8 @@ function ask(roots: readonly string[]): void {
   document.body.append(backdrop);
 
   const first =
-    list.querySelector<HTMLElement>("[data-suggested]") ?? list.querySelector<HTMLElement>("button");
+    list.querySelector<HTMLElement>("[data-suggested]") ??
+    list.querySelector<HTMLElement>("button");
   first?.focus();
 
   function close(): void {
@@ -182,7 +185,22 @@ function ask(roots: readonly string[]): void {
   // Escape lands on the daemon-wide view rather than leaving the question open: dismissing has to go
   // somewhere, and the honest destination is the scope that hides nothing.
   function onKey(e: KeyboardEvent): void {
-    if (e.key === "Escape") choose(ALL_WORKSPACES);
+    if (e.key === "Escape") {
+      choose(ALL_WORKSPACES);
+      return;
+    }
+    if (e.key !== "Tab") return;
+    // aria-modal tells a screen reader that nothing outside this box exists. Without a trap Tab walks
+    // straight out into the console behind it, and the two accounts of where the user is disagree.
+    const stops = [...box.querySelectorAll<HTMLElement>("button")];
+    if (stops.length === 0) return;
+    const edge = e.shiftKey ? stops[0] : stops[stops.length - 1];
+    const wrapTo = e.shiftKey ? stops[stops.length - 1] : stops[0];
+    const active = document.activeElement;
+    if (active === edge || !(active instanceof Node) || !box.contains(active)) {
+      e.preventDefault();
+      wrapTo.focus();
+    }
   }
   document.addEventListener("keydown", onKey);
 }
