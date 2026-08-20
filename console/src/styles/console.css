@@ -841,21 +841,27 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    it is never the accessible name (that is the button's aria-label), so clipping it costs nothing. */
 #console-sidebar .pf-v6-c-nav__link-text { white-space: nowrap; opacity: 1; transition: opacity 0.1s ease; }
 #console-sidebar:not([data-expanded]) .pf-v6-c-nav__link-text { opacity: 0; }
-/* A surface open in a BACKGROUND tab. Only there: pf-m-current already carries the same fill the tab
-   bar's active item uses, and current implies open - painting both on one row stacked two markers for
-   one fact, which is what made the rail read as busier than the rest of the app.
-   Inset from the rail's leading edge rather than flush to it: the rail now runs to the window edge, and
-   a 2px accent sliver at x=0 reads as something bleeding off-screen rather than as a deliberate mark. */
+/* The rail's two row markers: an edge bar running the FULL height of the row, the way the log viewer's
+   tab strip marks its current tab. It was a 1rem stub inset from the leading edge, which read as a
+   bullet beside the row rather than as an edge marker on it - the earlier worry about a sliver
+   "bleeding off-screen" was about a SHORT mark at x=0; a full-height bar at the edge is the standard
+   tab-indicator shape and reads as deliberate. */
+#console-sidebar .pf-v6-c-nav__link[data-tab-open]::before,
+#console-sidebar .pf-v6-c-nav__link.pf-m-current::before {
+  content: ""; position: absolute; inset-inline-start: 0; inset-block: 0; inline-size: 3px;
+}
+/* OPEN somewhere else: this surface has a tab, but it is not where you are. Neutral, because the house
+   rule is ONE functional colour - a second hue here would make the rail a two-colour system for what
+   is really one axis. Prominence separates the two states instead. */
 #console-sidebar .pf-v6-c-nav__link[data-tab-open]:not(.pf-m-current)::before {
-  content: ""; position: absolute; inset-inline-start: 0.25rem; inline-size: 2px; block-size: 1rem;
-  /* Spruce, not --console-accent. The mark is FUNCTIONAL (this app has a tab open), and the house
-     rule for functional colour is one muted hue, spruce - blue and purple are off the palette because
-     they read as generic. --console-accent still resolves to PatternFly's brand blue everywhere in
-     this sheet, which is a gap against that rule rather than an endorsement of it; when the accent
-     itself becomes spruce this can collapse back to var(--console-accent).
-     Semantic colour is a separate vocabulary and stays where it is - the pool dot below is a status
-     reading, so it keeps the status tokens. */
-  background: var(--console-spruce);
+  background: var(--pf-t--global--icon--color--subtle);
+}
+/* WHERE YOU ARE. The saturated end of that axis, and the only row that ever carries it - exactly one
+   row is current, so this is unambiguous even though both markers share a shape.
+   Semantic colour is a separate vocabulary and stays where it is - the pool dot below is a status
+   reading, so it keeps the status tokens. */
+#console-sidebar .pf-v6-c-nav__link.pf-m-current::before {
+  background: var(--console-accent);
 }
 /* The live pool reading at the rail's foot. It borrows the nav link's grid so its dot sits on the same
    vertical line as every app icon above it - a second alignment here would read as a stray element
