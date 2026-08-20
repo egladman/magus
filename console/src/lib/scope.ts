@@ -36,6 +36,26 @@ export function setWorkspaceScope(root: string): void {
   window.dispatchEvent(new CustomEvent(EVENT, { detail: root }));
 }
 
+// Which workspaces the daemon has loaded, announced by whoever learned it first.
+//
+// The shell polls GetStatus every 15s, but a SURFACE often knows sooner and more reliably: the
+// dashboard holds an open status stream, and in the offline demo it is the only thing that knows at
+// all, because there is no daemon to poll. So the list is published rather than owned - the shell's
+// scope picker builds its menu from whatever arrives, from either source.
+const WORKSPACES_EVENT = "console:workspaces";
+
+export function publishWorkspaces(roots: readonly string[]): void {
+  window.dispatchEvent(new CustomEvent(WORKSPACES_EVENT, { detail: [...roots] }));
+}
+
+export function onWorkspaces(fn: (roots: string[]) => void): () => void {
+  const handler = (e: Event): void => {
+    if (e instanceof CustomEvent && Array.isArray(e.detail)) fn(e.detail as string[]);
+  };
+  window.addEventListener(WORKSPACES_EVENT, handler);
+  return () => window.removeEventListener(WORKSPACES_EVENT, handler);
+}
+
 // onWorkspaceScope subscribes to changes made ANYWHERE in this browser tab - the shell's selector, or
 // a surface that offers its own way in. Returns an unsubscribe.
 export function onWorkspaceScope(fn: (root: string) => void): () => void {

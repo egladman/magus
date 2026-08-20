@@ -2,6 +2,7 @@
 // deep-links the Workspace glossary term.
 
 import type { DashboardState, WorkspaceView } from "../state";
+import { publishWorkspaces } from "../../../lib/scope";
 import { relTime } from "../state";
 import { Card, h, type Tile } from "./card";
 import { fitRows } from "./density";
@@ -34,6 +35,10 @@ export function workspacesTile(activeWorkspace?: ScopeReader): Tile {
   card.body.append(list, empty);
 
   function render(wss: WorkspaceView[]): void {
+    // Tell the shell which workspaces exist. This tile is the one place that always has the list -
+    // live from the status stream, and synthetic in the demo - so the title bar's scope picker can
+    // offer them without a second call, and can offer them offline at all.
+    publishWorkspaces(wss.map((w) => w.root).filter((r) => r !== ""));
     count.textContent = String(wss.length);
     empty.hidden = wss.length > 0;
     list.replaceChildren();

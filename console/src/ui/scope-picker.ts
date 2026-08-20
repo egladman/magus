@@ -10,7 +10,13 @@
 // HIDDEN until a daemon serves more than one workspace. With one loaded, scoped and unscoped show
 // the same thing and the control is a decision nobody has to make - the same rule the dashboard's
 // own picker used before this replaced it.
-import { ALL_WORKSPACES, setWorkspaceScope, shortName, workspaceScope } from "../lib/scope";
+import {
+  ALL_WORKSPACES,
+  onWorkspaceScope,
+  setWorkspaceScope,
+  shortName,
+  workspaceScope,
+} from "../lib/scope";
 
 export interface ScopePicker {
   // The daemon told us which workspaces it has loaded; rebuild the menu around them.
@@ -121,6 +127,9 @@ export function initScopePicker(host: HTMLElement): ScopePicker {
 
   host.prepend(menu);
   host.prepend(btn);
+  // The control has to follow the scope, not just set it: the scope can change from anywhere in the
+  // tab, and without this the button kept announcing the workspace you left.
+  onWorkspaceScope(paint);
   paint();
 
   return {

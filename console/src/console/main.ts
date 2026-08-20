@@ -46,6 +46,7 @@ import { leaves, type Pane, type Leaf, type Split } from "./tiling";
 import { initRefDrawer, referenceSurface } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
 import { initScopePicker } from "../ui/scope-picker";
+import { onWorkspaces } from "../lib/scope";
 import { mountNotificationCenter, notify } from "../lib/notifications";
 import { checkLocalStorageAlert, startShellWatch } from "../lib/watch";
 import { openSurfaceWindow } from "../lib/appwindow";
@@ -1086,6 +1087,9 @@ export function startConsole(
   // decision with one answer.
   const actionsHost = document.getElementById("console-actions");
   const scopePicker = actionsHost ? initScopePicker(actionsHost) : null;
+  // A surface can know the workspace list before this shell's 15s poll does - and in the offline demo
+  // it is the ONLY thing that knows, since there is no daemon to poll.
+  if (scopePicker) onWorkspaces((roots) => scopePicker.setWorkspaces(roots));
 
   const sidebarHost = document.getElementById("console-sidebar");
   if (sidebarHost) {
