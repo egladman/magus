@@ -153,6 +153,8 @@ const GRAPH_KEYMAP: Keymap = {
   "graph.search": "/", // focus the node search
   "graph.fit": "f", // zoom to fit
   "graph.layout": "l", // cycle force / layered / waves layout
+  "graph.focus.shallower": "[", // one hop less of the local graph
+  "graph.focus.deeper": "]", // one hop more
 };
 const keymapCell = persisted<Keymap>("keymap", {});
 // These handles are the DOM contract with graph.html; the page always provides them, so they are
@@ -4437,18 +4439,16 @@ function bootWireEvents() {
     (sim?.force("y") as ForceY<GNode> | undefined)?.strength(v / 100);
   });
 
-  // Keyboard: Esc clears a focus/query; [ and ] shrink/grow the focus depth.
+  // Esc clears a focus/query. It stays a raw listener rather than a registered command because
+  // it is the conventional global dismiss and has to fire while the search box has focus, which
+  // the keybinding layer deliberately suppresses (isTyping). The focus-depth keys DID live here
+  // too; they are commands now, so they reach the Shortcuts view and can be rebound.
   document.addEventListener(
     "keydown",
     (e) => {
-      if (e.key === "Escape") {
-        clearFocusOrQuery();
-        if (searchEl.blur) searchEl.blur();
-        return;
-      }
-      if (e.target === searchEl) return; // don't hijack typing
-      if (e.key === "[") changeFocusDepth(-1);
-      else if (e.key === "]") changeFocusDepth(1);
+      if (e.key !== "Escape") return;
+      clearFocusOrQuery();
+      if (searchEl.blur) searchEl.blur();
     },
     { signal: lifecycleSignal },
   );
@@ -4477,6 +4477,18 @@ function bootWireEvents() {
     label: "Cycle layout",
     group: "Graph",
     run: () => cycleLayout(),
+  });
+  registerCommand({
+    id: "graph.focus.shallower",
+    label: "Local graph: one hop less",
+    group: "Graph",
+    run: () => changeFocusDepth(-1),
+  });
+  registerCommand({
+    id: "graph.focus.deeper",
+    label: "Local graph: one hop more",
+    group: "Graph",
+    run: () => changeFocusDepth(1),
   });
   uninstallKeys?.();
   uninstallKeys = installKeybindings(() => mergeKeymap(GRAPH_KEYMAP, keymapCell.get()));
