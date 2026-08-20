@@ -792,6 +792,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    the window crosses the breakpoint, and would otherwise be left floating with nothing anchoring it. */
 @media (min-width: 48rem) {
   #console-appmenu-btn, #console-appmenu { display: none; }
+  /* The settings gear goes too, and for a sharper reason than mere redundancy: Settings is a
+     DESTINATION - it opens as a surface like any other - and destinations belong to the navigation
+     surface, not the toolbar (Apple's HIG draws exactly this line; a toolbar carries actions). The
+     rail already lists it, so the gear was the same cog twice on one screen, which is what VS Code's
+     own activity-bar guidance names outright: "Don't duplicate an existing icon."
+     Below this width the rail is gone and the gear is the only way in, so it comes back. */
+  #settings-btn { display: none; }
 }
 /* min-width:0 lets the drawer content shrink so the inline Reference panel fits: on desktop the
    content insets by the panel's 22rem, and on a narrow/mobile screen it shrinks to zero so the panel
