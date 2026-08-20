@@ -50,11 +50,11 @@ const AgentsFile = "AGENTS.md"
 // ship a skill by that name.
 //
 // Nothing in the installer or the verifier knows this constant, and that is the
-// design rather than an omission: install writes only the names in
-// skillSources, and CheckStatuses grades only the anchor, so any name magus
-// does not ship is already untouchable. The reservation exists so it stays that
-// way - a future shipped skill called magus-local-development would, on the
-// first --force after the upgrade, silently overwrite every early adopter's
+// design rather than an omission: install writes only the names in skillSources,
+// and grading skips any file magus did not write, so a name magus does not ship
+// is untouchable by structure rather than by exception. The reservation exists so
+// it stays that way - a future shipped skill called magus-local-development would,
+// on the first --force after the upgrade, silently overwrite every early adopter's
 // file.
 // TestLocalSkillNameIsReserved is what makes the promise enforceable.
 const LocalSkillName = "magus-local-development"
@@ -558,16 +558,9 @@ func (c *Catalog) WriteSkillTree(dir, dest string, force bool, v Variant) ([]str
 // workspace's own magus-local-development both live there) and is never a candidate
 // even though the catalog does not name it.
 func (c *Catalog) StaleSkillDirs(dir, dest string) ([]string, error) {
-	skills, err := c.RenderedSkills(VariantSimple)
+	shipped, err := c.shipped()
 	if err != nil {
 		return nil, err
-	}
-	// Both variants, so a tree installed under either one is judged by what the
-	// catalog SHIPS rather than by which permutation last wrote it.
-	shipped := make(map[string]bool, len(skills)*2)
-	for _, s := range skills {
-		shipped[s.Name] = true
-		shipped[FullTwinName(s.Name)] = true
 	}
 
 	root := filepath.Join(dir, dest)
@@ -769,9 +762,23 @@ func (c *Catalog) CheckStatuses(dir string) []Status {
 // when magus-query happens not to have changed.
 func (c *Catalog) gradeDest(dir, dest string) Status {
 	reinstall := "magus agent install " + dest + " --force"
+	// An unusable shipped set grades EVERYTHING rather than skipping: the skip below
+	// reads an unknown name as "not magus's", which would silently drop a
+	// pre-versioning install of a shipped skill - the one case that must still report.
+	shipped, shippedErr := c.shipped()
 	for _, name := range c.installedSkillNames(filepath.Join(dir, dest)) {
 		body, err := os.ReadFile(filepath.Join(dir, dest, name, "SKILL.md"))
 		if err != nil {
+			continue
+		}
+		// Not ours to grade: a workspace's own skill sits here by design, and grading it
+		// reported drift no reinstall could clear, since install writes only the names
+		// magus ships.
+		//
+		// BOTH conditions, and neither alone is the test. A missing marker also
+		// describes an install PREDATING versioning, which must still read as stale; an
+		// unshipped name also describes a skill a rename orphaned, which magus wrote.
+		if shippedErr == nil && !shipped[name] && !bytes.Contains(body, []byte(generatedSkillMarker)) {
 			continue
 		}
 		if st := c.gradeStamp(dest, reinstall, string(body), c.SkillDigest(baseSkillName(name))); st.Stale {
@@ -796,6 +803,26 @@ func (c *Catalog) installedSkillNames(path string) []string {
 	}
 	sort.Strings(names)
 	return names
+}
+
+// shipped is the set of directory names an install of this catalog writes. Both
+// variants are included, so a tree installed under either one is judged by what the
+// catalog SHIPS rather than by which permutation last wrote it.
+//
+// The error is propagated rather than absorbed into an empty set: callers read this
+// as "magus did not write that", and an empty set says it of every skill magus owns -
+// which would make StaleSkillDirs offer the whole installed tree for deletion.
+func (c *Catalog) shipped() (map[string]bool, error) {
+	skills, err := c.RenderedSkills(VariantSimple)
+	if err != nil {
+		return nil, err
+	}
+	out := make(map[string]bool, len(skills)*2)
+	for _, s := range skills {
+		out[s.Name] = true
+		out[FullTwinName(s.Name)] = true
+	}
+	return out, nil
 }
 
 // baseSkillName maps an installed directory to the skill it was rendered from,

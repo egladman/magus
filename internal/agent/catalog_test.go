@@ -85,6 +85,33 @@ func TestCatalogInstallsAndVerifiesSkillTree(t *testing.T) {
 	assert.True(t, catalog.CheckStatuses(dir)[0].Stale)
 }
 
+// TestCheckStatusesIgnoresASkillMagusDidNotWrite pins the other half of the promise
+// LocalSkillName makes. A workspace is told to put its own rules in a skill beside the
+// installed ones, and that file carries no stamp - so grading it reported drift on every
+// run with a remedy that could not work, since install writes only the names magus ships
+// and would never stamp it.
+func TestCheckStatusesIgnoresASkillMagusDidNotWrite(t *testing.T) {
+	catalog := testCatalog(t)
+	dir := t.TempDir()
+	_, err := catalog.WriteSkillTree(dir, ".agents/skills", false, VariantFull)
+	require.NoError(t, err)
+	require.False(t, catalog.CheckStatuses(dir)[0].Stale)
+
+	local := filepath.Join(dir, ".agents/skills", LocalSkillName)
+	require.NoError(t, os.MkdirAll(local, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(local, "SKILL.md"), []byte("---\nname: "+LocalSkillName+"\n---\nour rules\n"), 0o644))
+
+	statuses := catalog.CheckStatuses(dir)
+	require.Len(t, statuses, 1)
+	assert.False(t, statuses[0].Stale, "a hand-authored skill has no stamp to grade: %s", statuses[0].Detail)
+
+	// Why a missing stamp cannot be the whole test: an install predating versioning has
+	// no footer either, and must still read as stale.
+	shippedNoFooter := filepath.Join(dir, ".agents/skills", "magus-query")
+	require.NoError(t, os.WriteFile(filepath.Join(shippedNoFooter, "SKILL.md"), []byte("---\nname: magus-query\n---\nold body\n"), 0o644))
+	assert.True(t, catalog.CheckStatuses(dir)[0].Stale, "a shipped skill with no stamp predates versioning and is stale")
+}
+
 // TestStaleSkillDirsReportsAndPruneRemovesOnlyWhatMagusWrote pins the deletion half of the
 // install contract, its opt-in, and the limit on it.
 //
