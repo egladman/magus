@@ -1052,8 +1052,8 @@ export function startConsole(
   initAppMenu(SURFACES.filter((surface) => surface.pageId !== "settings"));
 
   // The left navigation rail, over the SAME surface list, so the rail, the launcher and the
-  // Applications menu can never offer different sets. An app-mode window has no rail host and so
-  // gets no rail: it is one surface with no shell, and navigating away from it is not its job.
+  // Applications menu can never offer different sets. This runs before the ?app branch below, so an
+  // app-mode window builds a rail too and console.css hides it there ([data-appmode]).
   // The rail's live pool reading. Held here rather than in the rail so the poller below owns one
   // source of it; null until the first answer, and back to null whenever the daemon stops answering.
   const pulse = signal<PulseView | null>(null);

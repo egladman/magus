@@ -104,9 +104,12 @@ function chevron(expanded: boolean): string {
 }
 
 // createSidebar fills `host` (the #console-sidebar element the page supplies) and keeps it in step
-// with the workspace and the expanded preference. It REPLACES the host's children, and the caller
-// owns whether there is a host at all - an app-mode window mounts one surface with no shell chrome,
-// and simply never calls this.
+// with the workspace and the expanded preference. It REPLACES the host's children.
+//
+// It is built even in an app-mode window, which does not want one: the shell constructs its chrome
+// well before startConsole discovers the ?app param, and the markup is identical either way. CSS
+// hides it there (:root[data-appmode], console.css) - do not "fix" that by skipping construction
+// without checking that ordering first.
 //
 // The rows are built ONCE and only their state attributes are rewritten on change: the surface list
 // is fixed, so rebuilding the list would throw away focus mid-keyboard-navigation for nothing.

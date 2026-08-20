@@ -858,6 +858,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    there - the window IS the app - so hide it; the title bar keeps just its right-aligned actions
    (app drawer, reference, settings), reading as native chrome. main.ts sets data-appmode on the root. */
 :root[data-appmode] #console-tabs { display: none; }
+/* The navigation rail goes with it, for the same reason and one worse: the window IS the app, and a
+   rail offering eight OTHER apps would open them as tabs into a window whose tab bar is hidden - you
+   would land somewhere with no way back. Hidden in CSS rather than skipped at construction because
+   the shell builds its chrome long before it discovers it is in app mode (startConsole's ?app branch
+   returns much later), and the rail is the same markup in both. */
+:root[data-appmode] #console-sidebar { display: none; }
 /* With the tab bar (the flex:1 spacer) hidden, nothing holds #console-actions against the right edge,
    so it would collapse to the left. Push it back with an auto start-margin to keep the actions
    right-aligned - matching the shell and the intent above. */
