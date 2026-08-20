@@ -9,7 +9,6 @@
 // (openSurfaceWindow) - an EXPLICIT opt-in, never the plain-click default, so a card can still never
 // strand you in a window you did not ask for.
 import { openSurfaceWindow } from "../lib/appwindow";
-import { formatChord, isMac } from "./commands";
 
 // A surface the launcher can open: the pageId the console registered it under, and a human label.
 export interface Launchable {
@@ -230,6 +229,17 @@ export function surfaceIconSvg(pageId: string, size?: number): string {
 // open; `open` asks the console to open one as a tab. The returned element carries data-surface="home"
 // (its heading/lede layout is ID-scoped in console.css) and is appended straight into
 // #console-outlet-content as a sibling of the tab panes, shown only when no tab is active.
+// syncLauncherChord names the palette's CURRENT key in the zero-tab hint. Called by the shell every
+// time the launcher is shown rather than once when it is built, because a rebind in Settings happens
+// while the launcher is hidden behind the tab that did it.
+export function syncLauncherChord(root: HTMLElement, chord: string): void {
+  const hint = root.querySelector<HTMLElement>("[data-empty-hint]");
+  if (!hint) return;
+  hint.textContent = chord
+    ? "Pick one from the rail, or press " + chord + " for the palette."
+    : "Pick one from the rail, or use the command palette.";
+}
+
 export function buildLauncher(
   surfaces: Launchable[],
   open: (pageId: string) => void,
@@ -417,9 +427,11 @@ export function buildLauncher(
   pickLabel.textContent = "Open an app";
   const pickHint = document.createElement("span");
   pickHint.setAttribute("data-empty-hint", "");
-  // Names the rail because this composition only ever renders at a width where the rail exists.
-  pickHint.textContent =
-    "Pick one from the rail, or press " + formatChord("mod+k", isMac()) + " for the palette.";
+  // Names the rail because this composition only ever renders at a width where the rail exists. The
+  // palette's chord is deliberately absent: it is user-remappable, and the launcher is built once at
+  // startup, so a chord baked in here would keep naming the key someone rebound. The shell stamps the
+  // live one through syncLauncherChord each time it shows this.
+  pickHint.textContent = "Pick one from the rail, or use the command palette.";
   pickWay.append(pickLabel, pickHint);
 
   const demoWay = document.createElement("div");
