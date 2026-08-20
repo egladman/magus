@@ -57,7 +57,12 @@
     <button id="console-commandbar-btn" class="pf-v6-c-button pf-m-plain" type="button" aria-haspopup="dialog" aria-controls="command-bar" aria-label="Command Palette" title="Command Palette">
       <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 10l3 3-3 3M13 16h4"/></svg></span>
     </button>
-    <!-- Applications menu: a PatternFly Menu popover (like the settings gear). Each row is TWO actions,
+    <!-- MOBILE ONLY as of the navigation rail: console.css hides this button (and its popover) above
+         48rem, which is exactly the width where the rail appears. The two are complements on one edge -
+         the rail lists the same surfaces from the same registry, so both showing would be two doors onto
+         the same rows. Below 48rem the rail is hidden and this is the only way to reach a surface.
+         NOTE: the Documentation link below lives ONLY here, so it is currently mobile-only too.
+         Applications menu: a PatternFly Menu popover (like the settings gear). Each row is TWO actions,
          the same split the launcher cards use: clicking the row opens the app as a TAB (single-instance -
          it focuses the tab if already open), and the trailing icon opens it in its own window. Opening a
          new OS window was the row's default before, which surprised people into stray windows. Wired by

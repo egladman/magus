@@ -767,6 +767,16 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 @media (max-width: 47.999rem) {
   #console-sidebar { display: none; }
 }
+/* ...and no Applications menu once the rail IS there: the two list the same set from the same
+   registry, so above this width the menu is a second door onto the rail's own rows.
+   The two rules are complements on the SAME 48rem edge, deliberately: exactly one of the pair is
+   present at every width, and there is no size at which both show or neither does. Change one edge
+   and you must change the other.
+   The popover is hidden alongside its trigger for the case that has no other guard - it is open when
+   the window crosses the breakpoint, and would otherwise be left floating with nothing anchoring it. */
+@media (min-width: 48rem) {
+  #console-appmenu-btn, #console-appmenu { display: none; }
+}
 /* min-width:0 lets the drawer content shrink so the inline Reference panel fits: on desktop the
    content insets by the panel's 22rem, and on a narrow/mobile screen it shrinks to zero so the panel
    (flex-basis 100% there) fills the screen. Without it PF's flex __content keeps its intrinsic width
