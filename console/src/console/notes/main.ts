@@ -101,6 +101,7 @@ const collapsedCell = persisted<string[]>("notes-collapsed", []);
 
 interface Refs {
   panel: HTMLElement;
+  bar: HTMLElement;
   main: HTMLElement;
   search: HTMLInputElement;
   list: HTMLElement;
@@ -244,21 +245,24 @@ function buildScaffold(host: HTMLElement): Refs {
   // reader has not opened.
   search.placeholder = "Filter notes, or the code they are about";
   search.setAttribute("aria-label", "Filter notes by title, tag or anchor");
-  // The filter owns the whole row. Scope used to sit beside it as a three-way toggle, which
-  // was a control for a choice the store headings already express: collapsing "Private" says
-  // the same thing as filtering to "Shared", using an affordance that has to exist anyway.
+  // ONE bar across the whole surface rather than one per pane. The filter sits at the left and
+  // the open note's scope badge at the right, and because it spans both columns there is no
+  // second header to keep level with it - two of them drifted 29px apart, which is the kind of
+  // alignment that is easier to delete than to maintain.
   searchWrap.append(search);
-  bar.append(searchWrap);
+  const detailScope = h("span", "console-notes-app__detail-scope");
+  bar.append(searchWrap, detailScope);
 
   const list = h("div", "console-notes-app__list");
   list.setAttribute("role", "list");
-  pane.append(bar, list);
+  pane.append(list);
 
   const detail = h("div", "console-notes-app__detail");
+  // Only the way back, and only when the detail is an overlay. Once the panes sit side by side
+  // the list never went anywhere, so the bar has nothing to say and the sheet hides it.
   const detailBar = h("div", "console-notes-app__detail-bar");
   const back = button("Back to notes", "pf-m-link pf-m-inline console-notes-app__detail-back");
-  const detailScope = h("span", "console-notes-app__detail-scope");
-  detailBar.append(back, detailScope);
+  detailBar.append(back);
   const detailBody = h("div", "console-notes-app__detail-body");
   detail.append(detailBar, detailBody);
   back.addEventListener("click", () => {
@@ -310,9 +314,12 @@ function buildScaffold(host: HTMLElement): Refs {
   emptyContent.append(emptyTitle, emptyBody);
   empty.append(emptyContent);
 
-  panel.append(main, empty);
+  // The bar belongs to the panel, not to a pane, and it is hidden with `main` in the cold
+  // state - a filter over nothing is a control with nothing to do.
+  panel.append(bar, main, empty);
   host.append(panel);
   return {
+    bar,
     panel,
     main,
     search,
@@ -351,6 +358,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     refs.detail.removeAttribute("data-open");
     refs.detailBody.replaceChildren();
     refs.main.hidden = true;
+    refs.bar.hidden = true;
     // The cold state is not demo data, so the tag comes down with the notes it described.
     markDemoData(false);
     refs.empty.hidden = false;
@@ -703,6 +711,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     loadBody = fetch;
     refs.empty.hidden = true;
     refs.main.hidden = false;
+    refs.bar.hidden = false;
     renderList();
     showBlank();
   }
@@ -770,6 +779,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   refs.search.addEventListener("input", () => renderList());
   refs.main.hidden = true;
+  refs.bar.hidden = true;
   load();
 
   return {

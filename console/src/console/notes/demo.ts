@@ -2,7 +2,8 @@
 //
 // These are INVENTED, and the surface says so out loud - loadDemo raises the shell's "demo
 // data" tag in the status bar, beside the connection state, for as long as they are on screen.
-// That disclosure is not politeness, it is the condition on this file existing at all. A note's only provenance is the person who wrote it - nothing in the repository
+// That disclosure is not politeness, it is the condition on this file existing at all. A
+// note's only provenance is the person who wrote it - nothing in the repository
 // corroborates one later, which is why agents may read notes and never write them
 // (notes/what-belongs-in-a-note.md). Sample prose shown unlabelled in THIS surface would be
 // the one lie the store cannot survive, because a reader takes what they see here as
@@ -53,6 +54,17 @@ interface NoteSpec {
   editedDaysAgo: number;
 }
 
+// KIND_SLUG spells a node id the way the graph does. AnchorKind is a protobuf enum, so it is a
+// NUMBER at runtime: building an id by concatenating it produced "3:." where a real daemon sends
+// "project:.", which reads as a broken id rather than as sample data.
+const KIND_SLUG: Record<number, string> = {
+  [AnchorKind.SYMBOL]: "symbol",
+  [AnchorKind.FILE]: "file",
+  [AnchorKind.PROJECT]: "project",
+  [AnchorKind.TARGET]: "target",
+  [AnchorKind.NOTE]: "note",
+};
+
 function anchor(spec: AnchorSpec): Anchor {
   return create(AnchorSchema, {
     kind: spec.kind,
@@ -60,7 +72,7 @@ function anchor(spec: AnchorSpec): Anchor {
     status: spec.status,
     // A node id only for one that resolves: the surface prints it beside the anchor so a
     // reader can carry it to the Graph Explorer, and a dangling anchor has nothing to carry.
-    nodeId: spec.status === AnchorStatus.RESOLVES ? spec.kind + ":" + spec.target : "",
+    nodeId: spec.status === AnchorStatus.RESOLVES ? KIND_SLUG[spec.kind] + ":" + spec.target : "",
     detail: spec.detail ?? "",
   });
 }

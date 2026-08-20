@@ -74,6 +74,18 @@
   overflow: hidden; text-overflow: ellipsis;
 }
 #console-statusbar .console-shell-statusbar__version:hover { opacity: 1; }
+/* Centring it out of the flow assumes the LEFT cluster never reaches the middle of the rail,
+ * and a surface that adds a tag there breaks that: on a phone "not connected" plus a "demo
+ * data" tag runs under the version and both become unreadable. Nothing in the flex layout can
+ * prevent it, because the chip is not in the flex layout.
+ *
+ * The version is the most disposable thing on the bar - it names a build, it is not live state
+ * and nothing acts on it - so it is the one that goes when the rail is too narrow to hold
+ * everything. Truncating the left cluster instead would eat the demo disclosure, which is the
+ * one item there that must survive a glance. */
+@media (max-width: 40rem) {
+  #console-statusbar .console-shell-statusbar__version { display: none; }
+}
 
 /* Keyboard-shortcuts toggle: a quiet icon button matching the version chip's muted-until-hover weight,
  * sized down to sit on the slim rail without inflating it. */

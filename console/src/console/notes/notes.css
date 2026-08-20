@@ -17,10 +17,10 @@
 
 .console-notes-app {
   --notes-pad: 0.65rem;
-  /* One height for BOTH pane headers. They are separate elements holding different things -
-     a filter on the left, the open note's scope on the right - and left to their own content
-     they came out 39.5px and 10.6px, so the two columns started their content 29px apart and
-     the split read as broken. Whatever either header holds, the rule under them is level. */
+  /* The one header row, spanning the whole surface. There used to be one per pane, holding
+     different things and sizing themselves independently - they came out 39.5px and 10.6px, so
+     the columns started 29px apart. One bar across both is the version with no alignment to
+     maintain. */
   --notes-bar-h: 2.9rem;
   display: flex; flex-direction: column; position: relative;
   margin-top: 1.25rem;
@@ -46,11 +46,12 @@
 
 /* --- Filter + scope ---------------------------------------------------------------------- */
 .console-notes-app__bar {
-  flex: 0 0 auto; display: flex; gap: 0.4rem; align-items: center;
+  flex: 0 0 auto; display: flex; gap: 0.5rem; align-items: center;
   min-height: var(--notes-bar-h); box-sizing: border-box;
   padding: 0 var(--notes-pad);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
+.console-notes-app__bar[hidden] { display: none; }
 /* The filter owns the row outright. It shared it with a three-way scope toggle, which was a
    control for a choice the store headings already make - collapsing one says what filtering to
    the other said - and two controls of different natural heights on one line never sat right.
@@ -166,10 +167,11 @@
   visibility: hidden;
 }
 .console-notes-app__detail[data-open] { visibility: visible; }
+/* Overlay mode only - it holds the way back, and in split mode the list never went away. The
+   split rule below removes it entirely rather than leaving an empty strip above the prose. */
 .console-notes-app__detail-bar {
   flex: 0 0 auto; display: flex; align-items: center; gap: 0.5rem;
-  min-height: var(--notes-bar-h); box-sizing: border-box;
-  padding: 0 var(--notes-pad);
+  padding: 0.3rem var(--notes-pad);
   background: var(--pf-t--global--background--color--secondary--default);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
@@ -279,13 +281,20 @@
     border-inline-end: 1px solid var(--pf-t--global--border--color--default);
   }
   .console-notes-app__detail { position: static; flex: 1 1 auto; min-width: 0; visibility: visible; }
-  .console-notes-app__detail-back { display: none; }
+  /* The whole bar, not just the button inside it: the scope badge moved up to the shared
+     header, so what is left here has nothing to hold and would render as an empty strip. */
+  .console-notes-app__detail-bar { display: none; }
+  /* Sized to the column it acts on, so the filter ends where the list ends instead of reaching
+     across the reading pane. Below this width there is only one column to line up with, and it
+     takes the whole row. */
+  .console-notes-app__search { flex: 0 0 21rem; }
 }
 
 /* Wider still, the extra column buys context rather than line length: the measure is capped and
    the note's facts move beside the prose instead of under it. */
 @container notes (min-width: 68rem) {
   .console-notes-app__pane { flex-basis: 23rem; }
+  .console-notes-app__search { flex-basis: 23rem; }
   .console-notes-app__detail-body {
     display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 17rem);
     gap: 1.5rem; align-items: start;
