@@ -1,9 +1,17 @@
 // bigPicture.ts - the dashboard's header control row plus the "Big Picture" MODE SWITCH. The
 // header holds the active-workspace switcher (an "Active workspace" ToggleGroup, shown only when
 // the daemon serves more than one workspace, so the common single-workspace case stays
-// unobtrusive) and the Big Picture button. Board-mode data is daemon-wide (the wire carries no
-// per-workspace run attribution to filter by); the picker anchors the loaded-workspaces tile's
-// highlight for now.
+// unobtrusive) and the Big Picture button.
+//
+// SCOPE, and it is not uniform - the wire splits in two:
+//   - Attributable to a workspace: RunningTarget.workspace (every running unit of work) and
+//     ActivityEvent.workspace. These CAN be filtered by the picker; today they are not.
+//   - Daemon-wide by construction: Pool.capacity/running/queued and everything in the metrics
+//     service. There is ONE pool and one cache behind every loaded workspace, so these are not
+//     unfiltered by omission - there is no per-workspace number to show.
+// The picker currently only anchors the loaded-workspaces tile's highlight.
+// (This note used to say the wire carried no per-workspace attribution at all. It does, for runs and
+// activity - which is what makes scoping the WORK possible while the machine stays daemon-wide.)
 //
 // Big Picture is a MODE, NOT A VIEW. There is deliberately no bigPictureTile() here and no second
 // component tree anywhere: Big Picture is the same board tiles, a subset of them, laid out by a
