@@ -945,13 +945,28 @@ function draw() {
           ctx.fillRect(waveX - colW / 2, minY - 40, colW, maxY - minY + 64);
         }
         ctx.globalAlpha = 1;
-        if (transform.k >= 0.35) {
+        // Wave headers are CHROME, so they paint at a constant screen size rather than scaling
+        // with the graph: sized in world units they were gated off below k=0.35, and the fit
+        // that frames a tall build DAG lands nearer k=0.15 - so the one view whose whole point
+        // is "these run at the same time" showed unlabelled bands at its own default zoom.
+        // What still degrades is how MUCH is written, decided by the room a column has on
+        // screen rather than by the zoom alone.
+        const px = (n: number) => n / transform.k; // world units that paint n screen pixels
+        const colScreenW = colW * transform.k;
+        // Three tiers, because a waves layout is far taller than it is wide - 63 targets stacked
+        // against 8 columns - so the fit that shows all of it leaves each column only ~32px.
+        // A bare index still tells the operator the bands are ordered stages.
+        if (colScreenW >= 18) {
           ctx.fillStyle = th.muted;
           ctx.textAlign = "center";
-          ctx.font = "10px " + th.font;
-          ctx.fillText("wave " + i, waveX, minY - 28);
-          ctx.font = "9px " + th.font;
-          ctx.fillText(ids.length + " in parallel", waveX, minY - 16);
+          const full = colScreenW >= 76;
+          const named = colScreenW >= 40;
+          ctx.font = px(full ? 10 : 9) + "px " + th.font;
+          ctx.fillText(named ? "wave " + i : String(i), waveX, minY - px(full ? 28 : 16));
+          if (full) {
+            ctx.font = px(9) + "px " + th.font;
+            ctx.fillText(ids.length + " in parallel", waveX, minY - px(16));
+          }
         }
       });
     }
