@@ -1,32 +1,11 @@
 <main class="console-graph-main">
 
-    <!-- The blocks below marked [data-ref-section] are this surface's reference copy (Ask, Views, Search
+    <!-- The blocks below marked [data-ref-section] are this surface's reference copy (Views, Search
          syntax, Loading a graph by URL). ref-drawer.ts CLONES them into the Reference
          panel (#console-refpanel, opened from the title-bar Reference button) each time it opens, and
          again on a tab change while docked - cloning, not moving, so the surface can unmount and remount
          freely. The sources are hidden in place by [data-ref-section]{display:none} (overrides.css);
          only the clones are shown. -->
-    <!-- Views panel - question-first navigation. The one [data-ref-section] the drawer SKIPS (by its
-         #ask-panel id): its chips are the live sidebar control, not reference copy. -->
-    <details class="console-graph-views" data-ref-section id="ask-panel">
-      <summary>Explore</summary>
-      <div class="console-graph-help__body">
-        <p class="console-graph-views__hint">Things you can do with a workspace's graph. Click one to explore, or write your own query below.</p>
-        <div class="console-graph-views__body">
-        <button type="button" class="console-graph-views__chip" data-view="blast" title="Pick a target, then see everything that would rebuild if you change it. CLI: magus explain &lt;target&gt;">See what rebuilds when I change a target</button>
-        <button type="button" class="console-graph-views__chip" data-view="trace" title="Pick two targets to see the dependency path between them. CLI: magus path &lt;a&gt; &lt;b&gt;">Trace the path between two targets</button>
-        <button type="button" class="console-graph-views__chip" data-layoutjump="waves" title="Switch to the waves layout: each column is a set of targets magus can run at the same time. CLI: magus describe graph -o json">Show the build order</button>
-        <button type="button" class="console-graph-views__chip" data-view="critical" data-conditional title="The longest duration-weighted chain of targets. Shown when the graph has timing (run a build first: magus graph deps -o json)">Find the slowest chain</button>
-        <button type="button" class="console-graph-views__chip" data-view="cycles" title="Highlight targets caught in a circular dependency, where A needs B needs A. magus cannot order these, so it is a configuration error to fix. CLI: magus graph verify">Find circular dependencies</button>
-        <button type="button" class="console-graph-views__chip" data-radialpick title="Pick a target to see its neighborhood as rings by distance.">See a target's neighbors</button>
-        <button type="button" class="console-graph-views__chip" data-view="hubs" title="The highest-degree targets, the ones everything touches. CLI: magus query kind:target">Show the most depended-on targets</button>
-        <button type="button" class="console-graph-views__chip" data-view="orphans" title="Targets with no dependents, potentially dead or unconfigured. CLI: magus query -kind:project">Show targets nothing depends on</button>
-        <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode: magus graph export --open --follow">See what my last change affects</button>
-        <button type="button" id="clear-view-btn" class="console-graph-views__clear" hidden>Clear</button>
-        </div>
-      </div>
-    </details>
-
     <details class="console-graph-help" data-ref-section>
       <summary>Views</summary>
       <div class="console-graph-help__body">
@@ -130,11 +109,10 @@
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="radial" title="Rings around one node by distance: its neighborhood at a glance. Pick a node first."><span class="pf-v6-c-toggle-group__text">Radial</span></button></div>
           </div>
         </div>
-        <!-- Ask a question: the question-first views, surfaced in the sidebar. The original
-             #ask-panel reference block is display:none in the decoupled console (no ref drawer),
-             so these are the live control. Reuses the sanctioned console-graph-views__chip
-             escape hatch; main.ts wires them by class + data-view. Order matches the
-             #ask-panel reference copy (keep both in sync). -->
+        <!-- Ask a question: the question-first views, and the ONLY copy of them - a duplicate set
+             in a [data-ref-section] block would render nowhere, since the CSS hides the source
+             and the drawer's clone is id-stripped. Reuses the sanctioned
+             console-graph-views__chip escape hatch; main.ts wires them by class + data-view. -->
         <div class="console-graph-views console-graph-sidebar__views" aria-label="Explore">
           <p class="console-graph-sidebar__viewslabel">Explore</p>
           <div class="console-graph-views__body" role="group" aria-label="Explore views">
@@ -146,7 +124,8 @@
             <button type="button" class="console-graph-views__chip" data-radialpick title="Pick a target to see its neighborhood as rings by distance.">See a target's neighbors</button>
             <button type="button" class="console-graph-views__chip" data-view="hubs" title="The highest-degree targets, the ones everything touches. CLI: magus query kind:target">Show the most depended-on targets</button>
             <button type="button" class="console-graph-views__chip" data-view="orphans" title="Targets with no dependents, potentially dead or unconfigured. CLI: magus query -kind:project">Show targets nothing depends on</button>
-            <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode: magus graph export --open --follow">See what my last change affects</button>
+            <button type="button" class="console-graph-views__chip" data-view="affected" data-conditional hidden title="What your working-tree diff would rebuild. Appears in live mode once the daemon reports an affected set.">See what my last change affects</button>
+            <button type="button" id="clear-view-btn" class="console-graph-views__clear" hidden>Clear</button>
           </div>
         </div>
         <!-- Colors and forces: the interactive display controls, collapsed by default so
@@ -240,6 +219,11 @@
           <ul id="graph-legend" aria-label="Node kinds"></ul>
         </div>
         <p id="live-status-strip" class="console-graph-live__strip" hidden aria-live="polite"></p>
+        <!-- A live control, so it belongs here and not in a [data-ref-section] block: main.ts
+             wires it by id, and the drawer's clones are id-stripped. Un-hidden in live mode. -->
+        <div id="live-remember-row" class="console-graph-live__rememberrow" hidden>
+          <label><input type="checkbox" id="live-remember-cb"> Remember this workspace (store token in localStorage)</label>
+        </div>
         <!-- Empty state: shown when nothing is loaded (no #data/#src/#port and the demo has
              not been launched). Mirrors the log viewer's empty state - an intuitive prompt
              with the command to open your own graph plus a button to try the demo. We do NOT
@@ -319,9 +303,6 @@
         <dd>Apply a color preset on load: <code>spell</code>, <code>project</code>, or <code>depth</code>.</dd>
       </dl>
       <p>Combine them with <code>&amp;</code>: <code>#data=...&amp;node=target:.:build</code>. A raw <code>graph.json</code> (from <code>magus graph export -o json</code>) also loads via the <b>Open file</b> button or drag-and-drop.</p>
-      <div id="live-remember-row" class="console-graph-live__rememberrow" hidden>
-        <label><input type="checkbox" id="live-remember-cb"> Remember this workspace (store token in localStorage)</label>
-      </div>
       </div>
     </details>
 

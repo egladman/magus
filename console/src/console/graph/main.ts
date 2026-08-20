@@ -1712,6 +1712,22 @@ function syncConditionalViews() {
   document.querySelectorAll<HTMLElement>("[data-layoutjump]").forEach((btn) => {
     btn.hidden = graphFlavor !== "targets";
   });
+  syncAffectedView();
+}
+
+// syncAffectedView shows the affected chip exactly while an affected set is available, and
+// retires the view if one goes away underneath it. No status producer populates
+// StatusOutput.Affected yet (see fetchLiveStatus), so today it never shows - hidden rather
+// than visible-and-disabled, which would be a control the user can see and never reach.
+// Called separately from syncConditionalViews because the live SSE path can change the set
+// without reloading the graph.
+function syncAffectedView() {
+  const has = !!window._liveAffectedIds?.size;
+  document.querySelectorAll<HTMLElement>("[data-view='affected']").forEach((btn) => {
+    btn.toggleAttribute("data-conditional", !has);
+    btn.hidden = !has;
+  });
+  if (!has && activeView === "affected") clearView();
 }
 
 // ---- color groups ----------------------------------------------------------
@@ -2118,10 +2134,6 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   // A locally opened/dropped file supersedes whatever provenance badge was
   // showing for the graph that loaded at boot.
   updateSnapshotBadge(null);
-  // A graph is now loaded, so the "Ask" panel (a <details> collapsed while nothing is
-  // loaded) is worth opening - the questions operate on the loaded graph.
-  const askPanel = el("ask-panel") as HTMLDetailsElement | null;
-  if (askPanel) askPanel.open = true;
   // Detect and adapt flavor before prepareGraph, same as boot(). The knowledge
   // path is unchanged; the targets path is converted client-side.
   graphFlavor = flavorOf(data);
@@ -4089,18 +4101,27 @@ function bootWireEvents() {
   // Wire view buttons (.console-graph-views__chip). Every explicit click routes through
   // askQuestion (Decision 2: a question may auto-switch the display mode, guarded by
   // layoutBlockedReason) - never the [data-layout] toggle, which switches mode alone.
-  document.querySelectorAll<HTMLElement>(".console-graph-views__chip").forEach((b) => {
-    b.addEventListener("click", () => {
-      const v = b.dataset.view;
-      if (!v) return;
+  //
+  // Must stay delegated: the Reference drawer CLONES this surface's [data-ref-section] blocks,
+  // and cloneNode copies no listeners, so a querySelectorAll snapshot over the sources reaches
+  // no chip in the drawer.
+  document.addEventListener(
+    "click",
+    (ev) => {
+      const b = (ev.target as HTMLElement | null)?.closest<HTMLElement>(
+        ".console-graph-views__chip",
+      );
+      const v = b?.dataset.view;
+      if (!b || !v) return;
       if ((b as HTMLButtonElement).disabled || b.hasAttribute("data-disabled")) return;
       if (activeView === v) {
         clearView();
         return;
       }
       askQuestion(v);
-    });
-  });
+    },
+    { signal: lifecycleSignal },
+  );
 
   // Wire the clear-view button.
   const clearViewBtn = el("clear-view-btn");
@@ -4226,9 +4247,15 @@ function bootWireEvents() {
 
   // Query-syntax reference: each example runs itself in the filter (teach-by-doing).
   // Scope to [data-q] so the lens/add-group buttons (which share .console-graph-help__example for its
-  // chip styling but carry no data-q) aren't wired as examples.
-  document.querySelectorAll<HTMLElement>(".console-graph-help__example[data-q]").forEach((b) =>
-    b.addEventListener("click", () => {
+  // chip styling but carry no data-q) aren't wired as examples. Delegated for the same reason the
+  // view chips are: these examples only ever render as reference-drawer clones.
+  document.addEventListener(
+    "click",
+    (ev) => {
+      const b = (ev.target as HTMLElement | null)?.closest<HTMLElement>(
+        ".console-graph-help__example[data-q]",
+      );
+      if (!b) return;
       const q = b.dataset.q ?? "";
       searchEl.value = q;
       applyQuery(q);
@@ -4237,7 +4264,8 @@ function bootWireEvents() {
         behavior: "smooth",
         block: "nearest",
       });
-    }),
+    },
+    { signal: lifecycleSignal },
   );
 
   // "Copy as Mermaid" toolbar button: emit the current scope as a mermaid diagram.

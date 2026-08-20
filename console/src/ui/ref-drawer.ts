@@ -156,11 +156,7 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
     document.querySelector<HTMLElement>("#console-outlet-content div[data-tab-id]:not([hidden])");
 
   const collect = (pane: HTMLElement | null): HTMLElement[] =>
-    pane
-      ? [...pane.querySelectorAll<HTMLElement>("[data-ref-section]")].filter(
-          (b) => b.id !== "ask-panel",
-        )
-      : [];
+    pane ? [...pane.querySelectorAll<HTMLElement>("[data-ref-section]")] : [];
 
   // The shell's own reference (chords, tabs and panes) is not surface-specific, so it trails EVERY
   // surface's sections rather than belonging to one - and it is the whole of what the launcher shows,
@@ -173,6 +169,10 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
   // Paint the given reference blocks into the panel body. Cloning (not moving) keeps the source
   // intact so a surface can unmount/remount freely. Nested <details> open so the reference reads
   // as content; ids are stripped from clones to avoid duplicates.
+  //
+  // cloneNode copies no event listeners, so a clickable control inside a reference block only
+  // works if its surface wires it by DELEGATION (document-level, matched with closest()) rather
+  // than by a querySelectorAll snapshot taken over the sources.
   const paint = (blocks: HTMLElement[]): void => {
     bodyEl.replaceChildren();
     if (blocks.length === 0) {
@@ -195,8 +195,7 @@ export function initRefDrawer(opts: { onBreakOut?: () => void } = {}): void {
     }
   };
 
-  // Show the active surface's reference sections. #ask-panel is skipped (the graph explorer
-  // surfaces those "Ask a question" views in its sidebar already). A freshly opened surface mounts
+  // Show the active surface's reference sections. A freshly opened surface mounts
   // its scaffold asynchronously (its bundle is a dynamic import), so if the pane has no blocks yet,
   // watch it briefly and repaint once its content lands - otherwise a just-opened tab would read
   // "No reference".
