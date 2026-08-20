@@ -1035,6 +1035,10 @@ function draw() {
   const highlight = selected || hoverId;
   const near = neighbors(highlight);
   const lit = (id: string) => id === highlight || !!near?.has(id);
+  // Cap on how big a neighbourhood still earns the glow - see the shadow cost note in the node
+  // pass. A hub with hundreds of neighbours reads as a lit blob anyway, so the effect it buys
+  // there is small and the per-frame cost is not.
+  const glowNeighborhood = !!highlight && (near?.size ?? 0) <= 120;
 
   // Edges first, under the nodes. Dim edges not touching the highlighted node;
   // under a query filter, dim edges not between two matches, so the
@@ -1087,9 +1091,18 @@ function draw() {
     // of the default muted stroke.
     const criticalEdge =
       activeView === "critical" && !!matchSet && matchSet.has(s.id) && matchSet.has(t.id);
-    ctx.strokeStyle = active ? th.muted : th.border;
-    ctx.globalAlpha = criticalEdge ? 1 : active ? 0.55 : 0.1;
-    ctx.lineWidth = criticalEdge ? 2.2 / transform.k : 0.6 / transform.k;
+    // An edge touching the hovered or selected node draws in the accent, not the muted grey.
+    // Dimming everything else already isolates the neighbourhood, but only by subtraction - the
+    // reader has to notice what did NOT fade. Colouring the incident edges says which lines are
+    // the answer, and it is the connections, not the nodes, that carry "what is this attached to".
+    const incident = !!highlight && (s.id === highlight || t.id === highlight);
+    ctx.strokeStyle = incident ? th.accent : active ? th.muted : th.border;
+    ctx.globalAlpha = incident || criticalEdge ? 1 : active ? 0.55 : 0.1;
+    ctx.lineWidth = incident
+      ? 1.6 / transform.k
+      : criticalEdge
+        ? 2.2 / transform.k
+        : 0.6 / transform.k;
     // Cycle edges (from the target-graph adapter) get a dashed stroke so they
     // stand out from normal dependency edges. Layout-reversed edges (cycle-break
     // in layered mode) also render dashed.
@@ -1218,10 +1231,21 @@ function draw() {
     }
     ctx.globalAlpha = alpha;
     const nodeColor = groupColorFor(n) || th.kindColor[n.kind] || "#888";
+    // The hovered node and everything one hop from it GLOW, rather than merely failing to dim.
+    // Blur is divided by the zoom so the halo stays a constant size on screen instead of
+    // ballooning as the view zooms in. Skipped when the neighbourhood is large: a canvas shadow
+    // is redrawn per node per frame, and a hub with hundreds of neighbours would pay for it on
+    // every tick of a simulation that never fully cools.
+    const glowing = glowNeighborhood && lit(n.id);
+    if (glowing) {
+      ctx.shadowColor = th.accent;
+      ctx.shadowBlur = (n.id === highlight ? 16 : 9) / transform.k;
+    }
     ctx.beginPath();
     ctx.arc(n.x, n.y, n.r, 0, 2 * Math.PI);
     ctx.fillStyle = nodeColor;
     ctx.fill();
+    if (glowing) ctx.shadowBlur = 0;
     // Anchor ring: target-graph anchor targets (top-level, nothing depends on
     // them within their project) get an outer ring in the same kind color so
     // they stand out without adding a new palette entry.
