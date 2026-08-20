@@ -16,8 +16,8 @@
           <tr><td>What breaks if I change this?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="blast">blast</button></td><td><code>magus explain &lt;node-id-or-name&gt;</code></td></tr>
           <tr><td>Why does A depend on B?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="trace">trace</button></td><td><code>magus path &lt;a&gt; &lt;b&gt;</code></td></tr>
           <tr><td>What's slow?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="critical" data-conditional>critical</button></td><td><code>magus graph deps -o json</code></td></tr>
-          <tr><td>What's a hub?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="hubs">hubs</button></td><td><code>magus query kind:target</code></td></tr>
-          <tr><td>What's dead?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="orphans">orphans</button></td><td><code>magus query -kind:project</code></td></tr>
+          <tr><td>What's a hub?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="hubs">hubs</button></td><td>no CLI equivalent</td></tr>
+          <tr><td>What's dead?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="orphans">orphans</button></td><td>no CLI equivalent</td></tr>
         </tbody>
       </table>
       </div>
@@ -122,8 +122,8 @@
             <button type="button" class="console-graph-views__chip" data-view="critical" data-conditional title="The longest duration-weighted chain of targets. Shown when the graph has timing (run a build first: magus graph deps -o json)">Find the slowest chain</button>
             <button type="button" class="console-graph-views__chip" data-view="cycles" title="Highlight targets caught in a circular dependency, where A needs B needs A. magus cannot order these, so it is a configuration error to fix. CLI: magus graph verify">Find circular dependencies</button>
             <button type="button" class="console-graph-views__chip" data-radialpick title="Pick a target to see its neighborhood as rings by distance.">See a target's neighbors</button>
-            <button type="button" class="console-graph-views__chip" data-view="hubs" title="The highest-degree targets, the ones everything touches. CLI: magus query kind:target">Show the most depended-on targets</button>
-            <button type="button" class="console-graph-views__chip" data-view="orphans" title="Targets with no dependents, potentially dead or unconfigured. CLI: magus query -kind:project">Show targets nothing depends on</button>
+            <button type="button" class="console-graph-views__chip" data-view="hubs" title="The nodes the most other nodes depend on, ranked by how many. Containment does not count, so a project never outranks the code.">Show the most depended-on nodes</button>
+            <button type="button" class="console-graph-views__chip" data-view="orphans" title="Nodes with no dependency in either direction: nothing needs them and they need nothing. Potentially dead or unconfigured.">Show what depends on nothing</button>
             <button type="button" class="console-graph-views__chip" data-view="affected" data-conditional hidden title="What your working-tree diff would rebuild. Appears in live mode once the daemon reports an affected set.">See what my last change affects</button>
             <button type="button" id="clear-view-btn" class="console-graph-views__clear" hidden>Clear</button>
           </div>

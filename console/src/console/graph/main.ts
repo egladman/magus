@@ -74,6 +74,7 @@ import {
   type FlowEdge,
 } from "./particles.js";
 import { toMermaid } from "./mermaid.js";
+import { disconnected, mostDependedOn } from "./views.js";
 import { flavorOf, isTargetGraph, targetGraphToNodeLink } from "./target-adapter.js";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { wireToolbarOverflow } from "../toolbar";
@@ -2607,6 +2608,10 @@ function criticalPath() {
   return path.length > 1 ? path : null;
 }
 
+// How many nodes the hubs view calls hubs. A cutoff has to be somewhere and the ranking is
+// long-tailed; a dozen fills the canvas without turning the answer back into the whole graph.
+const HUB_LIMIT = 12;
+
 // Apply a named view. Updates activeView, viewNode, viewNodeTo, matchSet,
 // and the CLI idiom display. Serializes into the fragment via updateHash().
 function activateView(name: string, nodeId?: string | null, nodeTo?: string | null) {
@@ -2757,27 +2762,27 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
       break;
     }
     case "hubs": {
-      const top = graph.nodes
-        .slice()
-        .sort((a, b) => b.degree - a.degree)
-        .slice(0, 12);
-      matchSet = new Set(top.map((n) => n.id));
-      setStatus("What's a hub? The " + matchSet.size + " highest-degree nodes.");
-      setResultLine("The " + matchSet.size + " most depended-on targets.");
+      matchSet = new Set(mostDependedOn(graph.nodes, graph.links, HUB_LIMIT));
+      const n = matchSet.size;
+      setStatus(
+        n
+          ? "What's a hub? The " + n + " most depended-on node" + (n === 1 ? "" : "s") + "."
+          : "Nothing in this graph has a dependent.",
+      );
+      setResultLine(n ? "The " + n + " most depended-on nodes." : "Nothing has a dependent.");
       break;
     }
     case "orphans": {
-      matchSet = new Set(graph.nodes.filter((n) => n.degree === 0).map((n) => n.id));
+      matchSet = new Set(disconnected(graph.nodes, graph.links));
+      const n = matchSet.size;
       setStatus(
         "What's dead? " +
-          matchSet.size +
-          " orphan node" +
-          (matchSet.size === 1 ? "" : "s") +
-          " with no edges.",
+          n +
+          " node" +
+          (n === 1 ? "" : "s") +
+          " with no dependency either way: nothing needs them and they need nothing.",
       );
-      setResultLine(
-        matchSet.size + " target" + (matchSet.size === 1 ? "" : "s") + " nothing depends on.",
-      );
+      setResultLine(n + " node" + (n === 1 ? "" : "s") + " with no dependencies either way.");
       break;
     }
     case "cycles": {
@@ -3191,10 +3196,11 @@ function renderSuggestions() {
     });
   }
 
-  // 1. Highest-degree node ("biggest hub").
+  // 1. The most depended-on node.
   if (graph.nodes.length > 1 && chips.length < 3) {
-    const top = graph.nodes.slice().sort((a, b) => b.degree - a.degree)[0];
-    if (top && top.degree > 0) {
+    const topId = mostDependedOn(graph.nodes, graph.links, 1)[0];
+    const top = topId ? graph.byId.get(topId) : null;
+    if (top) {
       chips.push({
         text: top.label + " is the biggest hub: what depends on it?",
         action: () => {
@@ -3225,15 +3231,12 @@ function renderSuggestions() {
     });
   }
 
-  // 3. Orphan count.
-  const orphans = graph.nodes.filter((n) => n.degree === 0);
-  if (orphans.length > 0 && chips.length < 3) {
+  // 3. Dead-node count.
+  const dead = disconnected(graph.nodes, graph.links);
+  if (dead.length > 0 && chips.length < 3) {
     chips.push({
       text:
-        orphans.length +
-        " node" +
-        (orphans.length === 1 ? "" : "s") +
-        " with no edges: what's dead?",
+        dead.length + " node" + (dead.length === 1 ? "" : "s") + " depend on nothing: what's dead?",
       action: () => {
         applyPreferredMode("orphans");
         activateView("orphans");
@@ -3519,16 +3522,11 @@ function recomputeLiveMatchSet() {
         matchSet = path ? new Set(path) : null;
         break;
       }
-      case "hubs": {
-        const top = graph.nodes
-          .slice()
-          .sort((a, b) => b.degree - a.degree)
-          .slice(0, 12);
-        matchSet = new Set(top.map((n) => n.id));
+      case "hubs":
+        matchSet = new Set(mostDependedOn(graph.nodes, graph.links, HUB_LIMIT));
         break;
-      }
       case "orphans":
-        matchSet = new Set(graph.nodes.filter((n) => n.degree === 0).map((n) => n.id));
+        matchSet = new Set(disconnected(graph.nodes, graph.links));
         break;
       case "cycles": {
         const ids = new Set<string>();
