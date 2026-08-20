@@ -43,6 +43,7 @@ import {
   validateLoopbackHost,
   consumeLiveToken,
   createDaemonTransport,
+  markDemoData,
 } from "../../lib/daemon";
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
@@ -93,14 +94,15 @@ const ANCHOR_KIND_NAME: Record<number, string> = {
   5: "note",
 };
 
-type ScopeFilter = "all" | "shared" | "private";
+// Collapsed store keys, remembered across mounts. A reader who folds "Private" away has made
+// a standing choice about what they want to see, not a gesture that should reset on every tab
+// switch - and it is the same cell the old scope toggle occupied, minus the control.
+const collapsedCell = persisted<string[]>("notes-collapsed", []);
 
 interface Refs {
   panel: HTMLElement;
-  demoSlot: HTMLElement;
   main: HTMLElement;
   search: HTMLInputElement;
-  scopeGroup: HTMLElement;
   list: HTMLElement;
   detail: HTMLElement;
   detailScope: HTMLElement;
@@ -222,9 +224,6 @@ function copyRow(value: string, what: string): HTMLElement {
 function buildScaffold(host: HTMLElement): Refs {
   const panel = h("section", "console-notes-app");
 
-  const demoSlot = h("div", "console-notes-app__demo");
-  demoSlot.hidden = true;
-
   const main = h("div", "console-notes-app__main");
   const pane = h("div", "console-notes-app__pane");
 
@@ -238,10 +237,10 @@ function buildScaffold(host: HTMLElement): Refs {
   // claiming to search it would silently miss every note the reader has not opened.
   search.placeholder = "Filter title, tag or anchor";
   search.setAttribute("aria-label", "Filter notes");
-  const scopeGroup = h("div", "pf-v6-c-toggle-group console-notes-app__scope");
-  scopeGroup.setAttribute("role", "group");
-  scopeGroup.setAttribute("aria-label", "Scope");
-  bar.append(search, scopeGroup);
+  // The filter owns the whole row. Scope used to sit beside it as a three-way toggle, which
+  // was a control for a choice the store headings already express: collapsing "Private" says
+  // the same thing as filtering to "Shared", using an affordance that has to exist anyway.
+  bar.append(search);
 
   const list = h("div", "console-notes-app__list");
   list.setAttribute("role", "list");
@@ -303,14 +302,12 @@ function buildScaffold(host: HTMLElement): Refs {
   emptyContent.append(emptyTitle, emptyBody);
   empty.append(emptyContent);
 
-  panel.append(demoSlot, main, empty);
+  panel.append(main, empty);
   host.append(panel);
   return {
     panel,
-    demoSlot,
     main,
     search,
-    scopeGroup,
     list,
     detail,
     detailScope,
@@ -335,7 +332,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   let notes: Note[] = [];
   let stores: StoreStatus[] = [];
-  let scopeFilter: ScopeFilter = "all";
   let selected: string | null = null;
   let loadBody: (n: Note) => Promise<string> = () => Promise.resolve("");
 
@@ -347,7 +343,8 @@ export function activate(host: HTMLElement): SurfaceInstance {
     refs.detail.removeAttribute("data-open");
     refs.detailBody.replaceChildren();
     refs.main.hidden = true;
-    refs.demoSlot.hidden = true;
+    // The cold state is not demo data, so the tag comes down with the notes it described.
+    markDemoData(false);
     refs.empty.hidden = false;
     refs.emptyTitle.textContent = title;
     refs.emptySub.textContent = sub;
@@ -388,42 +385,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (am === null) return 1;
     if (bm === null) return -1;
     return bm - am;
-  }
-
-  function renderScopeGroup(): void {
-    refs.scopeGroup.replaceChildren();
-    const total = stores.reduce((sum, s) => sum + s.noteCount, 0);
-    const options: { id: ScopeFilter; label: string; count: number }[] = [
-      { id: "all", label: "All", count: total },
-    ];
-    for (const store of stores) {
-      const copy = SCOPE_COPY[store.scope];
-      if (!copy || !store.declared) continue;
-      options.push({
-        id: copy.key as ScopeFilter,
-        label: copy.title,
-        count: store.noteCount,
-      });
-    }
-    // One store makes the filter a control with nothing to choose between.
-    if (options.length < 3) return;
-    for (const opt of options) {
-      const item = h("div", "pf-v6-c-toggle-group__item");
-      const btn = h(
-        "button",
-        "pf-v6-c-toggle-group__button" + (scopeFilter === opt.id ? " pf-m-selected" : ""),
-      ) as HTMLButtonElement;
-      btn.type = "button";
-      btn.setAttribute("aria-pressed", String(scopeFilter === opt.id));
-      btn.append(h("span", "pf-v6-c-toggle-group__text", opt.label + " " + opt.count));
-      btn.addEventListener("click", () => {
-        scopeFilter = opt.id;
-        renderScopeGroup();
-        renderList();
-      });
-      item.append(btn);
-      refs.scopeGroup.append(item);
-    }
   }
 
   function buildRow(n: Note): HTMLElement {
@@ -484,6 +445,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
     return row;
   }
 
+  const collapsed = (): string[] => collapsedCell.get() ?? [];
+
+  function toggleStore(key: string): void {
+    const now = collapsed();
+    collapsedCell.set(now.includes(key) ? now.filter((k) => k !== key) : [...now, key]);
+    renderList();
+  }
+
   function renderList(): void {
     const term = refs.search.value.trim().toLowerCase();
     refs.list.replaceChildren();
@@ -492,12 +461,21 @@ export function activate(host: HTMLElement): SurfaceInstance {
     for (const store of stores) {
       const copy = SCOPE_COPY[store.scope];
       if (!copy) continue;
-      if (scopeFilter !== "all" && scopeFilter !== copy.key) continue;
 
-      const head = h("div", "console-notes-app__store");
-      head.dataset.scope = copy.key;
       const mine = notes.filter((n) => n.scope === store.scope && matches(n, term)).sort(byRecency);
-      head.append(h("span", undefined, copy.title + " " + mine.length));
+      // A filter that silently hid its own matches inside a collapsed store would be the
+      // search lying, so an active term expands everything for as long as it is set.
+      const folded = term === "" && collapsed().includes(copy.key);
+
+      const head = h("button", "console-notes-app__store") as HTMLButtonElement;
+      head.type = "button";
+      head.dataset.scope = copy.key;
+      head.setAttribute("aria-expanded", String(!folded));
+      if (folded) head.dataset.collapsed = "";
+      head.append(h("span", "console-notes-app__store-twist"));
+      // Parenthesised, because the number is a count of what is under this heading and not
+      // part of the store's name - "Shared 4" reads for a moment as a fourth Shared.
+      head.append(h("span", undefined, copy.title + " (" + mine.length + ")"));
       // A store that is declared and empty and a store that is not declared at all are
       // different facts, and a blank area would say the first when it means the second.
       head.append(
@@ -507,7 +485,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
           store.declared ? copy.consequence : "not declared",
         ),
       );
+      head.addEventListener("click", () => toggleStore(copy.key));
       refs.list.append(head);
+
+      if (folded) continue;
 
       if (!store.declared) {
         refs.list.append(
@@ -520,10 +501,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
         continue;
       }
 
+      // A real PF Alert rather than a hand-rolled strip. A store that cannot read one of its
+      // own files is a genuine warning, and the component carries the severity semantics and
+      // the icon slot for free - the sheet only flattens it so it spans the list edge to edge
+      // instead of floating in it as a card.
       for (const issue of store.issues) {
-        const warn = h("div", "console-notes-app__issue");
-        warn.append(h("span", undefined, "!"), h("span", undefined, issue));
-        refs.list.append(warn);
+        refs.list.append(alert("pf-m-warning pf-m-inline console-notes-app__issue", issue));
       }
 
       if (mine.length === 0) {
@@ -704,7 +687,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
     loadBody = fetch;
     refs.empty.hidden = true;
     refs.main.hidden = false;
-    renderScopeGroup();
     renderList();
     showBlank();
   }
@@ -714,8 +696,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
     try {
       const resp = await client.listNotes({});
       if (stale) return;
-      refs.demoSlot.hidden = true;
-      refs.demoSlot.replaceChildren();
+      // Live data replacing a demo the reader was just looking at: the tag must come down, or
+      // it would sit there calling real notes invented.
+      markDemoData(false);
       show(resp.notes, resp.stores, async (n) => {
         const one = await client.getNote({ name: noteResourceName(n) });
         return one.body ?? "";
@@ -730,21 +713,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
     }
   }
 
-  // loadDemo renders invented notes, and the banner above them is not decoration: it is the only
-  // thing between a demo and this surface asserting that a person wrote five things nobody wrote.
-  // Every other surface can show sample data silently; this one cannot, because authorship is the
-  // entire claim a note makes. Warning rather than info, because the reader who skims past an
-  // info stripe and then quotes one of these to a colleague is the failure being prevented.
+  // loadDemo renders invented notes. The disclosure that they ARE invented is not optional -
+  // authorship is the entire claim a note makes, and sample prose passing as something a
+  // colleague wrote is the one lie this store cannot survive - but it does not have to cost a
+  // banner. It moved to the status bar tag beside the connection state, which says the same
+  // thing for as long as the data is on screen instead of once, at the top, until you scroll.
   function loadDemo(): void {
     const demo = demoNotes();
-    refs.demoSlot.replaceChildren(
-      alert(
-        "pf-m-warning",
-        "Sample notes. Nobody wrote these.",
-        "Connect a daemon to read the ones people actually wrote here.",
-      ),
-    );
-    refs.demoSlot.hidden = false;
+    markDemoData();
     show(demo.notes, demo.stores, (n) => Promise.resolve(demo.body(n.name)));
   }
 

@@ -93,6 +93,22 @@ export function wantsDemo(params: HashParams): boolean {
   return params.demo !== undefined;
 }
 
+// markDemoData reveals the shell's "demo data" tag in the status bar, beside the connection
+// state. Call it when a surface renders sample data instead of a daemon's.
+//
+// Through shared DOM rather than an import, because each surface is its own esbuild bundle
+// and module state set in the shell is invisible inside one. The connection dot already
+// works this way; this is the same seam.
+//
+// It exists so a surface does not have to spend a banner on the disclosure. The reader still
+// has to learn that what they are looking at is invented - for notes that is the whole
+// integrity of the store - but an ambient tag beside "not connected" says it for as long as
+// the data is on screen, where a banner says it once and then scrolls away.
+export function markDemoData(on = true): void {
+  const tag = document.getElementById("console-demo");
+  if (tag) tag.hidden = !on;
+}
+
 // ---- the loopback lock -----------------------------------------------------
 
 // validateLoopbackHost: a configured/entered daemon host MUST be literally 127.0.0.1

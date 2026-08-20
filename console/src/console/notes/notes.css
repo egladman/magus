@@ -30,13 +30,6 @@
   container-type: inline-size; container-name: notes;
 }
 
-/* --- Demo disclosure --------------------------------------------------------------------
-   The one banner here worth its full vertical cost. Sample prose shown unlabelled would be the
-   surface asserting that a person wrote something nobody wrote, and authorship is the entire
-   claim a note makes. */
-.console-notes-app__demo { flex: 0 0 auto; }
-.console-notes-app__demo .pf-v6-c-alert { border-radius: 0; border-inline: 0; border-block-start: 0; }
-
 /* --- Two-pane body ----------------------------------------------------------------------- */
 .console-notes-app__main { flex: 1 1 auto; min-height: 0; display: flex; position: relative; }
 /* Its own stacking context, so the z-index PF puts on a selected ToggleGroup button competes
@@ -52,9 +45,10 @@
   padding: 0.4rem var(--notes-pad);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
+/* The filter owns the row outright. It shared it with a three-way scope toggle, which was a
+   control for a choice the store headings already make - collapsing one says what filtering to
+   the other said - and two controls of different natural heights on one line never sat right. */
 .console-notes-app__search { flex: 1 1 auto; min-width: 0; font-size: 0.82rem; }
-.console-notes-app__scope { flex: 0 0 auto; }
-.console-notes-app__scope .pf-v6-c-toggle-group__button { font-size: 0.74rem; white-space: nowrap; }
 
 /* --- The list ---------------------------------------------------------------------------- */
 .console-notes-app__list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
@@ -62,17 +56,34 @@
 
 /* The store head carries the consequence sentence itself rather than a banner beneath it: what
    a store IS outranks everything else on this surface, and a reader who scrolls past it has
-   lost the only fact separating the two. Sticky, so the scroll cannot lose it. */
+   lost the only fact separating the two. Sticky, so the scroll cannot lose it.
+
+   It is a real <button> that folds its store away, which is also the scope filter - collapsing
+   "Private" says what a Private/Shared toggle said, using an affordance the heading needs
+   anyway. An earlier revision inherited the log viewer's head styling and LOOKED clickable
+   while doing nothing; the repair was to make the affordance true rather than to remove it. */
 .console-notes-app__store {
   position: sticky; top: 0; z-index: 1;
-  display: flex; align-items: baseline; gap: 0.5rem;
-  padding: 0.25rem var(--notes-pad);
+  display: flex; align-items: baseline; gap: 0.5rem; width: 100%;
+  padding: 0.3rem var(--notes-pad);
   background: var(--pf-t--global--background--color--secondary--default);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  border: 0; border-bottom: 1px solid var(--pf-t--global--border--color--default);
   font-family: var(--pf-t--global--font--family--mono);
   font-size: 0.7rem; letter-spacing: 0.07em; text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
+  text-align: left; cursor: pointer;
 }
+.console-notes-app__store:hover { background: var(--pf-t--global--background--color--primary--default); }
+.console-notes-app__store:focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
+/* CSS-drawn caret, so the source stays ASCII. Points down when the store is open. */
+.console-notes-app__store-twist {
+  flex: 0 0 auto; align-self: center; width: 0; height: 0;
+  border-left: 0.3em solid transparent; border-right: 0.3em solid transparent;
+  border-top: 0.36em solid currentcolor;
+  transition: transform 0.12s;
+}
+@media (prefers-reduced-motion: reduce) { .console-notes-app__store-twist { transition: none; } }
+.console-notes-app__store[data-collapsed] .console-notes-app__store-twist { transform: rotate(-90deg); }
 .console-notes-app__store-consequence {
   margin-left: auto; text-transform: none; letter-spacing: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -119,15 +130,20 @@
 .console-notes-app__note-meta [data-health="drifted"] { color: var(--console-status-warn); }
 .console-notes-app__note-meta [data-health="dangling"] { color: var(--console-status-danger); }
 
-/* A store problem belongs in the list it describes, at one line, rather than stacked above it. */
-.console-notes-app__issue {
-  display: flex; gap: 0.45rem;
-  padding: 0.3rem var(--notes-pad);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
-  background: color-mix(in srgb, var(--console-status-warn) 14%, transparent);
-  font-family: var(--pf-t--global--font--family--mono); font-size: 0.72rem;
-  color: var(--pf-t--global--text--color--regular);
+/* A store problem belongs in the list it describes, at one line, rather than stacked above it.
+   A real PF Alert flattened to span the list edge to edge: the component keeps the severity
+   semantics and the icon slot, and the sheet takes away only the card silhouette that would
+   make it float inside the list rather than read as part of it.
+
+   The full-bleed inline notice is the console's shape for this - the same treatment belongs on
+   any surface with something to say about the data it is showing. */
+.console-notes-app__issue.pf-v6-c-alert {
+  border-radius: 0; border-inline: 0; border-block-start: 0;
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  padding-block: 0.3rem; padding-inline: var(--notes-pad);
+  font-size: 0.75rem;
 }
+.console-notes-app__issue .pf-v6-c-alert__title { font-weight: 400; overflow-wrap: anywhere; }
 .console-notes-app__note-none {
   padding: 0.6rem var(--notes-pad); color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem;
 }

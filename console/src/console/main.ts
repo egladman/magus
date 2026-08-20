@@ -513,6 +513,23 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
     viewOnly.title = "This is a read-only view shared over the network.";
     left.append(viewOnly);
   }
+  // Demo reminder, same shape as "view only" and for a stronger reason. A surface showing
+  // sample data is asserting things nobody said, and the reader needs to know that BEFORE
+  // they quote one at a colleague - notes is the sharp case, where invented prose passing as
+  // something a person wrote is the one lie the store cannot survive.
+  //
+  // Built hidden and revealed by the surface (markDemoData), not decided here: demo mode is
+  // reachable without the #demo hash - the cold empty state has a "See the demo" button - so
+  // a check at construction time would miss the path a reader is most likely to take. Each
+  // surface is its own bundle, so this coordinates through shared DOM the way the connection
+  // dot already does, rather than through module state no other bundle can see.
+  const demo = document.createElement("span");
+  demo.id = "console-demo";
+  demo.dataset.demo = "";
+  demo.hidden = true;
+  demo.textContent = "demo data";
+  demo.title = "This surface is showing sample data. Nobody wrote it.";
+  left.append(demo);
   const right = document.createElement("div");
   right.dataset.cluster = "";
   right.className = "console-shell-statusbar__right";

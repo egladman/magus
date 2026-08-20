@@ -1,14 +1,14 @@
 // demo.ts - sample notes for the Notes surface, so it can be seen without a daemon.
 //
-// These are INVENTED, and the surface says so out loud (see the banner loadDemo renders in
-// main.ts). That disclosure is not politeness, it is the condition on this file existing at
-// all. A note's only provenance is the person who wrote it - nothing in the repository
+// These are INVENTED, and the surface says so out loud - loadDemo raises the shell's "demo
+// data" tag in the status bar, beside the connection state, for as long as they are on screen.
+// That disclosure is not politeness, it is the condition on this file existing at all. A note's only provenance is the person who wrote it - nothing in the repository
 // corroborates one later, which is why agents may read notes and never write them
 // (notes/what-belongs-in-a-note.md). Sample prose shown unlabelled in THIS surface would be
 // the one lie the store cannot survive, because a reader takes what they see here as
 // something a colleague wrote. Labelled, it is a screenshot with the lights on.
 //
-// So: if the banner goes, this file goes with it.
+// So: if the disclosure goes, this file goes with it.
 //
 // The set exercises the rendering rather than looking full - both scopes, every anchor
 // verdict, both staleness tiers, a multi-anchor note, and a store carrying a repair warning.
