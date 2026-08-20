@@ -123,7 +123,7 @@
             <button type="button" class="console-graph-views__chip" data-view="cycles" title="Highlight targets caught in a circular dependency, where A needs B needs A. magus cannot order these, so it is a configuration error to fix. CLI: magus graph verify">Find circular dependencies</button>
             <button type="button" class="console-graph-views__chip" data-radialpick title="Pick a target to see its neighborhood as rings by distance.">See a target's neighbors</button>
             <button type="button" class="console-graph-views__chip" data-view="hubs" title="The nodes the most other nodes depend on, ranked by how many. Containment does not count, so a project never outranks the code.">Show the most depended-on nodes</button>
-            <button type="button" class="console-graph-views__chip" data-view="orphans" title="Nodes with no dependency in either direction: nothing needs them and they need nothing. Potentially dead or unconfigured.">Show what depends on nothing</button>
+            <button type="button" class="console-graph-views__chip" data-view="orphans" title="Nodes with no dependency in either direction, among the kinds that carry dependencies at all. Potentially dead or unconfigured.">Show what depends on nothing</button>
             <button type="button" class="console-graph-views__chip" data-view="affected" data-conditional hidden title="What your working-tree diff would rebuild. Appears in live mode once the daemon reports an affected set.">See what my last change affects</button>
             <button type="button" id="clear-view-btn" class="console-graph-views__clear" hidden>Clear</button>
           </div>

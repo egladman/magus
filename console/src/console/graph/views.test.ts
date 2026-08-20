@@ -80,6 +80,11 @@ test("a node held only by its project's contains edge still reads as dead", () =
   assert.deepEqual(disconnected(NODES, LINKS), ["proj", "spare"]);
 });
 
+test("a self-dependency makes its kind dependency-bearing", () => {
+  const nodes = [node("a"), node("b")];
+  assert.deepEqual(disconnected(nodes, [link("a", "a")]), ["b"]);
+});
+
 test("disconnected excludes anything on either end of a dependency edge", () => {
   const ids = disconnected(NODES, LINKS);
   for (const id of ["app-a", "app-b", "lib"]) {
@@ -88,10 +93,28 @@ test("disconnected excludes anything on either end of a dependency edge", () => 
 });
 
 test("documenting a node is not depending on it", () => {
-  const nodes = ["readme", "build"].map(node);
-  const links = [link("readme", "build", "documents")];
+  const nodes = ["readme", "build", "app", "lib"].map(node);
+  // app -> lib is what makes the kind dependency-bearing; the documents edge must not save
+  // readme or build from the dead list, and must not put build on the hub list.
+  const links = [link("readme", "build", "documents"), link("app", "lib")];
   assert.deepEqual(disconnected(nodes, links), ["readme", "build"]);
-  assert.deepEqual(mostDependedOn(nodes, links, 5), []);
+  assert.deepEqual(mostDependedOn(nodes, links, 5), ["lib"]);
+});
+
+test("a kind that never bears a dependency is not dead code", () => {
+  const nodes = [node("app"), node("lib"), { ...node("readme"), kind: "doc" } as GNode];
+  const links = [link("app", "lib")];
+  // The doc kind sits on no dependency edge anywhere in this graph, so calling it dead says
+  // nothing about the workspace - unlike the target kind, where "no dependency" is a finding.
+  assert.deepEqual(disconnected(nodes, links), []);
+});
+
+test("a kind qualifies as soon as one node of it bears a dependency", () => {
+  const docA = { ...node("doc-a"), kind: "doc" } as GNode;
+  const docB = { ...node("doc-b"), kind: "doc" } as GNode;
+  const nodes = [docA, docB, node("lib")];
+  const links = [link("doc-a", "lib", "references")];
+  assert.deepEqual(disconnected(nodes, links), ["doc-b"]);
 });
 
 test("an edge to a node outside the set is skipped", () => {

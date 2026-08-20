@@ -70,17 +70,31 @@ export function mostDependedOn(
 }
 
 /**
- * disconnected returns the ids with no dependency edge in either direction: nothing depends on
- * them and they depend on nothing. These are the dead-or-unconfigured candidates. A node still
- * counts as disconnected when its only edges are structural (a target's `contains` edge to its
- * project) or annotational, which is what separates this from a plain degree-zero test - in a
- * knowledge graph every target carries that `contains` edge, so degree zero finds nearly
- * nothing and finds it for structural reasons rather than workspace ones.
+ * disconnected returns the ids with no dependency edge in either direction - nothing depends on
+ * them and they depend on nothing - among the kinds that carry dependencies AT ALL in this
+ * graph. These are the dead-or-unconfigured candidates.
+ *
+ * Two structural traps sit either side of this answer, and the kind filter is what threads
+ * between them. Testing raw degree instead finds almost nothing, because in a knowledge graph
+ * every target carries a `contains` edge to its project. Dropping the kind filter finds far too
+ * much, because whole kinds - diagnostics, directories, methods, rationales - never sit on a
+ * dependency edge in the first place, and reporting each of them as dead code says nothing
+ * about the workspace.
+ *
+ * Which kinds qualify is read off THIS graph rather than hardcoded: a kind counts when at least
+ * one node of it sits on a dependency edge. That keeps the answer meaningful across both graph
+ * flavors and any kind added later, without a list to maintain.
  */
 export function disconnected(nodes: readonly GNode[], links: readonly GLink[]): string[] {
   const deg = dependencyDegrees(nodes, links);
+  const bearing = new Set<string>();
+  for (const n of nodes) {
+    const d = deg.get(n.id);
+    if (d && d.dependents + d.dependencies > 0) bearing.add(n.kind);
+  }
   return nodes
     .filter((n) => {
+      if (!bearing.has(n.kind)) return false;
       const d = deg.get(n.id);
       return !!d && d.dependents === 0 && d.dependencies === 0;
     })

@@ -710,6 +710,9 @@ function applyRadialMode(): boolean {
       (centerNode ? centerNode.label : center) +
       (hiddenCount ? "; " + hiddenCount + " more hidden" : ""),
   );
+  // matchSet just became the placed set, so the count row and node cloud have to be redrawn
+  // with it or they keep reporting whatever set was showing before radial narrowed it.
+  renderList();
   // Frame the freshly-placed rings. Radial centers on world origin, so without
   // this the camera stays wherever the previous layout left it and the rings
   // render off-screen (fitView calls draw()).
@@ -1944,11 +1947,34 @@ function applyQuery(q: string) {
   renderList();
   updateHash();
   syncLayoutToggle(); // availability tracks matchSet size
-  // Radial pins its ring positions and parks everything it did not place off-canvas, so a query
-  // has to re-run the layout over the new subset: without this its own matches stay parked a
-  // million units off-canvas while the count and the node list report them as visible.
+  // Radial owns placement: it pins its ego rings and parks everything else off-canvas. Left
+  // alone it would report matches sitting a million units off the canvas as visible, so the
+  // filter narrows to the matches radial actually PLACED. Re-placing over the whole graph
+  // first (matchSet cleared) rather than over the matches keeps the rings meaningful - the
+  // paths between matches run through nodes the filter excludes, and a BFS restricted to the
+  // matches alone would reach almost none of them.
   if (layoutMode === "radial") {
-    applyRadialMode();
+    const matches = matchSet;
+    matchSet = null;
+    applyRadialMode(); // re-places over the full graph; leaves matchSet as the placed set
+    const placed = matchSet as Set<string> | null;
+    if (matches && placed) {
+      matchSet = new Set([...matches].filter((id) => placed.has(id)));
+      const unreachable = matches.size - matchSet.size;
+      const centerNode = radialCenter ? graph.byId.get(radialCenter) : null;
+      setStatus(
+        matchSet.size +
+          " match" +
+          (matchSet.size === 1 ? "" : "es") +
+          " within " +
+          RADIAL_MAX_RINGS +
+          " hops of " +
+          (centerNode ? centerNode.label : radialCenter) +
+          (unreachable ? "; " + unreachable + " further out" : ""),
+      );
+      renderList();
+      fitView(matchSet);
+    }
     return;
   }
   // Re-run the dag layout (layered or waves) on the new visible subset.
@@ -2780,7 +2806,7 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
           n +
           " node" +
           (n === 1 ? "" : "s") +
-          " with no dependency either way: nothing needs them and they need nothing.",
+          " of a kind that normally has dependencies, but with none either way.",
       );
       setResultLine(n + " node" + (n === 1 ? "" : "s") + " with no dependencies either way.");
       break;
