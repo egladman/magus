@@ -1754,25 +1754,53 @@ function revealWholeGraph() {
   });
 }
 
-// whenCanvasSized resolves once the canvas has a non-zero box, or gives up after ~20s of frames.
-// Distinct from waitForCanvasWidth, whose ~1s cap suits a load the operator is already watching;
-// this one waits out a surface mounted hidden, where there is nothing to be late for.
+// whenCanvasSized resolves once the canvas has a non-zero box, or gives up after ~20s. Distinct
+// from waitForCanvasWidth, whose ~1s cap suits a load the operator is already watching; this one
+// waits out a surface mounted hidden, where there is nothing to be late for.
+//
+// A TIMER, not requestAnimationFrame: rAF stops entirely while the page is not being rendered -
+// the same pause the idle wobble relies on - and the whole point here is to wait out a surface
+// that is not being rendered yet, so an rAF poll deadlocks on exactly the case it exists for.
 function whenCanvasSized(): Promise<void> {
   return new Promise((resolve) => {
-    let frames = 0;
-    const check = () => {
-      if (canvas.clientWidth > 0 || ++frames > 1200) resolve();
-      else requestAnimationFrame(check);
-    };
-    check();
+    if (canvas.clientWidth > 0) {
+      resolve();
+      return;
+    }
+    let waited = 0;
+    const timer = setInterval(() => {
+      waited += 100;
+      if (canvas.clientWidth > 0 || waited > 20_000) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, 100);
   });
 }
 
+// A fit asked for while the canvas had no box, held until it has one. The console can mount this
+// surface into a pane that is still display:none for seconds, and every fit in that window - a
+// view's, a focus's, radial's - would otherwise be computed against a zero viewport, clamp to the
+// minimum scale and be silently dropped. Only the LAST one is worth replaying: they supersede.
+let pendingFit: { ids: Set<string> | null } | null = null;
+let pendingFitArmed = false;
+
 function fitView(ids: Set<string> | null) {
   const pts = graph.nodes.filter((n) => n.x != null && (!ids || ids.has(n.id)));
-  // No zoom behavior means setupZoomDrag has not run; no width means the canvas has not been
-  // laid out. Framing against either writes a transform that has to be undone by hand.
-  if (!pts.length || !zoomBehavior || canvas.clientWidth <= 0) return;
+  if (!pts.length || !zoomBehavior) return; // setupZoomDrag has not run yet
+  if (canvas.clientWidth <= 0) {
+    pendingFit = { ids };
+    if (!pendingFitArmed) {
+      pendingFitArmed = true;
+      void whenCanvasSized().then(() => {
+        pendingFitArmed = false;
+        const want = pendingFit;
+        pendingFit = null;
+        if (want && !cameraOwnedByOperator) fitView(want.ids);
+      });
+    }
+    return;
+  }
   let minX = Infinity,
     minY = Infinity,
     maxX = -Infinity,
