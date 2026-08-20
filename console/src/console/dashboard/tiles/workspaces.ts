@@ -9,7 +9,7 @@ import { fitRows } from "./density";
 // The scope this tile highlights against. Narrowed to what it actually reads - a value and a
 // subscription - so it can be fed either a persisted cell or the shell's per-tab workspace scope
 // without either having to pretend to be the other.
-export interface ScopeReader {
+export interface WorkspaceReader {
   get(): string;
   subscribe(fn: (value: string) => void): () => void;
 }
@@ -18,7 +18,7 @@ export interface ScopeReader {
 // by the title bar's scope picker): the matching row gets [data-active], so the tab's scope has a
 // visible anchor here - the one place per-workspace data (this daemon's cache tallies) actually
 // exists to scope to. Optional: the standalone case renders unhighlighted.
-export function workspacesTile(activeWorkspace?: ScopeReader): Tile {
+export function workspacesTile(activeWorkspace?: WorkspaceReader): Tile {
   const card = new Card("workspaces", "Workspaces", {
     term: "Workspace",
     label: "workspaces",

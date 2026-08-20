@@ -45,7 +45,7 @@ import { createTileView, type TileView } from "./tileView";
 import { leaves, type Pane, type Leaf, type Split } from "./tiling";
 import { initRefDrawer, referenceSurface } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
-import { initScopePicker } from "../ui/scope-picker";
+import { initWorkspacePicker } from "../ui/workspace-picker";
 import { onWorkspaces } from "../lib/scope";
 import { maybeAskWorkspace } from "../ui/signin";
 import { mountNotificationCenter, notify } from "../lib/notifications";
@@ -1090,16 +1090,16 @@ export function startConsole(
   // reports more than one workspace, so a single-workspace console never grows a control for a
   // decision with one answer.
   const actionsHost = document.getElementById("console-actions");
-  const scopePicker = actionsHost ? initScopePicker(actionsHost) : null;
+  const workspacePicker = actionsHost ? initWorkspacePicker(actionsHost) : null;
   // A surface can know the workspace list before this shell's 15s poll does - and in the offline demo
   // it is the ONLY thing that knows, since there is no daemon to poll.
   // The offline demo publishes two synthetic workspaces, which is what makes scoping demonstrable with
   // no daemon - but a Connect screen there would ask for a credential against a daemon that does not
   // exist, and answer its own questions with "not configured" and "No credential".
   const inDemo = (): boolean => document.getElementById("console-conn")?.dataset.state === "demo";
-  if (scopePicker) {
+  if (workspacePicker) {
     onWorkspaces((roots) => {
-      scopePicker.setWorkspaces(roots);
+      workspacePicker.setWorkspaces(roots);
       // Ask once per browser tab, and only when the answer carries information. Guarded inside, so a
       // status tick every few seconds cannot re-open it.
       if (!inDemo()) maybeAskWorkspace(roots);
@@ -1885,7 +1885,7 @@ export function startConsole(
       // control every 15s, and the dashboard's own publisher restores it a second later - a flicker
       // caused entirely by two publishers disagreeing about what "no answer" means.
       if (p) {
-        scopePicker?.setWorkspaces(p.workspaces);
+        workspacePicker?.setWorkspaces(p.workspaces);
         if (!inDemo()) maybeAskWorkspace(p.workspaces);
       }
     });

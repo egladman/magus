@@ -1,6 +1,10 @@
-// scope-picker.ts - the title bar's workspace scope control: which workspace THIS BROWSER TAB is
-// looking at. Named for what it does to the window rather than for the thing it lists, because
-// picking here changes what every surface in the tab reports on.
+// workspace-picker.ts - the title bar's control for which workspace THIS BROWSER TAB is looking at.
+// Picking here changes what every surface in the tab reports on.
+//
+// Named for the workspace rather than for the scope so it does not collide with view.ts's `Scope`,
+// which is a component's disposer bag and has nothing to do with any of this. The CSS hooks are still
+// spelled console-shell-scope__*; they name the tab's scope, which is accurate, and moving them would
+// be a stylesheet change for a TypeScript problem.
 //
 // It is the console's account switcher. Two browser tabs can sit in two workspaces at once and stay
 // there; the scope rides sessionStorage (lib/scope.ts), so it belongs to the tab and not to the
@@ -18,7 +22,7 @@ import {
   workspaceScope,
 } from "../lib/scope";
 
-export interface ScopePicker {
+export interface WorkspacePicker {
   // The daemon told us which workspaces it has loaded; rebuild the menu around them.
   setWorkspaces(roots: readonly string[]): void;
   // Releases the document listeners and the scope subscription, and removes the control. The two
@@ -27,7 +31,7 @@ export interface ScopePicker {
   destroy(): void;
 }
 
-export function initScopePicker(host: HTMLElement): ScopePicker {
+export function initWorkspacePicker(host: HTMLElement): WorkspacePicker {
   const btn = document.createElement("button");
   btn.id = "console-scope-btn";
   btn.type = "button";

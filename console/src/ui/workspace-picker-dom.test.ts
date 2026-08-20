@@ -1,11 +1,11 @@
-// scope-picker-dom.test.ts - the title bar's workspace control: when it exists at all, what picking
+// workspace-picker-dom.test.ts - the title bar's workspace control: when it exists at all, what picking
 // does, and whether it lets go on destroy. The teardown case is the reason this file exists: the two
 // outside-click listeners live on `document`, not on the control, so dropping the reference alone
 // would leave a detached menu answering clicks for the life of the page.
 
 import assert from "node:assert/strict";
 import { describe, test, beforeEach } from "node:test";
-import { initScopePicker } from "./scope-picker";
+import { initWorkspacePicker } from "./workspace-picker";
 import { ALL_WORKSPACES, setWorkspaceScope, workspaceScope } from "../lib/scope";
 
 const ACME = "/Users/eli/Repos/acme";
@@ -14,9 +14,9 @@ const BOTH = [ACME, MAGUS];
 
 function mount() {
   const host = document.createElement("div");
-  host.dataset.scopePickerHost = "";
+  host.dataset.workspacePickerHost = "";
   document.body.append(host);
-  const picker = initScopePicker(host);
+  const picker = initWorkspacePicker(host);
   const btn = host.querySelector<HTMLButtonElement>("#console-scope-btn");
   assert.ok(btn);
   return { host, picker, btn };
@@ -31,7 +31,7 @@ function menuItems(host: HTMLElement): HTMLButtonElement[] {
 describe("the workspace scope control", () => {
   beforeEach(() => {
     sessionStorage.removeItem("magus:workspace-scope");
-    for (const el of document.querySelectorAll("[data-scope-picker-host]")) el.remove();
+    for (const el of document.querySelectorAll("[data-workspace-picker-host]")) el.remove();
   });
 
   // With one workspace loaded, scoped and unscoped show the same thing - the control would be a
