@@ -30,8 +30,11 @@
   min-height: var(--console-statusbar-h);
   padding: 0.1rem var(--console-pad);
   /* The same recessive tone as the title bar and the navigation rail - the three are one continuous
-     chrome surface wrapping the content, so there is no seam between them to draw. */
+     chrome surface wrapping the content, so no seam is drawn BETWEEN them. The border and cast here
+     face the content above, which is where the chrome ends and the depth belongs. */
   background: var(--pf-t--global--background--color--secondary--default);
+  border-top: 1px solid var(--pf-t--global--border--color--default);
+  box-shadow: var(--pf-t--global--box-shadow--sm--top);
   font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle);
   overflow: hidden; /* a stray long value truncates with the bar, never scrolls the page */
   -webkit-user-select: none; user-select: none; /* chrome rail, like a native window edge */

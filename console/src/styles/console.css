@@ -24,6 +24,9 @@
   /* ZERO. The content used to be inset from the chrome by this much, which left a band of chrome
      colour between the content and everything around it - under the tab strip, beside the rail, above
      the status bar - so the content read as a slab dropped into the window rather than part of it.
+     Depth comes from the boundary instead: a hairline plus a soft cast where the chrome meets the
+     content (see the title bar, the status bar and the outlet below). Those edges are the only place
+     a seam belongs - drawn WITHIN the chrome they would cut the continuous surface up again.
      Kept as a name rather than deleted because the padding pair below is what it feeds, and a literal
      0 in two places is the drift this name exists to prevent. */
   --console-shell-gutter: 0;
@@ -518,8 +521,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      recessive tone, so they read as a single frame wrapping the content down the left and along the
      top and bottom - the shape Firefox uses - rather than as three bars meeting at corners. The
      content is what steps forward out of it (see the outlet's card below); the frame stays back.
-     No bottom border, and no cast: a seam here would cut the continuous surface in two. */
+     The border and the cast here face the CONTENT, not the rail: this edge is where the chrome ends,
+     so it is where the depth belongs. The cast is what makes a surface scrolling under the tab strip
+     pass beneath something rather than meet a flat seam. */
   background: var(--pf-t--global--background--color--secondary--default);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  box-shadow: var(--pf-t--global--box-shadow--sm--bottom);
   /* A soft cast DOWN over the content, so a surface scrolling under the bar passes beneath
      something rather than meeting a flat seam. The hairline above stays: it is what holds the
      edge crisp at rest, and the shadow only reads once there is content behind it. PF's
@@ -677,6 +684,10 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-tabs .pf-v6-c-tabs__item { background: transparent; }
 #console-tabs .pf-v6-c-tabs__item.pf-m-current {
   background: var(--pf-t--global--background--color--primary--default);
+  /* Lifted on the SIDES, which is where its neighbours are. Top and bottom are the strip's own edges -
+     the tab meets the window above and the content below, and casting onto either would fight the
+     strip's own cast rather than separate one tab from the next. */
+  box-shadow: var(--pf-t--global--box-shadow--sm--left), var(--pf-t--global--box-shadow--sm--right);
 }
 #console-tabs .pf-v6-c-tabs__item.pf-m-current .pf-v6-c-tabs__link { color: var(--pf-t--global--text--color--regular); }
 #console-tabs .pf-v6-c-tabs__item:not(.pf-m-current) .pf-v6-c-tabs__link { color: var(--pf-t--global--text--color--subtle); }
@@ -701,7 +712,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* ROW explicitly: `body[data-console-fill] > main` sets flex-direction:column for the standalone
    single-card pages, and the outlet inherits that rule. It did not matter while the outlet had one
    child; with the navigation rail beside the Drawer, column stacks them vertically. */
-#console-outlet { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: row; }
+#console-outlet {
+  flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: row;
+  /* The rail's edge, drawn on the CONTENT rather than on the rail: a border on the rail itself would
+     run its full height and cut it away from the title bar and status bar, which are the same
+     continuous surface. Here it spans exactly the content's height, which is the boundary it marks. */
+  border-left: 1px solid var(--pf-t--global--border--color--default);
+}
 /* The content CARD - the only curved thing in the shell, and the one surface that steps forward out
    of the chrome frame. Chrome is square and recessive; containers are raised and rounded.
    It is the DRAWER that carries this, not #console-outlet: the outlet holds the shell gutter as
@@ -813,6 +830,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   display: grid; grid-template-columns: var(--console-sidebar-w) minmax(0, 1fr); align-items: center; justify-items: center;
 }
 #console-sidebar[data-expanded] .pf-v6-c-nav__link { grid-template-columns: 1.5rem minmax(0, 1fr); justify-items: start; }
+/* The current row lifts off the rail, TOP AND BOTTOM ONLY. A cast on the sides would read as a gap
+   between the row and the rail's edges - the row spans the full width, so there is nothing there for
+   it to cast onto. */
+#console-sidebar .pf-v6-c-nav__link.pf-m-current {
+  box-shadow: var(--pf-t--global--box-shadow--sm--top), var(--pf-t--global--box-shadow--sm--bottom);
+}
 #console-sidebar .pf-v6-c-nav__link-icon { display: flex; }
 /* The label is present in the DOM in both states and clipped by the rail's overflow when collapsed;
    it is never the accessible name (that is the button's aria-label), so clipping it costs nothing. */
