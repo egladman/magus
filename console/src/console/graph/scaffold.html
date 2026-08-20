@@ -31,7 +31,7 @@
         <dt><button type="button" class="console-graph-help__example" data-q="render">Match text anywhere</button></dt>
         <dd>Free text like <code>render</code> matches a node's id, label, or doc.</dd>
         <dt><button type="button" class="console-graph-help__example" data-q="kind:spell">Keep one kind of node</button></dt>
-        <dd><code>kind:spell</code>: one of project, target, spell, op, charm, module, method, import, function, file, doc, rationale, diagnostic, symbol. (Or click a legend color.)</dd>
+        <dd><code>kind:spell</code>: one of <span data-kindlist>the kinds in the legend</span>. (Or click a legend color.)</dd>
         <dt><button type="button" class="console-graph-help__example" data-q="kind:target">Show every target</button></dt>
         <dd><code>kind:target</code> lists all targets. In a target graph (<code>magus describe graph -o json</code>), anchor targets (those nothing depends on within their project) get a ring outline.</dd>
         <dt><button type="button" class="console-graph-help__example" data-q="project:website">Show a project and its targets</button></dt>
@@ -46,8 +46,8 @@
         <dd>Quote a value with spaces to keep it one term: <code>"spell op"</code>.</dd>
         <dt><button type="button" class="console-graph-help__example" data-q="kind:target -id:generate">Combine terms</button></dt>
         <dd>All terms must match: <code>kind:target -id:generate</code> lists targets whose id lacks "generate".</dd>
-        <dt><button type="button" class="console-graph-help__example" data-q="kind:symbol">Show code symbols</button></dt>
-        <dd><code>kind:symbol</code>: SCIP code-symbol nodes (from <code>magus refs</code>), when present.</dd>
+        <dt hidden><button type="button" class="console-graph-help__example" data-q="kind:symbol" hidden>Show code symbols</button></dt>
+        <dd hidden><code>kind:symbol</code>: SCIP code-symbol nodes (from <code>magus refs</code>). Shown only when the loaded graph carries them - the live daemon graph excludes the @symbols shards.</dd>
       </dl>
       <p>A query dims non-matching nodes and hides edges except those between two matches, so the matching subgraph stands out. The same string works as <code>magus query "&lt;terms&gt;"</code> on the command line, or as a <code>#q=</code> deep link on this page.</p>
       <p><b>Local graph:</b> double-click any node (on the canvas or a pill) to isolate its neighborhood; <kbd>[</kbd>/<kbd>]</kbd> change depth, <kbd>Esc</kbd> clears. <b>Fit</b> frames everything (or the current matches).</p>

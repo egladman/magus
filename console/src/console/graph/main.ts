@@ -1784,6 +1784,31 @@ function clearFocusOrQuery() {
   }
 }
 
+// syncKindList fills the search-syntax reference with the kinds THIS graph carries, and hides
+// the kind:symbol example unless it has symbol nodes to find. The list used to be a hardcoded
+// enumeration in the scaffold, which drifted from both the schema and the payload; a search the
+// help advertises must be one the loaded data can answer.
+function syncKindList(counts: Map<string, number>) {
+  const kinds = legendKinds(counts);
+  if (kinds.length) {
+    // An empty graph leaves the scaffold's "the kinds in the legend" wording standing rather
+    // than blanking the sentence mid-clause.
+    for (const slot of document.querySelectorAll<HTMLElement>("[data-kindlist]")) {
+      slot.textContent = kinds.join(", ");
+    }
+  }
+  for (const ex of document.querySelectorAll<HTMLElement>('[data-q="kind:symbol"]')) {
+    const row = ex.closest("dt");
+    const hide = !counts.has("symbol");
+    ex.hidden = hide;
+    if (row) {
+      row.hidden = hide;
+      const dd = row.nextElementSibling;
+      if (dd instanceof HTMLElement) dd.hidden = hide;
+    }
+  }
+}
+
 // syncConditionalViews shows or hides the "What's slow?" (critical) view button
 // based on whether the current graph has DurationMs timing data. Called after
 // each graph load (boot and replaceGraph) so the button tracks the data.
@@ -2159,12 +2184,24 @@ function syncListSelection() {
   });
 }
 
+// legendKinds lists the kinds actually present, KINDS order first and anything else after it,
+// alphabetically. Filtering to KINDS alone silently dropped every kind the graph carries that
+// this list predates - `dir`, `package`, `tool` and `note` in magus's own graph - so the legend
+// claimed to enumerate node kinds while its counts did not add up to the node total. An unknown
+// kind has no --gk-<kind>, and both the dot and the canvas already fall back to grey.
+function legendKinds(counts: Map<string, number>): string[] {
+  const known = KINDS.filter((k) => counts.has(k));
+  const rest = [...counts.keys()].filter((k) => !KINDS.includes(k)).sort();
+  return [...known, ...rest];
+}
+
 function renderLegend() {
-  const counts = new Map();
+  const counts = new Map<string, number>();
   for (const n of graph.nodes) counts.set(n.kind, (counts.get(n.kind) || 0) + 1);
+  syncKindList(counts);
   // Each legend row is a button that filters to kind:<k> (the CLI query it maps to),
   // so clicking a color isolates that kind - a quick, Obsidian-style filter.
-  legendEl.innerHTML = KINDS.filter((k) => counts.has(k))
+  legendEl.innerHTML = legendKinds(counts)
     .map(
       (k) =>
         '<li><button type="button" class="console-graph-legend__row" data-kind="' +
