@@ -50,7 +50,11 @@ export function publishWorkspaces(roots: readonly string[]): void {
 
 export function onWorkspaces(fn: (roots: string[]) => void): () => void {
   const handler = (e: Event): void => {
-    if (e instanceof CustomEvent && Array.isArray(e.detail)) fn(e.detail as string[]);
+    // Array.isArray proves the shape, not the element type; a non-string root reaches shortName and
+    // throws on .split. Filtering is the same rigor onWorkspaceScope below applies to its scalar.
+    if (e instanceof CustomEvent && Array.isArray(e.detail)) {
+      fn((e.detail as unknown[]).filter((r): r is string => typeof r === "string"));
+    }
   };
   window.addEventListener(WORKSPACES_EVENT, handler);
   return () => window.removeEventListener(WORKSPACES_EVENT, handler);

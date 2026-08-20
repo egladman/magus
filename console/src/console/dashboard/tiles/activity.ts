@@ -361,7 +361,10 @@ export function activityTile(): Tile {
   const repaint = (): void => {
     if (!latest?.status) return;
     const all = latest.status.runningTargets;
-    const mine = all.filter((t) => inScope(t.workspace));
+    // Read the scope once. inScope defaults it per call, so leaving it off costs one sessionStorage
+    // read per running target per frame on a stream that pushes about once a second.
+    const scope = workspaceScope();
+    const mine = all.filter((t) => inScope(t.workspace, scope));
     // "Where is my stuff" is the failure a scope invites, and this is the moment someone asks it: a
     // scoped tile that is empty while the daemon is busy looks identical to an idle daemon. Saying
     // how much is running ELSEWHERE turns a dead end into a signpost - it is the sentence AWS's
