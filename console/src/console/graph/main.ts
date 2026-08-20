@@ -78,7 +78,13 @@ import {
   overlayInsets,
   usableCenter,
 } from "./viewport.js";
-import { disconnected, mostDependedOn, projectOwners as computeProjectOwners } from "./views.js";
+import {
+  type DependencyDegree,
+  dependencyDegrees,
+  disconnected,
+  mostDependedOn,
+  projectOwners as computeProjectOwners,
+} from "./views.js";
 import { flavorOf, isTargetGraph, targetGraphToNodeLink } from "./target-adapter.js";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { wireToolbarOverflow } from "../toolbar";
@@ -197,6 +203,7 @@ interface Graph {
   relIndex?: Map<string, Set<string>>;
   adj?: Map<string, Set<string>>;
   projectOf?: Map<string, string>;
+  depDegrees?: Map<string, DependencyDegree>;
 }
 // graph is null until the first load, but every reader runs post-load (boot gates on it),
 // so it is typed non-null - `null as any` keeps the runtime null + the `if (!graph)` guards
@@ -2224,11 +2231,42 @@ function positionNodeListOverlay() {
   listEl.style.top = r.bottom + 6 + "px";
 }
 function setListExpanded(v: boolean) {
+  const changed = listExpanded !== v;
   listExpanded = v;
   listEl.hidden = !v;
   const btn = el("list-toggle");
   if (btn) btn.setAttribute("aria-expanded", v ? "true" : "false");
+  // The toggle's own label reads "Show/Hide the N matching nodes" under a scope, so it has to be
+  // repainted when the disclosure flips. Guarded against the re-entry renderList would cause,
+  // since renderList itself calls setListExpanded on a fresh query.
+  if (changed && graph) renderList();
   if (v) positionNodeListOverlay();
+}
+
+// Cached per graph like adjacency(): the hubs ranking reads it once per node.
+function depDegrees() {
+  if (!graph.depDegrees) graph.depDegrees = dependencyDegrees(graph.nodes, graph.links);
+  return graph.depDegrees;
+}
+
+// rowMetric is the number the ACTIVE VIEW ranked by, when it ranked by one. A list that is
+// ordered but never says by what asks the reader to take the order on trust; worse, the fallback
+// order is raw degree, which is not what either of these views sorted on.
+function rowMetric(): { sort: (n: GNode) => number; text: (n: GNode) => string } | null {
+  if (activeView === "hubs") {
+    const deg = depDegrees();
+    return {
+      sort: (n) => deg.get(n.id)?.dependents ?? 0,
+      text: (n) => {
+        const d = deg.get(n.id)?.dependents ?? 0;
+        return d + (d === 1 ? " dependent" : " dependents");
+      },
+    };
+  }
+  if (activeView === "critical" && graphHasDurations) {
+    return { sort: (n) => nodeDurationMs(n), text: (n) => formatDuration(nodeDurationMs(n)) };
+  }
+  return null;
 }
 
 // The node list is the accessible twin of the canvas: it always reflects the
@@ -2236,10 +2274,22 @@ function setListExpanded(v: boolean) {
 function renderList() {
   const ms = matchSet;
   const pool = ms ? graph.nodes.filter((n) => ms.has(n.id)) : graph.nodes.slice();
-  pool.sort((a, b) => b.degree - a.degree || a.label.localeCompare(b.label));
+  const metric = rowMetric();
+  if (metric) {
+    pool.sort((a, b) => metric.sort(b) - metric.sort(a) || a.label.localeCompare(b.label));
+  } else {
+    pool.sort((a, b) => b.degree - a.degree || a.label.localeCompare(b.label));
+  }
   const shown = pool.slice(0, 300);
+  // The scope bar carries "N of TOTAL" whenever anything is applied, so this row drops the number
+  // then and states its own job instead - two counts within a few hundred pixels read as a
+  // disagreement waiting to happen.
   countEl.textContent = matchSet
-    ? matchSet.size + " match" + (matchSet.size === 1 ? "" : "es")
+    ? (listExpanded ? "Hide" : "Show") +
+      " the " +
+      matchSet.size +
+      " matching node" +
+      (matchSet.size === 1 ? "" : "s")
     : graph.nodes.length +
       " node" +
       (graph.nodes.length === 1 ? "" : "s") +
@@ -2276,6 +2326,9 @@ function renderList() {
         '<span class="console-graph-nodelist__label">' +
         escapeHtml(n.label) +
         "</span>" +
+        (metric
+          ? '<span class="console-graph-nodelist__metric">' + escapeHtml(metric.text(n)) + "</span>"
+          : "") +
         "</button></li>",
     )
     .join("");
@@ -2346,6 +2399,133 @@ function renderLegend() {
   );
 }
 
+// ---- scope bar ---------------------------------------------------------------
+// One row naming every emphasis in effect. A query, a view, a local-graph focus, the default
+// projection and a colour preset can all be applied at once; before this the operator inferred
+// that from five widgets that never referred to each other.
+//
+// It RENDERS the live state rather than owning it - each pill delegates to the same clear path
+// the rest of the code uses. Making it the single source of truth is the separate refactor that
+// wants the graph contract first.
+interface ScopePill {
+  label: string;
+  title: string;
+  clear: () => void;
+}
+
+// termText renders a parsed term back to the grammar. parseQuery lowercases values and drops the
+// original spans, so this is a normalized form, not the operator's literal keystrokes - which is
+// also what makes a pill removable: the remaining terms re-serialize into a valid query.
+function termText(t: QueryTerm): string {
+  const value = /\s/.test(t.value) ? '"' + t.value + '"' : t.value;
+  return (t.negated ? "-" : "") + (t.field ? t.field + ":" : "") + value;
+}
+
+function labelFor(id: string): string {
+  return graph?.byId.get(id)?.label ?? id;
+}
+
+function scopePills(): ScopePill[] {
+  const pills: ScopePill[] = [];
+  const terms = query ? parseQuery(query) : [];
+  terms.forEach((t, i) => {
+    pills.push({
+      label: termText(t),
+      title: "Remove this term",
+      clear: () => {
+        const rest = terms
+          .filter((_, j) => j !== i)
+          .map(termText)
+          .join(" ");
+        searchEl.value = rest;
+        applyQuery(rest);
+      },
+    });
+  });
+  if (activeView) {
+    const subject = viewNodeTo
+      ? labelFor(viewNode ?? "") + " to " + labelFor(viewNodeTo)
+      : viewNode
+        ? labelFor(viewNode)
+        : "";
+    pills.push({
+      label: subject ? activeView + ": " + subject : activeView,
+      title: "Clear this view",
+      clear: clearView,
+    });
+  }
+  if (focusId) {
+    pills.push({
+      label:
+        "around " + labelFor(focusId) + ", " + focusDepth + (focusDepth === 1 ? " hop" : " hops"),
+      title: "Leave the local graph",
+      clear: clearFocus,
+    });
+  }
+  if (!projectionUnfolded && projectionSet) {
+    pills.push({
+      label: "projects only",
+      title: "Show the full graph",
+      clear: unfoldProjection,
+    });
+  }
+  if (activePreset) {
+    const preset = activePreset;
+    pills.push({
+      // The preset labels read "Color by project"; the pill already says colour, so drop the prefix.
+      label:
+        "colour: " +
+        (COLOR_PRESETS.find((p) => p.id === preset)?.label ?? preset).replace(/^Color by /, ""),
+      title: "Clear the colour preset",
+      clear: () => applyPreset(preset),
+    });
+  }
+  return pills;
+}
+
+// clearFocus leaves the local graph WITHOUT taking the query with it - clearFocusOrQuery clears
+// both, which is right for Esc and wrong for a pill that names only the focus.
+function clearFocus() {
+  focusId = null;
+  matchSet = matchSetFor(query);
+  setStatus("");
+  renderList();
+  updateHash();
+  if (isDagMode()) reapplyDagLayout();
+  draw();
+}
+
+// renderScope repaints the bar. `previewCount` is the count for a query the operator is still
+// typing, which has not been applied yet - shown immediately so the field answers every
+// keystroke instead of waiting out the debounce.
+function renderScope(previewCount?: number) {
+  const bar = el("scope-bar");
+  const pillsEl = el("scope-pills");
+  const countEl = el("scope-count");
+  if (!bar || !pillsEl || !countEl) return;
+  const pills = graph ? scopePills() : [];
+  const typing = previewCount !== undefined;
+  if (!pills.length && !typing) {
+    bar.hidden = true;
+    return;
+  }
+  bar.hidden = false;
+  pillsEl.replaceChildren();
+  for (const p of pills) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "console-graph-scope__pill";
+    b.textContent = p.label;
+    b.title = p.title;
+    b.addEventListener("click", p.clear);
+    pillsEl.append(b);
+  }
+  const total = graph?.nodes.length ?? 0;
+  const shown = typing ? previewCount : (matchSet?.size ?? total);
+  countEl.textContent =
+    shown + " of " + total + (typing ? " would match" : shown === total ? " shown" : " shown");
+}
+
 // Reflect selection, query, layout mode, active view, and color preset in the
 // hash WITHOUT clobbering a #data= fragment (round-tripping the whole graph
 // through history on every click would break the private-data contract).
@@ -2356,6 +2536,7 @@ let suppressHash = false;
 const SOURCE_HASH_KEYS = ["src", "port", "demo", "flavor"];
 
 function updateHash() {
+  renderScope(); // called wherever the applied state changes, which is what the bar reflects
   if (suppressHash) return;
   const params = hashParams();
   // #data= carries the whole gzipped graph. Rewriting a six-figure fragment through
@@ -4384,6 +4565,13 @@ function bootWireEvents() {
   // file against Node's lib.
   let queryTimer: ReturnType<typeof setTimeout> | undefined;
   searchEl.addEventListener("input", () => {
+    // Answer the keystroke immediately with the count, then apply on the debounce. Matching is a
+    // single pass over the node list, far cheaper than the re-layout and repaint applyQuery
+    // triggers - which is what the 120ms is protecting, not the matching.
+    const typed = searchEl.value.trim();
+    renderScope(
+      typed === query ? undefined : (matchSetFor(typed)?.size ?? graph?.nodes.length ?? 0),
+    );
     clearTimeout(queryTimer);
     queryTimer = setTimeout(() => {
       applyQuery(searchEl.value);

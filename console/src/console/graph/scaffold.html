@@ -82,6 +82,15 @@
             </div>
           </div>
         </div>
+        <!-- SCOPE: every emphasis currently applied, in one place. A query, a view, a local-graph
+             focus, the projection and a colour preset can all be live at once, and the operator
+             was left to infer that from five separate widgets. Each pill clears the one thing it
+             names. Rendered from the live state by renderScope() - it does not OWN the state,
+             which is the separate refactor the graph contract has to come first for. -->
+        <div id="scope-bar" class="console-graph-scope" hidden>
+          <div id="scope-pills" class="console-graph-scope__pills" role="group" aria-label="Applied scope"></div>
+          <p id="scope-count" class="console-graph-scope__count" aria-live="polite"></p>
+        </div>
         <!-- ASK: the question-first views, and the ONLY copy of them - a duplicate set in a
              [data-ref-section] block would render nowhere, since the CSS hides the source and the
              drawer's clone is id-stripped. Split into the two shapes a question can take, because
