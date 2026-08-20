@@ -206,12 +206,19 @@ describe("the connect screen", () => {
     assert.ok(!shown.includes(token), "the whole token must never reach the DOM");
   });
 
-  // The old copy read "this daemon is open on loopback" - a claim about the daemon's security posture
-  // inferred from the absence of a stored token. All that is known is that none was needed here.
-  test("no credential reports the observation, not the daemon's posture", () => {
+  // Two earlier versions of this line claimed a tokenless daemon. There is no such thing: every
+  // console route is behind BearerGuard and httpx.guard 401s a request carrying no token, so an
+  // authenticated call must have produced the list this screen is offering. No token means the list
+  // did not come from a daemon, which is an anomaly and is marked as one.
+  test("no credential reads as an anomaly, not as a tokenless daemon", () => {
     maybeAskWorkspace(BOTH);
     const shown = screen()?.textContent ?? "";
-    assert.ok(shown.includes("without asking for one"));
-    assert.ok(!shown.includes("open on loopback"), "never assert what was not checked");
+    assert.ok(shown.includes("Nothing here came from an authenticated daemon"));
+    assert.ok(!shown.includes("open on loopback"), "the daemon is never open");
+    assert.ok(!shown.includes("without asking for one"), "the daemon never stops asking");
+    const cred = [...document.querySelectorAll<HTMLElement>(".console-shell-signin__value")].find(
+      (e) => e.dataset.anomaly !== undefined && e.tagName !== "CODE",
+    );
+    assert.ok(cred, "a missing credential must be marked, not reported calmly");
   });
 });

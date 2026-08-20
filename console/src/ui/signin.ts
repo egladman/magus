@@ -58,14 +58,20 @@ function rememberPick(root: string): void {
 // A credential is shown as evidence, never in full: enough to confirm one arrived and to tell two
 // apart, never enough to read over a shoulder or lift from a screenshot.
 //
-// The no-token line says what was OBSERVED, not what the daemon is. It used to read "this daemon is
-// open on loopback", which is a claim about the daemon's security posture inferred from an absence -
-// all this function knows is that no token is stored. The inference happens to hold on this screen
-// (a daemon that wanted one would have 401'd and there would be no workspace list to choose from),
-// but the sentence outlives the screen, and it was already false the first time the dialog was opened
-// from a path that had not talked to a daemon at all.
+// THERE IS NO TOKENLESS MODE, which two earlier versions of this line both got wrong. Every console
+// route is wrapped in BearerGuard (internal/daemon/daemon.go): the API bridge, StatusService,
+// activity, tools, insight, jobs, memory, notes. httpx.guard 401s when no token is presented at all,
+// and every verifier in internal/auth fails closed. Only /livez and /readyz are unguarded, on purpose
+// so an orchestrator can probe them, and they carry no workspace paths. RequireLoopbackPeer appears
+// once, on /api/v1/share, where it ADDS a restriction on top of the bearer token rather than waiving
+// one.
+//
+// So "this daemon is open on loopback" was false about the product, and so was its replacement, "the
+// daemon answered without asking for one" - it never does. Reaching this screen means an
+// authenticated call returned two or more workspaces. No stored token therefore means the list did
+// NOT come from a daemon, which is an anomaly and has to read like one.
 function tokenEvidence(token: string | null): string {
-  if (!token) return "None. The daemon answered this window without asking for one.";
+  if (!token) return "None. Nothing here came from an authenticated daemon.";
   const tail = token.length > 4 ? token.slice(-4) : token;
   return "From your link, ending " + tail + (hasScopedToken() ? " (console-scoped)" : "");
 }
@@ -128,7 +134,16 @@ function ask(roots: readonly string[]): void {
   credLabel.textContent = "Credential";
   const credValue = document.createElement("span");
   credValue.className = "console-shell-signin__value";
-  credValue.textContent = tokenEvidence(getLiveToken());
+  const liveToken = getLiveToken();
+  credValue.textContent = tokenEvidence(liveToken);
+  // Same anomaly treatment as an unresolved host, and for the same reason: every route that could
+  // have produced the list above is behind a bearer guard, so arriving here with no token means
+  // something upstream is not what it claims to be.
+  if (!liveToken) {
+    credValue.dataset.anomaly = "";
+    credValue.title =
+      "Every console route requires a bearer token, so an authenticated call must have produced this list.";
+  }
   connWrap.append(connLabel, connHost, credLabel, credValue);
 
   // --- which workspace ---------------------------------------------------------------------------
