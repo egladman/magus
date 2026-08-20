@@ -185,7 +185,7 @@ func TestAgentInstallStaysQuietWhenTheBlockIsCurrent(t *testing.T) {
 }
 
 // TestAgentSamplePrintsAMarkedBlock keeps the two print paths on one set of
-// bytes: a paste from `sample` must be gradeable by `graph verify` exactly as a
+// bytes: a paste from `sample` must be gradeable by `magus doctor` exactly as a
 // paste from install's offer is.
 func TestAgentSamplePrintsAMarkedBlock(t *testing.T) {
 	out := captureStdout(t, func() { require.NoError(t, agentSampleCmd()) })

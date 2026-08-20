@@ -28,7 +28,7 @@ magus agent install .agents/skills
 
 The same install reads your `AGENTS.md` and prints the managed magus block when
 it is missing or stale, for you to paste between its markers. Nothing writes
-that file. [Skills](skills.md) explains why, and what `magus graph verify` does
+that file. [Skills](skills.md) explains why, and what `magus doctor` does
 with the pasted block afterwards.
 
 Codex discovers skills, `AGENTS.md`, and MCP servers at task start, so start a
@@ -134,10 +134,9 @@ envelope and pipe it to `magus notify`, exactly as the other hosts do - see
 codex mcp list
 magus status --probe=liveness,mcp
 magus doctor
-magus graph verify
 ```
 
-`graph verify` grades the installed skills and the pasted `AGENTS.md` block
+doctor's **agent skills** check grades the installed skills and the pasted `AGENTS.md` block
 against the running binary. `doctor`'s **guard binary** and **guard wiring**
 checks report which binary a hook resolves and whether any host config actually
 invokes a current template.

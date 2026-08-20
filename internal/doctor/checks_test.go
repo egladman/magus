@@ -14,6 +14,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"testing/fstest"
 	"time"
 )
 
@@ -696,4 +697,28 @@ func TestUnmatchableSourceGlobsIgnoresExactPaths(t *testing.T) {
 
 	assert.Equal(t, types.DoctorOK, got.Status, got.Message)
 	assert.Empty(t, got.Details)
+}
+
+// TestCheckAgentSkills pins what doctor DOES with the answer; grading an installed copy
+// against the binary belongs to internal/agent and is tested there.
+func TestCheckAgentSkills(t *testing.T) {
+	t.Run("no catalog supplied -> skipped, not a finding", func(t *testing.T) {
+		r := &runner{ws: rootStubWorkspace{root: t.TempDir()}}
+
+		got := r.checkAgentSkills()
+
+		assert.Equal(t, types.DoctorOK, got.Status)
+		assert.Contains(t, got.Message, "skipped")
+	})
+
+	t.Run("nothing installed -> advice naming the install command", func(t *testing.T) {
+		r := &runner{ws: rootStubWorkspace{root: t.TempDir()}}
+		r.opts.skills = agent.NewCatalog(fstest.MapFS{}, "", 1)
+
+		got := r.checkAgentSkills()
+
+		require.Equal(t, types.DoctorAdvice, got.Status)
+		assert.Contains(t, strings.Join(got.Details, "\n"), "magus agent install")
+		assert.Empty(t, got.Fix, "install into WHICH directory is the developer's choice, so there is nothing to apply")
+	})
 }

@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2373,
-  "edge_count": 6090,
+  "edge_count": 6111,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -3018,7 +3018,7 @@
       "attrs": {
         "role": "doc",
         "section": "guides",
-        "tags": "agents,skills,agent install,AGENTS.md,drift,graph verify",
+        "tags": "agents,skills,agent install,AGENTS.md,drift,doctor",
         "title": "Skills"
       }
     },
@@ -26987,6 +26987,22 @@
       "provenance": ".claude/skills/magus-skill-authoring/SKILL.md"
     },
     {
+      "source": "doc:.claude/skills/magus-skill-authoring/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": ".claude/skills/magus-skill-authoring/SKILL.md"
+    },
+    {
+      "source": "doc:AGENTS.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "AGENTS.md"
+    },
+    {
       "source": "doc:AGENTS.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
@@ -27556,6 +27572,14 @@
     },
     {
       "source": "doc:cmd/magus/agents-section.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "cmd/magus/agents-section.md"
+    },
+    {
+      "source": "doc:cmd/magus/agents-section.md",
       "target": "doc:docs/reference/manpage/magus-memory.md",
       "relation": "references",
       "confidence": "inferred",
@@ -27777,6 +27801,14 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "cmd/magus/skills/magus-vcs-hygiene/SKILL.md"
+    },
+    {
+      "source": "doc:cmd/magus/skills/magus-workspace-rules/SKILL.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "cmd/magus/skills/magus-workspace-rules/SKILL.md"
     },
     {
       "source": "doc:cmd/magus/skills/magus-workspace-rules/SKILL.md",
@@ -28656,6 +28688,14 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/concepts/knowledge.md"
+    },
+    {
+      "source": "doc:docs/concepts/knowledge.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "docs/concepts/knowledge.md"
     },
     {
@@ -31532,6 +31572,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents/codex.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents/codex.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/codex.md",
       "target": "doc:docs/reference/manpage/magus-notify.md",
       "relation": "references",
       "confidence": "inferred",
@@ -31957,6 +32005,14 @@
     {
       "source": "doc:docs/guides/integrations/agents/skills.md",
       "target": "doc:docs/reference/manpage/magus-describe.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/guides/integrations/agents/skills.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/skills.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -44323,6 +44379,14 @@
       "provenance": "docs/reference/skills/magus-architecture-review.md"
     },
     {
+      "source": "doc:docs/reference/skills/magus-architecture-review.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-architecture-review.md"
+    },
+    {
       "source": "doc:docs/reference/skills/magus-buzz-review.md",
       "target": "diagnostic:MGS3003",
       "relation": "documents",
@@ -44341,6 +44405,14 @@
     {
       "source": "doc:docs/reference/skills/magus-buzz-review.md",
       "target": "doc:docs/reference/manpage/magus-buzz.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-buzz-review.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-buzz-review.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -44372,6 +44444,14 @@
     },
     {
       "source": "doc:docs/reference/skills/magus-buzz-write.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-buzz-write.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-buzz-write.md",
       "target": "spell:markdown",
       "relation": "documents",
       "confidence": "inferred",
@@ -44396,6 +44476,14 @@
     },
     {
       "source": "doc:docs/reference/skills/magus-change-summary.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-change-summary.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-change-summary.md",
       "target": "doc:docs/reference/manpage/magus-ls.md",
       "relation": "references",
       "confidence": "inferred",
@@ -44411,6 +44499,14 @@
       "provenance": "docs/reference/skills/magus-commit-composition.md"
     },
     {
+      "source": "doc:docs/reference/skills/magus-commit-composition.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-commit-composition.md"
+    },
+    {
       "source": "doc:docs/reference/skills/magus-context-audit.md",
       "target": "doc:docs/guides/integrations/agents/skills.md",
       "relation": "references",
@@ -44419,11 +44515,27 @@
       "provenance": "docs/reference/skills/magus-context-audit.md"
     },
     {
+      "source": "doc:docs/reference/skills/magus-context-audit.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-context-audit.md"
+    },
+    {
       "source": "doc:docs/reference/skills/magus-delegate-multi-agent.md",
       "target": "doc:docs/guides/integrations/agents/skills.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/reference/skills/magus-delegate-multi-agent.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-delegate-multi-agent.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "docs/reference/skills/magus-delegate-multi-agent.md"
     },
     {
@@ -44452,6 +44564,14 @@
     },
     {
       "source": "doc:docs/reference/skills/magus-docs-lookup.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-docs-lookup.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-docs-lookup.md",
       "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "inferred",
@@ -44472,6 +44592,14 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/reference/skills/magus-handoff-journal.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-handoff-journal.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "docs/reference/skills/magus-handoff-journal.md"
     },
     {
@@ -44525,6 +44653,14 @@
     {
       "source": "doc:docs/reference/skills/magus-query.md",
       "target": "doc:docs/reference/manpage/magus-describe.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-query.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-query.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
@@ -44596,6 +44732,14 @@
     },
     {
       "source": "doc:docs/reference/skills/magus-sdk.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-sdk.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-sdk.md",
       "target": "spell:go",
       "relation": "documents",
       "confidence": "inferred",
@@ -44635,11 +44779,27 @@
       "provenance": "docs/reference/skills/magus-vcs-hygiene.md"
     },
     {
+      "source": "doc:docs/reference/skills/magus-vcs-hygiene.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-vcs-hygiene.md"
+    },
+    {
       "source": "doc:docs/reference/skills/magus-workspace-rules.md",
       "target": "doc:docs/guides/integrations/agents/skills.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/reference/skills/magus-workspace-rules.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-workspace-rules.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "docs/reference/skills/magus-workspace-rules.md"
     },
     {
@@ -45105,6 +45265,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "plans/delegation-lessons-from-deepseek-harness.md"
+    },
+    {
+      "source": "doc:plans/delegation-surface-implementation-plan.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "plans/delegation-surface-implementation-plan.md"
     },
     {
       "source": "doc:plans/delegation-surface-implementation-plan.md",

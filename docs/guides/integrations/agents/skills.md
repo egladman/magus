@@ -1,7 +1,7 @@
 ---
 title: Skills
 description: Installing the magus agent skills - where each host reads them, the short primary and its always-full twin, the AGENTS.md block magus prints but never writes, and the drift check that grades what is installed.
-tags: [agents, skills, agent install, AGENTS.md, drift, graph verify]
+tags: [agents, skills, agent install, AGENTS.md, drift, doctor]
 ---
 
 # Skills
@@ -39,8 +39,8 @@ magus agent install .claude/skills --force  # overwrite after a magus upgrade
 magus agent install .claude/skills --prune  # also remove skills this binary no longer ships
 magus agent install --tar                   # stream a tar of every skill to stdout
 magus agent sample                          # print a whole starter AGENTS.md
-magus graph verify                          # are the installed skills current? (per location)
-magus graph verify --strict                 # CI gate: non-zero exit when stale
+magus doctor                                # are the installed skills current? (per location)
+magus doctor --fix                          # reinstall whatever it reports stale
 ```
 
 Commit what install writes, so every teammate's agent shares the same
@@ -150,7 +150,7 @@ doing.
 ## Drift
 
 Every installed file, and the `AGENTS.md` block, carries a generated stamp with
-the agent-skill version and the knowledge schema version. `magus graph verify`
+the agent-skill version and the knowledge schema version. `magus doctor`
 compares those against the running binary for every well-known location it finds
 installed (`.agents/skills`, `.claude/skills`, `.opencode/skills`, and the
 `AGENTS.md` block), so a magus upgrade that changes the tool surface shows up as
@@ -180,7 +180,7 @@ line in every session.
 
 Put that last kind in a local skill next to the installed ones, under a name
 magus does not ship - `magus-local-development` by convention. `magus agent
-install` writes only the names it ships and `magus graph verify` grades only
+install` writes only the names it ships and `magus doctor` grades only
 those, so a local skill is neither overwritten nor reported as drift, and no
 configuration is needed to make a host find it. The `magus-workspace-rules`
 skill carries the stamp format and the rest of the method. When a local rule

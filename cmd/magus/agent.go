@@ -157,9 +157,9 @@ func hookUsage(w io.Writer) {
 // --tar | tar -xf - -C <absolute path>`.
 func agentInstallCmd(ctx context.Context, args []string) error {
 	fset := flag.NewFlagSet("agent install", flag.ContinueOnError)
-	// See graph_verify.go: the display flags are global, so every command takes
-	// them. `agent install ... -s` previously died on an undefined flag, and with
-	// stderr redirected that looked exactly like a successful install - the
+	// The display flags are global, so every command takes them - one gap decays the
+	// whole convention. `agent install ... -s` previously died on an undefined flag,
+	// and with stderr redirected that looked exactly like a successful install: the
 	// skills were never written and nothing said so.
 	bindDisplayFlags(fset)
 	af := gen.BindAgent(fset)
@@ -315,7 +315,7 @@ func printAgentInstallNextSteps(dir string, written, stale []string, v agent.Var
 func printAgentsBlockToPaste(dir string) {
 	verb := "add it to AGENTS.md at your repo root"
 	for _, s := range agentSkills.CheckStatuses(dir) {
-		if s.Location != "AGENTS.md" {
+		if s.Location != agent.AgentsFile {
 			continue
 		}
 		if !s.Stale {
@@ -335,7 +335,7 @@ const vcsSafetyRule = "Version control is the orchestrator's job: do it yourself
 // agentSampleDoc returns an AGENTS.md starter for a developer to paste and own.
 //
 // The magus guidance arrives inside its begin/end markers - the same bytes
-// install prints - so `magus graph verify` can grade it once pasted.
+// install prints - so `magus doctor` can grade it once pasted.
 func agentSampleDoc() string {
 	return "# AGENTS.md\n\n" +
 		"<!-- A starter for AI agents working in this repo. Own and edit this file:\n" +
@@ -755,7 +755,7 @@ func adviseMemoryWrite(path string) string {
 
 // adviseInstalledSkillWrite explains that an installed skill is generated, or
 // "" when the path is not one. The other path advisories catch a write that is
-// wasted; this one catches a write that DISAPPEARS - `graph verify` reports it
+// wasted; this one catches a write that DISAPPEARS - `magus doctor` reports it
 // as drift and the next `install --force` erases it.
 //
 // The STAMP is the discriminator, not the path: a workspace's own skill sits in
@@ -785,7 +785,7 @@ func adviseInstalledSkillWrite(path string) string {
 		return ""
 	}
 	return "magus workspace: put rules that belong to THIS workspace in a local skill beside the installed ones - a directory magus does not ship, conventionally magus-local-development, which install and verify both leave alone.\n" +
-		"That file is an INSTALLED skill, generated from magus's embedded sources and stamped with a content digest: `magus graph verify` reports your edit as stale rather than reading it, and the next `magus agent install <dir> --force` overwrites it.\n" +
+		"That file is an INSTALLED skill, generated from magus's embedded sources and stamped with a content digest: `magus doctor` reports your edit as stale rather than reading it, and the next `magus agent install <dir> --force` overwrites it.\n" +
 		"Stamp each rule with its evidence and the condition that retires it. Load the magus-workspace-rules skill for the format."
 }
 

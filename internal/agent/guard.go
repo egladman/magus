@@ -34,7 +34,7 @@ var guardSurfaces = []string{"command", "path"}
 // into their agent host.
 //
 // The templates are the one shipped artifact with no self-correcting path. An
-// installed skill is generated, stamped and regraded on every `graph verify`; a
+// installed skill is generated, stamped and regraded on every `magus doctor`; a
 // hook template is COPIED into a host's config and then owned by its reader, so
 // a fix magus makes to the source never reaches the copy, and nothing about the
 // copy says how old it is. That is not hypothetical: a change to the guard's

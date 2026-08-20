@@ -11,7 +11,7 @@ hand-edit it.
 ## Agent surface
 
 - `.claude/skills/magus-*` are INSTALLED copies (stamped, checked by
-  `magus graph verify`); edit the sources in `cmd/magus/skills/` and re-run
+  `magus doctor`); edit the sources in `cmd/magus/skills/` and re-run
   `magus agent install .claude/skills --force`. Exception: `magus-skill-authoring`
   is hand-authored - read it before touching the agent surface.
 - Record decisions worth keeping (with the why) via the `magus_memory` MCP

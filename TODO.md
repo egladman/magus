@@ -67,7 +67,7 @@ The three buckets mean different things:
       the rest of the surface is not.** Two shipped this session. `serve` stats
       `os.executable()` each watch tick and refuses to keep regenerating when the
       binary changed underneath it. `agent install` now stamps a fingerprint of the
-      embedded skill sources, so `graph verify` catches content drift instead of
+      embedded skill sources, so `magus doctor` catches content drift instead of
       trusting a hand-bumped counter - that one was found the hard way, by an install
       from a stale binary writing old skills while verify reported up to date.
       What remains is every OTHER long-lived or generated-output path with the same

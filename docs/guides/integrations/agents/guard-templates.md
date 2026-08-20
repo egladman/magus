@@ -44,7 +44,7 @@ checksum, because these are yours to modify and a checksum would flag your own
 edits as drift.
 
 This is the one part of the agent surface with no automatic staleness check.
-Installed skills are generated, so `magus graph verify` regrades them against
+Installed skills are generated, so `magus doctor` regrades them against
 the binary; a copied hook template is owned by you, and this line stands in for
 that. `magus doctor`'s **guard wiring** check reads the marker in whatever file
 your host config points at, and fails when it is stale or missing.

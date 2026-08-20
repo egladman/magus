@@ -100,7 +100,7 @@ Reinstall with a binary built from the EDITED source, and confirm the content
 digest moved:
 
 ```sh
-magus graph verify    # the digest must CHANGE, or the install did nothing
+magus doctor    # the agent skills check must report a CHANGED digest, or the install did nothing
 ```
 
 A stale binary re-installs the OLD body and reports success{{if .Full}}, which is the single

@@ -11,7 +11,7 @@
 //
 // The rendered skill text is fenced verbatim so a reader can copy it, but the page
 // says plainly that `magus agent install` is the supported way to get it - a copied
-// skill carries no provenance stamp, so `magus graph verify` cannot tell whether it
+// skill carries no provenance stamp, so `magus doctor` cannot tell whether it
 // is current.
 package main
 
@@ -156,7 +156,7 @@ func renderSkill(cat *agent.Catalog, full, simple agent.AgentSkill) string {
 	fmt.Fprintf(&b, "%s\n\n", full.Description)
 	fmt.Fprintf(&b, "Install it, rather than copying from this page:\n\n")
 	fmt.Fprintf(&b, "```sh\nmagus agent install .claude/skills   # writes both forms below\n```\n\n")
-	fmt.Fprintf(&b, "An installed copy carries a provenance stamp, so `magus graph verify` can tell "+
+	fmt.Fprintf(&b, "An installed copy carries a provenance stamp, so `magus doctor` can tell "+
 		"you when a magus upgrade has made it stale. Text copied from this page carries none.\n\n")
 
 	writeStampTable(&b, cat, full)
@@ -251,7 +251,7 @@ func firstSentence(s string) string {
 // The page already tells the reader that an installed skill is stamped and that
 // copied text is not, then never showed the stamp - so the one concrete reason to
 // prefer `magus agent install` over copy-paste was an assertion rather than
-// something you could look at. These are the exact fields `magus graph verify`
+// something you could look at. These are the exact fields `magus doctor`
 // reads to decide "up to date" or "STALE".
 //
 // The values come from the catalog rather than a literal, so the table cannot
@@ -263,7 +263,7 @@ func writeStampTable(b *strings.Builder, cat *agent.Catalog, skill agent.AgentSk
 
 	b.WriteString("## What an installed copy carries\n\n")
 	b.WriteString("`magus agent install` writes this frontmatter above the body. " +
-		"`magus graph verify` reads it to report whether your installed skills are current.\n\n")
+		"`magus doctor` reads it to report whether your installed skills are current.\n\n")
 	b.WriteString("| field | value |\n| --- | --- |\n")
 	for _, line := range strings.Split(body, "\n") {
 		line = strings.TrimSpace(line)
