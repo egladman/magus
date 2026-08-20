@@ -30,27 +30,16 @@ export interface Workspace {
 
 export const emptyWorkspace: Workspace = { tabs: [], activeId: null };
 
-// Start new desktop workspaces with two panes.
+// What a first desktop visit opens: the Dashboard, on its own.
+//
+// It used to arrive pre-split, Dashboard beside Activity. That made the first thing anyone saw a
+// layout they did not ask for and could not account for - and because the workspace persists, it
+// followed them forever. It also made the navigation rail lie: clicking Dashboard opened the TAB that
+// contained it, which was two surfaces, so asking for one thing produced two.
+// A single pane says what the console is; splitting is a thing to discover, not a thing to be handed.
 export function desktopStarterWorkspace(): Workspace {
   const id = "starter";
-  return {
-    activeId: id,
-    tabs: [
-      {
-        id,
-        pageId: "dashboard",
-        title: "Dashboard",
-        layout: {
-          kind: "split",
-          id: "starter-split",
-          dir: "row",
-          ratio: 0.62,
-          a: { kind: "leaf", id: "starter-dashboard", pageId: "dashboard" },
-          b: { kind: "leaf", id: "starter-activity", pageId: "activity" },
-        },
-      },
-    ],
-  };
+  return { activeId: id, tabs: [{ id, pageId: "dashboard", title: "Dashboard" }] };
 }
 
 // openTab appends a tab and activates it. Opening a tab whose id already exists does
