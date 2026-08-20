@@ -3,7 +3,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { sidebarItems } from "./sidebar";
+import { pulseLabel, pulseTitle, sidebarItems } from "./sidebar";
 import type { Launchable } from "./home";
 import type { Workspace } from "./tabs";
 
@@ -104,4 +104,25 @@ test("an activeId with no tab leaves nothing current", () => {
     false,
   );
   assert.equal(items.find((i) => i.pageId === "logs")?.open, true);
+});
+
+// Collapsed there is room for one number, and it is the running count - a queue depth means nothing
+// without knowing whether anything holds the slots.
+test("collapsed, the reading is the running count alone", () => {
+  assert.equal(pulseLabel({ running: 3, queued: 2 }, false), "3");
+  assert.equal(pulseLabel({ running: 0, queued: 0 }, false), "0");
+});
+
+// An empty queue is left OFF rather than shown as "0 queued", so the second clause appearing is
+// itself the signal that work is backing up.
+test("expanded, the queue joins the reading only once there is one", () => {
+  assert.equal(pulseLabel({ running: 3, queued: 0 }, true), "3 running");
+  assert.equal(pulseLabel({ running: 3, queued: 2 }, true), "3 running, 2 queued");
+});
+
+// Collapsed, a bare "3" is not something a screen reader can make sense of, so the full sentence is
+// the accessible name in BOTH states.
+test("the spoken reading is the full sentence either way", () => {
+  assert.equal(pulseTitle({ running: 1, queued: 0 }), "1 running in this workspace");
+  assert.equal(pulseTitle({ running: 1, queued: 4 }), "1 running in this workspace, 4 queued");
 });

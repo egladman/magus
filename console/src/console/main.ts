@@ -22,6 +22,7 @@ import {
 } from "./tabs";
 import { createTabBar } from "./tabBar";
 import { createSidebar } from "./sidebar";
+import { fetchPulse, type PulseView } from "./pulse";
 import { buildLauncher, type Launchable } from "./home";
 import { standaloneSurface, moduleSurface } from "./standalone";
 import {
@@ -49,6 +50,7 @@ import { openSurfaceWindow } from "../lib/appwindow";
 import { persisted } from "../lib/persist";
 import { splitModeCell, sidebarExpandedCell } from "./layoutPrefs";
 import { surfaceNavigation, surfaceNavigationEvent } from "./surface-navigation";
+import { signal } from "./view";
 import {
   parseHash,
   wantsDemo,
@@ -1052,9 +1054,14 @@ export function startConsole(
   // The left navigation rail, over the SAME surface list, so the rail, the launcher and the
   // Applications menu can never offer different sets. An app-mode window has no rail host and so
   // gets no rail: it is one surface with no shell, and navigating away from it is not its job.
+  // The rail's live pool reading. Held here rather than in the rail so the poller below owns one
+  // source of it; null until the first answer, and back to null whenever the daemon stops answering.
+  const pulse = signal<PulseView | null>(null);
   const sidebarHost = document.getElementById("console-sidebar");
   if (sidebarHost) {
-    createSidebar(sidebarHost, ws, sidebarExpandedCell, SURFACES, { onOpen: (id) => open(id) });
+    createSidebar(sidebarHost, ws, sidebarExpandedCell, pulse, SURFACES, {
+      onOpen: (id) => open(id),
+    });
   }
 
   // Wire the title-bar Reference button + its slide-out panel. No-ops without the #console-refdrawer
@@ -1768,10 +1775,12 @@ export function startConsole(
       current.title = hint;
       current.setAttribute("aria-label", hint);
       delete current.dataset.health;
+      pulse.set(null); // synthetic surfaces, no pool: a leftover count would read as this daemon's
       return;
     }
     const host = resolveDaemonHost();
     if (!host) {
+      pulse.set(null); // a count with no daemon behind it outlives the thing it described
       // No daemon address configured at all: nothing to probe. A surface, if one is docked, owns the text;
       // but the launcher's own bar (zero tabs) has no surface behind it, so say so plainly - RED, via the
       // not-connected "none" state - rather than leaving whatever a prior host's probe left.
@@ -1787,6 +1796,9 @@ export function startConsole(
       }
       return;
     }
+    // The rail's pool reading rides THIS interval rather than starting one of its own: the shell is
+    // already asking this daemon a question every 15s, and the rail's number is the same freshness.
+    void fetchPulse(host).then((p) => pulse.set(p));
     const startedAt = Date.now();
     fetchReadiness(host).then((report) => {
       const conn = document.getElementById("console-conn");

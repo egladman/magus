@@ -26,8 +26,9 @@
 
 import type { Persisted } from "../lib/persist";
 import { tabHostsSurface, type Workspace } from "./tabs";
-import { bind, scope, type Scope } from "./view";
+import { bind, scope, type Scope, type Signal } from "./view";
 import { surfaceIconSvg, type Launchable } from "./home";
+import type { PulseView } from "./pulse";
 
 // One row of the rail: the surface it opens, and what the workspace currently makes of it.
 // `open` means some tab hosts that surface; `current` means the ACTIVE tab does. They are separate
@@ -43,6 +44,24 @@ export interface SidebarItem {
 
 export interface SidebarCallbacks {
   onOpen: (pageId: string) => void;
+}
+
+// pulseLabel renders the reading for the rail's foot. Collapsed there is room for ONE number, and it
+// is the running count: "how busy is this workspace" is the question a glance at a dock answers, and
+// a queue only means anything once you know something is occupying the slots. Expanded, the queue
+// joins it. A queue of zero is left off rather than shown as "0 queued", so the second number
+// appearing is itself the signal that work is backing up.
+export function pulseLabel(p: PulseView, expanded: boolean): string {
+  if (!expanded) return String(p.running);
+  if (p.queued > 0) return p.running + " running, " + p.queued + " queued";
+  return p.running + " running";
+}
+
+// The full sentence, for the tooltip and the accessible name, in both states - collapsed, the visible
+// "3" is not a thing a screen reader can make sense of on its own.
+export function pulseTitle(p: PulseView): string {
+  const queued = p.queued > 0 ? ", " + p.queued + " queued" : "";
+  return p.running + " running in this workspace" + queued;
 }
 
 export interface Sidebar {
@@ -90,6 +109,7 @@ export function createSidebar(
   host: HTMLElement,
   ws: Persisted<Workspace>,
   expanded: Persisted<boolean>,
+  pulse: Signal<PulseView | null>,
   surfaces: readonly Launchable[],
   cb: SidebarCallbacks,
 ): Sidebar {
@@ -131,6 +151,17 @@ export function createSidebar(
     links.set(s.pageId, link);
   }
 
+  // The live reading sits at the foot, between the apps and the toggle: it is about the workspace
+  // rather than about any one app, so it belongs to the rail rather than to a row.
+  const pulseEl = document.createElement("div");
+  pulseEl.id = "console-sidebar-pulse";
+  pulseEl.hidden = true;
+  const pulseDot = document.createElement("span");
+  pulseDot.className = "pf-v6-c-nav__link-icon";
+  const pulseText = document.createElement("span");
+  pulseText.className = "pf-v6-c-nav__link-text";
+  pulseEl.append(pulseDot, pulseText);
+
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.id = "console-sidebar-toggle";
@@ -140,7 +171,7 @@ export function createSidebar(
   toggle.append(toggleIcon);
   toggle.addEventListener("click", () => expanded.set(!expanded.get()));
 
-  host.replaceChildren(list, toggle);
+  host.replaceChildren(list, pulseEl, toggle);
 
   sc.add(
     bind(ws, (w) => {
@@ -169,6 +200,23 @@ export function createSidebar(
       toggle.setAttribute("aria-expanded", on ? "true" : "false");
     }),
   );
+
+  // Two sources, one paint: the reading itself, and the state that decides how much of it fits. A
+  // null pulse HIDES the element rather than showing a zero - the daemon not answering and the pool
+  // being idle are different facts, and only one of them is a number.
+  const paintPulse = (): void => {
+    const p = pulse.get();
+    pulseEl.hidden = p == null;
+    if (!p) return;
+    pulseText.textContent = pulseLabel(p, expanded.get());
+    pulseEl.title = pulseTitle(p);
+    pulseEl.setAttribute("aria-label", pulseTitle(p));
+    // Idle is stated plainly rather than colored: a green dot on an idle pool reads as a health
+    // claim, and this is an occupancy reading, not a verdict.
+    pulseEl.dataset.state = p.queued > 0 ? "queued" : p.running > 0 ? "running" : "idle";
+  };
+  sc.add(bind(pulse, paintPulse));
+  sc.add(expanded.subscribe(paintPulse));
 
   return { el: host, destroy: () => sc.dispose() };
 }

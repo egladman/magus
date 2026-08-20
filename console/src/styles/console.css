@@ -723,6 +723,38 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   content: ""; position: absolute; inset-inline-start: 0; inline-size: 2px; block-size: 1rem;
   background: var(--console-accent); border-radius: 0 2px 2px 0;
 }
+/* The live pool reading at the rail's foot. It borrows the nav link's grid so its dot sits on the same
+   vertical line as every app icon above it - a second alignment here would read as a stray element
+   rather than as the rail's own footer. */
+#console-sidebar #console-sidebar-pulse {
+  flex: 0 0 auto; min-height: var(--console-sidebar-w);
+  display: grid; grid-template-columns: var(--console-sidebar-w) 1fr;
+  align-items: center; justify-items: center;
+  border-top: 1px solid var(--pf-t--global--border--color--default);
+  font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle);
+  white-space: nowrap;
+}
+#console-sidebar[data-expanded] #console-sidebar-pulse {
+  grid-template-columns: 1.5rem 1fr; justify-items: start; padding-inline-start: 0.55rem;
+}
+/* Collapsed, the NUMBER is the content, so it takes the whole 44px and the dot steps aside: putting
+   the dot in the icon column would push the count into the clipped column, leaving a rail that
+   signals something is happening without saying how much. State moves onto the text's own color. */
+#console-sidebar:not([data-expanded]) #console-sidebar-pulse { grid-template-columns: 1fr; }
+#console-sidebar:not([data-expanded]) #console-sidebar-pulse .pf-v6-c-nav__link-icon { display: none; }
+#console-sidebar:not([data-expanded]) #console-sidebar-pulse[data-state="running"] { color: var(--console-status-running); }
+#console-sidebar:not([data-expanded]) #console-sidebar-pulse[data-state="queued"] { color: var(--console-status-warn); }
+#console-sidebar #console-sidebar-pulse .pf-v6-c-nav__link-icon {
+  /* min-inline-size:0 because PF gives a nav link's icon slot a min-width sized for a real glyph
+     (~19px); a min-width outranks width, so without this the dot renders as a pill, not a circle. */
+  inline-size: 0.5rem; block-size: 0.5rem; min-inline-size: 0; border-radius: 50%;
+  background: var(--pf-t--global--icon--color--subtle);
+}
+/* Occupancy, not health: busy takes the info color and a backed-up queue the caution color, while idle
+   stays neutral rather than going green - green here would claim the workspace is HEALTHY, which an
+   idle pool says nothing about. */
+#console-sidebar #console-sidebar-pulse[data-state="running"] .pf-v6-c-nav__link-icon { background: var(--console-status-running); }
+#console-sidebar #console-sidebar-pulse[data-state="queued"] .pf-v6-c-nav__link-icon { background: var(--console-status-warn); }
 #console-sidebar #console-sidebar-toggle {
   flex: 0 0 auto; min-height: var(--console-sidebar-w);
   border-top: 1px solid var(--pf-t--global--border--color--default);

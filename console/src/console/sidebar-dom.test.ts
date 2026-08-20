@@ -7,6 +7,8 @@ import { test } from "node:test";
 import { createSidebar } from "./sidebar";
 import { buildLauncher, type Launchable } from "./home";
 import type { Workspace } from "./tabs";
+import type { PulseView } from "./pulse";
+import { signal } from "./view";
 import type { Persisted } from "../lib/persist";
 
 // The rail only reads and subscribes; the durable half is persist.ts's own business. This is that
@@ -41,11 +43,12 @@ function mount(ws: Workspace, expanded = false) {
   const host = document.createElement("nav");
   const wsCell = cell<Workspace>(ws);
   const expCell = cell<boolean>(expanded);
+  const pulse = signal<PulseView | null>(null);
   const opened: string[] = [];
-  const bar = createSidebar(host, wsCell, expCell, SURFACES, {
+  const bar = createSidebar(host, wsCell, expCell, pulse, SURFACES, {
     onOpen: (id) => opened.push(id),
   });
-  return { host, wsCell, expCell, opened, bar };
+  return { host, wsCell, expCell, pulse, opened, bar };
 }
 
 function link(host: HTMLElement, pageId: string): HTMLButtonElement {
@@ -164,4 +167,40 @@ test("destroy stops the rail following the workspace", () => {
   bar.destroy();
   wsCell.set({ tabs: [{ id: "a", pageId: "logs", title: "Log Viewer" }], activeId: "a" });
   assert.equal(link(host, "logs").classList.contains("pf-m-current"), false);
+});
+
+// A daemon that is not answering and a pool that is idle are DIFFERENT facts, and only one of them is
+// a number. Showing a zero for the first would be a measurement the console never took.
+test("no reading hides the pulse rather than showing a zero", () => {
+  const { host, pulse } = mount({ tabs: [], activeId: null });
+  const el = host.querySelector<HTMLElement>("#console-sidebar-pulse");
+  assert.ok(el);
+  assert.equal(el.hidden, true);
+
+  pulse.set({ running: 0, queued: 0 });
+  assert.equal(el.hidden, false, "an idle pool is a real reading and shows");
+  assert.equal(el.dataset.state, "idle");
+
+  pulse.set(null);
+  assert.equal(el.hidden, true, "losing the daemon hides it again");
+});
+
+test("the reading follows the pool and the rail's own width", () => {
+  const { host, pulse, expCell } = mount({ tabs: [], activeId: null });
+  const el = host.querySelector<HTMLElement>("#console-sidebar-pulse");
+  assert.ok(el);
+  const text = () => el.querySelector(".pf-v6-c-nav__link-text")?.textContent;
+
+  pulse.set({ running: 2, queued: 0 });
+  assert.equal(text(), "2");
+  assert.equal(el.dataset.state, "running");
+  assert.equal(el.getAttribute("aria-label"), "2 running in this workspace");
+
+  // Expanding must repaint the reading, not just the rows - the collapsed form is a bare number.
+  expCell.set(true);
+  assert.equal(text(), "2 running");
+
+  pulse.set({ running: 2, queued: 5 });
+  assert.equal(text(), "2 running, 5 queued");
+  assert.equal(el.dataset.state, "queued");
 });
