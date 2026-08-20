@@ -153,6 +153,13 @@ const NOTES: NoteSpec[] = [
     anchors: [
       { kind: AnchorKind.TARGET, target: "test", status: AnchorStatus.RESOLVES },
       {
+        kind: AnchorKind.SYMBOL,
+        target: "m sandbox/Policy#Apply().",
+        status: AnchorStatus.BODY_CHANGED,
+        detail:
+          "This changed inside a declaration that did not, which usually leaves prose about the interface standing. Re-read only if the note claims something about the implementation.",
+      },
+      {
         kind: AnchorKind.NOTE,
         target: "two-caches-and-why-they-pair",
         status: AnchorStatus.RESOLVES,

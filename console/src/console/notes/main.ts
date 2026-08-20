@@ -85,6 +85,7 @@ const ANCHOR_COPY: Record<number, { label: string; slug: string }> = {
   [AnchorStatus.DANGLING]: { label: "dangling", slug: "dangling" },
   [AnchorStatus.DRIFTED]: { label: "drifted", slug: "drifted" },
   [AnchorStatus.UNVERIFIED]: { label: "unverified", slug: "unverified" },
+  [AnchorStatus.BODY_CHANGED]: { label: "body changed", slug: "body-changed" },
 };
 
 const ANCHOR_KIND_NAME: Record<number, string> = {
@@ -142,9 +143,16 @@ function edited(ms: number): string {
 
 // worstAnchor reports the anchor verdict a row should be marked by. Dangling outranks drifted
 // because the subject is gone rather than merely changed, and both outrank an unverified
-// anchor, which is an absence of evidence rather than a finding.
+// anchor, which is an absence of evidence rather than a finding. Body-changed ranks last and
+// deliberately paints no rule down the row's edge: it fires on most edits, and a column that
+// is lit on every row is a column nobody scans.
 function worstAnchor(n: Note): { slug: string; count: number } | null {
-  for (const status of [AnchorStatus.DANGLING, AnchorStatus.DRIFTED, AnchorStatus.UNVERIFIED]) {
+  for (const status of [
+    AnchorStatus.DANGLING,
+    AnchorStatus.DRIFTED,
+    AnchorStatus.UNVERIFIED,
+    AnchorStatus.BODY_CHANGED,
+  ]) {
     const hits = n.anchors.filter((a) => a.status === status);
     if (hits.length > 0) {
       const copy = ANCHOR_COPY[status];

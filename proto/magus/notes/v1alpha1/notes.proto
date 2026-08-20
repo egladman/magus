@@ -64,17 +64,22 @@ enum AnchorKind {
 // AnchorStatus is what checking one anchor against the workspace found.
 //
 // DRIFTED is the case an existence check cannot catch and a reader cannot see: the anchored
-// code still exists and quietly stopped meaning what the note says. UNVERIFIED is a real,
-// distinct answer and must never be rendered as "fine" - it means no fingerprint was recorded
-// (the note predates fingerprinting, or was never re-read) or none could be computed here,
-// and reporting drift from missing data is the false positive that trains a reader to ignore
-// every flag.
+// code still exists and quietly stopped meaning what the note says. BODY_CHANGED is that same
+// check graded one step finer - the content moved, the DECLARATION did not - and it is a far
+// weaker signal: measured across 1,496 repositories, an edit that leaves the signature alone
+// is 39-105x less likely to come with a prose update than one that changes it, which is why
+// an undifferentiated content hash reports drift that mostly is not there. Surface it, never
+// gate on it. UNVERIFIED is a real, distinct answer and must never be rendered as "fine" - it
+// means no fingerprint was recorded (the note predates fingerprinting, or was never re-read)
+// or none could be computed here, and reporting drift from missing data is the false positive
+// that trains a reader to ignore every flag.
 enum AnchorStatus {
   ANCHOR_STATUS_UNSPECIFIED = 0;
   ANCHOR_STATUS_RESOLVES = 1;
   ANCHOR_STATUS_DANGLING = 2;
   ANCHOR_STATUS_DRIFTED = 3;
   ANCHOR_STATUS_UNVERIFIED = 4;
+  ANCHOR_STATUS_BODY_CHANGED = 5;
 }
 
 // Staleness is whether the prose was outrun by the thing it describes.
@@ -104,7 +109,8 @@ message Anchor {
   // node_id is the graph node this anchor names, so a client can link into the Graph
   // Explorer. Empty when the anchor does not resolve.
   string node_id = 4;
-  // detail explains a DANGLING or DRIFTED status in one sentence, and what to do about it.
+  // detail explains a DANGLING, DRIFTED or BODY_CHANGED status in one sentence, and what to
+  // do about it.
   // Empty for the other statuses. UNTRUSTED only in the sense that it is prose; it is
   // magus-authored, unlike body below.
   string detail = 5;

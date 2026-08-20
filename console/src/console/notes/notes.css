@@ -272,6 +272,12 @@
 .console-notes-app__anchor-status[data-status="resolves"] { background: var(--console-status-ok); }
 .console-notes-app__anchor-status[data-status="drifted"] { background: var(--console-status-warn); }
 .console-notes-app__anchor-status[data-status="dangling"] { background: var(--console-status-danger); }
+/* Info blue rather than a fourth --console-status-* slot: those name the console's own states
+   (a pool running, a queue saturated), and this is a finding about a note. It has to read as
+   noted-not-alarming and stay distinct from the grey an unverified anchor falls back to. */
+.console-notes-app__anchor-status[data-status="body-changed"] {
+  background: var(--pf-t--global--icon--color--status--info--default);
+}
 .console-notes-app__anchor-target { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
 /* An anchor's explanation and its graph node id render as text rather than as a title tooltip.
    They carry the only copy saying what a verdict means, and a tooltip is undiscoverable with a

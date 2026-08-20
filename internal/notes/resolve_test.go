@@ -366,3 +366,39 @@ func TestAnUngradedAnchorReportsDrift(t *testing.T) {
 		})
 	}
 }
+
+// errDeclResolver computes a body digest but fails on the declaration - a symbol the indexer
+// found but reported no enclosing range for.
+type errDeclResolver struct{ fakeResolver }
+
+func (errDeclResolver) DeclDigest(context.Context, Anchor) (string, error) {
+	return "", assert.AnError
+}
+
+// TestDeclarationHeldFailsTowardsUngraded pins the DIRECTION the grading fails in, which is
+// the whole reason it is one exported function rather than a rule each caller re-implements.
+// Every way of being unsure - nothing recorded, nothing computable, an error - answers false,
+// so the finding degrades to ungraded drift rather than to the softer verdict. Overstating a
+// change costs a re-read; understating one is a note that quietly stopped being true.
+func TestDeclarationHeldFailsTowardsUngraded(t *testing.T) {
+	const target = "m internal/cache/Store#Put()."
+	key := "symbol:" + target
+
+	for _, tt := range []struct {
+		name     string
+		recorded string
+		res      Resolver
+		want     bool
+	}{
+		{"nothing recorded", "", fakeResolver{decls: map[string]string{key: "decl"}}, false},
+		{"nothing computable", "decl", fakeResolver{}, false},
+		{"declaration errored", "decl", errDeclResolver{}, false},
+		{"declaration moved", "decl", fakeResolver{decls: map[string]string{key: "other"}}, false},
+		{"declaration held", "decl", fakeResolver{decls: map[string]string{key: "decl"}}, true},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			a := Anchor{Kind: AnchorSymbol, Target: target, Digest: "oldbody", DeclDigest: tt.recorded}
+			assert.Equal(t, tt.want, DeclarationHeld(t.Context(), tt.res, a))
+		})
+	}
+}
