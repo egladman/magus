@@ -25,6 +25,18 @@ function choices(): HTMLButtonElement[] {
   return [...document.querySelectorAll<HTMLButtonElement>(".console-shell-signin__choice")];
 }
 
+function rowFor(root: string): HTMLButtonElement {
+  const b = choices().find((c) => c.dataset.root === root);
+  if (!b) throw new Error("no row for " + root);
+  return b;
+}
+
+function confirmBtn(): HTMLButtonElement {
+  const b = document.querySelector<HTMLButtonElement>(".console-shell-signin__confirm");
+  if (!b) throw new Error("no confirm button");
+  return b;
+}
+
 function dismiss(key: string): void {
   document.dispatchEvent(new KeyboardEvent("keydown", { key, bubbles: true }));
 }
@@ -55,7 +67,39 @@ describe("the connect screen", () => {
   test("two workspaces and no scope yet is the one case that asks", () => {
     maybeAskWorkspace(BOTH);
     assert.ok(screen(), "the screen should be up");
-    assert.equal(choices().length, 2);
+    // The daemon-wide view is a row like any other, first, matching the title bar's own menu.
+    assert.equal(choices().length, 3);
+    assert.equal(choices()[0].dataset.root, "");
+  });
+
+  // A scope nobody picked is the failure this screen exists to prevent, so a first visit with nothing
+  // remembered cannot be answered by pressing the default button on reflex.
+  test("confirm is refused until a choice exists", () => {
+    maybeAskWorkspace(BOTH);
+    assert.equal(confirmBtn().disabled, true);
+    confirmBtn().click();
+    assert.ok(screen(), "an disabled confirm must not close the screen");
+    assert.equal(workspaceScope(), ALL_WORKSPACES);
+
+    rowFor(ACME).click();
+    assert.equal(confirmBtn().disabled, false);
+  });
+
+  test("exactly one row is ever marked as chosen", () => {
+    maybeAskWorkspace(BOTH);
+    rowFor(ACME).click();
+    rowFor(MAGUS).click();
+    const checked = choices().filter((c) => c.getAttribute("aria-checked") === "true");
+    assert.equal(checked.length, 1);
+    assert.equal(checked[0].dataset.root, MAGUS);
+  });
+
+  // The shortcut people reach for in any list-plus-confirm; refusing it makes the dialog feel stuck.
+  test("a double click commits without the button", () => {
+    maybeAskWorkspace(BOTH);
+    rowFor(MAGUS).dispatchEvent(new MouseEvent("dblclick", { bubbles: true }));
+    assert.equal(screen(), null);
+    assert.equal(workspaceScope(), MAGUS);
   });
 
   // One workspace is one possible answer. Asking would be a question whose only effect is a click.
@@ -74,7 +118,8 @@ describe("the connect screen", () => {
   // workspace-list event, so it runs several times a minute for the life of the page.
   test("answering once is answering for the browser tab", () => {
     maybeAskWorkspace(BOTH);
-    choices()[0].click();
+    rowFor(ACME).click();
+    confirmBtn().click();
     assert.equal(screen(), null);
     assert.equal(sessionStorage.getItem(ASKED_KEY), "1");
 
@@ -86,9 +131,12 @@ describe("the connect screen", () => {
 
   test("picking a workspace scopes the tab and is remembered for the next one", () => {
     maybeAskWorkspace(BOTH);
-    const magus = choices().find((b) => b.title === MAGUS);
-    assert.ok(magus);
-    magus.click();
+    rowFor(MAGUS).click();
+    // Selecting is not committing: nothing has moved yet.
+    assert.equal(workspaceScope(), ALL_WORKSPACES, "a row click must not change the scope");
+    assert.equal(localStorage.getItem(LAST_KEY), null);
+
+    confirmBtn().click();
     assert.equal(workspaceScope(), MAGUS);
     assert.equal(localStorage.getItem(LAST_KEY), MAGUS);
   });
@@ -113,19 +161,23 @@ describe("the connect screen", () => {
   test("watching all workspaces does not erase it either", () => {
     localStorage.setItem(LAST_KEY, ACME);
     maybeAskWorkspace(BOTH);
-    document.querySelector<HTMLButtonElement>(".console-shell-signin__all")?.click();
+    rowFor(ALL_WORKSPACES).click();
+    confirmBtn().click();
     assert.equal(workspaceScope(), ALL_WORKSPACES);
     assert.equal(localStorage.getItem(LAST_KEY), ACME);
   });
 
   // The remembered pick is preselected, never auto-applied: the click still happens, because an
   // inherited scope nobody chose is the failure this screen exists to prevent.
-  test("the remembered workspace is marked but not applied", () => {
+  test("the remembered workspace is preselected but not applied", () => {
     localStorage.setItem(LAST_KEY, MAGUS);
     maybeAskWorkspace(BOTH);
     const marked = choices().filter((b) => b.dataset.suggested !== undefined);
     assert.equal(marked.length, 1);
-    assert.equal(marked[0].title, MAGUS);
+    assert.equal(marked[0].dataset.root, MAGUS);
+    // Filled in as the answer AND ready to confirm - but still not applied until the click happens.
+    assert.equal(marked[0].getAttribute("aria-checked"), "true");
+    assert.equal(confirmBtn().disabled, false);
     assert.equal(workspaceScope(), ALL_WORKSPACES, "preselecting must not decide");
   });
 
@@ -152,5 +204,14 @@ describe("the connect screen", () => {
     const shown = screen()?.textContent ?? "";
     assert.ok(shown.includes("abcd"), "the tail identifies which credential arrived");
     assert.ok(!shown.includes(token), "the whole token must never reach the DOM");
+  });
+
+  // The old copy read "this daemon is open on loopback" - a claim about the daemon's security posture
+  // inferred from the absence of a stored token. All that is known is that none was needed here.
+  test("no credential reports the observation, not the daemon's posture", () => {
+    maybeAskWorkspace(BOTH);
+    const shown = screen()?.textContent ?? "";
+    assert.ok(shown.includes("without asking for one"));
+    assert.ok(!shown.includes("open on loopback"), "never assert what was not checked");
   });
 });

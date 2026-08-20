@@ -57,8 +57,15 @@ function rememberPick(root: string): void {
 
 // A credential is shown as evidence, never in full: enough to confirm one arrived and to tell two
 // apart, never enough to read over a shoulder or lift from a screenshot.
+//
+// The no-token line says what was OBSERVED, not what the daemon is. It used to read "this daemon is
+// open on loopback", which is a claim about the daemon's security posture inferred from an absence -
+// all this function knows is that no token is stored. The inference happens to hold on this screen
+// (a daemon that wanted one would have 401'd and there would be no workspace list to choose from),
+// but the sentence outlives the screen, and it was already false the first time the dialog was opened
+// from a path that had not talked to a daemon at all.
 function tokenEvidence(token: string | null): string {
-  if (!token) return "No credential - this daemon is open on loopback.";
+  if (!token) return "None. The daemon answered this window without asking for one.";
   const tail = token.length > 4 ? token.slice(-4) : token;
   return "From your link, ending " + tail + (hasScopedToken() ? " (console-scoped)" : "");
 }
@@ -105,7 +112,17 @@ function ask(roots: readonly string[]): void {
   connLabel.textContent = "Daemon";
   const connHost = document.createElement("code");
   connHost.className = "console-shell-signin__value";
-  connHost.textContent = resolveDaemonHost() ?? "not configured";
+  // "not configured" read as a calm, ordinary state. It is not one: this screen only opens once a
+  // daemon has answered with two or more workspaces, so an address must have resolved to get here.
+  // If it did not, the console has lost track of which daemon answered - worth saying so rather than
+  // reporting it in the same voice as a host that is present.
+  const daemonHost = resolveDaemonHost();
+  connHost.textContent = daemonHost ?? "not resolved";
+  if (!daemonHost) {
+    connHost.dataset.anomaly = "";
+    connHost.title =
+      "This workspace list came from a daemon, so an address should have resolved here.";
+  }
   const credLabel = document.createElement("span");
   credLabel.className = "console-shell-signin__label";
   credLabel.textContent = "Credential";
@@ -141,9 +158,9 @@ function ask(roots: readonly string[]): void {
   menuContent.append(list);
   menu.append(menuContent);
 
-  const choose = (root: string): void => {
-    // Only an explicit workspace pick moves the preselection. Escape and "Watch all workspaces" both
-    // arrive here with ALL_WORKSPACES, and letting either clear it would cost the NEXT browser tab its
+  const commit = (root: string): void => {
+    // Only an explicit workspace pick moves the preselection. Escape and "All workspaces" both arrive
+    // here with ALL_WORKSPACES, and letting either clear it would cost the NEXT browser tab its
     // one-click answer as the price of dismissing this one.
     if (root !== ALL_WORKSPACES) rememberPick(root);
     setWorkspaceScope(root);
@@ -151,54 +168,99 @@ function ask(roots: readonly string[]): void {
     close();
   };
 
-  const suggested = lastPick();
-  for (const root of roots) {
+  // Selecting and confirming are SEPARATE. Clicking a row used to apply it and close the dialog, so
+  // the scope changed on the same click that was still reading the options - and there was no moment
+  // where the answer was visible before it took effect. Now a row marks the choice and the button
+  // commits it, which is also what lets a remembered pick be genuinely preselected rather than merely
+  // focused: the answer is filled in, and the confirming click still happens.
+  let picked: string | null = null;
+  const rows: HTMLButtonElement[] = [];
+
+  const select = (root: string): void => {
+    picked = root;
+    for (const r of rows) {
+      const on = r.dataset.root === root;
+      r.setAttribute("aria-checked", on ? "true" : "false");
+      r.classList.toggle("pf-m-selected", on);
+    }
+    confirm.disabled = false;
+  };
+
+  const row = (root: string, text: string, path: string): HTMLLIElement => {
     const li = document.createElement("li");
     li.className = "pf-v6-c-menu__list-item";
     li.setAttribute("role", "none");
     const b = document.createElement("button");
     b.type = "button";
     b.className = "pf-v6-c-menu__item console-shell-signin__choice";
-    b.setAttribute("role", "menuitem");
-    b.title = root;
+    b.setAttribute("role", "menuitemradio");
+    b.setAttribute("aria-checked", "false");
+    b.dataset.root = root;
+    if (path) b.title = path;
     const main = document.createElement("span");
     main.className = "pf-v6-c-menu__item-main";
     const name = document.createElement("span");
     name.className = "pf-v6-c-menu__item-text";
-    name.textContent = shortName(root);
-    // The path is the ONLY way to tell two checkouts sharing a leaf name apart, so it stays on its own
-    // line under the name rather than becoming a tooltip.
-    const path = document.createElement("span");
-    path.className = "console-shell-signin__path";
-    path.textContent = root;
-    main.append(name, path);
+    name.textContent = text;
+    main.append(name);
+    if (path) {
+      // The path is the ONLY way to tell two checkouts sharing a leaf name apart, so it stays on its
+      // own line under the name rather than becoming a tooltip.
+      const p = document.createElement("span");
+      p.className = "console-shell-signin__path";
+      p.textContent = path;
+      main.append(p);
+    }
     b.append(main);
-    if (root === suggested) b.dataset.suggested = "";
-    b.addEventListener("click", () => choose(root));
+    b.addEventListener("click", () => select(root));
+    // Double-click is the shortcut people reach for in any list-plus-confirm, and refusing it makes
+    // the dialog feel stuck rather than careful.
+    b.addEventListener("dblclick", () => commit(root));
     li.append(b);
-    list.append(li);
+    rows.push(b);
+    return li;
+  };
+
+  const suggested = lastPick();
+  list.append(
+    // Daemon-wide FIRST, matching the title bar's own menu, and offered as a row rather than a link
+    // below: watching every workspace is a legitimate way to work, and burying it would push people
+    // into picking one they did not want just to get past the question.
+    row(ALL_WORKSPACES, "All workspaces", ""),
+    ...roots.map((r) => row(r, shortName(r), r)),
+  );
+
+  const footer = document.createElement("footer");
+  footer.className = "pf-v6-c-modal-box__footer console-shell-signin__footer";
+  const confirm = document.createElement("button");
+  confirm.type = "button";
+  confirm.className = "pf-v6-c-button pf-m-primary console-shell-signin__confirm";
+  const confirmText = document.createElement("span");
+  confirmText.className = "pf-v6-c-button__text";
+  confirmText.textContent = "Connect";
+  confirm.append(confirmText);
+  // Disabled until something is chosen. A first visit with nothing remembered has to make an actual
+  // choice - a scope nobody picked is the failure this screen exists to prevent, and defaulting the
+  // button to "All workspaces" would hand out exactly that to anyone who pressed it on reflex.
+  confirm.disabled = true;
+  confirm.addEventListener("click", () => {
+    if (picked !== null) commit(picked);
+  });
+  footer.append(confirm);
+
+  if (suggested && roots.includes(suggested)) {
+    const marked = rows.find((r) => r.dataset.root === suggested);
+    if (marked) marked.dataset.suggested = "";
+    select(suggested);
   }
 
-  // Offered plainly, not buried: watching every workspace is a legitimate way to work, and hiding it
-  // would push people into picking one they did not want just to get past the question.
-  const all = document.createElement("button");
-  all.type = "button";
-  all.className = "pf-v6-c-button pf-m-link console-shell-signin__all";
-  const allText = document.createElement("span");
-  allText.className = "pf-v6-c-button__text";
-  allText.textContent = "Watch all workspaces";
-  all.append(allText);
-  all.addEventListener("click", () => choose(ALL_WORKSPACES));
-
-  body.append(connWrap, wsLabel, lede, menu, all);
-  box.append(header, body);
+  body.append(connWrap, wsLabel, lede, menu);
+  box.append(header, body, footer);
   bullseye.append(box);
   backdrop.append(bullseye);
   document.body.append(backdrop);
 
-  const first =
-    list.querySelector<HTMLElement>("[data-suggested]") ??
-    list.querySelector<HTMLElement>("button");
+  const first = list.querySelector<HTMLElement>("[data-suggested]") ?? rows[0];
   first?.focus();
 
   function close(): void {
@@ -210,7 +272,9 @@ function ask(roots: readonly string[]): void {
   // somewhere, and the honest destination is the scope that hides nothing.
   function onKey(e: KeyboardEvent): void {
     if (e.key === "Escape") {
-      choose(ALL_WORKSPACES);
+      // Dismissing bypasses the confirm button on purpose: it is not a choice, it is a refusal to
+      // make one, and the honest destination for that is the scope that hides nothing.
+      commit(ALL_WORKSPACES);
       return;
     }
     if (e.key !== "Tab") return;
