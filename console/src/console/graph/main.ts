@@ -604,6 +604,10 @@ function neighborhood(id: string, depth: number) {
 
 // ---- layered DAG layout (see layout.ts for the pure Sugiyama algorithm) ----
 
+// PARKED_X is the off-canvas coordinate hidden nodes are pinned to (radial's unplaced set, the
+// default projection's non-projects) so the force simulation does not waste cycles on them.
+const PARKED_X = -1e6;
+
 // applyLayoutedMode: switch to layered layout for the visible node/link set.
 // Returns false (with a status message) when the scale guard fires.
 // Stops the force simulation so no ticks disturb the fixed positions.
@@ -667,7 +671,7 @@ function reapplyDagLayout(): boolean {
 // visible subset) rather than accepting matchSet as-is - it narrows matchSet
 // to that placed set afterward so the node list/status agree with what's
 // drawn. Nodes that were visible but fell outside the placed set are parked
-// off-canvas (fx/fy = -1e6, the same convention parkHiddenNodes uses) so they
+// off-canvas (fx/fy = PARKED_X, the same convention parkHiddenNodes uses) so they
 // don't sit stacked at the origin. Stops the force simulation - radial pins
 // fx/fy like the dag modes, even though it is not one (see isDagMode).
 function applyRadialMode(): boolean {
@@ -687,10 +691,10 @@ function applyRadialMode(): boolean {
   let hiddenCount = 0;
   for (const n of subset) {
     if (!placed.has(n.id)) {
-      n.fx = -1e6;
-      n.fy = -1e6;
-      n.x = -1e6;
-      n.y = -1e6;
+      n.fx = PARKED_X;
+      n.fy = PARKED_X;
+      n.x = PARKED_X;
+      n.y = PARKED_X;
       hiddenCount++;
     }
   }
@@ -710,6 +714,33 @@ function applyRadialMode(): boolean {
   // render off-screen (fitView calls draw()).
   fitView(matchSet);
   return true;
+}
+
+// unparkNodes releases only the nodes sitting at the parking coordinate, returning them to the
+// origin. Resetting x/y is not optional: a released node keeps its parked coordinate until the
+// simulation moves it, and a fitView over bounds a million units wide collapses the zoom to its
+// floor, so the canvas comes back blank.
+function unparkNodes() {
+  for (const n of graph.nodes) {
+    if (n.fx !== PARKED_X) continue;
+    n.fx = null;
+    n.fy = null;
+    n.x = 0;
+    n.y = 0;
+  }
+}
+
+// unpinAllNodes hands every node back to the simulation - the pins a DAG or radial layout set
+// as well as the parking pins - and lifts any parked node off PARKED_X on the way out.
+function unpinAllNodes() {
+  for (const n of graph.nodes) {
+    n.fx = null;
+    n.fy = null;
+    if (n.x === PARKED_X) {
+      n.x = 0;
+      n.y = 0;
+    }
+  }
 }
 
 // layoutBlockedReason says whether a mode can run right now; the returned string is
@@ -760,23 +791,13 @@ function switchLayout(mode: LayoutMode) {
       return;
     }
   } else if (layoutMode === "radial") {
-    // Leaving radial: release whatever it parked off-canvas so the next
-    // layout can place those nodes again. Also reset x/y away from the -1e6
-    // parking spot (fitView(null) after this would otherwise include it in
-    // the bounds and collapse zoom to k=0.1) and clear matchSet, so the next
-    // layout shows the full graph instead of radial's placed set - the same
-    // recovery the other park-release sites use.
-    for (const n of graph.nodes) {
-      if (n.fx === -1e6) {
-        n.fx = null;
-        n.fy = null;
-        n.x = 0;
-        n.y = 0;
-      }
-    }
+    unparkNodes();
     radialCenter = null;
     radialRings = null;
-    matchSet = null;
+    // Restore the FILTER's own matches rather than nulling: radial narrowed matchSet to its
+    // placed set, but the query box still reads what the operator typed, and a box that reads
+    // `kind:target` over an unfiltered graph is lying about the state.
+    matchSet = matchSetFor(query);
   }
   layoutMode = mode;
   if (mode !== "waves") wavesMeta = null;
@@ -795,10 +816,7 @@ function switchLayout(mode: LayoutMode) {
       setStatus("too many nodes to lay out as " + mode + "; showing Force instead", true);
       // Clear fixed positions so the sim can move nodes, and any routes from
       // the dag pass so force mode never draws a stale curve.
-      for (const n of graph.nodes) {
-        n.fx = null;
-        n.fy = null;
-      }
+      unpinAllNodes();
       for (const e of graph.links) delete e.points;
       if (sim) {
         sim.alpha(0.5).restart();
@@ -824,10 +842,7 @@ function switchLayout(mode: LayoutMode) {
     // Force mode: clear fixed positions so the simulation takes over, and any
     // edge routes left over from a dag pass so force mode never draws a stale
     // curve.
-    for (const n of graph.nodes) {
-      n.fx = null;
-      n.fy = null;
-    }
+    unpinAllNodes();
     for (const e of graph.links) delete e.points;
     if (sim) {
       sim.alpha(0.5).restart();
@@ -1511,18 +1526,7 @@ function selectNode(id: string | null, center: boolean) {
       // Unfold this project: show its contains neighborhood.
       projectionUnfolded = true;
       projectionSet = null;
-      // Release any nodes that were parked off-screen by the projection. x/y must be reset
-      // too, not just fx/fy: a released node keeps the -1e6 parking coordinate until the sim
-      // moves it, and a fitView over a set containing one fits bounds a million units wide -
-      // zoom collapses and the canvas reads as blank. switchLayout gets this right.
-      for (const nd of graph.nodes) {
-        if (nd.fx === -1e6) {
-          nd.fx = null;
-          nd.fy = null;
-          nd.x = 0;
-          nd.y = 0;
-        }
-      }
+      unparkNodes();
       const projectNeighborhood = new Set([id]);
       for (const e of graph.links) {
         const s = endpointId(e.source),
@@ -1536,8 +1540,8 @@ function selectNode(id: string | null, center: boolean) {
         if (t === id && e.relation === "contains") projectNeighborhood.add(s);
       }
       matchSet = projectNeighborhood;
-      const btn = el("projection-unfold-btn");
-      if (btn) btn.hidden = true;
+      // Keep "Show full graph" visible: this branch narrows to ONE project's neighborhood, so
+      // the button is the way back out, and the status line below names it as such.
       setStatus("Showing " + id + " neighborhood. Press Esc or Show full graph to see everything.");
       renderList();
       if (matchSet.size) fitView(matchSet);
@@ -1636,6 +1640,11 @@ function fitView(ids: Set<string> | null) {
 function focusNode(id: string, depth: number) {
   const focusNodeObj = graph.byId.get(id);
   if (!focusNodeObj) return;
+  // A local graph is its own emphasis, so it retires whatever view was driving the canvas.
+  // Without this the chip stays lit, the result line keeps reporting the old view's answer and
+  // the command bar keeps offering its CLI idiom, while the canvas shows this neighborhood -
+  // and a canvas dblclick fires a plain click first, so it is one gesture.
+  if (activeView) clearView();
   focusId = id;
   focusDepth = depth;
   matchSet = neighborhood(id, depth);
@@ -1665,6 +1674,7 @@ function focusNode(id: string, depth: number) {
     }
     reapplyDagLayout();
   }
+  updateHash();
   fitView(matchSet);
 }
 
@@ -1892,6 +1902,19 @@ function termMatches(node: GNode, term: QueryTerm) {
   return term.negated ? !hit : hit;
 }
 
+// matchSetFor resolves a query string to the set of ids it matches, or null when the query
+// is empty. null means NO FILTER, which is not the same as a filter that matched nothing.
+function matchSetFor(q: string): Set<string> | null {
+  const terms = q ? parseQuery(q) : [];
+  if (!terms.length) return null;
+  if (!graph.relIndex) graph.relIndex = relationIndex();
+  const out = new Set<string>();
+  for (const n of graph.nodes) {
+    if (terms.every((t) => termMatches(n, t))) out.add(n.id);
+  }
+  return out;
+}
+
 function applyQuery(q: string) {
   focusId = null; // typing a query exits focus/lens/view mode
   pendingRadialPick = false;
@@ -1915,20 +1938,18 @@ function applyQuery(q: string) {
     flowOn = false;
   }
   query = q.trim();
-  const terms = query ? parseQuery(query) : [];
-  if (!terms.length) {
-    matchSet = null;
-  } else {
-    if (!graph.relIndex) graph.relIndex = relationIndex();
-    matchSet = new Set();
-    for (const n of graph.nodes) {
-      if (terms.every((t) => termMatches(n, t))) matchSet.add(n.id);
-    }
-    setListExpanded(true); // a query reveals its matches
-  }
+  matchSet = matchSetFor(query);
+  if (matchSet) setListExpanded(true); // a query reveals its matches
   renderList();
   updateHash();
   syncLayoutToggle(); // availability tracks matchSet size
+  // Radial pins its ring positions and parks everything it did not place off-canvas, so a query
+  // has to re-run the layout over the new subset: without this its own matches stay parked a
+  // million units off-canvas while the count and the node list report them as visible.
+  if (layoutMode === "radial") {
+    applyRadialMode();
+    return;
+  }
   // Re-run the dag layout (layered or waves) on the new visible subset.
   if (isDagMode()) {
     // Clear prior layout-reversed flags so cycle-break reruns cleanly.
@@ -1941,11 +1962,7 @@ function applyQuery(q: string) {
       layoutMode = "force";
       wavesMeta = null;
       syncLayoutToggle();
-      // Clear pinned positions so the force sim can move all nodes.
-      for (const n of graph.nodes) {
-        n.fx = null;
-        n.fy = null;
-      }
+      unpinAllNodes();
       if (sim) sim?.alpha(0.3).restart();
     }
     return;
@@ -2115,20 +2132,24 @@ function updateHash() {
   if (location.hash !== next) history.replaceState(null, "", next);
 }
 
+// applyDeepLinks restores everything updateHash serializes. The two must stay symmetric: a
+// key written but not read back makes a shared link a lie about what the sender was looking at.
 function applyDeepLinks() {
   const params = hashParams();
   // Restore view state: #view=<id>&node=<id>[&to=<id>]
   const validViews = ["blast", "trace", "critical", "hubs", "orphans", "cycles"];
-  if (params.view && validViews.includes(params.view)) {
+  const view = params.view && validViews.includes(params.view) ? params.view : null;
+  if (view) {
     projectionUnfolded = true; // views show the full graph
-    activateView(params.view, params.node || null, params.to || null);
-    return; // view takes precedence over q/node
+    activateView(view, params.node || null, params.to || null);
+  } else {
+    // q/node only apply when no view claimed them: a view owns #node= as its subject.
+    if (params.q) {
+      searchEl.value = params.q;
+      applyQuery(params.q);
+    }
+    if (params.node && graph.byId.has(params.node)) selectNode(params.node, true);
   }
-  if (params.q) {
-    searchEl.value = params.q;
-    applyQuery(params.q);
-  }
-  if (params.node && graph.byId.has(params.node)) selectNode(params.node, true);
   // Restore layout mode from the fragment (#layout=force|layered|waves|radial).
   // Only switch when the value is valid and differs from the current mode.
   // radial additionally requires a #node= that resolved above (selectNode sets
@@ -2139,6 +2160,7 @@ function applyDeepLinks() {
     if (params.layout === "radial" && !selected) {
       setStatus("radial needs a #node= to center on; showing the default layout instead.");
     } else if (params.layout !== layoutMode) {
+      layoutPickedByHand = true; // a mode named in the link is the sender's deliberate choice
       switchLayout(params.layout);
     }
   }
@@ -2209,13 +2231,10 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
     .querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset")
     .forEach((b) => b.removeAttribute("data-active"));
   renderViewCommand(null, null, null);
-  // Apply projection: show only projects by default if the count is small.
-  const ps = buildProjectionSet();
-  if (ps) {
-    projectionUnfolded = false;
-    projectionSet = ps;
-    matchSet = new Set(ps);
-  } else projectionUnfolded = true;
+  // Same scale-guard decision boot() makes, through the same function: a second collapse rule
+  // here would make one file read differently depending on how it was opened. A dropped file
+  // carries no fragment directive - it supersedes whatever the URL said.
+  computeDefaultProjection(false);
   const ub = el("projection-unfold-btn");
   if (ub) ub.hidden = projectionUnfolded;
   renderCard(null);
@@ -2262,17 +2281,7 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   } else {
     startSimulation();
   }
-  // Park hidden nodes after the sim is built (projection reduces the visible set).
-  if (!projectionUnfolded && projectionSet) {
-    for (const n of graph.nodes) {
-      if (!projectionSet.has(n.id)) {
-        n.fx = -1e6;
-        n.fy = -1e6;
-        n.x = -1e6;
-        n.y = -1e6;
-      }
-    }
-  }
+  parkHiddenNodes(); // after the sim is built: the projection reduces the visible set
   draw();
   syncGraphKindToggle();
 }
@@ -2287,13 +2296,30 @@ function syncLayoutToggle() {
   document.querySelectorAll<HTMLButtonElement>("[data-layout]").forEach((btn) => {
     const mode = btn.dataset.layout;
     if (!mode || !isLayoutMode(mode)) return;
-    btn.classList.toggle("pf-m-selected", mode === layoutMode);
+    const current = mode === layoutMode;
+    btn.classList.toggle("pf-m-selected", current);
     const reason = layoutBlockedReason(mode);
-    btn.disabled = !!reason;
+    // Never disable the mode that is showing. layoutBlockedReason reads matchSet.size, so a
+    // filter widening under a running Layered/Waves layout can block the very mode drawing the
+    // canvas; rendering it selected AND disabled says the operator both is and cannot be here.
+    // The reason still reaches them through the title.
+    btn.disabled = !!reason && !current;
     btn.title = reason ?? LAYOUT_TITLES[mode] ?? "";
   });
+  // Gray the force sliders out rather than removing them: a panel titled "Colors and forces"
+  // that contains no forces reads as a rendering bug, and the controls' absence carries no
+  // reason the way a disabled control with a title does.
   const forceControls = document.querySelector<HTMLElement>(".console-graph-display__forces");
-  if (forceControls) forceControls.hidden = layoutMode !== "force";
+  if (forceControls) {
+    const off = layoutMode !== "force";
+    forceControls.toggleAttribute("data-inactive", off);
+    forceControls.title = off
+      ? "Layout forces apply in Force mode; this graph is " + layoutMode
+      : "";
+    forceControls.querySelectorAll("input").forEach((input) => {
+      input.disabled = off;
+    });
+  }
 }
 
 // The graph-kind toggle group's per-kind titles when live. Mirrors scaffold.html's
@@ -2402,19 +2428,7 @@ function unfoldProjection() {
   matchSet = null;
   if (searchEl) searchEl.value = "";
   query = "";
-  // Release all parked nodes so the force sim (or layered layout) can place them. x/y are
-  // reset alongside fx/fy for the same reason switchLayout does it: left at -1e6, a released
-  // node poisons the next fitView's bounds and the canvas comes back blank.
-  if (graph) {
-    for (const n of graph.nodes) {
-      if (n.fx === -1e6) {
-        n.fx = null;
-        n.fy = null;
-        n.x = 0;
-        n.y = 0;
-      }
-    }
-  }
+  if (graph) unparkNodes();
   renderList();
   const btn = el("projection-unfold-btn");
   if (btn) btn.hidden = true;
@@ -3470,7 +3484,7 @@ function applyPositions(newNodes: GNode[], prevPos: Map<string, NodePos>) {
     if (p) {
       n.x = p.x;
       n.y = p.y;
-      if (p.fx != null && p.fx !== -1e6) {
+      if (p.fx != null && p.fx !== PARKED_X) {
         n.fx = p.fx;
         n.fy = p.fy;
       }
@@ -3480,7 +3494,7 @@ function applyPositions(newNodes: GNode[], prevPos: Map<string, NodePos>) {
 }
 
 // recomputeLiveMatchSet recomputes matchSet (and, for the default projection,
-// projectionSet) against the CURRENT graph for whatever activeView/query/
+// projectionSet) against the CURRENT graph for whatever activeView/focus/query/
 // projection state is already in effect. It mirrors the per-view logic in
 // activateView and the filter logic in applyQuery, but - unlike calling those
 // functions directly - does not touch activeView/query/projectionUnfolded/
@@ -3537,17 +3551,16 @@ function recomputeLiveMatchSet() {
     }
     return;
   }
+  // A local graph is emphasis too, and liveApplyGraphUpdate keeps focusId across a refresh:
+  // without this branch the refresh would drop the neighborhood while the status line still
+  // said the operator was in it.
+  if (focusId) {
+    matchSet = graph.byId.has(focusId) ? neighborhood(focusId, focusDepth) : null;
+    if (!matchSet) focusId = null; // the focus node vanished in this refresh
+    return;
+  }
   if (query) {
-    const terms = parseQuery(query);
-    if (!terms.length) {
-      matchSet = null;
-      return;
-    }
-    if (!graph.relIndex) graph.relIndex = relationIndex();
-    matchSet = new Set();
-    for (const n of graph.nodes) {
-      if (terms.every((t) => termMatches(n, t))) matchSet.add(n.id);
-    }
+    matchSet = matchSetFor(query);
     return;
   }
   if (!projectionUnfolded) {
@@ -3913,10 +3926,10 @@ function parkHiddenNodes() {
   if (!projectionUnfolded && projectionSet) {
     for (const n of graph.nodes) {
       if (!projectionSet.has(n.id)) {
-        n.fx = -1e6;
-        n.fy = -1e6;
-        n.x = -1e6;
-        n.y = -1e6;
+        n.fx = PARKED_X;
+        n.fy = PARKED_X;
+        n.x = PARKED_X;
+        n.y = PARKED_X;
       }
     }
   }

@@ -437,6 +437,10 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-display__forces { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.2rem; }
 .console-graph-display__forces label { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); margin: 0; }
 .console-graph-display__forces input[type="range"] { width: 8rem; flex: 0 0 auto; margin: 0; }
+/* Outside Force mode the sliders drive nothing. They gray out rather than disappearing: an
+   empty "Colors and forces" panel reads as a rendering fault, and only a present control can
+   carry the title explaining why it is inert. */
+.console-graph-display__forces[data-inactive] { opacity: 0.45; cursor: not-allowed; }
 
 /* Color groups: paint query matches a chosen color on top of the kind palette.
    The swatch color is genuinely dynamic (a user pick), so it rides an inline style
