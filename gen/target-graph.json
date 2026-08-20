@@ -1638,16 +1638,12 @@
         },
         {
           "name": "generate",
-          "doc": "generate is the one public docs publication target.",
+          "doc": "generate owns the COMMITTED derived files, and nothing else.",
           "dependencies": [
             "preflight",
             "content-generate",
             "index-generate",
-            "diagrams-generate",
-            "build-hljs",
-            "build-playground-editor",
-            "build-playground",
-            "site-generate"
+            "diagrams-generate"
           ],
           "charms": [
             "rw"
@@ -1674,18 +1670,6 @@
             },
             {
               "target": "diagrams-generate"
-            },
-            {
-              "target": "build-hljs"
-            },
-            {
-              "target": "build-playground-editor"
-            },
-            {
-              "target": "build-playground"
-            },
-            {
-              "target": "site-generate"
             }
           ],
           "reads_secrets": false
@@ -1806,12 +1790,17 @@
         },
         {
           "name": "build",
+          "doc": "build renders the site: the tree cd.yaml publishes and deploy-generate assembles.",
           "dependencies": [
-            "generate"
+            "generate",
+            "site-generate"
           ],
           "chain": [
             {
               "target": "generate"
+            },
+            {
+              "target": "site-generate"
             }
           ],
           "reads_secrets": false
@@ -2063,13 +2052,10 @@
         },
         {
           "name": "generate",
-          "doc": "Regenerates MAGUS.md and fails on drift.",
+          "doc": "Regenerates MAGUS.md.",
           "dependencies": [
             "preflight",
             "index-generate"
-          ],
-          "charms": [
-            "rw"
           ],
           "chain": [
             {
@@ -2237,13 +2223,10 @@
         },
         {
           "name": "generate",
-          "doc": "Regenerates MAGUS.md and fails on drift.",
+          "doc": "Regenerates MAGUS.md.",
           "dependencies": [
             "preflight",
             "index-generate"
-          ],
-          "charms": [
-            "rw"
           ],
           "chain": [
             {
@@ -2433,9 +2416,6 @@
             "preflight",
             "index-generate"
           ],
-          "charms": [
-            "rw"
-          ],
           "chain": [
             {
               "target": "preflight"
@@ -2589,9 +2569,6 @@
           "dependencies": [
             "preflight",
             "index-generate"
-          ],
-          "charms": [
-            "rw"
           ],
           "chain": [
             {

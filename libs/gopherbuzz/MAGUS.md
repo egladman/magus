@@ -68,11 +68,11 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | console | 7 | `magus query project:console` | `preflight`, `ci`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents | 5 | `magus query project:docs/guides/integrations/agents` | `ci`, `format`, `lint` |
-| libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `generate` |
+| libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `lint` |
 | libs/diagram | 2 | `magus query project:libs/diagram` | `test`, `ci` |
-| libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `format`, `build`, `generate` |
-| libs/testlayout | 8 | `magus query project:libs/testlayout` | `format`, `build`, `generate` |
-| libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
+| libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `format`, `build`, `lint` |
+| libs/testlayout | 8 | `magus query project:libs/testlayout` | `format`, `build`, `lint` |
+| libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `preflight`, `test` |
 | proto | 3 | `magus query project:proto` | `generate`, `lint`, `ci` |
 
 ## Project: magus
@@ -141,10 +141,10 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | Target | What it does |
 |---|---|
 | `site-generate` | site-generate owns publication. |
-| `generate` | generate is the one public docs publication target. |
+| `generate` | generate owns the COMMITTED derived files, and nothing else. |
 | `format` | Scope dprint by ARGV, not by its config, for the same reason the root project does: dprint DISCOVERS a nested dprint.json and formats that subtree under its own config, and neither this project's `includes` nor an exclude prunes it. |
 | `lint` | lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). |
-| `build` |  |
+| `build` | build renders the site: the tree cd.yaml publishes and deploy-generate assembles. |
 | `test` |  |
 | `security` | security audits what actually ships against the npm advisory database. |
 | `ci` |  |
@@ -173,7 +173,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Target | What it does |
 |---|---|
-| `generate` | Regenerates MAGUS.md and fails on drift. |
+| `generate` | Regenerates MAGUS.md. |
 | `format` |  |
 | `lint` |  |
 | `build` |  |
@@ -193,7 +193,7 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 
 | Target | What it does |
 |---|---|
-| `generate` | Regenerates MAGUS.md and fails on drift. |
+| `generate` | Regenerates MAGUS.md. |
 | `format` |  |
 | `lint` |  |
 | `build` |  |
