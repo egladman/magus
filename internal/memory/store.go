@@ -1,9 +1,15 @@
 // Package memory is the durable, per-repository handoff journal: discrete,
 // categorized records (one markdown file per entry, YAML frontmatter carrying the
 // structured fields) plus a legacy cursor snapshot. It is the one place that owns
-// where journal entries live and how a record is serialized; the MCP tool
-// (internal/handler/mcp), the console RPC (internal/handler/memory), and the
-// knowledge-graph @memory shard all read/write through it.
+// where journal entries live and how a record is serialized. Two consumers read and
+// write through it: the MCP tool (internal/handler/mcp) and the console RPC
+// (internal/handler/memory).
+//
+// There is NO knowledge-graph shard over these records. This comment used to name an
+// "@memory shard" among the consumers and it does not exist - knowledge.Inputs has a
+// Notes field and no Memory one, and AssembleShards builds nothing for it. So a record
+// is invisible to `magus query`, carries no edges to what it points at, and cannot be
+// drift-checked: nothing anchors it. See RefKind on what that costs.
 //
 // The store lives in the user's XDG state directory, NOT the repo (a developer's
 // working memory does not belong in a shared checkout) and NOT the cache (evictable).
@@ -39,8 +45,19 @@ const (
 )
 
 // RefKind is the closed set a Ref.Kind may take. node/doc/output name a magus-domain node;
-// query/command are re-runnable strings. All five are resolvable, so staleness is
-// detectable (the isolation and graph-anchoring live in the deferred Phase 2 shard).
+// query/command are re-runnable strings.
+//
+// All five are resolvable IN PRINCIPLE, which is not the same as resolved: nothing here
+// resolves any of them, so staleness is undetectable today and a record kept a year ago
+// reads exactly like one kept this morning. The "deferred Phase 2 shard" an earlier version
+// of this comment pointed at was never built, so this is an open gap rather than work
+// living somewhere else.
+//
+// A node ref's Target is additionally a notes-anchor-shaped string ("symbol:...", "file:...",
+// "project:...", "target:..."), parsed by notes.ParseAnchor when `magus notes promote` turns a
+// record into a note. That coupling is real and undeclared: this package names no anchor kinds,
+// so nothing stops a Target that the notes vocabulary cannot read, and promotion silently skips
+// the ones it cannot parse.
 type RefKind string
 
 const (
