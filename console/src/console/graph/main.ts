@@ -63,7 +63,7 @@ import {
   endpointId,
 } from "./types.js";
 import { LAYERED_COL_W, LAYERED_MAX, layoutLayered, layoutWaves } from "./layout.js";
-import { CARD_COL_W, drawCard, measureCards } from "./cards.js";
+import { CARD_COL_W, DOT_R_PX, cardDetail, drawCard, measureCards } from "./cards.js";
 import { RADIAL_MAX_RINGS, RADIAL_RING_R, layoutRadial } from "./radial.js";
 import { nodeDurationMs, formatDuration } from "./duration.js";
 import {
@@ -1311,10 +1311,21 @@ function nodeAtPointer(event: MouseEvent): GNode | null | undefined {
   const py = (event.clientY - rect.top - transform.y) / transform.k;
   // Card mode: rectangular hit test in reverse draw order (so an overlapping
   // card on top wins), since sim.find's circle radius doesn't match card shape.
+  // The target has to match what was DRAWN: zoomed out far enough that cards paint as dots
+  // (cardDetail), a card-sized rectangle would claim a patch of empty canvas many times the
+  // mark the operator is aiming at. Dots take a generous screen-constant radius instead, so
+  // they stay reachable at the zoom that frames the whole DAG.
   if (cardsActive()) {
+    const dots = cardDetail(transform.k) === "dot";
+    const hitR = (DOT_R_PX + 5) / transform.k;
     for (let i = graph.nodes.length - 1; i >= 0; i--) {
       const n = graph.nodes[i];
-      if (n.x == null || !n.w || !n.h) continue;
+      if (n.x == null) continue;
+      if (dots) {
+        if ((px - n.x) ** 2 + (py - n.y) ** 2 <= hitR * hitR) return n;
+        continue;
+      }
+      if (!n.w || !n.h) continue;
       if (Math.abs(px - n.x) <= n.w / 2 && Math.abs(py - n.y) <= n.h / 2) return n;
     }
     return null;
