@@ -1028,6 +1028,38 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   min-inline-size: 14rem;
 }
 
+/* The connect screen (ui/signin.ts): who you are, then which workspace. One dialog, because the
+   workspace list is authenticated - it cannot populate before the credential works, so splitting the
+   two would hide a dependency rather than remove it. */
+.console-shell-signin__section {
+  display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 0.25rem 0.75rem;
+  align-items: baseline; margin-block-end: 1.25rem;
+  padding-block-end: 1rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-shell-signin__label {
+  font-size: 0.72rem; font-weight: 600; color: var(--pf-t--global--text--color--subtle);
+}
+.console-shell-signin__value { font-size: 0.8rem; min-inline-size: 0; overflow-wrap: anywhere; }
+.console-shell-signin__lede { margin-block: 0.35rem 0; font-size: 0.82rem; color: var(--pf-t--global--text--color--subtle); }
+/* Stacked full-width, not a row: the path under each name is the only way to tell two checkouts with
+   the same leaf name apart, and a row would truncate exactly that. */
+.console-shell-signin__list { display: flex; flex-direction: column; gap: 0.4rem; margin-block: 0.9rem; }
+.console-shell-signin__choice {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 0.1rem;
+  inline-size: 100%; text-align: start;
+}
+.console-shell-signin__path {
+  font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle);
+  font-family: var(--pf-t--global--font--family--mono);
+}
+/* The remembered pick is SUGGESTED, not chosen: an outline so the eye lands on it, and it still has
+   to be clicked. Auto-applying it would rebuild the inherited scope this screen exists to replace. */
+.console-shell-signin__choice[data-suggested] {
+  border-color: var(--console-spruce);
+  box-shadow: inset 0 0 0 1px var(--console-spruce);
+}
+.console-shell-signin__all { align-self: flex-start; }
+
 /* App-drawer section label: the "Menu" group heading above the app entries - smaller, uppercase, muted,
    and non-interactive-looking, so it reads as a divider label rather than a menu row. */
 .console-appmenu__group-title {

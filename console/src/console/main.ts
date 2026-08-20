@@ -47,6 +47,7 @@ import { initRefDrawer, referenceSurface } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
 import { initScopePicker } from "../ui/scope-picker";
 import { onWorkspaces } from "../lib/scope";
+import { maybeAskWorkspace } from "../ui/signin";
 import { mountNotificationCenter, notify } from "../lib/notifications";
 import { checkLocalStorageAlert, startShellWatch } from "../lib/watch";
 import { openSurfaceWindow } from "../lib/appwindow";
@@ -1089,7 +1090,14 @@ export function startConsole(
   const scopePicker = actionsHost ? initScopePicker(actionsHost) : null;
   // A surface can know the workspace list before this shell's 15s poll does - and in the offline demo
   // it is the ONLY thing that knows, since there is no daemon to poll.
-  if (scopePicker) onWorkspaces((roots) => scopePicker.setWorkspaces(roots));
+  if (scopePicker) {
+    onWorkspaces((roots) => {
+      scopePicker.setWorkspaces(roots);
+      // Ask once per browser tab, and only when the answer carries information. Guarded inside, so a
+      // status tick every few seconds cannot re-open it.
+      maybeAskWorkspace(roots);
+    });
+  }
 
   const sidebarHost = document.getElementById("console-sidebar");
   if (sidebarHost) {
