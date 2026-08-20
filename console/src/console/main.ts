@@ -24,7 +24,7 @@ import { createTabBar } from "./tabBar";
 import { createSidebar } from "./sidebar";
 import { fetchPulse, type PulseView } from "./pulse";
 import { fetchDiffCount, type Badge } from "./badges";
-import { buildLauncher, type Launchable } from "./home";
+import { syncLauncherChord, buildLauncher, type Launchable } from "./home";
 import { standaloneSurface, moduleSurface } from "./standalone";
 import {
   registerCommand,
@@ -950,6 +950,9 @@ export function startConsole(
     // No active tab means the workspace is empty: reveal the launcher empty state and dock its default
     // status bar. With a tab active, hide the launcher and dock the active tab's per-tab status bar.
     launcher.hidden = active != null;
+    // Restamp the palette's chord on the way in: it is remappable, and the launcher was built long
+    // before this keymap was read.
+    if (!launcher.hidden) syncLauncherChord(launcher, chordFor("console.actionBar.open"));
     // Empty state flag for CSS: with zero tabs there is nothing on the (mobile) tab row, so the phone
     // title bar collapses back from two rows to one (see console.css) instead of reserving an empty
     // second row on the launcher screen.
@@ -1090,25 +1093,35 @@ export function startConsole(
   const scopePicker = actionsHost ? initScopePicker(actionsHost) : null;
   // A surface can know the workspace list before this shell's 15s poll does - and in the offline demo
   // it is the ONLY thing that knows, since there is no daemon to poll.
+  // The offline demo publishes two synthetic workspaces, which is what makes scoping demonstrable with
+  // no daemon - but a Connect screen there would ask for a credential against a daemon that does not
+  // exist, and answer its own questions with "not configured" and "No credential".
+  const inDemo = (): boolean => document.getElementById("console-conn")?.dataset.state === "demo";
   if (scopePicker) {
     onWorkspaces((roots) => {
       scopePicker.setWorkspaces(roots);
       // Ask once per browser tab, and only when the answer carries information. Guarded inside, so a
       // status tick every few seconds cannot re-open it.
-      maybeAskWorkspace(roots);
+      if (!inDemo()) maybeAskWorkspace(roots);
     });
   }
 
   const sidebarHost = document.getElementById("console-sidebar");
   if (sidebarHost) {
+    // The handle is discarded deliberately. This is the composition root and there is no console-level
+    // teardown to hook into - startConsole runs once for the page's lifetime, the same reason the
+    // readiness interval below simply runs for as long as the page does. destroy() exists so the DOM
+    // tests can mount a rail per case without the previous one's document listeners answering.
     createSidebar(
       sidebarHost,
-      ws,
-      sidebarExpandedCell,
-      pulse,
-      focusedSurface,
-      railBadges,
-      SURFACES,
+      {
+        ws,
+        expanded: sidebarExpandedCell,
+        pulse,
+        focused: focusedSurface,
+        badges: railBadges,
+        surfaces: SURFACES,
+      },
       { onOpen: (id) => open(id) },
     );
   }
@@ -1378,8 +1391,11 @@ export function startConsole(
   // tab. Built AFTER the pane
   // commands above so every id it dispatches exists. chordFor mirrors the commandBarBtn tooltip's
   // chord lookup, stamped into each control's title so the tray also teaches its keyboard equivalent.
-  const chordFor = (id: string): string =>
-    formatChord(mergeKeymap(CONSOLE_KEYMAP, keymapCell.get())[id] ?? "", isMac());
+  // A declaration, not a const arrow: show() stamps the launcher's palette hint with it, and show()
+  // can run from a tab restore well before this point in the composition root.
+  function chordFor(id: string): string {
+    return formatChord(mergeKeymap(CONSOLE_KEYMAP, keymapCell.get())[id] ?? "", isMac());
+  }
 
   const panesPopup = document.createElement("div");
   panesPopup.id = "console-panespopup";
@@ -1817,6 +1833,10 @@ export function startConsole(
     if (conn.dataset.state === "connected" && report) conn.dataset.health = readinessHealth(report);
     else delete conn.dataset.health;
   }
+  // Bumped on every poll that reaches the daemon, so a slow answer can tell whether it is still the
+  // current one. Cheaper than an AbortController here because the fetch helpers already collapse every
+  // failure to null; what has to be dropped is a SUCCESSFUL answer that arrived too late.
+  let pollGeneration = 0;
   function pollReadiness(): void {
     const current = document.getElementById("console-conn");
     if (current?.dataset.state === "demo") {
@@ -1849,9 +1869,25 @@ export function startConsole(
     }
     // The rail's readings ride THIS interval rather than starting their own: the shell is already
     // asking this daemon a question every 15s, and the rail's numbers are the same freshness.
+    //
+    // NOT gated on the rail being on screen, unlike the diff badge below. The pulse feeds two
+    // consumers and only one of them is the rail: the title bar's scope picker and the Connect screen
+    // are built from p.workspaces, and both exist on a phone where the rail does not. Gating this
+    // would leave a mobile tab unable to learn it has a workspace to choose.
+    const generation = ++pollGeneration;
     void fetchPulse(host).then((p) => {
+      // A slow answer can land after a switch to a demo surface or to no host at all, both of which
+      // clear these cells on the way past. Installing it then would paint a live pool reading over
+      // synthetic data - the exact thing the branches above clear them to prevent.
+      if (generation !== pollGeneration) return;
       pulse.set(p);
-      scopePicker?.setWorkspaces(p?.workspaces ?? []);
+      // Only a real answer replaces the list. Overwriting with [] on a failed poll hides the scope
+      // control every 15s, and the dashboard's own publisher restores it a second later - a flicker
+      // caused entirely by two publishers disagreeing about what "no answer" means.
+      if (p) {
+        scopePicker?.setWorkspaces(p.workspaces);
+        if (!inDemo()) maybeAskWorkspace(p.workspaces);
+      }
     });
     // Only while the rail is actually on screen. It is hidden on a phone and in an app-mode window,
     // where this would be a request every 15s for a number nobody can see - and a phone is exactly
@@ -1901,7 +1937,15 @@ export function startConsole(
     });
   }
   pollReadiness();
-  setInterval(pollReadiness, READINESS_POLL_MS);
+  setInterval(() => {
+    // A backgrounded tab has nothing to repaint, and this tick is now three requests. Skipping while
+    // hidden and catching up on the way back keeps a console left open overnight from talking to the
+    // daemon until morning for readings nobody is looking at.
+    if (!document.hidden) pollReadiness();
+  }, READINESS_POLL_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) pollReadiness();
+  });
 
   installKeybindings(() => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()));
 
