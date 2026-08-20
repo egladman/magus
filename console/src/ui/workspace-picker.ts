@@ -14,6 +14,7 @@
 // HIDDEN until a daemon serves more than one workspace. With one loaded, scoped and unscoped show
 // the same thing and the control is a decision nobody has to make - the same rule the dashboard's
 // own picker used before this replaced it.
+import { parseHash, wantsDemo } from "../lib/daemon";
 import {
   ALL_WORKSPACES,
   onWorkspaceScope,
@@ -21,6 +22,13 @@ import {
   shortName,
   workspaceScope,
 } from "../lib/scope";
+
+export interface WorkspacePickerOptions {
+  // Enter or leave the daemon-free demo. The picker is the only way in now: the six per-surface
+  // "See the demo" buttons are gone, so if this is not wired the demo is reachable only by typing
+  // #demo into the address bar.
+  onDemo(enter: boolean): void;
+}
 
 export interface WorkspacePicker {
   // The daemon told us which workspaces it has loaded; rebuild the menu around them.
@@ -31,7 +39,11 @@ export interface WorkspacePicker {
   destroy(): void;
 }
 
-export function initWorkspacePicker(host: HTMLElement): WorkspacePicker {
+export function initWorkspacePicker(
+  host: HTMLElement,
+  opts: WorkspacePickerOptions,
+): WorkspacePicker {
+  const inDemo = (): boolean => wantsDemo(parseHash());
   // ONE control, not a label parked beside a button. The two were adjacent siblings - a bare caption
   // next to a bordered chip - and read as two unrelated things in a row of icon buttons rather than as
   // a field and its value. The border belongs to the WRAPPER, so it encloses both halves; the caption
@@ -87,18 +99,17 @@ export function initWorkspacePicker(host: HTMLElement): WorkspacePicker {
 
   const paint = (): void => {
     const scope = workspaceScope();
-    // More than one loaded is the only case where scope is a question. Below that the control would
-    // be an always-present reminder of a decision with one possible answer.
-    const relevant = roots.length > 1;
-    // Hide the WRAPPER, so the caption can never outlive the value it names.
-    wrap.hidden = !relevant;
-    if (!relevant) {
-      setOpen(false);
-      return;
-    }
-    label.textContent = shortName(scope);
+    // ALWAYS shown now. It used to hide below two workspaces, on the grounds that scope is not a
+    // question with one possible answer - true when this control only chose a scope. It is also the
+    // way into the demo now, and a console with no daemon has exactly zero workspaces, so the old
+    // rule would have hidden the one control that offers anything at all on a first visit.
+    wrap.hidden = false;
+    const demo = inDemo();
+    label.textContent = demo ? "Demo data" : shortName(scope);
     const name = scope === ALL_WORKSPACES ? "all workspaces" : shortName(scope);
-    btn.title = "Workspace: " + name + ". Change which workspace this tab shows.";
+    btn.title = demo
+      ? "Showing demo data. Change what this window is looking at."
+      : "Workspace: " + name + ". Change which workspace this tab shows.";
     // The caption supplies the "Workspace" half of the name; the button's own text supplies the value.
     btn.setAttribute("aria-labelledby", "console-scope-caption " + btn.id);
   };
@@ -124,6 +135,15 @@ export function initWorkspacePicker(host: HTMLElement): WorkspacePicker {
       // the row shows.
       if (root) b.title = root;
       main.append(t);
+      // In the demo these roots are SYNTHETIC. They are spelled like real checkouts (~/Repos/acme),
+      // so without a mark the menu presents fabricated workspaces as though the daemon had loaded
+      // them - the same class of untruth as a screen claiming a credential it never checked.
+      if (root && inDemo()) {
+        const tag = document.createElement("span");
+        tag.className = "console-shell-scope__tag";
+        tag.textContent = "demo";
+        main.append(tag);
+      }
       b.append(main);
       b.addEventListener("click", () => {
         setOpen(false);
@@ -140,7 +160,45 @@ export function initWorkspacePicker(host: HTMLElement): WorkspacePicker {
       // readings (pool, cache, latency) describe exactly what they measure.
       row(ALL_WORKSPACES, "All workspaces"),
       ...roots.map((r) => row(r, shortName(r))),
+      demoRow(),
     );
+  };
+
+  // An ACTION, not a scope. It sits apart from the radio group above because entering the demo is not
+  // choosing which workspace to look at - it changes whether anything on screen is real. Keeping it in
+  // the same radio group would have made "am I looking at fabricated data" one of the workspaces.
+  const demoRow = (): HTMLLIElement => {
+    const li = document.createElement("li");
+    li.className = "pf-v6-c-menu__list-item console-shell-scope__demorow";
+    li.setAttribute("role", "none");
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "pf-v6-c-menu__item";
+    b.setAttribute("role", "menuitem");
+    const demo = inDemo();
+    b.title = demo
+      ? "Leave the demo and go back to live data"
+      : "Explore a populated console with no daemon running";
+    const main = document.createElement("span");
+    main.className = "pf-v6-c-menu__item-main";
+    const t = document.createElement("span");
+    t.className = "pf-v6-c-menu__item-text";
+    t.textContent = demo ? "Leave demo" : "Demo data";
+    main.append(t);
+    if (!demo) {
+      const tag = document.createElement("span");
+      tag.className = "console-shell-scope__tag";
+      tag.textContent = "sample";
+      main.append(tag);
+    }
+    b.append(main);
+    b.addEventListener("click", () => {
+      setOpen(false);
+      btn.focus();
+      opts.onDemo(!demo);
+    });
+    li.append(b);
+    return li;
   };
 
   const listeners = new AbortController();

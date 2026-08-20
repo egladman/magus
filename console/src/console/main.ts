@@ -813,7 +813,7 @@ export function startConsole(
     for (const id of ["logs", "graph", "activity", "dashboard"]) open(id);
     notifications.seedDemo(); // populate the history panel for the offline demo (history tier only)
   };
-  const launcher = buildLauncher(SURFACES, open, launchDemo);
+  const launcher = buildLauncher(SURFACES, open);
   launcher.hidden = true;
   outlet.append(launcher);
   const launcherStatus = makeStatusBar(false); // zero tabs, zero panes: no Panes tray button
@@ -1090,7 +1090,17 @@ export function startConsole(
   // reports more than one workspace, so a single-workspace console never grows a control for a
   // decision with one answer.
   const actionsHost = document.getElementById("console-actions");
-  const workspacePicker = actionsHost ? initWorkspacePicker(actionsHost) : null;
+  // Leaving the demo is a RELOAD, not a state flip. Every surface reads #demo once at mount and keeps
+  // whatever mode it saw - the same reason launchDemo closes every tab before opening them again - so
+  // clearing the fragment without reloading would leave four synthetic surfaces on screen claiming to
+  // be live.
+  const leaveDemo = (): void => {
+    history.replaceState(null, "", location.pathname + location.search);
+    location.reload();
+  };
+  const workspacePicker = actionsHost
+    ? initWorkspacePicker(actionsHost, { onDemo: (enter) => (enter ? launchDemo() : leaveDemo()) })
+    : null;
   // A surface can know the workspace list before this shell's 15s poll does - and in the offline demo
   // it is the ONLY thing that knows, since there is no daemon to poll.
   // The offline demo publishes two synthetic workspaces, which is what makes scoping demonstrable with

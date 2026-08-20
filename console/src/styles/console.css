@@ -1052,6 +1052,22 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 @media (width < 48rem) {
   .console-shell-scope__caption { display: none; }
 }
+/* Marks a row as NOT REAL: the demo's roots are spelled like checkouts (~/Repos/acme), so without
+   this the menu presents fabricated workspaces as though a daemon had loaded them. Also tags the demo
+   action itself before you are in it. Subtle, because it is a qualifier on the name beside it rather
+   than a status of its own. */
+.console-shell-scope__tag {
+  margin-inline-start: 0.5rem;
+  font-size: 0.64rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
+}
+/* The demo row is an ACTION, not one of the scopes above it - entering the demo changes whether
+   anything on screen is real, which is a different question from which workspace to look at. The rule
+   is what says "below here is not part of that choice". */
+.console-shell-scope__demorow {
+  border-block-start: 1px solid var(--pf-t--global--border--color--default);
+  margin-block-start: 0.25rem; padding-block-start: 0.25rem;
+}
 .console-shell-scope__menu {
   position: absolute; inset-block-start: var(--console-titlebar-h); inset-inline-end: 0.5rem;
   z-index: var(--pf-t--global--z-index--400);

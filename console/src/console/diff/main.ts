@@ -61,7 +61,7 @@ import { registerCommand, unregisterCommand } from "../commands";
 import { resolveDaemonHost, parseHash, adoptDaemonOrigin, wantsDemo } from "../../lib/daemon";
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
-import type { SurfaceInstance } from "../standalone";
+import { inConsoleShell, type SurfaceInstance } from "../standalone";
 
 // Rows rendered beyond the viewport so a fast scroll never shows blank space. Bounded and
 // constant, unlike the diff.
@@ -1635,7 +1635,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
     emptyTitle.textContent = title;
     emptyBody.textContent = body;
     if (cmd) emptyBody.append(" ", h("code", undefined, cmd), ".");
-    emptyFooter.hidden = !offerDemo;
+    // Inside the console the demo is reached from the title bar's Workspace menu, so a second button
+    // here would be one of six competing entry points for one thing. Standalone there is no title bar,
+    // and this button is the only way in.
+    emptyFooter.hidden = !offerDemo || inConsoleShell();
   };
 
   // Entering the showcase in place, NOT by reloading: inside the console a reload would tear

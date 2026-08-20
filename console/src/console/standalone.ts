@@ -16,6 +16,19 @@
 
 import type { PageController, PageModule, SearchProvider, TitleSource } from "./page";
 
+// inConsoleShell reports whether this surface is running INSIDE the console rather than as its own
+// page. Every surface ships both ways - /console/diff/ and /console/activity/ are real, shareable
+// URLs - and the two have different affordances available: the shell owns the title bar, so its
+// workspace control (the only way into the demo) exists only when embedded. A standalone page has to
+// keep offering its own way in, or it is a dead end for anyone arriving without a daemon.
+//
+// Keyed on the shell's content outlet rather than on a flag threaded through activate(): the outlet is
+// built before any surface mounts and exists for the page's life, and a surface booting itself never
+// has one.
+export function inConsoleShell(): boolean {
+  return typeof document !== "undefined" && document.getElementById("console-outlet") !== null;
+}
+
 export interface StandaloneSurface {
   id: string; // registry id / pageId, e.g. "logs"
   title: string; // tab title, e.g. "Log Viewer"

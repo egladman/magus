@@ -69,11 +69,7 @@ test("each row is named independently of its visible label", () => {
 // different sizes.
 test("a rail row draws the same glyph as that app's launcher card", () => {
   const { host } = mount({ tabs: [], activeId: null });
-  const launcher = buildLauncher(
-    SURFACES,
-    () => {},
-    () => {},
-  );
+  const launcher = buildLauncher(SURFACES, () => {});
   const geometry = (el: Element | null | undefined): string[] =>
     el
       ? [...el.querySelectorAll("path, circle, rect, polyline, line")].map(

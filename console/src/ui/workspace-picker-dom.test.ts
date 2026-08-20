@@ -16,10 +16,11 @@ function mount() {
   const host = document.createElement("div");
   host.dataset.workspacePickerHost = "";
   document.body.append(host);
-  const picker = initWorkspacePicker(host);
+  const demoCalls: boolean[] = [];
+  const picker = initWorkspacePicker(host, { onDemo: (enter) => demoCalls.push(enter) });
   const btn = host.querySelector<HTMLButtonElement>("#console-scope-btn");
   assert.ok(btn);
-  return { host, picker, btn };
+  return { host, picker, btn, demoCalls };
 }
 
 function menuItems(host: HTMLElement): HTMLButtonElement[] {
@@ -36,17 +37,28 @@ describe("the workspace scope control", () => {
 
   // With one workspace loaded, scoped and unscoped show the same thing - the control would be a
   // permanent reminder of a decision with one possible answer.
-  test("the control stays hidden until scope is a real question", () => {
+  // It used to hide below two workspaces, because scope was not a question with one possible answer.
+  // It is the way into the demo now, and a console with no daemon has zero workspaces - so the old
+  // rule would have hidden the only control offering anything at all on a first visit.
+  test("the control is present even with nothing loaded", () => {
     const { host, picker } = mount();
     const wrap = host.querySelector<HTMLElement>("#console-scope");
     assert.ok(wrap);
-    assert.equal(wrap.hidden, true, "nothing published yet");
-
-    picker.setWorkspaces([ACME]);
-    assert.equal(wrap.hidden, true, "one workspace is one answer");
+    assert.equal(wrap.hidden, false, "the demo has to be reachable with no daemon");
 
     picker.setWorkspaces(BOTH);
     assert.equal(wrap.hidden, false);
+  });
+
+  // The six per-surface "See the demo" buttons are gone; this row is the only way in.
+  test("the menu offers the demo, and asks to enter it", () => {
+    const { host, picker, btn, demoCalls } = mount();
+    picker.setWorkspaces(BOTH);
+    btn.click();
+    const demo = menuItems(host).find((i) => i.textContent?.includes("Demo data"));
+    assert.ok(demo, "no way into the demo");
+    demo.click();
+    assert.deepEqual(demoCalls, [true]);
   });
 
   // The button's own text is the VALUE ("acme"), which in a row of icon buttons could be a title, a
@@ -79,12 +91,14 @@ describe("the workspace scope control", () => {
     picker.setWorkspaces(BOTH);
     btn.click();
     const items = menuItems(host);
-    assert.equal(items.length, 3);
+    // All workspaces, the two roots, then the demo action.
+    assert.equal(items.length, 4);
     assert.equal(items[0].textContent, "All workspaces");
     assert.deepEqual(
-      items.slice(1).map((b) => b.title),
+      items.slice(1, 3).map((b) => b.title),
       BOTH,
     );
+    assert.ok(items[3].textContent?.includes("Demo data"));
   });
 
   test("picking scopes the browser tab", () => {

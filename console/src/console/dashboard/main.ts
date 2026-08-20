@@ -7,6 +7,7 @@
 // security-critical loopback lock, token handling, and stream clients live in
 // lib/daemon.ts, shared with the graph explorer and log viewer.
 
+import { inConsoleShell } from "../standalone";
 import {
   parseHash,
   daemonAttach,
@@ -544,6 +545,14 @@ function showResume(host: string | null, failed: boolean): void {
 function wireDemoButton(): void {
   const btn = opt("dash-demo-btn");
   if (!btn) return;
+  // Inside the console the demo is reached from the title bar's Workspace menu. Six buttons offering
+  // one thing was five too many; standalone there is no title bar, so this stays the only way in.
+  if (inConsoleShell()) {
+    const way = btn.closest<HTMLElement>("[data-empty-way]");
+    if (way) way.hidden = true;
+    else btn.hidden = true;
+    return;
+  }
   btn.addEventListener("click", () => {
     history.replaceState(null, "", "#demo");
     beginDemo();

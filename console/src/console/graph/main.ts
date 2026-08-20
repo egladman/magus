@@ -1,3 +1,4 @@
+import { inConsoleShell } from "../standalone";
 import { must, errMessage } from "../../lib/guards";
 import { openSurface } from "../surface-navigation";
 // main.ts - the /graph/ page's interactive knowledge-graph view.
@@ -4284,6 +4285,13 @@ function bootWireEvents() {
   // "Explore the magus graph" fetches the committed demo graph.json on demand and renders it in place
   // (loadDemoGraph), dismissing the empty state.
   const demoExplore = el("demo-explore-btn");
+  // Inside the console the Workspace menu is the single way into a populated console; standalone this
+  // button is the only one this page has.
+  if (demoExplore && inConsoleShell()) {
+    const way = demoExplore.closest<HTMLElement>("[data-empty-way]");
+    if (way) way.hidden = true;
+    else demoExplore.hidden = true;
+  }
   if (demoExplore) demoExplore.addEventListener("click", () => loadDemoGraph());
 
   // Fullscreen toggle: expand the whole explorer panel (like the playground).

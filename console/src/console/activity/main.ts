@@ -9,6 +9,7 @@
 // returns a teardown the console calls on close (it just marks in-flight loads stale - there is no
 // long-lived stream yet).
 
+import { inConsoleShell } from "../standalone";
 import { createClient } from "@connectrpc/connect";
 import {
   ActivityService,
@@ -46,7 +47,8 @@ interface Refs {
   empty: HTMLElement;
   emptyTitle: HTMLElement;
   emptySub: HTMLElement;
-  demoBtn: HTMLButtonElement;
+  // Present only on the STANDALONE page: embedded, the shell's Workspace menu is the way into the demo.
+  demoBtn: HTMLButtonElement | null;
 }
 
 // buildScaffold assembles the surface DOM on PatternFly - the shared render frame plus a PF EmptyState
@@ -93,12 +95,29 @@ function buildScaffold(host: HTMLElement): Refs {
   wayDemo.dataset.emptyWay = "";
   const demoLabel = h("span", undefined, "Try the demo");
   demoLabel.dataset.emptyWayLabel = "";
-  const demoBtn = h("button", "pf-v6-c-button pf-m-primary") as HTMLButtonElement;
-  demoBtn.type = "button";
-  demoBtn.append(h("span", "pf-v6-c-button__text", "See the demo"));
-  const demoHint = h("span", undefined, "A synthesized trail, no daemon needed.");
+  // Inside the console this POINTS at the shell's workspace control instead of carrying its own
+  // button: six separate ways into one demo was five too many, and each showed a different amount of
+  // the product. Standalone (/console/activity/) there is no title bar and so no such control, and a
+  // button here is the only way in - a page that cannot show anything to someone without a daemon is
+  // a dead end, not a restrained one.
+  const embedded = inConsoleShell();
+  const demoHint = h(
+    "span",
+    undefined,
+    embedded
+      ? "Pick Demo data from the Workspace menu. A synthesized trail, no daemon needed."
+      : "A synthesized trail, no daemon needed.",
+  );
   demoHint.dataset.emptyHint = "";
-  wayDemo.append(demoLabel, demoBtn, demoHint);
+  let demoBtn: HTMLButtonElement | null = null;
+  if (embedded) {
+    wayDemo.append(demoLabel, demoHint);
+  } else {
+    demoBtn = h("button", "pf-v6-c-button pf-m-primary") as HTMLButtonElement;
+    demoBtn.type = "button";
+    demoBtn.append(h("span", "pf-v6-c-button__text", "See the demo"));
+    wayDemo.append(demoLabel, demoBtn, demoHint);
+  }
 
   emptyActions.append(wayLive, wayDemo);
   emptyBody.append(emptySub, emptyActions);
@@ -374,6 +393,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // that very daemon. Without this the surface works only after the dashboard has persisted a
     // host to localStorage, which is the shape of bug that looks fine on the developer's machine.
     adoptDaemonOrigin();
+    // Null when embedded: the shell's Workspace menu is the way into the demo inside the console, and
+    // this button exists only on the standalone page where there is no such menu.
+    refs.demoBtn?.addEventListener("click", () => render(demoEvents(Date.now())));
     if (wantsDemo(params)) {
       render(demoEvents(Date.now()));
       return;
@@ -392,7 +414,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
     );
   }
 
-  refs.demoBtn.addEventListener("click", () => render(demoEvents(Date.now())));
   load();
 
   return {

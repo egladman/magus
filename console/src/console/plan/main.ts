@@ -33,6 +33,7 @@
 // Like the activity trail and notes it has no standalone page: activate(host) builds into a console
 // host and returns the controller for that mount.
 
+import { inConsoleShell } from "../standalone";
 import { createClient } from "@connectrpc/connect";
 import { StatusService, type Status } from "../../gen/magus/status/v1alpha1/status_pb";
 import {
@@ -756,7 +757,9 @@ export function activate(host: HTMLElement): PlanInstance {
     refs.emptyBody.textContent = body;
     // A real <code> element, as every other surface writes a command.
     if (cmd) refs.emptyBody.append(" ", h("code", undefined, cmd), ".");
-    refs.emptyFooter.hidden = !offerDemo;
+    // Same rule as the diff surface: inside the console the Workspace menu is the one way in, and
+    // standalone this button is the only one.
+    refs.emptyFooter.hidden = !offerDemo || inConsoleShell();
   };
 
   // signature is what decides whether the plan on screen still matches the plan in hand. The list is

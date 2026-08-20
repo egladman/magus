@@ -240,11 +240,7 @@ export function syncLauncherChord(root: HTMLElement, chord: string): void {
     : "Pick one from the rail, or use the command palette.";
 }
 
-export function buildLauncher(
-  surfaces: Launchable[],
-  open: (pageId: string) => void,
-  launchDemo: () => void,
-): HTMLElement {
+export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => void): HTMLElement {
   // data-surface tags the empty state; its heading/lede layout is ID-scoped in console.css. The
   // launcher is a PatternFly Gallery of clickable Cards - the [data-open] hook the click handler keys
   // on rides on each card, and the whole card is the keyboard-reachable target (tabindex + Enter/Space).
@@ -395,21 +391,6 @@ export function buildLauncher(
     if (ev.key === "Escape") closeAllMenus();
   });
 
-  // A quiet corner affordance to launch the full demo: opens every surface with representative,
-  // daemon-free demo data (see main.ts's launchDemo). It sits bottom-right of the launcher and reveals
-  // its label on hover/focus, so it reads as a subtle "try it" rather than a primary action.
-  const demo = document.createElement("button");
-  demo.type = "button";
-  demo.className = "console-launcher-demo";
-  demo.setAttribute("aria-label", "Launch the demo");
-  demo.setAttribute("title", "Launch the demo");
-  demo.innerHTML =
-    '<span class="console-launcher-demo__icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">' +
-    '<path d="M12 3l1.6 4.8L18 9l-4.4 1.2L12 15l-1.6-4.8L6 9l4.4-1.2z"/>' +
-    '<path d="M18 14l.6 1.9 1.9.6-1.9.6L18 19l-.6-1.9-1.9-.6 1.9-.6z"/></svg></span>' +
-    '<span class="console-launcher-demo__label">Launch the demo</span>';
-  demo.addEventListener("click", () => launchDemo());
-
   // What the zero-tab screen says once there IS a rail: the console's shared cold-state shape (a row
   // of "ways" out of it, [data-empty-way] in console.css) rather than a second copy of the rail's own
   // eight destinations. Both compositions are built; console.css shows exactly one, on the same 48rem
@@ -434,26 +415,22 @@ export function buildLauncher(
   pickHint.textContent = "Pick one from the rail, or use the command palette.";
   pickWay.append(pickLabel, pickHint);
 
+  // The demo is reached from the title bar's workspace control now, not from a button here. It used
+  // to have its own primary button on this screen and on each of five surfaces - six places offering
+  // one thing, on a screen that already had a rail listing every destination. This POINTS at the one
+  // control instead of competing with it.
   const demoWay = document.createElement("div");
   demoWay.setAttribute("data-empty-way", "");
   const demoLabel = document.createElement("span");
   demoLabel.setAttribute("data-empty-way-label", "");
   demoLabel.textContent = "Try the demo";
-  const demoBtn = document.createElement("button");
-  demoBtn.type = "button";
-  demoBtn.className = "pf-v6-c-button pf-m-primary";
-  const demoBtnText = document.createElement("span");
-  demoBtnText.className = "pf-v6-c-button__text";
-  demoBtnText.textContent = "See the demo";
-  demoBtn.append(demoBtnText);
-  demoBtn.addEventListener("click", launchDemo);
   const demoHint = document.createElement("span");
   demoHint.setAttribute("data-empty-hint", "");
-  demoHint.textContent = "Sample data, no daemon needed.";
-  demoWay.append(demoLabel, demoBtn, demoHint);
+  demoHint.textContent = "Pick Demo data from the Workspace menu. Sample data, no daemon needed.";
+  demoWay.append(demoLabel, demoHint);
 
   ways.append(pickWay, demoWay);
 
-  root.append(title, sub, ways, gallery, demo);
+  root.append(title, sub, ways, gallery);
   return root;
 }
