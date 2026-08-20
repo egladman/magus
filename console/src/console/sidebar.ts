@@ -282,16 +282,27 @@ export function createSidebar(
   pulseText.className = "pf-v6-c-nav__link-text";
   pulseEl.append(pulseDot, pulseText);
 
+  // A ROW in the utility group, not a control tacked onto the rail's foot. It was a bare icon button
+  // sitting alone under a hairline, which read as a band with a glyph adrift in it rather than as
+  // something to press - and at the expanded width it had 140px of empty rail beside it. Built from
+  // the same nav markup as Settings, so it inherits the row's geometry, hover and focus treatment and
+  // lines up with every glyph above it.
+  const toggleItem = document.createElement("li");
+  toggleItem.className = "pf-v6-c-nav__item";
   const toggle = document.createElement("button");
   toggle.type = "button";
   toggle.id = "console-sidebar-toggle";
-  toggle.className = "pf-v6-c-button pf-m-plain";
+  toggle.className = "pf-v6-c-nav__link";
   const toggleIcon = document.createElement("span");
-  toggleIcon.className = "pf-v6-c-button__icon";
-  toggle.append(toggleIcon);
+  toggleIcon.className = "pf-v6-c-nav__link-icon";
+  const toggleText = document.createElement("span");
+  toggleText.className = "pf-v6-c-nav__link-text";
+  toggle.append(toggleIcon, toggleText);
+  toggleItem.append(toggle);
   toggle.addEventListener("click", () => expanded.set(!expanded.get()));
 
-  host.replaceChildren(list, utilityList, pulseEl, toggle);
+  utilityList.append(toggleItem);
+  host.replaceChildren(list, pulseEl, utilityList);
 
   const paintRows = (): void => {
     for (const item of sidebarItems(ws.get(), surfaces, focused.get())) {
@@ -341,6 +352,7 @@ export function createSidebar(
       host.toggleAttribute("data-expanded", on);
       toggleIcon.innerHTML = chevron(on);
       const label = on ? "Collapse the navigation rail" : "Expand the navigation rail";
+      toggleText.textContent = on ? "Collapse" : "Expand";
       toggle.setAttribute("aria-label", label);
       toggle.title = label;
       toggle.setAttribute("aria-expanded", on ? "true" : "false");

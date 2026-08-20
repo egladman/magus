@@ -63,7 +63,9 @@ function link(host: HTMLElement, pageId: string): HTMLButtonElement {
 
 test("renders one PF nav row per surface", () => {
   const { host } = mount({ tabs: [], activeId: null });
-  assert.equal(host.querySelectorAll(".pf-v6-c-nav__item").length, 3);
+  // Count SURFACE rows, not nav items: the collapse control is a row of the same kind and would
+  // otherwise be counted as a surface that does not exist.
+  assert.equal(host.querySelectorAll("[data-rail-surface]").length, 3);
   assert.equal(link(host, "dashboard").querySelector("svg") != null, true);
   assert.equal(
     link(host, "dashboard").querySelector(".pf-v6-c-nav__link-text")?.textContent,

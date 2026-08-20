@@ -700,16 +700,20 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* ROW explicitly: `body[data-console-fill] > main` sets flex-direction:column for the standalone
    single-card pages, and the outlet inherits that rule. It did not matter while the outlet had one
    child; with the navigation rail beside the Drawer, column stacks them vertically. */
-#console-outlet {
-  flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: row;
-  /* The content is a CARD sitting in the chrome frame, and the only curved thing in the shell. That
-     is the split the whole frame rests on: chrome is square and recessive, containers are raised and
-     rounded. Rounded on the three edges that meet the frame; square where it meets the tab strip, so
-     the current tab and the card it belongs to read as one continuous surface. */
+#console-outlet { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: row; }
+/* The content CARD - the only curved thing in the shell, and the one surface that steps forward out
+   of the chrome frame. Chrome is square and recessive; containers are raised and rounded.
+   It is the DRAWER that carries this, not #console-outlet: the outlet holds the shell gutter as
+   padding, so painting the card there put the gutter INSIDE the card and left a ring of card colour
+   around the content - a light strip above it, below it, and beside the tab strip. The gutter belongs
+   between the frame and the card, so it has to stay outside the painted box.
+   Rounded on ALL FOUR corners: the gutter runs around every edge, so the card floats free of the tab
+   strip rather than joining it. (It was square at the top-left to let the current tab flow into the
+   card, which was true only while the card was painted on the padded box and reached the strip.) */
+#console-outlet > #console-refdrawer {
   background: var(--pf-t--global--background--color--primary--default);
-  border-start-end-radius: var(--pf-t--global--border--radius--medium);
-  border-end-end-radius: var(--pf-t--global--border--radius--medium);
-  border-end-start-radius: var(--pf-t--global--border--radius--medium);
+  overflow: hidden; /* so the corners actually clip what is inside them */
+  border-radius: var(--pf-t--global--border--radius--medium);
 }
 #console-refdrawer { flex: 1 1 auto; min-height: 0; }
 
@@ -788,6 +792,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-sidebar [data-rail-utility] {
   flex: 0 0 auto; overflow: visible;
   padding-block-start: 0;
+  /* Air under the last row. Flush to the window's bottom corner the group read as though it had been
+     cut off by the edge rather than placed against it. */
+  padding-block-end: 0.4rem;
   border-top: 1px solid var(--pf-t--global--border--color--default);
 }
 /* The rail's row menu. PF Menu positioned at the pointer; above the drawer content/panel and the
@@ -863,11 +870,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    rail's full width it became a 183px slab with a lone chevron adrift in it - the one control here that
    is not a row of the list, so it should not take a row's shape. Sitting on the icon column means it
    lands under the same vertical line every glyph above it uses, whether or not labels are showing. */
-#console-sidebar #console-sidebar-toggle {
-  flex: 0 0 auto;
-  inline-size: var(--console-sidebar-w); block-size: var(--console-sidebar-w);
-  border-radius: 0; justify-content: center;
-}
+/* The collapse row is a nav row like the others now, so it needs nothing of its own - only the chevron
+   wants centring in the icon column at both widths. */
+#console-sidebar #console-sidebar-toggle { cursor: pointer; }
 /* No rail on a phone. Even collapsed it is a permanent 44px bite out of a screen that is already
    giving two rows to the title bar, and every surface it navigates to is one tap away in the
    Applications menu on that bar. This has to sit AFTER the rail's own display:flex rather than with
