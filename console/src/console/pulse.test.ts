@@ -5,9 +5,9 @@
 import assert from "node:assert/strict";
 import { test, beforeEach } from "node:test";
 import { Code, ConnectError } from "@connectrpc/connect";
-import { fetchPulse, resetDeniedHosts } from "./pulse";
+import { fetchPulse, resetRoutelessHosts } from "./pulse";
 
-beforeEach(() => resetDeniedHosts());
+beforeEach(() => resetRoutelessHosts());
 
 const HOST = "127.0.0.1:7391";
 
@@ -51,6 +51,55 @@ test("an outage keeps being retried", async () => {
       workspaces: [],
     },
   );
+});
+
+// The shell trades the operator token for a console-scoped one un-awaited, and this poll can run
+// before that lands. Latching on the 401 would blank the rail for the life of the page even once the
+// credential works - a silent permanent failure with nothing to report it.
+test("an auth failure keeps being retried", async () => {
+  let calls = 0;
+  const unauthorized = async (): Promise<never> => {
+    calls++;
+    throw new ConnectError("no token", Code.Unauthenticated);
+  };
+  await fetchPulse(HOST, unauthorized);
+  await fetchPulse(HOST, unauthorized);
+  assert.equal(calls, 2, "a credential that may still arrive must not latch the host off");
+
+  // And it recovers the moment the token works.
+  assert.deepEqual(
+    await fetchPulse(HOST, async () => ({ running: 3, queued: 0, workspaces: [] })),
+    {
+      running: 3,
+      queued: 0,
+      workspaces: [],
+    },
+  );
+});
+
+// The other half of the same rule: PermissionDenied is a live decision about this credential, not a
+// statement that the route is absent, so it retries too.
+test("a permission denial keeps being retried", async () => {
+  let calls = 0;
+  const denied = async (): Promise<never> => {
+    calls++;
+    throw new ConnectError("forbidden", Code.PermissionDenied);
+  };
+  await fetchPulse(HOST, denied);
+  await fetchPulse(HOST, denied);
+  assert.equal(calls, 2);
+});
+
+// The other spelling of an absent route: a daemon that answers NotFound rather than Unimplemented.
+test("a route answered NotFound latches like Unimplemented", async () => {
+  let calls = 0;
+  const missing = async (): Promise<never> => {
+    calls++;
+    throw new ConnectError("no such route", Code.NotFound);
+  };
+  await fetchPulse(HOST, missing);
+  await fetchPulse(HOST, missing);
+  assert.equal(calls, 1);
 });
 
 // A non-ConnectError (a raw TypeError from a blocked cross-origin fetch, which is exactly what a

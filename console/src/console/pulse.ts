@@ -10,9 +10,9 @@
 //
 // Deliberately just the pool. "Failing" is a richer derivation the dashboard owns, and a rail that
 // guessed at it would disagree with the board that computes it properly.
-import { createClient } from "@connectrpc/connect";
+import { createClient, Code, ConnectError } from "@connectrpc/connect";
 import { StatusService } from "../gen/magus/status/v1alpha1/status_pb";
-import { createDaemonTransport, getLiveToken, isCapabilityDenied } from "../lib/daemon";
+import { createDaemonTransport, getLiveToken } from "../lib/daemon";
 
 export interface PulseView {
   running: number;
@@ -23,22 +23,34 @@ export interface PulseView {
   workspaces: string[];
 }
 
-// Daemons that answered "I do not serve this", by host. GetStatus is newer than the shipped releases
-// (a v0.2.0 daemon 404s the route), and this poll runs for the page's whole life whether or not a tab
-// is open - so without this, a console pointed at an older daemon retries a route that cannot appear
-// every 15 seconds forever, which is the console-spamming that lib/daemon.ts's readiness probe is at
-// pains to avoid. Keyed by HOST so pointing at a different daemon probes again; a daemon UPGRADED in
-// place stays latched until the page reloads, which is the cheap half of the trade.
-//
-// Only a capability denial latches. A plain outage must not: the daemon coming back is the normal
-// case, and latching on it would leave the rail permanently blank after one blip.
-const deniedHosts = new Set<string>();
+// Hosts whose daemon has no GetStatus route, by host. The route is newer than the shipped releases (a
+// v0.2.0 daemon 404s it), and this poll runs for the page's whole life whether or not a tab is open -
+// so without this, a console pointed at an older daemon retries a route that cannot appear every 15
+// seconds forever, which is the console-spamming that lib/daemon.ts's readiness probe is at pains to
+// avoid. Keyed by HOST so pointing at a different daemon probes again; a daemon UPGRADED in place
+// stays latched until the page reloads, which is the cheap half of the trade.
+const routelessHosts = new Set<string>();
+
+// How long to wait before giving up on one poll. Matches lib/daemon.ts's readiness probe, which rides
+// the same interval: without it a hung connection leaves a request pending per tick, unbounded.
+const TIMEOUT_MS = 3000;
+
+// Only the daemon saying the route does not exist latches. An auth failure must NOT: the shell trades
+// the operator token for a console-scoped one AFTER this poll can first run, so a single early
+// Unauthenticated would blank the rail for the life of the page even once the credential works. This
+// is deliberately narrower than daemon.ts's isCapabilityDenied, which folds auth in because it answers
+// a different question - what a LAN-share session may SEE, where a denial is a durable property of the
+// session rather than a passing state.
+function isRouteless(e: unknown): boolean {
+  if (!(e instanceof ConnectError)) return false;
+  return e.code === Code.Unimplemented || e.code === Code.NotFound;
+}
 
 // The one RPC, split out so the latch below can be tested without a daemon. It THROWS on failure;
 // classifying the failure is fetchPulse's job.
 async function getPool(host: string): Promise<PulseView | null> {
   const client = createClient(StatusService, createDaemonTransport(host, getLiveToken()));
-  const resp = await client.getStatus({});
+  const resp = await client.getStatus({}, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   const pool = resp.status?.pool;
   if (!pool) return null;
   return {
@@ -58,17 +70,17 @@ export async function fetchPulse(
   host: string,
   call: (host: string) => Promise<PulseView | null> = getPool,
 ): Promise<PulseView | null> {
-  if (!host || deniedHosts.has(host)) return null;
+  if (!host || routelessHosts.has(host)) return null;
   try {
     return await call(host);
   } catch (e) {
-    if (isCapabilityDenied(e)) deniedHosts.add(host);
+    if (isRouteless(e)) routelessHosts.add(host);
     return null;
   }
 }
 
-// resetDeniedHosts drops the latch. Exported for the tests, which would otherwise leak one case's
-// denial into the next.
-export function resetDeniedHosts(): void {
-  deniedHosts.clear();
+// resetRoutelessHosts drops the latch. Exported for the tests, which would otherwise leak one case's
+// verdict into the next.
+export function resetRoutelessHosts(): void {
+  routelessHosts.clear();
 }
