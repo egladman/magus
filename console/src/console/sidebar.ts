@@ -160,6 +160,13 @@ export function createSidebar(
   // rather than about any one app, so it belongs to the rail rather than to a row.
   const pulseEl = document.createElement("div");
   pulseEl.id = "console-sidebar-pulse";
+  // role=status for TWO reasons, and the first is the one that is easy to miss: aria-label is only
+  // honoured on an element whose role supports naming from the author, and a bare div's generic role
+  // does not - without a role the sentence below is dropped and a screen reader is left with "3".
+  // Second, it is a live region, so a count that changes while you are elsewhere is announced
+  // politely rather than silently. The paint below writes only on a real change, so the politeness
+  // is not spent re-announcing the same number every poll.
+  pulseEl.setAttribute("role", "status");
   pulseEl.hidden = true;
   const pulseDot = document.createElement("span");
   pulseDot.className = "pf-v6-c-nav__link-icon";
@@ -213,12 +220,17 @@ export function createSidebar(
     const p = pulse.get();
     pulseEl.hidden = p == null;
     if (!p) return;
-    pulseText.textContent = pulseLabel(p, expanded.get());
-    pulseEl.title = pulseTitle(p);
-    pulseEl.setAttribute("aria-label", pulseTitle(p));
     // Idle is stated plainly rather than colored: a green dot on an idle pool reads as a health
-    // claim, and this is an occupancy reading, not a verdict.
+    // claim, and this is an occupancy reading, not a verdict. Set before the early return below, so
+    // the color can never be left behind by a reading whose text happened not to change.
     pulseEl.dataset.state = p.queued > 0 ? "queued" : p.running > 0 ? "running" : "idle";
+    const label = pulseLabel(p, expanded.get());
+    const title = pulseTitle(p);
+    // Unchanged means untouched: this is a live region, and rewriting the same text re-announces it.
+    if (pulseText.textContent === label && pulseEl.title === title) return;
+    pulseText.textContent = label;
+    pulseEl.title = title;
+    pulseEl.setAttribute("aria-label", title);
   };
   sc.add(bind(pulse, paintPulse));
   sc.add(expanded.subscribe(paintPulse));

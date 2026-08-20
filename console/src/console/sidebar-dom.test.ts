@@ -185,6 +185,35 @@ test("no reading hides the pulse rather than showing a zero", () => {
   assert.equal(el.hidden, true, "losing the daemon hides it again");
 });
 
+// aria-label is only honoured on an element whose role supports naming from the author; a bare div's
+// generic role is not one, so without the role the spoken name is silently dropped and a collapsed
+// rail reads as "3".
+test("the reading is nameable and announces itself", () => {
+  const { host, pulse } = mount({ tabs: [], activeId: null });
+  const el = host.querySelector<HTMLElement>("#console-sidebar-pulse");
+  assert.ok(el);
+  assert.equal(el.getAttribute("role"), "status");
+  pulse.set({ running: 1, queued: 0 });
+  assert.equal(el.getAttribute("aria-label"), "1 running on this daemon");
+});
+
+// It is a live region, so rewriting identical text re-announces it. A 15s poll on a steady pool must
+// not narrate the same number forever.
+test("an unchanged reading is not rewritten", () => {
+  const { host, pulse } = mount({ tabs: [], activeId: null });
+  const el = host.querySelector<HTMLElement>("#console-sidebar-pulse");
+  assert.ok(el);
+  pulse.set({ running: 2, queued: 0 });
+  const txt = el.querySelector(".pf-v6-c-nav__link-text");
+  assert.ok(txt);
+  let writes = 0;
+  const observer = new MutationObserver(() => writes++);
+  observer.observe(txt, { childList: true, characterData: true, subtree: true });
+  pulse.set({ running: 2, queued: 0 });
+  observer.disconnect();
+  assert.equal(writes, 0, "the same reading was written to the live region again");
+});
+
 test("the reading follows the pool and the rail's own width", () => {
   const { host, pulse, expCell } = mount({ tabs: [], activeId: null });
   const el = host.querySelector<HTMLElement>("#console-sidebar-pulse");
