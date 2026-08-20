@@ -252,6 +252,13 @@ let radialRings: string[][] | null = null;
 // selectNode with an id, or cleared on Esc/query/view activation.
 let pendingRadialPick = false;
 
+// On-screen radius, in CSS pixels, a node must reach before its label is worth drawing. Below
+// this the node is one indistinguishable dot among thousands and the name points at nothing.
+// The cutoff is sharp on a real graph and 8 sits in the gap: framing all 2373 nodes of magus's
+// own workspace, 7px would still admit 38 names into the dense core while 8px admits 6 - the
+// root project, magusfile.buzz and a few of the biggest docs. Zooming in reveals the rest.
+const LABEL_MIN_NODE_PX = 8;
+
 // Cards render for the targets flavor in the DAG-shaped modes only; the
 // knowledge constellation keeps circles (density makes cards unreadable).
 // Radial also stays circles for targets - rings are round, wide cards don't fit.
@@ -1281,7 +1288,6 @@ function draw() {
   // the selection, or a zoomed-in view; and culled to the viewport first so the overlap
   // scan stays cheap. Boxes are compared in world units (the same scale as the on-screen
   // 11px text), so the overlap test is zoom-consistent.
-  ctx.fillStyle = th.text;
   ctx.font = "500 " + 11 / transform.k + "px " + th.font;
   ctx.textAlign = "left";
   ctx.textBaseline = "middle";
@@ -1296,7 +1302,13 @@ function draw() {
     if (cardsActive() && n.w) continue; // the label is painted inside the card
     const show =
       n.id === highlight ||
-      n.degree > 24 ||
+      // A hub only earns a label once it is big enough on screen to be the thing the label
+      // points AT. `n.degree > 24` alone is zoom-independent, so framing the whole graph put
+      // all 74 of this workspace's hubs into the dense core at once - a smear of white text
+      // over a cloud of 3px dots, naming nodes the reader cannot pick out anyway. Keying on
+      // the drawn radius also orders the reveal by importance for free: the biggest hubs get
+      // their names back first as the view zooms in.
+      (n.degree > 24 && n.r * transform.k >= LABEL_MIN_NODE_PX) ||
       transform.k > 2.2 ||
       (layoutMode === "radial" && radialPlacedCount <= 60);
     if (!show) continue;
@@ -1327,6 +1339,14 @@ function draw() {
     }
     if (clash) continue;
     placedLabels.push({ x: lx, y: ly, w: lw });
+    // Halo first: light text over a dense node cloud loses its edges against whatever it
+    // happens to cross. A stroke in the page background separates the glyphs from the graph
+    // without a label box, which at this density would hide more than it names.
+    ctx.lineJoin = "round";
+    ctx.lineWidth = 3 / transform.k;
+    ctx.strokeStyle = th.bg;
+    ctx.strokeText(n.label, lx, n.y);
+    ctx.fillStyle = th.text;
     ctx.fillText(n.label, lx, n.y);
   }
   ctx.restore();
