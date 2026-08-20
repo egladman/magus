@@ -173,10 +173,21 @@
   background: var(--pf-t--global--background--color--secondary--default);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
+/* A badge, matching the "quoted" chip below: this states a property OF the note being read,
+   which is what a badge is for, where bare text on a header reads as commentary about the
+   header. Empty when nothing is open, and :empty keeps it from drawing an empty outline. */
 .console-notes-app__detail-scope {
-  margin-left: auto; font-family: var(--pf-t--global--font--family--mono); font-size: 0.7rem;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  margin-left: auto; flex: 0 0 auto;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid currentcolor; border-radius: var(--pf-t--global--border--radius--small);
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.62rem;
+  letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
+  color: var(--pf-t--global--text--color--subtle);
 }
+.console-notes-app__detail-scope:empty { display: none; }
+/* Hue by scope, off the status palette - neither store is a problem, and tinting private as a
+   warning would say that it is. Same two hues the list heading uses, so one note's badge and
+   its store's heading are visibly the same fact. */
 .console-notes-app__detail-scope[data-scope="shared"] { color: var(--console-slate); }
 .console-notes-app__detail-scope[data-scope="private"] { color: var(--console-indigo); }
 .console-notes-app__detail-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0.75rem var(--notes-pad) 1.25rem; }

@@ -546,6 +546,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     refs.detail.removeAttribute("data-open");
     refs.detailScope.textContent = "";
     refs.detailScope.removeAttribute("data-scope");
+    refs.detailScope.removeAttribute("title");
     refs.detailBody.replaceChildren(
       h("div", "console-notes-app__blank", "Select a note to read it."),
     );
@@ -618,8 +619,15 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   function renderNote(n: Note, body: string): void {
     const copy = SCOPE_COPY[n.scope];
-    refs.detailScope.textContent = copy ? copy.title + " - " + copy.consequence : "";
-    if (copy) refs.detailScope.dataset.scope = copy.key;
+    // A badge, not a sentence. This is the open note's scope - a property OF the thing being
+    // read, which is what a badge means - and spelling the consequence out beside it read as
+    // running commentary on the header. The consequence still matters, so it moves to the
+    // tooltip, and the list heading states it in full for the store as a whole.
+    refs.detailScope.textContent = copy ? copy.title : "";
+    if (copy) {
+      refs.detailScope.dataset.scope = copy.key;
+      refs.detailScope.title = copy.consequence;
+    }
 
     const read = h("div", "console-notes-app__read");
     read.append(h("h2", "console-notes-app__title", n.title || n.name));
