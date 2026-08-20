@@ -45,13 +45,15 @@
    contract intact while sourcing those PF tokens - so a theme toggle re-tints the
    graph with no per-theme CSS here (the old two-theme --gk blocks are gone). */
 :root {
-  --gk-project: var(--console-node-project); --gk-spell: var(--console-node-spell);
-  --gk-op: var(--console-node-op); --gk-charm: var(--console-node-charm);
-  --gk-target: var(--console-node-target); --gk-module: var(--console-node-module);
-  --gk-method: var(--console-node-method); --gk-import: var(--console-node-import);
-  --gk-function: var(--console-node-function); --gk-file: var(--console-node-file);
+  --gk-project: var(--console-node-project); --gk-module: var(--console-node-module);
+  --gk-file: var(--console-node-file); --gk-dir: var(--console-node-dir);
+  --gk-target: var(--console-node-target); --gk-spell: var(--console-node-spell);
+  --gk-op: var(--console-node-op); --gk-tool: var(--console-node-tool);
+  --gk-function: var(--console-node-function); --gk-method: var(--console-node-method);
+  --gk-import: var(--console-node-import); --gk-package: var(--console-node-package);
   --gk-doc: var(--console-node-doc); --gk-rationale: var(--console-node-rationale);
-  --gk-diagnostic: var(--console-node-diagnostic); --gk-symbol: var(--console-node-symbol);
+  --gk-diagnostic: var(--console-node-diagnostic); --gk-charm: var(--console-node-charm);
+  --gk-symbol: var(--console-node-symbol); --gk-note: var(--console-node-note);
 }
 
 .console-graph-pagetitle { margin-bottom: 0.6rem; }
@@ -305,19 +307,23 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
    style). The same attribute colors the legend swatches and the explain-card head. */
 .console-graph-kinddot { flex: 0 0 auto; width: 0.7em; height: 0.7em; border-radius: 50%; display: inline-block; background: #888; }
 .console-graph-kinddot[data-kind="project"] { background: var(--gk-project); }
+.console-graph-kinddot[data-kind="module"] { background: var(--gk-module); }
+.console-graph-kinddot[data-kind="file"] { background: var(--gk-file); }
+.console-graph-kinddot[data-kind="dir"] { background: var(--gk-dir); }
+.console-graph-kinddot[data-kind="target"] { background: var(--gk-target); }
 .console-graph-kinddot[data-kind="spell"] { background: var(--gk-spell); }
 .console-graph-kinddot[data-kind="op"] { background: var(--gk-op); }
-.console-graph-kinddot[data-kind="charm"] { background: var(--gk-charm); }
-.console-graph-kinddot[data-kind="target"] { background: var(--gk-target); }
-.console-graph-kinddot[data-kind="module"] { background: var(--gk-module); }
+.console-graph-kinddot[data-kind="tool"] { background: var(--gk-tool); }
+.console-graph-kinddot[data-kind="function"] { background: var(--gk-function); }
 .console-graph-kinddot[data-kind="method"] { background: var(--gk-method); }
 .console-graph-kinddot[data-kind="import"] { background: var(--gk-import); }
-.console-graph-kinddot[data-kind="function"] { background: var(--gk-function); }
-.console-graph-kinddot[data-kind="file"] { background: var(--gk-file); }
+.console-graph-kinddot[data-kind="package"] { background: var(--gk-package); }
 .console-graph-kinddot[data-kind="doc"] { background: var(--gk-doc); }
 .console-graph-kinddot[data-kind="rationale"] { background: var(--gk-rationale); }
 .console-graph-kinddot[data-kind="diagnostic"] { background: var(--gk-diagnostic); }
+.console-graph-kinddot[data-kind="charm"] { background: var(--gk-charm); }
 .console-graph-kinddot[data-kind="symbol"] { background: var(--gk-symbol); }
+.console-graph-kinddot[data-kind="note"] { background: var(--gk-note); }
 
 /* Explain card: a third column on wide screens; plain HTML dl content. */
 #explain-card {

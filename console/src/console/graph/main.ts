@@ -121,19 +121,23 @@ declare global {
 // and may appear in graphs exported with those shards loaded.
 const KINDS = [
   "project",
+  "module",
+  "file",
+  "dir",
+  "target",
   "spell",
   "op",
-  "charm",
-  "target",
-  "module",
+  "tool",
+  "function",
   "method",
   "import",
-  "function",
-  "file",
+  "package",
   "doc",
   "rationale",
   "diagnostic",
+  "charm",
   "symbol",
+  "note",
 ];
 
 // Relations, for grouping edges in the explain card. Order = display order.
@@ -967,10 +971,16 @@ function startSimulation() {
       "link",
       forceLink<GNode, GLink>(graph.links)
         .id((d) => d.id)
-        .distance(40)
+        .distance(55)
         .strength(0.4),
     )
-    .force("charge", forceManyBody().strength(-60).distanceMax(400))
+    // Repulsion is what makes the layout say anything, but only the SHORT-RANGE half of it.
+    // Raising the strength alone (-60 to -180) and letting it reach further just inflates the
+    // periphery: the low-degree nodes sail out, the fit zooms out to hold them, and the core
+    // that needed the room arrives back on screen smaller and denser than it started. Pushing
+    // hard over a SHORTER range spends the force where the crowding is, so clusters separate
+    // while the graph's overall extent stays roughly put.
+    .force("charge", forceManyBody().strength(-180).distanceMax(250))
     .force("center", forceCenter(simCenter.x, simCenter.y))
     .force(
       "collide",
@@ -2928,8 +2938,8 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
 }
 
 // syncLayoutToggle updates the layout toggle group's selected state, each mode
-// button's disabled/title (from layoutBlockedReason), the force sliders'
-// visibility, and the bottom-left stage mode indicator to match the current
+// button's disabled/title (from layoutBlockedReason), and the bottom-left stage
+// mode indicator to match the current
 // layoutMode WITHOUT switching the mode (used after loading a new graph where
 // the mode is set directly, and called from selectNode/applyQuery so
 // availability tracks state as it changes).
