@@ -21,6 +21,10 @@ import {
 export interface ScopePicker {
   // The daemon told us which workspaces it has loaded; rebuild the menu around them.
   setWorkspaces(roots: readonly string[]): void;
+  // Releases the document listeners and the scope subscription, and removes the control. The two
+  // listeners live on `document`, not on the control, so dropping the reference alone would leak them
+  // and leave a dead menu answering outside clicks for the life of the page.
+  destroy(): void;
 }
 
 export function initScopePicker(host: HTMLElement): ScopePicker {
@@ -97,6 +101,9 @@ export function initScopePicker(host: HTMLElement): ScopePicker {
       b.append(main);
       b.addEventListener("click", () => {
         setOpen(false);
+        // Focus would otherwise sit on an element that just became hidden, which drops it to the body
+        // and restarts the next Tab at the top of the page.
+        btn.focus();
         setWorkspaceScope(root);
       });
       li.append(b);
@@ -110,26 +117,42 @@ export function initScopePicker(host: HTMLElement): ScopePicker {
     );
   };
 
-  btn.addEventListener("click", (e) => {
-    e.stopPropagation();
-    if (!open) rebuild();
-    setOpen(!open);
-  });
-  document.addEventListener("click", (e) => {
-    if (open && !menu.contains(e.target as Node) && !btn.contains(e.target as Node)) setOpen(false);
-  });
-  document.addEventListener("keydown", (e: KeyboardEvent) => {
-    if (e.key === "Escape" && open) {
-      setOpen(false);
-      btn.focus();
-    }
-  });
+  const listeners = new AbortController();
+  const { signal } = listeners;
+
+  btn.addEventListener(
+    "click",
+    (e) => {
+      e.stopPropagation();
+      if (!open) rebuild();
+      setOpen(!open);
+    },
+    { signal },
+  );
+  document.addEventListener(
+    "click",
+    (e) => {
+      const target = e.target instanceof Node ? e.target : null;
+      if (open && !menu.contains(target) && !btn.contains(target)) setOpen(false);
+    },
+    { signal },
+  );
+  document.addEventListener(
+    "keydown",
+    (e: KeyboardEvent) => {
+      if (e.key === "Escape" && open) {
+        setOpen(false);
+        btn.focus();
+      }
+    },
+    { signal },
+  );
 
   host.prepend(menu);
   host.prepend(btn);
   // The control has to follow the scope, not just set it: the scope can change from anywhere in the
   // tab, and without this the button kept announcing the workspace you left.
-  onWorkspaceScope(paint);
+  const unsubscribe = onWorkspaceScope(paint);
   paint();
 
   return {
@@ -140,6 +163,12 @@ export function initScopePicker(host: HTMLElement): ScopePicker {
       roots = [...next];
       paint();
       if (open) rebuild();
+    },
+    destroy() {
+      listeners.abort();
+      unsubscribe();
+      btn.remove();
+      menu.remove();
     },
   };
 }

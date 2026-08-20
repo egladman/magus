@@ -81,9 +81,13 @@ export function workspacesTile(activeWorkspace?: ScopeReader): Tile {
 
   // Repaint the highlight the instant the switcher's pick changes, not on the next status tick.
   let lastStatus: DashboardState["status"] = null;
-  activeWorkspace?.subscribe(() => {
-    if (lastStatus) render(lastStatus.workspaces);
-  });
+  // The subscription is a window listener (lib/scope.ts), so it outlives this tile unless destroy
+  // drops it: the dashboard remounts its tiles on every reopen, and a leaked one holds the dead tile's
+  // DOM and re-publishes the workspace list on every scope change.
+  const unsubscribe =
+    activeWorkspace?.subscribe(() => {
+      if (lastStatus) render(lastStatus.workspaces);
+    }) ?? ((): void => {});
 
   // On the board this list simply grows its card and the page scrolls. In Big Picture the card is a
   // fixed grid slot with no scrollbar, so a longer list would lose its tail behind overflow: hidden
@@ -98,6 +102,7 @@ export function workspacesTile(activeWorkspace?: ScopeReader): Tile {
       if (s.status) render(s.status.workspaces);
     },
     destroy() {
+      unsubscribe();
       unfit();
     },
   };
