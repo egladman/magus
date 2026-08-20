@@ -177,14 +177,10 @@ func (g *Graph) Resolve(input string, limit int) []types.KnowledgeMatch {
 			continue
 		}
 		m := types.KnowledgeMatch{ID: id, Kind: n.Kind, Label: n.Label, Score: score}
-		// Prose whose subject moved on without it ranks below prose that kept up. The
-		// penalty is applied HERE rather than inside scoreNode so the evidence can travel
-		// with the match: a weight a reader cannot see is one they cannot argue with.
-		if p := stalenessPenalty(n.Attrs); p > 0 {
-			m.Score -= p
-			m.Staleness = n.Attrs[AttrStaleness]
-			m.OutrunDays, _ = strconv.Atoi(n.Attrs[AttrOutrunDays])
-		}
+		// Prose whose subject moved on is LABELLED, never reordered - see stalenessLabel for
+		// why ranking on it is the wrong repair. The label travels with the match so a caller
+		// can show "400 days behind its subject" beside the result and let the reader judge.
+		m.Staleness, m.OutrunDays = stalenessLabel(n.Attrs)
 		matches = append(matches, m)
 	}
 	slices.SortFunc(matches, func(a, b types.KnowledgeMatch) int {

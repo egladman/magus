@@ -121,21 +121,42 @@ func outrunDays(prose, subject time.Time) int {
 	return int(day(subject).Sub(day(prose)).Hours() / 24)
 }
 
-// stalenessPenalty is what retrieval subtracts from a prose node's score.
+// stalenessLabel reports the verdict retrieval should ATTACH to a prose node, and the days
+// behind that back it. It never changes the node's rank.
 //
-// Ranking by this is a deliberate choice with a real cost: a weight moves results without
-// the reader seeing it happen. That is why the penalty is coarse, bounded, and always
-// accompanied by the evidence - AttrOutrunDays travels with the match so a caller can say
-// "ranked down: 400 days behind its subject" rather than silently reordering. An
-// unmeasured node (no attr) is never penalized; absence of evidence is not evidence.
-func stalenessPenalty(attrs map[string]string) int {
+// Retrieval used to subtract a score penalty here (30 petrified, 10 outrun). Three things
+// argue against ranking on it, and none against showing it:
+//
+//   - It inverts the risk signal. Relative code churn predicts defect density (Nagappan and
+//     Ball, ~89% discrimination accuracy on Windows Server 2003), so a subject that keeps
+//     moving is where knowledge is worth MOST. Demoting the prose about it optimizes against
+//     the need.
+//   - Elapsed days measure calendar time, not divergence. A note and its subject both
+//     untouched for 400 days are settled, not stale.
+//   - The prose whose subject is GONE is often the only surviving evidence that the thing
+//     existed and why it went - the "we rejected this and here is why" note. Ranking it down
+//     buries it exactly when nothing else can answer the question.
+//
+// Both mature systems that solved this in production converged on labelling instead: Guru
+// keeps an unverified card "searchable and visible" with its lapsed state shown, and Google's
+// g3doc carries a "last reviewed by" byline rather than ranking down. Neither demotes.
+//
+// The one public A/B on decay-weighted retrieval agrees and adds a direction. Stack Overflow
+// tested four vote-decay half-lives against an undecayed baseline: the GENTLEST (365 days)
+// won at +4.46%, and the most aggressive (36 days) was worst and not significant, monotonically
+// across the four. They shipped it as an opt-in sort, never the default. Their flagging study
+// also found no strong relationship between age and being outdated, which is the assumption a
+// day count encodes. If ranking on this is ever revisited, those are the terms: gentle,
+// opt-in, and measured - not a flat penalty applied to every query.
+//
+// An unmeasured node (no attr) gets no label; absence of evidence is not evidence.
+func stalenessLabel(attrs map[string]string) (verdict string, days int) {
 	switch attrs[AttrStaleness] {
-	case StalenessPetrified:
-		return 30
-	case StalenessOutrun:
-		return 10
+	case StalenessPetrified, StalenessOutrun:
+		n, _ := strconv.Atoi(attrs[AttrOutrunDays])
+		return attrs[AttrStaleness], n
 	default:
-		return 0
+		return "", 0
 	}
 }
 

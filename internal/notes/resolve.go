@@ -25,6 +25,13 @@ type Resolver interface {
 	// the story, while a failure names something a reader can go fix. Collapsing both into
 	// "" hid four distinct causes behind one silence.
 	Digest(ctx context.Context, a Anchor) (string, error)
+	// DeclDigest returns the CURRENT fingerprint of the anchored subject's declaration, or
+	// "" when the kind has no declaration to speak of.
+	//
+	// Errors are NOT reported separately from Digest's: this only ever grades a change
+	// Digest already found, so a declaration that cannot be computed degrades to an ungraded
+	// finding rather than to a second complaint about the same anchor.
+	DeclDigest(ctx context.Context, a Anchor) (string, error)
 }
 
 // ResolveAnchors reports every anchor that no longer resolves, with the coarser anchor it
@@ -109,6 +116,24 @@ func ResolveAnchors(ctx context.Context, dir string, res Resolver) ([]Issue, err
 			if current == "" || current == a.Digest {
 				continue
 			}
+			// The content moved. Grade it before reporting: a body edited under an unchanged
+			// declaration is the overwhelmingly common change and the one that almost never
+			// invalidates prose, so calling it drift is how a store teaches its reader to
+			// stop reading the findings.
+			if a.DeclDigest != "" {
+				if decl, dErr := res.DeclDigest(ctx, a); dErr == nil && decl != "" && decl == a.DeclDigest {
+					issues = append(issues, Issue{
+						Severity: SeverityWarning,
+						Code:     CodeAnchorBodyChanged,
+						Path:     path,
+						Note:     n.Name,
+						Message: fmt.Sprintf("anchor %s:%s changed inside an unchanged declaration since this note was last reviewed",
+							a.Kind, a.Target),
+						Hint: "Most edits under an unchanged signature do not invalidate the prose about them. Re-read only if the note claims something about the implementation rather than the interface.",
+					})
+					continue
+				}
+			}
 			issues = append(issues, Issue{
 				Severity: SeverityWarning,
 				Code:     CodeDriftedAnchor,
@@ -185,6 +210,12 @@ func RecordDigests(ctx context.Context, dir, name, rev string, res Resolver) (in
 			continue
 		}
 		n.Anchors[i].Digest = current
+		// Stamped alongside, and allowed to be empty: a kind with no declaration records
+		// none, and a later verify simply reports that anchor ungraded. Computed from the
+		// same read as the content digest, so the two can never describe different revisions.
+		if decl, dErr := res.DeclDigest(ctx, a); dErr == nil {
+			n.Anchors[i].DeclDigest = decl
+		}
 		// Stamped with the digest, never apart: a pair that disagreed would send a reader to
 		// the wrong diff, which is worse than no provenance.
 		n.Anchors[i].Commit = rev

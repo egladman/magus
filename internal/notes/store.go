@@ -74,6 +74,14 @@ type Anchor struct {
 	// stopped meaning what the note says. Empty when the kind has no content to hash,
 	// and empty until the note has been verified once.
 	Digest string `json:"digest,omitempty" yaml:"digest,omitempty"`
+	// DeclDigest fingerprints only the anchored subject's DECLARATION - see DigestDecl. It
+	// grades what Digest detects: when both moved, what the subject IS changed, and the note
+	// is very likely wrong; when only Digest moved, the body was edited under an unchanged
+	// signature, which is the case that almost never invalidates prose.
+	//
+	// Empty for a kind with no declaration to speak of (a whole file, a project, a target),
+	// and empty on a note stamped before grading existed. Both are ungraded, never a verdict.
+	DeclDigest string `json:"decl_digest,omitempty" yaml:"decl_digest,omitempty"`
 	// Commit is the revision this anchor was last reviewed against. PROVENANCE ONLY -
 	// resolution always runs against the working tree. A pinned revision never breaks,
 	// which is precisely why it must never be the anchor: it would go on pointing at
@@ -110,7 +118,11 @@ type Note struct {
 	Title   string   `json:"title" yaml:"title"`
 	Tags    []string `json:"tags,omitempty" yaml:"tags,omitempty"`
 	Anchors []Anchor `json:"anchors" yaml:"anchors"`
-	Body    string   `json:"body,omitempty" yaml:"-"`
+	// Source records where the prose came from when a person did not type it here. Nil on a
+	// written note, which is the overwhelming majority and the reason it is a pointer: an
+	// empty block in every hand-written note's frontmatter would be litter in someone's vault.
+	Source *Source `json:"source,omitempty" yaml:"source,omitempty"`
+	Body   string  `json:"body,omitempty" yaml:"-"`
 	// Modified is the file's modification time, filled in on read. It is observed, not
 	// stored, so it cannot disagree with the file it describes.
 	Modified time.Time `json:"modified" yaml:"-"`
@@ -128,6 +140,40 @@ type Note struct {
 	// Empty on a Note that was built rather than read (Scaffold, a new note from stdin),
 	// where there is no file yet to have a path.
 	Path string `json:"-" yaml:"-"`
+}
+
+// SourceKind names what a captured note is a transcript OF. It is an open vocabulary rather
+// than an enum: the store's job is to record where prose came from, and a reader who meets a
+// kind this binary predates is better served by seeing it than by having it rejected.
+type SourceKind string
+
+// SourceReviewThread is a conversation from a magus review session - the comments a human and
+// any agents left against one changeset.
+const SourceReviewThread SourceKind = "review-thread"
+
+// Source is the provenance of prose a note did not originate.
+//
+// It exists so the store can hold a transcript without the transcript pretending to be
+// authored. A note's whole value is that a person stands behind it; a capture's value is the
+// opposite, that nobody does and the source can be re-read instead. Recording which one a
+// file is makes that a fact a reader and `notes verify` can both check, rather than a
+// convention that holds until someone forgets it.
+type Source struct {
+	Kind SourceKind `json:"kind" yaml:"kind"`
+	// Ref identifies the conversation within Kind - a review session id. Opaque here.
+	Ref string `json:"ref,omitempty" yaml:"ref,omitempty"`
+	// AsOf is the subject's identity at capture time: for a review thread, the digest of the
+	// patch the comments were written against. It is what makes a stale capture detectable
+	// rather than merely old.
+	AsOf string `json:"as_of,omitempty" yaml:"as_of,omitempty"`
+	// Captured is when the transcript was taken, which is NOT the note file's mtime: editing
+	// a capture's surrounding prose later moves the mtime and must not move this.
+	//
+	// A stored timestamp, and deliberately not the created/updated fields Note refuses above.
+	// Those describe the FILE, which git and the filesystem already describe and which a hand
+	// edit immediately falsifies. This describes an event that happened once somewhere else
+	// and that nothing in the repository records, so a later edit cannot make it wrong.
+	Captured time.Time `json:"captured,omitempty" yaml:"captured,omitempty"`
 }
 
 // Severity separates the two things verify reports, and the split is load-bearing rather
@@ -156,9 +202,16 @@ const (
 	CodeMissingNote IssueCode = "missing-note"
 	// CodeDanglingAnchor: an anchor names an entity the graph no longer has.
 	CodeDanglingAnchor IssueCode = "dangling-anchor"
-	// CodeDriftedAnchor: the anchored entity still exists, and its content changed since a
-	// person last reviewed the note against it.
+	// CodeDriftedAnchor: the anchored entity still exists, and what it IS changed since a
+	// person last reviewed the note against it - its declaration moved, or the note predates
+	// grading and only the whole-content fingerprint is known.
 	CodeDriftedAnchor IssueCode = "drifted-anchor"
+	// CodeAnchorBodyChanged: the anchored entity's content changed UNDER AN UNCHANGED
+	// declaration. Reported separately from drift because it is a different bet: measured
+	// across 1,496 repositories, an edit that leaves the signature alone is 39-105x less
+	// likely to be accompanied by a prose update than one that changes it. Worth surfacing,
+	// not worth interrupting for, and never worth gating on.
+	CodeAnchorBodyChanged IssueCode = "anchor-body-changed"
 	// CodeUnverifiableAnchor: the anchored entity exists, and its fingerprint could not be
 	// computed - so whether the note still holds is UNKNOWN rather than wrong.
 	CodeUnverifiableAnchor IssueCode = "unverifiable-anchor"
@@ -694,6 +747,7 @@ type notePayload struct {
 	Title   string   `yaml:"title"`
 	Tags    []string `yaml:"tags,omitempty"`
 	Anchors []Anchor `yaml:"anchors"`
+	Source  *Source  `yaml:"source,omitempty"`
 }
 
 // magusNode returns the value node under FrontmatterKey, or nil when the document does not
@@ -795,6 +849,7 @@ func readNoteFile(path, name string) (Note, bool, error) {
 		Title:    payload.Title,
 		Tags:     payload.Tags,
 		Anchors:  payload.Anchors,
+		Source:   payload.Source,
 		Body:     strings.TrimSpace(string(m[2])),
 		Modified: modified,
 		Path:     path,
@@ -827,7 +882,7 @@ func marshalNote(path string, n Note) ([]byte, error) {
 		}
 	}
 	if err := setMagusNode(doc, notePayload{
-		ID: n.ID, Title: n.Title, Tags: n.Tags, Anchors: n.Anchors,
+		ID: n.ID, Title: n.Title, Tags: n.Tags, Anchors: n.Anchors, Source: n.Source,
 	}); err != nil {
 		return nil, fmt.Errorf("notes: render %s: %w", filepath.Base(path), err)
 	}

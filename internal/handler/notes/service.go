@@ -202,6 +202,20 @@ func (s *Service) toProto(ctx context.Context, n store.Note, sd scopedDir, res *
 	if !n.Modified.IsZero() {
 		out.ModifyTime = timestamppb.New(n.Modified)
 	}
+	// Carried on the LISTING as well as the read, unlike the body. A client has to be able to
+	// mark a capture in a list of notes: telling one apart only after opening it means a
+	// reader has already taken it for authored prose by the time they learn otherwise.
+	if n.Source != nil {
+		src := &notesv1.Source{
+			Kind: string(n.Source.Kind),
+			Ref:  n.Source.Ref,
+			AsOf: n.Source.AsOf,
+		}
+		if !n.Source.Captured.IsZero() {
+			src.Captured = timestamppb.New(n.Source.Captured)
+		}
+		out.Source = src
+	}
 	scoped := res
 	if res != nil {
 		bound := res.ForScope(string(sd.scope))

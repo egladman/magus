@@ -15,6 +15,9 @@ import (
 type fakeResolver struct {
 	live    map[string]bool
 	digests map[string]string
+	// decls is left nil by most cases on purpose: an anchor with no current declaration
+	// digest is UNGRADED, which is the path every note stamped before grading takes.
+	decls map[string]string
 }
 
 func (f fakeResolver) Resolves(_ context.Context, a Anchor) bool {
@@ -22,6 +25,9 @@ func (f fakeResolver) Resolves(_ context.Context, a Anchor) bool {
 }
 func (f fakeResolver) Digest(_ context.Context, a Anchor) (string, error) {
 	return f.digests[string(a.Kind)+":"+a.Target], nil
+}
+func (f fakeResolver) DeclDigest(_ context.Context, a Anchor) (string, error) {
+	return f.decls[string(a.Kind)+":"+a.Target], nil
 }
 
 func TestResolveAnchors(t *testing.T) {
@@ -271,4 +277,92 @@ func TestRecordDigestsStampsTheRevision(t *testing.T) {
 	require.Len(t, issues, 1)
 	assert.Equal(t, CodeDriftedAnchor, issues[0].Code)
 	assert.Contains(t, issues[0].Hint, "git diff cafe1234..HEAD -- a.go")
+}
+
+// Grading is the answer to a measured base rate: only about one code change in thirty-eight
+// to a documented subject actually invalidates the prose, and a whole-body hash fires on all
+// thirty-eight. A body edited under an unchanged declaration is the common, mostly-harmless
+// case, and reporting it as drift is how a store trains its reader to ignore the findings.
+func TestBodyChangeUnderAnUnchangedDeclarationIsNotDrift(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "notes")
+	require.NoError(t, Save(dir, Note{
+		Name:  "pairing",
+		Title: "Two caches",
+		Anchors: []Anchor{{
+			Kind: AnchorSymbol, Target: "m internal/cache/Store#Put().",
+			Digest: "oldbody", DeclDigest: "decl",
+		}},
+		Body: "prose",
+	}))
+	res := fakeResolver{
+		live:    map[string]bool{"symbol:m internal/cache/Store#Put().": true},
+		digests: map[string]string{"symbol:m internal/cache/Store#Put().": "newbody"},
+		decls:   map[string]string{"symbol:m internal/cache/Store#Put().": "decl"},
+	}
+
+	issues, err := ResolveAnchors(t.Context(), dir, res)
+	require.NoError(t, err)
+	require.Len(t, issues, 1)
+	assert.Equal(t, CodeAnchorBodyChanged, issues[0].Code)
+	assert.Contains(t, issues[0].Message, "unchanged declaration")
+}
+
+func TestDeclarationChangeIsStillDrift(t *testing.T) {
+	dir := filepath.Join(t.TempDir(), "notes")
+	require.NoError(t, Save(dir, Note{
+		Name:  "pairing",
+		Title: "Two caches",
+		Anchors: []Anchor{{
+			Kind: AnchorSymbol, Target: "m internal/cache/Store#Put().",
+			Digest: "oldbody", DeclDigest: "olddecl",
+		}},
+		Body: "prose",
+	}))
+	res := fakeResolver{
+		live:    map[string]bool{"symbol:m internal/cache/Store#Put().": true},
+		digests: map[string]string{"symbol:m internal/cache/Store#Put().": "newbody"},
+		decls:   map[string]string{"symbol:m internal/cache/Store#Put().": "newdecl"},
+	}
+
+	issues, err := ResolveAnchors(t.Context(), dir, res)
+	require.NoError(t, err)
+	require.Len(t, issues, 1)
+	assert.Equal(t, CodeDriftedAnchor, issues[0].Code, "what the subject IS changed")
+}
+
+// A note stamped before grading existed has no recorded declaration, and an anchor kind with
+// no declaration never gets one. Neither may be silently downgraded to the softer finding:
+// ungraded means the evidence to grade it is absent, not that the change was harmless.
+func TestAnUngradedAnchorReportsDrift(t *testing.T) {
+	for _, tt := range []struct {
+		name       string
+		declDigest string
+		current    map[string]string
+	}{
+		{"note predates grading", "", map[string]string{"symbol:m internal/cache/Store#Put().": "decl"}},
+		{"kind has no declaration", "decl", nil},
+	} {
+		t.Run(tt.name, func(t *testing.T) {
+			dir := filepath.Join(t.TempDir(), "notes")
+			require.NoError(t, Save(dir, Note{
+				Name:  "pairing",
+				Title: "Two caches",
+				Anchors: []Anchor{{
+					Kind: AnchorSymbol, Target: "m internal/cache/Store#Put().",
+					Digest: "oldbody", DeclDigest: tt.declDigest,
+				}},
+				Body: "prose",
+			}))
+			res := fakeResolver{
+				live:    map[string]bool{"symbol:m internal/cache/Store#Put().": true},
+				digests: map[string]string{"symbol:m internal/cache/Store#Put().": "newbody"},
+				decls:   tt.current,
+			}
+
+			issues, err := ResolveAnchors(t.Context(), dir, res)
+			require.NoError(t, err)
+			require.Len(t, issues, 1)
+			assert.Equal(t, CodeDriftedAnchor, issues[0].Code)
+		})
+	}
 }

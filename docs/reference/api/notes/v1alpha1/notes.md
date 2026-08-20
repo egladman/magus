@@ -49,7 +49,7 @@ Used by: [GetNote (response)](notes.md#getnote), [ListNotes (response)](notes.md
 
 ### GetNoteRequest
 
-Source: [notes.proto:177](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L177).
+Source: [notes.proto:204](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L204).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -59,7 +59,7 @@ Used by: [GetNote (request)](notes.md#getnote).
 
 ### ListNotesRequest
 
-Source: [notes.proto:162](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L162).
+Source: [notes.proto:189](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L189).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -70,7 +70,7 @@ Used by: [ListNotes (request)](notes.md#listnotes).
 
 ### ListNotesResponse
 
-Source: [notes.proto:169](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L169).
+Source: [notes.proto:196](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L196).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -100,6 +100,22 @@ Source: [notes.proto:120](https://github.com/egladman/magus/blob/main/proto/magu
 | `staleness` | [Staleness](#staleness) | 8 |  |
 | `outrun_days` | int32 | 9 | outrun\_days is how far the subject moved ahead of the prose. The raw number rather than just the bucket, because it is the evidence: a UI ranking something down owes the reader "400 days behind its subject" rather than a silent reorder. Zero unless staleness is OUTRUN or PETRIFIED. |
 | `modify_time` | Timestamp | 10 | modify\_time is the file's modification time, observed rather than stored, so it cannot disagree with the file it describes. Output only. |
+| `source` | [Source](#source) | 11 | source is set when the prose was quoted rather than written - a captured review thread. Absent on a note a person wrote, which is the overwhelming majority.  A client MUST render a note carrying this differently from one without it. The whole claim a note makes is that somebody stands behind it; a capture's claim is the opposite, that nobody does and the source can be re-read instead. A surface that presents the two identically tells the reader the one thing this field exists to prevent. |
+
+Used by: [GetNote (response)](notes.md#getnote), [ListNotes (response)](notes.md#listnotes).
+
+### Source
+
+Source is the provenance of prose a note did not originate.
+
+Source: [notes.proto:154](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L154).
+
+| Field | Type | # | Description |
+|-------|------|---|-------------|
+| `kind` | string | 1 | kind names what the note is a transcript OF ("review-thread").  A string and not an enum, deliberately. An enum rejects what it does not know, and the client that meets a kind its binary predates is far better served by showing the reader an unfamiliar word than by dropping the one field that says this prose is quoted. |
+| `ref` | string | 2 | ref identifies the conversation within kind - a review session id. Opaque to a client. |
+| `as_of` | string | 3 | as\_of is the subject's identity at capture time: for a review thread, the digest of the patch the comments were written against. It is what makes a stale capture detectable rather than merely old. |
+| `captured` | Timestamp | 4 | captured is when the transcript was taken. NOT the file's modify\_time: editing a capture's surrounding prose moves the mtime and must not move this. |
 
 Used by: [GetNote (response)](notes.md#getnote), [ListNotes (response)](notes.md#listnotes).
 
@@ -107,7 +123,7 @@ Used by: [GetNote (response)](notes.md#getnote), [ListNotes (response)](notes.md
 
 StoreStatus reports one store's availability, so a client can tell "declared but empty" from "not declared at all" from "declared and broken" - three states that must not collapse into an empty list.
 
-Source: [notes.proto:148](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L148).
+Source: [notes.proto:175](https://github.com/egladman/magus/blob/main/proto/magus/notes/v1alpha1/notes.proto#L175).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|

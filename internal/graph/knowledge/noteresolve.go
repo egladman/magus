@@ -113,6 +113,35 @@ func (r NoteResolver) Digest(_ context.Context, a notes.Anchor) (string, error) 
 	}
 }
 
+// DeclDigest fingerprints the anchored symbol's declaration line, which is what grades a
+// content change as "what this IS moved" rather than "how it does it moved".
+//
+// Symbols only. A file anchor's declaration is the file, so grading it against itself would
+// answer nothing; project, target and note anchors have no content at all. Both return ""
+// with a nil error - an ungraded finding, never a second complaint about the same anchor.
+func (r NoteResolver) DeclDigest(_ context.Context, a notes.Anchor) (string, error) {
+	if a.Kind != notes.AnchorSymbol {
+		return "", nil
+	}
+	n, ok := r.node[r.NodeID(a)]
+	if !ok {
+		return "", fmt.Errorf("symbol %q is not in the graph; the symbol index may not be built", a.Target)
+	}
+	path, start, ok := splitSourceLine(n.Source)
+	if !ok {
+		return "", fmt.Errorf("symbol %q has no source location", a.Target)
+	}
+	end, err := strconv.Atoi(n.Attrs[AttrDefEndLine])
+	if err != nil || end < start {
+		return "", fmt.Errorf("symbol %q has no enclosing range; this indexer did not report one", a.Target)
+	}
+	src, err := os.ReadFile(filepath.Join(r.root, filepath.FromSlash(path)))
+	if err != nil {
+		return "", fmt.Errorf("read %s: %w", path, err)
+	}
+	return notes.DigestDecl(string(src), start, end), nil
+}
+
 // splitSourceLine parses a node's "<path>:<line>" Source.
 func splitSourceLine(src string) (string, int, bool) {
 	i := strings.LastIndexByte(src, ':')
