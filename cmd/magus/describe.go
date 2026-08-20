@@ -925,8 +925,8 @@ func describeProjects(ctx context.Context, root string, args []string) error {
 				if pol.IncludeArch != nil {
 					fmt.Printf("  include_arch=%t", *pol.IncludeArch)
 				}
-				if pol.FailOnDrift {
-					fmt.Printf("  fail_on_drift")
+				if pol.Drift != types.DriftDefault {
+					fmt.Printf("  drift=%s", pol.Drift)
 				}
 				if pol.RetryOnVolatile {
 					fmt.Printf("  retry_on_volatile")
@@ -1133,8 +1133,8 @@ func describeTarget(ctx context.Context, root string, pos []string, explain bool
 			if e.Policy.IncludeArch != nil {
 				fmt.Printf("  include_arch=%t", *e.Policy.IncludeArch)
 			}
-			if e.Policy.FailOnDrift {
-				fmt.Printf("  fail_on_drift")
+			if e.Policy.Drift != types.DriftDefault {
+				fmt.Printf("  drift=%s", e.Policy.Drift)
 			}
 			if e.Policy.RetryOnVolatile {
 				fmt.Printf("  retry_on_volatile")

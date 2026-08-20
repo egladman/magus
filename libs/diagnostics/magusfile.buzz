@@ -43,17 +43,14 @@ magus\project({
 
 export fun preflight(ctx: magus\Context, args: [str]) > void {}
 
-// Regenerates MAGUS.md and fails on drift. Use the rw charm to keep the result.
+// Regenerates MAGUS.md. Use the rw charm to keep the result; without it the engine's drift
+// gate compares what regeneration produced against what is committed. The gate is not
+// written here: index_generate declares MAGUS.md as its output, which is the whole
+// declaration magus needs to check it.
 export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     ctx.needs(preflight);
     gomod\replaceWorkspaceModules(ctx, go, "libs/diagnostics");
-    final before = drift.hashes(["MAGUS.md"]);
     ctx.needs(index_generate);
-    if (ctx.hasCharm("rw")) { return; }
-
-    if (drift.changedSince(before, ["MAGUS.md"]).len() > 0) {
-        throw "generate: MAGUS.md drifted; re-run `magus run generate:rw libs/diagnostics` and commit" + drift.secondCause;
-    }
 }
 
 // Renders MAGUS.md (target catalog plus graph) from this magusfile.

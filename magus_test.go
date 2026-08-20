@@ -40,24 +40,24 @@ func TestContainsAll(t *testing.T) {
 	assert.False(t, slices.Contains([]string{"--all-things"}, StreamAllSentinel), "sentinel-like prefix")
 }
 
-// TestMakeHandlerConventionalTargets asserts that makeHandler returns a
+// TestMakeHandlerConventionalTargets asserts that targetHandler returns a
 // non-nil handler for the seven conventional target names and that invoking
 // it on an empty project (no packs) returns nil without panic.
-func TestMakeHandlerConventionalTargets(t *testing.T) {
+func TestTargetHandlerConventionalTargets(t *testing.T) {
 	m := &Magus{}
 	p := &types.Project{} // no packs → every handler must return nil cleanly
 	ctx := context.Background()
 	for _, name := range []string{"preflight", "build", "test", "lint", "format", "clean", "generate"} {
-		h := m.makeHandler(name)
-		if !assert.NotNilf(t, h, "makeHandler(%q) = nil; expected non-nil handler", name) {
+		h := m.targetHandler(name)
+		if !assert.NotNilf(t, h, "targetHandler(%q) = nil; expected non-nil handler", name) {
 			continue
 		}
-		assert.NoErrorf(t, h(ctx, p), "makeHandler(%q)(ctx, emptyProject)", name)
+		assert.NoErrorf(t, h(ctx, p), "targetHandler(%q)(ctx, emptyProject)", name)
 	}
 	// Arbitrary non-conventional names also get a handler.
-	h := m.makeHandler("go-build")
-	if assert.NotNil(t, h, "makeHandler(\"go-build\") = nil; any target name should produce a handler") {
-		assert.NoError(t, h(ctx, p), "makeHandler(\"go-build\")(ctx, emptyProject)")
+	h := m.targetHandler("go-build")
+	if assert.NotNil(t, h, "targetHandler(\"go-build\") = nil; any target name should produce a handler") {
+		assert.NoError(t, h(ctx, p), "targetHandler(\"go-build\")(ctx, emptyProject)")
 	}
 }
 

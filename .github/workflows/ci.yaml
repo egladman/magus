@@ -18,9 +18,17 @@ on:
   push:
     branches: [main]
 
+# On a PR the newest push supersedes the ones before it, so cancelling is right: the only
+# verdict anyone acts on is the one for the head commit.
+#
+# On main it is WRONG, and silently so. github.ref is refs/heads/main for every push, so
+# one group holds them all and each merge cancelled the previous merge's run - two merges
+# close together and the first one was never validated at all. That is how main comes to
+# carry generated output nothing regenerates, and the bill lands on whoever opens the next
+# pull request. Every commit on main gets its own verdict.
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
   contents: read

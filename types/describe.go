@@ -586,7 +586,7 @@ type EvaluatedTarget struct {
 	DependsOn []string         `json:"depends_on,omitempty" yaml:"depends_on,omitempty"`
 	Charms    []string         `json:"charms,omitempty"     yaml:"charms,omitempty"`
 	Spells    []EvaluatedSpell `json:"spells,omitempty"     yaml:"spells,omitempty"`
-	Policy    *Target          `json:"policy,omitempty"    yaml:"policy,omitempty"` // only the policy fields of Target are meaningful (SkipCache/Exclusive/FailOnDrift/RetryOnVolatile)
+	Policy    *Target          `json:"policy,omitempty"    yaml:"policy,omitempty"` // only the policy fields of Target are meaningful (SkipCache/Exclusive/Drift/RetryOnVolatile)
 	Exclusive bool             `json:"exclusive,omitempty" yaml:"exclusive,omitempty"`
 }
 

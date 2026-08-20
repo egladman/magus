@@ -718,7 +718,7 @@ func vcsAddCmd(ctx context.Context, root string, args []string) error {
 	// of intent about that path, and this check is an inference about paths nobody named.
 	var unexplained []string
 	if len(pos) == 0 {
-		outputs, unexplained = types.SplitExplainedOutputs(files, sourcesChangedSinceBase(ctx, ws, res, root))
+		outputs, unexplained = types.SplitExplainedOutputs(files, types.SourcesChangedSinceBase(ctx, ws, res, root))
 	}
 	// Naming a path is an explicit statement of intent about that path, so an undeclared
 	// one the caller ASKED for is staged rather than reported as skipped. Without this,
@@ -1017,28 +1017,3 @@ func gitTrackedPaths(ctx context.Context, root string, paths []string) (map[stri
 
 // gitLsFilesChunk bounds pathspecs per `git ls-files` call; see gitTrackedPaths.
 const gitLsFilesChunk = 256
-
-// sourcesChangedSinceBase returns the projects whose declared sources changed between the
-// base ref and HEAD, so an output whose source change is already COMMITTED still counts as
-// accounted for.
-//
-// Working-tree-only reported drift on the two ordinary source-first workflows - commit
-// the source then the output, and pull then regenerate - which is exactly when the check
-// most needs to be right.
-//
-// Best effort: no base ref, or a VCS that cannot answer, yields nothing rather than an
-// error.
-func sourcesChangedSinceBase(ctx context.Context, ws types.WorkspaceRepository, res types.VCSResolution, root string) map[string]bool {
-	if res.VCS == nil || res.Base == "" {
-		return nil
-	}
-	paths, err := res.VCS.ChangedFiles(ctx, root, res.Base)
-	if err != nil || len(paths) == 0 {
-		return nil
-	}
-	files, err := ws.ClassifyFiles(ctx, paths)
-	if err != nil {
-		return nil
-	}
-	return types.SourceProjects(files)
-}

@@ -2167,14 +2167,8 @@ func (r *runner) checkGeneratedDrift() types.DoctorCheck {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "could not classify changed paths; skipped"}
 	}
 	// Sources committed since the base ref explain their outputs too; see
-	// sourcesChangedSinceBase in cmd/magus/vcs.go for why the working tree alone is wrong.
-	var sinceBase map[string]bool
-	if changed, derr := res.VCS.ChangedFiles(ctx, r.root, res.Base); derr == nil && len(changed) > 0 {
-		if cf, cerr := insp.ClassifyFiles(ctx, changed); cerr == nil {
-			sinceBase = types.SourceProjects(cf)
-		}
-	}
-	_, unexplained := types.SplitExplainedOutputs(files, sinceBase)
+	// types.SourcesChangedSinceBase for why the working tree alone is wrong.
+	_, unexplained := types.SplitExplainedOutputs(files, types.SourcesChangedSinceBase(ctx, insp, res, r.root))
 	if len(unexplained) == 0 {
 		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "every changed output has a source change behind it"}
 	}

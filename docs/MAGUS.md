@@ -68,11 +68,11 @@ magus graph export -o json  # the whole graph (MCP: magus_query, magus_explain, 
 | console | 7 | `magus query project:console` | `preflight`, `ci`, `build` |
 | docs | 18 | `magus query project:docs` | `content-generate`, `site-generate`, `diagrams-generate` |
 | docs/guides/integrations/agents | 5 | `magus query project:docs/guides/integrations/agents` | `ci`, `format`, `lint` |
-| libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `generate` |
+| libs/diagnostics | 8 | `magus query project:libs/diagnostics` | `format`, `build`, `lint` |
 | libs/diagram | 2 | `magus query project:libs/diagram` | `test`, `ci` |
-| libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `format`, `build`, `generate` |
-| libs/testlayout | 8 | `magus query project:libs/testlayout` | `format`, `build`, `generate` |
-| libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `generate`, `preflight` |
+| libs/gopherbuzz | 10 | `magus query project:libs/gopherbuzz` | `format`, `build`, `lint` |
+| libs/testlayout | 8 | `magus query project:libs/testlayout` | `format`, `build`, `lint` |
+| libs/textsearch | 6 | `magus query project:libs/textsearch` | `lint`, `preflight`, `test` |
 | proto | 3 | `magus query project:proto` | `generate`, `lint`, `ci` |
 
 ## Project: docs

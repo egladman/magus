@@ -2048,13 +2048,10 @@
         },
         {
           "name": "generate",
-          "doc": "Regenerates MAGUS.md and fails on drift.",
+          "doc": "Regenerates MAGUS.md.",
           "dependencies": [
             "preflight",
             "index-generate"
-          ],
-          "charms": [
-            "rw"
           ],
           "chain": [
             {
@@ -2222,13 +2219,10 @@
         },
         {
           "name": "generate",
-          "doc": "Regenerates MAGUS.md and fails on drift.",
+          "doc": "Regenerates MAGUS.md.",
           "dependencies": [
             "preflight",
             "index-generate"
-          ],
-          "charms": [
-            "rw"
           ],
           "chain": [
             {
@@ -2418,9 +2412,6 @@
             "preflight",
             "index-generate"
           ],
-          "charms": [
-            "rw"
-          ],
           "chain": [
             {
               "target": "preflight"
@@ -2574,9 +2565,6 @@
           "dependencies": [
             "preflight",
             "index-generate"
-          ],
-          "charms": [
-            "rw"
           ],
           "chain": [
             {

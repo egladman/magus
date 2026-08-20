@@ -296,6 +296,13 @@ export fun generate(ctx: magus\Context, args: [str]) > void !> any {
     // listing it would assert a check that silently passes. src/gen is absent because
     // proto:generate declares and gates it - nothing in THIS chain regenerates it, so the
     // hash either side would always match.
+    //
+    // The engine's drift gate does NOT make this one redundant. It hashes each target's
+    // declared OUTPUTS, and two of these are not outputs: `magus describe file` reports
+    // CHANGELOG.md and assets/gen as role=source, because they are written through `update`
+    // declarations rather than ctx.writesFiles. A check keyed on outputs cannot see them
+    // however correct it is. MAGUS.md and CONTENT are covered twice over; those two are
+    // covered only here.
     final GENERATED = ["MAGUS.md", ROOT + "/CHANGELOG.md", "assets/gen"] + CONTENT;
     // Hashed before and after, not gated on a clean tree: the old form skipped whenever any
     // of these was already dirty, which is the state you are in while editing a generator.
