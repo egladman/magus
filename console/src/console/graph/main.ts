@@ -74,8 +74,10 @@ import {
   type Insets,
   NO_INSETS,
   type Rect,
+  type WorldBox,
   fitTransform,
   overlayInsets,
+  recenterOn,
   usableCenter,
 } from "./viewport.js";
 import {
@@ -881,7 +883,7 @@ function switchLayout(mode: LayoutMode) {
     // Frame the new arrangement. Here and not in applyLayeredMode/applyWavesMode, which
     // liveApplyGraphUpdate re-runs on every SSE refresh - re-framing there would yank the
     // camera out from under someone reading.
-    if (ok) fitView(matchSet);
+    if (ok) frameArrangement();
   } else if (mode === "radial") {
     applyRadialMode();
   } else {
@@ -896,6 +898,18 @@ function switchLayout(mode: LayoutMode) {
       startSimulation();
     }
     draw();
+    // Force unwinds the previous arrangement over about a second, so one frame taken now frames
+    // positions that are on their way somewhere else - the same reason the load-time reveal
+    // spends beats instead of a single fit. Each beat re-reads the camera: panning ends the
+    // follow (centeredOn is cleared), and a beat can land after another switch.
+    frameArrangement();
+    for (const at of REVEAL_BEATS_MS) {
+      setTimeout(() => {
+        if (layoutMode !== "force") return;
+        if (centeredOn) centerOn(centeredOn);
+        else if (!cameraOwnedByOperator) fitView(matchSet);
+      }, at);
+    }
   }
 }
 
@@ -1953,6 +1967,28 @@ function whenCanvasSized(): Promise<void> {
 let pendingFit: { ids: Set<string> | null } | null = null;
 let pendingFitArmed = false;
 
+// worldBox is the bounding box of `ids` (or of every placed node when null), in world units.
+// Null when nothing in the set has a position yet. In a card mode the box measures the drawn
+// card rather than the dot radius, so a fit does not clip the labels it exists to make readable.
+function worldBox(ids: Set<string> | null): WorldBox | null {
+  const pts = graph.nodes.filter((n) => n.x != null && (!ids || ids.has(n.id)));
+  if (!pts.length) return null;
+  let minX = Infinity,
+    minY = Infinity,
+    maxX = -Infinity,
+    maxY = -Infinity;
+  const cards = cardsActive();
+  for (const n of pts) {
+    const hw = cards && n.w ? n.w / 2 : n.r;
+    const hh = cards && n.h ? n.h / 2 : n.r;
+    minX = Math.min(minX, n.x - hw);
+    maxX = Math.max(maxX, n.x + hw);
+    minY = Math.min(minY, n.y - hh);
+    maxY = Math.max(maxY, n.y + hh);
+  }
+  return { minX, minY, maxX, maxY };
+}
+
 function fitView(ids: Set<string> | null) {
   const pts = graph.nodes.filter((n) => n.x != null && (!ids || ids.has(n.id)));
   if (!pts.length || !zoomBehavior) return; // setupZoomDrag has not run yet
@@ -1987,6 +2023,31 @@ function fitView(ids: Set<string> | null) {
   const t = fitTransform({ minX, minY, maxX, maxY }, w, h, stageInsets());
   glideTo(zoomIdentity.translate(t.x, t.y).scale(t.k));
   draw();
+}
+
+// frameArrangement frames a freshly applied arrangement. A plain fit answers "where is the
+// set", and with a node selected that is not the question being asked: the operator is reading
+// one node, and every arrangement moves it somewhere else, so a fit hands back a legible layout
+// with the thing they were looking at lost inside it. Keep the fit's scale, land on the
+// selection. With nothing selected an arrangement switch is itself a request to re-frame, so it
+// supersedes a camera the operator had moved by hand.
+function frameArrangement() {
+  const n = selected ? graph.byId.get(selected) : null;
+  if (n && n.x != null && zoomBehavior && canvas.clientWidth > 0) {
+    const box = worldBox(matchSet);
+    if (box) {
+      const { w, h } = resizeCanvas();
+      const insets = stageInsets();
+      const t = recenterOn(fitTransform(box, w, h, insets), { x: n.x, y: n.y }, w, h, insets);
+      cameraOwnedByOperator = true;
+      centeredOn = selected;
+      glideTo(zoomIdentity.translate(t.x, t.y).scale(t.k));
+      draw();
+      return;
+    }
+  }
+  cameraOwnedByOperator = false;
+  fitView(matchSet);
 }
 
 // focusNode builds a LOCAL graph around a node (Obsidian's local view): the node

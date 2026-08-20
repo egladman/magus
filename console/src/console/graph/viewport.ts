@@ -144,3 +144,19 @@ export function usableCenter(
   const usableH = Math.max(40, h - insets.top - insets.bottom);
   return { x: insets.left + usableW / 2, y: insets.top + usableH / 2 };
 }
+
+/**
+ * recenterOn returns `fit` moved so `focus` sits in the middle of the usable box, at the scale
+ * `fit` chose. Framing a set answers where the SET is; when the operator has a node selected
+ * the question is where THAT is, and only the scale is still worth taking from the fit.
+ */
+export function recenterOn(
+  fit: FitTransform,
+  focus: { x: number; y: number },
+  w: number,
+  h: number,
+  insets: Insets = NO_INSETS,
+): FitTransform {
+  const c = usableCenter(w, h, insets);
+  return { k: fit.k, x: c.x - focus.x * fit.k, y: c.y - focus.y * fit.k };
+}

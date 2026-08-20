@@ -2,7 +2,7 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type Rect, fitTransform, overlayInsets, usableCenter } from "./viewport";
+import { type Rect, fitTransform, overlayInsets, recenterOn, usableCenter } from "./viewport";
 
 const STAGE: Rect = { left: 0, top: 0, right: 600, bottom: 400 };
 const rect = (left: number, top: number, right: number, bottom: number): Rect => ({
@@ -112,4 +112,19 @@ test("the simulation settles in the usable centre", () => {
     x: 130 + 235,
     y: 40 + 180,
   });
+});
+
+test("recentring keeps the fit's scale and puts the focus in the usable centre", () => {
+  const insets = { left: 130, right: 0, top: 40, bottom: 0 };
+  const fit = fitTransform({ minX: 0, minY: 0, maxX: 1000, maxY: 800 }, 600, 400, insets);
+  const t = recenterOn(fit, { x: 900, y: 700 }, 600, 400, insets);
+  assert.equal(t.k, fit.k);
+  assert.deepEqual({ x: t.x + 900 * t.k, y: t.y + 700 * t.k }, usableCenter(600, 400, insets));
+});
+
+test("recentring on the middle of the box it fitted is the fit itself", () => {
+  const box = { minX: 0, minY: 0, maxX: 1000, maxY: 800 };
+  const fit = fitTransform(box, 600, 400);
+  const t = recenterOn(fit, { x: 500, y: 400 }, 600, 400);
+  assert.ok(Math.abs(t.x - fit.x) < 1e-9 && Math.abs(t.y - fit.y) < 1e-9);
 });
