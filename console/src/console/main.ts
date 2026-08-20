@@ -1096,7 +1096,12 @@ export function startConsole(
   // The offline demo publishes two synthetic workspaces, which is what makes scoping demonstrable with
   // no daemon - but a Connect screen there would ask for a credential against a daemon that does not
   // exist, and answer its own questions with "not configured" and "No credential".
-  const inDemo = (): boolean => document.getElementById("console-conn")?.dataset.state === "demo";
+  //
+  // Read from the FRAGMENT, not from #console-conn's data-state. The dashboard publishes its workspace
+  // list as soon as it mounts, and the connection dot is not stamped "demo" until the first readiness
+  // tick paints it - so a guard on the dot loses the race and the screen opens over the demo anyway.
+  // The fragment is set before anything mounts.
+  const inDemo = (): boolean => wantsDemo(parseHash());
   if (workspacePicker) {
     onWorkspaces((roots) => {
       workspacePicker.setWorkspaces(roots);
