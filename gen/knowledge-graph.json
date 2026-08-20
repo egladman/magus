@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2372,
-  "edge_count": 6095,
+  "node_count": 2373,
+  "edge_count": 6096,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -284,6 +284,14 @@
       "label": "MGS1028",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1028/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1029",
+      "kind": "diagnostic",
+      "label": "MGS1029",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1029/"
       }
     },
     {
@@ -4279,12 +4287,10 @@
       "label": "docs/reference/codes/magusfile/MGS1029.md",
       "source": "docs/reference/codes/magusfile/MGS1029.md",
       "attrs": {
-        "diagnostic": "MGS7002",
         "role": "doc",
         "section": "reference",
         "tags": "MGS1029,magusfile,sources,cache,globs",
-        "title": "MGS1029: source glob reaches into a pruned directory",
-        "unknown_codes": "MGS1029"
+        "title": "MGS1029: source glob reaches into a pruned directory"
       }
     },
     {
@@ -35368,6 +35374,14 @@
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1029.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1029.md",
+      "target": "diagnostic:MGS1029",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1029.md"
     },
     {
