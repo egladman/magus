@@ -396,17 +396,15 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
      comfortable tap padding and a legible chevron (it was ~9px, effectively untappable). */
   .console-graph-sidebar__count { padding-block: 0.55rem; }
   .console-graph-sidebar__chevron { font-size: 1.6em; }
-  /* The node cloud OVERLAYS the canvas here instead of pushing it down in-flow: main.ts
-     positions this panel (fixed, viewport coordinates) under #list-toggle whenever it expands,
-     via setListExpanded's positionNodeListOverlay(). z-index sits above the stage tools/legend
-     (3-5) so it always wins a tap over the canvas beneath it. */
+  /* The node cloud stays IN FLOW here and scrolls inside its own box. It used to be a
+     position:fixed card that JS anchored under #list-toggle, which worked only while the toggle
+     was the LAST thing in the sidebar - once the results moved above the View and Source
+     sections, that floating card covered them. In flow it cannot: the sidebar is capped at
+     40svh and scrolls itself, so a long list moves the sidebar's own scrollbar and never
+     touches the canvas. */
   #node-list {
-    position: fixed; z-index: 6;
-    max-height: min(55svh, 420px); width: min(20rem, calc(100vw - 1.2rem));
-    border: 1px solid var(--pf-t--global--border--color--default);
-    border-radius: var(--pf-t--global--border--radius--small);
-    background: var(--pf-t--global--background--color--primary--default);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+    max-height: min(40svh, 320px);
+    overflow-y: auto;
   }
 }
 

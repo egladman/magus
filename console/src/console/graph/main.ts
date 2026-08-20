@@ -1335,11 +1335,14 @@ function draw() {
     if (n.x == null) continue;
     if (projectionActive && !projectionActive.has(n.id)) continue;
     if (cardsActive() && n.w) continue; // the label is painted inside the card
-    // Two exemptions from the zoom floor, both cases where the reader ASKED for a name: the node
-    // under the cursor or selection, and radial, which exists to name one node's neighbours and
-    // never places more than a few dozen.
+    // Two exemptions from the zoom floor, both cases where the reader ASKED for a name. The
+    // first is the hovered or selected node AND EVERYTHING ONE HOP FROM IT: naming only the node
+    // already under the cursor answers a question nobody asked, since the point of pointing at a
+    // node is to learn what it is attached to. The greedy overlap pass below is what keeps a
+    // dense neighbourhood from stacking, and it ranks the focus first. The second is radial,
+    // which exists to name one node's neighbours and never places more than a few dozen.
     const show =
-      n.id === highlight ||
+      lit(n.id) ||
       (layoutMode === "radial" && radialPlacedCount <= 60) ||
       (transform.k >= LABEL_MIN_ZOOM &&
         (transform.k > 2.2 || (n.degree > 24 && n.r * transform.k >= LABEL_MIN_NODE_PX)));
@@ -2229,28 +2232,6 @@ function applyQuery(q: string) {
 // The node cloud is collapsed by default (canvas-first on load); a query, or the
 // count toggle, reveals it.
 let listExpanded = false;
-// Mobile only (graph.css scopes #node-list's position:fixed to the same breakpoint): the node
-// cloud overlays the canvas instead of pushing it down in-flow, since the stacked sidebar has
-// no headroom to push into without shoving the canvas off-screen. Desktop's #node-list keeps
-// its plain in-flow disclosure, so this query gates the JS half of that split.
-const mobileListQuery = matchMedia("(max-width: 900px)");
-let overlayResizeWired = false; // guards the resize listener in bootWireEvents against a second wiring
-// Places the fixed-position node-list panel directly under #list-toggle, clamped into the
-// viewport - the same placement idiom as help-popover.ts's place(). Re-run on open and on
-// resize/orientation change so a rotated phone doesn't leave the panel stranded.
-function positionNodeListOverlay() {
-  if (!mobileListQuery.matches) return;
-  const btn = el("list-toggle");
-  if (!btn) return;
-  const r = btn.getBoundingClientRect();
-  const margin = 8;
-  const w = listEl.getBoundingClientRect().width || 320;
-  let left = r.left;
-  if (left + w > window.innerWidth - margin) left = window.innerWidth - margin - w;
-  if (left < margin) left = margin;
-  listEl.style.left = left + "px";
-  listEl.style.top = r.bottom + 6 + "px";
-}
 function setListExpanded(v: boolean) {
   const changed = listExpanded !== v;
   listExpanded = v;
@@ -2261,7 +2242,6 @@ function setListExpanded(v: boolean) {
   // repainted when the disclosure flips. Guarded against the re-entry renderList would cause,
   // since renderList itself calls setListExpanded on a fresh query.
   if (changed && graph) renderList();
-  if (v) positionNodeListOverlay();
 }
 
 // Cached per graph like adjacency(): the hubs ranking reads it once per node.
@@ -4659,17 +4639,6 @@ function bootWireEvents() {
   // The count row toggles the (default-collapsed) node cloud.
   const listToggle = el("list-toggle");
   if (listToggle) listToggle.addEventListener("click", () => setListExpanded(!listExpanded));
-
-  // Keep the mobile node-list overlay glued under its toggle across a resize/rotation. Wired
-  // once (bootWireEvents can re-run from the live-mode path); the listener itself no-ops via
-  // positionNodeListOverlay's own mobileListQuery/listExpanded guards, so a second registration
-  // would just be redundant rather than harmful, but there's no reason to keep both around.
-  if (!overlayResizeWired) {
-    overlayResizeWired = true;
-    window.addEventListener("resize", () => {
-      if (listExpanded) positionNodeListOverlay();
-    });
-  }
 
   // Zoom-to-fit: frame the current matches (or the whole graph) in the viewport.
   const fitBtn = el("fit-btn");
