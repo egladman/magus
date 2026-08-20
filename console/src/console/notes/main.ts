@@ -228,19 +228,27 @@ function buildScaffold(host: HTMLElement): Refs {
   const pane = h("div", "console-notes-app__pane");
 
   const bar = h("div", "console-notes-app__bar");
-  const search = h(
-    "input",
-    "pf-v6-c-form-control__text console-notes-app__search",
-  ) as HTMLInputElement;
+  // PF FormControl is a WRAPPER plus an input, and `__text` alone styles nothing: the field
+  // was rendering as a bare native input, which is why it had square corners and a 2px inset
+  // border while every other control on the surface was rounded.
+  const searchWrap = h("span", "pf-v6-c-form-control console-notes-app__search");
+  const search = h("input", "pf-v6-c-form-control__text") as HTMLInputElement;
   search.type = "search";
-  // Title, tag and anchor, NOT body: ListNotes leaves the prose empty by contract, so a filter
-  // claiming to search it would silently miss every note the reader has not opened.
-  search.placeholder = "Filter title, tag or anchor";
-  search.setAttribute("aria-label", "Filter notes");
+  // Says what the field does AND teaches the non-obvious half: you can find a note by the code
+  // it annotates, not only by its own words. "anchor" is the surface's word for that and it is
+  // opaque on first contact, so the placeholder spends its characters on the capability and
+  // leaves the vocabulary to the detail pane, which has room to label it.
+  //
+  // It stops short of promising a text search, because there is not one: ListNotes leaves the
+  // prose empty by contract, so a filter claiming to read it would silently miss every note the
+  // reader has not opened.
+  search.placeholder = "Filter notes, or the code they are about";
+  search.setAttribute("aria-label", "Filter notes by title, tag or anchor");
   // The filter owns the whole row. Scope used to sit beside it as a three-way toggle, which
   // was a control for a choice the store headings already express: collapsing "Private" says
   // the same thing as filtering to "Shared", using an affordance that has to exist anyway.
-  bar.append(search);
+  searchWrap.append(search);
+  bar.append(searchWrap);
 
   const list = h("div", "console-notes-app__list");
   list.setAttribute("role", "list");

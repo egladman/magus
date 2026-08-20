@@ -17,6 +17,11 @@
 
 .console-notes-app {
   --notes-pad: 0.65rem;
+  /* One height for BOTH pane headers. They are separate elements holding different things -
+     a filter on the left, the open note's scope on the right - and left to their own content
+     they came out 39.5px and 10.6px, so the two columns started their content 29px apart and
+     the split read as broken. Whatever either header holds, the rule under them is level. */
+  --notes-bar-h: 2.9rem;
   display: flex; flex-direction: column; position: relative;
   margin-top: 1.25rem;
   height: calc(100svh - 12.5rem); min-height: 420px;
@@ -42,13 +47,18 @@
 /* --- Filter + scope ---------------------------------------------------------------------- */
 .console-notes-app__bar {
   flex: 0 0 auto; display: flex; gap: 0.4rem; align-items: center;
-  padding: 0.4rem var(--notes-pad);
+  min-height: var(--notes-bar-h); box-sizing: border-box;
+  padding: 0 var(--notes-pad);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 /* The filter owns the row outright. It shared it with a three-way scope toggle, which was a
    control for a choice the store headings already make - collapsing one says what filtering to
-   the other said - and two controls of different natural heights on one line never sat right. */
-.console-notes-app__search { flex: 1 1 auto; min-width: 0; font-size: 0.82rem; }
+   the other said - and two controls of different natural heights on one line never sat right.
+
+   Sizing and the corner radius come from PF's FormControl, so the field matches every other
+   input in the console rather than carrying a second opinion about what a text box looks like. */
+.console-notes-app__search { flex: 1 1 auto; min-width: 0; }
+.console-notes-app__search .pf-v6-c-form-control__text { font-size: 0.82rem; }
 
 /* --- The list ---------------------------------------------------------------------------- */
 .console-notes-app__list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
@@ -158,7 +168,8 @@
 .console-notes-app__detail[data-open] { visibility: visible; }
 .console-notes-app__detail-bar {
   flex: 0 0 auto; display: flex; align-items: center; gap: 0.5rem;
-  padding: 0.3rem var(--notes-pad);
+  min-height: var(--notes-bar-h); box-sizing: border-box;
+  padding: 0 var(--notes-pad);
   background: var(--pf-t--global--background--color--secondary--default);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
