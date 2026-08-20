@@ -68,7 +68,7 @@ export fun renderSearchPage(site: Site) > void !> any {
 `, {"root": root, "gh": site.config.repoURL, "rows": rows});
     final title = "Search";
     final desc = "Search the magus documentation. Filter by tag with tag:name, exclude terms with -term, and match exact phrases with quotes.";
-    final doc = renderPage(title, desc, body, "search/index.md", "", "search/", "", mut [], site);
+    final doc = renderPage(title, desc, body, "search/index.md", "", "search/", "", mut [], "", site);
     fs\mkdirAll(site.outDir + "/search");
     final of = io\File.open(site.outDir + "/search/index.html", io\FileMode.write);
     of.write(doc);

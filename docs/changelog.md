@@ -1,5 +1,6 @@
 ---
 title: Changelog
+generated_from: CHANGELOG.md
 description: Every released change to magus, newest first, in Keep a Changelog format. Generated from releases/*.yaml.
 tags: [changelog, releases, versions, upgrade, breaking-changes]
 ---

@@ -22,6 +22,15 @@ import (
 // python spell declares __pycache__, deliberately left out here - missing it costs
 // only a little discovery-walk time, and adding it would change hash keys for broad-
 // glob projects that sit near a __pycache__).
+// These names also prune the cache-key expansion walk (internal/cache.expandSources),
+// which is the sharper edge: a target CAN legitimately declare a file inside one of
+// these trees - a generated descriptor another project produces is a real input - and a
+// walk that skips the directory would drop it from the key while `describe target` went
+// on listing it under sources. So an EXACT, wildcard-free declaration is resolved by
+// stat instead and reaches the key normally. A PATTERN gets no such exemption, because
+// that is the whole point of pruning (a bare **/*.js must not hash node_modules);
+// MGS1029 reports one aimed inside a pruned tree rather than letting it match nothing in
+// silence. Confirm what actually keyed with `describe target --cache --inputs`.
 var IgnoreDirs = []string{
 	"vendor",       // Go vendored deps
 	"node_modules", // pnpm/npm

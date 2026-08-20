@@ -1,5 +1,6 @@
 ---
 title: cosign spell
+generated_from: spells/cosign/spell.buzz
 description: "Cosign spell: keyless sign, attest, and verify for container artifacts."
 tags: [cosign, spell, sigstore, signing, supply-chain, tools]
 ---

@@ -1,5 +1,6 @@
 ---
 title: magus hook
+generated_from: internal/clispec/registry.go
 description: "Read one shell command, or one path an edit is about to write, and report a deny, advise, or pass verdict for an agent host's pre-tool-use hook."
 tags: [cli, magus hook, guard, agents, policy, pre-tool-use]
 ---

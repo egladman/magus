@@ -117,7 +117,7 @@ export fun renderSectionIndexes(site: Site) > void !> any {
   </div>
 `, {"root": root, "cards": ordered});
 
-        final doc = renderPage(p.title, p.desc, body, p.srcRel, "", p.url, "", mut [], site);
+        final doc = renderPage(p.title, p.desc, body, p.srcRel, "", p.url, "", mut [], "", site);
         final dir = fs\join(site.outDir, p.url.sub(0, p.url.len() - 1));
         fs\mkdirAll(dir);
         fs\writeFile(dir + "/index.html", doc);

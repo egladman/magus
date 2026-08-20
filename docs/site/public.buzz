@@ -237,7 +237,7 @@ are hosted on GitHub; the links below go there.</p>
     } else {
         site.metaCommits[site.metaPrefix + srcMarker] = site.metaFull + "|" + site.metaShort + "|" + site.metaStamp;
     }
-    final doc = renderPage("Public files", "Machine-readable endpoints served by this site: release manifest, Atom feeds, sitemap, and robots policy.", body, srcMarker, "", "public/", "", mut [], site);
+    final doc = renderPage("Public files", "Machine-readable endpoints served by this site: release manifest, Atom feeds, sitemap, and robots policy.", body, srcMarker, "", "public/", "", mut [], "", site);
     fs\writeFile(site.outDir + "/public/index.html", doc);
     site.pageUrls["public/"] = true;
     site.writtenPaths["public/index.html"] = true;

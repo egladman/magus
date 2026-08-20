@@ -20,14 +20,15 @@ import "engine/types" as _;
 import "engine/page" as _;
 
 // isPublishablePost reports whether blog/<name> should be rendered at all: a .md file that
-// is not the index, not an _underscored fixture, and not marked `draft: true` in its
-// frontmatter.
+// is not the index, not an _underscored fixture, not marked `draft: true` in its
+// frontmatter, and not dated past the build (isFuturePost).
 //
 // A draft stays committed in the repo and renders NOWHERE - no post page, no blog index
 // entry, no feed item, no announcement-bar link - so unfinished writing can be reviewed in
 // a pull request without shipping to the site. The underscore prefix already skipped a
 // file, but that is the fixture convention and it forces a rename to publish; `draft:` is a
-// one-word edit inside the file and survives the rename.
+// one-word edit inside the file and survives the rename. A future `date:` holds a finished
+// post the same way, and needs no follow-up edit at all: it ships once the day arrives.
 //
 // Every place that enumerates posts calls this, which is also why it exists: the name
 // predicate was copied across four walks (walkBlog, the hasBlogPosts precompute,
@@ -40,7 +41,9 @@ export fun isPublishablePost(site: Site, name: str) > bool !> any {
     final f = io\File.open(site.root + "/" + site.blog + "/" + name, io\FileMode.read);
     final md = f.readAll();
     f.close();
-    return serialize\jsonDecode(markdown\frontmatter(md)).q("draft").booleanValue() == false;
+    final fm = serialize\jsonDecode(markdown\frontmatter(md));
+    if (fm.q("draft").booleanValue()) { return false; }
+    return isFuturePost(fm.q("date").stringValue(), site.metaStamp) == false;
 }
 
 // findReleasePost sets site.releaseBlogURL to the post whose frontmatter `release:` names
@@ -137,7 +140,7 @@ export fun renderBlogPost(base: str, site: Site) > void !> any {
     // Reverse-chronological pager: blog posts pair prev/next by date, not filename.
     final pager = renderBlogPager(base, site);
 
-    final doc = renderPage(title, desc, article, rel, pager, url, readingTime(md), parseTags(md), site);
+    final doc = renderPage(title, desc, article, rel, pager, url, readingTime(md), parseTags(md), generatedFrom(md), site);
     makeOutputDir(site.outDir + "/" + site.blog + "/" + urlPath, rel, url);
     final of = io\File.open(site.outDir + "/" + site.blog + "/" + urlPath + "/index.html", io\FileMode.write);
     of.write(doc);
@@ -267,7 +270,7 @@ export fun renderBlogIndex(site: Site) > void !> any {
         final rec = site.metaCommits[site.metaPrefix + site.blog + "/" + sorted[0].base];
         if (rec != null) { site.metaCommits[site.metaPrefix + site.blog + "/index.md"] = rec; }
     }
-    final doc = renderPage(title, desc, body, site.blog + "/index.md", "", url, "", mut [], site);
+    final doc = renderPage(title, desc, body, site.blog + "/index.md", "", url, "", mut [], "", site);
     fs\mkdirAll(fs\join(site.outDir, site.blog));
     final of = io\File.open(site.outDir + "/" + site.blog + "/index.html", io\FileMode.write);
     of.write(doc);

@@ -932,11 +932,13 @@ article dd,
   color: var(--pico-muted-color);
   white-space: nowrap;
 }
-/* The "Generated" status chip leads the tag row on mechanically generated pages
-   (module/spell/man-page references). Filled - not outlined - so it reads as a
+/* The "generated" status chip leads the tag row on any page carrying a
+   generated_from frontmatter key. Filled - not outlined - so it reads as a
    status distinct from the topical tags beside it, and slightly stronger text so
-   it draws the eye first. cursor:help pairs with the tooltip. Still Pico tokens,
-   still angular, so it stays in the design language. */
+   it draws the eye first. cursor:help pairs with the tooltip, and is why this
+   stays a <span>: the source link rides beside it as an ordinary a.tag, which
+   fills on hover to read as interactive. Still Pico tokens, still angular, so it
+   stays in the design language. */
 .post-tags .tag.generated {
   background: var(--pico-muted-border-color);
   color: var(--pico-color);

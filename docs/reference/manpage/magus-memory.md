@@ -1,5 +1,6 @@
 ---
 title: magus memory
+generated_from: internal/clispec/registry.go
 description: "Manage the per-repository handoff journal that lives outside the checkout: named entries people and agents can read across sessions and worktrees."
 tags: [cli, magus memory, handoff, journal, agents]
 ---

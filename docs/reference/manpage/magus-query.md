@@ -1,5 +1,6 @@
 ---
 title: magus query
+generated_from: internal/clispec/registry.go
 description: "Resolve search terms to knowledge-graph nodes and return the ranked matches plus their neighborhood; also retrieves a target's captured output by ref and a run's journal by invocation id."
 tags: [cli, magus query, query, knowledge graph, search, output, reference, invocation, journal, audit]
 ---

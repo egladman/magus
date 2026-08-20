@@ -11,6 +11,7 @@ import "template";
 import "../libs/diagram/diagram" as _;
 import "lib/text" as _;
 import "lib/html" as _;
+import "engine/meta" as _;
 import "engine/path" as _;
 import "engine/types" as _;
 import "engine/page" as _;
@@ -85,7 +86,7 @@ export fun collectDevelopmentPages(site: Site) > void !> any {
 // right depth and trail. collectDevelopmentPages has already registered it.
 fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str, site: Site) > void !> any {
     final html = renderContentHTML(markdown\toHtml(md), "", "");
-    final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], site);
+    final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], generatedFrom(md), site);
     final dir = fs\join(site.outDir, url.sub(0, url.len() - 1));
     fs\mkdirAll(dir);
     fs\writeFile(dir + "/index.html", doc);
@@ -100,7 +101,7 @@ fun renderDevelopmentPage(title: str, desc: str, md: str, url: str, srcRel: str,
 // slash-terminated and resolve without a directory redirect. searchText is the plain
 // text to index, since the HTML carries no useful prose.
 fun renderDevelopmentPageRaw(title: str, desc: str, html: str, searchText: str, url: str, srcRel: str, site: Site) > void !> any {
-    final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], site);
+    final doc = renderPage(title, desc, html, srcRel, "", url, "", mut [], "", site);
     final dir = fs\join(site.outDir, url.sub(0, url.len() - 1));
     fs\mkdirAll(dir);
     fs\writeFile(dir + "/index.html", doc);

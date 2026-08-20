@@ -1,5 +1,6 @@
 ---
 title: magus module
+generated_from: reference/buzz/
 aliases: [modules/magus]
 description: Magus core primitives.
 tags: [magus, module, stdlib, magusfile]

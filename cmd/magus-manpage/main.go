@@ -148,6 +148,7 @@ func renderMainMD() []byte {
 	m.frontmatter(
 		"magus command",
 		"Standalone build orchestrator and content-addressed cache for polyglot monorepos, with workspace-aware subcommands for build, test, lint, and inspect.",
+		"internal/clispec/registry.go",
 		[]string{"cli", "magus", "build", "monorepo", "orchestrator", "cache", "workspace"},
 	)
 	m.h1("magus")
@@ -209,7 +210,7 @@ func renderCommandMD(seg iclispec.Command) []byte {
 	if len(tags) == 0 {
 		tags = []string{"cli", "magus " + seg.Name, seg.Name}
 	}
-	m.frontmatter("magus "+seg.Name, desc, tags)
+	m.frontmatter("magus "+seg.Name, desc, "internal/clispec/registry.go", tags)
 	pageName := "magus-" + seg.Name
 	m.h1(pageName)
 	m.p(mdEsc(seg.Short))
@@ -327,9 +328,10 @@ type mdBuf struct{ b bytes.Buffer }
 // frontmatter writes the site's YAML frontmatter block. Values are quoted only
 // when they contain a colon (YAML would otherwise parse them as a nested
 // mapping). Tags render as a flow sequence.
-func (m *mdBuf) frontmatter(title, description string, tags []string) {
+func (m *mdBuf) frontmatter(title, description, generatedFrom string, tags []string) {
 	m.b.WriteString("---\n")
 	fmt.Fprintf(&m.b, "title: %s\n", yamlScalar(title))
+	fmt.Fprintf(&m.b, "generated_from: %s\n", yamlScalar(generatedFrom))
 	fmt.Fprintf(&m.b, "description: %s\n", yamlScalar(description))
 	m.b.WriteString("tags: [")
 	for i, t := range tags {

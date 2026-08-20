@@ -1,5 +1,6 @@
 ---
 title: magus config
+generated_from: internal/clispec/registry.go
 description: Inspect the effective merged configuration or write keys to the local or global magus.yaml, with subcommands for view, set, history, cache, and mcp.
 tags: [cli, magus config, configuration, magus.yaml, settings, cache]
 ---

@@ -1,5 +1,6 @@
 ---
 title: xml module
+generated_from: reference/buzz/
 aliases: [modules/xml]
 description: Build, serialize, and parse XML/SVG.
 tags: [xml, module, stdlib, magusfile]

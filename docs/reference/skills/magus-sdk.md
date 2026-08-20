@@ -1,5 +1,6 @@
 ---
 title: magus-sdk
+generated_from: cmd/magus/skills/magus-sdk/SKILL.md
 description: "Help a Go developer consume magus as a library (import \"github.com/egladman/magus\") instead of shelling out to the CLI, and audit whether the SDK actually serves them."
 tags: [agents, skills, magus-sdk]
 skill_full_bytes: 13317

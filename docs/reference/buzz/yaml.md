@@ -1,5 +1,6 @@
 ---
 title: yaml module
+generated_from: reference/buzz/
 aliases: [modules/yaml]
 description: YAML parse and stringify (YAML 1.2 via gopkg.in/yaml.v3).
 tags: [yaml, module, stdlib, magusfile]

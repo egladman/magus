@@ -1,6 +1,7 @@
 ---
 title: magus stdlib
 page_type: overview
+generated_from: std/**/*.go, internal/hostmodules/**/*.go
 aliases: [modules]
 description: Reference for every magus stdlib module - fs, os, http, json, yaml, crypto, and the rest of the magusfile API surface.
 tags: [stdlib, modules, magusfile, reference, fs, os, http, json]

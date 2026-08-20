@@ -1,5 +1,6 @@
 ---
 title: magus-context-audit
+generated_from: cmd/magus/skills/magus-context-audit/SKILL.md
 description: "Audit the instructions an agent was given - the repo instruction file, installed skills, handoff-journal entries, a routing index, hook-injected text, and any user-level instruction file - for statements that contradict each other or that no longer match what the tools do."
 tags: [agents, skills, magus-context-audit]
 skill_full_bytes: 5537

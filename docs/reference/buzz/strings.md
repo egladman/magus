@@ -1,5 +1,6 @@
 ---
 title: strings module
+generated_from: reference/buzz/
 aliases: [modules/strings]
 description: "String helpers Buzz's builtins lack: case conversion, comparison, affix trimming, padding, and splitting into lines or fields."
 tags: [strings, module, stdlib, magusfile]

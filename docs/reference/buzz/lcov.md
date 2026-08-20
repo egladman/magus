@@ -1,5 +1,6 @@
 ---
 title: lcov module
+generated_from: reference/buzz/
 aliases: [modules/lcov]
 description: "LCOV coverage reports: the percentage a badge or a floor gate shows, and the line-level merge that keeps it true across multiple test processes."
 tags: [lcov, module, stdlib, magusfile]

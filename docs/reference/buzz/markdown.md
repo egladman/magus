@@ -1,5 +1,6 @@
 ---
 title: markdown module
+generated_from: reference/buzz/
 aliases: [modules/markdown]
 description: GitHub-Flavored Markdown to semantic HTML.
 tags: [markdown, module, stdlib, magusfile]

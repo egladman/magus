@@ -1,5 +1,6 @@
 ---
 title: typescript spell
+generated_from: spells/typescript/spell.buzz
 description: "TypeScript toolchain spell: tsc, eslint, prettier, and vitest run through the project package manager."
 tags: [typescript, spell, node, eslint, vitest, tools]
 ---

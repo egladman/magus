@@ -1,5 +1,6 @@
 ---
 title: magus completion
+generated_from: internal/clispec/registry.go
 description: Print a bash, zsh, fish, or PowerShell completion script to stdout, ready to append to your shell startup file for tab-completion of magus commands.
 tags: [cli, magus completion, completion, bash, zsh, fish, powershell, shell]
 ---

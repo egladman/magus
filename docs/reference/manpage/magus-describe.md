@@ -1,5 +1,6 @@
 ---
 title: magus describe
+generated_from: internal/clispec/registry.go
 description: Define a magus concept (spell, charm, target, project, workspace, module, mcp-tool) and list every entity of that kind, or detail one when a name is given.
 tags: [cli, magus describe, spell, charm, target, project, workspace, introspection]
 ---
@@ -47,6 +48,9 @@ step at a time.
 
 **--explain**
 : For a ref with charms: show the per-charm argv trace (base then each charm)
+
+**--inputs**
+: With --cache: list every key input line, so you can confirm a declared file was actually hashed
 
 **--no-default-charms**
 : With --cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)

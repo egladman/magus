@@ -1,5 +1,6 @@
 ---
 title: hex module
+generated_from: reference/buzz/
 aliases: [modules/hex]
 description: Hex text codec.
 tags: [hex, module, stdlib, magusfile]

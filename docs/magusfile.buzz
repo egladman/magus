@@ -212,8 +212,24 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         // a schema edit reaches here through that artifact. Depending on ../proto/**/*.proto
         // directly would drag a network-bound buf step into this project's cache boundary,
         // which is the exact coupling buf.gen.yaml was restructured to remove.
+        // The .proto sources ALONGSIDE the descriptor, not instead of it. Both now reach
+        // the cache key, so this is redundancy rather than the load-bearing declaration it
+        // was for one afternoon: the descriptor lives under gen/, which the expansion walk
+        // prunes by name, and an exact path inside a pruned tree used to be dropped
+        // silently (`describe target` listed it under sources while the key omitted it).
+        // internal/cache now resolves a wildcard-free declaration by stat, and MGS1029
+        // reports the pattern case that still cannot work.
+        //
+        // Kept anyway, because keying on the schema is the more honest statement of what
+        // this target reads: the descriptor is downstream of these files, and a reader
+        // asking why the API reference regenerated is better served by "the .proto
+        // changed" than by "a binary artifact changed". Costs nothing at runtime - a read
+        // is hashed, not executed, so no buf step enters this project's boundary.
+        workspace.file("proto/magus/**/*.proto"),
         workspace.file("proto/gen/descriptor.binpb"), workspace.file("CHANGELOG.md"));
-    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/api/*.md", "changelog.md");
+    // reference/api nests by .proto path (reference/api/token/v1/token.md), so it is the one
+    // entry here that needs a recursive glob; every other generator here writes flat.
+    ctx.writesFiles("reference/buzz/*.md", "reference/config.md", "concepts/spells/*.md", "reference/manpage/*.md", "reference/skills/*.md", "reference/api/**/*.md", "changelog.md");
     // spells.md and knowledge.md are EDITED, not produced: both are hand-written pages
     // carrying a small generated region between HTML markers, which magus-spelldocs and
     // magus-examples replace in place and hard-error on if the markers are missing.
@@ -247,7 +263,7 @@ export fun content_generate(ctx: magus\Context, args: [str]) > void !> any {
         .split("](docs/").join("](")
         .split("](CONTRIBUTING.md").join("](development/contributing/");
     fs\writeFile("changelog.md",
-        "---\ntitle: Changelog\n"
+        "---\ntitle: Changelog\ngenerated_from: CHANGELOG.md\n"
         + "description: Every released change to magus, newest first, in Keep a Changelog format. Generated from releases/*.yaml.\n"
         + "tags: [changelog, releases, versions, upgrade, breaking-changes]\n---\n\n"
         + changelogMd);

@@ -1,5 +1,6 @@
 ---
 title: magus-query
+generated_from: cmd/magus/skills/magus-query/SKILL.md
 description: "Query the magus knowledge graph to find and relate entities (projects, targets, spells, ops, charms, modules, diagnostics, docs)."
 tags: [agents, skills, magus-query]
 skill_full_bytes: 11553

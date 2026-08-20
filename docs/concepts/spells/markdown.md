@@ -1,5 +1,6 @@
 ---
 title: markdown spell
+generated_from: spells/markdown/spell.buzz
 description: "Markdown docs spell: markdownlint and prettier for linting and formatting prose."
 tags: [markdown, spell, docs, prettier, lint, tools]
 ---

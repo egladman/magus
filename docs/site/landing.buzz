@@ -579,7 +579,7 @@ std&#92;print(yaml);</code></pre>
     // the search result heading.
     final title = "magus";
     final desc = site.config.description;
-    final doc = renderPage(title, desc, html, LANDING_SRC, "", "", "", mut [], site);
+    final doc = renderPage(title, desc, html, LANDING_SRC, "", "", "", mut [], "", site);
     fs\writeFile(site.outDir + "/index.html", doc);
     // The plain-text body the search index carries. The HTML above is mostly layout, so
     // indexing it verbatim would fill a result snippet with markup rather than the words

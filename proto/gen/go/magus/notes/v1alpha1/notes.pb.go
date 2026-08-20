@@ -594,9 +594,11 @@ func (x *StoreStatus) GetIssues() []string {
 }
 
 type ListNotesRequest struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	PageSize      int32                  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"` // wired for forward-compat; the store returns all notes today
-	PageToken     string                 `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// Bounded at the same tier as ListActivity and ListMemories; see ListMemoriesRequest for
+	// why the three keep their own flat field rather than sharing a pagination message.
+	PageSize      int32  `protobuf:"varint,1,opt,name=page_size,json=pageSize,proto3" json:"page_size,omitempty"`
+	PageToken     string `protobuf:"bytes,2,opt,name=page_token,json=pageToken,proto3" json:"page_token,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -786,9 +788,10 @@ const file_magus_notes_v1alpha1_notes_proto_rawDesc = "" +
 	"\x04path\x18\x03 \x01(\tR\x04path\x12\x1d\n" +
 	"\n" +
 	"note_count\x18\x04 \x01(\x05R\tnoteCount\x12\x16\n" +
-	"\x06issues\x18\x05 \x03(\tR\x06issues\"N\n" +
-	"\x10ListNotesRequest\x12\x1b\n" +
-	"\tpage_size\x18\x01 \x01(\x05R\bpageSize\x12\x1d\n" +
+	"\x06issues\x18\x05 \x03(\tR\x06issues\"Z\n" +
+	"\x10ListNotesRequest\x12'\n" +
+	"\tpage_size\x18\x01 \x01(\x05B\n" +
+	"\xbaH\a\x1a\x05\x18\xe8\a(\x00R\bpageSize\x12\x1d\n" +
 	"\n" +
 	"page_token\x18\x02 \x01(\tR\tpageToken\"\xa8\x01\n" +
 	"\x11ListNotesResponse\x120\n" +

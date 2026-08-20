@@ -1,5 +1,6 @@
 ---
 title: ActivityService
+generated_from: reference/api/
 description: "ActivityService serves the trail to a viewer, mirroring magus.viewer.v1alpha1's shape: List a page of events (newest first), Get a payload blob by ref."
 tags: [api, proto, connect, grpc, activityservice]
 ---
@@ -8,7 +9,7 @@ tags: [api, proto, connect, grpc, activityservice]
 
 ActivityService serves the trail to a viewer, mirroring magus.viewer.v1alpha1's shape: List a page of events (newest first), Get a payload blob by ref. Mounted on the console's human-facing API surface, never under /mcp (the agent protocol surface).
 
-Package `magus.activity.v1alpha1`, defined in `proto/magus/activity/v1alpha1/activity.proto`. Part of the [daemon API](index.md).
+Package `magus.activity.v1alpha1`, defined in `proto/magus/activity/v1alpha1/activity.proto`. Source: [activity.proto:120](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L120). Part of the [daemon API](../../index.md).
 
 ## Methods
 
@@ -16,17 +17,17 @@ Package `magus.activity.v1alpha1`, defined in `proto/magus/activity/v1alpha1/act
 
 ListActivity returns a page of recent events, newest first, narrowed by filter.
 
-`POST /magus.activity.v1alpha1.ActivityService/ListActivityEvents`: unary.
+`POST /magus.activity.v1alpha1.ActivityService/ListActivityEvents`: unary. Source: [activity.proto:122](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L122).
 
-Takes `ListActivityEventsRequest`, returns `ListActivityEventsResponse`.
+Takes [ListActivityEventsRequest](#listactivityeventsrequest), returns [ListActivityEventsResponse](#listactivityeventsresponse).
 
 ### GetPayload
 
 GetPayload returns a stored request or response body by its ref (from an ActivityEvent).
 
-`POST /magus.activity.v1alpha1.ActivityService/GetPayload`: unary.
+`POST /magus.activity.v1alpha1.ActivityService/GetPayload`: unary. Source: [activity.proto:124](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L124).
 
-Takes `GetPayloadRequest`, returns `Payload`.
+Takes [GetPayloadRequest](#getpayloadrequest), returns [Payload](#payload).
 
 ## Messages
 
@@ -34,13 +35,15 @@ Takes `GetPayloadRequest`, returns `Payload`.
 
 ActivityEvent is one recorded action - the atom of the trail. The envelope (time, actor, kind, action, outcome) is common to every kind; the payload refs point into the activity blob store (fetched via GetPayload) so a large request/response body never bloats the line. For an MCP tool call: actor is the agent id, action is the tool name, request is the arguments, response is the result. For an agent command observation: actor is the host-supplied agent/session identity when available, action is the host tool name, request is the normalized invocation, and response is the guard decision. For a token lifecycle event: actor is "cli", action is "connector.create"/"connector.revoke", and the refs are empty.
 
+Source: [activity.proto:73](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L73).
+
 | Field | Type | # | Description |
 |-------|------|---|-------------|
 | `time` | Timestamp | 1 | when the action occurred |
-| `kind` | Kind | 2 |  |
+| `kind` | [Kind](#kind) | 2 |  |
 | `actor` | string | 3 | who: an agent id, "cli", a user |
 | `action` | string | 4 | the specific action: a tool name, "connector.create" |
-| `outcome` | Outcome | 5 |  |
+| `outcome` | [Outcome](#outcome) | 5 |  |
 | `error` | string | 6 | error text when outcome is OUTCOME\_ERROR |
 | `duration` | Duration | 7 | wall-clock, on call-shaped actions |
 | `request_ref` | string | 8 | Content-addressed payload refs, provenance-prefixed (an MCP payload is "mcp<hash>"). Empty when the action has no such body. Resolve with GetPayload. |
@@ -53,61 +56,76 @@ ActivityEvent is one recorded action - the atom of the trail. The envelope (time
 | `session` | string | 15 |  |
 | `unit` | string | 16 | The work-ledger unit this action belongs to, empty when the producer could not correlate one. Set today only by KIND\_AGENT\_SPAWN, and only when the handed context declared it: no host event names a magus unit, so the producer scans the delegation prompt for a documented marker line ("unit: <id>") instead. Correlation is COOPERATIVE - an orchestrator that wants the join writes the marker, and one that does not leaves this empty, which is a missing join rather than a wrong one. It rides the event rather than the blob for the same reason host and session do: joining a page of rows to a ledger must not cost a GetPayload per row. |
 
+Used by: [ListActivityEvents (response)](activity.md#listactivityevents).
+
 ### ActivityQuery
 
 ActivityQuery narrows the listing server-side. Fields AND together; repeated values within a field OR; the time window bounds it.
 
+Source: [activity.proto:129](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L129).
+
 | Field | Type | # | Description |
 |-------|------|---|-------------|
-| `kinds` | repeated Kind | 1 | restrict to these action kinds |
+| `kinds` | [repeated Kind](#kind) | 1 | restrict to these action kinds |
 | `actors` | repeated string | 2 | restrict to these actors |
 | `actions` | repeated string | 3 | restrict to these actions (e.g. tool names) |
-| `time` | TimeRange | 4 | action-time window |
+| `time` | [TimeRange](../../query/v1alpha1/query.md#timerange) | 4 | action-time window |
+
+Used by: [ListActivityEvents (request)](activity.md#listactivityevents).
 
 ### GetPayloadRequest
 
+Source: [activity.proto:146](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L146).
+
 | Field | Type | # | Description |
 |-------|------|---|-------------|
-| `ref` | string | 1 | A provenance-prefixed content ref: a short lowercase source tag followed by hex. |
+| `ref` | string | 1 | _string.pattern: `^[a-z]{2,8}[0-9a-f]+$`_ A provenance-prefixed content ref: a short lowercase source tag followed by hex. |
+
+Used by: [GetPayload (request)](activity.md#getpayload).
 
 ### ListActivityEventsRequest
 
+Source: [activity.proto:136](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L136).
+
 | Field | Type | # | Description |
 |-------|------|---|-------------|
-| `page_size` | int32 | 1 |  |
+| `page_size` | int32 | 1 | _int32.lte: 1000; int32.gte: 0_ |
 | `page_token` | string | 2 |  |
-| `filter` | ActivityQuery | 3 |  |
+| `filter` | [ActivityQuery](#activityquery) | 3 |  |
+
+Used by: [ListActivityEvents (request)](activity.md#listactivityevents).
 
 ### ListActivityEventsResponse
 
+Source: [activity.proto:141](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L141).
+
 | Field | Type | # | Description |
 |-------|------|---|-------------|
-| `events` | repeated ActivityEvent | 1 |  |
+| `events` | [repeated ActivityEvent](#activityevent) | 1 |  |
 | `next_page_token` | string | 2 | set when more events remain |
+
+Used by: [ListActivityEvents (response)](activity.md#listactivityevents).
 
 ### Payload
 
 Payload is one stored request or response body, resolved from an ActivityEvent's ref.
+
+Source: [activity.proto:151](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L151).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
 | `body` | bytes | 1 |  |
 | `size_bytes` | int64 | 2 |  |
 
-### TimeRange
-
-TimeRange bounds a query to items between since and until (inclusive); either bound may be unset for an open-ended range. since doubles as a live-stream resume cursor.
-
-| Field | Type | # | Description |
-|-------|------|---|-------------|
-| `since` | Timestamp | 1 |  |
-| `until` | Timestamp | 2 |  |
+Used by: [GetPayload (response)](activity.md#getpayload).
 
 ## Enums
 
 ### Kind
 
 Kind classifies the recorded action by its source. A reader switches on kind; new sources add a value without changing the envelope.
+
+Source: [activity.proto:23](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L23).
 
 | Value | # | Description |
 |-------|---|-------------|
@@ -123,13 +141,19 @@ Kind classifies the recorded action by its source. A reader switches on kind; ne
 | `KIND_AGENT_SPAWN` | 9 | An orchestrating agent handed work to a sub-agent. The request blob carries the CONTEXT that was handed over - the delegation's whole point, and routinely kilobytes, so only its ref rides the event. There is no response blob and no guard decision: a spawn is an observation, not a judged surface. OUTCOME\_OK means the handoff was observed, NOT that the sub-agent later succeeded. |
 | `KIND_NOTES` | 10 | The console NotesService door onto the workspace's human-authored notes. The service has no write path - a note's whole value is the guarantee that a person wrote it - so every event under this kind is a READ, audited because this is the only door that can serve the PRIVATE note store, which lives outside any repository and which nothing else attributes. |
 
+Used by: [ListActivityEvents (request)](activity.md#listactivityevents), [ListActivityEvents (response)](activity.md#listactivityevents).
+
 ### Outcome
 
 Outcome is how the action ended.
+
+Source: [activity.proto:59](https://github.com/egladman/magus/blob/main/proto/magus/activity/v1alpha1/activity.proto#L59).
 
 | Value | # | Description |
 |-------|---|-------------|
 | `OUTCOME_UNSPECIFIED` | 0 |  |
 | `OUTCOME_OK` | 1 |  |
 | `OUTCOME_ERROR` | 2 |  |
+
+Used by: [ListActivityEvents (response)](activity.md#listactivityevents).
 

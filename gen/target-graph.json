@@ -1477,6 +1477,10 @@
             },
             {
               "project": ".",
+              "glob": "proto/magus/**/*.proto"
+            },
+            {
+              "project": ".",
               "glob": "proto/gen/descriptor.binpb"
             },
             {
@@ -1502,7 +1506,7 @@
               "glob": "reference/skills/*.md"
             },
             {
-              "glob": "reference/api/*.md"
+              "glob": "reference/api/**/*.md"
             },
             {
               "glob": "changelog.md"

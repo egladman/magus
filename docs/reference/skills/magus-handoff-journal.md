@@ -1,5 +1,6 @@
 ---
 title: magus-handoff-journal
+generated_from: cmd/magus/skills/magus-handoff-journal/SKILL.md
 description: "Maintain a user-owned handoff journal through magus_memory or `magus memory`: named decisions, plans, and pointers that survive worktrees and sessions."
 tags: [agents, skills, magus-handoff-journal]
 aliases:

@@ -1,5 +1,6 @@
 ---
 title: toml module
+generated_from: reference/buzz/
 aliases: [modules/toml]
 description: TOML parse and stringify (TOML 1.0 via pelletier/go-toml/v2).
 tags: [toml, module, stdlib, magusfile]

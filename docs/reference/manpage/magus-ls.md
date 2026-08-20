@@ -1,5 +1,6 @@
 ---
 title: magus ls
+generated_from: internal/clispec/registry.go
 description: List every discovered project in the workspace with its language pack, source files, outputs, dependencies, and tool requirements.
 tags: [cli, magus ls, list, projects, discovery, workspace]
 ---

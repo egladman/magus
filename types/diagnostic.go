@@ -119,7 +119,22 @@ const (
 	// while moving no cache key, so the work is real and its result was already
 	// correct - the expensive half of an under-declaration, with the silent half
 	// (nothing reruns when the file DOES matter) waiting behind it.
-	UndeclaredSeedingFile     DiagnosticCode = "MGS1028"
+	UndeclaredSeedingFile DiagnosticCode = "MGS1028"
+	// UnmatchableSourceGlob is a source or read declaration whose static directory
+	// prefix lands inside a pruned tree (project.IgnoreDirs: gen, vendor, node_modules,
+	// target). The expansion walk skips those directories wholesale, so the pattern
+	// matches nothing and silently contributes no cache key - the target replays while
+	// the files it named change underneath it.
+	//
+	// The mirror of MGS1014, which catches a declared OUTPUT that no run produces. Both
+	// are a declaration disconnected from reality, and both are invisible without a
+	// check: `describe target` lists the glob under sources either way.
+	//
+	// An EXACT path is not reported: a wildcard-free declaration names one file, so it
+	// is resolved by stat rather than the walk and reaches the key normally. Only a
+	// pattern is unmatchable, and only because letting one reach into a pruned tree is
+	// what pruning exists to prevent (a bare **/*.js would hash all of node_modules).
+	UnmatchableSourceGlob     DiagnosticCode = "MGS1029"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -202,6 +217,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	SelfStalingOutput, OutputOwnedByTwoTargets, WorkspaceNeedsNewerMagus,
 	MagusfileOnlyMember, ProviderPathRejected, ProviderProjectShadowed,
 	MagusfileAPIRemoved, CacheableSecretRead, SecretGrantInvalid, UndeclaredSeedingFile,
+	UnmatchableSourceGlob,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,

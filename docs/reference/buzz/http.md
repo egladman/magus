@@ -1,5 +1,6 @@
 ---
 title: http module
+generated_from: reference/buzz/
 aliases: [modules/http]
 description: HTTP client.
 tags: [http, module, stdlib, magusfile]

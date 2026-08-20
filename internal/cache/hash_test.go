@@ -759,3 +759,51 @@ func FuzzHashStep(f *testing.F) {
 		}
 	})
 }
+
+// TestExpandSourcesResolvesExactPathInsidePrunedDir pins the fix for a cache key that
+// silently omitted a declared source. The walk prunes whole directories by name
+// (project.IgnoreDirs: gen, vendor, node_modules, target), so a target naming a file
+// INSIDE one could never match it: `magus describe target` listed the path as a source
+// while the key ignored it, and edits to it replayed a stale entry forever. docs's
+// content-generate hit this on proto/gen/descriptor.binpb.
+//
+// A wildcard-free declaration names one file, so it is resolved by stat instead. The
+// second half is the half that must not regress: a PATTERN still gets no such licence,
+// or a project declaring **/*.js would start hashing all of node_modules.
+func TestExpandSourcesResolvesExactPathInsidePrunedDir(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "gen"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "gen", "descriptor.binpb"), []byte("d"), 0o644))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "gen", "other.binpb"), []byte("o"), 0o644))
+
+	out, err := expandSources([]string{"gen/descriptor.binpb"}, root, nil, nil)
+	require.NoError(t, err)
+	var rels []string
+	for _, ra := range out {
+		rels = append(rels, ra.rel)
+	}
+	assert.Equal(t, []string{"gen/descriptor.binpb"}, rels,
+		"an exact path names one file deliberately; a pruned dir must not swallow it")
+
+	// A glob reaching into the same dir stays pruned.
+	out, err = expandSources([]string{"gen/*.binpb"}, root, nil, nil)
+	require.NoError(t, err)
+	assert.Empty(t, out, "a pattern must not reach into a pruned dir")
+}
+
+// TestExpandSourcesDeduplicatesExactAndPattern covers the overlap the exact-path path
+// introduces: one file named both ways must be hashed once, or adding a redundant
+// declaration would change the cache key while adding no information.
+func TestExpandSourcesDeduplicatesExactAndPattern(t *testing.T) {
+	root := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "cmd"), 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(root, "cmd", "main.go"), []byte("m"), 0o644))
+
+	out, err := expandSources([]string{"**/*.go", "cmd/main.go"}, root, nil, nil)
+	require.NoError(t, err)
+	var rels []string
+	for _, ra := range out {
+		rels = append(rels, ra.rel)
+	}
+	assert.Equal(t, []string{"cmd/main.go"}, rels, "one file, named twice, hashed once")
+}

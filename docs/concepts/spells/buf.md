@@ -1,5 +1,6 @@
 ---
 title: buf spell
+generated_from: spells/buf/spell.buzz
 description: "Buf spell: protobuf build, lint, format, and code generation."
 tags: [buf, spell, protobuf, codegen, lint, tools]
 ---

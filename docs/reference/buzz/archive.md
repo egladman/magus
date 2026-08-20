@@ -1,5 +1,6 @@
 ---
 title: archive module
+generated_from: reference/buzz/
 aliases: [modules/archive]
 description: Archive creation and extraction with automatic format detection.
 tags: [archive, module, stdlib, magusfile]

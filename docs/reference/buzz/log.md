@@ -1,5 +1,6 @@
 ---
 title: log module
+generated_from: reference/buzz/
 aliases: [modules/log]
 description: "Emit a message at a level through magus's own logger, so it honors -q/-v/-vv, renders in the run's format, is redacted, and is captured in the run log."
 tags: [log, module, stdlib, magusfile]

@@ -1,5 +1,6 @@
 ---
 title: magus explain
+generated_from: internal/clispec/registry.go
 description: "Show a single knowledge-graph node in context: its data, its incoming and outgoing edges with provenance, and how many nodes reach it."
 tags: [cli, magus explain, explain, knowledge graph, node, edges, provenance, impact]
 ---

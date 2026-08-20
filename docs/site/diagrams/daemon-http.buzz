@@ -20,7 +20,7 @@ export fun daemonHttpDiagram() > Diagram {
         eyebrow = "magus daemon",
         title = "The HTTP surface, and the one route without a guard",
         desc = "Agents and the console reach /mcp, the /api/v1 read views, the review and "
-            + "plan routes and nine typed Connect services through the DNS-rebind, "
+            + "plan routes and ten typed Connect services through the DNS-rebind, "
             + "bearer-token and CORS guard. POST /api/v1/diff/session carries the human "
             + "half of a paired review and POST /api/v1/share opens the LAN listener; both "
             + "are loopback only. The health endpoints answer probes directly, with no "
@@ -47,7 +47,7 @@ export fun daemonHttpDiagram() > Diagram {
                   sub = "diff, session, plan, ledger",
                   x = 600, y = 264, w = 280, h = 64 },
             Node{ id = "connect", anchor = "internal/handler/metrics", label = "Connect RPC",
-                  sub = "nine typed services",
+                  sub = "ten typed services",
                   x = 600, y = 352, w = 280, h = 64 },
             Node{ id = "health", anchor = "internal/daemon", label = "/livez /readyz", sub = "no authentication",
                   role = "external", x = 600, y = 440, w = 280, h = 64 },

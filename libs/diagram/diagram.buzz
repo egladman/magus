@@ -1127,7 +1127,13 @@ fun fitLabel(label: str) > str {
 // Bounded and deterministic: same input, same answer. If nothing is clean the last attempt
 // is returned and the caller drops the figure (see dependencyFigure) rather than drawing
 // connectors nobody can trace.
-final LayerStaggers = [4, 8, 12, 16, 20, 24];
+// Ascending, and the first clean one wins, so a graph pays only the offset it needs and the
+// common case still settles at 4. The list runs to one full row pitch (80): past that a
+// column has dropped a whole row and the staircase reads worse than the table the caller
+// falls back to. Six values used to be the whole search, and the docs run-order figure
+// needed more than that - it went unrendered for months while the graph had ample room
+// (its busiest column gap wants 10 channels of the 18 a gap provides).
+final LayerStaggers = [4, 8, 12, 16, 20, 24, 28, 32, 36, 40, 44, 48, 52, 56, 60, 64, 68, 72, 76, 80];
 
 export fun layered(id: str, title: str, desc: str, items: [LayeredItem]) > Diagram {
     var best = layoutWithStagger(id, title, desc, items, LayerStaggers[0]);
@@ -1255,7 +1261,9 @@ fun layoutWithStagger(id: str, title: str, desc: str, items: [LayeredItem], stag
         title = title,
         desc = desc,
         width = 64 + (maxRank + 1) * LayerNodeW + maxRank * LayerColGap,
-        height = LayerTop + maxRows * (LayerNodeH + LayerRowGap) + 32,
+        // maxRank * stagger, because a node's y carries r * stagger: the last column sits
+        // that much lower than the first, and a canvas sized from rows alone clips it.
+        height = LayerTop + maxRows * (LayerNodeH + LayerRowGap) + maxRank * stagger + 32,
         nodes = nodes,
         edges = edges,
     };

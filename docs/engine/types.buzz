@@ -94,7 +94,8 @@ export object DemoLink {
     anchor: str = "",
 }
 
-// renderBreadcrumb() looks one up by url for its title.
+// renderBreadcrumb() looks one up by url for its title. generatedFrom is "" for a
+// hand-written page; see meta.generatedFrom for the two non-empty shapes.
 export object DocPage {
     url: str = "",
     title: str = "",
@@ -103,6 +104,7 @@ export object DocPage {
     section: str = "",
     overview: bool = false,
     srcRel: str = "",
+    generatedFrom: str = "",
 }
 
 // Release is one entry read from releases/v<semver>.yaml. body is the trimmed markdown for
@@ -360,6 +362,7 @@ export object Site {
             section = firstPathSegment(url),
             overview = pageType(md) == "overview",
             srcRel = this.docs + "/" + rel,
+            generatedFrom = generatedFrom(md),
         });
     }
 

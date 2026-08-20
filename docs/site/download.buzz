@@ -74,7 +74,7 @@ tar -xzf "magus_windows_amd64_static.tar.gz" magus.exe</code></pre>
 
     final title = "Download";
     final desc = "Install magus on macOS, Linux or Windows. One binary, no runtime, and the exact command for the machine you are on.";
-    final doc = renderPage(title, desc, html, DOWNLOAD_SRC, "", "download/", "", mut [], site);
+    final doc = renderPage(title, desc, html, DOWNLOAD_SRC, "", "download/", "", mut [], "", site);
     fs\mkdirAll(site.outDir + "/download");
     final of = io\File.open(site.outDir + "/download/index.html", io\FileMode.write);
     of.write(doc);

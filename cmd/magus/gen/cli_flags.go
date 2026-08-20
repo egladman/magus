@@ -135,6 +135,8 @@ const (
 	FlagDescribeTargetE = "e"
 	// describe target: --explain
 	FlagDescribeTargetExplain = "explain"
+	// describe target: --inputs
+	FlagDescribeTargetInputs = "inputs"
 	// describe target: --no-default-charms
 	FlagDescribeTargetNoDefaultCharms = "no-default-charms"
 	// diff: --generated
@@ -346,6 +348,7 @@ type DescribeTargetFlags struct {
 	Explain         bool   // --explain, -e
 	Cache           bool   // --cache
 	Against         string // --against
+	Inputs          bool   // --inputs
 	NoDefaultCharms bool   // --no-default-charms
 }
 
@@ -356,6 +359,7 @@ func BindDescribeTarget(fs *flag.FlagSet) *DescribeTargetFlags {
 	fs.BoolVar(&f.Explain, FlagDescribeTargetE, false, "Short for --explain")
 	fs.BoolVar(&f.Cache, FlagDescribeTargetCache, false, "Show the live cache key, the ref a run would print, and the component classes behind it")
 	fs.StringVar(&f.Against, FlagDescribeTargetAgainst, "", "With --cache: diff the live key inputs against the stored lines behind an output `ref`")
+	fs.BoolVar(&f.Inputs, FlagDescribeTargetInputs, false, "With --cache: list every key input line, so you can confirm a declared file was actually hashed")
 	fs.BoolVar(&f.NoDefaultCharms, FlagDescribeTargetNoDefaultCharms, false, "With --cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)")
 	return &f
 }

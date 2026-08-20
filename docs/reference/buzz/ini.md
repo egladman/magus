@@ -1,5 +1,6 @@
 ---
 title: ini module
+generated_from: reference/buzz/
 aliases: [modules/ini]
 description: INI/properties config parsing and rendering (.npmrc, .gitconfig, .editorconfig).
 tags: [ini, module, stdlib, magusfile]

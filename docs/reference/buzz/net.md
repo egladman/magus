@@ -1,5 +1,6 @@
 ---
 title: net module
+generated_from: reference/buzz/
 aliases: [modules/net]
 description: "TCP readiness and port allocation: wait for a service to accept connections, and find a free port."
 tags: [net, module, stdlib, magusfile]

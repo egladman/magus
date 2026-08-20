@@ -1,5 +1,6 @@
 ---
 title: fmt module
+generated_from: reference/buzz/
 aliases: [modules/fmt]
 description: String formatting (printf-style).
 tags: [fmt, module, stdlib, magusfile]

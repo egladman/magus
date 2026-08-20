@@ -1,5 +1,6 @@
 ---
 title: bash spell
+generated_from: spells/bash/spell.buzz
 description: "Bash spell: shellcheck linting for shell scripts."
 tags: [bash, spell, shell, shellcheck, lint, tools]
 ---

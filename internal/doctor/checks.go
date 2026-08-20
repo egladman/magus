@@ -2221,3 +2221,67 @@ func (r *runner) checkConcurrencySizing() types.DoctorCheck {
 		Fix:     []string{"config", "set", fmt.Sprintf("key=concurrency,value=%d", fit)},
 	}
 }
+
+// checkUnmatchableSourceGlobs is MGS1029: a source glob whose static directory prefix
+// lands inside a tree the expansion walk prunes wholesale (project.IgnoreDirs: gen,
+// vendor, node_modules, target). The walk never descends, so the pattern matches
+// nothing and contributes no cache key - the target replays while the files it named
+// change underneath it.
+//
+// FAIL, not advice, which is where this parts company with MGS1028. An undeclared file
+// is a judgement call the workspace is entitled to make; this is a declaration that
+// cannot mean what it says. Nobody writes "gen/*.binpb" hoping it matches nothing.
+//
+// Only PATTERNS are reported. A wildcard-free path names one file and is resolved by
+// stat rather than the walk, so it reaches the key from inside a pruned tree normally -
+// that is the fix this check is the residue of. Letting a pattern in too is what
+// pruning exists to prevent: a bare **/*.js would start hashing all of node_modules.
+func (r *runner) checkUnmatchableSourceGlobs(projects []*types.Project) types.DoctorCheck {
+	const name = "unmatchable source globs"
+
+	var details []string
+	for _, p := range projects {
+		for _, glob := range p.Sources {
+			if dir, ok := prunedPrefix(glob); ok {
+				details = append(details, fmt.Sprintf(
+					"%s: source glob %q can never match: the expansion walk prunes %q",
+					types.ProjectDisplayName(p.Path, p.Name, p.Dir), glob, dir))
+			}
+		}
+	}
+	if len(details) == 0 {
+		return types.DoctorCheck{Name: name, Status: types.DoctorOK, Message: "no unmatchable source globs"}
+	}
+	slices.Sort(details)
+	details = slices.Compact(details)
+	return types.DoctorCheck{
+		Name:   name,
+		Status: types.DoctorFail,
+		Message: fmt.Sprintf(
+			"%d source glob(s) reach into a pruned directory and match nothing; the target replays while those files change (see %s)",
+			len(details), types.CodeURL(types.UnmatchableSourceGlob)),
+		Details: details,
+	}
+}
+
+// prunedPrefix reports whether glob is a PATTERN whose static directory prefix passes
+// through a pruned directory, and names the offending segment. A glob with no
+// metacharacter is exact and resolves by stat, so it is never unmatchable.
+func prunedPrefix(glob string) (string, bool) {
+	if !strings.ContainsAny(glob, "*?[{") {
+		return "", false
+	}
+	static := glob
+	if i := strings.IndexAny(glob, "*?[{"); i >= 0 {
+		static = glob[:i]
+	}
+	for _, seg := range strings.Split(filepath.ToSlash(static), "/") {
+		if seg == "" || seg == "." || seg == ".." {
+			continue
+		}
+		if slices.Contains(project.IgnoreDirs, seg) {
+			return seg, true
+		}
+	}
+	return "", false
+}

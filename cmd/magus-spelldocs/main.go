@@ -224,9 +224,10 @@ func renderSpell(d spells.Descriptor) string {
 	tags := append([]string{d.Name, "spell"}, meta.tags...)
 	tags = append(tags, "tools")
 	docs.WriteFrontmatter(&b, docs.Frontmatter{
-		Title:       d.Name + " spell",
-		Description: meta.description,
-		Tags:        dedupe(tags),
+		Title:         d.Name + " spell",
+		Description:   meta.description,
+		GeneratedFrom: "spells/" + meta.dir + "/spell.buzz",
+		Tags:          dedupe(tags),
 	})
 
 	fmt.Fprintf(&b, "# %s\n\n", d.Name)

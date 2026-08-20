@@ -3,8 +3,8 @@
   "schema_version": 9,
   "directed": true,
   "multigraph": false,
-  "node_count": 2341,
-  "edge_count": 6031,
+  "node_count": 2373,
+  "edge_count": 6090,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -284,6 +284,14 @@
       "label": "MGS1028",
       "attrs": {
         "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1028/"
+      }
+    },
+    {
+      "id": "diagnostic:MGS1029",
+      "kind": "diagnostic",
+      "label": "MGS1029",
+      "attrs": {
+        "url": "https://eli.gladman.cc/magus/reference/codes/magusfile/MGS1029/"
       }
     },
     {
@@ -1020,7 +1028,7 @@
       "label": "docs/reference",
       "source": "docs/reference",
       "attrs": {
-        "dir_files": "189",
+        "dir_files": "216",
         "dir_languages": "markdown"
       }
     },
@@ -1030,7 +1038,247 @@
       "label": "docs/reference/api",
       "source": "docs/reference/api",
       "attrs": {
-        "dir_files": "11",
+        "dir_files": "37",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/activity",
+      "kind": "dir",
+      "label": "docs/reference/api/activity",
+      "source": "docs/reference/api/activity",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/activity/v1alpha1",
+      "kind": "dir",
+      "label": "docs/reference/api/activity/v1alpha1",
+      "source": "docs/reference/api/activity/v1alpha1",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/graph",
+      "kind": "dir",
+      "label": "docs/reference/api/graph",
+      "source": "docs/reference/api/graph",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/graph/v1alpha1",
+      "kind": "dir",
+      "label": "docs/reference/api/graph/v1alpha1",
+      "source": "docs/reference/api/graph/v1alpha1",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/insight",
+      "kind": "dir",
+      "label": "docs/reference/api/insight",
+      "source": "docs/reference/api/insight",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/insight/v1alpha1",
+      "kind": "dir",
+      "label": "docs/reference/api/insight/v1alpha1",
+      "source": "docs/reference/api/insight/v1alpha1",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/job",
+      "kind": "dir",
+      "label": "docs/reference/api/job",
+      "source": "docs/reference/api/job",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/job/v1alpha1",
+      "kind": "dir",
+      "label": "docs/reference/api/job/v1alpha1",
+      "source": "docs/reference/api/job/v1alpha1",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/memory",
+      "kind": "dir",
+      "label": "docs/reference/api/memory",
+      "source": "docs/reference/api/memory",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/memory/v1alpha1",
+      "kind": "dir",
+      "label": "docs/reference/api/memory/v1alpha1",
+      "source": "docs/reference/api/memory/v1alpha1",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/metrics",
+      "kind": "dir",
+      "label": "docs/reference/api/metrics",
+      "source": "docs/reference/api/metrics",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/metrics/v1alpha1",
+      "kind": "dir",
+      "label": "docs/reference/api/metrics/v1alpha1",
+      "source": "docs/reference/api/metrics/v1alpha1",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/notes",
+      "kind": "dir",
+      "label": "docs/reference/api/notes",
+      "source": "docs/reference/api/notes",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/notes/v1alpha1",
+      "kind": "dir",
+      "label": "docs/reference/api/notes/v1alpha1",
+      "source": "docs/reference/api/notes/v1alpha1",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/query",
+      "kind": "dir",
+      "label": "docs/reference/api/query",
+      "source": "docs/reference/api/query",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/query/v1alpha1",
+      "kind": "dir",
+      "label": "docs/reference/api/query/v1alpha1",
+      "source": "docs/reference/api/query/v1alpha1",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/status",
+      "kind": "dir",
+      "label": "docs/reference/api/status",
+      "source": "docs/reference/api/status",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/status/v1alpha1",
+      "kind": "dir",
+      "label": "docs/reference/api/status/v1alpha1",
+      "source": "docs/reference/api/status/v1alpha1",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/token",
+      "kind": "dir",
+      "label": "docs/reference/api/token",
+      "source": "docs/reference/api/token",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/token/v1alpha1",
+      "kind": "dir",
+      "label": "docs/reference/api/token/v1alpha1",
+      "source": "docs/reference/api/token/v1alpha1",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/tool",
+      "kind": "dir",
+      "label": "docs/reference/api/tool",
+      "source": "docs/reference/api/tool",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/tool/v1alpha1",
+      "kind": "dir",
+      "label": "docs/reference/api/tool/v1alpha1",
+      "source": "docs/reference/api/tool/v1alpha1",
+      "attrs": {
+        "dir_files": "1",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/viewer",
+      "kind": "dir",
+      "label": "docs/reference/api/viewer",
+      "source": "docs/reference/api/viewer",
+      "attrs": {
+        "dir_files": "2",
+        "dir_languages": "markdown"
+      }
+    },
+    {
+      "id": "dir:docs/reference/api/viewer/v1alpha1",
+      "kind": "dir",
+      "label": "docs/reference/api/viewer/v1alpha1",
+      "source": "docs/reference/api/viewer/v1alpha1",
+      "attrs": {
+        "dir_files": "1",
         "dir_languages": "markdown"
       }
     },
@@ -1050,7 +1298,7 @@
       "label": "docs/reference/codes",
       "source": "docs/reference/codes",
       "attrs": {
-        "dir_files": "84",
+        "dir_files": "85",
         "dir_languages": "markdown"
       }
     },
@@ -1090,7 +1338,7 @@
       "label": "docs/reference/codes/magusfile",
       "source": "docs/reference/codes/magusfile",
       "attrs": {
-        "dir_files": "29",
+        "dir_files": "30",
         "dir_languages": "markdown"
       }
     },
@@ -1320,7 +1568,7 @@
       "label": "plans",
       "source": "plans",
       "attrs": {
-        "dir_files": "8",
+        "dir_files": "9",
         "dir_languages": "markdown"
       }
     },
@@ -2966,15 +3214,27 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/activity.md",
+      "id": "doc:docs/reference/api/activity/v1alpha1/activity.md",
       "kind": "doc",
-      "label": "docs/reference/api/activity.md",
-      "source": "docs/reference/api/activity.md",
+      "label": "docs/reference/api/activity/v1alpha1/activity.md",
+      "source": "docs/reference/api/activity/v1alpha1/activity.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
         "tags": "api,proto,connect,grpc,activityservice",
         "title": "ActivityService"
+      }
+    },
+    {
+      "id": "doc:docs/reference/api/graph/v1alpha1/graph.md",
+      "kind": "doc",
+      "label": "docs/reference/api/graph/v1alpha1/graph.md",
+      "source": "docs/reference/api/graph/v1alpha1/graph.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "api,proto,connect,grpc,graph-v1alpha1",
+        "title": "magus.graph.v1alpha1"
       }
     },
     {
@@ -2990,10 +3250,10 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/insight.md",
+      "id": "doc:docs/reference/api/insight/v1alpha1/insight.md",
       "kind": "doc",
-      "label": "docs/reference/api/insight.md",
-      "source": "docs/reference/api/insight.md",
+      "label": "docs/reference/api/insight/v1alpha1/insight.md",
+      "source": "docs/reference/api/insight/v1alpha1/insight.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -3002,10 +3262,10 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/job.md",
+      "id": "doc:docs/reference/api/job/v1alpha1/job.md",
       "kind": "doc",
-      "label": "docs/reference/api/job.md",
-      "source": "docs/reference/api/job.md",
+      "label": "docs/reference/api/job/v1alpha1/job.md",
+      "source": "docs/reference/api/job/v1alpha1/job.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -3014,10 +3274,10 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/memory.md",
+      "id": "doc:docs/reference/api/memory/v1alpha1/memory.md",
       "kind": "doc",
-      "label": "docs/reference/api/memory.md",
-      "source": "docs/reference/api/memory.md",
+      "label": "docs/reference/api/memory/v1alpha1/memory.md",
+      "source": "docs/reference/api/memory/v1alpha1/memory.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -3026,10 +3286,10 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/metrics.md",
+      "id": "doc:docs/reference/api/metrics/v1alpha1/metrics.md",
       "kind": "doc",
-      "label": "docs/reference/api/metrics.md",
-      "source": "docs/reference/api/metrics.md",
+      "label": "docs/reference/api/metrics/v1alpha1/metrics.md",
+      "source": "docs/reference/api/metrics/v1alpha1/metrics.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -3038,10 +3298,10 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/notes.md",
+      "id": "doc:docs/reference/api/notes/v1alpha1/notes.md",
       "kind": "doc",
-      "label": "docs/reference/api/notes.md",
-      "source": "docs/reference/api/notes.md",
+      "label": "docs/reference/api/notes/v1alpha1/notes.md",
+      "source": "docs/reference/api/notes/v1alpha1/notes.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -3050,10 +3310,22 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/status.md",
+      "id": "doc:docs/reference/api/query/v1alpha1/query.md",
       "kind": "doc",
-      "label": "docs/reference/api/status.md",
-      "source": "docs/reference/api/status.md",
+      "label": "docs/reference/api/query/v1alpha1/query.md",
+      "source": "docs/reference/api/query/v1alpha1/query.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "api,proto,connect,grpc,query-v1alpha1",
+        "title": "magus.query.v1alpha1"
+      }
+    },
+    {
+      "id": "doc:docs/reference/api/status/v1alpha1/status.md",
+      "kind": "doc",
+      "label": "docs/reference/api/status/v1alpha1/status.md",
+      "source": "docs/reference/api/status/v1alpha1/status.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -3062,10 +3334,10 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/token.md",
+      "id": "doc:docs/reference/api/token/v1alpha1/token.md",
       "kind": "doc",
-      "label": "docs/reference/api/token.md",
-      "source": "docs/reference/api/token.md",
+      "label": "docs/reference/api/token/v1alpha1/token.md",
+      "source": "docs/reference/api/token/v1alpha1/token.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -3074,10 +3346,10 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/tool.md",
+      "id": "doc:docs/reference/api/tool/v1alpha1/tool.md",
       "kind": "doc",
-      "label": "docs/reference/api/tool.md",
-      "source": "docs/reference/api/tool.md",
+      "label": "docs/reference/api/tool/v1alpha1/tool.md",
+      "source": "docs/reference/api/tool/v1alpha1/tool.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -3086,10 +3358,10 @@
       }
     },
     {
-      "id": "doc:docs/reference/api/viewer.md",
+      "id": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
       "kind": "doc",
-      "label": "docs/reference/api/viewer.md",
-      "source": "docs/reference/api/viewer.md",
+      "label": "docs/reference/api/viewer/v1alpha1/viewer.md",
+      "source": "docs/reference/api/viewer/v1alpha1/viewer.md",
       "attrs": {
         "role": "doc",
         "section": "reference",
@@ -4007,6 +4279,18 @@
         "section": "reference",
         "tags": "MGS1028,magusfile,sources,affected,cache,seeding,doctor",
         "title": "MGS1028: a changed file seeds a project it does not key"
+      }
+    },
+    {
+      "id": "doc:docs/reference/codes/magusfile/MGS1029.md",
+      "kind": "doc",
+      "label": "docs/reference/codes/magusfile/MGS1029.md",
+      "source": "docs/reference/codes/magusfile/MGS1029.md",
+      "attrs": {
+        "role": "doc",
+        "section": "reference",
+        "tags": "MGS1029,magusfile,sources,cache,globs",
+        "title": "MGS1029: source glob reaches into a pruned directory"
       }
     },
     {
@@ -5469,6 +5753,15 @@
       "kind": "doc",
       "label": "plans/handoff-cli-command-registry.md",
       "source": "plans/handoff-cli-command-registry.md",
+      "attrs": {
+        "role": "doc"
+      }
+    },
+    {
+      "id": "doc:plans/protobuf-api-docs-improvement.md",
+      "kind": "doc",
+      "label": "plans/protobuf-api-docs-improvement.md",
+      "source": "plans/protobuf-api-docs-improvement.md",
       "attrs": {
         "role": "doc"
       }
@@ -7835,7 +8128,7 @@
       "kind": "function",
       "label": "findReleasePost",
       "doc": "findReleasePost sets site.releaseBlogURL to the post whose frontmatter `release:` names the newest release's version, or leaves it \"\" when no post claims it.  The claim lives on the POST, not on the release manifest: a release need not have a post at all, and releases/*.yaml mirrors the Go ReleaseManifest that freezes index.json's v1 schema, so an optional docs-only field has no business there. It also means a post can be written and merged ahead of the tag it names, and starts announcing itself the moment",
-      "source": "docs/engine/blog.buzz:54",
+      "source": "docs/engine/blog.buzz:57",
       "attrs": {
         "exported": "true"
       }
@@ -7844,8 +8137,8 @@
       "id": "function:docs/engine/blog.buzz:isPublishablePost",
       "kind": "function",
       "label": "isPublishablePost",
-      "doc": "isPublishablePost reports whether blog/<name> should be rendered at all: a .md file that is not the index, not an _underscored fixture, and not marked `draft: true` in its frontmatter.  A draft stays committed in the repo and renders NOWHERE - no post page, no blog index entry, no feed item, no announcement-bar link - so unfinished writing can be reviewed in a pull request without shipping to the site. The underscore prefix already skipped a file, but that is the fixture convention and it forces a rename to",
-      "source": "docs/engine/blog.buzz:36",
+      "doc": "isPublishablePost reports whether blog/<name> should be rendered at all: a .md file that is not the index, not an _underscored fixture, not marked `draft: true` in its frontmatter, and not dated past the build (isFuturePost).  A draft stays committed in the repo and renders NOWHERE - no post page, no blog index entry, no feed item, no announcement-bar link - so unfinished writing can be reviewed in a pull request without shipping to the site. The underscore prefix already skipped a file, but that is the fix",
+      "source": "docs/engine/blog.buzz:37",
       "attrs": {
         "exported": "true"
       }
@@ -7855,7 +8148,7 @@
       "kind": "function",
       "label": "renderBlogIndex",
       "doc": "renderBlogIndex writes gen/blog/index.html, a reverse-chronological list of the collected posts. Runs AFTER renderBlogPost has populated site.blogPosts. A plain <ul> under renderPage(), so it inherits nav/breadcrumb/footer.",
-      "source": "docs/engine/blog.buzz:219",
+      "source": "docs/engine/blog.buzz:222",
       "attrs": {
         "exported": "true"
       }
@@ -7865,14 +8158,14 @@
       "kind": "function",
       "label": "renderBlogPager",
       "doc": "renderBlogPager renders the prev/next links between posts, ordered by date newest-first so \"prev\" is newer and \"next\" is older (timeline intuition). Falls back to filename order when a post lacks a date.",
-      "source": "docs/engine/blog.buzz:160"
+      "source": "docs/engine/blog.buzz:163"
     },
     {
       "id": "function:docs/engine/blog.buzz:renderBlogPost",
       "kind": "function",
       "label": "renderBlogPost",
       "doc": "renderBlogPost renders one blog/<file>.md as its own directory-index page. base is the basename (e.g. \"2026-07-01-hello-blog.md\"); the URL is date-scoped blog/YYYY/MM/DD/slug/ (via blogURLPath), so permalinks sort by date and never collide across years. Post metadata is captured into site.blogPosts for the index page.",
-      "source": "docs/engine/blog.buzz:78",
+      "source": "docs/engine/blog.buzz:81",
       "attrs": {
         "exported": "true"
       }
@@ -8115,7 +8408,7 @@
       "kind": "function",
       "label": "deriveDescription",
       "doc": "deriveDescription is the fallback page description: the first substantive paragraph of the rendered HTML, tags stripped, whitespace collapsed, entities decoded, truncated on a word boundary. A leading image-only paragraph (the hero) is skipped. \"\" when no paragraph has text, so the caller can fall back to site.config.description. Decoding here (before escapeAttr re-encodes) avoids double-encoding.",
-      "source": "docs/engine/meta.buzz:100",
+      "source": "docs/engine/meta.buzz:109",
       "attrs": {
         "exported": "true"
       }
@@ -8131,11 +8424,21 @@
       }
     },
     {
+      "id": "function:docs/engine/meta.buzz:generatedFrom",
+      "kind": "function",
+      "label": "generatedFrom",
+      "doc": "generatedFrom reads the frontmatter `generated_from:` value (empty when absent, which means the page is hand-written). A repo-relative path or comma-joined glob list names the source directly; a value ending in \"/\" is an in-site path to the section overview that carries the real source link(s) instead - see internal/docs.Frontmatter.",
+      "source": "docs/engine/meta.buzz:40",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
       "id": "function:docs/engine/meta.buzz:insertSinceBadge",
       "kind": "function",
       "label": "insertSinceBadge",
       "doc": "insertSinceBadge places an \"Added in <version>\" marker under the H1 so a reader can tell whether a feature exists in their installed magus. magus follows Go-style compatibility (no v2), so one page serves every version and just notes when a thing arrived. since is the frontmatter `since:` value; no-op without a `since:` or an H1 to anchor to.",
-      "source": "docs/engine/meta.buzz:121",
+      "source": "docs/engine/meta.buzz:130",
       "attrs": {
         "exported": "true"
       }
@@ -8145,7 +8448,7 @@
       "kind": "function",
       "label": "insertSizeRatio",
       "doc": "insertSizeRatio places a size comparison under the H1 of an agent-skill page: how much smaller the `--simple` permutation is, as a number and as a bar.  The bar is a bare `<progress>`. Pico styles that element classlessly (`progress{accent-color:var(--pico-primary)}` plus a themed track in both color schemes), so the ratio gets a graphic with no custom CSS and no new markup vocabulary - which is the site's whole rule. It is also the semantically correct element: a proportion of a known whole, readable by a",
-      "source": "docs/engine/meta.buzz:159",
+      "source": "docs/engine/meta.buzz:168",
       "attrs": {
         "exported": "true"
       }
@@ -8155,7 +8458,7 @@
       "kind": "function",
       "label": "pageType",
       "doc": "pageType reads the frontmatter `page_type:` marker (empty when absent). The value that matters is \"overview\": a landing/index page that orients and routes to others. Related ranking favors these hubs and the reachability gate trusts them as roots, so declaring the type in frontmatter beats guessing it from a URL shape.",
-      "source": "docs/engine/meta.buzz:40",
+      "source": "docs/engine/meta.buzz:49",
       "attrs": {
         "exported": "true"
       }
@@ -8175,7 +8478,7 @@
       "kind": "function",
       "label": "readingTime",
       "doc": "readingTime estimates minutes-to-read by weighting content by type, not raw word count: prose at 220 wpm, code counted by line (read deliberately, not skimmed), images costing a few seconds each - so a code- or figure-heavy page gets a truer number. Frontmatter is stripped so YAML doesn't skew it. \"\" for pages too short to label. Deterministic.",
-      "source": "docs/engine/meta.buzz:49",
+      "source": "docs/engine/meta.buzz:58",
       "attrs": {
         "exported": "true"
       }
@@ -8300,7 +8603,7 @@
       "id": "function:docs/engine/page.buzz:dependencyFigure",
       "kind": "function",
       "label": "dependencyFigure",
-      "source": "docs/engine/page.buzz:765",
+      "source": "docs/engine/page.buzz:823",
       "attrs": {
         "exported": "true"
       }
@@ -8310,7 +8613,7 @@
       "kind": "function",
       "label": "diagramDrift",
       "doc": "diagramDrift re-exports the anchor check, alongside writeDiagramPair.",
-      "source": "docs/engine/page.buzz:752",
+      "source": "docs/engine/page.buzz:810",
       "attrs": {
         "exported": "true"
       }
@@ -8320,7 +8623,7 @@
       "kind": "function",
       "label": "injectDemoCallout",
       "doc": "injectDemoCallout inserts the \"Interactive demo\" callout after a page's intro (the first </p>), deep-linking href (a tour card). A distinct component (its own teal identity), not a link or a button - it signals \"there is a runnable demonstration of this concept.\"",
-      "source": "docs/engine/page.buzz:609"
+      "source": "docs/engine/page.buzz:667"
     },
     {
       "id": "function:docs/engine/page.buzz:pageOrder",
@@ -8344,17 +8647,23 @@
       "kind": "function",
       "label": "renderFile",
       "doc": "Render one docs/*.md file to a sibling *.html under gen. rel is relative to the docs/ subtree; srcRel (site.docs/rel) is magus/-relative for the footer/edit link.",
-      "source": "docs/engine/page.buzz:623",
+      "source": "docs/engine/page.buzz:681",
       "attrs": {
         "exported": "true"
       }
     },
     {
+      "id": "function:docs/engine/page.buzz:renderGeneratedChips",
+      "kind": "function",
+      "label": "renderGeneratedChips",
+      "doc": "renderGeneratedChips renders a generated page's provenance as two chips: the existing \"generated\" status chip, then a link chip naming the source it came from.  They stay SEPARATE rather than merging into one linked status chip, because the two styles say different things and the CSS already encodes that: .tag.generated is filled with cursor:help to read as a status (see site.css), while .post-tags a.tag is outlined and fills on hover to read as interactive. A filled chip that is also a link gets no visible",
+      "source": "docs/engine/page.buzz:285"
+    },
+    {
       "id": "function:docs/engine/page.buzz:renderPage",
       "kind": "function",
       "label": "renderPage",
-      "doc": "srcRel is the page's source path relative to magus/ (e.g. \"docs/spells.md\"), driving the commit footer and \"Suggest an edit\" link. description is resolved (frontmatter, else derived, else site default), always non-empty so the meta tag fires. canonUrl is the clean gen-root URL (\"\" for home). pager is the prev/next nav (may be \"\").",
-      "source": "docs/engine/page.buzz:253",
+      "source": "docs/engine/page.buzz:299",
       "attrs": {
         "exported": "true"
       }
@@ -8378,24 +8687,31 @@
       "kind": "function",
       "label": "renderRoot",
       "doc": "Render the repo's top-level README.md as the /development/ landing (README_URL). It is the same document GitHub shows on the repository front page - the full pitch, the architecture, and how to build and test the tree - so it is the contributor section's overview rather than the site's front door; site/landing.buzz owns gen/index.html.  Links like href=\"docs/X\" are repo-root-relative, which is what GitHub needs. From gen/development/index.html the docs tree is one level up, so the prefix is rewritten to \"..",
-      "source": "docs/engine/page.buzz:520",
+      "source": "docs/engine/page.buzz:578",
       "attrs": {
         "exported": "true"
       }
+    },
+    {
+      "id": "function:docs/engine/page.buzz:repoBlobHref",
+      "kind": "function",
+      "label": "repoBlobHref",
+      "doc": "srcRel is the page's source path relative to magus/ (e.g. \"docs/spells.md\"), driving the commit footer and \"Suggest an edit\" link. description is resolved (frontmatter, else derived, else site default), always non-empty so the meta tag fires. canonUrl is the clean gen-root URL (\"\" for home). pager is the prev/next nav (may be \"\"). repoBlobHref resolves a repo-relative path or glob to a GitHub blob URL. GitHub does not resolve glob syntax as a URL, so a glob (\"std/**/*.go\") links the directory before its fir",
+      "source": "docs/engine/page.buzz:256"
     },
     {
       "id": "function:docs/engine/page.buzz:substituteVersionTokens",
       "kind": "function",
       "label": "substituteVersionTokens",
       "doc": "substituteVersionTokens swaps __MAGUS_VERSION__ for the latest release version WITH the leading \"v\" (e.g. \"v0.1.0\"), read from releases/*.yaml via loadReleases - the single source of truth (do NOT read git tags). Run before render AND before the md is written back as index.md, so the page and its \"View source\" copy agree. No-op when no release has shipped (the token stays literal, prompting a cut).",
-      "source": "docs/engine/page.buzz:600"
+      "source": "docs/engine/page.buzz:658"
     },
     {
       "id": "function:docs/engine/page.buzz:writeDiagramPair",
       "kind": "function",
       "label": "writeDiagramPair",
       "doc": "writeDiagramPair re-exports the standalone writer so the magusfile can reach it through render.buzz. It lives behind this module because the registry may have exactly one importer, and the site render is the consumer that cannot give it up.",
-      "source": "docs/engine/page.buzz:747",
+      "source": "docs/engine/page.buzz:805",
       "attrs": {
         "exported": "true"
       }
@@ -8485,7 +8801,7 @@
       "kind": "function",
       "label": "climb",
       "doc": "climb builds n repetitions of \"../\".",
-      "source": "docs/engine/route.buzz:49",
+      "source": "docs/engine/route.buzz:37",
       "attrs": {
         "exported": "true"
       }
@@ -8495,17 +8811,7 @@
       "kind": "function",
       "label": "climbFromDir",
       "doc": "climbFromDir returns the \"../\" prefix from a gen-relative directory back to gen's root, one \"../\" per segment (\"console/dashboard\" -> \"../../\"). App pages derive their nav prefix from their output location so it can't drift from the write path.",
-      "source": "docs/engine/route.buzz:59",
-      "attrs": {
-        "exported": "true"
-      }
-    },
-    {
-      "id": "function:docs/engine/route.buzz:isGenerated",
-      "kind": "function",
-      "label": "isGenerated",
-      "doc": "isGenerated reports whether a doc page is machine-generated. The generators overwrite fixed docs/ subtrees wholesale: buzz/modules/, spells/*.md (but the spells.md landing is hand-written), and manpage/, plus config.md. srcRel is the docs/-prefixed path. A path convention because the generated .md carries no frontmatter marker.",
-      "source": "docs/engine/route.buzz:14",
+      "source": "docs/engine/route.buzz:47",
       "attrs": {
         "exported": "true"
       }
@@ -8515,7 +8821,7 @@
       "kind": "function",
       "label": "newCleanDirectory",
       "doc": "newCleanDirectory gives a docs page's clean directory (its clean URL minus the trailing slash), the \"new dir\" arg the link rewriter needs. Reads site state (blog dir via cleanURL), so it lives here; the pure oldFlatDirectory counterpart is in lib/html.",
-      "source": "docs/engine/route.buzz:82",
+      "source": "docs/engine/route.buzz:70",
       "attrs": {
         "exported": "true"
       }
@@ -8524,7 +8830,7 @@
       "id": "function:docs/engine/route.buzz:outputName",
       "kind": "function",
       "label": "outputName",
-      "source": "docs/engine/route.buzz:42",
+      "source": "docs/engine/route.buzz:30",
       "attrs": {
         "exported": "true"
       }
@@ -8534,7 +8840,7 @@
       "kind": "function",
       "label": "rootPrefix",
       "doc": "rootPrefix returns the relative path from a page back up to gen/'s root (\"\" for spells.html, \"../../\" for codes/sandbox/X.html), so shared nav and theme.js resolve at any page depth and the site works under a project subpath.",
-      "source": "docs/engine/route.buzz:91",
+      "source": "docs/engine/route.buzz:79",
       "attrs": {
         "exported": "true"
       }
@@ -8544,7 +8850,7 @@
       "kind": "function",
       "label": "sitePathPrefix",
       "doc": "sitePathPrefix returns the root-absolute URL path prefix: the path component of baseURL (\"https://host/magus/\" -> \"/magus/\"), or \"/\" when baseURL is unset. Used only where depth is unpredictable (404, SW offline fallback, PWA manifest/worker); other pages use the depth-relative rootPrefix. One definition so the derivation isn't copy-pasted.",
-      "source": "docs/engine/route.buzz:67",
+      "source": "docs/engine/route.buzz:55",
       "attrs": {
         "exported": "true"
       }
@@ -8827,7 +9133,7 @@
       "kind": "function",
       "label": "blogDate",
       "doc": "blogDate renders a post's frontmatter date as a plain calendar byline (\"July 1, 2026\").",
-      "source": "docs/lib/date.buzz:22",
+      "source": "docs/lib/date.buzz:23",
       "attrs": {
         "exported": "true"
       }
@@ -8837,7 +9143,7 @@
       "kind": "function",
       "label": "blogDateAttr",
       "doc": "blogDateAttr is the date-only \"YYYY-MM-DD\" that pairs with blogDate() in <time datetime>.",
-      "source": "docs/lib/date.buzz:30",
+      "source": "docs/lib/date.buzz:31",
       "attrs": {
         "exported": "true"
       }
@@ -8847,7 +9153,7 @@
       "kind": "function",
       "label": "formatISO",
       "doc": "formatISO renders an ISO 8601 UTC string as \"June 29, 2026, 1:41 AM UTC\" (no-JS fallback; client JS rewrites it to the viewer's local zone).",
-      "source": "docs/lib/date.buzz:10",
+      "source": "docs/lib/date.buzz:11",
       "attrs": {
         "exported": "true"
       }
@@ -8857,7 +9163,17 @@
       "kind": "function",
       "label": "formatISOShort",
       "doc": "formatISOShort is the compact recent-changes form (\"Jan 2, 2006\").",
-      "source": "docs/lib/date.buzz:16",
+      "source": "docs/lib/date.buzz:17",
+      "attrs": {
+        "exported": "true"
+      }
+    },
+    {
+      "id": "function:docs/lib/date.buzz:isFuturePost",
+      "kind": "function",
+      "label": "isFuturePost",
+      "doc": "isFuturePost reports whether date falls on a UTC day after asOf's. Same day is not future: a post dated the day of the build publishes that day. An undated post never is.  asOf is site.metaStamp (HEAD's commit date), never wall-clock: generate is a drift gate, so the render stays a pure function of the tree rather than of when it ran. Empty asOf fails open, since a missing git stamp should not blank every dated post.",
+      "source": "docs/lib/date.buzz:41",
       "attrs": {
         "exported": "true"
       }
@@ -9542,7 +9858,7 @@
       "kind": "function",
       "label": "build",
       "doc": "build renders the site: the tree cd.yaml publishes and deploy-generate assembles. None of it is committed, so unlike generate it is gated by producing without error rather than by a byte comparison - see generate's comment for the split.  generate first, because site-generate reads the Markdown and catalog it derives. The esbuild bundles are NOT listed here: site-generate declares them itself, which is what makes it correct when something other than this target invokes it. Repeating them would state the ord",
-      "source": "docs/magusfile.buzz:419",
+      "source": "docs/magusfile.buzz:435",
       "attrs": {
         "exported": "true"
       }
@@ -9552,7 +9868,7 @@
       "kind": "function",
       "label": "build_hljs",
       "doc": "build-hljs bundles the vendored highlight.js library (src/vendor/hljs.js -> highlight.js@11) into gen/assets/hljs.js. syntax-highlight.js imports it same-origin so syntax highlighting works offline without any CDN. Bump the version in package.json and the next generate picks it up; gen/ is not committed, so generate runs this as one of its stages.",
-      "source": "docs/magusfile.buzz:522",
+      "source": "docs/magusfile.buzz:538",
       "attrs": {
         "exported": "true"
       }
@@ -9562,7 +9878,7 @@
       "kind": "function",
       "label": "build_playground",
       "doc": "build-playground rebuilds the WebAssembly interpreter the playground loads: the stock Go toolchain compiles ../cmd/buzz-playground straight into gen/playground/buzz.wasm, and Go's own wasm_exec.js glue is copied beside it. The glue must come from the SAME Go that built the wasm - it is a matched pair.  gen/, not vendor/. Those bytes were committed for one reason: CI had no TinyGo, so it could not reproduce them and they had to be inputs rather than output. CI has Go. So this is ordinary render output now, r",
-      "source": "docs/magusfile.buzz:466",
+      "source": "docs/magusfile.buzz:482",
       "attrs": {
         "exported": "true"
       }
@@ -9572,7 +9888,7 @@
       "kind": "function",
       "label": "build_playground_editor",
       "doc": "build-playground-editor bundles the CodeMirror editor the playground loads into gen/playground/editor.js. It existed only as a pnpm script before, because the artifact was committed and a human ran it after a version bump. gen/ is no longer committed, so every published byte needs a target CI can run - a script nothing invokes would have shipped a playground with no editor.",
-      "source": "docs/magusfile.buzz:535",
+      "source": "docs/magusfile.buzz:551",
       "attrs": {
         "exported": "true"
       }
@@ -9582,7 +9898,7 @@
       "kind": "function",
       "label": "buzz_test",
       "doc": "buzz-test runs render's in-file `test \"...\" {}` blocks through `magus buzz`, in --embedded mode so render's markdown/encoding imports resolve. magus.cmd raises on a non-zero exit, so a failing assertion fails this target.",
-      "source": "docs/magusfile.buzz:427",
+      "source": "docs/magusfile.buzz:443",
       "attrs": {
         "exported": "true"
       }
@@ -9591,7 +9907,7 @@
       "id": "function:docs/magusfile.buzz:ci",
       "kind": "function",
       "label": "ci",
-      "source": "docs/magusfile.buzz:443",
+      "source": "docs/magusfile.buzz:459",
       "attrs": {
         "exported": "true"
       }
@@ -9611,7 +9927,7 @@
       "kind": "function",
       "label": "conventions",
       "doc": "conventions holds the prose corpus to the conventions page it publishes: no shell prompt in a command block, no pinned version standing in for example output, no backticked path that has since moved. See docs/conventions.md for what each rule means.  Its OWN target, not a line inside lint, and it deliberately depends on nothing. A prose nit should name the thing that is wrong; folding it into lint would report a stale path in the README as \"docs lint failed\", and a target that fails for reasons unrelated to",
-      "source": "docs/magusfile.buzz:383",
+      "source": "docs/magusfile.buzz:399",
       "attrs": {
         "exported": "true"
       }
@@ -9621,7 +9937,7 @@
       "kind": "function",
       "label": "diagrams_generate",
       "doc": "diagrams-generate writes the committed light/dark SVG pair for every diagram under diagrams/. The docs site does NOT read these - it inlines a CSS-variable copy at render time so a diagram follows the theme toggle. This pair is for GitHub, where the README loads an image through <img> and cannot reach the page's CSS at all.  The pair lands under this project rather than beside the terminal recordings in the workspace's assets/gen: docs already depends on the root project, so writing there is MGS1012, a targ",
-      "source": "docs/magusfile.buzz:495",
+      "source": "docs/magusfile.buzz:511",
       "attrs": {
         "exported": "true"
       }
@@ -9631,7 +9947,7 @@
       "kind": "function",
       "label": "format",
       "doc": "Scope dprint by ARGV, not by its config, for the same reason the root project does: dprint DISCOVERS a nested dprint.json and formats that subtree under its own config, and neither this project's `includes` nor an exclude prunes it. Since the guard-hook templates' project under guides/integrations/agents grew Markdown pages of its own, a bare run here reached them - the parent target writing into a descendant project, which magus rejects as MGS3001. That project formats its own pages.  Keep this list in ste",
-      "source": "docs/magusfile.buzz:362",
+      "source": "docs/magusfile.buzz:378",
       "attrs": {
         "exported": "true"
       }
@@ -9641,7 +9957,7 @@
       "kind": "function",
       "label": "generate",
       "doc": "generate owns the COMMITTED derived files, and nothing else. That is the line between generate and build here: generate's output is in the repository, so CI can re-run it and fail when the bytes move, and the drift gate below is that check. build's output is not committed, so no comparison can gate it - it is verified by rendering without error.  The site render, the esbuild bundles, and the WebAssembly playground all write the ignored gen/ tree, so they live in build. They used to run here, which cost ever",
-      "source": "docs/magusfile.buzz:288",
+      "source": "docs/magusfile.buzz:304",
       "attrs": {
         "exported": "true"
       }
@@ -9668,7 +9984,7 @@
       "kind": "function",
       "label": "lint",
       "doc": "lint runs the client-side TypeScript gates: tsc for type errors and Biome for the banned patterns (no `any`, no non-null assertions - see biome.json). Both need node_modules, which it reaches through format -> generate -> preflight; proc.exec raises on a non-zero exit, so either gate fails lint.  Markdown formatting is dprint, run once from the root project (its scope is dprint.json at the workspace root), so `format` here is a dependency edge and nothing else. This project only lints prose; see docs/concep",
-      "source": "docs/magusfile.buzz:396",
+      "source": "docs/magusfile.buzz:412",
       "attrs": {
         "exported": "true"
       }
@@ -9687,7 +10003,7 @@
       "kind": "function",
       "label": "render",
       "doc": "render is the fast docs/blog iteration path; it skips generated content, bundles, and drift checks.",
-      "source": "docs/magusfile.buzz:543",
+      "source": "docs/magusfile.buzz:559",
       "attrs": {
         "exported": "true"
       }
@@ -9697,7 +10013,7 @@
       "kind": "function",
       "label": "security",
       "doc": "security audits what actually ships against the npm advisory database. See console/magusfile.buzz for why it is --prod, why it is not folded into lint, and why the .npmrc cooling period is the stronger half of this.",
-      "source": "docs/magusfile.buzz:438",
+      "source": "docs/magusfile.buzz:454",
       "attrs": {
         "exported": "true"
       }
@@ -9707,7 +10023,7 @@
       "kind": "function",
       "label": "site_generate",
       "doc": "site-generate owns publication. It cannot replay while it reads VCS state; the public generate target still lets the independent content stages fan out first.  The bundles are needed HERE, not merely ordered by whoever calls this. They used to be ordered only in `generate`, which made this target correct as a stage and broken on its own: `magus run site-generate docs` - and `magus vcs resolve`, which invokes the target that owns a conflicted output directly - failed on `playground/index.html references miss",
-      "source": "docs/magusfile.buzz:267",
+      "source": "docs/magusfile.buzz:283",
       "attrs": {
         "exported": "true"
       }
@@ -9716,7 +10032,7 @@
       "id": "function:docs/magusfile.buzz:test",
       "kind": "function",
       "label": "test",
-      "source": "docs/magusfile.buzz:431",
+      "source": "docs/magusfile.buzz:447",
       "attrs": {
         "exported": "true"
       }
@@ -9813,7 +10129,7 @@
       "kind": "function",
       "label": "collectDevelopmentPages",
       "doc": "collectDevelopmentPages registers EVERY /development/ page in docPages before anything renders, the same pre-walk contract collectDocPages and collectSectionIndexes hold.  Registering at render time (which is what renderDevelopmentPage used to do) cannot work here, because the section's two navigation directions point at each other: the landing's \"In this section\" list is built from its children, and every child's list is built from the landing that governs it. Whichever rendered second was the only one wit",
-      "source": "docs/site/development.buzz:65",
+      "source": "docs/site/development.buzz:66",
       "attrs": {
         "exported": "true"
       }
@@ -9823,35 +10139,35 @@
       "kind": "function",
       "label": "projectCatalog",
       "doc": "projectCatalog renders one project's target catalog as Markdown from the TYPED graph (TargetGraphProject) rather than by capturing `describe graph -o markdown` from a subprocess. Building it here means the page is assembled from the same in-process data the CLI renders, with no fork, no stdout to re-parse, and compile-checked field access on every node.  An inline SVG figure draws the run order from each node's declared dependencies, so the arrows are the real ctx.needs edges and not a hand-maintained pictu",
-      "source": "docs/site/development.buzz:194"
+      "source": "docs/site/development.buzz:195"
     },
     {
       "id": "function:docs/site/development.buzz:projectLabel",
       "kind": "function",
       "label": "projectLabel",
       "doc": "projectLabel is the display name for a workspace-relative project path. The root project's path is \".\", which reads as nothing at all in a URL, a card, or a graph node; every render site here goes through this so they cannot disagree.",
-      "source": "docs/site/development.buzz:127"
+      "source": "docs/site/development.buzz:128"
     },
     {
       "id": "function:docs/site/development.buzz:projectPageDesc",
       "kind": "function",
       "label": "projectPageDesc",
       "doc": "projectPageDesc is one project page's description. Same reason as the constants above: two passes, one string.",
-      "source": "docs/site/development.buzz:31"
+      "source": "docs/site/development.buzz:32"
     },
     {
       "id": "function:docs/site/development.buzz:registerDevPage",
       "kind": "function",
       "label": "registerDevPage",
       "doc": "registerDevPage adds a synthesized /development/ page to docPages, the corpus every navigation helper walks. addRecord alone only feeds the search index, so without this these pages were reachable by search and invisible to Related, the section list, and the subtree.  The landing page is the section's overview, so it anchors the others rather than listing itself.",
-      "source": "docs/site/development.buzz:42"
+      "source": "docs/site/development.buzz:43"
     },
     {
       "id": "function:docs/site/development.buzz:renderDevelopment",
       "kind": "function",
       "label": "renderDevelopment",
       "doc": "renderDevelopment writes the /development/ section BELOW its landing: one themed page per project rendering its target catalog and run-order graph, the Contributing guide, and a /development/projects/ index linking to the project pages and showing how they depend on each other. Retired /development/projects/<slug> URLs redirect to the flattened locations.  The section LANDING is not written here - /development/ is the repository README, which renderRoot writes. That is why this file no longer carries a buil",
-      "source": "docs/site/development.buzz:280",
+      "source": "docs/site/development.buzz:281",
       "attrs": {
         "exported": "true"
       }
@@ -9861,28 +10177,28 @@
       "kind": "function",
       "label": "renderDevelopmentPage",
       "doc": "renderDevelopmentPage renders one /development/ page from markdown through the shared renderPage() pipeline (nav, TOC, theme, search index). url ends in \"/\"; srcRel uses the \"<dir>/_index.md\" marker so rootPrefix/renderBreadcrumb derive the right depth and trail. collectDevelopmentPages has already registered it.",
-      "source": "docs/site/development.buzz:86"
+      "source": "docs/site/development.buzz:87"
     },
     {
       "id": "function:docs/site/development.buzz:renderDevelopmentPageRaw",
       "kind": "function",
       "label": "renderDevelopmentPageRaw",
       "doc": "renderDevelopmentPageRaw is renderDevelopmentPage for bodies already in final HTML (the /development/projects/ landing). It skips renderContentHTML - whose link-rewrite strips the trailing slash off relative links - so card hrefs like \"../magus/\" stay slash-terminated and resolve without a directory redirect. searchText is the plain text to index, since the HTML carries no useful prose.",
-      "source": "docs/site/development.buzz:102"
+      "source": "docs/site/development.buzz:103"
     },
     {
       "id": "function:docs/site/development.buzz:slugifyProject",
       "kind": "function",
       "label": "slugifyProject",
       "doc": "slugifyProject turns a workspace-relative project path into one URL segment: \"libs/gopherbuzz\" -> \"libs-gopherbuzz\". Nested projects are the reason this exists -- the previous shallow scan never produced a path with a separator in it.  split/join, not replace: str.replace substitutes only the FIRST match, so a two-separator path (\"cmd/magus/starter\") kept the rest and the \"one segment\" this promises became a directory tree - /development/cmd-magus/starter/ - plus a node id with slashes still in it.",
-      "source": "docs/site/development.buzz:120"
+      "source": "docs/site/development.buzz:121"
     },
     {
       "id": "function:docs/site/development.buzz:workspaceDependencies",
       "kind": "function",
       "label": "workspaceDependencies",
       "doc": "workspaceDependencies renders how the PROJECTS relate, as Markdown. The per-project pages answer \"what can I run here\"; this answers \"what does changing it reach\", which no page showed before.  It reads magus.projectGraph()'s typed view: nodes already in topological order (so the table IS a valid build order, sorted by nobody here), each node's direct dependencies, and its blast radius - the count of projects a change can transitively affect, which is the number that tells a contributor whether an edit is c",
-      "source": "docs/site/development.buzz:144"
+      "source": "docs/site/development.buzz:145"
     },
     {
       "id": "function:docs/site/diagrams/all.buzz:allDiagrams",
@@ -11430,7 +11746,7 @@
       "id": "function:libs/diagram/diagram.buzz:layered",
       "kind": "function",
       "label": "layered",
-      "source": "libs/diagram/diagram.buzz:1132",
+      "source": "libs/diagram/diagram.buzz:1138",
       "attrs": {
         "exported": "true"
       }
@@ -11439,7 +11755,7 @@
       "id": "function:libs/diagram/diagram.buzz:layoutWithStagger",
       "kind": "function",
       "label": "layoutWithStagger",
-      "source": "libs/diagram/diagram.buzz:1142"
+      "source": "libs/diagram/diagram.buzz:1148"
     },
     {
       "id": "function:libs/diagram/diagram.buzz:lightPalette",
@@ -22872,11 +23188,99 @@
     },
     {
       "source": "dir:docs/reference/api",
-      "target": "doc:docs/reference/api/activity.md",
+      "target": "dir:docs/reference/api/activity",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/activity.md"
+      "provenance": "docs/reference/api/activity"
+    },
+    {
+      "source": "dir:docs/reference/api",
+      "target": "dir:docs/reference/api/graph",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/graph"
+    },
+    {
+      "source": "dir:docs/reference/api",
+      "target": "dir:docs/reference/api/insight",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/insight"
+    },
+    {
+      "source": "dir:docs/reference/api",
+      "target": "dir:docs/reference/api/job",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/job"
+    },
+    {
+      "source": "dir:docs/reference/api",
+      "target": "dir:docs/reference/api/memory",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/memory"
+    },
+    {
+      "source": "dir:docs/reference/api",
+      "target": "dir:docs/reference/api/metrics",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/metrics"
+    },
+    {
+      "source": "dir:docs/reference/api",
+      "target": "dir:docs/reference/api/notes",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/notes"
+    },
+    {
+      "source": "dir:docs/reference/api",
+      "target": "dir:docs/reference/api/query",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/query"
+    },
+    {
+      "source": "dir:docs/reference/api",
+      "target": "dir:docs/reference/api/status",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/status"
+    },
+    {
+      "source": "dir:docs/reference/api",
+      "target": "dir:docs/reference/api/token",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/token"
+    },
+    {
+      "source": "dir:docs/reference/api",
+      "target": "dir:docs/reference/api/tool",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/tool"
+    },
+    {
+      "source": "dir:docs/reference/api",
+      "target": "dir:docs/reference/api/viewer",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/viewer"
     },
     {
       "source": "dir:docs/reference/api",
@@ -22887,76 +23291,196 @@
       "provenance": "docs/reference/api/index.md"
     },
     {
-      "source": "dir:docs/reference/api",
-      "target": "doc:docs/reference/api/insight.md",
+      "source": "dir:docs/reference/api/activity",
+      "target": "dir:docs/reference/api/activity/v1alpha1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/insight.md"
+      "provenance": "docs/reference/api/activity/v1alpha1"
     },
     {
-      "source": "dir:docs/reference/api",
-      "target": "doc:docs/reference/api/job.md",
+      "source": "dir:docs/reference/api/activity/v1alpha1",
+      "target": "doc:docs/reference/api/activity/v1alpha1/activity.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/job.md"
+      "provenance": "docs/reference/api/activity/v1alpha1/activity.md"
     },
     {
-      "source": "dir:docs/reference/api",
-      "target": "doc:docs/reference/api/memory.md",
+      "source": "dir:docs/reference/api/graph",
+      "target": "dir:docs/reference/api/graph/v1alpha1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/memory.md"
+      "provenance": "docs/reference/api/graph/v1alpha1"
     },
     {
-      "source": "dir:docs/reference/api",
-      "target": "doc:docs/reference/api/metrics.md",
+      "source": "dir:docs/reference/api/graph/v1alpha1",
+      "target": "doc:docs/reference/api/graph/v1alpha1/graph.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/metrics.md"
+      "provenance": "docs/reference/api/graph/v1alpha1/graph.md"
     },
     {
-      "source": "dir:docs/reference/api",
-      "target": "doc:docs/reference/api/notes.md",
+      "source": "dir:docs/reference/api/insight",
+      "target": "dir:docs/reference/api/insight/v1alpha1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/notes.md"
+      "provenance": "docs/reference/api/insight/v1alpha1"
     },
     {
-      "source": "dir:docs/reference/api",
-      "target": "doc:docs/reference/api/status.md",
+      "source": "dir:docs/reference/api/insight/v1alpha1",
+      "target": "doc:docs/reference/api/insight/v1alpha1/insight.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/status.md"
+      "provenance": "docs/reference/api/insight/v1alpha1/insight.md"
     },
     {
-      "source": "dir:docs/reference/api",
-      "target": "doc:docs/reference/api/token.md",
+      "source": "dir:docs/reference/api/job",
+      "target": "dir:docs/reference/api/job/v1alpha1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/token.md"
+      "provenance": "docs/reference/api/job/v1alpha1"
     },
     {
-      "source": "dir:docs/reference/api",
-      "target": "doc:docs/reference/api/tool.md",
+      "source": "dir:docs/reference/api/job/v1alpha1",
+      "target": "doc:docs/reference/api/job/v1alpha1/job.md",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/tool.md"
+      "provenance": "docs/reference/api/job/v1alpha1/job.md"
     },
     {
-      "source": "dir:docs/reference/api",
-      "target": "doc:docs/reference/api/viewer.md",
+      "source": "dir:docs/reference/api/memory",
+      "target": "dir:docs/reference/api/memory/v1alpha1",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/viewer.md"
+      "provenance": "docs/reference/api/memory/v1alpha1"
+    },
+    {
+      "source": "dir:docs/reference/api/memory/v1alpha1",
+      "target": "doc:docs/reference/api/memory/v1alpha1/memory.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/memory/v1alpha1/memory.md"
+    },
+    {
+      "source": "dir:docs/reference/api/metrics",
+      "target": "dir:docs/reference/api/metrics/v1alpha1",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/metrics/v1alpha1"
+    },
+    {
+      "source": "dir:docs/reference/api/metrics/v1alpha1",
+      "target": "doc:docs/reference/api/metrics/v1alpha1/metrics.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/metrics/v1alpha1/metrics.md"
+    },
+    {
+      "source": "dir:docs/reference/api/notes",
+      "target": "dir:docs/reference/api/notes/v1alpha1",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/notes/v1alpha1"
+    },
+    {
+      "source": "dir:docs/reference/api/notes/v1alpha1",
+      "target": "doc:docs/reference/api/notes/v1alpha1/notes.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/notes/v1alpha1/notes.md"
+    },
+    {
+      "source": "dir:docs/reference/api/query",
+      "target": "dir:docs/reference/api/query/v1alpha1",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/query/v1alpha1"
+    },
+    {
+      "source": "dir:docs/reference/api/query/v1alpha1",
+      "target": "doc:docs/reference/api/query/v1alpha1/query.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/query/v1alpha1/query.md"
+    },
+    {
+      "source": "dir:docs/reference/api/status",
+      "target": "dir:docs/reference/api/status/v1alpha1",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/status/v1alpha1"
+    },
+    {
+      "source": "dir:docs/reference/api/status/v1alpha1",
+      "target": "doc:docs/reference/api/status/v1alpha1/status.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/status/v1alpha1/status.md"
+    },
+    {
+      "source": "dir:docs/reference/api/token",
+      "target": "dir:docs/reference/api/token/v1alpha1",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/token/v1alpha1"
+    },
+    {
+      "source": "dir:docs/reference/api/token/v1alpha1",
+      "target": "doc:docs/reference/api/token/v1alpha1/token.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/token/v1alpha1/token.md"
+    },
+    {
+      "source": "dir:docs/reference/api/tool",
+      "target": "dir:docs/reference/api/tool/v1alpha1",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/tool/v1alpha1"
+    },
+    {
+      "source": "dir:docs/reference/api/tool/v1alpha1",
+      "target": "doc:docs/reference/api/tool/v1alpha1/tool.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/tool/v1alpha1/tool.md"
+    },
+    {
+      "source": "dir:docs/reference/api/viewer",
+      "target": "dir:docs/reference/api/viewer/v1alpha1",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/viewer/v1alpha1"
+    },
+    {
+      "source": "dir:docs/reference/api/viewer/v1alpha1",
+      "target": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
     },
     {
       "source": "dir:docs/reference/buzz",
@@ -23621,6 +24145,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/reference/codes/magusfile/MGS1028.md"
+    },
+    {
+      "source": "dir:docs/reference/codes/magusfile",
+      "target": "doc:docs/reference/codes/magusfile/MGS1029.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1029.md"
     },
     {
       "source": "dir:docs/reference/codes/magusfile",
@@ -25157,6 +25689,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "plans/handoff-cli-command-registry.md"
+    },
+    {
+      "source": "dir:plans",
+      "target": "doc:plans/protobuf-api-docs-improvement.md",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "plans/protobuf-api-docs-improvement.md"
     },
     {
       "source": "dir:plans",
@@ -32327,16 +32867,40 @@
       "provenance": "docs/recommendations.md"
     },
     {
-      "source": "doc:docs/reference/api/activity.md",
+      "source": "doc:docs/reference/api/activity/v1alpha1/activity.md",
+      "target": "doc:docs/reference/api/activity/v1alpha1/activity.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/activity/v1alpha1/activity.md"
+    },
+    {
+      "source": "doc:docs/reference/api/activity/v1alpha1/activity.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/activity.md"
+      "provenance": "docs/reference/api/activity/v1alpha1/activity.md"
+    },
+    {
+      "source": "doc:docs/reference/api/activity/v1alpha1/activity.md",
+      "target": "doc:docs/reference/api/query/v1alpha1/query.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/activity/v1alpha1/activity.md"
+    },
+    {
+      "source": "doc:docs/reference/api/graph/v1alpha1/graph.md",
+      "target": "doc:docs/reference/api/index.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/graph/v1alpha1/graph.md"
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/activity.md",
+      "target": "doc:docs/reference/api/activity/v1alpha1/activity.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32344,7 +32908,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/insight.md",
+      "target": "doc:docs/reference/api/graph/v1alpha1/graph.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32352,7 +32916,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/job.md",
+      "target": "doc:docs/reference/api/insight/v1alpha1/insight.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32360,7 +32924,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/memory.md",
+      "target": "doc:docs/reference/api/job/v1alpha1/job.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32368,7 +32932,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/metrics.md",
+      "target": "doc:docs/reference/api/memory/v1alpha1/memory.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32376,7 +32940,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/notes.md",
+      "target": "doc:docs/reference/api/metrics/v1alpha1/metrics.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32384,7 +32948,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/status.md",
+      "target": "doc:docs/reference/api/notes/v1alpha1/notes.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32392,7 +32956,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/token.md",
+      "target": "doc:docs/reference/api/query/v1alpha1/query.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32400,7 +32964,7 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/tool.md",
+      "target": "doc:docs/reference/api/status/v1alpha1/status.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32408,7 +32972,23 @@
     },
     {
       "source": "doc:docs/reference/api/index.md",
-      "target": "doc:docs/reference/api/viewer.md",
+      "target": "doc:docs/reference/api/token/v1alpha1/token.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/index.md"
+    },
+    {
+      "source": "doc:docs/reference/api/index.md",
+      "target": "doc:docs/reference/api/tool/v1alpha1/tool.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/index.md"
+    },
+    {
+      "source": "doc:docs/reference/api/index.md",
+      "target": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
@@ -32423,108 +33003,212 @@
       "provenance": "docs/reference/api/index.md"
     },
     {
-      "source": "doc:docs/reference/api/insight.md",
+      "source": "doc:docs/reference/api/insight/v1alpha1/insight.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/insight.md"
+      "provenance": "docs/reference/api/insight/v1alpha1/insight.md"
     },
     {
-      "source": "doc:docs/reference/api/job.md",
+      "source": "doc:docs/reference/api/insight/v1alpha1/insight.md",
+      "target": "doc:docs/reference/api/insight/v1alpha1/insight.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/insight/v1alpha1/insight.md"
+    },
+    {
+      "source": "doc:docs/reference/api/job/v1alpha1/job.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/job.md"
+      "provenance": "docs/reference/api/job/v1alpha1/job.md"
     },
     {
-      "source": "doc:docs/reference/api/memory.md",
+      "source": "doc:docs/reference/api/job/v1alpha1/job.md",
+      "target": "doc:docs/reference/api/job/v1alpha1/job.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/job/v1alpha1/job.md"
+    },
+    {
+      "source": "doc:docs/reference/api/memory/v1alpha1/memory.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/memory.md"
+      "provenance": "docs/reference/api/memory/v1alpha1/memory.md"
     },
     {
-      "source": "doc:docs/reference/api/metrics.md",
+      "source": "doc:docs/reference/api/memory/v1alpha1/memory.md",
+      "target": "doc:docs/reference/api/memory/v1alpha1/memory.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/memory/v1alpha1/memory.md"
+    },
+    {
+      "source": "doc:docs/reference/api/metrics/v1alpha1/metrics.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/metrics.md"
+      "provenance": "docs/reference/api/metrics/v1alpha1/metrics.md"
     },
     {
-      "source": "doc:docs/reference/api/metrics.md",
+      "source": "doc:docs/reference/api/metrics/v1alpha1/metrics.md",
+      "target": "doc:docs/reference/api/metrics/v1alpha1/metrics.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/metrics/v1alpha1/metrics.md"
+    },
+    {
+      "source": "doc:docs/reference/api/metrics/v1alpha1/metrics.md",
       "target": "spell:buzz",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.5,
-      "provenance": "docs/reference/api/metrics.md"
+      "provenance": "docs/reference/api/metrics/v1alpha1/metrics.md"
     },
     {
-      "source": "doc:docs/reference/api/notes.md",
+      "source": "doc:docs/reference/api/notes/v1alpha1/notes.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/notes.md"
+      "provenance": "docs/reference/api/notes/v1alpha1/notes.md"
     },
     {
-      "source": "doc:docs/reference/api/status.md",
+      "source": "doc:docs/reference/api/notes/v1alpha1/notes.md",
+      "target": "doc:docs/reference/api/notes/v1alpha1/notes.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/notes/v1alpha1/notes.md"
+    },
+    {
+      "source": "doc:docs/reference/api/query/v1alpha1/query.md",
+      "target": "doc:docs/reference/api/activity/v1alpha1/activity.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/query/v1alpha1/query.md"
+    },
+    {
+      "source": "doc:docs/reference/api/query/v1alpha1/query.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/status.md"
+      "provenance": "docs/reference/api/query/v1alpha1/query.md"
     },
     {
-      "source": "doc:docs/reference/api/status.md",
+      "source": "doc:docs/reference/api/query/v1alpha1/query.md",
+      "target": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/query/v1alpha1/query.md"
+    },
+    {
+      "source": "doc:docs/reference/api/status/v1alpha1/status.md",
+      "target": "doc:docs/reference/api/index.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/status/v1alpha1/status.md"
+    },
+    {
+      "source": "doc:docs/reference/api/status/v1alpha1/status.md",
+      "target": "doc:docs/reference/api/status/v1alpha1/status.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/status/v1alpha1/status.md"
+    },
+    {
+      "source": "doc:docs/reference/api/status/v1alpha1/status.md",
       "target": "doc:docs/reference/manpage/magus-run.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "docs/reference/api/status.md"
+      "provenance": "docs/reference/api/status/v1alpha1/status.md"
     },
     {
-      "source": "doc:docs/reference/api/token.md",
+      "source": "doc:docs/reference/api/token/v1alpha1/token.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/token.md"
+      "provenance": "docs/reference/api/token/v1alpha1/token.md"
     },
     {
-      "source": "doc:docs/reference/api/tool.md",
+      "source": "doc:docs/reference/api/token/v1alpha1/token.md",
+      "target": "doc:docs/reference/api/token/v1alpha1/token.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/token/v1alpha1/token.md"
+    },
+    {
+      "source": "doc:docs/reference/api/tool/v1alpha1/tool.md",
       "target": "diagnostic:MGS3005",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "docs/reference/api/tool.md"
+      "provenance": "docs/reference/api/tool/v1alpha1/tool.md"
     },
     {
-      "source": "doc:docs/reference/api/tool.md",
+      "source": "doc:docs/reference/api/tool/v1alpha1/tool.md",
       "target": "diagnostic:MGS3006",
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
-      "provenance": "docs/reference/api/tool.md"
+      "provenance": "docs/reference/api/tool/v1alpha1/tool.md"
     },
     {
-      "source": "doc:docs/reference/api/tool.md",
+      "source": "doc:docs/reference/api/tool/v1alpha1/tool.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/tool.md"
+      "provenance": "docs/reference/api/tool/v1alpha1/tool.md"
     },
     {
-      "source": "doc:docs/reference/api/viewer.md",
+      "source": "doc:docs/reference/api/tool/v1alpha1/tool.md",
+      "target": "doc:docs/reference/api/tool/v1alpha1/tool.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/tool/v1alpha1/tool.md"
+    },
+    {
+      "source": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
       "target": "doc:docs/reference/api/index.md",
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
-      "provenance": "docs/reference/api/viewer.md"
+      "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
+    },
+    {
+      "source": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
+      "target": "doc:docs/reference/api/query/v1alpha1/query.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
+    },
+    {
+      "source": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
+      "target": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/api/viewer/v1alpha1/viewer.md"
     },
     {
       "source": "doc:docs/reference/buzz/archive.md",
@@ -34661,6 +35345,30 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "docs/reference/codes/magusfile/MGS1028.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1029.md",
+      "target": "diagnostic:MGS1014",
+      "relation": "documents",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/codes/magusfile/MGS1029.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1029.md",
+      "target": "diagnostic:MGS1029",
+      "relation": "documents",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1029.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/magusfile/MGS1029.md",
+      "target": "doc:docs/reference/codes/magusfile/MGS1014.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/reference/codes/magusfile/MGS1029.md"
     },
     {
       "source": "doc:docs/reference/codes/magusfile/README.md",
@@ -45504,6 +46212,14 @@
     },
     {
       "source": "file:docs/engine/meta.buzz",
+      "target": "function:docs/engine/meta.buzz:generatedFrom",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/engine/meta.buzz"
+    },
+    {
+      "source": "file:docs/engine/meta.buzz",
       "target": "function:docs/engine/meta.buzz:insertSinceBadge",
       "relation": "contains",
       "confidence": "extracted",
@@ -45800,6 +46516,14 @@
     },
     {
       "source": "file:docs/engine/page.buzz",
+      "target": "function:docs/engine/page.buzz:renderGeneratedChips",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/engine/page.buzz"
+    },
+    {
+      "source": "file:docs/engine/page.buzz",
       "target": "function:docs/engine/page.buzz:renderPage",
       "relation": "contains",
       "confidence": "extracted",
@@ -45825,6 +46549,14 @@
     {
       "source": "file:docs/engine/page.buzz",
       "target": "function:docs/engine/page.buzz:renderRoot",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/engine/page.buzz"
+    },
+    {
+      "source": "file:docs/engine/page.buzz",
+      "target": "function:docs/engine/page.buzz:repoBlobHref",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -46161,14 +46893,6 @@
     {
       "source": "file:docs/engine/route.buzz",
       "target": "function:docs/engine/route.buzz:climbFromDir",
-      "relation": "contains",
-      "confidence": "extracted",
-      "score": 1,
-      "provenance": "docs/engine/route.buzz"
-    },
-    {
-      "source": "file:docs/engine/route.buzz",
-      "target": "function:docs/engine/route.buzz:isGenerated",
       "relation": "contains",
       "confidence": "extracted",
       "score": 1,
@@ -46816,7 +47540,23 @@
     },
     {
       "source": "file:docs/lib/date.buzz",
+      "target": "function:docs/lib/date.buzz:isFuturePost",
+      "relation": "contains",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/lib/date.buzz"
+    },
+    {
+      "source": "file:docs/lib/date.buzz",
       "target": "import:assert",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/lib/date.buzz"
+    },
+    {
+      "source": "file:docs/lib/date.buzz",
+      "target": "import:lib/text",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -48289,6 +49029,14 @@
     {
       "source": "file:docs/site/development.buzz",
       "target": "import:../libs/diagram/diagram",
+      "relation": "imports",
+      "confidence": "inferred",
+      "score": 0.7,
+      "provenance": "docs/site/development.buzz"
+    },
+    {
+      "source": "file:docs/site/development.buzz",
+      "target": "import:engine/meta",
       "relation": "imports",
       "confidence": "inferred",
       "score": 0.7,
@@ -57351,6 +58099,22 @@
       "provenance": "docs/engine/page.buzz"
     },
     {
+      "source": "function:docs/engine/page.buzz:renderGeneratedChips",
+      "target": "function:docs/engine/page.buzz:repoBlobHref",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/engine/page.buzz"
+    },
+    {
+      "source": "function:docs/engine/page.buzz:renderPage",
+      "target": "function:docs/engine/page.buzz:renderGeneratedChips",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/engine/page.buzz"
+    },
+    {
       "source": "function:docs/engine/page.buzz:renderPager",
       "target": "function:docs/engine/page.buzz:pageOrder",
       "relation": "calls",
@@ -57565,6 +58329,14 @@
       "confidence": "extracted",
       "score": 1,
       "provenance": "docs/lib/csp.buzz"
+    },
+    {
+      "source": "function:docs/lib/date.buzz:isFuturePost",
+      "target": "function:docs/lib/date.buzz:blogDateAttr",
+      "relation": "calls",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/lib/date.buzz"
     },
     {
       "source": "function:docs/lib/feed.buzz:xmlAttribute",
@@ -66717,7 +67489,15 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/activity.md",
+      "target": "doc:docs/reference/api/activity/v1alpha1/activity.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:docs/reference/api/graph/v1alpha1/graph.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -66733,7 +67513,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/insight.md",
+      "target": "doc:docs/reference/api/insight/v1alpha1/insight.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -66741,7 +67521,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/job.md",
+      "target": "doc:docs/reference/api/job/v1alpha1/job.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -66749,7 +67529,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/memory.md",
+      "target": "doc:docs/reference/api/memory/v1alpha1/memory.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -66757,7 +67537,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/metrics.md",
+      "target": "doc:docs/reference/api/metrics/v1alpha1/metrics.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -66765,7 +67545,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/notes.md",
+      "target": "doc:docs/reference/api/notes/v1alpha1/notes.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -66773,7 +67553,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/status.md",
+      "target": "doc:docs/reference/api/query/v1alpha1/query.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -66781,7 +67561,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/token.md",
+      "target": "doc:docs/reference/api/status/v1alpha1/status.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -66789,7 +67569,7 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/tool.md",
+      "target": "doc:docs/reference/api/token/v1alpha1/token.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,
@@ -66797,7 +67577,15 @@
     },
     {
       "source": "target:docs:content-generate",
-      "target": "doc:docs/reference/api/viewer.md",
+      "target": "doc:docs/reference/api/tool/v1alpha1/tool.md",
+      "relation": "produces",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs"
+    },
+    {
+      "source": "target:docs:content-generate",
+      "target": "doc:docs/reference/api/viewer/v1alpha1/viewer.md",
       "relation": "produces",
       "confidence": "extracted",
       "score": 1,

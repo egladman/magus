@@ -33,6 +33,15 @@ export fun parseTags(md: str) > [str] !> any {
     return tags;
 }
 
+// generatedFrom reads the frontmatter `generated_from:` value (empty when absent, which
+// means the page is hand-written). A repo-relative path or comma-joined glob list names
+// the source directly; a value ending in "/" is an in-site path to the section overview
+// that carries the real source link(s) instead - see internal/docs.Frontmatter.
+export fun generatedFrom(md: str) > str !> any {
+    final fm = serialize\jsonDecode(markdown\frontmatter(md));
+    return fm.q("generated_from").stringValue();
+}
+
 // pageType reads the frontmatter `page_type:` marker (empty when absent). The value that
 // matters is "overview": a landing/index page that orients and routes to others. Related
 // ranking favors these hubs and the reachability gate trusts them as roots, so declaring

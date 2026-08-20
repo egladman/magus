@@ -1,5 +1,6 @@
 ---
 title: magus buzz
+generated_from: internal/clispec/registry.go
 description: Run Buzz from a REPL, a file, stdin, or an inline snippet, with the Buzz stdlib, every magus host module, and the magus namespace available.
 tags: [cli, magus buzz, buzz, scripting, repl, lsp]
 ---

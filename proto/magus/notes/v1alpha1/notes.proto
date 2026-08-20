@@ -160,7 +160,9 @@ message StoreStatus {
 }
 
 message ListNotesRequest {
-  int32 page_size = 1;   // wired for forward-compat; the store returns all notes today
+  // Bounded at the same tier as ListActivity and ListMemories; see ListMemoriesRequest for
+  // why the three keep their own flat field rather than sharing a pagination message.
+  int32 page_size = 1 [(buf.validate.field).int32 = {gte: 0, lte: 1000}];
   string page_token = 2;
 }
 
