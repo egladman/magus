@@ -9,7 +9,7 @@
 // through these reducers.
 
 import { persisted, type Persisted } from "../lib/persist";
-import type { Pane } from "./tiling";
+import { leaves, type Pane } from "./tiling";
 
 // A tab is one open instance of a surface: `id` is the tab's own identity (so the same
 // surface can be opened twice), `pageId` is the tab's PRIMARY surface (dashboard|graph|logs)
@@ -124,4 +124,14 @@ export function renameTab(ws: Workspace, id: string, title: string): Workspace {
 // come back on the next load.
 export function workspaceStore(): Persisted<Workspace> {
   return persisted<Workspace>("workspace", emptyWorkspace);
+}
+
+// tabHostsSurface reports whether a tab already shows a surface, checking its tiled panes when it
+// has a layout and its primary pageId otherwise. Every surface is single-instance (it keeps
+// module-level state, so a second instance would fight the first), so this is what "already open"
+// means: the console's open() focuses the hosting tab instead of mounting a duplicate, and the
+// navigation rail marks the same surfaces as open.
+export function tabHostsSurface(t: TabState, pageId: string): boolean {
+  const ids = t.layout ? leaves(t.layout).map((l) => l.pageId) : [t.pageId];
+  return ids.includes(pageId);
 }

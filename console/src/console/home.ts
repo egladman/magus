@@ -203,6 +203,23 @@ const SURFACE_ICONS: Record<string, string> = {
     '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
 };
 
+// surfaceIconSvg renders one surface's glyph at `size` px. Exported because the shell's navigation
+// rail (sidebar.ts) marks the same surfaces with the same marks: two hand-kept copies of eight
+// glyphs would drift the first time one is redrawn. `size` omitted leaves the svg unsized, which is
+// what the card's corner watermark wants (it is scaled by CSS). A surface with no glyph of its own
+// falls back to a neutral square, so the rail is never left with a hole where an icon should be.
+export function surfaceIconSvg(pageId: string, size?: number): string {
+  const dims = size == null ? "" : ' width="' + size + '" height="' + size + '"';
+  return (
+    '<svg viewBox="0 0 24 24"' +
+    dims +
+    ' fill="none" stroke="currentColor" stroke-width="1.7" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    (SURFACE_ICONS[pageId] ?? '<rect x="4" y="4" width="16" height="16" rx="2"/>') +
+    "</svg>"
+  );
+}
+
 // buildLauncher builds the launcher DOM as the outlet's empty state. `surfaces` is what it offers to
 // open; `open` asks the console to open one as a tab. The returned element carries data-surface="home"
 // (its heading/lede layout is ID-scoped in console.css) and is appended straight into
@@ -252,11 +269,7 @@ export function buildLauncher(
     icon.className = "console-launcher-card__icon";
     if (s.pageId === "settings") icon.dataset.motion = "gear";
     if (s.pageId === "notes") icon.dataset.motion = "settle";
-    icon.innerHTML =
-      '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
-      'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-      (SURFACE_ICONS[s.pageId] ?? '<rect x="4" y="4" width="16" height="16" rx="2"/>') +
-      "</svg>";
+    icon.innerHTML = surfaceIconSvg(s.pageId, 24);
     const titleEl = document.createElement("div");
     titleEl.className = "pf-v6-c-card__title";
     const titleText = document.createElement("span");
@@ -276,11 +289,7 @@ export function buildLauncher(
     if (glyph) {
       const mark = document.createElement("span");
       mark.className = "console-launcher-card__watermark";
-      mark.innerHTML =
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
-        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-        glyph +
-        "</svg>";
+      mark.innerHTML = surfaceIconSvg(s.pageId);
       card.append(mark);
     }
     card.addEventListener("click", () => open(s.pageId));

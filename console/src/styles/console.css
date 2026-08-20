@@ -21,6 +21,15 @@
   --console-topchrome-h: var(--console-titlebar-h);
   --console-statusbar-h: 2.2rem;
   --console-refdrawer-w: 22rem;
+  /* The left navigation rail, collapsed and expanded. Collapsed is 2.75rem for the same reason the
+     title bar is: every row is a tap target. Expanded stays deliberately narrow - the Graph Explorer
+     and the Diff surface open their OWN left sidebars inside the pane, and two wide left columns
+     side by side is what the rail must not become. */
+  --console-sidebar-w: 2.75rem;
+  --console-sidebar-expanded-w: 11.5rem;
+  /* How wide the launcher column is allowed to get. Wide enough for four of the bigger cards, short
+     of the full window, so the home screen stays a composed column rather than a wall. */
+  --console-launcher-w: 74rem;
   /* The chart/accent palette that used to live here (the aliased --c-* slots) moved to
      tokens.css as the console's PF-native --console-* / --console-status-* slots; the charts
      read those at runtime. Nothing consumes a --c-* name any more. */
@@ -602,7 +611,10 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    own classes. Those id+attr selectors out-specify PF's single-class rules, so they had to go for
    the spike; this is exactly the W2 shell rebuild, previewed. The PF strip carries its own ARIA
    (role=tablist/tab, aria-selected). See tabBar.ts and README.md. */
-#console-tabs :focus-visible, #console-outlet [data-open]:focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
+/* The shell's one keyboard-focus cue. The rail is listed because PatternFly gives a focused nav link
+   only the same background tint it gives a hovered one, which tells a keyboard user nothing. */
+#console-tabs :focus-visible, #console-outlet [data-open]:focus-visible,
+#console-sidebar :focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
 
 /* Vertically center the tab close (x) control on the tab row. PF's tab action button is a plain
    button with align-items:baseline, sized for an inline webfont glyph; we render an inline <svg>
@@ -651,8 +663,78 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* The outlet is the PatternFly Drawer host (#console-refdrawer inside it); the drawer fills the
    main region, its __content (#console-outlet-content) holds one mounted surface per open tab (a
    div[data-tab-id], only the active shows), and its __panel is the Reference panel. */
-#console-outlet { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; }
+/* ROW explicitly: `body[data-console-fill] > main` sets flex-direction:column for the standalone
+   single-card pages, and the outlet inherits that rule. It did not matter while the outlet had one
+   child; with the navigation rail beside the Drawer, column stacks them vertically. */
+#console-outlet { flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: row; }
 #console-refdrawer { flex: 1 1 auto; min-height: 0; }
+
+/* --- The left navigation rail (#console-sidebar, sidebar.ts) -------------------------------------
+   A PF Nav docked at the outlet's left edge, bracketing the tab content against the Reference panel
+   on the right. It is a flex sibling of the Drawer rather than a fixed overlay, so the surfaces
+   reflow around it exactly as they already do for a pinned Reference panel - nothing is painted over.
+
+   Collapsed (no [data-expanded]) it is an icon strip; expanded it grows to show labels. The width is
+   the ONLY thing that animates, and the transition is what makes it read as a native dock rather
+   than a re-render. Everything else about the rail is PatternFly's Nav, retuned through PF's own
+   per-link custom properties below rather than by re-skinning the component. */
+#console-sidebar {
+  flex: 0 0 auto;
+  width: var(--console-sidebar-w);
+  display: flex; flex-direction: column;
+  overflow: hidden; /* labels are clipped, not wrapped, while the width animates */
+  border-right: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--pf-t--global--background--color--secondary--default);
+  transition: width 0.14s ease;
+  /* PF centres a nav link's icon against a baseline and pads it for a full-width row. Neither suits a
+     square icon button, so both are retuned here - in PF's vocabulary, so a PF version bump carries. */
+  --pf-v6-c-nav__link--AlignItems: center;
+  --pf-v6-c-nav__link--PaddingInlineStart: 0;
+  --pf-v6-c-nav__link--PaddingInlineEnd: 0;
+  --pf-v6-c-nav__link--ColumnGap: 0;
+}
+#console-sidebar[data-expanded] {
+  width: var(--console-sidebar-expanded-w);
+  --pf-v6-c-nav__link--PaddingInlineStart: 0.55rem;
+  --pf-v6-c-nav__link--ColumnGap: var(--pf-t--global--spacer--sm);
+}
+/* align-content:start because PF's nav list is a GRID: growing it to fill the rail (so it is the part
+   that scrolls when the surfaces outgrow the window) otherwise spreads the rows over the full height
+   and each one comes out as tall as the space allows. */
+#console-sidebar .pf-v6-c-nav__list { flex: 1 1 auto; align-content: start; overflow-y: auto; overflow-x: hidden; padding-block-start: 0.25rem; }
+#console-sidebar .pf-v6-c-nav__link {
+  position: relative; /* the open-tab marker below is absolutely placed against the row */
+  width: 100%; min-height: var(--console-sidebar-w);
+  cursor: pointer; border: 0;
+  /* Collapsed, the row is a square target and the icon has to sit dead centre of it; expanded, the
+     icon keeps that column and the label runs on beside it, so the icons stay on one vertical line
+     through the whole transition instead of sliding sideways. */
+  display: grid; grid-template-columns: var(--console-sidebar-w) 1fr; align-items: center; justify-items: center;
+}
+#console-sidebar[data-expanded] .pf-v6-c-nav__link { grid-template-columns: 1.5rem 1fr; justify-items: start; }
+#console-sidebar .pf-v6-c-nav__link-icon { display: flex; }
+/* The label is present in the DOM in both states and clipped by the rail's overflow when collapsed;
+   it is never the accessible name (that is the button's aria-label), so clipping it costs nothing. */
+#console-sidebar .pf-v6-c-nav__link-text { white-space: nowrap; opacity: 1; transition: opacity 0.1s ease; }
+#console-sidebar:not([data-expanded]) .pf-v6-c-nav__link-text { opacity: 0; }
+/* A surface with a tab open but not in view: a dot on the rail edge, the dock idiom for "running".
+   Distinct from pf-m-current, which PF already paints for the surface the active tab is showing. */
+#console-sidebar .pf-v6-c-nav__link[data-tab-open]::before {
+  content: ""; position: absolute; inset-inline-start: 0; inline-size: 2px; block-size: 1rem;
+  background: var(--console-accent); border-radius: 0 2px 2px 0;
+}
+#console-sidebar #console-sidebar-toggle {
+  flex: 0 0 auto; min-height: var(--console-sidebar-w);
+  border-top: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: 0; justify-content: center;
+}
+/* No rail on a phone. Even collapsed it is a permanent 44px bite out of a screen that is already
+   giving two rows to the title bar, and every surface it navigates to is one tap away in the
+   Applications menu on that bar. This has to sit AFTER the rail's own display:flex rather than with
+   the other phone rules further up: both selectors are a single id, so the later one wins. */
+@media (max-width: 47.999rem) {
+  #console-sidebar { display: none; }
+}
 /* min-width:0 lets the drawer content shrink so the inline Reference panel fits: on desktop the
    content insets by the panel's 22rem, and on a narrow/mobile screen it shrinks to zero so the panel
    (flex-basis 100% there) fills the screen. Without it PF's flex __content keeps its intrinsic width
@@ -667,15 +749,21 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    supplies the page background itself (the PF primary page token, theme-aware light/dark) - otherwise
    its themed dark-on-light text would sit on the app's dark outlet and vanish in light mode. It takes
    the SECONDARY page token (the PF "grey page" behind primary-white cards) so the clickable Cards keep
-   their contrast in both themes. The content stays capped at 44rem, left-aligned, so the full-bleed
-   background reads as a real page. */
+   their contrast in both themes. */
 /* Fill the outlet so the launcher's background covers the whole panel - otherwise the surface stops
    at its content height and the page shows through below it, reading as two different backgrounds.
    A small inset from the outlet edges plus a generous radius (larger than the card tiles' container
    radius) lets the rounded corners read, so the panel presents as a distinct, inviting rounded
    surface floating in the outlet rather than a flush square fill. The radius is built from the large
    token (device-aware via the tokens.css platform gate), doubled so the curve is unmistakable. */
-#console-outlet [data-surface="home"] { position: relative; flex: 1 1 auto; align-self: stretch; min-height: 0; display: flex; flex-direction: column; overflow: auto; margin: 0; padding: 2rem 1.25rem; background: var(--pf-t--global--background--color--secondary--default); }
+/* The launcher column is CENTRED in a wide window rather than pinned to the left edge: left-aligned it
+   left roughly two thirds of a desktop window empty with the cards huddled in one corner, which reads as
+   a page that failed to load rather than as a home screen.
+   Centred by growing the horizontal PADDING, not by capping each child: the column's children align
+   against each other (the heading and lede take their own narrower measure, the demo pill floats to the
+   trailing edge), and those relationships survive a padded content box while a per-child max-width would
+   have to restate every one of them. The max() keeps the phone gutter when there is nothing to centre. */
+#console-outlet [data-surface="home"] { position: relative; flex: 1 1 auto; align-self: stretch; min-height: 0; display: flex; flex-direction: column; overflow: auto; margin: 0; padding-block: 2rem; padding-inline: max(1.25rem, (100% - var(--console-launcher-w)) / 2); background: var(--pf-t--global--background--color--secondary--default); }
 
 /* Launch-the-demo affordance: a quiet icon pill below the cards, right-aligned, that expands to show its
    label on hover/focus. Subtle by default (muted, icon-only) so it does not compete with the cards. It
@@ -708,7 +796,15 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    that margin is `auto` (it floats the pill to the bottom of a short column) and collapses to nothing the
    moment the cards overflow - which is exactly the mobile case, leaving the pill flush against the last
    card. A margin-bottom here cannot collapse, so the pill keeps its own space at every card count. */
-#console-outlet [data-surface="home"] .pf-v6-l-gallery { max-width: 52rem; margin-bottom: 2.5rem; }
+#console-outlet [data-surface="home"] .pf-v6-l-gallery { margin-bottom: 2.5rem; }
+/* Bigger cards on a desktop window. The PF Gallery sizes its columns from a minimum, so raising the
+   minimum is what fills the extra width - the grid keeps choosing the column count itself, and the
+   layout never becomes a fixed count that breaks at the next window size. It is deliberately NOT the
+   full-bleed tile wall it could be: these are eight cards you pick one of and leave, so they should
+   read as a considered set, not as a start screen you have to scan. */
+@media (min-width: 62rem) {
+  #console-outlet [data-surface="home"] .pf-v6-l-gallery { --pf-v6-l-gallery--GridTemplateColumns--min: 17rem; }
+}
 
 /* App-drawer section label: the "Menu" group heading above the app entries - smaller, uppercase, muted,
    and non-interactive-looking, so it reads as a divider label rather than a menu row. */
@@ -977,6 +1073,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   #console-outlet [data-surface="home"] .console-launcher-card { opacity: 1; animation: none; }
   .console-launcher-card, .console-launcher-card__watermark, .console-launcher-card__icon svg,
   .console-launcher-card [data-motion] { transition: none !important; animation: none !important; transform: none !important; }
+  /* The rail still expands and collapses - it just arrives at the new width immediately. */
+  #console-sidebar, #console-sidebar .pf-v6-c-nav__link-text { transition: none; }
 }
 .console-shell-commandbar__item {
   /* A small block margin insets every token from the bar's top/bottom edges so the selection reads as

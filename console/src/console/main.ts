@@ -17,9 +17,11 @@ import {
   renameTab,
   desktopStarterWorkspace,
   workspaceStore,
+  tabHostsSurface,
   type TabState,
 } from "./tabs";
 import { createTabBar } from "./tabBar";
+import { createSidebar } from "./sidebar";
 import { buildLauncher, type Launchable } from "./home";
 import { standaloneSurface, moduleSurface } from "./standalone";
 import {
@@ -38,14 +40,14 @@ import { settingsSurface } from "./settings/surface";
 import { createCheatsheet } from "./cheatsheet";
 import { createActionsSurface } from "./actions";
 import { createTileView, type TileView } from "./tileView";
-import { leaves, type Pane, type Leaf, type Split } from "./tiling";
+import { type Pane, type Leaf, type Split } from "./tiling";
 import { initRefDrawer, referenceSurface } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
 import { mountNotificationCenter, notify } from "../lib/notifications";
 import { checkLocalStorageAlert, startShellWatch } from "../lib/watch";
 import { openSurfaceWindow } from "../lib/appwindow";
 import { persisted } from "../lib/persist";
-import { splitModeCell } from "./layoutPrefs";
+import { splitModeCell, sidebarExpandedCell } from "./layoutPrefs";
 import { surfaceNavigation, surfaceNavigationEvent } from "./surface-navigation";
 import {
   parseHash,
@@ -93,6 +95,8 @@ const CONSOLE_KEYMAP: Keymap = {
   "console.pane.focusParent": "alt+a",
   // The Command Palette: one searchable list of every command (and its chord).
   "console.actionBar.open": "mod+k",
+  // mod+b for the navigation rail, the binding every editor with a left sidebar already uses.
+  "console.sidebar.toggle": "mod+b",
 };
 const keymapCell = persisted<Keymap>("keymap", {});
 const DESKTOP_START_QUERY = "(min-width: 64rem)";
@@ -1045,6 +1049,14 @@ export function startConsole(
   // its dedicated gear, while every user-openable workspace surface remains in the escape hatch.
   initAppMenu(SURFACES.filter((surface) => surface.pageId !== "settings"));
 
+  // The left navigation rail, over the SAME surface list, so the rail, the launcher and the
+  // Applications menu can never offer different sets. An app-mode window has no rail host and so
+  // gets no rail: it is one surface with no shell, and navigating away from it is not its job.
+  const sidebarHost = document.getElementById("console-sidebar");
+  if (sidebarHost) {
+    createSidebar(sidebarHost, ws, sidebarExpandedCell, SURFACES, { onOpen: (id) => open(id) });
+  }
+
   // Wire the title-bar Reference button + its slide-out panel. No-ops without the #console-refdrawer
   // markup. It reads the active surface's [data-ref-section] help blocks (refreshed on tab change). The
   // panel's "break out to tab" button promotes the console-wide reference into a persistent tab.
@@ -1249,6 +1261,15 @@ export function startConsole(
     label: "Command Palette",
     group: "General",
     run: () => commandBar.open(),
+  });
+
+  // The rail's own toggle is a button on the rail, which is no help when the rail is what you want
+  // back; the command (and mod+b) is the route that does not depend on it being visible.
+  registerCommand({
+    id: "console.sidebar.toggle",
+    label: "Toggle navigation rail",
+    group: "General",
+    run: () => sidebarExpandedCell.set(!sidebarExpandedCell.get()),
   });
 
   // Mirror the title-bar bell as a palette command, so the notification history is reachable by keyboard
@@ -1842,13 +1863,6 @@ export function startConsole(
     if (detail?.pageId === "dashboard" && detail.dashboardMode === "plan") openDashboardPlan();
     else if (detail?.pageId) open(detail.pageId);
   });
-
-  // tabHostsSurface reports whether a tab already shows a surface, checking its tiled panes when it
-  // has a layout and its primary pageId otherwise - so a single-instance surface is never opened twice.
-  function tabHostsSurface(t: TabState, pageId: string): boolean {
-    const ids = t.layout ? leaves(t.layout).map((l) => l.pageId) : [t.pageId];
-    return ids.includes(pageId);
-  }
 
   register(
     standaloneSurface({

@@ -100,6 +100,18 @@
        Reference button (#console-refbtn) toggles it; pinned it stays open across tab switches
        (persisted). PF Drawer does not dim - there is no backdrop by design. -->
   <main id="console-outlet">
+    <!-- The left navigation rail: every surface the console can open, always on screen, with the one the
+         active tab is showing marked (pf-m-current) and the ones that merely have a tab open flagged
+         (data-tab-open). console.js's createSidebar() fills this host - the surface list is the same
+         registry the launcher and the Applications menu read, so the three can never disagree.
+         Collapsed to icons by default (data-expanded absent) because the Graph Explorer and the Diff
+         surface carry their OWN left sidebars inside the pane; the width lives in console.css.
+         Named "Applications" to a screen reader, not "Surfaces": surface is the code's word for these
+         (pageId, PageModule, SURFACES) and appears in no other user-facing string - the window calls
+         them apps, in the Applications menu that lists this same set. It sits
+         INSIDE #console-outlet, before the Drawer, so the rail and the right-hand Reference panel bracket
+         the tab content instead of either one overlapping it. -->
+    <nav id="console-sidebar" class="pf-v6-c-nav" aria-label="Applications"></nav>
     <div id="console-refdrawer" class="pf-v6-c-drawer pf-m-panel-right">
       <div class="pf-v6-c-drawer__main">
         <div id="console-outlet-content" class="pf-v6-c-drawer__content"></div>
@@ -165,6 +177,7 @@
       <p>Nothing here is chord-only: the <b>Command Palette</b> runs any command by name, the <b>Shortcuts</b> surface lists every command with its chord and lets you rebind it, and the title-bar and status-bar controls dispatch those same commands.</p>
       <dl>
         <dt><code>mod+k</code></dt><dd>Command Palette - run any command.</dd>
+        <dt><code>mod+b</code></dt><dd>Show or hide the navigation rail's labels.</dd>
         <dt><code>mod+\</code></dt><dd>Split the focused pane in the default direction.</dd>
         <dt><code>mod+shift+\</code></dt><dd>Toggle the default split direction.</dd>
         <dt><code>mod+w</code></dt><dd>Close the focused pane, or the tab once it is the last one.</dd>
@@ -183,6 +196,7 @@
     <details data-ref-section>
       <summary>Tabs and panes</summary>
       <p>Each app opens as a <b>tab</b>. Opening one you already have focuses its tab instead of a second copy - every surface is single-instance.</p>
+      <p>The <b>rail</b> down the left edge lists every app, whether or not it is open. The one you are looking at is highlighted, and an app with a tab open somewhere else is marked. Click a row to go there. It collapses to icons and back with the chevron at its foot, or <code>mod+b</code>.</p>
       <p>A tab splits into <b>panes</b>. A split divides the focused pane in the persisted default direction (side by side, or stacked); the direction can be toggled or picked explicitly. Tap or click a pane to focus it; drag the divider to re-weight the split. A pane can also be moved into a neighboring slot without losing its place.</p>
       <p>The <b>Panes</b> button in the status bar drives all of it without a keyboard.</p>
       <p>To leave this window, right-click a tab and choose <b>Move to new window</b>. That is the only route to a separate OS window - opening an app never takes you out of the one you are in.</p>
