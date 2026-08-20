@@ -74,6 +74,14 @@ import {
   type FlowEdge,
 } from "./particles.js";
 import { toMermaid } from "./mermaid.js";
+import {
+  type Insets,
+  NO_INSETS,
+  type Rect,
+  fitTransform,
+  overlayInsets,
+  usableCenter,
+} from "./viewport.js";
 import { disconnected, mostDependedOn } from "./views.js";
 import { flavorOf, isTargetGraph, targetGraphToNodeLink } from "./target-adapter.js";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
@@ -869,6 +877,9 @@ function resizeCanvas() {
 function startSimulation() {
   if (sim) sim?.stop(); // stop the prior run (e.g. after loading a new file) - its timer would keep ticking
   const { w, h } = resizeCanvas();
+  // Settle in the part of the canvas the legend and toolbar do not cover: the cold view is
+  // never fitted, so wherever the cloud lands is the operator's first impression of the graph.
+  const simCenter = usableCenter(w, h, stageInsets());
   sim = forceSimulation<GNode, GLink>(graph.nodes)
     .force(
       "link",
@@ -878,13 +889,13 @@ function startSimulation() {
         .strength(0.4),
     )
     .force("charge", forceManyBody().strength(-60).distanceMax(400))
-    .force("center", forceCenter(w / 2, h / 2))
+    .force("center", forceCenter(simCenter.x, simCenter.y))
     .force(
       "collide",
       forceCollide<GNode>().radius((d) => d.r + 2),
     )
-    .force("x", forceX(w / 2).strength(0.02))
-    .force("y", forceY(h / 2).strength(0.02))
+    .force("x", forceX(simCenter.x).strength(0.02))
+    .force("y", forceY(simCenter.y).strength(0.02))
     .alphaTarget(idleAlpha()) // decay toward a small floor, not 0, so it keeps gently moving
     .on("tick", draw);
 }
@@ -1326,6 +1337,10 @@ function setupZoomDrag() {
     .scaleExtent([0.1, 8])
     .filter((event) => !event.button && event.type !== "dblclick")
     .on("zoom", (event) => {
+      // sourceEvent is null for the programmatic transforms fitView applies; a real wheel or
+      // drag means the operator has framed the graph themselves and the load-time reveal must
+      // stop moving the camera under their hands.
+      if (event.sourceEvent) cameraOwnedByOperator = true;
       transform = event.transform;
       draw();
     });
@@ -1608,6 +1623,56 @@ function centerOn(id: string) {
 
 // fitView frames a set of nodes (or all when ids is null) in the viewport - the
 // zoom-to-fit / reset-view action. Reuses the shared zoomBehavior + transform.
+// The stage floats chrome over the canvas rather than beside it. These are the pieces that do,
+// measured live so a hidden one (the legend is closed on mobile, the toolbar collapses to a
+// kebab) contributes nothing. The explain card is NOT here: it sits beside the canvas.
+const STAGE_OVERLAYS = [
+  "#graph-legend-panel",
+  "#legend-toggle",
+  ".console-graph-stage__tools",
+  ".console-graph-stage__result",
+];
+
+// stageInsets measures how far the stage chrome covers the canvas, so the framing below can
+// centre the graph in what the operator can see instead of behind the legend.
+function stageInsets(): Insets {
+  if (!canvas) return NO_INSETS;
+  const view = canvas.getBoundingClientRect() as Rect;
+  const overlays: Rect[] = [];
+  for (const sel of STAGE_OVERLAYS) {
+    for (const node of document.querySelectorAll<HTMLElement>(sel)) {
+      if (node.hidden) continue;
+      overlays.push(node.getBoundingClientRect());
+    }
+  }
+  return overlayInsets(view, overlays);
+}
+
+// Set once the operator pans or zooms by hand. The reveal below stops re-framing after that:
+// a camera that keeps moving while someone is reading is worse than a frame that came out loose.
+let cameraOwnedByOperator = false;
+
+// Frames at which the load-time reveal re-checks the framing. A cold force layout keeps
+// spreading for seconds, so a single early fit frames a cloud that then grows straight back out
+// of view - which is how a 2373-node graph came to land cropped to a corner. The first beat is
+// quick feedback, the last one catches the settled extent.
+const REVEAL_BEATS_MS = [700, 1800, 3200];
+
+// revealWholeGraph frames the whole graph as the cold force layout spreads, so it lands centered
+// instead of cropped. Force mode only: the DAG layouts frame themselves in applyLayeredMode,
+// radial in applyRadialMode, and a projection is already its own subset.
+function revealWholeGraph() {
+  if (!projectionUnfolded || isDagMode() || !graph?.nodes.length) return;
+  cameraOwnedByOperator = false;
+  for (const at of REVEAL_BEATS_MS) {
+    setTimeout(() => {
+      // Re-check the mode too: a beat can land after the operator switched layout or ran a view.
+      if (cameraOwnedByOperator || isDagMode() || activeView || focusId || query) return;
+      fitView(null);
+    }, at);
+  }
+}
+
 function fitView(ids: Set<string> | null) {
   const pts = graph.nodes.filter((n) => n.x != null && (!ids || ids.has(n.id)));
   if (!pts.length || !zoomBehavior) return;
@@ -1625,14 +1690,8 @@ function fitView(ids: Set<string> | null) {
     maxY = Math.max(maxY, n.y + hh);
   }
   const { w, h } = resizeCanvas();
-  const pad = 48;
-  const k = Math.max(
-    0.1,
-    Math.min(8, Math.min((w - 2 * pad) / (maxX - minX || 1), (h - 2 * pad) / (maxY - minY || 1))),
-  );
-  const cx = (minX + maxX) / 2,
-    cy = (minY + maxY) / 2;
-  transform = zoomIdentity.translate(w / 2 - cx * k, h / 2 - cy * k).scale(k);
+  const t = fitTransform({ minX, minY, maxX, maxY }, w, h, stageInsets());
+  transform = zoomIdentity.translate(t.x, t.y).scale(t.k);
   select(canvas).call(zoomBehavior.transform, transform);
   draw();
 }
@@ -2310,6 +2369,7 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   }
   parkHiddenNodes(); // after the sim is built: the projection reduces the visible set
   draw();
+  revealWholeGraph();
   syncGraphKindToggle();
 }
 
@@ -4045,12 +4105,7 @@ function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void
   applyLayoutAndSimulation(initialParams.layout, flavor);
   parkHiddenNodes();
 
-  // Wow reveal: once the cold force layout has spread out, frame the whole graph so it lands centered and
-  // fully in view instead of cropped to a corner. Only for the default full-graph view - a deep link or
-  // the perf-guard projection already frames its own subset, and layered layout is framed by applyLayeredMode.
-  if (projectionUnfolded && !hasFragmentDirective && !isDagMode() && graph.nodes.length) {
-    setTimeout(() => fitView(null), 700);
-  }
+  if (!hasFragmentDirective) revealWholeGraph(); // a deep link frames its own subset
   syncGraphKindToggle();
 }
 
@@ -4386,7 +4441,8 @@ function bootWireEvents() {
         // The canvas is sized to its box; refit after the panel resizes.
         resizeCanvas();
         if (sim) {
-          sim.force("center", forceCenter(canvas.clientWidth / 2, canvas.clientHeight / 2));
+          const c = usableCenter(canvas.clientWidth, canvas.clientHeight, stageInsets());
+          sim.force("center", forceCenter(c.x, c.y));
           sim.alpha(0.15).restart();
         }
         draw();
@@ -4433,7 +4489,8 @@ function bootWireEvents() {
       resizePending = false;
       resizeCanvas();
       if (sim) {
-        sim.force("center", forceCenter(canvas.clientWidth / 2, canvas.clientHeight / 2));
+        const c = usableCenter(canvas.clientWidth, canvas.clientHeight, stageInsets());
+        sim.force("center", forceCenter(c.x, c.y));
         sim.alpha(0.1).restart();
       }
       draw();
