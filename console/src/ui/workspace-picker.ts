@@ -32,11 +32,15 @@ export interface WorkspacePicker {
 }
 
 export function initWorkspacePicker(host: HTMLElement): WorkspacePicker {
-  // A VISIBLE caption, not just the accessible name. The button's text is the workspace ITSELF
-  // ("acme", "All workspaces"), which in a row of icon buttons says nothing about what picking one
-  // does - it reads as a title, a filter, or a pair of tabs. The accessible name already carried
-  // "Workspace:", so the sighted reader was the only one being asked to guess. Named via
-  // aria-labelledby so the control has ONE name rather than a visible one and a different spoken one.
+  // ONE control, not a label parked beside a button. The two were adjacent siblings - a bare caption
+  // next to a bordered chip - and read as two unrelated things in a row of icon buttons rather than as
+  // a field and its value. The border belongs to the WRAPPER, so it encloses both halves; the caption
+  // sits on its own segment behind a hairline, the way a form addon does. Without that enclosure the
+  // caption is just more text in the title bar.
+  const wrap = document.createElement("div");
+  wrap.className = "console-shell-scope";
+  wrap.id = "console-scope";
+
   const caption = document.createElement("span");
   caption.className = "console-shell-scope__caption";
   caption.id = "console-scope-caption";
@@ -50,7 +54,16 @@ export function initWorkspacePicker(host: HTMLElement): WorkspacePicker {
   btn.setAttribute("aria-expanded", "false");
   const label = document.createElement("span");
   label.className = "console-shell-scope__label";
-  btn.append(label);
+  // A caret, because aria-haspopup tells a screen reader this opens a menu and nothing told anyone
+  // else. Without it the value reads as a status readout rather than as something to press.
+  const caret = document.createElement("span");
+  caret.className = "console-shell-scope__caret";
+  caret.innerHTML =
+    '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" ' +
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    '<path d="M6 9l6 6 6-6"/></svg>';
+  btn.append(label, caret);
+  wrap.append(caption, btn);
 
   const menu = document.createElement("div");
   menu.className = "pf-v6-c-menu console-shell-scope__menu";
@@ -77,8 +90,8 @@ export function initWorkspacePicker(host: HTMLElement): WorkspacePicker {
     // More than one loaded is the only case where scope is a question. Below that the control would
     // be an always-present reminder of a decision with one possible answer.
     const relevant = roots.length > 1;
-    btn.hidden = !relevant;
-    caption.hidden = !relevant;
+    // Hide the WRAPPER, so the caption can never outlive the value it names.
+    wrap.hidden = !relevant;
     if (!relevant) {
       setOpen(false);
       return;
@@ -162,8 +175,7 @@ export function initWorkspacePicker(host: HTMLElement): WorkspacePicker {
   );
 
   host.prepend(menu);
-  host.prepend(btn);
-  host.prepend(caption);
+  host.prepend(wrap);
   // The control has to follow the scope, not just set it: the scope can change from anywhere in the
   // tab, and without this the button kept announcing the workspace you left.
   const unsubscribe = onWorkspaceScope(paint);
@@ -181,8 +193,7 @@ export function initWorkspacePicker(host: HTMLElement): WorkspacePicker {
     destroy() {
       listeners.abort();
       unsubscribe();
-      caption.remove();
-      btn.remove();
+      wrap.remove();
       menu.remove();
     },
   };

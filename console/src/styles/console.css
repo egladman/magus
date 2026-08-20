@@ -1014,23 +1014,35 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* The workspace scope control in the title bar (ui/scope-picker.ts). Square and normal-case like every
    other chip in this shell; it names the workspace this BROWSER TAB is scoped to, and hides itself
    entirely until the daemon reports more than one. */
-#console-scope-btn {
-  inline-size: auto; padding-inline: 0.5rem;
-  font-size: 0.78rem; color: var(--pf-t--global--text--color--regular);
+/* ONE control: the border belongs to this wrapper so it encloses the caption AND the value. As two
+   siblings they read as unrelated things sitting next to each other in a row of icon buttons. */
+.console-shell-scope {
+  display: inline-flex; align-items: stretch;
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
+  overflow: hidden; block-size: 1.75rem;
+}
+.console-shell-scope[hidden] { display: none; }
+/* Its own segment behind a hairline - the form-addon treatment, which is what makes the pair read as
+   field-then-value rather than as two chips. */
+.console-shell-scope__caption {
+  display: flex; align-items: center; padding-inline: 0.5rem;
+  font-size: 0.7rem; font-weight: 600; letter-spacing: 0.01em;
+  color: var(--pf-t--global--text--color--subtle);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-inline-end: 1px solid var(--pf-t--global--border--color--default);
   white-space: nowrap;
 }
-#console-scope-btn[hidden] { display: none; }
-/* Names the control for the sighted reader; the button beside it carries the value. Subtle and small
-   so it reads as a field label rather than as another control competing with the chip. */
-.console-shell-scope__caption {
-  font-size: 0.72rem; font-weight: 600; color: var(--pf-t--global--text--color--subtle);
-  margin-inline-end: 0.35rem; white-space: nowrap;
+#console-scope-btn {
+  display: flex; align-items: center; gap: 0.3rem;
+  inline-size: auto; padding-inline: 0.5rem;
+  font-size: 0.78rem; color: var(--pf-t--global--text--color--regular);
+  border: 0; border-radius: 0;
+  white-space: nowrap;
 }
-.console-shell-scope__caption[hidden] { display: none; }
-/* Below the rail's breakpoint the title bar is fighting for room and the chip's own text still names
-   a workspace; the caption is the part that can go. */
+.console-shell-scope__caret { display: flex; align-items: center; color: var(--pf-t--global--icon--color--subtle); }
+/* Below the rail's breakpoint the title bar is fighting for room and the value still names a
+   workspace; the caption segment is the part that can go. */
 @media (width < 48rem) {
   .console-shell-scope__caption { display: none; }
 }
