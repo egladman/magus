@@ -4612,7 +4612,13 @@ function bootWireEvents() {
         sim.force("center", forceCenter(c.x, c.y));
         sim.alpha(0.1).restart();
       }
-      draw();
+      // Re-frame only while the camera is still the app's. Selecting a node narrows the stage
+      // by the explain card's width, and a DAG layout keeps its pinned coordinates through
+      // that, so the framing goes stale with nothing to correct it. Once the operator has
+      // panned or zoomed, the camera is theirs: moving it on a resize would yank the view out
+      // from under a click.
+      if (!cameraOwnedByOperator) fitView(matchSet);
+      else draw();
     });
   };
   // stageResizeObserver is disconnected (and the lifecycleSignal aborted, removing every
