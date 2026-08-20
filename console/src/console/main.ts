@@ -1831,9 +1831,15 @@ export function startConsole(
     // The rail's readings ride THIS interval rather than starting their own: the shell is already
     // asking this daemon a question every 15s, and the rail's numbers are the same freshness.
     void fetchPulse(host).then((p) => pulse.set(p));
-    void fetchDiffCount(host).then((count) => {
-      railBadges.set(count == null ? {} : { diff: { count, noun: "changed files" } });
-    });
+    // Only while the rail is actually on screen. It is hidden on a phone and in an app-mode window,
+    // where this would be a request every 15s for a number nobody can see - and a phone is exactly
+    // where that is worth not doing. Read from the rendered width rather than re-testing the 48rem
+    // breakpoint here, so CSS stays the one place that decides when the rail exists.
+    if (sidebarHost && sidebarHost.getBoundingClientRect().width > 0) {
+      void fetchDiffCount(host).then((count) => {
+        railBadges.set(count == null ? {} : { diff: { count, noun: "changed files" } });
+      });
+    }
     const startedAt = Date.now();
     fetchReadiness(host).then((report) => {
       const conn = document.getElementById("console-conn");

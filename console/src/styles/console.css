@@ -21,9 +21,10 @@
   --console-topchrome-h: var(--console-titlebar-h);
   --console-statusbar-h: 2.2rem;
   --console-refdrawer-w: 22rem;
-  /* The gutter that insets the app card from the window. Named because the navigation rail has to
-     cancel exactly it to sit flush, and two copies of the number would drift the first time one
-     changed - the same trap the title-bar height note above describes. */
+  /* The gutter that insets the app card from the window. Named rather than inlined so the two axes
+     cannot drift apart - they are meant to match, and the block/inline pair below is the only place
+     it is read. (It was extracted when the navigation rail sat inside this padding and had to cancel
+     it; the rail is a sibling of <main> now and cancels nothing.) */
   --console-shell-gutter: 0.6rem;
   /* The left navigation rail, collapsed and expanded. Collapsed is 2.75rem for the same reason the
      title bar is: every row is a tap target. Expanded stays deliberately narrow - the Graph Explorer
@@ -762,7 +763,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    the same rule the pool reading and the collapse control already use, so the rail's foot reads as one
    stack of trailing controls rather than three unrelated bands. */
 #console-sidebar [data-rail-utility] {
-  flex: 0 0 auto; align-content: end; overflow: visible;
+  flex: 0 0 auto; overflow: visible;
   padding-block-start: 0;
   border-top: 1px solid var(--pf-t--global--border--color--default);
 }
