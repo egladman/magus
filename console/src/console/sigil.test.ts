@@ -21,16 +21,46 @@ test("a near-identical root is not a near-identical mark", () => {
 
 // The property that stops these reading as scribble. An earlier version traced a name across a magic
 // square, whose defining feature is scattering consecutive values to unrelated cells - so the path had
-// no symmetry at all and looked like noise. Here the motif repeats exactly `folds` times.
-test("the figure repeats exactly as many times as it has folds", () => {
-  for (let i = 0; i < 200; i++) {
-    const spec = sigilSpec("/Repos/p" + i);
-    assert.ok(spec.folds >= 3 && spec.folds <= 8, "folds " + spec.folds);
-    const d = /<path d="([^"]*)Z"/.exec(renderSigil(spec, 100))?.[1] ?? "";
-    const verts = d.split(/[ML]/).filter(Boolean).length;
-    // One hand-over point plus the motif, mirrored or not, per wedge.
-    const perWedge = 1 + spec.motif.length * (spec.mirror ? 2 : 1);
-    assert.equal(verts, perWedge * spec.folds, "p" + i + " is not k-fold symmetric");
+// no symmetry at all and looked like noise.
+//
+// Tested GEOMETRICALLY rather than by counting path commands: turn the figure by one wedge and it must
+// land on itself. That survives changing how the curve is drawn - which counting did not, since the
+// segments became quadratics the moment these were made less crystalline.
+function endpoints(svg: string): [number, number][] {
+  const d = /<path d="([^"]*)"/.exec(svg)?.[1] ?? "";
+  const out: [number, number][] = [];
+  for (const m of d.matchAll(/[MQ]([-\d.]+) ([-\d.]+)(?: ([-\d.]+) ([-\d.]+))?/g)) {
+    // A Q carries a control point then an endpoint; an M carries only the point.
+    const x = m[3] !== undefined ? Number(m[3]) : Number(m[1]);
+    const y = m[4] !== undefined ? Number(m[4]) : Number(m[2]);
+    out.push([x, y]);
+  }
+  return out;
+}
+
+test("turning the figure by one fold lands it on itself", () => {
+  const SIZE = 200;
+  const c = SIZE / 2;
+  for (let i = 0; i < 120; i++) {
+    const spec = sigilSpec("/Repos/sym" + i);
+    const pts = endpoints(renderSigil(spec, SIZE));
+    assert.ok(pts.length >= spec.folds, "sym" + i + " drew too little to test");
+    const a = (Math.PI * 2) / spec.folds;
+    const key = (q: [number, number]): string => q[0].toFixed(0) + "," + q[1].toFixed(0);
+    const have = new Set(pts.map(key));
+    for (const [x, y] of pts) {
+      const dx = x - c;
+      const dy = y - c;
+      const rx = c + dx * Math.cos(a) - dy * Math.sin(a);
+      const ry = c + dx * Math.sin(a) + dy * Math.cos(a);
+      // Allow a pixel of slack: the path is emitted at two decimals and rotation is not exact in
+      // floating point.
+      const near = [...have].some((k) => {
+        const [hx, hy] = k.split(",").map(Number);
+        return Math.hypot(hx - rx, hy - ry) <= 1.5;
+      });
+      assert.ok(near, "sym" + i + " is not " + spec.folds + "-fold symmetric");
+    }
   }
 });
 

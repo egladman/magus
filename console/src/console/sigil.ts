@@ -66,6 +66,11 @@ export interface SigilSpec {
   motif: Pt[];
   core: 0 | 1 | 2; // nothing, a dot, or an inner ring
   ring: boolean; // the enclosing circle
+  // How far each segment bows away from the straight line between its ends. This is what decides
+  // whether the mark reads as crystalline or as grown: at 0 it is a star, and away from 0 the same
+  // figure becomes petals and curls. Signed, so a figure can bulge outward or cup inward.
+  bulge: number;
+  orbs: boolean; // small filled dots at each petal tip
   hue: string;
 }
 
@@ -95,6 +100,9 @@ export function sigilSpec(seed: string): SigilSpec {
     const out = edge < 0.6 ? edge + REACH : edge - REACH;
     motif[i] = { t: motif[i].t, r: Math.max(0.12, Math.min(0.98, out)) };
   }
+  // Never zero: a straight-sided figure is the crystalline look this deliberately moves away from.
+  // The sign is seeded too, so some workspaces bloom outward and others cup inward.
+  const BULGES = [-0.34, -0.22, -0.13, 0.13, 0.22, 0.34, 0.46];
   return {
     folds,
     mirror: pick(2) === 0,
@@ -102,6 +110,8 @@ export function sigilSpec(seed: string): SigilSpec {
     motif,
     core: pick(3) as 0 | 1 | 2,
     ring: pick(4) > 0,
+    bulge: BULGES[pick(BULGES.length)],
+    orbs: pick(3) === 0,
     hue: SIGIL_HUES[pick(SIGIL_HUES.length)],
   };
 }
@@ -116,6 +126,8 @@ export function specKey(s: SigilSpec): string {
     s.edge.toFixed(2),
     s.core,
     s.ring ? "r" : "-",
+    s.bulge.toFixed(2),
+    s.orbs ? "o" : "-",
     s.hue,
     s.motif.map((p) => p.t.toFixed(2) + ":" + p.r.toFixed(2)).join(","),
   ].join("|");
@@ -159,14 +171,49 @@ export function renderSigil(spec: SigilSpec, size = 44): string {
     ...spec.motif,
     ...(spec.mirror ? [...spec.motif].reverse().map((p) => ({ t: 1 - p.t, r: p.r })) : []),
   ];
-  const d: string[] = [];
+  // Walk every wedge into one flat ring of points first, so the curve through them closes smoothly
+  // rather than restarting at each wedge - the joins are the thing that would give the repetition away.
+  const ring: [number, number][] = [];
   for (let k = 0; k < spec.folds; k++) {
-    for (let i = 0; i < inWedge.length; i++) {
-      const [x, y] = at(inWedge[i].t, inWedge[i].r, k);
-      d.push((k === 0 && i === 0 ? "M" : "L") + x.toFixed(2) + " " + y.toFixed(2));
-    }
+    for (const q of inWedge) ring.push(at(q.t, q.r, k));
+  }
+  // QUADRATICS, not straight segments. Each control point sits at the midpoint pushed along the radius
+  // by `bulge`, so a segment bows outward into a petal or inward into a cusp. This is the whole
+  // difference between a spiky star and something grown - the symmetry is identical either way.
+  const d: string[] = ["M" + ring[0][0].toFixed(2) + " " + ring[0][1].toFixed(2)];
+  for (let i = 1; i <= ring.length; i++) {
+    const [x0, y0] = ring[i - 1];
+    const [x1, y1] = ring[i % ring.length];
+    const mx = (x0 + x1) / 2;
+    const my = (y0 + y1) / 2;
+    // Push along the line from the centre through the midpoint, which keeps the bow radial and so
+    // keeps the k-fold symmetry exact.
+    const dx = mx - c;
+    const dy = my - c;
+    const len = Math.hypot(dx, dy) || 1;
+    const cx = mx + (dx / len) * rad * spec.bulge;
+    const cy = my + (dy / len) * rad * spec.bulge;
+    d.push("Q" + cx.toFixed(2) + " " + cy.toFixed(2) + " " + x1.toFixed(2) + " " + y1.toFixed(2));
   }
   const parts = ['<path d="' + d.join("") + 'Z"/>'];
+  // Seeds at the petal tips. Small enough to read as punctuation on the figure rather than as a second
+  // figure competing with it.
+  if (spec.orbs) {
+    const tipR = Math.max(...inWedge.map((q) => q.r));
+    const tip = inWedge.findIndex((q) => q.r === tipR);
+    for (let k = 0; k < spec.folds; k++) {
+      const [x, y] = at(inWedge[tip].t, inWedge[tip].r, k);
+      parts.push(
+        '<circle cx="' +
+          x.toFixed(2) +
+          '" cy="' +
+          y.toFixed(2) +
+          '" r="' +
+          (size * 0.032).toFixed(2) +
+          '" fill="currentColor" stroke="none"/>',
+      );
+    }
+  }
   if (spec.ring) {
     parts.unshift(
       '<circle cx="' + c + '" cy="' + c + '" r="' + rad.toFixed(2) + '" opacity="0.22"/>',
