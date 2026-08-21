@@ -2512,7 +2512,24 @@ async function refineTraceFromServer(from: string, to: string, gen: number) {
           .map((s) => s.relation + " -> " + (graph.byId.get(s.to)?.label ?? s.to))
           .join(", "),
     );
+    // The result line above the canvas carries the LOCAL walk's verdict, and that walk follows
+    // depends_on only - so when the daemon finds a chain through other relations, the line is
+    // left insisting there is no path while the status bar describes one. Two surfaces
+    // disagreeing about the same question is worse than either being wrong on its own.
+    const label = (id: string) => graph.byId.get(id)?.label ?? id;
+    setResultLine(
+      "Path from " +
+        label(res.from) +
+        " to " +
+        label(res.to) +
+        ", " +
+        res.steps.length +
+        " step" +
+        (res.steps.length === 1 ? "" : "s") +
+        " (from the workspace graph).",
+    );
     renderList();
+    refreshOverview(); // the match set just changed under the panel that reports its size
     draw();
   } catch {
     // Local answer stands.
@@ -2571,6 +2588,7 @@ async function refineQueryFromServer(q: string, gen: number) {
     setListExpanded(true);
     renderList();
     syncLayoutToggle();
+    refreshOverview(); // the match set just changed under the panel that reports its size
     draw();
   } catch {
     // A refinement that cannot reach the daemon leaves the local answer standing, which is
@@ -5461,6 +5479,10 @@ async function bootLive() {
   if (!host) return false;
 
   liveHost = host;
+  // bootLive renders through its own skeleton-then-full path rather than renderLoadedGraph, so it
+  // has to name the source itself or the overview reports "an unnamed source" for the one case
+  // where the answer matters most - whether you are looking at your workspace or the demo.
+  graphSource = "live";
   liveFlavor = params.flavor || null;
 
   // Consume and store the token (strips it from the URL fragment).
