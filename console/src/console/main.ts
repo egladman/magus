@@ -8,6 +8,8 @@
 // opened. The four core lenses are real surfaces (logs/graph/dashboard/activity). The launcher
 // (home.ts) is NOT a tab - it is the outlet's empty state, shown whenever zero tabs are open.
 
+import { castWorkspaceSigil } from "./cast";
+import { WORKSPACE_ROOT as DEMO_WORKSPACE_ROOT } from "./demo-scenario";
 import { exchangeOperatorToken } from "../lib/token-exchange";
 import {
   openTab,
@@ -46,7 +48,7 @@ import { leafShowing, type Pane, type Leaf, type Split } from "./tiling";
 import { initRefDrawer, referenceSurface } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
 import { initWorkspacePicker } from "../ui/workspace-picker";
-import { onWorkspaces } from "../lib/scope";
+import { onWorkspaceScope, onWorkspaces, workspaceScope } from "../lib/scope";
 import { maybeAskWorkspace } from "../ui/signin";
 import { mountNotificationCenter, notify } from "../lib/notifications";
 import { checkLocalStorageAlert, startShellWatch } from "../lib/watch";
@@ -1107,6 +1109,22 @@ export function startConsole(
   const workspacePicker = actionsHost
     ? initWorkspacePicker(actionsHost, { onDemo: (enter) => (enter ? launchDemo() : leaveDemo()) })
     : null;
+  // The first-sight cast belongs to the SHELL, not to the launcher. It used to run from the launcher's
+  // paint, which meant it fired only if you happened to be looking at the zero-tab screen when the
+  // workspace became known - open a tab first and the one showing was never spent, but never seen
+  // either. This is "the first time this console sees a workspace", so it is the shell's event.
+  // Only when there is a DEFINITE workspace: the one this tab is scoped to, or the only one loaded.
+  // With several loaded and none picked there is nothing to inscribe - casting an arbitrary one would
+  // be a claim about which workspace you are in, and it would spend that workspace's single showing on
+  // a guess. Same rule the launcher's mark follows.
+  let lastCast = "";
+  const castSeen = (roots: readonly string[]): void => {
+    const seed = workspaceScope() || (roots.length === 1 ? roots[0] : "");
+    if (!seed || seed === lastCast) return;
+    lastCast = seed;
+    castWorkspaceSigil(seed, roots);
+  };
+
   // A surface can know the workspace list before this shell's 15s poll does - and in the offline demo
   // it is the ONLY thing that knows, since there is no daemon to poll.
   // The offline demo publishes two synthetic workspaces, which is what makes scoping demonstrable with
@@ -1124,8 +1142,13 @@ export function startConsole(
       // Ask once per browser tab, and only when the answer carries information. Guarded inside, so a
       // status tick every few seconds cannot re-open it.
       if (!inDemo()) maybeAskWorkspace(roots);
+      castSeen(roots);
     });
   }
+
+  // Choosing a workspace is what makes it definite, so it is the other moment worth casting on - a
+  // daemon serving several never has one until someone picks.
+  onWorkspaceScope(() => castSeen(pulse.get()?.workspaces ?? []));
 
   const sidebarHost = document.getElementById("console-sidebar");
   if (sidebarHost) {
@@ -1860,13 +1883,38 @@ export function startConsole(
   let pollGeneration = 0;
   function pollReadiness(): void {
     const current = document.getElementById("console-conn");
-    if (current?.dataset.state === "demo") {
-      const hint = "Demo data is synthetic. Click to change the daemon address.";
-      current.title = hint;
-      current.setAttribute("aria-label", hint);
-      delete current.dataset.health;
-      pulse.set(null); // synthetic surfaces, no pool: a leftover count would read as this daemon's
+    // The FRAGMENT decides, not the connection dot. The dot is not stamped "demo" until a demo surface
+    // mounts and writes it, so keying on it meant a console opened straight at #demo produced no pulse
+    // at all until a tab happened to be opened - no rail reading, no workspaces, no sigil. Same
+    // ordering mistake as the connect screen's guard, in a branch that predates it.
+    if (wantsDemo(parseHash()) || current?.dataset.state === "demo") {
+      // The dot may not exist yet at #demo - it is docked by whichever surface is showing, and on the
+      // zero-tab screen the launcher's own bar owns it. The pulse below does not depend on it.
+      if (current) {
+        const hint = "Demo data is synthetic. Click to change the daemon address.";
+        current.title = hint;
+        current.setAttribute("aria-label", hint);
+        delete current.dataset.health;
+      }
+      // A SYNTHETIC pulse, not null. Everything in the demo is fabricated and says so - the status bar
+      // reads "demo", the workspace menu tags its roots - so a pool reading here is consistent with the
+      // rest of it rather than a claim about a daemon. Nulling it meant the demo was the one mode where
+      // the rail's reading, the welcome screen's live row, and the workspace sigil all stayed dark,
+      // which made the parts of the console that only appear with a workspace impossible to see at all
+      // without a daemon running.
+      pulse.set({
+        running: 5,
+        queued: 2,
+        workspaces: [DEMO_WORKSPACE_ROOT, "~/Repos/magus"],
+        cache: { hits: 412, misses: 77 },
+      });
       railBadges.set({});
+      // The picker is fed here too. Its list otherwise arrives only from the dashboard's publisher,
+      // so in the demo the workspace menu stayed empty until that one surface happened to be mounted -
+      // and the scope control is in the title bar, where it is visible long before any surface is.
+      const demoRoots = [DEMO_WORKSPACE_ROOT, "~/Repos/magus"];
+      workspacePicker?.setWorkspaces(demoRoots);
+      castSeen(demoRoots);
       return;
     }
     const host = resolveDaemonHost();
@@ -1908,6 +1956,7 @@ export function startConsole(
       if (p) {
         workspacePicker?.setWorkspaces(p.workspaces);
         if (!inDemo()) maybeAskWorkspace(p.workspaces);
+        castSeen(p.workspaces);
       }
     });
     // Only while the rail is actually on screen. It is hidden on a phone and in an app-mode window,

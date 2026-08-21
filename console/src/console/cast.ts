@@ -15,6 +15,9 @@
 // tab. Transitions degrade the other way, to "it just appeared". Belt and braces on top of that:
 // shouldCast defers while hidden and the record is written on completion rather than on start.
 
+import { persisted } from "../lib/persist";
+import { assignSigils, renderSigil, sigilSpec } from "./sigil";
+
 export type CastDecision = "cast" | "skip" | "defer";
 
 // shouldCast decides without touching the DOM, so the rule is testable on its own.
@@ -97,4 +100,44 @@ export function castSigil(svg: string, ms = CAST_MS): Promise<boolean> {
       }
     });
   });
+}
+
+// castWorkspaceSigil is the shell's entry point: the first time this console sees a workspace, trace
+// its sigil. Once, ever, per workspace.
+//
+// Recorded on COMPLETION, not on start. A tab that was hidden, or a click that ended it early, must
+// leave the workspace still owing its one showing rather than silently spending it - a hidden tab does
+// not advance transitions, so casting there would draw nothing at all.
+const castCell = persisted<Record<string, true>>("sigil-cast", {});
+
+let casting = false;
+
+export function castWorkspaceSigil(seed: string, peers: readonly string[]): void {
+  if (casting || !seed) return;
+  const decide = (): void => {
+    const seen = castCell.get()[seed] === true;
+    const reducedMotion =
+      typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const verdict = shouldCast({ seen, hidden: document.hidden, reducedMotion });
+    if (verdict === "skip") {
+      // Reduced motion counts as shown - the sigil is on screen, just not drawn - so it is not
+      // deferred forever waiting for a ceremony that will never be wanted.
+      if (!seen) castCell.set({ ...castCell.get(), [seed]: true });
+      return;
+    }
+    if (verdict === "defer") {
+      document.addEventListener("visibilitychange", onVisible, { once: true });
+      return;
+    }
+    const spec = assignSigils(peers).get(seed) ?? sigilSpec(seed);
+    casting = true;
+    void castSigil(renderSigil(spec, 168), CAST_MS).then((completed) => {
+      casting = false;
+      if (completed) castCell.set({ ...castCell.get(), [seed]: true });
+    });
+  };
+  const onVisible = (): void => {
+    if (!document.hidden) decide();
+  };
+  decide();
 }
