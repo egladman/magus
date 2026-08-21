@@ -335,13 +335,14 @@ func (r *wsRegistry) status() []proc.Workspace {
 		// across every adopted run - the live cache activity the /dashboard shows.
 		st := e.m.CacheStats()
 		out = append(out, proc.Workspace{
-			Root:       e.root,
-			LoadedAt:   e.loadedAt,
-			LastAccess: time.Unix(0, e.lastAccess.Load()),
-			CacheHit:   st.Hit,
-			CacheMiss:  st.Miss,
-			CacheError: st.Error,
-			CacheBytes: e.m.CacheDiskBytes(),
+			Root:         e.root,
+			LoadedAt:     e.loadedAt,
+			LastAccess:   time.Unix(0, e.lastAccess.Load()),
+			CacheHit:     st.Hit,
+			CacheMiss:    st.Miss,
+			CacheError:   st.Error,
+			CacheBytes:   e.m.CacheDiskBytes(),
+			CacheSavedMs: st.SavedMs,
 			// Which provider is loaded, not what it can reach.
 			SecretProvider: e.m.SecretProvider(),
 		})

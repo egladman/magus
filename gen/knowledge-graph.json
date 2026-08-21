@@ -11804,7 +11804,7 @@
       "id": "function:libs/diagram/diagram.buzz:renderDecision",
       "kind": "function",
       "label": "renderDecision",
-      "doc": "renderDecision paints the diamond. The label sits on the centre line rather than the stacked layout a box uses: a diamond's widest run is its middle, so a two-line stack would push text out past the sloping sides.",
+      "doc": "renderDecision paints the diamond. The label sits on the center line rather than the stacked layout a box uses: a diamond's widest run is its middle, so a two-line stack would push text out past the sloping sides.",
       "source": "libs/diagram/diagram.buzz:685"
     },
     {
@@ -12743,7 +12743,7 @@
       "id": "function:magusfile.buzz:escape_module_path",
       "kind": "function",
       "label": "escape_module_path",
-      "doc": "Applies the module cache's case encoding: an uppercase letter becomes \"!\" plus its lowercase form, so github.com/Masterminds/sprig is stored at github.com/!masterminds/sprig. Without this every capitalised module path looks unlicensed - a false \"missing license\" that would abort a release for no reason.",
+      "doc": "Applies the module cache's case encoding: an uppercase letter becomes \"!\" plus its lowercase form, so github.com/Masterminds/sprig is stored at github.com/!masterminds/sprig. Without this every capitalized module path looks unlicensed - a false \"missing license\" that would abort a release for no reason.",
       "source": "magusfile.buzz:1318"
     },
     {

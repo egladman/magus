@@ -245,6 +245,7 @@ func statusOutputFromReply(r *proc.StatusReply) *types.StatusOutput {
 			CacheMiss:      ws.CacheMiss,
 			CacheError:     ws.CacheError,
 			CacheBytes:     ws.CacheBytes,
+			CacheSavedMs:   ws.CacheSavedMs,
 			SecretProvider: ws.SecretProvider,
 		})
 	}

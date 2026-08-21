@@ -48,17 +48,18 @@ type Cache struct {
 	hits           atomic.Int64
 	misses         atomic.Int64
 	errs           atomic.Int64
+	savedMs        atomic.Int64  // summed Manifest.DurationMs over hits: work replayed instead of run
 	diskMu         sync.Mutex    // guards the memoized on-disk size below
 	diskBytes      int64         // last computed cache size in bytes
 	diskAt         time.Time     // when diskBytes was computed (zero = never)
 	mtimes         *mtimeStore   // mtime fast-path for source hashing
 	outputs        *OutputStore  // per-execution captured-output store (target output refs)
 	exportMu       sync.RWMutex  // guards Export/Import against concurrent Run writes
-	evictMu        sync.Mutex    // serialises evictLRU so concurrent Runs don't over-evict each other's fresh manifests
+	evictMu        sync.Mutex    // serializes evictLRU so concurrent Runs don't over-evict each other's fresh manifests
 	remote         RemoteBackend // optional remote backend; nil = local-only
 	// annotator folds failure output and raises notices for whichever CI
 	// provider is running the job; Nop off CI, so call sites never branch.
-	// annotateMu serialises a whole failure block (group open, dump, group
+	// annotateMu serializes a whole failure block (group open, dump, group
 	// close): projects run concurrently, and a peer's output landing between
 	// a group's markers would fold that peer's log into this project's
 	// section.
@@ -89,6 +90,10 @@ type Stats struct {
 	Hit   int
 	Miss  int
 	Error int
+	// SavedMs is the summed recorded duration of the runs those hits replayed. Measured, not
+	// modeled - each figure is how long that exact target took on this machine when it last ran.
+	// Understates when entries predate Manifest.DurationMs, and never overstates.
+	SavedMs int64
 }
 
 // Step is the hashable description of a cached build step.
@@ -322,7 +327,12 @@ func (c *Cache) sizeCap() int64 {
 
 // Stats returns a snapshot of the per-cache counters.
 func (c *Cache) Stats() Stats {
-	return Stats{Hit: int(c.hits.Load()), Miss: int(c.misses.Load()), Error: int(c.errs.Load())}
+	return Stats{
+		Hit:     int(c.hits.Load()),
+		Miss:    int(c.misses.Load()),
+		Error:   int(c.errs.Load()),
+		SavedMs: c.savedMs.Load(),
+	}
 }
 
 // Remote returns the configured remote backend, or nil when local-only. Exposed
@@ -380,7 +390,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 	}
 	result.Hash = hash
 
-	// The inputs that produced the cache key, summarised: the starting point for
+	// The inputs that produced the cache key, summarized: the starting point for
 	// "why did this rebuild?". Counts (not per-file hashes) keep it cheap and off
 	// the pinned hashStep hot path; -vv surfaces it for every step. Diagnostics go
 	// to the default logger (stderr), not c.log (stdout cache-result events).
@@ -456,6 +466,9 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 				// first run and nothing on the second.
 				types.RecordReturn(ctx, s.ProjectPath, s.Target, manifest.Return)
 				c.hits.Add(1)
+				// The work this hit avoided, as measured when the entry was written. Entries from
+				// before the field existed carry zero and add nothing, so the total understates.
+				c.savedMs.Add(manifest.DurationMs)
 				logData, _ := os.ReadFile(c.logPath(s.ProjectPath, hash))
 				// Quiet mode suppresses log replay; passing projects stay silent.
 				// Stderr, not stdout, matching captureRun's miss path: stdout is
@@ -608,7 +621,7 @@ func (c *Cache) Run(ctx context.Context, s Step, fn func(context.Context) error,
 
 	if c.mutable && !s.NoCache {
 		_, endSnap := tracer.StartSpan(ctx, "magus.cache.snapshot")
-		outs, err := c.snapshot(ctx, s, hash)
+		outs, err := c.snapshot(ctx, s, hash, time.Since(start))
 		endSnap(err)
 		if err != nil {
 			result.Duration = time.Since(start)

@@ -86,7 +86,7 @@ type RunReply struct {
 }
 
 // StatusRequest is the payload for the status JSONL message.
-// Magic must equal StatusMagic; unrecognised requests get an empty reply.
+// Magic must equal StatusMagic; unrecognized requests get an empty reply.
 type StatusRequest struct {
 	Magic    string `json:"magic"`
 	Protocol string `json:"protocol"`
@@ -103,6 +103,8 @@ type Workspace struct {
 	CacheMiss  int   `json:"cache_miss,omitempty"`
 	CacheError int   `json:"cache_error,omitempty"`
 	CacheBytes int64 `json:"cache_bytes,omitempty"`
+	// Work the hits replayed instead of ran, summed from each entry's recorded duration.
+	CacheSavedMs int64 `json:"cache_saved_ms,omitempty"`
 	// SecretProvider is the selected provider spell's name; empty = built-in env provider.
 	SecretProvider string `json:"secret_provider,omitempty"`
 }
@@ -135,7 +137,7 @@ type Call struct {
 const StatusMagic = "magus-pool-v1"
 
 // ShutdownRequest is the payload for the shutdown JSONL message.
-// Magic must equal ShutdownMagic; unrecognised requests are ignored.
+// Magic must equal ShutdownMagic; unrecognized requests are ignored.
 type ShutdownRequest struct {
 	Magic    string `json:"magic"`
 	Protocol string `json:"protocol"`

@@ -29,6 +29,15 @@ type Manifest struct {
 	// never even builds. Empty means "written before this field existed"; see the
 	// mismatch check in readManifest for how that is treated.
 	Platform string `json:"platform,omitempty"`
+	// DurationMs is how long the run that produced this entry took. A cache HIT replays that run's
+	// result, so this is exactly the work the hit avoided - a measured figure for this target on
+	// this machine, not an average over targets that never ran. Cache.Stats sums it across hits.
+	//
+	// Absent (zero) on every manifest written before this field, and on an entry whose run was not
+	// timed. Those hits count toward Hit and contribute nothing to Saved, so the total understates
+	// rather than invents - which is why the console labels it as saved THIS SESSION rather than
+	// implying it covers the cache's whole history.
+	DurationMs int64 `json:"durationMs,omitempty"`
 	// Return is what the target returned (str or [str]), stored so a cache HIT can
 	// replay it. A hit never invokes the target, so without this a target would
 	// print its result on the first run and nothing on the second. Absent for the

@@ -37,6 +37,7 @@ func statusReportToProto(r types.StatusReport, build types.BuildInfo) *statusv1.
 				agg.Misses += int64(w.CacheMiss)
 				agg.Errors += int64(w.CacheError)
 				agg.SizeBytes += w.CacheBytes
+				agg.SavedMs += w.CacheSavedMs
 			}
 			s.Pool.Cache = agg
 		}
@@ -171,6 +172,7 @@ func poolToProto(p *types.StatusOutput) *statusv1.Pool {
 			ws.Cache = &statusv1.Cache{
 				Hits: int64(w.CacheHit), Misses: int64(w.CacheMiss),
 				Errors: int64(w.CacheError), SizeBytes: w.CacheBytes,
+				SavedMs: w.CacheSavedMs,
 			}
 		}
 		out.Workspaces = append(out.Workspaces, ws)
