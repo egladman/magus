@@ -192,14 +192,12 @@ func (s *Service) FindDependents(
 func (s *Service) FindAffected(
 	ctx context.Context, req *connect.Request[graphv1.FindAffectedRequest],
 ) (*connect.Response[graphv1.Affected], error) {
-	// An empty base is not a missing argument: it means "whatever this repo diffs against",
-	// which Affected resolves from magus.yaml, the env, and the run history. Passing it through
-	// is what keeps a browser caller from having to know the repo's base ref.
+	// An empty base is not a missing argument: Affected resolves it from magus.yaml, the env and
+	// the run history, so a browser caller never has to know the repo's base ref.
 	r, err := s.ws.Affected(ctx, req.Msg.GetBase())
 	if err != nil {
-		// A VCS that cannot produce a definitive diff is an ANSWER here, not a failure: the
-		// caller is a view that must decide between "nothing is affected" and "I could not
-		// tell", and a CodeInternal collapses those into an error banner that says neither.
+		// A VCS that cannot produce a definitive diff is an ANSWER, not a failure: the caller must
+		// tell "nothing is affected" from "I could not tell", and CodeInternal collapses both.
 		if errors.Is(err, types.ErrAffectedFallback) {
 			return connect.NewResponse(&graphv1.Affected{Fallback: err.Error()}), nil
 		}

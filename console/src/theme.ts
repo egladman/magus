@@ -30,12 +30,9 @@
     /* ignore */
   }
 
-  // Reduced motion, pre-paint for the same reason the theme is: the console's boot reveal and the
-  // graph's first camera glide both start on the first frame, so a preference applied after paint
-  // is a preference that lets through exactly the animation it was set to stop.
-  //
-  // Read raw rather than through lib/persist: this file is a pre-paint IIFE with no imports. The
-  // key and JSON encoding are persist.ts's ("magus:" namespace, JSON value), so the two agree.
+  // Pre-paint for the same reason the theme is: the boot reveal and the graph's first camera glide
+  // start on the first frame, so applying this later lets through exactly what it was set to stop.
+  // Read raw because this IIFE has no imports; the key and JSON encoding are persist.ts's.
   try {
     if (JSON.parse(localStorage.getItem("magus:console-motion") || '"auto"') === "reduced") {
       root.setAttribute("data-motion", "reduced");

@@ -9,11 +9,8 @@ export type ConnectionState = "none" | "connecting" | "connected" | "disconnecte
 const DEMO_HINT = "Demo data is synthetic. Click to change the daemon address.";
 
 export interface StatusContribution {
-  // connection/label are for a surface that maintains its OWN link to the daemon - the graph's SSE
-  // stream, the log tail. Omit both when the surface has no link of its own: the shell's readiness
-  // poller then answers, which is the only answer a surface without a connection could honestly
-  // give anyway. Passing one requires the other; a state with no words is a colored dot that says
-  // nothing, and words with no state color them wrong.
+  // For a surface with its OWN link to the daemon (the graph's SSE stream, the log tail). Omit both
+  // otherwise and the shell's readiness poller answers. Pass either and you must pass both.
   connection?: ConnectionState;
   label?: string;
   health?: string;
@@ -35,11 +32,9 @@ export interface StatusContribution {
 // Only the connection state is taken over. count and observing describe the DATA a surface is
 // showing rather than the link behind it, so they stay the surface's to report.
 //
-// A contribution that carries a connection CLAIMS the connection slot, stamped on the bar element
-// so the shell's readiness poller stops writing to it. The bars are per-tab, so the claim is too:
-// a tab whose surface never claims keeps the poller's answer instead of makeStatusBar's
-// construction-time "not connected", which was a live console reporting no daemon on every surface
-// that had nothing to say.
+// A contribution carrying a connection CLAIMS the slot, stamped on the bar element so the readiness
+// poller stops writing to it. Bars are per-tab, so the claim is too: a tab that never claims keeps
+// the poller's answer instead of makeStatusBar's construction-time "not connected".
 export function publishStatus(contribution: StatusContribution): void {
   const demoing = wantsDemo(parseHash());
   const conn = document.getElementById("console-conn");

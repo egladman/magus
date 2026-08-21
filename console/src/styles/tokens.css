@@ -211,51 +211,24 @@
   --console-ansi-cyan: var(--pf-t--global--color--nonstatus--teal--300);   /* cyan -> teal         */
 
   /* --- 6. Graph node-kind palette (categorical) ----------------------------------------
-     The graph explorer colors every node by its kind, and types/knowledge.go declares 20 of
-     them. These are DERIVED, not picked, and not PatternFly's data-viz steps - see the note
-     below for why those could not do this job.
+     Derived in OKLCH, not picked: five families one hue each, L = L0 +/- 0.07 per step within a
+     family, chroma tapering at the ends to hold gamut. Ratios below are against the canvas the
+     value ships on (light #ffffff, dark #292929); types/kindpalette_drift_test.go re-measures
+     them, so the 3:1 floor of WCAG 1.4.11 cannot rot.
 
-     Five families, one hue each, in OKLCH:
-       Problems     h  25   diagnostic charm
-       Code         h 130   function method import package symbol
-       Declarations h 190   target spell op tool
-       Structure    h 250   project module dir file
-       Prose        h 310   doc rationale note
-       People       h   0   owner author   (C 0.014, so it reads as neutral)
+     Five grouped hues separate about twice as well as twenty evenly spaced ones (OKLab dE 6.9 vs
+     3.0) at lower chroma. The spacing is deliberately UNEVEN: hues 75-115 turn olive below L 0.5
+     (target was #514700, which is bile), so that belt is skipped, and the two largest families -
+     Code and Structure - take the widest gap left.
 
-     The hues are not evenly spaced, and that is the one deliberate departure from the rule.
-     Even 72-degree spacing puts a family in the 75-115 belt, where every lightness below about
-     0.5 turns to olive - the first draft had target at #514700, which is bile. The belt is
-     skipped, and the remaining span is divided to hold the widest worst-case gap that leaves
-     (60 degrees), with the two LARGEST families - Code at 1383 nodes, Structure at 406 - placed
-     furthest apart, because two heavy kinds on neighbouring hues make the whole canvas read as
-     one colour whatever the measurements say.
+     PatternFly's nonstatus families used to fill this and cannot: built as filled areas with a
+     label on top, 18 of 20 fell below 3:1 as small marks on white.
 
-     Within a family, lightness does the separating: L = L0 +/- 0.07 per step, chroma tapering
-     slightly toward the ends to hold gamut. That is the whole scheme, and it is deliberate
-     that siblings look like siblings - function and method ARE related, and a reader who
-     learns "green is code" has learned something true rather than memorized twenty swatches.
+     Colour is never the only channel - graph/shapes.ts carries the second one, because under
+     deuteranopia the closest pair here drops to dE 3.4 whatever the scheme.
 
-     Why not more hues: twenty categorical colors is past what anyone can identify by hue, and
-     these are 4-9px dots, which is the hardest case there is. Measured over every pair, five
-     grouped hues separate roughly TWICE as well as twenty evenly-spaced ones (OKLab dE 6.9 vs
-     3.0) at LOWER chroma - grouping buys discrimination that evenness cannot.
-
-     Why not PatternFly's nonstatus families, which this used to use: those are built to be
-     filled areas with a label on top. As small marks on white, 18 of the 20 fell below the
-     3:1 non-text contrast floor of WCAG 1.4.11 - symbol was 1.23:1. Every value here clears
-     3:1 against the ground it ships on (light #ffffff, dark #292929); the ratio is in each
-     comment, and types/kindpalette_drift_test.go re-measures them so it cannot rot.
-
-     What color still cannot do: under deuteranopia the closest pair drops to dE 3.4 whatever
-     the scheme. Color is the fast path, never the only one - the legend, the node list, and
-     the labels are what actually carry identity.
-
-     A kind with no token here falls back to a flat #888 in main.ts, silently. Count against
-     the Kind* constants, NOT against a legend: the legend is built from the kinds present in
-     the LOADED graph, so a kind the demo does not emit is invisible until it is not.
-     graph/main.ts reads these at paint time as --gk-<kind> (aliased in graph.css); the
-     legend/pill swatches read them through the .k-<kind> classes. */
+     A kind with no token falls back to a flat #888 in main.ts, silently. Count against the Kind*
+     constants, not against a legend: the legend lists only the kinds the LOADED graph emits. */
   /* Problems - h 25 */
   --console-node-diagnostic: #86423e;  /* 7.34:1 */
   --console-node-charm:      #9d5651;  /* 5.41:1 */
@@ -316,10 +289,9 @@
   --console-gold: #bda05a; --console-slate: #7998b0; --console-indigo: #8d89ba; --console-stone: #a49d95;
 
   --console-pin-active: var(--pf-t--global--dark--color--nonstatus--orange--300);
-  /* The SAME five hues as the light block, and the same order within each family. Only the
-     lightness anchor moves: L0 0.50 -> 0.78, because a mark has to be darker than white and
-     lighter than #292929 to clear 3:1 on each. One palette, two grounds - not two palettes.
-     Chroma also eases (C0 0.100 -> 0.085): a dark ground makes the same chroma read louder. */
+  /* Same five hues and the same order as the light block; only the anchor moves, L0 0.50 -> 0.78,
+     because a mark has to be darker than white and lighter than #292929. One palette, two grounds.
+     Chroma eases too (0.100 -> 0.085): a dark ground makes the same chroma read louder. */
   /* Problems - h 25 */
   --console-node-diagnostic: #db9993;  /* 6.23:1 */
   --console-node-charm:      #f2afa9;  /* 7.95:1 */

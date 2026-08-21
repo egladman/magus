@@ -55,9 +55,8 @@ test("measureCards: a mid-length label sits strictly between MIN and MAX", () =>
   assert.equal(nodes[0].w, 140);
 });
 
-// The cache is keyed on nothing but "already measured", so the one input that can invalidate a
-// measurement has to force a re-measure: a theme switch hands a different font, and a card sized
-// for the old one clips its own label.
+// The cache is keyed on nothing but "already measured", so a font change has to force a re-measure
+// or a card sized for the old font clips its own label.
 test("measureCards: a font change re-measures an already-measured node", () => {
   const nodes = [fakeNode("a", "a".repeat(20))];
   measureCards(fakeCtx(), nodes, "sans");

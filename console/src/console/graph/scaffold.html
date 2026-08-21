@@ -264,27 +264,19 @@
         </div>
       </div>
 
-      <!-- Detail column: the card (or the overview when nothing is selected) scrolls, and the two
-           "what is happening right now" readouts sit under it. Both used to span the full width of
-           the app BELOW the canvas, which put a sentence about the current view about as far from
-           that view as the layout allowed, and gave the surface a full-bleed strip of chrome under
-           everything else. They belong with the rest of the narration. -->
+      <!-- Detail column: the card scrolls, the two "what is happening now" readouts sit under it.
+           Both used to span the full width below the canvas, as far from the view they describe as
+           the layout allowed. -->
       <div class="console-graph-detail">
         <div id="explain-card" aria-live="polite" hidden></div>
         <div class="console-graph-detail__foot">
-          <!-- Term-prompt view command bar (same idiom as playground.html). Shows the CLI
-               equivalent of the active view; hidden when no view is active or the view has no
-               exact CLI equivalent (earn the prompt rule, 0.5). Populated by renderViewCommand(). -->
+          <!-- Term-prompt view command bar (same idiom as playground.html), populated by
+               renderViewCommand(). Hidden when the active view has no exact CLI equivalent. -->
           <div id="view-cmd" class="console-graph-views__cmdbar" hidden aria-live="polite" aria-label="CLI command for active view"></div>
-          <!-- The surface's live region, as the console's inline notice (a PF Alert flattened to
-               span the panel, the same shape notes.css uses for anything a surface has to say
-               about the data it is showing). The icon slot is not decoration: PF lays the
-               component out as a grid around it, and an alert without one reads as body text -
-               which is what this was, a grey sentence people scrolled past.
-               Hidden unless there is something to report: loading, a view result, an error, or a
-               mode change the operator did not ask for (switchLayout's scale-guard revert), so it
-               costs nothing at rest. role=status because the DISPLAY MODE toggle shows which
-               layout is active but announces nothing when one changes on its own. -->
+          <!-- The surface's live region, as the console's inline notice. The icon slot is not
+               decoration: PF lays the component out as a grid around it, and an alert without one
+               reads as body text. role=status because the layout toggle shows which mode is active
+               but announces nothing when one changes on its own (switchLayout's scale guard). -->
           <div id="graph-status" class="pf-v6-c-alert pf-m-info console-graph-hint" role="status" hidden>
             <div class="pf-v6-c-alert__icon" aria-hidden="true">i</div>
             <p class="pf-v6-c-alert__title" id="graph-status-text"></p>

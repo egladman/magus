@@ -1,9 +1,6 @@
-// status-dom.test.ts - who owns the connection dot.
-//
-// The bar is per-tab and two things write to it: the surface in front, and the shell's readiness
-// poller. The rule they share is the data-owner stamp, and it is invisible - nothing about reading
-// publishStatus tells you a bar it never touched stays the poller's to fill. A regression here is
-// silent in the worst way: the dot keeps rendering, it just answers about the wrong thing.
+// status-dom.test.ts - who owns the connection dot. The surface in front and the shell's readiness
+// poller both write to it, and the rule they share is the invisible data-owner stamp. A regression
+// is silent in the worst way: the dot keeps rendering, it just answers about the wrong thing.
 //
 // document/window are registered globally by test-setup.mjs (node --import), same as the other
 // *-dom tests.

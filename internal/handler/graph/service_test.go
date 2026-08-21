@@ -295,9 +295,8 @@ func TestFindAffectedMapsProjectPathsToNodeIds(t *testing.T) {
 	assert.Empty(t, resp.Msg.GetFallback())
 }
 
-// A diff that reaches nothing and a diff that could not be computed are different answers, and
-// the view renders them differently - one says "nothing affected" and the other must not - so
-// the fallback has to survive as data rather than collapsing into an error code.
+// A diff that reaches nothing and a diff that could not be computed are different answers, so the
+// fallback has to survive as data rather than collapsing into an error code.
 func TestFindAffectedFallbackIsAnAnswerNotAnError(t *testing.T) {
 	svc := NewService(fakeResolver{probed: true,
 		affErr: fmt.Errorf("shallow clone: %w", types.ErrAffectedFallback)})
