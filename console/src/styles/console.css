@@ -1186,6 +1186,20 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 [data-launcher-sigil][hidden] { display: none; }
 
+/* The mark turns, slowly enough that you notice it only if you look. 90s a revolution is about 4
+   degrees a second - below the threshold where peripheral vision registers motion, so it never
+   competes with the choices beside it. The MEDALLION stays put; only the drawing inside it turns,
+   or the disc's inset ring would appear to wobble.
+   Linear, because any easing makes a continuous rotation visibly stutter at the seam. */
+@keyframes console-sigil-turn { to { transform: rotate(360deg); } }
+[data-launcher-sigil] > svg { animation: console-sigil-turn 90s linear infinite; }
+/* Both opt-outs, since one is the OS preference and the other is the console's own setting; the
+   blanket data-motion rule near-zeroes durations, which for an infinite spin would read as a blur. */
+@media (prefers-reduced-motion: reduce) {
+  [data-launcher-sigil] > svg { animation: none; }
+}
+:root[data-motion="reduced"] [data-launcher-sigil] > svg { animation: none !important; }
+
 /* The welcome screen's live reading, under the tagline. A LINE, not a card: as a card it wrapped the
    ways row and gave a reading the loudest button on the screen. The count leads, the detail follows
    quietly, and the way in is a link rather than a primary - you are being told something, and offered

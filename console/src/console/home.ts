@@ -10,7 +10,7 @@
 // strand you in a window you did not ask for.
 import { openSurfaceWindow } from "../lib/appwindow";
 import type { PulseView } from "./pulse";
-import { assignSigils, renderSigil, sigilSpec, type SigilSpec } from "./sigil";
+import { assignSigils, describeSigil, renderSigil, sigilSpec, type SigilSpec } from "./sigil";
 import { shortName, workspaceScope } from "../lib/scope";
 
 // A surface the launcher can open: the pageId the console registered it under, and a human label.
@@ -327,8 +327,9 @@ function paintSigil(root: HTMLElement, p: PulseView): void {
   el.style.color = "var(" + spec.hue + ")";
   // The SHORT name, never the root. A full path carries a username, a client, an unreleased codename;
   // the sigil discloses none of that by construction, and a tooltip spelling the path out would hand
-  // back exactly what the mark was careful not to encode.
-  el.title = shortName(seed);
+  // back exactly what the mark was careful not to encode. describeSigil reads the SPEC, not the seed,
+  // for the same reason.
+  el.title = shortName(seed) + " - " + describeSigil(spec);
 }
 
 // syncLauncherChord names the palette's CURRENT key in the zero-tab hint. Called by the shell every
