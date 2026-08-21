@@ -114,7 +114,7 @@
           <div class="console-graph-views__body" role="group" aria-label="Questions about the whole graph">
             <button type="button" class="console-graph-views__chip" data-view="hubs" title="The nodes the most other nodes depend on, ranked by how many. Containment does not count, so a project never outranks the code.">Show the most depended-on nodes</button>
             <button type="button" class="console-graph-views__chip" data-view="orphans" title="Nodes with no dependency in either direction, among the kinds that carry dependencies at all. Potentially dead or unconfigured.">Show what depends on nothing</button>
-            <button type="button" class="console-graph-views__chip" data-view="cycles" title="Highlight targets caught in a circular dependency, where A needs B needs A. magus cannot order these, so it is a configuration error to fix. CLI: magus graph verify">Find circular dependencies</button>
+            <button type="button" class="console-graph-views__chip" data-view="cycles" title="Highlight targets caught in a circular dependency, where A needs B needs A. magus cannot order these, so it is a configuration error to fix. CLI: magus describe graph">Find circular dependencies</button>
             <button type="button" class="console-graph-views__chip" data-view="critical" data-conditional title="The longest duration-weighted chain of targets. Shown when the graph has timing (run a build first: magus graph deps -o json)">Find the slowest chain</button>
             <button type="button" class="console-graph-views__chip" data-view="affected" data-conditional title="What your working-tree diff would rebuild. Appears in live mode once the daemon reports an affected set.">See what my last change affects</button>
             <button type="button" id="clear-view-btn" class="console-graph-views__clear" hidden>Clear</button>
@@ -143,15 +143,16 @@
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="waves" title="Build order: each column is a set of targets magus can run in parallel. Best for seeing what runs when."><span class="pf-v6-c-toggle-group__text">Waves</span></button></div>
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="radial" title="Rings around one node by distance: its neighborhood at a glance. Pick a node first."><span class="pf-v6-c-toggle-group__text">Radial</span></button></div>
           </div>
+          <p id="arrangement-note" class="console-graph-display__unavailable" hidden></p>
           <!-- Colour and Graph pair on one row: each is a short toggle group, and stacked they
                spent two full rows of a 20rem column on controls that together do not fill one. -->
           <div class="console-graph-sidebar__viewpair">
           <div class="console-graph-sidebar__viewcell">
           <p class="console-graph-display__sublabel" id="colour-label">Colour</p>
           <div class="pf-v6-c-toggle-group console-graph-colorgroup__presetrow" role="group" aria-labelledby="colour-label">
-            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="project" title="Give each project its own hue, so project boundaries show on the canvas."><span class="pf-v6-c-toggle-group__text">Project</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="project" title="Give each project its own hue, so the boundaries show on the canvas."><span class="pf-v6-c-toggle-group__text">Project</span></button></div>
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="spell" title="Give each spell its own hue, so the toolchain shows as an architectural layer."><span class="pf-v6-c-toggle-group__text">Spell</span></button></div>
-            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="depth" title="Shade by how deep a node sits in the dependency chain: pale depends on nothing, dark depends on the most. Same number the layer: query field matches."><span class="pf-v6-c-toggle-group__text">Depth</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="depth" title="Shade by how deep a node sits in the dependency chain: pale depends on nothing, dark depends on the most. Computed here from the layered layout; there is no layer: query field to type."><span class="pf-v6-c-toggle-group__text">Depth</span></button></div>
             <div class="pf-v6-c-toggle-group__item" data-conditional data-preset-item="duration"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="duration" title="Shade by how long a node took to run: hot is slow. Shown once the graph carries timing (run a build first)."><span class="pf-v6-c-toggle-group__text">Duration</span></button></div>
           </div>
           </div>
