@@ -14,6 +14,8 @@ package types
 // and gets the fallback anyway. The KINDS array is checked because it fixes legend order.
 
 import (
+	"fmt"
+	"math"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -72,4 +74,89 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 		require.Equal(t, 2, strings.Count(tokens, "--console-node-"+k+":"),
 			"tokens.css must define --console-node-%s in both the light and dark blocks", k)
 	}
+
+	t.Run("contrast", func(t *testing.T) { requireNodeContrast(t, tokens, kinds) })
+}
+
+// requireNodeContrast measures every node color against the canvas it is painted on.
+//
+// This is the check the structural ones above cannot make. "The token is defined" was true of a
+// palette where 18 of 20 kinds sat below 3:1 on the white canvas and owner was 1.72:1 on the dark
+// one - present, aliased, listed in KINDS, and invisible. A palette is a VISUAL property, so the
+// gate has to measure the property.
+//
+// The floor is WCAG 2.1 SC 1.4.11 (non-text contrast): 3:1 for a graphical object you need to
+// see to understand the content, which a node whose color is its kind plainly is. Grounds are the
+// two the canvas actually paints (drawStage fills with the surface background).
+func requireNodeContrast(t *testing.T, tokens string, kinds []string) {
+	t.Helper()
+
+	const darkSelector = ":root.pf-v6-theme-dark {"
+	split := strings.Index(tokens, darkSelector)
+	require.Greater(t, split, 0, "tokens.css no longer has a %s block to read the dark palette from", darkSelector)
+
+	for _, theme := range []struct {
+		name   string
+		css    string
+		ground string
+	}{
+		{"light", tokens[:split], "#ffffff"},
+		{"dark", tokens[split:], "#292929"},
+	} {
+		for _, k := range kinds {
+			t.Run(theme.name+"/"+k, func(t *testing.T) {
+				hex, ok := nodeTokenValue(theme.css, k)
+				require.True(t, ok,
+					"could not read a literal hex for --console-node-%s in the %s block; the palette is "+
+						"derived and written as hex on purpose, so this gate can measure it", k, theme.name)
+				ratio := contrastRatio(hex, theme.ground)
+				require.GreaterOrEqualf(t, ratio, 3.0,
+					"--console-node-%s is %s on the %s canvas (%s): %.2f:1, below the 3:1 floor of WCAG "+
+						"SC 1.4.11. Re-derive it at a lightness that clears the ground.",
+					k, hex, theme.name, theme.ground, ratio)
+			})
+		}
+	}
+}
+
+// nodeTokenValue pulls the hex literal off `--console-node-<kind>: #rrggbb;`.
+func nodeTokenValue(css, kind string) (string, bool) {
+	i := strings.Index(css, "--console-node-"+kind+":")
+	if i < 0 {
+		return "", false
+	}
+	rest := css[i:]
+	h := strings.Index(rest, "#")
+	if h < 0 || h > 40 { // the value is on the same line; a distant # is the next rule's
+		return "", false
+	}
+	if len(rest) < h+7 {
+		return "", false
+	}
+	return rest[h : h+7], true
+}
+
+// contrastRatio is the WCAG 2.1 ratio between two sRGB hex colors.
+func contrastRatio(a, b string) float64 {
+	la, lb := relativeLuminance(a), relativeLuminance(b)
+	if la < lb {
+		la, lb = lb, la
+	}
+	return (la + 0.05) / (lb + 0.05)
+}
+
+func relativeLuminance(hex string) float64 {
+	ch := func(off int) float64 {
+		var v int
+		_, err := fmt.Sscanf(hex[off:off+2], "%02x", &v)
+		if err != nil {
+			return 0
+		}
+		c := float64(v) / 255
+		if c <= 0.04045 {
+			return c / 12.92
+		}
+		return math.Pow((c+0.055)/1.055, 2.4)
+	}
+	return 0.2126*ch(1) + 0.7152*ch(3) + 0.0722*ch(5)
 }

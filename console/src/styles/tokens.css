@@ -211,49 +211,77 @@
   --console-ansi-cyan: var(--pf-t--global--color--nonstatus--teal--300);   /* cyan -> teal         */
 
   /* --- 6. Graph node-kind palette (categorical) ----------------------------------------
-     The graph explorer (console/graph) colors every node by its kind. PatternFly ships 9
-     "nonstatus" (data-viz) color FAMILIES - teal, blue, yellow, orange, green, orangered,
-     purple, red, gray - and types/knowledge.go declares 20 kinds, so each family carries two
-     (--300 vivid, --200 the sibling) and two carry a third at --100. Every group is
-     SEMANTICALLY ADJACENT, so the one confusion the palette can produce (two kinds on one hue)
-     never crosses a meaningful boundary: workspace units on teal, filesystem on blue, build
-     declarations on yellow, toolchain on orange, code on green (function/method/symbol),
-     dependencies on orangered, prose on purple (doc/rationale/note), problems on red, people
-     on gray.
-     WHICH family a pair lands on is not free, though: two heavy kinds on adjacent hues make
-     the whole canvas read as one color. doc is 331 nodes of high degree, so it draws the big
-     circles, and next to import on yellow/orange it turned the graph warm end to end. It is on
-     purple to be far from import, not for a reason about prose.
-     A kind with no token here falls back to a flat #888 in main.ts, which is why the count
-     above is load-bearing rather than trivia: this list said 14 while the graph emitted 17,
-     and dir/package/tool/note drew as an anonymous grey mass a quarter of the graph wide -
-     alongside doc, which was deliberately neutral and so could not be told apart from them.
-     Count against types/knowledge.go's Kind* constants, NOT against a legend: the legend is
-     built from the kinds present in the LOADED graph, so a kind nothing in the demo happens
-     to emit (author, until a live workspace showed two) is invisible until it is not.
+     The graph explorer colors every node by its kind, and types/knowledge.go declares 20 of
+     them. These are DERIVED, not picked, and not PatternFly's data-viz steps - see the note
+     below for why those could not do this job.
+
+     Five families, one hue each, in OKLCH:
+       Problems     h  25   diagnostic charm
+       Code         h 130   function method import package symbol
+       Declarations h 190   target spell op tool
+       Structure    h 250   project module dir file
+       Prose        h 310   doc rationale note
+       People       h   0   owner author   (C 0.014, so it reads as neutral)
+
+     The hues are not evenly spaced, and that is the one deliberate departure from the rule.
+     Even 72-degree spacing puts a family in the 75-115 belt, where every lightness below about
+     0.5 turns to olive - the first draft had target at #514700, which is bile. The belt is
+     skipped, and the remaining span is divided to hold the widest worst-case gap that leaves
+     (60 degrees), with the two LARGEST families - Code at 1383 nodes, Structure at 406 - placed
+     furthest apart, because two heavy kinds on neighbouring hues make the whole canvas read as
+     one colour whatever the measurements say.
+
+     Within a family, lightness does the separating: L = L0 +/- 0.07 per step, chroma tapering
+     slightly toward the ends to hold gamut. That is the whole scheme, and it is deliberate
+     that siblings look like siblings - function and method ARE related, and a reader who
+     learns "green is code" has learned something true rather than memorized twenty swatches.
+
+     Why not more hues: twenty categorical colors is past what anyone can identify by hue, and
+     these are 4-9px dots, which is the hardest case there is. Measured over every pair, five
+     grouped hues separate roughly TWICE as well as twenty evenly-spaced ones (OKLab dE 6.9 vs
+     3.0) at LOWER chroma - grouping buys discrimination that evenness cannot.
+
+     Why not PatternFly's nonstatus families, which this used to use: those are built to be
+     filled areas with a label on top. As small marks on white, 18 of the 20 fell below the
+     3:1 non-text contrast floor of WCAG 1.4.11 - symbol was 1.23:1. Every value here clears
+     3:1 against the ground it ships on (light #ffffff, dark #292929); the ratio is in each
+     comment, and types/kindpalette_drift_test.go re-measures them so it cannot rot.
+
+     What color still cannot do: under deuteranopia the closest pair drops to dE 3.4 whatever
+     the scheme. Color is the fast path, never the only one - the legend, the node list, and
+     the labels are what actually carry identity.
+
+     A kind with no token here falls back to a flat #888 in main.ts, silently. Count against
+     the Kind* constants, NOT against a legend: the legend is built from the kinds present in
+     the LOADED graph, so a kind the demo does not emit is invisible until it is not.
      graph/main.ts reads these at paint time as --gk-<kind> (aliased in graph.css); the
-     legend/pill swatches read them through the .k-<kind> classes. THIS is the graph's
-     silent-regression surface - keep the pairings distinct if you re-map. */
-  --console-node-project: var(--pf-t--global--color--nonstatus--teal--300);       /* workspace units */
-  --console-node-module: var(--pf-t--global--color--nonstatus--teal--200);
-  --console-node-file: var(--pf-t--global--color--nonstatus--blue--300);          /* filesystem      */
-  --console-node-dir: var(--pf-t--global--color--nonstatus--blue--200);
-  --console-node-target: var(--pf-t--global--color--nonstatus--yellow--300);      /* declarations    */
-  --console-node-spell: var(--pf-t--global--color--nonstatus--yellow--200);
-  --console-node-op: var(--pf-t--global--color--nonstatus--orange--300);          /* toolchain       */
-  --console-node-tool: var(--pf-t--global--color--nonstatus--orange--200);
-  --console-node-function: var(--pf-t--global--color--nonstatus--green--300);     /* code            */
-  --console-node-method: var(--pf-t--global--color--nonstatus--green--200);
-  --console-node-import: var(--pf-t--global--color--nonstatus--orangered--300);   /* dependencies    */
-  --console-node-package: var(--pf-t--global--color--nonstatus--orangered--200);
-  --console-node-symbol: var(--pf-t--global--color--nonstatus--green--100);
-  --console-node-doc: var(--pf-t--global--color--nonstatus--purple--300);         /* prose           */
-  --console-node-rationale: var(--pf-t--global--color--nonstatus--purple--200);
-  --console-node-note: var(--pf-t--global--color--nonstatus--purple--100);
-  --console-node-diagnostic: var(--pf-t--global--color--nonstatus--red--300);     /* problems        */
-  --console-node-charm: var(--pf-t--global--color--nonstatus--red--200);
-  --console-node-owner: var(--pf-t--global--color--nonstatus--gray--300);         /* people          */
-  --console-node-author: var(--pf-t--global--color--nonstatus--gray--200);
+     legend/pill swatches read them through the .k-<kind> classes. */
+  /* Problems - h 25 */
+  --console-node-diagnostic: #86423e;  /* 7.34:1 */
+  --console-node-charm:      #9d5651;  /* 5.41:1 */
+  /* Code - h 130 */
+  --console-node-function:   #304516;  /* 10.56:1 */
+  --console-node-method:     #3f5921;  /* 7.89:1 */
+  --console-node-import:     #506e2c;  /* 5.82:1 */
+  --console-node-package:    #668249;  /* 4.33:1 */
+  --console-node-symbol:     #7d9664;  /* 3.27:1 */
+  /* Declarations - h 190 */
+  --console-node-target:     #00524e;  /* 9.06:1 */
+  --console-node-spell:      #006763;  /* 6.73:1 */
+  --console-node-op:         #007e79;  /* 4.93:1 */
+  --console-node-tool:       #3c918c;  /* 3.74:1 */
+  /* Structure - h 250 */
+  --console-node-project:    #1f4970;  /* 9.35:1 */
+  --console-node-module:     #2b5c8c;  /* 6.97:1 */
+  --console-node-dir:        #4071a2;  /* 5.12:1 */
+  --console-node-file:       #5b85b1;  /* 3.86:1 */
+  /* Prose - h 310 */
+  --console-node-doc:        #5f4174;  /* 8.42:1 */
+  --console-node-rationale:  #75528e;  /* 6.26:1 */
+  --console-node-note:       #87689e;  /* 4.66:1 */
+  /* People - neutral */
+  --console-node-owner:      #615659;  /* 7.04:1 */
+  --console-node-author:     #756a6d;  /* 5.20:1 */
 }
 
 /* Dark-theme node palette. PatternFly's PLAIN --...--color--nonstatus--* tokens are NOT theme-aware
@@ -288,31 +316,34 @@
   --console-gold: #bda05a; --console-slate: #7998b0; --console-indigo: #8d89ba; --console-stone: #a49d95;
 
   --console-pin-active: var(--pf-t--global--dark--color--nonstatus--orange--300);
-  /* The step order is INVERTED against the light block above, on purpose. In the dark nonstatus
-     set --300 resolves to the family's --10 step, which is around 90% lightness for every hue:
-     blue--10 #e0f0ff, green--10 #e9f7df, teal--10 #daf2f2 are all effectively the same near-white
-     once a node is a few pixels across, so the biggest kinds arrived indistinguishable and the
-     canvas read as pale confetti. --100 is the family's --30 step and is where the hue actually
-     lives on a dark ground, so the PROMINENT kind takes --100 here and the paler siblings climb.
-     Same pairing as light, opposite direction of travel. */
-  --console-node-project: var(--pf-t--global--dark--color--nonstatus--teal--100);
-  --console-node-module: var(--pf-t--global--dark--color--nonstatus--teal--200);
-  --console-node-file: var(--pf-t--global--dark--color--nonstatus--blue--100);
-  --console-node-dir: var(--pf-t--global--dark--color--nonstatus--blue--200);
-  --console-node-target: var(--pf-t--global--dark--color--nonstatus--yellow--100);
-  --console-node-spell: var(--pf-t--global--dark--color--nonstatus--yellow--200);
-  --console-node-op: var(--pf-t--global--dark--color--nonstatus--orange--100);
-  --console-node-tool: var(--pf-t--global--dark--color--nonstatus--orange--200);
-  --console-node-function: var(--pf-t--global--dark--color--nonstatus--green--100);
-  --console-node-method: var(--pf-t--global--dark--color--nonstatus--green--200);
-  --console-node-import: var(--pf-t--global--dark--color--nonstatus--orangered--100);
-  --console-node-package: var(--pf-t--global--dark--color--nonstatus--orangered--200);
-  --console-node-symbol: var(--pf-t--global--dark--color--nonstatus--green--300);
-  --console-node-doc: var(--pf-t--global--dark--color--nonstatus--purple--100);
-  --console-node-rationale: var(--pf-t--global--dark--color--nonstatus--purple--200);
-  --console-node-note: var(--pf-t--global--dark--color--nonstatus--purple--300);
-  --console-node-diagnostic: var(--pf-t--global--dark--color--nonstatus--red--100);
-  --console-node-charm: var(--pf-t--global--dark--color--nonstatus--red--200);
-  --console-node-owner: var(--pf-t--global--dark--color--nonstatus--gray--100);
-  --console-node-author: var(--pf-t--global--dark--color--nonstatus--gray--200);
+  /* The SAME five hues as the light block, and the same order within each family. Only the
+     lightness anchor moves: L0 0.50 -> 0.78, because a mark has to be darker than white and
+     lighter than #292929 to clear 3:1 on each. One palette, two grounds - not two palettes.
+     Chroma also eases (C0 0.100 -> 0.085): a dark ground makes the same chroma read louder. */
+  /* Problems - h 25 */
+  --console-node-diagnostic: #db9993;  /* 6.23:1 */
+  --console-node-charm:      #f2afa9;  /* 7.95:1 */
+  /* Code - h 130 */
+  --console-node-function:   #7f946b;  /* 4.40:1 */
+  --console-node-method:     #92ab7a;  /* 5.77:1 */
+  --console-node-import:     #a5c389;  /* 7.46:1 */
+  --console-node-package:    #bed8a5;  /* 9.39:1 */
+  --console-node-symbol:     #d6eec1;  /* 11.68:1 */
+  /* Declarations - h 190 */
+  --console-node-target:     #61a5a0;  /* 5.13:1 */
+  --console-node-spell:      #6cbdb7;  /* 6.65:1 */
+  --console-node-op:         #83d4ce;  /* 8.50:1 */
+  --console-node-tool:       #a3e8e3;  /* 10.54:1 */
+  /* Structure - h 250 */
+  --console-node-project:    #769ac1;  /* 4.96:1 */
+  --console-node-module:     #86b1dd;  /* 6.48:1 */
+  --console-node-dir:        #9bc7f5;  /* 8.23:1 */
+  --console-node-file:       #bdddff;  /* 10.36:1 */
+  /* Prose - h 310 */
+  --console-node-doc:        #b095c5;  /* 5.51:1 */
+  --console-node-rationale:  #c8a9e1;  /* 7.08:1 */
+  --console-node-note:       #ddc1f3;  /* 9.00:1 */
+  /* People - neutral */
+  --console-node-owner:      #b4a9ac;  /* 6.38:1 */
+  --console-node-author:     #cbbfc2;  /* 8.15:1 */
 }
