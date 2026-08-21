@@ -557,8 +557,18 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-titlebar [role="tab"],
 #console-titlebar #console-actions { -webkit-app-region: no-drag; app-region: no-drag; }
 
-/* The tab bar fills the title bar; the trailing control group sits at the right, on the tab row. */
-#console-tabs { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; }
+/* The tab bar fills the title bar; the trailing control group sits at the right, on the tab row.
+   The leading border separates it from the navigation rail below-left: without it the tab strip and
+   the rail read as one L-shaped piece of chrome, and the first tab looks like it belongs to the
+   rail. Matched to the rail's own edge so the two lines continue each other. */
+#console-tabs {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch;
+  border-inline-start: 1px solid var(--pf-t--global--border--color--default);
+}
+/* No rail on a phone (see the rail's own breakpoint), so nothing to separate from. */
+@media (max-width: 48rem) {
+  #console-tabs { border-inline-start: 0; }
+}
 
 /* Title-bar-right control group: the chrome buttons (command bar, apps, reference, settings gear) as PF
    plain icon Buttons centered on the tab row, and the positioning context for the apps-menu popover

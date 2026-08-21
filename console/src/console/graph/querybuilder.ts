@@ -20,18 +20,32 @@ export interface QueryBuilderDeps {
   projects: () => string[];
   currentQuery: () => string;
   applyQuery: (q: string) => void;
+  // How many nodes the applied filter currently matches, for the readout under the query. Null when
+  // nothing is filtered, so the panel says nothing rather than "2373 of 2373".
+  matchCount: () => { matched: number; total: number } | null;
   runView: (view: string) => void;
   radialPick: () => void;
-  // Views are conditional: cycles needs a target graph, critical needs timing, affected needs a
-  // live workspace. Unavailable ones are shown with the reason rather than hidden, because a
-  // question you cannot ask yet is still worth knowing about.
-  viewUnavailable: (view: string) => string | null;
+  onClose?: () => void;
+  // FACTS about the loaded graph, not prose. Each view declares what it needs (ViewSpec.requires)
+  // and writes its own sentence, so a requirement lives beside the view it belongs to and adding a
+  // view forces a decision about it. This used to be one lambda in main.ts testing three
+  // hard-coded ids: nothing made a new view state its requirement, and a reason that went stale
+  // would have kept rendering confidently.
+  capabilities: () => GraphCapabilities;
+}
+
+export interface GraphCapabilities {
+  flavor: "targets" | "knowledge";
+  hasDurations: boolean;
+  hasAffectedSet: boolean;
+  live: boolean;
 }
 
 export interface QueryBuilder {
   el: HTMLElement;
   open(): void;
   close(): void;
+  isOpen(): boolean;
 }
 
 type Field = "" | "kind" | "project" | "relation" | "id";
@@ -151,6 +165,10 @@ interface ViewSpec {
   blurb: string;
   cli: string | null;
   picks: boolean; // arms a click on the canvas rather than answering immediately
+  // What this view needs from the loaded graph, and what to say when it is missing. Absent means
+  // the view always works. Returning a sentence is what disables it - so the requirement and the
+  // explanation cannot drift apart, because they are the same expression.
+  requires?: (c: GraphCapabilities) => string | null;
 }
 
 const VIEWS: ViewSpec[] = [
@@ -195,44 +213,62 @@ const VIEWS: ViewSpec[] = [
     blurb: "Targets caught in a dependency cycle, which magus cannot order.",
     cli: "magus describe graph",
     picks: false,
+    // Only the target adapter marks a cycle; types.KnowledgeEdge has no such field, so on the
+    // knowledge graph this view found nothing every time and reported the graph acyclic - a result
+    // it had never checked.
+    requires: (c) =>
+      c.flavor === "targets"
+        ? null
+        : "Switch to the target graph. The knowledge graph does not record cycles, so this would report none without looking.",
   },
   {
     id: "critical",
     label: "What is slow?",
-    blurb: "The longest duration-weighted chain. Needs a graph carrying timing.",
+    blurb: "The longest duration-weighted chain of targets.",
     cli: "magus graph deps -o json",
     picks: false,
+    requires: (c) =>
+      c.hasDurations
+        ? null
+        : "This graph carries no timing. Run a build, then export again and the chain appears.",
   },
   {
     id: "affected",
     label: "What does my diff touch?",
-    blurb: "The projects your working tree changes reach. Needs a live workspace.",
+    blurb: "The projects your working-tree changes reach.",
     cli: "magus affected ls",
     picks: false,
+    // Live-with-a-clean-tree is a different answer from not-live, and saying "needs a live
+    // workspace" to someone who HAS one is how a correct tool reads as broken.
+    requires: (c) =>
+      c.hasAffectedSet
+        ? null
+        : c.live
+          ? "Nothing to show: your working tree matches the base it is compared against."
+          : "Needs a live workspace. Open one with magus graph export --open --follow.",
   },
 ];
 
 export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
   let terms: Term[] = [];
   let tab: "filter" | "view" = "filter";
+  // The filter as it stood when the panel opened, so Reset can put it back after experimenting.
+  let openedWith = "";
 
-  const overlay = h("div", "pf-v6-c-backdrop console-graph-qb");
+  const overlay = h("div", "console-graph-qb");
   overlay.hidden = true;
-  overlay.setAttribute("role", "dialog");
-  overlay.setAttribute("aria-modal", "true");
+  overlay.setAttribute("role", "region");
   overlay.setAttribute("aria-label", "Ask the graph");
 
-  const bullseye = h("div", "pf-v6-l-bullseye");
-  const box = h("div", "pf-v6-c-modal-box pf-m-md console-graph-qb__box");
-  const head = h("div", "pf-v6-c-modal-box__header");
-  const titleWrap = h("div", "pf-v6-c-modal-box__title");
-  titleWrap.append(h("span", "pf-v6-c-modal-box__title-text", "Ask the graph"));
-  head.append(titleWrap);
-  const closeBtn = h("button", "pf-v6-c-button pf-m-plain pf-v6-c-modal-box__close");
+  const box = h("div", "console-graph-qb__box");
+  const head = h("div", "console-graph-qb__head");
+  head.append(h("span", "console-graph-qb__title", "Ask the graph"));
+  const closeBtn = h("button", "pf-v6-c-button pf-m-plain console-graph-qb__close");
   closeBtn.type = "button";
-  closeBtn.setAttribute("aria-label", "Close");
+  closeBtn.setAttribute("aria-label", "Close the builder");
   closeBtn.append(h("span", "pf-v6-c-button__icon", "×"));
   closeBtn.addEventListener("click", () => close());
+  head.append(closeBtn);
 
   // Tabs
   const tabs = h("div", "pf-v6-c-tabs console-graph-qb__tabs");
@@ -258,7 +294,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
   }
   tabs.append(tabList);
 
-  const body = h("div", "pf-v6-c-modal-box__body console-graph-qb__body");
+  const body = h("div", "console-graph-qb__body");
   const filterPane = h("div", "console-graph-qb__pane");
   const viewPane = h("div", "console-graph-qb__pane");
   body.append(filterPane, viewPane);
@@ -279,6 +315,32 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
   const previewLabel = h("p", "console-graph-qb__previewlabel", "Your filter");
   const preview = h("code", "console-graph-qb__preview");
   const cliLine = h("code", "console-graph-qb__cli");
+  const countLine = h("p", "console-graph-qb__count");
+  countLine.setAttribute("aria-live", "polite");
+  // One copy control for the two things worth copying: the filter itself, and the command that runs
+  // it in a terminal. The sidebar's own copy button does the command only.
+  const copyRow = h("div", "console-graph-qb__copyrow");
+  for (const [label, get] of [
+    ["Copy filter", () => renderQuery(terms)],
+    ["Copy command", () => 'magus query "' + renderQuery(terms) + '"'],
+  ] as [string, () => string][]) {
+    const b = h("button", "pf-v6-c-button pf-m-link pf-m-inline") as HTMLButtonElement;
+    b.type = "button";
+    b.append(h("span", "pf-v6-c-button__text", label));
+    b.addEventListener("click", () => {
+      const text = get();
+      if (!renderQuery(terms)) return;
+      void navigator.clipboard?.writeText(text).then(() => {
+        const span = b.querySelector(".pf-v6-c-button__text");
+        if (!span) return;
+        span.textContent = "Copied";
+        setTimeout(() => {
+          span.textContent = label;
+        }, 1200);
+      });
+    });
+    copyRow.append(b);
+  }
   const hint = h(
     "p",
     "console-graph-qb__hint",
@@ -296,11 +358,23 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
     b.addEventListener("click", () => {
       terms = parseTerms(ex.query);
       paintRows();
+      commit(); // a discrete pick, same as any other - it applies and the canvas answers
     });
     exWrap.append(b);
   }
 
-  filterPane.append(rows, addBtn, previewLabel, preview, cliLine, hint, exLabel, exWrap);
+  filterPane.append(
+    rows,
+    addBtn,
+    previewLabel,
+    preview,
+    countLine,
+    cliLine,
+    copyRow,
+    hint,
+    exLabel,
+    exWrap,
+  );
 
   function valueListFor(field: Field): string[] {
     if (field === "kind") return deps.kinds();
@@ -336,6 +410,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
       neg.addEventListener("click", () => {
         t.negated = !t.negated;
         paintRows();
+        commit();
       });
 
       const sel = h("span", "pf-v6-c-form-control console-graph-qb__field");
@@ -352,6 +427,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
         t.field = select.value as Field;
         t.value = "";
         paintRows();
+        commit();
       });
       sel.append(select);
 
@@ -377,9 +453,19 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
       } else {
         input.placeholder = t.field === "id" ? "part of a node id" : "any text in a name or doc";
       }
+      // Typing updates the preview but does NOT run the query - Enter or leaving the field does.
+      // Datadog's split, and it is the right one: a discrete pick is cheap and unambiguous, while
+      // a half-typed value would run a query for `spe` on the way to `spell`.
       input.addEventListener("input", () => {
         t.value = input.value;
         paintPreview();
+      });
+      input.addEventListener("change", () => commit());
+      input.addEventListener("keydown", (ev) => {
+        if ((ev as KeyboardEvent).key === "Enter") {
+          ev.preventDefault();
+          commit();
+        }
       });
       valWrap.append(input);
 
@@ -393,6 +479,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
       del.addEventListener("click", () => {
         terms.splice(idx, 1);
         paintRows();
+        commit();
       });
 
       row.append(neg, sel, valWrap, del);
@@ -413,8 +500,21 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
   // --- view pane -------------------------------------------------------------------------------
   function paintViews(): void {
     viewPane.textContent = "";
+    const caps = deps.capabilities();
+    // Say what this graph is BEFORE the list, so the greyed-out cards are explained in advance
+    // rather than each one having to be clicked to find out.
+    const blocked = VIEWS.filter((v) => v.requires?.(caps)).length;
+    const summary = h(
+      "p",
+      "console-graph-qb__caps",
+      (caps.flavor === "targets" ? "Target graph" : "Knowledge graph") +
+        (caps.hasDurations ? ", with timing" : ", no timing") +
+        (caps.live ? ", live" : ", snapshot") +
+        (blocked ? " - " + blocked + " of " + VIEWS.length + " views need something else." : "."),
+    );
+    viewPane.append(summary);
     for (const v of VIEWS) {
-      const why = deps.viewUnavailable(v.id);
+      const why = v.requires?.(caps) ?? null;
       const card = h("button", "console-graph-qb__view") as HTMLButtonElement;
       card.type = "button";
       card.disabled = !!why;
@@ -434,27 +534,42 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
   }
 
   // --- footer ----------------------------------------------------------------------------------
-  const foot = h("div", "pf-v6-c-modal-box__footer console-graph-qb__foot");
-  const applyBtn = h("button", "pf-v6-c-button pf-m-primary") as HTMLButtonElement;
-  applyBtn.type = "button";
-  applyBtn.append(h("span", "pf-v6-c-button__text", "Apply filter"));
-  applyBtn.addEventListener("click", () => {
+  // No Apply: the canvas behind this panel already shows the answer. What the footer owes instead
+  // is an undo, because experimenting is only safe if the filter you arrived with comes back.
+  const foot = h("div", "console-graph-qb__foot");
+  const resetBtn = h("button", "pf-v6-c-button pf-m-link") as HTMLButtonElement;
+  resetBtn.type = "button";
+  resetBtn.append(h("span", "pf-v6-c-button__text", "Reset"));
+  resetBtn.addEventListener("click", () => {
+    terms = parseTerms(openedWith);
+    paintRows();
+    commit();
+  });
+  const clearBtn = h("button", "pf-v6-c-button pf-m-link") as HTMLButtonElement;
+  clearBtn.type = "button";
+  clearBtn.append(h("span", "pf-v6-c-button__text", "Clear all"));
+  clearBtn.addEventListener("click", () => {
+    terms = [];
+    paintRows();
+    commit();
+  });
+  foot.append(resetBtn, clearBtn);
+
+  box.append(head, tabs, body, foot);
+  overlay.append(box);
+
+  // commit runs the query NOW. Called by every discrete control and by Enter/blur in a value, never
+  // per keystroke.
+  function commit(): void {
     deps.applyQuery(renderQuery(terms));
-    close();
-  });
-  const cancelBtn = h("button", "pf-v6-c-button pf-m-link") as HTMLButtonElement;
-  cancelBtn.type = "button";
-  cancelBtn.append(h("span", "pf-v6-c-button__text", "Cancel"));
-  cancelBtn.addEventListener("click", () => close());
-  foot.append(applyBtn, cancelBtn);
+    paintCount();
+  }
 
-  box.append(head, closeBtn, tabs, body, foot);
-  bullseye.append(box);
-  overlay.append(bullseye);
-
-  overlay.addEventListener("click", (ev) => {
-    if (!box.contains(ev.target as Node)) close();
-  });
+  function paintCount(): void {
+    const m = deps.matchCount();
+    countLine.textContent = m == null ? "" : m.matched + " of " + m.total + " nodes match";
+    countLine.hidden = m == null;
+  }
 
   function paint(): void {
     for (const [id, btn] of tabButtons) {
@@ -464,32 +579,37 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
     }
     filterPane.hidden = tab !== "filter";
     viewPane.hidden = tab !== "view";
-    // Apply belongs to the filter tab; a view runs on click and has nothing to commit.
+    // The footer undoes a filter; a view runs on click and has nothing to undo here.
     foot.hidden = tab !== "filter";
     if (tab === "view") paintViews();
   }
 
   function open(): void {
     // Seed from whatever is in the filter box, so opening the builder over a hand-typed query
-    // continues it rather than discarding it.
-    terms = parseTerms(deps.currentQuery());
+    // continues it rather than discarding it. openedWith is what Reset goes back to.
+    openedWith = deps.currentQuery();
+    terms = parseTerms(openedWith);
     tab = "filter";
     overlay.hidden = false;
     paint();
     paintRows();
+    paintCount();
     (rows.querySelector("select") as HTMLSelectElement | null)?.focus();
   }
 
   function close(): void {
     overlay.hidden = true;
+    deps.onClose?.();
   }
 
   document.addEventListener("keydown", (e) => {
-    if (e.key === "Escape" && !overlay.hidden) {
+    // Only when focus is inside the panel: this is no longer a modal, so Escape belongs to whatever
+    // the reader is actually working in - stealing it would break Escape on the canvas.
+    if (e.key === "Escape" && !overlay.hidden && overlay.contains(document.activeElement)) {
       e.preventDefault();
       close();
     }
   });
 
-  return { el: overlay, open, close };
+  return { el: overlay, open, close, isOpen: () => !overlay.hidden };
 }

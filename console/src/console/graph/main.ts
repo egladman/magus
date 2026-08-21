@@ -1773,11 +1773,40 @@ function renderOverview() {
 // setting it reports is owned elsewhere, so each owner has to say when it moved. NOT hooked into
 // draw() (that runs per frame, and this writes innerHTML) and not into renderList() alone (which
 // the arrangement never calls).
+// What the detail column is showing. "auto" is the column's normal life - the selected node's card,
+// or the overview when nothing is selected. "builder" means the question builder has the column.
+//
+// An explicit mode because three things now want that space, and the alternative is each one
+// reaching in to hide the others: the builder was doing exactly that, and closing it needed a
+// second reach-in to undo. One owner, one function that paints it.
+type DetailMode = "auto" | "builder";
+let detailMode: DetailMode = "auto";
+
+function setDetailMode(mode: DetailMode) {
+  detailMode = mode;
+  renderDetail();
+}
+
+function renderDetail() {
+  const host = el("query-builder-host");
+  const builderOwns = detailMode === "builder";
+  if (host) host.hidden = !builderOwns;
+  if (cardEl) cardEl.hidden = builderOwns;
+  if (builderOwns || !graph?.nodes) return;
+  if (selected && graph.byId.has(selected)) renderCard(selected);
+  else renderOverview();
+}
+
+// syncOverview repaints the column when the overview is what it should be showing. Routed through
+// renderDetail so a repaint triggered by a match-set change cannot paint over the builder.
 function syncOverview() {
-  if (!selected && graph?.nodes) renderOverview();
+  if (!selected) renderDetail();
 }
 
 function renderCard(id: string | null) {
+  // The builder owns the column while it is open, so a selection changes what is SELECTED without
+  // evicting what the reader deliberately opened. Closing it repaints whatever is current.
+  if (detailMode === "builder") return;
   const n = id ? graph.byId.get(id) : null;
   if (!n) {
     renderOverview();
@@ -5617,20 +5646,30 @@ function bootWireEvents() {
       if (searchEl) searchEl.value = q;
       applyQuery(q);
     },
+    matchCount: () =>
+      matchSet ? { matched: matchSet.size, total: graph?.nodes.length ?? 0 } : null,
     runView: (v) => activateView(v),
     radialPick: enterRadialPick,
-    viewUnavailable: (v) => {
-      if (v === "cycles" && graphFlavor !== "targets")
-        return "Needs the target graph - the knowledge graph has no cycle concept.";
-      if (v === "critical" && !graphHasDurations)
-        return "Needs a graph carrying timing. Run a build, then export again.";
-      if (v === "affected" && !window._liveAffectedIds?.size)
-        return "Needs a live workspace with a computed diff.";
-      return null;
-    },
+    onClose: () => setDetailMode("auto"),
+    // Facts only. Which views those facts rule out is declared beside the views.
+    capabilities: () => ({
+      flavor: graphFlavor === "targets" ? "targets" : "knowledge",
+      hasDurations: graphHasDurations,
+      hasAffectedSet: !!window._liveAffectedIds?.size,
+      live: !!liveHost,
+    }),
   });
-  document.body.append(builder.el);
-  el("query-builder-btn")?.addEventListener("click", () => builder.open());
+  // Mounted in the detail column: it takes that column while open, so the canvas beside it stays
+  // visible and acts as the preview. setDetailMode owns which of the three the column shows.
+  el("query-builder-host")?.append(builder.el);
+  el("query-builder-btn")?.addEventListener("click", () => {
+    if (builder.isOpen()) {
+      builder.close();
+      return;
+    }
+    setDetailMode("builder");
+    builder.open();
+  });
 
   // Wire the live-mode "Remember this workspace" checkbox.
   const rememberCb = el("live-remember-cb") as HTMLInputElement | null;

@@ -817,17 +817,32 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-loading[hidden] { display: none; }
 .console-graph-loading__label { margin: 0; color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem; }
 
-/* Question builder (querybuilder.ts): a PF ModalBox in the backdrop + bullseye the cheat sheet and
-   the keybinding editor already use. */
+/* Question builder (querybuilder.ts): a PANEL in the detail column, not a modal. A modal covered
+   the canvas, and the canvas is what tells you whether the filter you are building is the one you
+   wanted - so it hid the only feedback that mattered. */
+.console-graph-qb { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
 .console-graph-qb[hidden] { display: none; }
-.console-graph-qb__box { width: min(44rem, 92vw); }
-.console-graph-qb__body { display: block; max-height: min(60svh, 34rem); overflow-y: auto; }
+.console-graph-qb__box { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.console-graph-qb__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-graph-qb__title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pf-t--global--text--color--subtle); }
+.console-graph-qb__close { margin: -0.3rem -0.3rem -0.3rem 0; }
+.console-graph-qb__body { display: block; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0.8rem; }
 .console-graph-qb__pane[hidden] { display: none; }
+.console-graph-qb__count { margin: 0.4rem 0 0; font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle); }
+.console-graph-qb__count[hidden] { display: none; }
+.console-graph-qb__copyrow { display: flex; gap: 0.9rem; margin-top: 0.4rem; }
+.console-graph-qb__foot { display: flex; gap: 0.6rem; padding: 0.5rem 0.8rem; border-top: 1px solid var(--pf-t--global--border--color--default); }
 
 .console-graph-qb__rows { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.7rem; }
 /* Fixed columns rather than auto: the field select and the negate toggle stay put as rows are
    added and removed, so the row a person is editing does not shift under the cursor. */
-.console-graph-qb__row { display: grid; grid-template-columns: 3.4rem 11rem minmax(0, 1fr) 2rem; gap: 0.4rem; align-items: center; }
+/* Two lines per term in a 21rem column: the negate toggle and the field on one, the value beneath.
+   A single 4-column row needed 28rem and truncated the value box to uselessness. */
+.console-graph-qb__row { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr) 1.8rem; gap: 0.3rem; align-items: center; }
+.console-graph-qb__value { grid-column: 1 / -1; }
 .console-graph-qb__neg { justify-content: center; font-variant: small-caps; }
 .console-graph-qb__neg[aria-pressed="true"] { color: var(--console-status-danger); font-weight: 700; }
 .console-graph-qb__empty { margin: 0 0 0.6rem; color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem; }
@@ -882,3 +897,4 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-qb__exlabel { font-size: 0.88rem; font-weight: 500; }
 .console-graph-qb__exquery { grid-column: 2; grid-row: 1; font-family: var(--pf-t--global--font--family--mono); font-size: 0.76rem; color: var(--console-accent); white-space: nowrap; }
 .console-graph-qb__exnote { grid-column: 1 / -1; font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }
+.console-graph-qb__caps { margin: 0 0 0.7rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--pf-t--global--border--color--default); font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }

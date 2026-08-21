@@ -259,6 +259,10 @@
            Both used to span the full width below the canvas, as far from the view they describe as
            the layout allowed. -->
       <div class="console-graph-detail">
+        <!-- The question builder mounts here (querybuilder.ts) and takes the column while it is
+             open. A panel rather than a modal: a modal covers the canvas, and the canvas is the
+             preview - the whole point is watching the graph narrow as you pick terms. -->
+        <div id="query-builder-host" hidden></div>
         <div id="explain-card" aria-live="polite" hidden></div>
         <div class="console-graph-detail__foot">
           <!-- Term-prompt view command bar (same idiom as playground.html), populated by
