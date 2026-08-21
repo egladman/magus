@@ -812,6 +812,24 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   display: inline-flex;
   align-items: center;
   gap: var(--pf-t--global--spacer--xs);
+  /* COMPACT, to the shell's own control scale. These were left at PatternFly's default button size -
+     37px tall at 14px type - next to a title bar whose workspace control is 28px at 12.5px, so the
+     dashboard's buttons read as a size larger than everything around them. Matching the shell means
+     one control scale across the app instead of one per surface. */
+  min-block-size: 1.75rem;
+  padding-block: 0;
+  padding-inline: 0.55rem;
+  font-size: 0.78rem;
+  border-radius: var(--pf-t--global--border--radius--small);
+}
+/* Big Picture is a TOGGLE-GROUP button, not a plain one, and PatternFly rounds a group's outer corners
+   through a first/last-child rule that out-specifies the shared block above - so it kept a 9px corner
+   while its twin took 6px. Matching the specificity rather than reaching for !important. */
+.console-dashboard-viewbar
+  .pf-v6-c-toggle-group__item
+  .pf-v6-c-toggle-group__button.console-dashboard-viewbar__bigpicture,
+.console-dashboard-viewbar .pf-v6-c-toggle-group__button.console-dashboard-viewbar__bigpicture {
+  border-radius: var(--pf-t--global--border--radius--small);
 }
 .console-dashboard-viewbar__bigpicture .pf-v6-c-button__icon,
 .console-dashboard-activity__open .pf-v6-c-button__icon {
