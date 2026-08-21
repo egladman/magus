@@ -24,7 +24,7 @@ import { createTabBar } from "./tabBar";
 import { createSidebar } from "./sidebar";
 import { fetchPulse, type PulseView } from "./pulse";
 import { fetchDiffCount, type Badge } from "./badges";
-import { syncLauncherChord, buildLauncher, type Launchable } from "./home";
+import { syncLauncherChord, syncLauncherPulse, buildLauncher, type Launchable } from "./home";
 import { standaloneSurface, moduleSurface } from "./standalone";
 import {
   registerCommand,
@@ -1086,6 +1086,12 @@ export function startConsole(
   // Per-surface counts the rail hangs on a row. Diff only for now - see badges.ts for why a count
   // earns a badge and a static one does not.
   const railBadges = signal<Record<string, Badge>>({});
+  // The welcome screen reads the SAME pulse the rail does, on the same 15s tick, so a console sitting
+  // at zero tabs keeps saying what the daemon is doing rather than freezing on whatever was true when
+  // it was built. Null HIDES the row - see syncLauncherPulse for why "no answer" must not read as idle.
+  // Not disposed, like the readiness interval below: startConsole runs once for the page's lifetime.
+  pulse.subscribe((p) => syncLauncherPulse(launcher, p));
+  syncLauncherPulse(launcher, pulse.get());
   // The workspace scope control, in the title bar's action group. It hides itself until the daemon
   // reports more than one workspace, so a single-workspace console never grows a control for a
   // decision with one answer.

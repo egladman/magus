@@ -9,6 +9,7 @@
 // (openSurfaceWindow) - an EXPLICIT opt-in, never the plain-click default, so a card can still never
 // strand you in a window you did not ask for.
 import { openSurfaceWindow } from "../lib/appwindow";
+import type { PulseView } from "./pulse";
 
 // A surface the launcher can open: the pageId the console registered it under, and a human label.
 export interface Launchable {
@@ -229,6 +230,41 @@ export function surfaceIconSvg(pageId: string, size?: number): string {
 // open; `open` asks the console to open one as a tab. The returned element carries data-surface="home"
 // (its heading/lede layout is ID-scoped in console.css) and is appended straight into
 // #console-outlet-content as a sibling of the tab panes, shown only when no tab is active.
+// syncLauncherPulse turns the welcome screen's first row into a LIVE reading when there is a daemon
+// answering, and hides it when there is not. Called on every pulse tick, so the screen someone lands
+// on says what the daemon is doing right now rather than the same sentence it always says.
+//
+// The counts are DAEMON-WIDE and say so. There is one pool behind every loaded workspace, so
+// pool.running is the machine's occupancy and not the caller's - the dashboard hero carries the same
+// qualifier for the same reason, and a launcher that dropped it would be the one screen implying these
+// numbers are yours.
+export function syncLauncherPulse(root: HTMLElement, p: PulseView | null): void {
+  const way = root.querySelector<HTMLElement>("[data-launcher-live]");
+  const label = root.querySelector<HTMLElement>("[data-launcher-live-label]");
+  const hint = root.querySelector<HTMLElement>("[data-launcher-live-hint]");
+  if (!way || !label || !hint) return;
+  // No answer is not the same as nothing running: an older daemon that does not serve the route, or a
+  // dropped request, must not render as an idle machine. Hide rather than report a zero nobody measured.
+  way.hidden = p === null;
+  if (!p) return;
+  const running = p.running;
+  label.textContent =
+    running > 0
+      ? running === 1
+        ? "1 target running"
+        : running + " targets running"
+      : "Nothing running";
+  const parts: string[] = [];
+  if (p.queued > 0) parts.push(p.queued === 1 ? "1 queued" : p.queued + " queued");
+  if (p.workspaces.length > 0) {
+    parts.push(
+      p.workspaces.length === 1 ? "1 workspace loaded" : p.workspaces.length + " workspaces loaded",
+    );
+  }
+  parts.push("Counts are daemon-wide.");
+  hint.textContent = parts.join(". ");
+}
+
 // syncLauncherChord names the palette's CURRENT key in the zero-tab hint. Called by the shell every
 // time the launcher is shown rather than once when it is built, because a rebind in Settings happens
 // while the launcher is hidden behind the tab that did it.
@@ -401,6 +437,29 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   ways.className = "pf-v6-c-empty-state__actions";
   ways.setAttribute("data-empty-ways", "");
 
+  // The LIVE row, first, so a connected console leads with what is happening rather than with two
+  // sentences about how to get started. Hidden until a pulse arrives, which on a cold visit is never -
+  // that visit gets the teaching rows below and nothing that looks broken.
+  const liveWay = document.createElement("div");
+  liveWay.setAttribute("data-empty-way", "");
+  liveWay.setAttribute("data-launcher-live", "");
+  liveWay.hidden = true;
+  const liveLabel = document.createElement("span");
+  liveLabel.setAttribute("data-empty-way-label", "");
+  liveLabel.setAttribute("data-launcher-live-label", "");
+  const liveBtn = document.createElement("button");
+  liveBtn.type = "button";
+  liveBtn.className = "pf-v6-c-button pf-m-primary";
+  const liveBtnText = document.createElement("span");
+  liveBtnText.className = "pf-v6-c-button__text";
+  liveBtnText.textContent = "Open the dashboard";
+  liveBtn.append(liveBtnText);
+  liveBtn.addEventListener("click", () => open("dashboard"));
+  const liveHint = document.createElement("span");
+  liveHint.setAttribute("data-empty-hint", "");
+  liveHint.setAttribute("data-launcher-live-hint", "");
+  liveWay.append(liveLabel, liveBtn, liveHint);
+
   const pickWay = document.createElement("div");
   pickWay.setAttribute("data-empty-way", "");
   const pickLabel = document.createElement("span");
@@ -429,7 +488,7 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   demoHint.textContent = "Pick Demo data from the Workspace menu. Sample data, no daemon needed.";
   demoWay.append(demoLabel, demoHint);
 
-  ways.append(pickWay, demoWay);
+  ways.append(liveWay, pickWay, demoWay);
 
   root.append(title, sub, ways, gallery);
   return root;
