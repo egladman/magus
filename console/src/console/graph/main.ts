@@ -1720,7 +1720,6 @@ function renderOverview() {
     " the whole graph.</p>";
   cardEl.innerHTML = html;
   cardEl.hidden = false;
-  document.body.toggleAttribute("data-has-card", true);
 }
 
 // syncOverview repaints the overview when it is what the detail column is showing. Every
@@ -1738,7 +1737,6 @@ function renderCard(id: string | null) {
     docTitle.set(null); // nothing selected: the tab falls back to "Graph Explorer"
     return;
   }
-  document.body.toggleAttribute("data-has-card", true);
   // The selected node is what this surface has open, so the console names its tab after it. Driven
   // from here rather than from selectNode's several assignment sites: the card is the ONE place a
   // selection is rendered, so the tab cannot disagree with what the panel shows.
@@ -1871,11 +1869,8 @@ function centerOn(id: string) {
   const n = graph.byId.get(id);
   if (!n || n.x == null || !zoomBehavior) return;
   // Putting a node in the middle is a camera the operator asked for, so it is theirs from here.
-  // Selecting also OPENS the explain card, which narrows the stage: the resize lands AFTER this
-  // runs, so the centring is computed against the wider canvas and would be half a card off by
-  // the time it is seen - and the resize re-frame would refit the whole match set on top of
-  // that, sailing the node just clicked off the screen. Remembering the subject lets the resize
-  // re-centre on it instead.
+  // Remembering the subject is what lets a later resize re-centre on THIS node: without it the
+  // resize re-frame refits the whole match set and sails the node just clicked off the screen.
   cameraOwnedByOperator = true;
   centeredOn = id;
   const { w, h } = resizeCanvas();
