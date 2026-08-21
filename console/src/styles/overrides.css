@@ -74,6 +74,18 @@
   overflow: hidden; text-overflow: ellipsis;
 }
 #console-statusbar .console-shell-statusbar__version:hover { opacity: 1; }
+/* Centring it out of the flow assumes the LEFT cluster never reaches the middle of the rail, and
+ * anything added there breaks that: on a phone the connection state plus a "view only" tag runs
+ * under the version and both become unreadable. Nothing in the flex layout can prevent it, because
+ * the chip is not in the flex layout - which is why this is a breakpoint rather than a flex rule.
+ *
+ * The version is the most disposable thing on the bar - it names a build, it is not live state and
+ * nothing acts on it - so it is the one that goes when the rail is too narrow to hold everything.
+ * Truncating the left cluster instead would eat what the console is connected to, which is the one
+ * item there that must survive a glance. */
+@media (max-width: 40rem) {
+  #console-statusbar .console-shell-statusbar__version { display: none; }
+}
 
 /* Keyboard-shortcuts toggle: a quiet icon button matching the version chip's muted-until-hover weight,
  * sized down to sit on the slim rail without inflating it. */
@@ -115,6 +127,10 @@
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
 }
+/* Demo mode has no chip of its own beside this one. It is the CONNECTION DOT's state, set from the
+ * #demo fragment in makeStatusBar, so it says the same thing on every tab - a separate tag next to a
+ * dot already reading "demo" was the sentence twice in one bar. Its colour is the [data-state="demo"]
+ * rule below rather than anything here. */
 #console-conn::before {
   content: ""; display: inline-block; width: 0.5em; height: 0.5em; margin-right: 0.4em;
   border-radius: 50%; background: var(--console-conn-dot, currentColor); vertical-align: middle;

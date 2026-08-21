@@ -555,34 +555,46 @@ meaning what the note said, and git is how the person who left it has their name
 
 ### Where a note goes, and what that means
 
-There are two independent questions - who wrote it, and who can read it - and together
-they make a grid magus fills in three of four ways:
+There is one question that matters to a reader - **may I act on this without checking it?** -
+and it makes two tiers:
 
-|                       | the team sees it        | only you see it |
-| --------------------- | ----------------------- | --------------- |
-| **a person wrote it** | `knowledge.notes.shared`| `knowledge.notes.private` |
-| **an agent wrote it** | *nothing, deliberately* | `magus memory`  |
+| tier         | where                    | committed | attributed | who writes it       |
+| ------------ | ------------------------ | --------- | ---------- | ------------------- |
+| **drafting** | `magus memory`           | no        | no         | an agent, or you    |
+| **committed**| `knowledge.notes.shared` | yes       | git        | you, by promoting   |
 
-The empty cell is the design rather than a gap. An agent's derived claims are never pushed
-at the team, which is the same rule the guard enforces by refusing agent writes to either
-notes location - on the file surface AND on the command surface, so it holds however the
-write is spelled.
+Between them sits one command. `magus notes promote <record>` opens an agent's draft in your
+editor, derives the note's anchors from the record's node refs, and writes it to the shared
+store - and it **refuses a body you did not change**, because promoting without reading is an
+agent's claim with your name on the commit.
+
+That refusal is the whole boundary. An agent may still never write a note, but the rule it
+enforces is not really "a human typed this" - a person pasting an agent's prose into `$EDITOR`
+always passed it. What the store actually guarantees, and the stronger claim, is that
+**somebody accountable pressed commit**, which git records whether or not the first draft was
+theirs.
+
+Writing a note straight into the committed tier is still supported and still the right move
+when the reasoning is already yours: `magus notes edit` opens a scaffold and gets out of the
+way.
 
 ```yaml
 knowledge:
   notes:
     shared: notes        # a directory IN the repo: committed, so git records who wrote each note
-    private: ~/vault     # a directory anywhere: only this machine has it, and nothing attributes it
 ```
 
 One sentence each, and the whole surface follows from them:
 
-- **`notes.shared`** - a person wrote it, the team has it, git says who. Must live inside
-  the checkout; outside it there is no commit to attribute a note to and no review to have
-  seen it, so "shared" would be a claim the location cannot back.
-- **`notes.private`** - a person wrote it, only this machine has it, nothing attributes it.
-  May live anywhere, including outside any repository. Its shard is **never** exported to
-  the remote cache, which is what makes an out-of-repo location safe to support at all.
+- **`notes.shared`** - a person stands behind it, the team has it, git says who. Must live
+  inside the checkout; outside it there is no commit to attribute a note to and no review to
+  have seen it, so "shared" would be a claim the location cannot back.
+- **`knowledge.notes.private`** - **superseded, still read.** A second notes location, yours
+  rather than the team's, anywhere on disk. It is no longer the recommended shape: line the
+  stores up by property and it has no column of its own, because a private note and a memory
+  record are both uncommitted, unattributed, unreviewed and unrecoverable. The one thing it
+  had that memory did not was anchors, and `notes promote` closes that. Existing stores keep
+  working; new workspaces should use the drafting tier instead.
 - **`magus memory`** - an agent wrote it, only this machine has it, and every entry cites a
   ref a later reader can re-run.
 
@@ -650,9 +662,19 @@ together").
 Recording that fingerprint is a deliberate human act: `magus notes edit` stamps it, because
 the person just had the note and its subject in front of them. Verify only ever reports.
 
-Retrieval uses the same idea one level up. Prose whose subject has moved on without it
-ranks below prose that kept up, and the match carries `outrun_days` so the weight is
-visible rather than silent.
+Retrieval labels, and never reorders. A match whose subject has moved on carries its
+verdict and `outrun_days` so a reader can see "400 days behind its subject" beside the
+result, but it keeps its rank.
+
+Ranking on staleness was tried and removed, because it points the wrong way. Code that
+keeps changing is where knowledge is worth most - relative churn is one of the better
+predictors of defect density - so demoting the prose about a moving subject hides it
+exactly where it is needed. Elapsed days measure calendar time rather than divergence: a
+note and its subject both untouched for a year are settled, not stale. And prose whose
+subject is *gone* is often the only surviving record of why it went, which is the last
+thing a search should bury. Systems that solved this in production reached the same
+answer - Google's g3doc carries a "last reviewed" byline, and Guru keeps an unverified
+card searchable and visible with its lapsed state shown. Both label. Neither demotes.
 
 ## Exporting to external tools
 

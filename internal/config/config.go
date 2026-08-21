@@ -463,6 +463,24 @@ type NotesConfig struct {
 	// carry a scope attr so the distinction is visible wherever they surface.
 	//
 	// Agents still may not write here. That is the point: it is the vault case.
+	//
+	// compat(until: `magus notes promote` has replaced this in practice - no workspace here
+	// or in the wild sets knowledge.notes.private, and `magus memory` carries the drafting
+	// tier instead): SUPERSEDED, still read, no longer the recommended shape.
+	//
+	// Line the three stores up by property rather than by who types into them and this one
+	// has no column of its own: private notes and `magus memory` are both uncommitted,
+	// unattributed, unreviewed and unrecoverable. The only thing separating them was who
+	// wrote the file, which is a field rather than a store - and one the guard cannot
+	// actually enforce, since a person pasting an agent's prose into $EDITOR passes it
+	// cleanly. What private bought that memory did not was ANCHORS; `notes promote` closes
+	// that by deriving a note's anchors from a record's node refs, so the drafting tier can
+	// now graduate into the committed one without a third store in between.
+	//
+	// Observe that it is safe to drop by checking that nothing sets it: it was never set in
+	// this repository, and a store nobody points at holds nothing to lose. Kept readable
+	// until then because the path may name someone's vault, and deleting the key would
+	// orphan real prose to save a struct field.
 	Private string `json:"private" yaml:"private"`
 }
 

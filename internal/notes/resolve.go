@@ -25,6 +25,34 @@ type Resolver interface {
 	// the story, while a failure names something a reader can go fix. Collapsing both into
 	// "" hid four distinct causes behind one silence.
 	Digest(ctx context.Context, a Anchor) (string, error)
+	// DeclDigest returns the CURRENT fingerprint of the anchored subject's declaration, or
+	// "" when the kind has no declaration to speak of.
+	//
+	// Errors are NOT reported separately from Digest's: this only ever grades a change
+	// Digest already found, so a declaration that cannot be computed degrades to an ungraded
+	// finding rather than to a second complaint about the same anchor.
+	DeclDigest(ctx context.Context, a Anchor) (string, error)
+}
+
+// DeclarationHeld reports whether the anchored subject's DECLARATION is the one the note was
+// last reviewed against. Call it only once Digest has already found a change: it is what
+// separates a body edit, which rarely invalidates prose, from drift worth re-reading for.
+//
+// Exported so the CLI and the daemon grade with one rule rather than two. They present the
+// answer differently - an Issue with a hint, an AnchorStatus with a detail - but a surface
+// whose verdict disagreed with `magus notes verify` would be a second opinion rather than a
+// second view of one answer.
+//
+// False is the answer for every uncertainty: no recorded declaration digest, no computable
+// one, or an error. The finding then degrades to ungraded drift instead of to silence, which
+// is the safe direction - an ungraded finding overstates a change, while grading on absent
+// data would understate one.
+func DeclarationHeld(ctx context.Context, res Resolver, a Anchor) bool {
+	if a.DeclDigest == "" {
+		return false
+	}
+	decl, err := res.DeclDigest(ctx, a)
+	return err == nil && decl != "" && decl == a.DeclDigest
 }
 
 // ResolveAnchors reports every anchor that no longer resolves, with the coarser anchor it
@@ -109,6 +137,22 @@ func ResolveAnchors(ctx context.Context, dir string, res Resolver) ([]Issue, err
 			if current == "" || current == a.Digest {
 				continue
 			}
+			// The content moved. Grade it before reporting: a body edited under an unchanged
+			// declaration is the overwhelmingly common change and the one that almost never
+			// invalidates prose, so calling it drift is how a store teaches its reader to
+			// stop reading the findings.
+			if DeclarationHeld(ctx, res, a) {
+				issues = append(issues, Issue{
+					Severity: SeverityWarning,
+					Code:     CodeAnchorBodyChanged,
+					Path:     path,
+					Note:     n.Name,
+					Message: fmt.Sprintf("anchor %s:%s changed inside an unchanged declaration since this note was last reviewed",
+						a.Kind, a.Target),
+					Hint: "Most edits under an unchanged signature do not invalidate the prose about them. Re-read only if the note claims something about the implementation rather than the interface.",
+				})
+				continue
+			}
 			issues = append(issues, Issue{
 				Severity: SeverityWarning,
 				Code:     CodeDriftedAnchor,
@@ -185,6 +229,12 @@ func RecordDigests(ctx context.Context, dir, name, rev string, res Resolver) (in
 			continue
 		}
 		n.Anchors[i].Digest = current
+		// Stamped alongside, and allowed to be empty: a kind with no declaration records
+		// none, and a later verify simply reports that anchor ungraded. Computed from the
+		// same read as the content digest, so the two can never describe different revisions.
+		if decl, dErr := res.DeclDigest(ctx, a); dErr == nil {
+			n.Anchors[i].DeclDigest = decl
+		}
 		// Stamped with the digest, never apart: a pair that disagreed would send a reader to
 		// the wrong diff, which is worse than no provenance.
 		n.Anchors[i].Commit = rev

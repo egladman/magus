@@ -165,19 +165,24 @@ func (AnchorKind) EnumDescriptor() ([]byte, []int) {
 // AnchorStatus is what checking one anchor against the workspace found.
 //
 // DRIFTED is the case an existence check cannot catch and a reader cannot see: the anchored
-// code still exists and quietly stopped meaning what the note says. UNVERIFIED is a real,
-// distinct answer and must never be rendered as "fine" - it means no fingerprint was recorded
-// (the note predates fingerprinting, or was never re-read) or none could be computed here,
-// and reporting drift from missing data is the false positive that trains a reader to ignore
-// every flag.
+// code still exists and quietly stopped meaning what the note says. BODY_CHANGED is that same
+// check graded one step finer - the content moved, the DECLARATION did not - and it is a far
+// weaker signal: measured across 1,496 repositories, an edit that leaves the signature alone
+// is 39-105x less likely to come with a prose update than one that changes it, which is why
+// an undifferentiated content hash reports drift that mostly is not there. Surface it, never
+// gate on it. UNVERIFIED is a real, distinct answer and must never be rendered as "fine" - it
+// means no fingerprint was recorded (the note predates fingerprinting, or was never re-read)
+// or none could be computed here, and reporting drift from missing data is the false positive
+// that trains a reader to ignore every flag.
 type AnchorStatus int32
 
 const (
-	AnchorStatus_ANCHOR_STATUS_UNSPECIFIED AnchorStatus = 0
-	AnchorStatus_ANCHOR_STATUS_RESOLVES    AnchorStatus = 1
-	AnchorStatus_ANCHOR_STATUS_DANGLING    AnchorStatus = 2
-	AnchorStatus_ANCHOR_STATUS_DRIFTED     AnchorStatus = 3
-	AnchorStatus_ANCHOR_STATUS_UNVERIFIED  AnchorStatus = 4
+	AnchorStatus_ANCHOR_STATUS_UNSPECIFIED  AnchorStatus = 0
+	AnchorStatus_ANCHOR_STATUS_RESOLVES     AnchorStatus = 1
+	AnchorStatus_ANCHOR_STATUS_DANGLING     AnchorStatus = 2
+	AnchorStatus_ANCHOR_STATUS_DRIFTED      AnchorStatus = 3
+	AnchorStatus_ANCHOR_STATUS_UNVERIFIED   AnchorStatus = 4
+	AnchorStatus_ANCHOR_STATUS_BODY_CHANGED AnchorStatus = 5
 )
 
 // Enum value maps for AnchorStatus.
@@ -188,13 +193,15 @@ var (
 		2: "ANCHOR_STATUS_DANGLING",
 		3: "ANCHOR_STATUS_DRIFTED",
 		4: "ANCHOR_STATUS_UNVERIFIED",
+		5: "ANCHOR_STATUS_BODY_CHANGED",
 	}
 	AnchorStatus_value = map[string]int32{
-		"ANCHOR_STATUS_UNSPECIFIED": 0,
-		"ANCHOR_STATUS_RESOLVES":    1,
-		"ANCHOR_STATUS_DANGLING":    2,
-		"ANCHOR_STATUS_DRIFTED":     3,
-		"ANCHOR_STATUS_UNVERIFIED":  4,
+		"ANCHOR_STATUS_UNSPECIFIED":  0,
+		"ANCHOR_STATUS_RESOLVES":     1,
+		"ANCHOR_STATUS_DANGLING":     2,
+		"ANCHOR_STATUS_DRIFTED":      3,
+		"ANCHOR_STATUS_UNVERIFIED":   4,
+		"ANCHOR_STATUS_BODY_CHANGED": 5,
 	}
 )
 
@@ -300,7 +307,8 @@ type Anchor struct {
 	// node_id is the graph node this anchor names, so a client can link into the Graph
 	// Explorer. Empty when the anchor does not resolve.
 	NodeId string `protobuf:"bytes,4,opt,name=node_id,json=nodeId,proto3" json:"node_id,omitempty"`
-	// detail explains a DANGLING or DRIFTED status in one sentence, and what to do about it.
+	// detail explains a DANGLING, DRIFTED or BODY_CHANGED status in one sentence, and what to
+	// do about it.
 	// Empty for the other statuses. UNTRUSTED only in the sense that it is prose; it is
 	// magus-authored, unlike body below.
 	Detail        string `protobuf:"bytes,5,opt,name=detail,proto3" json:"detail,omitempty"`
@@ -403,7 +411,15 @@ type Note struct {
 	OutrunDays int32 `protobuf:"varint,9,opt,name=outrun_days,json=outrunDays,proto3" json:"outrun_days,omitempty"`
 	// modify_time is the file's modification time, observed rather than stored, so it cannot
 	// disagree with the file it describes. Output only.
-	ModifyTime    *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=modify_time,json=modifyTime,proto3" json:"modify_time,omitempty"`
+	ModifyTime *timestamppb.Timestamp `protobuf:"bytes,10,opt,name=modify_time,json=modifyTime,proto3" json:"modify_time,omitempty"`
+	// source is set when the prose was quoted rather than written - a captured review thread.
+	// Absent on a note a person wrote, which is the overwhelming majority.
+	//
+	// A client MUST render a note carrying this differently from one without it. The whole
+	// claim a note makes is that somebody stands behind it; a capture's claim is the opposite,
+	// that nobody does and the source can be re-read instead. A surface that presents the two
+	// identically tells the reader the one thing this field exists to prevent.
+	Source        *Source `protobuf:"bytes,11,opt,name=source,proto3" json:"source,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -508,6 +524,93 @@ func (x *Note) GetModifyTime() *timestamppb.Timestamp {
 	return nil
 }
 
+func (x *Note) GetSource() *Source {
+	if x != nil {
+		return x.Source
+	}
+	return nil
+}
+
+// Source is the provenance of prose a note did not originate.
+type Source struct {
+	state protoimpl.MessageState `protogen:"open.v1"`
+	// kind names what the note is a transcript OF ("review-thread").
+	//
+	// A string and not an enum, deliberately. An enum rejects what it does not know, and the
+	// client that meets a kind its binary predates is far better served by showing the reader
+	// an unfamiliar word than by dropping the one field that says this prose is quoted.
+	Kind string `protobuf:"bytes,1,opt,name=kind,proto3" json:"kind,omitempty"`
+	// ref identifies the conversation within kind - a review session id. Opaque to a client.
+	Ref string `protobuf:"bytes,2,opt,name=ref,proto3" json:"ref,omitempty"`
+	// as_of is the subject's identity at capture time: for a review thread, the digest of the
+	// patch the comments were written against. It is what makes a stale capture detectable
+	// rather than merely old.
+	AsOf string `protobuf:"bytes,3,opt,name=as_of,json=asOf,proto3" json:"as_of,omitempty"`
+	// captured is when the transcript was taken. NOT the file's modify_time: editing a
+	// capture's surrounding prose moves the mtime and must not move this.
+	Captured      *timestamppb.Timestamp `protobuf:"bytes,4,opt,name=captured,proto3" json:"captured,omitempty"`
+	unknownFields protoimpl.UnknownFields
+	sizeCache     protoimpl.SizeCache
+}
+
+func (x *Source) Reset() {
+	*x = Source{}
+	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[2]
+	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+	ms.StoreMessageInfo(mi)
+}
+
+func (x *Source) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*Source) ProtoMessage() {}
+
+func (x *Source) ProtoReflect() protoreflect.Message {
+	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[2]
+	if x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use Source.ProtoReflect.Descriptor instead.
+func (*Source) Descriptor() ([]byte, []int) {
+	return file_magus_notes_v1alpha1_notes_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *Source) GetKind() string {
+	if x != nil {
+		return x.Kind
+	}
+	return ""
+}
+
+func (x *Source) GetRef() string {
+	if x != nil {
+		return x.Ref
+	}
+	return ""
+}
+
+func (x *Source) GetAsOf() string {
+	if x != nil {
+		return x.AsOf
+	}
+	return ""
+}
+
+func (x *Source) GetCaptured() *timestamppb.Timestamp {
+	if x != nil {
+		return x.Captured
+	}
+	return nil
+}
+
 // StoreStatus reports one store's availability, so a client can tell "declared but empty"
 // from "not declared at all" from "declared and broken" - three states that must not collapse
 // into an empty list.
@@ -530,7 +633,7 @@ type StoreStatus struct {
 
 func (x *StoreStatus) Reset() {
 	*x = StoreStatus{}
-	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[2]
+	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[3]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -542,7 +645,7 @@ func (x *StoreStatus) String() string {
 func (*StoreStatus) ProtoMessage() {}
 
 func (x *StoreStatus) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[2]
+	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[3]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -555,7 +658,7 @@ func (x *StoreStatus) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use StoreStatus.ProtoReflect.Descriptor instead.
 func (*StoreStatus) Descriptor() ([]byte, []int) {
-	return file_magus_notes_v1alpha1_notes_proto_rawDescGZIP(), []int{2}
+	return file_magus_notes_v1alpha1_notes_proto_rawDescGZIP(), []int{3}
 }
 
 func (x *StoreStatus) GetScope() Scope {
@@ -605,7 +708,7 @@ type ListNotesRequest struct {
 
 func (x *ListNotesRequest) Reset() {
 	*x = ListNotesRequest{}
-	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[3]
+	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[4]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -617,7 +720,7 @@ func (x *ListNotesRequest) String() string {
 func (*ListNotesRequest) ProtoMessage() {}
 
 func (x *ListNotesRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[3]
+	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[4]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -630,7 +733,7 @@ func (x *ListNotesRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNotesRequest.ProtoReflect.Descriptor instead.
 func (*ListNotesRequest) Descriptor() ([]byte, []int) {
-	return file_magus_notes_v1alpha1_notes_proto_rawDescGZIP(), []int{3}
+	return file_magus_notes_v1alpha1_notes_proto_rawDescGZIP(), []int{4}
 }
 
 func (x *ListNotesRequest) GetPageSize() int32 {
@@ -660,7 +763,7 @@ type ListNotesResponse struct {
 
 func (x *ListNotesResponse) Reset() {
 	*x = ListNotesResponse{}
-	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[4]
+	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[5]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -672,7 +775,7 @@ func (x *ListNotesResponse) String() string {
 func (*ListNotesResponse) ProtoMessage() {}
 
 func (x *ListNotesResponse) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[4]
+	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[5]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -685,7 +788,7 @@ func (x *ListNotesResponse) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use ListNotesResponse.ProtoReflect.Descriptor instead.
 func (*ListNotesResponse) Descriptor() ([]byte, []int) {
-	return file_magus_notes_v1alpha1_notes_proto_rawDescGZIP(), []int{4}
+	return file_magus_notes_v1alpha1_notes_proto_rawDescGZIP(), []int{5}
 }
 
 func (x *ListNotesResponse) GetNotes() []*Note {
@@ -722,7 +825,7 @@ type GetNoteRequest struct {
 
 func (x *GetNoteRequest) Reset() {
 	*x = GetNoteRequest{}
-	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[5]
+	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[6]
 	ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 	ms.StoreMessageInfo(mi)
 }
@@ -734,7 +837,7 @@ func (x *GetNoteRequest) String() string {
 func (*GetNoteRequest) ProtoMessage() {}
 
 func (x *GetNoteRequest) ProtoReflect() protoreflect.Message {
-	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[5]
+	mi := &file_magus_notes_v1alpha1_notes_proto_msgTypes[6]
 	if x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
 		if ms.LoadMessageInfo() == nil {
@@ -747,7 +850,7 @@ func (x *GetNoteRequest) ProtoReflect() protoreflect.Message {
 
 // Deprecated: Use GetNoteRequest.ProtoReflect.Descriptor instead.
 func (*GetNoteRequest) Descriptor() ([]byte, []int) {
-	return file_magus_notes_v1alpha1_notes_proto_rawDescGZIP(), []int{5}
+	return file_magus_notes_v1alpha1_notes_proto_rawDescGZIP(), []int{6}
 }
 
 func (x *GetNoteRequest) GetName() string {
@@ -767,7 +870,7 @@ const file_magus_notes_v1alpha1_notes_proto_rawDesc = "" +
 	"\x06target\x18\x02 \x01(\tR\x06target\x12:\n" +
 	"\x06status\x18\x03 \x01(\x0e2\".magus.notes.v1alpha1.AnchorStatusR\x06status\x12\x17\n" +
 	"\anode_id\x18\x04 \x01(\tR\x06nodeId\x12\x16\n" +
-	"\x06detail\x18\x05 \x01(\tR\x06detail\"\xf4\x02\n" +
+	"\x06detail\x18\x05 \x01(\tR\x06detail\"\xaa\x03\n" +
 	"\x04Note\x12\x12\n" +
 	"\x04name\x18\x01 \x01(\tR\x04name\x121\n" +
 	"\x05scope\x18\x02 \x01(\x0e2\x1b.magus.notes.v1alpha1.ScopeR\x05scope\x12\x14\n" +
@@ -781,7 +884,13 @@ const file_magus_notes_v1alpha1_notes_proto_rawDesc = "" +
 	"outrunDays\x12;\n" +
 	"\vmodify_time\x18\n" +
 	" \x01(\v2\x1a.google.protobuf.TimestampR\n" +
-	"modifyTime\"\xa7\x01\n" +
+	"modifyTime\x124\n" +
+	"\x06source\x18\v \x01(\v2\x1c.magus.notes.v1alpha1.SourceR\x06source\"{\n" +
+	"\x06Source\x12\x12\n" +
+	"\x04kind\x18\x01 \x01(\tR\x04kind\x12\x10\n" +
+	"\x03ref\x18\x02 \x01(\tR\x03ref\x12\x13\n" +
+	"\x05as_of\x18\x03 \x01(\tR\x04asOf\x126\n" +
+	"\bcaptured\x18\x04 \x01(\v2\x1a.google.protobuf.TimestampR\bcaptured\"\xa7\x01\n" +
 	"\vStoreStatus\x121\n" +
 	"\x05scope\x18\x01 \x01(\x0e2\x1b.magus.notes.v1alpha1.ScopeR\x05scope\x12\x1a\n" +
 	"\bdeclared\x18\x02 \x01(\bR\bdeclared\x12\x12\n" +
@@ -811,13 +920,14 @@ const file_magus_notes_v1alpha1_notes_proto_rawDesc = "" +
 	"\x10ANCHOR_KIND_FILE\x10\x02\x12\x17\n" +
 	"\x13ANCHOR_KIND_PROJECT\x10\x03\x12\x16\n" +
 	"\x12ANCHOR_KIND_TARGET\x10\x04\x12\x14\n" +
-	"\x10ANCHOR_KIND_NOTE\x10\x05*\x9e\x01\n" +
+	"\x10ANCHOR_KIND_NOTE\x10\x05*\xbe\x01\n" +
 	"\fAnchorStatus\x12\x1d\n" +
 	"\x19ANCHOR_STATUS_UNSPECIFIED\x10\x00\x12\x1a\n" +
 	"\x16ANCHOR_STATUS_RESOLVES\x10\x01\x12\x1a\n" +
 	"\x16ANCHOR_STATUS_DANGLING\x10\x02\x12\x19\n" +
 	"\x15ANCHOR_STATUS_DRIFTED\x10\x03\x12\x1c\n" +
-	"\x18ANCHOR_STATUS_UNVERIFIED\x10\x04*\x86\x01\n" +
+	"\x18ANCHOR_STATUS_UNVERIFIED\x10\x04\x12\x1e\n" +
+	"\x1aANCHOR_STATUS_BODY_CHANGED\x10\x05*\x86\x01\n" +
 	"\tStaleness\x12\x19\n" +
 	"\x15STALENESS_UNSPECIFIED\x10\x00\x12\x18\n" +
 	"\x14STALENESS_UNMEASURED\x10\x01\x12\x15\n" +
@@ -843,7 +953,7 @@ func file_magus_notes_v1alpha1_notes_proto_rawDescGZIP() []byte {
 }
 
 var file_magus_notes_v1alpha1_notes_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
-var file_magus_notes_v1alpha1_notes_proto_msgTypes = make([]protoimpl.MessageInfo, 6)
+var file_magus_notes_v1alpha1_notes_proto_msgTypes = make([]protoimpl.MessageInfo, 7)
 var file_magus_notes_v1alpha1_notes_proto_goTypes = []any{
 	(Scope)(0),                    // 0: magus.notes.v1alpha1.Scope
 	(AnchorKind)(0),               // 1: magus.notes.v1alpha1.AnchorKind
@@ -851,11 +961,12 @@ var file_magus_notes_v1alpha1_notes_proto_goTypes = []any{
 	(Staleness)(0),                // 3: magus.notes.v1alpha1.Staleness
 	(*Anchor)(nil),                // 4: magus.notes.v1alpha1.Anchor
 	(*Note)(nil),                  // 5: magus.notes.v1alpha1.Note
-	(*StoreStatus)(nil),           // 6: magus.notes.v1alpha1.StoreStatus
-	(*ListNotesRequest)(nil),      // 7: magus.notes.v1alpha1.ListNotesRequest
-	(*ListNotesResponse)(nil),     // 8: magus.notes.v1alpha1.ListNotesResponse
-	(*GetNoteRequest)(nil),        // 9: magus.notes.v1alpha1.GetNoteRequest
-	(*timestamppb.Timestamp)(nil), // 10: google.protobuf.Timestamp
+	(*Source)(nil),                // 6: magus.notes.v1alpha1.Source
+	(*StoreStatus)(nil),           // 7: magus.notes.v1alpha1.StoreStatus
+	(*ListNotesRequest)(nil),      // 8: magus.notes.v1alpha1.ListNotesRequest
+	(*ListNotesResponse)(nil),     // 9: magus.notes.v1alpha1.ListNotesResponse
+	(*GetNoteRequest)(nil),        // 10: magus.notes.v1alpha1.GetNoteRequest
+	(*timestamppb.Timestamp)(nil), // 11: google.protobuf.Timestamp
 }
 var file_magus_notes_v1alpha1_notes_proto_depIdxs = []int32{
 	1,  // 0: magus.notes.v1alpha1.Anchor.kind:type_name -> magus.notes.v1alpha1.AnchorKind
@@ -863,19 +974,21 @@ var file_magus_notes_v1alpha1_notes_proto_depIdxs = []int32{
 	0,  // 2: magus.notes.v1alpha1.Note.scope:type_name -> magus.notes.v1alpha1.Scope
 	4,  // 3: magus.notes.v1alpha1.Note.anchors:type_name -> magus.notes.v1alpha1.Anchor
 	3,  // 4: magus.notes.v1alpha1.Note.staleness:type_name -> magus.notes.v1alpha1.Staleness
-	10, // 5: magus.notes.v1alpha1.Note.modify_time:type_name -> google.protobuf.Timestamp
-	0,  // 6: magus.notes.v1alpha1.StoreStatus.scope:type_name -> magus.notes.v1alpha1.Scope
-	5,  // 7: magus.notes.v1alpha1.ListNotesResponse.notes:type_name -> magus.notes.v1alpha1.Note
-	6,  // 8: magus.notes.v1alpha1.ListNotesResponse.stores:type_name -> magus.notes.v1alpha1.StoreStatus
-	7,  // 9: magus.notes.v1alpha1.NotesService.ListNotes:input_type -> magus.notes.v1alpha1.ListNotesRequest
-	9,  // 10: magus.notes.v1alpha1.NotesService.GetNote:input_type -> magus.notes.v1alpha1.GetNoteRequest
-	8,  // 11: magus.notes.v1alpha1.NotesService.ListNotes:output_type -> magus.notes.v1alpha1.ListNotesResponse
-	5,  // 12: magus.notes.v1alpha1.NotesService.GetNote:output_type -> magus.notes.v1alpha1.Note
-	11, // [11:13] is the sub-list for method output_type
-	9,  // [9:11] is the sub-list for method input_type
-	9,  // [9:9] is the sub-list for extension type_name
-	9,  // [9:9] is the sub-list for extension extendee
-	0,  // [0:9] is the sub-list for field type_name
+	11, // 5: magus.notes.v1alpha1.Note.modify_time:type_name -> google.protobuf.Timestamp
+	6,  // 6: magus.notes.v1alpha1.Note.source:type_name -> magus.notes.v1alpha1.Source
+	11, // 7: magus.notes.v1alpha1.Source.captured:type_name -> google.protobuf.Timestamp
+	0,  // 8: magus.notes.v1alpha1.StoreStatus.scope:type_name -> magus.notes.v1alpha1.Scope
+	5,  // 9: magus.notes.v1alpha1.ListNotesResponse.notes:type_name -> magus.notes.v1alpha1.Note
+	7,  // 10: magus.notes.v1alpha1.ListNotesResponse.stores:type_name -> magus.notes.v1alpha1.StoreStatus
+	8,  // 11: magus.notes.v1alpha1.NotesService.ListNotes:input_type -> magus.notes.v1alpha1.ListNotesRequest
+	10, // 12: magus.notes.v1alpha1.NotesService.GetNote:input_type -> magus.notes.v1alpha1.GetNoteRequest
+	9,  // 13: magus.notes.v1alpha1.NotesService.ListNotes:output_type -> magus.notes.v1alpha1.ListNotesResponse
+	5,  // 14: magus.notes.v1alpha1.NotesService.GetNote:output_type -> magus.notes.v1alpha1.Note
+	13, // [13:15] is the sub-list for method output_type
+	11, // [11:13] is the sub-list for method input_type
+	11, // [11:11] is the sub-list for extension type_name
+	11, // [11:11] is the sub-list for extension extendee
+	0,  // [0:11] is the sub-list for field type_name
 }
 
 func init() { file_magus_notes_v1alpha1_notes_proto_init() }
@@ -889,7 +1002,7 @@ func file_magus_notes_v1alpha1_notes_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: unsafe.Slice(unsafe.StringData(file_magus_notes_v1alpha1_notes_proto_rawDesc), len(file_magus_notes_v1alpha1_notes_proto_rawDesc)),
 			NumEnums:      4,
-			NumMessages:   6,
+			NumMessages:   7,
 			NumExtensions: 0,
 			NumServices:   1,
 		},

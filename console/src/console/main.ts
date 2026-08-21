@@ -484,11 +484,21 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
   const conn = document.createElement("span");
   conn.id = "console-conn";
   conn.setAttribute("aria-live", "polite");
-  conn.textContent = "not connected";
-  // Start in the honest not-connected state so the liveness dot reads RED until something proves a link,
-  // rather than the muted default color. A surface overwrites data-state the instant it mounts; the
-  // launcher's own bar (no surface behind it) keeps "none" until the readiness poller resolves a host.
-  conn.dataset.state = "none";
+  // The FRAGMENT decides demo, the same authority the readiness pulse and the connect screen already
+  // use. Leaving it to each surface to stamp meant only the Dashboard ever did, so a demo console read
+  // "demo" on one tab and "not connected" on the next - two answers to "what am I looking at", one of
+  // them wrong, in the one bar that exists to answer it.
+  //
+  // Safe to decide at construction now: demo mode is reachable ONLY through the Workspace menu, which
+  // sets #demo and remounts every tab. It was not always - each surface used to carry a "See the demo"
+  // button that entered demo with no fragment, which is why this was deferred to the surfaces at all.
+  const demoing = wantsDemo(parseHash());
+  conn.textContent = demoing ? "demo" : "not connected";
+  // Otherwise start in the honest not-connected state so the liveness dot reads RED until something
+  // proves a link, rather than the muted default color. A surface overwrites data-state the instant it
+  // mounts; the launcher's own bar (no surface behind it) keeps "none" until the readiness poller
+  // resolves a host.
+  conn.dataset.state = demoing ? "demo" : "none";
   // Clickable: a disconnected user's fastest fix is the daemon-address field, so the status pill
   // itself is the shortcut there (openDaemonSettings, wired via the delegated listener below). role +
   // tabindex make it a real keyboard-reachable control since a bare <span> is neither by default; the
@@ -499,7 +509,11 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
   // Surface the CONFIGURED daemon address up front, so a disconnected user reads what address the console
   // is trying without opening Settings. Both the accessible name and the hover tooltip carry it; the
   // readiness poller keeps the tooltip current once it has probed. notConnectedHint owns the wording.
-  const hint = notConnectedHint(getDefaultHost());
+  // The demo sentence is the same one the readiness poller writes, set here too so it is right from
+  // the first paint rather than from the first poll tick.
+  const hint = demoing
+    ? "Demo data is synthetic. Click to change the daemon address."
+    : notConnectedHint(getDefaultHost());
   conn.setAttribute("aria-label", hint);
   conn.title = hint;
   left.append(conn);
@@ -513,6 +527,11 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
     viewOnly.title = "This is a read-only view shared over the network.";
     left.append(viewOnly);
   }
+  // No separate "demo data" tag beside this. There was one, revealed per surface, and next to a
+  // connection dot that now reads "demo" on every tab it was the same sentence twice in one bar.
+  // The disclosure a reader needs - that sample prose is asserting things nobody said - is what the
+  // dot says, for as long as demo mode is on, on every surface rather than only the ones that
+  // remembered to raise it.
   const right = document.createElement("div");
   right.dataset.cluster = "";
   right.className = "console-shell-statusbar__right";
@@ -2094,15 +2113,15 @@ export function startConsole(
       css: "logs/logs.css",
     }),
   );
-  // Notes reuses logs.css rather than authoring its own: it renders on PF components plus the
-  // shared console-render-* frame the log viewer and the trail already load, so a third sheet
-  // would be a copy of rules that are already there.
+  // Notes authors its own sheet. It shares a panel-frame shape with the log viewer and the
+  // trail, but not their typography: .console-render-body is a monospace grid sized for log
+  // lines, and a note is human prose that has to wrap to a reading measure.
   register(
     moduleSurface({
       id: "notes",
       title: "Notes",
       bundle: "notes/notes.js",
-      css: "logs/logs.css",
+      css: "notes/notes.css",
     }),
   );
   // Review authors its own sheet rather than reusing logs.css: the hunk stream is virtualized
