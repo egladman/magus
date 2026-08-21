@@ -33,7 +33,6 @@
 // Like the activity trail and notes it has no standalone page: activate(host) builds into a console
 // host and returns the controller for that mount.
 
-import { inConsoleShell } from "../standalone";
 import { createClient } from "@connectrpc/connect";
 import { StatusService, type Status } from "../../gen/magus/status/v1alpha1/status_pb";
 import {
@@ -421,8 +420,6 @@ interface Refs {
   detail: HTMLElement;
   emptyTitle: HTMLElement;
   emptyBody: HTMLElement;
-  emptyFooter: HTMLElement;
-  demoBtn: HTMLButtonElement;
   treeHead: HTMLElement;
   treeHide: HTMLButtonElement;
   treeReopen: HTMLButtonElement;
@@ -556,15 +553,9 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   // first, and a dead end is a worse first impression than a fabricated plan clearly labelled as
   // one. Hidden unless the caller offers it - "nothing delegated" is a real answer about a real
   // workspace, and burying it under a demo button would be answering a different question.
-  const emptyFooter = h("div", "pf-v6-c-empty-state__footer");
-  const emptyActions = h("div", "pf-v6-c-empty-state__actions");
-  const demoBtn = h("button", "pf-v6-c-button pf-m-primary");
-  demoBtn.type = "button";
-  demoBtn.append(h("span", "pf-v6-c-button__text", "See the demo"));
-  emptyActions.append(demoBtn);
-  emptyFooter.append(emptyActions);
-  emptyFooter.hidden = true;
-  emptyContent.append(emptyTitle, emptyBodyWrap, emptyFooter);
+  // No demo button, on any page - see the diff surface for the reasoning. showEmpty names where a
+  // populated version lives instead.
+  emptyContent.append(emptyTitle, emptyBodyWrap);
   empty.append(emptyContent);
 
   root.append(toolbar, tree, treeReopen, stageBox, detail, empty);
@@ -582,8 +573,6 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
     detail,
     emptyTitle,
     emptyBody,
-    emptyFooter,
-    demoBtn,
     treeHead,
     treeHide,
     treeReopen,
@@ -689,7 +678,7 @@ export function activate(host: HTMLElement): PlanInstance {
   let sourceDecided = false;
   // The shared #demo fragment, read once at mount. Polling is never started in the demo: there is
   // no daemon to poll and the fixture does not move.
-  let demo = wantsDemo(parseHash());
+  const demo = wantsDemo(parseHash());
   let model: PlanModel = buildPlan([]);
   let join: RunJoin = joinRuns(model, []);
   let runModel: RunPlanModel = emptyRunPlan();
@@ -757,9 +746,12 @@ export function activate(host: HTMLElement): PlanInstance {
     refs.emptyBody.textContent = body;
     // A real <code> element, as every other surface writes a command.
     if (cmd) refs.emptyBody.append(" ", h("code", undefined, cmd), ".");
-    // Same rule as the diff surface: inside the console the Workspace menu is the one way in, and
-    // standalone this button is the only one.
-    refs.emptyFooter.hidden = !offerDemo || inConsoleShell();
+    if (offerDemo) {
+      refs.emptyBody.append(
+        " ",
+        "Pick Demo data from the Workspace menu to see a fabricated plan.",
+      );
+    }
   };
 
   // signature is what decides whether the plan on screen still matches the plan in hand. The list is
@@ -1606,19 +1598,6 @@ export function activate(host: HTMLElement): PlanInstance {
     { signal: controller.signal },
   );
   applyTree(treeCell.get() ?? false);
-
-  // Entering the showcase in place, NOT by reloading: inside the console a reload would tear down
-  // the whole SPA (every tab) instead of this one surface. replaceState so a standalone refresh
-  // stays in the demo and the URL reads as a shareable /console/plan/#demo.
-  refs.demoBtn.addEventListener(
-    "click",
-    () => {
-      history.replaceState(null, "", "#demo");
-      demo = true;
-      void refresh();
-    },
-    { signal: controller.signal },
-  );
 
   refs.list.addEventListener(
     "click",

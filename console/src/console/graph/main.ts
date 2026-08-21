@@ -1,4 +1,3 @@
-import { inConsoleShell } from "../standalone";
 import { must, errMessage } from "../../lib/guards";
 import { openSurface } from "../surface-navigation";
 // main.ts - the /graph/ page's interactive knowledge-graph view.
@@ -468,7 +467,7 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
   }
   // No usable fragment: DON'T auto-fetch the demo (that download is wasted on a cold visit).
   // Return an empty graph so boot runs its full setup (interactions wired, canvas ready); boot
-  // then shows the intuitive empty state, and the demo loads only when asked (loadDemoGraph).
+  // then shows the intuitive empty state, which names the fragment that loads one.
   return { data: { nodes: [], links: [] }, source: "empty" };
 }
 
@@ -2320,38 +2319,6 @@ async function switchGraphKind(kind: "targets" | "knowledge") {
   setStatus("Switched to the " + (kind === "targets" ? "target" : "knowledge") + " graph.");
 }
 
-// loadDemoGraph swaps the committed demo graph in place via renderLoadedGraph. NOT a page reload: the SPA
-// router clobbers #demo on reboot, so the old reload path never reached the demo. Fetch stays click-lazy.
-async function loadDemoGraph(): Promise<void> {
-  setStatus("Loading the magus demo graph...");
-  try {
-    // Relative to THIS bundle (gen/graph/), not the document - the console mounts the surface elsewhere.
-    const r = await fetch(new URL("./knowledge-graph.json", import.meta.url));
-    if (!r.ok) throw new Error("HTTP " + r.status);
-    const data = await r.json();
-    const empty = el("graph-empty-state");
-    if (empty) empty.hidden = true;
-    // Un-hiding un-collapses the canvas on a later frame; wait for real width or the sim centers on a
-    // zero viewport and the graph lands cramped in a corner.
-    await waitForCanvasWidth();
-    renderLoadedGraph({ data, source: "demo" });
-  } catch (e) {
-    setStatus("Could not load the demo graph (" + errMessage(e) + ").", true);
-  }
-}
-
-// waitForCanvasWidth resolves once the canvas has real width (its relayout landed), or after ~1s as a cap.
-function waitForCanvasWidth(): Promise<void> {
-  return new Promise((resolve) => {
-    let tries = 0;
-    const check = () => {
-      if (canvas.clientWidth > 0 || ++tries > 60) resolve();
-      else requestAnimationFrame(check);
-    };
-    check();
-  });
-}
-
 async function readGraphFile(file: File | undefined) {
   if (!file) return;
   // A user graph supersedes the empty state: dismiss it if it's still up.
@@ -4055,8 +4022,8 @@ export async function activate() {
   finishInteractiveSetup();
 
   // Empty state: nothing loaded (no #data/#src, no live attach), so show the prompt instead. The pipeline ran on
-  // an empty graph, so interactions are wired; the demo loads via loadDemoGraph, a dropped file via
-  // replaceGraph, both dismissing this.
+  // an empty graph, so interactions are wired; a dropped file arrives via replaceGraph and dismisses
+  // this, and the demo comes in through boot on #demo rather than being swapped in place.
   if (loaded.source === "empty") {
     const empty = el("graph-empty-state");
     if (empty) empty.hidden = false;
@@ -4281,18 +4248,6 @@ function bootWireEvents() {
   const openBtn = el("open-file-btn");
   if (openBtn && fileInput) openBtn.addEventListener("click", () => fileInput.click());
   if (fileInput) fileInput.addEventListener("change", () => readGraphFile(fileInput.files?.[0]));
-
-  // "Explore the magus graph" fetches the committed demo graph.json on demand and renders it in place
-  // (loadDemoGraph), dismissing the empty state.
-  const demoExplore = el("demo-explore-btn");
-  // Inside the console the Workspace menu is the single way into a populated console; standalone this
-  // button is the only one this page has.
-  if (demoExplore && inConsoleShell()) {
-    const way = demoExplore.closest<HTMLElement>("[data-empty-way]");
-    if (way) way.hidden = true;
-    else demoExplore.hidden = true;
-  }
-  if (demoExplore) demoExplore.addEventListener("click", () => loadDemoGraph());
 
   // Fullscreen toggle: expand the whole explorer panel (like the playground).
   // Hidden if the browser lacks the Fullscreen API rather than showing a dead

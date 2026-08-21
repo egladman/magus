@@ -109,17 +109,35 @@ test("#demo does not advertise workspace context it cannot provide", async () =>
   dispose.deactivate();
 });
 
-test("without #demo and without a daemon the surface offers the demo instead", async () => {
+// The surface used to carry its own "See the demo" button. It does not any more - one entry point for
+// the whole console, the title bar's Workspace menu - so what it owes someone with no daemon is a
+// SENTENCE naming where a populated version lives, not a dead end. Every /console/<surface>/ path is
+// the shell with a <base> injected (scripts/surface-stubs.mjs), so that menu is always on screen.
+test("without #demo and without a daemon the surface says where a populated one lives", async () => {
   const dispose = activate(document.body);
   await settle();
 
   const root = document.querySelector<HTMLElement>(".console-diff-layout");
   assert.equal(root?.dataset.phase, "empty");
-  const btn = document.querySelector<HTMLButtonElement>(".pf-v6-c-empty-state__footer button");
-  assert.ok(btn && !(btn.parentElement?.parentElement as HTMLElement).hidden);
+  assert.equal(
+    document.querySelectorAll(".pf-v6-c-empty-state__footer button").length,
+    0,
+    "the per-surface demo button is gone",
+  );
+  const body = document.querySelector<HTMLElement>(".pf-v6-c-empty-state__body")?.textContent ?? "";
+  assert.match(body, /Workspace menu/, "an empty surface has to name where a populated one lives");
 
-  btn.click();
+  dispose.deactivate();
+});
+
+// #demo still reaches the demo with no button anywhere - the fragment is the mechanism, and the
+// button was only ever one way to set it.
+test("#demo still loads the fabricated changeset", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
   await settle();
+
+  const root = document.querySelector<HTMLElement>(".console-diff-layout");
   assert.equal(root?.dataset.phase, "ready");
   assert.ok(document.querySelector(".console-diff-row__path"));
 

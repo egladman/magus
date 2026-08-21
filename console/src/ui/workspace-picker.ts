@@ -24,8 +24,8 @@ import {
 } from "../lib/scope";
 
 export interface WorkspacePickerOptions {
-  // Enter or leave the daemon-free demo. The picker is the only way in now: the six per-surface
-  // "See the demo" buttons are gone, so if this is not wired the demo is reachable only by typing
+  // Enter or leave the daemon-free demo. This is the ONLY way in now - the seven per-surface
+  // "See the demo" buttons are gone - so an unwired picker leaves the demo reachable only by typing
   // #demo into the address bar.
   onDemo(enter: boolean): void;
 }

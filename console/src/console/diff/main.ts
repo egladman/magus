@@ -61,7 +61,7 @@ import { registerCommand, unregisterCommand } from "../commands";
 import { resolveDaemonHost, parseHash, adoptDaemonOrigin, wantsDemo } from "../../lib/daemon";
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
-import { inConsoleShell, type SurfaceInstance } from "../standalone";
+import type { SurfaceInstance } from "../standalone";
 
 // Rows rendered beyond the viewport so a fast scroll never shows blank space. Bounded and
 // constant, unlike the diff.
@@ -254,7 +254,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // The daemon-free showcase, on the fragment every other surface reads. Derived ONCE, here,
   // rather than per fetch: a console served BY a daemon would otherwise answer host_() with a
   // real origin and the showcase would start writing a stranger's review session.
-  let demo = wantsDemo(parseHash());
+  const demo = wantsDemo(parseHash());
 
   const state: State = {
     changeset: { primary: [], generated: [] },
@@ -403,18 +403,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
   const emptyBodyWrap = h("div", "pf-v6-c-empty-state__body");
   const emptyBody = h("p", undefined, "Reading the working tree.");
   emptyBodyWrap.append(emptyBody);
-  // The same second way out the dashboard and the activity trail offer: someone who has no
-  // daemon running is the person most likely to be meeting this surface for the first time.
-  const demoBtn = h("button", "pf-v6-c-button pf-m-primary") as HTMLButtonElement;
-  demoBtn.type = "button";
-  demoBtn.title = "A fabricated changeset, no daemon and no workspace needed";
-  demoBtn.append(h("span", "pf-v6-c-button__text", "See the demo"));
-  const emptyFooter = h("div", "pf-v6-c-empty-state__footer");
-  const emptyActions = h("div", "pf-v6-c-empty-state__actions");
-  emptyActions.append(demoBtn);
-  emptyFooter.append(emptyActions);
-  emptyFooter.hidden = true;
-  emptyContent.append(emptyTitle, emptyBodyWrap, emptyFooter);
+  // No demo BUTTON here any more, on any page. Inside the console the title bar's Workspace menu is
+  // the single way in; standalone the fragment still is (/console/diff/#demo), and showEmpty says so.
+  // Six buttons for one thing was five too many, and each showed a different amount of the product.
+  emptyContent.append(emptyTitle, emptyBodyWrap);
   empty.append(emptyContent);
 
   main.append(toolbar, context, rail, viewport, overview, empty);
@@ -1635,25 +1627,16 @@ export function activate(host: HTMLElement): SurfaceInstance {
     emptyTitle.textContent = title;
     emptyBody.textContent = body;
     if (cmd) emptyBody.append(" ", h("code", undefined, cmd), ".");
-    // Inside the console the demo is reached from the title bar's Workspace menu, so a second button
-    // here would be one of six competing entry points for one thing. Standalone there is no title bar,
-    // and this button is the only way in.
-    emptyFooter.hidden = !offerDemo || inConsoleShell();
+    // Where a populated version lives. Every /console/<surface>/ path is the SHELL with a <base>
+    // injected (scripts/surface-stubs.mjs), so the Workspace menu is always on screen - there is no
+    // shell-less page that would need a different sentence.
+    if (offerDemo) {
+      emptyBody.append(
+        " ",
+        "Pick Demo data from the Workspace menu to see a fabricated changeset.",
+      );
+    }
   };
-
-  // Entering the showcase in place, NOT by reloading: inside the console a reload would tear
-  // down the whole SPA (every tab) instead of this one surface. The fragment is recorded with
-  // replaceState so a standalone refresh stays in the demo and the URL reads as a shareable
-  // /console/diff/#demo, and no hashchange fires for a sibling pane to react to.
-  demoBtn.addEventListener(
-    "click",
-    () => {
-      history.replaceState(null, "", "#demo");
-      demo = true;
-      void load();
-    },
-    { signal: controller.signal },
-  );
 
   const load = async (): Promise<void> => {
     stopPolling();
