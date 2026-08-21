@@ -74,15 +74,15 @@
   overflow: hidden; text-overflow: ellipsis;
 }
 #console-statusbar .console-shell-statusbar__version:hover { opacity: 1; }
-/* Centring it out of the flow assumes the LEFT cluster never reaches the middle of the rail,
- * and a surface that adds a tag there breaks that: on a phone "not connected" plus a "demo
- * data" tag runs under the version and both become unreadable. Nothing in the flex layout can
- * prevent it, because the chip is not in the flex layout.
+/* Centring it out of the flow assumes the LEFT cluster never reaches the middle of the rail, and
+ * anything added there breaks that: on a phone the connection state plus a "view only" tag runs
+ * under the version and both become unreadable. Nothing in the flex layout can prevent it, because
+ * the chip is not in the flex layout - which is why this is a breakpoint rather than a flex rule.
  *
- * The version is the most disposable thing on the bar - it names a build, it is not live state
- * and nothing acts on it - so it is the one that goes when the rail is too narrow to hold
- * everything. Truncating the left cluster instead would eat the demo disclosure, which is the
- * one item there that must survive a glance. */
+ * The version is the most disposable thing on the bar - it names a build, it is not live state and
+ * nothing acts on it - so it is the one that goes when the rail is too narrow to hold everything.
+ * Truncating the left cluster instead would eat what the console is connected to, which is the one
+ * item there that must survive a glance. */
 @media (max-width: 40rem) {
   #console-statusbar .console-shell-statusbar__version { display: none; }
 }
@@ -119,8 +119,7 @@
 /* Shared "view only" tag: a quiet, square, lowercase chip beside the connection dot on a phone viewing a
  * LAN share (main.ts adds it only in shared mode). Ambient read-only reminder, not a banner - muted fill,
  * no accent, so it never reads as a status or an error. */
-#console-statusbar [data-viewonly],
-#console-statusbar [data-demo] {
+#console-statusbar [data-viewonly] {
   margin-left: 0.5rem; padding: 0.05rem 0.35rem;
   font-size: 0.72rem; line-height: 1.3; white-space: nowrap;
   color: var(--pf-t--global--text--color--subtle);
@@ -128,18 +127,10 @@
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
 }
-/* "demo data" carries more weight than "view only" and is tinted rather than muted. A surface
- * showing sample data is asserting things nobody said, and on the notes surface a reader who
- * misses it may quote invented prose at a colleague - so it has to survive a glance.
- *
- * Clay, from the console's own earthy palette, and deliberately NOT a status colour: demo mode
- * is a different KIND of thing, not a problem, and an amber chip would read as a warning about
- * the data rather than a statement about where it came from. */
-#console-statusbar [data-demo] {
-  color: var(--console-clay);
-  background: color-mix(in srgb, var(--console-clay) 12%, transparent);
-  border-color: color-mix(in srgb, var(--console-clay) 45%, transparent);
-}
+/* Demo mode has no chip of its own beside this one. It is the CONNECTION DOT's state, set from the
+ * #demo fragment in makeStatusBar, so it says the same thing on every tab - a separate tag next to a
+ * dot already reading "demo" was the sentence twice in one bar. Its colour is the [data-state="demo"]
+ * rule below rather than anything here. */
 #console-conn::before {
   content: ""; display: inline-block; width: 0.5em; height: 0.5em; margin-right: 0.4em;
   border-radius: 50%; background: var(--console-conn-dot, currentColor); vertical-align: middle;

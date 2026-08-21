@@ -484,11 +484,21 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
   const conn = document.createElement("span");
   conn.id = "console-conn";
   conn.setAttribute("aria-live", "polite");
-  conn.textContent = "not connected";
-  // Start in the honest not-connected state so the liveness dot reads RED until something proves a link,
-  // rather than the muted default color. A surface overwrites data-state the instant it mounts; the
-  // launcher's own bar (no surface behind it) keeps "none" until the readiness poller resolves a host.
-  conn.dataset.state = "none";
+  // The FRAGMENT decides demo, the same authority the readiness pulse and the connect screen already
+  // use. Leaving it to each surface to stamp meant only the Dashboard ever did, so a demo console read
+  // "demo" on one tab and "not connected" on the next - two answers to "what am I looking at", one of
+  // them wrong, in the one bar that exists to answer it.
+  //
+  // Safe to decide at construction now: demo mode is reachable ONLY through the Workspace menu, which
+  // sets #demo and remounts every tab. It was not always - each surface used to carry a "See the demo"
+  // button that entered demo with no fragment, which is why this was deferred to the surfaces at all.
+  const demoing = wantsDemo(parseHash());
+  conn.textContent = demoing ? "demo" : "not connected";
+  // Otherwise start in the honest not-connected state so the liveness dot reads RED until something
+  // proves a link, rather than the muted default color. A surface overwrites data-state the instant it
+  // mounts; the launcher's own bar (no surface behind it) keeps "none" until the readiness poller
+  // resolves a host.
+  conn.dataset.state = demoing ? "demo" : "none";
   // Clickable: a disconnected user's fastest fix is the daemon-address field, so the status pill
   // itself is the shortcut there (openDaemonSettings, wired via the delegated listener below). role +
   // tabindex make it a real keyboard-reachable control since a bare <span> is neither by default; the
@@ -499,7 +509,11 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
   // Surface the CONFIGURED daemon address up front, so a disconnected user reads what address the console
   // is trying without opening Settings. Both the accessible name and the hover tooltip carry it; the
   // readiness poller keeps the tooltip current once it has probed. notConnectedHint owns the wording.
-  const hint = notConnectedHint(getDefaultHost());
+  // The demo sentence is the same one the readiness poller writes, set here too so it is right from
+  // the first paint rather than from the first poll tick.
+  const hint = demoing
+    ? "Demo data is synthetic. Click to change the daemon address."
+    : notConnectedHint(getDefaultHost());
   conn.setAttribute("aria-label", hint);
   conn.title = hint;
   left.append(conn);
@@ -513,23 +527,11 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
     viewOnly.title = "This is a read-only view shared over the network.";
     left.append(viewOnly);
   }
-  // Demo reminder, same shape as "view only" and for a stronger reason. A surface showing
-  // sample data is asserting things nobody said, and the reader needs to know that BEFORE
-  // they quote one at a colleague - notes is the sharp case, where invented prose passing as
-  // something a person wrote is the one lie the store cannot survive.
-  //
-  // Built hidden and revealed by the surface (markDemoData), not decided here: demo mode is
-  // reachable without the #demo hash - the cold empty state has a "See the demo" button - so
-  // a check at construction time would miss the path a reader is most likely to take. Each
-  // surface is its own bundle, so this coordinates through shared DOM the way the connection
-  // dot already does, rather than through module state no other bundle can see.
-  const demo = document.createElement("span");
-  demo.id = "console-demo";
-  demo.dataset.demo = "";
-  demo.hidden = true;
-  demo.textContent = "demo data";
-  demo.title = "This surface is showing sample data. Nobody wrote it.";
-  left.append(demo);
+  // No separate "demo data" tag beside this. There was one, revealed per surface, and next to a
+  // connection dot that now reads "demo" on every tab it was the same sentence twice in one bar.
+  // The disclosure a reader needs - that sample prose is asserting things nobody said - is what the
+  // dot says, for as long as demo mode is on, on every surface rather than only the ones that
+  // remembered to raise it.
   const right = document.createElement("div");
   right.dataset.cluster = "";
   right.className = "console-shell-statusbar__right";

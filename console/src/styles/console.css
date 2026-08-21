@@ -95,7 +95,7 @@ body[data-console-app] button[aria-disabled="true"] {
 
 /* The bottom status-bar FRAME (fixed rail + per-tab wrapper + clusters + the connection liveness
    dot) moved to overrides.css in the W2 shell rebuild - PatternFly has no status-bar component, so it
-   is the audited escape hatch. The discrete chips (#console-demo, #offline-badge) are PF Labels now
+   is the audited escape hatch. The discrete chips (#offline-badge) are PF Labels now
    (main.ts makeStatusBar). --console-statusbar-h / --console-pad (defined at the top of this file)
    are still consumed by both overrides.css and the console-fill layout below. */
 

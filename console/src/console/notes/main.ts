@@ -43,7 +43,6 @@ import {
   validateLoopbackHost,
   consumeLiveToken,
   createDaemonTransport,
-  markDemoData,
 } from "../../lib/daemon";
 import { persisted } from "../../lib/persist";
 import { h } from "../view";
@@ -368,8 +367,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
     refs.detailBody.replaceChildren();
     refs.main.hidden = true;
     refs.bar.hidden = true;
-    // The cold state is not demo data, so the tag comes down with the notes it described.
-    markDemoData(false);
     refs.empty.hidden = false;
     refs.emptyTitle.textContent = title;
     refs.emptySub.textContent = sub;
@@ -733,9 +730,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
     try {
       const resp = await client.listNotes({});
       if (stale) return;
-      // Live data replacing a demo the reader was just looking at: the tag must come down, or
-      // it would sit there calling real notes invented.
-      markDemoData(false);
       show(resp.notes, resp.stores, async (n) => {
         const one = await client.getNote({ name: noteResourceName(n) });
         return one.body ?? "";
@@ -751,13 +745,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
   }
 
   // loadDemo renders invented notes. The disclosure that they ARE invented is not optional -
-  // authorship is the entire claim a note makes, and sample prose passing as something a
-  // colleague wrote is the one lie this store cannot survive - but it does not have to cost a
-  // banner. It moved to the status bar tag beside the connection state, which says the same
-  // thing for as long as the data is on screen instead of once, at the top, until you scroll.
+  // authorship is the entire claim a note makes, and sample prose passing as something a colleague
+  // wrote is the one lie this store cannot survive - but this surface no longer carries it. Demo
+  // mode is entered through the Workspace menu, which sets #demo, and the shell's connection dot
+  // reads "demo" off that fragment for as long as it is set, on this tab and every other.
   function loadDemo(): void {
     const demo = demoNotes();
-    markDemoData();
     show(demo.notes, demo.stores, (n) => Promise.resolve(demo.body(n.name)));
   }
 
