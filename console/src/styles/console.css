@@ -850,18 +850,25 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-sidebar .pf-v6-c-nav__link.pf-m-current::before {
   content: ""; position: absolute; inset-inline-start: 0; inset-block: 0; inline-size: 3px;
 }
-/* OPEN somewhere else: this surface has a tab, but it is not where you are. Neutral, because the house
-   rule is ONE functional colour - a second hue here would make the rail a two-colour system for what
-   is really one axis. Prominence separates the two states instead. */
+/* OPEN somewhere else: this surface has a tab, but it is not where you are. Deliberately QUIET - it
+   answers "is it already open" and nothing more, so it should be findable when looked for and
+   invisible when not. It used to take the subtle ICON tone, which is #a3a3a3 on the dark chrome and
+   read nearly as loudly as the current row. The border tone is the right weight: it is the same value
+   every other hairline in the shell uses. */
 #console-sidebar .pf-v6-c-nav__link[data-tab-open]:not(.pf-m-current)::before {
-  background: var(--pf-t--global--icon--color--subtle);
+  background: var(--pf-t--global--border--color--default);
 }
 /* WHERE YOU ARE. The saturated end of that axis, and the only row that ever carries it - exactly one
    row is current, so this is unambiguous even though both markers share a shape.
    Semantic colour is a separate vocabulary and stays where it is - the pool dot below is a status
    reading, so it keeps the status tokens. */
+/* WHERE YOU ARE. The one row carrying COLOUR, which is what separates it from every other mark on the
+   rail - the rest of the chrome is grey, so hue alone says "surfaced" without needing size or
+   brightness. Wider than the quiet marker too: the two now differ on both axes, which is what makes
+   the pair legible at a glance rather than on comparison. */
 #console-sidebar .pf-v6-c-nav__link.pf-m-current::before {
   background: var(--console-accent);
+  inline-size: 4px;
 }
 /* The live pool reading at the rail's foot. It borrows the nav link's grid so its dot sits on the same
    vertical line as every app icon above it - a second alignment here would read as a stray element
@@ -1082,8 +1089,19 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 
 /* The workspace's sigil, above the heading. Tinted by the inline colour sigil.ts sets, so the mark
-   takes the workspace's hue the way every launcher card takes its surface's. */
-[data-launcher-sigil] { display: block; margin-block-end: 0.6rem; line-height: 0; }
+   takes the workspace's hue the way every launcher card takes its surface's.
+   It sits in a MEDALLION rather than loose on the page: as a bare line drawing it read as something
+   that had come adrift, because nothing on this screen bounds it and it is the only drawn thing on it.
+   The disc is the workspace's own hue at low alpha, so the container is part of the mark rather than a
+   grey plate under it. */
+[data-launcher-sigil] {
+  display: inline-flex; align-items: center; justify-content: center;
+  inline-size: 4.25rem; block-size: 4.25rem;
+  margin-block-end: 0.75rem;
+  border-radius: 50%;
+  background: color-mix(in srgb, currentcolor 10%, transparent);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, currentcolor 22%, transparent);
+}
 [data-launcher-sigil][hidden] { display: none; }
 
 /* The welcome screen's live reading, under the tagline. A LINE, not a card: as a card it wrapped the
