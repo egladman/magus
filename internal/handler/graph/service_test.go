@@ -3,6 +3,7 @@ package graph
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 
 	"connectrpc.com/connect"
@@ -42,6 +43,8 @@ type fakeResolver struct {
 	err    error
 	gaps   []types.KnowledgeSymbolGap
 	probed bool
+	aff    *types.AffectedResult
+	affErr error
 }
 
 func (f fakeResolver) KnowledgeGraph(context.Context, bool) (*knowledge.Graph, error) {
@@ -54,6 +57,10 @@ func (f fakeResolver) KnowledgeGraphWithSymbols(context.Context) (*knowledge.Gra
 
 func (f fakeResolver) SymbolGaps(context.Context) ([]types.KnowledgeSymbolGap, bool) {
 	return f.gaps, f.probed
+}
+
+func (f fakeResolver) Affected(context.Context, string) (*types.AffectedResult, error) {
+	return f.aff, f.affErr
 }
 
 func newService() *Service { return NewService(fakeResolver{g: fixture(), probed: true}) }
@@ -271,6 +278,49 @@ func TestEmptyRequestFieldsAreInvalidArgument(t *testing.T) {
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 	_, err = svc.FindDependents(ctx, connect.NewRequest(&graphv1.FindDependentsRequest{}))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+}
+
+func TestFindAffectedMapsProjectPathsToNodeIds(t *testing.T) {
+	svc := NewService(fakeResolver{probed: true, aff: &types.AffectedResult{
+		Base:     "main",
+		Changed:  []string{"console/src/a.ts", "console/src/b.ts"},
+		Affected: []string{"console", "docs"},
+	}})
+	resp, err := svc.FindAffected(context.Background(),
+		connect.NewRequest(&graphv1.FindAffectedRequest{}))
+	require.NoError(t, err)
+	assert.Equal(t, "main", resp.Msg.GetBase())
+	assert.Equal(t, int32(2), resp.Msg.GetChangedFiles())
+	assert.Equal(t, []string{"project:console", "project:docs"}, resp.Msg.GetIds())
+	assert.Empty(t, resp.Msg.GetFallback())
+}
+
+// A diff that reaches nothing and a diff that could not be computed are different answers, and
+// the view renders them differently - one says "nothing affected" and the other must not - so
+// the fallback has to survive as data rather than collapsing into an error code.
+func TestFindAffectedFallbackIsAnAnswerNotAnError(t *testing.T) {
+	svc := NewService(fakeResolver{probed: true,
+		affErr: fmt.Errorf("shallow clone: %w", types.ErrAffectedFallback)})
+	resp, err := svc.FindAffected(context.Background(),
+		connect.NewRequest(&graphv1.FindAffectedRequest{}))
+	require.NoError(t, err)
+	assert.Empty(t, resp.Msg.GetIds())
+	assert.Contains(t, resp.Msg.GetFallback(), "shallow clone")
+
+	empty := NewService(fakeResolver{probed: true, aff: &types.AffectedResult{Base: "main"}})
+	resp, err = empty.FindAffected(context.Background(),
+		connect.NewRequest(&graphv1.FindAffectedRequest{}))
+	require.NoError(t, err)
+	assert.Empty(t, resp.Msg.GetIds())
+	assert.Empty(t, resp.Msg.GetFallback())
+}
+
+func TestFindAffectedOtherErrorsAreInternal(t *testing.T) {
+	svc := NewService(fakeResolver{probed: true, affErr: errors.New("no workspace")})
+	_, err := svc.FindAffected(context.Background(),
+		connect.NewRequest(&graphv1.FindAffectedRequest{}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeInternal, connect.CodeOf(err))
 }
 
 func TestGraphResolutionFailureIsInternal(t *testing.T) {

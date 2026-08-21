@@ -83,6 +83,12 @@ service GraphService {
   // separate RPC rather than a field on NodeContext because a hub's list is long and an explain
   // card should not carry it.
   rpc FindDependents(FindDependentsRequest) returns (Dependents);
+  // FindAffected returns the projects a VCS diff reaches, as graph node ids, so a viewer can
+  // highlight what the working tree touches. `magus affected` over the wire.
+  //
+  // Read-only like the rest of the service, but the only verb here that reads the VCS rather
+  // than the graph, so it is the only one whose answer changes while the graph stands still.
+  rpc FindAffected(FindAffectedRequest) returns (Affected);
   // GetGraphStats returns where the workspace concentrates, neglects, and fragments.
   rpc GetGraphStats(GetGraphStatsRequest) returns (GraphStats);
 }
@@ -171,6 +177,24 @@ message FindDependentsRequest {
 message Dependents {
   string node = 1;         // the resolved node the walk started from
   repeated string ids = 2; // everything that transitively depends on it; empty is a real answer
+}
+
+message FindAffectedRequest {
+  // base is the VCS ref to diff against. Empty takes the workspace's configured base - the
+  // same resolution `magus affected` uses - so a caller with no opinion gets the one the repo
+  // already agreed on.
+  string base = 1;
+}
+
+// Affected is the reach of one VCS diff: which projects a change forces work in.
+message Affected {
+  string base = 1;          // the ref actually diffed against, after resolution
+  int32 changed_files = 2;  // how many paths the diff carried
+  repeated string ids = 3;  // project node ids in the transitive reverse closure, sorted
+  // fallback is why the answer is not definitive: a shallow clone, no VCS, an unreadable base.
+  // ids is empty whenever it is set, and the two are read together - an empty ids with no
+  // fallback means the diff genuinely reaches nothing, which is a real answer.
+  string fallback = 4;
 }
 
 message Path {

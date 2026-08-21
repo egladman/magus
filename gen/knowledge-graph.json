@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2373,
-  "edge_count": 6112,
+  "edge_count": 6113,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -32960,6 +32960,14 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/reference/api/graph/v1alpha1/graph.md"
+    },
+    {
+      "source": "doc:docs/reference/api/graph/v1alpha1/graph.md",
+      "target": "doc:docs/reference/manpage/magus-affected.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "docs/reference/api/graph/v1alpha1/graph.md"
     },
     {

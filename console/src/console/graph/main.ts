@@ -96,7 +96,8 @@ import { signal } from "../view";
 import { publishStatus } from "../status";
 
 // Runtime-only globals the monolith stashes on window: the live-mode "affected" id set that
-// the SSE handler writes for the view code to read, and the PWA File Handling API entry point.
+// refreshAffectedFromServer writes for the view code to read, and the PWA File Handling API
+// entry point.
 // LaunchQueue/LaunchParams are the minimal shape of the (not-yet-standard-typed) File Handling
 // API this code touches; a launched file arrives as a FileSystemFileHandle.
 interface LaunchParams {
@@ -2296,11 +2297,11 @@ function syncConditionalViews() {
 }
 
 // syncAffectedView shows the affected chip exactly while an affected set is available, and
-// retires the view if one goes away underneath it. No status producer populates
-// StatusOutput.Affected yet (see fetchLiveStatus), so today it never shows - hidden rather
-// than visible-and-disabled, which would be a control the user can see and never reach.
-// Called separately from syncConditionalViews because the live SSE path can change the set
-// without reloading the graph.
+// retires the view if one goes away underneath it. Hidden rather than visible-and-disabled: a
+// static page can never fill the set, and a control you can see and never reach is worse than
+// one that appears when it starts working.
+// Called separately from syncConditionalViews because the live path can change the set without
+// reloading the graph.
 function syncAffectedView() {
   const has = !!window._liveAffectedIds?.size;
   document.querySelectorAll<HTMLElement>("[data-view='affected']").forEach((btn) => {
@@ -2512,6 +2513,41 @@ let graphEpoch = 0;
 //
 // Same constraint as the traced path: ids the canvas was never sent cannot be lit up, so they are
 // reported rather than silently dropped from the count.
+// affectedFallback is why the last FindAffected could not answer definitively - a shallow clone,
+// no VCS. Kept because "no affected set" then has two causes the view must not conflate, and the
+// reason is the only thing that tells the reader which one they are looking at.
+let affectedFallback = "";
+
+// refreshAffectedFromServer asks the daemon which projects the working tree touches and stores
+// the answer for the affected view.
+//
+// Re-asked on every live graph load rather than fetched once: the diff moves with the tree, not
+// with the graph, so a cached set highlights what the tree looked like at connect time. Failure
+// is silent on purpose - the view is supplementary, and a red banner for it would talk over
+// whatever the reader was actually doing.
+async function refreshAffectedFromServer() {
+  const client = graphClient();
+  if (!client) return;
+  const epoch = graphEpoch;
+  try {
+    const res = await client.findAffected({}, rpcOptions());
+    if (epoch !== graphEpoch) return;
+    affectedFallback = res.fallback;
+    // Only ids this graph actually carries. The daemon answers about the workspace; the canvas
+    // may be showing a projection that collapsed some of those projects away, and highlighting
+    // an id with no node would count nodes the reader cannot see.
+    const present = res.ids.filter((id) => graph.byId.has(id));
+    window._liveAffectedIds = present.length ? new Set(present) : undefined;
+    syncAffectedView();
+    // Re-apply if the affected view is what the reader asked for. Both ways of asking can land
+    // before the diff comes back - a chip click, or a #view=affected link at boot - and
+    // activateView refuses the view while no set exists, so neither took effect the first time.
+    if (activeView === "affected" || hashParams().view === "affected") activateView("affected");
+  } catch {
+    /* network error; the chip keeps whatever it had */
+  }
+}
+
 async function refineBlastFromServer(nodeId: string, gen: number) {
   const client = graphClient();
   if (!client) return;
@@ -3195,6 +3231,10 @@ function updateHash() {
 function applyDeepLinks() {
   const params = hashParams();
   // Restore view state: #view=<id>&node=<id>[&to=<id>]
+  // "affected" is deliberately absent: its set arrives from the daemon after this runs, so
+  // activating it here would always hit activateView's "no diff" refusal and report a failure
+  // that is only a race. refreshAffectedFromServer re-reads the fragment and applies it once the
+  // set lands, which is the same link working a beat later rather than not at all.
   const validViews = ["blast", "trace", "critical", "hubs", "orphans", "cycles"];
   const view = params.view && validViews.includes(params.view) ? params.view : null;
   if (view) {
@@ -4077,12 +4117,16 @@ function askQuestion(view: string) {
     return;
   }
   if (view === "affected") {
-    // Affected view is wired separately in live mode; clicking here when not
-    // in live mode shows a hint instead of an empty view.
+    // The set comes from the daemon (refreshAffectedFromServer), so a static page has no way to
+    // fill it. Say WHICH of the two reasons applies: a VCS that could not produce a definitive
+    // diff is a different problem from having no daemon, and the old single message blamed live
+    // mode for both.
     const aff = window._liveAffectedIds;
     if (!aff || !aff.size) {
       setStatus(
-        "affected view: requires live mode (magus graph export --open --follow) with a computed diff.",
+        affectedFallback
+          ? "affected view: the workspace could not compute a diff: " + affectedFallback
+          : "affected view: requires live mode (magus graph export --open --follow) with a computed diff.",
         true,
       );
       return;
@@ -4950,13 +4994,11 @@ async function fetchLiveStatus() {
     // No pool strip on this surface. How many targets the daemon is running is SESSION state, not
     // anything about the graph on screen, and the dashboard is the surface that owns it. It sat
     // under the canvas restating a number this view cannot act on.
-    // Affected view (deferred): types.StatusOutput.Affected exists on the wire
-    // type but neither status producer (cmd/magus/status.go - no workspace/VCS
-    // context at that call site - or internal/webbridge/bridge.go) populates it
-    // yet, so status.pool.affected never arrives. Rather than ship client code
-    // that pretends to enable a view that can never actually receive data, the
-    // "affected" view button stays disabled (see the `disabled` attribute in
-    // graph.html) until a real Affected computation is wired server-side.
+    // The affected set does NOT come from here. types.StatusOutput.Affected is on the wire type
+    // but no status producer fills it, and `magus status` cannot: it reaches the daemon over the
+    // proc socket without opening a workspace, so there is no VCS context at that call site.
+    // GraphService.FindAffected answers from the daemon's loaded workspace instead - see
+    // refreshAffectedFromServer.
     publishLiveStatus();
   } catch {
     /* network error; badge stays */
@@ -5705,6 +5747,10 @@ async function bootLive() {
     applyLayoutAndSimulation(params.layout, graphFlavor);
     parkHiddenNodes();
     finishInteractiveSetup();
+
+    // Not awaited: the affected set decorates a view the reader has to open, so blocking the
+    // first paint on a VCS diff would trade the whole surface for a chip.
+    void refreshAffectedFromServer();
 
     // Connect SSE for live updates.
     liveConnect();

@@ -52,6 +52,9 @@ const (
 	// GraphServiceFindDependentsProcedure is the fully-qualified name of the GraphService's
 	// FindDependents RPC.
 	GraphServiceFindDependentsProcedure = "/magus.graph.v1alpha1.GraphService/FindDependents"
+	// GraphServiceFindAffectedProcedure is the fully-qualified name of the GraphService's FindAffected
+	// RPC.
+	GraphServiceFindAffectedProcedure = "/magus.graph.v1alpha1.GraphService/FindAffected"
 	// GraphServiceGetGraphStatsProcedure is the fully-qualified name of the GraphService's
 	// GetGraphStats RPC.
 	GraphServiceGetGraphStatsProcedure = "/magus.graph.v1alpha1.GraphService/GetGraphStats"
@@ -82,6 +85,12 @@ type GraphServiceClient interface {
 	// separate RPC rather than a field on NodeContext because a hub's list is long and an explain
 	// card should not carry it.
 	FindDependents(context.Context, *connect.Request[v1alpha1.FindDependentsRequest]) (*connect.Response[v1alpha1.Dependents], error)
+	// FindAffected returns the projects a VCS diff reaches, as graph node ids, so a viewer can
+	// highlight what the working tree touches. `magus affected` over the wire.
+	//
+	// Read-only like the rest of the service, but the only verb here that reads the VCS rather
+	// than the graph, so it is the only one whose answer changes while the graph stands still.
+	FindAffected(context.Context, *connect.Request[v1alpha1.FindAffectedRequest]) (*connect.Response[v1alpha1.Affected], error)
 	// GetGraphStats returns where the workspace concentrates, neglects, and fragments.
 	GetGraphStats(context.Context, *connect.Request[v1alpha1.GetGraphStatsRequest]) (*connect.Response[v1alpha1.GraphStats], error)
 }
@@ -127,6 +136,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("FindDependents")),
 			connect.WithClientOptions(opts...),
 		),
+		findAffected: connect.NewClient[v1alpha1.FindAffectedRequest, v1alpha1.Affected](
+			httpClient,
+			baseURL+GraphServiceFindAffectedProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("FindAffected")),
+			connect.WithClientOptions(opts...),
+		),
 		getGraphStats: connect.NewClient[v1alpha1.GetGraphStatsRequest, v1alpha1.GraphStats](
 			httpClient,
 			baseURL+GraphServiceGetGraphStatsProcedure,
@@ -143,6 +158,7 @@ type graphServiceClient struct {
 	explainNode    *connect.Client[v1alpha1.ExplainNodeRequest, v1alpha1.NodeContext]
 	findPath       *connect.Client[v1alpha1.FindPathRequest, v1alpha1.Path]
 	findDependents *connect.Client[v1alpha1.FindDependentsRequest, v1alpha1.Dependents]
+	findAffected   *connect.Client[v1alpha1.FindAffectedRequest, v1alpha1.Affected]
 	getGraphStats  *connect.Client[v1alpha1.GetGraphStatsRequest, v1alpha1.GraphStats]
 }
 
@@ -169,6 +185,11 @@ func (c *graphServiceClient) FindPath(ctx context.Context, req *connect.Request[
 // FindDependents calls magus.graph.v1alpha1.GraphService.FindDependents.
 func (c *graphServiceClient) FindDependents(ctx context.Context, req *connect.Request[v1alpha1.FindDependentsRequest]) (*connect.Response[v1alpha1.Dependents], error) {
 	return c.findDependents.CallUnary(ctx, req)
+}
+
+// FindAffected calls magus.graph.v1alpha1.GraphService.FindAffected.
+func (c *graphServiceClient) FindAffected(ctx context.Context, req *connect.Request[v1alpha1.FindAffectedRequest]) (*connect.Response[v1alpha1.Affected], error) {
+	return c.findAffected.CallUnary(ctx, req)
 }
 
 // GetGraphStats calls magus.graph.v1alpha1.GraphService.GetGraphStats.
@@ -201,6 +222,12 @@ type GraphServiceHandler interface {
 	// separate RPC rather than a field on NodeContext because a hub's list is long and an explain
 	// card should not carry it.
 	FindDependents(context.Context, *connect.Request[v1alpha1.FindDependentsRequest]) (*connect.Response[v1alpha1.Dependents], error)
+	// FindAffected returns the projects a VCS diff reaches, as graph node ids, so a viewer can
+	// highlight what the working tree touches. `magus affected` over the wire.
+	//
+	// Read-only like the rest of the service, but the only verb here that reads the VCS rather
+	// than the graph, so it is the only one whose answer changes while the graph stands still.
+	FindAffected(context.Context, *connect.Request[v1alpha1.FindAffectedRequest]) (*connect.Response[v1alpha1.Affected], error)
 	// GetGraphStats returns where the workspace concentrates, neglects, and fragments.
 	GetGraphStats(context.Context, *connect.Request[v1alpha1.GetGraphStatsRequest]) (*connect.Response[v1alpha1.GraphStats], error)
 }
@@ -242,6 +269,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("FindDependents")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceFindAffectedHandler := connect.NewUnaryHandler(
+		GraphServiceFindAffectedProcedure,
+		svc.FindAffected,
+		connect.WithSchema(graphServiceMethods.ByName("FindAffected")),
+		connect.WithHandlerOptions(opts...),
+	)
 	graphServiceGetGraphStatsHandler := connect.NewUnaryHandler(
 		GraphServiceGetGraphStatsProcedure,
 		svc.GetGraphStats,
@@ -260,6 +293,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceFindPathHandler.ServeHTTP(w, r)
 		case GraphServiceFindDependentsProcedure:
 			graphServiceFindDependentsHandler.ServeHTTP(w, r)
+		case GraphServiceFindAffectedProcedure:
+			graphServiceFindAffectedHandler.ServeHTTP(w, r)
 		case GraphServiceGetGraphStatsProcedure:
 			graphServiceGetGraphStatsHandler.ServeHTTP(w, r)
 		default:
@@ -289,6 +324,10 @@ func (UnimplementedGraphServiceHandler) FindPath(context.Context, *connect.Reque
 
 func (UnimplementedGraphServiceHandler) FindDependents(context.Context, *connect.Request[v1alpha1.FindDependentsRequest]) (*connect.Response[v1alpha1.Dependents], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.graph.v1alpha1.GraphService.FindDependents is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) FindAffected(context.Context, *connect.Request[v1alpha1.FindAffectedRequest]) (*connect.Response[v1alpha1.Affected], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.graph.v1alpha1.GraphService.FindAffected is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) GetGraphStats(context.Context, *connect.Request[v1alpha1.GetGraphStatsRequest]) (*connect.Response[v1alpha1.GraphStats], error) {
