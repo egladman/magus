@@ -380,8 +380,15 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
    would get squeezed hardest exactly when it is already tight. Below 48rem the tree stops
    being in flow at all (the overlay rule further down), so this only governs the docked
    case. */
+/* min-width: 0 is what makes the basis above binding. A flex item defaults to min-width:
+   auto, which floors it at its MIN-CONTENT width, and a long leaf label then overrides the
+   clamp entirely - the activity index's "magus_run_target 3m ago" leaves pushed this aside
+   to 580px inside a 1395px split. The run browser's leaves are short enough to stay under
+   the cap, so the same rule looked correct in one surface while it was broken in the
+   other. The tree scrolls, so the floor buys nothing. */
 .console-log-runs {
-  flex: 0 0 clamp(10rem, 24%, 15rem); display: flex; flex-direction: column; min-height: 0;
+  flex: 0 0 clamp(10rem, 24%, 15rem); display: flex; flex-direction: column;
+  min-height: 0; min-width: 0;
   border-right: 1px solid var(--pf-t--global--border--color--default);
   background: var(--pf-t--global--background--color--secondary--default);
 }
