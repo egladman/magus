@@ -60,13 +60,26 @@ function clamp(min: number, v: number, max: number): number {
 // label width, clamped to [CARD_MIN_W, CARD_MAX_W]. Call before layoutLayered/
 // layoutWaves so column spacing can account for card width.
 export function measureCards(ctx: CanvasRenderingContext2D, nodes: GNode[], font: string): void {
-  ctx.font = "500 12px " + font;
+  const spec = "500 12px " + font;
+  ctx.font = spec;
+  // A card's size is a pure function of its label and the font, but every layout switch re-runs
+  // this over the WHOLE graph - a few thousand measureText calls on a real workspace, for values
+  // that cannot have moved. Skip what is already measured. The font is the one input that
+  // invalidates a measurement (a theme switch changes it), so a different font re-measures all of
+  // them; a new graph brings unmeasured nodes and so needs no invalidation of its own.
+  const refont = spec !== measuredFont;
+  measuredFont = spec;
   for (const n of nodes) {
+    if (!refont && n.w != null) continue;
     const labelW = ctx.measureText(n.label).width;
     n.w = clamp(CARD_MIN_W, labelW + 2 * CARD_PAD_X, CARD_MAX_W);
     n.h = CARD_H;
   }
 }
+
+// The font the cached n.w measurements were taken with. Module-level because the cache lives on
+// the nodes themselves and this is the only thing that can invalidate it.
+let measuredFont = "";
 
 // ellipsize returns text unchanged when it already fits within maxW (given
 // ctx's current font); otherwise it grows a head/tail keep-window evenly from

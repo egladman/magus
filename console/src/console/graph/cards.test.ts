@@ -55,6 +55,27 @@ test("measureCards: a mid-length label sits strictly between MIN and MAX", () =>
   assert.equal(nodes[0].w, 140);
 });
 
+// The cache is keyed on nothing but "already measured", so the one input that can invalidate a
+// measurement has to force a re-measure: a theme switch hands a different font, and a card sized
+// for the old one clips its own label.
+test("measureCards: a font change re-measures an already-measured node", () => {
+  const nodes = [fakeNode("a", "a".repeat(20))];
+  measureCards(fakeCtx(), nodes, "sans");
+  assert.equal(nodes[0].w, 140);
+
+  // Same font, wider metric: the cached width stands, which is the skip doing its job.
+  const wide = {
+    font: "",
+    measureText: (s: string) => ({ width: s.length * 12 }),
+  } as unknown as CanvasRenderingContext2D;
+  measureCards(wide, nodes, "sans");
+  assert.equal(nodes[0].w, 140);
+
+  // Different font: everything is measured again, so the wider metric lands.
+  measureCards(wide, nodes, "serif");
+  assert.equal(nodes[0].w, CARD_MAX_W);
+});
+
 test("ellipsize: returns the original string when it already fits", () => {
   const ctx = fakeCtx();
   const text = "short";
