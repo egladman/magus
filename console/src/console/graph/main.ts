@@ -277,19 +277,15 @@ const LABEL_MIN_ZOOM = 1.6;
 // the moment the floor is crossed.
 const LABEL_MIN_NODE_PX = 8;
 
-// Cards render for the targets flavor in the DAG-shaped modes only; the knowledge
-// constellation keeps circles. Radial stays circles for targets too - rings are round, wide
-// cards don't fit.
+// Cards render in the DAG-shaped modes, either flavor: a named box beats a dot with the label
+// floating beside it, and both modes refuse above LAYERED_MAX so a card never has to survive the
+// full constellation. Radial stays circles - rings are round, wide cards do not fit.
 //
-// The flavor condition looks like it is about density, and it is not. draw() paints a card
-// only for a node carrying n.w, and measureCards stamps n.w on the LAID-OUT SUBSET - which in
-// the knowledge graph is the match set, not the graph. Turning cards on here therefore draws
-// the matches as rectangles and everything else as circles, on one canvas, with the shape
-// carrying no meaning; and n.w is sticky, so nodes keep their rectangle after the match set
-// moves on. A targets DAG lays out every node it has, so the split never surfaces there.
-// Making this flavor-blind needs measureCards to cover every node first.
-const cardsActive = () =>
-  graphFlavor === "targets" && (layoutMode === "layered" || layoutMode === "waves");
+// This is flavor-blind only because measureCards now covers EVERY node (see applyLayeredMode).
+// While it measured the laid-out subset, turning cards on here drew the match set as rectangles
+// and everything else as circles, which made the shape mean "is in the match set" and nothing
+// about the node.
+const cardsActive = () => layoutMode === "layered" || layoutMode === "waves";
 
 // isDagMode is true for the deterministic Sugiyama-family layouts (layered and
 // waves): the force sim stays stopped, edges route through dummy bend points,
@@ -679,7 +675,11 @@ function applyLayeredMode() {
     sim?.stop();
   }
   if (cardsActive()) {
-    measureCards(ctx, visNodes, (theme ?? readTheme()).font);
+    // Measure EVERY node, not just the laid-out subset. draw() paints a card only for a node
+    // carrying n.w, so measuring the subset makes the SHAPE mean "is in the match set" - matches
+    // as rectangles, everything else as circles, on one canvas - and n.w is sticky, so a node
+    // keeps its rectangle after the match set moves on. Card-or-dot is a property of the MODE.
+    measureCards(ctx, graph.nodes, (theme ?? readTheme()).font);
     layoutLayered(visNodes, graph.links, { colW: CARD_COL_W, rowH: 48 });
   } else {
     layoutLayered(visNodes, graph.links);
@@ -704,7 +704,7 @@ function applyWavesMode() {
     sim?.stop();
   }
   if (cardsActive()) {
-    measureCards(ctx, visNodes, (theme ?? readTheme()).font);
+    measureCards(ctx, graph.nodes, (theme ?? readTheme()).font); // see applyLayeredMode
     wavesMeta = layoutWaves(visNodes, graph.links, { colW: CARD_COL_W, rowH: 48 }).waves;
   } else {
     wavesMeta = layoutWaves(visNodes, graph.links).waves;
