@@ -853,10 +853,11 @@ function switchLayout(mode: LayoutMode) {
     unparkNodes();
     radialCenter = null;
     radialRings = null;
-    // Restore the FILTER's own matches rather than nulling: radial narrowed matchSet to its
-    // placed set, but the query box still reads what the operator typed, and a box that reads
-    // `kind:target` over an unfiltered graph is lying about the state.
-    matchSet = matchSetFor(query);
+    // Recompute rather than nulling: radial narrowed matchSet to its placed set, and every
+    // control that produced the PREVIOUS set is still showing - the query box reads what the
+    // operator typed, a view chip is still lit. Restoring only the query's matches left a lit
+    // blast chip over the query's nodes, which is the same lie one level down.
+    recomputeMatchSet();
   }
   layoutMode = mode;
   if (mode !== "waves") wavesMeta = null;
@@ -4669,14 +4670,18 @@ function applyPositions(newNodes: GNode[], prevPos: Map<string, NodePos>) {
   }
 }
 
-// recomputeLiveMatchSet recomputes matchSet (and, for the default projection,
+// recomputeMatchSet recomputes matchSet (and, for the default projection,
 // projectionSet) against the CURRENT graph for whatever activeView/focus/query/
 // projection state is already in effect. It mirrors the per-view logic in
 // activateView and the filter logic in applyQuery, but - unlike calling those
 // functions directly - does not touch activeView/query/projectionUnfolded/
-// layoutMode/search or refit the camera. Used by liveApplyGraphUpdate so a
-// live refresh reseeds data without resetting the user's current exploration.
-function recomputeLiveMatchSet() {
+// layoutMode/search or refit the camera.
+//
+// Two callers, and they want the same thing for different reasons: a live refresh reseeds data
+// without resetting the operator's exploration, and leaving radial gives back the set radial
+// narrowed. Both are "the controls did not move, recompute what they say" - which is why this is
+// one function rather than each site restoring the part of the state it happened to remember.
+function recomputeMatchSet() {
   if (activeView) {
     switch (activeView) {
       case "blast":
@@ -4778,11 +4783,11 @@ function liveApplyGraphUpdate(data: GraphPayload) {
   if (hoverId && !graph.byId.has(hoverId)) hoverId = null;
   if (focusId && !graph.byId.has(focusId)) focusId = null;
 
-  // graphHasDurations must reflect the NEW graph before recomputeLiveMatchSet
+  // graphHasDurations must reflect the NEW graph before recomputeMatchSet
   // runs, since a "critical" activeView calls criticalPath(), which now reads
   // that cached flag instead of re-probing durations itself.
   syncConditionalViews();
-  recomputeLiveMatchSet();
+  recomputeMatchSet();
   parkHiddenNodes(); // re-park if the default projection is still active
 
   renderLegend();
