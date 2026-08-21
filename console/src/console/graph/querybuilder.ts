@@ -5,6 +5,7 @@
 // query grammar and a view is a graph algorithm; no filter expresses "what breaks if I change this".
 
 import { h } from "../view";
+import { canDetach, detachPanel, type DetachHandle } from "../../lib/detach";
 
 export interface QueryBuilderDeps {
   // From the LOADED graph, so a picker never offers a value that matches nothing here.
@@ -237,6 +238,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
   let tab: "filter" | "view" = "filter";
   // The filter as it stood when the panel opened, so Reset can put it back after experimenting.
   let openedWith = "";
+  let detached: DetachHandle | null = null;
 
   const overlay = h("div", "console-graph-qb");
   overlay.hidden = true;
@@ -246,12 +248,49 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
   const box = h("div", "console-graph-qb__box");
   const head = h("div", "console-graph-qb__head");
   head.append(h("span", "console-graph-qb__title", "Ask the graph"));
+  // Detach puts the builder in its own window so it can sit beside the graph on another display -
+  // the panel is MOVED, so it keeps running and keeps driving this graph.
+  const detachBtn = h("button", "pf-v6-c-button pf-m-plain console-graph-qb__detach");
+  detachBtn.type = "button";
+  detachBtn.title = "Open in its own window";
+  detachBtn.setAttribute("aria-label", "Open the builder in its own window");
+  detachBtn.innerHTML =
+    '<span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" ' +
+    'stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" ' +
+    'aria-hidden="true"><path d="M15 3h6v6"/><path d="M10 14 21 3"/>' +
+    '<path d="M21 14v7H3V3h7"/></svg></span>';
+  detachBtn.hidden = !canDetach();
+  detachBtn.addEventListener("click", () => {
+    if (detached?.isOpen()) {
+      detached.close();
+      return;
+    }
+    // Not awaited before the call: both window APIs spend the click's user activation, and an await
+    // in between loses it.
+    void detachPanel(box, {
+      title: "Ask the graph",
+      width: 460,
+      height: 700,
+      onReturn: () => {
+        detached = null;
+      },
+    }).then((handle) => {
+      detached = handle;
+      // A browser can refuse both a PiP window and a popup. Saying so beats a button that looks
+      // broken - which is what this did until the refusal was observed.
+      if (!handle) {
+        detachBtn.title = "Your browser would not open a second window for this panel";
+        detachBtn.setAttribute("data-detach-failed", "");
+      }
+    });
+  });
+
   const closeBtn = h("button", "pf-v6-c-button pf-m-plain console-graph-qb__close");
   closeBtn.type = "button";
   closeBtn.setAttribute("aria-label", "Close the builder");
   closeBtn.append(h("span", "pf-v6-c-button__icon", "×"));
   closeBtn.addEventListener("click", () => close());
-  head.append(closeBtn);
+  head.append(detachBtn, closeBtn);
 
   // Tabs
   const tabs = h("div", "pf-v6-c-tabs console-graph-qb__tabs");
@@ -581,6 +620,9 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
   }
 
   function close(): void {
+    // Bring it home first. Hiding the host while the panel lives in another window would leave that
+    // window open with no way back to it.
+    detached?.close();
     overlay.hidden = true;
     deps.onClose?.();
   }

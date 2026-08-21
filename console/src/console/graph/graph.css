@@ -898,3 +898,5 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-qb__exquery { grid-column: 2; grid-row: 1; font-family: var(--pf-t--global--font--family--mono); font-size: 0.76rem; color: var(--console-accent); white-space: nowrap; }
 .console-graph-qb__exnote { grid-column: 1 / -1; font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }
 .console-graph-qb__caps { margin: 0 0 0.7rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--pf-t--global--border--color--default); font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }
+/* A detach that the browser refused: keep the control, mark it spent. */
+.console-graph-qb__detach[data-detach-failed] { opacity: 0.45; }

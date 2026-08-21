@@ -1918,3 +1918,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   color: var(--pf-t--global--text--color--regular); background: var(--pf-t--global--background--color--secondary--default);
 }
 .console-zoom :focus-visible { outline: 2px solid var(--console-accent); outline-offset: 1px; }
+
+/* A detached panel fills the window it was moved into. */
+[data-detached-host] { margin: 0; height: 100vh; display: flex; flex-direction: column; background: var(--pf-t--global--background--color--primary--default); }
+[data-detached-host] > * { flex: 1 1 auto; min-height: 0; }
+/* The gap the panel left behind, so a moved panel does not read as a closed one. */
+[data-detached-placeholder] { padding: 1rem 0.8rem; color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem; }
