@@ -620,6 +620,40 @@ func (g *Graph) resolveSymbol(ref string) (string, bool) {
 // blastRadius returns how many other nodes can reach id by walking edges in their
 // natural direction. It is unbounded (walks the whole reachable component); a
 // budget/cap for hub nodes on very large graphs is Phase 8 scale work.
+// Dependents returns every node that transitively DEPENDS ON id, as ids, nearest first.
+//
+// Deliberately narrower than blastRadius below, which is a different question wearing a similar
+// name: blastRadius counts everything that reaches a node by ANY relation, so a doc that
+// documents a spell is in it. This walks `depends_on` alone, which is what "what rebuilds if I
+// change this" means - and the two diverge hard. Nothing depends_on a spell (a target USES one),
+// so a spell's blastRadius is in the hundreds while its Dependents is empty, and both are
+// correct answers to their own question.
+//
+// Ids rather than a count, because the caller highlights them. Unbudgeted: the result is bounded
+// by the depends_on subgraph, which is the build DAG rather than the whole knowledge graph.
+func (g *Graph) Dependents(id string) []string {
+	g.ensureAdj()
+	if _, ok := g.node(id); !ok {
+		return nil
+	}
+	seen := map[string]bool{id: true}
+	out := []string{}
+	queue := []string{id}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		for _, e := range g.in[cur] { // predecessors: e.Source depends_on cur
+			if e.Relation != types.RelationDependsOn || seen[e.Source] {
+				continue
+			}
+			seen[e.Source] = true
+			out = append(out, e.Source)
+			queue = append(queue, e.Source)
+		}
+	}
+	return out
+}
+
 func (g *Graph) blastRadius(id string) int {
 	g.ensureAdj()
 	seen := map[string]bool{id: true}

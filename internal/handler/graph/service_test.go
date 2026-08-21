@@ -214,6 +214,40 @@ func TestResolveNodesRanksCandidates(t *testing.T) {
 	assert.Equal(t, "target:pkg/a:build", resp.Msg.GetMatches()[0].GetId())
 }
 
+func TestFindDependentsReturnsTheRebuildSet(t *testing.T) {
+	resp, err := newService().FindDependents(context.Background(),
+		connect.NewRequest(&graphv1.FindDependentsRequest{Name: "target:pkg/a:build"}))
+	require.NoError(t, err)
+	assert.Equal(t, "target:pkg/a:build", resp.Msg.GetNode())
+	assert.ElementsMatch(t, []string{"target:pkg/a:test"}, resp.Msg.GetIds())
+}
+
+// The distinction the verb exists for: a node reached only by non-depends_on edges has NO
+// dependents, however much of the graph points at it. Reporting blast_radius here instead would
+// claim things rebuild that do not.
+func TestFindDependentsIgnoresNonDependsOnEdges(t *testing.T) {
+	g := fixture()
+	g.AddNode(types.KnowledgeNode{ID: "spell:go", Kind: types.KindSpell, Label: "go"})
+	g.AddEdge(types.KnowledgeEdge{
+		Source: "target:pkg/a:build", Target: "spell:go", Relation: types.RelationUses,
+		Confidence: types.ConfidenceExtracted, Score: 1,
+	})
+	svc := NewService(fakeResolver{g: g, probed: true})
+	resp, err := svc.FindDependents(context.Background(),
+		connect.NewRequest(&graphv1.FindDependentsRequest{Name: "spell:go"}))
+	require.NoError(t, err)
+	assert.Empty(t, resp.Msg.GetIds(), "a spell is used, never depended on")
+}
+
+// An unresolvable name must not read as "nothing rebuilds" - that is the same shape as a real
+// answer and the caller cannot tell them apart.
+func TestFindDependentsUnresolvableIsNotFound(t *testing.T) {
+	_, err := newService().FindDependents(context.Background(),
+		connect.NewRequest(&graphv1.FindDependentsRequest{Name: "target:nope:nope"}))
+	require.Error(t, err)
+	assert.Equal(t, connect.CodeNotFound, connect.CodeOf(err))
+}
+
 func TestGetGraphStatsMapsCountsAndConnectivity(t *testing.T) {
 	resp, err := newService().GetGraphStats(context.Background(),
 		connect.NewRequest(&graphv1.GetGraphStatsRequest{}))
@@ -234,6 +268,8 @@ func TestEmptyRequestFieldsAreInvalidArgument(t *testing.T) {
 	_, err = svc.ExplainNode(ctx, connect.NewRequest(&graphv1.ExplainNodeRequest{}))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 	_, err = svc.FindPath(ctx, connect.NewRequest(&graphv1.FindPathRequest{From: "a"}))
+	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
+	_, err = svc.FindDependents(ctx, connect.NewRequest(&graphv1.FindDependentsRequest{}))
 	assert.Equal(t, connect.CodeInvalidArgument, connect.CodeOf(err))
 }
 

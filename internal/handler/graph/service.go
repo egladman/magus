@@ -165,6 +165,29 @@ func (s *Service) FindPath(
 	return connect.NewResponse(resp), nil
 }
 
+func (s *Service) FindDependents(
+	ctx context.Context, req *connect.Request[graphv1.FindDependentsRequest],
+) (*connect.Response[graphv1.Dependents], error) {
+	name := req.Msg.GetName()
+	if name == "" {
+		return nil, connect.NewError(connect.CodeInvalidArgument, errors.New("name is required"))
+	}
+	// The warm graph, always. depends_on edges never touch the @symbols shards, so loading them
+	// would cost the shard read and change nothing about the answer.
+	g, err := s.ws.KnowledgeGraph(ctx, false)
+	if err != nil {
+		return nil, connect.NewError(connect.CodeInternal, err)
+	}
+	// Resolve first: the caller may pass a reference rather than an id, and Dependents on an
+	// unknown id returns nil - which would report "nothing rebuilds" for a typo.
+	matches := g.Resolve(name, 1)
+	if len(matches) == 0 {
+		return nil, connect.NewError(connect.CodeNotFound, errors.New("no node matches "+name))
+	}
+	id := matches[0].ID
+	return connect.NewResponse(&graphv1.Dependents{Node: id, Ids: g.Dependents(id)}), nil
+}
+
 func (s *Service) GetGraphStats(
 	ctx context.Context, req *connect.Request[graphv1.GetGraphStatsRequest],
 ) (*connect.Response[graphv1.GraphStats], error) {

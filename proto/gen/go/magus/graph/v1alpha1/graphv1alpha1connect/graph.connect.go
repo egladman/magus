@@ -49,6 +49,9 @@ const (
 	GraphServiceExplainNodeProcedure = "/magus.graph.v1alpha1.GraphService/ExplainNode"
 	// GraphServiceFindPathProcedure is the fully-qualified name of the GraphService's FindPath RPC.
 	GraphServiceFindPathProcedure = "/magus.graph.v1alpha1.GraphService/FindPath"
+	// GraphServiceFindDependentsProcedure is the fully-qualified name of the GraphService's
+	// FindDependents RPC.
+	GraphServiceFindDependentsProcedure = "/magus.graph.v1alpha1.GraphService/FindDependents"
 	// GraphServiceGetGraphStatsProcedure is the fully-qualified name of the GraphService's
 	// GetGraphStats RPC.
 	GraphServiceGetGraphStatsProcedure = "/magus.graph.v1alpha1.GraphService/GetGraphStats"
@@ -69,6 +72,16 @@ type GraphServiceClient interface {
 	// FindPath returns the shortest chain between two nodes, edges walked in either direction.
 	// found=false is an answer, not an error; an endpoint that resolves to nothing is NOT_FOUND.
 	FindPath(context.Context, *connect.Request[v1alpha1.FindPathRequest]) (*connect.Response[v1alpha1.Path], error)
+	// FindDependents returns every node that transitively DEPENDS ON one, as ids - the answer to
+	// "what rebuilds if I change this".
+	//
+	// Deliberately not NodeContext.blast_radius, which is a different question wearing a similar
+	// name: that counts everything reaching a node by ANY relation. Nothing depends_on a spell (a
+	// target USES one), so a spell's blast_radius runs to the hundreds while its dependents are
+	// empty, and both are right. Ids rather than a count because the caller highlights them; a
+	// separate RPC rather than a field on NodeContext because a hub's list is long and an explain
+	// card should not carry it.
+	FindDependents(context.Context, *connect.Request[v1alpha1.FindDependentsRequest]) (*connect.Response[v1alpha1.Dependents], error)
 	// GetGraphStats returns where the workspace concentrates, neglects, and fragments.
 	GetGraphStats(context.Context, *connect.Request[v1alpha1.GetGraphStatsRequest]) (*connect.Response[v1alpha1.GraphStats], error)
 }
@@ -108,6 +121,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 			connect.WithSchema(graphServiceMethods.ByName("FindPath")),
 			connect.WithClientOptions(opts...),
 		),
+		findDependents: connect.NewClient[v1alpha1.FindDependentsRequest, v1alpha1.Dependents](
+			httpClient,
+			baseURL+GraphServiceFindDependentsProcedure,
+			connect.WithSchema(graphServiceMethods.ByName("FindDependents")),
+			connect.WithClientOptions(opts...),
+		),
 		getGraphStats: connect.NewClient[v1alpha1.GetGraphStatsRequest, v1alpha1.GraphStats](
 			httpClient,
 			baseURL+GraphServiceGetGraphStatsProcedure,
@@ -119,11 +138,12 @@ func NewGraphServiceClient(httpClient connect.HTTPClient, baseURL string, opts .
 
 // graphServiceClient implements GraphServiceClient.
 type graphServiceClient struct {
-	queryNodes    *connect.Client[v1alpha1.QueryNodesRequest, v1alpha1.QueryNodesResponse]
-	resolveNodes  *connect.Client[v1alpha1.ResolveNodesRequest, v1alpha1.ResolveNodesResponse]
-	explainNode   *connect.Client[v1alpha1.ExplainNodeRequest, v1alpha1.NodeContext]
-	findPath      *connect.Client[v1alpha1.FindPathRequest, v1alpha1.Path]
-	getGraphStats *connect.Client[v1alpha1.GetGraphStatsRequest, v1alpha1.GraphStats]
+	queryNodes     *connect.Client[v1alpha1.QueryNodesRequest, v1alpha1.QueryNodesResponse]
+	resolveNodes   *connect.Client[v1alpha1.ResolveNodesRequest, v1alpha1.ResolveNodesResponse]
+	explainNode    *connect.Client[v1alpha1.ExplainNodeRequest, v1alpha1.NodeContext]
+	findPath       *connect.Client[v1alpha1.FindPathRequest, v1alpha1.Path]
+	findDependents *connect.Client[v1alpha1.FindDependentsRequest, v1alpha1.Dependents]
+	getGraphStats  *connect.Client[v1alpha1.GetGraphStatsRequest, v1alpha1.GraphStats]
 }
 
 // QueryNodes calls magus.graph.v1alpha1.GraphService.QueryNodes.
@@ -146,6 +166,11 @@ func (c *graphServiceClient) FindPath(ctx context.Context, req *connect.Request[
 	return c.findPath.CallUnary(ctx, req)
 }
 
+// FindDependents calls magus.graph.v1alpha1.GraphService.FindDependents.
+func (c *graphServiceClient) FindDependents(ctx context.Context, req *connect.Request[v1alpha1.FindDependentsRequest]) (*connect.Response[v1alpha1.Dependents], error) {
+	return c.findDependents.CallUnary(ctx, req)
+}
+
 // GetGraphStats calls magus.graph.v1alpha1.GraphService.GetGraphStats.
 func (c *graphServiceClient) GetGraphStats(ctx context.Context, req *connect.Request[v1alpha1.GetGraphStatsRequest]) (*connect.Response[v1alpha1.GraphStats], error) {
 	return c.getGraphStats.CallUnary(ctx, req)
@@ -166,6 +191,16 @@ type GraphServiceHandler interface {
 	// FindPath returns the shortest chain between two nodes, edges walked in either direction.
 	// found=false is an answer, not an error; an endpoint that resolves to nothing is NOT_FOUND.
 	FindPath(context.Context, *connect.Request[v1alpha1.FindPathRequest]) (*connect.Response[v1alpha1.Path], error)
+	// FindDependents returns every node that transitively DEPENDS ON one, as ids - the answer to
+	// "what rebuilds if I change this".
+	//
+	// Deliberately not NodeContext.blast_radius, which is a different question wearing a similar
+	// name: that counts everything reaching a node by ANY relation. Nothing depends_on a spell (a
+	// target USES one), so a spell's blast_radius runs to the hundreds while its dependents are
+	// empty, and both are right. Ids rather than a count because the caller highlights them; a
+	// separate RPC rather than a field on NodeContext because a hub's list is long and an explain
+	// card should not carry it.
+	FindDependents(context.Context, *connect.Request[v1alpha1.FindDependentsRequest]) (*connect.Response[v1alpha1.Dependents], error)
 	// GetGraphStats returns where the workspace concentrates, neglects, and fragments.
 	GetGraphStats(context.Context, *connect.Request[v1alpha1.GetGraphStatsRequest]) (*connect.Response[v1alpha1.GraphStats], error)
 }
@@ -201,6 +236,12 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 		connect.WithSchema(graphServiceMethods.ByName("FindPath")),
 		connect.WithHandlerOptions(opts...),
 	)
+	graphServiceFindDependentsHandler := connect.NewUnaryHandler(
+		GraphServiceFindDependentsProcedure,
+		svc.FindDependents,
+		connect.WithSchema(graphServiceMethods.ByName("FindDependents")),
+		connect.WithHandlerOptions(opts...),
+	)
 	graphServiceGetGraphStatsHandler := connect.NewUnaryHandler(
 		GraphServiceGetGraphStatsProcedure,
 		svc.GetGraphStats,
@@ -217,6 +258,8 @@ func NewGraphServiceHandler(svc GraphServiceHandler, opts ...connect.HandlerOpti
 			graphServiceExplainNodeHandler.ServeHTTP(w, r)
 		case GraphServiceFindPathProcedure:
 			graphServiceFindPathHandler.ServeHTTP(w, r)
+		case GraphServiceFindDependentsProcedure:
+			graphServiceFindDependentsHandler.ServeHTTP(w, r)
 		case GraphServiceGetGraphStatsProcedure:
 			graphServiceGetGraphStatsHandler.ServeHTTP(w, r)
 		default:
@@ -242,6 +285,10 @@ func (UnimplementedGraphServiceHandler) ExplainNode(context.Context, *connect.Re
 
 func (UnimplementedGraphServiceHandler) FindPath(context.Context, *connect.Request[v1alpha1.FindPathRequest]) (*connect.Response[v1alpha1.Path], error) {
 	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.graph.v1alpha1.GraphService.FindPath is not implemented"))
+}
+
+func (UnimplementedGraphServiceHandler) FindDependents(context.Context, *connect.Request[v1alpha1.FindDependentsRequest]) (*connect.Response[v1alpha1.Dependents], error) {
+	return nil, connect.NewError(connect.CodeUnimplemented, errors.New("magus.graph.v1alpha1.GraphService.FindDependents is not implemented"))
 }
 
 func (UnimplementedGraphServiceHandler) GetGraphStats(context.Context, *connect.Request[v1alpha1.GetGraphStatsRequest]) (*connect.Response[v1alpha1.GraphStats], error) {

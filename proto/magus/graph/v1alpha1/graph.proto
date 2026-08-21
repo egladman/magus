@@ -73,6 +73,16 @@ service GraphService {
   // FindPath returns the shortest chain between two nodes, edges walked in either direction.
   // found=false is an answer, not an error; an endpoint that resolves to nothing is NOT_FOUND.
   rpc FindPath(FindPathRequest) returns (Path);
+  // FindDependents returns every node that transitively DEPENDS ON one, as ids - the answer to
+  // "what rebuilds if I change this".
+  //
+  // Deliberately not NodeContext.blast_radius, which is a different question wearing a similar
+  // name: that counts everything reaching a node by ANY relation. Nothing depends_on a spell (a
+  // target USES one), so a spell's blast_radius runs to the hundreds while its dependents are
+  // empty, and both are right. Ids rather than a count because the caller highlights them; a
+  // separate RPC rather than a field on NodeContext because a hub's list is long and an explain
+  // card should not carry it.
+  rpc FindDependents(FindDependentsRequest) returns (Dependents);
   // GetGraphStats returns where the workspace concentrates, neglects, and fragments.
   rpc GetGraphStats(GetGraphStatsRequest) returns (GraphStats);
 }
@@ -122,6 +132,10 @@ message ExplainNodeRequest {
 
 message NodeContext {
   Node node = 1;
+  // How many nodes transitively REACH this one, by ANY relation. A reach measure - read it as
+  // "how connected is this", not as "what breaks if I change it". Those diverge: nothing
+  // depends_on a spell, so a spell scores in the hundreds here and has no dependents at all.
+  // FindDependents answers the rebuild question; do not substitute this for it.
   int32 blast_radius = 2;
   repeated EdgeRef out = 3;
   repeated EdgeRef in = 4;
@@ -146,6 +160,17 @@ enum EdgeDirection {
 message FindPathRequest {
   string from = 1;
   string to = 2;
+}
+
+message FindDependentsRequest {
+  string name = 1;  // a node id, or any reference ResolveNodes accepts
+}
+
+// Dependents is the transitive depends_on fan-in of one node. Ids only: a caller that wants a
+// label already has the node, or can ask ExplainNode for the one it cares about.
+message Dependents {
+  string node = 1;         // the resolved node the walk started from
+  repeated string ids = 2; // everything that transitively depends on it; empty is a real answer
 }
 
 message Path {
