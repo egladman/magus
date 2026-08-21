@@ -37,14 +37,14 @@ describe("the launcher's live reading", () => {
   // The failure this guards: an old daemon that does not serve the route, or one dropped request,
   // rendering as a quiet idle machine. "No answer" and "nothing running" are different facts.
   test("no answer hides the row rather than reporting zero", () => {
-    syncLauncherPulse(root, { running: 3, queued: 0, workspaces: [] });
+    syncLauncherPulse(root, { running: 3, queued: 0, workspaces: [], cache: null });
     assert.equal(row().hidden, false);
     syncLauncherPulse(root, null);
     assert.equal(row().hidden, true, "a lost answer must not read as an idle daemon");
   });
 
   test("a busy daemon says what it is doing", () => {
-    syncLauncherPulse(root, { running: 5, queued: 2, workspaces: ["/a", "/b"] });
+    syncLauncherPulse(root, { running: 5, queued: 2, workspaces: ["/a", "/b"], cache: null });
     assert.equal(row().hidden, false);
     assert.match(text(), /5 targets running/);
     assert.match(text(), /2 queued/);
@@ -52,7 +52,7 @@ describe("the launcher's live reading", () => {
   });
 
   test("one of a thing is not 1 things", () => {
-    syncLauncherPulse(root, { running: 1, queued: 1, workspaces: ["/a"] });
+    syncLauncherPulse(root, { running: 1, queued: 1, workspaces: ["/a"], cache: null });
     assert.match(text(), /1 target running/);
     assert.match(text(), /1 queued\b/);
     assert.match(text(), /1 workspace loaded/);
@@ -61,7 +61,7 @@ describe("the launcher's live reading", () => {
   // Idle is a real measurement and a connected daemon saying "nothing running" is informative - it is
   // the ABSENT reading above that has to stay silent, not this one.
   test("an idle daemon still reports", () => {
-    syncLauncherPulse(root, { running: 0, queued: 0, workspaces: ["/a"] });
+    syncLauncherPulse(root, { running: 0, queued: 0, workspaces: ["/a"], cache: null });
     assert.equal(row().hidden, false);
     assert.match(text(), /Nothing running/);
   });
@@ -70,12 +70,12 @@ describe("the launcher's live reading", () => {
   // never the reader's. The dashboard hero carries the same qualifier; this is the screen where
   // dropping it would most look like a personal number.
   test("the counts name whose they are", () => {
-    syncLauncherPulse(root, { running: 4, queued: 0, workspaces: ["/a", "/b"] });
+    syncLauncherPulse(root, { running: 4, queued: 0, workspaces: ["/a", "/b"], cache: null });
     assert.match(text(), /daemon-wide/);
   });
 
   test("the reading offers a way in", () => {
-    syncLauncherPulse(root, { running: 4, queued: 0, workspaces: [] });
+    syncLauncherPulse(root, { running: 4, queued: 0, workspaces: [], cache: null });
     const btn = row().querySelector<HTMLButtonElement>("button");
     assert.ok(btn);
     btn.click();

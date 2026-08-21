@@ -12,8 +12,13 @@ beforeEach(() => resetRoutelessHosts());
 const HOST = "127.0.0.1:7391";
 
 test("a pool reading passes straight through", async () => {
-  const got = await fetchPulse(HOST, async () => ({ running: 2, queued: 1, workspaces: [] }));
-  assert.deepEqual(got, { running: 2, queued: 1, workspaces: [] });
+  const got = await fetchPulse(HOST, async () => ({
+    running: 2,
+    queued: 1,
+    workspaces: [],
+    cache: null,
+  }));
+  assert.deepEqual(got, { running: 2, queued: 1, workspaces: [], cache: null });
 });
 
 // Verified against a real v0.2.0 daemon, which 404s the route entirely: GetStatus is newer than the
@@ -44,11 +49,12 @@ test("an outage keeps being retried", async () => {
 
   // And it recovers: the earlier failures left nothing behind that blocks a later good answer.
   assert.deepEqual(
-    await fetchPulse(HOST, async () => ({ running: 1, queued: 0, workspaces: [] })),
+    await fetchPulse(HOST, async () => ({ running: 1, queued: 0, workspaces: [], cache: null })),
     {
       running: 1,
       queued: 0,
       workspaces: [],
+      cache: null,
     },
   );
 });
@@ -68,11 +74,12 @@ test("an auth failure keeps being retried", async () => {
 
   // And it recovers the moment the token works.
   assert.deepEqual(
-    await fetchPulse(HOST, async () => ({ running: 3, queued: 0, workspaces: [] })),
+    await fetchPulse(HOST, async () => ({ running: 3, queued: 0, workspaces: [], cache: null })),
     {
       running: 3,
       queued: 0,
       workspaces: [],
+      cache: null,
     },
   );
 });
@@ -126,15 +133,16 @@ test("the latch does not spread to another daemon", async () => {
     running: 4,
     queued: 0,
     workspaces: [],
+    cache: null,
   }));
-  assert.deepEqual(other, { running: 4, queued: 0, workspaces: [] });
+  assert.deepEqual(other, { running: 4, queued: 0, workspaces: [], cache: null });
 });
 
 test("no host is no request", async () => {
   let calls = 0;
   await fetchPulse("", async () => {
     calls++;
-    return { running: 1, queued: 0, workspaces: [] };
+    return { running: 1, queued: 0, workspaces: [], cache: null };
   });
   assert.equal(calls, 0);
 });

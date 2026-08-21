@@ -21,6 +21,13 @@ export interface PulseView {
   // this - it rides the reading that is already being fetched rather than a second call, and it is
   // the only place the shell learns that more than one workspace exists at all.
   workspaces: string[];
+  // Aggregate cache activity across the warm workspaces, or null when the daemon reported none.
+  //
+  // COUNTS ONLY, deliberately. Cache carries hits/misses/errors/size and NO duration, so "time saved"
+  // is not on this wire - deriving it would mean inventing an average for work that never ran, which
+  // is a fabricated number on the most-read screen in the app. What is measured is how much was
+  // served from cache, and that is what gets shown.
+  cache: { hits: number; misses: number } | null;
 }
 
 // Hosts whose daemon has no GetStatus route, by host. The route is newer than the shipped releases (a
@@ -53,10 +60,12 @@ async function getPool(host: string): Promise<PulseView | null> {
   const resp = await client.getStatus({}, { signal: AbortSignal.timeout(TIMEOUT_MS) });
   const pool = resp.status?.pool;
   if (!pool) return null;
+  const c = pool.cache;
   return {
     running: pool.running,
     queued: pool.queued,
     workspaces: pool.workspaces.map((w) => w.root).filter((r) => r !== ""),
+    cache: c ? { hits: Number(c.hits), misses: Number(c.misses) } : null,
   };
 }
 

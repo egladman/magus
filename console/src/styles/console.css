@@ -1052,6 +1052,22 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 @media (width < 48rem) {
   .console-shell-scope__caption { display: none; }
 }
+/* The workspace's sigil, above the heading. Tinted by the inline colour sigil.ts sets, so the mark
+   takes the workspace's hue the way every launcher card takes its surface's. */
+[data-launcher-sigil] { display: block; margin-block-end: 0.6rem; line-height: 0; }
+[data-launcher-sigil][hidden] { display: none; }
+
+/* The welcome screen's live reading, under the tagline. A LINE, not a card: as a card it wrapped the
+   ways row and gave a reading the loudest button on the screen. The count leads, the detail follows
+   quietly, and the way in is a link rather than a primary - you are being told something, and offered
+   somewhere to go with it. */
+[data-launcher-live] {
+  margin-block: 0.35rem 0; font-size: 0.86rem;
+  color: var(--pf-t--global--text--color--subtle);
+}
+[data-launcher-live][hidden] { display: none; }
+[data-launcher-live-label] { color: var(--pf-t--global--text--color--regular); }
+
 /* Marks a row as NOT REAL: the demo's roots are spelled like checkouts (~/Repos/acme), so without
    this the menu presents fabricated workspaces as though a daemon had loaded them. Also tags the demo
    action itself before you are in it. Subtle, because it is a qualifier on the name beside it rather

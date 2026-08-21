@@ -10,6 +10,8 @@
 // strand you in a window you did not ask for.
 import { openSurfaceWindow } from "../lib/appwindow";
 import type { PulseView } from "./pulse";
+import { sigilHue, sigilSvg } from "./sigil";
+import { workspaceScope } from "../lib/scope";
 
 // A surface the launcher can open: the pageId the console registered it under, and a human label.
 export interface Launchable {
@@ -261,8 +263,32 @@ export function syncLauncherPulse(root: HTMLElement, p: PulseView | null): void 
       p.workspaces.length === 1 ? "1 workspace loaded" : p.workspaces.length + " workspaces loaded",
     );
   }
+  // What the cache actually did, in the units the wire actually carries. NOT "time saved": Cache
+  // reports hits/misses/errors/size and no duration, so a saved-minutes figure would be an invented
+  // average for work that never ran - a fabricated number on the most-read screen in the app.
+  const c = p.cache;
+  if (c && c.hits + c.misses > 0) {
+    parts.push(Math.round((c.hits / (c.hits + c.misses)) * 100) + "% served from cache");
+  }
   parts.push("Counts are daemon-wide.");
   hint.textContent = parts.join(". ");
+
+  paintSigil(root, p);
+}
+
+// paintSigil draws the mark for whichever workspace this window is answering for. Scope first,
+// because that is the one the reader chose; otherwise the only loaded workspace. With several loaded
+// and none picked there is no mark - drawing an arbitrary one of them would be a claim about which
+// workspace you are looking at.
+function paintSigil(root: HTMLElement, p: PulseView): void {
+  const el = root.querySelector<HTMLElement>("[data-launcher-sigil]");
+  if (!el) return;
+  const seed = workspaceScope() || (p.workspaces.length === 1 ? p.workspaces[0] : "");
+  el.hidden = seed === "";
+  if (!seed) return;
+  el.innerHTML = sigilSvg(seed, 30);
+  el.style.color = "var(" + sigilHue(seed) + ")";
+  el.title = seed;
 }
 
 // syncLauncherChord names the palette's CURRENT key in the zero-tab hint. Called by the shell every
@@ -282,6 +308,13 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   // on rides on each card, and the whole card is the keyboard-reachable target (tabindex + Enter/Space).
   const root = document.createElement("div");
   root.dataset.surface = "home";
+
+  // The workspace's SIGIL (sigil.ts): one unique mark per workspace, derived from its root, so this
+  // console looks like YOURS and a sibling worktree looks like itself. Fixed - an identifier that
+  // changes is not one. Decorative and aria-hidden; the workspace already has a name in text.
+  const sigil = document.createElement("span");
+  sigil.setAttribute("data-launcher-sigil", "");
+  sigil.hidden = true;
 
   const title = document.createElement("h1");
   title.textContent = launcherTitle();
@@ -437,28 +470,35 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   ways.className = "pf-v6-c-empty-state__actions";
   ways.setAttribute("data-empty-ways", "");
 
-  // The LIVE row, first, so a connected console leads with what is happening rather than with two
-  // sentences about how to get started. Hidden until a pulse arrives, which on a cold visit is never -
-  // that visit gets the teaching rows below and nothing that looks broken.
-  const liveWay = document.createElement("div");
-  liveWay.setAttribute("data-empty-way", "");
-  liveWay.setAttribute("data-launcher-live", "");
-  liveWay.hidden = true;
-  const liveLabel = document.createElement("span");
-  liveLabel.setAttribute("data-empty-way-label", "");
+  // The live reading lives in the HEADER, not among the ways. As a third card it wrapped the row to two
+  // lines and put a full-width primary button under a READING - the loudest control on the screen
+  // belonged to the thing you look at rather than the thing you do. Up here it makes the top of the
+  // page move without adding anything to choose between.
+  //
+  // Hidden until a pulse arrives, which on a cold visit is never; that visit gets the ways below and
+  // nothing that looks half-loaded.
+  const live = document.createElement("p");
+  live.setAttribute("data-launcher-live", "");
+  live.hidden = true;
+  const liveLabel = document.createElement("strong");
   liveLabel.setAttribute("data-launcher-live-label", "");
+  const liveHint = document.createElement("span");
+  liveHint.setAttribute("data-launcher-live-hint", "");
   const liveBtn = document.createElement("button");
   liveBtn.type = "button";
-  liveBtn.className = "pf-v6-c-button pf-m-primary";
+  liveBtn.className = "pf-v6-c-button pf-m-link pf-m-inline";
   const liveBtnText = document.createElement("span");
   liveBtnText.className = "pf-v6-c-button__text";
   liveBtnText.textContent = "Open the dashboard";
   liveBtn.append(liveBtnText);
   liveBtn.addEventListener("click", () => open("dashboard"));
-  const liveHint = document.createElement("span");
-  liveHint.setAttribute("data-empty-hint", "");
-  liveHint.setAttribute("data-launcher-live-hint", "");
-  liveWay.append(liveLabel, liveBtn, liveHint);
+  live.append(
+    liveLabel,
+    document.createTextNode(" "),
+    liveHint,
+    document.createTextNode(" "),
+    liveBtn,
+  );
 
   const pickWay = document.createElement("div");
   pickWay.setAttribute("data-empty-way", "");
@@ -488,8 +528,8 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   demoHint.textContent = "Pick Demo data from the Workspace menu. Sample data, no daemon needed.";
   demoWay.append(demoLabel, demoHint);
 
-  ways.append(liveWay, pickWay, demoWay);
+  ways.append(pickWay, demoWay);
 
-  root.append(title, sub, ways, gallery);
+  root.append(sigil, title, sub, live, ways, gallery);
   return root;
 }
