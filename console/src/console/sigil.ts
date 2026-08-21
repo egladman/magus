@@ -1,22 +1,26 @@
-// sigil.ts - one unique, mathematically generated mark per workspace.
+// sigil.ts - one mark per workspace, built on rotational symmetry.
 //
-// The identicon idea, in this product's own idiom. A GitHub identicon is a grid of coloured squares
-// and would read as GitHub's; a SIGIL is a bounding circle, a figure inscribed by joining points on
-// it, and runes cut around the rim. Same job - you recognise your own at a glance and never had to
-// name it - drawn in a vocabulary this app already speaks.
+// WHY SYMMETRY. An earlier version traced a name across a planetary magic square, which is the
+// historical way sigils are made. It looked like scribble, and the reason is mathematical rather than
+// a matter of taste: a magic square is CONSTRUCTED so that consecutive numbers land in unrelated
+// cells - that scattering is what makes the rows sum equally - so the resulting path has no spatial
+// logic by design. The eye reads an asymmetric scatter as noise and a symmetric figure as intentional,
+// which is why every identicon that looks designed is built on mirror or rotational symmetry.
 //
-// PURE and DETERMINISTIC. The same root yields the same mark forever, on every machine, with nothing
-// persisted anywhere. That is the whole trick: a workspace's identity falls out of its path, so two
-// worktrees of one repo are visibly different and neither had to be configured.
+// So: generate ONE small motif from the hash, then repeat it k times around the centre. Symmetry does
+// the aesthetic work, and it cannot come out ugly; the motif carries the entropy.
 //
-// It does not change over time and nothing feeds it. An earlier version grew with cache hits; the
-// mark is an IDENTIFIER, and an identifier that changes is not one.
+// The motif begins and ends on the two edges of its wedge AT THE SAME RADIUS, so the rotated copies
+// join end to end into a single closed curve rather than sitting apart as k separate spokes. That one
+// constraint is the difference between a flower and a pinwheel of unrelated marks.
 //
-// Static by construction, with no animation - the house rule is that anything arriving on screen does
-// so through a transition, because a background tab does not advance keyframes.
+// NOT REVERSIBLE, deliberately. Recovering a path from a picture would mean a screenshot leaking
+// `/Users/<someone>/Repos/<unreleased-thing>`. What is wanted is that two marks rarely repeat, and
+// that comes from the size of the visual space - see assignSigils for the part that makes it a
+// guarantee rather than a probability.
 
-// FNV-1a, 32-bit: short, well-known, and stable across engines - a mark must not change because a
-// browser changed its hashing. Not a security function and never used as one.
+// FNV-1a, 32-bit: short, well-known, stable across engines - a mark must not change because a browser
+// changed its hashing. Not a security function and never used as one.
 function hash(seed: string): number {
   let h = 0x811c9dc5;
   for (let i = 0; i < seed.length; i++) {
@@ -51,102 +55,135 @@ export const SIGIL_HUES = [
   "--console-indigo",
 ] as const;
 
-export function sigilHue(root: string): string {
-  return SIGIL_HUES[hash(root) % SIGIL_HUES.length];
+// A point in the wedge, in polar form: t is the fraction across the wedge, r the fraction of the
+// radius.
+type Pt = { t: number; r: number };
+
+export interface SigilSpec {
+  folds: number; // how many times the motif repeats around the centre
+  mirror: boolean; // reflect within each wedge, for dihedral rather than plain rotational symmetry
+  edge: number; // the radius where one wedge hands over to the next
+  motif: Pt[];
+  core: 0 | 1 | 2; // nothing, a dot, or an inner ring
+  ring: boolean; // the enclosing circle
+  hue: string;
 }
 
-function gcd(a: number, b: number): number {
-  return b === 0 ? a : gcd(b, a % b);
-}
+// Three to eight folds. Two reads as a leaf rather than a figure; past eight the wedges are too narrow
+// for the motif to show at the size this renders at.
+const FOLDS = [3, 4, 5, 6, 7, 8];
 
-// sigilFigure resolves the two numbers that decide the shape: how many points sit on the rim, and the
-// stride the line takes between them. Exported because the FIGURE is the mark - it is the thing worth
-// pinning in a test.
-//
-// The stride must be coprime with the count so the line reaches every vertex before closing, AND
-// strictly inside [2, points-2] so the result is a STAR. A stride of 1 draws the regular polygon and
-// points-1 draws it backwards; both are coprime, and both rendered a twelve-pointed sigil as a plain
-// ring with no figure inside it at all.
-// Five to twelve points, MINUS SIX. Below five there is no star to inscribe, and past twelve the lines
-// crowd into a disc where two marks stop being tellable apart. Six is excluded because it has no
-// single-path star at all: every stride in [2, 4] shares a factor with 6, which is why a hexagram is
-// drawn as two separate triangles. Listing the workable counts beats searching for one and hoping.
-const POINT_CHOICES = [5, 7, 8, 9, 10, 11, 12] as const;
-
-export function sigilFigure(root: string): { points: number; step: number } {
-  const next = stepper(hash(root));
-  const points = POINT_CHOICES[next() % POINT_CHOICES.length];
-  // Enumerate rather than search: every stride that both reaches all points and skips at least one.
-  const strides: number[] = [];
-  for (let k = 2; k <= points - 2; k++) if (gcd(k, points) === 1) strides.push(k);
-  return { points, step: strides[next() % strides.length] };
-}
-
-// sigilSvg draws the mark. `size` is the viewBox edge; the caller sizes it in CSS.
-export function sigilSvg(root: string, size = 28): string {
-  const { points, step } = sigilFigure(root);
-  const next = stepper(hash(root) ^ 0x9e3779b9);
-  const c = size / 2;
-  const r = size / 2 - 4;
-  const at = (i: number, radius: number): [number, number] => {
-    // Twelve o'clock, not three: the mark reads upright, so one that happens to be symmetric looks
-    // deliberate rather than tilted.
-    const a = (i / points) * Math.PI * 2 - Math.PI / 2;
-    return [c + radius * Math.cos(a), c + radius * Math.sin(a)];
+export function sigilSpec(seed: string): SigilSpec {
+  const next = stepper(hash(seed));
+  const pick = (n: number): number => next() % n;
+  const folds = FOLDS[pick(FOLDS.length)];
+  // Quantized rather than continuous: a motif that can land anywhere produces near-identical marks
+  // that differ by a pixel, which is worse than a smaller set of clearly distinct ones.
+  const edge = 0.42 + pick(4) * 0.12;
+  const count = 2 + pick(3);
+  const motif: Pt[] = [];
+  for (let i = 0; i < count; i++) {
+    motif.push({ t: (1 + pick(7)) / 8, r: 0.25 + pick(7) * 0.11 });
+  }
+  // Force one point to stand clear of the hand-over radius. Without this, a seed whose motif happens
+  // to sit near `edge` throughout draws a plain regular polygon - technically a valid mark and a
+  // completely forgettable one. `magus` came out as a bare heptagon. The reach alternates in and out
+  // by seed, so the correction produces both stars and flowers rather than one house shape.
+  const REACH = 0.3;
+  if (!motif.some((q) => Math.abs(q.r - edge) >= REACH)) {
+    const i = pick(motif.length);
+    const out = edge < 0.6 ? edge + REACH : edge - REACH;
+    motif[i] = { t: motif[i].t, r: Math.max(0.12, Math.min(0.98, out)) };
+  }
+  return {
+    folds,
+    mirror: pick(2) === 0,
+    edge,
+    motif,
+    core: pick(3) as 0 | 1 | 2,
+    ring: pick(4) > 0,
+    hue: SIGIL_HUES[pick(SIGIL_HUES.length)],
   };
-  const order: number[] = [];
-  for (let i = 0; i < points; i++) order.push((i * step) % points);
-  const d = order
-    .map(
-      (v, i) =>
-        (i === 0 ? "M" : "L") +
-        at(v, r)
-          .map((q) => q.toFixed(2))
-          .join(" "),
-    )
-    .join("");
+}
 
-  const parts = [
-    '<circle cx="' + c + '" cy="' + c + '" r="' + r + '" opacity="0.3"/>',
-    '<path d="' + d + 'Z"/>',
+// specKey is the VISUAL identity of a spec - two workspaces whose specs share a key draw the same
+// picture. Collision resolution keys on this rather than on the seed, because the seed differing is
+// not the point; the picture differing is.
+export function specKey(s: SigilSpec): string {
+  return [
+    s.folds,
+    s.mirror ? "m" : "-",
+    s.edge.toFixed(2),
+    s.core,
+    s.ring ? "r" : "-",
+    s.hue,
+    s.motif.map((p) => p.t.toFixed(2) + ":" + p.r.toFixed(2)).join(","),
+  ].join("|");
+}
+
+// assignSigils turns the workspaces a daemon has loaded into marks that are DISTINCT FROM EACH OTHER.
+//
+// Uniqueness cannot be guaranteed against arbitrary inputs - finitely many pictures, unboundedly many
+// paths, pigeonhole. It can be guaranteed across a KNOWN SET, which is the only place a collision
+// would ever be noticed: if two roots would draw the same picture, the later one is re-seeded until it
+// does not. Sorted first, so which one moves does not depend on the order the daemon happened to list
+// them, and the result is stable across reloads with nothing stored.
+export function assignSigils(roots: readonly string[]): Map<string, SigilSpec> {
+  const out = new Map<string, SigilSpec>();
+  const taken = new Set<string>();
+  for (const root of [...roots].sort()) {
+    let spec = sigilSpec(root);
+    for (let salt = 1; taken.has(specKey(spec)) && salt < 64; salt++) {
+      spec = sigilSpec(root + "#" + salt);
+    }
+    taken.add(specKey(spec));
+    out.set(root, spec);
+  }
+  return out;
+}
+
+// renderSigil draws a spec. `size` is the viewBox edge; the caller sizes it in CSS.
+export function renderSigil(spec: SigilSpec, size = 44): string {
+  const c = size / 2;
+  const rad = size / 2 - 2;
+  const wedge = (Math.PI * 2) / spec.folds;
+  const at = (t: number, r: number, turn: number): [number, number] => {
+    // From twelve o'clock, so a figure that happens to be symmetric about the vertical reads upright.
+    const a = -Math.PI / 2 + turn * wedge + t * wedge;
+    return [c + rad * r * Math.cos(a), c + rad * r * Math.sin(a)];
+  };
+  // The wedge's own run: hand-over point, the motif, then the next hand-over point. Mirroring appends
+  // the motif reflected about the wedge's bisector, which turns rotational symmetry into dihedral.
+  const inWedge: Pt[] = [
+    { t: 0, r: spec.edge },
+    ...spec.motif,
+    ...(spec.mirror ? [...spec.motif].reverse().map((p) => ({ t: 1 - p.t, r: p.r })) : []),
   ];
-  // A CORE, chosen from four. Point count and hue alone were not enough separation: with seven counts
-  // and eight hues, three of a dozen real workspaces came out as blue-ish pentagrams that no one would
-  // tell apart at a glance. This is the cheapest axis that reads instantly - it sits at the centre,
-  // where the eye already is - and it multiplies the distinguishable space fourfold.
-  const core = next() % 4;
-  if (core === 1) {
-    parts.push('<circle cx="' + c + '" cy="' + c + '" r="2" fill="currentColor" stroke="none"/>');
-  } else if (core === 2) {
-    parts.push('<circle cx="' + c + '" cy="' + c + '" r="' + (r * 0.32).toFixed(2) + '"/>');
-  } else if (core === 3) {
-    // A small counter-rotated triangle: reads as a different KIND of mark rather than a smaller one.
-    const t = [0, 1, 2].map((k) => {
-      const a = (k / 3) * Math.PI * 2 + Math.PI / 2;
-      return [c + r * 0.34 * Math.cos(a), c + r * 0.34 * Math.sin(a)];
-    });
-    parts.push(
-      '<path d="M' + t.map((q) => q.map((v) => v.toFixed(2)).join(" ")).join("L") + 'Z"/>',
+  const d: string[] = [];
+  for (let k = 0; k < spec.folds; k++) {
+    for (let i = 0; i < inWedge.length; i++) {
+      const [x, y] = at(inWedge[i].t, inWedge[i].r, k);
+      d.push((k === 0 && i === 0 ? "M" : "L") + x.toFixed(2) + " " + y.toFixed(2));
+    }
+  }
+  const parts = ['<path d="' + d.join("") + 'Z"/>'];
+  if (spec.ring) {
+    parts.unshift(
+      '<circle cx="' + c + '" cy="' + c + '" r="' + rad.toFixed(2) + '" opacity="0.22"/>',
     );
   }
-  // Two or three runes on the rim, so two sigils that happen to share a figure still differ. Seeded
-  // from a different stream than the figure, so the two do not move together.
-  const runes = 2 + (next() % 2);
-  for (let i = 0; i < runes; i++) {
-    const a = ((next() % points) / points) * Math.PI * 2 - Math.PI / 2;
-    const [x1, y1] = [c + (r + 1) * Math.cos(a), c + (r + 1) * Math.sin(a)];
-    const [x2, y2] = [c + (r + 3.5) * Math.cos(a), c + (r + 3.5) * Math.sin(a)];
+  if (spec.core === 1) {
     parts.push(
-      '<line x1="' +
-        x1.toFixed(2) +
-        '" y1="' +
-        y1.toFixed(2) +
-        '" x2="' +
-        x2.toFixed(2) +
-        '" y2="' +
-        y2.toFixed(2) +
-        '"/>',
+      '<circle cx="' +
+        c +
+        '" cy="' +
+        c +
+        '" r="' +
+        (size * 0.05).toFixed(2) +
+        '" fill="currentColor" stroke="none"/>',
     );
+  } else if (spec.core === 2) {
+    parts.push('<circle cx="' + c + '" cy="' + c + '" r="' + (rad * 0.2).toFixed(2) + '"/>');
   }
   return (
     '<svg viewBox="0 0 ' +
@@ -157,9 +194,18 @@ export function sigilSvg(root: string, size = 28): string {
     size +
     '" height="' +
     size +
-    '" fill="none" stroke="currentColor" stroke-width="1.1" stroke-linecap="round" ' +
+    '" fill="none" stroke="currentColor" stroke-width="1.2" stroke-linecap="round" ' +
     'stroke-linejoin="round" aria-hidden="true">' +
     parts.join("") +
     "</svg>"
   );
+}
+
+// The single-workspace path, for a console that knows of no peers to be distinct from.
+export function sigilSvg(root: string, size = 44): string {
+  return renderSigil(sigilSpec(root), size);
+}
+
+export function sigilHue(root: string): string {
+  return sigilSpec(root).hue;
 }
