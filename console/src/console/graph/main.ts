@@ -930,6 +930,10 @@ function switchLayout(mode: LayoutMode) {
       }, at);
     }
   }
+  // LAST, not beside the layoutMode assignment above: the scale guard can revert layered/waves to
+  // force after that point, and an overview written before the revert reports an arrangement that
+  // is not on the canvas.
+  refreshOverview();
 }
 
 // ---- simulation + canvas ---------------------------------------------------
@@ -1648,12 +1652,72 @@ function relSectionHtml(title: string, rows: IncidentRow[]) {
   return html + "</dd>";
 }
 
+// graphSource names where the loaded graph came from ("demo", "live", "local", "loopback",
+// "remote", "empty"), so the overview can say which one a reader is looking at.
+let graphSource = "empty";
+
+// SOURCE_PROSE turns that into a sentence. A reader who cannot tell the committed demo from
+// their own workspace cannot trust anything else the panel says.
+const SOURCE_PROSE: Record<string, string> = {
+  demo: "the committed demo export of the magus repo, not your workspace",
+  live: "a live workspace, refreshing as it changes",
+  local: "a graph.json you opened from this machine",
+  loopback: "a one-shot snapshot from a local magus",
+  remote: "a graph fetched from a URL",
+};
+
+// renderOverview fills the detail column when NOTHING is selected. That column used to collapse,
+// which left the surface answering "what am I looking at" nowhere at all: the arrangement, the
+// colouring and the scope were each legible only as a lit-up button somewhere in the sidebar, and
+// the canvas alone cannot say whether it is showing a filtered subset or a different graph.
+// It states the graph, then every setting currently acting on it, in sentences.
+function renderOverview() {
+  const scope = matchSet
+    ? matchSet.size + " of " + graph.nodes.length + " nodes match " + (query || "the active view")
+    : "No filter: every node is showing.";
+  const colour = activePreset
+    ? (PRESET_RESULT_LINES[activePreset] ?? "A colour grouping is active.")
+    : "Coloured by node kind; the legend lists them.";
+  const rows: Array<[string, string]> = [
+    [
+      "Graph",
+      (graphFlavor === "targets" ? "The target graph" : "The knowledge graph") +
+        " - " +
+        (SOURCE_PROSE[graphSource] ?? "an unnamed source") +
+        ".",
+    ],
+    ["Size", graph.nodes.length + " nodes, " + graph.links.length + " edges."],
+    ["Arrangement", LAYOUT_TITLES[layoutMode]],
+    ["Colour", colour],
+    ["Scope", scope],
+  ];
+  let html = '<p class="console-graph-card__section">What you are looking at</p>';
+  html += "<dl>"; // #explain-card dl already carries the two-column grid
+  for (const [k, v] of rows) {
+    html += "<dt>" + escapeHtml(k) + "</dt><dd>" + escapeHtml(v) + "</dd>";
+  }
+  html += "</dl>";
+  html +=
+    '<p class="console-graph-card__hint">Click a node for its details. The questions on the left' +
+    " run the same things the CLI does: the first three ask about ONE node you pick, the next" +
+    " three ask about the whole graph at once.</p>";
+  cardEl.innerHTML = html;
+  cardEl.hidden = false;
+  document.body.toggleAttribute("data-has-card", true);
+}
+
+// refreshOverview repaints the overview when it is what the detail column is showing. Every
+// setting it reports is owned elsewhere, so each owner has to say when it moved. NOT hooked into
+// draw() (that runs per frame, and this writes innerHTML) and not into renderList() alone (which
+// the arrangement never calls).
+function refreshOverview() {
+  if (!selected && graph?.nodes) renderOverview();
+}
+
 function renderCard(id: string | null) {
   const n = id ? graph.byId.get(id) : null;
   if (!n) {
-    cardEl.innerHTML = "";
-    cardEl.hidden = true;
-    document.body.toggleAttribute("data-has-card", false);
+    renderOverview();
     docTitle.set(null); // nothing selected: the tab falls back to "Graph Explorer"
     return;
   }
@@ -2454,6 +2518,7 @@ function applyQuery(q: string) {
   renderList();
   updateHash();
   syncLayoutToggle(); // availability tracks matchSet size
+  refreshOverview();
   // Radial owns placement: it pins its ego rings and parks everything else off-canvas. Left
   // alone it would report matches sitting a million units off the canvas as visible, so the
   // filter narrows to the matches radial actually PLACED. Re-placing over the whole graph
@@ -4171,6 +4236,7 @@ function applyPreset(presetId: string) {
       .forEach((b) => b.removeAttribute("data-active"));
     renderLegend(); // back to the kind palette, which is what the canvas shows again
     setStatus("Back to colouring by node kind.");
+    refreshOverview();
     draw();
     updateHash();
     return;
@@ -4206,6 +4272,7 @@ function applyPreset(presetId: string) {
       presetId +
       " again to go back to node kinds.",
   );
+  refreshOverview();
   draw();
   updateHash();
 }
@@ -4717,6 +4784,9 @@ function finishInteractiveSetup() {
   applyDeepLinks();
   // Emit empty-state suggestion chips.
   renderSuggestions();
+  // Fill the detail column. AFTER applyDeepLinks, so a #q=/#view= link is already reflected in
+  // what the overview reports rather than being described a frame before it applies.
+  refreshOverview();
 }
 
 // renderLoadedGraph runs boot's data-to-view pipeline (detect/prepare/project/status/layout/reveal),
@@ -4724,6 +4794,7 @@ function finishInteractiveSetup() {
 function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void {
   const flavor = flavorOf(loaded.data);
   graphFlavor = flavor;
+  graphSource = loaded.source;
   let rawForPrepare = loaded.data;
   let cycleWarnings: string[] = [];
   if (flavor === "targets") {
