@@ -203,28 +203,6 @@
 /* Fullscreen: the panel fills the screen (like the playground's .panel:fullscreen);
    the opaque background is required or the element shows through to black. */
 .console-graph-app:fullscreen { height: 100%; width: 100%; border: 0; border-radius: 0; box-shadow: none; background: var(--pf-t--global--background--color--primary--default); }
-/* Result line ("what am I looking at"): a slim narration bar pinned to the top of the
-   stage, above the canvas but centered so it does not collide with the corner overlays
-   (stage tools top-right, legend top-left). Muted background/border like the bottom mode
-   indicator and status line; pointer-events:none so it never intercepts canvas drag/zoom.
-   z-index sits below the corner overlays (3) so those stay clickable if text ever runs
-   long enough to reach them. Hidden whenever no view/query is active - main.ts's
-   setResultLine mirrors what it already writes to the bottom #graph-status line, just
-   placed where the eye already is. */
-.console-graph-stage__result {
-  /* Sits BELOW the stage toolbar row (Fit / snapshot badge live at the top edge) so it never
-     collides with them; centered over the graph, clear of the top-left legend. */
-  position: absolute; top: 3rem; left: 50%; transform: translateX(-50%); z-index: 2;
-  max-width: min(60%, 30rem); margin: 0; padding: 0.25rem 0.65rem;
-  font-size: 0.74rem; line-height: 1.3; text-align: center;
-  color: var(--pf-t--global--text--color--regular);
-  background: color-mix(in srgb, var(--pf-t--global--background--color--secondary--default) 92%, transparent);
-  border: 1px solid var(--pf-t--global--border--color--default); border-radius: 0;
-  pointer-events: none;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.console-graph-stage__result[hidden] { display: none; }
-
 /* Legend: a compact overlay panel (translucent so the graph shows through) with a header
    row and a dense swatch+name+count list. The panel wrapper carries the position and chrome;
    the inner <ul> is the scrollable list. Positioned top-left over the canvas. */

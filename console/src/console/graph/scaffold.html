@@ -219,11 +219,6 @@
             <div class="pf-v6-c-toolbar__expandable-content" data-overflow-panel="graphtools"></div>
           </div>
         </div>
-        <!-- Result line: a slim narration of "what am I looking at" for the active view/query,
-             at the top of the stage. Hidden (and empty) when nothing is active - the bottom
-             #graph-status line carries the same text too, but this one sits where the eye
-             already is (over the canvas) instead of below the whole app. -->
-        <p id="graph-result-line" class="console-graph-stage__result" hidden aria-live="polite"></p>
         <canvas id="graph-canvas" aria-label="Force-directed knowledge graph. Use the node list to navigate without the canvas."></canvas>
         <!-- Load spinner: shown while boot fetches the demo graph.json (~1.4MB). main.ts toggles it
              around `await loadGraph()`; hidden by default (a cold visit shows the empty state instead). -->

@@ -528,22 +528,6 @@ function setStatus(msg: string, isError?: boolean) {
   statusEl.toggleAttribute("data-error", !!isError);
 }
 
-// setResultLine narrates "what am I looking at" in the slim bar at the top of the
-// canvas stage - a concise mirror of the fuller text activateView already writes to
-// the bottom #graph-status line, placed where the eye already is. null hides it (the
-// default state: nothing active).
-function setResultLine(text: string | null) {
-  const line = el("graph-result-line");
-  if (!line) return;
-  if (text) {
-    line.textContent = text;
-    line.hidden = false;
-  } else {
-    line.textContent = "";
-    line.hidden = true;
-  }
-}
-
 // ---- graph prep ------------------------------------------------------------
 // Normalize the loaded JSON into d3-force's mutable shape and precompute degree
 // (drives node radius) and adjacency (drives the explain card + neighbor
@@ -1888,10 +1872,10 @@ function centerOn(id: string) {
 // zoom-to-fit / reset-view action. Reuses the shared zoomBehavior + transform.
 // The stage floats chrome over the canvas rather than beside it. These are the pieces that do,
 // measured live so a hidden one (the toolbar collapses to a kebab) contributes nothing. The
-// explain card is NOT here, and the LEGEND is no longer here: both sit beside the canvas now, so
-// listing the legend would reserve a margin for something that covers nothing - and the framing
-// gets the whole left edge back.
-const STAGE_OVERLAYS = [".console-graph-stage__tools", ".console-graph-stage__result"];
+// explain card is NOT here, and neither the legend nor the result line is any more: all three sit
+// beside the canvas now, so listing them would reserve a margin for something that covers
+// nothing - and the framing gets the whole left edge back.
+const STAGE_OVERLAYS = [".console-graph-stage__tools"];
 
 // stageInsets measures how far the stage chrome covers the canvas, so the framing below can
 // centre the graph in what the operator can see instead of behind the legend.
@@ -2229,7 +2213,6 @@ function clearFocusOrQuery() {
   pendingRadialPick = false;
   if (searchEl) searchEl.value = "";
   setStatus("");
-  setResultLine(null);
   // Clear any active view.
   if (activeView) {
     activeView = null;
@@ -2625,22 +2608,6 @@ async function refineTraceFromServer(from: string, to: string, gen: number) {
         res.steps
           .map((s) => s.relation + " -> " + (graph.byId.get(s.to)?.label ?? s.to))
           .join(", "),
-    );
-    // The result line above the canvas carries the LOCAL walk's verdict, and that walk follows
-    // depends_on only - so when the daemon finds a chain through other relations, the line is
-    // left insisting there is no path while the status bar describes one. Two surfaces
-    // disagreeing about the same question is worse than either being wrong on its own.
-    const label = (id: string) => graph.byId.get(id)?.label ?? id;
-    setResultLine(
-      "Path from " +
-        label(res.from) +
-        " to " +
-        label(res.to) +
-        ", " +
-        res.steps.length +
-        " step" +
-        (res.steps.length === 1 ? "" : "s") +
-        " (from the workspace graph).",
     );
     renderList();
     syncOverview(); // the match set just changed under the panel that reports its size
@@ -3835,7 +3802,6 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
         setStatus(
           "Click a node to see what depends on it (blast view). CLI: magus explain <node-id>",
         );
-        setResultLine(null);
         renderList();
         draw();
         updateHash();
@@ -3853,15 +3819,6 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
           (deps.size - 1 === 1 ? "" : "s") +
           ".",
       );
-      setResultLine(
-        "Showing the " +
-          (deps.size - 1) +
-          " target" +
-          (deps.size - 1 === 1 ? "" : "s") +
-          " that rebuild if you change " +
-          (n ? n.label : nodeId) +
-          ".",
-      );
       void refineBlastFromServer(nodeId, ++viewGeneration);
       break;
     }
@@ -3870,7 +3827,6 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
         setStatus(
           "Click two nodes to find the path between them (trace view). CLI: magus path <a> <b>",
         );
-        setResultLine(null);
         renderList();
         draw();
         updateHash();
@@ -3887,9 +3843,6 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
             (nb ? nb.label : nodeTo) +
             ".",
         );
-        setResultLine(
-          "No path from " + (na ? na.label : nodeId) + " to " + (nb ? nb.label : nodeTo) + ".",
-        );
         matchSet = new Set([nodeId, nodeTo]);
       } else {
         matchSet = new Set(path);
@@ -3902,17 +3855,6 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
               })
               .join(" -> "),
         );
-        setResultLine(
-          "Path from " +
-            (na ? na.label : nodeId) +
-            " to " +
-            (nb ? nb.label : nodeTo) +
-            ", " +
-            (path.length - 1) +
-            " step" +
-            (path.length - 1 === 1 ? "" : "s") +
-            ".",
-        );
       }
       void refineTraceFromServer(nodeId, nodeTo, ++viewGeneration);
       break;
@@ -3923,7 +3865,6 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
         setStatus(
           "No duration data in this graph. Run `magus graph deps -o json` after a build to include timing.",
         );
-        setResultLine(null);
         matchSet = null;
       } else {
         matchSet = new Set(path);
@@ -3940,15 +3881,6 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
             formatDuration(total) +
             " total (longest duration-weighted chain).",
         );
-        setResultLine(
-          "Slowest chain: " +
-            path.length +
-            " target" +
-            (path.length === 1 ? "" : "s") +
-            ", " +
-            formatDuration(total) +
-            " total.",
-        );
       }
       break;
     }
@@ -3960,7 +3892,6 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
           ? "What's a hub? The " + n + " most depended-on node" + (n === 1 ? "" : "s") + "."
           : "Nothing in this graph has a dependent.",
       );
-      setResultLine(n ? "The " + n + " most depended-on nodes." : "Nothing has a dependent.");
       break;
     }
     case "orphans": {
@@ -3973,7 +3904,6 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
           (n === 1 ? "" : "s") +
           " of a kind that normally has dependencies, but with none either way.",
       );
-      setResultLine(n + " node" + (n === 1 ? "" : "s") + " with no dependencies either way.");
       break;
     }
     case "cycles": {
@@ -3991,13 +3921,9 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
             ids.size +
             " target(s) caught in a loop: a configuration error to fix.",
         );
-        setResultLine(
-          ids.size + " target" + (ids.size === 1 ? "" : "s") + " in circular dependencies.",
-        );
       } else {
         matchSet = null;
         setStatus("No circular dependencies: the dependency graph is acyclic.");
-        setResultLine("No circular dependencies.");
       }
       break;
     }
@@ -4006,7 +3932,6 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
       const aff = typeof nodeId === "object" && nodeId ? nodeId : window._liveAffectedIds;
       if (!aff || !aff.size) {
         setStatus("no affected nodes in current diff", true);
-        setResultLine(null);
         matchSet = null;
       } else {
         matchSet = aff;
@@ -4017,15 +3942,16 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
             (aff.size === 1 ? "" : "s") +
             " (live workspace).",
         );
-        setResultLine(
-          aff.size + " target" + (aff.size === 1 ? "" : "s") + " affected by your last change.",
-        );
       }
       break;
     }
   }
   setListExpanded(true);
   renderList();
+  // The overview reports the scope, and a view just set it. Only the deep-link path refreshed it,
+  // so clicking a chip left "No filter: every node is showing" standing above a status line
+  // reporting twelve matches - one panel disagreeing with itself.
+  syncOverview();
   if (matchSet && matchSet.size) fitView(matchSet);
   updateHash();
   buildFlowEdges(); // matchSet is final now; no-ops for non-flow views
@@ -4049,8 +3975,12 @@ function clearView() {
   query = "";
   setFlowEdges(null);
   flowOn = false;
-  setResultLine(null);
   renderList();
+  // Retire the view's narration with the view. Only the canvas line used to be cleared here, so
+  // the status line kept describing a view that was no longer active - now visibly, one row under
+  // an overview reporting no filter.
+  setStatus("");
+  syncOverview(); // see activateView: clearing the scope is a change to what the panel reports
   updateHash();
   draw();
 }
