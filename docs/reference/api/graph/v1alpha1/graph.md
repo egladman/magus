@@ -51,11 +51,21 @@ FindPath returns the shortest chain between two nodes, edges walked in either di
 
 Takes [FindPathRequest](#findpathrequest), returns [Path](#path).
 
+### FindDependents
+
+FindDependents returns every node that transitively DEPENDS ON one, as ids - the answer to "what rebuilds if I change this".
+
+Deliberately not NodeContext.blast\_radius, which is a different question wearing a similar name: that counts everything reaching a node by ANY relation. Nothing depends\_on a spell (a target USES one), so a spell's blast\_radius runs to the hundreds while its dependents are empty, and both are right. Ids rather than a count because the caller highlights them; a separate RPC rather than a field on NodeContext because a hub's list is long and an explain card should not carry it.
+
+`POST /magus.graph.v1alpha1.GraphService/FindDependents`: unary. Source: [graph.proto:85](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L85).
+
+Takes [FindDependentsRequest](#finddependentsrequest), returns [Dependents](#dependents).
+
 ### GetGraphStats
 
 GetGraphStats returns where the workspace concentrates, neglects, and fragments.
 
-`POST /magus.graph.v1alpha1.GraphService/GetGraphStats`: unary. Source: [graph.proto:77](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L77).
+`POST /magus.graph.v1alpha1.GraphService/GetGraphStats`: unary. Source: [graph.proto:87](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L87).
 
 Takes [GetGraphStatsRequest](#getgraphstatsrequest), returns [GraphStats](#graphstats).
 
@@ -65,7 +75,7 @@ Takes [GetGraphStatsRequest](#getgraphstatsrequest), returns [GraphStats](#graph
 
 Answer classifies a result against what magus could actually search. A stated reason or any gap makes the verdict unknown WHETHER OR NOT the lookup matched - that is the difference from a plain emptiness check, and it is why a bare term matching nothing says nothing about whether a code symbol by that name exists.
 
-Source: [graph.proto:215](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L215).
+Source: [graph.proto:240](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L240).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -75,11 +85,24 @@ Source: [graph.proto:215](https://github.com/egladman/magus/blob/main/proto/magu
 
 Used by: [QueryNodes (response)](graph.md#querynodes).
 
+### Dependents
+
+Dependents is the transitive depends\_on fan-in of one node. Ids only: a caller that wants a label already has the node, or can ask ExplainNode for the one it cares about.
+
+Source: [graph.proto:171](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L171).
+
+| Field | Type | # | Description |
+|-------|------|---|-------------|
+| `node` | string | 1 | the resolved node the walk started from |
+| `ids` | repeated string | 2 | everything that transitively depends on it; empty is a real answer |
+
+Used by: [FindDependents (response)](graph.md#finddependents).
+
 ### DocCoverage
 
 DocCoverage is doc coverage for one documentable kind. undocumented is a capped sample, not the full set.
 
-Source: [graph.proto:203](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L203).
+Source: [graph.proto:228](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L228).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -112,7 +135,7 @@ Used by: [QueryNodes (response)](graph.md#querynodes).
 
 EdgeRef is one edge seen FROM a focus node, so direction is relative to that node.
 
-Source: [graph.proto:131](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L131).
+Source: [graph.proto:145](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L145).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -127,7 +150,7 @@ Used by: [ExplainNode (response)](graph.md#explainnode).
 
 ### ExplainNodeRequest
 
-Source: [graph.proto:119](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L119).
+Source: [graph.proto:129](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L129).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -135,9 +158,19 @@ Source: [graph.proto:119](https://github.com/egladman/magus/blob/main/proto/magu
 
 Used by: [ExplainNode (request)](graph.md#explainnode).
 
+### FindDependentsRequest
+
+Source: [graph.proto:165](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L165).
+
+| Field | Type | # | Description |
+|-------|------|---|-------------|
+| `name` | string | 1 | a node id, or any reference ResolveNodes accepts |
+
+Used by: [FindDependents (request)](graph.md#finddependents).
+
 ### FindPathRequest
 
-Source: [graph.proto:146](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L146).
+Source: [graph.proto:160](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L160).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -148,7 +181,7 @@ Used by: [FindPath (request)](graph.md#findpath).
 
 ### GetGraphStatsRequest
 
-Source: [graph.proto:167](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L167).
+Source: [graph.proto:192](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L192).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -158,7 +191,7 @@ Used by: [GetGraphStats (request)](graph.md#getgraphstats).
 
 ### GodNode
 
-Source: [graph.proto:182](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L182).
+Source: [graph.proto:207](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L207).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -173,7 +206,7 @@ Used by: [GetGraphStats (response)](graph.md#getgraphstats).
 
 ### GraphStats
 
-Source: [graph.proto:171](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L171).
+Source: [graph.proto:196](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L196).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -192,7 +225,7 @@ Used by: [GetGraphStats (response)](graph.md#getgraphstats).
 
 Match is one ranked node. staleness/outrun\_days carry the EVIDENCE for a prose match that ranked down because the thing it describes moved on without it, so the weight is never silent. Empty on anything not penalized.
 
-Source: [graph.proto:110](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L110).
+Source: [graph.proto:120](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L120).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -224,12 +257,12 @@ Used by: [ExplainNode (response)](graph.md#explainnode), [QueryNodes (response)]
 
 ### NodeContext
 
-Source: [graph.proto:123](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L123).
+Source: [graph.proto:133](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L133).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
 | `node` | [Node](#node) | 1 |  |
-| `blast_radius` | int32 | 2 |  |
+| `blast_radius` | int32 | 2 | How many nodes transitively REACH this one, by ANY relation. A reach measure - read it as "how connected is this", not as "what breaks if I change it". Those diverge: nothing depends\_on a spell, so a spell scores in the hundreds here and has no dependents at all. FindDependents answers the rebuild question; do not substitute this for it. |
 | `out` | [repeated EdgeRef](#edgeref) | 3 |  |
 | `in` | [repeated EdgeRef](#edgeref) | 4 |  |
 
@@ -239,7 +272,7 @@ Used by: [ExplainNode (response)](graph.md#explainnode).
 
 Orphan is a node missing the connection its KIND implies - a doc that documents nothing, a spell no target uses - with the reason in plain English. Not the same as "no edges at all": the reason is what makes it actionable.
 
-Source: [graph.proto:194](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L194).
+Source: [graph.proto:219](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L219).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -252,7 +285,7 @@ Used by: [GetGraphStats (response)](graph.md#getgraphstats).
 
 ### Path
 
-Source: [graph.proto:151](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L151).
+Source: [graph.proto:176](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L176).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -267,7 +300,7 @@ Used by: [FindPath (response)](graph.md#findpath).
 
 PathStep is one hop as WALKED (from -> to). forward=false means the path traversed the underlying edge against its own direction.
 
-Source: [graph.proto:160](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L160).
+Source: [graph.proto:185](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L185).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -280,7 +313,7 @@ Used by: [FindPath (response)](graph.md#findpath).
 
 ### QueryNodesRequest
 
-Source: [graph.proto:80](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L80).
+Source: [graph.proto:90](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L90).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -293,7 +326,7 @@ Used by: [QueryNodes (request)](graph.md#querynodes).
 
 ### QueryNodesResponse
 
-Source: [graph.proto:87](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L87).
+Source: [graph.proto:97](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L97).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -310,7 +343,7 @@ Used by: [QueryNodes (response)](graph.md#querynodes).
 
 ### ResolveNodesRequest
 
-Source: [graph.proto:98](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L98).
+Source: [graph.proto:108](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L108).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -321,7 +354,7 @@ Used by: [ResolveNodes (request)](graph.md#resolvenodes).
 
 ### ResolveNodesResponse
 
-Source: [graph.proto:103](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L103).
+Source: [graph.proto:113](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L113).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -333,7 +366,7 @@ Used by: [ResolveNodes (response)](graph.md#resolvenodes).
 
 SymbolGap is one project whose declared symbol index magus could not read: the evidence behind an unknown verdict. The project is flattened to its two wire fields rather than nested, because ProjectRef's third field is an absolute host path that never leaves the daemon.
 
-Source: [graph.proto:224](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L224).
+Source: [graph.proto:249](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L249).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -348,7 +381,7 @@ Used by: [QueryNodes (response)](graph.md#querynodes).
 
 ### EdgeDirection
 
-Source: [graph.proto:140](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L140).
+Source: [graph.proto:154](https://github.com/egladman/magus/blob/main/proto/magus/graph/v1alpha1/graph.proto#L154).
 
 | Value | # | Description |
 |-------|---|-------------|
