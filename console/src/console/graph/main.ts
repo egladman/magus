@@ -61,6 +61,7 @@ import {
 } from "./types.js";
 import { LAYERED_COL_W, LAYERED_MAX, layoutLayered, layoutWaves } from "./layout.js";
 import { CARD_COL_W, DOT_R_PX, cardDetail, drawCard, measureCards } from "./cards.js";
+import { isRing, punchRing, shapeOfNode, traceNodeShape } from "./shapes.js";
 import { RADIAL_MAX_RINGS, RADIAL_RING_R, layoutRadial } from "./radial.js";
 import { nodeDurationMs, formatDuration } from "./duration.js";
 import {
@@ -352,13 +353,9 @@ let uninstallKeys: (() => void) | null = null;
 // and paused when the tab is hidden (see boot) so it isn't a background CPU drain.
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
-// motionSuppressed is the ONE question every animated thing on this surface asks: the OS
-// preference, or the console's own Motion setting (data-motion="reduced", written pre-paint by
-// theme.ts and live by Settings). One predicate rather than the media query tested in five places,
-// because five places is how a new switch reaches four of them and silently misses the fifth.
-//
-// The console's CSS kill cannot reach any of this: the wobble, the flow particles and the camera
-// glides are JS, so this is where the surface honours the setting.
+// The OS preference, or the console's own Motion setting. One predicate rather than the media query
+// tested in five places, which is how a new switch reaches four of them and misses the fifth. The
+// console's CSS kill cannot reach the wobble, the particles or the camera glides - they are JS.
 function motionSuppressed(): boolean {
   return reducedMotion.matches || document.documentElement.dataset.motion === "reduced";
 }
@@ -533,10 +530,8 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
   return { data: { nodes: [], links: [] }, source: "empty" };
 }
 
-// setStatus writes the surface's one live-region sentence. The notice is a PF Alert, so the text
-// goes in the title slot and the severity is a PF modifier rather than a bespoke attribute - an
-// error reads as an error everywhere in the console, not just here. Empty hides the whole notice:
-// the icon and its tinted ground are chrome, and chrome with nothing to say is a permanent nag.
+// The notice is a PF Alert, so the text goes in the title slot and severity is a PF modifier -
+// an error then reads as an error everywhere in the console. Empty hides the whole notice.
 function setStatus(msg: string, isError?: boolean) {
   if (!statusEl) return;
   const text = el("graph-status-text");
@@ -855,10 +850,8 @@ function switchLayout(mode: LayoutMode) {
     unparkNodes();
     radialCenter = null;
     radialRings = null;
-    // Recompute rather than nulling: radial narrowed matchSet to its placed set, and every
-    // control that produced the PREVIOUS set is still showing - the query box reads what the
-    // operator typed, a view chip is still lit. Restoring only the query's matches left a lit
-    // blast chip over the query's nodes, which is the same lie one level down.
+    // Radial narrowed matchSet to its placed set, and every control that produced the PREVIOUS one
+    // is still showing. Restoring only the query's matches left a lit blast chip over query nodes.
     recomputeMatchSet();
   }
   layoutMode = mode;
@@ -1028,6 +1021,7 @@ function startSimulation() {
 
 function draw() {
   const th = theme ?? readTheme();
+  const shapesOn = root.dataset.nodeShapes !== "off"; // once per frame, not per node
   const dpr = window.devicePixelRatio || 1;
   ctx.save();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -1333,11 +1327,13 @@ function draw() {
       ctx.shadowColor = th.accent;
       ctx.shadowBlur = (n.id === highlight ? 16 : 9) / transform.k;
     }
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, n.r, 0, 2 * Math.PI);
+    const shape = shapesOn ? shapeOfNode(n) : "circle";
+    traceNodeShape(ctx, shape, n.x, n.y, n.r);
     ctx.fillStyle = nodeColor;
     ctx.fill();
     if (glowing) ctx.shadowBlur = 0;
+    // After the glow is cleared, or the shadow prints inside the hole.
+    if (isRing(shape)) punchRing(ctx, n.x, n.y, n.r, th.bg);
     // Anchor ring: target-graph anchor targets (top-level, nothing depends on
     // them within their project) get an outer ring in the same kind color so
     // they stand out without adding a new palette entry.
@@ -1353,8 +1349,7 @@ function draw() {
     if (n.id === selected) {
       ctx.lineWidth = 2 / transform.k;
       ctx.strokeStyle = th.accent;
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, n.r, 0, 2 * Math.PI);
+      traceNodeShape(ctx, shape, n.x, n.y, n.r);
       ctx.stroke();
     }
   }
@@ -1427,16 +1422,11 @@ function draw() {
     if (n.x == null) continue;
     if (projectionActive && !projectionActive.has(n.id)) continue;
     if (cardsActive() && n.w) continue; // the label is painted inside the card
-    // Two exemptions from the zoom floor, both cases where the reader ASKED for a name. The
-    // first is the hovered or selected node AND EVERYTHING ONE HOP FROM IT: naming only the node
-    // already under the cursor answers a question nobody asked, since the point of pointing at a
-    // node is to learn what it is attached to. The greedy overlap pass below is what keeps a
-    // dense neighbourhood from stacking, and it ranks the focus first. The second is radial,
-    // which exists to name one node's neighbours and never places more than a few dozen.
-    //
-    // The one-hop half rides the SAME size cap as the glow. Past it a hub's neighbours cannot all
-    // be read anyway, and the overlap pass below is quadratic in the candidates it keeps - so the
-    // exemption made pointing at the busiest node in the graph the most expensive thing to do.
+    // Two exemptions from the zoom floor, both where the reader ASKED for a name: the hovered node
+    // and everything ONE HOP from it (the point of pointing at a node is to learn what it is
+    // attached to), and radial, which exists to name one node's neighbours. The one-hop half rides
+    // the same size cap as the glow - the overlap pass below is quadratic in what it keeps, so
+    // without the cap, pointing at the busiest node was the most expensive thing you could do.
     const show =
       n.id === highlight ||
       (glowNeighborhood && lit(n.id)) ||
@@ -2069,11 +2059,9 @@ function whenCanvasSized(): Promise<void> {
         resolve();
       }
     }, 100);
-    // A surface torn down while waiting takes the poll with it. The 20s cap already bounded one
-    // wait, but the callers re-arm: a pane opened and closed repeatedly leaves a 100ms interval
-    // per attempt still measuring a canvas that is no longer in the document. Resolving rather
-    // than hanging so the awaiting caller unwinds - it fits a zero-box canvas, which clamps and
-    // is dropped, on a surface nobody is looking at.
+    // The 20s cap bounds one wait, but callers re-arm: a pane opened and closed repeatedly leaves
+    // an interval per attempt measuring a canvas no longer in the document. Resolve rather than
+    // hang, so the awaiting caller unwinds and fits a zero box nobody is looking at.
     lifecycleAbort?.signal.addEventListener(
       "abort",
       () => {
@@ -2311,12 +2299,9 @@ function syncConditionalViews() {
   syncAffectedView();
 }
 
-// syncAffectedView shows the affected chip exactly while an affected set is available, and
-// retires the view if one goes away underneath it. Hidden rather than visible-and-disabled: a
-// static page can never fill the set, and a control you can see and never reach is worse than
-// one that appears when it starts working.
-// Called separately from syncConditionalViews because the live path can change the set without
-// reloading the graph.
+// Shows the affected chip while a set is available and retires the view if one goes away under it.
+// Hidden rather than disabled: a static page can never fill the set. Called separately from
+// syncConditionalViews because the live path changes the set without reloading the graph.
 function syncAffectedView() {
   const has = !!window._liveAffectedIds?.size;
   document.querySelectorAll<HTMLElement>("[data-view='affected']").forEach((btn) => {
@@ -2528,18 +2513,12 @@ let graphEpoch = 0;
 //
 // Same constraint as the traced path: ids the canvas was never sent cannot be lit up, so they are
 // reported rather than silently dropped from the count.
-// affectedFallback is why the last FindAffected could not answer definitively - a shallow clone,
-// no VCS. Kept because "no affected set" then has two causes the view must not conflate, and the
-// reason is the only thing that tells the reader which one they are looking at.
+// Why the last FindAffected could not answer definitively. Kept because "no affected set" then has
+// two causes the view must not conflate.
 let affectedFallback = "";
 
-// refreshAffectedFromServer asks the daemon which projects the working tree touches and stores
-// the answer for the affected view.
-//
-// Re-asked on every live graph load rather than fetched once: the diff moves with the tree, not
-// with the graph, so a cached set highlights what the tree looked like at connect time. Failure
-// is silent on purpose - the view is supplementary, and a red banner for it would talk over
-// whatever the reader was actually doing.
+// Re-asked on every live graph load rather than fetched once: the diff moves with the tree, not the
+// graph. Failure is silent - the view is supplementary, and a banner would talk over the reader.
 async function refreshAffectedFromServer() {
   const client = graphClient();
   if (!client) return;
@@ -2548,15 +2527,12 @@ async function refreshAffectedFromServer() {
     const res = await client.findAffected({}, rpcOptions());
     if (epoch !== graphEpoch) return;
     affectedFallback = res.fallback;
-    // Only ids this graph actually carries. The daemon answers about the workspace; the canvas
-    // may be showing a projection that collapsed some of those projects away, and highlighting
-    // an id with no node would count nodes the reader cannot see.
+    // The daemon answers about the workspace; a projection may have collapsed some of it away.
     const present = res.ids.filter((id) => graph.byId.has(id));
     window._liveAffectedIds = present.length ? new Set(present) : undefined;
     syncAffectedView();
-    // Re-apply if the affected view is what the reader asked for. Both ways of asking can land
-    // before the diff comes back - a chip click, or a #view=affected link at boot - and
-    // activateView refuses the view while no set exists, so neither took effect the first time.
+    // A chip click or a #view=affected link can land before the diff does, and activateView
+    // refuses the view while no set exists - so neither took effect the first time.
     if (activeView === "affected" || hashParams().view === "affected") activateView("affected");
   } catch {
     /* network error; the chip keeps whatever it had */
@@ -3231,10 +3207,8 @@ function updateHash() {
 function applyDeepLinks() {
   const params = hashParams();
   // Restore view state: #view=<id>&node=<id>[&to=<id>]
-  // "affected" is deliberately absent: its set arrives from the daemon after this runs, so
-  // activating it here would always hit activateView's "no diff" refusal and report a failure
-  // that is only a race. refreshAffectedFromServer re-reads the fragment and applies it once the
-  // set lands, which is the same link working a beat later rather than not at all.
+  // "affected" is absent on purpose: its set arrives after this runs, so activating it here would
+  // hit activateView's "no diff" refusal. refreshAffectedFromServer re-reads the fragment instead.
   const validViews = ["blast", "trace", "critical", "hubs", "orphans", "cycles"];
   const view = params.view && validViews.includes(params.view) ? params.view : null;
   if (view) {
@@ -3966,9 +3940,8 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
   }
   setListExpanded(true);
   renderList();
-  // The overview reports the scope, and a view just set it. Only the deep-link path refreshed it,
-  // so clicking a chip left "No filter: every node is showing" standing above a status line
-  // reporting twelve matches - one panel disagreeing with itself.
+  // Only the deep-link path used to refresh this, so clicking a chip left "No filter: every node is
+  // showing" standing above a status line reporting twelve matches.
   syncOverview();
   if (matchSet && matchSet.size) fitView(matchSet);
   updateHash();
@@ -3994,11 +3967,10 @@ function clearView() {
   setFlowEdges(null);
   flowOn = false;
   renderList();
-  // Retire the view's narration with the view. Only the canvas line used to be cleared here, so
-  // the status line kept describing a view that was no longer active - now visibly, one row under
-  // an overview reporting no filter.
+  // Only the canvas line used to be cleared here, so the status line kept describing a view that
+  // was no longer active.
   setStatus("");
-  syncOverview(); // see activateView: clearing the scope is a change to what the panel reports
+  syncOverview();
   updateHash();
   draw();
 }
@@ -4080,10 +4052,8 @@ function askQuestion(view: string) {
     return;
   }
   if (view === "affected") {
-    // The set comes from the daemon (refreshAffectedFromServer), so a static page has no way to
-    // fill it. Say WHICH of the two reasons applies: a VCS that could not produce a definitive
-    // diff is a different problem from having no daemon, and the old single message blamed live
-    // mode for both.
+    // Two different reasons to have no set, and the message says which: a VCS that could not
+    // produce a definitive diff is not the same problem as having no daemon.
     const aff = window._liveAffectedIds;
     if (!aff || !aff.size) {
       setStatus(
@@ -4621,10 +4591,8 @@ function applyPositions(newNodes: GNode[], prevPos: Map<string, NodePos>) {
 // functions directly - does not touch activeView/query/projectionUnfolded/
 // layoutMode/search or refit the camera.
 //
-// Two callers, and they want the same thing for different reasons: a live refresh reseeds data
-// without resetting the operator's exploration, and leaving radial gives back the set radial
-// narrowed. Both are "the controls did not move, recompute what they say" - which is why this is
-// one function rather than each site restoring the part of the state it happened to remember.
+// Two callers - a live refresh, and leaving radial - both wanting "the controls did not move,
+// recompute what they say", rather than each restoring the part of the state it remembered.
 function recomputeMatchSet() {
   if (activeView) {
     switch (activeView) {
@@ -4914,19 +4882,10 @@ function publishLiveStatus() {
   // Mirror the live state onto the shared console status bar's connection dot, so the graph explorer
   // reads the same as the dashboard and log viewer.
   if (surfaceVisible) {
-    // CONNECTION STATE ONLY. The shell's status bar answers one question - is this attached or
-    // not - and it already renders the workspace identity beside the dot on its own. Packing the
-    // workspace name into this label made a shared, fixed piece of chrome carry a per-surface
-    // detail, which is the same mistake as the badge that used to float it over the canvas.
-    // count is the shell's slot for "how much data is this surface showing", and the log viewer
-    // already fills it ("N events"). This surface had its own node/edge row in the sidebar and
-    // left the shared slot empty, which is two ways to state one thing with only one of them in
-    // the place every surface reports it. The sidebar row stays - it doubles as the node list's
-    // disclosure toggle - but the count now also goes where the console asks for it.
-    // A snapshot or demo graph has no link of its own, so it reports NO connection and the shell's
-    // readiness poller answers instead. Claiming the dot to say "not connected" was this surface
-    // reporting on a daemon it had not asked about: a console attached to a running daemon read
-    // "not connected" for as long as a dropped-file graph was in front.
+    // Connection state only: the bar answers one question, and the workspace identity is already
+    // beside it. A snapshot or demo graph has no link of its OWN, so it reports no connection and
+    // the shell's poller answers - claiming the dot to say "not connected" had this surface
+    // reporting on a daemon it never asked about.
     const nodes = graph?.nodes.length ?? 0;
     const count = nodes ? nodes + " nodes" : undefined;
     publishStatus(
@@ -4969,14 +4928,10 @@ async function fetchLiveStatus() {
     if (status.pool && status.pool.workspaces.length > 0) {
       liveWorkspaceName = status.pool.workspaces[0].root;
     }
-    // No pool strip on this surface. How many targets the daemon is running is SESSION state, not
-    // anything about the graph on screen, and the dashboard is the surface that owns it. It sat
-    // under the canvas restating a number this view cannot act on.
-    // The affected set does NOT come from here. types.StatusOutput.Affected is on the wire type
-    // but no status producer fills it, and `magus status` cannot: it reaches the daemon over the
-    // proc socket without opening a workspace, so there is no VCS context at that call site.
-    // GraphService.FindAffected answers from the daemon's loaded workspace instead - see
-    // refreshAffectedFromServer.
+    // No pool strip here: how many targets the daemon is running is session state the dashboard
+    // owns. The affected set does not come from here either - StatusOutput.Affected is on the wire
+    // type but `magus status` never opens a workspace, so it has no VCS context to fill it.
+    // GraphService.FindAffected answers instead (refreshAffectedFromServer).
     publishLiveStatus();
   } catch {
     /* network error; badge stays */
@@ -5497,16 +5452,19 @@ function bootWireEvents() {
     signal: lifecycleSignal,
   });
 
-  // Motion is a live setting, so the wobble has to answer immediately rather than at the next
-  // layout switch: Settings writes data-motion on the root, and the simulation is re-alpha'd from
-  // here. Turning it OFF is the half that matters - a reader who just asked for stillness watching
-  // the canvas keep breathing has been told the setting does not work.
+  // Both settings apply live. draw() unconditionally because shapes are a paint-time property and a
+  // stilled canvas has no next tick to pick them up on.
   motionObserver = new MutationObserver(() => {
-    if (!sim) return;
-    if (motionSuppressed()) sim.alpha(0).stop();
-    else sim.alphaTarget(idleAlpha()).restart();
+    if (sim) {
+      if (motionSuppressed()) sim.alpha(0).stop();
+      else sim.alphaTarget(idleAlpha()).restart();
+    }
+    draw();
   });
-  motionObserver.observe(root, { attributes: true, attributeFilter: ["data-motion"] });
+  motionObserver.observe(root, {
+    attributes: true,
+    attributeFilter: ["data-motion", "data-node-shapes"],
+  });
 
   // Keep the canvas bitmap in lockstep with its CSS box. A ResizeObserver (not just
   // window "resize") is what makes this robust: the stage also changes size when the
@@ -5741,8 +5699,8 @@ async function bootLive() {
     parkHiddenNodes();
     finishInteractiveSetup();
 
-    // Not awaited: the affected set decorates a view the reader has to open, so blocking the
-    // first paint on a VCS diff would trade the whole surface for a chip.
+    // Not awaited: this decorates a view the reader has to open, so the first paint never waits
+    // on a VCS diff.
     void refreshAffectedFromServer();
 
     // Connect SSE for live updates.

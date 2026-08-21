@@ -840,6 +840,10 @@
             {
               "project": ".",
               "glob": "console/src/console/graph/main.ts"
+            },
+            {
+              "project": ".",
+              "glob": "console/src/console/graph/shapes.ts"
             }
           ],
           "reads_secrets": false,

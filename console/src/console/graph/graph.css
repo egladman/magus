@@ -66,9 +66,8 @@
    card that appears on selection. Regions are set apart by borders, not custom color. */
 .console-graph-app {
   display: grid;
-  /* Sidebar, stage, detail. Three columns unconditionally: the detail column always has something
-     to show - the overview when no node is selected - so the two-column form this used to fall
-     back to was only ever the frames before the first render. */
+  /* Sidebar, stage, detail. Unconditionally three: the detail column always has something to show
+     (the overview, when nothing is selected). */
   grid-template-columns: 20rem 1fr 21rem;
   grid-template-rows: minmax(0, 1fr);
   gap: 0;
@@ -235,22 +234,16 @@
   cursor: pointer; font-size: inherit; line-height: 1.5; text-align: left;
 }
 .console-graph-legend__row:hover { background: color-mix(in srgb, var(--console-accent) 14%, transparent); }
-/* Foot of the detail column: the readouts that describe the current view, under the card that
-   describes the current node. No padding of its own and no gap - both children hide themselves
-   when they have nothing to say, and a container that reserved space for them would put a strip
-   of dead chrome at the bottom of the panel at rest (which is exactly what the full-width row
-   this replaced did: an empty row still held 28px, and the panel stopped short of the status bar
-   with a band of nothing beneath it). Spacing lives on the children. */
+/* Foot of the detail column. No padding and no gap: both children hide themselves when they have
+   nothing to say, and a container reserving space for them would leave a strip of dead chrome at
+   rest - which is what the full-width row this replaced did, at 28px. Spacing is on the children. */
 .console-graph-detail__foot {
   display: flex; flex-direction: column;
 }
-/* Hint notice at the foot of the detail column: a real PF Alert, flattened to span the panel the
-   way notes.css flattens its issue row. The component keeps the severity semantics, the tinted
-   ground and the icon slot - which is the point of the change. This used to be a plain grey
-   sentence in a hairline box, and a grey sentence at the bottom of a panel is something people
-   scroll past; the alert's icon and tint are what make it read as "here is a useful thing".
-   PF's own padding/radius are what would make it float as a card inside the panel, so the sheet
-   takes those away and nothing else. */
+/* Hint notice at the foot of the detail column: a PF Alert flattened to span the panel, the way
+   notes.css flattens its issue row. The icon and tint are the point - a grey sentence at the bottom
+   of a panel is something people scroll past. Only PF's padding is taken away, so the notice does
+   not float as a card inside the panel. */
 #graph-status.console-graph-hint {
   margin: 0.5rem 0.8rem 0.8rem;
   border-radius: var(--pf-t--global--border--radius--small);
@@ -261,8 +254,8 @@
   --pf-v6-c-alert--PaddingInlineEnd: 0.6rem;
 }
 #graph-status[hidden] { display: none; }
-/* The title is the whole message here, not a headline over a description, so it reads at body
-   weight - PF's bold title turns a one-line hint into a shout. */
+/* The title is the whole message, not a headline over a description, so body weight: PF's bold
+   turns a one-line hint into a shout. */
 #graph-status .pf-v6-c-alert__title { font-size: 0.78rem; font-weight: 400; overflow-wrap: anywhere; }
 #graph-status .pf-v6-c-alert__icon { font-size: 0.72rem; font-weight: 700; }
 
@@ -318,9 +311,52 @@
 .console-graph-kinddot[data-kind="owner"] { background: var(--gk-owner); }
 .console-graph-kinddot[data-kind="author"] { background: var(--gk-author); }
 
-/* Detail column: the third grid column. A flex column so the card takes the space and the
-   readouts below it stay pinned to the bottom of the panel. The border lives here rather than on
-   the card, so it runs the full height whether or not the card has rendered yet. */
+/* Kind dots carry the family SHAPE as well as the colour, matching graph/shapes.ts. Without this
+   the legend would be a key to a code it does not contain: a reader who cannot separate two hues
+   has no way to learn which mark is which. Keyed on data-kind so the CSS that already knows the
+   kind-to-family mapping keeps knowing it, with no second attribute for renderers to set. */
+:root:not([data-node-shapes="off"]) {
+  /* A touch of radius: a hard-cornered 0.7em square reads as an artifact next to round siblings. */
+  .console-graph-kinddot[data-kind="project"],
+  .console-graph-kinddot[data-kind="module"],
+  .console-graph-kinddot[data-kind="dir"],
+  .console-graph-kinddot[data-kind="file"] { border-radius: 0.12em; }
+
+  /* Declarations - triangle */
+  .console-graph-kinddot[data-kind="target"],
+  .console-graph-kinddot[data-kind="spell"],
+  .console-graph-kinddot[data-kind="op"],
+  .console-graph-kinddot[data-kind="tool"] {
+    border-radius: 0;
+    clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+  }
+
+  /* Prose - diamond */
+  .console-graph-kinddot[data-kind="doc"],
+  .console-graph-kinddot[data-kind="rationale"],
+  .console-graph-kinddot[data-kind="note"] {
+    border-radius: 0;
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  }
+
+  /* Problems - hexagon, flat-top to match the canvas */
+  .console-graph-kinddot[data-kind="diagnostic"],
+  .console-graph-kinddot[data-kind="charm"] {
+    border-radius: 0;
+    clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+  }
+
+  /* People - ring. Masked, not bordered: the hole then scales with the dot. */
+  .console-graph-kinddot[data-kind="owner"],
+  .console-graph-kinddot[data-kind="author"] {
+    mask: radial-gradient(circle, transparent 0 46%, #000 47% 100%);
+  }
+
+  /* Code keeps the circle. */
+}
+
+/* Detail column: a flex column so the card takes the space and the readouts stay at the bottom.
+   The border is here rather than on the card so it runs full height before the card renders. */
 .console-graph-detail {
   display: flex; flex-direction: column; min-height: 0;
   border-left: 1px solid var(--pf-t--global--border--color--default);

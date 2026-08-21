@@ -73,7 +73,13 @@ import { createClient } from "@connectrpc/connect";
 import { StatusService } from "../gen/magus/status/v1alpha1/status_pb";
 import { mountSharePanel } from "./share";
 import { mountActivityDrawer } from "./activityDrawer";
-import { applyFocusRing, getFocusRing, getDefaultHost } from "../lib/settings";
+import {
+  applyFocusRing,
+  getFocusRing,
+  getDefaultHost,
+  applyNodeShapes,
+  getNodeShapes,
+} from "../lib/settings";
 import { browserInstallHost, createInstallStore } from "../lib/install";
 import { registerServiceWorker } from "../lib/sw";
 import type { PageController, PageModule } from "./page";
@@ -452,9 +458,8 @@ function setPanesIcon(btn: HTMLElement, mode: "row" | "col"): void {
 // notConnectedHint is the #console-conn accessible name / tooltip when the console is not connected: it
 // names the CONFIGURED daemon address so a disconnected user sees the target without opening Settings,
 // and always ends in the click hint (the item jumps to the daemon-address field). Empty host = unset.
-// lastReadiness holds the most recent /readyz answer so a tab switch can paint it onto the bar
-// that just docked instead of waiting out the poll interval. Module-level because the poller and
-// the tab swap are separate closures inside startConsole and both reach for it.
+// The last /readyz answer, so a tab switch can paint the bar that just docked without waiting out
+// the poll interval. Module-level because the poller and the tab swap are separate closures.
 let lastReadiness: { report: ReadinessReport | null; host: string; at: number } | null = null;
 
 function notConnectedHint(host: string): string {
@@ -472,11 +477,10 @@ function notConnectedHint(host: string): string {
 // The text items (#console-conn with its liveness dot, #console-count, #console-observing) are plain
 // spans the surfaces write via textContent + [data-state], styled ID-scoped in overrides.css.
 // #console-conn also gets a periodic /readyz enrichment from startConsole's readiness poller below.
-// Ownership split (see enrichConnHealth): a surface that reports a link of its OWN claims textContent
-// + data-state by stamping data-owner through publishStatus; the poller owns title + data-health
-// always, and owns textContent/data-state on any bar nobody claimed - the launcher's zero-tab bar and
-// every surface with no daemon link to speak for. data-health is written only while data-state is
-// already "connected" (health refines the connected color, never overrides a not-connected dot).
+// Ownership split (see enrichConnHealth): a surface with a link of its OWN claims textContent +
+// data-state by stamping data-owner through publishStatus; the poller owns title + data-health
+// always, and owns textContent/data-state on any bar nobody claimed. data-health is written only
+// while data-state is already "connected", so health refines the dot but never overrides it.
 // Only .console-shell-statusbar__right stays a class - the log viewer queries it to inject its zoom control.
 //
 // withPanesButton adds the Panes tray toggle (data-panes-toggle) to the right cluster - every TAB's bar
@@ -812,6 +816,9 @@ export function startConsole(
 
   loadBuildInfo(); // fetch the build fingerprint once; fills every status bar's version chip
   applyFocusRing(getFocusRing()); // apply the persisted focus-ring preference before anything renders
+  // Before the graph mounts and reads the attribute. Motion is not here - theme.ts applies it
+  // pre-paint, because the boot reveal it suppresses runs before this does.
+  applyNodeShapes(getNodeShapes());
   const hadSavedWorkspace = hasSavedWorkspace();
   const ws = workspaceStore();
   const mounts = new Map<string, Mounted>(); // tabId -> its mounted tile + status bar
@@ -984,10 +991,7 @@ export function startConsole(
     // second row on the launcher screen.
     document.documentElement.toggleAttribute("data-no-tabs", active == null);
     statusHost.replaceChildren(active ? active.status : launcherStatus);
-    // The bar that just docked may never have been painted (a fresh tab) or may hold a reading from
-    // the last time it was active. Repaint it from the cached readiness rather than leaving it to
-    // the next poll, which is up to a full interval away.
-    applyReadiness();
+    applyReadiness(); // a fresh tab's bar has never been painted; an old one holds a stale reading
     // Switching tabs moves focus without the tile emitting: it is the same focused pane it always had,
     // so nothing inside it changed. Read it here instead.
     const shot = active?.tile.snapshot();
@@ -2003,11 +2007,8 @@ export function startConsole(
     });
   }
 
-  // applyReadiness paints the last /readyz answer onto whichever status bar is docked right now.
-  //
-  // Called by the poller AND by every tab switch. The bars are per-tab and the poller only ever
-  // reaches the docked one, so a tab activated between polls would otherwise show its
-  // construction-time default for up to a full interval.
+  // Called by the poller AND by every tab switch: bars are per-tab and the poller only reaches the
+  // docked one, so a tab activated between polls would show its construction-time default.
   function applyReadiness(): void {
     if (!lastReadiness) return;
     const { report, host, at } = lastReadiness;
@@ -2023,11 +2024,8 @@ export function startConsole(
     const ageSec = Math.max(0, Math.round((Date.now() - at) / 1000));
     // The tooltip is always safe to enrich - no surface writes conn.title, so this never contends.
     conn.title = formatReadinessTitle(report, ageSec, host);
-    // The poller owns the text + state of any bar NO SURFACE HAS CLAIMED (publishStatus stamps
-    // data-owner when a surface reports a link of its own). That covers the launcher's zero-tab
-    // bar, and also every surface with no daemon link to report - notes, diff, plan, settings -
-    // which until now sat on makeStatusBar's construction-time "not connected" for the whole
-    // session, telling a connected console it had no daemon.
+    // The poller owns any bar no surface has claimed: the launcher's zero-tab bar, and every
+    // surface with no daemon link of its own - which used to sit on "not connected" all session.
     if (!conn.dataset.owner) {
       conn.textContent = report
         ? report.ready

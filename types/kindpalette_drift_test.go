@@ -48,6 +48,7 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 	tokens := read("console", "src", "styles", "tokens.css")
 	graphCSS := read("console", "src", "console", "graph", "graph.css")
 	mainTS := read("console", "src", "console", "graph", "main.ts")
+	shapesTS := read("console", "src", "console", "graph", "shapes.ts")
 
 	// KINDS is a plain array literal; slice it out so a kind named in a comment elsewhere in
 	// the file cannot satisfy the check.
@@ -65,6 +66,10 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 				"graph.css does not alias --gk-%s; main.ts reads the alias, not the token", k)
 			require.Contains(t, kindsArray, `"`+k+`"`,
 				"main.ts KINDS omits %q; the legend would not list it", k)
+			// Shape is the second channel colour cannot carry (SC 1.4.1). A kind missing here
+			// falls back to a circle, which silently files it with the Code family.
+			require.Contains(t, shapesTS, "  "+k+": \"",
+				"shapes.ts SHAPE_BY_KIND omits %s; it would draw as an unexplained circle", k)
 		})
 	}
 
@@ -78,16 +83,12 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 	t.Run("contrast", func(t *testing.T) { requireNodeContrast(t, tokens, kinds) })
 }
 
-// requireNodeContrast measures every node color against the canvas it is painted on.
+// requireNodeContrast measures every node color against the canvas it is painted on, which is the
+// check the structural ones above cannot make: "the token is defined" was true of a palette where
+// 18 of 20 kinds sat below 3:1 on white and owner was 1.72:1 on the dark ground.
 //
-// This is the check the structural ones above cannot make. "The token is defined" was true of a
-// palette where 18 of 20 kinds sat below 3:1 on the white canvas and owner was 1.72:1 on the dark
-// one - present, aliased, listed in KINDS, and invisible. A palette is a VISUAL property, so the
-// gate has to measure the property.
-//
-// The floor is WCAG 2.1 SC 1.4.11 (non-text contrast): 3:1 for a graphical object you need to
-// see to understand the content, which a node whose color is its kind plainly is. Grounds are the
-// two the canvas actually paints (drawStage fills with the surface background).
+// The floor is WCAG 2.1 SC 1.4.11, 3:1 for a graphical object you must see to understand the
+// content - which a node whose color IS its kind plainly is.
 func requireNodeContrast(t *testing.T, tokens string, kinds []string) {
 	t.Helper()
 
@@ -107,8 +108,8 @@ func requireNodeContrast(t *testing.T, tokens string, kinds []string) {
 			t.Run(theme.name+"/"+k, func(t *testing.T) {
 				hex, ok := nodeTokenValue(theme.css, k)
 				require.True(t, ok,
-					"could not read a literal hex for --console-node-%s in the %s block; the palette is "+
-						"derived and written as hex on purpose, so this gate can measure it", k, theme.name)
+					"no literal hex for --console-node-%s in the %s block; the palette is written as hex "+
+						"so this gate can measure it", k, theme.name)
 				ratio := contrastRatio(hex, theme.ground)
 				require.GreaterOrEqualf(t, ratio, 3.0,
 					"--console-node-%s is %s on the %s canvas (%s): %.2f:1, below the 3:1 floor of WCAG "+

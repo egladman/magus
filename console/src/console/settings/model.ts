@@ -41,6 +41,7 @@ export interface Settings {
   theme: ThemePref; // color theme override (theme.ts / localStorage "theme")
   focusRing: boolean; // always show the split-pane focus outline vs keyboard-only (settings.getFocusRing)
   motion: MotionPref; // "auto" honours prefers-reduced-motion; "reduced" stills it here regardless
+  nodeShapes: boolean; // graph nodes carry a per-family shape as well as a colour (settings.getNodeShapes)
   keymap: Keymap; // the user's command chord overrides (the shared "keymap" cell)
 }
 
@@ -71,6 +72,7 @@ export function buildSettingsEnvelope(p: Settings, layout: LayoutSettings): Sett
       theme: p.theme,
       focusRing: p.focusRing,
       motion: p.motion,
+      nodeShapes: p.nodeShapes,
       keymap: p.keymap,
     },
     layout: {
@@ -112,6 +114,7 @@ const KNOWN_KEYS: readonly (keyof Settings)[] = [
   "theme",
   "focusRing",
   "motion",
+  "nodeShapes",
   "keymap",
 ];
 
@@ -193,6 +196,10 @@ export function importSettings(
     next.motion = settings.motion;
     applied.push("motion");
   } else skip("motion");
+  if (typeof settings.nodeShapes === "boolean") {
+    next.nodeShapes = settings.nodeShapes;
+    applied.push("nodeShapes");
+  } else skip("nodeShapes");
   if (isKeymap(settings.keymap)) {
     next.keymap = settings.keymap;
     applied.push("keymap");
@@ -264,6 +271,7 @@ export interface DiffContext {
   hostLabel: (host: string) => string;
   focusRingLabel: (on: boolean) => string;
   motionLabel: (v: MotionPref) => string;
+  nodeShapesLabel: (on: boolean) => string;
   commandLabel: (id: string) => string;
   effectiveChord: (keymap: Keymap, id: string) => string;
   commandIds: string[];
@@ -316,6 +324,14 @@ export function computePendingChanges(
       label: "Motion",
       before: ctx.motionLabel(committed.motion),
       after: ctx.motionLabel(draft.motion),
+    });
+  }
+  if (committed.nodeShapes !== draft.nodeShapes) {
+    changes.push({
+      key: "nodeShapes",
+      label: "Node shapes",
+      before: ctx.nodeShapesLabel(committed.nodeShapes),
+      after: ctx.nodeShapesLabel(draft.nodeShapes),
     });
   }
   for (const id of ctx.commandIds) {

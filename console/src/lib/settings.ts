@@ -75,14 +75,10 @@ export function applyFocusRing(on: boolean): void {
   else document.documentElement.removeAttribute("data-focus-ring");
 }
 
-// Whether to stop the console's animation. "auto" honours prefers-reduced-motion and nothing more;
-// "reduced" stills the console regardless of what the OS says.
-//
-// Both exist because they answer different questions. The OS setting is all-or-nothing across every
-// site a person visits, and someone may want THIS page still - the graph's force simulation never
-// fully stops, it decays to an idle wobble and keeps repainting - while leaving their OS alone.
-// The docs site made the same split and this mirrors it, attribute name included, so the two
-// surfaces cannot drift into two spellings of one idea.
+// "auto" honours prefers-reduced-motion and nothing more; "reduced" stills the console regardless
+// of the OS. Both exist because the OS setting is all-or-nothing across every site a person visits,
+// and the graph's simulation never fully stops on its own. Mirrors the docs site, attribute name
+// included.
 export type MotionPref = "auto" | "reduced";
 
 const motion = persisted<MotionPref>("console-motion", "auto");
@@ -100,10 +96,32 @@ export function saveMotion(v: MotionPref): void {
   motion.persistOnly(v);
 }
 
-// applyMotion reflects the preference onto the document root for the CSS keyed on
-// :root[data-motion="reduced"]. theme.ts sets the same attribute pre-paint from the stored value;
-// this is for a live change out of Settings.
+// theme.ts sets the same attribute pre-paint from the stored value; this is for a live change.
 export function applyMotion(v: MotionPref): void {
   if (v === "reduced") document.documentElement.setAttribute("data-motion", "reduced");
   else document.documentElement.removeAttribute("data-motion");
+}
+
+// On by default: colour alone cannot separate twenty kinds for a colourblind reader (graph/shapes.ts
+// carries the measurement), and SC 1.4.1 asks for a second channel rather than a better palette.
+const nodeShapes = persisted<boolean>("console-node-shapes", true);
+
+export function getNodeShapes(): boolean {
+  return nodeShapes.get();
+}
+
+export function setNodeShapes(on: boolean): void {
+  nodeShapes.set(on);
+}
+
+// Durably save WITHOUT applying to the running session (Settings "Save"). See persist.persistOnly.
+export function saveNodeShapes(on: boolean): void {
+  nodeShapes.persistOnly(on);
+}
+
+// An attribute rather than a shared cell: the graph is a separate bundle painting to a canvas, and
+// one MutationObserver over the root covers this and data-motion together.
+export function applyNodeShapes(on: boolean): void {
+  if (on) document.documentElement.removeAttribute("data-node-shapes");
+  else document.documentElement.setAttribute("data-node-shapes", "off");
 }
