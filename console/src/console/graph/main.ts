@@ -2071,6 +2071,19 @@ function whenCanvasSized(): Promise<void> {
         resolve();
       }
     }, 100);
+    // A surface torn down while waiting takes the poll with it. The 20s cap already bounded one
+    // wait, but the callers re-arm: a pane opened and closed repeatedly leaves a 100ms interval
+    // per attempt still measuring a canvas that is no longer in the document. Resolving rather
+    // than hanging so the awaiting caller unwinds - it fits a zero-box canvas, which clamps and
+    // is dropped, on a surface nobody is looking at.
+    lifecycleAbort?.signal.addEventListener(
+      "abort",
+      () => {
+        clearInterval(timer);
+        resolve();
+      },
+      { once: true },
+    );
   });
 }
 
