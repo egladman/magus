@@ -66,6 +66,11 @@ export function initWorkspacePicker(
   btn.setAttribute("aria-expanded", "false");
   const label = document.createElement("span");
   label.className = "console-shell-scope__label";
+  // Shown only in the demo, beside the workspace's own name rather than instead of it.
+  const demoTag = document.createElement("span");
+  demoTag.className = "console-shell-scope__tag";
+  demoTag.textContent = "demo";
+  demoTag.hidden = true;
   // A caret, because aria-haspopup tells a screen reader this opens a menu and nothing told anyone
   // else. Without it the value reads as a status readout rather than as something to press.
   const caret = document.createElement("span");
@@ -74,7 +79,7 @@ export function initWorkspacePicker(
     '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" ' +
     'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
     '<path d="M6 9l6 6 6-6"/></svg>';
-  btn.append(label, caret);
+  btn.append(label, demoTag, caret);
   wrap.append(caption, btn);
 
   const menu = document.createElement("div");
@@ -105,11 +110,18 @@ export function initWorkspacePicker(
     // rule would have hidden the one control that offers anything at all on a first visit.
     wrap.hidden = false;
     const demo = inDemo();
-    label.textContent = demo ? "Demo data" : shortName(scope);
+    // The control names the WORKSPACE, always. It used to read "Demo data" in the demo, which replaced
+    // the one fact it exists to report - you could be scoped to acme and the control would not say so.
+    // Demo-ness is a qualifier on that name, so it rides as a tag beside it, the same mark the menu
+    // rows carry.
+    label.textContent = shortName(scope);
+    demoTag.hidden = !demo;
     const name = scope === ALL_WORKSPACES ? "all workspaces" : shortName(scope);
-    btn.title = demo
-      ? "Showing demo data. Change what this window is looking at."
-      : "Workspace: " + name + ". Change which workspace this tab shows.";
+    btn.title =
+      "Workspace: " +
+      name +
+      (demo ? " (demo data)" : "") +
+      ". Change which workspace this tab shows.";
     // The caption supplies the "Workspace" half of the name; the button's own text supplies the value.
     btn.setAttribute("aria-labelledby", "console-scope-caption " + btn.id);
   };
