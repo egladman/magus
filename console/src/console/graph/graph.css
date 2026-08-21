@@ -244,17 +244,27 @@
 .console-graph-detail__foot {
   display: flex; flex-direction: column;
 }
-/* Status/hint line: a quiet line at the foot of the detail column. Empty by default -> hidden,
-   so it never sits as a persistent nag; it speaks up for loading, a view result, an error, or a
-   mode change the operator did not ask for. */
-#graph-status {
-  margin: 0.5rem 0.8rem 0.8rem; padding: 0.4rem 0.7rem;
-  font-size: 0.78rem; line-height: 1.45; color: var(--pf-t--global--text--color--subtle);
-  background: var(--pf-t--global--background--color--secondary--default);
-  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
+/* Hint notice at the foot of the detail column: a real PF Alert, flattened to span the panel the
+   way notes.css flattens its issue row. The component keeps the severity semantics, the tinted
+   ground and the icon slot - which is the point of the change. This used to be a plain grey
+   sentence in a hairline box, and a grey sentence at the bottom of a panel is something people
+   scroll past; the alert's icon and tint are what make it read as "here is a useful thing".
+   PF's own padding/radius are what would make it float as a card inside the panel, so the sheet
+   takes those away and nothing else. */
+#graph-status.console-graph-hint {
+  margin: 0.5rem 0.8rem 0.8rem;
+  border-radius: var(--pf-t--global--border--radius--small);
+  font-size: 0.78rem; line-height: 1.45;
+  --pf-v6-c-alert--PaddingBlockStart: 0.45rem;
+  --pf-v6-c-alert--PaddingBlockEnd: 0.45rem;
+  --pf-v6-c-alert--PaddingInlineStart: 0.6rem;
+  --pf-v6-c-alert--PaddingInlineEnd: 0.6rem;
 }
-#graph-status:empty { display: none; }
-#graph-status[data-error] { color: var(--console-status-danger); border-color: var(--console-status-danger); }
+#graph-status[hidden] { display: none; }
+/* The title is the whole message here, not a headline over a description, so it reads at body
+   weight - PF's bold title turns a one-line hint into a shout. */
+#graph-status .pf-v6-c-alert__title { font-size: 0.78rem; font-weight: 400; overflow-wrap: anywhere; }
+#graph-status .pf-v6-c-alert__icon { font-size: 0.72rem; font-weight: 700; }
 
 /* Cold empty state (PatternFly EmptyState, #graph-empty-state): shown over the (empty) canvas
    when nothing is loaded. Mirrors the log viewer's #log-empty - an icon, a title/body, and two

@@ -522,10 +522,17 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
   return { data: { nodes: [], links: [] }, source: "empty" };
 }
 
+// setStatus writes the surface's one live-region sentence. The notice is a PF Alert, so the text
+// goes in the title slot and the severity is a PF modifier rather than a bespoke attribute - an
+// error reads as an error everywhere in the console, not just here. Empty hides the whole notice:
+// the icon and its tinted ground are chrome, and chrome with nothing to say is a permanent nag.
 function setStatus(msg: string, isError?: boolean) {
   if (!statusEl) return;
-  statusEl.textContent = msg;
-  statusEl.toggleAttribute("data-error", !!isError);
+  const text = el("graph-status-text");
+  if (text) text.textContent = msg;
+  statusEl.classList.toggle("pf-m-danger", !!isError);
+  statusEl.classList.toggle("pf-m-info", !isError);
+  statusEl.hidden = !msg;
 }
 
 // ---- graph prep ------------------------------------------------------------

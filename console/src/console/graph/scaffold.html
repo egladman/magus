@@ -276,12 +276,19 @@
                equivalent of the active view; hidden when no view is active or the view has no
                exact CLI equivalent (earn the prompt rule, 0.5). Populated by renderViewCommand(). -->
           <div id="view-cmd" class="console-graph-views__cmdbar" hidden aria-live="polite" aria-label="CLI command for active view"></div>
-          <!-- The surface's live region. Empty (display:none) unless there is something to report:
-               loading, a view result, an error, or a mode change the operator did not ask for
-               (switchLayout's scale-guard revert), so it costs nothing at rest. role=status because
-               the DISPLAY MODE toggle shows which layout is active but announces nothing when one
-               changes on its own. -->
-          <p id="graph-status" role="status">Loading graph...</p>
+          <!-- The surface's live region, as the console's inline notice (a PF Alert flattened to
+               span the panel, the same shape notes.css uses for anything a surface has to say
+               about the data it is showing). The icon slot is not decoration: PF lays the
+               component out as a grid around it, and an alert without one reads as body text -
+               which is what this was, a grey sentence people scrolled past.
+               Hidden unless there is something to report: loading, a view result, an error, or a
+               mode change the operator did not ask for (switchLayout's scale-guard revert), so it
+               costs nothing at rest. role=status because the DISPLAY MODE toggle shows which
+               layout is active but announces nothing when one changes on its own. -->
+          <div id="graph-status" class="pf-v6-c-alert pf-m-info console-graph-hint" role="status" hidden>
+            <div class="pf-v6-c-alert__icon" aria-hidden="true">i</div>
+            <p class="pf-v6-c-alert__title" id="graph-status-text"></p>
+          </div>
         </div>
       </div>
     </section>
