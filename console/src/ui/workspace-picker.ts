@@ -160,13 +160,17 @@ export function initWorkspacePicker(
       // readings (pool, cache, latency) describe exactly what they measure.
       row(ALL_WORKSPACES, "All workspaces"),
       ...roots.map((r) => row(r, shortName(r))),
-      demoRow(),
+      // Offered only when you are NOT in the demo. "Leave demo" was a verb that existed in one state
+      // and read as clutter in a menu whose every other row answers "which workspace" - and the way
+      // out is already there: the status bar says "demo" and clicking it opens the daemon address.
+      ...(inDemo() ? [] : [demoRow()]),
     );
   };
 
-  // An ACTION, not a scope. It sits apart from the radio group above because entering the demo is not
-  // choosing which workspace to look at - it changes whether anything on screen is real. Keeping it in
-  // the same radio group would have made "am I looking at fabricated data" one of the workspaces.
+  // An ACTION, not a scope, and only ever an entrance. It sits apart from the radio group above because
+  // entering the demo is not choosing which workspace to look at - it changes whether anything on
+  // screen is real. Keeping it in the same radio group would have made "am I looking at fabricated
+  // data" one of the workspaces.
   const demoRow = (): HTMLLIElement => {
     const li = document.createElement("li");
     li.className = "pf-v6-c-menu__list-item console-shell-scope__demorow";
@@ -175,27 +179,22 @@ export function initWorkspacePicker(
     b.type = "button";
     b.className = "pf-v6-c-menu__item";
     b.setAttribute("role", "menuitem");
-    const demo = inDemo();
-    b.title = demo
-      ? "Leave the demo and go back to live data"
-      : "Explore a populated console with no daemon running";
+    b.title = "Explore a populated console with no daemon running";
     const main = document.createElement("span");
     main.className = "pf-v6-c-menu__item-main";
     const t = document.createElement("span");
     t.className = "pf-v6-c-menu__item-text";
-    t.textContent = demo ? "Leave demo" : "Demo data";
+    t.textContent = "Demo data";
     main.append(t);
-    if (!demo) {
-      const tag = document.createElement("span");
-      tag.className = "console-shell-scope__tag";
-      tag.textContent = "sample";
-      main.append(tag);
-    }
+    const tag = document.createElement("span");
+    tag.className = "console-shell-scope__tag";
+    tag.textContent = "sample";
+    main.append(tag);
     b.append(main);
     b.addEventListener("click", () => {
       setOpen(false);
       btn.focus();
-      opts.onDemo(!demo);
+      opts.onDemo(true);
     });
     li.append(b);
     return li;
