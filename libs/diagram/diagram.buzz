@@ -203,7 +203,7 @@ export object Edge {
     bend: int = 0,
 }
 
-// Zone is a labelled container drawn behind the nodes it groups. Zones are painted first,
+// Zone is a labeled container drawn behind the nodes it groups. Zones are painted first,
 // so a connector label may overlap one safely.
 export object Zone {
     label: str = "",
@@ -679,7 +679,7 @@ fun renderZone(z: Zone, p: Palette, s: Style) > str {
     return svg;
 }
 
-// renderDecision paints the diamond. The label sits on the centre line rather than the
+// renderDecision paints the diamond. The label sits on the center line rather than the
 // stacked layout a box uses: a diamond's widest run is its middle, so a two-line stack
 // would push text out past the sloping sides.
 fun renderDecision(n: Node, p: Palette, s: Style) > str {
@@ -934,7 +934,7 @@ test "a two-axis route bends on one crossing segment" {
     final path = connectorPath(0, 0, 200, 120, true, 100, radius: defaultStyle().bendRadius);
     std\assert(path.startsWith("M 0 0"), message: "starts at the source attach point");
     std\assert(path.endsWith("L 200 120"), message: "ends at the destination attach point");
-    std\assert(path.indexOf("Q") != null, message: "corners are rounded, not mitred");
+    std\assert(path.indexOf("Q") != null, message: "corners are rounded, not mitered");
 }
 
 test "marker ids are namespaced by diagram id" {
@@ -1114,7 +1114,7 @@ fun fitLabel(label: str) > str {
 // column per rank, and the ranks left to right so every edge points forward.
 //
 // This is the ONLY automatic placement in the module, and it is deliberately the dumbest
-// thing that works: no crossing minimisation, no barycentre passes. It exists because the
+// thing that works: no crossing minimization, no barycentre passes. It exists because the
 // workspace's own dependency graph has no author to place it, and it stays honest by
 // staying small - callers cap the node count and fall back to the table above the figure.
 

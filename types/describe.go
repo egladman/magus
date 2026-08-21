@@ -544,7 +544,7 @@ const EvaluatedTargetDefinition = "An evaluated target shows the fully-resolved 
 	"output globs that feed the cache key, the chain of targets it composes in " +
 	"invocation order, the spells that will fire (with " +
 	"target-specific sources), " +
-	"and any behavioural policy (CheckClean, TrackVolatile, Exclusive)."
+	"and any behavioral policy (CheckClean, TrackVolatile, Exclusive)."
 
 // EvaluatedSpell is one spell's contribution to an evaluated target.
 type EvaluatedSpell struct {

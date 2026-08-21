@@ -557,7 +557,7 @@ func (l *projectLocker) describeOwner(projectPath string) string {
 // LockStaleAfter is how long a lock is held, or a wait runs, before "busy" stops
 // being the likely explanation and "abandoned" starts.
 //
-// Exported because it is a JUDGEMENT the whole product has to agree on. It was
+// Exported because it is a JUDGMENT the whole product has to agree on. It was
 // previously decided twice - two minutes here and ten in the console tile - which put
 // a CLI warning that a holder "may be abandoned" beside a dashboard row still styled
 // as perfectly healthy. One threshold, one place; the console reads it off the wire.

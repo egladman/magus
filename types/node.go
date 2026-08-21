@@ -23,7 +23,7 @@ type Node struct {
 // Label is the human-facing project name. Path remains the stable machine key.
 func (n Node) Label() string { return ProjectDisplayName(n.Path, n.Name, n.Dir) }
 
-// GraphOutput is the full structured graph for JSON/YAML serialisation or
+// GraphOutput is the full structured graph for JSON/YAML serialization or
 // rendering. Named to sit alongside the other *Output result types (e.g.
 // StatusOutput, TargetGraphOutput) rather than the bare, ungrounded Output.
 type GraphOutput struct {

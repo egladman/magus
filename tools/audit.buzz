@@ -46,7 +46,7 @@ fun isBlockingSeverity(severity: str) > bool {
     return severity == "high" or severity == "critical";
 }
 
-test "an advisory range is honoured whole, not reduced to its floor" {
+test "an advisory range is honored whole, not reduced to its floor" {
     // The minimist shape, and the regression that motivated this test: a derived
     // floor of ">= 0.2.1" reported the VULNERABLE 1.2.5 as patched. The range must
     // be used as written.
@@ -142,7 +142,7 @@ fun hasInstallablePatch(pkg: str, patched: str, installed: str) > bool !> any {
                 return true; // a fix exists and our own policy would let it in
             }
         } catch (e) {
-            // Only an unparseable VERSION or timestamp reaches here now - the
+            // Only an unparsable VERSION or timestamp reaches here now - the
             // constraint was validated once above, so this can no longer swallow a
             // range bug for every candidate at once.
             continue

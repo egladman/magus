@@ -530,7 +530,7 @@ func Inspect(dir string) ([]Note, []Issue, error) {
 		// A sync conflict is a byte-for-byte copy of a note, magus block and all, so it
 		// would otherwise load as a second note competing with the original - and if the
 		// original declares an id, as a duplicate of that id. Obsidian Sync, Syncthing and
-		// Dropbox each spell it differently; all three are recognisable.
+		// Dropbox each spell it differently; all three are recognizable.
 		if isSyncConflict(d.Name()) {
 			return nil
 		}
@@ -698,7 +698,7 @@ func Save(dir string, n Note) error {
 	// original's anchors unfingerprinted. A note with no origin is new (Scaffold, a body
 	// piped in), and there its name is what names the file.
 	//
-	// The origin is honoured only INSIDE dir. A path from the other store would move the
+	// The origin is honored only INSIDE dir. A path from the other store would move the
 	// note between scopes, and publishing someone's private note by saving it is not a
 	// thing a save may do.
 	path := filepath.Join(dir, filepath.FromSlash(n.Name)+".md")
@@ -800,7 +800,7 @@ func setMagusNode(doc *yaml.Node, payload notePayload) error {
 // declaresMagus reports whether frontmatter is addressed to magus.
 //
 // A boolean rather than an error, because "this is someone else's note" is not a failure -
-// it is the majority answer in any vault. Unparseable frontmatter answers false for the
+// it is the majority answer in any vault. Unparsable frontmatter answers false for the
 // same reason: it cannot claim to be a magus note, so magus does not claim it.
 func declaresMagus(frontmatter []byte) (*yaml.Node, bool) {
 	var doc yaml.Node
@@ -814,7 +814,7 @@ func declaresMagus(frontmatter []byte) (*yaml.Node, bool) {
 
 // readNoteFile reads one file and reports (note, isNote, err).
 //
-// isNote false means the file is not addressed to magus - no frontmatter, unparseable
+// isNote false means the file is not addressed to magus - no frontmatter, unparsable
 // frontmatter, or frontmatter that declares no anchors. That is the common case in a vault
 // and it is not an error; only a file that DOES declare anchors is held to the schema.
 //

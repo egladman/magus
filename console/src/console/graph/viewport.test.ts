@@ -61,7 +61,7 @@ test("fit centers in the usable box, not the viewport", () => {
   const box = { minX: 0, minY: 0, maxX: 100, maxY: 100 };
   const bare = fitTransform(box, 600, 400);
   const inset = fitTransform(box, 600, 400, { left: 130, right: 0, top: 0, bottom: 0 });
-  // World centre (50,50) lands at the viewport centre without chrome, and 65px right of it
+  // World center (50,50) lands at the viewport center without chrome, and 65px right of it
   // once a 130px panel covers the left edge.
   assert.equal(bare.x + 50 * bare.k, 300);
   assert.equal(inset.x + 50 * inset.k, 130 + (600 - 130) / 2);
@@ -106,7 +106,7 @@ test("chrome wider than the viewport still yields a usable transform", () => {
   assert.ok(Number.isFinite(t.x) && Number.isFinite(t.y));
 });
 
-test("the simulation settles in the usable centre", () => {
+test("the simulation settles in the usable center", () => {
   assert.deepEqual(usableCenter(600, 400), { x: 300, y: 200 });
   assert.deepEqual(usableCenter(600, 400, { left: 130, right: 0, top: 40, bottom: 0 }), {
     x: 130 + 235,
@@ -114,7 +114,7 @@ test("the simulation settles in the usable centre", () => {
   });
 });
 
-test("recentring keeps the fit's scale and puts the focus in the usable centre", () => {
+test("recentring keeps the fit's scale and puts the focus in the usable center", () => {
   const insets = { left: 130, right: 0, top: 40, bottom: 0 };
   const fit = fitTransform({ minX: 0, minY: 0, maxX: 1000, maxY: 800 }, 600, 400, insets);
   const t = recenterOn(fit, { x: 900, y: 700 }, 600, 400, insets);

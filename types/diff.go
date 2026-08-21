@@ -38,7 +38,7 @@ const (
 // compatibility, which needs a base-side index magus does not have (the symbol shards
 // describe the working tree, not history) and language semantics magus does not model. A
 // tool that guessed at it would be wrong in exactly the cases that matter most - an
-// unchanged signature with changed behaviour, a widened parameter type - and a
+// unchanged signature with changed behavior, a widened parameter type - and a
 // breaking-change warning nobody trusts is worse than none. The per-language answer belongs
 // in a spell op (an apidiff), whose output joins this same review.
 const (

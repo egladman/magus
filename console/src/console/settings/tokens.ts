@@ -168,7 +168,7 @@ export function buildTokensSection(
       ) as HTMLButtonElement;
       revoke.type = "button";
       // The label already reads "Revoke"; the descriptive title/aria-label names WHICH token so the
-      // control's effect is unambiguous (the repo's explicit-labelling standard).
+      // control's effect is unambiguous (the repo's explicit-labeling standard).
       const who = (t.name ? t.name : scopeLabel(t.scope)) + " (" + t.identifier + ")";
       revoke.title = "Revoke token " + who;
       revoke.setAttribute("aria-label", "Revoke token " + who);

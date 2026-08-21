@@ -205,7 +205,7 @@
 /* Legend: a compact overlay panel (translucent so the graph shows through) with a header
    row and a dense swatch+name+count list. The panel wrapper carries the position and chrome;
    the inner <ul> is the scrollable list. Positioned top-left over the canvas. */
-/* In the sidebar, under the Colour control it is the key for - not floating over the canvas.
+/* In the sidebar, under the Color control it is the key for - not floating over the canvas.
    As an overlay it covered the stage's workspace label and the top-left of the graph, and being
    translucent it made both hard to read rather than hiding either cleanly. It scrolls inside its
    own box so twenty kinds cannot push the controls above it out of reach. */
@@ -311,7 +311,7 @@
 .console-graph-kinddot[data-kind="owner"] { background: var(--gk-owner); }
 .console-graph-kinddot[data-kind="author"] { background: var(--gk-author); }
 
-/* Kind dots carry the family SHAPE as well as the colour, matching graph/shapes.ts. Without this
+/* Kind dots carry the family SHAPE as well as the color, matching graph/shapes.ts. Without this
    the legend would be a key to a code it does not contain: a reader who cannot separate two hues
    has no way to learn which mark is which. Keyed on data-kind so the CSS that already knows the
    kind-to-family mapping keeps knowing it, with no second attribute for renderers to set. */
@@ -666,7 +666,7 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-sidebar__modes {
   padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
-/* Colour and Graph side by side. Both are short toggle groups; stacked, they spent two rows of a
+/* Color and Graph side by side. Both are short toggle groups; stacked, they spent two rows of a
    20rem column on controls that together do not fill one, and the column is the scarce axis here
    (Arrangement stays full-width - it is the one group that genuinely needs the room). */
 .console-graph-sidebar__viewpair {
@@ -676,7 +676,7 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-sidebar__viewcell { min-width: 0; }
 /* Why a control cannot be used, stated under it. Subtle, because it is a fact about the session
    rather than a warning - it must not read as "something is wrong", so it takes the subtle text
-   colour and not a status one. */
+   color and not a status one. */
 .console-graph-display__unavailable {
   margin: 0.2rem 0 0; font-size: 0.68rem; font-style: italic;
   color: var(--pf-t--global--text--color--subtle);
@@ -759,7 +759,7 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
   width: 100%; text-align: left; white-space: normal; font-size: 0.7rem; line-height: 1.35;
 }
 
-/* Colour presets: a PF ToggleGroup, the SAME component as Arrangement and Graph above and below
+/* Color presets: a PF ToggleGroup, the SAME component as Arrangement and Graph above and below
    it. They were loose pf-m-small Buttons, which made one of three sibling control groups a
    different height in a column where the other two agreed - and the odd height read as the odd
    control, which it is not: all three are one setting with several values.

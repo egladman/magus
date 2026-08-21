@@ -60,7 +60,7 @@ func NewStore(stateDir string) *Store {
 // The PATH is included, so the same three lines changed in two files are two marks. The hunk
 // HEADER is not, because its line numbers move whenever anything above it changes - a digest
 // over them would reset every mark in a file on any edit near the top, which is the exact
-// behaviour this exists to avoid.
+// behavior this exists to avoid.
 func HunkDigest(path string, lines []string) string {
 	// hash.Hash.Write is documented never to return an error, so the returns are discarded
 	// explicitly rather than checked - a branch that cannot be taken is untestable, and

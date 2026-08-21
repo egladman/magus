@@ -19,7 +19,7 @@ const modulePath = "github.com/egladman/magus"
 
 // mockeryConfig is the slice of .mockery.yaml this generator reads: which interfaces
 // were mocked, per package. Everything else in that file (template, output layout) is
-// mockery's business and is deliberately not modelled here.
+// mockery's business and is deliberately not modeled here.
 type mockeryConfig struct {
 	Packages map[string]struct {
 		Interfaces map[string]any `yaml:"interfaces"`

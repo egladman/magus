@@ -622,7 +622,7 @@ func Rotate(base string) { rotate(base, maxEvents) }
 const minEventBytes = 64
 
 // perKindFloor is how many of a kind's newest events survive a rotate regardless of how loud
-// its neighbours are.
+// its neighbors are.
 //
 // Plain recency is the wrong policy for a record with kinds this uneven. One chatty producer -
 // an agent hook wired to a read tool is the obvious one, but MCP tool calls do it too - can push

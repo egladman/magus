@@ -142,7 +142,7 @@ func describeSource(m SourceModule) ([]Method, error) {
 // The TYPE is carried as the annotation TEXT rather than mapped onto a TypeTag.
 // Buzz's type language is wider than the tag set - a function type, a nested map,
 // a declared object - so mapping would either lose information or reject a
-// legitimate signature. Nothing generates marshalling code from these (the module
+// legitimate signature. Nothing generates marshaling code from these (the module
 // IS Buzz; there is no boundary to cross), so the text is the honest
 // representation and the one describe/docs should show.
 func sourceArgs(fn *ast.FunDecl) []Arg {

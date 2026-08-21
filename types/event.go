@@ -38,7 +38,7 @@ type Event struct {
 const EventSchemaVersion = 1
 
 // EventOutcome names the situation class - WHAT KIND of attention is needed.
-// Seven canonical values; an unrecognised outcome falls through to other.
+// Seven canonical values; an unrecognized outcome falls through to other.
 type EventOutcome string
 
 const (

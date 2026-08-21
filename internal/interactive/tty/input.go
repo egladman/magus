@@ -18,7 +18,7 @@ type Key int
 
 // The keys magus acts on. Deliberately not an exhaustive terminal keymap:
 // anything not listed decodes to KeyUnknown and callers ignore it, which is
-// how an unrecognised escape sequence stays inert instead of being guessed at.
+// how an unrecognized escape sequence stays inert instead of being guessed at.
 const (
 	KeyUnknown Key = iota
 	KeyRune
@@ -268,7 +268,7 @@ const readPoll = 50 * time.Millisecond
 // tail to be decoded as stray keystrokes - an arrow key arriving as a bracket.
 //
 // On a descriptor that cannot take a deadline the wait is an ordinary blocking
-// read, so behaviour is unchanged where cancellation was never available.
+// read, so behavior is unchanged where cancellation was never available.
 func (i *Input) Read(ctx context.Context) (Event, error) {
 	for {
 		if err := i.waitForInput(ctx); err != nil {
@@ -368,7 +368,7 @@ func (i *Input) decode() (Event, error) {
 		return Event{Kind: EventKey, Key: KeyEscape}, nil
 	}
 	// SS3 - "ESC O <final>" - is how F1 to F4 and the application-mode arrows
-	// arrive. It has to be recognised even though magus binds none of them,
+	// arrive. It has to be recognized even though magus binds none of them,
 	// because the alternative is not "the key does nothing": ESC followed by
 	// anything used to fall through to KeyEscape below, and KeyEscape is the
 	// key that QUITS. Pressing F1 in the picker closed it, then its "O" and "P"

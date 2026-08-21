@@ -35,7 +35,7 @@ type planOutputs interface {
 }
 
 // The four states a plan node can be in. There is deliberately no QUEUED state: the pool
-// reports queueing as a daemon-wide COUNT (cache.Limiter.Snapshot's Queued is "slots
+// reports queuing as a daemon-wide COUNT (cache.Limiter.Snapshot's Queued is "slots
 // currently blocked in Acquire"), never as the identity of the work waiting, so only the
 // invoking process knows which target is next. A fifth state nothing can populate honestly
 // is worse than four that can.

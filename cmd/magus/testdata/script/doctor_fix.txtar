@@ -2,7 +2,7 @@
 #
 # The rule that makes it safe: a Fix is an EXISTING magus subcommand, never a private
 # repair routine. So --fix can only do what you could have typed yourself and can inspect
-# afterwards, and a finding whose remedy needs judgement (narrow this over-wide glob, or
+# afterwards, and a finding whose remedy needs judgment (narrow this over-wide glob, or
 # accept that the key is deliberately volatile?) declares none and stays a report.
 #
 # Nothing writes config directly either: a config-shaped remedy is spelled `config set`,

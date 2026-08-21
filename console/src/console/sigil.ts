@@ -7,7 +7,7 @@
 // logic by design. The eye reads an asymmetric scatter as noise and a symmetric figure as intentional,
 // which is why every identicon that looks designed is built on mirror or rotational symmetry.
 //
-// So: generate ONE small motif from the hash, then repeat it k times around the centre. Symmetry does
+// So: generate ONE small motif from the hash, then repeat it k times around the center. Symmetry does
 // the aesthetic work, and it cannot come out ugly; the motif carries the entropy.
 //
 // The motif begins and ends on the two edges of its wedge AT THE SAME RADIUS, so the rotated copies
@@ -60,7 +60,7 @@ export const SIGIL_HUES = [
 type Pt = { t: number; r: number };
 
 export interface SigilSpec {
-  folds: number; // how many times the motif repeats around the centre
+  folds: number; // how many times the motif repeats around the center
   mirror: boolean; // reflect within each wedge, for dihedral rather than plain rotational symmetry
   edge: number; // the radius where one wedge hands over to the next
   motif: Pt[];
@@ -186,7 +186,7 @@ export function renderSigil(spec: SigilSpec, size = 44): string {
     const [x1, y1] = ring[i % ring.length];
     const mx = (x0 + x1) / 2;
     const my = (y0 + y1) / 2;
-    // Push along the line from the centre through the midpoint, which keeps the bow radial and so
+    // Push along the line from the center through the midpoint, which keeps the bow radial and so
     // keeps the k-fold symmetry exact.
     const dx = mx - c;
     const dy = my - c;

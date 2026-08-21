@@ -58,7 +58,7 @@ func runModuleDecls(args []string) error {
 		// not a loud failure at run time - SetModuleDecls drops it and the module simply
 		// goes back to being untyped - so without this check a typo silently un-types a
 		// whole module and every call through it stops being verified. That is exactly
-		// how KnowledgeGodNode shipped an unparseable `in:` field: nothing parsed it.
+		// how KnowledgeGodNode shipped an unparsable `in:` field: nothing parsed it.
 		// Codegen is the right place to fail, for the same reason checkObjectDecls fails
 		// here rather than at load.
 		if _, err := buzz.Parse(b.String()); err != nil {
@@ -151,7 +151,7 @@ func sortedNamespaceMethods(ns std.Namespace) []std.Method {
 // A variadic method gets a COMMENT instead of a declaration. Buzz has no variadic
 // parameter, and the call it has to accept - fs\join("a", "b", "c") - cannot be
 // spelled with a fixed parameter list. Declaring it as a list parameter would reject
-// every existing call site, so the method keeps today's untyped behaviour and says so
+// every existing call site, so the method keeps today's untyped behavior and says so
 // in the generated output rather than going silently missing.
 func externDecl(m std.Method) (string, error) {
 	name := std.CamelCase(m.Name)
@@ -383,7 +383,7 @@ func buzzReturnType(m std.Method) (string, error) {
 // mirrorsFor returns the object mirrors a module's declarations must carry, in
 // leaf-first order: every object its methods return, plus every object those
 // reference transitively. Derived from the returns rather than hand-listed, so a new
-// object return cannot be declared without its mirror travelling with it.
+// object return cannot be declared without its mirror traveling with it.
 //
 // An unresolvable name is an ERROR, not a skip. Skipping was the original shape and it
 // defeated the point: a Ret.Object naming a type no registry row claims produced a

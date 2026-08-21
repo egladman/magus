@@ -1,6 +1,6 @@
 /* Local tokens.
  *
- * PatternFly ships status COLOUR tokens but no status BACKGROUND tokens, so the add/delete
+ * PatternFly ships status COLOR tokens but no status BACKGROUND tokens, so the add/delete
  * tint is mixed here rather than named.
  *
  * The SYNTAX values are deliberately the same palette the docs site already uses for code and
@@ -153,7 +153,7 @@
   flex: none;
 }
 
-/* The file being read. A left edge rather than a fill: the row already carries a status colour
+/* The file being read. A left edge rather than a fill: the row already carries a status color
    and a reach count, and a block of background would compete with both. */
 .console-diff-sidebar__item[aria-current="true"] {
   background: var(--pf-t--global--background--color--secondary--default);
@@ -416,7 +416,7 @@
 
 /* Add and delete tint.
  *
- * Mixed from the COLOUR tokens, NOT from --pf-t--global--background--color--status--*: those
+ * Mixed from the COLOR tokens, NOT from --pf-t--global--background--color--status--*: those
  * background tokens do not exist, so naming one resolves to transparent and the diff renders
  * as undifferentiated text with only the +/- glyph separating added from removed. Every use
  * carries a literal fallback the way overrides.css does.
@@ -426,7 +426,7 @@
  *
  * The accent bar is an inset box-shadow, NOT a border: the stream is virtualized against a
  * fixed ROW_HEIGHT, and a border would grow the content box and drift rows out of alignment
- * with the spacer. It is also the third channel after colour and the glyph. */
+ * with the spacer. It is also the third channel after color and the glyph. */
 .console-diff-row[data-kind="add"],
 .console-diff-row__side[data-kind="add"] {
   background: color-mix(in srgb, var(--console-diff-add) 12%, var(--console-diff-surface));
@@ -461,7 +461,7 @@
      line-height: normal, not the row height - a PF label sizes off line-height, so pinning it
      to the row makes every chip exactly as tall as the row and the extra height buys nothing.
      Letting the chips size themselves is what turns the taller row into actual space around
-     them; align-items: center on .console-diff-row does the centring. */
+     them; align-items: center on .console-diff-row does the centering. */
   height: 40px;
   line-height: normal;
   gap: var(--pf-t--global--spacer--xs);
@@ -657,7 +657,7 @@
    * attention. This rail is meant to be PERIPHERAL until the reader chooses to act on it,
    * which a full-strength wash contradicts.
    *
-   * The attention signal moves to a warning-toned rule on the leading edge. Colour on an edge
+   * The attention signal moves to a warning-toned rule on the leading edge. Color on an edge
    * marks the strip without tinting anything the reader has to read through - the device the
    * comment row already uses for its own accent. */
   background: var(--pf-t--global--background--color--secondary--default);
@@ -716,7 +716,7 @@
   padding-inline-start: 7ch;
   /* Secondary, not the highlight token. Highlight is a saturated yellow that in dark mode
    * dominates the screen and drops the text's contrast - and it fights for attention with the
-   * diff itself, which is what the reader actually came for. The coloured left border
+   * diff itself, which is what the reader actually came for. The colored left border
    * already says "this is a remark, and this is who wrote it", so the fill only has to
    * separate the row from the code around it. */
   background: var(--pf-t--global--background--color--secondary--default);
@@ -734,7 +734,7 @@
 
 /* An agent's remark is tinted differently from the reader's own. Not decoration: in a paired
  * review the first question about any comment is who said it, and the daemon stamps that from
- * the transport, so the colour is reporting a fact rather than a claim. */
+ * the transport, so the color is reporting a fact rather than a claim. */
 .console-diff-row--comment[data-author="agent"] {
   border-inline-start-color: var(--pf-t--global--icon--color--status--info--default);
 }
@@ -923,7 +923,7 @@
  * The surface animates in two places: the scroll container smooth-scrolls on hunk and file
  * navigation, and PatternFly transitions its labels. A reader who has asked the OS for less
  * motion has asked for exactly that to stop, and a whole diff sliding past on every `[` is
- * the symptom they turned it off to avoid. The JS honours this too (prefersReducedMotion in
+ * the symptom they turned it off to avoid. The JS honors this too (prefersReducedMotion in
  * main.ts) because scrollTo's behavior option is not governed by CSS. */
 @media (prefers-reduced-motion: reduce) {
   .console-diff-scroll {
@@ -942,8 +942,8 @@
 
 /* Intra-line emphasis: the part of a changed line that actually changed.
  *
- * Deliberately a background wash rather than a second foreground colour. The row already
- * carries add/delete as colour AND as a +/- marker, and stacking another hue on the text
+ * Deliberately a background wash rather than a second foreground color. The row already
+ * carries add/delete as color AND as a +/- marker, and stacking another hue on the text
  * would compete with syntax meaning and with the accessibility work above. A wash keeps the
  * text contrast that the row already earned. */
 .console-diff-row__word {
@@ -956,10 +956,10 @@
   background: color-mix(in srgb, var(--console-diff-del) 38%, transparent);
 }
 
-/* Syntax colour.
+/* Syntax color.
  *
  * Foreground only, because the row background is already spoken for by add/delete and the
- * intra-line emphasis. Five classes, not fifty: a diff spends most of its colour budget
+ * intra-line emphasis. Five classes, not fifty: a diff spends most of its color budget
  * distinguishing added from removed, and a rainbow on top of that competes with the signal the
  * reader actually came for.
  *
@@ -987,7 +987,7 @@
   color: var(--console-syn-function);
 }
 
-/* A token inside a removed or added line keeps its colour; the row tint sits behind it. */
+/* A token inside a removed or added line keeps its color; the row tint sits behind it. */
 .console-diff-row__text-part {
   background: inherit;
 }

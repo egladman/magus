@@ -177,7 +177,7 @@ func (g *Graph) Resolve(input string, limit int) []types.KnowledgeMatch {
 			continue
 		}
 		m := types.KnowledgeMatch{ID: id, Kind: n.Kind, Label: n.Label, Score: score}
-		// Prose whose subject moved on is LABELLED, never reordered - see stalenessLabel for
+		// Prose whose subject moved on is LABELED, never reordered - see stalenessLabel for
 		// why ranking on it is the wrong repair. The label travels with the match so a caller
 		// can show "400 days behind its subject" beside the result and let the reader judge.
 		m.Staleness, m.OutrunDays = stalenessLabel(n.Attrs)

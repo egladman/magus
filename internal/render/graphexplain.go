@@ -188,7 +188,7 @@ func relationGroups(out types.KnowledgeExplainOutput) []relationGroup {
 
 // writeGroup prints "<header>  <id>, <id>, ...", wrapping the ID list at wrapCol
 // with a hanging indent aligned under the first ID, so a group reads as one
-// labelled row however long its list. The trailing comma on a wrapped line signals
+// labeled row however long its list. The trailing comma on a wrapped line signals
 // the list continues.
 func writeGroup(b *strings.Builder, header string, ids []string, w int) {
 	indent := w + 2
@@ -215,7 +215,7 @@ func writeGroup(b *strings.Builder, header string, ids []string, w int) {
 }
 
 // PathText renders a shortest path as the chain of natural-language steps from the
-// source to the target, one labelled step per hop (direction folded into the verb).
+// source to the target, one labeled step per hop (direction folded into the verb).
 func PathText(out types.KnowledgePathOutput) string {
 	var b strings.Builder
 	steps := "no path"

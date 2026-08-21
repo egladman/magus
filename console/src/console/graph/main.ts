@@ -267,7 +267,7 @@ let radialRings: string[][] | null = null;
 // selectNode with an id, or cleared on Esc/query/view activation.
 let pendingRadialPick = false;
 
-// Below this zoom NOTHING is labelled. At the scale that frames a whole workspace the overview's
+// Below this zoom NOTHING is labeled. At the scale that frames a whole workspace the overview's
 // job is shape, and no amount of legibility work makes a name useful there: it cannot be tied to
 // the dot it belongs to, so it is just text laid over the thing the reader is trying to see.
 // Framing magus's own 2373 nodes lands near k=0.45. The floor is well above that rather than
@@ -276,7 +276,7 @@ let pendingRadialPick = false;
 // being a wall of text. Labels wait until the view is inspecting a REGION.
 const LABEL_MIN_ZOOM = 1.6;
 
-// Once labelling is on at all, this is the on-screen radius in CSS pixels a node must reach to
+// Once labeling is on at all, this is the on-screen radius in CSS pixels a node must reach to
 // earn one - so names arrive biggest-hub-first as the view goes deeper, rather than all at once
 // the moment the floor is crossed.
 const LABEL_MIN_NODE_PX = 8;
@@ -465,7 +465,7 @@ async function decodeFragment(b64url: string): Promise<GraphPayload> {
 // two had drifted on the case that matters: parseHash guards decodeURIComponent, this copy
 // called it bare, so a truncated shared link (a malformed percent-escape) threw a URIError out
 // of the graph explorer's boot path instead of degrading to the raw text. Aliased rather than
-// renamed at ~5 call sites, which keeps this change to the behaviour.
+// renamed at ~5 call sites, which keeps this change to the behavior.
 const hashParams = parseHash;
 
 async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
@@ -785,10 +785,10 @@ function applyRadialMode(): boolean {
   const subsetAll = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
   const subset = subsetAll.some((n) => n.id === center) ? subsetAll : graph.nodes;
   sim?.stop();
-  // Undirected rather than graph.links: an ego neighbourhood spans every edge kind, not just
+  // Undirected rather than graph.links: an ego neighborhood spans every edge kind, not just
   // depends_on, so there are no colW/rowH opts here - ring radius is fixed (RADIAL_RING_R).
   // Containment is excluded for the same reason neighborhood() drops it past the first hop: ring 2
-  // was every sibling in the centre's file, and ring 3 and 4 were the rest of the repo.
+  // was every sibling in the center's file, and ring 3 and 4 were the rest of the repo.
   const { rings } = layoutRadial(center, subset, semanticAdjacency());
   radialRings = rings;
   radialCenter = center;
@@ -1025,7 +1025,7 @@ function seedBigBang() {
   const c = usableCenter(w, h, stageInsets());
   const radius = 24 + Math.sqrt(graph.nodes.length) * 3;
   for (const n of graph.nodes) {
-    // sqrt() on the radius keeps the disc evenly filled instead of clumping at the centre,
+    // sqrt() on the radius keeps the disc evenly filled instead of clumping at the center,
     // which is the same singularity in miniature.
     const a = Math.random() * 2 * Math.PI;
     const r = Math.sqrt(Math.random()) * radius;
@@ -1115,7 +1115,7 @@ function draw() {
         // Wave headers are CHROME, so they paint at a constant screen size rather than scaling
         // with the graph: sized in world units they were gated off below k=0.35, and the fit
         // that frames a tall build DAG lands nearer k=0.15 - so the one view whose whole point
-        // is "these run at the same time" showed unlabelled bands at its own default zoom.
+        // is "these run at the same time" showed unlabeled bands at its own default zoom.
         // What still degrades is how MUCH is written, decided by the room a column has on
         // screen rather than by the zoom alone.
         const px = (n: number) => n / transform.k; // world units that paint n screen pixels
@@ -1174,8 +1174,8 @@ function draw() {
   const highlight = selected || hoverId;
   const near = neighbors(highlight);
   const lit = (id: string) => id === highlight || !!near?.has(id);
-  // Cap on how big a neighbourhood still earns the glow - see the shadow cost note in the node
-  // pass. A hub with hundreds of neighbours reads as a lit blob anyway, so the effect it buys
+  // Cap on how big a neighborhood still earns the glow - see the shadow cost note in the node
+  // pass. A hub with hundreds of neighbors reads as a lit blob anyway, so the effect it buys
   // there is small and the per-frame cost is not.
   const glowNeighborhood = !!highlight && (near?.size ?? 0) <= 120;
 
@@ -1231,11 +1231,11 @@ function draw() {
     const criticalEdge =
       activeView === "critical" && !!matchSet && matchSet.has(s.id) && matchSet.has(t.id);
     // An edge touching the hovered or selected node draws in the accent, not the muted grey.
-    // Dimming everything else already isolates the neighbourhood, but only by subtraction - the
-    // reader has to notice what did NOT fade. Colouring the incident edges says which lines are
+    // Dimming everything else already isolates the neighborhood, but only by subtraction - the
+    // reader has to notice what did NOT fade. Coloring the incident edges says which lines are
     // the answer, and it is the connections, not the nodes, that carry "what is this attached to".
     const incident = !!highlight && (s.id === highlight || t.id === highlight);
-    // Everything non-incident keeps ONE colour and only changes alpha. Dimming used to swap muted
+    // Everything non-incident keeps ONE color and only changes alpha. Dimming used to swap muted
     // for border at the same time as dropping alpha 5.5x, and the two compounded into a jolt.
     ctx.strokeStyle = incident ? th.accent : th.muted;
     ctx.globalAlpha = incident || criticalEdge ? 1 : active ? th.edgeAlpha : th.edgeDimAlpha;
@@ -1374,8 +1374,8 @@ function draw() {
     const nodeColor = groupColorFor(n) || th.kindColor[n.kind] || "#888";
     // The hovered node and everything one hop from it GLOW, rather than merely failing to dim.
     // Blur is divided by the zoom so the halo stays a constant size on screen instead of
-    // ballooning as the view zooms in. Skipped when the neighbourhood is large: a canvas shadow
-    // is redrawn per node per frame, and a hub with hundreds of neighbours would pay for it on
+    // ballooning as the view zooms in. Skipped when the neighborhood is large: a canvas shadow
+    // is redrawn per node per frame, and a hub with hundreds of neighbors would pay for it on
     // every tick of a simulation that never fully cools.
     const glowing = glowNeighborhood && lit(n.id);
     if (glowing) {
@@ -1479,7 +1479,7 @@ function draw() {
     if (cardsActive() && n.w) continue; // the label is painted inside the card
     // Two exemptions from the zoom floor, both where the reader ASKED for a name: the hovered node
     // and everything ONE HOP from it (the point of pointing at a node is to learn what it is
-    // attached to), and radial, which exists to name one node's neighbours. The one-hop half rides
+    // attached to), and radial, which exists to name one node's neighbors. The one-hop half rides
     // the same size cap as the glow - the overlap pass below is quadratic in what it keeps, so
     // without the cap, pointing at the busiest node was the most expensive thing you could do.
     const show =
@@ -1574,7 +1574,7 @@ function setupZoomDrag() {
       // stop moving the camera under their hands.
       if (event.sourceEvent) {
         cameraOwnedByOperator = true;
-        centeredOn = null; // panning away from a centred node ends the follow
+        centeredOn = null; // panning away from a centered node ends the follow
       }
       transform = event.transform;
       draw();
@@ -1730,16 +1730,16 @@ const SOURCE_PROSE: Record<string, string> = {
 
 // renderOverview fills the detail column when NOTHING is selected. That column used to collapse,
 // which left the surface answering "what am I looking at" nowhere at all: the arrangement, the
-// colouring and the scope were each legible only as a lit-up button somewhere in the sidebar, and
+// coloring and the scope were each legible only as a lit-up button somewhere in the sidebar, and
 // the canvas alone cannot say whether it is showing a filtered subset or a different graph.
 // It states the graph, then every setting currently acting on it, in sentences.
 function renderOverview() {
   const scope = matchSet
     ? matchSet.size + " of " + graph.nodes.length + " nodes match " + (query || "the active view")
     : "No filter: every node is showing.";
-  const colour = activePreset
-    ? (PRESET_RESULT_LINES[activePreset] ?? "A colour grouping is active.")
-    : "Coloured by node kind; the legend lists them.";
+  const color = activePreset
+    ? (PRESET_RESULT_LINES[activePreset] ?? "A color grouping is active.")
+    : "Colored by node kind; the legend lists them.";
   const rows: Array<[string, string]> = [
     [
       "Graph",
@@ -1750,7 +1750,7 @@ function renderOverview() {
     ],
     ["Size", graph.nodes.length + " nodes, " + graph.links.length + " edges."],
     ["Arrangement", LAYOUT_TITLES[layoutMode]],
-    ["Colour", colour],
+    ["Color", color],
     ["Scope", scope],
   ];
   let html = '<p class="console-graph-card__section">What you are looking at</p>';
@@ -1945,12 +1945,12 @@ function centerOn(id: string) {
   const n = graph.byId.get(id);
   if (!n || n.x == null || !zoomBehavior) return;
   // Putting a node in the middle is a camera the operator asked for, so it is theirs from here.
-  // Remembering the subject is what lets a later resize re-centre on THIS node: without it the
+  // Remembering the subject is what lets a later resize re-center on THIS node: without it the
   // resize re-frame refits the whole match set and sails the node just clicked off the screen.
   cameraOwnedByOperator = true;
   centeredOn = id;
   const { w, h } = resizeCanvas();
-  // Centre in the part of the canvas the legend and toolbar leave visible, not the raw middle.
+  // Center in the part of the canvas the legend and toolbar leave visible, not the raw middle.
   const c = usableCenter(w, h, stageInsets());
   // Shorter than a fit: this is a small move to a node the operator is already looking at, and
   // a long glide there would feel like the view hesitating.
@@ -1970,7 +1970,7 @@ function centerOn(id: string) {
 const STAGE_OVERLAYS = [".console-graph-stage__tools"];
 
 // stageInsets measures how far the stage chrome covers the canvas, so the framing below can
-// centre the graph in what the operator can see instead of behind the legend.
+// center the graph in what the operator can see instead of behind the legend.
 function stageInsets(): Insets {
   if (!canvas) return NO_INSETS;
   const view = canvas.getBoundingClientRect() as Rect;
@@ -1987,14 +1987,14 @@ function stageInsets(): Insets {
 // Set once the operator pans or zooms by hand. The reveal below stops re-framing after that:
 // a camera that keeps moving while someone is reading is worse than a frame that came out loose.
 let cameraOwnedByOperator = false;
-// The node the camera is currently holding in the middle, if any. A stage resize re-centres on
+// The node the camera is currently holding in the middle, if any. A stage resize re-centers on
 // it rather than re-framing, and a pan, zoom or fit releases it.
 let centeredOn: string | null = null;
 
 // The node currently held still because the pointer is on it. The simulation never fully cools -
 // that gentle drift is deliberate - but it means a node can wander out from under a stationary
-// cursor, dropping the highlight and darkening the neighbourhood while the reader did nothing.
-// So the thing being pointed at stops; its neighbours carry on moving around it.
+// cursor, dropping the highlight and darkening the neighborhood while the reader did nothing.
+// So the thing being pointed at stops; its neighbors carry on moving around it.
 let hoverPinned: string | null = null;
 
 function pinHovered(id: string | null) {
@@ -2361,10 +2361,10 @@ function syncKindList(counts: Map<string, number>) {
 // each graph load (boot and replaceGraph) so the button tracks the data.
 // Recomputes what the graph can currently answer. The VIEWS no longer read this from the DOM - the
 // builder asks viewUnavailable() at open time - but graphHasDurations is shared state, and the
-// colour presets are still chips in the sidebar.
+// color presets are still chips in the sidebar.
 function syncConditionalViews() {
   graphHasDurations = !!graph && graph.nodes.some((n) => nodeDurationMs(n) > 0);
-  // The "Colour by duration" preset needs timing for the same reason the critical-path view does.
+  // The "Color by duration" preset needs timing for the same reason the critical-path view does.
   // The attribute rides the toggle-group ITEM, not the button inside it: hiding only the button
   // leaves an empty cell holding the group's :last-child end cap, so the row renders squared off
   // mid-air with the rounding on a cell nobody can see.
@@ -2634,7 +2634,7 @@ async function refineBlastFromServer(nodeId: string, gen: number) {
     syncOverview();
     draw();
   } catch {
-    // Local answer stands, which is the offline behaviour and already on screen.
+    // Local answer stands, which is the offline behavior and already on screen.
   }
 }
 // refineTraceFromServer replaces the traced path with the daemon's.
@@ -2998,17 +2998,17 @@ function legendKinds(counts: Map<string, number>): string[] {
 }
 
 // legendTitleEl is the legend's heading. It names what the SWATCHES mean, which stops being
-// "node kinds" the moment a colour preset repaints the canvas by something else.
+// "node kinds" the moment a color preset repaints the canvas by something else.
 function setLegendTitle(text: string) {
   const t = document.querySelector<HTMLElement>(".console-graph-legend__title");
   if (t) t.textContent = text;
   if (legendEl) legendEl.setAttribute("aria-label", text);
 }
 
-// renderGroupLegend lists the ACTIVE colour grouping - one row per project, spell or depth band
-// with the hue it was given. A colour preset repaints every node, and the kind legend beside it
+// renderGroupLegend lists the ACTIVE color grouping - one row per project, spell or depth band
+// with the hue it was given. A color preset repaints every node, and the kind legend beside it
 // then describes a palette that is no longer on the canvas: the one panel whose whole job is to
-// say what the colours mean is the one saying something false. Rows are not clickable here, and
+// say what the colors mean is the one saying something false. Rows are not clickable here, and
 // deliberately: a kind row filters to kind:<k>, but these groups already ARE the whole graph
 // partitioned, so "filter to this group" is the query box's job, not a legend click.
 function renderGroupLegend(preset: string) {
@@ -3025,7 +3025,7 @@ function renderGroupLegend(preset: string) {
       }
     }
   }
-  setLegendTitle(GROUP_LEGEND_TITLES[preset] ?? "Colour groups");
+  setLegendTitle(GROUP_LEGEND_TITLES[preset] ?? "Color groups");
   legendEl.innerHTML = groups
     .map((g, i) =>
       counts[i] === 0
@@ -3102,7 +3102,7 @@ function renderLegend() {
 
 // ---- scope bar ---------------------------------------------------------------
 // One row naming every emphasis in effect. A query, a view, a local-graph focus, the default
-// projection and a colour preset can all be applied at once; before this the operator inferred
+// projection and a color preset can all be applied at once; before this the operator inferred
 // that from five widgets that never referred to each other.
 //
 // It RENDERS the live state rather than owning it - each pill delegates to the same clear path
@@ -3173,11 +3173,11 @@ function scopePills(): ScopePill[] {
   if (activePreset) {
     const preset = activePreset;
     pills.push({
-      // The preset labels read "Color by project"; the pill already says colour, so drop the prefix.
+      // The preset labels read "Color by project"; the pill already says color, so drop the prefix.
       label:
-        "colour: " +
+        "color: " +
         (COLOR_PRESETS.find((p) => p.id === preset)?.label ?? preset).replace(/^Color by /, ""),
-      title: "Clear the colour preset",
+      title: "Clear the color preset",
       clear: () => applyPreset(preset),
     });
   }
@@ -3569,7 +3569,7 @@ async function switchGraphKind(kind: "targets" | "knowledge") {
 //
 // A DAG layout places every node in one pass, so its extent is final and it can be fitted now.
 // Force spreads from a seeded disc for about a second (alphaDecay 0.06, see startSimulation), and
-// the disc is already centred on the usable area - so the graph is never off-screen while it
+// the disc is already centered on the usable area - so the graph is never off-screen while it
 // settles, and one fit afterwards is a single fluid motion instead of a hunt.
 function frameNewGraph() {
   cancelCameraBeats(); // a new graph retires any settle still pending for the old one
@@ -4378,7 +4378,7 @@ function renderSuggestions() {
   }
   wrap.hidden = false;
   // The heading rides in the same innerHTML as the chips so it appears and disappears with them;
-  // without it these read as a third, unlabelled group of Ask chips rather than as facts already
+  // without it these read as a third, unlabeled group of Ask chips rather than as facts already
   // computed about the graph in front of you.
   wrap.innerHTML =
     '<p class="console-graph-sidebar__viewslabel">In this graph</p>' +
@@ -4591,11 +4591,11 @@ function applyPreset(presetId: string) {
   // kind palette and the only trace of the click was the button's own fill.
   renderLegend();
   // The bottom status bar carries this, NOT the floating result line over the canvas. The result
-  // line is a strip centred on the stage: it lands on top of the legend - the one panel a reader
-  // is looking at when they change the colouring - and it puts the explanation nowhere near the
+  // line is a strip centered on the stage: it lands on top of the legend - the one panel a reader
+  // is looking at when they change the coloring - and it puts the explanation nowhere near the
   // control that produced it. The status bar already spans the foot of the app.
   // Same reasoning as the graph switch: nothing to announce. The legend has already retitled from
-  // "Node kinds" to the grouping and listed every group with its hue, the overview's Colour row
+  // "Node kinds" to the grouping and listed every group with its hue, the overview's Color row
   // states the meaning, and the sidebar hint under the control says a second click clears it. The
   // sentence that used to go here restated all three.
   setStatus("");
@@ -4605,12 +4605,12 @@ function applyPreset(presetId: string) {
 }
 
 // One line per preset saying what the canvas now MEANS - not what the control is called. Read by
-// the overview's Colour row, which is where a reader asks the question.
+// the overview's Color row, which is where a reader asks the question.
 const PRESET_RESULT_LINES: Record<string, string> = {
-  project: "Coloured by project: one hue per project, so boundaries show.",
-  spell: "Coloured by spell: one hue per toolchain, so layers show.",
-  depth: "Coloured by dependency depth: pale depends on nothing, dark depends on the most.",
-  duration: "Coloured by run duration: hot is slow.",
+  project: "Colored by project: one hue per project, so boundaries show.",
+  spell: "Colored by spell: one hue per toolchain, so layers show.",
+  depth: "Colored by dependency depth: pale depends on nothing, dark depends on the most.",
+  duration: "Colored by run duration: hot is slow.",
 };
 
 // ---- live mode -------------------------------------------------------------
@@ -4921,7 +4921,7 @@ function liveConnect() {
 // console status bar's own dot. What is left is the one fact nothing else states: the graph on
 // screen is a snapshot from some earlier moment, and how much earlier.
 // staleNotice is the exact text this writer last put on the shared status line, or null. A
-// BOOLEAN was not enough: the line has several writers (views, queries, the colour presets), and a
+// BOOLEAN was not enough: the line has several writers (views, queries, the color presets), and a
 // flag only records that we wrote at some point, not that our text is still the text showing. With
 // the flag, a view answering after a disconnect left the flag set, and the reconnect then cleared
 // the VIEW's answer. Comparing the text means we only ever clear our own.
@@ -5560,7 +5560,7 @@ function bootWireEvents() {
       // Selecting a node narrows the stage by the explain card's width, and a DAG layout keeps
       // its pinned coordinates through that, so the framing goes stale with nothing to correct
       // it. What the correction should BE depends on what the camera was doing: holding one
-      // node in the middle, re-centre on it in the new box; framing the graph, re-fit; being
+      // node in the middle, re-center on it in the new box; framing the graph, re-fit; being
       // driven by hand, leave it alone - moving it then yanks the view out from under a click.
       if (centeredOn) centerOn(centeredOn);
       else if (!cameraOwnedByOperator) fitView(matchSet);

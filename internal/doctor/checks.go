@@ -992,7 +992,7 @@ func (*runner) checkOutputOwnedByTwoTargets(projects []*types.Project) types.Doc
 // everything else.
 //
 // ADVICE, never a failure, and the doctrine at types/doctor.go decides that rather
-// than taste: which files are build inputs is the workspace's judgement. A LICENSE
+// than taste: which files are build inputs is the workspace's judgment. A LICENSE
 // nobody's cache key reads is correctly undeclared, and a checker that failed on it
 // would be dictating a layout. What magus can say is that the seeding is happening -
 // the cost is real and invisible, and every entry here is either a declaration
@@ -2009,7 +2009,7 @@ func (r *runner) checkAgentSkills() types.DoctorCheck {
 		// reinstalled, because --force rewrites only the names magus ships. Naming it as
 		// the remedy would make --fix run forever. No Fix rather than a pruning one:
 		// --prune deletes directories the caller has not reviewed, which is the
-		// judgement case the Fix contract reserves for a report.
+		// judgment case the Fix contract reserves for a report.
 		if orphans := r.orphanedSkillDirs(root, stale); len(orphans) > 0 {
 			return types.DoctorCheck{
 				Name:    name,
@@ -2328,7 +2328,7 @@ func (r *runner) checkConcurrencySizing() types.DoctorCheck {
 // change underneath it.
 //
 // FAIL, not advice, which is where this parts company with MGS1028. An undeclared file
-// is a judgement call the workspace is entitled to make; this is a declaration that
+// is a judgment call the workspace is entitled to make; this is a declaration that
 // cannot mean what it says. Nobody writes "gen/*.binpb" hoping it matches nothing.
 //
 // Only PATTERNS are reported. A wildcard-free path names one file and is resolved by

@@ -71,6 +71,6 @@
 @import "@patternfly/patternfly/components/TextInputGroup/text-input-group.css";
 /* The shell's left navigation rail (#console-sidebar, sidebar.ts) is a PF Nav: __list/__item/__link
  * with pf-m-current for the surface the active tab is showing. Collapsed it shows only __link-icon;
- * the widths and the collapsed geometry are retuned through PF's own --pf-v6-c-nav__link--* custom
+ * the widths and the collapsed geometry are returned through PF's own --pf-v6-c-nav__link--* custom
  * properties in console.css rather than by re-skinning the component. */
 @import "@patternfly/patternfly/components/Nav/nav.css";

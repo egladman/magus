@@ -25,7 +25,7 @@ type Capture struct {
 	Title  string
 	Source Source
 	Tags   []string
-	// Entries are in the order they should be read, which is the caller's judgement rather
+	// Entries are in the order they should be read, which is the caller's judgment rather
 	// than this package's - a review thread reads by file, a chat log by time.
 	Entries []CaptureEntry
 }

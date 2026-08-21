@@ -38,7 +38,7 @@ const ManagerGo = "gomod"
 // version at all and is DROPPED - there is no pin to record, and a local path is not
 // a third-party dependency in any sense this graph means.
 //
-// A missing or unparseable go.mod yields no packages and no error. Every caller is a
+// A missing or unparsable go.mod yields no packages and no error. Every caller is a
 // best-effort graph loader for which a malformed manifest is one project's absent
 // data, not a failed build.
 func GoModule(path string) []types.KnowledgePackage {

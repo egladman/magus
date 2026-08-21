@@ -26,7 +26,7 @@ export interface RatePoint {
 }
 
 // comparable reports whether two adjacent samples measure the same counter, so their
-// difference is a rate rather than an artefact.
+// difference is a rate rather than an artifact.
 export function comparable(a: SampleView, b: SampleView): boolean {
   if (a.cacheSrc !== b.cacheSrc) return false;
   // An unknown generation on either side counts as a boundary: joining an unknown process

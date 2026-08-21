@@ -3,7 +3,7 @@
 //
 // TWO SOURCES, ONE GRAMMAR. Both tenants answer "what is the shape of this work, and where did it
 // get to", and a reader should not have to learn the picture twice, so they share the stage, the
-// accessible twin list, the detail sheet, the state colours and the state marks:
+// accessible twin list, the detail sheet, the state colors and the state marks:
 //
 //  - DECLARED (ledger.ts) - the table an orchestrating agent keeps while it fans work out: one row
 //    per unit, with its parent, its owned and forbidden paths, what it depends on, and the state it
@@ -18,7 +18,7 @@
 //
 // Three decisions worth stating:
 //
-//  1. no_return IS ITS OWN COLOUR, and it belongs to the ledger ALONE. A unit that failed came back
+//  1. no_return IS ITS OWN COLOR, and it belongs to the ledger ALONE. A unit that failed came back
 //     and said so; a unit that never returned said nothing, and is the only state on this surface
 //     that no one else will report. It is never drawn, counted, or worded as a failure - and the
 //     run plan never invents one, because an engine that resolved a DAG knows what happened to
@@ -227,7 +227,7 @@ function svgEl<K extends keyof SVGElementTagNameMap>(
 }
 
 // trunc keeps a node label inside its box. SVG text neither wraps nor ellipsizes, so an id longer
-// than the box would run over its neighbours; the full id is on the node's <title>, in the list,
+// than the box would run over its neighbors; the full id is on the node's <title>, in the list,
 // and in the detail, so nothing is lost by shortening it here.
 function trunc(s: string, max: number): string {
   return s.length <= max ? s : s.slice(0, max - 1) + "...";
@@ -245,7 +245,7 @@ const SOURCE_LABEL: Record<PlanSource, string> = { declared: "Declared", run: "R
 // who has learned one view has learned both.
 interface DrawnNode {
   readonly id: string;
-  // The data-state value. plan.css maps it to a colour; the two sources' vocabularies do not
+  // The data-state value. plan.css maps it to a color; the two sources' vocabularies do not
   // overlap except where they mean the same thing (running, pass, fail).
   readonly state: string;
   readonly mark: string;
@@ -550,7 +550,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   const emptyBody = h("p", undefined, "");
   emptyBodyWrap.append(emptyBody);
   // The showcase offer, as the diff surface makes it: someone with no daemon running meets this
-  // first, and a dead end is a worse first impression than a fabricated plan clearly labelled as
+  // first, and a dead end is a worse first impression than a fabricated plan clearly labeled as
   // one. Hidden unless the caller offers it - "nothing delegated" is a real answer about a real
   // workspace, and burying it under a demo button would be answering a different question.
   // No demo button, on any page - see the diff surface for the reasoning. showEmpty names where a
@@ -583,7 +583,7 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   };
 }
 
-// field renders one labelled row of the detail sheet. An absent value renders NOTHING rather than
+// field renders one labeled row of the detail sheet. An absent value renders NOTHING rather than
 // an empty row: a plan that declares no checkpoint and a plan whose checkpoint is blank look the
 // same on screen otherwise, and only one of them is a gap worth noticing.
 function field(dl: HTMLElement, label: string, value: string): void {
@@ -819,7 +819,7 @@ export function activate(host: HTMLElement): PlanInstance {
       if (!n || !el) continue;
       const age = n.terminal ? "" : ageLabel(n.updated, now);
       const stale = isStale(n.terminal, n.updated, now);
-      // The word rides along with the number: colour alone cannot carry a state on this surface.
+      // The word rides along with the number: color alone cannot carry a state on this surface.
       const label = age && stale ? age + " stale" : age;
       if (el.textContent !== label) el.textContent = label;
       el.toggleAttribute("data-stale", stale);

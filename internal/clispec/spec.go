@@ -127,7 +127,7 @@ type Flag struct {
 	//
 	// This is the difference between documenting a shorthand and binding one. The
 	// hand-written CLI binds a pair to ONE variable, so -t and --test are the same
-	// switch. Modelled as two independent flags, a generated binder gave them two
+	// switch. Modeled as two independent flags, a generated binder gave them two
 	// destinations, and setting one left the other false - the shorthand parsed and
 	// then did nothing. Every generated struct field is a GROUP: the primary plus
 	// its aliases, bound to a single address.

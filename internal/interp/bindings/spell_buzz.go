@@ -149,7 +149,7 @@ func newBuzzSpellInvoker(spec spells.Descriptor, src string) func(context.Contex
 
 // callBuzzSpellFunc executes src in a fresh module-registered session and calls
 // the exported handler fn with the invocation's Target and the input callback cb,
-// returning its result marshalled back to a Go value. The handler signature is
+// returning its result marshaled back to a Go value. The handler signature is
 // fun(target: Target, cb: fun(any)) > bool: the handler calls cb(io) with an empty
 // map and reads the op's inputs the host writes into it (the cache passes
 // {project, hash, dest/src} via req.Params). Inputs arrive by mutation rather than

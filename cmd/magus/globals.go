@@ -222,7 +222,7 @@ type recordedFlag struct {
 }
 
 // recordFlagSet snapshots every flag bound for name. Called by cmdParse AFTER the local
-// registration closure, so the record is the complete set the parser will honour.
+// registration closure, so the record is the complete set the parser will honor.
 func recordFlagSet(name string, fs *flag.FlagSet) {
 	var flags []recordedFlag
 	fs.VisitAll(func(f *flag.Flag) {

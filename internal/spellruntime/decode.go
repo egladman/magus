@@ -13,7 +13,7 @@ import (
 )
 
 // Obj is a read view over a spell record (a Buzz map, wrapped in the buzzSpellObj
-// adapter). Decoupling Decode from the concrete value type keeps the marshalling in
+// adapter). Decoupling Decode from the concrete value type keeps the marshaling in
 // one place: Obj is the single boundary that knows a spell's shape, and the seam a
 // second authoring backend would implement.
 type Obj interface {
@@ -38,7 +38,7 @@ type Obj interface {
 	// CallStrs resolves the field at key to a []string. It accepts either form
 	// the field takes across a spell's life: a function (in a definition,
 	// needs()/provides() are called with args) or an already-resolved list (in a
-	// bound handle, where define/load marshalled the result back as data so
+	// bound handle, where define/load marshaled the result back as data so
 	// magus.project can decode the spell by value at bind time). Absent yields
 	// (nil, nil). Calling a function is the one genuinely engine-specific act:
 	// Buzz calls through its session.

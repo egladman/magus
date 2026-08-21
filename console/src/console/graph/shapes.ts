@@ -1,6 +1,6 @@
-// Per-family node shapes: the graph's second channel for identity, after colour.
+// Per-family node shapes: the graph's second channel for identity, after color.
 //
-// Twenty categorical colours cannot satisfy WCAG SC 1.4.1 however they are derived - the palette in
+// Twenty categorical colors cannot satisfy WCAG SC 1.4.1 however they are derived - the palette in
 // tokens.css collapses to an OKLab dE of 3.4 under simulated deuteranopia, against a threshold
 // around 8. Shape has the same five-or-six category ceiling as hue, which is why it pairs with the
 // palette rather than competing: one shape per FAMILY is six shapes.
@@ -66,7 +66,7 @@ export function traceNodeShape(
     case "triangle": {
       const s = r * K_TRIANGLE;
       // Nudged down because an equilateral triangle's centroid sits below its circumcentre;
-      // centred on the circumcentre it looks like it is floating above its own edges.
+      // centered on the circumcentre it looks like it is floating above its own edges.
       const cy = y + s * 0.125;
       ctx.moveTo(x, cy - s);
       ctx.lineTo(x + s * 0.866, cy + s * 0.5);

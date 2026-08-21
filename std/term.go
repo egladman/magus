@@ -138,7 +138,7 @@ func TermSizeOf(_ context.Context) (types.TermSize, error) {
 	return types.TermSize{Width: w, Height: h}, nil
 }
 
-// TermColorize wraps s in style, honouring the terminal's colour capability.
+// TermColorize wraps s in style, honoring the terminal's color capability.
 func TermColorize(_ context.Context, s, style string) (string, error) {
 	if !tty.WantsColor(os.Stderr, tty.SystemProbe) {
 		return s, nil
@@ -222,7 +222,7 @@ func TermNotify(ctx context.Context, message, level string, ttlMs int) error {
 	style := notifyStyle(types.LogLevel(level))
 	if !tty.WantsColor(os.Stderr, tty.SystemProbe) {
 		// NO_COLOR asks for plain text, and the band is text like any other.
-		// Severity still reads from the message; it just is not coloured.
+		// Severity still reads from the message; it just is not colored.
 		style = ""
 	}
 	// The write error is deliberately dropped, which is what lets this method

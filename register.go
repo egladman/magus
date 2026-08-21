@@ -141,12 +141,12 @@ func IncludeArch(v bool) TargetOption { return workspace.IncludeArch(v) }
 
 // platform, overriding what its spells would answer. Pass types.PlatformIndependent
 // to let one cache entry serve every platform; types.PlatformDependent to force the
-// opposite when a spell claims independence the target cannot honour.
+// opposite when a spell claims independence the target cannot honor.
 
 // RetryOnVolatile enables volatility detection and auto-retry for this target.
 func RetryOnVolatile() TargetOption { return workspace.RetryOnVolatile() }
 
-// WithTarget attaches a behavioural policy to the named target; multiple calls are merged.
+// WithTarget attaches a behavioral policy to the named target; multiple calls are merged.
 func WithTarget(name string, opts ...TargetOption) ProjectOption {
 	return workspace.WithTarget(name, opts...)
 }

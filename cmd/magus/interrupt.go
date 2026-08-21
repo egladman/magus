@@ -40,7 +40,7 @@ const interruptMessage = "interrupt: press Ctrl+C again to stop the run"
 // The confirmation is skipped, and the first signal stops the run, when:
 //
 //   - the signal is SIGTERM, which comes from a supervisor rather than a
-//     fingertip and must be honoured at once; or
+//     fingertip and must be honored at once; or
 //   - stderr is not a terminal, so nobody is there to read the prompt and
 //     a CI system sending SIGINT would otherwise have to send two.
 func watchInterrupts(parent context.Context) (context.Context, func(), func() (syscall.Signal, bool)) {

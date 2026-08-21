@@ -11,14 +11,14 @@
 // simply cannot be resolved from one line. Rather than carry cross-line state that would be
 // wrong whenever a hunk starts mid-construct, each line is tokenized alone and anything
 // ambiguous falls back to plain text. Under-highlighting is invisible; a confidently wrong
-// colour is worse than none, because it teaches the reader to distrust the whole column.
+// color is worse than none, because it teaches the reader to distrust the whole column.
 //
 // The output is RANGES, not markup. The renderer composes them with the intra-line emphasis
-// from words.ts - syntax owns the foreground colour, emphasis owns the background - so the two
+// from words.ts - syntax owns the foreground color, emphasis owns the background - so the two
 // signals never fight over the same property.
 
 // Token classes. Kept few on purpose: more classes means more palette, and a diff already
-// spends its colour budget on add/delete.
+// spends its color budget on add/delete.
 export type TokenClass = "kw" | "str" | "num" | "com" | "fn" | "";
 
 export interface Token {
@@ -175,7 +175,7 @@ export function tokenize(text: string, lang: Language): Token[] {
     // one cross-line inference worth making. Every convention in every language here continues
     // a block comment on the following lines, so an opener with no closer is a comment for the
     // rest of the line with near-certainty - and this codebase is dense with long comment
-    // blocks, so refusing to colour them leaves the most common thing on screen unstyled.
+    // blocks, so refusing to color them leaves the most common thing on screen unstyled.
     if (blockCommentLang(lang) && text.startsWith("/*", i)) {
       const close = text.indexOf("*/", i + 2);
       out.push({ start: i, end: close < 0 ? text.length : close + 2, cls: "com" });

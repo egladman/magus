@@ -40,15 +40,15 @@ function splitTitle(title: string): TitleParts {
   return { label: segs[segs.length - 1], parents: segs.slice(0, -1) };
 }
 
-// disambiguate is the editor behaviour for same-named documents: two tabs both showing `main.ts`
+// disambiguate is the editor behavior for same-named documents: two tabs both showing `main.ts`
 // are indistinguishable, so each grows the shortest run of parent directories that tells them
 // apart ("console/main.ts" vs "logs/main.ts" become the hints "console" and "logs"). The hint is
 // returned SEPARATELY from the label so the bar can render it dimmed beside the file name rather
 // than lengthening the name itself - the tab stays scannable at a glance.
 //
-// The depth is grown uniformly across a same-named group rather than minimised per tab: tabs that
+// The depth is grown uniformly across a same-named group rather than minimized per tab: tabs that
 // disambiguate at the same depth line up visually, and a group where one member needed a deeper
-// path than its neighbour reads as arbitrary. Tabs whose label is unique get no hint at all, so
+// path than its neighbor reads as arbitrary. Tabs whose label is unique get no hint at all, so
 // the common case (every tab showing a different thing) is unchanged.
 //
 // Two tabs on genuinely the same path exhaust their parents and keep identical hints - there is no

@@ -153,7 +153,7 @@ func (a *spellAnnotator) Annotate(an annotate.Annotation) error {
 	})
 }
 
-// Quote neutralises the provider's own command syntax in replayed output.
+// Quote neutralizes the provider's own command syntax in replayed output.
 //
 // The spell declares its command prefixes once, via quote_prefixes, and
 // the matching runs here in Go. That split is the point: this is called

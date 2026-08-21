@@ -122,9 +122,9 @@ test("inline code and emphasis render as elements", () => {
   assert.equal(host.querySelector("strong")?.textContent, "do not");
 });
 
-// Anything unrecognised keeps its characters. A note losing a line is far worse than a note
+// Anything unrecognized keeps its characters. A note losing a line is far worse than a note
 // showing a stray asterisk.
-test("unrecognised syntax degrades to its own text", () => {
+test("unrecognized syntax degrades to its own text", () => {
   assert.match(textOf("a | table | row\n---|---|---"), /a \| table \| row/);
   assert.match(textOf("some *unclosed emphasis here"), /some \*unclosed emphasis here/);
 });

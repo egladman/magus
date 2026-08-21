@@ -6,18 +6,18 @@ import { emphasis, pairForEmphasis } from "./words";
 const slice = (s: string, r: { start: number; end: number } | null): string | null =>
   r === null ? null : s.slice(r.start, r.end);
 
-test("one changed operator is emphasised down to the character that differs", () => {
+test("one changed operator is emphasized down to the character that differs", () => {
   const before = "total += x";
   const after = "total -= x";
   const e = emphasis(before, after);
-  // The "=" is common to both, so it is NOT part of the change. Emphasising "+=" would be
+  // The "=" is common to both, so it is NOT part of the change. Emphasizing "+=" would be
   // marking a character that did not change, which is the habit that makes highlighting
   // untrustworthy at the scale where it matters.
   assert.equal(slice(before, e.before), "+");
   assert.equal(slice(after, e.after), "-");
 });
 
-test("a renamed identifier is emphasised whole, not just its differing letters", () => {
+test("a renamed identifier is emphasized whole, not just its differing letters", () => {
   const before = "const userName = read()";
   const after = "const userLabel = read()";
   const e = emphasis(before, after);
@@ -26,7 +26,7 @@ test("a renamed identifier is emphasised whole, not just its differing letters",
   assert.equal(slice(after, e.after), "userLabel");
 });
 
-test("an insertion emphasises only the inserted span", () => {
+test("an insertion emphasizes only the inserted span", () => {
   const before = "call(a, b)";
   const after = "call(a, extra, b)";
   const e = emphasis(before, after);
@@ -40,13 +40,13 @@ test("identical lines carry no emphasis", () => {
   assert.equal(e.after, null);
 });
 
-test("a wholly different line carries no emphasis, because the row colour already says it", () => {
+test("a wholly different line carries no emphasis, because the row color already says it", () => {
   const e = emphasis("alpha", "9182");
   assert.equal(e.before, null);
   assert.equal(e.after, null);
 });
 
-test("an empty side is not emphasised", () => {
+test("an empty side is not emphasized", () => {
   const e = emphasis("", "added");
   assert.equal(e.before, null);
   assert.equal(e.after, null);

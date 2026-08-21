@@ -154,7 +154,7 @@ func buildMagusNS(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserv
 
 	// magus.modules() / magus.module(name): typed, native introspection of the host
 	// module registry - the same host.ModulesOutput core `magus describe module[s]`
-	// formats, marshalled straight to Buzz objects instead of scraping a subprocess's
+	// formats, marshaled straight to Buzz objects instead of scraping a subprocess's
 	// `-o json` stdout. modules() lists every module {name, doc, fields, methods};
 	// module(name) returns one with fields + per-method Buzz signatures, and raises on
 	// an unknown name. Hand-written (not declarative) because the core uses host,
@@ -197,7 +197,7 @@ func buildMagusNS(ctx context.Context, sess *buzz.Session, obs buzz.DirectObserv
 	// separate std log module on this surface. Each level writes into the process
 	// slog logger via emitMagusLog.
 	//
-	// Grouped, and grouped by BEHAVIOUR: everything here emits and returns. fatal and
+	// Grouped, and grouped by BEHAVIOR: everything here emits and returns. fatal and
 	// raise stay on magus itself because they end the run, and a namespace that mixed
 	// the two would let `magus\log.fatal(...)` read like one more level.
 	logNS := vm.NewMap()

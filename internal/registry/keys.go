@@ -24,7 +24,7 @@ var embeddedKeys []byte
 //
 // It is EMPTY until the registry keypair exists. That is deliberate rather than a
 // placeholder: an empty ring makes `magus self refresh` refuse the built-in source
-// with a clear reason, which is the correct behaviour for a binary that has been
+// with a clear reason, which is the correct behavior for a binary that has been
 // given no way to check what it would download. Filling it in is a one-line change
 // plus the matching MAGUS_REGISTRY_KEY secret.
 var PinnedKeys []ed25519.PublicKey

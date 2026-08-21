@@ -42,14 +42,14 @@ async function loadRefIndex(signal?: AbortSignal): Promise<RefEntry[] | null> {
 }
 
 // DrawerToggle is a minimal open/close controller with the Reference panel's dismissal + focus
-// behaviour. wireDrawerToggle factors that "pop-out" idiom out of initRefDrawer so a second pop-out (the
+// behavior. wireDrawerToggle factors that "pop-out" idiom out of initRefDrawer so a second pop-out (the
 // notification center) reuses the SAME mechanics rather than reimplementing them: a trigger toggles a
 // panel; Escape and an outside pointerdown dismiss it (unless canDismiss() vetoes, as the pinned
 // Reference panel does); focus moves into the panel on open and returns to the trigger on close; and
 // aria-expanded (trigger) / aria-hidden (panel) track the state. The panel is shown/hidden with its
 // `hidden` attribute, so the caller owns all visual styling. This is intentionally NARROWER than
 // initRefDrawer's own state machine (which also owns pinning, inline docking, and resize) - it is the
-// shared core, not a replacement for that surface's extra behaviour.
+// shared core, not a replacement for that surface's extra behavior.
 export interface DrawerToggle {
   open(): void;
   close(): void;

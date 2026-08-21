@@ -10,7 +10,7 @@
 //	assets/gen/core-loop.svg     what a reader sees   (generated, drift-gated)
 //
 // The capture is the raw byte stream off a pseudo-terminal, so the commands, the
-// numbers, the durations and the colours in the picture are the ones magus
+// numbers, the durations and the colors in the picture are the ones magus
 // actually produced - nothing here writes a "[pass]" line. What is staged is the
 // reading pace between frames, exactly as core-loop.session.sh already stages the
 // pauses between commands.

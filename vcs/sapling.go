@@ -450,7 +450,7 @@ const saplingArchivalMeta = ".sl_archival.txt"
 
 // ExportRevision implements types.RevisionExporter via `sl archive -t files`.
 //
-// Two Sapling behaviours shape this, both verified:
+// Two Sapling behaviors shape this, both verified:
 //
 //   - A whole-tree include is REFUSED ("this repository has a very large working copy and
 //     requires an explicit set of files to be archived") - and it fires on a four-file
@@ -723,7 +723,7 @@ func (v saplingVCS) InstallRefreshHook(_ context.Context, root, command string) 
 }
 
 // ConflictResolver and MergeStarter for Sapling. The resolve state machine is Mercurial's,
-// so the mapping is close - but two behaviours differ from hg and the methods below note
+// so the mapping is close - but two behaviors differ from hg and the methods below note
 // where they bite.
 //
 // The assertions are compile-time on purpose: both interfaces are reached by type assertion

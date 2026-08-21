@@ -40,7 +40,7 @@ export const STATE_LABEL: Record<UnitState, string> = {
   no_return: "no-return",
 };
 
-// STATE_MARK is the NON-COLOUR channel on a node. Colour alone fails WCAG 1.4.1, and this is a
+// STATE_MARK is the NON-COLOR channel on a node. Color alone fails WCAG 1.4.1, and this is a
 // surface whose entire content is five states told apart - the diff surface made the same call for
 // its add/delete markers. Short enough to sit inside a 152-unit-wide node beside the id.
 export const STATE_MARK: Record<UnitState, string> = {

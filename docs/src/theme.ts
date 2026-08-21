@@ -138,7 +138,7 @@
     // preference, and a cycle would hide half its states behind a click.
     //
     // `onMeans` is which switch position writes the stored value. Motion reads
-    // positively (on = reduce it), but glossary would not: a switch labelled "Glossary
+    // positively (on = reduce it), but glossary would not: a switch labeled "Glossary
     // highlights" must be ON when they are showing, so it is the OFF position that
     // stores "off". Same helper, opposite polarity, rather than a second function or a
     // label that says "Hide" to work around the widget.

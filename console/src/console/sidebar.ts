@@ -336,7 +336,7 @@ export function createSidebar(
   const pulseEl = document.createElement("div");
   pulseEl.id = "console-sidebar-pulse";
   // role=status for TWO reasons, and the first is the one that is easy to miss: aria-label is only
-  // honoured on an element whose role supports naming from the author, and a bare div's generic role
+  // honored on an element whose role supports naming from the author, and a bare div's generic role
   // does not - without a role the sentence below is dropped and a screen reader is left with "3".
   // Second, it is a live region, so a count that changes while you are elsewhere is announced
   // politely rather than silently. The paint below writes only on a real change, so the politeness

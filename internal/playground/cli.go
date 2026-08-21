@@ -120,7 +120,7 @@ func cliChildren(name string) []string {
 // explainCLI renders what a real magus subcommand is, and says plainly that the
 // browser cannot run it.
 //
-// This replaces the old fallthrough, which handed anything unrecognised to the
+// This replaces the old fallthrough, which handed anything unrecognized to the
 // Buzz evaluator: typing `doctor` reported `BZZ1001 undefined: doctor`, which
 // describes a Buzz scope rather than the magus command the reader meant. A
 // terminal that knows the whole CLI can say the true thing instead.

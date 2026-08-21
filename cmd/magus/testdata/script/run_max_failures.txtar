@@ -17,7 +17,7 @@
 # `a` throws immediately while `b` and `c` sit in a subprocess for a few seconds, so the
 # outcome does not depend on which goroutine wins the scheduler: `a` has always failed
 # long before the other two reach their write. --concurrency 4 so all three are admitted
-# at once rather than queueing behind one slot.
+# at once rather than queuing behind one slot.
 
 # Default is keep-going: a fails, and b and c still run to completion.
 ! exec magus run check:rw a b c --concurrency 4

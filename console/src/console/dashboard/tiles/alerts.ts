@@ -59,7 +59,7 @@ interface Alert {
   // the boundary - the rail announced that something broke and gave no way to go and look.
   //
   // href only, never the `run` callback variant: those cannot cross the NOTIFY_EVENT boundary (a
-  // function does not survive a CustomEvent from another bundle), so a rail that honoured them
+  // function does not survive a CustomEvent from another bundle), so a rail that honored them
   // would work for shell-raised alerts and silently do nothing for everyone else's.
   href: string;
   linkLabel: string;

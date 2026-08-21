@@ -136,7 +136,7 @@
   /* Graph edge opacity, read by graph/main.ts's readTheme. Light needs far less: the same alpha
      over white reads much heavier than over #292929, and with 6000 edges the lines were most of
      the ink on screen. The dim value is what non-incident edges drop to on hover - close enough to
-     the resting value that isolating a neighbourhood reads as a fade rather than a jolt. */
+     the resting value that isolating a neighborhood reads as a fade rather than a jolt. */
   --console-graph-edge-alpha: 0.26;
   --console-graph-edge-dim-alpha: 0.12;
   --console-accent-hover: var(--pf-t--global--color--brand--hover);        /* link/action hover      */
@@ -160,7 +160,7 @@
      where "Attention needed" is the single most important sentence on the board - the one state that
      has to be unmissable was the one failing the floor.
      The icon slots stay exactly as they are: they are correct for dots, borders and glyphs, which is
-     what they were chosen for. Use these ONLY where the colour lands on a glyph the reader is
+     what they were chosen for. Use these ONLY where the color lands on a glyph the reader is
      expected to READ. */
   /* The chrome surface: title bar, navigation rail, status bar. One slot, because those three are one
      continuous frame and must never drift apart.
@@ -187,7 +187,7 @@
   --console-spruce: #3f6b60; /* muted deep teal-green */
   /* Cooler earthy hues, held at the same low chroma + mid lightness as the warm set
      above so the six card accents read as ONE muted system, not a rainbow. */
-  --console-gold: #857032;   /* muted ochre          */
+  --console-gold: #857032;   /* muted ocher          */
   --console-slate: #3f5f78;  /* muted steel blue     */
   --console-indigo: #59547f; /* restrained indigo    */
   --console-stone: #6b645d;  /* neutral warm gray    */
@@ -231,7 +231,7 @@
      PatternFly's nonstatus families used to fill this and cannot: built as filled areas with a
      label on top, 18 of 20 fell below 3:1 as small marks on white.
 
-     Colour is never the only channel - graph/shapes.ts carries the second one, because under
+     Color is never the only channel - graph/shapes.ts carries the second one, because under
      deuteranopia the closest pair here drops to dE 3.4 whatever the scheme.
 
      A kind with no token falls back to a flat #888 in main.ts, silently. Count against the Kind*

@@ -418,7 +418,7 @@ func indexConnector(tokens []ConnectorToken, q string) (int, error) {
 // any hash work, then compares SHA-256 digests with subtle.ConstantTimeCompare
 // against every non-expired stored record carrying that scope. Expired records never
 // match, and neither does a token minted for a different surface - that filter is
-// what keeps the tiers disjoint rather than merely labelled.
+// what keeps the tiers disjoint rather than merely labeled.
 func (s *ConnectorStore) VerifyScope(presented string, scope ClientScope) bool {
 	if !validTokenFormat(presented) {
 		return false

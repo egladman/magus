@@ -147,7 +147,7 @@ func (f Forecaster) fits(assignments [][]*types.Project, projects []*types.Proje
 	return true
 }
 
-// optimalShardCount returns the makespan-minimising shard count N* = sqrt(W/α), clamped to [1, maxN].
+// optimalShardCount returns the makespan-minimizing shard count N* = sqrt(W/α), clamped to [1, maxN].
 func optimalShardCount(workMs, setupMs, alphaMs Millis, maxN int) int {
 	if maxN < 1 {
 		return 1

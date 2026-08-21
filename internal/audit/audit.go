@@ -50,7 +50,7 @@ type changeBucket struct {
 //
 // descs holds every descendant of the dispatching project — used for
 // per-change attribution via longest-prefix match. roots is the
-// minimised subset (topmost only) that take/diff actually walks; a
+// minimized subset (topmost only) that take/diff actually walks; a
 // nested descendant like api/docs/v2 is reached by recursing into
 // api/docs and would be double-walked if listed here as well.
 type Audit struct {

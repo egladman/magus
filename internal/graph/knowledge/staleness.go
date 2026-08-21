@@ -137,7 +137,7 @@ func outrunDays(prose, subject time.Time) int {
 //     existed and why it went - the "we rejected this and here is why" note. Ranking it down
 //     buries it exactly when nothing else can answer the question.
 //
-// Both mature systems that solved this in production converged on labelling instead: Guru
+// Both mature systems that solved this in production converged on labeling instead: Guru
 // keeps an unverified card "searchable and visible" with its lapsed state shown, and Google's
 // g3doc carries a "last reviewed by" byline rather than ranking down. Neither demotes.
 //

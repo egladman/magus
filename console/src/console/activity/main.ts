@@ -297,7 +297,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     }
   }
 
-  // revealDeepLink honours "#at=<epoch-ms>", which is how the dashboard's agent tile hands an
+  // revealDeepLink honors "#at=<epoch-ms>", which is how the dashboard's agent tile hands an
   // operator the full trail entry behind a summary row it just showed them.
   //
   // Matching on the timestamp rather than an id because the trail assigns none, and

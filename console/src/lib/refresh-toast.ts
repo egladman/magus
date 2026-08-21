@@ -47,7 +47,7 @@ export function showRefreshToast(source: string, message: string): void {
 // is about to happen and roughly when, and Cancel is there for the case where someone is in fact
 // standing at the screen. Cancelling is remembered by the caller, not here.
 //
-// Returns a canceller so the caller can call the whole thing off (leaving the mode, say).
+// Returns a canceler so the caller can call the whole thing off (leaving the mode, say).
 export function showCountdownToast(
   source: string,
   message: (secondsLeft: number) => string,

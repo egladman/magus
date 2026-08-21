@@ -25,7 +25,7 @@
 import type { GNode } from "./types.js";
 
 export const RADIAL_RING_R = 150; // world units between rings
-// Deepest ring placed (0 = center). Two, not four: radial exists to show ONE node's neighbourhood,
+// Deepest ring placed (0 = center). Two, not four: radial exists to show ONE node's neighborhood,
 // and at four hops it collected 1284 of this workspace's 2373 nodes - a circle with the whole graph
 // inside it and every edge crossing the middle. Two rings is what the layout can actually place
 // without the outer ring becoming a solid band.

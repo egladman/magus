@@ -198,7 +198,7 @@ func recordShowcaseSession() error {
 		return err
 	}
 	// The magus under test is this checkout's, not whatever is on PATH, so a
-	// recording shows the behaviour of the commit that produced it.
+	// recording shows the behavior of the commit that produced it.
 	repo, err := os.Getwd()
 	if err != nil {
 		return err

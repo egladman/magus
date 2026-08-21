@@ -170,7 +170,7 @@ export interface LockView {
   command: string;
   dir: string;
   acquireTime?: Timestamp;
-  // Supplied by the daemon so this renderer cannot drift from the CLI's judgement.
+  // Supplied by the daemon so this renderer cannot drift from the CLI's judgment.
   staleAfterSeconds: number;
   // Who is stalled behind this holder. A holder alone says who is working; this says
   // who is paying for it, which is the half a reader of a stuck queue wants.

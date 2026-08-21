@@ -71,7 +71,7 @@ export function ganttTile(): Tile {
   //
   // The tile encodes four separate things - horizontal position (when), bar length (how long), the
   // dashed leader (queued rather than working), and the shaded block (which run) - and the legend
-  // decoded only the fifth, colour. Someone looking at it cold could name the colours and still not
+  // decoded only the fifth, color. Someone looking at it cold could name the colors and still not
   // know which way time ran or what the dashes meant. A popover is the wrong home for this: it is
   // unreachable on a wall display, which is exactly where an unexplained chart is most expensive.
   const howto = h(
@@ -89,7 +89,7 @@ export function ganttTile(): Tile {
     ["passed", "passed"],
     ["failed", "failed"],
     ["cached", "cached"],
-    // The one legend entry that is not a colour. The dashed leader is the chart's most useful mark
+    // The one legend entry that is not a color. The dashed leader is the chart's most useful mark
     // and the least guessable, since nothing else on the board uses dashes to mean elapsed time.
     ["wait", "waiting to start"],
   ] as const) {

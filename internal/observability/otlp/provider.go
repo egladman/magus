@@ -409,7 +409,7 @@ func (p *otelProvider) Shutdown(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// disabledProvider honours the Provider contract without opening any connection.
+// disabledProvider honors the Provider contract without opening any connection.
 type disabledProvider struct{}
 
 func (disabledProvider) Enabled() bool                                               { return false }

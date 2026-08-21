@@ -144,7 +144,7 @@ type Target struct {
 	// budgets that can disagree.
 	//
 	// Undeclared (0) and an unmeasurable host both mean "take one slot", which is
-	// exactly the behaviour that existed before this field.
+	// exactly the behavior that existed before this field.
 	MemoryMB int `json:"memory_mb,omitempty" buzz:"memory_mb"`
 	// Drift is what happens when this target's declared outputs move under a read-only
 	// run. Empty is the DEFAULT, which gates any target that declares outputs - see
@@ -178,7 +178,7 @@ type Target struct {
 // It is a policy about the RESPONSE, never about the diagnosis. magus always separates
 // drift this change caused from drift that arrived with the base, because failing an author
 // for bytes they did not move is a bug in the gate rather than a strictness setting; there
-// is deliberately no way to spell that behaviour. See ClassifyDrift.
+// is deliberately no way to spell that behavior. See ClassifyDrift.
 //
 // The zero value gates, which is the point: a target that declares an output has already
 // claimed those bytes are a function of its inputs, and checking a claim the workspace

@@ -194,7 +194,7 @@ func (l Log) SlogLevel() slog.Level {
 type Cache struct {
 	Dir string `json:"dir" yaml:"dir"` // override default cache location (.magus/ in workspace root)
 	// Write gates producing entries. It replaces a cache.immutable flag that named the
-	// absence of the behaviour: answering "can this run write?" meant parsing a double
+	// absence of the behavior: answering "can this run write?" meant parsing a double
 	// negative, and the CI snippet that used it read inverted from its own intent.
 	Write   CacheWrite   `json:"write" yaml:"write"`
 	Include CacheInclude `json:"include" yaml:"include"`

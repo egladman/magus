@@ -213,7 +213,7 @@ func mermaidID(path string) string {
 
 // mermaidIDs assigns each path a unique Mermaid-safe node id, de-duplicated with a
 // numeric suffix on collision. It sorts first so the path that keeps the bare id on
-// a sanitised-name collision is deterministic regardless of input order (the output
+// a sanitized-name collision is deterministic regardless of input order (the output
 // feeds the MAGUS.md drift gate).
 func mermaidIDs(paths []string) map[string]string {
 	sorted := slices.Clone(paths)

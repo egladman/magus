@@ -27,7 +27,7 @@ import (
 // fingerprintShardContent hashes a shard's merged nodes and edges by streaming the
 // fields into SHA256 in canonical order.
 //
-// It does NOT marshal first, and that is the point twice over. Marshalling a shard
+// It does NOT marshal first, and that is the point twice over. Marshaling a shard
 // purely to hash the bytes made encoding the hot path of every magus command:
 // fingerprinting all shards is 757 ms at 50k projects, and the encode exists only to
 // be thrown away. Streaming the fields instead measured -31% sec/op and -27% B/op.

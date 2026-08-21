@@ -210,7 +210,7 @@ test("no reading hides the pulse rather than showing a zero", () => {
   assert.equal(el.hidden, true, "losing the daemon hides it again");
 });
 
-// aria-label is only honoured on an element whose role supports naming from the author; a bare div's
+// aria-label is only honored on an element whose role supports naming from the author; a bare div's
 // generic role is not one, so without the role the spoken name is silently dropped and a collapsed
 // rail reads as "3".
 test("the reading is nameable and announces itself", () => {

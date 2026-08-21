@@ -239,7 +239,7 @@ func DecodeCommandValue(v vm.Value) (spells.Command, error) {
 
 // buzzSpellObj adapts a Buzz data map (a resolved definition or a bound handle)
 // to Obj. All fields are plain data - needs/provides/ops were already resolved by
-// Resolve or marshalled into the handle - so there is no function-calling here.
+// Resolve or marshaled into the handle - so there is no function-calling here.
 type buzzSpellObj struct {
 	v vm.Value
 }

@@ -28,7 +28,7 @@ import (
 // v6 adds the "author" kind: a git contributor, with `authored` edges to the files they
 // touched (the EMERGENT maintainer, to set against a file's DECLARED CODEOWNERS owner).
 // v7 changes no node or edge shape at all: it bumps because shard fingerprints are now
-// computed by streaming fields into SHA256 instead of hashing marshalled JSON, so every
+// computed by streaming fields into SHA256 instead of hashing marshaled JSON, so every
 // shard's fingerprint VALUE differs from a v6 store's. The manifest check treats a
 // version mismatch as a full rebuild, which is exactly the migration needed - without
 // the bump, a v6 cache would read as current while every fingerprint disagreed, and a

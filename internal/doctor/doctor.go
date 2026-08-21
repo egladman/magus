@@ -16,7 +16,7 @@ import (
 // DaemonInfo carries live daemon state for the daemon-related doctor checks.
 // A nil daemon field means no daemon was found or queried.
 type DaemonInfo struct {
-	// Reachable is true when the daemon was successfully dialled.
+	// Reachable is true when the daemon was successfully dialed.
 	Reachable bool
 	// SockAddr is the resolved socket address (for display in check details).
 	SockAddr string
@@ -96,7 +96,7 @@ type runner struct {
 	ws   types.WorkspaceReader
 	// ctx bounds the checks that touch the world: a git probe, a socket dial, an HTTP
 	// GET. Each used to invent its own context.Background(), so a `magus_doctor` an
-	// agent cancelled kept dialling and walking regardless.
+	// agent cancelled kept dialing and walking regardless.
 	ctx context.Context
 }
 

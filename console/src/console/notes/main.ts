@@ -495,7 +495,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       head.setAttribute("aria-expanded", String(!folded));
       if (folded) head.dataset.collapsed = "";
       head.append(h("span", "console-notes-app__store-twist"));
-      // Parenthesised, because the number is a count of what is under this heading and not
+      // Parenthesized, because the number is a count of what is under this heading and not
       // part of the store's name - "Shared 4" reads for a moment as a fourth Shared.
       head.append(h("span", undefined, copy.title + " (" + mine.length + ")"));
       // A store that is declared and empty and a store that is not declared at all are

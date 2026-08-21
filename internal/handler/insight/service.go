@@ -4,7 +4,7 @@
 // types.InsightView to the wire at the boundary - the console service owns assembly and
 // caching, this owns the wire, and types/ stays free of protobuf.
 //
-// It is the typed replacement for the hand-marshalled JSON GET /api/v1/insight route, which
+// It is the typed replacement for the hand-marshaled JSON GET /api/v1/insight route, which
 // remains mounted for now: that route is documented, so retiring it is its own breaking change.
 package insight
 

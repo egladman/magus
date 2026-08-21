@@ -70,7 +70,7 @@ stdout '"url":'
 # An UNDECLARED file that the caller names is staged. It used to be refused: undeclared
 # paths were staged only under --untracked, however they arrived, so `magus vcs add
 # scratch.txt` printed "name them explicitly or pass --untracked" and then declined the
-# file just named. The advice described behaviour the command did not have, and the only
+# file just named. The advice described behavior the command did not have, and the only
 # way through was plain git - which is the thing vcs add exists to replace.
 cp src/a.newer.txt notes.txt
 exec magus vcs add notes.txt

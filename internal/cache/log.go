@@ -40,7 +40,7 @@ func newLogger(format string, level slog.Level) *slog.Logger {
 }
 
 // PrettyHandler renders both cache events (known cache.* messages) and general
-// diagnostics in a compact, scannable style: coloured ASCII status glyphs on a TTY,
+// diagnostics in a compact, scannable style: colored ASCII status glyphs on a TTY,
 // bracketed prefixes on plain streams. It carries no timestamps or level=/key=
 // boilerplate; that noise is what makes raw slog output hard to read interactively.
 //
@@ -248,14 +248,14 @@ func (h *PrettyHandler) paintStatus() {
 // latching cost the oldest visible failure whenever it happened late.
 func (h *PrettyHandler) band() []tty.Line {
 	// NO_COLOR applies here too. It is easy to miss, because the band only
-	// exists on a terminal and colour is what makes it readable - but the
-	// variable says any non-empty value disables colour, without an exception
+	// exists on a terminal and color is what makes it readable - but the
+	// variable says any non-empty value disables color, without an exception
 	// for the parts an author is fond of. Position and wording already carry
 	// the meaning: the status line is on top, failures below it.
 	//
 	// The selection is the one thing that CANNOT be dropped, since it is not
 	// decoration - it says which row a keypress will act on, and without it the
-	// prompt is unusable. Reverse video is not a colour, so it stays.
+	// prompt is unusable. Reverse video is not a color, so it stays.
 	color := h.wantsColor()
 	var dim tty.SGR
 	if color {
@@ -295,7 +295,7 @@ func (h *PrettyHandler) band() []tty.Line {
 			prev = f.Project
 			// The glyph rides the HEADER, once per project, not once per
 			// target. It is the only thing saying these rows are failures on a
-			// terminal with no colour, and repeating it down every branch of a
+			// terminal with no color, and repeating it down every branch of a
 			// tree is noise the tree already carries structurally.
 			rows = append(rows, tty.Line{Spans: []tty.Span{
 				{Text: glyph(color, "fail", colRed) + " ", Style: dim},
@@ -455,7 +455,7 @@ func (h *PrettyHandler) ensureLease() {
 	h.lease = h.zone.Acquire(stickyRegionRows)
 }
 
-// NewPrettyHandler builds the unified pretty handler. Colour is driven by the
+// NewPrettyHandler builds the unified pretty handler. Color is driven by the
 // terminal-ness of w's file descriptor (any writer exposing Fd(), not just an
 // *os.File); a writer without one -- a bytes.Buffer in tests, a pipe -- renders
 // plain. TTY detection runs per-Handle so late redirects are noticed.
@@ -573,7 +573,7 @@ func (h *PrettyHandler) Close() error {
 }
 
 // wantsColor reports whether output to this writer should carry ANSI
-// colour: the writer must be a terminal, and NO_COLOR must be unset.
+// color: the writer must be a terminal, and NO_COLOR must be unset.
 // It is consulted per record so a late redirect is noticed.
 //
 // The descriptor comes from tty.Fd, so any writer exposing Fd() is
@@ -872,7 +872,7 @@ func displayProjectLabel(label, project string) string {
 	return project
 }
 
-// ANSI colour codes used by the status glyphs. Cache state is conveyed by colour as
+// ANSI color codes used by the status glyphs. Cache state is conveyed by color as
 // well as by the parenthetical: a cached pass is dim, a fresh run is bright green.
 const (
 	// These name the palette tty already defines rather than restating the
@@ -886,7 +886,7 @@ const (
 )
 
 // glyph renders a bracketed status glyph like "[pass]" or "[fail]", ASCII only (no
-// Unicode symbols or emoji), coloured only on a TTY. pass/fail are the per-target
+// Unicode symbols or emoji), colored only on a TTY. pass/fail are the per-target
 // outcome words; cache state (cached vs ran) is shown separately in the line's
 // parenthetical, the orthogonal split every major build tool uses (e.g. Bazel's
 // "(cached) PASSED"). Named to match the doctor command's statusGlyph.
@@ -983,10 +983,10 @@ func (h *PrettyHandler) printFailure(colorize bool, f failureReport) {
 		// reproduce) stay in the scrolling region above where the user can
 		// select them without fighting the live update.
 		//
-		// The glyph is rendered uncoloured here even though this is a TTY: the
-		// band draws the whole row in bold red, and a coloured glyph would
+		// The glyph is rendered uncolored here even though this is a TTY: the
+		// band draws the whole row in bold red, and a colored glyph would
 		// close that with its own reset, leaving the project and target after
-		// it in the default colour.
+		// it in the default color.
 		h.failures[h.failureAt] = Failure{
 			Project:   project,
 			Target:    target,
@@ -1122,7 +1122,7 @@ func failureCauses(cause string) []string {
 	return out
 }
 
-// printRef prints a successful target's output reference id, labelled, after a
+// printRef prints a successful target's output reference id, labeled, after a
 // blank line.
 //
 // The id stays the LAST token on its own line, which is what makes a double-click

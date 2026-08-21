@@ -516,7 +516,7 @@ func notesVerify(ctx context.Context, root string, args []string) error {
 		vShared, vPrivate = notesScopeFlags(fs)
 		// Dangling only, and never drift. A dangling anchor is unambiguous, always fixable,
 		// and its cause is in the diff that broke it - the properties a gate needs. Drift is
-		// a judgement call whose base rate is low, and gating on judgement calls is how a
+		// a judgment call whose base rate is low, and gating on judgment calls is how a
 		// check earns a permanent `|| true`.
 		fs.BoolVar(&strict, "strict", false,
 			"Exit non-zero on a dangling anchor as well as an invalid note (for CI). Drift never fails.")
@@ -732,7 +732,7 @@ func printNotesIssues(issues []store.Issue, strict bool) error {
 // there because of what each finding costs to act on: a dangling anchor names something that
 // was renamed or deleted in a diff someone is already looking at, and the fix is bounded. A
 // drift finding asks a person to re-read prose against code and decide, and a gate that
-// blocks a merge pending a judgement call is one people route around permanently. The only
+// blocks a merge pending a judgment call is one people route around permanently. The only
 // actively-maintained tool in this space is a CI check that fails a pull request when covered
 // files move - the gate is the mechanism that works, and keeping it narrow is what keeps it.
 func notesIssuesError(issues []store.Issue, strict bool) error {
@@ -914,7 +914,7 @@ func commentAuthor(c types.DiffComment) string {
 		// "reviewer", not the "human" the enum spells, and not a name. The session records
 		// that a person wrote this and never which person, so a name would be invented; and
 		// "You" would be a lie to everyone except the one reader who captured it, which is
-		// exactly the wrong reader to optimise a committed note for.
+		// exactly the wrong reader to optimize a committed note for.
 		return "reviewer"
 	}
 	if c.AgentName == "" {

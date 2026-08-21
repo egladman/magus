@@ -12,7 +12,7 @@
 // imports its sibling SSG as `renderer`.
 //
 // Everything here COMPUTES; nothing decides. Choosing which of the three candidate
-// versions a change deserves is a judgement about what breaks for a consumer, and
+// versions a change deserves is a judgment about what breaks for a consumer, and
 // that belongs to a human. See the `release` target for the policy that uses these.
 import "vcs";
 import "semver";

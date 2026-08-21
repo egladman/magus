@@ -2,7 +2,7 @@
   <title>magus</title>
   <!--
     The adaptive TAB favicon, referenced as rel=icon type=image/svg+xml. Chrome, Edge and
-    Firefox render SVG favicons and honour the media query below, so the mark inverts with
+    Firefox render SVG favicons and honor the media query below, so the mark inverts with
     the browser theme. Safari does not use SVG favicons at all and falls back to
     favicon-32.png, which is why that PNG still ships and still has to read on both strips.
     Only the tab can adapt: the touch icon and the manifest icons are one fixed image each.
@@ -18,7 +18,7 @@
     shows through it. Nothing draws the band, which is why it stays crisp at 16px instead of
     turning into a smear.
 
-    COLOUR. Ground #2e2820, hat #e0b47c, contrast 7.63:1. ONE hue at two intensities: the
+    COLOR. Ground #2e2820, hat #e0b47c, contrast 7.63:1. ONE hue at two intensities: the
     ground is the SAME ~34deg amber as the hat, dropped to a dark, low-saturation wash of it.
     That is the console launcher's device - a glyph sitting on a low-percentage tint of its own
     accent - borrowed here so the icon and the app read as one family.
@@ -26,12 +26,12 @@
     This REPLACES an earlier rule that said to keep the ground desaturated and opposite the hat
     in temperature, on the grounds that a hue behind a hue leaves neither reading as the
     subject. The objection is real and the mitigation is the intensity gap: at this distance
-    apart the ground reads as a tinted surface rather than a competing colour. The hue is
+    apart the ground reads as a tinted surface rather than a competing color. The hue is
     the mascot's own: skin teal for the console, staff-orb amber for the docs, which sit
     near-complementary so the two apps are unmistakable side by side. Figure and ground now separate by LUMINANCE
     alone, so the contrast numbers carry more weight than before, not less. No black and no white anywhere: an icon is a graphical object, where WCAG's
     floor is 3:1, so holding 7:1 would force saturation down to pastel. These sit near 7:1,
-    which keeps the hue reading as a colour while the shape still resolves at 16px.
+    which keeps the hue reading as a color while the shape still resolves at 16px.
   -->
   <style>
     .g { fill: #2e2820 } .h { fill: #e0b47c }

@@ -1,4 +1,4 @@
-// store.test.ts - the dashboard's fan-out store. The behaviour worth pinning is what happens
+// store.test.ts - the dashboard's fan-out store. The behavior worth pinning is what happens
 // to the OTHER subscribers when one misbehaves: the dashboard pushes one status frame to every
 // tile about once a second, so a single broken tile must not be able to stop the board.
 

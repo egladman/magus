@@ -36,7 +36,7 @@ type ReplOptions struct {
 	Candidates func() []string
 }
 
-// replInput is the REPL's line source. It is one type with two behaviours because
+// replInput is the REPL's line source. It is one type with two behaviors because
 // every caller wants the same thing - give me the next line - and only the
 // implementation differs:
 //
@@ -93,7 +93,7 @@ func newReplInput(opts ReplOptions, complete func(line string, pos int, key rune
 }
 
 // readLine returns the next line. The editor draws prompt itself; the scanner path
-// prints it, which is what keeps a piped transcript identical to the old behaviour.
+// prints it, which is what keeps a piped transcript identical to the old behavior.
 func (in *replInput) readLine(prompt string) (string, error) {
 	if in.editor != nil {
 		in.editor.SetPrompt(prompt)
@@ -790,7 +790,7 @@ func handlePryMeta(ctx context.Context, stdout, stderr io.Writer, line string, s
 	return 0, false
 }
 
-// pryBanner returns the coloured banner line printed on entry.
+// pryBanner returns the colored banner line printed on entry.
 func pryBanner(pctx PryContext, useColor bool) string {
 	loc := pctx.File
 	if pctx.Line > 0 {

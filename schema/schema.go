@@ -54,7 +54,7 @@ func FieldByGoPath(path string) (Field, bool) {
 
 // ParseBool parses a boolean environment variable value using a
 // case-insensitive comparison. "true", "1", "yes" → true; "false", "0", "no"
-// → false. Any unrecognised value returns fallback unchanged.
+// → false. Any unrecognized value returns fallback unchanged.
 func ParseBool(v string, fallback bool) bool {
 	switch strings.ToLower(v) {
 	case "true", "1", "yes":

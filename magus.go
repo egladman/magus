@@ -873,7 +873,7 @@ func (m *Magus) Diff(ctx context.Context, paths []string) (types.Diff, error) {
 		}
 		// One symbol crossing a project boundary makes the whole file public surface: a
 		// reviewer needs to know the file contains something a consumer can see, and burying
-		// that because its neighbours are internal is how the signal gets missed.
+		// that because its neighbors are internal is how the signal gets missed.
 		switch {
 		case len(sym.ExternalProjects) > 0 || sym.ModuleAPI:
 			f.Surface = types.DiffSurfacePublic

@@ -39,7 +39,7 @@ stdout 'would fix agent skills: magus agent install \.claude/skills --force --di
 # check declares no Fix for it. magus wrote the file, so it is graded; but --force
 # rewrites only the names magus ships, so the reinstall it would otherwise name can
 # never clear the finding and --fix would run forever. The remedy needs --prune, which
-# deletes directories the caller has not reviewed - a judgement call the Fix contract
+# deletes directories the caller has not reviewed - a judgment call the Fix contract
 # reserves for a report.
 mkdir .claude/skills/magus-renamed-away
 cp orphan.md .claude/skills/magus-renamed-away/SKILL.md

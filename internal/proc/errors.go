@@ -41,7 +41,7 @@ var (
 	// ErrVersionMismatch: the client's build version differs from the daemon's.
 	ErrVersionMismatch error = &notAdoptedError{"proc: version mismatch between parent and child magus"}
 
-	// ErrProtocolMismatch: the client sent an unrecognised non-empty Protocol value.
+	// ErrProtocolMismatch: the client sent an unrecognized non-empty Protocol value.
 	ErrProtocolMismatch error = &notAdoptedError{"proc: protocol version mismatch"}
 )
 
@@ -77,7 +77,7 @@ func AlreadyReported(err error) bool {
 // losing its Go type; matching that text back to the known sentinel restores errors.Is
 // and NotAdopted on the client. It is a decode, not a wrap - only ErrNotAdoptable
 // carries trailing context, so that one case wraps the sentinel to keep it; an
-// unrecognised message becomes a plain error.
+// unrecognized message becomes a plain error.
 func decodeWireError(msg string) error {
 	switch msg {
 	case ErrProtocolMismatch.Error():

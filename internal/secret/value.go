@@ -77,7 +77,7 @@ func (Value) Format(f fmt.State, _ rune) { _, _ = io.WriteString(f, mask) }
 func (Value) LogValue() slog.Value { return slog.StringValue(mask) }
 
 // MarshalText closes the encoder path that defeated the redacting handler: a type whose
-// fmt form looks clean while its marshalled form carries the credential.
+// fmt form looks clean while its marshaled form carries the credential.
 //
 // This ALSO covers encoding/json, which falls back to TextMarshaler for a type that
 // implements no json.Marshaler and quotes the result. A separate MarshalJSON was written

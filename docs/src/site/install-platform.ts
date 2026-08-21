@@ -19,7 +19,7 @@ export function initInstallPlatform(): void {
   const hay = (uaPlatform + " " + ua).toLowerCase();
 
   // Only Windows moves the needle. Everything else - macOS, Linux, the BSDs, and anything
-  // unrecognised - is served by the install script the Unix route already shows.
+  // unrecognized - is served by the install script the Unix route already shows.
   const isWindows = hay.includes("windows") || hay.includes("win32") || hay.includes("win64");
   if (!isWindows) return;
 

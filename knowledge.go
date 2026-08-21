@@ -230,7 +230,7 @@ func BuildKnowledgeGraph(ctx context.Context, ws types.Inspector, root string, c
 // Go is the only reader today. Its manifest states exact versions, so go.mod alone is a
 // resolved inventory; an ecosystem whose manifest holds ranges needs its lockfile
 // (ProjectEntry.Lockfiles, already resolved beside Manifests) and a reader that
-// understands that format. Best-effort throughout: an unreadable or unparseable
+// understands that format. Best-effort throughout: an unreadable or unparsable
 // manifest contributes no packages rather than failing the graph build.
 func loadKnowledgePackages(projects types.ProjectsOutput) map[string][]types.KnowledgePackage {
 	out := map[string][]types.KnowledgePackage{}

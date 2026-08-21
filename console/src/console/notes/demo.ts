@@ -5,9 +5,9 @@
 // That disclosure is not politeness, it is the condition on this file existing at all. A
 // note's only provenance is the person who wrote it - nothing in the repository
 // corroborates one later, which is why agents may read notes and never write them
-// (notes/what-belongs-in-a-note.md). Sample prose shown unlabelled in THIS surface would be
+// (notes/what-belongs-in-a-note.md). Sample prose shown unlabeled in THIS surface would be
 // the one lie the store cannot survive, because a reader takes what they see here as
-// something a colleague wrote. Labelled, it is a screenshot with the lights on.
+// something a colleague wrote. Labeled, it is a screenshot with the lights on.
 //
 // So: if the disclosure goes, this file goes with it.
 //

@@ -51,7 +51,7 @@ type Notifier struct {
 // toast is one notification and the moment it stops being shown. A zero
 // deadline means it never expires on its own: it stays until a newer toast
 // pushes it out of the band, or the notifier is closed.
-// The notification's decoration: accentBar is its colour stripe, accentCols the
+// The notification's decoration: accentBar is its color stripe, accentCols the
 // width that stripe occupies, and marqueeHold how many ticks a scrolling
 // message rests at each end before moving on.
 const (
@@ -490,9 +490,9 @@ func bolden(s SGR) SGR {
 	return s + ";" + SGRBold
 }
 
-// style drops colour when the terminal does not want it. The notifier draws
+// style drops color when the terminal does not want it. The notifier draws
 // straight into the band rather than through the handler, so NO_COLOR has to
-// reach it here or the one row a reader is meant to act on is the only coloured
+// reach it here or the one row a reader is meant to act on is the only colored
 // thing left on a monochrome terminal.
 func (n *Notifier) style(s SGR) SGR {
 	if n.zone == nil || !WantsColor(n.zone.w, n.zone.probe) {
@@ -564,13 +564,13 @@ func (n *Notifier) paint() error {
 	offset := height - len(shown)
 	width := n.lease.Width()
 	for i, t := range shown {
-		// An accent bar in the toast's own colour, then the message in BOLD.
+		// An accent bar in the toast's own color, then the message in BOLD.
 		//
 		// The message used to be a single plain span, which put it at the same
 		// weight as the dim chrome around it - so the one row on screen that
 		// exists because a person has to act on it read like everything else.
 		// The bar is the affordance every toast UI uses, and it survives
-		// NO_COLOR as a shape even when the colour is dropped.
+		// NO_COLOR as a shape even when the color is dropped.
 		rows[offset+i] = Line{Spans: []Span{
 			{Text: accentBar + " ", Style: n.style(t.style)},
 			{Text: marquee(t.text, t.off, width-accentCols-1), Style: n.style(bolden(t.style))},

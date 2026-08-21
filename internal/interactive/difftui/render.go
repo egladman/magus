@@ -13,11 +13,11 @@ const (
 	overviewHelp = "up/down file   enter jump   esc back"
 )
 
-// The palette, named for what each colour MEANS in a changeset rather than for the colour, the
+// The palette, named for what each color MEANS in a changeset rather than for the color, the
 // way the cache log names its own. Every one is a code tty already defines, so this package
 // invents no escape sequence of its own.
 //
-// Emphasis is the line's colour made BOLD, which the palette already carries as a pair. It reads
+// Emphasis is the line's color made BOLD, which the palette already carries as a pair. It reads
 // as more of the same thing rather than as a different kind of thing, and it deliberately is not
 // SGRReverse: reverse means "the selected row" everywhere else in magus, and a diff where every
 // changed word looked selected would be saying something it does not mean.
@@ -56,7 +56,7 @@ func Chrome(m *Model) int {
 // It returns a string rather than writing one so [tty.InlineView] can rewrite only the rows
 // that differ - moving the cursor changes two lines and costs two lines of terminal traffic.
 //
-// colour is decided by the caller, from [tty.WantsColor], and is a parameter rather than
+// color is decided by the caller, from [tty.WantsColor], and is a parameter rather than
 // something read here so the model stays as testable as it is: false must produce the plain
 // frame, byte for byte, with no escape sequence anywhere in it.
 func Frame(m *Model, color bool) string {
@@ -130,7 +130,7 @@ func rowText(r Row, color bool) string {
 	return r.Text
 }
 
-// lineText colours one line of a hunk and draws the part that changed harder than the rest.
+// lineText colors one line of a hunk and draws the part that changed harder than the rest.
 //
 // It cuts the PLAIN text and styles each piece separately, which is what makes it impossible to
 // slice an escape sequence in half - the mistake that turns a viewer into a corrupted screen
@@ -145,7 +145,7 @@ func lineText(r Row) string {
 		base, emph = sgrDel, sgrDelEmph
 	default:
 		// Context, and the marker line saying a file has no trailing newline: nothing changed
-		// here, so nothing is coloured.
+		// here, so nothing is colored.
 		return r.Text
 	}
 	if r.Emph.Empty() {

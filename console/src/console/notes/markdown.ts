@@ -15,7 +15,7 @@
 // deliberately NOT passed through; it renders as the characters it is.
 //
 // A SUBSET, on purpose: paragraphs, ATX and setext headings, fenced code, lists, blockquotes,
-// rules, and inline code/emphasis/links. Anything unrecognised degrades to its own text rather
+// rules, and inline code/emphasis/links. Anything unrecognized degrades to its own text rather
 // than disappearing, because a note losing a line is worse than a note showing a stray asterisk.
 // No dependency: the console carries no markdown library, and a parser plus a sanitizer is a
 // large supply-chain surface for a feature this bounded.

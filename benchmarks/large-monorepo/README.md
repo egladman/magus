@@ -61,7 +61,7 @@ match, node-for-node and edge-for-edge, what turbo/nx/lage derive from
    `ctx.needs`. The 5 real `next build`s dominate the wall-clock, exactly as
    they do for turbo/nx/lage, which also build only the apps.
 
-### Verified behaviour
+### Verified behavior
 
 - cold `next build` runs and caches `.next`;
 - a warm run is an all-hit cache replay (the declared `.next/**` outputs stay

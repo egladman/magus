@@ -216,7 +216,7 @@ const (
 	VerdictTooOld
 	// VerdictTooNew means the version is at or above Below.
 	VerdictTooNew
-	// VerdictUnknown means the comparison could not be made - an unparseable probed
+	// VerdictUnknown means the comparison could not be made - an unparsable probed
 	// version, or a bound that is not a version. It is never a violation: a window
 	// magus cannot evaluate must not fail a build, the same way an unprobeable tool
 	// is not "too old".
@@ -287,7 +287,7 @@ func normalizeBound(v string) (string, bool) {
 // what it has qualified. An empty bound on either side contributes nothing, so a
 // workspace that sets only a ceiling keeps the spell's floor.
 //
-// An unparseable bound is kept rather than discarded. Dropping it would silently widen
+// An unparsable bound is kept rather than discarded. Dropping it would silently widen
 // the result, and Check turns it into VerdictUnknown where the reader can see it.
 func (b VersionBounds) Intersect(other VersionBounds) VersionBounds {
 	out := b
@@ -301,7 +301,7 @@ func (b VersionBounds) Intersect(other VersionBounds) VersionBounds {
 }
 
 // higher reports whether candidate is a tighter floor than current. An empty candidate
-// never wins; an empty current always loses to a real one. An unparseable candidate
+// never wins; an empty current always loses to a real one. An unparsable candidate
 // loses, which leaves the existing bound in place for Check to report as unknown.
 func higher(candidate, current string) bool { return tighter(candidate, current, 1) }
 

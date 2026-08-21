@@ -1,5 +1,5 @@
 // Package annotate emits CI job-log structure: the fold markers and the
-// warning/error notices a CI provider recognises.
+// warning/error notices a CI provider recognizes.
 //
 // The shape mirrors [cache.RemoteBackend]: magus core names no provider.
 // It holds an [Annotator], asks whether it is Active, and calls generic
@@ -11,7 +11,7 @@
 //
 //   - Groups carry an ID separate from their title, because GitLab
 //     sections and TeamCity blocks are keyed by a machine name.
-//   - Groups state whether they want to be collapsed; providers honour
+//   - Groups state whether they want to be collapsed; providers honor
 //     what they can.
 //   - EndGroup may legitimately do nothing: Buildkite has no end marker.
 //   - Annotations carry a source location and a diagnostic code, so
@@ -89,7 +89,7 @@ type Group struct {
 // transitive dependency chose to print. A provider must never interpolate
 // them where their content becomes syntax (a shell command, a URL), or a
 // dependency that printed a payload would be executing it on every CI
-// machine. [Sanitize] is a floor, not a licence to be careless.
+// machine. [Sanitize] is a floor, not a license to be careless.
 type Annotation struct {
 	Level   Level
 	Message string
@@ -121,7 +121,7 @@ type Annotator interface {
 	EndGroup(id string) error
 	// Annotate raises a message outside the job log.
 	Annotate(a Annotation) error
-	// Quote returns text safe to replay into the job log, neutralising any
+	// Quote returns text safe to replay into the job log, neutralizing any
 	// provider command syntax it contains.
 	//
 	// Not cosmetic: magus replays captured subprocess output, so a test
@@ -180,9 +180,9 @@ func Detect(w io.Writer) Annotator {
 	return Nop{}
 }
 
-// QuoteWith neutralises any line in text that begins with one of the
+// QuoteWith neutralizes any line in text that begins with one of the
 // given command prefixes, by dropping the prefix's first character so
-// the provider no longer recognises the line as a command.
+// the provider no longer recognizes the line as a command.
 //
 // Providers hand over their prefixes once rather than being asked per line:
 // this runs over every replayed line of a failing build, the one path where

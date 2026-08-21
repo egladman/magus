@@ -306,7 +306,7 @@ func serve(srv *Server, svc *service) {
 	// dispatched from a connection handler (an RPC `server stop`), so the two run
 	// concurrently by design rather than by accident. Accept on a closed listener
 	// returns an error, which is exactly the loop's existing exit condition, so
-	// holding the value across the close needs no extra signalling.
+	// holding the value across the close needs no extra signaling.
 	ln := srv.currentListener()
 	if ln == nil {
 		return // closed before the accept loop got going
@@ -341,7 +341,7 @@ func handleConn(svc *service, conn net.Conn, wg *sync.WaitGroup) {
 	_ = conn.SetReadDeadline(time.Now().Add(handshakeTimeout))
 	typ, line, err := readFrame(conn)
 	if errors.Is(err, io.EOF) {
-		return // bare liveness probe (isSocketLive dialled and closed), silent no-op
+		return // bare liveness probe (isSocketLive dialed and closed), silent no-op
 	}
 	if err != nil {
 		writeErr(conn, err.Error())

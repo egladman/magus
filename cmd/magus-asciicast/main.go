@@ -1,5 +1,5 @@
 // Command magus-asciicast records a terminal session to an asciicast v2 file:
-// everything a command printed, including the escape sequences that colour it and
+// everything a command printed, including the escape sequences that color it and
 // redraw its status line, with a timestamp on each chunk so a player can replay it
 // at the speed it actually happened.
 //
@@ -13,7 +13,7 @@
 // The pseudo-terminal is the whole trick. magus checks isatty to decide whether to
 // colourise and whether to draw its live regions at all, so a session captured
 // through a pipe would be the WRONG output: the plain non-TTY fallback, missing
-// exactly the behaviour worth showing. Running the child under a pty makes isatty
+// exactly the behavior worth showing. Running the child under a pty makes isatty
 // true and records what a person would actually see.
 //
 // Written in Go rather than as a script for the reason the rest of this repository

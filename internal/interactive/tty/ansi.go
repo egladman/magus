@@ -63,7 +63,7 @@ const (
 // compile and paint a message that read as a style code. It cannot now.
 type SGR string
 
-// SGR parameter codes. These name the colour, not the meaning: a caller
+// SGR parameter codes. These name the color, not the meaning: a caller
 // decides that "a cache hit is dim green", because what reads as low
 // signal differs per surface. Shared so the codes themselves are written
 // once.
@@ -75,7 +75,7 @@ const (
 	SGRYellow  SGR = "33"
 	SGRBoldRed SGR = "1;31"
 	// SGRReverse swaps foreground and background. It marks the selected row of
-	// an interactive band, and is used instead of a colour because it composes:
+	// an interactive band, and is used instead of a color because it composes:
 	// "7;1;31" is the same red the row already had, highlighted.
 	SGRReverse     SGR = "7"
 	SGRDimGreen    SGR = "2;32"
@@ -85,7 +85,7 @@ const (
 
 // Colorize wraps s in an SGR sequence and closes it again, so no caller
 // composes escapes by hand or forgets the reset. An empty sgr returns s
-// untouched, which lets a caller pass a colour it computed conditionally
+// untouched, which lets a caller pass a color it computed conditionally
 // without branching.
 //
 // Callers that already know output is not a terminal should skip this
@@ -128,8 +128,8 @@ func Hyperlink(text, uri string) string {
 // reader can see and never cutting inside an escape sequence.
 //
 // [Clip] counts bytes, which is exact for the plain text it was written for and
-// catastrophic for text that is already styled. A single coloured cell is one
-// column and about fifteen bytes, so a byte budget cuts a coloured row long
+// catastrophic for text that is already styled. A single colored cell is one
+// column and about fifteen bytes, so a byte budget cuts a colored row long
 // before it is actually too wide - in the middle of an escape - after which the
 // terminal reads the following text as parameters and swallows it. That is a
 // corrupted screen, repainted several times a second.
@@ -193,7 +193,7 @@ func closesStyle(seq string) bool {
 // escapeLen reports the length of the escape sequence starting at s, or 0 when
 // s does not start with one.
 //
-// It recognises the two shapes magus emits: CSI (ESC [ ... final byte) and OSC
+// It recognizes the two shapes magus emits: CSI (ESC [ ... final byte) and OSC
 // (ESC ] ... ST or BEL), the latter because hyperlinks carry a URI that must
 // never be counted as visible text or cut in half.
 func escapeLen(s string) int {

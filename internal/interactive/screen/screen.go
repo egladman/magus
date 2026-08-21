@@ -29,7 +29,7 @@ const tabWidth = 8
 //
 // It implements exactly the vocabulary magus emits and nothing else, so it is a
 // complete model of what magus does to a terminal rather than a partial model
-// of terminals in general. An unrecognised sequence is dropped rather than
+// of terminals in general. An unrecognized sequence is dropped rather than
 // guessed at.
 //
 // That rule cuts both ways, and it has already bitten once: a sequence this
@@ -38,7 +38,7 @@ const tabWidth = 8
 // one users have. Anything new in the emitted vocabulary belongs here in the
 // same change.
 //
-// The scroll-region behaviour is the part that carries its weight: a newline on
+// The scroll-region behavior is the part that carries its weight: a newline on
 // the last row of the scroll region scrolls only rows [top, bottom], leaving
 // the reserved zone below untouched. That single rule is what the whole Region
 // design rests on, and emulating it is what lets a test prove the zone survives
@@ -91,7 +91,7 @@ func (s *Screen) Write(p []byte) (int, error) {
 		case '\n':
 			// ONLCR: a cooked terminal turns a bare newline into carriage
 			// return plus line feed, which is what every Go program printing to
-			// one actually gets. Modelling the line feed alone would leave the
+			// one actually gets. Modeling the line feed alone would leave the
 			// column where the text ended and misplace everything after it.
 			s.col = 1
 			s.lineFeed()
@@ -103,7 +103,7 @@ func (s *Screen) Write(p []byte) (int, error) {
 			// HT advances to the next 8-column stop; it does not erase, so the
 			// cells it skips keep whatever is already in them.
 			//
-			// Modelling it as an ordinary character put ONE cell was wrong in a
+			// Modeling it as an ordinary character put ONE cell was wrong in a
 			// way only a picture shows: `go test` prints "ok  \tacme/admin\t0.531s",
 			// so the columns after each tab landed up to seven cells left of
 			// where the terminal actually put them - and the rendered SVG
@@ -320,7 +320,7 @@ func decodeRune(s string) (rune, int) {
 // written to, and a sequence of pointers to one live Screen would all show its
 // final state. The copy carries the CELLS, styles included - which the obvious
 // alternative of re-rendering String() into a fresh screen does not, because
-// String is plain text and drops every colour.
+// String is plain text and drops every color.
 //
 // Cursor position and scroll region are copied too, so a snapshot is a complete
 // terminal rather than a picture of one.

@@ -2,7 +2,7 @@
   <title>magus</title>
   <!--
     The adaptive TAB favicon, referenced as rel=icon type=image/svg+xml. Chrome, Edge and
-    Firefox render SVG favicons and honour the media query below, so the mark inverts with
+    Firefox render SVG favicons and honor the media query below, so the mark inverts with
     the browser theme. Safari does not use SVG favicons at all and falls back to
     favicon-32.png, which is why that PNG still ships and still has to read on both strips.
     Only the tab can adapt: the touch icon and the manifest icons are one fixed image each.
@@ -18,14 +18,14 @@
     shows through it. Nothing draws the band, which is why it stays crisp at 16px instead of
     turning into a smear.
 
-    COLOUR. Ground #31302e, hat #8fc6b9, contrast 6.87:1. The hat carries the hue and the ground
+    COLOR. Ground #31302e, hat #8fc6b9, contrast 6.87:1. The hat carries the hue and the ground
     stays desaturated - put a hue behind a hue and neither reads as the subject. The hue is
     the mascot's own: skin teal for the console, staff-orb amber for the docs, which sit
     near-complementary so the two apps are unmistakable side by side. Each ground is nudged
     OPPOSITE its hat in temperature, so figure and ground separate by temperature as well as
     luminance. No black and no white anywhere: an icon is a graphical object, where WCAG's
     floor is 3:1, so holding 7:1 would force saturation down to pastel. These sit near 7:1,
-    which keeps the hue reading as a colour while the shape still resolves at 16px.
+    which keeps the hue reading as a color while the shape still resolves at 16px.
   -->
   <style>
     .g { fill: #31302e } .h { fill: #8fc6b9 }

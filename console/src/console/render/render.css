@@ -68,7 +68,7 @@
 }
 /* INFO and SUMMARY are both narration, and were both grey, so nothing separated them. They take two
    distinct hues from the console's earthy palette instead: spruce reads as neutral information,
-   indigo as the heavier line that closes a run. Neither borrows an outcome colour, so neither can
+   indigo as the heavier line that closes a run. Neither borrows an outcome color, so neither can
    be mistaken for a pass or a failure. */
 .console-render-badge--info { background: var(--console-spruce); }
 .console-render-badge--summary { background: var(--console-indigo); }

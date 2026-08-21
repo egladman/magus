@@ -1,10 +1,10 @@
-// ansi.ts - pure text parsing shared by the log viewer's renderers: ANSI SGR colour
+// ansi.ts - pure text parsing shared by the log viewer's renderers: ANSI SGR color
 // parsing (the captured output may carry escapes) and the leading magus status token
 // ("[pass]" / "[fail]" ...) that the pretty view promotes to a badge. No DOM here - the
 // DOM fill lives in render.ts; this module is a pure leaf so the model layer can strip
 // ANSI without pulling in rendering.
 
-// A run of text sharing one SGR state, with the CSS classes that colour it.
+// A run of text sharing one SGR state, with the CSS classes that color it.
 export interface AnsiSeg {
   text: string;
   cls: string[];
@@ -36,7 +36,7 @@ export function statusToken(raw: string): string {
 
 // --- ANSI SGR parsing ---------------------------------------------------------
 // Every CSI sequence, not just SGR. Cursor moves, line/screen erases, and
-// scroll-margin sets carry no colour but would otherwise survive into the
+// scroll-margin sets carry no color but would otherwise survive into the
 // DOM as literal text. magus only emits them to a real terminal, so a
 // captured log should never contain them - but a log captured through a
 // pty (script, docker -t, some CI runners) can, and rendering "[20;1H" at
@@ -82,7 +82,7 @@ export function parseAnsi(line: string): AnsiSeg[] {
   };
   while ((m = CSI_RE.exec(line)) !== null) {
     push(line.slice(last, m.index));
-    // Only SGR (final byte "m") changes colour state; every other CSI is
+    // Only SGR (final byte "m") changes color state; every other CSI is
     // cursor or screen control that has no meaning in a scrollback pane and
     // is dropped rather than rendered.
     if (m[0].endsWith("m")) applySGR(state, m[0].slice(2, -1));

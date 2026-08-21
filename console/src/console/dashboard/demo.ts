@@ -67,7 +67,7 @@ const HISTORY = 200; // seed samples (~a GitHub-year strip fills fast at ~1/s)
 // passed and whether it had to run are orthogonal, which is the same split Bazel makes. The demo
 // showing them fused was worse than cosmetic: this is the only place most people ever see magus
 // output rendered, so a reader learned a log format the tool does not have.
-//   - real ANSI SGR escapes, on exactly the lines whose tool actually colours them (golangci-lint,
+//   - real ANSI SGR escapes, on exactly the lines whose tool actually colors them (golangci-lint,
 //     eslint, buildkit, vite), which the renderer maps onto the theme-aware --console-ansi-* slots
 // Without them the showcase would render the whole pipeline and look identical to the flat
 // monospace dump it replaced.

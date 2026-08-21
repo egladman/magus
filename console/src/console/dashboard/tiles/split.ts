@@ -2,7 +2,7 @@
 // (the verdict and the run timeline) takes from the live-activity column beside it.
 //
 // ONE knob, snapped to whole grid columns, and that restraint is the design rather than a shortcut.
-// A freeform drag would let the canvas be dragged into states the layout cannot honour - fractional
+// A freeform drag would let the canvas be dragged into states the layout cannot honor - fractional
 // columns, a panel too narrow to render its content, the bin-packing this mode exists for quietly
 // undone - on a surface that is usually being looked at rather than used. Snapping to a column
 // boundary means every reachable state is one the grid already knows how to lay out, so there is no
@@ -13,7 +13,7 @@
 // The tempting thing to store is the arrangement: which panel sits where, how wide each one is. It
 // is also the thing that breaks the first time a panel is added or removed, because a saved
 // arrangement is a claim about a set of panels that no longer exists - and it breaks silently, for
-// exactly the users who have been around long enough to have customised anything.
+// exactly the users who have been around long enough to have customized anything.
 //
 // So what is stored is a single integer: how many of the twelve columns the left stack should get.
 // It says what the operator WANTED, not what the layout happened to be when they wanted it. Add a
@@ -101,7 +101,7 @@ export interface SplitHandle {
 // it was wrong three separate ways: the observer watched a container that is `fixed; inset: 0` and
 // therefore never resizes, so internal reflows never repositioned it; `left` resolves against the
 // offset parent's padding box while getBoundingClientRect is viewport-relative, so the two origins
-// differed by the canvas padding; and half the handle's width had to be fudged back out to centre
+// differed by the canvas padding; and half the handle's width had to be fudged back out to center
 // it on a seam. All three were re-implementations of arithmetic the grid already does correctly.
 // Letting the grid place it deleted every one of them.
 //

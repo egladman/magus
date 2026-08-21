@@ -122,7 +122,7 @@ export function fitTransform(
     ),
   );
 
-  // The centre of the usable box, in viewport pixels.
+  // The center of the usable box, in viewport pixels.
   const vx = insets.left + usableW / 2;
   const vy = insets.top + usableH / 2;
   const cx = (box.minX + box.maxX) / 2;
@@ -131,7 +131,7 @@ export function fitTransform(
 }
 
 /**
- * usableCenter returns the centre of the visible box in viewport pixels - where the force
+ * usableCenter returns the center of the visible box in viewport pixels - where the force
  * simulation should settle so the cold, un-fitted view lands beside the chrome rather than
  * under it. The initial transform is the identity, so viewport pixels and world units coincide.
  */

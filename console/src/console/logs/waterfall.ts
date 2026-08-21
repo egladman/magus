@@ -211,7 +211,7 @@ export function renderWaterfall(): void {
   const filtering = !q.empty;
   const outOfWin = (s: number, e: number): boolean =>
     !!state.focusWin && (e < dom.t0 || s > dom.t1);
-  // Multiple invocations get a labelled group header each; a single one renders headerless.
+  // Multiple invocations get a labeled group header each; a single one renders headerless.
   const showHeaders = multi.groups.length > 1;
 
   const allTargets = multi.groups.flatMap((g) => g.targets);

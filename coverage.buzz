@@ -7,7 +7,7 @@
 // mocks, the Buzz object mirrors) that no hand-written test will ever call, and
 // every one counts against the total. That pushes the real figure down and, worse,
 // creates an incentive to write tests for protobuf getters to defend the floor -
-// coverage theatre that verifies nothing.
+// coverage theater that verifies nothing.
 //
 // Detection uses Go's canonical marker (https://golang.org/s/generatedcode):
 //

@@ -115,7 +115,7 @@ func loadPreview(f cache.Failure, width int) []string {
 // sanitizeLogLine makes one captured line safe to draw inside the band.
 //
 // The band is a BOX, so every character has to occupy the column the layout
-// thinks it does. Captured output honours neither assumption:
+// thinks it does. Captured output honors neither assumption:
 //
 //   - A TAB advances the terminal to the next 8-column stop while the layout
 //     counts it as one, so the row overruns and loses its right border. This is
@@ -124,7 +124,7 @@ func loadPreview(f cache.Failure, width int) []string {
 //     overwrites the tree, the divider and both edges. Any tool drawing a
 //     progress bar emits them.
 //   - Other C0 controls and stray escape sequences move the cursor or change
-//     colour inside a region the band believes it owns.
+//     color inside a region the band believes it owns.
 //
 // So the line is flattened to printable text before it is ever a span. The full
 // bytes remain reachable exactly where they always were: the captured log the

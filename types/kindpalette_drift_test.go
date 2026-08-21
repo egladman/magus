@@ -66,7 +66,7 @@ func TestNodeKindPaletteDrift(t *testing.T) {
 				"graph.css does not alias --gk-%s; main.ts reads the alias, not the token", k)
 			require.Contains(t, kindsArray, `"`+k+`"`,
 				"main.ts KINDS omits %q; the legend would not list it", k)
-			// Shape is the second channel colour cannot carry (SC 1.4.1). A kind missing here
+			// Shape is the second channel color cannot carry (SC 1.4.1). A kind missing here
 			// falls back to a circle, which silently files it with the Code family.
 			require.Contains(t, shapesTS, "  "+k+": \"",
 				"shapes.ts SHAPE_BY_KIND omits %s; it would draw as an unexplained circle", k)

@@ -312,7 +312,7 @@ func collectTargetNodes(src *interp.Source) []types.TargetGraphNode {
 // project-wide globs, never replacing them. A cross-project input's owning project also
 // unions into DependsOn; a same-project one is skipped.
 //
-// Mutates projects in place, honouring ctx between them. A project whose source cannot
+// Mutates projects in place, honoring ctx between them. A project whose source cannot
 // be read contributes nothing, matching the static extractor's never-error contract.
 // ONE exception: a ctx.readsFiles/writesFiles/modifiesExistingFiles call with a
 // non-literal argument is a hard load error, because a computed footprint is invisible

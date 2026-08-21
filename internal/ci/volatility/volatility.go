@@ -16,7 +16,7 @@ import (
 // contextKey is an unexported type for context values to avoid collisions.
 type contextKey struct{}
 
-// Config controls volatility-detection behaviour.
+// Config controls volatility-detection behavior.
 type Config struct {
 	Enabled          bool    // when false, skip all retry and recording logic
 	BootstrapSamples int     // outcomes below which all failures are retried unconditionally

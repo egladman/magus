@@ -60,5 +60,5 @@ func boxWrap(content string, inner int, dim func(string) string) string {
 }
 
 // plain is the no-styling dim function, for a surface drawing to something that
-// does not want colour.
+// does not want color.
 func plain(s string) string { return s }

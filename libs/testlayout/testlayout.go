@@ -70,7 +70,7 @@ var conventional = []string{
 // rawconn.go.
 //
 // Every entry is a GOOS or GOARCH from `go tool dist list` on Go 1.26, plus
-// `unix`, which go/build honours without being a platform. An earlier version
+// `unix`, which go/build honors without being a platform. An earlier version
 // also carried `generic`, `other`, `stub`, `posix`, and `asm` because they read
 // like build tags. None is one, and each made resolver_generic_test.go beside
 // resolver.go silently exempt. Nobody reports a linter for staying quiet, so a
@@ -157,7 +157,7 @@ func (l linter) run(pass *analysis.Pass) (any, error) {
 		// The package rule runs before the exemption list, which is about FILE NAMES
 		// that have no source counterpart by design. Where a test file lives in the
 		// package tree is a different question from what it is called, and an
-		// export_test.go is not licence to sit outside the package.
+		// export_test.go is not license to sit outside the package.
 		if strings.HasSuffix(f.Name.Name, "_test") {
 			pass.Report(analysis.Diagnostic{Pos: f.Package, Message: externalPackageMessage(f.Name.Name)})
 		}

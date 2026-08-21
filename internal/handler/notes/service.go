@@ -330,7 +330,7 @@ func staleness(nodes map[string]types.KnowledgeNode, nodeID string) (notesv1.Sta
 // outrunDays parses the divergence attr into the wire's int32, clamped.
 //
 // The attr is graph data rather than a value this process computed, so it is parsed
-// defensively: an unparseable or negative value reads as 0 (no divergence claimed), and a
+// defensively: an unparsable or negative value reads as 0 (no divergence claimed), and a
 // value past int32 is capped rather than wrapped into a negative day count that would
 // render as prose newer than the code it describes.
 func outrunDays(attr string) int32 {

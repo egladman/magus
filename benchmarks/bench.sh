@@ -36,7 +36,7 @@ SKIP_VER="${BENCH_SKIP_VERSION_CHECK:-0}"
 DRY_RUN="${BENCH_DRY_RUN:-0}"
 MAGUS="${MAGUS_BIN:-magus}"
 
-# ── colours ───────────────────────────────────────────────────────────────────
+# ── colors ───────────────────────────────────────────────────────────────────
 red()     { printf '\033[1;31m%s\033[0m\n' "$*"; }
 green()   { printf '\033[1;32m%s\033[0m\n' "$*"; }
 yellow()  { printf '\033[1;33m%s\033[0m\n' "$*"; }
@@ -190,7 +190,7 @@ get_cmd() {
     # the synthetic tree wires cross-package deps via workspace:*, but pnpm does
     # not reliably symlink @bench/lib-* into each app's node_modules, so `tsc -b`
     # fails with TS2307 for EVERY tool, not just magus (see README "known issues").
-    # Build ordering is not the blocker: magus honours the magusfile's magus.needs
+    # Build ordering is not the blocker: magus honors the magusfile's magus.needs
     # edges, so libs finish before apps. The linking gap remains.
     if [[ "$family" == "magus" && "$fixture" == "ts" ]]; then
         case "$scenario" in S4|S5|S6|S7) echo "n/a"; return;; esac
@@ -315,7 +315,7 @@ run_bench() {
 
 # ── scenario runner ───────────────────────────────────────────────────────────
 # run_all_scenarios <fixture> <size> <tool> <daemon-label>
-# Expects CWD = gen/ directory with git repo initialised.
+# Expects CWD = gen/ directory with git repo initialized.
 run_all_scenarios() {
     local fixture="$1" size="$2" tool="$3" daemon="$4"
     local prefix="${fixture}-${size}-${tool}-${daemon}"
@@ -517,7 +517,7 @@ for tool in "${TOOLS[@]}"; do
             # no-daemon run (NX_DAEMON=false baked into get_cmd)
             run_all_scenarios "$FIXTURE" "$SIZE" "$tool" "daemonless"
 
-            # daemon-on run (default nx daemon behaviour)
+            # daemon-on run (default nx daemon behavior)
             run_all_scenarios "$FIXTURE" "$SIZE" "$tool" "daemon"
             ;;
         *)

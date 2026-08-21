@@ -199,7 +199,7 @@ func (l *Lease) Enabled() bool {
 // The bool is the point of the signature: only the caller knows what its content
 // IS. A failure line is a RECORD and must be printed plainly when it cannot be
 // pinned; a status line is a VIEW and must be dropped. Returning false keeps that
-// judgement where the knowledge is.
+// judgment where the knowledge is.
 //
 // Fewer rows than the lease holds leaves the remainder blank, which is what
 // lets an entry disappear; more are dropped.

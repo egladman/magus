@@ -146,7 +146,7 @@ func highestBelow(v *semver.Version) *semver.Version {
 	}
 }
 
-// compareVersions orders two version strings, treating an unparseable one as lowest so
+// compareVersions orders two version strings, treating an unparsable one as lowest so
 // it can never win the "highest Since" race and silently raise the required floor.
 func compareVersions(a, b string) int {
 	av, aerr := semver.NewVersion(a)

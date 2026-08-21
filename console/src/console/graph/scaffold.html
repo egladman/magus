@@ -56,7 +56,7 @@
 
     <section class="console-graph-app">
       <aside class="console-graph-sidebar">
-        <!-- Query bar: a labelled PF input-group. The "magus query" prompt is a LABEL above the field,
+        <!-- Query bar: a labeled PF input-group. The "magus query" prompt is a LABEL above the field,
              not an inline addon - as an addon it ate a third of the 18rem sidebar and truncated the
              field to "kind:...". Keeps #node-search and #search-copy-btn (main.ts wires them by id). -->
         <div class="console-graph-sidebar__search">
@@ -98,7 +98,7 @@
           </div>
         </div>
         <!-- SCOPE: every emphasis currently applied, in one place. A query, a view, a local-graph
-             focus, the projection and a colour preset can all be live at once, and the operator
+             focus, the projection and a color preset can all be live at once, and the operator
              was left to infer that from five separate widgets. Each pill clears the one thing it
              names. Rendered from the live state by renderScope() - it does not OWN the state,
              which is the separate refactor the graph contract has to come first for. -->
@@ -121,7 +121,7 @@
           <span class="console-graph-sidebar__chevron" aria-hidden="true"></span>
         </button>
         <ul id="node-list" aria-label="Graph nodes" hidden></ul>
-        <!-- VIEW: how the graph is DRAWN - arrangement and colour, the two halves of one question,
+        <!-- VIEW: how the graph is DRAWN - arrangement and color, the two halves of one question,
              which were split across an always-visible block and a collapsed disclosure. The layout
              toggle stays always-visible (Decision 3, discoverability phase): it is the manual
              override for the arrangement axis, and main.ts drives selection and each button's
@@ -135,12 +135,12 @@
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="radial" title="Rings around one node by distance: its neighborhood at a glance. Pick a node first."><span class="pf-v6-c-toggle-group__text">Radial</span></button></div>
           </div>
           <p id="arrangement-note" class="console-graph-display__unavailable" hidden></p>
-          <!-- Colour and Graph pair on one row: each is a short toggle group, and stacked they
+          <!-- Color and Graph pair on one row: each is a short toggle group, and stacked they
                spent two full rows of a 20rem column on controls that together do not fill one. -->
           <div class="console-graph-sidebar__viewpair">
           <div class="console-graph-sidebar__viewcell">
-          <p class="console-graph-display__sublabel" id="colour-label">Colour</p>
-          <div class="pf-v6-c-toggle-group console-graph-colorgroup__presetrow" role="group" aria-labelledby="colour-label">
+          <p class="console-graph-display__sublabel" id="color-label">Color</p>
+          <div class="pf-v6-c-toggle-group console-graph-colorgroup__presetrow" role="group" aria-labelledby="color-label">
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="project" title="Give each project its own hue, so the boundaries show on the canvas."><span class="pf-v6-c-toggle-group__text">Project</span></button></div>
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="spell" title="Give each spell its own hue, so the toolchain shows as an architectural layer."><span class="pf-v6-c-toggle-group__text">Spell</span></button></div>
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="depth" title="Shade by how deep a node sits in the dependency chain: pale depends on nothing, dark depends on the most. Computed here from the layered layout; there is no layer: query field to type."><span class="pf-v6-c-toggle-group__text">Depth</span></button></div>
@@ -161,8 +161,8 @@
           <p id="graphkind-note" class="console-graph-display__unavailable" hidden></p>
           </div>
           </div>
-          <p class="console-graph-display__controlhint">Colour paints over the kind palette; click an active one to clear it.</p>
-          <!-- The KEY for whatever colouring is active, directly under the control that sets it.
+          <p class="console-graph-display__controlhint">Color paints over the kind palette; click an active one to clear it.</p>
+          <!-- The KEY for whatever coloring is active, directly under the control that sets it.
                It used to float over the canvas at 88% opacity, which put it on top of the stage's
                workspace label and the top-left of the graph itself. Its rows are filters
                (click -> kind:<k>), so it belongs in the control column, not over the drawing. -->

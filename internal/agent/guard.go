@@ -53,7 +53,7 @@ var guardSurfaces = []string{"command", "path"}
 //
 // 2: docs/guides/integrations/agents/opencode-plugin.ts unconditionally passed
 // the attribution flag, which no released binary accepts (v0.3.0 predates it) -
-// an older binary rejected it, the plugin's judge() got unparseable stdout, and
+// an older binary rejected it, the plugin's judge() got unparsable stdout, and
 // every verdict silently allowed. The sh templates already retried without
 // attribution on exactly this failure (magus-guard-command.sh's guard()); the
 // plugin now does the same.

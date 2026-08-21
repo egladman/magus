@@ -164,7 +164,7 @@ func lsProjects(ctx context.Context, root string) error {
 		}
 		fmt.Println()
 	}
-	// Name the neighbours once, so the boundary between the verbs is discoverable
+	// Name the neighbors once, so the boundary between the verbs is discoverable
 	// from the command itself rather than only from the docs. Rendered through
 	// clihint (not hand-written) so a subcommand rename cannot leave a hint here
 	// pointing at a command that no longer exists - the drift test walks these.

@@ -18,9 +18,9 @@ import (
 //
 // The names existed only as string literals before this: `magus run` bound "wait"
 // in run.go, the man page declared "wait" in its own list, and the code that has to
-// recognise the flag later - localOnlyFlags, the pre-parse --detach peek, the REPL's
+// recognize the flag later - localOnlyFlags, the pre-parse --detach peek, the REPL's
 // "-C applies to the REPL" message - spelled it a third and fourth time. One const
-// (detachFlagName) existed and its neighbour on the same line did not, which is the
+// (detachFlagName) existed and its neighbor on the same line did not, which is the
 // shape this is meant to make impossible: a flag name is now declared once, as data,
 // and every other mention resolves to it or fails to compile.
 //

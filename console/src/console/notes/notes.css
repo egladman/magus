@@ -12,7 +12,7 @@
  * Nothing here redefines a class logs.css also defines, which is what lets both sheets sit in
  * the document when both surfaces are open.
  *
- * Colours come from the PF token set and the console's own --console-* palette, so light and
+ * Colors come from the PF token set and the console's own --console-* palette, so light and
  * dark need no per-mode rules here. */
 
 .console-notes-app {
@@ -99,8 +99,8 @@
   margin-left: auto; text-transform: none; letter-spacing: 0;
   overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
 }
-/* Two hues that read as "different kind of thing", deliberately NOT status colours - neither
-   store is a problem, and colouring private as a warning would say that it is. */
+/* Two hues that read as "different kind of thing", deliberately NOT status colors - neither
+   store is a problem, and coloring private as a warning would say that it is. */
 .console-notes-app__store[data-scope="shared"] .console-notes-app__store-consequence { color: var(--console-slate); }
 .console-notes-app__store[data-scope="private"] .console-notes-app__store-consequence { color: var(--console-indigo); }
 
@@ -308,7 +308,7 @@
 
 /* --- Cold empty state --------------------------------------------------------------------
    The [data-empty-*] "ways" hooks are styled in the shared console.css, so this only has to
-   centre the block within the panel. */
+   center the block within the panel. */
 .console-notes-app__empty {
   flex: 1 1 auto;
   padding: clamp(1.5rem, 5vw, 3rem); color: var(--pf-t--global--text--color--subtle);
@@ -389,7 +389,7 @@
   border-inline-start: 2px solid var(--pf-t--global--border--color--default);
 }
 /* Person and agent are separated by hue, because a tool's output reading as a colleague's
-   opinion is the one misreading a transcript must not allow. Neither is a status colour. */
+   opinion is the one misreading a transcript must not allow. Neither is a status color. */
 .console-notes-app__entry[data-voice="person"] { border-inline-start-color: var(--console-slate); }
 .console-notes-app__entry[data-voice="agent"] { border-inline-start-color: var(--console-indigo); }
 /* A continued message keeps the rail and drops the name, so a run reads as one turn. */
