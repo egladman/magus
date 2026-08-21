@@ -2829,8 +2829,9 @@ function setListExpanded(v: boolean) {
   const btn = el("list-toggle");
   if (btn) btn.setAttribute("aria-expanded", v ? "true" : "false");
   // The toggle's own label reads "Show/Hide the N matching nodes" under a scope, so it has to be
-  // repainted when the disclosure flips. Guarded against the re-entry renderList would cause,
-  // since renderList itself calls setListExpanded on a fresh query.
+  // repainted when the disclosure flips. Only when it actually flipped: applyQuery expands and
+  // then renders on its own, so an unguarded repaint here would render the list twice for every
+  // keystroke that lands on an already-expanded list.
   if (changed && graph) renderList();
 }
 
