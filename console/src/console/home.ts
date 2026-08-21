@@ -10,8 +10,10 @@
 // strand you in a window you did not ask for.
 import { openSurfaceWindow } from "../lib/appwindow";
 import type { PulseView } from "./pulse";
-import { sigilHue, sigilSvg } from "./sigil";
-import { workspaceScope } from "../lib/scope";
+import { assignSigils, renderSigil, sigilSpec, type SigilSpec } from "./sigil";
+import { CAST_MS, castSigil, shouldCast } from "./cast";
+import { shortName, workspaceScope } from "../lib/scope";
+import { persisted } from "../lib/persist";
 
 // A surface the launcher can open: the pageId the console registered it under, and a human label.
 export interface Launchable {
@@ -280,15 +282,66 @@ export function syncLauncherPulse(root: HTMLElement, p: PulseView | null): void 
 // because that is the one the reader chose; otherwise the only loaded workspace. With several loaded
 // and none picked there is no mark - drawing an arbitrary one of them would be a claim about which
 // workspace you are looking at.
+// Which workspaces have already had their sigil drawn for them. One record, so a console that has seen
+// a dozen workspaces does not scatter a dozen keys.
+const castCell = persisted<Record<string, true>>("sigil-cast", {});
+
+// paintSigil draws the mark for whichever workspace this window is answering for, and the FIRST time
+// it sees one, traces it. Scope first, because that is the one the reader chose; otherwise the only
+// loaded workspace. With several loaded and none picked there is no mark - drawing an arbitrary one of
+// them would be a claim about which workspace you are looking at.
 function paintSigil(root: HTMLElement, p: PulseView): void {
   const el = root.querySelector<HTMLElement>("[data-launcher-sigil]");
   if (!el) return;
   const seed = workspaceScope() || (p.workspaces.length === 1 ? p.workspaces[0] : "");
   el.hidden = seed === "";
   if (!seed) return;
-  el.innerHTML = sigilSvg(seed, 30);
-  el.style.color = "var(" + sigilHue(seed) + ")";
-  el.title = seed;
+  // Resolved against the workspaces this daemon has loaded, so two of them can never draw the same
+  // picture. Falls back to the plain derivation when the scope is not in the list - a workspace the
+  // daemon has not reported has no peers to be distinct from.
+  const spec: SigilSpec = assignSigils(p.workspaces).get(seed) ?? sigilSpec(seed);
+  el.innerHTML = renderSigil(spec, 44);
+  el.style.color = "var(" + spec.hue + ")";
+  // The SHORT name, never the root. A full path carries a username, a client, an unreleased codename;
+  // the sigil discloses none of that by construction, and a tooltip spelling the path out would hand
+  // back exactly what the mark was careful not to encode.
+  el.title = shortName(seed);
+  maybeCast(seed, spec);
+}
+
+// maybeCast runs the first-sight flourish, once per workspace, ever.
+//
+// Recorded on COMPLETION, not on start: a tab that was hidden, or a click that ended it early, must
+// leave the workspace still owing its one showing rather than silently spending it. A hidden tab waits
+// for the tab to come back instead.
+let casting = false;
+function maybeCast(seed: string, spec: SigilSpec): void {
+  if (casting) return;
+  const decide = (): void => {
+    const seen = castCell.get()[seed] === true;
+    const reducedMotion =
+      typeof matchMedia === "function" && matchMedia("(prefers-reduced-motion: reduce)").matches;
+    const verdict = shouldCast({ seen, hidden: document.hidden, reducedMotion });
+    if (verdict === "skip") {
+      // Reduced motion still counts as shown - the sigil is on screen, just not drawn - so it is not
+      // deferred forever waiting for a ceremony that will never be wanted.
+      if (!seen) castCell.set({ ...castCell.get(), [seed]: true });
+      return;
+    }
+    if (verdict === "defer") {
+      document.addEventListener("visibilitychange", onVisible, { once: true });
+      return;
+    }
+    casting = true;
+    void castSigil(renderSigil(spec, 168), CAST_MS).then((completed) => {
+      casting = false;
+      if (completed) castCell.set({ ...castCell.get(), [seed]: true });
+    });
+  };
+  const onVisible = (): void => {
+    if (!document.hidden) decide();
+  };
+  decide();
 }
 
 // syncLauncherChord names the palette's CURRENT key in the zero-tab hint. Called by the shell every

@@ -1052,6 +1052,35 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 @media (width < 48rem) {
   .console-shell-scope__caption { display: none; }
 }
+/* The first-sight flourish (cast.ts): the ground dims and the workspace's sigil traces itself once,
+   turning as it draws. Every move here is a TRANSITION rather than a keyframe animation - a browser
+   does not advance animations in a hidden tab, and for a once-ever event that would spend the single
+   showing on a tab nobody is looking at. A transition that never interpolates degrades to "it just
+   appeared", which is the failure worth having. */
+.console-cast {
+  position: fixed; inset: 0; z-index: var(--pf-t--global--z-index--600);
+  display: grid; place-items: center;
+  background: color-mix(in srgb, var(--pf-t--global--background--color--primary--default) 72%, transparent);
+  backdrop-filter: blur(7px);
+  opacity: 0;
+  transition: opacity 320ms ease;
+}
+.console-cast[data-on] { opacity: 1; }
+/* Turning WHILE it draws, which is only legible because the figure is rotationally symmetric - the
+   mark reads as being inscribed rather than as sliding into place. */
+.console-cast__mark {
+  color: var(--console-accent);
+  transform: rotate(-120deg) scale(0.9);
+  opacity: 0;
+  transition: transform 1400ms ease-in-out, opacity 420ms ease;
+}
+.console-cast[data-on] .console-cast__mark { transform: rotate(0deg) scale(1); opacity: 1; }
+/* Someone who asked for less movement is not shown the ceremony at all (cast.ts skips it), but if a
+   preference changes mid-flight nothing should keep moving. */
+@media (prefers-reduced-motion: reduce) {
+  .console-cast, .console-cast__mark { transition: none; }
+}
+
 /* The workspace's sigil, above the heading. Tinted by the inline colour sigil.ts sets, so the mark
    takes the workspace's hue the way every launcher card takes its surface's. */
 [data-launcher-sigil] { display: block; margin-block-end: 0.6rem; line-height: 0; }
