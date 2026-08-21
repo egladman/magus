@@ -4945,20 +4945,31 @@ function clearStaleNotice() {
 // paints nothing on the surface itself.
 function publishLiveStatus() {
   // Mirror the live state onto the shared console status bar's connection dot, so the graph explorer
-  // reads the same as the dashboard and log viewer. A snapshot/demo graph has no live daemon link, so
-  // the dot stays at its default "not connected".
+  // reads the same as the dashboard and log viewer.
   if (surfaceVisible) {
     // CONNECTION STATE ONLY. The shell's status bar answers one question - is this attached or
     // not - and it already renders the workspace identity beside the dot on its own. Packing the
     // workspace name into this label made a shared, fixed piece of chrome carry a per-surface
     // detail, which is the same mistake as the badge that used to float it over the canvas.
+    // count is the shell's slot for "how much data is this surface showing", and the log viewer
+    // already fills it ("N events"). This surface had its own node/edge row in the sidebar and
+    // left the shared slot empty, which is two ways to state one thing with only one of them in
+    // the place every surface reports it. The sidebar row stays - it doubles as the node list's
+    // disclosure toggle - but the count now also goes where the console asks for it.
+    // A snapshot or demo graph has no link of its own, so it reports NO connection and the shell's
+    // readiness poller answers instead. Claiming the dot to say "not connected" was this surface
+    // reporting on a daemon it had not asked about: a console attached to a running daemon read
+    // "not connected" for as long as a dropped-file graph was in front.
+    const nodes = graph?.nodes.length ?? 0;
+    const count = nodes ? nodes + " nodes" : undefined;
     publishStatus(
       liveHost
         ? {
             connection: liveConnected ? "connected" : "connecting",
             label: liveConnected ? "connected" : "connecting...",
+            count,
           }
-        : { connection: "none", label: "not connected" },
+        : { count },
     );
   }
 }
@@ -5108,6 +5119,10 @@ function finishInteractiveSetup() {
   // Fill the detail column. AFTER applyDeepLinks, so a #q=/#view= link is already reflected in
   // what the overview reports rather than being described a frame before it applies.
   syncOverview();
+  // And publish the node count, which needs a LOADED graph. The live-mode callers of this all fire
+  // around connection events, every one of which can happen before there are any nodes to count -
+  // so on the demo and snapshot paths the shell's count slot stayed empty.
+  publishLiveStatus();
 }
 
 // renderLoadedGraph runs boot's data-to-view pipeline (detect/prepare/project/status/layout/reveal),
