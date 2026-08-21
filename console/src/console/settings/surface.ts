@@ -22,16 +22,13 @@ import {
   getFocusRing,
   setFocusRing,
   saveFocusRing,
-  applyFocusRing,
   getMotion,
   setMotion,
   saveMotion,
-  applyMotion,
   type MotionPref,
   getNodeShapes,
   setNodeShapes,
   saveNodeShapes,
-  applyNodeShapes,
 } from "../../lib/settings";
 import { showRefreshToast, showToast } from "../../lib/refresh-toast";
 import { probeDaemon, normalizeDaemonHost, resolveDaemonHost } from "../../lib/daemon";
@@ -1014,18 +1011,9 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
       if (keys.has("poll")) setPollMs(d.poll);
       if (keys.has("host")) setDefaultHost(d.host);
       if (keys.has("theme")) setTheme(false);
-      if (keys.has("focusRing")) {
-        setFocusRing(d.focusRing);
-        applyFocusRing(d.focusRing);
-      }
-      if (keys.has("motion")) {
-        setMotion(d.motion);
-        applyMotion(d.motion);
-      }
-      if (keys.has("nodeShapes")) {
-        setNodeShapes(d.nodeShapes);
-        applyNodeShapes(d.nodeShapes);
-      }
+      if (keys.has("focusRing")) setFocusRing(d.focusRing);
+      if (keys.has("motion")) setMotion(d.motion);
+      if (keys.has("nodeShapes")) setNodeShapes(d.nodeShapes);
       if (keys.has("keymap")) kb.keymap.set(d.keymap);
     } else {
       if (keys.has("poll")) savePollMs(d.poll);
