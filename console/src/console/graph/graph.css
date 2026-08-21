@@ -200,15 +200,6 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
    this overlay shrinks to its content, so hang the dropdown from the right edge and size it to the
    buttons instead of a 2rem-wide sliver under the kebab. */
 .console-graph-stage__tools .pf-v6-c-toolbar__expandable-content { inset-inline: auto 0; width: max-content; }
-/* Legend toggle (#legend-toggle, a PF Button): hidden on desktop (the legend is always
-   open there). Shown only on mobile via the media query below, where it collapses the
-   legend off the canvas. Positioned top-left where the legend would otherwise sit. */
-#legend-toggle {
-  position: absolute; top: 0.6rem; left: 0.6rem; z-index: 3;
-  display: none; font-size: 0.72rem;
-  background: color-mix(in srgb, var(--pf-t--global--background--color--primary--default) 90%, transparent);
-}
-#legend-toggle .console-render-btn__icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
 /* Fullscreen: the panel fills the screen (like the playground's .panel:fullscreen);
    the opaque background is required or the element shows through to black. */
 .console-graph-app:fullscreen { height: 100%; width: 100%; border: 0; border-radius: 0; box-shadow: none; background: var(--pf-t--global--background--color--primary--default); }
@@ -237,13 +228,14 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
 /* Legend: a compact overlay panel (translucent so the graph shows through) with a header
    row and a dense swatch+name+count list. The panel wrapper carries the position and chrome;
    the inner <ul> is the scrollable list. Positioned top-left over the canvas. */
+/* In the sidebar, under the Colour control it is the key for - not floating over the canvas.
+   As an overlay it covered the stage's workspace label and the top-left of the graph, and being
+   translucent it made both hard to read rather than hiding either cleanly. It scrolls inside its
+   own box so twenty kinds cannot push the controls above it out of reach. */
 .console-graph-legend {
-  position: absolute; top: 0.6rem; left: 0.6rem; z-index: 3;
   display: flex; flex-direction: column; gap: 0.3rem;
-  padding: 0.4rem 0.5rem 0.45rem;
-  background: color-mix(in srgb, var(--pf-t--global--background--color--primary--default) 88%, transparent);
-  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
-  max-height: calc(100% - 1.2rem); min-height: 0;
+  margin-top: 0.6rem;
+  max-height: 14rem; min-height: 0; overflow-y: auto;
 }
 .console-graph-legend__title {
   margin: 0; padding: 0 0.25rem 0.3rem;
@@ -311,8 +303,7 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
 .console-graph-app:has(#graph-empty-state:not([hidden])) .console-graph-stage > :not(#graph-empty-state),
 /* #id-level rules beat these elements' own #id display, which a plain class selector can't. */
 .console-graph-app:has(#graph-empty-state:not([hidden])) #graph-canvas,
-.console-graph-app:has(#graph-empty-state:not([hidden])) #graph-legend-panel,
-.console-graph-app:has(#graph-empty-state:not([hidden])) #legend-toggle { display: none; }
+.console-graph-app:has(#graph-empty-state:not([hidden])) #graph-legend-panel { display: none; }
 /* Give the cold-state prompt a tall-enough area and keep it vertically centered (PF EmptyState
    is already flex-centered), so it sits in the middle of the emptiness rather than at the top. */
 .console-graph-app:has(#graph-empty-state:not([hidden])) #graph-empty-state { position: static; min-height: min(60svh, 520px); }
@@ -414,11 +405,9 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
   .console-graph-sidebar { max-height: 40svh; border-right: 0; border-bottom: 1px solid var(--pf-t--global--border--color--default); }
   #explain-card { border-left: 0; border-top: 1px solid var(--pf-t--global--border--color--default); max-height: 50svh; }
   /* Mobile canvas chrome: the stage tools collapse behind the PF kebab toggle (pf-m-show-on-lg,
-     shared ../toolbar.ts) - no bespoke label-dropping here. The legend hides behind the "Legend"
-     toggle and only appears when tapped. */
-  #legend-toggle { display: inline-flex; }
-  .console-graph-legend { display: none; top: 2.7rem; max-height: calc(100% - 3.4rem); }
-  .console-graph-legend[data-open] { display: flex; }
+     shared ../toolbar.ts) - no bespoke label-dropping here. The legend needs no mobile rule of
+     its own any more: it lives in the sidebar, which is already capped and scrolls. */
+  .console-graph-legend { max-height: 9rem; }
   /* The count/chevron toggle row is the tap target for the stats disclosure below; give it
      comfortable tap padding and a legible chevron (it was ~9px, effectively untappable). */
   .console-graph-sidebar__count { padding-block: 0.55rem; }
@@ -781,14 +770,6 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
   font-size: 0.7rem;
   color: var(--pf-t--global--text--color--subtle);
   margin: 0.15rem 0;
-}
-.console-graph-live__banner {
-  background: var(--console-status-danger, #c0392b);
-  color: #fff;
-  padding: 0.25rem 0.75rem;
-  font-size: 0.8rem;
-  border-radius: var(--pf-t--global--border--radius--small);
-  margin-bottom: 0.25rem;
 }
 .console-graph-live__rememberrow {
   font-size: 0.8rem;

@@ -1875,14 +1875,11 @@ function centerOn(id: string) {
 // fitView frames a set of nodes (or all when ids is null) in the viewport - the
 // zoom-to-fit / reset-view action. Reuses the shared zoomBehavior + transform.
 // The stage floats chrome over the canvas rather than beside it. These are the pieces that do,
-// measured live so a hidden one (the legend is closed on mobile, the toolbar collapses to a
-// kebab) contributes nothing. The explain card is NOT here: it sits beside the canvas.
-const STAGE_OVERLAYS = [
-  "#graph-legend-panel",
-  "#legend-toggle",
-  ".console-graph-stage__tools",
-  ".console-graph-stage__result",
-];
+// measured live so a hidden one (the toolbar collapses to a kebab) contributes nothing. The
+// explain card is NOT here, and the LEGEND is no longer here: both sit beside the canvas now, so
+// listing the legend would reserve a margin for something that covers nothing - and the framing
+// gets the whole left edge back.
+const STAGE_OVERLAYS = [".console-graph-stage__tools", ".console-graph-stage__result"];
 
 // stageInsets measures how far the stage chrome covers the canvas, so the framing below can
 // centre the graph in what the operator can see instead of behind the legend.
@@ -4715,49 +4712,49 @@ function liveConnect() {
   );
 }
 
+// A dropped live connection speaks on the status line at the foot, not in a banner over the
+// canvas. The stage's top edge already carries the legend, the toolbar and the result line, so a
+// notice there is covered by one of them; and the CONNECTION half of the message duplicated the
+// console status bar's own dot. What is left is the one fact nothing else states: the graph on
+// screen is a snapshot from some earlier moment, and how much earlier.
 function showDisconnectBanner() {
-  const banner = el("live-disconnect-banner");
-  if (!banner) return;
   const now = new Date();
   const hhmm =
     now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0");
-  banner.textContent = "disconnected, showing workspace as of " + hhmm + ", reconnecting...";
-  banner.hidden = false;
+  setStatus("Showing this workspace as of " + hhmm + "; reconnecting.");
 }
 
 function clearDisconnectBanner() {
-  const banner = el("live-disconnect-banner");
-  if (banner) {
-    banner.textContent = "";
-    banner.hidden = true;
-  }
+  setStatus("");
 }
 
+// baseName is the last path segment, for naming a workspace in the status bar. A workspace is
+// identified by an absolute path, and the whole thing is both too long for a status line and
+// mostly the same prefix for every worktree on the machine.
+function baseName(p: string): string {
+  const trimmed = p.replace(/\/+$/, "");
+  const i = trimmed.lastIndexOf("/");
+  return i < 0 ? trimmed : trimmed.slice(i + 1);
+}
+
+// updateLiveBadge publishes the live session onto the shared console status bar. It no longer
+// paints anything on the surface itself - the name is historical and the one caller reads better
+// than a rename would.
 function updateLiveBadge() {
-  const badge = el("live-badge");
-  if (badge) {
-    if (liveHost) {
-      const ws = liveWorkspaceName || liveHost;
-      const content = badge.querySelector<HTMLElement>(".pf-v6-c-label__content");
-      if (content)
-        content.textContent = liveConnected ? "live: " + ws : "live: " + ws + " (connecting)";
-      badge.hidden = false;
-      // Blue PF Label when connected, grey while (re)connecting or disconnected.
-      badge.classList.toggle("pf-m-blue", liveConnected);
-      badge.classList.toggle("pf-m-grey", !liveConnected);
-    } else {
-      badge.hidden = true;
-    }
-  }
   // Mirror the live state onto the shared console status bar's connection dot, so the graph explorer
   // reads the same as the dashboard and log viewer. A snapshot/demo graph has no live daemon link, so
   // the dot stays at its default "not connected".
   if (surfaceVisible) {
+    // The label carries WHICH workspace, not just that there is one. It used to say only
+    // "connected" while a PF Label floated the same fact plus the workspace path over the canvas -
+    // two places claiming the session state, one of them on top of the drawing. Session state is
+    // the status bar's job, so the name goes here and the badge is gone.
+    const ws = liveWorkspaceName ? baseName(liveWorkspaceName) : liveHost;
     publishStatus(
       liveHost
         ? {
             connection: liveConnected ? "connected" : "connecting",
-            label: liveConnected ? "connected" : "connecting...",
+            label: (liveConnected ? "live: " : "connecting to ") + ws,
           }
         : { connection: "none", label: "not connected" },
     );
@@ -4792,14 +4789,9 @@ async function fetchLiveStatus() {
     if (status.pool && status.pool.workspaces.length > 0) {
       liveWorkspaceName = status.pool.workspaces[0].root;
     }
-    // Render status strip.
-    const strip = el("live-status-strip");
-    if (strip && status.pool) {
-      const p = status.pool;
-      strip.textContent = "pool: " + p.running + "/" + p.capacity + " running";
-      if (p.queued > 0) strip.textContent += ", " + p.queued + " queued";
-      strip.hidden = false;
-    }
+    // No pool strip on this surface. How many targets the daemon is running is SESSION state, not
+    // anything about the graph on screen, and the dashboard is the surface that owns it. It sat
+    // under the canvas restating a number this view cannot act on.
     // Affected view (deferred): types.StatusOutput.Affected exists on the wire
     // type but neither status producer (cmd/magus/status.go - no workspace/VCS
     // context at that call site - or internal/webbridge/bridge.go) populates it
@@ -5169,18 +5161,8 @@ function bootWireEvents() {
   if (fitBtn)
     fitBtn.addEventListener("click", () => fitView(matchSet && matchSet.size ? matchSet : null));
 
-  // Mobile-only legend toggle: on narrow screens the kind legend is collapsed off
-  // the canvas by default (CSS) so it doesn't cover the graph; this flips it open.
-  // Harmless on desktop, where the toggle is display:none and the legend is always
-  // shown.
-  const legendToggle = el("legend-toggle");
-  const legendPanel = el("graph-legend-panel");
-  if (legendToggle && legendPanel) {
-    legendToggle.addEventListener("click", () => {
-      const open = legendPanel.toggleAttribute("data-open");
-      legendToggle.setAttribute("aria-expanded", open ? "true" : "false");
-    });
-  }
+  // No legend toggle. It existed to get the legend off the canvas on a narrow screen; the legend
+  // is in the sidebar now, which scrolls, so there is nothing to collapse it away from.
 
   // No separate lens wiring. The hubs/orphans buttons are ordinary view chips - they carry
   // .console-graph-views__chip and data-view like every other question - so the chip handler
@@ -5553,7 +5535,10 @@ async function bootLive() {
     const unfoldBtnLive = el("projection-unfold-btn");
     if (unfoldBtnLive) unfoldBtnLive.hidden = projectionUnfolded;
     if (!projectionUnfolded) updateProjectionStatus();
-    else setStatus("live workspace connected");
+    // Nothing to announce on a successful connect: the console status bar carries a live
+    // connection dot that publishStatus already drives, so saying it again here was a second
+    // claim about the same fact taking a line of the surface to do it.
+    else setStatus("");
 
     renderLegend();
     renderList();
