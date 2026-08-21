@@ -1430,8 +1430,13 @@ function draw() {
     // node is to learn what it is attached to. The greedy overlap pass below is what keeps a
     // dense neighbourhood from stacking, and it ranks the focus first. The second is radial,
     // which exists to name one node's neighbours and never places more than a few dozen.
+    //
+    // The one-hop half rides the SAME size cap as the glow. Past it a hub's neighbours cannot all
+    // be read anyway, and the overlap pass below is quadratic in the candidates it keeps - so the
+    // exemption made pointing at the busiest node in the graph the most expensive thing to do.
     const show =
-      lit(n.id) ||
+      n.id === highlight ||
+      (glowNeighborhood && lit(n.id)) ||
       (layoutMode === "radial" && radialPlacedCount <= 60) ||
       (transform.k >= LABEL_MIN_ZOOM &&
         (transform.k > 2.2 || (n.degree > 24 && n.r * transform.k >= LABEL_MIN_NODE_PX)));
