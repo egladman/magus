@@ -35,14 +35,24 @@ test("no reference block wires a control by id", () => {
   }
 });
 
-test("the Clear control sits with the live Explore chips", () => {
+test("Clear is a live control, not reference copy", () => {
   const host = parse();
   const clear = host.querySelector("#clear-view-btn");
   assert.ok(clear, "expected a clear-view button");
   assert.equal(clear.closest("[data-ref-section]"), null, "Clear must not live in reference copy");
+});
+
+// The question chips moved into querybuilder.ts, which builds its cards in JS. What the scaffold
+// still owes is the way IN: without this button the views and the filter grammar are unreachable,
+// and nothing else in the markup would show it missing.
+test("the query builder has a live trigger", () => {
+  const host = parse();
+  const btn = host.querySelector("#query-builder-btn");
+  assert.ok(btn, "expected the builder trigger beside the filter input");
+  assert.equal(btn.closest("[data-ref-section]"), null, "the trigger must not be reference copy");
   assert.ok(
-    clear.closest(".console-graph-sidebar__views"),
-    "Clear must sit in the sidebar Explore group, beside the chips it clears",
+    btn.closest(".console-graph-sidebar__search"),
+    "the trigger belongs in the query bar, next to the input it writes into",
   );
 });
 
@@ -53,15 +63,19 @@ test("the remember-workspace checkbox sits in the live sidebar", () => {
   assert.equal(cb.closest("[data-ref-section]"), null, "a live control must not be reference copy");
 });
 
-test("the affected chip ships hidden until a live affected set exists", () => {
+// The view chips are gone, so the scaffold no longer decides which questions are askable - the
+// builder does, from live state. What must not come back is a view hard-coded in the markup, where
+// it would be offered whether or not the loaded graph can answer it.
+test("no LIVE view control is hard-coded in the scaffold", () => {
   const host = parse();
-  const chip = host.querySelector<HTMLElement>("[data-view='affected']");
-  assert.ok(chip, "expected an affected chip");
-  // No status producer populates StatusOutput.Affected (see main.ts fetchLiveStatus), so the
-  // chip hides on the same [data-conditional] footing as the critical chip. Shipping it
-  // visible-and-disabled instead would be a control the user can see and never reach.
-  assert.ok(chip.hasAttribute("data-conditional"), "affected chip must be conditional");
-  assert.ok(!chip.hasAttribute("disabled"), "hide the chip rather than shipping it disabled");
+  const live = [...host.querySelectorAll("[data-view]")].filter(
+    (el) => !el.closest("[data-ref-section]"),
+  );
+  assert.deepEqual(
+    live.map((el) => el.getAttribute("data-view")),
+    [],
+    "views are built by querybuilder.ts from viewUnavailable(); a static one cannot know if it applies",
+  );
 });
 
 test("data-conditional is the only mechanism for data-backed visibility", () => {

@@ -62,6 +62,7 @@ import {
 import { LAYERED_COL_W, LAYERED_MAX, layoutLayered, layoutWaves } from "./layout.js";
 import { CARD_COL_W, DOT_R_PX, cardDetail, drawCard, measureCards } from "./cards.js";
 import { isRing, punchRing, shapeOfNode, traceNodeShape } from "./shapes.js";
+import { createQueryBuilder } from "./querybuilder.js";
 import { RADIAL_MAX_RINGS, RADIAL_RING_R, layoutRadial } from "./radial.js";
 import { nodeDurationMs, formatDuration } from "./duration.js";
 import {
@@ -212,6 +213,7 @@ interface Graph {
   sourceBase: string;
   relIndex?: Map<string, Set<string>>;
   adj?: Map<string, Set<string>>;
+  semanticAdj?: Map<string, Set<string>>;
   projectOf?: Map<string, string>;
   depDegrees?: Map<string, DependencyDegree>;
 }
@@ -416,6 +418,10 @@ interface Theme {
   border: string;
   accent: string;
   font: string;
+  // Edge opacity at rest and while something is highlighted. Theme-aware because the same alpha
+  // reads far heavier on white than on #292929, and 6000 edges of it is most of the ink on screen.
+  edgeAlpha: number;
+  edgeDimAlpha: number;
   kindColor: Record<string, string>;
 }
 let theme: Theme | null = null;
@@ -432,6 +438,8 @@ function readTheme(): Theme {
     border: v("--pf-t--global--border--color--default", "#dce3eb"),
     accent: v("--console-accent", "#0066cc"),
     font: v("--pf-t--global--font--family--body", "system-ui, sans-serif"),
+    edgeAlpha: parseFloat(v("--console-graph-edge-alpha", "0.3")) || 0.3,
+    edgeDimAlpha: parseFloat(v("--console-graph-edge-dim-alpha", "0.14")) || 0.14,
     kindColor,
   };
   return theme;
@@ -620,6 +628,31 @@ function adjacency() {
   }
   return graph.adj;
 }
+
+// adjacency() minus the containment tree - see neighborhood() for why walking that tree by hop
+// count reaches most of the graph from anywhere in it. Cached alongside adjacency().
+function semanticAdjacency() {
+  if (!graph.semanticAdj) {
+    const adj = new Map<string, Set<string>>();
+    const add = (a: string, b: string) => {
+      let s = adj.get(a);
+      if (!s) {
+        s = new Set();
+        adj.set(a, s);
+      }
+      s.add(b);
+    };
+    for (const e of graph.links) {
+      if (e.relation === "contains") continue;
+      const s = endpointId(e.source),
+        t = endpointId(e.target);
+      add(s, t);
+      add(t, s);
+    }
+    graph.semanticAdj = adj;
+  }
+  return graph.semanticAdj;
+}
 // Cached on the graph like adjacency(): the project: filter runs it once per node over the whole
 // list. prepareGraph returns a fresh object on every load, so the cache resets with the data.
 function projectOwners() {
@@ -631,15 +664,23 @@ function neighbors(id: string | null) {
   return id ? adjacency().get(id) || null : null;
 }
 
-// neighborhood collects a node plus everything within `depth` hops - the node set
-// for a local/focus graph (Obsidian's local view). Reuses the adjacency map.
+// neighborhood collects a node plus everything within `depth` hops - the node set for a local/focus
+// graph (Obsidian's local view).
+//
+// Containment is TERMINAL: a contains edge is followed out of the seed and no further. Counting it
+// as an ordinary hop is what made this useless - from a function, hop 1 is its file, hop 2 is every
+// other function in that file, hop 3 every file in the dir, hop 4 every function in all of them. A
+// 4-hop walk from `eslint` collected 1284 of 2373 nodes, and the number measured how deeply the
+// tree nests rather than what the node is related to. You still see what a node contains and what
+// contains it; you no longer arrive at its second cousins.
 function neighborhood(id: string, depth: number) {
   const set = new Set<string>([id]);
   let frontier = [id];
   for (let d = 0; d < depth; d++) {
     const next = [];
     for (const nid of frontier) {
-      for (const nb of adjacency().get(nid) || []) {
+      const adj = d === 0 ? adjacency() : semanticAdjacency();
+      for (const nb of adj.get(nid) || []) {
         if (!set.has(nb)) {
           set.add(nb);
           next.push(nb);
@@ -727,16 +768,28 @@ function reapplyDagLayout(): boolean {
 // off-canvas (fx/fy = PARKED_X, the same convention parkHiddenNodes uses) so they
 // don't sit stacked at the origin. Stops the force simulation - radial pins
 // fx/fy like the dag modes, even though it is not one (see isDagMode).
+// Jump straight to radial when a node is already selected, else arm a one-shot pick that
+// switchLayout("radial")s on the next selectNode (see selectNode).
+function enterRadialPick(): void {
+  if (selected || focusId) {
+    switchLayout("radial");
+    return;
+  }
+  pendingRadialPick = true;
+  setStatus("Click a node to center the radial view.");
+}
+
 function applyRadialMode(): boolean {
   const center = selected ?? focusId;
   if (!center) return false; // switchLayout guards via layoutBlockedReason; safe fallback
   const subsetAll = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
   const subset = subsetAll.some((n) => n.id === center) ? subsetAll : graph.nodes;
   sim?.stop();
-  // Radial deliberately takes the undirected adjacency() rather than graph.links: the ego
-  // neighborhood spans every edge kind (contains, imports, uses, ...), not just depends_on,
-  // so it has no colW/rowH opts like the DAG layouts - ring radius is fixed (RADIAL_RING_R).
-  const { rings } = layoutRadial(center, subset, adjacency());
+  // Undirected rather than graph.links: an ego neighbourhood spans every edge kind, not just
+  // depends_on, so there are no colW/rowH opts here - ring radius is fixed (RADIAL_RING_R).
+  // Containment is excluded for the same reason neighborhood() drops it past the first hop: ring 2
+  // was every sibling in the centre's file, and ring 3 and 4 were the rest of the repo.
+  const { rings } = layoutRadial(center, subset, semanticAdjacency());
   radialRings = rings;
   radialCenter = center;
   const placed = new Set<string>();
@@ -1182,8 +1235,10 @@ function draw() {
     // reader has to notice what did NOT fade. Colouring the incident edges says which lines are
     // the answer, and it is the connections, not the nodes, that carry "what is this attached to".
     const incident = !!highlight && (s.id === highlight || t.id === highlight);
-    ctx.strokeStyle = incident ? th.accent : active ? th.muted : th.border;
-    ctx.globalAlpha = incident || criticalEdge ? 1 : active ? 0.55 : 0.1;
+    // Everything non-incident keeps ONE colour and only changes alpha. Dimming used to swap muted
+    // for border at the same time as dropping alpha 5.5x, and the two compounded into a jolt.
+    ctx.strokeStyle = incident ? th.accent : th.muted;
+    ctx.globalAlpha = incident || criticalEdge ? 1 : active ? th.edgeAlpha : th.edgeDimAlpha;
     ctx.lineWidth = incident
       ? 1.6 / transform.k
       : criticalEdge
@@ -2275,39 +2330,26 @@ function syncKindList(counts: Map<string, number>) {
 // syncConditionalViews shows or hides the "What's slow?" (critical) view button
 // based on whether the current graph has DurationMs timing data. Called after
 // each graph load (boot and replaceGraph) so the button tracks the data.
+// Recomputes what the graph can currently answer. The VIEWS no longer read this from the DOM - the
+// builder asks viewUnavailable() at open time - but graphHasDurations is shared state, and the
+// colour presets are still chips in the sidebar.
 function syncConditionalViews() {
   graphHasDurations = !!graph && graph.nodes.some((n) => nodeDurationMs(n) > 0);
-  document.querySelectorAll<HTMLElement>("[data-view='critical']").forEach((btn) => {
-    btn.toggleAttribute("data-conditional", !graphHasDurations);
-  });
-  // The "Colour by duration" preset shares the same conditional as the critical-path view: both
-  // need timing data to mean anything. The attribute rides the toggle-group ITEM, not the button
-  // inside it: hiding only the button leaves an empty cell holding the group's :last-child end
-  // cap, so the row renders squared off mid-air with the rounding on a cell nobody can see.
+  // The "Colour by duration" preset needs timing for the same reason the critical-path view does.
+  // The attribute rides the toggle-group ITEM, not the button inside it: hiding only the button
+  // leaves an empty cell holding the group's :last-child end cap, so the row renders squared off
+  // mid-air with the rounding on a cell nobody can see.
   document.querySelectorAll<HTMLElement>("[data-preset-item='duration']").forEach((item) => {
     item.toggleAttribute("data-conditional", !graphHasDurations);
-  });
-  // Circular dependencies are a TARGET-graph fact here. Only targetGraphToNodeLink sets e.cycle,
-  // from the per-project `cycle` array describe.Cycle fills in; nothing in the knowledge graph
-  // marks a cycle at all - types.KnowledgeEdge has no such field. So on the knowledge flavor the
-  // view read a flag that is never set, found nothing every time, and reported "the dependency
-  // graph is acyclic" - asserting a result it had not checked, on the graph the surface loads by
-  // default. Hide it where it cannot answer rather than let it answer wrongly.
-  document.querySelectorAll<HTMLElement>("[data-view='cycles']").forEach((btn) => {
-    btn.toggleAttribute("data-conditional", graphFlavor !== "targets");
   });
   syncAffectedView();
 }
 
-// Shows the affected chip while a set is available and retires the view if one goes away under it.
-// Hidden rather than disabled: a static page can never fill the set. Called separately from
-// syncConditionalViews because the live path changes the set without reloading the graph.
+// Retires the affected view if its set goes away underneath it - a live refresh can empty the diff
+// while the view is on screen, and it would otherwise keep highlighting a set that no longer exists.
+// Whether the view is OFFERED is the builder's question (viewUnavailable), asked when it opens.
 function syncAffectedView() {
-  const has = !!window._liveAffectedIds?.size;
-  document.querySelectorAll<HTMLElement>("[data-view='affected']").forEach((btn) => {
-    btn.toggleAttribute("data-conditional", !has);
-  });
-  if (!has && activeView === "affected") clearView();
+  if (!window._liveAffectedIds?.size && activeView === "affected") clearView();
 }
 
 // ---- color groups ----------------------------------------------------------
@@ -5561,20 +5603,34 @@ function bootWireEvents() {
   });
   syncGraphKindToggle();
 
-  // The Ask panel's "What's around this?" chip: jump straight to radial when a
-  // node is already selected/focused, else enter a one-shot pick mode
-  // (pendingRadialPick) that switchLayout("radial")s on the next selectNode
-  // with an id (see selectNode).
-  document.querySelectorAll<HTMLElement>("[data-radialpick]").forEach((b) => {
-    b.addEventListener("click", () => {
-      if (selected || focusId) {
-        switchLayout("radial");
-      } else {
-        pendingRadialPick = true;
-        setStatus("Click a node to center the radial view.");
-      }
-    });
+  // The question builder, behind the kebab beside the filter box. It owns the views and the
+  // filter grammar that used to be two columns of chips.
+  const builder = createQueryBuilder({
+    // Offered values come from the LOADED graph, so a picker never suggests a kind that matches
+    // nothing here.
+    kinds: () => [...new Set(graph?.nodes.map((n) => n.kind) ?? [])].sort(),
+    relations: () => [...new Set(graph?.links.map((e) => e.relation).filter(Boolean) ?? [])].sort(),
+    projects: () =>
+      [...new Set([...(graph?.projectOf?.values() ?? [])])].filter(Boolean).sort() as string[],
+    currentQuery: () => query,
+    applyQuery: (q) => {
+      if (searchEl) searchEl.value = q;
+      applyQuery(q);
+    },
+    runView: (v) => activateView(v),
+    radialPick: enterRadialPick,
+    viewUnavailable: (v) => {
+      if (v === "cycles" && graphFlavor !== "targets")
+        return "Needs the target graph - the knowledge graph has no cycle concept.";
+      if (v === "critical" && !graphHasDurations)
+        return "Needs a graph carrying timing. Run a build, then export again.";
+      if (v === "affected" && !window._liveAffectedIds?.size)
+        return "Needs a live workspace with a computed diff.";
+      return null;
+    },
   });
+  document.body.append(builder.el);
+  el("query-builder-btn")?.addEventListener("click", () => builder.open());
 
   // Wire the live-mode "Remember this workspace" checkbox.
   const rememberCb = el("live-remember-cb") as HTMLInputElement | null;

@@ -816,3 +816,69 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 }
 .console-graph-loading[hidden] { display: none; }
 .console-graph-loading__label { margin: 0; color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem; }
+
+/* Question builder (querybuilder.ts): a PF ModalBox in the backdrop + bullseye the cheat sheet and
+   the keybinding editor already use. */
+.console-graph-qb[hidden] { display: none; }
+.console-graph-qb__box { width: min(44rem, 92vw); }
+.console-graph-qb__body { display: block; max-height: min(60svh, 34rem); overflow-y: auto; }
+.console-graph-qb__pane[hidden] { display: none; }
+
+.console-graph-qb__rows { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.7rem; }
+/* Fixed columns rather than auto: the field select and the negate toggle stay put as rows are
+   added and removed, so the row a person is editing does not shift under the cursor. */
+.console-graph-qb__row { display: grid; grid-template-columns: 3.4rem 11rem minmax(0, 1fr) 2rem; gap: 0.4rem; align-items: center; }
+.console-graph-qb__neg { justify-content: center; font-variant: small-caps; }
+.console-graph-qb__neg[aria-pressed="true"] { color: var(--console-status-danger); font-weight: 700; }
+.console-graph-qb__empty { margin: 0 0 0.6rem; color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem; }
+.console-graph-qb__add { margin-bottom: 1rem; }
+
+.console-graph-qb__previewlabel { margin: 0 0 0.3rem; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--pf-t--global--text--color--subtle); }
+/* The composed query, shown at reading size and not as a caption: it is the thing the builder
+   exists to teach, so it gets more weight than the controls that produced it. */
+.console-graph-qb__preview {
+  display: block; padding: 0.5rem 0.7rem;
+  background: var(--pf-t--global--background--color--secondary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.console-graph-qb__cli { display: block; margin-top: 0.45rem; color: var(--pf-t--global--text--color--subtle); font-family: var(--pf-t--global--font--family--mono); font-size: 0.78rem; overflow-wrap: anywhere; }
+.console-graph-qb__cli[hidden] { display: none; }
+.console-graph-qb__hint { margin: 0.7rem 0 0; color: var(--pf-t--global--text--color--subtle); font-size: 0.8rem; }
+
+/* One card per view. A button, not a row with a button in it: the whole card is the target. */
+.console-graph-qb__view {
+  display: grid; grid-template-columns: 1fr auto; gap: 0.15rem 0.7rem;
+  width: 100%; margin-bottom: 0.4rem; padding: 0.6rem 0.75rem; text-align: left;
+  background: var(--pf-t--global--background--color--primary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  color: var(--pf-t--global--text--color--regular); cursor: pointer;
+}
+.console-graph-qb__view:hover:not(:disabled) { border-color: var(--console-accent); }
+.console-graph-qb__view:focus-visible { outline: 2px solid var(--console-accent); outline-offset: 1px; }
+.console-graph-qb__view:disabled { cursor: not-allowed; opacity: 0.6; }
+.console-graph-qb__viewlabel { font-weight: 600; font-size: 0.92rem; }
+.console-graph-qb__viewblurb { grid-column: 1; color: var(--pf-t--global--text--color--subtle); font-size: 0.82rem; }
+.console-graph-qb__viewcli { grid-column: 1; margin-top: 0.2rem; color: var(--pf-t--global--text--color--subtle); font-family: var(--pf-t--global--font--family--mono); font-size: 0.75rem; }
+/* Sits in the second column against the label, so "then click a node" reads as a property of the
+   view rather than another line of its description. */
+.console-graph-qb__viewpick { grid-column: 2; grid-row: 1; align-self: start; color: var(--console-accent); font-size: 0.72rem; white-space: nowrap; }
+.console-graph-qb__foot[hidden] { display: none; }
+
+/* Worked examples. Loading one fills the rows above rather than applying, so the query stays
+   editable - the point is to show what each term does, not to hand over an answer. */
+.console-graph-qb__examples { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.4rem; }
+.console-graph-qb__example {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.1rem 0.8rem;
+  padding: 0.45rem 0.6rem; text-align: left; cursor: pointer;
+  background: transparent; color: var(--pf-t--global--text--color--regular);
+  border: 1px solid transparent; border-radius: var(--pf-t--global--border--radius--small);
+}
+.console-graph-qb__example:hover { border-color: var(--pf-t--global--border--color--default); background: var(--pf-t--global--background--color--secondary--default); }
+.console-graph-qb__example:focus-visible { outline: 2px solid var(--console-accent); outline-offset: 1px; }
+.console-graph-qb__exlabel { font-size: 0.88rem; font-weight: 500; }
+.console-graph-qb__exquery { grid-column: 2; grid-row: 1; font-family: var(--pf-t--global--font--family--mono); font-size: 0.76rem; color: var(--console-accent); white-space: nowrap; }
+.console-graph-qb__exnote { grid-column: 1 / -1; font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }

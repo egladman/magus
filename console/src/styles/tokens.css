@@ -132,6 +132,13 @@
      MUST be defined here even though nothing in CSS consumes them. New names, not the old
      --c-* ones. */
   --console-accent: var(--pf-t--global--color--brand--default);            /* primary/active accent  */
+
+  /* Graph edge opacity, read by graph/main.ts's readTheme. Light needs far less: the same alpha
+     over white reads much heavier than over #292929, and with 6000 edges the lines were most of
+     the ink on screen. The dim value is what non-incident edges drop to on hover - close enough to
+     the resting value that isolating a neighbourhood reads as a fade rather than a jolt. */
+  --console-graph-edge-alpha: 0.26;
+  --console-graph-edge-dim-alpha: 0.12;
   --console-accent-hover: var(--pf-t--global--color--brand--hover);        /* link/action hover      */
   /* "Toggled on" accent for a depressed/active control (the Reference panel pin). Deliberately the
      nonstatus ORANGE - it stands apart from the brand-blue accent and the status hues, so a pinned
@@ -289,6 +296,10 @@
   --console-gold: #bda05a; --console-slate: #7998b0; --console-indigo: #8d89ba; --console-stone: #a49d95;
 
   --console-pin-active: var(--pf-t--global--dark--color--nonstatus--orange--300);
+
+  /* A dark ground carries more edge before it reads as noise, so these sit above the light pair. */
+  --console-graph-edge-alpha: 0.42;
+  --console-graph-edge-dim-alpha: 0.16;
   /* Same five hues and the same order as the light block; only the anchor moves, L0 0.50 -> 0.78,
      because a mark has to be darker than white and lighter than #292929. One palette, two grounds.
      Chroma eases too (0.100 -> 0.085): a dark ground makes the same chroma read louder. */
