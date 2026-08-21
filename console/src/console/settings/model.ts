@@ -40,8 +40,8 @@ export interface Settings {
   host: string; // explicit default daemon host, "host:port" or "" (settings.getDefaultHost)
   theme: ThemePref; // color theme override (theme.ts / localStorage "theme")
   focusRing: boolean; // always show the split-pane focus outline vs keyboard-only (settings.getFocusRing)
-  motion: MotionPref; // "auto" honours prefers-reduced-motion; "reduced" stills it here regardless
-  nodeShapes: boolean; // graph nodes carry a per-family shape as well as a colour (settings.getNodeShapes)
+  motion: MotionPref; // "auto" honors prefers-reduced-motion; "reduced" stills it here regardless
+  nodeShapes: boolean; // graph nodes carry a per-family shape as well as a color (settings.getNodeShapes)
   keymap: Keymap; // the user's command chord overrides (the shared "keymap" cell)
 }
 

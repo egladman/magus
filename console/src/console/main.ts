@@ -849,6 +849,7 @@ export function startConsole(
   const launcher = buildLauncher(SURFACES, open);
   launcher.hidden = true;
   outlet.append(launcher);
+  let launcherChordWired = false;
   const launcherStatus = makeStatusBar(false); // zero tabs, zero panes: no Panes tray button
 
   // mountSurface is how a tile mounts one surface into a pane host: resolve the registered module and
@@ -918,7 +919,7 @@ export function startConsole(
 
   // syncWindowTitle mirrors the active tab into document.title, so the browser tab, the installed
   // PWA's window, and the OS task switcher all say what you are looking at - the other half of the
-  // behaviour, and the reason a tab-title change has to reach past the bar. With no tab active the
+  // behavior, and the reason a tab-title change has to reach past the bar. With no tab active the
   // console is on its launcher, so the title falls back to the document's own static name.
   function syncWindowTitle(): void {
     if (appModeTitle !== null) {
@@ -986,6 +987,16 @@ export function startConsole(
     // Restamp the palette's chord on the way in: it is remappable, and the launcher was built long
     // before this keymap was read.
     if (!launcher.hidden) syncLauncherChord(launcher, chordFor("console.actionBar.open"));
+    // Delegated once, on the launcher: syncLauncherChord rebuilds the keycap on every reveal, so a
+    // listener bound to the button itself would be rebound each time.
+    if (!launcherChordWired) {
+      launcherChordWired = true;
+      launcher.addEventListener("click", (ev) => {
+        if ((ev.target as HTMLElement).closest("[data-open-palette]")) {
+          dispatchCommand("console.actionBar.open");
+        }
+      });
+    }
     // Empty state flag for CSS: with zero tabs there is nothing on the (mobile) tab row, so the phone
     // title bar collapses back from two rows to one (see console.css) instead of reserving an empty
     // second row on the launcher screen.
@@ -1938,7 +1949,9 @@ export function startConsole(
         running: 5,
         queued: 2,
         workspaces: [DEMO_WORKSPACE_ROOT, "~/Repos/magus"],
-        cache: { hits: 412, misses: 77 },
+        // 412 hits averaging a bit over three minutes each - a plausible afternoon, and enough to
+        // show the headline figure the demo exists to show.
+        cache: { hits: 412, misses: 77, savedMs: 79_200_000 },
       });
       railBadges.set({});
       // The picker is fed here too. Its list otherwise arrives only from the dashboard's publisher,

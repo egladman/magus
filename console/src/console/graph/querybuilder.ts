@@ -1,36 +1,24 @@
-// The graph's question builder: compose a filter term by term, or run one of the graph views.
+// The graph's question builder: compose a filter term by term, or run a view.
 //
-// It replaces two columns of prebuilt chips. Those ran the right queries and taught nothing - a
-// chip that silently types `kind:target -id:generate` into a box you never look at leaves you no
-// better at asking the next question. Every term here writes into the SAME input you could have
-// typed, so the builder is a way to learn the grammar rather than a way to avoid it.
-//
-// Two tabs because filters and views are different mechanics, and blurring them is what made the
-// chips confusing. A filter is a string in the query grammar. A view runs a graph algorithm -
-// there is no filter that expresses "what breaks if I change this", which is why several views
-// have no CLI equivalent to show.
+// Every term writes into the same input you could have typed, which is the point - it replaced
+// chips that ran the right query and never showed it. Two tabs because a filter is a string in the
+// query grammar and a view is a graph algorithm; no filter expresses "what breaks if I change this".
 
 import { h } from "../view";
 
 export interface QueryBuilderDeps {
-  // Values present in the LOADED graph, so the pickers offer what will actually match rather than
-  // every kind the schema allows.
+  // From the LOADED graph, so a picker never offers a value that matches nothing here.
   kinds: () => string[];
   relations: () => string[];
   projects: () => string[];
   currentQuery: () => string;
   applyQuery: (q: string) => void;
-  // How many nodes the applied filter currently matches, for the readout under the query. Null when
-  // nothing is filtered, so the panel says nothing rather than "2373 of 2373".
   matchCount: () => { matched: number; total: number } | null;
   runView: (view: string) => void;
   radialPick: () => void;
   onClose?: () => void;
-  // FACTS about the loaded graph, not prose. Each view declares what it needs (ViewSpec.requires)
-  // and writes its own sentence, so a requirement lives beside the view it belongs to and adding a
-  // view forces a decision about it. This used to be one lambda in main.ts testing three
-  // hard-coded ids: nothing made a new view state its requirement, and a reason that went stale
-  // would have kept rendering confidently.
+  // Facts only. Which views they rule out is declared per view (ViewSpec.requires), so adding a view
+  // forces a decision about its requirement instead of leaving it to a lambda somewhere else.
   capabilities: () => GraphCapabilities;
 }
 
@@ -78,7 +66,7 @@ export function renderQuery(terms: Term[]): string {
 }
 
 // Mirrors main.ts's parseQuery closely enough to round-trip what the builder itself writes; an
-// unrecognised field falls back to free text, which is what the filter does with it too.
+// unrecognized field falls back to free text, which is what the filter does with it too.
 export function parseTerms(str: string): Term[] {
   const out: Term[] = [];
   let i = 0;
@@ -112,13 +100,8 @@ export function parseTerms(str: string): Term[] {
   return out;
 }
 
-// Worked examples. Each one loads into the term rows rather than applying straight off, so the
-// next click is an EDIT: you see which term does what, change one, and the query is yours. A
-// gallery that applied on click would be the chips again with more steps.
-//
-// Ordered easy to hard on purpose. The last three are the ones nobody discovers unaided - that
-// terms AND together, that a leading hyphen subtracts, and that the two compose - and they are
-// where the grammar stops being a search box and starts being a query language.
+// Worked examples, easy to hard. Each loads into the term rows, so the next click is an EDIT - the
+// last three teach what nobody guesses: terms AND, a leading hyphen subtracts, and they compose.
 interface Example {
   label: string;
   query: string;
@@ -189,7 +172,7 @@ const VIEWS: ViewSpec[] = [
   {
     id: "radial",
     label: "What is next to this?",
-    blurb: "One node's neighbourhood, as rings by distance. Containment is not followed.",
+    blurb: "One node's neighborhood, as rings by distance. Containment is not followed.",
     cli: null,
     picks: true,
   },

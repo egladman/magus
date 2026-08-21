@@ -75,7 +75,7 @@ export function applyFocusRing(on: boolean): void {
   else document.documentElement.removeAttribute("data-focus-ring");
 }
 
-// "auto" honours prefers-reduced-motion and nothing more; "reduced" stills the console regardless
+// "auto" honors prefers-reduced-motion and nothing more; "reduced" stills the console regardless
 // of the OS. Both exist because the OS setting is all-or-nothing across every site a person visits,
 // and the graph's simulation never fully stops on its own. Mirrors the docs site, attribute name
 // included.
@@ -102,7 +102,7 @@ export function applyMotion(v: MotionPref): void {
   else document.documentElement.removeAttribute("data-motion");
 }
 
-// On by default: colour alone cannot separate twenty kinds for a colourblind reader (graph/shapes.ts
+// On by default: color alone cannot separate twenty kinds for a colourblind reader (graph/shapes.ts
 // carries the measurement), and SC 1.4.1 asks for a second channel rather than a better palette.
 const nodeShapes = persisted<boolean>("console-node-shapes", true);
 

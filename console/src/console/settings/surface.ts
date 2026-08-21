@@ -675,8 +675,8 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     ),
   );
 
-  // Motion, same 2-way shape. "System" is not "no reduction": it honours prefers-reduced-motion,
-  // which is why the other option is labelled Reduced rather than Off - it reduces motion here even
+  // Motion, same 2-way shape. "System" is not "no reduction": it honors prefers-reduced-motion,
+  // which is why the other option is labeled Reduced rather than Off - it reduces motion here even
   // when the OS is not asking for it anywhere.
   const motionGroup = h("div", "pf-v6-c-toggle-group console-settings-motion");
   motionGroup.setAttribute("role", "group");
@@ -746,7 +746,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
       "Node shapes",
       null,
       shapesGroup,
-      "Give each graph node a shape for its family as well as a colour, so kinds stay " +
+      "Give each graph node a shape for its family as well as a color, so kinds stay " +
         "tellable apart without relying on hue. Off draws every node as a circle.",
     ),
   );
