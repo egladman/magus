@@ -288,24 +288,31 @@
   --console-gold: #bda05a; --console-slate: #7998b0; --console-indigo: #8d89ba; --console-stone: #a49d95;
 
   --console-pin-active: var(--pf-t--global--dark--color--nonstatus--orange--300);
-  --console-node-project: var(--pf-t--global--dark--color--nonstatus--teal--300);
+  /* The step order is INVERTED against the light block above, on purpose. In the dark nonstatus
+     set --300 resolves to the family's --10 step, which is around 90% lightness for every hue:
+     blue--10 #e0f0ff, green--10 #e9f7df, teal--10 #daf2f2 are all effectively the same near-white
+     once a node is a few pixels across, so the biggest kinds arrived indistinguishable and the
+     canvas read as pale confetti. --100 is the family's --30 step and is where the hue actually
+     lives on a dark ground, so the PROMINENT kind takes --100 here and the paler siblings climb.
+     Same pairing as light, opposite direction of travel. */
+  --console-node-project: var(--pf-t--global--dark--color--nonstatus--teal--100);
   --console-node-module: var(--pf-t--global--dark--color--nonstatus--teal--200);
-  --console-node-file: var(--pf-t--global--dark--color--nonstatus--blue--300);
+  --console-node-file: var(--pf-t--global--dark--color--nonstatus--blue--100);
   --console-node-dir: var(--pf-t--global--dark--color--nonstatus--blue--200);
-  --console-node-target: var(--pf-t--global--dark--color--nonstatus--yellow--300);
+  --console-node-target: var(--pf-t--global--dark--color--nonstatus--yellow--100);
   --console-node-spell: var(--pf-t--global--dark--color--nonstatus--yellow--200);
-  --console-node-op: var(--pf-t--global--dark--color--nonstatus--orange--300);
+  --console-node-op: var(--pf-t--global--dark--color--nonstatus--orange--100);
   --console-node-tool: var(--pf-t--global--dark--color--nonstatus--orange--200);
-  --console-node-function: var(--pf-t--global--dark--color--nonstatus--green--300);
+  --console-node-function: var(--pf-t--global--dark--color--nonstatus--green--100);
   --console-node-method: var(--pf-t--global--dark--color--nonstatus--green--200);
-  --console-node-import: var(--pf-t--global--dark--color--nonstatus--orangered--300);
+  --console-node-import: var(--pf-t--global--dark--color--nonstatus--orangered--100);
   --console-node-package: var(--pf-t--global--dark--color--nonstatus--orangered--200);
-  --console-node-symbol: var(--pf-t--global--dark--color--nonstatus--green--100);
-  --console-node-doc: var(--pf-t--global--dark--color--nonstatus--purple--300);
+  --console-node-symbol: var(--pf-t--global--dark--color--nonstatus--green--300);
+  --console-node-doc: var(--pf-t--global--dark--color--nonstatus--purple--100);
   --console-node-rationale: var(--pf-t--global--dark--color--nonstatus--purple--200);
-  --console-node-note: var(--pf-t--global--dark--color--nonstatus--purple--100);
-  --console-node-diagnostic: var(--pf-t--global--dark--color--nonstatus--red--300);
+  --console-node-note: var(--pf-t--global--dark--color--nonstatus--purple--300);
+  --console-node-diagnostic: var(--pf-t--global--dark--color--nonstatus--red--100);
   --console-node-charm: var(--pf-t--global--dark--color--nonstatus--red--200);
-  --console-node-owner: var(--pf-t--global--dark--color--nonstatus--gray--300);
+  --console-node-owner: var(--pf-t--global--dark--color--nonstatus--gray--100);
   --console-node-author: var(--pf-t--global--dark--color--nonstatus--gray--200);
 }
