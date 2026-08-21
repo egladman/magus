@@ -32,7 +32,7 @@
   /* The same recessive tone as the title bar and the navigation rail - the three are one continuous
      chrome surface wrapping the content, so no seam is drawn BETWEEN them. The border and cast here
      face the content above, which is where the chrome ends and the depth belongs. */
-  background: var(--pf-t--global--background--color--secondary--default);
+  background: var(--console-chrome);
   border-top: 1px solid var(--pf-t--global--border--color--default);
   box-shadow: var(--pf-t--global--box-shadow--sm--top);
   font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle);

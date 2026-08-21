@@ -146,6 +146,26 @@
      but a distinct semantic name so a chart or tile reads "failure" not "saturation". */
   --console-status-danger: var(--pf-t--global--icon--color--status--danger--default);   /* error      (red)   */
 
+  /* --- The TEXT tier of the same semantics ---------------------------------------------
+     PatternFly ships a separate, lighter ramp for status TEXT, and the console was painting words
+     with the ICON slots above. The icon tier is tuned to read as a shape on a surface; as text on the
+     dark theme it lands at 4.19:1, under WCAG AA's 4.5 for body copy. Measured on the dashboard hero,
+     where "Attention needed" is the single most important sentence on the board - the one state that
+     has to be unmissable was the one failing the floor.
+     The icon slots stay exactly as they are: they are correct for dots, borders and glyphs, which is
+     what they were chosen for. Use these ONLY where the colour lands on a glyph the reader is
+     expected to READ. */
+  /* The chrome surface: title bar, navigation rail, status bar. One slot, because those three are one
+     continuous frame and must never drift apart.
+     LIGHT: the recessive tone. Content is white paper sitting on it, and the elevation reads because
+     white advances - that is the whole cue, and it works.
+     DARK: see the override in the dark block. The relationship INVERTS there, and it has to. */
+  --console-chrome: var(--pf-t--global--background--color--secondary--default);
+
+  --console-status-ok-text: var(--pf-t--global--text--color--status--success--default);
+  --console-status-warn-text: var(--pf-t--global--text--color--status--warning--default);
+  --console-status-danger-text: var(--pf-t--global--text--color--status--danger--default);
+
   /* --- 3b. Earthy card palette -----------------------------------------------------------
      A small set of muted, EARTHY hues, one per launcher-card surface (--card-accent, set per card in
      home.ts): each card's small icon takes its hue, so the home reads as deliberate pops of color.
@@ -228,6 +248,24 @@
    .pf-v6-theme-dark class on <html> for both an explicit dark choice and OS-dark). Same 14 kinds,
    same family/shade pairing, sourced from the dark ramp so the fills read on the dark canvas. */
 :root.pf-v6-theme-dark {
+  /* OFF-WHITE, not #ffffff. PatternFly's dark theme sets regular text to pure white, and pure white on
+     a dark surface is the classic halation case: the edges bloom and appear to vibrate, worst for the
+     roughly one in three people with astigmatism, and reading speed measurably drops. Material and
+     Apple both back off to a high-emphasis off-white for the same reason. This still measures 11.6:1
+     on the card surface and 13.7:1 on the deepest chrome, so nothing is lost but the glare.
+     Light theme is untouched - dark text on a light ground does not halate. */
+  --pf-t--global--text--color--regular: #e3e3e3;
+
+  /* The chrome is LIGHTER than the content it wraps, which is the reverse of the light theme and is
+     correct in both. In a dark theme elevation reads as LIGHTNESS - a shadow on a dark surface is
+     nearly invisible, so raising a surface means lightening it (Material's elevation overlay is the
+     same idea).
+     The console had the contradiction that produces: the status bar casts UP onto the content and the
+     tab strip casts DOWN onto it, so the chrome is declared to be above - while chrome and the content
+     ground were both #151515, exactly equal. The cue that works said one plane; the cue that does not
+     work said two. That is what read as flat. */
+  --console-chrome: #242424;
+
   /* The earthy card palette's dark ramp (lighter, so the hues read on the dark card). Plain custom
      properties, not theme-aware PF tokens, so they are restated here. */
   --console-clay: #c08768; --console-rust: #bd6f52; --console-moss: #9ba766; --console-sage: #93a985; --console-spruce: #6f9d92;

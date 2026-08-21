@@ -347,7 +347,7 @@ body[data-console-fill] > main > .console-render-panel {
   background: var(--pf-t--global--background--color--primary--default);
 }
 .console-shell-panespopup__closebtn:hover {
-  background: var(--pf-t--global--background--color--secondary--default);
+  background: var(--console-chrome);
 }
 /* The map card's header: a title and a plain X that dismisses the whole popup - the obvious "close this
    menu" control, distinct from the full-width "Close pane" footer (which closes a PANE). */
@@ -524,7 +524,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      The border and the cast here face the CONTENT, not the rail: this edge is where the chrome ends,
      so it is where the depth belongs. The cast is what makes a surface scrolling under the tab strip
      pass beneath something rather than meet a flat seam. */
-  background: var(--pf-t--global--background--color--secondary--default);
+  background: var(--console-chrome);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
   box-shadow: var(--pf-t--global--box-shadow--sm--bottom);
   /* A soft cast DOWN over the content, so a surface scrolling under the bar passes beneath
