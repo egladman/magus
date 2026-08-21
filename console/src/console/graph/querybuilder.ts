@@ -28,6 +28,9 @@ export interface GraphCapabilities {
   hasDurations: boolean;
   hasAffectedSet: boolean;
   live: boolean;
+  // Why the last FindAffected could not answer, empty when it did. An empty affected set has two
+  // causes and only one of them is "your tree is clean".
+  affectedFallback: string;
 }
 
 export interface QueryBuilder {
@@ -37,7 +40,15 @@ export interface QueryBuilder {
   isOpen(): boolean;
 }
 
-type Field = "" | "kind" | "project" | "relation" | "id";
+// One list, three uses: the type, the picker's order, and the parser's accept set. Spelling the
+// union separately let the picker and the type drift, which is a term the parser accepts and the
+// picker cannot offer.
+const FIELDS = ["", "kind", "project", "relation", "id"] as const;
+type Field = (typeof FIELDS)[number];
+
+function asField(s: string): Field | null {
+  return (FIELDS as readonly string[]).includes(s) ? (s as Field) : null;
+}
 
 interface Term {
   field: Field;
@@ -81,8 +92,11 @@ export function parseTerms(str: string): Term[] {
     }
     let field: Field = "";
     const fm = /^([a-zA-Z]+):/.exec(str.slice(i));
-    if (fm && ["kind", "project", "relation", "id"].includes(fm[1].toLowerCase())) {
-      field = fm[1].toLowerCase() as Field;
+    // An unknown prefix is not a field: it stays part of the value, so a filter magus understands
+    // and this builder does not still round-trips instead of being silently rewritten.
+    const named = fm && fm[1].toLowerCase() !== "" ? asField(fm[1].toLowerCase()) : null;
+    if (fm && named) {
+      field = named;
       i += fm[0].length;
     }
     let value: string;
@@ -227,9 +241,11 @@ const VIEWS: ViewSpec[] = [
     requires: (c) =>
       c.hasAffectedSet
         ? null
-        : c.live
-          ? "Nothing to show: your working tree matches the base it is compared against."
-          : "Needs a live workspace. Open one with magus graph export --open --follow.",
+        : c.affectedFallback
+          ? "The workspace could not compute a diff: " + c.affectedFallback
+          : c.live
+            ? "Nothing to show: your working tree matches the base it is compared against."
+            : "Needs a live workspace. Open one with magus graph export --open --follow.",
   },
 ];
 
@@ -239,6 +255,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
   // The filter as it stood when the panel opened, so Reset can put it back after experimenting.
   let openedWith = "";
   let detached: DetachHandle | null = null;
+  let opening = false;
 
   const overlay = h("div", "console-graph-qb");
   overlay.hidden = true;
@@ -265,6 +282,10 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
       detached.close();
       return;
     }
+    // requestWindow is async, so a second click before it settles would move the panel into a second
+    // window and strand the first one holding a placeholder that never comes back.
+    if (opening) return;
+    opening = true;
     // Not awaited before the call: both window APIs spend the click's user activation, and an await
     // in between loses it.
     void detachPanel(box, {
@@ -274,14 +295,18 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
       onReturn: () => {
         detached = null;
       },
-    }).then((handle) => {
-      detached = handle;
-      // A browser can refuse both a PiP window and a popup. Saying so beats a button that looks
-      // broken - which is what this did until the refusal was observed.
-      if (!handle) {
-        detachBtn.title = "Your browser would not open a second window for this panel";
-        detachBtn.setAttribute("data-detach-failed", "");
+    }).then((res) => {
+      opening = false;
+      if (res.ok) {
+        detached = res.handle;
+        detachBtn.removeAttribute("data-detach-failed");
+        detachBtn.title = "Put it back";
+        return;
       }
+      // A browser can refuse a second window. Saying WHY beats a button that looks broken - which is
+      // what this did until the refusal was observed.
+      detachBtn.title = "Could not open a second window: " + res.reason;
+      detachBtn.setAttribute("data-detach-failed", "");
     });
   });
 
@@ -302,7 +327,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
     ["view", "Run a view"],
   ] as ["filter" | "view", string][]) {
     const li = h("li", "pf-v6-c-tabs__item");
-    const btn = h("button", "pf-v6-c-tabs__link") as HTMLButtonElement;
+    const btn = h("button", "pf-v6-c-tabs__link");
     btn.type = "button";
     btn.setAttribute("role", "tab");
     btn.append(h("span", "pf-v6-c-tabs__item-text", label));
@@ -323,10 +348,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
 
   // --- filter pane -----------------------------------------------------------------------------
   const rows = h("div", "console-graph-qb__rows");
-  const addBtn = h(
-    "button",
-    "pf-v6-c-button pf-m-secondary console-graph-qb__add",
-  ) as HTMLButtonElement;
+  const addBtn = h("button", "pf-v6-c-button pf-m-secondary console-graph-qb__add");
   addBtn.type = "button";
   addBtn.append(h("span", "pf-v6-c-button__text", "Add a term"));
   addBtn.addEventListener("click", () => {
@@ -346,20 +368,28 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
     ["Copy filter", () => renderQuery(terms)],
     ["Copy command", () => 'magus query "' + renderQuery(terms) + '"'],
   ] as [string, () => string][]) {
-    const b = h("button", "pf-v6-c-button pf-m-link pf-m-inline") as HTMLButtonElement;
+    const b = h("button", "pf-v6-c-button pf-m-link pf-m-inline");
     b.type = "button";
     b.append(h("span", "pf-v6-c-button__text", label));
     b.addEventListener("click", () => {
       const text = get();
       if (!renderQuery(terms)) return;
-      void navigator.clipboard?.writeText(text).then(() => {
-        const span = b.querySelector(".pf-v6-c-button__text");
-        if (!span) return;
-        span.textContent = "Copied";
-        setTimeout(() => {
-          span.textContent = label;
-        }, 1200);
-      });
+      const span = b.querySelector(".pf-v6-c-button__text");
+      // writeText rejects when the document is not focused or the permission is denied, and an
+      // unhandled rejection left the button reading "Copied" with an empty clipboard.
+      void navigator.clipboard
+        ?.writeText(text)
+        .then(() => {
+          if (span) span.textContent = "Copied";
+        })
+        .catch(() => {
+          if (span) span.textContent = "Press Ctrl+C";
+        })
+        .finally(() => {
+          setTimeout(() => {
+            if (span) span.textContent = label;
+          }, 1200);
+        });
     });
     copyRow.append(b);
   }
@@ -419,10 +449,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
     terms.forEach((t, idx) => {
       const row = h("div", "console-graph-qb__row");
 
-      const neg = h(
-        "button",
-        "pf-v6-c-button pf-m-control console-graph-qb__neg",
-      ) as HTMLButtonElement;
+      const neg = h("button", "pf-v6-c-button pf-m-control console-graph-qb__neg");
       neg.type = "button";
       neg.setAttribute("aria-pressed", t.negated ? "true" : "false");
       neg.title = t.negated
@@ -436,17 +463,17 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
       });
 
       const sel = h("span", "pf-v6-c-form-control console-graph-qb__field");
-      const select = h("select") as HTMLSelectElement;
+      const select = h("select");
       select.setAttribute("aria-label", "Field");
-      for (const f of ["", "kind", "project", "relation", "id"] as Field[]) {
-        const o = h("option") as HTMLOptionElement;
+      for (const f of FIELDS) {
+        const o = h("option");
         o.value = f;
         o.textContent = FIELD_LABEL[f];
         o.selected = f === t.field;
         select.append(o);
       }
       select.addEventListener("change", () => {
-        t.field = select.value as Field;
+        t.field = asField(select.value) ?? "";
         t.value = "";
         paintRows();
         commit();
@@ -454,7 +481,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
       sel.append(select);
 
       const valWrap = h("span", "pf-v6-c-form-control console-graph-qb__value");
-      const input = h("input") as HTMLInputElement;
+      const input = h("input");
       input.type = "text";
       input.value = t.value;
       input.setAttribute("aria-label", "Value");
@@ -462,10 +489,10 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
       input.autocomplete = "off";
       const list = valueListFor(t.field);
       if (list.length) {
-        const dl = h("datalist") as HTMLDataListElement;
+        const dl = h("datalist");
         dl.id = "qb-values-" + idx;
         for (const v of list) {
-          const o = h("option") as HTMLOptionElement;
+          const o = h("option");
           o.value = v;
           dl.append(o);
         }
@@ -484,17 +511,14 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
       });
       input.addEventListener("change", () => commit());
       input.addEventListener("keydown", (ev) => {
-        if ((ev as KeyboardEvent).key === "Enter") {
+        if (ev.key === "Enter") {
           ev.preventDefault();
           commit();
         }
       });
       valWrap.append(input);
 
-      const del = h(
-        "button",
-        "pf-v6-c-button pf-m-plain console-graph-qb__del",
-      ) as HTMLButtonElement;
+      const del = h("button", "pf-v6-c-button pf-m-plain console-graph-qb__del");
       del.type = "button";
       del.setAttribute("aria-label", "Remove this term");
       del.append(h("span", "pf-v6-c-button__icon", "×"));
@@ -537,7 +561,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
     viewPane.append(summary);
     for (const v of VIEWS) {
       const why = v.requires?.(caps) ?? null;
-      const card = h("button", "console-graph-qb__view") as HTMLButtonElement;
+      const card = h("button", "console-graph-qb__view");
       card.type = "button";
       card.disabled = !!why;
       card.append(h("span", "console-graph-qb__viewlabel", v.label));
@@ -559,7 +583,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
   // No Apply: the canvas behind this panel already shows the answer. What the footer owes instead
   // is an undo, because experimenting is only safe if the filter you arrived with comes back.
   const foot = h("div", "console-graph-qb__foot");
-  const resetBtn = h("button", "pf-v6-c-button pf-m-link") as HTMLButtonElement;
+  const resetBtn = h("button", "pf-v6-c-button pf-m-link");
   resetBtn.type = "button";
   resetBtn.append(h("span", "pf-v6-c-button__text", "Reset"));
   resetBtn.addEventListener("click", () => {
@@ -567,7 +591,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
     paintRows();
     commit();
   });
-  const clearBtn = h("button", "pf-v6-c-button pf-m-link") as HTMLButtonElement;
+  const clearBtn = h("button", "pf-v6-c-button pf-m-link");
   clearBtn.type = "button";
   clearBtn.append(h("span", "pf-v6-c-button__text", "Clear all"));
   clearBtn.addEventListener("click", () => {
@@ -616,7 +640,7 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
     paint();
     paintRows();
     paintCount();
-    (rows.querySelector("select") as HTMLSelectElement | null)?.focus();
+    rows.querySelector("select")?.focus();
   }
 
   function close(): void {
@@ -627,10 +651,13 @@ export function createQueryBuilder(deps: QueryBuilderDeps): QueryBuilder {
     deps.onClose?.();
   }
 
-  document.addEventListener("keydown", (e) => {
-    // Only when focus is inside the panel: this is no longer a modal, so Escape belongs to whatever
-    // the reader is actually working in - stealing it would break Escape on the canvas.
-    if (e.key === "Escape" && !overlay.hidden && overlay.contains(document.activeElement)) {
+  // On the box, not on document. Two reasons: this is not a modal, so Escape belongs to whatever the
+  // reader is actually working in and only reaches here by bubbling out of the panel; and the box is
+  // what detach MOVES, so the binding travels to the detached window instead of listening on a
+  // document the panel has left. A document-level listener also outlived every activation, since the
+  // builder is rebuilt per activation and nothing ever removed it.
+  box.addEventListener("keydown", (e) => {
+    if (e.key === "Escape" && !overlay.hidden) {
       e.preventDefault();
       close();
     }

@@ -35,10 +35,6 @@ const SHAPE_BY_KIND: Readonly<Record<string, NodeShape>> = {
   author: "ring",
 };
 
-export function shapeFor(kind: string): NodeShape {
-  return SHAPE_BY_KIND[kind] ?? "circle";
-}
-
 // Scale factors that give every shape the same AREA as a circle of radius r. Radius encodes degree,
 // so sizing these to a shared bounding box instead would make a square node read as a smaller one.
 const AREA = Math.PI;
@@ -46,6 +42,11 @@ const K_SQUARE = Math.sqrt(AREA / 4);
 const K_TRIANGLE = Math.sqrt(AREA / ((3 * Math.sqrt(3)) / 4));
 const K_DIAMOND = Math.sqrt(AREA / 2);
 const K_HEXAGON = Math.sqrt(AREA / ((3 * Math.sqrt(3)) / 2));
+// The ring is the one shape drawn twice: an outer disc, then a hole punched out of it. Normalizing
+// the outer disc alone leaves 1 - 0.52^2 of the ink, so a ring node read as a smaller node than its
+// degree earned. Growing the outer radius by this factor puts the ANNULUS back on area.
+const RING_HOLE = 0.52;
+const K_RING = 1 / Math.sqrt(1 - RING_HOLE * RING_HOLE);
 
 // traceNodeShape lays the path and nothing else, so a fill and a selection stroke share one
 // definition of the outline.
@@ -96,6 +97,8 @@ export function traceNodeShape(
       return;
     }
     case "ring":
+      ctx.arc(x, y, r * K_RING, 0, 2 * Math.PI);
+      return;
     case "circle":
     default:
       ctx.arc(x, y, r, 0, 2 * Math.PI);
@@ -103,12 +106,9 @@ export function traceNodeShape(
   }
 }
 
-export function isRing(shape: NodeShape): boolean {
-  return shape === "ring";
-}
-
-// Punches a filled mark hollow. Compositing rather than stroking, so the ring's weight tracks the
-// node radius instead of turning small nodes into dots and large ones into thin hoops.
+// Punches a ring's disc hollow, in the background colour rather than by stroking, so the band's
+// weight tracks the node radius instead of turning small nodes into dots and large ones into thin
+// hoops. Call it right after filling a "ring" mark, with the same r.
 export function punchRing(
   ctx: CanvasRenderingContext2D,
   x: number,
@@ -117,11 +117,11 @@ export function punchRing(
   background: string,
 ): void {
   ctx.beginPath();
-  ctx.arc(x, y, r * 0.52, 0, 2 * Math.PI);
+  ctx.arc(x, y, r * K_RING * RING_HOLE, 0, 2 * Math.PI);
   ctx.fillStyle = background;
   ctx.fill();
 }
 
 export function shapeOfNode(n: GNode): NodeShape {
-  return shapeFor(n.kind);
+  return SHAPE_BY_KIND[n.kind] ?? "circle";
 }

@@ -61,8 +61,8 @@ import {
 } from "./types.js";
 import { LAYERED_COL_W, LAYERED_MAX, layoutLayered, layoutWaves } from "./layout.js";
 import { CARD_COL_W, DOT_R_PX, cardDetail, drawCard, measureCards } from "./cards.js";
-import { isRing, punchRing, shapeOfNode, traceNodeShape } from "./shapes.js";
-import { createQueryBuilder } from "./querybuilder.js";
+import { punchRing, shapeOfNode, traceNodeShape } from "./shapes.js";
+import { createQueryBuilder, type QueryBuilder } from "./querybuilder.js";
 import { RADIAL_MAX_RINGS, RADIAL_RING_R, layoutRadial } from "./radial.js";
 import { nodeDurationMs, formatDuration } from "./duration.js";
 import {
@@ -604,53 +604,38 @@ function incidentEdges(id: string) {
   return { out, inc };
 }
 
+function buildAdjacency(keep: (e: GLink) => boolean) {
+  const adj = new Map<string, Set<string>>();
+  const add = (a: string, b: string) => {
+    let s = adj.get(a);
+    if (!s) {
+      s = new Set();
+      adj.set(a, s);
+    }
+    s.add(b);
+  };
+  for (const e of graph.links) {
+    if (!keep(e)) continue;
+    const s = endpointId(e.source),
+      t = endpointId(e.target);
+    add(s, t);
+    add(t, s);
+  }
+  return adj;
+}
+
 // Undirected adjacency (node id -> Set of neighbor ids), built once per graph and
 // cached on the graph. draw() runs every tick + every hover, and focus/local-graph
 // BFS walks it, so a single precomputed map beats re-scanning all edges each time.
 function adjacency() {
-  if (!graph.adj) {
-    const adj = new Map<string, Set<string>>();
-    const add = (a: string, b: string) => {
-      let s = adj.get(a);
-      if (!s) {
-        s = new Set();
-        adj.set(a, s);
-      }
-      s.add(b);
-    };
-    for (const e of graph.links) {
-      const s = endpointId(e.source),
-        t = endpointId(e.target);
-      add(s, t);
-      add(t, s);
-    }
-    graph.adj = adj;
-  }
+  if (!graph.adj) graph.adj = buildAdjacency(() => true);
   return graph.adj;
 }
 
 // adjacency() minus the containment tree - see neighborhood() for why walking that tree by hop
 // count reaches most of the graph from anywhere in it. Cached alongside adjacency().
 function semanticAdjacency() {
-  if (!graph.semanticAdj) {
-    const adj = new Map<string, Set<string>>();
-    const add = (a: string, b: string) => {
-      let s = adj.get(a);
-      if (!s) {
-        s = new Set();
-        adj.set(a, s);
-      }
-      s.add(b);
-    };
-    for (const e of graph.links) {
-      if (e.relation === "contains") continue;
-      const s = endpointId(e.source),
-        t = endpointId(e.target);
-      add(s, t);
-      add(t, s);
-    }
-    graph.semanticAdj = adj;
-  }
+  if (!graph.semanticAdj) graph.semanticAdj = buildAdjacency((e) => e.relation !== "contains");
   return graph.semanticAdj;
 }
 // Cached on the graph like adjacency(): the project: filter runs it once per node over the whole
@@ -779,9 +764,12 @@ function enterRadialPick(): void {
   setStatus("Click a node to center the radial view.");
 }
 
-function applyRadialMode(): boolean {
+// Returns the set of nodes it PLACED, which is also what it leaves in matchSet - returned as well
+// because a caller that clears matchSet first cannot read it back through a narrowed binding. null
+// when there was no center to lay out around.
+function applyRadialMode(): Set<string> | null {
   const center = selected ?? focusId;
-  if (!center) return false; // switchLayout guards via layoutBlockedReason; safe fallback
+  if (!center) return null; // switchLayout guards via layoutBlockedReason; safe fallback
   const subsetAll = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
   const subset = subsetAll.some((n) => n.id === center) ? subsetAll : graph.nodes;
   sim?.stop();
@@ -822,7 +810,7 @@ function applyRadialMode(): boolean {
   // this the camera stays wherever the previous layout left it and the rings
   // render off-screen (fitView calls draw()).
   fitView(matchSet);
-  return true;
+  return placed;
 }
 
 // unparkNodes releases only the nodes sitting at the parking coordinate, returning them to the
@@ -1388,7 +1376,7 @@ function draw() {
     ctx.fill();
     if (glowing) ctx.shadowBlur = 0;
     // After the glow is cleared, or the shadow prints inside the hole.
-    if (isRing(shape)) punchRing(ctx, n.x, n.y, n.r, th.bg);
+    if (shape === "ring") punchRing(ctx, n.x, n.y, n.r, th.bg);
     // Anchor ring: target-graph anchor targets (top-level, nothing depends on
     // them within their project) get an outer ring in the same kind color so
     // they stand out without adding a new palette entry.
@@ -1769,10 +1757,6 @@ function renderOverview() {
   cardEl.hidden = false;
 }
 
-// syncOverview repaints the overview when it is what the detail column is showing. Every
-// setting it reports is owned elsewhere, so each owner has to say when it moved. NOT hooked into
-// draw() (that runs per frame, and this writes innerHTML) and not into renderList() alone (which
-// the arrangement never calls).
 // What the detail column is showing. "auto" is the column's normal life - the selected node's card,
 // or the overview when nothing is selected. "builder" means the question builder has the column.
 //
@@ -1781,6 +1765,8 @@ function renderOverview() {
 // second reach-in to undo. One owner, one function that paints it.
 type DetailMode = "auto" | "builder";
 let detailMode: DetailMode = "auto";
+// Held so deactivate() can close it. bootWireEvents rebuilds it per activation.
+let queryBuilder: QueryBuilder | null = null;
 
 function setDetailMode(mode: DetailMode) {
   detailMode = mode;
@@ -1804,19 +1790,18 @@ function syncOverview() {
 }
 
 function renderCard(id: string | null) {
+  const n = id ? graph.byId.get(id) : null;
+  // The tab name tracks the SELECTION, so it is set before the builder guard below - the reader
+  // selecting a node with the builder open still expects the tab to follow. Driven from here rather
+  // than from selectNode's several assignment sites: the card is the one place a selection renders.
+  docTitle.set(n?.label ?? null);
   // The builder owns the column while it is open, so a selection changes what is SELECTED without
   // evicting what the reader deliberately opened. Closing it repaints whatever is current.
   if (detailMode === "builder") return;
-  const n = id ? graph.byId.get(id) : null;
   if (!n) {
     renderOverview();
-    docTitle.set(null); // nothing selected: the tab falls back to "Graph Explorer"
     return;
   }
-  // The selected node is what this surface has open, so the console names its tab after it. Driven
-  // from here rather than from selectNode's several assignment sites: the card is the ONE place a
-  // selection is rendered, so the tab cannot disagree with what the panel shows.
-  docTitle.set(n.label);
   const { out, inc } = incidentEdges(n.id);
   let html = "";
   html += '<p class="console-graph-card__section">Node details</p>';
@@ -1973,7 +1958,7 @@ const STAGE_OVERLAYS = [".console-graph-stage__tools"];
 // center the graph in what the operator can see instead of behind the legend.
 function stageInsets(): Insets {
   if (!canvas) return NO_INSETS;
-  const view = canvas.getBoundingClientRect() as Rect;
+  const view = canvas.getBoundingClientRect();
   const overlays: Rect[] = [];
   for (const sel of STAGE_OVERLAYS) {
     for (const node of document.querySelectorAll<HTMLElement>(sel)) {
@@ -2810,8 +2795,7 @@ function applyQuery(q: string) {
   if (layoutMode === "radial") {
     const matches = matchSet;
     matchSet = null;
-    applyRadialMode(); // re-places over the full graph; leaves matchSet as the placed set
-    const placed = matchSet as Set<string> | null;
+    const placed = applyRadialMode(); // re-places over the full graph, and leaves it in matchSet
     if (matches && placed) {
       matchSet = new Set([...matches].filter((id) => placed.has(id)));
       const unreachable = matches.size - matchSet.size;
@@ -5198,6 +5182,11 @@ function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void
 export async function activate() {
   resolveDom();
   readTheme();
+  // FIRST, before anything that can outlive this activation. bootWireEvents used to create it, and
+  // that runs last - so revealWholeGraph's canvas-size poll and bootLive's FindAffected both started
+  // while it was still null, and both silently opted out of cancellation. Every comment promising
+  // "into every RPC" or "torn down takes the poll with it" was false for exactly those two.
+  lifecycleAbort = new AbortController();
 
   // Collapse the stage tools behind the PF toolbar kebab on narrow viewports (the shared
   // responsive-toolbar pattern the log viewer uses too). Wired before any early return so it
@@ -5275,13 +5264,9 @@ export async function activate() {
 // normal load path and the live-mode load path. Called at the end of boot() and
 // from the live-mode path before it returns.
 function bootWireEvents() {
-  // One AbortController for every window/document lifecycle listener this function wires
-  // (keydown, fullscreenchange, the theme matchMedia change, hashchange, visibilitychange,
-  // reduced-motion change), created up front so every addEventListener call below can route
-  // through its signal - deactivate() then removes them all with a single abort(). A reopened
-  // graph re-runs this block with a fresh controller.
-  lifecycleAbort = new AbortController();
-  const lifecycleSignal = lifecycleAbort.signal;
+  // The controller is activate()'s, not this function's - see the note there. Every
+  // addEventListener below routes through its signal, so deactivate() removes them with one abort().
+  const lifecycleSignal = must(lifecycleAbort).signal;
 
   // Debounce typing so a large graph isn't re-filtered + re-rendered on every
   // keystroke; the legend/example/deep-link paths call applyQuery directly (no wait).
@@ -5527,7 +5512,10 @@ function bootWireEvents() {
   // stilled canvas has no next tick to pick them up on.
   motionObserver = new MutationObserver(() => {
     if (sim) {
-      if (motionSuppressed()) sim.alpha(0).stop();
+      // motionEligible, not just motionSuppressed: the dag layouts hold their own coordinates and a
+      // restart would shake a settled Sugiyama apart, and a hidden or backgrounded surface has no
+      // reason to spin the simulation back up.
+      if (!motionEligible() || isDagMode() || !surfaceVisible) sim.alpha(0).stop();
       else sim.alphaTarget(idleAlpha()).restart();
     }
     draw();
@@ -5634,13 +5622,15 @@ function bootWireEvents() {
 
   // The question builder, behind the kebab beside the filter box. It owns the views and the
   // filter grammar that used to be two columns of chips.
-  const builder = createQueryBuilder({
+  queryBuilder = createQueryBuilder({
     // Offered values come from the LOADED graph, so a picker never suggests a kind that matches
     // nothing here.
     kinds: () => [...new Set(graph?.nodes.map((n) => n.kind) ?? [])].sort(),
     relations: () => [...new Set(graph?.links.map((e) => e.relation).filter(Boolean) ?? [])].sort(),
-    projects: () =>
-      [...new Set([...(graph?.projectOf?.values() ?? [])])].filter(Boolean).sort() as string[],
+    // projectOwners(), not the raw graph.projectOf cache it fills: that field is lazily populated
+    // the first time a project: term is parsed, so reading it directly gave the picker an empty
+    // list on every graph nobody had already filtered by project.
+    projects: () => [...new Set(projectOwners().values())].filter(Boolean).sort(),
     currentQuery: () => query,
     applyQuery: (q) => {
       if (searchEl) searchEl.value = q;
@@ -5648,7 +5638,10 @@ function bootWireEvents() {
     },
     matchCount: () =>
       matchSet ? { matched: matchSet.size, total: graph?.nodes.length ?? 0 } : null,
-    runView: (v) => activateView(v),
+    // askQuestion, not activateView: it is the documented single entry point, and it carries the
+    // empty-graph guard plus the preferred-layout switch. Going straight to activateView answered
+    // over a graph that had not arrived and left blast/critical in whatever layout was showing.
+    runView: askQuestion,
     radialPick: enterRadialPick,
     onClose: () => setDetailMode("auto"),
     // Facts only. Which views those facts rule out is declared beside the views.
@@ -5657,10 +5650,12 @@ function bootWireEvents() {
       hasDurations: graphHasDurations,
       hasAffectedSet: !!window._liveAffectedIds?.size,
       live: !!liveHost,
+      affectedFallback,
     }),
   });
   // Mounted in the detail column: it takes that column while open, so the canvas beside it stays
   // visible and acts as the preview. setDetailMode owns which of the three the column shows.
+  const builder = must(queryBuilder);
   el("query-builder-host")?.append(builder.el);
   el("query-builder-btn")?.addEventListener("click", () => {
     if (builder.isOpen()) {
@@ -5852,6 +5847,12 @@ export function deactivate(): void {
   // Forget the selected node: this module is a singleton the console re-activates on reopen, so a
   // stale label left here would name the reopened tab after a node it is no longer showing.
   docTitle.set(null);
+  // The same singleton hazard, twice more. A builder left open put detailMode in "builder", which
+  // survived the close and made renderCard early-return on the REOPENED graph - clicking a node
+  // painted nothing until you opened and closed the builder again. And a builder detached into its
+  // own window outlived the surface it drives, still calling applyQuery on a torn-down graph.
+  queryBuilder?.close();
+  detailMode = "auto";
   if (sim) sim?.stop();
   if (motionRaf) {
     cancelAnimationFrame(motionRaf);
