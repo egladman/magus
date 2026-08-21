@@ -812,6 +812,24 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   display: inline-flex;
   align-items: center;
   gap: var(--pf-t--global--spacer--xs);
+  /* COMPACT, to the shell's own control scale. These were left at PatternFly's default button size -
+     37px tall at 14px type - next to a title bar whose workspace control is 28px at 12.5px, so the
+     dashboard's buttons read as a size larger than everything around them. Matching the shell means
+     one control scale across the app instead of one per surface. */
+  min-block-size: 1.75rem;
+  padding-block: 0;
+  padding-inline: 0.55rem;
+  font-size: 0.78rem;
+  border-radius: var(--pf-t--global--border--radius--small);
+}
+/* Big Picture is a TOGGLE-GROUP button, not a plain one, and PatternFly rounds a group's outer corners
+   through a first/last-child rule that out-specifies the shared block above - so it kept a 9px corner
+   while its twin took 6px. Matching the specificity rather than reaching for !important. */
+.console-dashboard-viewbar
+  .pf-v6-c-toggle-group__item
+  .pf-v6-c-toggle-group__button.console-dashboard-viewbar__bigpicture,
+.console-dashboard-viewbar .pf-v6-c-toggle-group__button.console-dashboard-viewbar__bigpicture {
+  border-radius: var(--pf-t--global--border--radius--small);
 }
 .console-dashboard-viewbar__bigpicture .pf-v6-c-button__icon,
 .console-dashboard-activity__open .pf-v6-c-button__icon {
@@ -1459,9 +1477,9 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 .console-dashboard-hero[data-state="warn"]      { border-left-color: var(--console-status-warn); }
 .console-dashboard-hero[data-state="attention"] { border-left-color: var(--console-status-danger); }
 .console-dashboard-hero__verdict { margin: 0; font-size: 1.15rem; font-weight: 700; line-height: 1.2; }
-.console-dashboard-hero[data-state="clear"] .console-dashboard-hero__verdict     { color: var(--console-status-ok); }
-.console-dashboard-hero[data-state="warn"] .console-dashboard-hero__verdict      { color: var(--console-status-warn); }
-.console-dashboard-hero[data-state="attention"] .console-dashboard-hero__verdict { color: var(--console-status-danger); }
+.console-dashboard-hero[data-state="clear"] .console-dashboard-hero__verdict     { color: var(--console-status-ok-text); }
+.console-dashboard-hero[data-state="warn"] .console-dashboard-hero__verdict      { color: var(--console-status-warn-text); }
+.console-dashboard-hero[data-state="attention"] .console-dashboard-hero__verdict { color: var(--console-status-danger-text); }
 .console-dashboard-hero__detail { margin: 0.15rem 0 0; font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle); }
 /* The failing-target list. Full width under the verdict and counts, so it reads as the ANSWER to
    the headline rather than as a fourth metric. Chips rather than a bulleted column: the common case
@@ -1589,9 +1607,9 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 .console-dashboard-hero__l { font-size: 0.62rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pf-t--global--text--color--subtle); margin-top: 0.2rem; }
 /* Counts stay quiet at zero and only light up when there is something to report. */
 .console-dashboard-hero__metric .console-dashboard-hero__n { color: var(--pf-t--global--text--color--subtle); }
-.console-dashboard-hero__fail[data-n="some"] .console-dashboard-hero__n  { color: var(--console-status-danger); }
+.console-dashboard-hero__fail[data-n="some"] .console-dashboard-hero__n  { color: var(--console-status-danger-text); }
 .console-dashboard-hero__run[data-n="some"] .console-dashboard-hero__n   { color: var(--console-status-running); }
-.console-dashboard-hero__queue[data-n="some"] .console-dashboard-hero__n { color: var(--console-status-queued); }
+.console-dashboard-hero__queue[data-n="some"] .console-dashboard-hero__n { color: var(--console-status-danger-text); }
 .console-dashboard-hero__fail[data-n="some"] { border-color: var(--console-status-danger); }
 /* A live-mode failing count deep-links to the failing run's log. */
 /* A linked count reads as clickable: pointer cursor, an arrow on the label, and a hover that picks

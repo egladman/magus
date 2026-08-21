@@ -34,8 +34,23 @@
    * 15px status chip, which ended up looking like a lozenge on exactly the platform most of these
    * are read on. Pinning it here keeps the badge square-ish everywhere without flattening the
    * platform's rounding for every other component that shares the token. */
-  border-radius: 2px; color: #fff; vertical-align: baseline;
+  border-radius: 2px; vertical-align: baseline;
+  /* The ink follows the FILL's lightness, not the theme.
+   *
+   * These were #fff everywhere, which is correct only while the fills are deep. Light theme fills are
+   * deep, so white passed there - but the dark theme deliberately LIGHTENS every status hue so it
+   * reads on a dark surface, and white on a light fill collapses: measured 2.25:1 on pass and 3.47:1
+   * on fail, both under WCAG AA's 4.5. Dark ink on those same fills measures 7.8 and 5.1.
+   *
+   * Not a dark-theme bug as such - it is the general mistake of pinning ink to the page instead of to
+   * the thing the ink sits on. Which is why warn is wrong in the LIGHT theme too, below. */
+  color: #fff;
 }
+/* Dark theme: every status fill is the light variant, so the ink flips. */
+:root.pf-v6-theme-dark .console-render-badge { color: #151515; }
+/* Gold is a LIGHT fill in both themes, so it takes dark ink in both. White on it measured 2.21:1 in
+   the light theme - the worst contrast anywhere in the console, and on a warning. */
+.console-render-badge--warn, .console-render-badge--dry { color: #151515; }
 .console-render-badge--pass { background: var(--console-status-ok); }
 .console-render-badge--fail, .console-render-badge--error { background: var(--console-status-danger); }
 .console-render-badge--warn, .console-render-badge--dry { background: var(--console-status-warn); }

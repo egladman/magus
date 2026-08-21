@@ -49,6 +49,7 @@ export interface LayoutSettings {
   bigPictureSplit: Record<string, number>; // Big Picture split handle positions ("dashboard-bigpicture-split")
   logsZoom: number; // log viewer text zoom ("logs-zoom")
   collapsedCards: string[]; // dashboard cards folded away ("dashboard-collapsed")
+  sidebarExpanded: boolean; // navigation rail showing labels vs icons ("sidebar-expanded")
 }
 
 export interface SettingsEnvelope {
@@ -74,6 +75,7 @@ export function buildSettingsEnvelope(p: Settings, layout: LayoutSettings): Sett
       bigPictureSplit: layout.bigPictureSplit,
       logsZoom: layout.logsZoom,
       collapsedCards: layout.collapsedCards,
+      sidebarExpanded: layout.sidebarExpanded,
     },
   };
 }
@@ -109,6 +111,7 @@ const KNOWN_LAYOUT_KEYS: readonly (keyof LayoutSettings)[] = [
   "bigPictureSplit",
   "logsZoom",
   "collapsedCards",
+  "sidebarExpanded",
 ];
 
 function isRecord(v: unknown): v is Record<string, unknown> {
@@ -206,6 +209,10 @@ export function importSettings(
     nextLayout.collapsedCards = layout.collapsedCards;
     appliedLayout.push("collapsedCards");
   } else skipLayout("collapsedCards");
+  if (typeof layout.sidebarExpanded === "boolean") {
+    nextLayout.sidebarExpanded = layout.sidebarExpanded;
+    appliedLayout.push("sidebarExpanded");
+  } else skipLayout("sidebarExpanded");
 
   if (applied.length === 0 && appliedLayout.length === 0) {
     return { ok: false, error: "No recognizable settings to import." };

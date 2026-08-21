@@ -14,7 +14,8 @@ PatternFly is the console's ONLY design system. The stylesheet stack, in load or
 
 1. `patternfly.css` - PF Core base + the per-component sheets we render.
 2. `tokens.css` - the console's PF-native token layer (squares corners, system fonts, `--console-*` slots).
-3. `console.css` - the shell rules (title bar, status-bar frame vars, tiling, launcher, layout).
+3. `console.css` - the shell rules (title bar, navigation rail, status-bar frame vars, tiling,
+   launcher, layout).
 4. `overrides.css` - the small ID/class-scoped escape hatch for PF-less shell chrome.
 5. Per surface, lazily: `logs/logs.css`, `graph/graph.css`, `dashboard/dashboard.css`.
 
@@ -90,8 +91,8 @@ maintainable. There are NO bare, ad-hoc, or unprefixed class names. This mirrors
   must eventually return nothing but real HTML attributes.
 - **`<area>`** - the region/surface that OWNS the class (parallel to PF's `c`/`l`/`u` slot).
   The allowed areas are a CLOSED set - pick exactly one:
-  - `console-shell-*` the app frame: title bar, tab strip, status bar, floating gear +
-    settings popover, command palette, keybindings overlay, tiling.
+  - `console-shell-*` the app frame: title bar, tab strip, left navigation rail, status bar,
+    floating gear + settings popover, command palette, keybindings overlay, tiling.
   - `console-dashboard-*` the dashboard surface (hero, tiles, gantt, pool, stat strips, tables).
   - `console-log-*` the log viewer surface (filter chips, toolbar bits, zoom control).
   - `console-graph-*` the graph explorer surface (stage, sidebar, node cloud, legend, explain card).
@@ -132,6 +133,13 @@ ANSI colors, the badge kinds, the gantt bar kinds).
 `data-pane-id`, `data-open`, `data-card`, every `pf-v6-*` - all stay. The formula governs only
 the custom CSS CLASSES we author. A JS "hook" that carries no styling should be a `data-*`
 attribute, not a class, wherever practical.
+
+`data-surface` is SPOKEN FOR: it marks a mounted surface ROOT, and `console.css` styles several by
+value (`[data-surface="home"]`, `[data-surface="actions"]`, ...). Chrome that lives inside
+`#console-outlet` but is not a surface must pick its own hook - the navigation rail uses
+`data-rail-surface` for exactly this reason, having first been written with `data-surface` and
+silently inherited the Shortcuts surface's layout. Check a new hook against the existing selectors
+before reusing a name that reads as generic.
 
 ### Examples (ad-hoc -> the convention)
 

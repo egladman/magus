@@ -9,7 +9,7 @@
 // through these reducers.
 
 import { persisted, type Persisted } from "../lib/persist";
-import type { Pane } from "./tiling";
+import { leaves, type Pane } from "./tiling";
 
 // A tab is one open instance of a surface: `id` is the tab's own identity (so the same
 // surface can be opened twice), `pageId` is the tab's PRIMARY surface (dashboard|graph|logs)
@@ -30,27 +30,16 @@ export interface Workspace {
 
 export const emptyWorkspace: Workspace = { tabs: [], activeId: null };
 
-// Start new desktop workspaces with two panes.
+// What a first desktop visit opens: the Dashboard, on its own.
+//
+// It used to arrive pre-split, Dashboard beside Activity. That made the first thing anyone saw a
+// layout they did not ask for and could not account for - and because the workspace persists, it
+// followed them forever. It also made the navigation rail lie: clicking Dashboard opened the TAB that
+// contained it, which was two surfaces, so asking for one thing produced two.
+// A single pane says what the console is; splitting is a thing to discover, not a thing to be handed.
 export function desktopStarterWorkspace(): Workspace {
   const id = "starter";
-  return {
-    activeId: id,
-    tabs: [
-      {
-        id,
-        pageId: "dashboard",
-        title: "Dashboard",
-        layout: {
-          kind: "split",
-          id: "starter-split",
-          dir: "row",
-          ratio: 0.62,
-          a: { kind: "leaf", id: "starter-dashboard", pageId: "dashboard" },
-          b: { kind: "leaf", id: "starter-activity", pageId: "activity" },
-        },
-      },
-    ],
-  };
+  return { activeId: id, tabs: [{ id, pageId: "dashboard", title: "Dashboard" }] };
 }
 
 // openTab appends a tab and activates it. Opening a tab whose id already exists does
@@ -124,4 +113,14 @@ export function renameTab(ws: Workspace, id: string, title: string): Workspace {
 // come back on the next load.
 export function workspaceStore(): Persisted<Workspace> {
   return persisted<Workspace>("workspace", emptyWorkspace);
+}
+
+// tabHostsSurface reports whether a tab already shows a surface, checking its tiled panes when it
+// has a layout and its primary pageId otherwise. Every surface is single-instance (it keeps
+// module-level state, so a second instance would fight the first), so this is what "already open"
+// means: the console's open() focuses the hosting tab instead of mounting a duplicate, and the
+// navigation rail marks the same surfaces as open.
+export function tabHostsSurface(t: TabState, pageId: string): boolean {
+  const ids = t.layout ? leaves(t.layout).map((l) => l.pageId) : [t.pageId];
+  return ids.includes(pageId);
 }

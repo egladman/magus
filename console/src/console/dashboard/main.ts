@@ -540,16 +540,6 @@ function showResume(host: string | null, failed: boolean): void {
 // beginDemo() directly - NOT by reloading. A reload was fine on the standalone page but wrong inside the
 // console, where it would tear down the whole SPA (every tab) instead of just this surface. The #demo
 // fragment is still recorded (via replaceState, so no reload and no hashchange that a sibling pane would
-// react to) so a standalone refresh stays in the demo and the URL reads as a shareable /#demo.
-function wireDemoButton(): void {
-  const btn = opt("dash-demo-btn");
-  if (!btn) return;
-  btn.addEventListener("click", () => {
-    history.replaceState(null, "", "#demo");
-    beginDemo();
-  });
-}
-
 function wireResumeForm(): void {
   const form = opt("dash-resume") as HTMLFormElement | null;
   if (!form) return;
@@ -687,7 +677,6 @@ export function activate(): void {
     wireNotifications();
   }
   wireResumeForm();
-  wireDemoButton();
   opt("dash-plan-back")?.addEventListener("click", () => setDashboardMode("overview"), {
     signal: lifecycleAbort?.signal,
   });

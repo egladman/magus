@@ -23,19 +23,15 @@ test("openTab into an empty workspace appends and activates", () => {
   assert.deepEqual(ws, { tabs: [tab("a")], activeId: "a" });
 });
 
-test("desktop starter opens Dashboard beside Activity", () => {
+// A first visit opens ONE surface. It used to arrive pre-split beside Activity, which handed everyone
+// a layout they had not asked for and - because the workspace persists - kept it forever.
+test("desktop starter opens the Dashboard alone", () => {
   const ws = desktopStarterWorkspace();
   const [tab] = ws.tabs;
+  assert.equal(ws.tabs.length, 1);
   assert.equal(ws.activeId, "starter");
   assert.equal(tab?.pageId, "dashboard");
-  assert.deepEqual(tab?.layout, {
-    kind: "split",
-    id: "starter-split",
-    dir: "row",
-    ratio: 0.62,
-    a: { kind: "leaf", id: "starter-dashboard", pageId: "dashboard" },
-    b: { kind: "leaf", id: "starter-activity", pageId: "activity" },
-  });
+  assert.equal(tab?.layout, undefined, "no split: an un-tiled tab carries no layout tree");
 });
 
 test("setLayout makes a collapsed pane its tab's primary surface", () => {

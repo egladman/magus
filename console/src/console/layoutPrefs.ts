@@ -46,3 +46,9 @@ export const bigPictureSplitCell = persisted<SplitPref>("dashboard-bigpicture-sp
   v: SPLIT_SCHEMA,
   cols: SPLIT_DEFAULT,
 });
+
+// Whether the shell's left navigation rail shows its labels. Collapsed (the default) is the narrow
+// icon rail; expanded widens it to labelled rows. A deliberate choice about the shape of the window,
+// so it belongs here rather than in session state: it is the kind of thing that should follow you to
+// your other machine, which is what the Settings envelope's `layout` section carries.
+export const sidebarExpandedCell = persisted<boolean>("sidebar-expanded", false);

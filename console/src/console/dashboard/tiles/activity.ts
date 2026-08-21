@@ -13,6 +13,13 @@
 // (future work), which we deliberately do not invent here.
 
 import type { DashboardState, RunningTargetView } from "../state";
+import {
+  ALL_WORKSPACES,
+  inScope,
+  onWorkspaceScope,
+  shortName,
+  workspaceScope,
+} from "../../../lib/scope";
 import { fmtArgs, relTime } from "../state";
 import { glossaryLink } from "../../../lib/glossary";
 import { logsLink } from "../../../lib/daemon";
@@ -348,12 +355,44 @@ export function activityTile(): Tile {
     }
   }
 
+  // Repaint when the browser tab's workspace scope changes, not only when the daemon pushes: the
+  // scope decides which of these running targets belong to you, and it can change with no new frame.
+  let latest: DashboardState | null = null;
+  const repaint = (): void => {
+    if (!latest?.status) return;
+    const all = latest.status.runningTargets;
+    // Read the scope once. inScope defaults it per call, so leaving it off costs one sessionStorage
+    // read per running target per frame on a stream that pushes about once a second.
+    const scope = workspaceScope();
+    const mine = all.filter((t) => inScope(t.workspace, scope));
+    // "Where is my stuff" is the failure a scope invites, and this is the moment someone asks it: a
+    // scoped tile that is empty while the daemon is busy looks identical to an idle daemon. Saying
+    // how much is running ELSEWHERE turns a dead end into a signpost - it is the sentence AWS's
+    // region picker never says, and the reason people think they have lost data rather than moved.
+    const elsewhere = all.length - mine.length;
+    const scoped = workspaceScope() !== ALL_WORKSPACES;
+    if (mine.length === 0 && scoped && elsewhere > 0) {
+      empty.textContent =
+        "Nothing running in " +
+        shortName(workspaceScope()) +
+        ". " +
+        (elsewhere === 1 ? "1 target is" : elsewhere + " targets are") +
+        " running in other workspaces.";
+    } else {
+      empty.textContent = "Pool is idle. Nothing running right now.";
+    }
+    render(mine, latest.liveHost, latest.logLines, latest.conn.state === "demo");
+  };
+  const offScope = onWorkspaceScope(repaint);
+
   return {
     el: card.el,
     update(s: DashboardState) {
-      if (s.status)
-        render(s.status.runningTargets, s.liveHost, s.logLines, s.conn.state === "demo");
+      latest = s;
+      repaint();
     },
-    destroy() {},
+    destroy() {
+      offScope();
+    },
   };
 }

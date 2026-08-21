@@ -8,6 +8,8 @@
 // opened. The four core lenses are real surfaces (logs/graph/dashboard/activity). The launcher
 // (home.ts) is NOT a tab - it is the outlet's empty state, shown whenever zero tabs are open.
 
+import { castWorkspaceSigil } from "./cast";
+import { WORKSPACE_ROOT as DEMO_WORKSPACE_ROOT } from "./demo-scenario";
 import { exchangeOperatorToken } from "../lib/token-exchange";
 import {
   openTab,
@@ -17,10 +19,14 @@ import {
   renameTab,
   desktopStarterWorkspace,
   workspaceStore,
+  tabHostsSurface,
   type TabState,
 } from "./tabs";
 import { createTabBar } from "./tabBar";
-import { buildLauncher, type Launchable } from "./home";
+import { createSidebar } from "./sidebar";
+import { fetchPulse, type PulseView } from "./pulse";
+import { fetchDiffCount, type Badge } from "./badges";
+import { syncLauncherChord, syncLauncherPulse, buildLauncher, type Launchable } from "./home";
 import { standaloneSurface, moduleSurface } from "./standalone";
 import {
   registerCommand,
@@ -38,15 +44,19 @@ import { settingsSurface } from "./settings/surface";
 import { createCheatsheet } from "./cheatsheet";
 import { createActionsSurface } from "./actions";
 import { createTileView, type TileView } from "./tileView";
-import { leaves, type Pane, type Leaf, type Split } from "./tiling";
+import { leafShowing, type Pane, type Leaf, type Split } from "./tiling";
 import { initRefDrawer, referenceSurface } from "../ui/ref-drawer";
 import { initAppMenu } from "../ui/app-menu";
+import { initWorkspacePicker } from "../ui/workspace-picker";
+import { onWorkspaceScope, onWorkspaces, workspaceScope } from "../lib/scope";
+import { maybeAskWorkspace } from "../ui/signin";
 import { mountNotificationCenter, notify } from "../lib/notifications";
 import { checkLocalStorageAlert, startShellWatch } from "../lib/watch";
 import { openSurfaceWindow } from "../lib/appwindow";
 import { persisted } from "../lib/persist";
-import { splitModeCell } from "./layoutPrefs";
+import { splitModeCell, sidebarExpandedCell } from "./layoutPrefs";
 import { surfaceNavigation, surfaceNavigationEvent } from "./surface-navigation";
+import { signal } from "./view";
 import {
   parseHash,
   wantsDemo,
@@ -93,6 +103,8 @@ const CONSOLE_KEYMAP: Keymap = {
   "console.pane.focusParent": "alt+a",
   // The Command Palette: one searchable list of every command (and its chord).
   "console.actionBar.open": "mod+k",
+  // mod+b for the navigation rail, the binding every editor with a left sidebar already uses.
+  "console.sidebar.toggle": "mod+b",
 };
 const keymapCell = persisted<Keymap>("keymap", {});
 const DESKTOP_START_QUERY = "(min-width: 64rem)";
@@ -211,8 +223,14 @@ const SURFACES: Launchable[] = [
     pageId: "actions",
     label: "Shortcuts",
     hint: "Every command, its keys, and where to change them",
+    utility: true,
   },
-  { pageId: "settings", label: "Settings", hint: "Console settings and keybindings" },
+  {
+    pageId: "settings",
+    label: "Settings",
+    hint: "Console settings and keybindings",
+    utility: true,
+  },
 ];
 
 // CLEAN_PATH_SURFACES are the surfaces reachable by the canonical clean path /console/<surface>/,
@@ -797,7 +815,7 @@ export function startConsole(
     for (const id of ["logs", "graph", "activity", "dashboard"]) open(id);
     notifications.seedDemo(); // populate the history panel for the offline demo (history tier only)
   };
-  const launcher = buildLauncher(SURFACES, open, launchDemo);
+  const launcher = buildLauncher(SURFACES, open);
   launcher.hidden = true;
   outlet.append(launcher);
   const launcherStatus = makeStatusBar(false); // zero tabs, zero panes: no Panes tray button
@@ -831,7 +849,12 @@ export function startConsole(
       surfaces: SURFACES,
       mountSurface,
       onLayoutChange: (tree) => ws.set(setLayout(ws.get(), tab.id, tree)),
-      onTitleChange: (title, pageId) => retitleTab(tab.id, title, pageId),
+      onTitleChange: (title, pageId) => {
+        retitleTab(tab.id, title, pageId);
+        // Fires when focus moves to a pane showing a different surface - exactly when the rail's
+        // current row changes. Guarded on the tab being active so a background tab cannot claim it.
+        if (ws.get().activeId === tab.id) focusedSurface.set(pageId || null);
+      },
     });
     host.append(tile.el);
     mounts.set(tab.id, { host, status: makeStatusBar(), tile });
@@ -929,11 +952,18 @@ export function startConsole(
     // No active tab means the workspace is empty: reveal the launcher empty state and dock its default
     // status bar. With a tab active, hide the launcher and dock the active tab's per-tab status bar.
     launcher.hidden = active != null;
+    // Restamp the palette's chord on the way in: it is remappable, and the launcher was built long
+    // before this keymap was read.
+    if (!launcher.hidden) syncLauncherChord(launcher, chordFor("console.actionBar.open"));
     // Empty state flag for CSS: with zero tabs there is nothing on the (mobile) tab row, so the phone
     // title bar collapses back from two rows to one (see console.css) instead of reserving an empty
     // second row on the launcher screen.
     document.documentElement.toggleAttribute("data-no-tabs", active == null);
     statusHost.replaceChildren(active ? active.status : launcherStatus);
+    // Switching tabs moves focus without the tile emitting: it is the same focused pane it always had,
+    // so nothing inside it changed. Read it here instead.
+    const shot = active?.tile.snapshot();
+    focusedSurface.set(shot ? (active?.tile.leafPageId(shot.focusId) ?? null) : null);
     syncWindowTitle();
     // Let a docked Reference panel re-read the now-active surface's help sections.
     document.dispatchEvent(new CustomEvent("console:activetab", { detail: { id } }));
@@ -1044,6 +1074,101 @@ export function startConsole(
   // The app grid derives from the same registry as the launcher and Open commands. Settings keeps
   // its dedicated gear, while every user-openable workspace surface remains in the escape hatch.
   initAppMenu(SURFACES.filter((surface) => surface.pageId !== "settings"));
+
+  // The left navigation rail, over the SAME surface list, so the rail, the launcher and the
+  // Applications menu can never offer different sets. This runs before the ?app branch below, so an
+  // app-mode window builds a rail too and console.css hides it there ([data-appmode]).
+  // The rail's live pool reading. Held here rather than in the rail so the poller below owns one
+  // source of it; null until the first answer, and back to null whenever the daemon stops answering.
+  const pulse = signal<PulseView | null>(null);
+  // The surface the FOCUSED pane is showing - what the rail marks as current. A tiled tab holds
+  // several at once, so "the active tab's surfaces" is not an answer to "where am I"; focus is.
+  // Null with no tab open (the launcher), so nothing is marked.
+  const focusedSurface = signal<string | null>(null);
+  // Per-surface counts the rail hangs on a row. Diff only for now - see badges.ts for why a count
+  // earns a badge and a static one does not.
+  const railBadges = signal<Record<string, Badge>>({});
+  // The welcome screen reads the SAME pulse the rail does, on the same 15s tick, so a console sitting
+  // at zero tabs keeps saying what the daemon is doing rather than freezing on whatever was true when
+  // it was built. Null HIDES the row - see syncLauncherPulse for why "no answer" must not read as idle.
+  // Not disposed, like the readiness interval below: startConsole runs once for the page's lifetime.
+  pulse.subscribe((p) => syncLauncherPulse(launcher, p));
+  syncLauncherPulse(launcher, pulse.get());
+  // The workspace scope control, in the title bar's action group. It hides itself until the daemon
+  // reports more than one workspace, so a single-workspace console never grows a control for a
+  // decision with one answer.
+  const actionsHost = document.getElementById("console-actions");
+  // Leaving the demo is a RELOAD, not a state flip. Every surface reads #demo once at mount and keeps
+  // whatever mode it saw - the same reason launchDemo closes every tab before opening them again - so
+  // clearing the fragment without reloading would leave four synthetic surfaces on screen claiming to
+  // be live.
+  const leaveDemo = (): void => {
+    history.replaceState(null, "", location.pathname + location.search);
+    location.reload();
+  };
+  const workspacePicker = actionsHost
+    ? initWorkspacePicker(actionsHost, { onDemo: (enter) => (enter ? launchDemo() : leaveDemo()) })
+    : null;
+  // The first-sight cast belongs to the SHELL, not to the launcher. It used to run from the launcher's
+  // paint, which meant it fired only if you happened to be looking at the zero-tab screen when the
+  // workspace became known - open a tab first and the one showing was never spent, but never seen
+  // either. This is "the first time this console sees a workspace", so it is the shell's event.
+  // Only when there is a DEFINITE workspace: the one this tab is scoped to, or the only one loaded.
+  // With several loaded and none picked there is nothing to inscribe - casting an arbitrary one would
+  // be a claim about which workspace you are in, and it would spend that workspace's single showing on
+  // a guess. Same rule the launcher's mark follows.
+  let lastCast = "";
+  const castSeen = (roots: readonly string[]): void => {
+    const seed = workspaceScope() || (roots.length === 1 ? roots[0] : "");
+    if (!seed || seed === lastCast) return;
+    lastCast = seed;
+    castWorkspaceSigil(seed, roots);
+  };
+
+  // A surface can know the workspace list before this shell's 15s poll does - and in the offline demo
+  // it is the ONLY thing that knows, since there is no daemon to poll.
+  // The offline demo publishes two synthetic workspaces, which is what makes scoping demonstrable with
+  // no daemon - but a Connect screen there would ask for a credential against a daemon that does not
+  // exist, and answer its own questions with "not configured" and "No credential".
+  //
+  // Read from the FRAGMENT, not from #console-conn's data-state. The dashboard publishes its workspace
+  // list as soon as it mounts, and the connection dot is not stamped "demo" until the first readiness
+  // tick paints it - so a guard on the dot loses the race and the screen opens over the demo anyway.
+  // The fragment is set before anything mounts.
+  const inDemo = (): boolean => wantsDemo(parseHash());
+  if (workspacePicker) {
+    onWorkspaces((roots) => {
+      workspacePicker.setWorkspaces(roots);
+      // Ask once per browser tab, and only when the answer carries information. Guarded inside, so a
+      // status tick every few seconds cannot re-open it.
+      if (!inDemo()) maybeAskWorkspace(roots);
+      castSeen(roots);
+    });
+  }
+
+  // Choosing a workspace is what makes it definite, so it is the other moment worth casting on - a
+  // daemon serving several never has one until someone picks.
+  onWorkspaceScope(() => castSeen(pulse.get()?.workspaces ?? []));
+
+  const sidebarHost = document.getElementById("console-sidebar");
+  if (sidebarHost) {
+    // The handle is discarded deliberately. This is the composition root and there is no console-level
+    // teardown to hook into - startConsole runs once for the page's lifetime, the same reason the
+    // readiness interval below simply runs for as long as the page does. destroy() exists so the DOM
+    // tests can mount a rail per case without the previous one's document listeners answering.
+    createSidebar(
+      sidebarHost,
+      {
+        ws,
+        expanded: sidebarExpandedCell,
+        pulse,
+        focused: focusedSurface,
+        badges: railBadges,
+        surfaces: SURFACES,
+      },
+      { onOpen: (id) => open(id) },
+    );
+  }
 
   // Wire the title-bar Reference button + its slide-out panel. No-ops without the #console-refdrawer
   // markup. It reads the active surface's [data-ref-section] help blocks (refreshed on tab change). The
@@ -1251,6 +1376,15 @@ export function startConsole(
     run: () => commandBar.open(),
   });
 
+  // The rail's own toggle is a button on the rail, which is no help when the rail is what you want
+  // back; the command (and mod+b) is the route that does not depend on it being visible.
+  registerCommand({
+    id: "console.sidebar.toggle",
+    label: "Toggle navigation rail",
+    group: "General",
+    run: () => sidebarExpandedCell.set(!sidebarExpandedCell.get()),
+  });
+
   // Mirror the title-bar bell as a palette command, so the notification history is reachable by keyboard
   // like every other action.
   registerCommand({
@@ -1301,8 +1435,11 @@ export function startConsole(
   // tab. Built AFTER the pane
   // commands above so every id it dispatches exists. chordFor mirrors the commandBarBtn tooltip's
   // chord lookup, stamped into each control's title so the tray also teaches its keyboard equivalent.
-  const chordFor = (id: string): string =>
-    formatChord(mergeKeymap(CONSOLE_KEYMAP, keymapCell.get())[id] ?? "", isMac());
+  // A declaration, not a const arrow: show() stamps the launcher's palette hint with it, and show()
+  // can run from a tab restore well before this point in the composition root.
+  function chordFor(id: string): string {
+    return formatChord(mergeKeymap(CONSOLE_KEYMAP, keymapCell.get())[id] ?? "", isMac());
+  }
 
   const panesPopup = document.createElement("div");
   panesPopup.id = "console-panespopup";
@@ -1740,17 +1877,50 @@ export function startConsole(
     if (conn.dataset.state === "connected" && report) conn.dataset.health = readinessHealth(report);
     else delete conn.dataset.health;
   }
+  // Bumped on every poll that reaches the daemon, so a slow answer can tell whether it is still the
+  // current one. Cheaper than an AbortController here because the fetch helpers already collapse every
+  // failure to null; what has to be dropped is a SUCCESSFUL answer that arrived too late.
+  let pollGeneration = 0;
   function pollReadiness(): void {
     const current = document.getElementById("console-conn");
-    if (current?.dataset.state === "demo") {
-      const hint = "Demo data is synthetic. Click to change the daemon address.";
-      current.title = hint;
-      current.setAttribute("aria-label", hint);
-      delete current.dataset.health;
+    // The FRAGMENT decides, not the connection dot. The dot is not stamped "demo" until a demo surface
+    // mounts and writes it, so keying on it meant a console opened straight at #demo produced no pulse
+    // at all until a tab happened to be opened - no rail reading, no workspaces, no sigil. Same
+    // ordering mistake as the connect screen's guard, in a branch that predates it.
+    if (wantsDemo(parseHash()) || current?.dataset.state === "demo") {
+      // The dot may not exist yet at #demo - it is docked by whichever surface is showing, and on the
+      // zero-tab screen the launcher's own bar owns it. The pulse below does not depend on it.
+      if (current) {
+        const hint = "Demo data is synthetic. Click to change the daemon address.";
+        current.title = hint;
+        current.setAttribute("aria-label", hint);
+        delete current.dataset.health;
+      }
+      // A SYNTHETIC pulse, not null. Everything in the demo is fabricated and says so - the status bar
+      // reads "demo", the workspace menu tags its roots - so a pool reading here is consistent with the
+      // rest of it rather than a claim about a daemon. Nulling it meant the demo was the one mode where
+      // the rail's reading, the welcome screen's live row, and the workspace sigil all stayed dark,
+      // which made the parts of the console that only appear with a workspace impossible to see at all
+      // without a daemon running.
+      pulse.set({
+        running: 5,
+        queued: 2,
+        workspaces: [DEMO_WORKSPACE_ROOT, "~/Repos/magus"],
+        cache: { hits: 412, misses: 77 },
+      });
+      railBadges.set({});
+      // The picker is fed here too. Its list otherwise arrives only from the dashboard's publisher,
+      // so in the demo the workspace menu stayed empty until that one surface happened to be mounted -
+      // and the scope control is in the title bar, where it is visible long before any surface is.
+      const demoRoots = [DEMO_WORKSPACE_ROOT, "~/Repos/magus"];
+      workspacePicker?.setWorkspaces(demoRoots);
+      castSeen(demoRoots);
       return;
     }
     const host = resolveDaemonHost();
     if (!host) {
+      pulse.set(null); // a count with no daemon behind it outlives the thing it described
+      railBadges.set({});
       // No daemon address configured at all: nothing to probe. A surface, if one is docked, owns the text;
       // but the launcher's own bar (zero tabs) has no surface behind it, so say so plainly - RED, via the
       // not-connected "none" state - rather than leaving whatever a prior host's probe left.
@@ -1765,6 +1935,38 @@ export function startConsole(
         }
       }
       return;
+    }
+    // The rail's readings ride THIS interval rather than starting their own: the shell is already
+    // asking this daemon a question every 15s, and the rail's numbers are the same freshness.
+    //
+    // NOT gated on the rail being on screen, unlike the diff badge below. The pulse feeds two
+    // consumers and only one of them is the rail: the title bar's scope picker and the Connect screen
+    // are built from p.workspaces, and both exist on a phone where the rail does not. Gating this
+    // would leave a mobile tab unable to learn it has a workspace to choose.
+    const generation = ++pollGeneration;
+    void fetchPulse(host).then((p) => {
+      // A slow answer can land after a switch to a demo surface or to no host at all, both of which
+      // clear these cells on the way past. Installing it then would paint a live pool reading over
+      // synthetic data - the exact thing the branches above clear them to prevent.
+      if (generation !== pollGeneration) return;
+      pulse.set(p);
+      // Only a real answer replaces the list. Overwriting with [] on a failed poll hides the scope
+      // control every 15s, and the dashboard's own publisher restores it a second later - a flicker
+      // caused entirely by two publishers disagreeing about what "no answer" means.
+      if (p) {
+        workspacePicker?.setWorkspaces(p.workspaces);
+        if (!inDemo()) maybeAskWorkspace(p.workspaces);
+        castSeen(p.workspaces);
+      }
+    });
+    // Only while the rail is actually on screen. It is hidden on a phone and in an app-mode window,
+    // where this would be a request every 15s for a number nobody can see - and a phone is exactly
+    // where that is worth not doing. Read from the rendered width rather than re-testing the 48rem
+    // breakpoint here, so CSS stays the one place that decides when the rail exists.
+    if (sidebarHost && sidebarHost.getBoundingClientRect().width > 0) {
+      void fetchDiffCount(host).then((count) => {
+        railBadges.set(count == null ? {} : { diff: { count, noun: "changed files" } });
+      });
     }
     const startedAt = Date.now();
     fetchReadiness(host).then((report) => {
@@ -1805,7 +2007,15 @@ export function startConsole(
     });
   }
   pollReadiness();
-  setInterval(pollReadiness, READINESS_POLL_MS);
+  setInterval(() => {
+    // A backgrounded tab has nothing to repaint, and this tick is now three requests. Skipping while
+    // hidden and catching up on the way back keeps a console left open overnight from talking to the
+    // daemon until morning for readings nobody is looking at.
+    if (!document.hidden) pollReadiness();
+  }, READINESS_POLL_MS);
+  document.addEventListener("visibilitychange", () => {
+    if (!document.hidden) pollReadiness();
+  });
 
   installKeybindings(() => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()));
 
@@ -1819,6 +2029,12 @@ export function startConsole(
     const hostTab = ws.get().tabs.find((t) => tabHostsSurface(t, pageId));
     if (hostTab) {
       activateTab(hostTab.id);
+      // ...and land IN it, rather than wherever focus happened to be. leafShowing carries the why.
+      const tile = mounts.get(hostTab.id)?.tile;
+      if (tile) {
+        const leaf = leafShowing(tile.snapshot().tree, pageId);
+        if (leaf) tile.focusLeaf(leaf.id);
+      }
       return;
     }
     const tab: TabState = { id: pageId + "-" + Date.now().toString(36), pageId, title: m.title };
@@ -1842,13 +2058,6 @@ export function startConsole(
     if (detail?.pageId === "dashboard" && detail.dashboardMode === "plan") openDashboardPlan();
     else if (detail?.pageId) open(detail.pageId);
   });
-
-  // tabHostsSurface reports whether a tab already shows a surface, checking its tiled panes when it
-  // has a layout and its primary pageId otherwise - so a single-instance surface is never opened twice.
-  function tabHostsSurface(t: TabState, pageId: string): boolean {
-    const ids = t.layout ? leaves(t.layout).map((l) => l.pageId) : [t.pageId];
-    return ids.includes(pageId);
-  }
 
   register(
     standaloneSurface({

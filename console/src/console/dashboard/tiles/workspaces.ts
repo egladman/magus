@@ -2,16 +2,23 @@
 // deep-links the Workspace glossary term.
 
 import type { DashboardState, WorkspaceView } from "../state";
+import { publishWorkspaces } from "../../../lib/scope";
 import { relTime } from "../state";
 import { Card, h, type Tile } from "./card";
 import { fitRows } from "./density";
-import type { Persisted } from "../../../lib/persist";
+// The scope this tile highlights against. Narrowed to what it actually reads - a value and a
+// subscription - so it can be fed either a persisted cell or the shell's per-tab workspace scope
+// without either having to pretend to be the other.
+export interface WorkspaceReader {
+  get(): string;
+  subscribe(fn: (value: string) => void): () => void;
+}
 
-// activeWorkspace, when given, is the dashboard header's active-workspace picker pick
-// (tiles/bigPicture.ts): the matching row gets [data-active] so picking a workspace there has a
-// visible effect here - the one place per-workspace data (this daemon's cache tallies) actually
-// exists to scope to. Optional: the standalone case (no picker wired) renders unhighlighted.
-export function workspacesTile(activeWorkspace?: Persisted<string>): Tile {
+// activeWorkspace, when given, is the workspace THIS BROWSER TAB is scoped to (lib/scope.ts, driven
+// by the title bar's scope picker): the matching row gets [data-active], so the tab's scope has a
+// visible anchor here - the one place per-workspace data (this daemon's cache tallies) actually
+// exists to scope to. Optional: the standalone case renders unhighlighted.
+export function workspacesTile(activeWorkspace?: WorkspaceReader): Tile {
   const card = new Card("workspaces", "Workspaces", {
     term: "Workspace",
     label: "workspaces",
@@ -28,6 +35,10 @@ export function workspacesTile(activeWorkspace?: Persisted<string>): Tile {
   card.body.append(list, empty);
 
   function render(wss: WorkspaceView[]): void {
+    // Tell the shell which workspaces exist. This tile is the one place that always has the list -
+    // live from the status stream, and synthetic in the demo - so the title bar's scope picker can
+    // offer them without a second call, and can offer them offline at all.
+    publishWorkspaces(wss.map((w) => w.root).filter((r) => r !== ""));
     count.textContent = String(wss.length);
     empty.hidden = wss.length > 0;
     list.replaceChildren();
@@ -70,9 +81,13 @@ export function workspacesTile(activeWorkspace?: Persisted<string>): Tile {
 
   // Repaint the highlight the instant the switcher's pick changes, not on the next status tick.
   let lastStatus: DashboardState["status"] = null;
-  activeWorkspace?.subscribe(() => {
-    if (lastStatus) render(lastStatus.workspaces);
-  });
+  // The subscription is a window listener (lib/scope.ts), so it outlives this tile unless destroy
+  // drops it: the dashboard remounts its tiles on every reopen, and a leaked one holds the dead tile's
+  // DOM and re-publishes the workspace list on every scope change.
+  const unsubscribe =
+    activeWorkspace?.subscribe(() => {
+      if (lastStatus) render(lastStatus.workspaces);
+    }) ?? ((): void => {});
 
   // On the board this list simply grows its card and the page scrolls. In Big Picture the card is a
   // fixed grid slot with no scrollbar, so a longer list would lose its tail behind overflow: hidden
@@ -87,6 +102,7 @@ export function workspacesTile(activeWorkspace?: Persisted<string>): Tile {
       if (s.status) render(s.status.workspaces);
     },
     destroy() {
+      unsubscribe();
       unfit();
     },
   };

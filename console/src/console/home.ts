@@ -9,12 +9,20 @@
 // (openSurfaceWindow) - an EXPLICIT opt-in, never the plain-click default, so a card can still never
 // strand you in a window you did not ask for.
 import { openSurfaceWindow } from "../lib/appwindow";
+import type { PulseView } from "./pulse";
+import { assignSigils, renderSigil, sigilSpec, type SigilSpec } from "./sigil";
+import { shortName, workspaceScope } from "../lib/scope";
 
 // A surface the launcher can open: the pageId the console registered it under, and a human label.
 export interface Launchable {
   pageId: string;
   label: string;
   hint: string;
+  // A meta surface rather than a lens on the workspace - Settings and Shortcuts, the two you consult
+  // rather than work in. The navigation rail pins these to its foot, away from the six you switch
+  // between constantly; the launcher grid and the Applications menu ignore the flag and list
+  // everything, because neither has a foot to pin them to.
+  utility?: boolean;
 }
 
 // The launcher lede rotates a small tagline each fresh load - a quiet sign of polish, not a slogan.
@@ -203,20 +211,121 @@ const SURFACE_ICONS: Record<string, string> = {
     '<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>',
 };
 
+// surfaceIconSvg renders one surface's glyph at `size` px. Exported because the shell's navigation
+// rail (sidebar.ts) marks the same surfaces with the same marks: two hand-kept copies of eight
+// glyphs would drift the first time one is redrawn. `size` omitted leaves the svg unsized, which is
+// what the card's corner watermark wants (it is scaled by CSS). A surface with no glyph of its own
+// falls back to a neutral square, so the rail is never left with a hole where an icon should be.
+export function surfaceIconSvg(pageId: string, size?: number): string {
+  const dims = size == null ? "" : ' width="' + size + '" height="' + size + '"';
+  return (
+    '<svg viewBox="0 0 24 24"' +
+    dims +
+    ' fill="none" stroke="currentColor" stroke-width="1.7" ' +
+    'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+    (SURFACE_ICONS[pageId] ?? '<rect x="4" y="4" width="16" height="16" rx="2"/>') +
+    "</svg>"
+  );
+}
+
 // buildLauncher builds the launcher DOM as the outlet's empty state. `surfaces` is what it offers to
 // open; `open` asks the console to open one as a tab. The returned element carries data-surface="home"
 // (its heading/lede layout is ID-scoped in console.css) and is appended straight into
 // #console-outlet-content as a sibling of the tab panes, shown only when no tab is active.
-export function buildLauncher(
-  surfaces: Launchable[],
-  open: (pageId: string) => void,
-  launchDemo: () => void,
-): HTMLElement {
+// syncLauncherPulse turns the welcome screen's first row into a LIVE reading when there is a daemon
+// answering, and hides it when there is not. Called on every pulse tick, so the screen someone lands
+// on says what the daemon is doing right now rather than the same sentence it always says.
+//
+// The counts are DAEMON-WIDE and say so. There is one pool behind every loaded workspace, so
+// pool.running is the machine's occupancy and not the caller's - the dashboard hero carries the same
+// qualifier for the same reason, and a launcher that dropped it would be the one screen implying these
+// numbers are yours.
+export function syncLauncherPulse(root: HTMLElement, p: PulseView | null): void {
+  const way = root.querySelector<HTMLElement>("[data-launcher-live]");
+  const label = root.querySelector<HTMLElement>("[data-launcher-live-label]");
+  const hint = root.querySelector<HTMLElement>("[data-launcher-live-hint]");
+  if (!way || !label || !hint) return;
+  // No answer is not the same as nothing running: an older daemon that does not serve the route, or a
+  // dropped request, must not render as an idle machine. Hide rather than report a zero nobody measured.
+  way.hidden = p === null;
+  if (!p) return;
+  const running = p.running;
+  label.textContent =
+    running > 0
+      ? running === 1
+        ? "1 target running"
+        : running + " targets running"
+      : "Nothing running";
+  const parts: string[] = [];
+  if (p.queued > 0) parts.push(p.queued === 1 ? "1 queued" : p.queued + " queued");
+  if (p.workspaces.length > 0) {
+    parts.push(
+      p.workspaces.length === 1 ? "1 workspace loaded" : p.workspaces.length + " workspaces loaded",
+    );
+  }
+  // What the cache actually did, in the units the wire actually carries. NOT "time saved": Cache
+  // reports hits/misses/errors/size and no duration, so a saved-minutes figure would be an invented
+  // average for work that never ran - a fabricated number on the most-read screen in the app.
+  const c = p.cache;
+  if (c && c.hits + c.misses > 0) {
+    parts.push(Math.round((c.hits / (c.hits + c.misses)) * 100) + "% served from cache");
+  }
+  parts.push("Counts are daemon-wide.");
+  hint.textContent = parts.join(". ");
+
+  paintSigil(root, p);
+}
+
+// paintSigil draws the mark for whichever workspace this window is answering for. Scope first,
+// because that is the one the reader chose; otherwise the only loaded workspace. With several loaded
+// and none picked there is no mark - drawing an arbitrary one of them would be a claim about which
+// workspace you are looking at.
+// paintSigil draws the mark for whichever workspace this window is answering for. Scope first, because
+// that is the one the reader chose; otherwise the only loaded workspace. With several loaded and none
+// picked there is no mark - drawing an arbitrary one would be a claim about which one you are in.
+//
+// Drawing ONLY. The first-sight ceremony belongs to the shell (cast.ts): it used to run from here,
+// which meant it fired only if you happened to be on the zero-tab screen when the workspace became
+// known - open a tab first and the one showing was never spent, and never seen either.
+function paintSigil(root: HTMLElement, p: PulseView): void {
+  const el = root.querySelector<HTMLElement>("[data-launcher-sigil]");
+  if (!el) return;
+  const seed = workspaceScope() || (p.workspaces.length === 1 ? p.workspaces[0] : "");
+  el.hidden = seed === "";
+  if (!seed) return;
+  const spec: SigilSpec = assignSigils(p.workspaces).get(seed) ?? sigilSpec(seed);
+  el.innerHTML = renderSigil(spec, 44);
+  el.style.color = "var(" + spec.hue + ")";
+  // The SHORT name, never the root. A full path carries a username, a client, an unreleased codename;
+  // the sigil discloses none of that by construction, and a tooltip spelling the path out would hand
+  // back exactly what the mark was careful not to encode.
+  el.title = shortName(seed);
+}
+
+// syncLauncherChord names the palette's CURRENT key in the zero-tab hint. Called by the shell every
+// time the launcher is shown rather than once when it is built, because a rebind in Settings happens
+// while the launcher is hidden behind the tab that did it.
+export function syncLauncherChord(root: HTMLElement, chord: string): void {
+  const hint = root.querySelector<HTMLElement>("[data-empty-hint]");
+  if (!hint) return;
+  hint.textContent = chord
+    ? "Pick one from the rail, or press " + chord + " for the palette."
+    : "Pick one from the rail, or use the command palette.";
+}
+
+export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => void): HTMLElement {
   // data-surface tags the empty state; its heading/lede layout is ID-scoped in console.css. The
   // launcher is a PatternFly Gallery of clickable Cards - the [data-open] hook the click handler keys
   // on rides on each card, and the whole card is the keyboard-reachable target (tabindex + Enter/Space).
   const root = document.createElement("div");
   root.dataset.surface = "home";
+
+  // The workspace's SIGIL (sigil.ts): one unique mark per workspace, derived from its root, so this
+  // console looks like YOURS and a sibling worktree looks like itself. Fixed - an identifier that
+  // changes is not one. Decorative and aria-hidden; the workspace already has a name in text.
+  const sigil = document.createElement("span");
+  sigil.setAttribute("data-launcher-sigil", "");
+  sigil.hidden = true;
 
   const title = document.createElement("h1");
   title.textContent = launcherTitle();
@@ -252,11 +361,7 @@ export function buildLauncher(
     icon.className = "console-launcher-card__icon";
     if (s.pageId === "settings") icon.dataset.motion = "gear";
     if (s.pageId === "notes") icon.dataset.motion = "settle";
-    icon.innerHTML =
-      '<svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
-      'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-      (SURFACE_ICONS[s.pageId] ?? '<rect x="4" y="4" width="16" height="16" rx="2"/>') +
-      "</svg>";
+    icon.innerHTML = surfaceIconSvg(s.pageId, 24);
     const titleEl = document.createElement("div");
     titleEl.className = "pf-v6-c-card__title";
     const titleText = document.createElement("span");
@@ -276,11 +381,7 @@ export function buildLauncher(
     if (glyph) {
       const mark = document.createElement("span");
       mark.className = "console-launcher-card__watermark";
-      mark.innerHTML =
-        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" ' +
-        'stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
-        glyph +
-        "</svg>";
+      mark.innerHTML = surfaceIconSvg(s.pageId);
       card.append(mark);
     }
     card.addEventListener("click", () => open(s.pageId));
@@ -370,21 +471,76 @@ export function buildLauncher(
     if (ev.key === "Escape") closeAllMenus();
   });
 
-  // A quiet corner affordance to launch the full demo: opens every surface with representative,
-  // daemon-free demo data (see main.ts's launchDemo). It sits bottom-right of the launcher and reveals
-  // its label on hover/focus, so it reads as a subtle "try it" rather than a primary action.
-  const demo = document.createElement("button");
-  demo.type = "button";
-  demo.className = "console-launcher-demo";
-  demo.setAttribute("aria-label", "Launch the demo");
-  demo.setAttribute("title", "Launch the demo");
-  demo.innerHTML =
-    '<span class="console-launcher-demo__icon"><svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true">' +
-    '<path d="M12 3l1.6 4.8L18 9l-4.4 1.2L12 15l-1.6-4.8L6 9l4.4-1.2z"/>' +
-    '<path d="M18 14l.6 1.9 1.9.6-1.9.6L18 19l-.6-1.9-1.9-.6 1.9-.6z"/></svg></span>' +
-    '<span class="console-launcher-demo__label">Launch the demo</span>';
-  demo.addEventListener("click", () => launchDemo());
+  // What the zero-tab screen says once there IS a rail: the console's shared cold-state shape (a row
+  // of "ways" out of it, [data-empty-way] in console.css) rather than a second copy of the rail's own
+  // eight destinations. Both compositions are built; console.css shows exactly one, on the same 48rem
+  // edge the rail uses - above it the rail navigates and this speaks, below it there is no rail so the
+  // card grid navigates and this would name a control that is not on screen.
+  const ways = document.createElement("div");
+  ways.dataset.launcherWays = "";
+  ways.className = "pf-v6-c-empty-state__actions";
+  ways.setAttribute("data-empty-ways", "");
 
-  root.append(title, sub, gallery, demo);
+  // The live reading lives in the HEADER, not among the ways. As a third card it wrapped the row to two
+  // lines and put a full-width primary button under a READING - the loudest control on the screen
+  // belonged to the thing you look at rather than the thing you do. Up here it makes the top of the
+  // page move without adding anything to choose between.
+  //
+  // Hidden until a pulse arrives, which on a cold visit is never; that visit gets the ways below and
+  // nothing that looks half-loaded.
+  const live = document.createElement("p");
+  live.setAttribute("data-launcher-live", "");
+  live.hidden = true;
+  const liveLabel = document.createElement("strong");
+  liveLabel.setAttribute("data-launcher-live-label", "");
+  const liveHint = document.createElement("span");
+  liveHint.setAttribute("data-launcher-live-hint", "");
+  const liveBtn = document.createElement("button");
+  liveBtn.type = "button";
+  liveBtn.className = "pf-v6-c-button pf-m-link pf-m-inline";
+  const liveBtnText = document.createElement("span");
+  liveBtnText.className = "pf-v6-c-button__text";
+  liveBtnText.textContent = "Open the dashboard";
+  liveBtn.append(liveBtnText);
+  liveBtn.addEventListener("click", () => open("dashboard"));
+  live.append(
+    liveLabel,
+    document.createTextNode(" "),
+    liveHint,
+    document.createTextNode(" "),
+    liveBtn,
+  );
+
+  const pickWay = document.createElement("div");
+  pickWay.setAttribute("data-empty-way", "");
+  const pickLabel = document.createElement("span");
+  pickLabel.setAttribute("data-empty-way-label", "");
+  pickLabel.textContent = "Open an app";
+  const pickHint = document.createElement("span");
+  pickHint.setAttribute("data-empty-hint", "");
+  // Names the rail because this composition only ever renders at a width where the rail exists. The
+  // palette's chord is deliberately absent: it is user-remappable, and the launcher is built once at
+  // startup, so a chord baked in here would keep naming the key someone rebound. The shell stamps the
+  // live one through syncLauncherChord each time it shows this.
+  pickHint.textContent = "Pick one from the rail, or use the command palette.";
+  pickWay.append(pickLabel, pickHint);
+
+  // The demo is reached from the title bar's workspace control now, not from a button here. It used
+  // to have its own primary button on this screen and on each of five surfaces - six places offering
+  // one thing, on a screen that already had a rail listing every destination. This POINTS at the one
+  // control instead of competing with it.
+  const demoWay = document.createElement("div");
+  demoWay.setAttribute("data-empty-way", "");
+  const demoLabel = document.createElement("span");
+  demoLabel.setAttribute("data-empty-way-label", "");
+  demoLabel.textContent = "Try the demo";
+  const demoHint = document.createElement("span");
+  demoHint.setAttribute("data-empty-hint", "");
+  demoHint.textContent = "Pick Demo data from the Workspace menu. Sample data, no daemon needed.";
+  demoWay.append(demoLabel, demoHint);
+
+  ways.append(pickWay, demoWay);
+
+  root.append(sigil, title, sub, live, ways, gallery);
   return root;
 }

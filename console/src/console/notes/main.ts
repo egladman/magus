@@ -54,7 +54,6 @@ interface Refs {
   empty: HTMLElement;
   emptyTitle: HTMLElement;
   emptySub: HTMLElement;
-  demoBtn: HTMLButtonElement;
 }
 
 // SCOPE_COPY names each store by its CONSEQUENCE rather than by its config key. "shared" and
@@ -168,19 +167,22 @@ function buildScaffold(host: HTMLElement): Refs {
   liveHint.dataset.emptyHint = "";
   wayLive.append(liveLabel, liveCmd, liveHint);
 
-  // The hint says "sample" before the button is pressed, and loadDemo says it again above the
-  // cards. Twice on purpose: this is the surface where mistaking invented prose for something a
-  // colleague wrote is the costly error, and one notice is one thing to miss.
+  // The hint says "sample" here, and loadDemo says it again above the cards. Twice on purpose: this
+  // is the surface where mistaking invented prose for something a colleague wrote is the costly
+  // error, and one notice is one thing to miss.
+  //
+  // No button, matching every other surface - the Workspace menu is the one way in.
   const wayDemo = h("div");
   wayDemo.dataset.emptyWay = "";
   const demoLabel = h("span", undefined, "Try the demo");
   demoLabel.dataset.emptyWayLabel = "";
-  const demoBtn = h("button", "pf-v6-c-button pf-m-primary") as HTMLButtonElement;
-  demoBtn.type = "button";
-  demoBtn.append(h("span", "pf-v6-c-button__text", "See the demo"));
-  const demoHint = h("span", undefined, "Sample notes, no daemon needed.");
+  const demoHint = h(
+    "span",
+    undefined,
+    "Pick Demo data from the Workspace menu. Sample notes, no daemon needed.",
+  );
   demoHint.dataset.emptyHint = "";
-  wayDemo.append(demoLabel, demoBtn, demoHint);
+  wayDemo.append(demoLabel, demoHint);
 
   emptyActions.append(wayLive, wayDemo);
 
@@ -191,7 +193,7 @@ function buildScaffold(host: HTMLElement): Refs {
   scroll.append(body, empty);
   panel.append(scroll);
   host.append(panel);
-  return { scroll, body, empty, emptyTitle, emptySub, demoBtn };
+  return { scroll, body, empty, emptyTitle, emptySub };
 }
 
 // buildAnchors renders what a note is ABOUT, with each anchor's verdict beside it. An anchor
@@ -470,7 +472,6 @@ export function activate(host: HTMLElement): SurfaceInstance {
     );
   }
 
-  refs.demoBtn.addEventListener("click", () => loadDemo());
   load();
 
   return {

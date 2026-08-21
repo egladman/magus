@@ -39,6 +39,20 @@
      them per tab. The title bar is a Window-Controls-Overlay drag region (-webkit-app-region, console.css);
      every interactive child opts back out to no-drag so tabs/gear stay clickable in the installed PWA. -->
 <body data-console-app data-console-fill>
+  <!-- The left navigation rail: every surface the console can open, always on screen, with the one the
+       active tab is showing marked (pf-m-current) and the ones that merely have a tab open flagged
+       (data-tab-open). console.js's createSidebar() fills this host - the surface list is the same
+       registry the launcher and the Applications menu read, so the three can never disagree.
+       Collapsed to icons by default (data-expanded absent) because the Graph Explorer and the Diff
+       surface carry their OWN left sidebars inside the pane; the width lives in console.css.
+       Named "Applications" to a screen reader, not "Surfaces": surface is the code's word for these
+       (pageId, PageModule, SURFACES) and appears in no other user-facing string - the window calls
+       them apps, in the Applications menu that lists this same set.
+       A direct child of <body>, BEFORE the title bar, because it spans the window's full height: the
+       shell is a grid and the rail occupies the leading column across every row, so the title bar and
+       the content both begin to its right. That is the macOS rule - one leading sidebar may span the
+       full height and take the space from the titlebar - and it is why this is not inside <main>. -->
+  <nav id="console-sidebar" class="pf-v6-c-nav" aria-label="Applications"></nav>
   <header id="console-titlebar">
     <div id="console-tabs"></div>
     <!-- Title-bar-right control group: PatternFly plain (borderless) icon Buttons sitting ON the tab row
@@ -57,7 +71,13 @@
     <button id="console-commandbar-btn" class="pf-v6-c-button pf-m-plain" type="button" aria-haspopup="dialog" aria-controls="command-bar" aria-label="Command Palette" title="Command Palette">
       <span class="pf-v6-c-button__icon"><svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="4" width="18" height="16" rx="2"/><path d="M7 10l3 3-3 3M13 16h4"/></svg></span>
     </button>
-    <!-- Applications menu: a PatternFly Menu popover (like the settings gear). Each row is TWO actions,
+    <!-- MOBILE ONLY as of the navigation rail: console.css hides this button (and its popover) above
+         48rem, which is exactly the width where the rail appears. The two are complements on one edge -
+         the rail lists the same surfaces from the same registry, so both showing would be two doors onto
+         the same rows. Below 48rem the rail is hidden and this is the only way to reach a surface.
+         The Documentation link below is mirrored on the navigation rail's foot (sidebar.ts), which is
+         what replaces this menu above 48rem - change one and you must change the other.
+         Applications menu: a PatternFly Menu popover (like the settings gear). Each row is TWO actions,
          the same split the launcher cards use: clicking the row opens the app as a TAB (single-instance -
          it focuses the tab if already open), and the trailing icon opens it in its own window. Opening a
          new OS window was the row's default before, which surprised people into stray windows. Wired by
@@ -165,6 +185,7 @@
       <p>Nothing here is chord-only: the <b>Command Palette</b> runs any command by name, the <b>Shortcuts</b> surface lists every command with its chord and lets you rebind it, and the title-bar and status-bar controls dispatch those same commands.</p>
       <dl>
         <dt><code>mod+k</code></dt><dd>Command Palette - run any command.</dd>
+        <dt><code>mod+b</code></dt><dd>Show or hide the navigation rail's labels.</dd>
         <dt><code>mod+\</code></dt><dd>Split the focused pane in the default direction.</dd>
         <dt><code>mod+shift+\</code></dt><dd>Toggle the default split direction.</dd>
         <dt><code>mod+w</code></dt><dd>Close the focused pane, or the tab once it is the last one.</dd>
@@ -183,6 +204,7 @@
     <details data-ref-section>
       <summary>Tabs and panes</summary>
       <p>Each app opens as a <b>tab</b>. Opening one you already have focuses its tab instead of a second copy - every surface is single-instance.</p>
+      <p>The <b>rail</b> down the left edge lists every app, whether or not it is open. The one you are looking at is highlighted, and an app with a tab open somewhere else is marked. Click a row to go there. It collapses to icons and back with the chevron at its foot, or <code>mod+b</code>.</p>
       <p>A tab splits into <b>panes</b>. A split divides the focused pane in the persisted default direction (side by side, or stacked); the direction can be toggled or picked explicitly. Tap or click a pane to focus it; drag the divider to re-weight the split. A pane can also be moved into a neighboring slot without losing its place.</p>
       <p>The <b>Panes</b> button in the status bar drives all of it without a keyboard.</p>
       <p>To leave this window, right-click a tab and choose <b>Move to new window</b>. That is the only route to a separate OS window - opening an app never takes you out of the one you are in.</p>
