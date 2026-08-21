@@ -2440,6 +2440,114 @@ let queryGeneration = 0;
 // is not the daemon's graph even when a daemon happens to be running, and GraphService answers
 // about the knowledge graph, not the target graph - refining either against it would filter
 // the canvas by a query run over a different graph entirely.
+// graphClient is the typed GraphService client, or null when there is nothing to ask. Every verb
+// below is live-only and knowledge-only: a snapshot or the demo is not the daemon's graph even
+// when a daemon happens to be running, and GraphService answers about the knowledge graph rather
+// than the target graph.
+function graphClient() {
+  if (!liveHost || !liveToken || graphFlavor === "targets") return null;
+  return createClient(GraphService, createDaemonTransport(liveHost, liveToken));
+}
+
+// refineBlastFromServer corrects the blast COUNT against the whole workspace graph.
+//
+// It cannot replace the local set: ExplainNode returns a radius, not the reachable ids, and the
+// canvas needs ids to light up. What it can do is say when the local number is an UNDERCOUNT -
+// the browser walks the payload it was sent, which excludes symbol shards and anything a
+// projection dropped, so "42 dependents" can be a confident answer about a smaller graph than the
+// one the operator is asking about.
+async function refineBlastFromServer(nodeId: string, localCount: number, gen: number) {
+  const client = graphClient();
+  if (!client) return;
+  try {
+    const res = await client.explainNode({ name: nodeId });
+    if (gen !== viewGeneration) return;
+    const real = res.blastRadius;
+    if (real > localCount) {
+      setStatus(
+        "The workspace graph reaches " +
+          real +
+          " - this view shows the " +
+          localCount +
+          " that are loaded here.",
+      );
+    }
+  } catch {
+    // No daemon answer leaves the local count standing, which is the offline behaviour.
+  }
+}
+
+// refineTraceFromServer replaces the traced path with the daemon's.
+//
+// The local walk follows depends_on only, over the loaded payload; the daemon walks every
+// relation over the whole graph, so it finds chains the browser cannot and reports the relation
+// per hop. The server's answer is only USABLE here when every node on it is loaded - the canvas
+// cannot light up what it was never sent - so a path through an absent node is reported rather
+// than drawn.
+async function refineTraceFromServer(from: string, to: string, gen: number) {
+  const client = graphClient();
+  if (!client) return;
+  try {
+    const res = await client.findPath({ from, to });
+    if (gen !== viewGeneration || activeView !== "trace") return;
+    if (!res.found) return; // the local walk already said so, in the operator's own words
+    const ids = [res.from, ...res.steps.map((s) => s.to)];
+    const missing = ids.filter((id) => !graph.byId.has(id));
+    if (missing.length) {
+      setStatus(
+        "The workspace has a " +
+          res.steps.length +
+          "-step path, through " +
+          missing.length +
+          " node(s) this graph does not carry. Showing the local one.",
+      );
+      return;
+    }
+    matchSet = new Set(ids);
+    setStatus(
+      "Path (" +
+        res.steps.length +
+        " steps): " +
+        res.steps
+          .map((s) => s.relation + " -> " + (graph.byId.get(s.to)?.label ?? s.to))
+          .join(", "),
+    );
+    renderList();
+    draw();
+  } catch {
+    // Local answer stands.
+  }
+}
+
+// viewGeneration invalidates an in-flight view refinement, the same guard the query box uses: a
+// slow answer must never land on a view the operator has since replaced.
+let viewGeneration = 0;
+
+// suggestNodes fills the query box's completion list from the daemon's ranked candidates. It runs
+// on the SAME debounce as the query itself and shares its generation, so a stale answer cannot
+// repopulate the list under a newer prefix.
+//
+// A fielded term (kind:, project:, relation:) is left alone: ResolveNodes ranks NODE references,
+// so completing "kind:spe" against node ids would offer nonsense.
+async function suggestNodes(prefix: string, gen: number) {
+  const list = el("node-suggestions");
+  if (!list) return;
+  const client = graphClient();
+  if (!client || prefix.length < 2 || prefix.includes(":")) {
+    list.innerHTML = "";
+    return;
+  }
+  try {
+    const res = await client.resolveNodes({ reference: prefix, limit: 8 });
+    if (gen !== queryGeneration) return;
+    list.innerHTML = res.matches
+      .map((m) => '<option value="' + escapeHtml(m.id) + '">' + escapeHtml(m.label) + "</option>")
+      .join("");
+  } catch {
+    list.innerHTML = "";
+  }
+}
+
 async function refineQueryFromServer(q: string, gen: number) {
   if (!liveHost || !liveToken || graphFlavor === "targets") return;
   try {
@@ -2514,6 +2622,7 @@ function applyQuery(q: string) {
   serverScores = null;
   const gen = ++queryGeneration;
   if (query) void refineQueryFromServer(query, gen);
+  void suggestNodes(query, gen);
   if (matchSet) setListExpanded(true); // a query reveals its matches
   renderList();
   updateHash();
@@ -3527,6 +3636,7 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
           (n ? n.label : nodeId) +
           ".",
       );
+      void refineBlastFromServer(nodeId, deps.size - 1, ++viewGeneration);
       break;
     }
     case "trace": {
@@ -3578,6 +3688,7 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
             ".",
         );
       }
+      void refineTraceFromServer(nodeId, nodeTo, ++viewGeneration);
       break;
     }
     case "critical": {

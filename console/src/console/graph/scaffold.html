@@ -64,7 +64,12 @@
           <div class="pf-v6-c-input-group console-graph-querybar">
             <div class="pf-v6-c-input-group__item pf-m-fill">
               <span class="pf-v6-c-form-control">
-                <input id="node-search" type="text" placeholder="Type to filter, like kind:spell" aria-label="Query the graph" aria-describedby="query-prompt" spellcheck="false" autocomplete="off" disabled>
+                <input id="node-search" type="text" placeholder="Type to filter, like kind:spell" aria-label="Query the graph" aria-describedby="query-prompt" spellcheck="false" autocomplete="off" list="node-suggestions" disabled>
+                <!-- Completion candidates from GraphService.ResolveNodes, filled only in live mode.
+                     A native datalist rather than a bespoke dropdown: it is keyboard- and
+                     screen-reader-correct for free, and an EMPTY one (offline, where there is
+                     nothing to ask) simply offers nothing rather than needing to be hidden. -->
+                <datalist id="node-suggestions"></datalist>
               </span>
             </div>
             <div class="pf-v6-c-input-group__item">
