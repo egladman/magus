@@ -88,7 +88,13 @@ test("assignment does not depend on the order the daemon lists them", () => {
   const forward = assignSigils(roots);
   const backward = assignSigils([...roots].reverse());
   for (const r of roots) {
-    assert.equal(specKey(forward.get(r)!), specKey(backward.get(r)!), r + " moved");
+    const f = forward.get(r);
+    const b = backward.get(r);
+    // Asserted rather than non-null-asserted: a missing entry is a real failure of assignSigils - it
+    // owes one spec per root - and `!` would surface that as an unreadable TypeError instead.
+    assert.ok(f, "no spec assigned for " + r);
+    assert.ok(b, "no spec assigned for " + r + " in reverse order");
+    assert.equal(specKey(f), specKey(b), r + " moved");
   }
 });
 
@@ -96,7 +102,9 @@ test("assignment does not depend on the order the daemon lists them", () => {
 // stops being a property of the workspace.
 test("an uncontested workspace keeps its own mark", () => {
   const specs = assignSigils([ACME, MAGUS]);
-  assert.equal(specKey(specs.get(ACME)!), specKey(sigilSpec(ACME)));
+  const acme = specs.get(ACME);
+  assert.ok(acme, "no spec assigned for " + ACME);
+  assert.equal(specKey(acme), specKey(sigilSpec(ACME)));
 });
 
 // The base generator has to be wide enough that resolution is rare rather than routine - otherwise the
