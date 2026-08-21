@@ -270,6 +270,23 @@ body[data-console-fill] > main > .console-render-panel {
   outline-offset: -2px;
   z-index: 1;
 }
+/* Reduced motion, the console's own switch. The console already honours prefers-reduced-motion in a
+   dozen places, but that setting is all-or-nothing across every site a person visits, and someone
+   may want this console still while leaving their OS alone. Rather than restate those dozen blocks
+   against a second selector - which would guarantee the two drift - this is the blanket kill.
+   Near-zero durations rather than `animation: none`, because a zero-LENGTH animation still fires
+   animationend and code waiting on one would hang. Same shape and same attribute as the docs site,
+   so the two surfaces stay one idea. The graph's force simulation is JS, not CSS, and reads the
+   preference itself. */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
 /* The in-pane launcher: a fresh split pane is empty and offers the surfaces to drop in (a PF Gallery
    of Cards, built in tileView). Center the prompt + its card grid within the pane. */
 #console-outlet div[data-pane-id]:has([data-pane-launcher]) { align-items: center; justify-content: center; }

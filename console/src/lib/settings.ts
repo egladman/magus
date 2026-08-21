@@ -74,3 +74,36 @@ export function applyFocusRing(on: boolean): void {
   if (on) document.documentElement.setAttribute("data-focus-ring", "always");
   else document.documentElement.removeAttribute("data-focus-ring");
 }
+
+// Whether to stop the console's animation. "auto" honours prefers-reduced-motion and nothing more;
+// "reduced" stills the console regardless of what the OS says.
+//
+// Both exist because they answer different questions. The OS setting is all-or-nothing across every
+// site a person visits, and someone may want THIS page still - the graph's force simulation never
+// fully stops, it decays to an idle wobble and keeps repainting - while leaving their OS alone.
+// The docs site made the same split and this mirrors it, attribute name included, so the two
+// surfaces cannot drift into two spellings of one idea.
+export type MotionPref = "auto" | "reduced";
+
+const motion = persisted<MotionPref>("console-motion", "auto");
+
+export function getMotion(): MotionPref {
+  return motion.get();
+}
+
+export function setMotion(v: MotionPref): void {
+  motion.set(v);
+}
+
+// Durably save WITHOUT applying to the running session (Settings "Save"). See persist.persistOnly.
+export function saveMotion(v: MotionPref): void {
+  motion.persistOnly(v);
+}
+
+// applyMotion reflects the preference onto the document root for the CSS keyed on
+// :root[data-motion="reduced"]. theme.ts sets the same attribute pre-paint from the stored value;
+// this is for a live change out of Settings.
+export function applyMotion(v: MotionPref): void {
+  if (v === "reduced") document.documentElement.setAttribute("data-motion", "reduced");
+  else document.documentElement.removeAttribute("data-motion");
+}

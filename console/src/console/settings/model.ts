@@ -25,6 +25,7 @@
 
 import type { Keymap } from "../commands";
 import type { Persisted } from "../../lib/persist";
+import type { MotionPref } from "../../lib/settings";
 
 // The three theme states theme.ts persists: "auto" (no stored key), or an explicit "light"/"dark".
 // Mirrored here so the envelope can carry the theme without importing the pre-paint theme script.
@@ -39,6 +40,7 @@ export interface Settings {
   host: string; // explicit default daemon host, "host:port" or "" (settings.getDefaultHost)
   theme: ThemePref; // color theme override (theme.ts / localStorage "theme")
   focusRing: boolean; // always show the split-pane focus outline vs keyboard-only (settings.getFocusRing)
+  motion: MotionPref; // "auto" honours prefers-reduced-motion; "reduced" stills it here regardless
   keymap: Keymap; // the user's command chord overrides (the shared "keymap" cell)
 }
 
@@ -68,6 +70,7 @@ export function buildSettingsEnvelope(p: Settings, layout: LayoutSettings): Sett
       host: p.host,
       theme: p.theme,
       focusRing: p.focusRing,
+      motion: p.motion,
       keymap: p.keymap,
     },
     layout: {
@@ -103,7 +106,14 @@ export type ImportResult =
 
 // The canonical set of keys importSettings understands. Kept in sync with the Settings interface so a
 // settings-object key outside this set is reported as unknown rather than silently dropped.
-const KNOWN_KEYS: readonly (keyof Settings)[] = ["poll", "host", "theme", "focusRing", "keymap"];
+const KNOWN_KEYS: readonly (keyof Settings)[] = [
+  "poll",
+  "host",
+  "theme",
+  "focusRing",
+  "motion",
+  "keymap",
+];
 
 // The same contract for the layout section.
 const KNOWN_LAYOUT_KEYS: readonly (keyof LayoutSettings)[] = [
@@ -179,6 +189,10 @@ export function importSettings(
     next.focusRing = settings.focusRing;
     applied.push("focusRing");
   } else skip("focusRing");
+  if (settings.motion === "auto" || settings.motion === "reduced") {
+    next.motion = settings.motion;
+    applied.push("motion");
+  } else skip("motion");
   if (isKeymap(settings.keymap)) {
     next.keymap = settings.keymap;
     applied.push("keymap");
@@ -249,6 +263,7 @@ export interface DiffContext {
   themeLabel: (t: ThemePref) => string;
   hostLabel: (host: string) => string;
   focusRingLabel: (on: boolean) => string;
+  motionLabel: (v: MotionPref) => string;
   commandLabel: (id: string) => string;
   effectiveChord: (keymap: Keymap, id: string) => string;
   commandIds: string[];
@@ -293,6 +308,14 @@ export function computePendingChanges(
       label: "Focus ring",
       before: ctx.focusRingLabel(committed.focusRing),
       after: ctx.focusRingLabel(draft.focusRing),
+    });
+  }
+  if (committed.motion !== draft.motion) {
+    changes.push({
+      key: "motion",
+      label: "Motion",
+      before: ctx.motionLabel(committed.motion),
+      after: ctx.motionLabel(draft.motion),
     });
   }
   for (const id of ctx.commandIds) {

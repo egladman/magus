@@ -30,6 +30,20 @@
     /* ignore */
   }
 
+  // Reduced motion, pre-paint for the same reason the theme is: the console's boot reveal and the
+  // graph's first camera glide both start on the first frame, so a preference applied after paint
+  // is a preference that lets through exactly the animation it was set to stop.
+  //
+  // Read raw rather than through lib/persist: this file is a pre-paint IIFE with no imports. The
+  // key and JSON encoding are persist.ts's ("magus:" namespace, JSON value), so the two agree.
+  try {
+    if (JSON.parse(localStorage.getItem("magus:console-motion") || '"auto"') === "reduced") {
+      root.setAttribute("data-motion", "reduced");
+    }
+  } catch (e) {
+    /* storage disabled or value corrupt: leave motion at its default */
+  }
+
   function get(): Theme {
     try {
       return (localStorage.getItem("theme") || "auto") as Theme;

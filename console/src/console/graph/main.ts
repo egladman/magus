@@ -339,6 +339,7 @@ let surfaceVisible = true;
 // listeners would keep running in the background after the graph closes.
 let stageResizeObserver: ResizeObserver | null = null;
 let themeObserver: MutationObserver | null = null;
+let motionObserver: MutationObserver | null = null;
 let lifecycleAbort: AbortController | null = null;
 // installKeybindings' teardown. It adds its own document keydown listener rather than taking
 // the lifecycle signal, so aborting the controller does not reach it: dropping this handle
@@ -347,10 +348,21 @@ let lifecycleAbort: AbortController | null = null;
 let uninstallKeys: (() => void) | null = null;
 
 // The graph stays gently "alive": the simulation never fully cools, so nodes
-// keep drifting (the Obsidian-like wobble). Disabled under prefers-reduced-motion,
+// keep drifting (the Obsidian-like wobble). Stilled when motion is suppressed,
 // and paused when the tab is hidden (see boot) so it isn't a background CPU drain.
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
-const idleAlpha = () => (reducedMotion.matches ? 0 : 0.006);
+
+// motionSuppressed is the ONE question every animated thing on this surface asks: the OS
+// preference, or the console's own Motion setting (data-motion="reduced", written pre-paint by
+// theme.ts and live by Settings). One predicate rather than the media query tested in five places,
+// because five places is how a new switch reaches four of them and silently misses the fifth.
+//
+// The console's CSS kill cannot reach any of this: the wobble, the flow particles and the camera
+// glides are JS, so this is where the surface honours the setting.
+function motionSuppressed(): boolean {
+  return reducedMotion.matches || document.documentElement.dataset.motion === "reduced";
+}
+const idleAlpha = () => (motionSuppressed() ? 0 : 0.006);
 
 // ---- motion layer (flow particles + live recency pulses) ------------------
 // Motion is OFF outside two states: an active path/subset view (blast, trace,
@@ -369,8 +381,7 @@ let motionRaf = 0;
 const flowActive = () =>
   (activeView === "trace" || activeView === "critical" || activeView === "blast") && !!matchSet;
 
-const motionEligible = () =>
-  !reducedMotion.matches && !document.hidden && (flowOn || pulsesPending);
+const motionEligible = () => !motionSuppressed() && !document.hidden && (flowOn || pulsesPending);
 
 // motionLoop keeps draw() repainting once per frame while motionEligible();
 // the moment it isn't (view cleared, tab hidden, reduced-motion turned on, or
@@ -963,7 +974,7 @@ function resizeCanvas() {
 // from), and never under prefers-reduced-motion, where a burst of movement is precisely the
 // thing being opted out of.
 function seedBigBang() {
-  if (isDagMode() || reducedMotion.matches || !graph?.nodes.length) return;
+  if (isDagMode() || motionSuppressed() || !graph?.nodes.length) return;
   const { w, h } = resizeCanvas();
   const c = usableCenter(w, h, stageInsets());
   const radius = 24 + Math.sqrt(graph.nodes.length) * 3;
@@ -1358,7 +1369,7 @@ function draw() {
   // doesn't clip label text. tick() returning null (no flow, no unexpired
   // pulses) is what lets pulsesPending self-clear, which is in turn what lets
   // motionLoop stop re-arming itself once nothing is left to animate.
-  if (!reducedMotion.matches && !document.hidden) {
+  if (!motionSuppressed() && !document.hidden) {
     const motion = particlesTick(performance.now());
     if (!motion) {
       pulsesPending = false;
@@ -1979,7 +1990,7 @@ function glideTo(to: ZoomTransform, ms = 340) {
   if (!zoomBehavior) return;
   const from = transform;
   const still = Math.abs(from.k - to.k) < 1e-4 && Math.hypot(from.x - to.x, from.y - to.y) < 0.5;
-  if (ms <= 0 || still || reducedMotion.matches) {
+  if (ms <= 0 || still || motionSuppressed()) {
     applyTransform(to);
     return;
   }
@@ -5486,6 +5497,17 @@ function bootWireEvents() {
     signal: lifecycleSignal,
   });
 
+  // Motion is a live setting, so the wobble has to answer immediately rather than at the next
+  // layout switch: Settings writes data-motion on the root, and the simulation is re-alpha'd from
+  // here. Turning it OFF is the half that matters - a reader who just asked for stillness watching
+  // the canvas keep breathing has been told the setting does not work.
+  motionObserver = new MutationObserver(() => {
+    if (!sim) return;
+    if (motionSuppressed()) sim.alpha(0).stop();
+    else sim.alphaTarget(idleAlpha()).restart();
+  });
+  motionObserver.observe(root, { attributes: true, attributeFilter: ["data-motion"] });
+
   // Keep the canvas bitmap in lockstep with its CSS box. A ResizeObserver (not just
   // window "resize") is what makes this robust: the stage also changes size when the
   // details card opens/closes (the grid goes to three columns), when a disclosure
@@ -5808,6 +5830,10 @@ export function deactivate(): void {
   if (themeObserver) {
     themeObserver.disconnect();
     themeObserver = null;
+  }
+  if (motionObserver) {
+    motionObserver.disconnect();
+    motionObserver = null;
   }
   if (lifecycleAbort) {
     lifecycleAbort.abort();
