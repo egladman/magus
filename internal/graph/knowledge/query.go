@@ -613,9 +613,6 @@ func (g *Graph) resolveSymbol(ref string) (string, bool) {
 	return "", false
 }
 
-// blastRadius returns how many other nodes can reach id by walking edges in their
-// natural direction. It is unbounded (walks the whole reachable component); a
-// budget/cap for hub nodes on very large graphs is Phase 8 scale work.
 // Dependents returns every node that transitively DEPENDS ON id, as ids, nearest first.
 //
 // Deliberately narrower than blastRadius below, which is a different question wearing a similar
@@ -650,6 +647,12 @@ func (g *Graph) Dependents(id string) []string {
 	return out
 }
 
+// blastRadius returns how many other nodes can reach id by walking edges in their
+// natural direction, over ANY relation. It is unbounded (walks the whole reachable
+// component); a budget/cap for hub nodes on very large graphs is Phase 8 scale work.
+//
+// A REACH measure, not a rebuild one - see Dependents above, which answers "what rebuilds"
+// over depends_on alone. The two diverge to the point of contradiction on a spell.
 func (g *Graph) blastRadius(id string) int {
 	g.ensureAdj()
 	seen := map[string]bool{id: true}
