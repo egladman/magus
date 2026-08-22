@@ -22,6 +22,22 @@ import { createDaemonTransport, getLiveToken, isCapabilityDenied } from "../../l
 import { showToast } from "../../lib/refresh-toast";
 import { h } from "../view";
 
+// formControl wraps a control in PF's FormControl shell. PF's FormControl is a WRAPPER PLUS the
+// control, not a class for the control: form-control.css makes .pf-v6-c-form-control a display:grid
+// box, puts every padding rule on `> :is(input, select, textarea)`, and draws the border with
+// ::before/::after - pseudo-elements a replaced element like <input> never renders. Set the class on
+// the control and you get a PF background around an otherwise native widget, with no border and no
+// padding. cls rides on the wrapper because the wrapper is the layout box (the flex child, the width).
+function formControl(control: HTMLElement, cls?: string): HTMLElement {
+  const textarea = control.tagName === "TEXTAREA";
+  const wrap = h(
+    "span",
+    "pf-v6-c-form-control" + (textarea ? " pf-m-textarea" : "") + (cls ? " " + cls : ""),
+  );
+  wrap.append(control);
+  return wrap;
+}
+
 // TYPE_LABELS / REFKIND_LABELS render an enum value as its lowercase wire word; the *_OPTIONS
 // lists drive the edit-form selects and the type filter (UNSPECIFIED never offered). Typed as
 // Record<Memory*, string> so a new enum member without a label is a compile error, not a silent
@@ -173,7 +189,7 @@ export function buildMemorySection(
       render();
     });
 
-    const typeSel = h("select", "pf-v6-c-form-control console-settings-memory__filter");
+    const typeSel = h("select");
     typeSel.setAttribute("aria-label", "Filter by type");
     typeSel.append(option("All types", ""));
     for (const t of TYPE_OPTIONS)
@@ -184,7 +200,7 @@ export function buildMemorySection(
       repaintList();
     });
 
-    const search = h("input", "pf-v6-c-form-control console-settings-memory__search");
+    const search = h("input");
     search.type = "search";
     search.placeholder = "Filter by name, ref, or caption";
     search.setAttribute("aria-label", "Filter memories");
@@ -196,7 +212,11 @@ export function buildMemorySection(
       repaintList();
     });
 
-    toolbar.append(addBtn, typeSel, search);
+    toolbar.append(
+      addBtn,
+      formControl(typeSel, "console-settings-memory__filter"),
+      formControl(search, "console-settings-memory__search"),
+    );
     body.append(toolbar);
     repaintBulk();
 
@@ -268,7 +288,6 @@ export function buildMemorySection(
     const card = h("div", "console-settings-memory__cursor");
     card.append(h("h3", "console-settings-memory__title", "Resume - where you left off"));
     const area = h("textarea");
-    area.className = "pf-v6-c-form-control";
     area.rows = 3;
     area.spellcheck = false;
     area.value = content;
@@ -287,7 +306,7 @@ export function buildMemorySection(
       );
     });
     const control = h("div", "console-settings-memory__cursorbody");
-    control.append(area, save);
+    control.append(formControl(area), save);
     card.append(control);
     return card;
   }
@@ -349,7 +368,7 @@ export function buildMemorySection(
     nameInput.input.disabled = rec !== undefined; // name is identity; edit never renames
 
     const typeId = "console-memory-field-" + ++fieldSeq;
-    const typeSel = h("select", "pf-v6-c-form-control");
+    const typeSel = h("select");
     typeSel.id = typeId;
     for (const t of TYPE_OPTIONS)
       typeSel.append(option(TYPE_LABELS[t] ?? "unspecified", String(t)));
@@ -385,13 +404,12 @@ export function buildMemorySection(
     const bodyWrap = h("div", "console-settings-memory__bodywrap");
     const bodyArea = h("textarea");
     bodyArea.id = bodyId;
-    bodyArea.className = "pf-v6-c-form-control";
     bodyArea.rows = 2;
     bodyArea.placeholder = "Caption - the why (decision/plan only)";
     bodyArea.value = rec?.body ?? "";
     const bodyLabel = h("label", "console-settings-memory__label", "Caption");
     bodyLabel.htmlFor = bodyId;
-    bodyWrap.append(bodyLabel, bodyArea);
+    bodyWrap.append(bodyLabel, formControl(bodyArea));
     const syncBodyVisibility = (): void => {
       bodyWrap.hidden = !hasCaption(Number(typeSel.value) as MemoryType);
     };
@@ -447,7 +465,7 @@ export function buildMemorySection(
     const typeWrap = h("div", "console-settings-memory__bodywrap");
     const typeLabel = h("label", "console-settings-memory__label", "Type");
     typeLabel.htmlFor = typeId;
-    typeWrap.append(typeLabel, typeSel);
+    typeWrap.append(typeLabel, formControl(typeSel));
     const actions = h("div", "console-settings-memory__editactions");
     actions.append(save, cancel);
     form.append(
@@ -464,14 +482,14 @@ export function buildMemorySection(
 
   function buildRefRow(d: DraftRef, onRemove: () => void): HTMLElement {
     const rowEl = h("div", "console-settings-memory__refrow");
-    const kindSel = h("select", "pf-v6-c-form-control");
+    const kindSel = h("select");
     kindSel.setAttribute("aria-label", "Ref kind");
     for (const k of REFKIND_OPTIONS) kindSel.append(option(REFKIND_LABELS[k] ?? "?", String(k)));
     kindSel.value = String(d.kind);
     kindSel.addEventListener("change", () => {
       d.kind = Number(kindSel.value) as MemoryRefKind;
     });
-    const target = h("input", "pf-v6-c-form-control");
+    const target = h("input");
     target.setAttribute("aria-label", "Ref target");
     target.value = d.target;
     target.placeholder = "target (node id, query, output ref, command, or doc)";
@@ -480,7 +498,7 @@ export function buildMemorySection(
     });
     const rm = button("Remove", "pf-m-link pf-m-small");
     rm.addEventListener("click", onRemove);
-    rowEl.append(kindSel, target, rm);
+    rowEl.append(formControl(kindSel), formControl(target), rm);
     return rowEl;
   }
 
@@ -578,10 +596,10 @@ function labeledInput(
   const lab = h("label", "console-settings-memory__label", label);
   lab.htmlFor = id;
   wrap.append(lab);
-  const input = h("input", "pf-v6-c-form-control");
+  const input = h("input");
   input.id = id;
   input.value = value;
-  wrap.append(input);
+  wrap.append(formControl(input));
   return { wrap, input };
 }
 
