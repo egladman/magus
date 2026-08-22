@@ -256,15 +256,16 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // real origin and the showcase would start writing a stranger's review session.
   const demo = wantsDemo(parseHash());
 
-  // The shell's 48rem inversion. Both width-dependent defaults on this surface key off it: the file
-  // index below, and the view mode in the state literal.
+  // Both width-dependent defaults on this surface key off this: the file index, and the view mode.
   //
-  // TODO: this measures the WINDOW, and the surface can be tiled - two panes on a 1440px desktop
-  // gives each ~700px while narrow.matches stays false, so the index opens at its 180px floor
-  // inside a pane too small for it. A ResizeObserver on root, or a container query, is the honest
-  // measure. Kept as a viewport query for now to match the log viewer's run browser
-  // (logs/runtree.ts), so the two surfaces invert together rather than at different moments.
-  const narrow = window.matchMedia("(max-width: 47.999rem)");
+  // The measurement is the PANE, not the window. This surface tiles, so two panes on a 1440px
+  // desktop give it ~700px each while a viewport query still reads "wide" - and it would then open
+  // a 180px index floor and a two-column split inside a pane with no room for either, which is the
+  // exact geometry the defaults exist to avoid. The window is only the bootstrap guess, used for
+  // the state literal below because no DOM exists yet to measure; the observer at the foot of
+  // activate() corrects it as soon as the surface has a box, and on every retile after that.
+  const NARROW_PX = 768; // the shell's 48rem inversion, in px
+  let paneNarrow = window.innerWidth < NARROW_PX;
 
   const state: State = {
     changeset: { primary: [], generated: [] },
@@ -280,7 +281,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // The preference is NOT overwritten, so the next load on a wide viewport is split again -
     // this is read ONCE at mount and nothing listens for a resize, so widening the CURRENT window
     // does not bring split back until the surface is remounted.
-    mode: narrow.matches ? "unified" : modeCell.get(),
+    mode: paneNarrow ? "unified" : modeCell.get(),
     cursor: -1,
     session: null,
     viewed: new Set(),
@@ -345,7 +346,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // there is forced by width rather than chosen, so persisting it would let one phone visit rewrite
   // a preference the reader set on a desktop - in both directions.
   const rememberSidebar = (collapsed: boolean): void => {
-    if (!narrow.matches) sidebarCell.set(collapsed);
+    if (!paneNarrow) sidebarCell.set(collapsed);
   };
   hideBtn.addEventListener("click", () => {
     rememberSidebar(true);
@@ -439,7 +440,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // sidebar comes back. Opening it on a phone still works and lasts the session, which is the same
   // per-session treatment the log viewer's run browser gives its own index (logs/runtree.ts).
   // JS-driven rather than a media query because the collapse is expressed with the hidden attribute.
-  applySidebar(narrow.matches ? true : sidebarCell.get());
+  applySidebar(paneNarrow ? true : sidebarCell.get());
   host.append(root);
   root.dataset.phase = "loading";
 
@@ -1490,7 +1491,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
   const setMode = async (m: ViewMode): Promise<void> => {
     if (m === state.mode) return;
     state.mode = m;
-    modeCell.set(m);
+    // Same rule as the index toggle: a mode the PANE forced is not a preference. Persisting it
+    // would let one narrow tile rewrite the choice the reader made at full width, and the width
+    // observer below drives this same function.
+    if (!paneNarrow) modeCell.set(m);
     await rebuild();
   };
 
@@ -1760,6 +1764,30 @@ export function activate(host: HTMLElement): SurfaceInstance {
       setCollaboration("degraded");
     }
   };
+
+  // The pane-width defaults. Installed here, at the foot of activate(), because it drives setMode
+  // and so must be declared after it. ResizeObserver fires once on observe with the current box, so
+  // the bootstrap guess taken from the window above is corrected as soon as the surface is laid
+  // out, and again on every retile - which is the case a viewport query cannot see at all.
+  //
+  // Applied only on a CHANGE of state, never per resize tick: setMode rebuilds the row model, and
+  // running that on every pixel of a drag would be the whole stream re-laid out continuously.
+  const applyPaneWidth = (width: number): void => {
+    if (width <= 0) return; // detached or display:none - not a measurement
+    const isNarrow = width < NARROW_PX;
+    if (isNarrow === paneNarrow) return;
+    paneNarrow = isNarrow;
+    applySidebar(isNarrow ? true : sidebarCell.get());
+    void setMode(isNarrow ? "unified" : modeCell.get());
+  };
+  const paneResize =
+    typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver((entries) => {
+          if (!disposed) applyPaneWidth(entries[0].contentRect.width);
+        });
+  paneResize?.observe(root);
+  controller.signal.addEventListener("abort", () => paneResize?.disconnect(), { once: true });
 
   void load();
 

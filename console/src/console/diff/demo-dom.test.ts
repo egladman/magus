@@ -143,3 +143,61 @@ test("#demo still loads the fabricated changeset", async () => {
 
   dispose.deactivate();
 });
+
+// The pane-width defaults. These key off the surface's OWN box, not the viewport, because the
+// surface tiles: two panes on a wide desktop give it far less room than the window suggests, and a
+// viewport query reads "wide" for both. happy-dom does no layout, so the ResizeObserver is stubbed
+// and driven by hand - which is also the only way to exercise a retile without a real browser.
+//
+// The stub is restored in the same test. Isolation is `none`, so a leaked global would follow every
+// other *-dom test in the process.
+test("the diff sizes itself from its own pane, not the window", async () => {
+  const realRO = globalThis.ResizeObserver;
+  // activate() installs two observers (the sidebar virtualizer's and the pane's); keep the one
+  // watching the layout root.
+  let paneCb: ResizeObserverCallback | null = null;
+  class CapturingRO {
+    constructor(private cb: ResizeObserverCallback) {}
+    observe(el: Element): void {
+      if (el.classList.contains("console-diff-layout")) paneCb = this.cb;
+    }
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+  globalThis.ResizeObserver = CapturingRO as unknown as typeof ResizeObserver;
+
+  try {
+    location.hash = "#demo";
+    const dispose = activate(document.body);
+    await settle();
+
+    const root = document.querySelector<HTMLElement>(".console-diff-layout");
+    assert.ok(paneCb, "the surface must observe its own root");
+    // happy-dom reports innerWidth 1024, so the surface mounts in its wide defaults.
+    assert.equal(root?.dataset.sidebar, "open");
+
+    const resizeTo = async (width: number): Promise<void> => {
+      (paneCb as ResizeObserverCallback)(
+        [{ contentRect: { width } } as ResizeObserverEntry],
+        {} as ResizeObserver,
+      );
+      await settle();
+    };
+
+    // A 700px PANE on an unchanged 1024px window: the case a viewport query cannot see.
+    await resizeTo(700);
+    assert.equal(root?.dataset.sidebar, "collapsed", "a narrow pane folds the index");
+
+    // Retiled back to full width, the index returns.
+    await resizeTo(1200);
+    assert.equal(root?.dataset.sidebar, "open", "a wide pane restores the index");
+
+    // A zero box is a detached or hidden surface, not a measurement, and must not collapse it.
+    await resizeTo(0);
+    assert.equal(root?.dataset.sidebar, "open", "an unlaid-out box is not a narrow one");
+
+    dispose.deactivate();
+  } finally {
+    globalThis.ResizeObserver = realRO;
+  }
+});
