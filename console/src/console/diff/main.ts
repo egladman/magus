@@ -1326,13 +1326,16 @@ export function activate(host: HTMLElement): SurfaceInstance {
       const reason = h("span", "console-diff-rail__reason", s.reason);
       const go = h("button", "console-diff-rail__go");
       go.type = "button";
-      go.textContent = "go [g]";
+      // The key rides as its own <kbd>, the same chip the Shortcuts overlay and the Actions
+      // surface use for a physical key - not "[g]" folded into the label, which reads as part
+      // of the word rather than a key you can press.
+      go.append("go ", h("kbd", "console-cheatsheet-kbd", "g"));
       go.disabled = !canCollaborate();
       if (go.disabled) go.title = "Agent collaboration is unavailable";
       go.addEventListener("click", () => acceptSuggestion(s.id));
       const skip = h("button", "console-diff-rail__skip");
       skip.type = "button";
-      skip.textContent = "skip [x]";
+      skip.append("skip ", h("kbd", "console-cheatsheet-kbd", "x"));
       skip.disabled = !canCollaborate();
       if (skip.disabled) skip.title = "Agent collaboration is unavailable";
       skip.addEventListener("click", () => sync({ op: "answer", id: s.id, on: false }));

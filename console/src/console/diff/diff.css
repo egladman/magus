@@ -759,6 +759,9 @@
 
 .console-diff-rail__go,
 .console-diff-rail__skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   border: 1px solid var(--pf-t--global--border--color--default);
   background: var(--pf-t--global--background--color--primary--default);
   color: inherit;
