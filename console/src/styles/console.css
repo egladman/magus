@@ -551,17 +551,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      recessive tone, so they read as a single frame wrapping the content down the left and along the
      top and bottom - the shape Firefox uses - rather than as three bars meeting at corners. The
      content is what steps forward out of it (see the outlet's card below); the frame stays back.
-     The border and the cast here face the CONTENT, not the rail: this edge is where the chrome ends,
-     so it is where the depth belongs. The cast is what makes a surface scrolling under the tab strip
-     pass beneath something rather than meet a flat seam. */
+     NO cast here, deliberately. The bar used to throw --sm--bottom down over the content, which put
+     the elevation on the wrong body: chrome that is meant to stay back was the thing lifted, and the
+     content it wrapped sat flat underneath. The outlet casts onto this bar instead - one shadow, on
+     the surface that is actually raised. The hairline stays; it is what holds the edge crisp where
+     the two meet, and it is not elevation. */
   background: var(--console-chrome);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
-  box-shadow: var(--pf-t--global--box-shadow--sm--bottom);
-  /* A soft cast DOWN over the content, so a surface scrolling under the bar passes beneath
-     something rather than meeting a flat seam. The hairline above stays: it is what holds the
-     edge crisp at rest, and the shadow only reads once there is content behind it. PF's
-     directional token rather than a hand-rolled rgba, so it tracks the theme like every other
-     elevation here. */
   -webkit-app-region: drag; app-region: drag;
 }
 /* Interactive title-bar children opt out of the drag region so a click activates them (a drag region
@@ -772,6 +768,29 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      run its full height and cut it away from the title bar and status bar, which are the same
      continuous surface. Here it spans exactly the content's height, which is the boundary it marks. */
   border-left: 1px solid var(--pf-t--global--border--color--default);
+  /* The ONE elevation in the shell, and it belongs here: the content is the raised body, the frame is
+     the ground. An even cast (--sm, not a directional token) because this box casts on three faces at
+     once - up onto the title bar, left onto the rail, down onto the status bar - and a directional
+     shadow can only serve one of them.
+     The z-index is what makes the third face show. The status bar is a later grid sibling carrying
+     z-index 20, so it painted over the downward cast and the pane's bottom edge alone stayed flat -
+     the shadow was in the stylesheet and invisible on screen. One above it puts the whole cast on
+     top of the frame it falls on; the rows do not overlap, so nothing else changes stacking. */
+  box-shadow: var(--pf-t--global--box-shadow--sm);
+  z-index: 21;
+}
+/* ONE rounded corner in the whole shell: the bottom-left, where the pane's edge meets the rail and
+   the status bar at once. That single curve is what lifts the pane out of the frame; a second one at
+   the top-left did not read as symmetry, it read as a rectangle with its corners shaved, and it put a
+   curve directly beside the tab strip, which has square-butted items and a shape of its own.
+   Nothing on the right: a corner is only worth drawing where there is chrome behind it to curve away
+   from, and at the window's own edge the curve just bites a notch of page out of the content.
+   Gated on the rail's 48rem edge for that same reason - below it the rail is gone (see its
+   display:none above) and the pane's left edge IS the window's, where the curve chipped the corner of
+   a phone screen. Change that breakpoint and this one moves with it.
+   The large token doubled: at 9px the curve reads as a rendering artefact, at 18px as a decision. */
+@media (min-width: 48rem) {
+  #console-outlet { border-end-start-radius: calc(var(--pf-t--global--border--radius--large) * 2); }
 }
 /* The content CARD - the only curved thing in the shell, and the one surface that steps forward out
    of the chrome frame. Chrome is square and recessive; containers are raised and rounded.
@@ -779,9 +798,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    padding, so painting the card there put the gutter INSIDE the card and left a ring of card color
    around the content - a light strip above it, below it, and beside the tab strip. The gutter belongs
    between the frame and the card, so it has to stay outside the painted box.
-   SQUARE and FLUSH: it meets the rail, the tab strip and the status bar directly, so it joins the
-   frame instead of floating in it. A radius here would cut a notch of chrome color out of each
-   corner - the gap this change exists to remove, reintroduced four times over. */
+   SQUARE and FLUSH here, still: the corners are the OUTLET's to round (see its rule above), because
+   the outlet is the box the frame actually meets. Rounding this inner box too would curve a second
+   edge a pixel inside the first and read as a doubled line. Note the shape it takes is no longer
+   square on all four corners - two of them follow the outlet's radius - but that is the outlet
+   clipping this box, not this box asking for it. */
 #console-outlet > #console-refdrawer {
   background: var(--pf-t--global--background--color--primary--default);
   overflow: hidden;

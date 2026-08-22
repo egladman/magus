@@ -30,11 +30,12 @@
   min-height: var(--console-statusbar-h);
   padding: 0.1rem var(--console-pad);
   /* The same recessive tone as the title bar and the navigation rail - the three are one continuous
-     chrome surface wrapping the content, so no seam is drawn BETWEEN them. The border and cast here
-     face the content above, which is where the chrome ends and the depth belongs. */
+     chrome surface wrapping the content, so no seam is drawn BETWEEN them. The border faces the
+     content above, which is where the chrome ends. The CAST that used to face that way is gone: it
+     had the frame lifted over the content it wraps, which is backwards. The outlet casts down onto
+     this bar now (console.css), so the elevation sits on the raised body instead of the ground. */
   background: var(--console-chrome);
   border-top: 1px solid var(--pf-t--global--border--color--default);
-  box-shadow: var(--pf-t--global--box-shadow--sm--top);
   font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle);
   overflow: hidden; /* a stray long value truncates with the bar, never scrolls the page */
   -webkit-user-select: none; user-select: none; /* chrome rail, like a native window edge */
