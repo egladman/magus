@@ -49,12 +49,29 @@ find_chrome() {
 # these need no daemon and no workspace.
 # Only what the site actually shows. Adding a surface here is the whole cost of adding a
 # screenshot; committing one nothing references is just weight in the repo.
+#
+# The -narrow shots sit below the shell's 48rem inversion, where the layout is a different
+# design: the navigation rail gives way to the launcher grid, the diff's file index collapses
+# to a reopen rail, and the log waterfall holds its drawn width and scrolls.
+#
+# 500 IS THE FLOOR, and it is Chrome's, not a choice. Headless clamps the window to a 500px
+# minimum width on macOS: --window-size=375 renders at 500 and reports 500 to the page, with
+# no warning. Do not "fix" these to a phone width - you get the same image and a wrong label.
+#
+# What these therefore CANNOT show: the touch-target sizing. That is keyed on (pointer: coarse)
+# (tokens.css, console.css, overrides.css), and headless Chrome is pointer:fine no matter the
+# window size - --touch-events=enabled does not change it, measured. Showing it needs CDP device
+# emulation, which means a browser driver, which is the dependency the top of this file explains
+# we are not taking. So these capture the narrow LAYOUT honestly and the touch sizing not at all.
 shots=(
   "console-dashboard|console/dashboard/#demo|1280,820"
   "console-graph|console/graph/#demo|1280,820"
   "console-logs|console/logs/#demo|1280,820"
   "console-activity|console/activity/#demo|1280,820"
   "console-diff|console/diff/#demo|1280,820"
+  "console-diff-narrow|console/diff/#demo|500,900"
+  "console-logs-narrow|console/logs/#demo|500,900"
+  "console-dashboard-narrow|console/dashboard/#demo|500,900"
 )
 
 want=${1:-}
