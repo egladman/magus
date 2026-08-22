@@ -895,6 +895,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    that scrolls when the surfaces outgrow the window) otherwise spreads the rows over the full height
    and each one comes out as tall as the space allows. */
 #console-sidebar .pf-v6-c-nav__list { flex: 1 1 auto; align-content: start; overflow-y: auto; overflow-x: hidden; }
+/* ...but only the DESTINATIONS scroll. The two control groups are flex:0 0 auto above, so a rail with
+   more apps than height scrolls them between a toggle that stays at the top and a Settings row that
+   stays at the bottom - which is the whole point of pinning either one to a corner. */
 /* A row's count. Square and normal-case like every other chip in this shell - PatternFly's Badge is a
    pill, and pills are off the house style, so this is authored rather than borrowed.
    Collapsed it overlays the icon's top-trailing corner, the dock convention (VS Code, and every OS
@@ -917,8 +920,27 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 #console-sidebar [data-rail-badge][hidden] { display: none; }
 
+/* The lead group: the rail-collapse row, alone at the top (sidebar.ts). It gets the hairline the
+   utility group has, on its other edge, so the two control groups bracket the destinations between
+   them symmetrically instead of the top one merging into the first app. */
+#console-sidebar [data-rail-lead] {
+  flex: 0 0 auto; overflow: visible;
+  /* Exactly the title bar's band, hairline INCLUDED - hence border-box and an explicit height rather
+     than letting the row size the group. The rail and the title bar are the same chrome surface, and
+     the toggle sits in column 1 of the same row the tab strip fills in column 2, so the two hairlines
+     are one line crossing the window. Left to size itself the group came to 44 + padding + 1, which
+     put its line below the title bar's and turned the join into a visible kink. No padding for the
+     same reason: any air here is air between the square and the line under it. */
+  box-sizing: border-box;
+  block-size: var(--console-topchrome-h);
+  padding-block: 0;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+/* The row gives up the 1px the hairline took, rather than overflowing the group by it: min-height on
+   a rail row is what makes it a square target, and here the group's own height is the constraint. */
+#console-sidebar [data-rail-lead] .pf-v6-c-nav__link { min-height: 0; block-size: 100%; }
 /* The utility group sits at the foot rather than growing with the list above it, so Settings stays in
-   the same place whether six lenses are listed or sixteen. The rail's ONE hairline, separating the
+   the same place whether six lenses are listed or sixteen. The rail's other hairline, separating the
    surfaces from the controls; the pool reading above it deliberately has none. */
 #console-sidebar [data-rail-utility] {
   flex: 0 0 auto; overflow: visible;
