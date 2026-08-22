@@ -99,16 +99,35 @@
 #console-statusbar .console-shell-statusbar__activity:hover,
 #console-statusbar .console-shell-statusbar__share:hover { opacity: 1; }
 
-/* Panes tray toggle (main.ts): the same quiet weight as the shortcuts button, but its glyph is a live
- * readout of the persisted split direction (panesIcon) rather than a static icon, so it stays a touch
- * brighter than "muted chrome" and gets the accent while its popup is open. */
+/* Panes tray toggle (main.ts): nearly the quiet weight of the shortcuts button, but its glyph is a
+ * live readout of the persisted split direction (panesIcon) rather than a static icon, so it stays a
+ * touch brighter than "muted chrome" and gets the accent while its popup is open. Alone among the
+ * tray buttons it also carries a word, which is what earns it the fill below. */
 #console-statusbar .console-shell-statusbar__panes {
   display: inline-flex; align-items: center; gap: 0.3rem;
-  padding: 0 0.15rem; min-height: 0; border: 0; background: none;
+  padding: 0.1rem 0.4rem; min-height: 0; border: 0;
+  /* The glyph and its word are ONE control, but at the bar's 0.9rem gap a bare label sitting among
+     three bare glyphs read as a fourth, unrelated item. A quiet fill - the view-only chip's wash
+     without its border - closes the pair into a single pill, so the word is obviously the icon's
+     rather than the share button's. */
+  background: color-mix(in srgb, var(--pf-t--global--text--color--regular) 7%, transparent);
+  border-radius: var(--pf-t--global--border--radius--small);
+  /* PF's button base sets 14px, which made this the LARGEST text in an 11.5px bar: the label shouted
+     while the control it names is deliberately quiet chrome. Inherit puts it back on the bar's size. */
+  font-size: inherit;
   color: var(--pf-t--global--text--color--subtle); opacity: 0.8;
 }
-#console-statusbar .console-shell-statusbar__panes:hover { opacity: 1; }
+#console-statusbar .console-shell-statusbar__panes:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--pf-t--global--text--color--regular) 12%, transparent);
+}
 #console-statusbar .console-shell-statusbar__panes[aria-expanded="true"] { color: var(--console-accent); opacity: 1; }
+/* The glyph is an inline SVG, so it sat on the baseline of a line box the button's line-height sized -
+   two pixels above the label's optical centre, which is the misalignment you see before you can name
+   it. Its own flex box takes the line box out of the equation and centres the glyph on its metrics. */
+#console-statusbar .console-shell-statusbar__panes .pf-v6-c-button__icon {
+  display: flex; align-items: center; line-height: 0;
+}
 /* Spells out the icon's orientation (main.ts's setPanesIcon keeps it in sync) - tiling is not a
    metaphor every reader already carries, and the glyph alone assumes it is. Own line-height: the
    button above still wants its icon at line-height 0, but that would squash this text to nothing. */
@@ -611,6 +630,14 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+  /* Panes drops the fill it carries elsewhere. At 44px the pill is as tall as the bar itself, and a
+     slab that size stops reading as "these two belong together" and starts reading as "this control
+     is active" - which is what the accent on [aria-expanded] already means. The 44px box is grouping
+     enough on its own; the wash was only ever there to fight the 0.9rem gap at chrome scale. */
+  #console-statusbar .pf-v6-c-button.console-shell-statusbar__panes,
+  #console-statusbar .pf-v6-c-button.console-shell-statusbar__panes:hover {
+    background: none;
   }
 }
 
