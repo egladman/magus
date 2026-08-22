@@ -47,14 +47,24 @@ var remediationSections = map[string]bool{
 // to write, so it is advice, listing the pages by name rather than blocking on them.
 //
 // Scoped to the tree that OWNS these pages. The MGS pages ship with magus's own sources,
-// so a workspace where no code resolves to a page is not a workspace with 68 gaps - it is
-// somebody else's repo, and the check reports itself skipped there.
+// so a workspace without that tree is not a workspace with 68 gaps - it is somebody else's
+// repo, and the check reports itself skipped there. The scope is the TREE's existence,
+// never a count of pages resolved: no page resolving is equally what a code-to-page mapping
+// broken end to end produces, and skipping on that reports the total failure as a pass.
 //
 // codeURL is a parameter rather than a direct types.CodeURL call so a test can hand it a
 // domain that routes a code nowhere; that branch is unreachable through the real one,
 // which is the point of guarding it.
 func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func(types.DiagnosticCode) string) types.DoctorCheck {
 	const name = "diagnostic docs"
+
+	if _, err := os.Stat(codeDocsRoot(root)); err != nil {
+		return types.DoctorCheck{
+			Name:    name,
+			Status:  types.DoctorOK,
+			Message: "no docs" + codeDocsMarker + " tree; skipped (the MGS pages ship with magus's own sources)",
+		}
+	}
 
 	var unroutable, missing, silent []string
 	pages := 0
@@ -79,14 +89,6 @@ func checkDiagnosticDocs(root string, codes []types.DiagnosticCode, codeURL func
 			silent = append(silent, fmt.Sprintf(
 				"%s: %s explains the failure but declares no remediation section; add a `## Resolution` naming the next step",
 				code, relToRoot(root, page)))
-		}
-	}
-
-	if pages == 0 {
-		return types.DoctorCheck{
-			Name:    name,
-			Status:  types.DoctorOK,
-			Message: "no MGS pages under docs" + codeDocsMarker + "; skipped (they ship with magus's own sources)",
 		}
 	}
 
@@ -127,6 +129,12 @@ func (r *runner) checkDiagnosticDocs() types.DoctorCheck {
 	return checkDiagnosticDocs(r.root, types.AllDiagnosticCodes(), types.CodeURL)
 }
 
+// codeDocsRoot is the directory every code page lives under, and the one whose absence
+// puts the check out of scope.
+func codeDocsRoot(root string) string {
+	return filepath.Join(root, "docs", filepath.FromSlash(strings.Trim(codeDocsMarker, "/")))
+}
+
 // codeDocPath maps a code's rendered docs URL back to its Markdown source under root,
 // reporting ok=false when the URL does not route through the codes tree to this code's
 // own page.
@@ -155,31 +163,34 @@ func relToRoot(root, path string) string {
 // hasRemediation reports whether md declares a remediation section with something under
 // it. An empty section is the same gap as an absent one, and is the shape a stub takes.
 // The section runs until the next heading at its own level or above: a body structured
-// entirely as deeper subsections (MGS4001's numbered fixes) is content, not absence.
+// entirely as deeper subsections (MGS4001's numbered fixes) is content, not absence - but
+// the deeper heading is not the content, so a `### stub` with nothing under it is still an
+// empty section.
 func hasRemediation(md string) bool {
 	lines := strings.Split(md, "\n")
-	fenced := false
+	var page fence
 	for i, line := range lines {
-		if isFence(line) {
-			fenced = !fenced
+		if page.mark(line) {
 			continue
 		}
 		title, level, ok := sectionTitle(line)
-		if fenced || !ok || !remediationSections[normalizeSectionTitle(title)] {
+		if page.open() || !ok || !remediationSections[normalizeSectionTitle(title)] {
 			continue
 		}
-		bodyFenced := false
-		for _, body := range lines[i+1:] {
-			if isFence(body) {
-				bodyFenced = !bodyFenced
+		var body fence
+		for _, l := range lines[i+1:] {
+			if body.mark(l) {
 				continue
 			}
-			if !bodyFenced {
-				if _, l, next := sectionTitle(body); next && l <= level {
-					break
+			if !body.open() {
+				if _, deeper, isHeading := sectionTitle(l); isHeading {
+					if deeper <= level {
+						break
+					}
+					continue
 				}
 			}
-			if strings.TrimSpace(body) != "" {
+			if strings.TrimSpace(l) != "" {
 				return true
 			}
 		}
@@ -187,15 +198,52 @@ func hasRemediation(md string) bool {
 	return false
 }
 
-func isFence(line string) bool {
-	return strings.HasPrefix(strings.TrimSpace(line), "```")
+// fence tracks an open fenced block by the backtick run that opened it, because a fence
+// can wrap a shorter one: the four-backtick blocks in the docs exist to quote a
+// three-backtick example, and closing on the inner run desynchronizes every heading test
+// for the rest of the page.
+type fence struct{ ticks int }
+
+// open reports whether a fenced block is currently open, so the caller can tell a heading
+// from a line of sample output that looks like one.
+func (f *fence) open() bool { return f.ticks > 0 }
+
+// mark consumes line when it opens or closes a block, reporting whether it did. A run
+// shorter than the opener, or one trailing an info string, closes nothing and is left to
+// the caller as ordinary content.
+func (f *fence) mark(line string) bool {
+	s := strings.TrimSpace(line)
+	ticks := 0
+	for ticks < len(s) && s[ticks] == '`' {
+		ticks++
+	}
+	switch {
+	case ticks < 3:
+		return false
+	case f.ticks == 0:
+		f.ticks = ticks
+		return true
+	case ticks >= f.ticks && ticks == len(s):
+		f.ticks = 0
+		return true
+	}
+	return false
 }
 
 // sectionTitle returns the title and level of an ATX section heading, or ok=false for
 // any other line. A page's H1 is its name rather than a section, so a single hash is
-// not one.
+// not one. Two spellings beyond the plain form are CommonMark headings and are read as
+// such: one indented by up to three spaces, and a closed one (`## Resolution ##`), whose
+// trailing run is decoration rather than part of the title. Setext headings (a title
+// underlined with = or -) are not supported.
 func sectionTitle(line string) (string, int, bool) {
 	t := strings.TrimRight(line, "\r")
+	indent := len(t) - len(strings.TrimLeft(t, " "))
+	// A fourth space makes it an indented code block, not a heading.
+	if indent > 3 {
+		return "", 0, false
+	}
+	t = t[indent:]
 	hashes := 0
 	for hashes < len(t) && t[hashes] == '#' {
 		hashes++
@@ -203,7 +251,12 @@ func sectionTitle(line string) (string, int, bool) {
 	if hashes < 2 || hashes >= len(t) || t[hashes] != ' ' {
 		return "", 0, false
 	}
-	return strings.TrimSpace(t[hashes+1:]), hashes, true
+	title := strings.TrimSpace(t[hashes+1:])
+	// A closing run only closes when a space precedes it: "## C#" titles a section C#.
+	if closed := strings.TrimRight(title, "#"); closed != title && (closed == "" || strings.HasSuffix(closed, " ")) {
+		title = strings.TrimSpace(closed)
+	}
+	return title, hashes, true
 }
 
 // normalizeSectionTitle reduces a section title to the key remediationSections is keyed

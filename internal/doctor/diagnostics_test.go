@@ -1,9 +1,9 @@
 package doctor
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
-	"slices"
 	"strings"
 	"testing"
 
@@ -20,6 +20,13 @@ func writeCodePage(t *testing.T, root string, code types.DiagnosticCode, body st
 	dir := filepath.Join(root, "docs", "reference", "codes", "magusfile")
 	require.NoError(t, os.MkdirAll(dir, 0o755))
 	require.NoError(t, os.WriteFile(filepath.Join(dir, string(code)+".md"), []byte(body), 0o644))
+}
+
+// writeCodesTree creates the tree the check scopes itself to and plants nothing in it,
+// which is what a repo owning the pages looks like before any page is written.
+func writeCodesTree(t *testing.T, root string) {
+	t.Helper()
+	require.NoError(t, os.MkdirAll(filepath.Join(root, "docs", "reference", "codes"), 0o755))
 }
 
 func TestCheckDiagnosticDocs(t *testing.T) {
@@ -55,6 +62,44 @@ func TestCheckDiagnosticDocs(t *testing.T) {
 			"a heading inside a fenced block is sample output",
 			"# MGS1001\n\n```text\n## Resolution\n```\n",
 			types.DoctorAdvice, "declares no remediation section",
+		},
+		{
+			"a heading inside a four-backtick fence quoting a three-backtick example",
+			"# MGS1001\n\n````text\n```\n## Resolution\n```\n````\n",
+			types.DoctorAdvice, "declares no remediation section",
+		},
+		{
+			// The inner ``` line closing the outer fence would leave every later
+			// heading reading as sample output, this one included.
+			"a section after a four-backtick fence",
+			"# MGS1001\n\n````text\n```\n## Not this one\n```\n````\n\n## Resolution\n\nDeclare it.\n",
+			types.DoctorOK, "",
+		},
+		{
+			"a closed ATX heading",
+			"# MGS1001\n\n## Resolution ##\n\nDeclare it.\n",
+			types.DoctorOK, "",
+		},
+		{
+			"a heading indented three spaces",
+			"# MGS1001\n\n   ## Resolution\n\nDeclare it.\n",
+			types.DoctorOK, "",
+		},
+		{
+			"a fourth space makes it an indented code block",
+			"# MGS1001\n\n    ## Resolution\n\nDeclare it.\n",
+			types.DoctorAdvice, "declares no remediation section",
+		},
+		{
+			"a deeper subsection with nothing under it",
+			"# MGS1001\n\n## Fix\n\n### Declaring one\n\n## See also\n\n- something\n",
+			types.DoctorAdvice, "declares no remediation section",
+		},
+		{
+			// MGS4001's shape: the section's whole body is numbered subsections.
+			"a deeper subsection carrying the prose",
+			"# MGS1001\n\n## Fix\n\n### 1. Declare a ci target\n\nAdd one to the magusfile.\n",
+			types.DoctorOK, "",
 		},
 		// The spellings already in the tree: the pages say Resolution, Fix, The fix,
 		// Fixing it and Resolve it, and all five are the same section.
@@ -127,22 +172,45 @@ func TestCheckDiagnosticDocsSilentElsewhere(t *testing.T) {
 	require.Contains(t, got.Message, "skipped")
 }
 
-// codesWithoutRemediation lists known pages that explain a failure without naming a next
-// step. Empty today; a code may sit here only while its section is being written. Shrink
-// this set, never grow it.
-var codesWithoutRemediation = []types.DiagnosticCode{}
+// TestCheckDiagnosticDocsBreakageIsNotAbsence covers the two shapes that resolve no page
+// at all inside the tree that owns the pages. Both are total breakage, and reporting them
+// as the out-of-scope skip would hand back a green check that graded nothing.
+func TestCheckDiagnosticDocsBreakageIsNotAbsence(t *testing.T) {
+	codes := []types.DiagnosticCode{types.NoCITarget, types.SpellShadowed}
+
+	t.Run("no code routes to a page", func(t *testing.T) {
+		root := t.TempDir()
+		writeCodePage(t, root, types.NoCITarget, "# MGS1001\n\n## Resolution\n\nDeclare it.\n")
+
+		got := checkDiagnosticDocs(root, codes, func(types.DiagnosticCode) string { return "" })
+		require.Equal(t, types.DoctorFail, got.Status, got.Message)
+		require.Len(t, got.Details, 2)
+		assert.Contains(t, got.Details[0], "no see: target")
+	})
+
+	t.Run("no page is written yet", func(t *testing.T) {
+		root := t.TempDir()
+		writeCodesTree(t, root)
+
+		got := checkDiagnosticDocs(root, codes, types.CodeURL)
+		require.Equal(t, types.DoctorFail, got.Status, got.Message)
+		require.Len(t, got.Details, 2)
+		assert.Contains(t, got.Details[0], "docs/reference/codes/magusfile/MGS1001.md")
+	})
+}
 
 // TestDiagnosticCatalogPassesItsOwnCheck runs the check against the real catalog and the
 // real pages, which is the only run that grades the doctrine claim it exists to enforce.
-// A code shipped without a page fails here; a code shipped without a next step shows up
-// as an unexpected advice detail.
+// A code shipped without a page, or with a page naming no next step, fails here - there is
+// no allowlist, because the remedy for a listed code is to write the section.
+//
+// The message is asserted too: DoctorOK is also what the out-of-scope skip returns, so a
+// status assertion alone passes on a check that resolved no page at all.
 func TestDiagnosticCatalogPassesItsOwnCheck(t *testing.T) {
 	got := (&runner{root: filepath.Join("..", "..")}).checkDiagnosticDocs()
-	require.NotEqual(t, types.DoctorFail, got.Status, got.Message)
 
-	for _, d := range got.Details {
-		code := types.DiagnosticCode(strings.SplitN(d, ":", 2)[0])
-		assert.Truef(t, slices.Contains(codesWithoutRemediation, code),
-			"%s has no remediation section; write one rather than adding it to codesWithoutRemediation:\n%s", code, d)
-	}
+	require.Equalf(t, types.DoctorOK, got.Status, "%s\n%s", got.Message, strings.Join(got.Details, "\n"))
+	require.Equal(t, fmt.Sprintf(
+		"%d diagnostic code(s) resolve to a docs page carrying a remediation section",
+		len(types.AllDiagnosticCodes())), got.Message)
 }
