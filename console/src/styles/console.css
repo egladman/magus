@@ -689,25 +689,6 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
     scrollbar-width: none; /* the strip is swiped, not scrollbar-dragged */
   }
   #console-tabs::-webkit-scrollbar { display: none; }
-  /* ...which leaves nothing saying the row continues. A tab clipped mid-word says it only when one
-     happens to straddle the edge; when the last visible tab ends flush, an overflowing strip and a
-     full one look identical. So the edge that still has tabs behind it DISSOLVES - the same mask
-     idiom the command bar's token run uses, and the reason it reads is that a fade cannot be an
-     ending: text that stops mid-fade is text that continues.
-     [data-tab-overflow] is main.ts's wireTabOverflowCue, and it is absent whenever the row fits, so
-     a strip with room to spare carries no mask at all. */
-  #console-tabs[data-tab-overflow="end"] {
-    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent);
-    mask-image: linear-gradient(to right, #000 calc(100% - 2rem), transparent);
-  }
-  #console-tabs[data-tab-overflow="start"] {
-    -webkit-mask-image: linear-gradient(to left, #000 calc(100% - 2rem), transparent);
-    mask-image: linear-gradient(to left, #000 calc(100% - 2rem), transparent);
-  }
-  #console-tabs[data-tab-overflow="both"] {
-    -webkit-mask-image: linear-gradient(to right, transparent, #000 2rem, #000 calc(100% - 2rem), transparent);
-    mask-image: linear-gradient(to right, transparent, #000 2rem, #000 calc(100% - 2rem), transparent);
-  }
   #console-tabs .pf-v6-c-tabs__list { flex-wrap: nowrap; }
   #console-tabs .pf-v6-c-tabs__item { flex: 0 0 auto; }
   /* Squish the inactive tabs. The active one keeps its whole label - it names what you are looking at -
@@ -729,6 +710,36 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    (role=tablist/tab, aria-selected). See tabBar.ts and README.md. */
 /* The shell's one keyboard-focus cue. The rail is listed because PatternFly gives a focused nav link
    only the same background tint it gives a hovered one, which tells a keyboard user nothing. */
+/* The overflow controls (main.ts's wireTabOverflowCue): one per edge, pinned over the ends of the
+   strip, each naming how many tabs it is hiding. Outside the phone media query on purpose - the strip
+   overflows on a narrow DESKTOP window just as readily (measured: 231px of overflow at 900px with
+   seven tabs), and the cue used to live in that block, so the case with a mouse and no swipe gesture
+   was the one getting nothing.
+   Absolute over the strip rather than flex siblings beside it: as siblings they would shorten the
+   scroller every time they appeared, which changes what overflows, which changes whether they should
+   be there - a layout that oscillates. Overlaid, they take no space and the tabs simply pass beneath.
+   Opaque for that same reason: what is underneath has to be covered, not blended. */
+#console-tabs { position: relative; }
+.console-tabs-more {
+  position: absolute; inset-block: 0; z-index: 1;
+  display: none; align-items: center; gap: 0.15rem;
+  padding-inline: 0.4rem; border: 0;
+  background: var(--pf-t--global--background--color--primary--default);
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: 0.72rem; line-height: 1; cursor: pointer;
+}
+.console-tabs-more[hidden] { display: none; }
+/* The hairline is on the INNER edge, facing the tabs: it is the cut where the run is covered, so it
+   belongs where the covering starts rather than against the rail or the controls cluster outside. */
+.console-tabs-more[data-tab-scroll="start"] { inset-inline-start: 0; border-inline-end: 1px solid var(--pf-t--global--border--color--default); }
+.console-tabs-more[data-tab-scroll="end"] { inset-inline-end: 0; border-inline-start: 1px solid var(--pf-t--global--border--color--default); }
+#console-tabs[data-tab-overflow="start"] .console-tabs-more[data-tab-scroll="start"],
+#console-tabs[data-tab-overflow="end"] .console-tabs-more[data-tab-scroll="end"],
+#console-tabs[data-tab-overflow="both"] .console-tabs-more { display: flex; }
+.console-tabs-more:hover { color: var(--pf-t--global--text--color--regular); background: var(--console-chrome); }
+.console-tabs-more__count { font-variant-numeric: tabular-nums; font-weight: 600; }
+.console-tabs-more svg { inline-size: 0.85rem; block-size: 0.85rem; }
+
 #console-tabs :focus-visible, #console-outlet [data-open]:focus-visible,
 #console-sidebar :focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
 

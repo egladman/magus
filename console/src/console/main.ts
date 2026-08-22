@@ -455,10 +455,40 @@ function panesIcon(mode: "row" | "col"): SVGElement {
 // capture phase) and a MutationObserver for the swap itself. Three triggers, one read: the DOM is
 // asked every time rather than any of this being cached.
 function wireTabOverflowCue(host: HTMLElement): void {
+  // One control per edge, pinned over the strip's ends and opaque, so the tabs scroll UNDERNEATH them.
+  // A fade was the first attempt and it was too quiet to do the job: it says "something continues"
+  // only if you already suspect it might, it cannot be pressed, and at the trailing edge it competed
+  // with the controls cluster next door. A button that names the number of tabs you cannot see states
+  // the thing outright and is also the way to reach them.
+  const button = (edge: "start" | "end"): HTMLButtonElement => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "console-tabs-more";
+    b.dataset.tabScroll = edge;
+    const icon = svgIcon();
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    path.setAttribute("points", edge === "start" ? "15 6 9 12 15 18" : "9 6 15 12 9 18");
+    icon.append(path);
+    const count = document.createElement("span");
+    count.className = "console-tabs-more__count";
+    // The glyph leads at the start edge and trails at the end edge, so the chevron is always on the
+    // outside pointing off-screen and the number sits between it and the tabs it counts.
+    b.append(...(edge === "start" ? [icon, count] : [count, icon]));
+    b.addEventListener("click", () => {
+      const strip = host.querySelector<HTMLElement>(".pf-v6-c-tabs__list");
+      // A page at a time rather than a fixed pixel step, and 80% of it so one tab stays on screen as
+      // an anchor - a full page leaves nothing shared between before and after.
+      if (strip) strip.scrollBy({ left: (edge === "start" ? -1 : 1) * strip.clientWidth * 0.8 });
+    });
+    return b;
+  };
+  const controls = { start: button("start"), end: button("end") };
+  host.append(controls.start, controls.end);
+
   const update = (): void => {
     const strip = host.querySelector<HTMLElement>(".pf-v6-c-tabs__list");
     // Sub-pixel slack: fractional tab widths leave a fraction of a pixel unscrolled at a true end, and
-    // without the tolerance the trailing fade never clears on a strip scrolled all the way over.
+    // without the tolerance the trailing control never clears on a strip scrolled all the way over.
     const max = strip ? strip.scrollWidth - strip.clientWidth : 0;
     if (!strip || max <= 1) {
       delete host.dataset.tabOverflow;
@@ -466,11 +496,39 @@ function wireTabOverflowCue(host: HTMLElement): void {
     }
     const more = { start: strip.scrollLeft > 1, end: strip.scrollLeft < max - 1 };
     host.dataset.tabOverflow = more.start && more.end ? "both" : more.start ? "start" : "end";
+    // Counted from the RENDERED boxes rather than from scroll arithmetic: tabs are not a uniform
+    // width (the active one keeps its whole label while the rest ellipsize), so there is no tab count
+    // to derive from a pixel offset. A tab straddling the edge counts as hidden - it is one you
+    // cannot read, which is what the number is answering.
+    const edge = strip.getBoundingClientRect();
+    const tabs = [...strip.querySelectorAll<HTMLElement>("[data-tab-id]")].map((t) =>
+      t.getBoundingClientRect(),
+    );
+    for (const side of ["start", "end"] as const) {
+      const n = tabs.filter((b) =>
+        side === "end" ? b.right > edge.right + 1 : b.left < edge.left - 1,
+      ).length;
+      const el = controls[side];
+      el.hidden = !more[side];
+      const label = el.querySelector<HTMLElement>(".console-tabs-more__count");
+      // Written only when it CHANGES, and that guard is load-bearing rather than an optimisation.
+      // Assigning textContent replaces the text node, which is a childList mutation inside the very
+      // subtree the observer below watches - so an unconditional write re-entered update() on its own
+      // output and hung the tab. Comparing first makes the loop converge on the first pass.
+      const text = String(n);
+      if (label && label.textContent !== text) label.textContent = text;
+      const name = n === 1 ? "1 more tab" : n + " more tabs";
+      if (el.getAttribute("aria-label") !== name) {
+        el.setAttribute("aria-label", name);
+        el.title = name;
+      }
+    }
   };
   host.addEventListener("scroll", update, { capture: true, passive: true });
   new ResizeObserver(update).observe(host);
   // childList only: update() writes an attribute on the host, and observing attributes here would
-  // have it retrigger itself.
+  // have it retrigger itself. The controls are appended before this starts, so their own insertion is
+  // not one of the mutations it sees.
   new MutationObserver(update).observe(host, { childList: true, subtree: true });
   update();
 }
