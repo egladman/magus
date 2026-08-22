@@ -578,9 +578,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      Which inverts what the tabs themselves have to do: see the pf-m-current rules further down, where
      the INACTIVE tabs take the chrome fill and recede, rather than the active one taking white and
      advancing. Same logic, opposite assignment, because the ground moved out from under it.
-     NO border-bottom, for the same reason there is no cast: a line there would cut the active tab off
-     from its own page, which is the seam this change exists to remove. The inactive tabs are chips
-     with their own fill and do not need a baseline to sit on.
+     NO border-bottom, and no baseline under the strip either - the inactive tabs already ARE one. Each
+     is filled to the chrome tone and reaches the bottom of the row, so the run of them draws a line
+     across it that the current tab breaks by being the page colour. Adding a real border under that
+     put a second grey immediately below each chip's own grey edge, and two adjacent bands of it read
+     as one doubled line rather than as a rule. The chips draw the edge; nothing else needs to.
      NO cast either. The bar used to throw --sm--bottom down over the content, which put the elevation
      on the wrong body - chrome that is meant to stay back was the thing lifted. */
   background: var(--pf-t--global--background--color--primary--default);
@@ -601,23 +603,18 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-tabs {
   flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch;
 }
-/* The TRAILING edge, where the scrolling run ends and the fixed controls begin - and it curves away
-   rather than meeting the row's bottom square. A straight line stopping dead at a right angle is the
-   one hard corner left on this surface, and it read as a cut through the row; swept around a radius
-   it reads as the run ending, which is what it means.
-   The radius is the frame's own bottom-left, mirrored: the content curves away from the rail on one
-   side and the tab run curves away from the controls on the other, at the same size and on opposite
-   corners. Asymmetric on purpose - it is the same gesture twice, not a box with rounded corners.
-   NO border-bottom to curve into, deliberately. A bottom edge here would run the full width of the
-   run, including under the current tab, and put back the very line that was removed so a tab could be
-   contiguous with its own page. The right border curving out at its own end is the whole shape.
-   Gated with the divider it replaces: below 48rem the tabs and the controls are stacked rows, not
-   neighbours on one row, and there is nothing to divide. */
+/* The TRAILING edge, where the scrolling run ends and the fixed controls begin.
+   STRAIGHT, and that is a decision rather than an oversight. A radius was tried here, to mirror the
+   frame's bottom-left corner - but a corner is two edges meeting, and this box has only this one. The
+   bottom edge it would curve into cannot exist: the inactive tabs are filled to the chrome tone and
+   their run IS the line across the bottom of the strip, so a real border under them puts a second
+   grey directly below each chip's own grey edge and the pair reads as one doubled rule. Given the
+   choice between the chips and the corner, the chips carry more - they are what tells you which tab
+   you are not looking at - so the corner goes and this line stays square.
+   Gated: below 48rem the tabs and the controls are stacked rows, not neighbours on one, and there is
+   nothing to divide. */
 @media (min-width: 48rem) {
-  #console-tabs {
-    border-inline-end: 1px solid var(--pf-t--global--border--color--default);
-    border-end-end-radius: calc(var(--pf-t--global--border--radius--large) * 2);
-  }
+  #console-tabs { border-inline-end: 1px solid var(--pf-t--global--border--color--default); }
 }
 
 /* Title-bar-right control group: the chrome buttons (command bar, apps, reference, settings gear) as PF
