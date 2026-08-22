@@ -5,8 +5,8 @@ description: "Split work across agents in a magus workspace as an acceptance-cri
 tags: [agents, skills, magus-delegate-multi-agent]
 aliases:
   - reference/skills/magus-delegate-ultra
-skill_full_bytes: 15895
-skill_simple_bytes: 11978
+skill_full_bytes: 17394
+skill_simple_bytes: 13028
 ---
 
 # magus-delegate-multi-agent
@@ -30,9 +30,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `39` |
+| `agent-skill-version` | `40` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `78b37156844a` |
+| `skill-content` | `650bb5d2d445` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -127,6 +127,17 @@ re-runs the described order, with `magus affected ci` re-proving the whole
 composition. A worker hand-sequencing lint, format, and test is re-deriving an
 order the magusfile already owns, and the step it forgets fails silently by
 omission.
+
+Decide each unit's validation PLANE with its target. A worker environment that
+cannot execute magus at all - an isolated tree with no usable binary, or a
+guard that routes raw language tools back to targets it cannot run - cannot
+validate anything it writes. Mark that unit's validation ROOT-DEFERRED in the
+ledger before spawning: the worker writes the tests, stops at the static checks
+its environment does run, and says so; the root executes the unit's target
+centrally before accepting. Leaving each worker to discover the wall
+spends its budget on the discovery, once per worker, and its report then reads
+"done" with nothing executed - which the acceptance-evidence rule above already
+refuses to accept.
 
 A worker may delegate again. What it may not do is delegate without shrinking the
 problem - that is the shape that does not terminate, and the cost people
@@ -252,6 +263,18 @@ Every worker prompt must include its row, relevant graph evidence, and the globa
 spawn rule. Require the worker to preserve unrelated changes, stay inside owned
 paths, avoid generated outputs, run only its assigned Magus target, and return
 changed paths, validation evidence, descendants it created, and unresolved risks.
+
+The checkpoint you recorded is what you HANDED the unit; a worker's first
+required act is reporting the base it actually LANDED ON, because hosts that
+isolate workers in per-worker trees routinely branch them from an older
+revision than the tree you partitioned - and every diff-since-checkpoint
+in Integrate and verify silently lies when the recorded base is not the real
+one. When the bases differ, either respawn from the right revision or have
+the worker materialize the files it builds on from the intended revision
+(`git show <rev>:<path> > <path>`, verifying each blob against
+`git rev-parse <rev>:<path>`) and record the intended revision as the row's
+checkpoint. A worker that edits stale content without noticing
+reports clean validation against a tree nobody will ever merge.
 Also name any fact that will READ as drift to the worker's snapshot - a project
 deleted this session, a rename, an index regenerated underneath it - never a
 generic "expect drift" line, which only primes the worker to dismiss real
@@ -408,6 +431,14 @@ so a unit gets the narrowest target from that decomposition and the integrator
 re-runs the described order, with `magus affected ci` re-proving the whole
 composition.
 
+Decide each unit's validation PLANE with its target. A worker environment that
+cannot execute magus at all - an isolated tree with no usable binary, or a
+guard that routes raw language tools back to targets it cannot run - cannot
+validate anything it writes. Mark that unit's validation ROOT-DEFERRED in the
+ledger before spawning: the worker writes the tests, stops at the static checks
+its environment does run, and says so; the root executes the unit's target
+centrally before accepting.
+
 A worker may delegate again. What it may not do is delegate without shrinking the
 problem. Three rules give it a
 definitive end:
@@ -517,6 +548,15 @@ Every worker prompt must include its row, relevant graph evidence, and the globa
 spawn rule. Require the worker to preserve unrelated changes, stay inside owned
 paths, avoid generated outputs, run only its assigned Magus target, and return
 changed paths, validation evidence, descendants it created, and unresolved risks.
+
+The checkpoint you recorded is what you HANDED the unit; a worker's first
+required act is reporting the base it actually LANDED ON, because hosts that
+isolate workers in per-worker trees routinely branch them from an older
+revision than the tree you partitioned. When the bases differ, either respawn from the right revision or have
+the worker materialize the files it builds on from the intended revision
+(`git show <rev>:<path> > <path>`, verifying each blob against
+`git rev-parse <rev>:<path>`) and record the intended revision as the row's
+checkpoint.
 Also name any fact that will READ as drift to the worker's snapshot - a project
 deleted this session, a rename, an index regenerated underneath it - never a
 generic "expect drift" line.
