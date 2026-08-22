@@ -142,6 +142,26 @@ export function hunkRowIndexes(rows: readonly Row[]): number[] {
   return out;
 }
 
+// hunksRead counts how many of the CURRENT hunks (a stream after the generated fold, a filter, or
+// a rebuild) are marked viewed. It is the intersection of hunks with viewed, not viewed.size: that
+// count is the whole session's marks, which is not pruned when a hunk leaves the stream (the
+// generated group folds, a filter narrows), so it can read higher than the total it is meant to be
+// a fraction of. A hunk whose digest is not yet known - not yet scrolled into view, so not yet
+// primed - counts as unread rather than matched; that is the direction a wrong guess should err in,
+// since the alternative is claiming more read than the stream actually holds.
+export function hunksRead(
+  hunks: readonly number[],
+  digestByRow: ReadonlyMap<number, string>,
+  viewed: ReadonlySet<string>,
+): number {
+  let read = 0;
+  for (const row of hunks) {
+    const digest = digestByRow.get(row);
+    if (digest && viewed.has(digest)) read++;
+  }
+  return read;
+}
+
 // fileRowIndexes lists the row index of every file heading, in order - what the sidebar jumps
 // to, indexed the same way as the files array it was built from.
 export function fileRowIndexes(rows: readonly Row[]): number[] {

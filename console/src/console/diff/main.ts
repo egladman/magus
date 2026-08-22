@@ -28,6 +28,7 @@ import {
   buildRows,
   byHunk,
   hunkRowIndexes,
+  hunksRead,
   fileRowIndexes,
   nextIndexAfter,
   prevIndexBefore,
@@ -598,7 +599,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
         digestPaintQueued = true;
         requestAnimationFrame(() => {
           digestPaintQueued = false;
-          if (!disposed) paint(true);
+          if (!disposed) {
+            paint(true);
+            // The "N/M hunks read" chip counts only hunks whose digest is known (see
+            // renderToolbar), so a hunk carrying a mark from an earlier session stays uncounted
+            // until it scrolls into view and its digest resolves here. Re-render the chip at that
+            // point rather than leaving it to catch up on some unrelated toolbar change.
+            renderToolbar();
+          }
         });
       });
     }
@@ -1151,8 +1159,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
         ),
       );
     }
-    // Session state remains authoritative before an off-screen digest exists.
-    const read = state.viewed.size;
+    // state.viewed.size used to be the numerator here, and it is the WHOLE SESSION's marked set -
+    // every hunk ever read, including ones no longer in state.hunks (folded into "generated",
+    // filtered out, or from a build that has since rebuilt). Denominator is the CURRENT stream.
+    // Fold the generated group after reading hunks inside it and the two stop describing the same
+    // set: the chip read "12/8" and the green complete state fired on a coincidence, not on the
+    // stream actually being read. hunksRead (rows.ts) counts the intersection instead - see it for
+    // the undercount tradeoff that fix makes.
+    const read = hunksRead(state.hunks, state.digestByRow, state.viewed);
     chips.push(
       label(
         `${read}/${state.hunks.length} hunks read`,

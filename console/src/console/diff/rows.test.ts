@@ -6,6 +6,7 @@ import {
   byHunk,
   commentKey,
   hunkRowIndexes,
+  hunksRead,
   fileRowIndexes,
   nextIndexAfter,
   prevIndexBefore,
@@ -464,4 +465,36 @@ test("maxLineChars: a short, deeply-indented line can still outrun a longer flat
   ].join("\n");
   const rows = buildRows(parsePatch(patch), "unified");
   assert.equal(maxLineChars(rows), 53);
+});
+
+test("hunksRead counts only hunks the current stream still holds", () => {
+  const digestByRow = new Map([
+    [2, "digest-a"],
+    [5, "digest-b"],
+    [9, "digest-c"], // folded away below - still in the map, no longer in `hunks`
+  ]);
+  const viewed = new Set(["digest-a", "digest-c"]);
+
+  // Before the fold: three hunks in the stream, two marked.
+  assert.equal(hunksRead([2, 5, 9], digestByRow, viewed), 2);
+
+  // After folding the generated group away, row 9 leaves the stream. Its digest is still
+  // in `viewed` (marks are never pruned there) and still in `digestByRow` (never cleared for a
+  // row that simply stopped being in view) - this is the exact shape the "12/8" bug had, and the
+  // count must drop with the denominator instead of over-reporting against it.
+  assert.equal(hunksRead([2, 5], digestByRow, viewed), 1);
+});
+
+test("hunksRead undercounts rather than guesses at a hunk with no digest yet", () => {
+  // Row 7 is in the stream but has never scrolled into view, so its digest was never computed -
+  // even though a mark for that exact content exists from an earlier session. The honest answer
+  // is "not confirmed read", not a guess that could overstate the count.
+  const digestByRow = new Map([[3, "digest-a"]]);
+  const viewed = new Set(["digest-a", "digest-would-match-row-7-once-known"]);
+  assert.equal(hunksRead([3, 7], digestByRow, viewed), 1);
+});
+
+test("hunksRead is zero for an empty stream or an empty viewed set", () => {
+  assert.equal(hunksRead([], new Map(), new Set()), 0);
+  assert.equal(hunksRead([1, 2, 3], new Map([[1, "d"]]), new Set()), 0);
 });
