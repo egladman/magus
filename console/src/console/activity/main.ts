@@ -282,7 +282,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const has = events.length > 0;
     refs.empty.hidden = has;
     const n = events.length;
-    conn.textContent = n + (n === 1 ? " event" : " events");
+    // "N events" is the count LOADED, not the count the daemon holds - the trail pages. Saying so
+    // costs one character and stops the number reading as a total, which it only is on the last page.
+    conn.textContent = n + (n === 1 ? " event" : " events") + (nextPageToken ? "+" : "");
     if (panel) {
       renderIndexTree(panel.treeBox, events, Date.now(), (i) => reveal(i, sectionEls));
       panel.applyDefault(has);
@@ -314,7 +316,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (index >= 0) reveal(index, sectionEls);
   }
 
-  function showEmpty(title: string, sub: string, connText: string): void {
+  // keepIndex holds the event index open even though there is nothing to list. The refresh control
+  // lives in that panel's header, and applyDefault(false) with hideWhenEmpty hides the panel AND its
+  // reopen rail - so on a failure the one affordance that could retry goes away with the data, and
+  // this surface has no toolbar to fall back on. A cold or genuinely empty trail still collapses it.
+  function showEmpty(title: string, sub: string, connText: string, keepIndex = false): void {
     refs.body.replaceChildren();
     refs.empty.hidden = false;
     refs.emptyTitle.textContent = title;
@@ -322,7 +328,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     conn.textContent = connText;
     if (panel) {
       renderIndexTree(panel.treeBox, [], Date.now(), () => {});
-      panel.applyDefault(false);
+      panel.applyDefault(keepIndex);
     }
   }
 
@@ -333,6 +339,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
       conn.textContent = "connecting...";
       loadedEvents = [];
       nextPageToken = "";
+      // The card's default copy is "No daemon connected", and it is visible from the first paint.
+      // Until this request answers, that is a verdict nothing has reached: say what is happening
+      // instead of asserting an absence, and let the response replace it either way.
+      showEmpty(
+        "Connecting",
+        "Reading the activity trail from " + daemonHost + ".",
+        "connecting...",
+      );
     }
     try {
       const client = createClient(ActivityService, createDaemonTransport(daemonHost));
@@ -353,6 +367,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
     } catch (e) {
       if (stale) return;
       const msg = e instanceof Error ? e.message : String(e);
+      // A failed "load older" page must not take the pages already on screen with it. loadedEvents
+      // still holds them, so re-render rather than clearing to an error card the reader would have
+      // no way back from - the paging button comes back with it and is the retry.
+      if (pageToken && loadedEvents.length > 0) {
+        render(loadedEvents);
+        conn.textContent = "could not load older activity";
+        return;
+      }
       showEmpty(
         "Could not reach the daemon",
         "The daemon at " +
@@ -361,6 +383,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
           msg +
           "). Start it with: magus server start",
         "not connected",
+        true,
       );
     } finally {
       loading = false;
