@@ -17,11 +17,14 @@ export let refLabelEl: HTMLElement | null;
 export let emptyEl: HTMLElement | null;
 export let panelEl: HTMLElement | null;
 // The status strip: statusEl is the alert shell (toggled hidden and re-toned), statusTextEl carries
-// the message. Split because writing textContent on the shell would delete PF's icon slot, and PF
-// lays the component out as a grid around that icon.
+// the message, statusIconEl the tone glyph. Split because writing textContent on the shell would
+// delete PF's icon slot, and PF lays the component out as a grid around that icon.
+// The two parts are NOT exported: setStatus is the only reader, and three separately-mutable
+// bindings for one widget is three things to keep in sync. statusEl stays exported because
+// resolveDom's callers already reach for it.
 export let statusEl: HTMLElement | null;
-export let statusTextEl: HTMLElement | null;
-export let statusIconEl: HTMLElement | null;
+let statusTextEl: HTMLElement | null;
+let statusIconEl: HTMLElement | null;
 
 // resolveDom (re)reads the handles from the document. Called once at boot, after the scaffold is in
 // place - always so for the standalone page; the console injects it before calling. Idempotent.
@@ -67,7 +70,6 @@ export function setStatus(msg: string, isErr?: boolean): void {
   if (!statusEl) return;
   if (statusTextEl) statusTextEl.textContent = msg || "";
   statusEl.hidden = !msg;
-  statusEl.toggleAttribute("data-error", !!isErr);
   statusEl.classList.toggle("pf-m-danger", !!isErr);
   statusEl.classList.toggle("pf-m-info", !isErr);
   if (statusIconEl) statusIconEl.textContent = isErr ? "!" : "i";

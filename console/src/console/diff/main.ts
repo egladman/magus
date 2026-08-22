@@ -258,6 +258,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   // The shell's 48rem inversion. Both width-dependent defaults on this surface key off it: the file
   // index below, and the view mode in the state literal.
+  //
+  // TODO: this measures the WINDOW, and the surface can be tiled - two panes on a 1440px desktop
+  // gives each ~700px while narrow.matches stays false, so the index opens at its 180px floor
+  // inside a pane too small for it. A ResizeObserver on root, or a container query, is the honest
+  // measure. Kept as a viewport query for now to match the log viewer's run browser
+  // (logs/runtree.ts), so the two surfaces invert together rather than at different moments.
   const narrow = window.matchMedia("(max-width: 47.999rem)");
 
   const state: State = {
@@ -270,9 +276,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
     fileRows: [],
     fileOf: [],
     // Unified on a phone whatever the reader last picked on a desktop. Split halves an already
-    // narrow pane into two columns that each spend ~7ch on gutters and markers before any code, and
-    // the preference is NOT overwritten here - widen the window and split comes back.
-    mode: narrow.matches ? "unified" : (modeCell.get() ?? "unified"),
+    // narrow pane into two columns that each spend ~7ch on gutters and markers before any code.
+    // The preference is NOT overwritten, so the next load on a wide viewport is split again -
+    // this is read ONCE at mount and nothing listens for a resize, so widening the CURRENT window
+    // does not bring split back until the surface is remounted.
+    mode: narrow.matches ? "unified" : modeCell.get(),
     cursor: -1,
     session: null,
     viewed: new Set(),
@@ -333,12 +341,18 @@ export function activate(host: HTMLElement): SurfaceInstance {
     reopenBtn.hidden = !collapsed;
     hideBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
   };
+  // Below the breakpoint the toggle applies for the session but is NOT written down. The collapse
+  // there is forced by width rather than chosen, so persisting it would let one phone visit rewrite
+  // a preference the reader set on a desktop - in both directions.
+  const rememberSidebar = (collapsed: boolean): void => {
+    if (!narrow.matches) sidebarCell.set(collapsed);
+  };
   hideBtn.addEventListener("click", () => {
-    sidebarCell.set(true);
+    rememberSidebar(true);
     applySidebar(true);
   });
   reopenBtn.addEventListener("click", () => {
-    sidebarCell.set(false);
+    rememberSidebar(false);
     applySidebar(false);
   });
   sidebar.setAttribute("aria-label", "Changed files");
