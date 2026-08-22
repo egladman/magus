@@ -274,6 +274,12 @@ export function buildMemorySection(
       return;
     }
     const shown = lastRecords.filter(matchesFilter);
+    // A selection is scoped to what filtered it in. Without this, narrowing the filter after
+    // selecting left the hidden records still in `selected` - "Delete selected (5)" could delete
+    // records the reader could no longer see and had forgotten they had checked.
+    const visibleNames = new Set(shown.map((rec) => rec.name));
+    for (const name of selected) if (!visibleNames.has(name)) selected.delete(name);
+    repaintBulk();
     if (shown.length === 0) {
       listEl.append(
         h("p", "console-settings-memory__empty", "No records match the current filter."),
@@ -552,7 +558,10 @@ export function buildMemorySection(
   // regardless - always with ONE aggregate toast, never one per record.
   async function bulkDelete(names: string[]): Promise<void> {
     if (names.length === 0) return;
-    if (!confirm("Delete " + names.length + " memories? This cannot be undone.")) return;
+    // Named, not just counted, up to a size a native confirm() can still show as a readable list -
+    // past that a wall of names is no more readable than the count was, so it falls back to one.
+    const roster = names.length <= 10 ? "\n\n" + names.join("\n") : "";
+    if (!confirm("Delete " + names.length + " memories? This cannot be undone." + roster)) return;
     try {
       const results = await Promise.allSettled(
         names.map((name) =>
