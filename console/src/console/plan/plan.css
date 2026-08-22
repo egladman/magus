@@ -45,9 +45,13 @@
 
 /* Compact, so it does not tower over the summary line beside it - the same treatment (and the
    same reason) as the settings sheet's view toggle. PF's default ToggleGroup is 37px against a
-   0.8rem summary, which made the one control on the bar read as the loudest thing on it. */
+   0.8rem summary, which made the one control on the bar read as the loudest thing on it.
+   The height now comes from the shared token (the toolbar carries data-control-size="compact")
+   rather than a padding guess, so it lands on PF's own compact step and the form control beside it
+   lands on the same one. Only the inline padding and the type ramp stay local. */
 .console-plan-source .pf-v6-c-toggle-group__button {
-  padding-block: 0.15rem;
+  block-size: var(--console-control-block-size);
+  padding-block: 0;
   padding-inline: 0.5rem;
   font-size: var(--pf-t--global--font--size--body--sm);
 }
@@ -88,8 +92,13 @@
   color: var(--pf-t--global--text--color--subtle);
 }
 /* Deliberately narrow: the override is not the entry point. The run plan follows the live run, and
-   this is the small affordance for the exception. */
-.console-plan-target .pf-v6-c-form-control { width: 9rem; }
+   this is the small affordance for the exception. The height is the row's, not PF's default - it sat
+   at 37px next to a toggle group the rule above had shrunk, on a shared baseline. */
+.console-plan-target .pf-v6-c-form-control {
+  width: 9rem;
+  block-size: var(--console-control-block-size);
+}
+.console-plan-target .pf-v6-c-form-control > input { padding-block: 0; }
 
 /* ---- the accessible twin -------------------------------------------------- */
 
