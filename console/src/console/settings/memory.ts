@@ -35,6 +35,34 @@ function formControl(control: HTMLElement, cls?: string): HTMLElement {
     "pf-v6-c-form-control" + (textarea ? " pf-m-textarea" : "") + (cls ? " " + cls : ""),
   );
   wrap.append(control);
+  // A wrapped <select> MUST carry its own caret. PF's `> :is(input, select, textarea)` rule sets
+  // appearance:none, which strips the native dropdown arrow, and `:has(select)` reserves 30px of
+  // inline-end padding for the indicator PF expects here - so wrapping without this leaves a select
+  // with no affordance and a gap where the arrow should be. (Unwrapped it kept appearance:auto,
+  // which is why the class-on-the-control version looked fine on this one axis.)
+  // Authored inline rather than a pficon: the console overrides PF's font tokens and ships none of
+  // its icon assets, so a pficon glyph would render as a missing character. Same chevron the
+  // workspace picker draws. createElementNS, not innerHTML - see this file's header.
+  if (control.tagName === "SELECT") {
+    const utils = h("span", "pf-v6-c-form-control__utilities");
+    const icon = h("span", "pf-v6-c-form-control__toggle-icon");
+    const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
+    svg.setAttribute("viewBox", "0 0 24 24");
+    svg.setAttribute("width", "12");
+    svg.setAttribute("height", "12");
+    svg.setAttribute("fill", "none");
+    svg.setAttribute("stroke", "currentColor");
+    svg.setAttribute("stroke-width", "2");
+    svg.setAttribute("stroke-linecap", "round");
+    svg.setAttribute("stroke-linejoin", "round");
+    svg.setAttribute("aria-hidden", "true");
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "path");
+    path.setAttribute("d", "M6 9l6 6 6-6");
+    svg.append(path);
+    icon.append(svg);
+    utils.append(icon);
+    wrap.append(utils);
+  }
   return wrap;
 }
 
@@ -306,7 +334,7 @@ export function buildMemorySection(
       );
     });
     const control = h("div", "console-settings-memory__cursorbody");
-    control.append(formControl(area), save);
+    control.append(formControl(area, "console-settings-memory__cursorfield"), save);
     card.append(control);
     return card;
   }
@@ -498,7 +526,11 @@ export function buildMemorySection(
     });
     const rm = button("Remove", "pf-m-link pf-m-small");
     rm.addEventListener("click", onRemove);
-    rowEl.append(formControl(kindSel), formControl(target), rm);
+    rowEl.append(
+      formControl(kindSel),
+      formControl(target, "console-settings-memory__reftarget"),
+      rm,
+    );
     return rowEl;
   }
 

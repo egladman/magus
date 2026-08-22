@@ -323,7 +323,11 @@
   background: var(--pf-t--global--background--color--secondary--default);
 }
 .console-settings-memory__cursorbody { display: flex; align-items: flex-end; gap: var(--pf-t--global--spacer--sm); }
-.console-settings-memory__cursorbody textarea { flex: 1; resize: vertical; }
+/* flex on the WRAPPER, resize on the control. PF's FormControl is a span around the textarea, so the
+   wrapper is the flex item here - `flex: 1` on the textarea inside it is inert and the field
+   collapses to its intrinsic width beside the Save button. */
+.console-settings-memory__cursorfield { flex: 1; }
+.console-settings-memory__cursorbody textarea { resize: vertical; }
 .console-settings-memory__title {
   margin: 0;
   font-size: var(--pf-t--global--font--size--body--default);
@@ -381,7 +385,10 @@
 .console-settings-memory__label { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
 .console-settings-memory__refs { display: flex; flex-direction: column; gap: 0.3rem; }
 .console-settings-memory__refrow { display: flex; gap: var(--pf-t--global--spacer--sm); align-items: center; }
-.console-settings-memory__refrow input { flex: 1; }
+/* The target field grows, the kind select does not - so this is on the target's own wrapper rather
+   than on every .pf-v6-c-form-control in the row. Same wrapper-is-the-flex-item reason as the
+   cursor field above. */
+.console-settings-memory__reftarget { flex: 1; }
 .console-settings-memory__editactions { display: flex; gap: var(--pf-t--global--spacer--sm); }
 
 /* --- About: source/license/feedback, the quiet section at the foot of the page ----------------------
