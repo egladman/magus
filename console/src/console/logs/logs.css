@@ -195,7 +195,11 @@
   font-family: var(--pf-t--global--font--family--mono);
   /* --log-zoom (set by applyZoom in main.ts) scales the text view; it defaults to 1. */
   font-size: calc(0.8rem * var(--log-zoom, 1)); line-height: 1.6;
-  padding: 0.4rem 0;
+  /* No padding at the TOP. The body now sits under its own header (.console-log-body__head), and
+     0.4rem there left the first row floating below that header's hairline instead of starting against
+     it - a thin band of dead white in the one place the eye lands first. The bottom keeps its 0.4rem:
+     that end has no rule to sit against, and the last row wants clearance from the pane edge. */
+  padding: 0 0 0.4rem;
 }
 /* Waterfall zoom: magnify the SVG itself (a width:100% SVG re-fits under a body zoom). */
 .console-render-body[data-waterfall] .console-log-waterfall__svg { zoom: var(--log-zoom, 1); }
