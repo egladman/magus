@@ -19,6 +19,9 @@
      breakpoint below). Anything positioning itself under the chrome reads THIS, not the row height, or
      it lands a row out on mobile. */
   --console-topchrome-h: var(--console-titlebar-h);
+  /* 2.2rem is 35.2px, which is shorter than the 44pt hit region Apple asks of a button, so the bar
+     itself is the reason its tray icons cannot meet it. Grown on a coarse pointer in the block at the
+     foot of this file, PAIRED with the tray-button sizing in overrides.css (which owns #console-statusbar). */
   --console-statusbar-h: 2.2rem;
   --console-refdrawer-w: 22rem;
   /* ZERO. The content used to be inset from the chrome by this much, which left a band of chrome
@@ -1930,3 +1933,34 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 [data-detached-host] > * { flex: 1 1 auto; min-height: 0; }
 /* The gap the panel left behind, so a moved panel does not read as a closed one. */
 [data-detached-placeholder] { padding: 1rem 0.8rem; color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem; }
+
+/* --- Touch targets ------------------------------------------------------------------------------
+   Apple's HIG asks a button for a hit region of at least 44x44 pt. The shell's own chrome is the
+   worst offender in this console: measured at a 375px viewport, the status-bar tray icons are 19x14
+   and the zoom stepper is 18x18. They are small because the bar is: --console-statusbar-h is 35.2px,
+   so a 44px target could not fit in it whatever the button asked for.
+
+   Keyed on the pointer rather than the width, for the same reason as the control token in tokens.css:
+   a touchscreen laptop needs the bigger target at any width, and a narrow desktop window does not.
+
+   The GLYPHS are deliberately left alone. Growing a 14px icon to fill 44px would turn a quiet status
+   strip into a toolbar; what is too small here is the region you can hit, not the thing you can see.
+
+   PAIRED with the #console-statusbar tray-button rule in overrides.css, which owns that element.
+   Change one, change the other. */
+@media (pointer: coarse) {
+  :root {
+    --console-statusbar-h: 44px;
+  }
+  /* Height only, for the same reason as the tray buttons in overrides.css: widening these to 44 as
+     well put 395px of content in a 375px bar and clipped the shortcuts button off the end. Three
+     stepper buttons are the cheapest 78px to give back, and vertical is the dimension that was
+     actually hard to hit. */
+  .console-zoom .console-zoom__btn {
+    min-block-size: 44px;
+    height: auto;
+  }
+  .console-zoom .console-zoom__readout {
+    min-block-size: 44px;
+  }
+}

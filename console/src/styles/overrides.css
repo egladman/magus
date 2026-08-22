@@ -576,3 +576,29 @@
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-shell-activity__empty[hidden] { display: none; }
+
+/* Touch targets in the status bar. Apple's HIG asks for a 44x44 pt hit region; these tray icons
+   measure 19x14 because the button carries `padding: 0 2.4px` around a 14px glyph.
+   Only the REGION grows - the glyph stays 14px, so the bar reads the same and stops being a row of
+   targets you have to aim at.
+   PAIRED with the (pointer: coarse) block at the foot of console.css, which grows the bar itself to
+   44px so these fit; without that half this rule would just overflow the bar. Change one, change the other. */
+@media (pointer: coarse) {
+  #console-statusbar .pf-v6-c-button.pf-m-plain {
+    /* HEIGHT ONLY, deliberately. 14px was the dimension that made these hard to hit, and 44 fixes it
+       without costing anything. Width is NOT raised to 44: four 44px-wide tray buttons plus the zoom
+       stepper measure 499px of content in a 375px bar, and the bar clips (`overflow: hidden`), so
+       Panes, Share and Keyboard shortcuts became unreachable. Trading three controls away to widen
+       the other four is worse than a narrow target.
+       Getting the full 44x44 here means the tray collapsing into a menu below some width - an
+       information-architecture change, not a sizing one. Until then these stay 19x44, which still
+       clears WCAG 2.5.8 via its spacing exception (checked: no two target centres within 24px). */
+    min-block-size: 44px;
+    /* Centring is not optional here: these buttons carry `line-height: 0` (see the tray rules above),
+       which pins the glyph to the top of whatever box it is in. At the old 19x14 the box WAS the
+       glyph so it never showed; grow the box and the icon hangs at the top of it. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+}
