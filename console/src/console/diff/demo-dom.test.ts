@@ -10,6 +10,7 @@
 import assert from "node:assert/strict";
 import { test, beforeEach, afterEach } from "node:test";
 import { activate } from "./main";
+import { dispatchCommand } from "../commands";
 
 const realFetch = globalThis.fetch;
 
@@ -105,6 +106,22 @@ test("#demo does not advertise workspace context it cannot provide", async () =>
   await settle();
 
   assert.equal(document.querySelectorAll(".console-diff-row__peek").length, 0);
+
+  dispose.deactivate();
+});
+
+// The row button above is withheld on purpose, but the p key and the command palette reach the
+// same action through no button at all - so a demo reader who finds either must still be told
+// why nothing came up, not met with silence.
+test("#demo answers the peek command instead of doing nothing", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.context.peek"));
+  const context = document.querySelector<HTMLElement>(".console-diff-context");
+  assert.equal(context?.hidden, false);
+  assert.match(context?.textContent ?? "", /unavailable in this showcase/);
 
   dispose.deactivate();
 });

@@ -366,6 +366,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
   const collaborationNotice = h("span", "console-diff-collaboration");
   collaborationNotice.setAttribute("role", "status");
   collaborationNotice.setAttribute("aria-live", "polite");
+  collaborationNotice.addEventListener("animationend", () =>
+    collaborationNotice.classList.remove("is-flash"),
+  );
   toolbar.append(statsEl, collaborationNotice);
   // Keep context outside the fixed-height virtual stream.
   const context = h("aside", "console-diff-context");
@@ -877,6 +880,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
   };
 
   const canCollaborate = (): boolean => demo || state.collaboration === "live";
+  // The mouse path to these actions disables its button and explains why in a title; a keyboard
+  // shortcut has no button to disable, so this restarts the toolbar notice's flash animation to
+  // point at the sentence that already gives the same reason, instead of a second copy of it.
+  const flashCollaborationNotice = (): void => {
+    collaborationNotice.classList.remove("is-flash");
+    void collaborationNotice.offsetWidth;
+    collaborationNotice.classList.add("is-flash");
+  };
   const setCollaboration = (next: CollaborationState): void => {
     if (state.collaboration === next) return;
     state.collaboration = next;
@@ -900,8 +911,16 @@ export function activate(host: HTMLElement): SurfaceInstance {
     hunk: { newStart: number; newCount: number },
     focus = false,
   ): Promise<void> => {
-    // Demo fixtures cannot provide workspace context.
-    if (demo) return;
+    // Demo fixtures cannot provide workspace context. The row button is withheld in demo for the
+    // same reason (see renderRow), but the p key and command-bar entry have no button to withhold,
+    // so they still need to say why nothing happened rather than doing nothing silently.
+    if (demo) {
+      context.hidden = false;
+      contextTitle.textContent = file.path;
+      contextBody.textContent = "Surrounding code is unavailable in this showcase.";
+      if (focus) context.focus();
+      return;
+    }
     const asOf = state.session?.as_of;
     if (!asOf || state.collaboration !== "live") {
       context.hidden = false;
@@ -1438,7 +1457,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (i === null) return;
     const digest = await digestForHunk(i);
     if (!digest) return;
-    if (!canCollaborate()) return;
+    if (!canCollaborate()) {
+      flashCollaborationNotice();
+      return;
+    }
     const on = !state.viewed.has(digest);
     void sync({ op: "viewed", digest, on });
   };
@@ -1455,7 +1477,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // the code they are remarking on while they type. The composer sits in the stream for the
   // same reason the comments do.
   const composeComment = (): void => {
-    if (!canCollaborate()) return;
+    if (!canCollaborate()) {
+      flashCollaborationNotice();
+      return;
+    }
     const i = currentHunkRow();
     if (i === null) return;
     const row = state.rows[i];
@@ -1505,7 +1530,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // resolveHere closes the first unresolved comment on the hunk the cursor is in. Either party
   // may resolve - see the store - so this needs no author check.
   const resolveHere = (): void => {
-    if (!canCollaborate()) return;
+    if (!canCollaborate()) {
+      flashCollaborationNotice();
+      return;
+    }
     const i = currentHunkRow();
     if (i === null) return;
     const row = state.rows[i];
@@ -1521,7 +1549,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const target = id ? pending.find((s) => s.id === id) : pending[0];
     if (!target) return;
     // Accepting is the ONLY path from an agent's suggestion to the reader's viewport.
-    if (!canCollaborate()) return;
+    if (!canCollaborate()) {
+      flashCollaborationNotice();
+      return;
+    }
     void sync({ op: "answer", id: target.id, on: true }).then((saved) => {
       if (!saved || disposed) return;
       const row = state.rows.findIndex(

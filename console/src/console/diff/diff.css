@@ -316,6 +316,21 @@
   font-size: var(--pf-t--global--font--size--sm);
 }
 
+/* Draws the eye to the sentence above when a keyboard-only action (v/c/r/g) was refused for the
+   same reason the sentence already gives, rather than duplicating that reason in a second place. */
+.console-diff-collaboration.is-flash {
+  border-radius: 3px;
+  animation: console-diff-collab-flash 900ms ease-out;
+}
+@keyframes console-diff-collab-flash {
+  from {
+    background: color-mix(in srgb, var(--console-status-warn-text) 30%, transparent);
+  }
+  to {
+    background: transparent;
+  }
+}
+
 /* Bounded in-place code context. */
 .console-diff-context {
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
