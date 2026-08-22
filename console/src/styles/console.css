@@ -622,17 +622,19 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      fill rather than as deliberate framing. The two chrome rails already frame the content, and 19px of
      a phone's height is worth more than the effect. */
   body[data-console-fill] > main { padding-block: 0; }
-  /* Widen the PANE to the bezel once a surface is mounted, and paint it. The title bar casts DOWN
-     onto whatever sits under it, and an opaque box painted after the static header covers the part
-     it overlaps - so an inset pane leaves the cast showing in the two rails beside it, and the
-     phone gets a stub of shadow in each top corner with nothing between them. That reads as a
-     rendering artifact, not as elevation. Widening the pane covers the cast edge to edge; the fill
-     is what does the covering, since the pane is otherwise transparent down to the page grey.
-     The pane's own 0.4rem keeps its content off the bezel - only the shell's 0.6rem goes, so this
-     buys 19px of width without pushing anything flush. The LAUNCHER keeps the shell gutter
-     (data-no-tabs): it has no pane, and its cards want the page grey around them. */
+  /* Widen the PANE to the bezel once a surface is mounted. The pane's own 0.4rem keeps its content
+     off the glass - only the shell's 0.6rem goes, so this buys 19px of width without pushing
+     anything flush. The LAUNCHER keeps the shell gutter (data-no-tabs): it has no pane, and its
+     cards want the page grey around them.
+     There is no fill here any more. The pane used to paint itself the secondary token, for one
+     reason: the title bar cast DOWN onto whatever sat under it, an inset pane left that cast showing
+     in the rails beside it, and the phone got a stub of shadow in each top corner. The title bar no
+     longer casts at all (overrides.css, and the outlet's own rule) so there is nothing left to
+     cover - and the fill was not free. It was the SAME token the zebra band on a command row uses,
+     so every banded row on a phone was painted its ground's exact colour and the alternation that
+     makes those rows readable was invisible at every width below this breakpoint. Transparent, the
+     pane falls through to the drawer's white, which is what the desktop already shows. */
   html:not([data-no-tabs]) body[data-console-fill] > main { padding-inline: 0; }
-  #console-outlet div[data-pane-id] { background: var(--pf-t--global--background--color--secondary--default); }
   /* Zero open tabs (the launcher screen): the second row would be empty, so collapse back to a single
      row - drop the doubled height and hide the empty tab strip, so the home screen isn't topped by a
      blank bar. data-no-tabs is set in main.ts's show() when the workspace has no active tab. */
