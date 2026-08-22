@@ -802,14 +802,15 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      window on one side of it and the content on the other. Same gate as the corner below. */
   border-left: 0;
   /* The ONE elevation in the shell, and it belongs here: the content is the raised body, the frame is
-     the ground. An even cast (--sm, not a directional token) because this box casts on three faces at
-     once - up onto the title bar, left onto the rail, down onto the status bar - and a directional
-     shadow can only serve one of them.
-     The z-index is what makes the third face show. The status bar is a later grid sibling carrying
-     z-index 20, so it painted over the downward cast and the pane's bottom edge alone stayed flat -
-     the shadow was in the stylesheet and invisible on screen. One above it puts the whole cast on
-     top of the frame it falls on; the rows do not overlap, so nothing else changes stacking. */
-  box-shadow: var(--pf-t--global--box-shadow--sm);
+     the ground. LEFT and DOWN only, as two directional tokens rather than the even --sm: upward the
+     pane's neighbour is the tab strip, and a tab is contiguous with the content it shows - casting on
+     it puts a shadow between a tab and its own page and breaks that reading. The rail and the status
+     bar are chrome the pane genuinely sits in front of, so those two faces keep the cast.
+     The z-index is what makes the downward one show. The status bar is a later grid sibling carrying
+     z-index 20, so it painted over that cast and the pane's bottom edge stayed flat - the shadow was
+     in the stylesheet and invisible on screen. One above it puts the cast on top of the frame it
+     falls on; the rows do not overlap, so nothing else changes stacking. */
+  box-shadow: var(--pf-t--global--box-shadow--sm--left), var(--pf-t--global--box-shadow--sm--bottom);
   z-index: 21;
 }
 /* ONE rounded corner in the whole shell: the bottom-left, where the pane's edge meets the rail and
