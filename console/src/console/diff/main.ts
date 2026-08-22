@@ -317,11 +317,13 @@ export function activate(host: HTMLElement): SurfaceInstance {
   sidebarHead.append(sidebarTitle, hideBtn);
 
   // Keep filtering in the index at every diff size.
-  const sidebarFilter = h("input", "console-diff-sidebar__filter") as HTMLInputElement;
+  const sidebarFilterWrap = h("span", "pf-v6-c-form-control console-diff-sidebar__filter");
+  const sidebarFilter = h("input", "pf-v6-c-form-control__text") as HTMLInputElement;
   sidebarFilter.type = "search";
   sidebarFilter.placeholder = "Filter files";
   sidebarFilter.setAttribute("aria-label", "Filter changed files");
   sidebarFilter.autocomplete = "off";
+  sidebarFilterWrap.append(sidebarFilter);
   const sidebarIndex = h("div", "console-diff-sidebar__index");
   sidebarIndex.setAttribute("role", "list");
   sidebarIndex.setAttribute("aria-label", "Changed files index");
@@ -330,7 +332,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   sidebarSpacer.append(sidebarWindow);
   sidebarIndex.append(sidebarSpacer);
   const sidebarGenerated = h("div", "console-diff-sidebar__generated");
-  sidebar.append(sidebarHead, sidebarFilter, sidebarIndex, sidebarGenerated);
+  sidebar.append(sidebarHead, sidebarFilterWrap, sidebarIndex, sidebarGenerated);
 
   const reopenBtn = h("button", "console-diff-reopen");
   reopenBtn.type = "button";
@@ -1487,7 +1489,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (!row || row.kind !== "hunk") return;
 
     // One composer at a time; a second press re-focuses rather than stacking boxes.
-    const existing = scroll.querySelector<HTMLInputElement>(".console-diff-composer__input");
+    const existing = scroll.querySelector<HTMLInputElement>(".console-diff-composer__input input");
     if (existing) {
       existing.focus();
       return;
@@ -1496,7 +1498,8 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const box = h("div", "console-diff-composer");
     const where = h("span", "console-diff-composer__where");
     where.textContent = `${row.file.path} hunk ${row.index + 1}`;
-    const input = h("input", "console-diff-composer__input");
+    const inputWrap = h("span", "pf-v6-c-form-control console-diff-composer__input");
+    const input = h("input", "pf-v6-c-form-control__text");
     input.type = "text";
     input.placeholder =
       "Say what is wrong, or what you had to work out. Enter to post, Esc to cancel.";
@@ -1520,7 +1523,8 @@ export function activate(host: HTMLElement): SurfaceInstance {
       if (!body) return;
       sync({ op: "comment", path: row.file.path, hunk: row.index, body });
     });
-    box.append(where, input);
+    inputWrap.append(input);
+    box.append(where, inputWrap);
     // Pinned rather than inserted into the virtualized window: the window is replaced wholesale
     // on every scroll frame, so a composer living in it would be destroyed mid-sentence.
     scroll.append(box);

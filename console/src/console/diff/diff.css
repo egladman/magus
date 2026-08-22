@@ -136,12 +136,9 @@
 .console-diff-sidebar__filter {
   flex: none;
   min-width: 0;
-  box-sizing: border-box;
   width: 100%;
-  border: 1px solid var(--pf-t--global--border--color--default);
-  background: var(--pf-t--global--background--color--primary--default);
-  color: inherit;
-  padding: 2px var(--pf-t--global--spacer--xs);
+}
+.console-diff-sidebar__filter .pf-v6-c-form-control__text {
   font: var(--pf-t--global--font--body--sm);
 }
 
@@ -828,10 +825,8 @@
 .console-diff-composer__input {
   flex: 1 1 auto;
   min-width: 0;
-  background: var(--pf-t--global--background--color--primary--default);
-  color: inherit;
-  border: 1px solid var(--pf-t--global--border--color--default);
-  padding: 2px var(--pf-t--global--spacer--xs);
+}
+.console-diff-composer__input .pf-v6-c-form-control__text {
   font: inherit;
 }
 
