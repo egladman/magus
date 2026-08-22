@@ -593,32 +593,41 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-titlebar #console-actions { -webkit-app-region: no-drag; app-region: no-drag; }
 
 /* The tab bar fills the title bar; the trailing control group sits at the right, on the tab row.
-   The leading border separates it from the navigation rail below-left: without it the tab strip and
-   the rail read as one L-shaped piece of chrome, and the first tab looks like it belongs to the
-   rail. Matched to the rail's own edge so the two lines continue each other. */
+   NO leading border. It used to carry one to separate the strip from the rail, and that was right
+   when the strip was the outermost thing on this row - but the frame around it draws that same edge
+   now, one level out and down its whole height. Both together put two hairlines side by side at the
+   tab row and one below it, so the left edge read thicker beside the tabs than beside the content:
+   a doubled line whose seam landed exactly where the strip ends. */
 #console-tabs {
   flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch;
-  border-inline-start: 1px solid var(--pf-t--global--border--color--default);
 }
-/* No rail on a phone (see the rail's own breakpoint), so nothing to separate from. */
-@media (max-width: 48rem) {
-  #console-tabs { border-inline-start: 0; }
+/* The TRAILING edge, where the scrolling run ends and the fixed controls begin - and it curves away
+   rather than meeting the row's bottom square. A straight line stopping dead at a right angle is the
+   one hard corner left on this surface, and it read as a cut through the row; swept around a radius
+   it reads as the run ending, which is what it means.
+   The radius is the frame's own bottom-left, mirrored: the content curves away from the rail on one
+   side and the tab run curves away from the controls on the other, at the same size and on opposite
+   corners. Asymmetric on purpose - it is the same gesture twice, not a box with rounded corners.
+   NO border-bottom to curve into, deliberately. A bottom edge here would run the full width of the
+   run, including under the current tab, and put back the very line that was removed so a tab could be
+   contiguous with its own page. The right border curving out at its own end is the whole shape.
+   Gated with the divider it replaces: below 48rem the tabs and the controls are stacked rows, not
+   neighbours on one row, and there is nothing to divide. */
+@media (min-width: 48rem) {
+  #console-tabs {
+    border-inline-end: 1px solid var(--pf-t--global--border--color--default);
+    border-end-end-radius: calc(var(--pf-t--global--border--radius--large) * 2);
+  }
 }
 
 /* Title-bar-right control group: the chrome buttons (command bar, apps, reference, settings gear) as PF
    plain icon Buttons centered on the tab row, and the positioning context for the apps-menu popover
    (#console-appmenu, anchored in overrides.css). A slim inline gutter keeps them off the window edge. */
 #console-actions { flex: 0 0 auto; position: relative; display: flex; align-items: center; padding-inline: 0.35rem; }
-/* A rule between the tabs and the controls, where the two share a ROW. With the strip now the content
-   colour the two runs met as one undivided band, and a tab clipped by the overflow could sit directly
-   against the workspace selector and read as another control; the line says where the scrolling run
-   ends and the fixed cluster begins.
-   Only above 48rem, because only above it are they side by side. Below, the bar stacks into two rows
-   already parted by a horizontal hairline, this cluster spans the full width, and an inline-start
-   border lands on the phone's own left edge with nothing to its left to be divided from. */
-@media (min-width: 48rem) {
-  #console-actions { border-inline-start: 1px solid var(--pf-t--global--border--color--default); }
-}
+/* The rule that parts the controls from the tabs is the TAB RUN's trailing border above, not one
+   here. Same line on the page, drawn by the neighbour that can curve it: a border on this cluster is
+   straight by construction, because the corner it would have to round belongs to the run that ends,
+   not to the fixed group that follows. */
 /* PF plain buttons default to align-items:baseline (sized for a text+icon button), so the title-bar
    icon-only buttons (apps menu, reference, gear) hang their svg off the baseline - a few px above the
    button center, most visible on mobile. Center the icon so the three chrome buttons sit dead-center. */
