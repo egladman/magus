@@ -293,7 +293,15 @@ body[data-console-fill] > main > .console-render-panel {
    of Cards, built in tileView). Center the prompt + its card grid within the pane. */
 #console-outlet div[data-pane-id]:has([data-pane-launcher]) { align-items: center; justify-content: center; }
 #console-outlet [data-pane-launcher] { margin: 0 0 0.75rem; color: var(--pf-t--global--text--color--subtle); text-align: center; }
-#console-outlet [data-pane-launcher] + .pf-v6-l-gallery { width: 100%; max-width: 26rem; padding: 0 1rem; }
+/* No max-width cap: that used to force PF's own responsive grid down to one narrow centered
+   column regardless of how wide the pane actually was, which is correct for a slim tiled pane but
+   wastes most of a wide one - a plain 2-pane split leaves this one nearly full width. Same
+   min-column value the home launcher already uses (:1127 below), so a split pane's picker and
+   the full-page one settle into the same rhythm instead of two different grids. */
+#console-outlet [data-pane-launcher] + .pf-v6-l-gallery {
+  width: 100%; padding: 0 1rem;
+  --pf-v6-l-gallery--GridTemplateColumns--min: 17rem;
+}
 /* PF cards ship no border; the home launcher cards add a hairline (console-launcher-card). The compact
    in-pane picker cards did not, so a split pane's surface picker looked flat and off-language. Match the
    hairline + hover here so the two launchers read the same. */
