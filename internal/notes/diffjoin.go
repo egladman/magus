@@ -40,15 +40,10 @@ func (m MatchStrength) rank() int {
 }
 
 // ResolvedAnchor is one anchor, the note that declares it, and what checking it found.
-//
-// CHECKPOINT: nothing in this package builds one yet. ResolveAnchors returns []Issue, which
-// cannot drive this join for two independent reasons - it carries the anchor's kind and
-// target only inside prose (IssueCode's doc is explicit that callers must not match the
-// message, because the messages change freely), and it says nothing whatever about an anchor
-// that is FINE, which is most of them and most of what a diff touches. Recovering either by
-// parsing, or by re-deriving the grade here, would be a second opinion rather than a second
-// view of one answer - the exact failure DeclarationHeld exists to prevent. Resolution has to
-// grow a per-anchor result before the store can hand this join its own input.
+// ResolveAllAnchors builds them - one per anchor, healthy ones included - as a second
+// view of the same resolution pass behind ResolveAnchors, never a second opinion. []Issue
+// cannot drive this join: it carries anchor identity only inside prose and says nothing
+// about an anchor that is fine, which is most of them and most of what a diff touches.
 type ResolvedAnchor struct {
 	// Note is the declaring note's Name and Title its heading. Both ride along because a hit
 	// is rendered with the diff in hand and the store nowhere near it.

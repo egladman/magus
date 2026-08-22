@@ -4,6 +4,7 @@ import (
 	"context"
 	"os"
 	"path/filepath"
+	"slices"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -365,6 +366,124 @@ func TestAnUngradedAnchorReportsDrift(t *testing.T) {
 			assert.Equal(t, CodeDriftedAnchor, issues[0].Code)
 		})
 	}
+}
+
+// gradedStore writes one note per grading outcome, so a note NAME identifies the expected
+// verdict without any test having to read a verdict back out of prose.
+func gradedStore(t *testing.T) (string, fakeResolver) {
+	t.Helper()
+	dir := filepath.Join(t.TempDir(), "notes")
+	for _, n := range []Note{
+		{Name: "gone", Title: "Points at nothing", Anchors: []Anchor{
+			{Kind: AnchorSymbol, Target: "m gone/Removed#"},
+		}},
+		{Name: "drifted", Title: "Moved on", Anchors: []Anchor{
+			{Kind: AnchorFile, Target: "internal/cache/cache.go", Digest: "oldbody"},
+		}},
+		{Name: "body", Title: "Same signature", Anchors: []Anchor{
+			{Kind: AnchorSymbol, Target: "m cache/Put().", Digest: "oldbody", DeclDigest: "decl"},
+		}},
+		{Name: "clean", Title: "Still true", Anchors: []Anchor{
+			{Kind: AnchorFile, Target: "clean.go"},
+			{Kind: AnchorSymbol, Target: "m clean/Ok()."},
+		}},
+	} {
+		require.NoError(t, Save(dir, n))
+	}
+
+	return dir, fakeResolver{
+		live: map[string]bool{
+			"file:internal/cache/cache.go": true,
+			"symbol:m cache/Put().":        true,
+			"file:clean.go":                true,
+			"symbol:m clean/Ok().":         true,
+		},
+		digests: map[string]string{
+			"file:internal/cache/cache.go": "newbody",
+			"symbol:m cache/Put().":        "newbody",
+		},
+		decls: map[string]string{"symbol:m cache/Put().": "decl"},
+	}
+}
+
+// TestResolveAllAnchorsSeesEveryAnchor covers what the Issue view structurally cannot: a
+// healthy anchor, which is most of them and most of what a diff touches.
+func TestResolveAllAnchorsSeesEveryAnchor(t *testing.T) {
+	dir, res := gradedStore(t)
+
+	all, err := ResolveAllAnchors(t.Context(), dir, res)
+	require.NoError(t, err)
+	require.Len(t, all, 5, "every anchor of every note, healthy ones included")
+
+	byNote := map[string][]ResolvedAnchor{}
+	for _, r := range all {
+		byNote[r.Note] = append(byNote[r.Note], r)
+	}
+	for note, want := range map[string]IssueCode{
+		"gone":    CodeDanglingAnchor,
+		"drifted": CodeDriftedAnchor,
+		"body":    CodeAnchorBodyChanged,
+	} {
+		require.Len(t, byNote[note], 1)
+		assert.Equal(t, want, byNote[note][0].Status, note)
+	}
+
+	clean := byNote["clean"]
+	require.Len(t, clean, 2)
+	assert.Equal(t, "Still true", clean[0].Title, "a hit renders far from the store, so the title rides along")
+	for i, r := range clean {
+		assert.Empty(t, r.Status, "an anchor nothing is wrong with reports no code")
+		assert.Equal(t, i, r.Pos, "position is the anchor's index in its own note")
+	}
+	assert.Equal(t, "clean.go", clean[0].File, "a file anchor already knows its file")
+	assert.Empty(t, clean[1].File,
+		"a symbol key names a package and a descriptor, never a path; only the graph knows where it sits")
+}
+
+// TestResolveAllAnchorsAgreesWithResolveAnchors is the reason the two APIs share a grader. A
+// surface whose verdict disagreed with `magus notes verify` would be a second opinion rather
+// than a second view of one answer, and nothing in the types would catch the divergence.
+func TestResolveAllAnchorsAgreesWithResolveAnchors(t *testing.T) {
+	dir, res := gradedStore(t)
+
+	issues, err := ResolveAnchors(t.Context(), dir, res)
+	require.NoError(t, err)
+	all, err := ResolveAllAnchors(t.Context(), dir, res)
+	require.NoError(t, err)
+
+	// Keyed by note because the Issue view identifies an anchor only inside a message written
+	// for a person - which is itself the reason the per-anchor view had to exist.
+	reported := map[string][]IssueCode{}
+	for _, i := range issues {
+		reported[i.Note] = append(reported[i.Note], i.Code)
+	}
+	graded := map[string][]IssueCode{}
+	for _, r := range all {
+		if r.Status != "" {
+			graded[r.Note] = append(graded[r.Note], r.Status)
+		}
+	}
+	for _, m := range []map[string][]IssueCode{reported, graded} {
+		for _, codes := range m {
+			slices.Sort(codes)
+		}
+	}
+	assert.Equal(t, reported, graded)
+}
+
+// The join is what the per-anchor view exists to feed, and a drift finding has to survive the
+// trip: AnchorsTouching reports what a diff touches and never re-grades.
+func TestResolveAllAnchorsDrivesTheDiffJoin(t *testing.T) {
+	dir, res := gradedStore(t)
+
+	all, err := ResolveAllAnchors(t.Context(), dir, res)
+	require.NoError(t, err)
+
+	hits := AnchorsTouching(all, []string{"internal/cache/cache.go"}, nil)
+	require.Len(t, hits, 1)
+	assert.Equal(t, "drifted", hits[0].Note)
+	assert.Equal(t, MatchFile, hits[0].Match)
+	assert.Equal(t, CodeDriftedAnchor, hits[0].Status)
 }
 
 // errDeclResolver computes a body digest but fails on the declaration - a symbol the indexer

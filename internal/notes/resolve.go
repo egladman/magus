@@ -97,73 +97,137 @@ func ResolveAnchors(ctx context.Context, dir string, res Resolver) ([]Issue, err
 		// repair an anchor in a file that does not exist.
 		path := n.Path
 		for _, a := range n.Anchors {
-			if !res.Resolves(ctx, a) {
-				issues = append(issues, Issue{
-					Severity: SeverityWarning,
-					Code:     CodeDanglingAnchor,
-					Path:     path,
-					Note:     n.Name,
-					Message:  fmt.Sprintf("anchor %s:%s no longer resolves", a.Kind, a.Target),
-					Hint:     degradeHint(a),
-				})
-				continue
-			}
-			// The anchor resolves, so the easy question is answered. The harder one is
-			// whether the thing it points at still SAYS what the note claims - the case a
-			// reader cannot see and an existence check cannot catch.
-			//
-			// Both empty cases are silence, not drift: no stored digest means the note
-			// predates fingerprinting or was never re-anchored, and no current digest
-			// means it cannot be computed here. Guessing "changed" from either is exactly
-			// the false positive that trains a reader to ignore the flags.
-			if a.Digest == "" {
-				continue
-			}
-			current, derr := res.Digest(ctx, a)
-			if derr != nil {
-				// Reported, never as drift. The note may be exactly right; what is known is
-				// that nothing can check it right now, and the cause is usually one command
-				// away from fixed.
-				issues = append(issues, Issue{
-					Severity: SeverityWarning,
-					Code:     CodeUnverifiableAnchor,
-					Path:     path,
-					Note:     n.Name,
-					Message:  fmt.Sprintf("anchor %s:%s could not be fingerprinted: %v", a.Kind, a.Target, derr),
-					Hint:     "This is not drift - it means nothing can currently tell whether the note still holds. A symbol anchor needs the symbol index: `magus graph build`.",
-				})
-				continue
-			}
-			if current == "" || current == a.Digest {
-				continue
-			}
-			// The content moved. Grade it before reporting: a body edited under an unchanged
-			// declaration is the overwhelmingly common change and the one that almost never
-			// invalidates prose, so calling it drift is how a store teaches its reader to
-			// stop reading the findings.
-			if DeclarationHeld(ctx, res, a) {
-				issues = append(issues, Issue{
-					Severity: SeverityWarning,
-					Code:     CodeAnchorBodyChanged,
-					Path:     path,
-					Note:     n.Name,
-					Message: fmt.Sprintf("anchor %s:%s changed inside an unchanged declaration since this note was last reviewed",
-						a.Kind, a.Target),
-					Hint: "Most edits under an unchanged signature do not invalidate the prose about them. Re-read only if the note claims something about the implementation rather than the interface.",
-				})
+			f := resolveAnchor(ctx, res, n.Name, a)
+			if f.code == "" {
 				continue
 			}
 			issues = append(issues, Issue{
 				Severity: SeverityWarning,
-				Code:     CodeDriftedAnchor,
+				Code:     f.code,
 				Path:     path,
 				Note:     n.Name,
-				Message:  fmt.Sprintf("anchor %s:%s still exists but its content changed since this note was last reviewed", a.Kind, a.Target),
-				Hint:     driftHint(n.Name, a),
+				Message:  f.message,
+				Hint:     f.hint,
 			})
 		}
 	}
 	return issues, nil
+}
+
+// ResolveAllAnchors reports EVERY anchor of every note, healthy ones included, each graded by
+// the same pass ResolveAnchors reports through.
+//
+// It exists because an Issue can only describe a problem, and the joins built on top of this
+// store - which note does this diff touch - are mostly about anchors that are perfectly fine.
+// Reconstructing those from the Issue view is impossible in both directions: an anchor's kind
+// and target live only inside a message written for a person, and a clean anchor produces no
+// Issue at all. Re-deriving the grade here instead would be the second opinion DeclarationHeld
+// exists to prevent, so the two APIs are projections of one resolution rather than two graders.
+//
+// Status is the IssueCode this anchor graded to and "" when it is clean, so a caller renders
+// drift without asking twice. Pos is the anchor's index in its note, carried because callers
+// sort and key on it rather than on slice order.
+//
+// File is filled in for file anchors only. A symbol's file is deliberately not derivable here:
+// a SCIP symbol key names a package and a descriptor, never a path, and only the graph knows
+// where a symbol currently sits - a dependency this package does not have and must not grow
+// (see internal/graph/knowledge.NoteResolver). A caller holding the graph populates it; one
+// that leaves it empty loses the weaker same-file match in AnchorsTouching and nothing else.
+//
+// Ordering follows the store walk and then anchor position. Every anchor appears exactly once,
+// including anchor kinds no join can match, because absent is indistinguishable from clean.
+func ResolveAllAnchors(ctx context.Context, dir string, res Resolver) ([]ResolvedAnchor, error) {
+	found, _, err := Inspect(dir)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ResolvedAnchor, 0, len(found))
+	for _, n := range found {
+		if err := ctx.Err(); err != nil {
+			return nil, err
+		}
+		for i, a := range n.Anchors {
+			r := ResolvedAnchor{
+				Note:   n.Name,
+				Title:  n.Title,
+				Pos:    i,
+				Anchor: a,
+				Status: resolveAnchor(ctx, res, n.Name, a).code,
+			}
+			if a.Kind == AnchorFile {
+				r.File = a.Target
+			}
+			out = append(out, r)
+		}
+	}
+	return out, nil
+}
+
+// anchorFinding is what resolving one anchor found: the code it graded to, empty when the
+// anchor is clean, and the person-facing text that belongs with that code.
+//
+// The text rides along rather than being rebuilt from the code because the unverifiable case
+// names the failure that produced it, which no later renderer could recover.
+type anchorFinding struct {
+	code    IssueCode
+	message string
+	hint    string
+}
+
+// resolveAnchor grades one anchor: the single place the ladder from "gone" through "ungraded
+// drift" to "body edit" is decided, so the Issue view and the per-anchor view cannot disagree.
+//
+// note names the declaring note, which the drift hint quotes back as the command to re-record.
+func resolveAnchor(ctx context.Context, res Resolver, note string, a Anchor) anchorFinding {
+	if !res.Resolves(ctx, a) {
+		return anchorFinding{
+			code:    CodeDanglingAnchor,
+			message: fmt.Sprintf("anchor %s:%s no longer resolves", a.Kind, a.Target),
+			hint:    degradeHint(a),
+		}
+	}
+	// The anchor resolves, so the easy question is answered. The harder one is whether the
+	// thing it points at still SAYS what the note claims - the case a reader cannot see and
+	// an existence check cannot catch.
+	//
+	// Both empty cases are silence, not drift: no stored digest means the note predates
+	// fingerprinting or was never re-anchored, and no current digest means it cannot be
+	// computed here. Guessing "changed" from either is exactly the false positive that trains
+	// a reader to ignore the flags.
+	if a.Digest == "" {
+		return anchorFinding{}
+	}
+	current, derr := res.Digest(ctx, a)
+	if derr != nil {
+		// Reported, never as drift. The note may be exactly right; what is known is that
+		// nothing can check it right now, and the cause is usually one command away from
+		// fixed.
+		return anchorFinding{
+			code:    CodeUnverifiableAnchor,
+			message: fmt.Sprintf("anchor %s:%s could not be fingerprinted: %v", a.Kind, a.Target, derr),
+			hint:    "This is not drift - it means nothing can currently tell whether the note still holds. A symbol anchor needs the symbol index: `magus graph build`.",
+		}
+	}
+	if current == "" || current == a.Digest {
+		return anchorFinding{}
+	}
+	// The content moved. Grade it before reporting: a body edited under an unchanged
+	// declaration is the overwhelmingly common change and the one that almost never
+	// invalidates prose, so calling it drift is how a store teaches its reader to stop
+	// reading the findings.
+	if DeclarationHeld(ctx, res, a) {
+		return anchorFinding{
+			code: CodeAnchorBodyChanged,
+			message: fmt.Sprintf("anchor %s:%s changed inside an unchanged declaration since this note was last reviewed",
+				a.Kind, a.Target),
+			hint: "Most edits under an unchanged signature do not invalidate the prose about them. Re-read only if the note claims something about the implementation rather than the interface.",
+		}
+	}
+	return anchorFinding{
+		code:    CodeDriftedAnchor,
+		message: fmt.Sprintf("anchor %s:%s still exists but its content changed since this note was last reviewed", a.Kind, a.Target),
+		hint:    driftHint(note, a),
+	}
 }
 
 // driftHint says what to re-read and, when the note recorded where its fingerprint was
