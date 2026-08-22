@@ -15,14 +15,17 @@ import (
 // authority, and a surface that overstates its relevance is one readers learn to skip.
 type MatchStrength string
 
+// Each value names WHAT matched and nothing more: the subject is the only axis they differ on.
+// Do not qualify them exact/fuzzy - every match here is exact equality, so such a prefix would
+// name an inexact tier that does not exist and, given the refusal to guess, cannot.
 const (
 	// MatchSymbol: the anchor names a symbol the diff changed.
-	MatchSymbol MatchStrength = "exact-symbol"
+	MatchSymbol MatchStrength = "symbol"
 	// MatchFile: the anchor names a file the diff changed.
-	MatchFile MatchStrength = "exact-file"
-	// MatchSameFile: the anchor names a symbol the diff did NOT change, in a file it did. The
+	MatchFile MatchStrength = "file"
+	// MatchNeighbor: the anchor names a symbol the diff did NOT change, in a file it did. The
 	// note may be about untouched code that merely shares a file with the edit.
-	MatchSameFile MatchStrength = "same-file"
+	MatchNeighbor MatchStrength = "neighbor"
 )
 
 // rank orders the strengths so one anchor's competing matches collapse to the most precise.
@@ -32,7 +35,7 @@ func (m MatchStrength) rank() int {
 		return 3
 	case MatchFile:
 		return 2
-	case MatchSameFile:
+	case MatchNeighbor:
 		return 1
 	default:
 		return 0
@@ -40,10 +43,10 @@ func (m MatchStrength) rank() int {
 }
 
 // ResolvedAnchor is one anchor, the note that declares it, and what checking it found.
-// ResolveAllAnchors builds them - one per anchor, healthy ones included - as a second
-// view of the same resolution pass behind ResolveAnchors, never a second opinion. []Issue
-// cannot drive this join: it carries anchor identity only inside prose and says nothing
-// about an anchor that is fine, which is most of them and most of what a diff touches.
+// ResolveAnchors builds them - one per anchor, healthy ones included - and AnchorIssues is the
+// same pass projected onto the findings, never a second opinion. []Issue cannot drive this
+// join: it carries anchor identity only inside prose and says nothing about an anchor that is
+// fine, which is most of them and most of what a diff touches.
 type ResolvedAnchor struct {
 	// Note is the declaring note's Name and Title its heading. Both ride along because a hit
 	// is rendered with the diff in hand and the store nowhere near it.
@@ -59,9 +62,10 @@ type ResolvedAnchor struct {
 	// unknown. SUPPLIED rather than derived: a SCIP symbol key names a package and a
 	// descriptor but never a file, and only the graph knows where a symbol sits - which this
 	// package deliberately never learns (see internal/graph/knowledge.NoteResolver, whose doc
-	// states the one-way dependency). Empty costs the weaker same-file match and nothing else.
+	// states the one-way dependency). Empty costs the weaker neighbor match and nothing else.
 	File string `json:"file,omitempty" yaml:"file,omitempty"`
-	// Status is the IssueCode resolution reported for this anchor, "" when it is clean.
+	// Status is the IssueCode resolution reported for this anchor, "" when it is clean, and
+	// StatusUngraded when nothing graded it.
 	Status IssueCode `json:"status,omitempty" yaml:"status,omitempty"`
 }
 
@@ -75,17 +79,18 @@ type AnchorHit struct {
 	Kind   AnchorKind `json:"kind" yaml:"kind"`
 	Target string     `json:"target" yaml:"target"`
 	// Matched is the changed thing that produced this hit: a symbol id for MatchSymbol, a file
-	// path for MatchFile and MatchSameFile. It answers the reader's next question - which of
+	// path for MatchFile and MatchNeighbor. It answers the reader's next question - which of
 	// the diff's many paths pulled this note in - which neither the anchor nor the strength
 	// can answer alone.
 	Matched string        `json:"matched" yaml:"matched"`
 	Match   MatchStrength `json:"match" yaml:"match"`
-	// Status is the anchor's drift finding carried through untouched, "" when it is clean.
-	// This join reports what a diff TOUCHES and never re-grades drift.
+	// Status is the anchor's drift finding carried through untouched: "" when it is clean and
+	// StatusUngraded when nothing graded it. This join reports what a diff TOUCHES and never
+	// grades, so it can neither invent a verdict nor upgrade an ungraded anchor to clean.
 	Status IssueCode `json:"status,omitempty" yaml:"status,omitempty"`
 }
 
-// AnchorsTouching reports every note anchor that a diff's changed files and symbols touch.
+// AnchorHits reports every note anchor that a diff's changed files and symbols touch.
 //
 // It is the join nothing else performs. The store knows what its notes are ABOUT and a diff
 // knows what moved; until the two meet, finding the note that explains the code you are
@@ -94,7 +99,7 @@ type AnchorHit struct {
 //
 // files are the diff's changed paths and symbols its changed symbol ids, both workspace
 // relative and matched by EXACT equality. Nothing here guesses - no prefix match, no basename
-// fallback, no fuzzy symbol lookup. ResolveAnchors' doc records the measurement behind that
+// fallback, no fuzzy symbol lookup. AnchorIssues' doc records the measurement behind that
 // refusal, and it binds harder here: an unresolved anchor at least admits it failed, while a
 // note surfaced against code it is not about spends the reader's trust in every later hit.
 //
@@ -104,14 +109,14 @@ type AnchorHit struct {
 // render as an absence of relevant notes. Revisit when a diff carries its affected targets.
 //
 // Duplicates collapse per ANCHOR: one anchor yields at most one hit, the strongest it has, so
-// a symbol anchor whose id changed reports exact-symbol instead of also reporting the
-// same-file match underneath it. Two DISTINCT anchors of one note stay two hits - including
+// a symbol anchor whose id changed reports MatchSymbol instead of also reporting the
+// MatchNeighbor hit underneath it. Two DISTINCT anchors of one note stay two hits - including
 // the common case of a note anchoring both a file and a symbol inside it, which is two claims
 // about two subjects. A renderer wanting one row per note groups them.
 //
 // The result is ordered by note name then anchor position, and is pure: no I/O, no clock, and
 // no dependence on the order of res.
-func AnchorsTouching(res []ResolvedAnchor, files, symbols []string) []AnchorHit {
+func AnchorHits(res []ResolvedAnchor, files, symbols []string) []AnchorHit {
 	changedFiles, changedSymbols := changedSet(files), changedSet(symbols)
 
 	best := make(map[anchorKey]AnchorHit, len(res))
@@ -157,7 +162,7 @@ func (r ResolvedAnchor) hit(files, symbols map[string]bool) (AnchorHit, bool) {
 		case symbols[r.Anchor.Target]:
 			matched, strength = r.Anchor.Target, MatchSymbol
 		case r.File != "" && files[r.File]:
-			matched, strength = r.File, MatchSameFile
+			matched, strength = r.File, MatchNeighbor
 		}
 	}
 	if strength == "" {

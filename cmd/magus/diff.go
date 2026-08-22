@@ -24,6 +24,7 @@ import (
 	"github.com/egladman/magus/internal/interactive/difftui"
 	"github.com/egladman/magus/internal/interactive/tty"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/internal/notes"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -1397,7 +1398,15 @@ func preflightAnchorLines(hits []anchorHit) []string {
 	for _, h := range preflightCap(hits) {
 		line := fmt.Sprintf("      note %s anchors %s:%s", h.Note, h.Kind, h.Target)
 		if h.Drift != "" {
-			line += " [" + h.Drift + "]"
+			// An unmeasured anchor is marked too, and deliberately not with its wire code:
+			// rendered as "ungraded-anchor" it scans as a fourth kind of drift verdict, when
+			// what it says is that no verdict was reached. Bare would be worse - that reads
+			// as clean, which is the one thing nobody checked it for.
+			marker := h.Drift
+			if h.Drift == string(notes.StatusUngraded) {
+				marker = "ungraded"
+			}
+			line += " [" + marker + "]"
 		}
 		out = append(out, line)
 	}

@@ -13,17 +13,16 @@ type anchorHit struct {
 	Title  string           `json:"title,omitempty" yaml:"title,omitempty"`
 	Kind   notes.AnchorKind `json:"kind"            yaml:"kind"`
 	Target string           `json:"target"          yaml:"target"`
-	// Drift is the notes.IssueCode this anchor resolved to, or empty when it was not graded.
-	//
-	// Empty means UNGRADED, never clean: grading needs the knowledge graph, and when it
-	// will not load the join below still answers WHAT is anchored while claiming nothing
-	// about freshness nobody measured.
+	// Drift is the notes.IssueCode this anchor resolved to. Empty is graded CLEAN;
+	// notes.StatusUngraded is unmeasured, which grading needs the knowledge graph for and
+	// cannot report when the graph will not load. The two are distinct so a renderer cannot
+	// show an anchor nobody checked as fresh.
 	Drift string `json:"drift,omitempty" yaml:"drift,omitempty"`
 }
 
-// preflightAnchors joins every note anchor against the changeset. Graded through
-// ResolveAllAnchors when the knowledge graph loads; when it will not, the same join runs
-// over ungraded anchors so a broken index costs the drift column, never the section.
+// preflightAnchors joins every note anchor against the changeset. A knowledge graph that will
+// not load costs the drift column and nothing else: notes.ResolveAnchors takes a nil resolver
+// and grades every anchor ungraded, so the section still answers WHAT is anchored.
 func preflightAnchors(ctx context.Context, root string, files, symbols []string) []anchorHit {
 	stores, err := notesStores(root, "")
 	if err != nil {
@@ -33,31 +32,18 @@ func preflightAnchors(ctx context.Context, root string, files, symbols []string)
 
 	var resolved []notes.ResolvedAnchor
 	for _, st := range stores {
+		var scoped notes.Resolver
 		if resErr == nil {
-			ra, raErr := notes.ResolveAllAnchors(ctx, st.dir, res.ForScope(string(st.scope)))
-			if raErr == nil {
-				resolved = append(resolved, ra...)
-				continue
-			}
+			scoped = res.ForScope(string(st.scope))
 		}
-		found, _, ierr := notes.Inspect(st.dir)
-		if ierr != nil {
+		ra, raErr := notes.ResolveAnchors(ctx, st.dir, scoped)
+		if raErr != nil {
 			continue
 		}
-		for _, n := range found {
-			for i, a := range n.Anchors {
-				file := ""
-				if a.Kind == notes.AnchorFile {
-					file = a.Target
-				}
-				resolved = append(resolved, notes.ResolvedAnchor{
-					Note: n.Name, Title: n.Title, Pos: i, Anchor: a, File: file,
-				})
-			}
-		}
+		resolved = append(resolved, ra...)
 	}
 
-	hits := notes.AnchorsTouching(resolved, files, symbols)
+	hits := notes.AnchorHits(resolved, files, symbols)
 	out := make([]anchorHit, 0, len(hits))
 	for _, h := range hits {
 		out = append(out, anchorHit{

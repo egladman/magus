@@ -55,8 +55,9 @@ func DeclarationHeld(ctx context.Context, res Resolver, a Anchor) bool {
 	return err == nil && decl != "" && decl == a.DeclDigest
 }
 
-// ResolveAnchors reports every anchor that no longer resolves, with the coarser anchor it
-// degrades to.
+// AnchorIssues reports every anchor that no longer resolves, with the coarser anchor it
+// degrades to. It is the Issue projection of ResolveAnchors' pass - the same grader, filtered
+// to the anchors something is wrong with - and never a second opinion about one.
 //
 // The empirical case for doing this at all is blunt: humans do not maintain references in
 // prose. Under 9% of links in source comments are ever revised after the commit that added
@@ -76,7 +77,7 @@ func DeclarationHeld(ctx context.Context, res Resolver, a Anchor) bool {
 // Every system that guessed instead (a lost tour step parked at line 2000, a highlight that
 // silently fails to render, a quote anchored within 50% edit distance) produced confident,
 // wrong placement. An unresolved anchor is reported as unresolved.
-func ResolveAnchors(ctx context.Context, dir string, res Resolver) ([]Issue, error) {
+func AnchorIssues(ctx context.Context, dir string, res Resolver) ([]Issue, error) {
 	// Inspect, not List: List fails hard on an error-severity issue, which would make the
 	// one command whose job is reporting broken notes abort on encountering one. The
 	// unreadable entries are already reported by Verify; the readable ones still deserve
@@ -114,29 +115,44 @@ func ResolveAnchors(ctx context.Context, dir string, res Resolver) ([]Issue, err
 	return issues, nil
 }
 
-// ResolveAllAnchors reports EVERY anchor of every note, healthy ones included, each graded by
-// the same pass ResolveAnchors reports through.
+// StatusUngraded is the Status of an anchor nothing graded. It is distinct from "", which
+// means grading ran and found the anchor clean: a caller reading unmeasured as fresh would
+// report a stale note as current, which is the one failure anchor grading exists to prevent.
 //
-// It exists because an Issue can only describe a problem, and the joins built on top of this
-// store - which note does this diff touch - are mostly about anchors that are perfectly fine.
-// Reconstructing those from the Issue view is impossible in both directions: an anchor's kind
-// and target live only inside a message written for a person, and a clean anchor produces no
-// Issue at all. Re-deriving the grade here instead would be the second opinion DeclarationHeld
-// exists to prevent, so the two APIs are projections of one resolution rather than two graders.
+// Named for the field rather than joining the Code* family in store.go: verify never emits it,
+// so it is not an Issue anyone can be shown. The wire spelling keeps that family's shape.
+const StatusUngraded IssueCode = "ungraded-anchor"
+
+// ResolveAnchors grades EVERY anchor of every note, healthy ones included. It is the
+// resolution pass itself, and AnchorIssues is that pass projected onto the anchors that graded
+// to a finding, so the two views cannot disagree - re-deriving a grade for either would be the
+// second opinion DeclarationHeld exists to prevent.
 //
-// Status is the IssueCode this anchor graded to and "" when it is clean, so a caller renders
-// drift without asking twice. Pos is the anchor's index in its note, carried because callers
-// sort and key on it rather than on slice order.
+// The per-anchor view is the primitive because an Issue can only describe a problem, while the
+// joins built on top of this store - which note does this diff touch - are mostly about anchors
+// that are perfectly fine. Reconstructing those from the Issue view is impossible in both
+// directions: an anchor's kind and target live only inside a message written for a person, and
+// a clean anchor produces no Issue at all.
 //
-// File is filled in for file anchors only. A symbol's file is deliberately not derivable here:
-// a SCIP symbol key names a package and a descriptor, never a path, and only the graph knows
-// where a symbol currently sits - a dependency this package does not have and must not grow
-// (see internal/graph/knowledge.NoteResolver). A caller holding the graph populates it; one
-// that leaves it empty loses the weaker same-file match in AnchorsTouching and nothing else.
+// res may be NIL, meaning ungraded: every anchor comes back StatusUngraded, and the caller
+// learns WHAT is anchored while claiming nothing about freshness nobody measured. That is the
+// state a knowledge graph which will not load leaves behind, and it is deliberately not an
+// error - a broken index should cost the drift column, never the answer.
+//
+// Status is the IssueCode this anchor graded to, "" when it is clean, and StatusUngraded when
+// res was nil, so a caller renders drift without asking twice. Pos is the anchor's index in its
+// note, carried because callers sort and key on it rather than on slice order.
+//
+// File is filled in for file anchors only, graded or not. A symbol's file is deliberately not
+// derivable here: a SCIP symbol key names a package and a descriptor, never a path, and only
+// the graph knows where a symbol currently sits - a dependency this package does not have and
+// must not grow (see internal/graph/knowledge.NoteResolver). A caller holding the graph
+// populates it; one that leaves it empty loses the weaker neighbor match in AnchorHits and
+// nothing else.
 //
 // Ordering follows the store walk and then anchor position. Every anchor appears exactly once,
 // including anchor kinds no join can match, because absent is indistinguishable from clean.
-func ResolveAllAnchors(ctx context.Context, dir string, res Resolver) ([]ResolvedAnchor, error) {
+func ResolveAnchors(ctx context.Context, dir string, res Resolver) ([]ResolvedAnchor, error) {
 	found, _, err := Inspect(dir)
 	if err != nil {
 		return nil, err
@@ -152,7 +168,10 @@ func ResolveAllAnchors(ctx context.Context, dir string, res Resolver) ([]Resolve
 				Title:  n.Title,
 				Pos:    i,
 				Anchor: a,
-				Status: resolveAnchor(ctx, res, n.Name, a).code,
+				Status: StatusUngraded,
+			}
+			if res != nil {
+				r.Status = resolveAnchor(ctx, res, n.Name, a).code
 			}
 			if a.Kind == AnchorFile {
 				r.File = a.Target

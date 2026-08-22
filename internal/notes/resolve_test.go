@@ -31,7 +31,7 @@ func (f fakeResolver) DeclDigest(_ context.Context, a Anchor) (string, error) {
 	return f.decls[string(a.Kind)+":"+a.Target], nil
 }
 
-func TestResolveAnchors(t *testing.T) {
+func TestAnchorIssues(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "notes")
 	require.NoError(t, Save(dir, Note{
 		Name:  "pairing",
@@ -46,7 +46,7 @@ func TestResolveAnchors(t *testing.T) {
 	res := fakeResolver{live: map[string]bool{
 		"file:internal/cache/cache.go": true,
 	}}
-	issues, err := ResolveAnchors(context.Background(), dir, res)
+	issues, err := AnchorIssues(context.Background(), dir, res)
 	require.NoError(t, err)
 	require.Len(t, issues, 1, "only the unresolved anchor is reported")
 
@@ -61,7 +61,7 @@ func TestResolveAnchors(t *testing.T) {
 		"a low-confidence re-anchor is worse than an admitted failure")
 }
 
-func TestResolveAnchors_AllLiveReportsNothing(t *testing.T) {
+func TestAnchorIssues_AllLiveReportsNothing(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "notes")
 	require.NoError(t, Save(dir, Note{
 		Name:    "fine",
@@ -69,15 +69,15 @@ func TestResolveAnchors_AllLiveReportsNothing(t *testing.T) {
 		Anchors: []Anchor{{Kind: AnchorProject, Target: "."}},
 	}))
 
-	issues, err := ResolveAnchors(context.Background(), dir, fakeResolver{live: map[string]bool{"project:.": true}})
+	issues, err := AnchorIssues(context.Background(), dir, fakeResolver{live: map[string]bool{"project:.": true}})
 	require.NoError(t, err)
 	assert.Empty(t, issues)
 }
 
-// TestResolveAnchors_NeverRewritesTheStore is the guard against the failure mode every
+// TestAnchorIssues_NeverRewritesTheStore is the guard against the failure mode every
 // system in this space eventually shipped: silently re-pointing an anchor at a best guess,
 // which turns a detectable problem into a confident wrong answer.
-func TestResolveAnchors_NeverRewritesTheStore(t *testing.T) {
+func TestAnchorIssues_NeverRewritesTheStore(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "notes")
 	n := Note{
 		Name:    "pairing",
@@ -89,7 +89,7 @@ func TestResolveAnchors_NeverRewritesTheStore(t *testing.T) {
 	before, err := Get(dir, n.Name)
 	require.NoError(t, err)
 
-	_, err = ResolveAnchors(context.Background(), dir, fakeResolver{})
+	_, err = AnchorIssues(context.Background(), dir, fakeResolver{})
 	require.NoError(t, err)
 
 	after, err := Get(dir, n.Name)
@@ -105,9 +105,9 @@ func TestDegradeHintNamesTheFallback(t *testing.T) {
 	assert.Contains(t, degradeHint(Anchor{Kind: AnchorProject}), "no longer exists")
 }
 
-// TestResolveAnchorsReportsDrift covers the case an existence check cannot see: the code
+// TestAnchorIssuesReportsDrift covers the case an existence check cannot see: the code
 // is still there and quietly stopped saying what the note claims.
-func TestResolveAnchorsReportsDrift(t *testing.T) {
+func TestAnchorIssuesReportsDrift(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "notes")
 	require.NoError(t, Save(dir, Note{
 		Name:    "pairing",
@@ -119,7 +119,7 @@ func TestResolveAnchorsReportsDrift(t *testing.T) {
 		digests: map[string]string{"symbol:m cache/Put().": "bbbbbbbbbbbbbbbb"},
 	}
 
-	issues, err := ResolveAnchors(context.Background(), dir, res)
+	issues, err := AnchorIssues(context.Background(), dir, res)
 	require.NoError(t, err)
 	require.Len(t, issues, 1)
 	assert.Equal(t, CodeDriftedAnchor, issues[0].Code)
@@ -127,10 +127,10 @@ func TestResolveAnchorsReportsDrift(t *testing.T) {
 	assert.Contains(t, issues[0].Hint, "Nothing re-records it for you")
 }
 
-// TestResolveAnchorsSilentWhenADigestIsUnavailable pins the direction the tuning must
+// TestAnchorIssuesSilentWhenADigestIsUnavailable pins the direction the tuning must
 // fail in. An absent fingerprint is no opinion, never "changed": a gate that cries drift
 // because it could not compute something is exactly the gate people stop reading.
-func TestResolveAnchorsSilentWhenADigestIsUnavailable(t *testing.T) {
+func TestAnchorIssuesSilentWhenADigestIsUnavailable(t *testing.T) {
 	dir := filepath.Join(t.TempDir(), "notes")
 	require.NoError(t, Save(dir, Note{
 		Name:    "pairing",
@@ -139,7 +139,7 @@ func TestResolveAnchorsSilentWhenADigestIsUnavailable(t *testing.T) {
 	}))
 	live := map[string]bool{"symbol:m cache/Put().": true}
 
-	issues, err := ResolveAnchors(context.Background(), dir, fakeResolver{live: live}) // no digests at all
+	issues, err := AnchorIssues(context.Background(), dir, fakeResolver{live: live}) // no digests at all
 	require.NoError(t, err)
 	assert.Empty(t, issues, "an uncomputable fingerprint is silence")
 
@@ -151,7 +151,7 @@ func TestResolveAnchorsSilentWhenADigestIsUnavailable(t *testing.T) {
 		Title:   "Never re-anchored",
 		Anchors: []Anchor{{Kind: AnchorSymbol, Target: "m cache/Put()."}},
 	}))
-	issues, err = ResolveAnchors(context.Background(), fresh, fakeResolver{
+	issues, err = AnchorIssues(context.Background(), fresh, fakeResolver{
 		live:    live,
 		digests: map[string]string{"symbol:m cache/Put().": "bbbbbbbbbbbbbbbb"},
 	})
@@ -212,13 +212,13 @@ func TestRecordDigestsUpdatesTheNoteInPlaceAfterARename(t *testing.T) {
 }
 
 // A verify warning names the file to go and repair, so it has to be the file that exists.
-func TestResolveAnchorsReportsTheRealFileAfterARename(t *testing.T) {
+func TestAnchorIssuesReportsTheRealFileAfterARename(t *testing.T) {
 	dir := t.TempDir()
 	file := filepath.Join(dir, "Some Note.md")
 	require.NoError(t, os.WriteFile(file,
 		[]byte("---\nmagus:\n  id: pairing\n  title: Two caches\n  anchors:\n    - kind: symbol\n      target: m gone/Removed().\n---\n\nProse.\n"), 0o644))
 
-	issues, err := ResolveAnchors(context.Background(), dir, fakeResolver{})
+	issues, err := AnchorIssues(context.Background(), dir, fakeResolver{})
 	require.NoError(t, err)
 	require.Len(t, issues, 1)
 	assert.Equal(t, file, issues[0].Path)
@@ -270,7 +270,7 @@ func TestRecordDigestsStampsTheRevision(t *testing.T) {
 
 	// The drift report is what the provenance is FOR: naming the diff turns "something
 	// changed" into something a reader can act on without going looking.
-	issues, err := ResolveAnchors(context.Background(), dir, fakeResolver{
+	issues, err := AnchorIssues(context.Background(), dir, fakeResolver{
 		live:    map[string]bool{"file:a.go": true},
 		digests: map[string]string{"file:a.go": "d2"},
 	})
@@ -301,7 +301,7 @@ func TestBodyChangeUnderAnUnchangedDeclarationIsNotDrift(t *testing.T) {
 		decls:   map[string]string{"symbol:m internal/cache/Store#Put().": "decl"},
 	}
 
-	issues, err := ResolveAnchors(t.Context(), dir, res)
+	issues, err := AnchorIssues(t.Context(), dir, res)
 	require.NoError(t, err)
 	require.Len(t, issues, 1)
 	assert.Equal(t, CodeAnchorBodyChanged, issues[0].Code)
@@ -325,7 +325,7 @@ func TestDeclarationChangeIsStillDrift(t *testing.T) {
 		decls:   map[string]string{"symbol:m internal/cache/Store#Put().": "newdecl"},
 	}
 
-	issues, err := ResolveAnchors(t.Context(), dir, res)
+	issues, err := AnchorIssues(t.Context(), dir, res)
 	require.NoError(t, err)
 	require.Len(t, issues, 1)
 	assert.Equal(t, CodeDriftedAnchor, issues[0].Code, "what the subject IS changed")
@@ -360,7 +360,7 @@ func TestAnUngradedAnchorReportsDrift(t *testing.T) {
 				decls:   tt.current,
 			}
 
-			issues, err := ResolveAnchors(t.Context(), dir, res)
+			issues, err := AnchorIssues(t.Context(), dir, res)
 			require.NoError(t, err)
 			require.Len(t, issues, 1)
 			assert.Equal(t, CodeDriftedAnchor, issues[0].Code)
@@ -406,12 +406,12 @@ func gradedStore(t *testing.T) (string, fakeResolver) {
 	}
 }
 
-// TestResolveAllAnchorsSeesEveryAnchor covers what the Issue view structurally cannot: a
+// TestResolveAnchorsSeesEveryAnchor covers what the Issue view structurally cannot: a
 // healthy anchor, which is most of them and most of what a diff touches.
-func TestResolveAllAnchorsSeesEveryAnchor(t *testing.T) {
+func TestResolveAnchorsSeesEveryAnchor(t *testing.T) {
 	dir, res := gradedStore(t)
 
-	all, err := ResolveAllAnchors(t.Context(), dir, res)
+	all, err := ResolveAnchors(t.Context(), dir, res)
 	require.NoError(t, err)
 	require.Len(t, all, 5, "every anchor of every note, healthy ones included")
 
@@ -440,15 +440,15 @@ func TestResolveAllAnchorsSeesEveryAnchor(t *testing.T) {
 		"a symbol key names a package and a descriptor, never a path; only the graph knows where it sits")
 }
 
-// TestResolveAllAnchorsAgreesWithResolveAnchors is the reason the two APIs share a grader. A
+// TestResolveAnchorsAgreesWithAnchorIssues is the reason the two APIs share a grader. A
 // surface whose verdict disagreed with `magus notes verify` would be a second opinion rather
 // than a second view of one answer, and nothing in the types would catch the divergence.
-func TestResolveAllAnchorsAgreesWithResolveAnchors(t *testing.T) {
+func TestResolveAnchorsAgreesWithAnchorIssues(t *testing.T) {
 	dir, res := gradedStore(t)
 
-	issues, err := ResolveAnchors(t.Context(), dir, res)
+	issues, err := AnchorIssues(t.Context(), dir, res)
 	require.NoError(t, err)
-	all, err := ResolveAllAnchors(t.Context(), dir, res)
+	all, err := ResolveAnchors(t.Context(), dir, res)
 	require.NoError(t, err)
 
 	// Keyed by note because the Issue view identifies an anchor only inside a message written
@@ -472,18 +472,51 @@ func TestResolveAllAnchorsAgreesWithResolveAnchors(t *testing.T) {
 }
 
 // The join is what the per-anchor view exists to feed, and a drift finding has to survive the
-// trip: AnchorsTouching reports what a diff touches and never re-grades.
-func TestResolveAllAnchorsDrivesTheDiffJoin(t *testing.T) {
+// trip: AnchorHits reports what a diff touches and never re-grades.
+func TestResolveAnchorsDrivesTheDiffJoin(t *testing.T) {
 	dir, res := gradedStore(t)
 
-	all, err := ResolveAllAnchors(t.Context(), dir, res)
+	all, err := ResolveAnchors(t.Context(), dir, res)
 	require.NoError(t, err)
 
-	hits := AnchorsTouching(all, []string{"internal/cache/cache.go"}, nil)
+	hits := AnchorHits(all, []string{"internal/cache/cache.go"}, nil)
 	require.Len(t, hits, 1)
 	assert.Equal(t, "drifted", hits[0].Note)
 	assert.Equal(t, MatchFile, hits[0].Match)
 	assert.Equal(t, CodeDriftedAnchor, hits[0].Status)
+}
+
+// TestResolveAnchorsUngradedWithoutAResolver pins what the nil resolver buys: a caller whose
+// knowledge graph will not load still learns WHAT is anchored, and every anchor says so rather
+// than reporting the "" a graded pass reserves for anchors it checked and found clean.
+func TestResolveAnchorsUngradedWithoutAResolver(t *testing.T) {
+	dir, _ := gradedStore(t)
+
+	all, err := ResolveAnchors(t.Context(), dir, nil)
+	require.NoError(t, err)
+	require.Len(t, all, 5, "an ungraded pass sees exactly the anchors a graded one does")
+
+	for _, r := range all {
+		assert.Equal(t, StatusUngraded, r.Status, "note %s anchor %d", r.Note, r.Pos)
+	}
+}
+
+// TestUngradedResolutionDiffersOnlyInStatus: the nil-resolver path is the same walk, not a
+// second one. Fewer anchors, a different order, or an unpopulated File would make a drift
+// column outage read as a change in what the store is about.
+func TestUngradedResolutionDiffersOnlyInStatus(t *testing.T) {
+	dir, res := gradedStore(t)
+
+	graded, err := ResolveAnchors(t.Context(), dir, res)
+	require.NoError(t, err)
+	ungraded, err := ResolveAnchors(t.Context(), dir, nil)
+	require.NoError(t, err)
+
+	require.Len(t, ungraded, len(graded))
+	for i, want := range graded {
+		want.Status = StatusUngraded
+		assert.Equal(t, want, ungraded[i])
+	}
 }
 
 // errDeclResolver computes a body digest but fails on the declaration - a symbol the indexer
