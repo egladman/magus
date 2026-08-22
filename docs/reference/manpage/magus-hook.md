@@ -40,6 +40,18 @@ which is an opaque label the caller chooses rather than a set magus knows: a
 magus that enumerated hosts would need a release per host, and a wrapper that
 cannot extract a session id must still be able to get a verdict.
 
+--unit is the exception: it IS policy. It names the delegation unit the caller is
+acting as, and a write is then graded against that unit's declared write boundary
+in this workspace's delegation ledger. Inside its owned paths passes; inside its
+forbidden paths, or inside another live unit's owned paths, is denied and the
+reason names the owning unit. It defaults to $MAGUS_UNIT, and the flag wins when
+both are set.
+
+A call that names no valid unit while a fleet is running is ADVISED and never
+blocked: a person editing their own repository has no unit id, and the guard is a
+seatbelt for harnesses that opt in rather than a sandbox. With no ledger, or with
+no unit in it declared or running, nothing is graded and nothing is read.
+
 ## Options
 
 **--agent-name** *string*
@@ -59,6 +71,9 @@ cannot extract a session id must still be able to get a verdict.
 
 **--transcript** *string*
 : Path to the host's own log of this session, recorded as a pointer; magus never opens it
+
+**--unit** *string*
+: The delegation unit this call is acting as, graded against the ledger's declared write boundary (defaults to $MAGUS_UNIT)
 
 ## Examples
 
@@ -84,6 +99,12 @@ printf '%s' 'internal/cache/output.go' | magus hook --observe
 
 ```sh
 printf '%s' 'rm -rf /' | magus hook -o json
+```
+
+*Grade a write as a delegation unit*
+
+```sh
+printf '%s' 'internal/ledger/store.go' | magus hook --path --unit f2-guard
 ```
 
 ## See Also

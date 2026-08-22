@@ -379,20 +379,20 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	})
 }
 
-// unitMaxLen bounds a unit id: long enough for a branch-shaped ledger name, short enough that
+// MaxUnitIDLen bounds a unit id: long enough for a branch-shaped ledger name, short enough that
 // the id stays a correlation key rather than a payload riding every event line.
-const unitMaxLen = 128
+const MaxUnitIDLen = 128
 
 // ValidUnitID reports whether id may be stamped as a work-ledger unit: letters, digits and the
 // separators -_./: a ledger row or a branch-shaped unit name uses, never empty, at most
-// unitMaxLen characters.
+// MaxUnitIDLen characters.
 //
 // The narrowness is a security property, not a naming preference. Unit is exempt from event
 // redaction (see redactEvent), so EVERY channel that can stamp one - the delegation marker below,
 // the environment channel in [UnitFromEnv], a producer's own field - has to pass its candidate
 // through here first, or the exemption becomes a way to carry a credential onto an event line.
 func ValidUnitID(id string) bool {
-	if id == "" || len(id) > unitMaxLen {
+	if id == "" || len(id) > MaxUnitIDLen {
 		return false
 	}
 	for _, c := range id {
@@ -438,7 +438,7 @@ func UnitFromEnv() string {
 			// be anything at all.
 			slog.Warn("magus: ignoring MAGUS_UNIT and recording no unit for this process: a unit id is letters, digits and -_./: only, and never empty",
 				slog.Int("length", len(id)),
-				slog.Int("max_length", unitMaxLen))
+				slog.Int("max_length", MaxUnitIDLen))
 		})
 		return ""
 	}
