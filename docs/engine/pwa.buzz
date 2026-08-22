@@ -25,15 +25,15 @@ export fun writeManifest(site: Site) > void !> any {
     // Android/Windows install prompts; icon-512-maskable holds the mark inside the 80% safe
     // circle for the crops a launcher applies.
     //
-    // The docs and the console share ONE mark, the mascot's hat, and differ only in color:
-    // the docs take the staff-orb amber, the console the skin teal. Those sit near
-    // complementary, so the two installed apps are unmistakable side by side while staying
-    // one family. See assets/icon.svg for the palette reasoning.
+    // The docs and the console share ONE mark and differ only in hue - amber for the docs, the
+    // console's own spruce. See assets/icon.svg for why those values, and why both sit dark on
+    // a pale ground.
     //
-    // background_color is the splash-screen fill while the app boots. The manifest spec has
-    // no light/dark variant (unlike theme-color in the HTML head), so one value must read in
-    // both schemes: #2a2e34 is the icon's own ground, giving dark users a seamless splash
-    // and light users a brief on-brand flash instead of a blinding white one.
+    // background_color is the splash fill while the app boots, and the spec allows ONE value -
+    // no light/dark variant, unlike theme-color in the HTML head. It deliberately does NOT
+    // match the icon's pale ground: cream here would fire a white flash at every dark-scheme
+    // user on every launch, which costs more than the brief seam of a dark splash handing off
+    // to a pale icon.
     final body = "\{\n"
         + "  \"name\": \"" + site.config.title + "\",\n"
         + "  \"short_name\": \"" + site.config.title + "\",\n"
