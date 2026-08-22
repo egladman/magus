@@ -407,15 +407,25 @@ function volatilityTile(): Tile {
 
 // insightSection builds the labeled "Insight" band (heading + a manual refresh
 // button) and the five lens tiles. main.ts mounts the band and forwards store
-// updates to each tile. onRefresh forces an out-of-band /api/v1/insight refetch.
-export function insightSection(onRefresh: () => void): { el: HTMLElement; tiles: Tile[] } {
+// updates to each tile. onRefresh forces an out-of-band /api/v1/insight refetch,
+// returning its promise so the button can show it is doing something: the poll it
+// forces can take seconds, and nothing else about the tiles visibly changes until
+// it resolves.
+export function insightSection(onRefresh: () => Promise<void>): { el: HTMLElement; tiles: Tile[] } {
   const band = h("div", "console-dashboard-insight");
   const head = h("div", "console-dashboard-insight__head");
   head.append(h("h2", "console-dashboard-insight__title", "Insight"));
   const refresh = h("button", "console-dashboard-insight__refresh", "Refresh");
   refresh.type = "button";
   refresh.title = "Refetch the insight lenses now";
-  refresh.addEventListener("click", () => onRefresh());
+  refresh.addEventListener("click", () => {
+    refresh.disabled = true;
+    refresh.textContent = "Refreshing…";
+    void onRefresh().finally(() => {
+      refresh.disabled = false;
+      refresh.textContent = "Refresh";
+    });
+  });
   head.append(refresh);
   band.append(head);
   band.append(

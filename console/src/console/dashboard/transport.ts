@@ -417,9 +417,11 @@ export class DashboardTransport {
     }
   }
 
-  // refreshInsight forces an out-of-band refetch (the section's refresh button).
-  refreshInsight(): void {
-    if (this.insightHost) void this.fetchInsight();
+  // refreshInsight forces an out-of-band refetch (the section's refresh button). Returns the
+  // fetch's promise, not fire-and-forget, so the button can show feedback for exactly the
+  // duration of the click that asked for it - a background poll tick has no caller to tell.
+  refreshInsight(): Promise<void> {
+    return this.insightHost ? this.fetchInsight() : Promise.resolve();
   }
 
   private async fetchInsight(): Promise<void> {
