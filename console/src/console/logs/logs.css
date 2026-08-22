@@ -264,6 +264,16 @@
 /* Invocation group header in a multi-invocation waterfall: the command, bolded. */
 .console-log-waterfall__grouphead { font-size: 10px; font-weight: 600; fill: var(--pf-t--global--text--color--regular); font-family: var(--pf-t--global--font--family--mono); }
 .console-log-waterfall__label--step { fill: var(--pf-t--global--text--color--subtle); font-size: 8px; }
+/* The chart is authored in a fixed 900-unit viewBox and scales to the panel, so its type scales with
+   it: at a 375px viewport the whole drawing renders at 0.357 and the 8px axis labels land at 2.85px.
+   Hold the drawing at the width it was drawn for and let the panel scroll across it, rather than
+   shrinking the labels to nothing to avoid a scrollbar. Scoped to [data-waterfall] so the text log,
+   which wraps and must not scroll sideways, is untouched. The zoom stepper still composes on top
+   (it applies `zoom` to this same element), so scaling back down to fit stays one control away. */
+@media (max-width: 47.999rem) {
+  .console-render-body[data-waterfall] { overflow-x: auto; }
+  .console-render-body[data-waterfall] .console-log-waterfall__svg { min-inline-size: 900px; }
+}
 .console-log-waterfall__bar { fill: var(--console-accent); }
 .console-log-waterfall__bar.console-log-waterfall__bar--step { fill: var(--pf-t--global--text--color--subtle); opacity: 0.7; }
 .console-log-waterfall__bar[data-status="pass"] { fill: var(--console-status-ok); }
