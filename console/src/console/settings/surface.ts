@@ -424,6 +424,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   diffHead.append(h("h2", "console-settings-diff__title", "Pending changes"));
 
   const viewToggle = h("div", "pf-v6-c-toggle-group console-settings-diff__view");
+  viewToggle.dataset.controlSize = "compact";
   viewToggle.setAttribute("role", "group");
   viewToggle.setAttribute("aria-label", "Pending changes view");
   const viewButtons: ["pretty" | "raw", HTMLButtonElement][] = [];

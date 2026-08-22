@@ -136,10 +136,13 @@
   font-weight: var(--pf-t--global--font--weight--heading--bold);
   color: var(--pf-t--global--text--color--regular);
 }
-/* The view toggle sits quietly at the end of the header; compact so it does not tower over the heading. */
+/* The view toggle sits quietly at the end of the header; compact so it does not tower over the heading.
+   Same control as the plan surface's source switch, so it takes its height from the same token rather
+   than from a second copy of the same padding guess. */
 .console-settings-diff__view { margin-left: auto; }
 .console-settings-diff__view .pf-v6-c-toggle-group__button {
-  padding-block: 0.15rem;
+  block-size: var(--console-control-block-size);
+  padding-block: 0;
   padding-inline: 0.5rem;
   font-size: var(--pf-t--global--font--size--body--sm);
 }
