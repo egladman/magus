@@ -115,6 +115,40 @@
   --pf-t--global--border--radius--control--form-element: 9px;
 }
 
+/* --- Control block size -----------------------------------------------------------------
+   ONE height for the shared controls, opted into with data-control-size on a group and enforced by
+   the magus/control-size-token stylelint rule. It exists because the console had grown eight
+   distinct control heights - 14, 18.4, 21.6, 23, 25, 28, 29 and 37px - and every hand-tuned one was
+   a stylesheet solving the same problem again in isolation.
+
+   PatternFly ships no control-height token; it DERIVES height as one line box plus the vertical
+   control spacer, written out in its own Button/button.css:
+
+     --pf-v6-c-button--MinWidth: calc(1lh + PaddingBlockStart + PaddingBlockEnd)
+
+   So this is PF's formula restated as a height and pinned to the body ramp, rather than a number
+   somebody picked. Two consequences worth knowing before adopting:
+
+   - The default tier is a NO-OP for a plain PF control: it already measures exactly this. Only the
+     hand-tuned outliers move, which is what makes the migration safe to land a group at a time.
+   - The compact tier IS pf-m-small's geometry (button.css points that modifier at the compact
+     spacer), so the ad-hoc 23/24/25.5/27px sizes collapse onto a real PF step, not a new one.
+
+   Pinned to --font--size--body--default rather than inherited em so a child's font-size cannot
+   silently change the box the row is aligned against. */
+:root {
+  --console-control-block-size: calc(
+    var(--pf-t--global--font--size--body--default) * var(--pf-t--global--font--line-height--body) +
+      2 * var(--pf-t--global--spacer--control--vertical--default)
+  );
+}
+[data-control-size="compact"] {
+  --console-control-block-size: calc(
+    var(--pf-t--global--font--size--body--default) * var(--pf-t--global--font--line-height--body) +
+      2 * var(--pf-t--global--spacer--control--vertical--compact)
+  );
+}
+
 :root {
   /* --- 2. System font stack ------------------------------------------------------------
      Point PatternFly's font-family tokens at a system stack so its @font-face RedHat
