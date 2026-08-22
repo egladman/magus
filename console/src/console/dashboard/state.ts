@@ -932,6 +932,10 @@ export interface DashboardState {
   metrics: MetricsView | null;
   samples: SampleView[];
   insight: InsightView | null;
+  // Why the insight lenses have no data, or null when they do. A tile with `insight === null` cannot
+  // tell "the daemon has not answered yet" from "it answered and the window is empty", and the two
+  // want opposite copy: the first is unknown, the second is a measured absence.
+  insightError: string | null;
   tools: ToolsView | null;
   // Agent traffic seen in the recent window (mapAgentActivity). null until the activity poll has
   // produced a frame, or when the daemon serves no trail.
@@ -959,6 +963,7 @@ export function initialState(): DashboardState {
     metrics: null,
     samples: [],
     insight: null,
+    insightError: "Reading history...",
     tools: null,
     agents: null,
     logLines: [],

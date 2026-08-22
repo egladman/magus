@@ -123,7 +123,12 @@ function hotspotFilesTile(): Tile {
   return {
     el: card.el,
     update(s: DashboardState) {
-      if (!s.insight) return;
+      if (!s.insight) {
+        table.setUnresolved(s.insightError ?? "Reading history...");
+        card.setNote("");
+        return;
+      }
+      table.setUnresolved(null);
       const moved = s.insight.hotspotFiles.filter((f) => f.moves > 0).length;
       card.setNote(
         `${s.insight.hotspotFiles.length} files, ${s.insight.commits} commits` +
@@ -149,7 +154,12 @@ function hotspotsTile(): Tile {
   return {
     el: card.el,
     update(s: DashboardState) {
-      if (!s.insight) return;
+      if (!s.insight) {
+        table.setUnresolved(s.insightError ?? "Reading history...");
+        card.setNote("");
+        return;
+      }
+      table.setUnresolved(null);
       card.setNote(`${s.insight.hotspots.length} projects, ${s.insight.commits} commits`);
       table.setRows(s.insight.hotspots);
     },
@@ -191,7 +201,12 @@ function affinityTile(): Tile {
   return {
     el: card.el,
     update(s: DashboardState) {
-      if (!s.insight) return;
+      if (!s.insight) {
+        table.setUnresolved(s.insightError ?? "Reading history...");
+        card.setNote("");
+        return;
+      }
+      table.setUnresolved(null);
       const hidden = s.insight.affinity.filter((p) => p.hidden).length;
       card.setNote(`${s.insight.affinity.length} pairs, ${hidden} hidden`);
       table.setRows(s.insight.affinity);
@@ -247,7 +262,12 @@ function ownershipTile(): Tile {
   return {
     el: card.el,
     update(s: DashboardState) {
-      if (!s.insight) return;
+      if (!s.insight) {
+        table.setUnresolved(s.insightError ?? "Reading history...");
+        card.setNote("");
+        return;
+      }
+      table.setUnresolved(null);
       const bus1 = s.insight.ownership.filter((o) => o.busFactor1).length;
       card.setNote(`${s.insight.ownership.length} projects, ${bus1} bus-factor-1`);
       table.setRows(s.insight.ownership);
@@ -297,7 +317,12 @@ function trendTile(): Tile {
   return {
     el: card.el,
     update(s: DashboardState) {
-      if (!s.insight) return;
+      if (!s.insight) {
+        table.setUnresolved(s.insightError ?? "Reading history...");
+        card.setNote("");
+        return;
+      }
+      table.setUnresolved(null);
       const rising = s.insight.trend.filter((t) => t.delta > 0).length;
       card.setNote(`${s.insight.trend.length} projects, ${rising} rising`);
       table.setRows(s.insight.trend);
@@ -356,7 +381,12 @@ function volatilityTile(): Tile {
   return {
     el: card.el,
     update(s: DashboardState) {
-      if (!s.insight) return;
+      if (!s.insight) {
+        table.setUnresolved(s.insightError ?? "Reading history...");
+        card.setNote("");
+        return;
+      }
+      table.setUnresolved(null);
       const v = s.insight.volatility;
       if (!v) {
         card.setNote("no run history");
@@ -392,7 +422,7 @@ export function insightSection(onRefresh: () => void): { el: HTMLElement; tiles:
     h(
       "p",
       "console-dashboard-insight__sub",
-      "Where a codebase's attention and risk concentrate: four lenses read git history, volatility reads run outcomes.",
+      "Where a codebase's attention and risk concentrate: five lenses read git history, volatility reads run outcomes.",
     ),
   );
 

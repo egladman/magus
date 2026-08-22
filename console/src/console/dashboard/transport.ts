@@ -420,14 +420,23 @@ export class DashboardTransport {
     const host = this.insightHost;
     if (!host) return;
     if (this.insightAbort) this.insightAbort.abort();
-    this.insightAbort = new AbortController();
+    const ctrl = new AbortController();
+    this.insightAbort = ctrl;
     try {
       const client = createClient(InsightService, createDaemonTransport(host, getLiveToken()));
-      const resp = await client.getInsight({}, { signal: this.insightAbort.signal });
-      this.store.set({ insight: mapInsight(resp) });
-    } catch {
-      // An abort, a network blip, or a daemon with no workspace (CodeUnavailable): leave the
-      // prior insight in place; the poll retries.
+      const resp = await client.getInsight({}, { signal: ctrl.signal });
+      this.store.set({ insight: mapInsight(resp), insightError: null });
+    } catch (e) {
+      // A network blip or a daemon with no workspace (CodeUnavailable): leave the prior insight in
+      // place; the poll retries. But RECORD it, because on the first connect there is no prior
+      // insight to leave and the tiles would otherwise report an empty window as a measured result.
+      //
+      // Tested on ctrl's own signal rather than the error: a superseded poll is this poller
+      // cancelling itself and is not a failure, and the transport does not promise a stable error
+      // shape for it (a fetch abort and a Connect Canceled do not look alike).
+      if (ctrl.signal.aborted) return;
+      const msg = e instanceof Error ? e.message : String(e);
+      this.store.set({ insightError: "The daemon did not answer (" + msg + ")." });
     }
   }
 
