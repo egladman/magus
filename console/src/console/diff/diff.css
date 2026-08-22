@@ -17,7 +17,11 @@
   --console-diff-add: var(--pf-t--global--color--status--success--default, #3e8635);
   --console-diff-del: var(--pf-t--global--color--status--danger--default, #c9190b);
   --console-diff-surface: var(--pf-t--global--background--color--primary--default, #ffffff);
-  --console-diff-panel: var(--pf-t--global--background--color--secondary--default, #f2f2f2);
+  /* The surface's chrome plane - sidebar, toolbar, peek panel. --console-chrome rather than the raw
+     secondary token so this joins the shell's frame instead of sitting a plane below it: in dark the
+     raw token is #151515 against a rail and title bar at #242424, which drew a seam exactly where the
+     surface meets the shell. Identical to the old value in light, where both resolve to #f2f2f2. */
+  --console-diff-panel: var(--console-chrome, #f2f2f2);
 
   --console-syn-comment: #636d76;
   --console-syn-keyword: #715bb0;
@@ -154,9 +158,12 @@
 }
 
 /* The file being read. A left edge rather than a fill: the row already carries a status color
-   and a reach count, and a block of background would compete with both. */
+   and a reach count, and a block of background would compete with both.
+   No background declaration on purpose - it used to repeat the sidebar's own fill, which was a
+   no-op only for as long as the two tokens happened to agree. Once the sidebar joined the chrome
+   plane they stopped agreeing, and the dead line would have started painting the fill the comment
+   above rules out. */
 .console-diff-sidebar__item[aria-current="true"] {
-  background: var(--pf-t--global--background--color--secondary--default);
   box-shadow: inset 2px 0 0 var(--console-accent);
 }
 
