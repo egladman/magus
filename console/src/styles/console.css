@@ -1677,7 +1677,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
     inset-inline-end: 0; inset-inline-start: auto;
     width: var(--pf-v6-c-drawer__panel--md--FlexBasis, var(--console-refdrawer-w)); max-width: 100%;
     margin: 0; transform: none;
-    box-shadow: var(--pf-t--global--box-shadow--lg);
+    /* LEFT only, not the full-perimeter --lg blur: the panel's top and bottom edges already sit
+       flush against the title bar and the status bar, so a shadow there has nowhere to cast but
+       onto that chrome - which read as a hazy wash bleeding down over the status bar. The left
+       edge is the only one actually separating the panel from something behind it (the content
+       pane), so that is the only side that needs the cast. */
+    box-shadow: var(--pf-t--global--box-shadow--lg--left);
     z-index: var(--pf-t--global--z-index--200);
   }
 }
