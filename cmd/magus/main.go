@@ -266,6 +266,12 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// did. Not forwarded either; there is no warm daemon state to reuse for a
 		// listing that is one directory read.
 		return dispatchProfile{needsConfig: true}
+	case "attention":
+		// Same store, same reasons as activity. It must additionally stay usable while
+		// the workspace is broken: an agent blocked on a person is exactly the state a
+		// half-finished edit produces, and a queue that needed a loadable magusfile
+		// would go dark when it is needed most.
+		return dispatchProfile{needsConfig: true}
 	case "status":
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true}
 	case "server":
@@ -754,6 +760,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return configCmd(ctx, root, globalCfg, subArgs)
 	case "activity":
 		return activityCmd(ctx, root, subArgs)
+	case "attention":
+		return attentionCmd(ctx, root, subArgs)
 	case "memory":
 		return memoryCmd(ctx, root, subArgs)
 	case "notes":
@@ -775,7 +783,7 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 	case "hook":
 		return hookCmd(ctx, os.Stdin, os.Stdout, subArgs)
 	case "notify":
-		return notifyCmd(ctx, os.Stdin, os.Stdout, subArgs)
+		return notifyCmd(ctx, root, os.Stdin, os.Stdout, subArgs)
 	case "self":
 		return selfCmd(ctx, root, subArgs)
 	case "buzz":

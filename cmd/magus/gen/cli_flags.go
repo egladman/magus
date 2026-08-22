@@ -73,6 +73,8 @@ const (
 	FlagAgentPrune = "prune"
 	// agent: --tar
 	FlagAgentTar = "tar"
+	// attention dispose: --note
+	FlagAttentionDisposeNote = "note"
 	// buzz: --C
 	FlagBuzzC = "C"
 	// buzz: --e
@@ -902,6 +904,18 @@ type ActivityFlags struct {
 func BindActivity(fs *flag.FlagSet) *ActivityFlags {
 	var f ActivityFlags
 	fs.IntVar(&f.Limit, FlagActivityLimit, 0, "Show at most this many sessions (0 for all)")
+	return &f
+}
+
+// AttentionDisposeFlags are the flags declared for `magus attention dispose`.
+type AttentionDisposeFlags struct {
+	Note string // --note
+}
+
+// BindAttentionDispose registers `magus attention dispose`'s flags on fs and returns the destination.
+func BindAttentionDispose(fs *flag.FlagSet) *AttentionDisposeFlags {
+	var f AttentionDisposeFlags
+	fs.StringVar(&f.Note, FlagAttentionDisposeNote, "", "Record why the request is being closed, alongside the disposition")
 	return &f
 }
 

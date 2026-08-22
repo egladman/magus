@@ -14,6 +14,11 @@ knows nothing about magus's event schema can still raise a well\-formed one.
 \-\-outcome names the event's outcome vocabulary. \-\-desktop additionally
 raises an operating\-system notification, which is the part a human notices;
 without it the event is recorded and nothing pops up.
+.PP
+An event whose outcome is waiting (blocked on input) or permission (blocked on
+approval) additionally opens a durable request in this repository, listed by
+`magus attention` and closed only by a person. Any other outcome opens
+none. This is the only command that opens one.
 .SH OPTIONS
 .RS
 .TP
@@ -56,6 +61,7 @@ printf '%s\(rsn' '{"outcome":"permission","source":{"kind":"agent"},"message":"n
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
 \fBmagus\-activity\fR(1),
+\fBmagus\-attention\fR(1),
 \fBmagus\-memory\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),

@@ -44,10 +44,15 @@ func TestEventFromStdin(t *testing.T) {
 }
 
 func TestNotifyCmd(t *testing.T) {
+	// A waiting or permission event opens a real attention request, so the store is
+	// redirected here; without it these subtests would file requests into the
+	// developer's own queue.
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root := t.TempDir()
 	run := func(stdin string, args ...string) (string, error) {
 		var out bytes.Buffer
 		global = globalFlags{}
-		err := notifyCmd(context.Background(), strings.NewReader(stdin), &out, args)
+		err := notifyCmd(context.Background(), root, strings.NewReader(stdin), &out, args)
 		return out.String(), err
 	}
 

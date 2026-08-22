@@ -24,7 +24,12 @@ import (
 // Notification delivery is deliberately best effort. Hosts must be able to
 // invoke this from a hook without a missing desktop notifier breaking the agent
 // session that the notification is meant to help.
-func notifyCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) error {
+//
+// This is the ONLY producer of attention requests. An event that means the work
+// has stopped until a person acts also opens a durable request `magus attention`
+// lists; there is deliberately no `attention raise` twin, because one ingest path
+// is what keeps the queue's contents traceable to a single normalization.
+func notifyCmd(ctx context.Context, root string, in io.Reader, out io.Writer, args []string) error {
 	fset := flag.NewFlagSet("notify", flag.ContinueOnError)
 	bindDisplayFlags(fset)
 	nf := gen.BindNotify(fset)
@@ -52,6 +57,10 @@ func notifyCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) 
 		ev.Outcome = classifyOutcome(string(ev.Outcome))
 	}
 	normalizeEvent(&ev)
+
+	if err := recordAttentionOpen(root, ev); err != nil {
+		noteAttentionOpenFailure(err)
+	}
 
 	if nf.Desktop {
 		_ = raiseDesktopNotification(ctx, ev)
@@ -152,6 +161,9 @@ func notifyUsage(w io.Writer) {
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Raise one canonical attention event. Input may be plain text, a complete")
 	fmt.Fprintln(w, "types.Event JSON envelope. --desktop additionally raises an OS notification.")
+	fmt.Fprintln(w, "")
+	fmt.Fprintln(w, "An event whose outcome is waiting or permission also opens a durable request")
+	fmt.Fprintln(w, "in this repository, which `magus attention` lists and only a person closes.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
 	fmt.Fprintf(w, "  printf '%%s\\n' 'needs approval' | magus notify --outcome permission --desktop\n")

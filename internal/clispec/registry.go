@@ -23,6 +23,7 @@ var All = []Command{
 	doctorCommand,
 	configCommand,
 	activityCommand,
+	attentionCommand,
 	memoryCommand,
 	notesCommand,
 	diffCommand,
@@ -1119,6 +1120,44 @@ activity. Use --limit to bound the listing, and -o json for the full records.`,
 	},
 }
 
+var attentionCommand = Command{
+	Name:        "attention",
+	Short:       "List the blocks agents raised and dispose of one",
+	Description: "List the open requests agents raised in this repository - work blocked on input or on approval - and close one by hand.",
+	Tags:        []string{"cli", "magus attention", "agents", "requests", "queue", "journal"},
+	Long: `List the requests agents have raised in this repository and close one.
+
+A request is opened by ` + "`magus notify`" + `: an event whose outcome is waiting
+(blocked on input) or permission (blocked on approval) becomes a durable request
+instead of a notification that scrolls past. Any other outcome opens nothing.
+
+The queue is keyed by repository identity rather than by checkout path, so every
+git worktree of one repo lists and disposes the same requests, with no daemon and
+no shared branch.
+
+Nothing closes a request automatically. There is no expiry, no severity inference
+and no auto-dispose flag, because a request magus could answer by itself would not
+have needed a person - see the doctrine page. Re-raising a block that is already
+open updates nothing and adds no second row.`,
+	Usage: "magus attention [ls] [flags]",
+	Children: []Command{
+		{Name: "ls", Short: "List open requests, oldest first (the default)"},
+		{
+			Name:  "dispose",
+			Short: "Close one open request by id",
+			Flags: []Flag{
+				{Name: "note", Kind: FlagString, Doc: "Record why the request is being closed, alongside the disposition"},
+			},
+		},
+	},
+	Examples: []Example{
+		{"List open requests", "magus attention"},
+		{"Full records as JSON", "magus attention ls -o json"},
+		{"Close one request", "magus attention dispose att-3f9c1a2b4d5e"},
+		{"Close one, saying why", `magus attention dispose att-3f9c1a2b4d5e -note "approved and pushed by hand"`},
+	},
+}
+
 var memoryCommand = Command{
 	Name:        "memory",
 	Short:       "Durable cross-session project memory",
@@ -1391,7 +1430,12 @@ knows nothing about magus's event schema can still raise a well-formed one.
 
 --outcome names the event's outcome vocabulary. --desktop additionally
 raises an operating-system notification, which is the part a human notices;
-without it the event is recorded and nothing pops up.`,
+without it the event is recorded and nothing pops up.
+
+An event whose outcome is waiting (blocked on input) or permission (blocked on
+approval) additionally opens a durable request in this repository, listed by
+` + "`magus attention`" + ` and closed only by a person. Any other outcome opens
+none. This is the only command that opens one.`,
 	Usage: "magus notify [--outcome <vocab>] [--desktop]",
 	Flags: []Flag{
 		{Name: "outcome", Kind: FlagString, Doc: "Outcome vocabulary for the event"},
