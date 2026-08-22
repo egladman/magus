@@ -825,6 +825,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      strip's own cast rather than separate one tab from the next. */
   box-shadow: var(--pf-t--global--box-shadow--sm--left), var(--pf-t--global--box-shadow--sm--right);
 }
+/* ...but the FIRST tab casts only right. It has no left neighbour to be separated from - what is over
+   there is the frame's own edge, and the cast landed on top of that hairline as a soft smudge, making
+   the border read thicker along the tab row than along the content below it. Two different weights on
+   one continuous edge, and the seam between them exactly where the strip ends. */
+#console-tabs .pf-v6-c-tabs__item.pf-m-current:first-child {
+  box-shadow: var(--pf-t--global--box-shadow--sm--right);
+}
 #console-tabs .pf-v6-c-tabs__item.pf-m-current .pf-v6-c-tabs__link { color: var(--pf-t--global--text--color--regular); }
 #console-tabs .pf-v6-c-tabs__item:not(.pf-m-current) .pf-v6-c-tabs__link { color: var(--pf-t--global--text--color--subtle); }
 #console-tabs .pf-v6-c-tabs__item:not(.pf-m-current):hover { background: var(--pf-t--global--background--color--secondary--hover, rgba(127, 127, 127, 0.12)); }
