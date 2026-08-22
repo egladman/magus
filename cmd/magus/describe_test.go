@@ -40,17 +40,23 @@ func TestDescribeWorkspacesOutput_MultiDeclared(t *testing.T) {
 	assert.NotEqual(t, out[1].Root, out[0].Root, "expected two distinct workspace roots")
 }
 
-// TestNewTargetCacheLastRun covers the four verdicts `describe target --cache` can reach
-// about the last run recorded here. Every explanation has to name the mechanism behind
-// the verdict and the next command, since that section is often the only thing a reader
-// takes away from a miss.
+// TestNewTargetCacheLastRun covers the verdicts `describe target --cache` can reach about
+// the last run recorded here. Every explanation has to name the mechanism behind the
+// verdict and the next command, since that section is often the only thing a reader takes
+// away from a miss.
+//
+// The lines are verbatim producer shapes, copied from the writeLine calls in
+// internal/cache/hash.go's hashStepInputs: keyVersion (hash.go:85), target (:114),
+// src:<rel>:<hash>:<execBit> (:147) and tool (:191), whose value cmd/magus/run.go's
+// probeTools joins as <spell>:<tool>:<token> (run.go:842). A `tool:<name>:version=<v>`
+// fixture is what let a broken split ship: no producer writes it.
 func TestNewTargetCacheLastRun(t *testing.T) {
 	t.Parallel()
-	recorded := []string{"keyVersion:3", "target:build", "src:api/main.go:aaa:0", "tool:go:version=1.25.0"}
+	recorded := []string{"keyVersion:3", "target:build", "src:api/main.go:aaa:0", "tool:go:go:go1.25.0"}
 
 	t.Run("nothing recorded", func(t *testing.T) {
 		t.Parallel()
-		got := newTargetCacheLastRun("api", "build", cache.RecordedRun{}, fs.ErrNotExist, "cafe", nil)
+		got := newTargetCacheLastRun("api", "build", cache.RecordedRun{}, fs.ErrNotExist, "cafe", false, nil)
 		assert.False(t, got.Recorded)
 		assert.Empty(t, got.Ref, "no entry, so nothing to point at")
 		assert.Contains(t, got.Explanation, "nothing to compare against")
@@ -60,21 +66,37 @@ func TestNewTargetCacheLastRun(t *testing.T) {
 	t.Run("matches", func(t *testing.T) {
 		t.Parallel()
 		rec := cache.RecordedRun{Key: "cafe", KeyInputs: recorded}
-		got := newTargetCacheLastRun("api", "build", rec, nil, "cafe", recorded)
+		got := newTargetCacheLastRun("api", "build", rec, nil, "cafe", true, recorded)
 		assert.True(t, got.Recorded)
 		assert.True(t, got.Matches)
+		assert.True(t, got.Replays)
 		assert.Equal(t, 0, got.Differences)
 		assert.Nil(t, got.First)
 		assert.Contains(t, got.Explanation, "replays that entry")
 	})
 
+	t.Run("live key hits an older entry", func(t *testing.T) {
+		t.Parallel()
+		rec := cache.RecordedRun{Key: "cafe", KeyInputs: recorded}
+		live := []string{"keyVersion:3", "target:build", "src:api/main.go:bbb:0", "tool:go:go:go1.25.0"}
+		got := newTargetCacheLastRun("api", "build", rec, nil, "f00d", true, live)
+		assert.False(t, got.Matches, "the newest entry is a different key")
+		assert.True(t, got.Replays)
+		assert.Equal(t, cache.PortableRef("f00d"), got.ReplaysRef, "the entry a run reaches is named")
+		assert.Zero(t, got.Differences, "a hit has no miss to explain")
+		assert.Nil(t, got.First)
+		assert.Contains(t, got.Explanation, "HITS")
+		assert.NotContains(t, got.Explanation, "MISSES")
+	})
+
 	t.Run("names the first differing input", func(t *testing.T) {
 		t.Parallel()
 		rec := cache.RecordedRun{Key: "cafe", KeyInputs: recorded}
-		live := []string{"keyVersion:3", "target:build", "src:api/main.go:bbb:0", "tool:go:version=1.26.0"}
-		got := newTargetCacheLastRun("api", "build", rec, nil, "f00d", live)
+		live := []string{"keyVersion:3", "target:build", "src:api/main.go:bbb:0", "tool:go:go:go1.26.0"}
+		got := newTargetCacheLastRun("api", "build", rec, nil, "f00d", false, live)
 		assert.False(t, got.Matches)
-		assert.Equal(t, 2, got.Differences)
+		assert.False(t, got.Replays)
+		assert.Equal(t, 2, got.Differences, "the edited source and the moved tool token, once each")
 		require.NotNil(t, got.First)
 		assert.Equal(t, "src:api/main.go", got.First.Input, "the earliest class in live key order leads")
 		assert.Contains(t, got.Explanation, "MISSES")
@@ -82,9 +104,22 @@ func TestNewTargetCacheLastRun(t *testing.T) {
 		assert.Contains(t, got.Explanation, "magus describe target build api --cache --inputs")
 	})
 
+	t.Run("a bumped key version is one difference", func(t *testing.T) {
+		t.Parallel()
+		rec := cache.RecordedRun{Key: "cafe", KeyInputs: recorded}
+		live := []string{"keyVersion:4", "target:build", "src:api/main.go:aaa:0", "tool:go:go:go1.25.0"}
+		got := newTargetCacheLastRun("api", "build", rec, nil, "f00d", false, live)
+		assert.Equal(t, 1, got.Differences, "one value moved, so one input moved")
+		require.NotNil(t, got.First)
+		assert.Equal(t, "keyVersion", got.First.Input)
+		assert.Equal(t, "3", got.First.Recorded)
+		assert.Equal(t, "4", got.First.Live)
+		assert.Contains(t, got.Explanation, "1 input moved")
+	})
+
 	t.Run("entry predates key inputs", func(t *testing.T) {
 		t.Parallel()
-		got := newTargetCacheLastRun("api", "build", cache.RecordedRun{Key: "cafe"}, nil, "f00d", recorded)
+		got := newTargetCacheLastRun("api", "build", cache.RecordedRun{Key: "cafe"}, nil, "f00d", false, recorded)
 		assert.True(t, got.Recorded)
 		assert.False(t, got.Matches)
 		assert.Nil(t, got.First, "there is no recorded line to blame")
@@ -104,6 +139,12 @@ func TestLastRunLines(t *testing.T) {
 
 	got = lastRunLines(targetCacheLastRun{Recorded: true, Ref: "mgs_abc123", At: at, Matches: true, Explanation: "replays."})
 	assert.Equal(t, []string{"  last recorded run: 2026-08-20T10:00:00Z  mgs_abc123  MATCHES", "    replays."}, got)
+
+	got = lastRunLines(targetCacheLastRun{Recorded: true, Ref: "mgs_abc123", At: at, Replays: true, ReplaysRef: "mgs_def456", Explanation: "hits."})
+	assert.Equal(t, []string{
+		"  last recorded run: 2026-08-20T10:00:00Z  mgs_abc123  DIFFERS; the live key HITS an older entry",
+		"    hits.",
+	}, got, "the header must not read as a miss when a run would replay")
 
 	got = lastRunLines(targetCacheLastRun{
 		Recorded:    true,

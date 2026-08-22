@@ -13,7 +13,17 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/secret"
 )
+
+// toolLine is a verbatim `tool:` key input, not an invented one: hash.go's
+// hashStepInputs writes "tool:" + v (hash.go:191) for each Step.ToolVersions entry, and
+// probeTools in run.go builds every such entry as <spell>:<tool>:<token> (run.go:842).
+// The shape matters - the last colon is the only thing separating the tool from its
+// version token, and a fixture that spells it any other way tests a producer that does
+// not exist.
+const toolLine = "tool:go:go:go1.25.0"
 
 // TestMaskKeyInputsHidesEnvValues: env values are replaced by a stable digest, every
 // other class is untouched, and an unset marker keeps its shape. The digest must
@@ -25,14 +35,14 @@ func TestMaskKeyInputsHidesEnvValues(t *testing.T) {
 		"env:TOKEN=sk-live-super-secret",
 		"env:EMPTY=",
 		"env:MISSING:unset",
-		"tool:go1.25.0",
+		toolLine,
 	}
 	got := MaskKeyInputs(in)
 
 	joined := strings.Join(got, "\n")
 	assert.NotContains(t, joined, "sk-live-super-secret", "an env value must never survive masking")
 	assert.Equal(t, []string{"keyVersion:3", "src:pkg/a/main.go:abc:0"}, got[:2], "non-env classes pass through")
-	assert.Equal(t, "tool:go1.25.0", got[5])
+	assert.Equal(t, toolLine, got[5])
 	assert.Equal(t, "env:MISSING:unset", got[4], "an unset marker carries no value to mask")
 	assert.Regexp(t, `^env:TOKEN=sha256:[0-9a-f]{12}$`, got[2])
 	assert.Regexp(t, `^env:EMPTY=sha256:[0-9a-f]{12}$`, got[3])
@@ -118,7 +128,7 @@ func TestClassDigests(t *testing.T) {
 		"src:pkg/a/main.go:abc:0",
 		"src:pkg/a/util.go:def:0",
 		"env:GOFLAGS=-trimpath",
-		"tool:go1.25.0",
+		toolLine,
 	}
 	d := ClassDigests(lines)
 	classes := make([]string, len(d))
@@ -252,15 +262,55 @@ func TestCompareKeyInputsIdentical(t *testing.T) {
 		"target:build",
 		"src:svc/main.go:abc123:0",
 		"env:GOFLAGS=sha256:0123456789ab",
-		"tool:go:version=1.25.0",
+		toolLine,
 	}
 	got := CompareKeyInputs(lines, append([]string(nil), lines...))
 	assert.Equal(t, 0, got.Differences)
 	assert.Nil(t, got.First)
 }
 
+// TestCompareKeyInputsPairsAMovedToolVersion drives the fixtures through the REAL
+// producer: StepKey collects exactly the lines hashStepInputs hashed, so this cannot pass
+// against a `tool:` layout nothing emits. A toolchain upgrade has to read as ONE input
+// carrying both versions, not as an unfamiliar line arriving beside an unfamiliar line
+// leaving.
+func TestCompareKeyInputsPairsAMovedToolVersion(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	step := makeStep(root)
+	step.Target = "build"
+
+	// A ToolVersions entry carries no class label - hashStepInputs prefixes "tool:" - so
+	// this is exactly the <spell>:<tool>:<token> string probeTools appends.
+	step.ToolVersions = []string{"go:go:go1.25.0"}
+	recorded := producedKeyInputs(t, c, &step)
+	step.ToolVersions = []string{"go:go:go1.26.0"}
+	live := producedKeyInputs(t, c, &step)
+
+	got := CompareKeyInputs(recorded, live)
+	require.Equal(t, 1, got.Differences, "a moved tool token is ONE input that changed: %+v", got)
+	require.NotNil(t, got.First)
+	assert.Equal(t, KeyInputChange{
+		Class: "tool", Input: "tool:go:go", Recorded: "go1.25.0", Live: "go1.26.0",
+	}, *got.First, "both versions must be named, and under the tool's own identity")
+}
+
+// producedKeyInputs returns the key inputs a run of step would hash, masked the way the
+// store persists them. Fixtures built this way cannot drift from the producer.
+func producedKeyInputs(t *testing.T, c *Cache, step *Step) []string {
+	t.Helper()
+	_, lines, err := c.StepKey(t.Context(), step)
+	require.NoError(t, err, "StepKey")
+	return MaskKeyInputs(lines)
+}
+
 // TestCompareKeyInputsPairsInputsByIdentity: a value that moved must read as ONE input
 // that changed, per class, rather than as a line removed and a line added.
+//
+// Every fixture below is a verbatim producer shape, taken from the writeLine calls in
+// hash.go's hashStepInputs: src (:147), env set and unset (:155, :157), tool (:191, whose
+// value run.go's probeTools joins at :842), keyVersion (:85), spellDefVersion (:185) and
+// arch (:109).
 func TestCompareKeyInputsPairsInputsByIdentity(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
@@ -293,10 +343,28 @@ func TestCompareKeyInputsPairsInputsByIdentity(t *testing.T) {
 			want:     KeyInputChange{Class: "env", Input: "env:TOKEN", Recorded: "unset", Live: "sha256:bbbbbbbbbbbb"},
 		},
 		{
-			name:     "tool version",
-			recorded: []string{"tool:go:version=1.25.0"},
-			live:     []string{"tool:go:version=1.26.0"},
-			want:     KeyInputChange{Class: "tool", Input: "tool:go:version", Recorded: "1.25.0", Live: "1.26.0"},
+			name:     "tool token",
+			recorded: []string{"tool:go:go:go1.25.0"},
+			live:     []string{"tool:go:go:go1.26.0"},
+			want:     KeyInputChange{Class: "tool", Input: "tool:go:go", Recorded: "go1.25.0", Live: "go1.26.0"},
+		},
+		{
+			name:     "key version",
+			recorded: []string{"keyVersion:3"},
+			live:     []string{"keyVersion:4"},
+			want:     KeyInputChange{Class: "keyVersion", Input: "keyVersion", Recorded: "3", Live: "4"},
+		},
+		{
+			name:     "spell definition",
+			recorded: []string{"spellDefVersion:aaa111"},
+			live:     []string{"spellDefVersion:bbb222"},
+			want:     KeyInputChange{Class: "spellDefVersion", Input: "spellDefVersion", Recorded: "aaa111", Live: "bbb222"},
+		},
+		{
+			name:     "host arch",
+			recorded: []string{"arch:amd64"},
+			live:     []string{"arch:arm64"},
+			want:     KeyInputChange{Class: "arch", Input: "arch", Recorded: "amd64", Live: "arm64"},
 		},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -310,19 +378,22 @@ func TestCompareKeyInputsPairsInputsByIdentity(t *testing.T) {
 }
 
 // TestCompareKeyInputsReportsLiveOrderFirst: "first" is the earliest class
-// hashStepInputs writes, so a changed target line is named ahead of the source hashes
-// it explains.
+// hashStepInputs writes, so a bumped keyVersion is named ahead of the source hashes it
+// explains - every src line moves when the key layout does, and blaming a file for that
+// sends the reader after the wrong thing.
 func TestCompareKeyInputsReportsLiveOrderFirst(t *testing.T) {
 	t.Parallel()
-	recorded := []string{"target:build", "src:svc/a.go:aaa:0", "src:svc/b.go:bbb:0", "dep:libs/x"}
-	live := []string{"target:build:rw", "src:svc/a.go:zzz:0", "src:svc/b.go:bbb:0"}
+	recorded := []string{"keyVersion:3", "target:build", "src:svc/a.go:aaa:0", "src:svc/b.go:bbb:0", "dep:libs/x"}
+	live := []string{"keyVersion:4", "target:build", "src:svc/a.go:zzz:0", "src:svc/b.go:bbb:0"}
 
 	got := CompareKeyInputs(recorded, live)
 	require.NotNil(t, got.First)
-	assert.Equal(t, "target:build:rw", got.First.Input, "the live key's earliest differing line leads")
-	assert.True(t, got.First.RecordedAbsent)
-	// The two target lines, the edited source, and the dropped dep.
-	assert.Equal(t, 4, got.Differences)
+	assert.Equal(t, KeyInputChange{
+		Class: "keyVersion", Input: "keyVersion", Recorded: "3", Live: "4",
+	}, *got.First, "the live key's earliest differing input leads, paired")
+	// The bumped keyVersion, the edited source, and the dropped dep - three, not the five
+	// an unpaired keyVersion would report.
+	assert.Equal(t, 3, got.Differences)
 }
 
 // TestCompareKeyInputsMarksAbsence: a class with no value slot can only appear or
@@ -336,6 +407,43 @@ func TestCompareKeyInputsMarksAbsence(t *testing.T) {
 	got = CompareKeyInputs([]string{"charm:rw"}, nil)
 	require.NotNil(t, got.First)
 	assert.Equal(t, KeyInputChange{Class: "charm", Input: "charm:rw", LiveAbsent: true}, *got.First)
+}
+
+// TestKeyInputsRedactBothSidesOfAComparison: a registered credential can ride a class
+// MaskKeyInputs does nothing for - an `arg:` line here, exactly as a magusfile passing a
+// token through --token= produces. The store redacts at write, so the live side has to
+// redact too or the two never agree again, and `describe target --cache` reports a
+// difference every run that no edit can settle.
+func TestKeyInputsRedactBothSidesOfAComparison(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+
+	const token = "sk-live-w5a-probe-token"
+	ctx := secret.ContextWithResolver(t.Context(), secret.New())
+	t.Setenv("MAGUS_TEST_KEYINPUT_TOKEN", token)
+	// Reading through the built-in env provider is what registers a value for redaction.
+	_, err := secret.ResolverFromContext(ctx).Read(ctx, "MAGUS_TEST_KEYINPUT_TOKEN")
+	require.NoError(t, err)
+
+	step := makeStep(root)
+	step.Target = "build"
+	step.ExtraArgs = []string{"--token=" + token}
+	_, raw, err := c.StepKey(ctx, &step)
+	require.NoError(t, err)
+
+	masked := MaskKeyInputs(raw)
+	require.Contains(t, strings.Join(masked, "\n"), token, "masking alone leaves a non-env class carrying it")
+
+	const key = "feedfacefeedfacefeedface"
+	require.NoError(t, c.outputs.PersistKeyInputs(ctx, key, raw))
+	stored, err := c.outputs.KeyInputsForKey(key)
+	require.NoError(t, err)
+	assert.NotContains(t, strings.Join(stored, "\n"), token, "the stored side is redacted at write")
+
+	live := RedactKeyInputs(ctx, masked)
+	assert.Empty(t, DiffKeyInputs(stored, live), "both sides redacted: nothing to diff")
+	assert.Equal(t, 0, CompareKeyInputs(stored, live).Differences)
+	assert.NotEmpty(t, DiffKeyInputs(stored, masked), "and the live-side redaction is what earns that")
 }
 
 // hashOfLines re-derives the cache key from collected key inputs, independently of

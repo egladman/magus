@@ -633,16 +633,23 @@ type targetCacheAgainst struct {
 }
 
 // targetCacheLastRun is the negative half of the cache lens: the newest entry recorded
-// for this target HERE, whether a run now would replay it, and the first key input that
-// moved when it would not. --against answers the same question about a peer the caller
-// names; this answers it about the run the caller already made, which is the one they
-// have when they ask why the cache missed.
+// for this target HERE, whether a run now would replay a stored entry, and the first key
+// input that moved when it would not. --against answers the same question about a peer
+// the caller names; this answers it about the run the caller already made, which is the
+// one they have when they ask why the cache missed.
 type targetCacheLastRun struct {
-	Recorded    bool                  `json:"recorded"`
-	Ref         string                `json:"ref,omitempty"`
-	Key         string                `json:"key,omitempty"`
-	At          time.Time             `json:"at,omitempty"`
+	Recorded bool      `json:"recorded"`
+	Ref      string    `json:"ref,omitempty"`
+	Key      string    `json:"key,omitempty"`
+	At       time.Time `json:"at,omitempty"`
+	// Matches is whether the NEWEST entry's key equals the live key. Replays is the
+	// question the reader actually asked - would a run now hit at all - and the two come
+	// apart: an edit and a revert leave the newest entry keyed to the edited tree while an
+	// older entry still sits at the live key and replays. ReplaysRef names the entry a run
+	// would reach, and is set whenever Replays is.
 	Matches     bool                  `json:"matches"`
+	Replays     bool                  `json:"replays"`
+	ReplaysRef  string                `json:"replays_ref,omitempty"`
 	Differences int                   `json:"differences,omitempty"`
 	First       *cache.KeyInputChange `json:"first_difference,omitempty"`
 	// Explanation names the mechanism behind the verdict and the next step, so the JSON
@@ -724,10 +731,12 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		if kerr != nil {
 			return kerr
 		}
-		// Mask before comparing or showing: the store persists masked lines, so both
-		// sides must be masked to be byte-comparable - and a live env value must not
-		// print merely because this machine holds it.
-		lines = cache.MaskKeyInputs(lines)
+		// Mask AND redact before comparing or showing, in that order and both: the store
+		// applies the same pair at write, so anything skipped here reads as a difference
+		// on every run rather than as drift. Masking hides env values, which must not
+		// print merely because this machine holds them; redaction is what covers a
+		// registered credential riding a non-env class.
+		lines = cache.RedactKeyInputs(ctx, cache.MaskKeyInputs(lines))
 		r := targetCacheReport{
 			Project:      e.Project,
 			Target:       e.Target,
@@ -762,7 +771,7 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 			// It never gates the exit code the way --against does: a differing key here
 			// is the NORMAL state after any edit, and failing on it would break every
 			// script that reads `--cache` for a predicted ref.
-			lr := newTargetCacheLastRun(e.Project, e.Target, rec, rerr, key, lines)
+			lr := newTargetCacheLastRun(e.Project, e.Target, rec, rerr, key, rec.Replays(key), lines)
 			r.LastRun = &lr
 		}
 		reports = append(reports, r)
@@ -848,9 +857,12 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 
 // newTargetCacheLastRun turns the last recorded entry for project:target into the miss
 // explanation for liveKey. lookupErr wrapping fs.ErrNotExist is the "nothing recorded
-// yet" case, which is an answer rather than a failure. liveLines must already be masked,
-// like the lines the store persists.
-func newTargetCacheLastRun(project, target string, rec cache.RecordedRun, lookupErr error, liveKey string, liveLines []string) targetCacheLastRun {
+// yet" case, which is an answer rather than a failure. liveLines must already be masked
+// and redacted, like the lines the store persists.
+//
+// liveKeyReplays is [cache.RecordedRun.Replays] for liveKey, and it gates the whole miss
+// explanation: a true there means a run HITS, whatever the newest entry's key says.
+func newTargetCacheLastRun(project, target string, rec cache.RecordedRun, lookupErr error, liveKey string, liveKeyReplays bool, liveLines []string) targetCacheLastRun {
 	switch {
 	case errors.Is(lookupErr, fs.ErrNotExist):
 		return targetCacheLastRun{Explanation: fmt.Sprintf(
@@ -867,8 +879,18 @@ func newTargetCacheLastRun(project, target string, rec cache.RecordedRun, lookup
 		At:       rec.CreatedAt,
 		Matches:  rec.Key == liveKey,
 	}
+	lr.Replays = liveKeyReplays || lr.Matches
+	if lr.Replays {
+		lr.ReplaysRef = cache.PortableRef(liveKey)
+	}
 	if lr.Matches {
 		lr.Explanation = "the live key hashes to the same value, so a run now replays that entry instead of executing."
+		return lr
+	}
+	if lr.Replays {
+		lr.Explanation = fmt.Sprintf(
+			"a run now HITS: an OLDER entry here is already stored under the live key, so a run replays %s and never reaches %s. An edit and a revert leave the cache exactly this way. Next: `magus query output %s` reads the entry that would replay.",
+			lr.ReplaysRef, lr.Ref, lr.ReplaysRef)
 		return lr
 	}
 	if rec.KeyInputs == nil {
@@ -905,8 +927,11 @@ func lastRunLines(lr targetCacheLastRun) []string {
 		return []string{"  last recorded run: none", "    " + lr.Explanation}
 	}
 	verdict := "DIFFERS"
-	if lr.Matches {
+	switch {
+	case lr.Matches:
 		verdict = "MATCHES"
+	case lr.Replays:
+		verdict = "DIFFERS; the live key HITS an older entry"
 	}
 	out := []string{fmt.Sprintf("  last recorded run: %s  %s  %s", lr.At.UTC().Format(time.RFC3339), lr.Ref, verdict)}
 	if lr.First != nil {

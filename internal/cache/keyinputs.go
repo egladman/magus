@@ -72,15 +72,33 @@ func (s *OutputStore) PersistKeyInputs(ctx context.Context, cacheKey string, inp
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return err
 	}
-	masked := MaskKeyInputs(inputs)
 	// Redact the plain text, not the marshaled JSON: a secret containing a character
 	// json escapes would not match its escaped form, and would land on disk raw.
-	redacted := strings.Split(string(secret.Redact(ctx, []byte(strings.Join(masked, "\n")))), "\n")
-	data, err := json.Marshal(redacted)
+	data, err := json.Marshal(RedactKeyInputs(ctx, MaskKeyInputs(inputs)))
 	if err != nil {
 		return err
 	}
 	return os.WriteFile(filepath.Join(dir, keyInputsName), data, 0o644)
+}
+
+// RedactKeyInputs replaces every value the run's secret resolver has registered with its
+// mask, one line at a time. It is the second net behind [MaskKeyInputs]: env values are
+// masked by construction, but a registered credential can ride a non-env class too - an
+// `arg:` line carrying `--token=<value>`, say - and nothing else strips it.
+//
+// BOTH sides of a comparison must pass through it. The store redacts at write, so a live
+// line that skipped this differs from its redacted stored twin on every run: a phantom
+// diff no edit can settle.
+//
+// Per line rather than over a joined blob, because a key input may itself contain a
+// newline; splitting a redacted join back apart would resegment the set. Always returns a
+// fresh slice of the same length, holding the lines verbatim when nothing is registered.
+func RedactKeyInputs(ctx context.Context, lines []string) []string {
+	out := make([]string, len(lines))
+	for i, line := range lines {
+		out[i] = secret.RedactString(ctx, line)
+	}
+	return out
 }
 
 // KeyInputsByRef returns the stored pre-hash key inputs behind ref (step ref, unique
@@ -162,15 +180,29 @@ func ClassDigests(inputs []string) []ClassDigest {
 // splitKeyInput separates a key-input line into the input's stable IDENTITY and the
 // VALUE keyed under it. A source file whose content moved has to read as ONE input
 // that changed, not as a line removed and an unrelated line added, and only the
-// per-class layouts written by hashStepInputs say where that boundary falls. A class
-// with no value slot (dep, charm, arg, ...) is its own identity, so it can only be
-// present or absent.
+// per-class layouts written by hashStepInputs say where that boundary falls.
+//
+// Three classes bury a value behind a multi-part identity, so the pair boundary is the
+// LAST colon: src, env, and tool - whose line reads tool:<spell>:<tool>:<token> because
+// probeTools joins those three parts before hashStepInputs labels them.
+//
+// Five more carry a bare value straight after the class label, so the boundary is the
+// class colon: keyVersion, os, arch, target, spellDefVersion. Pairing them matters as
+// much as pairing src does - unpaired, a bumped keyVersion reads as one line vanishing
+// and an unrelated one arriving, double-counting the single thing that moved.
+//
+// Everything else is its own identity and can only be present or absent, which is the
+// whole difference it can express: charm, arg, obs, exec and dep have no value slot at
+// all, and projectPath and spell are held fixed by the (project, target) pair a
+// comparison is scoped to.
 func splitKeyInput(line string) (identity, value string) {
 	class, rest, ok := strings.Cut(line, ":")
 	if !ok {
 		return line, ""
 	}
 	switch class {
+	case "keyVersion", "os", "arch", "target", "spellDefVersion":
+		return class, rest
 	case "src": // src:<rel>:<contentHash>:<execBit>; the rel path may itself contain ':'
 		if i := strings.LastIndexByte(rest, ':'); i > 0 {
 			if j := strings.LastIndexByte(rest[:i], ':'); j > 0 {
@@ -184,9 +216,9 @@ func splitKeyInput(line string) (identity, value string) {
 		if name, ok := strings.CutSuffix(rest, ":unset"); ok {
 			return "env:" + name, "unset"
 		}
-	case "tool": // tool:<name>:version=<v>
-		if name, v, ok := strings.Cut(rest, "="); ok {
-			return "tool:" + name, v
+	case "tool": // tool:<spell>:<tool>:<token>
+		if i := strings.LastIndexByte(rest, ':'); i > 0 {
+			return "tool:" + rest[:i], rest[i+1:]
 		}
 	}
 	return line, ""

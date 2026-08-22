@@ -6,9 +6,12 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/egladman/magus/internal/json"
 )
 
 func TestLastEntryFor_NoEntries(t *testing.T) {
@@ -98,6 +101,59 @@ func TestLastRecordedRun_ExplainsChangedSource(t *testing.T) {
 	require.NotNil(t, cmp.First)
 	assert.Equal(t, "src:test/pkg/main.go", cmp.First.Input)
 	assert.NotEqual(t, cmp.First.Recorded, cmp.First.Live, "both content hashes are shown")
+}
+
+// TestLastRecordedRun_KeyComesFromTheFilename: readManifest accepts an empty Hash as
+// valid - the permissive-on-absence convention that keeps pre-field entries usable - so
+// the body cannot be trusted for the key. The filename IS the key, and a RecordedRun that
+// took the body's word for it reports Key "" and compares against nothing.
+func TestLastRecordedRun_KeyComesFromTheFilename(t *testing.T) {
+	cdir := filepath.Join(t.TempDir(), ".magus")
+	c, err := Open(t.Context(), cdir, WithMutable(true), WithLogger(discardLogger))
+	require.NoError(t, err)
+
+	const key = "abc123abc123abc123abc123"
+	dir := filepath.Join(cdir, "manifests", flattenPath("svc"))
+	require.NoError(t, os.MkdirAll(dir, 0o755))
+	body, err := json.Marshal(Manifest{ProjectPath: "svc", Target: "build", CreatedAt: time.Now()})
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filepath.Join(dir, key+".json"), body, 0o644))
+
+	rec, err := c.LastRecordedRun("svc", "build")
+	require.NoError(t, err)
+	assert.Equal(t, key, rec.Key, "an entry whose body records no hash still keys by its filename")
+	assert.True(t, rec.Replays(key))
+}
+
+// TestLastRecordedRun_ReplaysAnOlderKey: an edit and a revert leave the NEWEST entry
+// keyed to the edited tree while the key a run now mints belongs to the first entry -
+// which still hits. Reading the verdict off the newest entry alone reports a miss for a
+// run that never executes.
+func TestLastRecordedRun_ReplaysAnOlderKey(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	step := makeStep(root)
+	step.Target = "build"
+	run := func(body string) {
+		t.Helper()
+		writeMain(t, root, body)
+		_, err := c.Run(t.Context(), step, func(context.Context) error { return nil })
+		require.NoError(t, err)
+	}
+
+	run("package main")
+	run("package main // edited")
+	writeMain(t, root, "package main")
+
+	liveKey, _, err := c.StepKey(t.Context(), &step)
+	require.NoError(t, err)
+	rec, err := c.LastRecordedRun("test/pkg", "build")
+	require.NoError(t, err)
+
+	assert.NotEqual(t, liveKey, rec.Key, "the newest entry is the edited run")
+	assert.True(t, rec.Replays(liveKey), "the reverted tree keys to the FIRST entry, which still hits")
+	assert.False(t, rec.Replays("0123456789abcdef"), "no manifest sits at that key")
+	assert.False(t, rec.Replays(""), "an empty key names no entry")
+	assert.False(t, RecordedRun{}.Replays(liveKey), "a RecordedRun that consulted no cache answers false")
 }
 
 func TestLastEntryForTarget_FiltersTarget(t *testing.T) {

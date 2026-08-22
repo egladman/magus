@@ -164,7 +164,7 @@ type Step struct {
 	// go-build target's entry.
 	Spell           string
 	SpellDefVersion string   // binary fingerprint; forces miss on magus upgrade
-	ToolVersions    []string // "spell:version" strings; forces miss on toolchain upgrade
+	ToolVersions    []string // "spell:tool:token" strings (run.go builds them); forces miss on toolchain upgrade
 	// PlatformIndependent drops the host-platform line from the key, so one entry
 	// serves every platform. Resolved from the target's declaration or its spells';
 	// false (the default) keys the platform. See types.PlatformSensitivity.
