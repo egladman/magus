@@ -600,7 +600,15 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* Title-bar-right control group: the chrome buttons (command bar, apps, reference, settings gear) as PF
    plain icon Buttons centered on the tab row, and the positioning context for the apps-menu popover
    (#console-appmenu, anchored in overrides.css). A slim inline gutter keeps them off the window edge. */
-#console-actions { flex: 0 0 auto; position: relative; display: flex; align-items: center; padding-inline: 0.35rem; }
+/* A rule between the tabs and the controls. They share one row, and with the strip now the content
+   colour the two runs met as one undivided band - a tab clipped by the overflow could sit directly
+   against the workspace selector and read as another control. The line says where the scrolling run
+   ends and the fixed cluster begins. */
+#console-actions {
+  flex: 0 0 auto; position: relative; display: flex; align-items: center;
+  padding-inline: 0.35rem;
+  border-inline-start: 1px solid var(--pf-t--global--border--color--default);
+}
 /* PF plain buttons default to align-items:baseline (sized for a text+icon button), so the title-bar
    icon-only buttons (apps menu, reference, gear) hang their svg off the baseline - a few px above the
    button center, most visible on mobile. Center the icon so the three chrome buttons sit dead-center. */
