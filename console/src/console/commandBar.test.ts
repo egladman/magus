@@ -4,8 +4,8 @@
 
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { matchCommands, displayToken } from "./commandBar";
-import type { Command } from "./commands";
+import { matchCommands, matchTargets, displayToken } from "./commandBar";
+import type { Command, CommandTarget } from "./commands";
 
 const cmd = (id: string, label: string, group?: string): Command => ({
   id,
@@ -72,4 +72,49 @@ test("a command is findable by its prose label, but label hits are not reported 
 
 test("returns nothing when the query is a subsequence of no token or label", () => {
   assert.deepEqual(matchCommands(cmds, "zzq"), []);
+});
+
+// --- matchTargets: the second stage's ranking ---------------------------------
+// Targets have no token - a tab is named, not addressed - so unlike matchCommands every hit is on the
+// label and every hit is reported, because the label is what the row renders.
+
+const targets: CommandTarget[] = [
+  { value: "t1", label: "Dashboard" },
+  { value: "t2", label: "Log Viewer" },
+  { value: "t3", label: "main.ts - console" },
+  { value: "t4", label: "main.ts - logs" },
+];
+
+test("an empty query returns every target in order, unscored", () => {
+  const r = matchTargets(targets, "");
+  assert.deepEqual(
+    r.map((m) => m.target.value),
+    ["t1", "t2", "t3", "t4"],
+  );
+  assert.deepEqual(
+    r.map((m) => m.score),
+    [0, 0, 0, 0],
+  );
+});
+
+test("matchTargets reports hits on the LABEL, since that is what a target row renders", () => {
+  const r = matchTargets(targets, "dash");
+  assert.deepEqual(
+    r.map((m) => m.target.value),
+    ["t1"],
+  );
+  assert.deepEqual(r[0].hits, [0, 1, 2, 3]);
+});
+
+test("two same-named targets stay tellable apart by their disambiguating suffix", () => {
+  // The suffix is what tabViews hands over for tabs that would otherwise both read main.ts, so
+  // filtering on it has to reach exactly one of them.
+  assert.deepEqual(
+    matchTargets(targets, "logs").map((m) => m.target.value),
+    ["t4"],
+  );
+});
+
+test("returns nothing when the query is a subsequence of no label", () => {
+  assert.deepEqual(matchTargets(targets, "zzq"), []);
 });
