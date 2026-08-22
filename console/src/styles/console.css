@@ -558,17 +558,24 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      chrome, not a page section, so zero both. Without this the border-box height collapses the
      content area to a ~2px sliver and the tabs render as a clipped, unreadable strip. */
   margin: 0; padding: 0;
-  /* ONE chrome surface. The title bar, the navigation rail and the status bar all take this same
-     recessive tone, so they read as a single frame wrapping the content down the left and along the
-     top and bottom - the shape Firefox uses - rather than as three bars meeting at corners. The
-     content is what steps forward out of it (see the outlet's card below); the frame stays back.
-     NO cast here, deliberately. The bar used to throw --sm--bottom down over the content, which put
-     the elevation on the wrong body: chrome that is meant to stay back was the thing lifted, and the
-     content it wrapped sat flat underneath. The outlet casts onto this bar instead - one shadow, on
-     the surface that is actually raised. The hairline stays; it is what holds the edge crisp where
-     the two meet, and it is not elevation. */
-  background: var(--console-chrome);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  /* The CONTENT tone, not the chrome tone. A tab is contiguous with the page it shows - that is the
+     whole browser-tab metaphor - and it cannot be, on a strip painted the same colour as the rail:
+     the active tab was a white island in a grey band that then met a white page at a seam. Painting
+     the strip itself the content colour makes the tab row and the page below it ONE surface, which
+     is what the metaphor was always claiming. The frame is now just the rail and the status bar,
+     wrapping that surface on two sides.
+     Which inverts what the tabs themselves have to do: see the pf-m-current rules further down, where
+     the INACTIVE tabs take the chrome fill and recede, rather than the active one taking white and
+     advancing. Same logic, opposite assignment, because the ground moved out from under it.
+     NO border-bottom, for the same reason there is no cast: a line there would cut the active tab off
+     from its own page, which is the seam this change exists to remove. The inactive tabs are chips
+     with their own fill and do not need a baseline to sit on.
+     NO cast either. The bar used to throw --sm--bottom down over the content, which put the elevation
+     on the wrong body - chrome that is meant to stay back was the thing lifted. */
+  background: var(--pf-t--global--background--color--primary--default);
+  /* The rail's edge, on this row as it already is on the outlet below (that rule carries the same
+     hairline for the same reason). Needed now that the two are different colours meeting. */
+  border-left: 1px solid var(--pf-t--global--border--color--default);
   -webkit-app-region: drag; app-region: drag;
 }
 /* Interactive title-bar children opt out of the drag region so a click activates them (a drag region
@@ -763,9 +770,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    (242 / 21). So the selected tab was the invisible one and the unselected ones read as raised. The
    rounded top corners were the only cue still separating them, which is why squaring the tabs exposed
    this rather than caused it. */
-#console-tabs .pf-v6-c-tabs__item { background: transparent; }
+/* INACTIVE tabs carry the fill, the current one does not: the strip is the content colour now (see
+   #console-titlebar), so it is the tabs you are NOT looking at that have to step back off the page.
+   Transparent here would leave every tab flush with the surface and the active one unmarked. */
+#console-tabs .pf-v6-c-tabs__item { background: var(--console-chrome); }
 #console-tabs .pf-v6-c-tabs__item.pf-m-current {
-  background: var(--pf-t--global--background--color--primary--default);
+  background: transparent;
   /* Lifted on the SIDES, which is where its neighbors are. Top and bottom are the strip's own edges -
      the tab meets the window above and the content below, and casting onto either would fight the
      strip's own cast rather than separate one tab from the next. */
