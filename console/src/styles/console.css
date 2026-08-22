@@ -766,8 +766,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: row;
   /* The rail's edge, drawn on the CONTENT rather than on the rail: a border on the rail itself would
      run its full height and cut it away from the title bar and status bar, which are the same
-     continuous surface. Here it spans exactly the content's height, which is the boundary it marks. */
-  border-left: 1px solid var(--pf-t--global--border--color--default);
+     continuous surface. Here it spans exactly the content's height, which is the boundary it marks.
+     It marks a boundary, so it is only drawn where there IS one - below the rail's 48rem edge there is
+     no rail, and the line was left running down the outermost pixel column of a phone screen with the
+     window on one side of it and the content on the other. Same gate as the corner below. */
+  border-left: 0;
   /* The ONE elevation in the shell, and it belongs here: the content is the raised body, the frame is
      the ground. An even cast (--sm, not a directional token) because this box casts on three faces at
      once - up onto the title bar, left onto the rail, down onto the status bar - and a directional
@@ -790,7 +793,10 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    a phone screen. Change that breakpoint and this one moves with it.
    The large token doubled: at 9px the curve reads as a rendering artefact, at 18px as a decision. */
 @media (min-width: 48rem) {
-  #console-outlet { border-end-start-radius: calc(var(--pf-t--global--border--radius--large) * 2); }
+  #console-outlet {
+    border-left: 1px solid var(--pf-t--global--border--color--default);
+    border-end-start-radius: calc(var(--pf-t--global--border--radius--large) * 2);
+  }
 }
 /* The content CARD - the only curved thing in the shell, and the one surface that steps forward out
    of the chrome frame. Chrome is square and recessive; containers are raised and rounded.
