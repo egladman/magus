@@ -221,9 +221,15 @@ button[data-collapse] {
 }
 button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); background: var(--pf-t--global--background--color--secondary--default); }
 [data-caret]::before { content: "\25BE"; font-size: 1.1rem; line-height: 1; }
-/* Collapsed: the caret points right and the card body folds away (the header stays). */
+/* Collapsed: the caret points right and the card body folds away (the header stays). The
+   min-block-size the width tiers above give every card (so a short one does not look broken
+   next to a tall row-mate) is exactly what a collapsed card must NOT keep, or hiding its body
+   leaves an empty box the height of whatever the tier demands - the #dash-panels selector
+   here matches those tiers' id+1-attribute specificity plus one more attribute, so it wins
+   regardless of which tier is active without needing a copy in each one. */
 [data-card][data-collapsed] [data-caret] { transform: rotate(-90deg); }
 [data-card][data-collapsed] > .pf-v6-c-card__body { display: none; }
+#dash-panels > [data-card][data-collapsed] { min-block-size: 0; }
 
 /* Card title + its "?" affordance on ONE line. PF's card__title is a block, so the glyph wrapped
    underneath the heading and read as a stray character rather than as part of the title. */
