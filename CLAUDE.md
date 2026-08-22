@@ -57,8 +57,12 @@ Building is the exception, and it needs a reason:
 - engine, daemon, spell-runtime, or CLI behavior you are about to run
 - a doctor check whose output you want to see against this tree
 
-Editing docs, workflows, or Go you are only unit-testing (`go test ./...` needs
-no magus binary) requires NO rebuild. The instinct to build first is expensive in
+Editing docs, workflows, or Go you are only unit-testing requires NO rebuild -
+but do not read that as "run `go test` raw": the guard denies `go test` and
+`go vet` alongside `go build`/`go run` and routes them to `magus run
+go::go-test` (verified 2026-08-22, three isolated worktrees hit the deny), so a
+worktree with no loadable magus binary cannot run tests at all. Escape by
+running the tests from a worktree that has one. The instinct to build first is expensive in
 a way that is invisible locally: the build stamps
 `-X main.version/commit/buildDate` from `git describe` and the commit hash, so the
 LINK step is unshareable across worktrees and across commits within a worktree.
