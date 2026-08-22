@@ -1025,7 +1025,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    supplies the page background itself (the PF primary page token, theme-aware light/dark) - otherwise
    its themed dark-on-light text would sit on the app's dark outlet and vanish in light mode. It takes
    the SECONDARY page token (the PF "grey page" behind primary-white cards) so the clickable Cards keep
-   their contrast in both themes. */
+   their contrast in both themes - but only BELOW the 48rem edge, where those white cards are what is on
+   screen. Above it the gallery retires (see the breakpoint below) and the two ways-cards that replace it
+   are secondary-filled, so the ground goes primary-white there: grey-on-grey left the ways-cards reading
+   as bare outlines, and it made the empty state the same tone as the rail, the title bar, and the status
+   bar - one continuous slab of chrome with no content surface anywhere in the window. */
 /* Fill the outlet so the launcher's background covers the whole panel - otherwise the surface stops
    at its content height and the page shows through below it, reading as two different backgrounds.
    A small inset from the outlet edges plus a generous radius (larger than the card tiles' container
@@ -1121,6 +1125,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-outlet [data-surface="home"] [data-launcher-ways] { display: none; }
 @media (min-width: 48rem) {
   #console-outlet [data-surface="home"] .pf-v6-l-gallery { display: none; }
+  /* Safe here and only here: the white cards that needed a grey ground are the ones the line above
+     retires. What remains is secondary-filled, so it gains contrast from this rather than losing it. */
+  #console-outlet [data-surface="home"] { background: var(--pf-t--global--background--color--primary--default); }
   /* The demo pill goes with the grid: the demo is one of the two ways below, and offering it twice on
      one screen is the duplication this whole change is about. */
   #console-outlet [data-surface="home"] .console-launcher-demo { display: none; }
