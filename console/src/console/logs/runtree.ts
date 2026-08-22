@@ -371,6 +371,13 @@ function iconButton(id: string, label: string, title: string, paths: string[]): 
 // the .console-log-runs styles); only what fills treeBox differs.
 export interface CollapsiblePanel {
   head: HTMLElement; // the header row, so a caller can inject extra chrome (e.g. a count)
+  // The BODY's header, the index header's opposite number across the splitter. It exists so the two
+  // rules land on one line: the index header ended in a hairline that stopped dead at the splitter
+  // with nothing continuing it, which read as a line drawn halfway across the surface (measured at
+  // 8.2px above where the body's first row ended). bodyTitle is the text in it - callers write what
+  // the body is currently showing, so the row earns its height instead of being spacing in disguise.
+  bodyHead: HTMLElement;
+  bodyTitle: HTMLElement;
   treeBox: HTMLElement; // the caller (re)renders its tree into this
   refreshBtn: HTMLButtonElement;
   // The slim reopen rail shown while the panel is auto-collapsed on a phone. head's own chrome
@@ -393,6 +400,7 @@ export function mountCollapsiblePanel(opts: {
   scroll: HTMLElement;
   title: string;
   label: string;
+  bodyTitle: string; // the body header's resting text, before a caller names what is on screen
   onRefresh: () => void;
   hideWhenEmpty: boolean;
 }): CollapsiblePanel | null {
@@ -428,7 +436,19 @@ export function mountCollapsiblePanel(opts: {
   reopen.classList.add("console-log-runs__reopen");
   reopen.hidden = true;
 
-  split.append(aside, reopen, opts.scroll);
+  // The body column: a header row over the scroller, so the scroller keeps scrolling under a header
+  // that stays put. scroll cannot simply gain a border-top - it scrolls, and the line would go with it.
+  const body = document.createElement("div");
+  body.className = "console-log-body";
+  const bodyHead = document.createElement("div");
+  bodyHead.className = "console-log-body__head";
+  const bodyTitle = document.createElement("span");
+  bodyTitle.className = "console-log-body__title";
+  bodyTitle.textContent = opts.bodyTitle;
+  bodyHead.append(bodyTitle);
+  body.append(bodyHead, opts.scroll);
+
+  split.append(aside, reopen, body);
 
   // The open state is JS-driven (the hidden attribute), so the phone default lives here (matchMedia)
   // rather than duplicated into logs.css - the same breakpoint the app shell uses (console.css).
@@ -447,6 +467,8 @@ export function mountCollapsiblePanel(opts: {
 
   return {
     head,
+    bodyHead,
+    bodyTitle,
     treeBox,
     refreshBtn,
     reopen,
@@ -470,6 +492,7 @@ export function initRunBrowser(deps: RunBrowserDeps): { refresh: () => void } {
     scroll: deps.scroll,
     title: "Recent runs",
     label: "Recent runs",
+    bodyTitle: "Output",
     onRefresh: () => {
       void load();
     },

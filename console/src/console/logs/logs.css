@@ -425,11 +425,36 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
   background: var(--console-chrome);
 }
 .console-log-runs[hidden] { display: none; }
+/* ONE height for both column headers, and it is a floor rather than a fixed size so injected chrome
+   (activity puts its connection chip in the index header) can still grow the row. The two differ in
+   content - the index header carries icon buttons, the body header only a word - so left to their
+   intrinsic heights they came out 37.8 and 32.5, and their rules landed 5.3px apart. The number is
+   the taller of the two, rounded up to a whole pixel at the default scale. If a caller ever injects
+   something taller than this into either header, they part again and this has to become a real
+   shared measurement rather than a floor. */
+.console-log-split { --console-log-head-h: 2.375rem; }
+.console-log-runs__head,
+.console-log-body__head {
+  box-sizing: border-box;
+  min-block-size: var(--console-log-head-h);
+}
 .console-log-runs__head {
   flex: 0 0 auto; display: flex; align-items: center; gap: 0.15rem;
   padding: 0.4rem 0.35rem 0.4rem 0.7rem;
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
+/* The BODY column: the header row and the scroller under it, stacked. The scroller has to stay the
+   flexing child so it still scrolls internally rather than growing the split. */
+.console-log-body { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+/* The index header's opposite number, and the reason it exists is the RULE. Every metric here is
+   copied from .console-log-runs__head rather than chosen: same padding, same border, so the two
+   hairlines resolve to the same y and read as one line across the surface. Change one, change both. */
+.console-log-body__head {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 0.15rem;
+  padding: 0.4rem 0.35rem 0.4rem 0.7rem;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-log-body__title { margin-right: auto; font-size: 0.78rem; font-weight: 600; color: var(--pf-t--global--text--color--regular); }
 .console-log-runs__title { margin-right: auto; font-size: 0.78rem; font-weight: 600; color: var(--pf-t--global--text--color--regular); }
 .console-log-runs__tree { flex: 1 1 auto; overflow: auto; padding: 0.35rem 0.2rem 0.6rem; }
 .console-log-runs__empty { margin: 0.5rem 0.7rem; font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); line-height: 1.5; }
