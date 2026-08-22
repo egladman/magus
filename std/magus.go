@@ -213,6 +213,17 @@ var Magus = Module{
 			Impl:    MagusDoctor,
 		},
 		{
+			Name: "attention",
+			Doc:  "List the OPEN attention requests of this repository's session store: {requests, store}, each request {id, outcome, source, where, unit, message, ...} as `magus attention -o json` reports them. Read-only by design: a magusfile may refuse to proceed while a request is open, but disposing one is a human act (see the workspace doctrine's Manual-on-purpose table), so no method here closes anything - the person runs `magus attention dispose <id> -reason <text>`. Runs a nested magus, so it works from a `magus buzz` script as well as a magusfile; opts.root and opts.dir as on doctor. Raises only when the subprocess cannot run or its output cannot decode.",
+			Args: []Arg{
+				{Name: "args", Type: TypeStringSlice},
+				{Name: "opts", Type: TypeAnyMap, Optional: true},
+			},
+			Returns: []Ret{{Type: TypeAnyMap}},
+			Raises:  true,
+			Impl:    MagusAttention,
+		},
+		{
 			Name: "diagnose_drift",
 			Doc:  "Diagnose why a generate gate's declared outputs drifted and RETURN the verdict {drifted, code, message, url, files} so the caller decides whether to fail or warn. Pass the target's output globs and (optional) input globs, project-relative. code is MGS4006 when a declared input changed (real drift, commit it), MGS4005 when the inputs are unchanged but a dev build produced differing output (version/tool skew, not your change), or MGS4003 when a release build's identical inputs still differ (a reproducibility bug). files are the drifted outputs as Paths based at the repository root. drifted is false with every field zero when the outputs are clean. It lives here rather than on vcs because choosing between those codes is magus policy; vcs only supplies the probe. Composes vcs.status; does not replace it.",
 			Args: []Arg{
@@ -538,7 +549,7 @@ func MagusBustCache(ctx context.Context, projectPath string) error {
 // typed magus.<name>(...) method. magus.cmd warns when its first arg names one,
 // nudging authors toward the clearer, signature-stable wrapper.
 var typedMagusSubcommands = map[string]bool{
-	"run": true, "describe": true, "doctor": true,
+	"run": true, "describe": true, "doctor": true, "attention": true,
 }
 
 // errNoWorkspace is the MGS1022 error a magus.* member raises when it is called
@@ -740,6 +751,13 @@ func MagusRun(ctx context.Context, args []string, opts map[string]any) (types.Ex
 // MagusDescribe runs `magus describe <args>`; see runMagus.
 func MagusDescribe(ctx context.Context, args []string, opts map[string]any) (types.ExecResult, error) {
 	return runMagusSub(ctx, "describe", args, opts)
+}
+
+// MagusAttention lists the open attention requests through a nested magus. Listing only:
+// disposal is deliberately absent from this surface, because a script that closes
+// requests is the auto-disposition the doctrine's Manual-on-purpose table rules out.
+func MagusAttention(ctx context.Context, args []string, opts map[string]any) (map[string]any, error) {
+	return runMagusJSON[map[string]any](ctx, "attention", args, opts)
 }
 
 // MagusDoctor validates the workspace and returns the typed report.

@@ -274,6 +274,12 @@ func buildMagus(_ *buzz.Session, tr *Tracer) vm.Value {
 		res.MapSet("summary", summary)
 		return res, nil
 	}))
+	m.MapSet("attention", fn("magus.attention", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
+		res := vm.NewMap()
+		res.MapSet("requests", vm.ListValue(nil))
+		res.MapSet("store", vm.StrValue(""))
+		return res, nil
+	}))
 	m.MapSet("describeFile", fn("magus.describeFile", func(_ context.Context, _ []vm.Value) (vm.Value, error) {
 		res := vm.NewMap()
 		res.MapSet("definition", vm.StrValue(""))

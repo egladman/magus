@@ -142,6 +142,15 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 		}
 		return buzzValueMagusDoctorReport(ret0), nil
 	}))
+	m.MapSet("attention", vm.DirectValue("magus.attention", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		args := StrSlice(bzArgs, 0)
+		opts := AnyMap(bzArgs, 1)
+		ret0, err := std.MagusAttention(ctx, args, opts)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return AnyMapVal(ret0), nil
+	}))
 	m.MapSet("diagnoseDrift", vm.DirectValue("magus.diagnoseDrift", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		outputs := StrSlice(bzArgs, 0)
 		inputs := StrSlice(bzArgs, 1)

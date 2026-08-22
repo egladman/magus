@@ -459,6 +459,7 @@ export object DelegationReport {
 
 export extern fun affected(base: str = "") > Affected !> any;
 export extern fun affectedImpact(base: str = "", opts: {str: any} = {<str: any>}) > Impact !> any;
+export extern fun attention(args: [str], opts: {str: any} = {<str: any>}) > {str: any} !> any;
 export extern fun bustCache(project_path: str = "") > void !> any;
 export extern fun canonicalName(name: str) > str;
 export extern fun cmd(sub: str, args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
