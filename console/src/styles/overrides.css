@@ -583,16 +583,22 @@
    targets you have to aim at.
    PAIRED with the (pointer: coarse) block at the foot of console.css, which grows the bar itself to
    44px so these fit; without that half this rule would just overflow the bar. Change one, change the other. */
+/* Below the shell's inversion AND on a touch pointer, two of the four tray controls are controls for
+ * things the device does not have: the cheat sheet lists KEYBOARD shortcuts, and Panes opens the
+ * tiling tray, which this width has already folded away in favour of the launcher grid. Dropping
+ * them is not dropping function - the function is what is absent - and it is what buys the room for
+ * the two that remain to take a full 44x44 target. Four 44px-wide buttons plus the zoom stepper
+ * measure 499px of content in a 375px bar that clips, which is how Panes, Share and Keyboard
+ * shortcuts went off the end when width was raised without this.
+ *
+ * BOTH conditions, not just the pointer: a touchscreen laptop at 1280px is coarse too, and there
+ * tiling works and the rail is present, so hiding its control would remove something real. */
 @media (pointer: coarse) {
   #console-statusbar .pf-v6-c-button.pf-m-plain {
-    /* HEIGHT ONLY, deliberately. 14px was the dimension that made these hard to hit, and 44 fixes it
-       without costing anything. Width is NOT raised to 44: four 44px-wide tray buttons plus the zoom
-       stepper measure 499px of content in a 375px bar, and the bar clips (`overflow: hidden`), so
-       Panes, Share and Keyboard shortcuts became unreachable. Trading three controls away to widen
-       the other four is worse than a narrow target.
-       Getting the full 44x44 here means the tray collapsing into a menu below some width - an
-       information-architecture change, not a sizing one. Until then these stay 19x44, which still
-       clears WCAG 2.5.8 via its spacing exception (checked: no two target centres within 24px). */
+    /* Height wherever the pointer is coarse; width only below the inversion, in the block after this
+       one. 14px was the dimension that made these hard to hit at all. Above the inversion the bar
+       keeps all four controls at 19x44, which still clears WCAG 2.5.8 through its spacing exception
+       (checked: no two target centres within 24px) - it is Apple's 44x44 that wants the width. */
     min-block-size: 44px;
     /* Centring is not optional here: these buttons carry `line-height: 0` (see the tray rules above),
        which pins the glyph to the top of whatever box it is in. At the old 19x14 the box WAS the
@@ -600,5 +606,19 @@
     display: inline-flex;
     align-items: center;
     justify-content: center;
+  }
+}
+
+/* AFTER the block above, and not merged into it, because `display: none` here has to beat the
+ * `display: inline-flex` there. Both selectors are one id and two classes, so specificity cannot
+ * settle it and source order does - written before it, the hide silently lost and the buttons
+ * stayed on screen at 44px wide, pushing two of them off the end of the bar. */
+@media (pointer: coarse) and (max-width: 47.999rem) {
+  #console-statusbar .pf-v6-c-button.console-shell-statusbar__shortcuts,
+  #console-statusbar .pf-v6-c-button.console-shell-statusbar__panes {
+    display: none;
+  }
+  #console-statusbar .pf-v6-c-button.pf-m-plain {
+    min-inline-size: 44px;
   }
 }
