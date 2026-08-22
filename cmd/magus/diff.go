@@ -786,6 +786,7 @@ func diffUsage(w *os.File) {
 	fmt.Fprintln(w, "files reference the most-referenced symbol the file changed. Reach needs a")
 	fmt.Fprintln(w, "symbol index; without one there is no ranking key at all, and diff says so")
 	fmt.Fprintln(w, "at the top and falls back to path order rather than implying a ranking.")
+	fmt.Fprintln(w, "Build the index with `magus graph build`.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Public surface, coverage, churn, and the agent trail are CONTEXT printed")
 	fmt.Fprintln(w, "beside each file. None of them is a sort key.")
