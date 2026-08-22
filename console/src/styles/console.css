@@ -923,25 +923,24 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 #console-sidebar [data-rail-badge][hidden] { display: none; }
 
-/* The lead group: the rail-collapse row, alone at the top (sidebar.ts). It gets the hairline the
-   utility group has, on its other edge, so the two control groups bracket the destinations between
-   them symmetrically instead of the top one merging into the first app. */
+/* The lead group: the rail-collapse row, alone at the top (sidebar.ts). It is a separate list for
+   PINNING, not for separation - the destinations between the two control groups scroll, and a toggle
+   sitting in that run would scroll off the corner it was moved to. Visually it is meant to be part of
+   the run: no rule under it and no gap after it, so it reads as the first square in one continuous
+   column of squares rather than as a control the rail holds at arm's length. */
 #console-sidebar [data-rail-lead] {
   flex: 0 0 auto; overflow: visible;
-  /* Exactly the title bar's band, hairline INCLUDED - hence border-box and an explicit height rather
-     than letting the row size the group. The rail and the title bar are the same chrome surface, and
-     the toggle sits in column 1 of the same row the tab strip fills in column 2, so the two hairlines
-     are one line crossing the window. Left to size itself the group came to 44 + padding + 1, which
-     put its line below the title bar's and turned the join into a visible kink. No padding for the
-     same reason: any air here is air between the square and the line under it. */
+  /* Exactly the title bar's band, so the toggle square in column 1 fills the same row the tab strip
+     fills in column 2. Explicit and border-box rather than letting the row size the group: left to
+     itself it came to the row height plus padding, which pushed the apps below out of alignment. */
   box-sizing: border-box;
   block-size: var(--console-topchrome-h);
   padding-block: 0;
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  /* Cancel exactly the gap PatternFly puts between nav lists, for this edge only. In PF's own token
+     so it tracks a version bump, and negative rather than zeroing the property on the rail, which
+     would close the utility group's gap at the other end too - that one is doing real work. */
+  margin-block-end: calc(-1 * var(--pf-v6-c-nav--RowGap));
 }
-/* The row gives up the 1px the hairline took, rather than overflowing the group by it: min-height on
-   a rail row is what makes it a square target, and here the group's own height is the constraint. */
-#console-sidebar [data-rail-lead] .pf-v6-c-nav__link { min-height: 0; block-size: 100%; }
 /* The utility group sits at the foot rather than growing with the list above it, so Settings stays in
    the same place whether six lenses are listed or sixteen. The rail's other hairline, separating the
    surfaces from the controls; the pool reading above it deliberately has none. */
