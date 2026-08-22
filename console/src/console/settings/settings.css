@@ -41,8 +41,12 @@
 .console-settings-tabs .pf-v6-c-tabs__item {
   margin-bottom: -1px;
 }
-.console-settings-tabs .pf-v6-c-tabs__link {
-  min-height: 2.5rem;
+/* The default control tier rather than a bare 2.5rem. The 40px it used to carry was the only
+   instance of that number anywhere in the console, and it stacked under the shell's own 44px tab
+   strip - two tab strips, neither on a declared step. PF's untouched tabs link is 29px, which is too
+   quiet for the surface's primary navigation, so this takes the default tier instead of the compact one. */
+.console-settings-tabs[data-control-size] .pf-v6-c-tabs__link {
+  min-block-size: var(--console-control-block-size);
   padding-inline: var(--pf-t--global--spacer--md);
   color: var(--pf-t--global--text--color--subtle);
 }

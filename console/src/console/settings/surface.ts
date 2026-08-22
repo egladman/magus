@@ -203,6 +203,7 @@ function buildSettingsTabs(tabs: SettingsTab[]): {
 } {
   const root = h("div", "console-settings-tabs__wrap");
   const nav = h("div", "pf-v6-c-tabs console-settings-tabs");
+  nav.dataset.controlSize = "";
   const list = h("ul", "pf-v6-c-tabs__list");
   list.setAttribute("role", "tablist");
   list.setAttribute("aria-label", "Settings sections");
