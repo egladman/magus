@@ -11,6 +11,7 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessionjournal"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -56,6 +57,9 @@ func TestSessionFactHandlerRecordsOneFactPerTargetResult(t *testing.T) {
 
 func TestSessionFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	// The whole-struct compare below is only meaningful if the environment cannot contribute a
+	// field: a developer running with MAGUS_UNIT set would otherwise fail a test about outcomes.
+	t.Setenv(trail.EnvUnit, "")
 	root := t.TempDir()
 
 	h := beginSessionJournal(root, []string{"run", "ci"}, "v0")
@@ -171,6 +175,95 @@ func TestSessionFactHandlerWarnsOnceWhenTheStoreIsUnwritable(t *testing.T) {
 	assert.Equal(t, 1, strings.Count(logged, "not recorded in the session journal"),
 		"the handler breaks once, so the warning cannot repeat per target")
 	assert.Contains(t, logged, dir, "the warning names the store a person has to go look at")
+}
+
+// activityUnitCell returns the UNIT cell of the row for session, which is the column the console
+// drawer's join is waiting on. Reading it positionally rather than searching the whole listing is
+// what makes the "-" case assertable: a dash appears in every unattributed column.
+func activityUnitCell(t *testing.T, out, session string) string {
+	t.Helper()
+	for _, line := range strings.Split(out, "\n") {
+		fields := strings.Fields(line)
+		// SESSION, date, time, HOST, UNIT, FACTS, TARGETS...
+		if len(fields) > 4 && fields[0] == session {
+			return fields[4]
+		}
+	}
+	t.Fatalf("no row for session %q in:\n%s", session, out)
+	return ""
+}
+
+func TestActivityRendersTheUnitColumnAttributedAndNot(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	global = globalFlags{}
+	root := t.TempDir()
+
+	t.Setenv(trail.EnvUnit, "fleet/f3")
+	attributed := beginSessionJournal(root, []string{"run", "build"}, "v0")
+	require.NotNil(t, attributed)
+	emitJournalEvent(t, attributed, journal.Event{Kind: journal.KindResult, Inv: "invUnit", Target: "build", Status: journal.StatusPass})
+
+	// A person at a keyboard carries no unit, and the same store has to render both.
+	t.Setenv(trail.EnvUnit, "")
+	bare := beginSessionJournal(root, []string{"run", "test"}, "v0")
+	require.NotNil(t, bare)
+	emitJournalEvent(t, bare, journal.Event{Kind: journal.KindResult, Inv: "invBare", Target: "test", Status: journal.StatusPass})
+
+	out := captureStdout(t, func() {
+		require.NoError(t, activityCmd(context.Background(), root, nil))
+	})
+
+	assert.Contains(t, out, "UNIT")
+	assert.Equal(t, "fleet/f3", activityUnitCell(t, out, "invUnit"))
+	assert.Equal(t, "-", activityUnitCell(t, out, "invBare"), "an unattributed session reads like an unknown HOST, not like a blank")
+}
+
+func TestSessionFactHandlerStampsTheUnitOnEveryFact(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv(trail.EnvUnit, "fleet/f3")
+	root := t.TempDir()
+
+	h := beginSessionJournal(root, []string{"run", "ci"}, "v0")
+	require.NotNil(t, h)
+	emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
+	emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "test", Status: journal.StatusPass})
+
+	dir, err := sessionjournal.Dir(root)
+	require.NoError(t, err)
+	fold, err := sessionjournal.Read(dir)
+	require.NoError(t, err)
+
+	sessions := sessionjournal.Summarize(fold)
+	require.Len(t, sessions, 1)
+	assert.Equal(t, "fleet/f3", sessions[0].Unit)
+	require.Len(t, sessions[0].Targets, 2)
+	for _, target := range sessions[0].Targets {
+		assert.Equal(t, "fleet/f3", target.Unit, "a fact read on its own still says whose work it was")
+	}
+}
+
+// A unit that fails the id rule is dropped rather than stamped, which is what keeps the trail's
+// redaction exemption honest. The note explaining the drop is asserted in internal/trail, where
+// the one-time gate can be reset; here the observable fact is that nothing was attributed.
+func TestSessionFactHandlerDropsAnInvalidUnit(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv(trail.EnvUnit, "not a unit id")
+	root := t.TempDir()
+
+	h := beginSessionJournal(root, []string{"run", "build"}, "v0")
+	require.NotNil(t, h)
+	emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
+
+	dir, err := sessionjournal.Dir(root)
+	require.NoError(t, err)
+	fold, err := sessionjournal.Read(dir)
+	require.NoError(t, err)
+
+	sessions := sessionjournal.Summarize(fold)
+	require.Len(t, sessions, 1)
+	assert.Empty(t, sessions[0].Unit)
+	require.Len(t, sessions[0].Targets, 1)
+	assert.Empty(t, sessions[0].Targets[0].Unit)
 }
 
 func TestActivityRejectsPositionalArguments(t *testing.T) {

@@ -14,6 +14,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessionjournal"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
 
@@ -128,13 +129,14 @@ func renderAttentionText(requests []sessionjournal.AttentionRequest, dir string)
 
 	now := time.Now()
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tAGE\tOUTCOME\tSOURCE\tWHERE\tMESSAGE")
+	fmt.Fprintln(tw, "ID\tAGE\tOUTCOME\tSOURCE\tUNIT\tWHERE\tMESSAGE")
 	for _, req := range requests {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\n",
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			req.ID,
 			orDash(formatDur(now.Sub(time.UnixMilli(req.OpenedMs)))),
 			orDash(req.Outcome),
 			orDash(req.Source),
+			orDash(req.Unit),
 			orDash(req.Where),
 			attentionOneLine(req.Message))
 	}
@@ -286,6 +288,9 @@ func recordAttentionOpen(root string, ev types.Event) error {
 	// The AGENT's session, not this magus invocation's: a re-fire is a second magus
 	// process, and keying on that would mint a fresh id every time.
 	id := sessionjournal.RequestID(ev.Source.ID, source, where, ev.Message)
+	// Not an input to the id, on purpose - see RequestID. It rides the payload so the queue can
+	// say WHOSE work is blocked without the row's identity moving when a fleet re-partitions.
+	unit := trail.UnitFromEnv()
 
 	fold, err := sessionjournal.Read(dir)
 	if err != nil {
@@ -309,6 +314,7 @@ func recordAttentionOpen(root string, ev types.Event) error {
 		Severity: string(ev.Severity),
 		Source:   source,
 		Where:    where,
+		Unit:     unit,
 		Message:  ev.Message,
 	})
 }

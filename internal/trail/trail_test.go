@@ -1,9 +1,12 @@
 package trail
 
 import (
+	"bytes"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -12,6 +15,19 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+// captureWarnings installs a slog handler for the duration of fn and returns what it logged.
+// A producer here reports a fact it could not record through slog rather than an error - every
+// entry point is best-effort by contract - so the default logger is the only place to observe it.
+func captureWarnings(t *testing.T, fn func()) string {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	fn()
+	return buf.String()
+}
 
 // seedEvents writes n events (Ts 1..n) straight into the trail file, bypassing Append so a
 // large fixture is one write, not n opens. Returns the events in append order (oldest first).
@@ -265,6 +281,95 @@ func TestUnitFromContext(t *testing.T) {
 			require.Equal(t, tc.want, unitFromContext(tc.context))
 		})
 	}
+}
+
+// TestValidUnitID pins the rule every unit channel shares. It is exported because the marker
+// scanner is not the only producer any more: whatever stamps a Unit has to agree with this, or
+// the redaction exemption starts covering strings nobody checked.
+func TestValidUnitID(t *testing.T) {
+	for name, tc := range map[string]struct {
+		id   string
+		want bool
+	}{
+		"plain":               {"MGS1021", true},
+		"every separator":     {"a.b:c_d-1/2", true},
+		"branch shaped":       {"feat/spawn-capture", true},
+		"at the length cap":   {strings.Repeat("u", unitMaxLen), true},
+		"past the length cap": {strings.Repeat("u", unitMaxLen+1), false},
+		"empty":               {"", false},
+		"space":               {"two words", false},
+		"punctuation":         {"MGS1021!", false},
+		"newline":             {"unit\n", false},
+		"non-ascii":           {"unit-é", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			require.Equal(t, tc.want, ValidUnitID(tc.id))
+		})
+	}
+}
+
+func TestUnitFromEnv_ReadsAValidID(t *testing.T) {
+	t.Setenv(EnvUnit, "  feat/spawn-capture  ")
+	require.Equal(t, "feat/spawn-capture", UnitFromEnv(), "surrounding whitespace is formatting, not part of the id")
+
+	t.Setenv(EnvUnit, "")
+	require.Empty(t, UnitFromEnv(), "an unset channel is a session that claims no unit, not an error")
+}
+
+// The note is what keeps a typo'd MAGUS_UNIT from looking like a fleet that simply never
+// attributed anything: the value is dropped either way, and only the note says why.
+func TestUnitFromEnv_DropsAnInvalidIDWithANote(t *testing.T) {
+	t.Setenv(EnvUnit, "not a unit id")
+	unitEnvNoteOnce = sync.Once{} // another test in this binary may already have spent it
+	t.Cleanup(func() { unitEnvNoteOnce = sync.Once{} })
+
+	logged := captureWarnings(t, func() {
+		require.Empty(t, UnitFromEnv())
+		require.Empty(t, UnitFromEnv())
+	})
+
+	assert.Equal(t, 1, strings.Count(logged, "MAGUS_UNIT"), "the environment cannot change under a running worker, so the note cannot repeat")
+	assert.Contains(t, logged, "letters, digits", "the note names the rule the value failed")
+	assert.NotContains(t, logged, "not a unit id", "the value failed the charset that makes a unit safe to log unredacted")
+}
+
+// A hook observes a command, not a delegation, so the environment is the only channel that can
+// attribute one - and it is what lights up the console drawer's unit column for runs.
+func TestAppendAgentCommand_UnitFallsBackToTheEnvironment(t *testing.T) {
+	t.Setenv(EnvUnit, "fleet/f3")
+	dir := t.TempDir()
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "magus run test .", Decision: "pass"})
+
+	events, err := ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Equal(t, "fleet/f3", events[0].Unit)
+}
+
+func TestAppendAgentCommand_SuppliedUnitBeatsTheEnvironment(t *testing.T) {
+	t.Setenv(EnvUnit, "fleet/from-env")
+	dir := t.TempDir()
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Unit: "fleet/supplied"})
+	// A supplied unit that could not be stamped is not an error and not a stamp: the process's
+	// own claim is still better than a value that failed the charset.
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls -l", Unit: "not a unit id"})
+
+	events, err := ReadRecent(dir, 2)
+	require.NoError(t, err)
+	require.Len(t, events, 2)
+	assert.Equal(t, "fleet/from-env", events[0].Unit, "newest first: the malformed supplied unit fell through")
+	assert.Equal(t, "fleet/supplied", events[1].Unit)
+}
+
+func TestAppendAgentCommand_NoUnitAnywhereStaysUncorrelated(t *testing.T) {
+	t.Setenv(EnvUnit, "")
+	dir := t.TempDir()
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls"})
+
+	events, err := ReadRecent(dir, 1)
+	require.NoError(t, err)
+	require.Len(t, events, 1)
+	assert.Empty(t, events[0].Unit, "a missing join is the designed outcome, never an invented one")
 }
 
 func TestWriteBlob_RoundTripAndDedup(t *testing.T) {

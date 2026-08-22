@@ -9,6 +9,7 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessionjournal"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -121,6 +122,37 @@ func TestAppendSessionJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 		assert.Equal(t, runFold.Records[i].Kind, affectedFold.Records[i].Kind)
 		assert.Equal(t, runFold.Records[i].Seq, affectedFold.Records[i].Seq)
 		assert.Equal(t, runFold.Records[i].V, affectedFold.Records[i].V)
+	}
+}
+
+// The unit is stamped in the shared wiring, not per command, for the same reason the fact shape
+// is: `magus activity` is a view of the repository, and a unit that only `run` recorded would
+// read as a fleet that stopped working the moment it ran `affected`.
+func TestAppendSessionJournalStampsTheUnitOnEveryVerb(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv(trail.EnvUnit, "fleet/f3")
+
+	for verb, args := range map[string][]string{
+		"run":      {"ci", "api"},
+		"affected": {"ci"},
+	} {
+		t.Run(verb, func(t *testing.T) {
+			root := t.TempDir()
+			handlers := appendSessionJournal(nil, root, verb, args)
+			require.Len(t, handlers, 1)
+			emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusPass})
+
+			dir, err := sessionjournal.Dir(root)
+			require.NoError(t, err)
+			fold, err := sessionjournal.Read(dir)
+			require.NoError(t, err)
+
+			sessions := sessionjournal.Summarize(fold)
+			require.Len(t, sessions, 1)
+			assert.Equal(t, "fleet/f3", sessions[0].Unit)
+			require.Len(t, sessions[0].Targets, 1)
+			assert.Equal(t, "fleet/f3", sessions[0].Targets[0].Unit)
+		})
 	}
 }
 

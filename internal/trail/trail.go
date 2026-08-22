@@ -24,9 +24,11 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
 	"time"
 
 	json "github.com/egladman/magus/internal/json"
@@ -140,7 +142,7 @@ type Event struct {
 	Session       string `json:"session,omitempty"`       // the host's own session id, when its event carried one
 	Workspace     string `json:"workspace,omitempty"`     // repo-relative or absolute root the action pertained to; "" for daemon-wide (an MCP call is not bound to one workspace)
 	Action        string `json:"action"`                  // the specific action: a tool name, a job command, "connector.create"
-	Unit          string `json:"unit,omitempty"`          // work-ledger unit this action belongs to, when the producer could correlate one (KindAgentSpawn today); "" when uncorrelated
+	Unit          string `json:"unit,omitempty"`          // work-ledger unit this action belongs to, when the producer could correlate one (a delegation marker, or the MAGUS_UNIT channel); "" when uncorrelated
 	Outcome       string `json:"outcome"`                 // one of the Outcome* constants
 	Error         string `json:"error,omitempty"`         // error text when Outcome is OutcomeError
 	DurMs         int64  `json:"dur_ms,omitempty"`        // wall-clock, on call-shaped actions
@@ -165,6 +167,10 @@ type Event struct {
 // It travels beside Session rather than replacing it: the id is what groups the events, and
 // the path is what a reader follows to see the rest. A host that exposes no transcript sends
 // none, exactly as with the other identity fields.
+//
+// Unit is the work-ledger unit a producer already knew this observation belongs to, and is
+// usually empty: a hook observes a command, not a delegation, so nothing in the host event names
+// one and [AppendAgentCommand] falls back to the environment channel.
 type AgentCommand struct {
 	Actor      string
 	Workspace  string
@@ -178,6 +184,7 @@ type AgentCommand struct {
 	Decision   string
 	Reason     string
 	Context    string
+	Unit       string
 }
 
 const agentCommandSchemaVersion = 1
@@ -239,6 +246,19 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	reqRef, reqBytes := WriteBlob(ctx, base, "agent", request)
 	respRef, respBytes := WriteBlob(ctx, base, "agent", response)
 
+	// A supplied unit is what the producer could correlate at the observation itself and wins;
+	// MAGUS_UNIT is this process's own claim about itself and fills the gap. A supplied one that
+	// fails ValidUnitID falls through to the environment rather than being stamped, on the same
+	// reasoning as everywhere else: no join beats a wrong one.
+	//
+	// The prompt-marker contract is deliberately NOT run here. An observation carries a command
+	// line and a guard's reason, not a delegation prompt, and a "unit:" line inside either is
+	// quoted prose rather than an orchestrator's assertion.
+	unit := command.Unit
+	if !ValidUnitID(unit) {
+		unit = UnitFromEnv()
+	}
+
 	action := command.Tool
 	if action == "" {
 		action = "command"
@@ -259,6 +279,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Session:       command.Session,
 		Workspace:     command.Workspace,
 		Action:        action,
+		Unit:          unit,
 		Outcome:       OutcomeOK,
 		RequestRef:    reqRef,
 		RequestBytes:  reqBytes,
@@ -358,6 +379,72 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	})
 }
 
+// unitMaxLen bounds a unit id: long enough for a branch-shaped ledger name, short enough that
+// the id stays a correlation key rather than a payload riding every event line.
+const unitMaxLen = 128
+
+// ValidUnitID reports whether id may be stamped as a work-ledger unit: letters, digits and the
+// separators -_./: a ledger row or a branch-shaped unit name uses, never empty, at most
+// unitMaxLen characters.
+//
+// The narrowness is a security property, not a naming preference. Unit is exempt from event
+// redaction (see redactEvent), so EVERY channel that can stamp one - the delegation marker below,
+// the environment channel in [UnitFromEnv], a producer's own field - has to pass its candidate
+// through here first, or the exemption becomes a way to carry a credential onto an event line.
+func ValidUnitID(id string) bool {
+	if id == "" || len(id) > unitMaxLen {
+		return false
+	}
+	for _, c := range id {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case c == '-', c == '_', c == '.', c == '/', c == ':':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
+// EnvUnit names the environment variable a worker process carries its work-ledger unit in. It is
+// exported so a spawner and a worker cannot disagree about the spelling of the channel.
+const EnvUnit = "MAGUS_UNIT"
+
+// unitEnvNoteOnce holds the malformed-unit note to one per process. The environment does not
+// change under a running worker, so the same bad value would otherwise be reported once per
+// event and drown the run in one repeated fact.
+var unitEnvNoteOnce sync.Once
+
+// UnitFromEnv returns the work-ledger unit this process was launched under, or "" when it was
+// launched under none.
+//
+// This is the second of the two unit channels, and the two say different things. The delegation
+// marker (see unitFromContext) is the ORCHESTRATOR's assertion about a handoff it is making;
+// MAGUS_UNIT is the WORKER's own claim about itself. Where both are available the marker wins:
+// the party doing the partitioning is the one that knows the partition.
+//
+// A value failing [ValidUnitID] yields "" plus a one-time note. Dropping it rather than stamping
+// it is what keeps the redaction exemption honest; the note is what keeps a typo'd unit from
+// looking like a fleet that simply never attributed anything.
+func UnitFromEnv() string {
+	id := strings.TrimSpace(os.Getenv(EnvUnit))
+	if id == "" {
+		return ""
+	}
+	if !ValidUnitID(id) {
+		unitEnvNoteOnce.Do(func() {
+			// The value itself is deliberately not logged: it failed the charset check that
+			// makes a unit safe to carry unredacted, so it is the one string here that could
+			// be anything at all.
+			slog.Warn("magus: ignoring MAGUS_UNIT and recording no unit for this process: a unit id is letters, digits and -_./: only, and never empty",
+				slog.Int("length", len(id)),
+				slog.Int("max_length", unitMaxLen))
+		})
+		return ""
+	}
+	return id
+}
+
 // unitScanBytes bounds the head of the handed context the marker may appear in. The marker
 // leads the prompt, so this is a cap on one pathological first line rather than a window to
 // search: it keeps a multi-megabyte single-line payload from being scanned at all.
@@ -374,16 +461,12 @@ const unitScanBytes = 4096
 // orchestrator wrote is at the top, and a marker in quoted prose is not; the position is the
 // only thing that separates them. Leading blank lines are formatting and are skipped.
 //
-// The id is a bare token of letters, digits and -_./: - no spaces, at most unitMaxLen chars. That
-// charset is not decoration: Unit is exempt from event redaction (it is a correlation key matched
-// by exact string, and a masked one would silently break the join it exists to serve), so what
-// may land in it has to be too narrow to smuggle a credential through.
+// The id itself has to satisfy [ValidUnitID], which is where the charset and its reasoning live.
 //
 // Anything else - no marker, an empty id, an id carrying spaces or punctuation outside the set,
 // a marker below the first line - yields "". Correlation is cooperative: a missing join is the
 // designed outcome, never an error.
 func unitFromContext(handed string) string {
-	const unitMaxLen = 128
 	head := handed
 	if len(head) > unitScanBytes {
 		head = head[:unitScanBytes]
@@ -398,26 +481,12 @@ func unitFromContext(handed string) string {
 			return "" // the prompt leads with something else, so it declares no unit
 		}
 		id := strings.TrimSpace(rest)
-		if id == "" || len(id) > unitMaxLen || !validUnit(id) {
+		if !ValidUnitID(id) {
 			return ""
 		}
 		return id
 	}
 	return ""
-}
-
-// validUnit reports whether id is a bare identifier: letters, digits, and the separators a
-// ledger row or a branch-shaped unit name uses.
-func validUnit(id string) bool {
-	for _, c := range id {
-		switch {
-		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
-		case c == '-', c == '_', c == '.', c == '/', c == ':':
-		default:
-			return false
-		}
-	}
-	return true
 }
 
 func eventsPath(base string) string { return filepath.Join(base, dir, eventsFile) }
@@ -845,9 +914,10 @@ func validRef(ref string) bool {
 // Workspace, Unit and the blob refs are enumerated values, identities and content addresses, none
 // of which a credential can occupy, and all of which a reader filters on by exact match. Redacting
 // them would break the activity view to protect nothing - the same reasoning that leaves slog
-// attribute KEYS alone in internal/secret. Unit is the one of those derived from free text rather
-// than supplied by a caller, which is why its scanner restricts it to a bare-identifier charset
-// before it can reach this exemption.
+// attribute KEYS alone in internal/secret. Unit is the one of those derived from free text - a
+// delegation prompt, or the MAGUS_UNIT environment channel - rather than supplied by a caller,
+// which is why every channel that can stamp one runs it through [ValidUnitID]'s bare-identifier
+// rule before it can reach this exemption.
 func redactEvent(ctx context.Context, e Event) Event {
 	e.Action = secret.RedactString(ctx, e.Action)
 	e.Error = secret.RedactString(ctx, e.Error)

@@ -29,12 +29,16 @@ const (
 // is read by binaries older than the one that wrote it, and nesting an envelope that
 // carries its own schema version would leave such a reader two versions to reconcile
 // for one fact.
+// Unit is the work-ledger unit the RAISING session was launched under, which is what lets a
+// person reading the queue see which slice of a fleet's work is blocked. It is attribution and
+// not identity: see [RequestID] for why it stays out of the id.
 type AttentionOpen struct {
 	Request  string `json:"request"`
 	Outcome  string `json:"outcome"`
 	Severity string `json:"severity,omitempty"`
 	Source   string `json:"source,omitempty"`
 	Where    string `json:"where,omitempty"`
+	Unit     string `json:"unit,omitempty"`
 	Message  string `json:"message"` // clamped to MaxMessageBytes when written
 }
 
@@ -93,6 +97,12 @@ type AttentionDispose struct {
 // first as "waiting" and then as "permission" is describing the same wait, and two
 // rows for it would be two interruptions for one event.
 //
+// The UNIT is not an input either, for a different reason. A unit says which slice of work the
+// raising session belongs to - it is attribution, and identity here is "which block is this".
+// Feeding it in would re-key every open request the moment a fleet re-partitioned its units: the
+// row a person was about to dispose of would vanish and an identical one would appear under a new
+// id, from a change that did not touch the block at all.
+//
 // Fields are joined with NUL, which none of them can contain, so no pair of values
 // can concatenate into another pair's digest.
 func RequestID(session, source, where, message string) string {
@@ -110,6 +120,7 @@ type AttentionRequest struct {
 	Severity string `json:"severity,omitempty"`
 	Source   string `json:"source,omitempty"`
 	Where    string `json:"where,omitempty"`
+	Unit     string `json:"unit,omitempty"`
 	Message  string `json:"message"`
 
 	Disposed   bool   `json:"disposed"`
@@ -171,6 +182,7 @@ func Attention(fold Fold) []AttentionRequest {
 				Severity: open.Severity,
 				Source:   open.Source,
 				Where:    open.Where,
+				Unit:     open.Unit,
 				Message:  open.Message,
 			}
 		case KindAttentionDispose:

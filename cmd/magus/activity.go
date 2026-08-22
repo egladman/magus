@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessionjournal"
+	"github.com/egladman/magus/internal/trail"
 )
 
 // activityDefaultLimit bounds the default listing to a session or two of scrollback.
@@ -89,12 +90,13 @@ func renderActivityText(sessions []sessionjournal.Summary, fold sessionjournal.F
 	}
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "SESSION\tLAST\tHOST\tFACTS\tTARGETS")
+	fmt.Fprintln(tw, "SESSION\tLAST\tHOST\tUNIT\tFACTS\tTARGETS")
 	for _, s := range sessions {
-		fmt.Fprintf(tw, "%s\t%s\t%s\t%d\t%s\n",
+		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\n",
 			s.Session,
 			time.UnixMilli(s.LastMs).Format("2006-01-02 15:04:05"),
 			orDash(s.Host),
+			orDash(s.Unit),
 			s.Facts,
 			orDash(summarizeTargets(s.Targets)))
 	}
@@ -170,12 +172,16 @@ func beginSessionJournal(root string, command []string, magusVersion string) slo
 	if err != nil {
 		return nil
 	}
+	// The unit is read ONCE, here, and every fact this invocation writes carries that copy.
+	// Reading it per fact would let a mid-run environment change split one session's facts
+	// across two units, which is a history no producer could have meant.
 	return &sessionFactHandler{
 		dir: dir,
 		start: sessionjournal.SessionStart{
 			Workspace: root,
 			Command:   strings.Join(command, " "),
 			Version:   magusVersion,
+			Unit:      trail.UnitFromEnv(),
 		},
 	}
 }
@@ -215,6 +221,7 @@ func (h *sessionFactHandler) Handle(_ context.Context, r slog.Record) error {
 		DurMs:    e.DurMs,
 		Replayed: e.Status == journal.StatusCached,
 		Ref:      e.Ref,
+		Unit:     h.start.Unit,
 	}); err != nil {
 		// One failed append means the store is unwritable (a full disk, a read-only
 		// state dir); retrying per target would repeat the same failure once per

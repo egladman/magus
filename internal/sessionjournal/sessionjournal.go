@@ -98,16 +98,26 @@ type Record struct {
 // EMPTY from the CLI today. Nothing in the run path knows it: agent identity
 // reaches magus only through the hook payloads internal/trail records, and joining
 // the two stores is later work. An empty Host means "not known", never "a human".
+//
+// Unit is the work-ledger unit the session was launched under, from the MAGUS_UNIT environment
+// channel (trail.UnitFromEnv). Attribution is cooperative: an empty Unit means the session
+// claimed none, which is the designed outcome for anything a person started by hand, never an
+// error and never a session that belongs to no work.
 type SessionStart struct {
 	Host      string `json:"host,omitempty"`
 	Workspace string `json:"workspace,omitempty"`
 	Command   string `json:"command,omitempty"`
 	Version   string `json:"version,omitempty"`
+	Unit      string `json:"unit,omitempty"`
 }
 
 // TargetResult is the payload of one target finishing. Replayed distinguishes a
 // cache hit from work that actually ran, which is the difference between a session
 // that did something and one that confirmed something.
+//
+// Unit repeats the producing session's [SessionStart.Unit] rather than being read off the
+// envelope, because a fact is routinely read on its own: the activity drawer joins one target
+// result to a unit without holding the session-start record that opened the file.
 type TargetResult struct {
 	Target   string `json:"target"`
 	Project  string `json:"project,omitempty"`
@@ -115,6 +125,7 @@ type TargetResult struct {
 	DurMs    int64  `json:"dur_ms,omitempty"`
 	Replayed bool   `json:"replayed,omitempty"`
 	Ref      string `json:"ref,omitempty"`
+	Unit     string `json:"unit,omitempty"`
 }
 
 // sessionRE is the session-id shape, which doubles as the journal file's basename:
@@ -438,6 +449,7 @@ func readLine(br *bufio.Reader, limit int) ([]byte, bool, error) {
 type Summary struct {
 	Session   string         `json:"session"`
 	Host      string         `json:"host,omitempty"`
+	Unit      string         `json:"unit,omitempty"`
 	Workspace string         `json:"workspace,omitempty"`
 	Command   string         `json:"command,omitempty"`
 	StartedMs int64          `json:"started_ms"`
@@ -471,7 +483,7 @@ func Summarize(fold Fold) []Summary {
 		case KindSessionStart:
 			var start SessionStart
 			if json.Unmarshal(rec.Payload, &start) == nil {
-				s.Host, s.Workspace, s.Command = start.Host, start.Workspace, start.Command
+				s.Host, s.Workspace, s.Command, s.Unit = start.Host, start.Workspace, start.Command, start.Unit
 			}
 		case KindTargetResult:
 			var result TargetResult

@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/sessionjournal"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -19,6 +20,9 @@ import (
 func attentionTestRoot(t *testing.T) string {
 	t.Helper()
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	// A developer running with MAGUS_UNIT set would otherwise have it stamped on every request
+	// these tests raise. A test that wants one sets it after this call.
+	t.Setenv(trail.EnvUnit, "")
 	global = globalFlags{}
 	return t.TempDir()
 }
@@ -79,6 +83,85 @@ func TestAttentionListShowsAnOpenRequest(t *testing.T) {
 	assert.Contains(t, out, "1 open request(s)")
 	assert.Contains(t, out, "magus attention dispose", "the listing names the one command that closes a request")
 	assert.Contains(t, out, "Nothing here closes on its own.")
+}
+
+func TestAttentionListShowsTheRaisingUnit(t *testing.T) {
+	root := attentionTestRoot(t)
+	t.Setenv(trail.EnvUnit, "fleet/f3")
+	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision on the schema")))
+
+	out := captureStdout(t, func() {
+		require.NoError(t, attentionCmd(context.Background(), root, nil))
+	})
+
+	assert.Contains(t, out, "UNIT")
+	assert.Contains(t, out, "fleet/f3", "the queue says which slice of the fleet is blocked")
+}
+
+func TestAttentionListRendersAnUnattributedRequestWithADash(t *testing.T) {
+	root := attentionTestRoot(t)
+	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+
+	out := captureStdout(t, func() {
+		require.NoError(t, attentionCmd(context.Background(), root, nil))
+	})
+
+	// ID, AGE, OUTCOME, SOURCE, UNIT, WHERE, MESSAGE...
+	var cells []string
+	for _, line := range strings.Split(out, "\n") {
+		if strings.HasPrefix(line, "att-") {
+			cells = strings.Fields(line)
+			break
+		}
+	}
+	require.Greater(t, len(cells), 4, "no request row in:\n%s", out)
+	assert.Equal(t, "-", cells[4], "an unattributed request reads like an unknown SOURCE, not like a blank")
+}
+
+// The unit is attribution, so changing it must not move the row a person is about to dispose of.
+// Re-raising the same block under a new unit re-uses the id, and the queue still holds one row.
+func TestRecordAttentionOpenKeepsTheIDWhenTheUnitChanges(t *testing.T) {
+	root := attentionTestRoot(t)
+	t.Setenv(trail.EnvUnit, "fleet/f3")
+	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+	first := openRequestIDs(t, root)
+	require.Len(t, first, 1)
+
+	t.Setenv(trail.EnvUnit, "fleet/f9")
+	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+
+	assert.Equal(t, first, openRequestIDs(t, root), "a re-partitioned fleet must not re-key an open request")
+}
+
+// The store carries the unit, not just the rendering: the console reads these records too.
+func TestRecordAttentionOpenStoresTheUnit(t *testing.T) {
+	root := attentionTestRoot(t)
+	t.Setenv(trail.EnvUnit, "fleet/f3")
+	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+
+	dir, err := sessionjournal.Dir(root)
+	require.NoError(t, err)
+	fold, err := sessionjournal.Read(dir)
+	require.NoError(t, err)
+	open := sessionjournal.OpenAttention(fold)
+	require.Len(t, open, 1)
+	assert.Equal(t, "fleet/f3", open[0].Unit)
+}
+
+// An id that fails the rule attributes nothing rather than smuggling free text into a field the
+// trail carries unredacted. internal/trail asserts the note that explains the drop.
+func TestRecordAttentionOpenDropsAnInvalidUnit(t *testing.T) {
+	root := attentionTestRoot(t)
+	t.Setenv(trail.EnvUnit, "not a unit id")
+	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+
+	dir, err := sessionjournal.Dir(root)
+	require.NoError(t, err)
+	fold, err := sessionjournal.Read(dir)
+	require.NoError(t, err)
+	open := sessionjournal.OpenAttention(fold)
+	require.Len(t, open, 1)
+	assert.Empty(t, open[0].Unit)
 }
 
 func TestAttentionListEmptyStateNamesTheProducer(t *testing.T) {
