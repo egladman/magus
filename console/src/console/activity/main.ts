@@ -336,17 +336,26 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (loading) return;
     loading = true;
     if (!pageToken) {
-      conn.textContent = "connecting...";
+      // COLD loads only. showEmpty clears the body, and this same branch is what the index panel's
+      // refresh button re-enters - so painting it unconditionally blanks a populated trail before
+      // the request has even started, and hides the panel holding the button that was just pressed.
+      // Measured against the prior list, because the reset below is about to empty it.
+      const cold = loadedEvents.length === 0;
       loadedEvents = [];
       nextPageToken = "";
+      conn.textContent = "connecting...";
       // The card's default copy is "No daemon connected", and it is visible from the first paint.
       // Until this request answers, that is a verdict nothing has reached: say what is happening
-      // instead of asserting an absence, and let the response replace it either way.
-      showEmpty(
-        "Connecting",
-        "Reading the activity trail from " + daemonHost + ".",
-        "connecting...",
-      );
+      // instead of asserting an absence, and let the response replace it either way. keepIndex so
+      // the refresh control stays reachable while the request is in flight.
+      if (cold) {
+        showEmpty(
+          "Connecting",
+          "Reading the activity trail from " + daemonHost + ".",
+          "connecting...",
+          true,
+        );
+      }
     }
     try {
       const client = createClient(ActivityService, createDaemonTransport(daemonHost));
