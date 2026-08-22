@@ -23,15 +23,27 @@
      surface meets the shell. Identical to the old value in light, where both resolve to #f2f2f2. */
   --console-diff-panel: var(--console-chrome, #f2f2f2);
 
-  --console-syn-comment: #636d76;
-  --console-syn-keyword: #715bb0;
-  --console-syn-string: #3d7a50;
+  /* comment/keyword/string are a shade down from #636d76 / #715bb0 / #3d7a50: on a tinted row they
+     measured 4.47, 4.65 and 4.26, and the first and last were under AA. The shift is 1-5% toward
+     black and hue-preserving, so the theme reads the same.
+     Light adjusts the PALETTE where dark adjusts the TINT, and that is deliberate rather than
+     inconsistent: here the tokens needed a few percent, while in dark clearing the same bar by
+     colour alone wanted a third of the way to white - a visibly different comment. Each theme
+     moves whichever costs less to look at. */
+  --console-syn-comment: #606a72;
+  --console-syn-keyword: #705aae;
+  --console-syn-string: #3a744c;
   --console-syn-number: #8d5e26;
   --console-syn-function: #2f6aad;
 }
 
 :root.pf-v6-theme-dark {
-  --console-syn-comment: #838e98;
+  /* Lifted from #838e98, which was 4.36:1 on the plain dark ground and 2.84:1 once an added row's
+     tint went under it - failing AA before any tint and badly after. Comments are the one token
+     this bites: keyword, string, number and function all clear on their own. Paired with the
+     lighter dark row tint below; neither change clears AA alone, and the pair puts the worst of the
+     fifteen token/ground combinations at 4.52:1. */
+  --console-syn-comment: #9da6ae;
   --console-syn-keyword: #b79ae6;
   --console-syn-string: #8fc79b;
   --console-syn-number: #dbab77;
@@ -448,15 +460,21 @@
   box-shadow: inset 2px 0 0 var(--console-diff-del);
 }
 
-/* Dark needs a heavier mix: the same 12% over a dark surface is very nearly invisible. */
+/* Dark needs a heavier mix than light: 12% over a dark surface is very nearly invisible.
+   14 and not the 22 this was: every point of tint lightens the ground the CODE is read on, and at
+   22 the comment token measured 2.84:1 and keyword 3.97:1 on an added line. 14 is the most tint
+   that leaves all five tokens above AA once the comment is lifted (see the palette note at the top
+   of this file); above it a second token starts failing and the fix stops being one colour.
+   What is given up is small and is not the only cue: the band drops from 1.36:1 against the surface
+   to 1.30:1, and the +/- glyph and the 2px inset accent bar are the other two channels. */
 :root.pf-v6-theme-dark .console-diff-row[data-kind="add"],
 :root.pf-v6-theme-dark .console-diff-row__side[data-kind="add"] {
-  background: color-mix(in srgb, var(--console-diff-add) 22%, var(--console-diff-surface));
+  background: color-mix(in srgb, var(--console-diff-add) 14%, var(--console-diff-surface));
 }
 
 :root.pf-v6-theme-dark .console-diff-row[data-kind="del"],
 :root.pf-v6-theme-dark .console-diff-row__side[data-kind="del"] {
-  background: color-mix(in srgb, var(--console-diff-del) 22%, var(--console-diff-surface));
+  background: color-mix(in srgb, var(--console-diff-del) 14%, var(--console-diff-surface));
 }
 
 /* The header is CHROME, not content, so it holds the pane instead of joining the code's

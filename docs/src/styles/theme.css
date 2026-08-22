@@ -118,9 +118,12 @@
   --demo-accent-bg: #e6f2f0;
 
   /* Syntax tokens (muted, all >=4.5:1 on the code surface). */
-  --syn-comment: #636d76;
-  --syn-keyword: #715bb0;
-  --syn-string: #3d7a50;
+  /* comment/keyword/string nudged down from #636d76 / #715bb0 / #3d7a50 so they clear AA on the
+     console diff's tinted rows, which share this palette (syntax-palette.test.ts pins them equal).
+     1-5% toward black, hue preserved - the docs' own code blocks read identically. */
+  --syn-comment: #606a72;
+  --syn-keyword: #705aae;
+  --syn-string: #3a744c;
   --syn-number: #8d5e26;
   --syn-function: #2f6aad;
   --syn-type: #0d7680;
@@ -203,7 +206,10 @@
     --demo-accent-strong: #7fd3c9;
     --demo-accent-bg: rgba(75, 181, 170, 0.12);
 
-    --syn-comment: #838e98;
+    /* comment lifted from #838e98: it was 4.36:1 on the dark code ground, under AA before the diff
+       surface's row tint even touched it. The console pins its own palette to these tokens
+       (syntax-palette.test.ts), so the two move together or the build fails. */
+    --syn-comment: #9da6ae;
     --syn-keyword: #b79ae6;
     --syn-string: #8fc79b;
     --syn-number: #dbab77;
@@ -285,7 +291,8 @@
   --demo-accent-strong: #7fd3c9;
   --demo-accent-bg: rgba(75, 181, 170, 0.12);
 
-  --syn-comment: #838e98;
+  /* See the note in the prefers-color-scheme block above; these two must stay identical. */
+  --syn-comment: #9da6ae;
   --syn-keyword: #b79ae6;
   --syn-string: #8fc79b;
   --syn-number: #dbab77;
