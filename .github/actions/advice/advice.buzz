@@ -21,8 +21,60 @@ import "assert";
 // The comment marker identifies OUR comment among everyone else's. Never rendered.
 final comment_marker = "<!-- magus:advice -->";
 
+// The SINK: where a composed section goes. Unset means the pull request, which is what
+// every CI step gets and what the rest of this file is about. "collect" means the caller
+// reads the sections off stdout instead - `magus diff` runs these same advisors against
+// the local working diff, where there is no pull request to write into and no business
+// reaching the forge at all.
+//
+// One environment variable rather than a flag per advisor, because an advisor is a script
+// with no argv of its own: the composite action hands it everything through the
+// environment, so a local driver has to speak the same way or the advisors would need two
+// input paths.
+final sink_env = "MAGUS_ADVICE_SINK";
+final sink_collect = "collect";
+
+// The base to compare against in collect mode, set by the driver. A BRANCH NAME rather
+// than a rev, because the advisors compare against `origin/<base>` - the same thing
+// PR_BASE means in CI, so the local mode changes where the value comes from and not what
+// it is.
+final base_env = "MAGUS_ADVICE_BASE";
+
+// Stand-ins for the two pull-request facts a local run does not have. Both must be
+// NON-EMPTY: every advisor guards on "PR_NUMBER, PR_BASE and PR_HEAD_SHA set together"
+// and reads all three empty as "not a pull request, say nothing", which locally would
+// silence the entire set rather than run it.
+final local_pr = "local";
+// HEAD, not the working tree, and the difference is real rather than pedantic: the
+// advisors compare with `git diff <base>...<head>` and `git merge-tree <base> <head>`, and
+// a rev is the only thing either form accepts. Uncommitted work is therefore outside what
+// a local advisor sees. Closing that gap means changing the git forms in each advisor,
+// which changes what they MEASURE - a separate decision from where their output goes.
+final local_head = "HEAD";
+
+// collecting reports whether this run writes to the caller instead of to the forge.
+export fun collecting() > bool { return (os\env(sink_env) ?? "") == sink_collect; }
+
+// localFallback maps a pull-request variable to what a local run uses in its place. Pure
+// over the base, so the local contract is pinned by a test rather than by an environment
+// this file would have to mutate to observe.
+export fun localFallback(name: str, base: str) > str {
+    if (name == "PR_BASE") { return base; }
+    if (name == "PR_NUMBER") { return local_pr; }
+    if (name == "PR_HEAD_SHA") { return local_head; }
+    return "";
+}
+
 // env reads a variable, returning "" rather than null so callers can compare directly.
-export fun env(name: str) > str { return os\env(name) ?? ""; }
+//
+// In collect mode it also SUPPLIES the pull-request facts nobody set, so an advisor goes
+// on reading its inputs through this one helper and grows no local branch of its own. A
+// name that IS set always wins: a developer who exported PR_BASE meant it.
+export fun env(name: str) > str {
+    final set = os\env(name) ?? "";
+    if (set != "" or !collecting()) { return set; }
+    return localFallback(name, base: os\env(base_env) ?? "");
+}
 
 export fun beginMarker(name: str) > str { return "<!-- magus:advice:" + name + ":begin -->"; }
 export fun endMarker(name: str) > str { return "<!-- magus:advice:" + name + ":end -->"; }
@@ -312,6 +364,10 @@ export fun silences(labels: [str], name: str) > bool {
 
 // silenced asks GitHub for this pull request's labels and applies the rule above.
 export fun silenced(repo: str, pr: str, name: str) > bool !> any {
+    // Labels live on a pull request. Collect mode has none, and must not reach the forge
+    // to find out, so nothing is silenced there. Muting a local advisor is a job for
+    // whoever asked for the run, not for a label on a change that may not exist yet.
+    if (collecting()) { return false; }
     final res = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
         dir: ".", opts: {"quiet": true, "allow_failure": true});
     if (!res.ok) { return false; }
@@ -337,10 +393,35 @@ fun find(repo: str, pr: str) > str !> any {
     return "";
 }
 
+// sectionLine renders one section as the single JSON line the collect sink emits. Pure,
+// so the shape the Go driver parses is pinned by a test here rather than by its one call
+// site - the two sit in different languages and cannot share a type.
+export fun sectionLine(name: str, title: str, body: str) > str {
+    return serialize\jsonEncode({"name": name, "title": title, "body": body});
+}
+
 // publish upserts one advisor's section into the PR's magus comment. An empty body
 // retracts the section, and a comment left with no sections at all is emptied to the
 // bare marker rather than deleted - deleting would lose the thread's history.
+//
+// In collect mode it writes the section to stdout instead and touches nothing else. The
+// section is emitted even when the body is EMPTY: a retraction says "this advisor looked
+// and found nothing", which is exactly what a reader of a local run wants to know, and it
+// is what lets the caller show a per-advisor verdict rather than a list of complaints.
 export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void !> any {
+    if (collecting()) {
+        std\print(sectionLine(name, title: title, body: body));
+        return;
+    }
+    // Neither a pull request to write to nor a sink to write to. Reaching gh from here
+    // would build `repos//issues//comments` and fail on the far side, blaming GitHub for
+    // a missing local variable, so say which of the two modes is missing its input.
+    if (repo == "" or pr == "") {
+        throw "advice: nowhere to publish \"" + name + "\". For a pull request, set REPO "
+            + "and PR_NUMBER (the advice composite action passes both). For a local run, "
+            + "set " + sink_env + "=" + sink_collect + " and each section is printed as "
+            + "one JSON line instead of posted.";
+    }
     final id = find(repo, pr: pr);
     var current = "";
     if (id != "") {
@@ -473,6 +554,38 @@ test "silences mutes one advisor by name" {
 
 test "silences mutes everything with the bare label" {
     std\assert(silences(["magus:silence"], name: "doctor"), message: "blanket silence");
+}
+
+test "the collect sink emits one JSON line per section" {
+    final line = sectionLine("unclaimed", title: "Files no project claims (2)", body: "a\nb");
+    std\assert(line.indexOf("\n") == null, message: "one line: the driver reads these line by line");
+    std\assert(line.indexOf("\"name\":\"unclaimed\"") != null, message: "names the section");
+    std\assert(line.indexOf("\"title\":\"Files no project claims (2)\"") != null, message: "carries the summary line");
+    std\assert(line.indexOf("\"body\":\"a\\nb\"") != null, message: "a newline in the body is escaped, not emitted");
+}
+
+test "a retraction is still a section" {
+    // An empty body removes the PR section, and a local reader needs the same fact:
+    // "this advisor ran and found nothing" is not the same as "this advisor did not run".
+    final line = sectionLine("doctor", title: "Workspace health", body: "");
+    std\assert(line.indexOf("\"name\":\"doctor\"") != null, message: "the advisor is still named");
+    std\assert(line.indexOf("\"body\":\"\"") != null, message: "and the empty body is carried, not dropped");
+}
+
+test "local mode supplies the pull-request facts a working tree has not got" {
+    assert\equal(localFallback("PR_BASE", base: "main"), want: "main",
+        message: "the base is the driver's, passed through");
+    std\assert(localFallback("PR_NUMBER", base: "main") != "",
+        message: "non-empty, or every advisor reads the run as 'not a pull request' and says nothing");
+    std\assert(localFallback("PR_HEAD_SHA", base: "main") != "",
+        message: "same guard: all three must be set together");
+}
+
+test "local mode invents nothing beyond those three" {
+    assert\equal(localFallback("GH_TOKEN", base: "main"), want: "",
+        message: "a credential is never conjured for a local run");
+    assert\equal(localFallback("FIX_LABEL", base: "main"), want: "",
+        message: "consent for a writer is not something a local default can give");
 }
 
 test "silences ignores unrelated labels" {
