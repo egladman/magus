@@ -130,11 +130,22 @@ body[data-console-fill] {
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
 }
-body[data-console-fill] > header { flex: 0 0 auto; grid-column: 2; grid-row: 1; } /* the app bar keeps its natural height */
-body[data-console-fill] > main { grid-column: 2; grid-row: 2; }
+/* The frame spans the title row AND the content row, so the two are one box for painting purposes
+   (see index.html for why that matters). Inside it they stack as they did as grid rows: the bar at
+   its natural height, the outlet taking the rest. The status bar stays a body-level grid row - it is
+   chrome, it is what the frame casts DOWN onto, and putting it inside would make it cast on itself. */
+body[data-console-fill] > #console-frame {
+  grid-column: 2; grid-row: 1 / 3;
+  display: flex; flex-direction: column;
+  min-height: 0; overflow: hidden;
+}
+#console-frame > header { flex: 0 0 auto; } /* the app bar keeps its natural height */
 body[data-console-fill] > #console-sidebar { grid-column: 1; grid-row: 1 / -1; }
 body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
-body[data-console-fill] > main {
+/* Addressed by id rather than as `body[data-console-fill] > main`, which it no longer is now that the
+   frame is between them. The id keeps the same specificity that selector had against the
+   #console-outlet block further down, so which one wins each shared property is unchanged. */
+#console-outlet {
   flex: 1 1 auto;
   min-height: 0;            /* let the card shrink to fit rather than forcing a page scroll */
   overflow: hidden;
@@ -154,9 +165,9 @@ body[data-console-fill] > main {
 /* The app card stretches to fill the main region as a flex child - more robust than a
    percentage height against a flex parent, and it drops the apps' fixed heights + tall
    min-heights + Pico's section margin so short viewports still fit without a page scroll. */
-body[data-console-fill] > main > .console-graph-app,
-body[data-console-fill] > main > .console-notes-app,
-body[data-console-fill] > main > .console-render-panel {
+#console-outlet > .console-graph-app,
+#console-outlet > .console-notes-app,
+#console-outlet > .console-render-panel {
   flex: 1 1 auto;
   min-height: 0;
   height: auto;
@@ -635,7 +646,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      of the title bar and again of the status bar, which reads as two slim strips the content failed to
      fill rather than as deliberate framing. The two chrome rails already frame the content, and 19px of
      a phone's height is worth more than the effect. */
-  body[data-console-fill] > main { padding-block: 0; }
+  #console-outlet { padding-block: 0; }
   /* Widen the PANE to the bezel once a surface is mounted. The pane's own 0.4rem keeps its content
      off the glass - only the shell's 0.6rem goes, so this buys 19px of width without pushing
      anything flush. The LAUNCHER keeps the shell gutter (data-no-tabs): it has no pane, and its
@@ -648,7 +659,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      so every banded row on a phone was painted its ground's exact colour and the alternation that
      makes those rows readable was invisible at every width below this breakpoint. Transparent, the
      pane falls through to the drawer's white, which is what the desktop already shows. */
-  html:not([data-no-tabs]) body[data-console-fill] > main { padding-inline: 0; }
+  html:not([data-no-tabs]) #console-outlet { padding-inline: 0; }
   /* Zero open tabs (the launcher screen): the second row would be empty, so collapse back to a single
      row - drop the doubled height and hide the empty tab strip, so the home screen isn't topped by a
      blank bar. data-no-tabs is set in main.ts's show() when the workspace has no active tab. */
@@ -824,22 +835,19 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    child; with the navigation rail beside the Drawer, column stacks them vertically. */
 #console-outlet {
   flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: row;
-  /* The rail's edge, drawn on the CONTENT rather than on the rail: a border on the rail itself would
-     run its full height and cut it away from the title bar and status bar, which are the same
-     continuous surface. Here it spans exactly the content's height, which is the boundary it marks.
-     It marks a boundary, so it is only drawn where there IS one - below the rail's 48rem edge there is
-     no rail, and the line was left running down the outermost pixel column of a phone screen with the
-     window on one side of it and the content on the other. Same gate as the corner below. */
-  border-left: 0;
-  /* The ONE elevation in the shell, and it belongs here: the content is the raised body, the frame is
-     the ground. LEFT and DOWN only, as two directional tokens rather than the even --sm: upward the
-     pane's neighbour is the tab strip, and a tab is contiguous with the content it shows - casting on
-     it puts a shadow between a tab and its own page and breaks that reading. The rail and the status
-     bar are chrome the pane genuinely sits in front of, so those two faces keep the cast.
-     The z-index is what makes the downward one show. The status bar is a later grid sibling carrying
-     z-index 20, so it painted over that cast and the pane's bottom edge stayed flat - the shadow was
-     in the stylesheet and invisible on screen. One above it puts the cast on top of the frame it
-     falls on; the rows do not overlap, so nothing else changes stacking. */
+}
+/* Everything that describes the EDGE of the content surface lives on the frame, because the frame is
+   that surface. Held on the outlet instead, all three stopped at the outlet's top and left the tab
+   strip above them outside the shape they were describing.
+   The cast: LEFT and DOWN only, two directional tokens rather than the even --sm. Upward the frame's
+   neighbour is the window edge, and the tab strip inside it is contiguous with its own content, so
+   there is nothing above for it to sit in front of. The rail and the status bar are chrome it
+   genuinely does, so those two faces carry it.
+   The z-index is what makes the downward one show. The status bar is a later grid sibling carrying
+   z-index 20, so it painted over that cast and the bottom edge stayed flat - the shadow was in the
+   stylesheet and invisible on screen. One above it puts the cast on top of the chrome it falls on;
+   the rows do not overlap, so nothing else changes stacking. */
+#console-frame {
   box-shadow: var(--pf-t--global--box-shadow--sm--left), var(--pf-t--global--box-shadow--sm--bottom);
   z-index: 21;
 }
@@ -854,16 +862,14 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    a phone screen. Change that breakpoint and this one moves with it.
    The large token doubled: at 9px the curve reads as a rendering artefact, at 18px as a decision. */
 @media (min-width: 48rem) {
-  #console-outlet {
+  /* One border and one corner for the whole surface, on the frame. Both mark the boundary with the
+     RAIL, so both are gated on the rail existing: below this width it is hidden, the frame's left
+     edge IS the window's, and an unconditional border ran down the outermost pixel of a phone with
+     nothing on the far side of it while the corner bit a notch out of the content. */
+  #console-frame {
     border-left: 1px solid var(--pf-t--global--border--color--default);
     border-end-start-radius: calc(var(--pf-t--global--border--radius--large) * 2);
   }
-  /* The title bar takes the same edge, for the same reason and behind the same gate: it is the other
-     half of the boundary the rail makes, now that the strip is the content colour and the two are
-     different tones meeting. Below this width there is no rail, and the line was drawing down the
-     outermost pixel of the phone with the window on one side of it - on BOTH rows, since the border
-     spans the bar's whole height and the bar stacks into two there. */
-  #console-titlebar { border-left: 1px solid var(--pf-t--global--border--color--default); }
 }
 /* The content CARD - the only curved thing in the shell, and the one surface that steps forward out
    of the chrome frame. Chrome is square and recessive; containers are raised and rounded.
