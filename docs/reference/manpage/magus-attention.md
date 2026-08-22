@@ -43,6 +43,17 @@ open updates nothing and adds no second row.
 **dispose**
 : Close one open request by id
 
+## Exit status
+
+**0**
+: Requests were listed, or one was disposed. A plain listing exits 0 whether or not the queue is empty, because an empty queue is the good state.
+
+**1**
+: The request named for disposal is not in the store, or was already disposed - a request closes once and stays closed. Also what -q reports for an empty queue, so a prompt or a watch loop can branch on the status instead of parsing the listing.
+
+**2**
+: Misuse: an unknown subcommand, an argument to ls, or a dispose naming other than exactly one id.
+
 ## Examples
 
 *List open requests*

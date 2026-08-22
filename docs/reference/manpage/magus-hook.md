@@ -75,6 +75,14 @@ no unit in it declared or running, nothing is graded and nothing is read.
 **--unit** *string*
 : The delegation unit this call is acting as, graded against the ledger's declared write boundary (defaults to $MAGUS_UNIT)
 
+## Exit status
+
+**0**
+: The command or path is allowed: a pass verdict, or an advise verdict, which attaches context and does not block. --observe always lands here.
+
+**2**
+: Denied, and also what a malformed invocation exits with. The two share a code deliberately: a guard that could not parse its input has not cleared the command either, so a host that blocks on 2 fails closed in both cases.
+
 ## Examples
 
 *Judge a shell command*

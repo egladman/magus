@@ -103,6 +103,17 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.
 **ci**
 : Run the magusfile's ci target read-only (affected-set anchor)
 
+## Exit status
+
+**0**
+: Every selected project's target succeeded, whether it ran or replayed from cache.
+
+**1**
+: At least one target failed. The failure was already reported with the path to its captured log, so there is no second error line here. This is the default failure status, not the only one: a magusfile calling os.exit(code) has that code honored verbatim, so a target may exit with a status this list does not name.
+
+**2**
+: Misuse: an unknown target, no project matched the filters, or a flag that does not apply to this invocation.
+
 ## Examples
 
 *Build everything*

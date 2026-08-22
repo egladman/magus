@@ -38,6 +38,17 @@ none. This is the only command that opens one.
 **--outcome** *string*
 : Outcome vocabulary for the event
 
+## Exit status
+
+**0**
+: The event was normalized and emitted. Delivery is best-effort and never changes this: a desktop notification that could not be raised, and a durable request that could not be opened, are both reported as warnings and still exit 0.
+
+**1**
+: stdin could not be read. Unparseable input is not this case - text that is not a complete event envelope becomes the event's message rather than an error.
+
+**2**
+: Called with a positional argument; the event is read from stdin.
+
 ## Examples
 
 *Raise a permission prompt on the desktop*

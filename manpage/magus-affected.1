@@ -128,6 +128,18 @@ Run code generation for selected projects
 \fBci\fR
 Run the magusfile's ci target read\-only (affected\-set anchor)
 .RE
+.SH EXIT STATUS
+.RS
+.TP
+\fB0\fR
+Every affected project's target succeeded. An empty affected set is also 0: nothing changed is a pass, not a fault, so a CI job gating on this stays green on a docs\-only commit.
+.TP
+\fB1\fR
+At least one target failed, already reported with the path to its captured log.
+.TP
+\fB2\fR
+Misuse: no target named, or \-\-step without an interactive terminal.
+.RE
 .SH EXAMPLES
 \fIBuild projects changed since the default base ref\fR
 .PP

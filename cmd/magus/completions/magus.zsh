@@ -80,6 +80,18 @@ _magus() {
             ;;
         args)
             case $words[1] in
+                attention)
+                    # dispose completes from the live queue, the way run completes
+                    # targets from the workspace.
+                    if (( CURRENT == 2 )); then
+                        local -a verbs=('ls:list the open requests' 'dispose:close one request with a reason')
+                        _describe 'verb' verbs
+                    elif [[ $words[2] == dispose ]] && (( CURRENT == 3 )); then
+                        local -a ids
+                        ids=("${(@f)$(magus attention -o name 2>/dev/null)}")
+                        _describe 'request id' ids
+                    fi
+                    ;;
                 run)
                     local -a run_flags=(--dry-run --graph --upstream --depth --timeout --skip --shard --n-shards --no-volatility-retry --race --step --no-default-charms)
                     if [[ $words[CURRENT] == -* ]]; then

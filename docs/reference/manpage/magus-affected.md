@@ -137,6 +137,17 @@ history to find the commit that introduced a regression.
 **ci**
 : Run the magusfile's ci target read-only (affected-set anchor)
 
+## Exit status
+
+**0**
+: Every affected project's target succeeded. An empty affected set is also 0: nothing changed is a pass, not a fault, so a CI job gating on this stays green on a docs-only commit.
+
+**1**
+: At least one target failed, already reported with the path to its captured log.
+
+**2**
+: Misuse: no target named, or --step without an interactive terminal.
+
 ## Examples
 
 *Build projects changed since the default base ref*

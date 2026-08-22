@@ -60,6 +60,17 @@ _magus_complete() {
     cmd="${COMP_WORDS[1]}"
 
     case "$cmd" in
+        attention)
+            # dispose wants an open request id; ids come from the queue itself, the
+            # same way run's targets come from the workspace. Elsewhere the verb list
+            # is static.
+            if [[ "$COMP_CWORD" -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "ls dispose" -- "$cur") )
+            elif [[ "${COMP_WORDS[2]}" == "dispose" && "$COMP_CWORD" -eq 3 ]]; then
+                COMPREPLY=( $(compgen -W "$(magus attention -o name 2>/dev/null)" -- "$cur") )
+            fi
+            return 0
+            ;;
         run)
             # Everything after --then is the chain's, so its verbs win over run's own
             # flags and project names.

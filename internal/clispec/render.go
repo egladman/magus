@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"flag"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/egladman/magus/internal/config"
@@ -100,6 +101,8 @@ func renderCommandRoff(command Command, date, version string) []byte {
 		}
 		w.Dedent()
 	}
+	// Before EXAMPLES, per man(7) section order.
+	writeExitStatusRoff(w, command.ExitStatus)
 	if len(command.Examples) > 0 {
 		w.SH("Examples")
 		for _, example := range command.Examples {
@@ -140,6 +143,18 @@ func writeFlagsRoff(w *Writer, name string, build func(*flag.FlagSet), heading s
 		typeName, _ := flag.UnquoteUsage(f)
 		w.TP(roffFlagLabel(f.Name, typeName, f.DefValue), Escape(f.Usage))
 	})
+	w.Dedent()
+}
+
+func writeExitStatusRoff(w *Writer, codes []ExitCode) {
+	if len(codes) == 0 {
+		return
+	}
+	w.SH("Exit status")
+	w.Indent()
+	for _, code := range codes {
+		w.TP(w.B(strconv.Itoa(code.Code)), Escape(code.Meaning))
+	}
 	w.Dedent()
 }
 

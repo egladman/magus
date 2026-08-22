@@ -28,6 +28,18 @@ Also raise an OS notification
 \fB\-\-outcome\fR \fIstring\fR
 Outcome vocabulary for the event
 .RE
+.SH EXIT STATUS
+.RS
+.TP
+\fB0\fR
+The event was normalized and emitted. Delivery is best\-effort and never changes this: a desktop notification that could not be raised, and a durable request that could not be opened, are both reported as warnings and still exit 0.
+.TP
+\fB1\fR
+stdin could not be read. Unparseable input is not this case \- text that is not a complete event envelope becomes the event's message rather than an error.
+.TP
+\fB2\fR
+Called with a positional argument; the event is read from stdin.
+.RE
 .SH EXAMPLES
 \fIRaise a permission prompt on the desktop\fR
 .PP

@@ -206,6 +206,11 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{"Graph dependents of api/gateway", "magus run build api/gateway --graph --upstream"},
 		{"Stream JSONL target events to a file", "magus run build -o jsonl --tee build.jsonl"},
 	},
+	ExitStatus: []ExitCode{
+		{0, "Every selected project's target succeeded, whether it ran or replayed from cache."},
+		{1, "At least one target failed. The failure was already reported with the path to its captured log, so there is no second error line here. This is the default failure status, not the only one: a magusfile calling os.exit(code) has that code honored verbatim, so a target may exit with a status this list does not name."},
+		{2, "Misuse: an unknown target, no project matched the filters, or a flag that does not apply to this invocation."},
+	},
 }
 
 var whereCommand = Command{
@@ -337,6 +342,11 @@ history to find the commit that introduced a regression.`,
 		{"Emit a CI shard plan for the affected set", "magus affected ci --plan"},
 		{"Shard a test plan across at most four workers", "magus affected test --plan --max-shards 4"},
 		{"Bisect a regression in myapp", "magus affected --bisect ./apps/myapp"},
+	},
+	ExitStatus: []ExitCode{
+		{0, "Every affected project's target succeeded. An empty affected set is also 0: nothing changed is a pass, not a fault, so a CI job gating on this stays green on a docs-only commit."},
+		{1, "At least one target failed, already reported with the path to its captured log."},
+		{2, "Misuse: no target named, or --step without an interactive terminal."},
 	},
 }
 
@@ -1156,6 +1166,11 @@ open updates nothing and adds no second row.`,
 		{"Close one request", "magus attention dispose att-3f9c1a2b4d5e"},
 		{"Close one, saying why", `magus attention dispose att-3f9c1a2b4d5e -reason "approved and pushed by hand"`},
 	},
+	ExitStatus: []ExitCode{
+		{0, "Requests were listed, or one was disposed. A plain listing exits 0 whether or not the queue is empty, because an empty queue is the good state."},
+		{1, "The request named for disposal is not in the store, or was already disposed - a request closes once and stays closed. Also what -q reports for an empty queue, so a prompt or a watch loop can branch on the status instead of parsing the listing."},
+		{2, "Misuse: an unknown subcommand, an argument to ls, or a dispose naming other than exactly one id."},
+	},
 }
 
 var memoryCommand = Command{
@@ -1252,6 +1267,14 @@ rather than as a clean bill of health.`,
 		{"Everything to know before landing it", "magus diff --cost"},
 		{"Navigate it hunk by hunk and mark what you have read", "magus diff --tui"},
 		{"Machine-readable, for a script or a Buzz advisor", "magus diff -o json"},
+	},
+	// Documented because git trained everyone to expect the opposite: there is no
+	// --exit-code here, and a script testing the status for "anything changed?"
+	// silently never fires.
+	ExitStatus: []ExitCode{
+		{0, "The changeset was read and rendered. This is the status whether or not anything changed: unlike git diff --exit-code, a non-empty changeset is not a failure, and no flag makes it one."},
+		{1, "The changeset could not be read - an unreadable patch file, or stdin, or a working tree the VCS would not report on."},
+		{2, "Misuse: more than one patch argument, an argument that is neither a readable patch nor -, or a flag combination that cannot hold (--tui with --watch, with a patch argument, or with -o json). --tui at a non-interactive terminal also exits 2, since the request cannot be served as asked."},
 	},
 }
 
@@ -1441,6 +1464,13 @@ no unit in it declared or running, nothing is graded and nothing is read.`,
 		{"Machine-readable verdict", "printf '%s' 'rm -rf /' | magus hook -o json"},
 		{"Grade a write as a delegation unit", "printf '%s' 'internal/ledger/store.go' | magus hook --path --unit f2-guard"},
 	},
+	// The status IS the enforcement here: a host that reads only the exit code
+	// blocks on 2 and runs the command on 0, so a wrapper author has to be told
+	// that advise passes and that 2 is overloaded.
+	ExitStatus: []ExitCode{
+		{0, "The command or path is allowed: a pass verdict, or an advise verdict, which attaches context and does not block. --observe always lands here."},
+		{2, "Denied, and also what a malformed invocation exits with. The two share a code deliberately: a guard that could not parse its input has not cleared the command either, so a host that blocks on 2 fails closed in both cases."},
+	},
 }
 
 var notifyCommand = Command{
@@ -1470,5 +1500,10 @@ none. This is the only command that opens one.`,
 	Examples: []Example{
 		{"Raise a permission prompt on the desktop", "printf '%s\\n' 'needs approval' | magus notify --outcome permission --desktop"},
 		{"Raise a pre-built event envelope", `printf '%s\n' '{"outcome":"permission","source":{"kind":"agent"},"message":"needs approval"}' | magus notify --desktop`},
+	},
+	ExitStatus: []ExitCode{
+		{0, "The event was normalized and emitted. Delivery is best-effort and never changes this: a desktop notification that could not be raised, and a durable request that could not be opened, are both reported as warnings and still exit 0."},
+		{1, "stdin could not be read. Unparseable input is not this case - text that is not a complete event envelope becomes the event's message rather than an error."},
+		{2, "Called with a positional argument; the event is read from stdin."},
 	},
 }

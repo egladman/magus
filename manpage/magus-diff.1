@@ -51,6 +51,18 @@ Read the changeset interactively, joined to the session the console and an agent
 \fB\-\-watch\fR
 Re\-read and re\-render whenever the working tree changes
 .RE
+.SH EXIT STATUS
+.RS
+.TP
+\fB0\fR
+The changeset was read and rendered. This is the status whether or not anything changed: unlike git diff \-\-exit\-code, a non\-empty changeset is not a failure, and no flag makes it one.
+.TP
+\fB1\fR
+The changeset could not be read \- an unreadable patch file, or stdin, or a working tree the VCS would not report on.
+.TP
+\fB2\fR
+Misuse: more than one patch argument, an argument that is neither a readable patch nor \-, or a flag combination that cannot hold (\-\-tui with \-\-watch, with a patch argument, or with \-o json). \-\-tui at a non\-interactive terminal also exits 2, since the request cannot be served as asked.
+.RE
 .SH EXAMPLES
 \fIRead what you are about to commit\fR
 .PP

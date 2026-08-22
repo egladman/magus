@@ -61,6 +61,17 @@ rather than as a clean bill of health.
 **--watch**
 : Re-read and re-render whenever the working tree changes
 
+## Exit status
+
+**0**
+: The changeset was read and rendered. This is the status whether or not anything changed: unlike git diff --exit-code, a non-empty changeset is not a failure, and no flag makes it one.
+
+**1**
+: The changeset could not be read - an unreadable patch file, or stdin, or a working tree the VCS would not report on.
+
+**2**
+: Misuse: more than one patch argument, an argument that is neither a readable patch nor -, or a flag combination that cannot hold (--tui with --watch, with a patch argument, or with -o json). --tui at a non-interactive terminal also exits 2, since the request cannot be served as asked.
+
 ## Examples
 
 *Read what you are about to commit*
