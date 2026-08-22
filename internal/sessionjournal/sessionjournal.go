@@ -170,7 +170,7 @@ type Writer struct {
 // session that only ever says it began.
 func Open(dir, session string, start SessionStart) (*Writer, error) {
 	if !sessionRE.MatchString(session) {
-		return nil, fmt.Errorf("sessionjournal: session id %q must be alphanumeric with - and _ (it names the journal file); mint one with ProcessSession", session)
+		return nil, fmt.Errorf("sessionjournal: session id %q must be alphanumeric with - and _ (it names the journal file); mint one with journal.NewInvocationID", session)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return nil, fmt.Errorf("sessionjournal: create store %s: %w", dir, err)

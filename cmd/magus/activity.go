@@ -39,6 +39,10 @@ func activityCmd(_ context.Context, root string, args []string) error {
 		return usagef("magus activity: takes no arguments (got %q); use --limit to bound the listing", rest[0])
 	}
 
+	root = attentionRoot(root)
+	if root == "" {
+		return fmt.Errorf("magus activity: no workspace here: the session store is keyed by repository, so run from inside one or pass --root <path>")
+	}
 	dir, err := sessionjournal.Dir(root)
 	if err != nil {
 		return err
