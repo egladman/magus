@@ -33,22 +33,16 @@
      chrome surface wrapping the content, so no seam is drawn BETWEEN them. The border faces the
      content above, which is where the chrome ends. The CAST that used to face that way is gone: it
      had the frame lifted over the content it wraps, which is backwards. The outlet casts down onto
-     this bar now (console.css), so the elevation sits on the raised body instead of the ground. */
+     this bar now (console.css), so the elevation sits on the raised body instead of the ground.
+     NO border either, at any width. One mark per seam: the hairline and the cast were both drawing
+     this same edge, and because the cast is offset a pixel DOWNWARD its strongest lobe landed
+     directly beneath the hairline - a crisp line with a soft one under it, which reads as a doubled
+     border rather than as one edge. The cast is the mark that survives, since it is the one that says
+     which side is raised; the bar and the pane above it can share a tone and still separate. */
   background: var(--console-chrome);
-  border-top: 1px solid var(--pf-t--global--border--color--default);
   font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle);
   overflow: hidden; /* a stray long value truncates with the bar, never scrolls the page */
   -webkit-user-select: none; user-select: none; /* chrome rail, like a native window edge */
-}
-/* ...and no border once the pane above it is round. The border is a straight line across the bar's
-   whole width, so where the pane curves away from the bottom-left corner the hairline kept going -
-   carrying on past the end of the edge it was drawing, and cutting a chord across the curve. The
-   pane's own cast is what separates the two there.
-   Same 48rem edge as the corner (console.css's #console-outlet radius) and as the rail that corner
-   exists for: below it the pane is square and flush, the seam is two flat edges meeting, and the
-   hairline is exactly what holds it crisp. The three move together - change one, change all three. */
-@media (min-width: 48rem) {
-  #console-statusbar { border-top: 0; }
 }
 /* --- Big Picture: suppress the shell's own chrome ------------------------------------------------
  * The dashboard's presentation mode (dashboard.css) stamps [data-bigpicture] on the document
