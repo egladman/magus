@@ -939,6 +939,9 @@ export interface DashboardState {
   // and failed alike - whatever the reason there is nothing to show. transport.ts owns every
   // transition; nothing else writes it.
   insightNote: string | null;
+  // When the insight lenses last actually answered (epoch ms), so the reader can tell a fresh
+  // read from a stale one without pressing Refresh to find out. null until the first success.
+  insightUpdatedAt: number | null;
   tools: ToolsView | null;
   // Agent traffic seen in the recent window (mapAgentActivity). null until the activity poll has
   // produced a frame, or when the daemon serves no trail.
@@ -969,6 +972,7 @@ export function initialState(): DashboardState {
     // Not "Reading history..." - at construction no daemon is attached and nothing is reading.
     // startInsight sets that once a poll actually begins.
     insightNote: "Not connected.",
+    insightUpdatedAt: null,
     tools: null,
     agents: null,
     logLines: [],

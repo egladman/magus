@@ -443,7 +443,11 @@ export class DashboardTransport {
       // its body was already buffered when the next tick aborted it, and writing here would both
       // overwrite the newer poll's insight and clear an error the newer poll had just recorded.
       if (ctrl.signal.aborted) return;
-      this.store.set({ insight: mapInsight(resp), insightNote: null });
+      this.store.set({
+        insight: mapInsight(resp),
+        insightNote: null,
+        insightUpdatedAt: Date.now(),
+      });
     } catch (e) {
       // A network blip or a daemon with no workspace (CodeUnavailable): leave the prior insight in
       // place; the poll retries. But RECORD it, because on the first connect there is no prior

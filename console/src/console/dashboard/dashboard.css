@@ -62,6 +62,11 @@ body[data-dash-native] { margin: 0; }
   align-items: baseline;
   gap: 0.7rem;
   padding-block: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--xs);
+  /* Matches the card body's own inline padding below (#dash-panels > [data-card] >
+     .pf-v6-c-card__body) - without it this heading's text sits flush against the grid's edge
+     while every card's title sits inset behind its own padding, so the row above the cards
+     reads as unindented even though it occupies the same grid column. */
+  padding-inline: clamp(0.75rem, 1vw, 1rem);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-dashboard-section h2 { margin: 0; font-size: var(--pf-t--global--font--size--lg); }
@@ -1745,11 +1750,16 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 /* Insight section band: a labeled divider above the five insight lens tiles, with a manual
    refresh button (the lenses are an on-demand poll, not the live stream). */
 .console-dashboard-insight { margin-top: 0.4rem; }
-.console-dashboard-insight__head { display: flex; align-items: center; gap: 0.6rem; }
+/* Matches the card body's own inline padding (#dash-panels > [data-card] > .pf-v6-c-card__body):
+   without it this band's title sits flush against the grid's edge while every card's title sits
+   inset behind its own padding - see the same reasoning on .console-dashboard-section above. */
+.console-dashboard-insight__head { display: flex; align-items: center; gap: 0.6rem; padding-inline: clamp(0.75rem, 1vw, 1rem); }
 .console-dashboard-insight__title { font-size: 1.05rem; margin: 0; }
-.console-dashboard-insight__sub { margin: 0.2rem 0 0; font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }
+/* Pushes itself AND the refresh button after it to the row's trailing edge, so the two read as
+   one cluster ("last answered - refresh it") while the title and its "?" stay leading. */
+.console-dashboard-insight__lastran { margin-inline-start: auto; font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-insight__refresh {
-  margin: 0 0 0 auto; padding: 0.2rem 0.6rem; width: auto; font-size: 0.72rem;
+  padding: 0.2rem 0.6rem; width: auto; font-size: 0.72rem;
   border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default); color: var(--console-status-running); cursor: pointer;
 }
