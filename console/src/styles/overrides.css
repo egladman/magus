@@ -40,6 +40,16 @@
   overflow: hidden; /* a stray long value truncates with the bar, never scrolls the page */
   -webkit-user-select: none; user-select: none; /* chrome rail, like a native window edge */
 }
+/* ...and no border once the pane above it is round. The border is a straight line across the bar's
+   whole width, so where the pane curves away from the bottom-left corner the hairline kept going -
+   carrying on past the end of the edge it was drawing, and cutting a chord across the curve. The
+   pane's own cast is what separates the two there.
+   Same 48rem edge as the corner (console.css's #console-outlet radius) and as the rail that corner
+   exists for: below it the pane is square and flush, the seam is two flat edges meeting, and the
+   hairline is exactly what holds it crisp. The three move together - change one, change all three. */
+@media (min-width: 48rem) {
+  #console-statusbar { border-top: 0; }
+}
 /* --- Big Picture: suppress the shell's own chrome ------------------------------------------------
  * The dashboard's presentation mode (dashboard.css) stamps [data-bigpicture] on the document
  * element. The canvas it draws is fixed and opaque, so it already COVERS the chrome - but covering
