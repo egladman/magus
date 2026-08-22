@@ -69,6 +69,11 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  /* Shared by the sidebar head and the toolbar so their bottom hairlines land on the same row.
+     Independently, the two are sized by unrelated content - a title versus a row of PF chips -
+     and drift out of alignment the moment either one's content changes. One number, read by
+     both, is what keeps that from happening again. */
+  --console-diff-head-block-size: 2.5rem;
 }
 
 /* Collapsed, the index gives its column back to the diff and leaves only the reopen rail. The
@@ -77,12 +82,18 @@
   grid-template-columns: auto minmax(0, 1fr);
 }
 
+/* min-block-size shared with .console-diff-toolbar (see .console-diff-layout): each pane's
+   header is sized by unrelated content - a title here, a row of PF chips there - so nothing
+   holds their bottom edges to the same row without an explicit shared height. Without it the
+   hairline below stops at the pane boundary and meets .console-diff-sidebar's own border as a
+   T instead of a straight line across the surface. */
 .console-diff-sidebar__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--pf-t--global--spacer--xs);
-  padding-block-end: var(--pf-t--global--spacer--xs);
+  min-block-size: var(--console-diff-head-block-size);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
 }
 
 /* No uppercase, no letter-spacing. Both are shouting devices, and this is the quietest thing on
@@ -127,6 +138,11 @@
   overflow: hidden;
   border-inline-end: 1px solid var(--pf-t--global--border--color--default);
   padding: var(--pf-t--global--spacer--sm);
+  /* The toolbar it has to line up with carries no padding above itself at all - its header row
+     is centered by height, not pushed down by padding. Matching that here is what the shared
+     header height above needs to land the two hairlines on the same row, not merely give the
+     two headers the same height starting from different tops. */
+  padding-block-start: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -288,10 +304,17 @@
   container: diff-main / inline-size;
 }
 
+/* display:column rather than the block flow this replaced, so the chip row and (when shown) the
+   collaboration sentence still stack top to bottom - only now as flex items, so justify-content
+   can center that stack inside the fixed min-block-size shared with the sidebar head above. */
 .console-diff-toolbar {
   background: var(--console-diff-panel);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-block-size: var(--console-diff-head-block-size);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
-  padding-block: var(--pf-t--global--spacer--xs);
   padding-inline: var(--pf-t--global--spacer--sm);
 }
 
