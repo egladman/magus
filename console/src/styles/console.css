@@ -700,6 +700,14 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    The link's own radius goes too: it is transparent at rest, so its 9px only ever showed as a stray
    curve under a focus ring. */
 #console-tabs { --pf-v6-c-tabs__link--after--BorderColor: transparent; }
+/* The line above is inherited and never reaches the current tab: .pf-v6-c-tabs__item.pf-m-current
+   re-declares this same property on ITSELF (tabs.css:510, reading the brand accent), and a
+   declaration on the element always wins over one inherited from an ancestor no matter how
+   specific the ancestor's selector is. Measured: a 3px teal bar survived every review of this
+   file because reading the source here looked right - only a computed style on the actual
+   .pf-m-current element showed the leftover accent width and color. Same fix shape as the
+   radius override below, just missed for this property the first time. */
+#console-tabs .pf-v6-c-tabs__item.pf-m-current { --pf-v6-c-tabs__link--after--BorderColor: transparent; }
 /* The link's radius is set as a property rather than through PF's --pf-v6-c-tabs__link--BorderRadius,
    because PatternFly declares that variable on .pf-v6-c-tabs itself - a closer ancestor than this host,
    so an inherited override never reaches it. */
