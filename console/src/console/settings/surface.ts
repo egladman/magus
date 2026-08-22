@@ -208,7 +208,7 @@ function buildSettingsTabs(tabs: SettingsTab[]): {
   list.setAttribute("role", "tablist");
   list.setAttribute("aria-label", "Settings sections");
   nav.append(list);
-  const panelsHost = h("div", "console-settings-tabs__panels");
+  const panelsHost = h("div");
   const buttons = new Map<string, HTMLButtonElement>();
   const items = new Map<string, HTMLElement>();
   const panelById = new Map<string, HTMLElement>();
@@ -255,7 +255,7 @@ function buildSettingsTabs(tabs: SettingsTab[]): {
     btn.id = "console-settings-tab-" + t.id;
     btn.setAttribute("role", "tab");
     btn.setAttribute("aria-controls", "console-settings-panel-" + t.id);
-    btn.append(h("span", "pf-v6-c-tabs__item-text console-settings-tabs__label", t.label));
+    btn.append(h("span", "pf-v6-c-tabs__item-text", t.label));
     btn.addEventListener("click", () => show(t.id));
     btn.addEventListener("keydown", (ev) => onKey(ev, t.id));
     buttons.set(t.id, btn);
@@ -550,11 +550,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   // Test attaches to the field so a typed host can be checked BEFORE saving it - the draft value is what
   // gets probed. It reports through a toast rather than the pending-changes bar: this is a one-off action,
   // not a staged edit.
-  const testBtn = h(
-    "button",
-    "pf-v6-c-button pf-m-secondary console-settings-host__test",
-    "Test",
-  ) as HTMLButtonElement;
+  const testBtn = h("button", "pf-v6-c-button pf-m-secondary", "Test") as HTMLButtonElement;
   testBtn.type = "button";
   testBtn.title = "Try to reach a daemon at this address";
   testBtn.addEventListener("click", () => {
@@ -677,7 +673,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   // Motion, same 2-way shape. "System" is not "no reduction": it honors prefers-reduced-motion,
   // which is why the other option is labeled Reduced rather than Off - it reduces motion here even
   // when the OS is not asking for it anywhere.
-  const motionGroup = h("div", "pf-v6-c-toggle-group console-settings-motion");
+  const motionGroup = h("div", "pf-v6-c-toggle-group");
   motionGroup.setAttribute("role", "group");
   motionGroup.setAttribute("aria-label", "Motion");
   const motionButtons = new Map<MotionPref, HTMLButtonElement>();
@@ -714,7 +710,7 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
   );
 
   // Node shapes, same 2-way shape again.
-  const shapesGroup = h("div", "pf-v6-c-toggle-group console-settings-nodeshapes");
+  const shapesGroup = h("div", "pf-v6-c-toggle-group");
   shapesGroup.setAttribute("role", "group");
   shapesGroup.setAttribute("aria-label", "Node shapes");
   const shapesButtons = new Map<boolean, HTMLButtonElement>();

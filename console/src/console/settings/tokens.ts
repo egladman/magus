@@ -134,7 +134,7 @@ export function buildTokensSection(
 
       const type = h("span", "console-settings-tokens__cell");
       type.setAttribute("role", "cell");
-      const label = h("span", "pf-v6-c-label pf-m-compact console-settings-tokens__type");
+      const label = h("span", "pf-v6-c-label pf-m-compact");
       label.append(h("span", "pf-v6-c-label__content", scopeLabel(t.scope)));
       type.append(label);
 
