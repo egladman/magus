@@ -876,18 +876,16 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   inline-size: 1.75rem; block-size: 1.75rem;
   border-radius: var(--pf-t--global--border--radius--small);
 }
-/* The ACTIVE INDICATOR: a filled backdrop behind the current row's icon.
+/* The ACTIVE INDICATOR: a filled backdrop behind the current row.
  *
  * Required, not decorative. WCAG 1.4.1 (Level A) forbids color as the only thing distinguishing a
  * state, and measured, current-vs-open differed by hue plus ONE pixel of bar width - which is not a
- * cue at this size, so the pair was near-indistinguishable in greyscale. Material's navigation rail
- * spec calls for exactly this: the selected destination carries an active indicator behind a filled
- * icon, not color alone.
+ * cue at this size, so the pair was near-indistinguishable in greyscale.
  *
- * On the ICON rather than the label, because the rail collapses to 44px and the labels are clipped
- * away - a bolder label would be a cue that vanishes in the state the rail spends most of its time in.
- * Slightly-rounded and not a pill: the shell has no capsules. */
-#console-sidebar .pf-v6-c-nav__link.pf-m-current .pf-v6-c-nav__link-icon {
+ * On the whole row, not just the icon: a fill sized to the 1.75rem icon read as a second, smaller
+ * box floating inside the 44px row rather than as the row's own state. The row is already forced
+ * to BorderRadius 0 above (chrome is square), so the fill takes that shape for free. */
+#console-sidebar .pf-v6-c-nav__link.pf-m-current {
   background: color-mix(in srgb, var(--console-accent) 26%, transparent);
 }
 /* The label is present in the DOM in both states and clipped by the rail's overflow when collapsed;
