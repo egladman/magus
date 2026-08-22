@@ -4,13 +4,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	json "github.com/egladman/magus/internal/json"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"strings"
 
+	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/interp/bindings"
+	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/libs/gopherbuzz"
 	vm "github.com/egladman/magus/libs/gopherbuzz/vm"
 	"github.com/egladman/magus/types"
@@ -73,21 +73,18 @@ var localAdvisors = []string{
 //
 // Not safe for concurrent use: the advisors read their inputs with os\env, so the two
 // collect-mode variables are set process-wide for the duration of the call.
-func runLocalAdvisors(ctx context.Context, root, base string) ([]adviceSection, []string, error) {
-	dir := filepath.Join(root, adviceDirRel)
+func runLocalAdvisors(ctx context.Context, m *magus.Magus, base string) ([]adviceSection, []string, error) {
+	dir := filepath.Join(m.Root(), adviceDirRel)
 	if _, err := os.Stat(dir); err != nil {
 		return nil, []string{fmt.Sprintf("no advisors in this workspace: %s is not readable (%v)", dir, err)}, nil
 	}
 
 	// The advisors ask magus about the workspace (magus\describeFile, magus\diff,
 	// magus\affectedImpact), which reads it off the context the way `magus buzz` does.
-	// Best-effort, matching buzzCmd: a workspace that will not load leaves each advisor
-	// to raise MGS1022, which becomes that advisor's note instead of failing the set.
-	if m, err := loadMagus(ctx, root); err == nil && m != nil {
+	// The caller's already-loaded workspace is attached rather than loaded again:
+	// loadMagus is once-per-process and panics on a second call with a different root.
+	if m != nil {
 		ctx = types.WithWorkspace(ctx, m)
-	} else if err != nil {
-		slog.WarnContext(ctx, "workspace not attached to the local advisors; they will raise MGS1022",
-			slog.String("error", err.Error()))
 	}
 	return collectAdvice(ctx, dir, localAdvisors, base)
 }

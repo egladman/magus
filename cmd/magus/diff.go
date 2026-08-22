@@ -77,7 +77,7 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	render := func() error { return renderDiff(ctx, m, src, opts, rf, rf.Preflight) }
+	render := func() error { return renderDiff(ctx, m, src, opts, rf, root, rf.Preflight) }
 	if rf.Watch {
 		return watchDiff(ctx, m, render)
 	}
@@ -203,7 +203,7 @@ func (in diffInput) readPatch(ctx context.Context, m *magus.Magus) (string, stri
 // preflight is ADDITIVE: with it off, every byte emitted here is what this command emitted
 // before the flag existed, which is what lets a script parsing `magus diff -o json` keep
 // working and what keeps the flag honest about being context rather than a gate.
-func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputOptions, rf *gen.DiffFlags, preflight bool) error {
+func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputOptions, rf *gen.DiffFlags, rootOverride string, preflight bool) error {
 	patch, base, err := src.readPatch(ctx, m)
 	if err != nil {
 		return err
@@ -233,7 +233,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	}
 	var pre *diffPreflight
 	if preflight {
-		p := collectPreflight(ctx, m, rev)
+		p := collectPreflight(ctx, m, rootOverride, rev)
 		pre = &p
 	}
 
@@ -1126,7 +1126,7 @@ const preflightListCap = 10
 // Every lens is best-effort and every failure degrades to that lens's empty form. A preflight
 // that refuses to print because the symbol index is cold or no daemon is running is a
 // preflight nobody runs, and this surface reports context rather than passing judgement.
-func collectPreflight(ctx context.Context, m *magus.Magus, rev types.Diff) diffPreflight {
+func collectPreflight(ctx context.Context, m *magus.Magus, rootOverride string, rev types.Diff) diffPreflight {
 	p := diffPreflight{Reach: preflightReachOf(rev)}
 
 	// The same bounded git-log walk annotateDiff pays for the churn lenses, so the two
@@ -1142,18 +1142,25 @@ func collectPreflight(ctx context.Context, m *magus.Magus, rev types.Diff) diffP
 		}
 	}
 
-	// rev.Base and never a ref derived here. The report prints that string as the base it
-	// annotated, so an advisor handed anything else would be answering about a different
-	// changeset under the same heading - and `magus diff` takes no ref, so there is no second
-	// base to be tempted by: WorkingDiff is the tree against the index plus the untracked
-	// files, which is a state rather than a revision.
-	sections, failed, err := runLocalAdvisors(ctx, m.Root(), rev.Base)
+	// The configured VCS base ref, never rev.Base: the working diff's base is a STATE
+	// label ("working"), and the advisors compare git revisions (`origin/<base>`), so the
+	// label would send them fetching a branch that does not exist. Their section
+	// therefore describes committed state against the base branch - the most a rev-based
+	// advisor can measure, per the documented limit on runLocalAdvisors.
+	base := m.VCSOptions().BaseRef
+	if base == "" {
+		base = "main"
+	}
+	sections, failed, err := runLocalAdvisors(ctx, m, base)
 	p.Advisors, p.AdvisorNotes = sections, failed
 	if err != nil {
 		p.AdvisorNotes = append(p.AdvisorNotes, fmt.Sprintf("advisors did not run: %v", err))
 	}
 
-	p.Anchors = preflightAnchors(ctx, m.Root(), diffPaths(rev), diffSymbolIDs(rev))
+	// rootOverride, not m.Root(): the workspace loaders are once-per-process and keyed on
+	// the override they were first handed, so the anchors' graph load must spell the root
+	// exactly as diffCmd's own load did.
+	p.Anchors = preflightAnchors(ctx, rootOverride, diffPaths(rev), diffSymbolIDs(rev))
 	return p
 }
 
