@@ -203,10 +203,21 @@ body[data-console-fill] > main > .console-render-panel {
   flex-direction: column;
   max-width: none;
   margin-inline: 0;
-  /* Zero, not Pico's ~1rem .container-fluid inset: the console owns the whole width. It was a slim
-     0.4rem gutter, which read as a white strip down the seam between the rail and the surface -
-     this main is transparent, so the gutter showed the page ground against the rail's own surface
-     rather than any deliberate spacing. Surfaces that want breathing room set their own padding. */
+  /* Every pane insets its content. The inset is the pane's to give, not each surface's to remember:
+     this selector carries an id, so it beats any class a surface sheet can write, and a padding
+     shorthand over there silently loses its inline longhands to it - which is how the Dashboard's
+     headings ended up flush against the edge of a phone screen. Defaulting to a gutter means a
+     surface that declares nothing reads slightly wide, rather than reading as broken.
+     --console-pad, not a literal, so the inset tracks the same responsive step as the rest of the
+     shell. The full-bleed exemption is the rule directly below. */
+  padding-inline: var(--console-pad);
+}
+/* Full-bleed surfaces take the whole pane. These paint their own panel edge to edge and meet the
+   rail; a gutter would show page ground along that seam as a strip in a third colour. Keyed on the
+   panel the surface MOUNTS rather than a flag it sets, because a surface that mounts one of these
+   is structurally full-bleed - the same classes the rule below sizes, so one list decides both. */
+#console-outlet div[data-pane-id] > main:has(> .console-graph-app),
+#console-outlet div[data-pane-id] > main:has(> .console-render-panel) {
   padding-inline: 0;
 }
 #console-outlet div[data-pane-id] > main > .console-graph-app,
