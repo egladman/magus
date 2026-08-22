@@ -10,7 +10,8 @@ import (
 )
 
 // buildLedgerNS assembles magus\ledger for a magusfile or `magus buzz` script:
-// list/put/clear over the delegation ledger (see internal/ledger, types.DelegationUnit).
+// list/put/register/clear over the delegation ledger (see internal/ledger,
+// types.DelegationUnit).
 //
 // Hand-bound, like cache/ci/secret/workspace above, because a Namespace's methods are
 // Extern by construction (see std.Namespace) - there is no Impl for codegen to reflect a
@@ -22,7 +23,7 @@ import (
 // Every failure goes back through bindinggen.HostError, which is what a generated
 // trampoline does and what makes a caught value a MAP rather than a str: the VM turns a
 // bare error into StrValue(err.Error()) and only a StructuredError into an indexable map
-// (see vm.caughtValue). All three methods are Raises, so BZZ1006 forces callers to catch
+// (see vm.caughtValue). Every method here is Raises, so BZZ1006 forces callers to catch
 // one - handing them a differently-typed value than every other magus\* method does is a
 // difference they would only find at run time.
 func buildLedgerNS(obs buzz.DirectObserver) vm.Value {
@@ -42,6 +43,17 @@ func buildLedgerNS(obs buzz.DirectObserver) vm.Value {
 			return vm.Null, bindinggen.HostError(err)
 		}
 		return bindinggen.AnyMapVal(unit.BuzzObject()), nil
+	}))
+	// register answers with a two-key map rather than the row alone, which is the shape
+	// list and put use. The advice sentence is DERIVED from the row and not a field on it
+	// (see ledger.RegisterAdvice), so folding it in beside the row's own keys would put a
+	// rendering where a caller reads facts; "unit" and "advice" keep the two apart.
+	ns.MapSet("register", directVal(obs, "magus.ledger.register", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
+		unit, advice, err := std.MagusRegisterLedger(ctx, bindinggen.Str(args, 0), bindinggen.Str(args, 1))
+		if err != nil {
+			return vm.Null, bindinggen.HostError(err)
+		}
+		return bindinggen.AnyMapVal(map[string]any{"unit": unit.BuzzObject(), "advice": advice}), nil
 	}))
 	ns.MapSet("clear", directVal(obs, "magus.ledger.clear", func(ctx context.Context, _ []vm.Value) (vm.Value, error) {
 		n, err := std.MagusClearLedger(ctx)

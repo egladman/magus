@@ -20,6 +20,7 @@ ledger
 ledger.clear
 ledger.list
 ledger.put
+ledger.register
 log
 log.debug
 log.error

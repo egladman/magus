@@ -3,6 +3,7 @@ package ledger
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -174,6 +175,59 @@ func TestStoreUpdateMergesUnderOneLock(t *testing.T) {
 	assert.Equal(t, "goal for a", got[0].Goal, "neither merge erased the row it did not name")
 }
 
+// TestStoreUpdateSurvivesSeparateStores is the CROSS-PROCESS half, and the one the
+// in-process mutex cannot cover: two Stores on one directory share no mutex, exactly as
+// the CLI, the daemon, and a registering worker do not. Only the file lock stops their
+// read-modify-writes from interleaving, and the symptom when it does is a DROPPED ROW -
+// the loser read the ledger before the winner appended, so its write puts back a file
+// that never held the winner's unit.
+//
+// Two Stores in one process is as close as a Go test gets to two processes: the flock is
+// per open handle and each Store opens its own, so the kernel arbitrates between them the
+// same way. What it cannot reproduce is a lock the OS declines to make exclusive within a
+// process, which is why this is a regression test for the drop and not a proof of the
+// lock.
+func TestStoreUpdateSurvivesSeparateStores(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	dir := t.TempDir()
+	root := t.TempDir()
+
+	const rounds = 30
+	var wg sync.WaitGroup
+	errs := make(chan error, 2*rounds)
+	for w := range 2 {
+		s := NewStore(Location{CacheDir: dir, Root: root})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range rounds {
+				_, err := s.Put(ctx, unit(fmt.Sprintf("w%d-%d", w, i)))
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for e := range errs {
+		require.NoError(t, e)
+	}
+
+	got, err := NewStore(Location{CacheDir: dir, Root: root}).List()
+	require.NoError(t, err)
+	ids := make([]string, len(got))
+	for i, u := range got {
+		ids[i] = u.ID
+	}
+	assert.Len(t, ids, 2*rounds, "every row both writers appended is still there: %v", ids)
+	for w := range 2 {
+		for i := range rounds {
+			assert.Contains(t, ids, fmt.Sprintf("w%d-%d", w, i))
+		}
+	}
+}
+
 // TestStoreUpdateCreatesTheRowItMerges keeps declaring a unit and advancing one the same
 // call: a merge onto an id nothing has written yet starts from a zero row carrying the id.
 func TestStoreUpdateCreatesTheRowItMerges(t *testing.T) {
@@ -294,14 +348,14 @@ func TestStoreClear(t *testing.T) {
 
 	ctx := t.Context()
 	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
-	require.NoError(t, s.Clear(), "clearing a ledger that was never written is not an error")
+	require.NoError(t, s.Clear(ctx), "clearing a ledger that was never written is not an error")
 
 	_, err := s.Put(ctx, unit("a"))
 	require.NoError(t, err)
 	_, err = s.Put(ctx, unit("b"))
 	require.NoError(t, err)
 
-	require.NoError(t, s.Clear())
+	require.NoError(t, s.Clear(ctx))
 	got, err := s.List()
 	require.NoError(t, err)
 	assert.Empty(t, got, "a fresh plan starts from an empty ledger")

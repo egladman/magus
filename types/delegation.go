@@ -29,6 +29,30 @@ const (
 	StateNoReturn DelegationState = "no_return"
 )
 
+// DelegationBaseVerdict says how the base a worker reported at registration compares
+// with the Checkpoint its unit was handed. A FACT computed at that moment, never a
+// refusal: a diverged worker is registered like any other and told what diverged.
+//
+// The middle value is why this is not a boolean. A checkpoint is a revision PLUS a
+// dirty-patch digest, so two trees can share a revision and hold different uncommitted
+// work; that is neither agreement nor the kind of divergence a respawn fixes, and folding
+// it into either one sends the worker to the wrong remedy.
+type DelegationBaseVerdict string
+
+const (
+	// BaseMatch is a reported base identical to the checkpoint, digest included.
+	BaseMatch DelegationBaseVerdict = "match"
+	// BaseRevisionMatch is the same revision carrying a different uncommitted patch.
+	BaseRevisionMatch DelegationBaseVerdict = "revision-match"
+	// BaseDiverged is a different revision: the worker is not on the tree it was handed.
+	BaseDiverged DelegationBaseVerdict = "diverged"
+	// BaseUnknown is a registration with nothing to compare against, because the unit was
+	// declared without a Checkpoint. Distinct from BaseMatch on the same ground
+	// StateNoReturn is distinct from StateFail - claiming agreement nobody observed is a
+	// judgment the ledger did not make.
+	BaseUnknown DelegationBaseVerdict = "unknown"
+)
+
 // terminal reports whether the unit is done, however it ended. Nothing derives a
 // verdict from it - it is what keeps a finished unit out of the overlap report below.
 // Unexported because that is its only reader: a client decides what "done" means from
@@ -41,14 +65,22 @@ func (s DelegationState) terminal() bool {
 // agent DECLARED about a piece of work it handed out, recorded so a human can see the
 // plan the agents are running.
 //
-// FACTS ONLY, NEVER ENFORCEMENT. magus records these rows and does nothing else with
-// them. OwnedPaths and ForbiddenPaths are what an orchestrator said it intended, not a
-// boundary anything checks - no write is blocked, no run is gated, no verdict is
-// derived. The skill that defines this vocabulary says the same thing about the prompt
-// text these rows mirror: ownership is checked by comparing the ledger against the
-// ACTUAL diff since each unit's Checkpoint, which is an agent's job and not magus's. A
-// store that quietly started enforcing would make the ledger something agents route
-// around instead of something they keep honestly.
+// FACTS ONLY, NEVER ENFORCEMENT, and the division is precise rather than a blanket "magus
+// does nothing with these". OwnedPaths and ForbiddenPaths are
+// what an orchestrator said it intended, not a boundary this store checks - nothing here
+// blocks a write, gates a run, or refuses a call. The AGENT GUARD is what consults these
+// facts to grade a write, and it lives outside this package and READS this store; a guard
+// verdict is its own, not the ledger's. BaseVerdict is the shape that division takes on a
+// row: registration computes it, records it, and hands it back, and it refuses nothing -
+// the caller and the orchestrator decide what a divergence is worth.
+//
+// Why enforcement lives outside rather than here, which is the reason the split exists at
+// all: a store that quietly started refusing would make the ledger
+// something agents route around instead of something they keep honestly, and a ledger
+// nobody keeps honestly grades nothing. The skill that defines this vocabulary says the
+// same thing about the prompt text these rows mirror: ownership is checked by comparing
+// the ledger against the ACTUAL diff since each unit's Checkpoint, which is a job for an
+// agent reading this store rather than for the store itself.
 //
 // The field set mirrors the ledger table in the magus-delegate-multi-agent skill
 // one-for-one, so a row an agent writes down and a row it records here cannot describe
@@ -106,6 +138,22 @@ type DelegationUnit struct {
 	// worker announces a release by shrinking OwnedPaths, and the digest is what the
 	// next agent needs to tell whether it inherited the file the releaser left.
 	Releases []DelegationRelease `json:"releases,omitempty" yaml:"releases,omitempty"`
+	// ReportedBase is the checkpoint token the unit's WORKER reported it actually landed
+	// on, in the same `magus vcs checkpoint -o name` form Checkpoint holds. Checkpoint is
+	// what the orchestrator handed out; this is what the worker found. Two fields rather
+	// than one overwritten in place, because a single value could never disagree with
+	// itself and the disagreement is the fact worth recording.
+	ReportedBase string `json:"reported_base,omitempty" yaml:"reported_base,omitempty"`
+	// BaseVerdict compares the two, computed by the store at the moment the worker
+	// registered and kept as the fact it was then. Empty until a unit registers, which is
+	// why there is no vocabulary member for "never registered" - an absent verdict is not
+	// a judgment, and inventing one would be the mistake StateNoReturn exists to avoid.
+	BaseVerdict DelegationBaseVerdict `json:"base_verdict,omitempty" yaml:"base_verdict,omitempty"`
+	// Registered is unix seconds, stamped by the store on the write that recorded
+	// ReportedBase, off the same clock read as Updated. No write door accepts it from a
+	// caller, for the reason Created and Updated do not: a client-supplied timestamp is a
+	// fact about the client's clock.
+	Registered int64 `json:"registered,omitempty" yaml:"registered,omitempty"`
 	// Created and Updated are unix seconds, stamped by the store on write and
 	// output-only to callers - a client-supplied timestamp is a fact about the client's
 	// clock, not about when the row was recorded.
@@ -179,6 +227,13 @@ type DelegationReport struct {
 // NewDelegationReport wraps the rows and derives the overlaps. Derived on READ and
 // never stored: an overlap is a relation between two rows, so storing it on either
 // one would mean a row that stopped being true when its neighbor changed.
+//
+// The registration facts take the opposite route and are NOT derived here. ReportedBase,
+// BaseVerdict and Registered describe one row against the checkpoint that row was handed,
+// so they belong on the row, are computed once when the worker registers, and reach every
+// reader of this report - magus_ledger's list op, the console's /api/v1/ledger - by riding
+// the units. Deriving a second copy at read time would be a duplicate to keep true, which
+// is exactly what the overlap rule above avoids in the other direction.
 //
 // The single door onto a report, which is why the empty case is normalized HERE: an
 // unwritten ledger serves "units":[] rather than null, and the MCP tool and the HTTP

@@ -125,7 +125,43 @@ func TestLedgerTool(t *testing.T) {
 	t.Run("an unknown op is rejected, not silently listed", func(t *testing.T) {
 		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"op": "delete"}})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "list, put, clear")
+		assert.Contains(t, err.Error(), "list, put, register, clear")
+	})
+
+	// register is the worker's door: it reports the base it actually landed on and is
+	// told how that compares with the checkpoint the unit was handed. The comparison
+	// itself is covered in internal/ledger; what this asserts is that the tool answers
+	// with BOTH halves - the row for a reader, and Text for the worker, which is the only
+	// op here that sets it.
+	t.Run("register records the reported base and returns the verdict", func(t *testing.T) {
+		invoke(t, map[string]any{"op": "put", "id": "unit-reg", "checkpoint": "aaaa1111", "state": "declared"})
+
+		resp := invoke(t, map[string]any{"op": "register", "id": "unit-reg", "base": "bbbb2222"})
+		got, ok := resp.Data.(types.DelegationUnit)
+		require.True(t, ok)
+		assert.Equal(t, types.BaseDiverged, got.BaseVerdict)
+		assert.Equal(t, "bbbb2222", got.ReportedBase)
+		assert.NotZero(t, got.Registered)
+		assert.Contains(t, resp.Text, "aaaa1111", "the reading names the checkpoint the unit was handed")
+		assert.Contains(t, resp.Text, "bbbb2222", "and the base the worker reported")
+		assert.Contains(t, resp.Text, "Respawn from", "and what to do about it")
+
+		var found bool
+		for _, u := range units(t, invoke(t, map[string]any{"op": "list"})) {
+			if u.ID == "unit-reg" {
+				found = true
+				assert.Equal(t, types.BaseDiverged, u.BaseVerdict, "the verdict is stored, not only returned")
+			}
+		}
+		assert.True(t, found, "nothing was refused: the diverged row is in the ledger like any other")
+	})
+
+	t.Run("register on an unknown id names where the declared ids are", func(t *testing.T) {
+		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{
+			"op": "register", "id": "never-declared", "base": "aaaa1111",
+		}})
+		require.ErrorIs(t, err, ledger.ErrUnknownUnit)
+		assert.Contains(t, err.Error(), "magus_ledger list")
 	})
 
 	// Every reader answers a wrong-typed field the same way. Dropping one while state and

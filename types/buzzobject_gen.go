@@ -944,6 +944,9 @@ func (v DelegationUnit) BuzzObject() BuzzObject {
 		"state":          string(v.State),
 		"readOnly":       v.ReadOnly,
 		"releases":       itemsReleases,
+		"reportedBase":   v.ReportedBase,
+		"baseVerdict":    string(v.BaseVerdict),
+		"registered":     v.Registered,
 		"created":        v.Created,
 		"updated":        v.Updated,
 	}

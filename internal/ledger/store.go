@@ -1,10 +1,16 @@
 // Package ledger persists the delegation ledger: the rows an orchestrating agent
 // declares about the plan it is running, kept where a human can read them.
 //
-// It RECORDS AND NOTHING ELSE. Nothing here gates a run, blocks a write, or derives a
-// verdict from a row - see types.DelegationUnit for why enforcement would make the
-// ledger something agents route around. The store's whole job is that a plan an agent
-// stated in a prompt stops being trapped in one session's transcript.
+// It RECORDS AND REFUSES NOTHING. Nothing here gates a run or blocks a write; the AGENT
+// GUARD is what consults these rows to grade one, and it is a separate thing that READS
+// this store. Register does compute a verdict - whether a worker's reported base is the
+// checkpoint its unit was handed - and that is a fact recorded on the row and handed back
+// to the caller, not a gate: the registration succeeds either way and what to do about a
+// divergence is the caller's and the orchestrator's call. Enforcement stays outside for
+// the reason types.DelegationUnit gives: a store that refused would make the ledger
+// something agents route around, and a ledger nobody keeps honestly grades nothing. The
+// store's whole job is that a plan an agent stated in a prompt stops being trapped in one
+// session's transcript.
 //
 // ONE PLAN PER WORKSPACE, and no history of past plans: Clear wipes the rows so the
 // next plan starts empty. A plan that ended is not archived anywhere, which is the v1
@@ -14,12 +20,12 @@
 // "LEDGER" NAMES THE RECONCILIATION, NOT THE DURABILITY, and the difference is worth
 // stating because the word oversells one of them. A financial ledger is append-only and
 // historical; this is neither - Put upserts a row in place, Clear wipes the book, and
-// nothing is archived. What it does share is the part that earns the name: a single
-// author keeps it, and it is written to be checked AGAINST reality later, which is
-// exactly the skill's "compare the ledger against the actual diff since each unit's
-// checkpoint" step. Read it as a book of declared intent kept for reconciliation, not as
-// a durable record of what happened. The vocabulary came from the delegation skill,
-// which is also where the row shape is defined (see types.DelegationUnit).
+// nothing is archived. What it does share is the part that earns the name: it is written
+// to be checked AGAINST reality later, which is exactly the skill's "compare the ledger
+// against the actual diff since each unit's checkpoint" step. Read it as a book of
+// declared intent kept for reconciliation, not as a durable record of what happened. The
+// vocabulary came from the delegation skill, which is also where the row shape is defined
+// (see types.DelegationUnit).
 //
 // It is the INTENT layer of three, and naming the other two is what keeps them apart -
 // they are flat stores joined by unit id at render time, never a storage hierarchy:
@@ -41,6 +47,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"os"
 	"path/filepath"
@@ -48,6 +55,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/gofrs/flock"
 
 	"github.com/egladman/magus/internal/file"
 	"github.com/egladman/magus/internal/json"
@@ -63,20 +72,27 @@ var ErrNoID = errors.New("ledger: a unit needs an id")
 // directory. Every operation reads the file, acts, and writes it back, so a Store is
 // cheap to construct and holds no state between calls beyond the path and its lock.
 //
-// The mutex serializes writers within one process only while they share a Store, which
-// is why the daemon builds exactly one and hands it to both of its doors (the magus_ledger
-// MCP tool and the console's read route). It serializes for the span of ONE call: a
-// caller that merges fields by reading with List and writing back with Put takes the
-// lock twice, and two such merges on one id then lose whichever field the second one
-// read before the first wrote. [Store.Update] is that merge done under a single
-// acquisition, and it is what a field-at-a-time writer (the magus_ledger MCP tool) has
-// to use.
+// TWO locks, because there are two kinds of concurrent writer and neither lock sees the
+// other's:
 //
-// It does NOT lock across processes: the CLI, the daemon, and an MCP client are separate
-// processes that can each hold a Store on the same file, and a concurrent
-// read-modify-write from two of them can drop a row. That is accepted for v1 because the
-// writer is one orchestrating agent by construction - the ledger has a single author by
-// definition of what it records.
+//   - The mutex serializes writers within one process while they share a Store, which is
+//     why the daemon builds exactly one and hands it to both of its doors (the
+//     magus_ledger MCP tool and the console's read route).
+//   - An OS file lock beside units.json serializes writers across PROCESSES. The CLI, the
+//     daemon, and an MCP client each hold their own Store on the same file, and workers
+//     now register and heartbeat against it, so "one orchestrating agent writes this" -
+//     the assumption that made a cross-process race acceptable - stopped being true. Two
+//     read-modify-writes that interleave drop whichever row the loser had not read.
+//
+// Both are taken for the span of ONE call. A caller that merges fields by reading with
+// List and writing back with Put takes them twice, and two such merges on one id then
+// lose whichever field the second one read before the first wrote. [Store.Update] is that
+// merge done under a single acquisition, and it is what a field-at-a-time writer (the
+// magus_ledger MCP tool) has to use.
+//
+// READS take neither. write replaces the file by rename, so a reader either sees the
+// whole previous ledger or the whole next one; blocking List behind a writer in another
+// process would buy nothing and would let a wedged writer stall the console.
 type Store struct {
 	mu   sync.Mutex
 	path string
@@ -122,10 +138,11 @@ func (s *Store) Put(ctx context.Context, u types.DelegationUnit) (types.Delegati
 	return s.Update(ctx, u.ID, func(cur *types.DelegationUnit) { *cur = u })
 }
 
-// Update applies apply to the row with this id and writes the result back, all under a
-// SINGLE lock acquisition. That is the whole point: a merge spread across List and Put
-// releases the lock in between, so two concurrent writers advancing different fields of
-// one row each read it before the other wrote, and the second write reverts the first.
+// Update applies apply to the row with this id and writes the result back, all while
+// holding both of the Store's locks ONCE. That is the whole point: a merge spread across
+// List and Put releases them in between, so two concurrent writers advancing different
+// fields of one row each read it before the other wrote, and the second write reverts the
+// first - whether the two are goroutines or separate magus processes.
 //
 // The row is CREATED when absent, matching Put: apply then sees a zero unit carrying
 // only the id, so declaring a unit and advancing one are the same call. Created is
@@ -148,40 +165,69 @@ func (s *Store) Put(ctx context.Context, u types.DelegationUnit) (types.Delegati
 // stops hashing files, so a caller that walked away does not keep the store's lock while
 // the disk is read.
 func (s *Store) Update(ctx context.Context, id string, apply func(*types.DelegationUnit)) (types.DelegationUnit, error) {
+	return s.mutate(ctx, id, func(cur *types.DelegationUnit, _ bool, _ int64) error {
+		apply(cur)
+		return nil
+	})
+}
+
+// mutate is the locked read-modify-write [Store.Update] and [Store.Register] share, and
+// the only place units.json is rewritten row-wise.
+//
+// apply gets two things Update's caller does not need and Register's cannot do without.
+// exists says whether a row was already there, which is the difference between the two
+// doors: Update creates, Register refuses (a worker registering an id nobody declared was
+// handed the wrong id, and inventing a row would bury that). now is the one clock read
+// this write is stamped from, so a row cannot claim it registered a second before or
+// after it was updated.
+//
+// apply may fail, which is what lets that refusal be decided where it has to be: under
+// the lock, after the row is known present or absent. Nothing is written when it does.
+func (s *Store) mutate(ctx context.Context, id string, apply func(cur *types.DelegationUnit, exists bool, now int64) error) (types.DelegationUnit, error) {
 	if strings.TrimSpace(id) == "" {
 		return types.DelegationUnit{}, ErrNoID
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	f, err := s.read()
+	var stored types.DelegationUnit
+	err := s.withFileLock(ctx, func() error {
+		f, err := s.read()
+		if err != nil {
+			return err
+		}
+		i := slices.IndexFunc(f.Units, func(e types.DelegationUnit) bool { return e.ID == id })
+		var prev types.DelegationUnit
+		if i >= 0 {
+			prev = f.Units[i]
+		}
+		u := prev.Clone()
+		u.ID = id
+		now := time.Now().Unix()
+		if aerr := apply(&u, i >= 0, now); aerr != nil {
+			return aerr
+		}
+		u = u.Clone()
+		u.ID = id
+		u.Updated = now
+		u.Created = now
+		u.Releases = s.releases(ctx, prev, u, now)
+		if i >= 0 {
+			u.Created = prev.Created
+			f.Units[i] = u
+		} else {
+			f.Units = append(f.Units, u)
+		}
+		if werr := s.write(f); werr != nil {
+			return werr
+		}
+		stored = u.Clone()
+		return nil
+	})
 	if err != nil {
 		return types.DelegationUnit{}, err
 	}
-	i := slices.IndexFunc(f.Units, func(e types.DelegationUnit) bool { return e.ID == id })
-	var prev types.DelegationUnit
-	if i >= 0 {
-		prev = f.Units[i]
-	}
-	u := prev.Clone()
-	u.ID = id
-	apply(&u)
-	u = u.Clone()
-	u.ID = id
-	now := time.Now().Unix()
-	u.Updated = now
-	u.Created = now
-	u.Releases = s.releases(ctx, prev, u, now)
-	if i >= 0 {
-		u.Created = prev.Created
-		f.Units[i] = u
-	} else {
-		f.Units = append(f.Units, u)
-	}
-	if err := s.write(f); err != nil {
-		return types.DelegationUnit{}, err
-	}
-	return u.Clone(), nil
+	return stored, nil
 }
 
 // List returns every row in the order it was first recorded. The rows are copies, so a
@@ -203,11 +249,16 @@ func (s *Store) List() ([]types.DelegationUnit, error) {
 
 // Clear drops every row, which is how a fresh plan starts. Clearing an empty or absent
 // ledger is not an error - the caller asked for an empty ledger and got one.
-func (s *Store) Clear() error {
+//
+// It reads nothing, so no row can be lost to an interleaving; it takes the file lock
+// anyway, so that every rewrite of units.json is under it and a reader of this package
+// never has to work out which writes are the exempt ones. ctx bounds the wait for the
+// lock and nothing else.
+func (s *Store) Clear(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.write(unitsFile{})
+	return s.withFileLock(ctx, func() error { return s.write(unitsFile{}) })
 }
 
 // releases carries the row's recorded releases forward and adds the paths this write
@@ -323,6 +374,57 @@ func (s *Store) read() (unitsFile, error) {
 	}
 	return f, nil
 }
+
+// withFileLock runs fn while this process holds the ledger's exclusive OS file lock, so a
+// read-modify-write cannot interleave with one from another magus process.
+//
+// The same idiom the workspace project locks use (magus/lock.go): gofrs/flock, TryLock
+// first and TryLockContext to poll while contended. An OS lock rather than a lockfile
+// because the kernel drops it when the holder exits, so a killed worker never leaves the
+// ledger wedged. Advisory, like that one - it serializes the code that takes it and
+// nothing else, so a hand-edit of units.json ignores it entirely.
+//
+// The wait is BOUNDED, which is where this parts company with the project locks. Those
+// wait forever with a heartbeat because the holder is a build that may legitimately run
+// for hours; a ledger write is a small file rewrite, so a wait past lockWait means the
+// holder is stuck rather than busy, and blocking a worker's registration on it forever
+// hides that. ctx shortens the wait and never lengthens it.
+func (s *Store) withFileLock(ctx context.Context, fn func() error) error {
+	if err := os.MkdirAll(filepath.Dir(s.path), 0o755); err != nil {
+		return err
+	}
+	fl := flock.New(s.path + lockSuffix)
+	got, err := fl.TryLock()
+	if err != nil {
+		return fmt.Errorf("ledger: lock %s: %w", fl.Path(), err)
+	}
+	if !got {
+		wait, cancel := context.WithTimeout(ctx, lockWait)
+		defer cancel()
+		if got, err = fl.TryLockContext(wait, lockRetryDelay); err != nil || !got {
+			// Whose deadline ended the wait decides which of two different problems the
+			// caller has, and blaming a stuck holder for their own cancellation would send
+			// them looking for a process that is working fine.
+			if ctx.Err() != nil {
+				return fmt.Errorf("ledger: the caller was cancelled while waiting for the delegation ledger lock at %s,"+
+					" so this write was not applied: %w", fl.Path(), ctx.Err())
+			}
+			return fmt.Errorf("ledger: another process has held the delegation ledger lock at %s for more than %s,"+
+				" so this write was not applied. Look for a stuck magus process with `magus status`, then retry;"+
+				" the lock is an OS file lock and is released the moment its holder exits", fl.Path(), lockWait)
+		}
+	}
+	defer func() { _ = fl.Unlock() }()
+	return fn()
+}
+
+// The file lock's shape. lockWait bounds one acquisition and lockRetryDelay is how often a
+// blocked one re-polls, matching the project locks' cadence in magus/lock.go.
+const (
+	lockSuffix     = ".lock"
+	lockWait       = 10 * time.Second
+	lockRetryDelay = 20 * time.Millisecond
+)
 
 // write replaces the file atomically, so a reader never sees a half-written ledger.
 func (s *Store) write(f unitsFile) error {
