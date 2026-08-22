@@ -46,7 +46,12 @@ var adviceDirRel = filepath.Join(".github", "actions", "advice")
 //
 // first-contribution.buzz is the one read-only advisor deliberately left out: it asks the
 // forge who opened the pull request, through its own `gh` call rather than through
-// advice.buzz, so the collect sink cannot intercept it. It also has no local meaning.
+// advice.buzz, so local mode cannot intercept it. It also has no local meaning.
+//
+// Restating is not the same as drifting, and TestLocalAdvisorsMatchActionYML is what keeps
+// the two apart: it reads the steps back out of action.yml and fails naming any advisor
+// that is in one list and not the other. Adding a read-only advisor to CI without adding
+// it here is the failure that gate exists for.
 var localAdvisors = []string{
 	"merge-conflict.buzz",
 	"hand-edited-generated.buzz",
@@ -72,7 +77,7 @@ var localAdvisors = []string{
 // makes the whole set meaningless.
 //
 // Not safe for concurrent use: the advisors read their inputs with os\env, so the two
-// collect-mode variables are set process-wide for the duration of the call.
+// local-mode variables are set process-wide for the duration of the call.
 func runLocalAdvisors(ctx context.Context, m *magus.Magus, base string) ([]adviceSection, []string, error) {
 	dir := filepath.Join(m.Root(), adviceDirRel)
 	if _, err := os.Stat(dir); err != nil {
@@ -101,11 +106,16 @@ func collectAdvice(ctx context.Context, dir string, files []string, base string)
 	var sections []adviceSection
 	var notes []string
 	for _, file := range files {
-		out, err := runAdvisor(ctx, dir, file)
+		out, warnings, err := runAdvisor(ctx, dir, file)
 		// Sections printed before the failure are kept: an advisor that publishes and
 		// then dies has already said something true, and dropping it would report the
 		// finding as absent rather than as partial.
 		sections = append(sections, parseAdviceSections(out)...)
+		// Warnings first, then the failure: that is the order they happened in, and a
+		// BZZ3001 above a crash is usually the explanation for it.
+		for _, w := range warnings {
+			notes = append(notes, fmt.Sprintf("%s: %s", file, w))
+		}
 		if err != nil {
 			notes = append(notes, fmt.Sprintf("%s: %v", file, err))
 		}
@@ -113,21 +123,28 @@ func collectAdvice(ctx context.Context, dir string, files []string, base string)
 	return sections, notes, nil
 }
 
-// adviceEnv is the contract between this driver and advice.buzz. The names are read there
-// with os\env; there is no per-session environment to hand a Buzz script, so they are set
-// on the process.
+// The contract between this driver and advice.buzz. The names are read there with os\env;
+// there is no per-session environment to hand a Buzz script, so they are set on the
+// process.
+//
+// MAGUS_INTERNAL_ says what these are: the handshake between two halves of one feature,
+// not a knob. Setting either by hand puts the advisors into local mode with no driver
+// reading their stdout, and both names may change with this file in one commit. advice.buzz
+// pins the same three strings in a test block of its own, because nothing at runtime
+// couples its copy to this one - rename one side alone and every advisor fails with
+// "nowhere to publish" instead of saying anything.
 const (
-	adviceSinkEnv     = "MAGUS_ADVICE_SINK"
-	adviceSinkCollect = "collect"
-	adviceBaseEnv     = "MAGUS_ADVICE_BASE"
+	adviceModeEnv       = "MAGUS_INTERNAL_ADVICE_MODE"
+	adviceModeLocal     = "local"
+	adviceBaseBranchEnv = "MAGUS_INTERNAL_ADVICE_BASE_BRANCH"
 )
 
-// setAdviceEnv puts the collect-mode variables on the process and returns the restore.
+// setAdviceEnv puts the local-mode variables on the process and returns the restore.
 // It restores an absent variable to absent rather than to empty, because advice.buzz
 // distinguishes the two.
 func setAdviceEnv(base string) (func(), error) {
 	saved := map[string]*string{}
-	for name, want := range map[string]string{adviceSinkEnv: adviceSinkCollect, adviceBaseEnv: base} {
+	for name, want := range map[string]string{adviceModeEnv: adviceModeLocal, adviceBaseBranchEnv: base} {
 		if had, ok := os.LookupEnv(name); ok {
 			saved[name] = &had
 		} else {
@@ -148,14 +165,27 @@ func setAdviceEnv(base string) (func(), error) {
 	}, nil
 }
 
-// runAdvisor evaluates one advisor in-process and returns whatever it printed. The
-// session is built exactly as `magus buzz <file>` builds one - same module surface, same
-// strict parse mode - so an advisor cannot behave one way in CI and another way here.
-// std.print is redirected to a buffer, which is how the sections come back.
-func runAdvisor(ctx context.Context, dir, file string) (string, error) {
+// runAdvisor evaluates one advisor in-process and returns what it printed, the warnings
+// its compilation raised, and the error that ended it. Nothing here writes or exits: all
+// three are the caller's to report.
+//
+// The session is built as `magus buzz <file>` builds one - same module surface, same
+// strict parse mode, warnings drained at the same point, `fun main() > int` read rather
+// than discarded - so an advisor cannot behave one way in CI and another way here. Two
+// differences remain, both deliberate:
+//
+//   - std.print goes to a buffer, not stdout. That IS the transport: a section is a line
+//     the advisor printed, and parseAdviceSections reads them back.
+//   - the include path is set on the session rather than through BUZZ_INCLUDE_PATH, for
+//     the reason at the call site below.
+//
+// Where those two observations LAND differs as well, and has to. `magus buzz` prints
+// warnings to stderr and exits with main's value; ten advisors run here, and the ninth
+// failing is not a verdict on `magus diff`. Both become notes instead.
+func runAdvisor(ctx context.Context, dir, file string) (string, []string, error) {
 	src, err := os.ReadFile(filepath.Join(dir, file))
 	if err != nil {
-		return "", err
+		return "", nil, err
 	}
 	sess := buzz.NewSession(ctx)
 	defer func() { _ = sess.Close() }()
@@ -170,16 +200,33 @@ func runAdvisor(ctx context.Context, dir, file string) (string, error) {
 	bindings.RegisterSpellSourceModules(sess)
 
 	if err := sess.Exec(ctx, string(src)); err != nil {
-		return out.String(), err
+		return out.String(), nil, err
 	}
+	// Drained where `magus buzz` drains them: after Exec, before main. These are parse and
+	// check diagnostics (BZZ3001 unused import, and the rest), so Exec is where all of them
+	// are produced, and it never fails on one - which is exactly why they need collecting
+	// rather than trusting a green run. An advisor whose imports have rotted is the kind of
+	// thing a reader wants told, not left to read as an advisor with nothing to say.
+	var warnings []string
+	for _, w := range sess.Warnings() {
+		warnings = append(warnings, w.String())
+	}
+
 	mainFn := sess.GetGlobal("main")
 	if !mainFn.IsFun() {
-		return out.String(), fmt.Errorf("no main() to run")
+		return out.String(), warnings, fmt.Errorf("no main() to run")
 	}
-	if _, err := sess.CallValue(ctx, mainFn, []vm.Value{vm.ListValue(nil)}); err != nil {
-		return out.String(), err
+	ret, err := sess.CallValue(ctx, mainFn, []vm.Value{vm.ListValue(nil)})
+	if err != nil {
+		return out.String(), warnings, err
 	}
-	return out.String(), nil
+	// `fun main() > int` is upstream's exit-status convention, and the checker permits it,
+	// so an advisor may report failure by returning rather than by throwing. Discarding the
+	// value read that advisor as having succeeded.
+	if ret.IsInt() && ret.AsInt() != 0 {
+		return out.String(), warnings, fmt.Errorf("main() returned %d", ret.AsInt())
+	}
+	return out.String(), warnings, nil
 }
 
 // parseAdviceSections picks the section objects out of one advisor's output. An advisor

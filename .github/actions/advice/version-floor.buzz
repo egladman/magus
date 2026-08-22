@@ -60,7 +60,7 @@ fun main() > void !> any {
         return;
     }
 
-    proc\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+    advice\fetchBase(base, refspec: false);
     final diff = proc\exec("git", args: ["diff", "origin/" + base + "..." + head, "--", "magus.yaml"],
         dir: ".", opts: {"allow_failure": true}).stdout;
     final floor = raised(diff);
