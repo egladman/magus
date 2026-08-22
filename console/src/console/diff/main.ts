@@ -1212,15 +1212,19 @@ export function activate(host: HTMLElement): SurfaceInstance {
     paintSidebar(true);
     const generated = document.createDocumentFragment();
     if (state.changeset.generated.length > 0) {
-      // Same fold affordance as an activity section - the twist caret plus aria-expanded and
-      // data-collapsed - so a collapsible in the sidebar reads the way collapsibles read
-      // everywhere else in the console. It was a bare button styled like nothing else.
-      const g = h("button", "console-diff-sidebar__group console-render-section__head");
+      // Its own twist caret rather than the log viewer's console-render-section one: that class is
+      // styled only in logs.css, which this surface never loads (verified cold - the button rendered
+      // display:inline-block with a 0x0 caret when Diff was the first surface opened in a session,
+      // and only looked right because an earlier visit to Logs/Activity/Notes had pulled the sheet
+      // in already). The rotation is also driven off this button's OWN aria-expanded rather than a
+      // [data-collapsed] ancestor, because this button has no such ancestor - logs.css's selector
+      // could never have matched it even with the sheet loaded.
+      const g = h("button", "console-diff-sidebar__group");
       g.type = "button";
       g.setAttribute("aria-expanded", state.showGenerated ? "true" : "false");
-      const twist = h("span", "console-render-section__twist");
+      const twist = h("span", "console-diff-sidebar__grouptwist");
       twist.setAttribute("aria-hidden", "true");
-      const gLabel = h("span", "console-render-section__title");
+      const gLabel = h("span", "console-diff-sidebar__grouplabel");
       gLabel.textContent = `${state.changeset.generated.length} generated`;
       g.append(twist, gLabel);
       g.title = state.showGenerated

@@ -864,6 +864,9 @@
 }
 
 .console-diff-sidebar__group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   margin-block-start: var(--pf-t--global--spacer--sm);
   padding: 2px var(--pf-t--global--spacer--xs);
   border: 1px dashed var(--pf-t--global--border--color--default);
@@ -872,6 +875,25 @@
   cursor: pointer;
   font-size: var(--pf-t--global--font--size--xs);
   text-align: start;
+}
+.console-diff-sidebar__grouplabel {
+  flex: 1 1 auto;
+}
+/* CSS-drawn disclosure caret, the border-triangle technique (keeps the source ASCII rather than an
+   authored SVG for a mark this small). Points down when expanded, rotated flat when not - driven off
+   the button's own aria-expanded, since this button IS the disclosure, not a child of one. */
+.console-diff-sidebar__grouptwist {
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 0.3em solid transparent;
+  border-right: 0.3em solid transparent;
+  border-top: 0.36em solid var(--pf-t--global--text--color--subtle);
+  transition: transform 0.12s;
+}
+.console-diff-sidebar__group[aria-expanded="false"] .console-diff-sidebar__grouptwist {
+  transform: rotate(-90deg);
 }
 
 /* The overview. Esc lands here: the whole changeset on one screen, so a reader can decide what
