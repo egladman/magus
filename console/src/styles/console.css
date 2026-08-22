@@ -733,20 +733,35 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-tabs-more {
   position: absolute; inset-block: 0; z-index: 1;
   display: none; align-items: center; gap: 0.15rem;
-  padding-inline: 0.4rem; border: 0;
-  background: var(--pf-t--global--background--color--primary--default);
+  border: 0;
   color: var(--pf-t--global--text--color--subtle);
   font-size: 0.72rem; line-height: 1; cursor: pointer;
 }
 .console-tabs-more[hidden] { display: none; }
-/* The hairline is on the INNER edge, facing the tabs: it is the cut where the run is covered, so it
-   belongs where the covering starts rather than against the rail or the controls cluster outside. */
-.console-tabs-more[data-tab-scroll="start"] { inset-inline-start: 0; border-inline-end: 1px solid var(--pf-t--global--border--color--default); }
-.console-tabs-more[data-tab-scroll="end"] { inset-inline-end: 0; border-inline-start: 1px solid var(--pf-t--global--border--color--default); }
+/* The control's own background IS the transition. Opaque with a hairline on its inner edge, it
+   guillotined whatever tab it covered mid-word - a hard vertical cut through a word, which reads as
+   damage rather than as continuation. A ramp to the strip's own colour lets the run dissolve into the
+   control instead: a fade cannot be an ending, so text that stops inside one is text that goes on.
+   The ramp reaches solid BEFORE the padding ends, which is what the two numbers below are doing -
+   0.25rem of clear ground between the last of the tab and the first of the count, so the two never
+   read as one string. Same rules at every width: the phone and a narrow desktop window get the same
+   control, because it is the same problem. */
+.console-tabs-more[data-tab-scroll="start"] {
+  inset-inline-start: 0;
+  padding-inline: 0.55rem 2.75rem;
+  background: linear-gradient(to right, var(--pf-t--global--background--color--primary--default) 2.5rem, transparent);
+}
+.console-tabs-more[data-tab-scroll="end"] {
+  inset-inline-end: 0;
+  padding-inline: 2.75rem 0.55rem;
+  background: linear-gradient(to left, var(--pf-t--global--background--color--primary--default) 2.5rem, transparent);
+}
 #console-tabs[data-tab-overflow="start"] .console-tabs-more[data-tab-scroll="start"],
 #console-tabs[data-tab-overflow="end"] .console-tabs-more[data-tab-scroll="end"],
 #console-tabs[data-tab-overflow="both"] .console-tabs-more { display: flex; }
-.console-tabs-more:hover { color: var(--pf-t--global--text--color--regular); background: var(--console-chrome); }
+/* Colour only on hover, never the background: swapping the ramp for a flat fill would snap the hard
+   edge back the moment the pointer arrived, which is the thing this shape exists to avoid. */
+.console-tabs-more:hover { color: var(--pf-t--global--text--color--regular); }
 .console-tabs-more__count { font-variant-numeric: tabular-nums; font-weight: 600; }
 .console-tabs-more svg { inline-size: 0.85rem; block-size: 0.85rem; }
 
