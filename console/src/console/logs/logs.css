@@ -437,12 +437,23 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 .console-log-runs__dot { display: inline-block; width: 7px; height: 7px; margin-right: 0.45rem; border-radius: 50%; flex: 0 0 auto; background: var(--pf-t--global--text--color--subtle); }
 .console-log-runs__dot[data-status="pass"] { background: var(--console-status-ok); }
 .console-log-runs__dot[data-status="fail"] { background: var(--console-status-danger); }
-/* The slim reopen rail, shown only while the aside is hidden but runs exist. */
+/* The slim reopen rail, shown only while the aside is hidden but runs exist. Column, not PF's
+   default row, so a caller's count badge (activity's event count - see console-log-runs__reopen-badge
+   below) stacks under the icon instead of squeezing beside it in a rail this narrow. */
 .console-log-runs__reopen {
   flex: 0 0 auto; align-self: stretch; border-right: 1px solid var(--pf-t--global--border--color--default);
   border-radius: 0; padding-inline: 0.15rem;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem;
 }
 .console-log-runs__reopen[hidden] { display: none; }
+/* The count a caller injects (activity: how many events are loaded) so it survives the panel
+   auto-collapsing on a phone - see the CollapsiblePanel.reopen doc in runtree.ts for why head's
+   own count does not. Empty by default (unset by any caller that has none, e.g. the log viewer's
+   run browser), so :empty hides it rather than reserving space for a badge nobody filled in. */
+.console-log-runs__reopen-badge {
+  font-size: 0.62rem; line-height: 1; color: var(--pf-t--global--text--color--subtle);
+}
+.console-log-runs__reopen-badge:empty { display: none; }
 /* Keep the tree readable in the dense panel: the run leaves are mono (they read as data/timestamps). */
 .console-log-runs .pf-v6-c-tree-view__node-text { font-size: 0.78rem; }
 .console-log-runs__tree .pf-v6-c-tree-view__list-item:not([aria-expanded]) .pf-v6-c-tree-view__node-text { font-family: var(--pf-t--global--font--family--mono); }

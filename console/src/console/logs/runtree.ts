@@ -358,6 +358,11 @@ export interface CollapsiblePanel {
   head: HTMLElement; // the header row, so a caller can inject extra chrome (e.g. a count)
   treeBox: HTMLElement; // the caller (re)renders its tree into this
   refreshBtn: HTMLButtonElement;
+  // The slim reopen rail shown while the panel is auto-collapsed on a phone. head's own chrome
+  // (including anything a caller injected into it, like a count) is hidden along with the rest
+  // of the aside in that state - this is the one element still on screen, so it is the caller's
+  // only way to keep a count reachable without the tree.
+  reopen: HTMLButtonElement;
   // applyDefault sets the open state after a (re)load from whether the panel now has content: an
   // empty panel collapses (to the rail, or fully hidden when hideWhenEmpty), a populated one opens -
   // except on a phone, where an open aside would crush the content pane, so it starts collapsed to
@@ -429,6 +434,7 @@ export function mountCollapsiblePanel(opts: {
     head,
     treeBox,
     refreshBtn,
+    reopen,
     applyDefault: (hasContent: boolean): void => {
       if (!hasContent) {
         apply(opts.hideWhenEmpty ? "hidden" : "closed");

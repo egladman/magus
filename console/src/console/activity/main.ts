@@ -259,7 +259,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
     hideWhenEmpty: true,
   });
   const conn = h("span", "console-activity-conn");
-  if (panel) panel.head.insertBefore(conn, panel.refreshBtn);
+  // On a phone the panel auto-collapses and takes conn with it - it lives in head, which is
+  // hidden along with the rest of the aside. reopen is the one piece of the panel still on
+  // screen in that state, so the count rides there too instead of vanishing with the tree.
+  const countBadge = h("span", "console-log-runs__reopen-badge");
+  if (panel) {
+    panel.head.insertBefore(conn, panel.refreshBtn);
+    panel.reopen.append(countBadge);
+  }
 
   // reveal scrolls a section into view and expands it, so clicking an index leaf lands on that event.
   function reveal(index: number, sectionEls: HTMLElement[]): void {
@@ -285,6 +292,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // "N events" is the count LOADED, not the count the daemon holds - the trail pages. Saying so
     // costs one character and stops the number reading as a total, which it only is on the last page.
     conn.textContent = n + (n === 1 ? " event" : " events") + (nextPageToken ? "+" : "");
+    // The badge stays a bare number - a corner overlay has no room for a sentence, and unlike conn
+    // it is not cleared to an error/status string elsewhere, so it always reflects what is actually
+    // loaded even while conn is saying something else (e.g. a failed "load older" page).
+    countBadge.textContent = n > 0 ? String(n) + (nextPageToken ? "+" : "") : "";
     if (panel) {
       renderIndexTree(panel.treeBox, events, Date.now(), (i) => reveal(i, sectionEls));
       panel.applyDefault(has);
