@@ -13,6 +13,7 @@ import (
 
 	"github.com/egladman/magus/internal/cache"
 	"github.com/egladman/magus/internal/config"
+	"github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/types"
 )
 
@@ -68,8 +69,8 @@ func TestNewTargetCacheLastRun(t *testing.T) {
 		rec := cache.RecordedRun{Key: "cafe", KeyInputs: recorded}
 		got := newTargetCacheLastRun("api", "build", rec, nil, "cafe", true, recorded)
 		assert.True(t, got.Recorded)
-		assert.True(t, got.Matches)
-		assert.True(t, got.Replays)
+		assert.True(t, got.KeyMatches)
+		assert.True(t, got.WouldReplay)
 		assert.Equal(t, 0, got.Differences)
 		assert.Nil(t, got.First)
 		assert.Contains(t, got.Explanation, "replays that entry")
@@ -80,8 +81,8 @@ func TestNewTargetCacheLastRun(t *testing.T) {
 		rec := cache.RecordedRun{Key: "cafe", KeyInputs: recorded}
 		live := []string{"keyVersion:3", "target:build", "src:api/main.go:bbb:0", "tool:go:go:go1.25.0"}
 		got := newTargetCacheLastRun("api", "build", rec, nil, "f00d", true, live)
-		assert.False(t, got.Matches, "the newest entry is a different key")
-		assert.True(t, got.Replays)
+		assert.False(t, got.KeyMatches, "the newest entry is a different key")
+		assert.True(t, got.WouldReplay)
 		assert.Equal(t, cache.PortableRef("f00d"), got.ReplaysRef, "the entry a run reaches is named")
 		assert.Zero(t, got.Differences, "a hit has no miss to explain")
 		assert.Nil(t, got.First)
@@ -94,8 +95,8 @@ func TestNewTargetCacheLastRun(t *testing.T) {
 		rec := cache.RecordedRun{Key: "cafe", KeyInputs: recorded}
 		live := []string{"keyVersion:3", "target:build", "src:api/main.go:bbb:0", "tool:go:go:go1.26.0"}
 		got := newTargetCacheLastRun("api", "build", rec, nil, "f00d", false, live)
-		assert.False(t, got.Matches)
-		assert.False(t, got.Replays)
+		assert.False(t, got.KeyMatches)
+		assert.False(t, got.WouldReplay)
 		assert.Equal(t, 2, got.Differences, "the edited source and the moved tool token, once each")
 		require.NotNil(t, got.First)
 		assert.Equal(t, "src:api/main.go", got.First.Input, "the earliest class in live key order leads")
@@ -121,7 +122,7 @@ func TestNewTargetCacheLastRun(t *testing.T) {
 		t.Parallel()
 		got := newTargetCacheLastRun("api", "build", cache.RecordedRun{Key: "cafe"}, nil, "f00d", false, recorded)
 		assert.True(t, got.Recorded)
-		assert.False(t, got.Matches)
+		assert.False(t, got.KeyMatches)
 		assert.Nil(t, got.First, "there is no recorded line to blame")
 		assert.Contains(t, got.Explanation, "predates key-input persistence")
 		assert.Contains(t, got.Explanation, "magus run build api")
@@ -137,10 +138,10 @@ func TestLastRunLines(t *testing.T) {
 	got := lastRunLines(targetCacheLastRun{Explanation: "nothing recorded."})
 	assert.Equal(t, []string{"  last recorded run: none", "    nothing recorded."}, got)
 
-	got = lastRunLines(targetCacheLastRun{Recorded: true, Ref: "mgs_abc123", At: at, Matches: true, Explanation: "replays."})
+	got = lastRunLines(targetCacheLastRun{Recorded: true, Ref: "mgs_abc123", At: at, KeyMatches: true, Explanation: "replays."})
 	assert.Equal(t, []string{"  last recorded run: 2026-08-20T10:00:00Z  mgs_abc123  MATCHES", "    replays."}, got)
 
-	got = lastRunLines(targetCacheLastRun{Recorded: true, Ref: "mgs_abc123", At: at, Replays: true, ReplaysRef: "mgs_def456", Explanation: "hits."})
+	got = lastRunLines(targetCacheLastRun{Recorded: true, Ref: "mgs_abc123", At: at, WouldReplay: true, ReplaysRef: "mgs_def456", Explanation: "hits."})
 	assert.Equal(t, []string{
 		"  last recorded run: 2026-08-20T10:00:00Z  mgs_abc123  DIFFERS; the live key HITS an older entry",
 		"    hits.",
@@ -161,6 +162,24 @@ func TestLastRunLines(t *testing.T) {
 		"      + live      bbb:0",
 		"    misses.",
 	}, got)
+}
+
+// TestTargetCacheLastRunWireFields pins the field names a script gating on `describe
+// target --cache -o json` reads. Both verdicts are booleans of the same shape, so a
+// consumer that silently gets the other one back reports a hit as a miss; renaming either
+// has to be a deliberate break rather than a side effect.
+func TestTargetCacheLastRunWireFields(t *testing.T) {
+	t.Parallel()
+	data, err := json.Marshal(targetCacheLastRun{Recorded: true, KeyMatches: true, WouldReplay: true, ReplaysRef: "mgs_abc123"})
+	require.NoError(t, err)
+
+	var wire map[string]any
+	require.NoError(t, json.Unmarshal(data, &wire))
+	assert.Equal(t, true, wire["key_matches"], "the newest entry's key equals the live key")
+	assert.Equal(t, true, wire["would_replay"], "a run now hits some entry")
+	assert.Equal(t, "mgs_abc123", wire["replays_ref"])
+	assert.NotContains(t, wire, "matches")
+	assert.NotContains(t, wire, "replays")
 }
 
 // TestLastRunLinesMarksAbsence: a class with no value slot differs only by appearing or

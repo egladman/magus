@@ -26,20 +26,20 @@ import (
 // mistake it for an execution record.
 const keyInputsName = "key-inputs"
 
-// envValueDigestLen truncates a masked env value's digest, matching the ref/class
+// envValueDigestLen truncates an env value's digest, matching the ref/class
 // truncation length used elsewhere.
 const envValueDigestLen = 12
 
-// MaskKeyInputs returns lines with every env value replaced by a short digest
+// DigestEnvValues returns lines with every env value replaced by a short digest
 // ("env:NAME=abc" -> "env:NAME=sha256:<12hex>"). Env values are the one key-input
 // class that routinely carries material a user would not publish (tokens ride env
 // vars whether or not a secret provider registered them), so the raw value never
-// leaves hashStep: the store persists MASKED lines, and every comparison surface
-// masks its live lines the same way - which also keeps the two sides byte-comparable
+// leaves hashStep: the store persists DIGESTED lines, and every comparison surface
+// digests its live lines the same way - which also keeps the two sides byte-comparable
 // (a registry-based redaction would fire on one machine and not the other, turning
 // every secret-bearing env line into a false diff). The digest still changes when
 // the value changes, so the diff names the exact variable without exposing it.
-func MaskKeyInputs(inputs []string) []string {
+func DigestEnvValues(inputs []string) []string {
 	out := make([]string, len(inputs))
 	for i, line := range inputs {
 		rest, ok := strings.CutPrefix(line, "env:")
@@ -59,7 +59,7 @@ func MaskKeyInputs(inputs []string) []string {
 }
 
 // PersistKeyInputs writes the step's pre-hash key inputs beside its attempts, env
-// values masked (MaskKeyInputs) and the result secret-redacted line-by-line as a
+// values digested (DigestEnvValues) and the result secret-redacted line-by-line as a
 // second net for non-env classes. One file per cache key: the lines are a property
 // of the KEY, so later attempts of the same step overwrite with identical content.
 // Best-effort at the call site: an error just means a later --meta/--against has no
@@ -74,7 +74,7 @@ func (s *OutputStore) PersistKeyInputs(ctx context.Context, cacheKey string, inp
 	}
 	// Redact the plain text, not the marshaled JSON: a secret containing a character
 	// json escapes would not match its escaped form, and would land on disk raw.
-	data, err := json.Marshal(RedactKeyInputs(ctx, MaskKeyInputs(inputs)))
+	data, err := json.Marshal(RedactKeyInputs(ctx, DigestEnvValues(inputs)))
 	if err != nil {
 		return err
 	}
@@ -82,8 +82,8 @@ func (s *OutputStore) PersistKeyInputs(ctx context.Context, cacheKey string, inp
 }
 
 // RedactKeyInputs replaces every value the run's secret resolver has registered with its
-// mask, one line at a time. It is the second net behind [MaskKeyInputs]: env values are
-// masked by construction, but a registered credential can ride a non-env class too - an
+// mask, one line at a time. It is the second net behind [DigestEnvValues]: env values are
+// digested by construction, but a registered credential can ride a non-env class too - an
 // `arg:` line carrying `--token=<value>`, say - and nothing else strips it.
 //
 // BOTH sides of a comparison must pass through it. The store redacts at write, so a live
@@ -112,11 +112,11 @@ func (s *OutputStore) KeyInputsByRef(ref string) ([]string, error) {
 	return readKeyInputs(filepath.Dir(path))
 }
 
-// KeyInputsForKey returns the stored pre-hash key inputs for an EXACT cache key, the
+// KeyInputsByKey returns the stored pre-hash key inputs for an EXACT cache key, the
 // shape a manifest records. It does not scan the store the way KeyInputsByRef must: a
 // prefix search would be a slower route to the same directory, and it fails outright once
 // the key's attempt blobs have been pruned away while this sidecar remains.
-func (s *OutputStore) KeyInputsForKey(cacheKey string) ([]string, error) {
+func (s *OutputStore) KeyInputsByKey(cacheKey string) ([]string, error) {
 	return readKeyInputs(filepath.Join(s.outputsDir(), cacheKey))
 }
 
@@ -239,25 +239,22 @@ type KeyInputChange struct {
 	LiveAbsent     bool   `json:"live_absent,omitempty"`
 }
 
-// KeyInputComparison is the negative lens on a cache key: how many inputs moved since a
-// recorded run, and which one moved first. First is nil exactly when Differences is 0.
-type KeyInputComparison struct {
-	Differences int             `json:"differences"`
-	First       *KeyInputChange `json:"first,omitempty"`
-}
-
-// CompareKeyInputs reports which inputs disagree between a recorded run's key inputs and
-// the live ones, in LIVE key order (inputs only the recorded key had trail behind, in
-// recorded order). Live order is the order hashStepInputs writes, so "first" means the
-// earliest component class - the target's own definition before its sources, sources
+// FirstKeyInputChange reports which inputs disagree between a recorded run's key inputs
+// and the live ones, in LIVE key order (inputs only the recorded key had trail behind, in
+// recorded order). Live order is the order hashStepInputs writes, so the slice LEADS with
+// the earliest component class - the target's own definition before its sources, sources
 // before env, env before tools - which is the order a reader wants to be told about: a
-// changed target definition explains a moved source hash, never the reverse.
+// changed target definition explains a moved source hash, never the reverse. Empty exactly
+// when the two sides agree.
 //
-// Both sides must already be masked (MaskKeyInputs); the store persists masked lines and
-// an unmasked live line would read as a difference on every env var. Identity, not the
-// whole line, is what pairs the two sides, so a source file whose hash moved counts once.
-// Multiplicity collapses: a line repeated within one side is compared once.
-func CompareKeyInputs(recorded, live []string) KeyInputComparison {
+// This is the one pairing rule for both comparison surfaces; [DiffKeyInputs] projects the
+// same result onto whole lines for `--against`.
+//
+// Both sides must already carry digested env values ([DigestEnvValues]); the store persists
+// digested lines and a raw live line would read as a difference on every env var. Identity,
+// not the whole line, is what pairs the two sides, so a source file whose hash moved counts
+// once. Multiplicity collapses: a line repeated within one side is compared once.
+func FirstKeyInputChange(recorded, live []string) []KeyInputChange {
 	recordedVals := make(map[string]string, len(recorded))
 	for _, l := range recorded {
 		id, v := splitKeyInput(l)
@@ -292,11 +289,7 @@ func CompareKeyInputs(recorded, live []string) KeyInputComparison {
 			add(KeyInputChange{Input: id, Recorded: v, LiveAbsent: true})
 		}
 	}
-	out := KeyInputComparison{Differences: len(changes)}
-	if len(changes) > 0 {
-		out.First = &changes[0]
-	}
-	return out
+	return changes
 }
 
 // KeyInputDiff is one component class's stored-vs-live disagreement: lines only the
@@ -308,19 +301,30 @@ type KeyInputDiff struct {
 	LiveOnly   []string `json:"live_only,omitempty"`
 }
 
-// DiffKeyInputs compares two key-input sets and returns the disagreeing classes in
-// stored-key order (then any live-only classes in live order). Line identity is the
-// whole line: a source file whose hash changed appears once under StoredOnly (the old
-// hash) and once under LiveOnly (the new), which is exactly the shape a reader needs
-// to see what drifted.
+// DiffKeyInputs projects [FirstKeyInputChange] onto whole lines: the same identity pairing
+// decides what moved, and each moved input contributes its stored line to StoredOnly and
+// its live line to LiveOnly, grouped by component class. A source file whose hash changed
+// appears once on each side, which is exactly the shape a reader needs to see what drifted.
+//
+// Classes come back in stored-key order, then any class only the live key has, in live
+// order - the order `--against` has always rendered, and a shape scripts read. The
+// pairing's own live-first ordering is the right lead for a SINGLE first difference and
+// the wrong one for a full listing, where the reader is scanning classes rather than being
+// handed a culprit.
+//
+// Lines are emitted verbatim rather than rebuilt from a change's Input and value, because
+// that join is not invertible: env keys its value behind "=" but its unset marker behind
+// ":", and the classes with no value slot at all would gain a trailing separator.
 func DiffKeyInputs(stored, live []string) []KeyInputDiff {
-	storedSet := make(map[string]struct{}, len(stored))
-	for _, l := range stored {
-		storedSet[l] = struct{}{}
+	changes := FirstKeyInputChange(stored, live)
+	moved := make(map[string]struct{}, len(changes))
+	for _, c := range changes {
+		moved[c.Input] = struct{}{}
 	}
-	liveSet := make(map[string]struct{}, len(live))
-	for _, l := range live {
-		liveSet[l] = struct{}{}
+	lineMoved := func(line string) bool {
+		id, _ := splitKeyInput(line)
+		_, ok := moved[id]
+		return ok
 	}
 	var order []string
 	byClass := map[string]*KeyInputDiff{}
@@ -335,13 +339,13 @@ func DiffKeyInputs(stored, live []string) []KeyInputDiff {
 		return d
 	}
 	for _, l := range stored {
-		if _, ok := liveSet[l]; !ok {
+		if lineMoved(l) {
 			d := classOf(l)
 			d.StoredOnly = append(d.StoredOnly, l)
 		}
 	}
 	for _, l := range live {
-		if _, ok := storedSet[l]; !ok {
+		if lineMoved(l) {
 			d := classOf(l)
 			d.LiveOnly = append(d.LiveOnly, l)
 		}

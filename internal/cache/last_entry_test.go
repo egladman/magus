@@ -71,8 +71,8 @@ func TestLastRecordedRun_NothingRecorded(t *testing.T) {
 }
 
 // TestLastRecordedRun_ExplainsChangedSource walks the whole negative lens: run a target,
-// edit one of its sources, and the recorded run plus CompareKeyInputs must name that file
-// as the reason a run now would miss.
+// edit one of its sources, and the recorded run plus FirstKeyInputChange must name that
+// file as the reason a run now would miss.
 func TestLastRecordedRun_ExplainsChangedSource(t *testing.T) {
 	root, _, c := newMutableCache(t)
 	writeMain(t, root, "package main")
@@ -88,7 +88,7 @@ func TestLastRecordedRun_ExplainsChangedSource(t *testing.T) {
 	require.NoError(t, err)
 	assert.Equal(t, rec.Key, liveKey, "nothing moved yet, so the recorded key is still what a run would mint")
 	require.NotEmpty(t, rec.KeyInputs, "the run recorded its key inputs")
-	assert.Equal(t, 0, CompareKeyInputs(rec.KeyInputs, MaskKeyInputs(liveLines)).Differences)
+	assert.Empty(t, FirstKeyInputChange(rec.KeyInputs, DigestEnvValues(liveLines)))
 
 	writeMain(t, root, "package main // edited")
 
@@ -96,11 +96,10 @@ func TestLastRecordedRun_ExplainsChangedSource(t *testing.T) {
 	require.NoError(t, err)
 	assert.NotEqual(t, rec.Key, liveKey, "the edit moved the key, so a run now misses")
 
-	cmp := CompareKeyInputs(rec.KeyInputs, MaskKeyInputs(liveLines))
-	assert.Equal(t, 1, cmp.Differences, "one file changed: %+v", cmp)
-	require.NotNil(t, cmp.First)
-	assert.Equal(t, "src:test/pkg/main.go", cmp.First.Input)
-	assert.NotEqual(t, cmp.First.Recorded, cmp.First.Live, "both content hashes are shown")
+	changes := FirstKeyInputChange(rec.KeyInputs, DigestEnvValues(liveLines))
+	require.Len(t, changes, 1, "one file changed: %+v", changes)
+	assert.Equal(t, "src:test/pkg/main.go", changes[0].Input)
+	assert.NotEqual(t, changes[0].Recorded, changes[0].Live, "both content hashes are shown")
 }
 
 // TestLastRecordedRun_KeyComesFromTheFilename: readManifest accepts an empty Hash as
@@ -122,14 +121,14 @@ func TestLastRecordedRun_KeyComesFromTheFilename(t *testing.T) {
 	rec, err := c.LastRecordedRun("svc", "build")
 	require.NoError(t, err)
 	assert.Equal(t, key, rec.Key, "an entry whose body records no hash still keys by its filename")
-	assert.True(t, rec.Replays(key))
+	assert.True(t, rec.WouldReplay(key))
 }
 
-// TestLastRecordedRun_ReplaysAnOlderKey: an edit and a revert leave the NEWEST entry
+// TestLastRecordedRun_WouldReplayAnOlderKey: an edit and a revert leave the NEWEST entry
 // keyed to the edited tree while the key a run now mints belongs to the first entry -
 // which still hits. Reading the verdict off the newest entry alone reports a miss for a
 // run that never executes.
-func TestLastRecordedRun_ReplaysAnOlderKey(t *testing.T) {
+func TestLastRecordedRun_WouldReplayAnOlderKey(t *testing.T) {
 	root, _, c := newMutableCache(t)
 	step := makeStep(root)
 	step.Target = "build"
@@ -150,10 +149,10 @@ func TestLastRecordedRun_ReplaysAnOlderKey(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.NotEqual(t, liveKey, rec.Key, "the newest entry is the edited run")
-	assert.True(t, rec.Replays(liveKey), "the reverted tree keys to the FIRST entry, which still hits")
-	assert.False(t, rec.Replays("0123456789abcdef"), "no manifest sits at that key")
-	assert.False(t, rec.Replays(""), "an empty key names no entry")
-	assert.False(t, RecordedRun{}.Replays(liveKey), "a RecordedRun that consulted no cache answers false")
+	assert.True(t, rec.WouldReplay(liveKey), "the reverted tree keys to the FIRST entry, which still hits")
+	assert.False(t, rec.WouldReplay("0123456789abcdef"), "no manifest sits at that key")
+	assert.False(t, rec.WouldReplay(""), "an empty key names no entry")
+	assert.False(t, RecordedRun{}.WouldReplay(liveKey), "a RecordedRun that consulted no cache answers false")
 }
 
 func TestLastEntryForTarget_FiltersTarget(t *testing.T) {

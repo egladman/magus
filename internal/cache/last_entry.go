@@ -39,31 +39,31 @@ func (c *Cache) LastEntryForTarget(projectPath, target string) (*Manifest, strin
 // behind that key. KeyInputs is nil when the entry predates key-input persistence, which
 // leaves the key comparable but nothing line-level to name.
 //
-// [RecordedRun.Replays] answers the separate question of whether some entry - not
+// [RecordedRun.WouldReplay] answers the separate question of whether some entry - not
 // necessarily this one - would replay for a given key.
 type RecordedRun struct {
 	Key       string
 	CreatedAt time.Time
 	KeyInputs []string
 
-	// The cache and project this was read from, so Replays can ask about a key OTHER than
-	// this entry's. Unexported: a RecordedRun a caller builds itself consulted no cache,
-	// and false is the honest answer for it.
+	// The cache and project this was read from, so WouldReplay can ask about a key OTHER
+	// than this entry's. Unexported: a RecordedRun a caller builds itself consulted no
+	// cache, and false is the honest answer for it.
 	cache   *Cache
 	project string
 }
 
-// Replays reports whether a run whose cache key is key would replay a stored entry here
-// instead of executing: a manifest sits at that exact key and passes the gates a hit
+// WouldReplay reports whether a run whose cache key is key would replay a stored entry
+// here instead of executing: a manifest sits at that exact key and passes the gates a hit
 // applies (key, project, platform).
 //
-// It is NOT [RecordedRun.Key] == key. Key names only the NEWEST entry, so an edit followed
-// by a revert leaves Key pointing at the edited run while the key a run now mints belongs
-// to an older entry that still hits. Reading "a run now misses" off the newest entry alone
-// is wrong exactly there.
+// The entry it finds need not be this one. [RecordedRun.Key] names only the NEWEST entry,
+// so an edit followed by a revert leaves Key pointing at the edited run while the key a run
+// now mints belongs to an older entry that still hits - and that is the case a verdict read
+// off the newest entry alone gets wrong.
 //
 // False on a zero RecordedRun and on an empty key.
-func (r RecordedRun) Replays(key string) bool {
+func (r RecordedRun) WouldReplay(key string) bool {
 	if r.cache == nil || key == "" {
 		return false
 	}
@@ -73,7 +73,7 @@ func (r RecordedRun) Replays(key string) bool {
 
 // LastRecordedRun returns the most recent entry recorded for target in projectPath, the
 // comparison peer for "why would a run here MISS": its key inputs are what
-// [CompareKeyInputs] diffs the live ones against. Charms are deliberately not part of the
+// [FirstKeyInputChange] pairs the live ones against. Charms are deliberately not part of the
 // lookup - an entry recorded under different charms is still the last thing this target
 // stored here, and the charm lines then show up as the difference that explains the miss.
 //
@@ -90,7 +90,7 @@ func (c *Cache) LastRecordedRun(projectPath, target string) (RecordedRun, error)
 	if c.outputs != nil {
 		// Absent is not an error here: an entry written before key inputs were persisted
 		// still dates and keys the comparison, it just cannot name a line.
-		run.KeyInputs, _ = c.outputs.KeyInputsForKey(key)
+		run.KeyInputs, _ = c.outputs.KeyInputsByKey(key)
 	}
 	return run, nil
 }
