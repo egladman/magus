@@ -1802,8 +1802,8 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     fs\writeFile("coverage.hand.out",
         cov\stripGenerated(fs\readFile("coverage.out"),
             prefix: cov\modulePath(fs\readFile("go.mod")) + "/"));
-    if (std\parseInt(coverage_percent().split(".")[0]) < 60) {
-        throw "test: coverage " + coverage_percent() + "% is below the 60% floor; investigate the regression or lower the floor deliberately";
+    if (std\parseInt(coverage_percent().split(".")[0]) < 70) {
+        throw "test: coverage " + coverage_percent() + "% is below the 70% floor; investigate the regression or lower the floor deliberately";
     }
 }
 
