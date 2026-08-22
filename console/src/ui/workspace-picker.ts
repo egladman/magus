@@ -109,7 +109,10 @@ export function initWorkspacePicker(
     // one fact it exists to report), then carried a "demo" tag beside the name - which put a word
     // in the title bar that repeats what the status bar's connection dot already says, on every
     // screen, permanently. The demo mark belongs in the MENU, against the row that enters it.
-    label.textContent = shortName(scope);
+    // "All", not shortName's "All workspaces": the caption beside this button already says
+    // Workspace, so the full phrase read as "Workspace All workspaces". The MENU row keeps the
+    // long form, because nothing there supplies the noun.
+    label.textContent = scope === ALL_WORKSPACES ? "All" : shortName(scope);
     const name = scope === ALL_WORKSPACES ? "all workspaces" : shortName(scope);
     btn.title =
       "Workspace: " +

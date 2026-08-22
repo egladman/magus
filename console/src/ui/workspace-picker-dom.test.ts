@@ -119,8 +119,11 @@ describe("the workspace scope control", () => {
     setWorkspaceScope(ACME);
     assert.match(btn.textContent ?? "", /acme/);
 
+    // "All", not "All workspaces": the caption beside the button carries the noun, so the button
+    // that repeats it reads as a stutter. The MENU row still spells it out.
     setWorkspaceScope(ALL_WORKSPACES);
-    assert.match(btn.textContent ?? "", /All workspaces/);
+    assert.match(btn.textContent ?? "", /\bAll\b/);
+    assert.doesNotMatch(btn.textContent ?? "", /All workspaces/);
   });
 
   // Focus would otherwise sit on an element that just became hidden, which drops it to the body and
