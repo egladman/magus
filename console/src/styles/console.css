@@ -632,6 +632,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
     order: -1; height: var(--console-titlebar-h); justify-content: flex-end;
     border-bottom: 1px solid var(--pf-t--global--border--color--default);
   }
+  /* The command palette trigger splits off to the row's leading edge on a phone, where every
+     other action button (workspace, applications, reference, settings) is otherwise one
+     indistinguishable cluster jammed against the trailing edge with nothing to tell them apart
+     at a glance. auto margin, not order or a second flex line: it needs no DOM change and no
+     second row, it just claims the row's slack so everything after it gets pushed to the end. */
+  #console-commandbar-btn { margin-inline-end: auto; }
   /* On a phone the chrome buttons ARE the tap target, so stretch them to the row height for a
      finger-sized (~44px) hit area (the desktop gap above matters only for the mouse hover). Match the
      WIDTH to that stretched height so the button box - and thus its hover/active highlight - is a SQUARE
