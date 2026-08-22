@@ -127,10 +127,14 @@ export class SortableTable<T> {
   }
 
   // setUnresolved swaps the empty line's copy for a reason the table has no rows to show, and hides
-  // the header row while it stands. Without it a table that never received data renders as a bare
-  // header - a shape that reads as "measured, and there was nothing", which is the one claim it
-  // cannot make. Pass null once data arrives.
+  // the TABLE (header and body both) while it stands. Without it a table that never received data
+  // renders as a bare header - a shape that reads as "measured, and there was nothing", which is
+  // the one claim it cannot make. Pass null once data arrives.
   setUnresolved(reason: string | null): void {
+    // Idempotent: every tile calls this on EVERY store frame, and the live status stream produces
+    // them continuously. Without this the null case re-sorts and rebuilds the whole tbody a second
+    // time per frame, on top of the setRows() that follows it.
+    if (reason === this.unresolved) return;
     this.unresolved = reason;
     if (reason === null) {
       this.empty.textContent = this.emptyText;

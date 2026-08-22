@@ -124,7 +124,7 @@ function hotspotFilesTile(): Tile {
     el: card.el,
     update(s: DashboardState) {
       if (!s.insight) {
-        table.setUnresolved(s.insightError ?? "Reading history...");
+        table.setUnresolved(s.insightNote);
         card.setNote("");
         return;
       }
@@ -155,7 +155,7 @@ function hotspotsTile(): Tile {
     el: card.el,
     update(s: DashboardState) {
       if (!s.insight) {
-        table.setUnresolved(s.insightError ?? "Reading history...");
+        table.setUnresolved(s.insightNote);
         card.setNote("");
         return;
       }
@@ -202,7 +202,7 @@ function affinityTile(): Tile {
     el: card.el,
     update(s: DashboardState) {
       if (!s.insight) {
-        table.setUnresolved(s.insightError ?? "Reading history...");
+        table.setUnresolved(s.insightNote);
         card.setNote("");
         return;
       }
@@ -263,7 +263,7 @@ function ownershipTile(): Tile {
     el: card.el,
     update(s: DashboardState) {
       if (!s.insight) {
-        table.setUnresolved(s.insightError ?? "Reading history...");
+        table.setUnresolved(s.insightNote);
         card.setNote("");
         return;
       }
@@ -318,7 +318,7 @@ function trendTile(): Tile {
     el: card.el,
     update(s: DashboardState) {
       if (!s.insight) {
-        table.setUnresolved(s.insightError ?? "Reading history...");
+        table.setUnresolved(s.insightNote);
         card.setNote("");
         return;
       }
@@ -382,7 +382,7 @@ function volatilityTile(): Tile {
     el: card.el,
     update(s: DashboardState) {
       if (!s.insight) {
-        table.setUnresolved(s.insightError ?? "Reading history...");
+        table.setUnresolved(s.insightNote);
         card.setNote("");
         return;
       }
