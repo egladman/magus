@@ -1228,16 +1228,26 @@ needs a base-side index magus does not keep and language semantics it does not
 model - it reports who can see the thing you changed and lets you decide.
 
 The console's Diff surface reads the same annotations over the same session,
-and an agent can join that session through the magus_diff MCP tool.`,
-	Usage: "magus diff [--generated] [--tui] [--watch] [<patch-file>|-] [flags]",
+and an agent can join that session through the magus_diff MCP tool.
+
+--preflight appends what landing the change costs: which projects rebuild and
+which were merely edited, who has been changing them, an estimate of the
+rebuild from recorded run durations, what the workspace's advisors say, and
+which human-authored notes anchor a file or symbol you touched. It is context
+and never a verdict - nothing is gated on it and the exit code is unchanged.
+Each section says when it could not measure something, so an empty one reads
+as "nobody looked" rather than as a clean bill of health.`,
+	Usage: "magus diff [--generated] [--preflight] [--tui] [--watch] [<patch-file>|-] [flags]",
 	Flags: []Flag{
 		{Name: "generated", Kind: FlagBool, Doc: "Include declared target outputs, which are folded away by default"},
+		{Name: "preflight", Kind: FlagBool, Doc: "Append what landing this costs: reach, ownership, an estimate from recorded run times, advisors, and note anchors"},
 		{Name: "tui", Kind: FlagBool, Doc: "Read the changeset interactively, joined to the session the console and an agent share"},
 		{Name: "watch", Kind: FlagBool, Doc: "Re-read and re-render whenever the working tree changes"},
 	},
 	Examples: []Example{
 		{"Read what you are about to commit", "magus diff"},
 		{"Include the generated files too", "magus diff --generated"},
+		{"Everything to know before landing it", "magus diff --preflight"},
 		{"Navigate it hunk by hunk and mark what you have read", "magus diff --tui"},
 		{"Machine-readable, for a script or a Buzz advisor", "magus diff -o json"},
 	},

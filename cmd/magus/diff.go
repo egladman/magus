@@ -18,6 +18,7 @@ import (
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/cmd/magus/gen"
 	"github.com/egladman/magus/internal/auth"
+	"github.com/egladman/magus/internal/ci/forecast"
 	"github.com/egladman/magus/internal/diff"
 	"github.com/egladman/magus/internal/file/watch"
 	"github.com/egladman/magus/internal/interactive/difftui"
@@ -52,6 +53,12 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		// either on every tree change would re-render identical output forever.
 		return usagef("magus diff: --watch reads the working tree, so it cannot be combined with %s", src.label)
 	}
+	if rf.Preflight && rf.Tui {
+		// Refused rather than ignored. The viewer has nowhere to put a report, so accepting the
+		// flag would answer the question with a page that never mentions it - and a flag that
+		// silently does nothing is the failure this command's refusal matrix exists to prevent.
+		return usagef("magus diff: --preflight is a report and --tui is a viewport, so they cannot be combined; run `magus diff --preflight` for the report")
+	}
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -70,7 +77,7 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	render := func() error { return renderDiff(ctx, m, src, opts, rf) }
+	render := func() error { return renderDiff(ctx, m, src, opts, rf, rf.Preflight) }
 	if rf.Watch {
 		return watchDiff(ctx, m, render)
 	}
@@ -192,7 +199,11 @@ func (in diffInput) readPatch(ctx context.Context, m *magus.Magus) (string, stri
 }
 
 // renderDiff reads one patch and emits it in the requested format.
-func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputOptions, rf *gen.DiffFlags) error {
+//
+// preflight is ADDITIVE: with it off, every byte emitted here is what this command emitted
+// before the flag existed, which is what lets a script parsing `magus diff -o json` keep
+// working and what keeps the flag honest about being context rather than a gate.
+func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputOptions, rf *gen.DiffFlags, preflight bool) error {
 	patch, base, err := src.readPatch(ctx, m)
 	if err != nil {
 		return err
@@ -220,11 +231,21 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 	if err != nil {
 		return err
 	}
+	var pre *diffPreflight
+	if preflight {
+		p := collectPreflight(ctx, m, rev)
+		pre = &p
+	}
 
 	switch opts.Format {
 	case outputJSON, outputYAML, outputJSONL, outputTemplate:
+		if pre != nil {
+			return emitFormatted(opts, diffReport{Diff: rev, Preflight: pre})
+		}
 		return emitFormatted(opts, rev)
 	case outputName:
+		// Left alone under --preflight: -o name is the shape a shell loop reads, and one
+		// non-path line in it would break every one of them.
 		for _, f := range rev.Files {
 			if f.Generated() && !rf.Generated {
 				continue
@@ -233,7 +254,7 @@ func renderDiff(ctx context.Context, m *magus.Magus, src diffInput, opts OutputO
 		}
 		return nil
 	}
-	return printDiffText(rev, rf.Generated, pathLinker(m.Root()))
+	return printDiffText(rev, rf.Generated, pathLinker(m.Root()), pre)
 }
 
 // annotateDiff computes the annotated changeset for a set of changed paths.
@@ -747,7 +768,7 @@ func (b *diffBridge) post(ctx context.Context, op diffSessionOp) {
 }
 
 func diffUsage(w *os.File) {
-	fmt.Fprintln(w, "Usage: magus diff [--generated] [flags]")
+	fmt.Fprintln(w, "Usage: magus diff [--generated] [--preflight] [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Read the working tree's uncommitted changes, ordered by what they can break.")
 	fmt.Fprintln(w, "It takes no ref: the subject is always the uncommitted tree.")
@@ -777,6 +798,10 @@ func diffUsage(w *os.File) {
 	fmt.Fprintln(w, "  --generated   include the folded declared outputs")
 	fmt.Fprintln(w, "  --tui         read it interactively, joined to the session the console")
 	fmt.Fprintln(w, "                and an agent share: ] and [ walk hunks, v marks one read")
+	fmt.Fprintln(w, "  --preflight   append what landing this costs: which projects rebuild, who")
+	fmt.Fprintln(w, "                owns them, an estimate from recorded run times, what the")
+	fmt.Fprintln(w, "                advisors say, and which notes anchor what you changed.")
+	fmt.Fprintln(w, "                It gates nothing and changes no exit code.")
 }
 
 // diffHistoryCommits bounds the git-log walk the churn lenses do. 500 matches what the
@@ -836,7 +861,10 @@ func diffCountsLine(rev types.Diff, showGenerated bool) string {
 
 // printDiffText renders the diff in the house style: counts before lists, the evidence
 // beside the claim, plain ASCII.
-func printDiffText(rev types.Diff, showGenerated bool, link func(string) string) error {
+//
+// pre is nil unless --preflight was passed, and nil prints nothing at all: the report above
+// it must not change shape because a second one was appended.
+func printDiffText(rev types.Diff, showGenerated bool, link func(string) string, pre *diffPreflight) error {
 	var primary, generated []types.DiffFile
 	for _, f := range rev.Files {
 		if f.Generated() {
@@ -888,6 +916,15 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string)
 	// column reads as "nothing was measured" rather than as "nothing depends on this".
 	for _, n := range rev.Notes {
 		fmt.Printf("\nnote: %s\n", n)
+	}
+
+	// Above the console link rather than below it: the link is a trailing pointer somewhere
+	// else, and burying it under forty lines of report would cost it every reader it has.
+	if pre != nil {
+		fmt.Println()
+		for _, line := range preflightLines(*pre) {
+			fmt.Println(line)
+		}
 	}
 
 	// The same changeset in the console's Diff surface. Interactive-only: the token rides
@@ -1006,6 +1043,387 @@ func capSlice(xs []string, n int) []string {
 // The paths come from the PATCH rather than from a second VCS call on purpose: a re-derived
 // set would race an edit made since the patch was read, and annotate a file the reader is not
 // looking at. The console makes the same choice for the same reason.
+// diffReport is the changeset plus its preflight, the document --preflight serves on the
+// structured path.
+//
+// It exists ONLY under the flag. Without it the emitted value is types.Diff exactly as
+// before, so nothing reading `magus diff -o json` today meets a key it has never seen.
+type diffReport struct {
+	types.Diff `yaml:",inline"`
+	Preflight  *diffPreflight `json:"preflight,omitempty" yaml:"preflight,omitempty"`
+}
+
+// diffPreflight is what a disposer should know before landing: the consequences a file list
+// structurally cannot show.
+//
+// Every field distinguishes "nothing" from "nobody measured", the same refusal types.DiffFile
+// makes with its pointers. An absent cost is a workspace with no run history, and rendering it
+// as zero would tell a reader the build is free.
+type diffPreflight struct {
+	Reach     *preflightReach  `json:"reach,omitempty"     yaml:"reach,omitempty"`
+	Ownership []preflightOwner `json:"ownership,omitempty" yaml:"ownership,omitempty"`
+	Cost      *preflightCost   `json:"cost,omitempty"      yaml:"cost,omitempty"`
+	Advisors  []adviceSection  `json:"advisors,omitempty"  yaml:"advisors,omitempty"`
+	// AdvisorNotes names each advisor that could not run. Surfaced rather than swallowed, so
+	// an empty advisor list reads as "they all passed" only when it is one.
+	AdvisorNotes []string    `json:"advisor_notes,omitempty" yaml:"advisor_notes,omitempty"`
+	Anchors      []anchorHit `json:"anchors,omitempty"       yaml:"anchors,omitempty"`
+}
+
+// preflightReach is the blast radius: what was edited, and what rebuilds because of it.
+type preflightReach struct {
+	Seeds    int                `json:"seeds"              yaml:"seeds"`
+	Rebuilds int                `json:"rebuilds"           yaml:"rebuilds"`
+	Projects []preflightProject `json:"projects,omitempty" yaml:"projects,omitempty"`
+}
+
+type preflightProject struct {
+	Path  string `json:"path"            yaml:"path"`
+	Seed  bool   `json:"seed"            yaml:"seed"`
+	Files int    `json:"files,omitempty" yaml:"files,omitempty"`
+}
+
+// preflightOwner is one project in reach and who has been changing it.
+type preflightOwner struct {
+	Project      string `json:"project"                yaml:"project"`
+	Primary      string `json:"primary"                yaml:"primary"`
+	PrimaryShare int    `json:"primary_share"          yaml:"primary_share"` // percent
+	Authors      int    `json:"authors"                yaml:"authors"`
+	BusFactor1   bool   `json:"bus_factor_1,omitempty" yaml:"bus_factor_1,omitempty"`
+}
+
+// preflightCost is the estimated cost of rebuilding the reach, from recorded run durations.
+type preflightCost struct {
+	TotalMs  int64                  `json:"total_ms"           yaml:"total_ms"`
+	Projects []preflightCostProject `json:"projects,omitempty" yaml:"projects,omitempty"`
+}
+
+type preflightCostProject struct {
+	Project string `json:"project" yaml:"project"`
+	Target  string `json:"target"  yaml:"target"`
+	Ms      int64  `json:"ms"      yaml:"ms"`
+	// Samples is how many runs the estimate rests on, carried so a reader can weigh it. An
+	// estimate from three runs and one from three hundred print the same duration otherwise.
+	Samples int     `json:"samples"           yaml:"samples"`
+	HitRate float64 `json:"hit_rate,omitempty" yaml:"hit_rate,omitempty"`
+}
+
+// preflightCostTargets is the target a project's rebuild is estimated by, most representative
+// first. ci is the whole gate; test is the bulk of it where no ci target is declared.
+var preflightCostTargets = []string{"ci", "test"}
+
+// preflightMinSamples mirrors the tier-3 gate inside forecast.resolvePrediction: below it the
+// prediction is the workspace fallback rather than a measurement of this project, and printing
+// that as an estimate would be inventing a number.
+const preflightMinSamples = 3
+
+// preflightListCap bounds each section's list. A reach of sixty projects is a real answer and
+// an unreadable one; the remainder is reported rather than truncated in silence.
+const preflightListCap = 10
+
+// collectPreflight joins the lenses the report needs onto an already-annotated changeset.
+//
+// Every lens is best-effort and every failure degrades to that lens's empty form. A preflight
+// that refuses to print because the symbol index is cold or no daemon is running is a
+// preflight nobody runs, and this surface reports context rather than passing judgement.
+func collectPreflight(ctx context.Context, m *magus.Magus, rev types.Diff) diffPreflight {
+	p := diffPreflight{Reach: preflightReachOf(rev)}
+
+	// The same bounded git-log walk annotateDiff pays for the churn lenses, so the two
+	// sections of one report cannot describe two different windows of history.
+	if own, err := m.Ownership(ctx, types.InsightOptions{Commits: diffHistoryCommits}); err == nil {
+		p.Ownership = preflightOwnersOf(own, rev.AffectedProjects)
+	}
+
+	if path := globalCfg.HistoryPath; path != "" {
+		var h forecast.History
+		if err := h.Load(ctx, path); err == nil {
+			p.Cost = preflightCostOf(&h, rev.AffectedProjects)
+		}
+	}
+
+	// rev.Base and never a ref derived here. The report prints that string as the base it
+	// annotated, so an advisor handed anything else would be answering about a different
+	// changeset under the same heading - and `magus diff` takes no ref, so there is no second
+	// base to be tempted by: WorkingDiff is the tree against the index plus the untracked
+	// files, which is a state rather than a revision.
+	sections, failed, err := runLocalAdvisors(ctx, m.Root(), rev.Base)
+	p.Advisors, p.AdvisorNotes = sections, failed
+	if err != nil {
+		p.AdvisorNotes = append(p.AdvisorNotes, fmt.Sprintf("advisors did not run: %v", err))
+	}
+
+	p.Anchors = preflightAnchors(ctx, m.Root(), diffPaths(rev), diffSymbolIDs(rev))
+	return p
+}
+
+// preflightReachOf renders what types.Diff has carried since the impact join landed and
+// nothing has ever printed: which projects were edited, and which merely rebuild.
+//
+// nil when the closure is empty, which is a real state - a change entirely outside every
+// project directory seeds nothing.
+func preflightReachOf(rev types.Diff) *preflightReach {
+	if len(rev.AffectedProjects) == 0 {
+		return nil
+	}
+	r := &preflightReach{Seeds: len(rev.SeedProjects), Rebuilds: len(rev.AffectedProjects)}
+	for _, p := range rev.AffectedProjects {
+		r.Projects = append(r.Projects, preflightProject{Path: p.Path, Seed: p.Seed, Files: len(p.Files)})
+	}
+	return r
+}
+
+// preflightOwnersOf joins the ownership lens onto the reach, in reach order.
+//
+// Projects the lens has nothing to say about are DROPPED rather than listed with an empty
+// author: a project with no commits in the window has no owner to name, and a blank name
+// beside a path reads as a lookup that failed.
+func preflightOwnersOf(own types.OwnershipOutput, affected []types.ImpactProject) []preflightOwner {
+	byPath := make(map[string]types.OwnershipEntry, len(own.Projects))
+	for _, e := range own.Projects {
+		byPath[e.Path] = e
+	}
+	var out []preflightOwner
+	for _, p := range affected {
+		e, ok := byPath[p.Path]
+		if !ok || e.Primary == "" {
+			continue
+		}
+		out = append(out, preflightOwner{
+			Project:      p.Path,
+			Primary:      e.Primary,
+			PrimaryShare: e.PrimaryShare,
+			Authors:      e.Authors,
+			BusFactor1:   e.BusFactor1,
+		})
+	}
+	return out
+}
+
+// preflightCostOf sums the recorded history's per-project prediction over the reach.
+//
+// nil when the history has nothing to say about ANY project in reach. That case matters more
+// than the happy one: forecast falls back to a workspace-wide default and then to a compiled-in
+// constant, so a total is always computable and a total computed from those is a fabrication
+// wearing a duration. Only projects with enough samples for forecast's own project tier are
+// counted, and a reach whose projects all fall short reports no history at all.
+func preflightCostOf(h *forecast.History, affected []types.ImpactProject) *preflightCost {
+	c := &preflightCost{}
+	for _, p := range affected {
+		target, stats, ok := preflightCostTarget(h, p)
+		if !ok {
+			continue
+		}
+		// Tags are derived from the changed files inside the project, which is what selects
+		// forecast's per-subdirectory bucket over the project-wide percentile. A transitively
+		// affected project has none, and Tags answers "transitive" for it.
+		d := h.PredictDuration(p.Path, target, forecast.Tags(p.Path, p.Files))
+		c.TotalMs += d.Milliseconds()
+		c.Projects = append(c.Projects, preflightCostProject{
+			Project: p.Path,
+			Target:  target,
+			Ms:      d.Milliseconds(),
+			Samples: stats.Samples,
+			HitRate: stats.HitRate,
+		})
+	}
+	if len(c.Projects) == 0 {
+		return nil
+	}
+	return c
+}
+
+// preflightCostTarget picks the target a project's rebuild is estimated by, and reports false
+// when the history has no measurement of this project worth quoting.
+func preflightCostTarget(h *forecast.History, p types.ImpactProject) (string, forecast.Stats, bool) {
+	targets, ok := h.Projects[p.Path]
+	if !ok {
+		return "", forecast.Stats{}, false
+	}
+	for _, name := range preflightCostTargets {
+		s, timed := targets[name]
+		if timed && s.Samples >= preflightMinSamples && s.P75Ms > 0 {
+			return name, s, true
+		}
+	}
+	return "", forecast.Stats{}, false
+}
+
+// diffNotes reads every declared notes store, best-effort.
+//
+// A workspace that declares none is the DEFAULT rather than a fault, and an unreadable store
+// is already reported by `magus notes verify`; either way the anchors section says it found
+// nothing rather than failing the report around it.
+// diffPaths is the changed file set, generated files included: a note may anchor one.
+func diffPaths(rev types.Diff) []string {
+	out := make([]string, 0, len(rev.Files))
+	for _, f := range rev.Files {
+		out = append(out, f.Path)
+	}
+	return out
+}
+
+// diffSymbolIDs is every changed symbol's index id, which is what a symbol anchor names.
+func diffSymbolIDs(rev types.Diff) []string {
+	var out []string
+	seen := map[string]bool{}
+	for _, f := range rev.Files {
+		for _, s := range f.Symbols {
+			if s.ID != "" && !seen[s.ID] {
+				seen[s.ID] = true
+				out = append(out, s.ID)
+			}
+		}
+	}
+	return out
+}
+
+// preflightLines renders the report, one claim per line, in the same count-then-list shape
+// the file list above it uses.
+//
+// Lines rather than prints, so every empty form is testable without a terminal - and the empty
+// forms are the half that matters. Each one says what was not measured and what would measure
+// it, because a silent section reads as a clean bill of health.
+func preflightLines(p diffPreflight) []string {
+	out := []string{"PREFLIGHT - what landing this costs, and who else it touches", ""}
+	sections := [][]string{
+		preflightReachLines(p.Reach),
+		preflightOwnershipLines(p.Ownership),
+		preflightCostLines(p.Cost),
+		preflightAdvisorLines(p.Advisors, p.AdvisorNotes),
+		preflightAnchorLines(p.Anchors),
+	}
+	for i, s := range sections {
+		if i > 0 {
+			out = append(out, "")
+		}
+		out = append(out, s...)
+	}
+	return out
+}
+
+func preflightReachLines(r *preflightReach) []string {
+	if r == nil {
+		return []string{"REACH: no project contains a changed file, so nothing rebuilds"}
+	}
+	out := []string{fmt.Sprintf("REACH: %d project%s edited, %d project%s rebuild",
+		r.Seeds, pluralSuffix(r.Seeds, "", "s"), r.Rebuilds, pluralSuffix(r.Rebuilds, "", "s"))}
+	for _, p := range preflightCap(r.Projects) {
+		if p.Seed {
+			out = append(out, fmt.Sprintf("      %s - edited, %d file%s", p.Path, p.Files, pluralSuffix(p.Files, "", "s")))
+			continue
+		}
+		out = append(out, fmt.Sprintf("      %s - rebuilds because it depends on one that was", p.Path))
+	}
+	return append(out, preflightMoreLine(len(r.Projects))...)
+}
+
+func preflightOwnershipLines(owners []preflightOwner) []string {
+	if len(owners) == 0 {
+		return []string{"OWNERSHIP: no commit history in the window, so no owner is named"}
+	}
+	out := []string{"OWNERSHIP: who has been changing the projects in reach"}
+	for _, o := range preflightCap(owners) {
+		line := fmt.Sprintf("      %s mostly %s (%d%%), %d author%s",
+			o.Project, o.Primary, o.PrimaryShare, o.Authors, pluralSuffix(o.Authors, "", "s"))
+		if o.BusFactor1 {
+			// The bus factor is the whole point of the lens, so it is stated rather than left
+			// to be inferred from "1 author".
+			line += " - BUS FACTOR 1"
+		}
+		out = append(out, line)
+	}
+	return append(out, preflightMoreLine(len(owners))...)
+}
+
+func preflightCostLines(c *preflightCost) []string {
+	if c == nil {
+		return []string{
+			"COST: no run history yet, so there is nothing to estimate from",
+			"      Run `magus affected ci` once and the next preflight can price this.",
+		}
+	}
+	out := []string{fmt.Sprintf(
+		"COST: ~%s to rebuild the reach (history-based estimate: the p75 of past runs, discounted by the cache hit rate they recorded)",
+		preflightDuration(c.TotalMs))}
+	for _, p := range preflightCap(c.Projects) {
+		line := fmt.Sprintf("      %s %s ~%s (%d run%s)",
+			p.Project, p.Target, preflightDuration(p.Ms), p.Samples, pluralSuffix(p.Samples, "", "s"))
+		if p.HitRate > 0 {
+			line += fmt.Sprintf(", %d%% cache hits", int(p.HitRate*100+0.5))
+		}
+		out = append(out, line)
+	}
+	return append(out, preflightMoreLine(len(c.Projects))...)
+}
+
+func preflightAdvisorLines(sections []adviceSection, failed []string) []string {
+	if len(sections) == 0 && len(failed) == 0 {
+		return []string{"ADVISORS: nothing to report"}
+	}
+	out := []string{fmt.Sprintf("ADVISORS: %d finding%s", len(sections), pluralSuffix(len(sections), "", "s"))}
+	for _, s := range sections {
+		out = append(out, "      "+s.Title)
+		body := strings.TrimRight(s.Body, "\n")
+		if body == "" {
+			// Split would answer [""] and emit a line of nothing but indentation.
+			continue
+		}
+		for _, line := range strings.Split(body, "\n") {
+			out = append(out, "        "+line)
+		}
+	}
+	// Named rather than counted: which advisor went quiet is what a reader needs to decide
+	// whether the silence above it means anything.
+	for _, f := range failed {
+		out = append(out, "      could not run: "+f)
+	}
+	return out
+}
+
+func preflightAnchorLines(hits []anchorHit) []string {
+	if len(hits) == 0 {
+		return []string{"ANCHORS: no note anchors a changed file or symbol"}
+	}
+	out := []string{fmt.Sprintf("ANCHORS: %d note%s anchored to what you changed",
+		len(hits), pluralSuffix(len(hits), "", "s"))}
+	for _, h := range preflightCap(hits) {
+		line := fmt.Sprintf("      note %s anchors %s:%s", h.Note, h.Kind, h.Target)
+		if h.Drift != "" {
+			line += " [" + h.Drift + "]"
+		}
+		out = append(out, line)
+	}
+	return append(out, preflightMoreLine(len(hits))...)
+}
+
+// preflightCap bounds one section's list; preflightMoreLine reports what it left off. They
+// are separate because the remainder is a line in the section's own indentation, not an entry
+// in the list it describes.
+func preflightCap[T any](xs []T) []T {
+	if len(xs) <= preflightListCap {
+		return xs
+	}
+	return xs[:preflightListCap]
+}
+
+func preflightMoreLine(n int) []string {
+	if n <= preflightListCap {
+		return nil
+	}
+	return []string{fmt.Sprintf("      and %d more", n-preflightListCap)}
+}
+
+// preflightDuration renders an estimate at the precision it deserves. Seconds is the floor:
+// this is a p75 of past runs, and a millisecond figure would claim an accuracy it has not got.
+func preflightDuration(ms int64) string {
+	d := (time.Duration(ms) * time.Millisecond).Round(time.Second)
+	if d < time.Second {
+		return "<1s"
+	}
+	return d.String()
+}
+
 func changedPathsFromPatch(patch string) []string {
 	var out []string
 	seen := map[string]bool{}

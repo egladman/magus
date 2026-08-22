@@ -20,9 +20,9 @@ import (
 // comment, rendered for a local reader instead. An EMPTY Body is a retraction - the
 // advisor ran and found nothing - and is a section like any other, not an absence.
 type adviceSection struct {
-	Name  string `json:"name"`
-	Title string `json:"title"`
-	Body  string `json:"body"`
+	Name  string `json:"name"  yaml:"name"`
+	Title string `json:"title" yaml:"title"`
+	Body  string `json:"body"  yaml:"body"`
 }
 
 // adviceDirRel is where this repository keeps the advisors. They are checked in as a
