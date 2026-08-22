@@ -438,6 +438,43 @@ function panesIcon(mode: "row" | "col"): SVGElement {
   return svg;
 }
 
+// wireTabOverflowCue stamps the tab strip with WHICH SIDE still has tabs off screen, so the strip can
+// fade that edge (console.css). On a phone the row scrolls horizontally and its scrollbar is hidden -
+// deliberately, because the strip is swiped rather than dragged - and hiding it took away the only cue
+// the row had that anything lay past the edge. A partially clipped tab is a cue when one happens to
+// straddle the boundary, and nothing at all when the last visible tab ends flush.
+//
+// The element that actually scrolls is PatternFly's <ul class="pf-v6-c-tabs__list">, NOT the host: the
+// host's own overflow-x never engages, because .pf-v6-c-tabs between them is overflow:hidden and clips
+// the run before it can reach the host. Measured, not assumed - the host reports scrollWidth ===
+// clientWidth with seven tabs open while the list reports 856 against 375.
+//
+// Everything is bound to the HOST anyway, because tabBar's render() builds a brand new <ul> on every
+// workspace change and anything held on the old one dies silently at the first tab open. Hence
+// capture for the scroll (scroll does not bubble, but it does reach an ancestor listening in the
+// capture phase) and a MutationObserver for the swap itself. Three triggers, one read: the DOM is
+// asked every time rather than any of this being cached.
+function wireTabOverflowCue(host: HTMLElement): void {
+  const update = (): void => {
+    const strip = host.querySelector<HTMLElement>(".pf-v6-c-tabs__list");
+    // Sub-pixel slack: fractional tab widths leave a fraction of a pixel unscrolled at a true end, and
+    // without the tolerance the trailing fade never clears on a strip scrolled all the way over.
+    const max = strip ? strip.scrollWidth - strip.clientWidth : 0;
+    if (!strip || max <= 1) {
+      delete host.dataset.tabOverflow;
+      return;
+    }
+    const more = { start: strip.scrollLeft > 1, end: strip.scrollLeft < max - 1 };
+    host.dataset.tabOverflow = more.start && more.end ? "both" : more.start ? "start" : "end";
+  };
+  host.addEventListener("scroll", update, { capture: true, passive: true });
+  new ResizeObserver(update).observe(host);
+  // childList only: update() writes an attribute on the host, and observing attributes here would
+  // have it retrigger itself.
+  new MutationObserver(update).observe(host, { childList: true, subtree: true });
+  update();
+}
+
 // setPanesIcon repaints an already-built tray button's glyph in place - called once per tray button at
 // creation, and again on every button whenever the split mode changes (refreshPanesTray).
 //
@@ -1118,6 +1155,7 @@ export function startConsole(
     },
   });
   tabBarHost.append(bar.el);
+  wireTabOverflowCue(tabBarHost);
 
   // Wire the title-bar settings gear to OPEN the Settings surface as a tab (single-instance: open()
   // focuses it if it is already open). The old gear popover was retired; its controls live on the
