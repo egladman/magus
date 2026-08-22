@@ -29,6 +29,7 @@ import {
   byHunk,
   hunkRowIndexes,
   hunksRead,
+  activeFileTarget,
   fileRowIndexes,
   nextIndexAfter,
   prevIndexBefore,
@@ -689,6 +690,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
   const sidebarItems = new Map<number, HTMLButtonElement>();
   let activeSidebarFile: HTMLButtonElement | undefined;
   let activeSidebarRow = -1;
+  // The sidebar lists PRIMARY files only, so a row inside a generated file resolves to no entry
+  // in sidebarItems - markActiveFile used to just clear the last highlight and set nothing, which
+  // blanked the one indicator the reader has for where they are the moment they scrolled somewhere
+  // the index cannot show. The generated group's own toggle is the honest stand-in.
+  let activeGeneratedToggle: HTMLButtonElement | undefined;
   let sidebarEntries: FileIndexEntry[] = [];
   let sidebarOffsets = [0];
   let sidebarPaintedFirst = -1;
@@ -814,8 +820,30 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const fileRow = state.fileOf[rowAt(state.offsets, top)] ?? -1;
     if (fileRow === activeSidebarRow) return;
     activeSidebarFile?.removeAttribute("aria-current");
-    activeSidebarFile = sidebarItems.get(fileRow);
-    activeSidebarFile?.setAttribute("aria-current", "true");
+    activeGeneratedToggle?.removeAttribute("aria-current");
+    const candidate = sidebarItems.get(fileRow);
+    // activeFileTarget (rows.ts) makes the DECISION; this is just wiring it to the two elements
+    // that can show it. "generated" is a real file row the index has no entry for - the whole
+    // point of the fallback - so hasSidebarEntry is exactly "did the lookup above find one".
+    switch (activeFileTarget(fileRow, candidate !== undefined)) {
+      case "file":
+        activeSidebarFile = candidate;
+        activeGeneratedToggle = undefined;
+        activeSidebarFile?.setAttribute("aria-current", "true");
+        break;
+      case "generated":
+        activeSidebarFile = undefined;
+        // Re-queried rather than cached: the toggle button is replaced on every renderSidebar.
+        activeGeneratedToggle =
+          sidebarGenerated.querySelector<HTMLButtonElement>(".console-diff-sidebar__group") ??
+          undefined;
+        activeGeneratedToggle?.setAttribute("aria-current", "true");
+        break;
+      case "none":
+        activeSidebarFile = undefined;
+        activeGeneratedToggle = undefined;
+        break;
+    }
     activeSidebarRow = fileRow;
   };
 
@@ -1205,6 +1233,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     });
     const needle = sidebarFilter.value.trim().toLocaleLowerCase();
     sidebarEntries = [];
+    let shownTotal = 0;
     for (const [project, entries] of groups) {
       const shown = needle
         ? entries.filter(({ o }) =>
@@ -1212,6 +1241,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
           )
         : entries;
       if (shown.length === 0) continue;
+      shownTotal += shown.length;
       sidebarEntries.push({ kind: "project", project, count: shown.length });
       for (const { i } of shown) sidebarEntries.push({ kind: "file", project, changeIndex: i });
     }
@@ -1219,7 +1249,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
     for (const entry of sidebarEntries)
       sidebarOffsets.push((sidebarOffsets.at(-1) ?? 0) + sidebarEntryHeight(entry));
     sidebarSpacer.style.height = `${sidebarOffsets.at(-1) ?? 0}px`;
-    sidebarTitle.textContent = `Files (${state.changeset.primary.length})`;
+    // The total, always - filtering to 2 of 7 files while the heading kept reading "Files (7)"
+    // was a count that stopped matching what was under it the moment the reader typed anything.
+    const total = state.changeset.primary.length;
+    sidebarTitle.textContent =
+      shownTotal === total ? `Files (${total})` : `Files (${shownTotal} of ${total})`;
     sidebarIndex.scrollTop = 0;
     sidebarPaintedFirst = -1;
     sidebarPaintedLast = -1;

@@ -895,6 +895,13 @@
 .console-diff-sidebar__group[aria-expanded="false"] .console-diff-sidebar__grouptwist {
   transform: rotate(-90deg);
 }
+/* Same accent-edge treatment as a primary file's aria-current, and the same reason for a border
+   over a fill: this button already carries its own dashed border, and a background would compete
+   with it. This is the position indicator for a scroll position the file index otherwise has no
+   entry for at all - a generated file is never listed, only folded under this one row. */
+.console-diff-sidebar__group[aria-current="true"] {
+  box-shadow: inset 2px 0 0 var(--console-accent);
+}
 
 /* The overview. Esc lands here: the whole changeset on one screen, so a reader can decide what
  * to spend attention on before spending any. */

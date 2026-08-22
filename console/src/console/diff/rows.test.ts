@@ -7,6 +7,7 @@ import {
   commentKey,
   hunkRowIndexes,
   hunksRead,
+  activeFileTarget,
   fileRowIndexes,
   nextIndexAfter,
   prevIndexBefore,
@@ -497,4 +498,19 @@ test("hunksRead undercounts rather than guesses at a hunk with no digest yet", (
 test("hunksRead is zero for an empty stream or an empty viewed set", () => {
   assert.equal(hunksRead([], new Map(), new Set()), 0);
   assert.equal(hunksRead([1, 2, 3], new Map([[1, "d"]]), new Set()), 0);
+});
+
+test("activeFileTarget picks the sidebar entry when the row has one", () => {
+  assert.equal(activeFileTarget(5, true), "file");
+});
+
+test("activeFileTarget falls back to the generated toggle for a real row with no entry", () => {
+  // The sidebar lists PRIMARY files only, so a row inside a generated file resolves to a real
+  // row index (fileRow >= 0) with no sidebar entry - this is the case markActiveFile used to
+  // read as "nothing to highlight" and simply clear the last indicator.
+  assert.equal(activeFileTarget(5, false), "generated");
+});
+
+test("activeFileTarget is nothing before the first file heading", () => {
+  assert.equal(activeFileTarget(-1, false), "none");
 });

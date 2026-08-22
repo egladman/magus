@@ -162,6 +162,22 @@ export function hunksRead(
   return read;
 }
 
+// ActiveFileTarget is what the sidebar should highlight as "here" for a scroll position - the
+// primary file's own entry, the generated group's fold toggle (a real file, just not one the
+// index lists individually), or nothing (a row before the first file heading).
+export type ActiveFileTarget = "file" | "generated" | "none";
+
+// activeFileTarget decides that highlight. The sidebar lists PRIMARY files only, so a scroll
+// position inside a generated file resolves to a real row (fileRow >= 0) with no sidebar entry -
+// the caller used to read that as "no target" and simply cleared the last highlight, which left
+// the reader with no position indicator at all the moment they scrolled somewhere the index
+// cannot show individually. The generated group's own toggle is the honest stand-in for that case.
+export function activeFileTarget(fileRow: number, hasSidebarEntry: boolean): ActiveFileTarget {
+  if (hasSidebarEntry) return "file";
+  if (fileRow >= 0) return "generated";
+  return "none";
+}
+
 // fileRowIndexes lists the row index of every file heading, in order - what the sidebar jumps
 // to, indexed the same way as the files array it was built from.
 export function fileRowIndexes(rows: readonly Row[]): number[] {
