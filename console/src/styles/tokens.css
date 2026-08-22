@@ -149,6 +149,31 @@
   );
 }
 
+/* Touch floor. Apple's HIG: "a button needs a hit region of at least 44x44 pt ... whether they use a
+   fingertip, a pointer, their eyes, or a remote." The tiers above are PatternFly's, and PF is a
+   desktop system: 37px and 29px are MOUSE targets. Measured on a 375px viewport, every control on
+   the log viewer was under 44 and the smallest were 19x14.
+
+   Keyed on the POINTER, not the width. A touchscreen laptop at 1280px needs the bigger target and a
+   narrow desktop browser window does not, so a width breakpoint gets both cases wrong. `coarse`
+   means the primary input is imprecise, which is exactly the question being asked.
+
+   Both tiers land on the same floor, which is correct rather than a bug: 44 is a minimum, so once it
+   binds there is no "compact". max() keeps the tier ordering meaningful if a larger tier is ever
+   added, and keeps this a FLOOR rather than an override.
+
+   Not a WCAG fix - WCAG 2.2 SC 2.5.8 asks 24x24 and the undersized controls all clear its spacing
+   exception today. This is the Apple guideline, which is stricter. */
+@media (pointer: coarse) {
+  :root,
+  [data-control-size="compact"] {
+    --console-control-block-size: max(44px, calc(
+      var(--pf-t--global--font--size--body--default) * var(--pf-t--global--font--line-height--body) +
+        2 * var(--pf-t--global--spacer--control--vertical--default)
+    ));
+  }
+}
+
 :root {
   /* --- 2. System font stack ------------------------------------------------------------
      Point PatternFly's font-family tokens at a system stack so its @font-face RedHat
