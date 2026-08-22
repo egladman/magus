@@ -55,6 +55,51 @@ func TestLastEntryFor_ReturnsLatest(t *testing.T) {
 	assert.Equal(t, "build", m.Target)
 }
 
+// TestLastRecordedRun_NothingRecorded: with no entry there is no comparison to make,
+// and the error has to say so and name the step that would create one.
+func TestLastRecordedRun_NothingRecorded(t *testing.T) {
+	c, err := Open(t.Context(), t.TempDir())
+	require.NoError(t, err)
+
+	_, err = c.LastRecordedRun("svc", "build")
+	require.ErrorIs(t, err, fs.ErrNotExist)
+	assert.Contains(t, err.Error(), "nothing to compare against")
+	assert.Contains(t, err.Error(), "run the target once")
+}
+
+// TestLastRecordedRun_ExplainsChangedSource walks the whole negative lens: run a target,
+// edit one of its sources, and the recorded run plus CompareKeyInputs must name that file
+// as the reason a run now would miss.
+func TestLastRecordedRun_ExplainsChangedSource(t *testing.T) {
+	root, _, c := newMutableCache(t)
+	writeMain(t, root, "package main")
+	step := makeStep(root)
+	step.Target = "build"
+
+	_, err := c.Run(t.Context(), step, func(context.Context) error { return nil })
+	require.NoError(t, err)
+
+	liveKey, liveLines, err := c.StepKey(t.Context(), &step)
+	require.NoError(t, err)
+	rec, err := c.LastRecordedRun("test/pkg", "build")
+	require.NoError(t, err)
+	assert.Equal(t, rec.Key, liveKey, "nothing moved yet, so the recorded key is still what a run would mint")
+	require.NotEmpty(t, rec.KeyInputs, "the run recorded its key inputs")
+	assert.Equal(t, 0, CompareKeyInputs(rec.KeyInputs, MaskKeyInputs(liveLines)).Differences)
+
+	writeMain(t, root, "package main // edited")
+
+	liveKey, liveLines, err = c.StepKey(t.Context(), &step)
+	require.NoError(t, err)
+	assert.NotEqual(t, rec.Key, liveKey, "the edit moved the key, so a run now misses")
+
+	cmp := CompareKeyInputs(rec.KeyInputs, MaskKeyInputs(liveLines))
+	assert.Equal(t, 1, cmp.Differences, "one file changed: %+v", cmp)
+	require.NotNil(t, cmp.First)
+	assert.Equal(t, "src:test/pkg/main.go", cmp.First.Input)
+	assert.NotEqual(t, cmp.First.Recorded, cmp.First.Live, "both content hashes are shown")
+}
+
 func TestLastEntryForTarget_FiltersTarget(t *testing.T) {
 	root := t.TempDir()
 	cdir := t.TempDir()

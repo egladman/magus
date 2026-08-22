@@ -11,6 +11,8 @@ import (
 //
 // Regenerate with: cd magus && go generate ./cmd/magus/...
 const (
+	// activity: --limit
+	FlagActivityLimit = "limit"
 	// affected: --b
 	FlagAffectedB = "b"
 	// affected: --base
@@ -357,7 +359,7 @@ func BindDescribeTarget(fs *flag.FlagSet) *DescribeTargetFlags {
 	var f DescribeTargetFlags
 	fs.BoolVar(&f.Explain, FlagDescribeTargetExplain, false, "For a ref with charms: show the per-charm argv trace (base then each charm)")
 	fs.BoolVar(&f.Explain, FlagDescribeTargetE, false, "Short for --explain")
-	fs.BoolVar(&f.Cache, FlagDescribeTargetCache, false, "Show the live cache key, the ref a run would print, and the component classes behind it")
+	fs.BoolVar(&f.Cache, FlagDescribeTargetCache, false, "Show the live cache key, the ref a run would print, the component classes behind it, and what moved since the last recorded run")
 	fs.StringVar(&f.Against, FlagDescribeTargetAgainst, "", "With --cache: diff the live key inputs against the stored lines behind an output `ref`")
 	fs.BoolVar(&f.Inputs, FlagDescribeTargetInputs, false, "With --cache: list every key input line, so you can confirm a declared file was actually hashed")
 	fs.BoolVar(&f.NoDefaultCharms, FlagDescribeTargetNoDefaultCharms, false, "With --cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)")
@@ -888,6 +890,18 @@ func BindConfigConsoleTokenCreate(fs *flag.FlagSet) *ConfigConsoleTokenCreateFla
 	fs.StringVar(&f.Name, FlagConfigConsoleTokenCreateName, "", "Name for this console token (default: console-N)")
 	fs.StringVar(&f.Expires, FlagConfigConsoleTokenCreateExpires, "", "Lifetime: a duration like 90d or 48h, or \"never\" (default 90d)")
 	fs.BoolVar(&f.Viewer, FlagConfigConsoleTokenCreateViewer, false, "Mint a READ-ONLY viewer token: it can read the console and cannot submit jobs, edit memory, or open a share")
+	return &f
+}
+
+// ActivityFlags are the flags declared for `magus activity`.
+type ActivityFlags struct {
+	Limit int // --limit
+}
+
+// BindActivity registers `magus activity`'s flags on fs and returns the destination.
+func BindActivity(fs *flag.FlagSet) *ActivityFlags {
+	var f ActivityFlags
+	fs.IntVar(&f.Limit, FlagActivityLimit, 0, "Show at most this many sessions (0 for all)")
 	return &f
 }
 

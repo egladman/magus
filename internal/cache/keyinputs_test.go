@@ -243,6 +243,101 @@ func TestRunPersistsKeyInputsAndAgainstDiffNamesTheDrift(t *testing.T) {
 	assert.NotContains(t, strings.Join(append(env.StoredOnly, env.LiveOnly...), " "), "before", "values stay masked on both sides")
 }
 
+// TestCompareKeyInputsIdentical: nothing differs when both sides hashed the same
+// inputs, and First stays nil so a caller can branch on it alone.
+func TestCompareKeyInputsIdentical(t *testing.T) {
+	t.Parallel()
+	lines := []string{
+		"keyVersion:3",
+		"target:build",
+		"src:svc/main.go:abc123:0",
+		"env:GOFLAGS=sha256:0123456789ab",
+		"tool:go:version=1.25.0",
+	}
+	got := CompareKeyInputs(lines, append([]string(nil), lines...))
+	assert.Equal(t, 0, got.Differences)
+	assert.Nil(t, got.First)
+}
+
+// TestCompareKeyInputsPairsInputsByIdentity: a value that moved must read as ONE input
+// that changed, per class, rather than as a line removed and a line added.
+func TestCompareKeyInputsPairsInputsByIdentity(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name           string
+		recorded, live []string
+		want           KeyInputChange
+	}{
+		{
+			name:     "source content",
+			recorded: []string{"src:svc/main.go:abc123:0"},
+			live:     []string{"src:svc/main.go:def456:0"},
+			want:     KeyInputChange{Class: "src", Input: "src:svc/main.go", Recorded: "abc123:0", Live: "def456:0"},
+		},
+		{
+			name:     "source exec bit",
+			recorded: []string{"src:svc/run.sh:abc123:0"},
+			live:     []string{"src:svc/run.sh:abc123:1"},
+			want:     KeyInputChange{Class: "src", Input: "src:svc/run.sh", Recorded: "abc123:0", Live: "abc123:1"},
+		},
+		{
+			name:     "env value",
+			recorded: []string{"env:TOKEN=sha256:aaaaaaaaaaaa"},
+			live:     []string{"env:TOKEN=sha256:bbbbbbbbbbbb"},
+			want:     KeyInputChange{Class: "env", Input: "env:TOKEN", Recorded: "sha256:aaaaaaaaaaaa", Live: "sha256:bbbbbbbbbbbb"},
+		},
+		{
+			name:     "env became set",
+			recorded: []string{"env:TOKEN:unset"},
+			live:     []string{"env:TOKEN=sha256:bbbbbbbbbbbb"},
+			want:     KeyInputChange{Class: "env", Input: "env:TOKEN", Recorded: "unset", Live: "sha256:bbbbbbbbbbbb"},
+		},
+		{
+			name:     "tool version",
+			recorded: []string{"tool:go:version=1.25.0"},
+			live:     []string{"tool:go:version=1.26.0"},
+			want:     KeyInputChange{Class: "tool", Input: "tool:go:version", Recorded: "1.25.0", Live: "1.26.0"},
+		},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got := CompareKeyInputs(tc.recorded, tc.live)
+			assert.Equal(t, 1, got.Differences, "one input moved, so one difference")
+			require.NotNil(t, got.First)
+			assert.Equal(t, tc.want, *got.First)
+		})
+	}
+}
+
+// TestCompareKeyInputsReportsLiveOrderFirst: "first" is the earliest class
+// hashStepInputs writes, so a changed target line is named ahead of the source hashes
+// it explains.
+func TestCompareKeyInputsReportsLiveOrderFirst(t *testing.T) {
+	t.Parallel()
+	recorded := []string{"target:build", "src:svc/a.go:aaa:0", "src:svc/b.go:bbb:0", "dep:libs/x"}
+	live := []string{"target:build:rw", "src:svc/a.go:zzz:0", "src:svc/b.go:bbb:0"}
+
+	got := CompareKeyInputs(recorded, live)
+	require.NotNil(t, got.First)
+	assert.Equal(t, "target:build:rw", got.First.Input, "the live key's earliest differing line leads")
+	assert.True(t, got.First.RecordedAbsent)
+	// The two target lines, the edited source, and the dropped dep.
+	assert.Equal(t, 4, got.Differences)
+}
+
+// TestCompareKeyInputsMarksAbsence: a class with no value slot can only appear or
+// disappear, and the *Absent flags are what say which - an empty value does not.
+func TestCompareKeyInputsMarksAbsence(t *testing.T) {
+	t.Parallel()
+	got := CompareKeyInputs(nil, []string{"charm:rw"})
+	require.NotNil(t, got.First)
+	assert.Equal(t, KeyInputChange{Class: "charm", Input: "charm:rw", RecordedAbsent: true}, *got.First)
+
+	got = CompareKeyInputs([]string{"charm:rw"}, nil)
+	require.NotNil(t, got.First)
+	assert.Equal(t, KeyInputChange{Class: "charm", Input: "charm:rw", LiveAbsent: true}, *got.First)
+}
+
 // hashOfLines re-derives the cache key from collected key inputs, independently of
 // hashStep's buffer plumbing.
 func hashOfLines(lines []string) string {

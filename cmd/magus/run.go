@@ -301,6 +301,11 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// An adopted run (dispatched by the daemon) also feeds the daemon's live-run registry,
 	// carried on ctx; a plain CLI run has no sink, so this is empty there.
 	captureHandlers := append(liveHandlers(liveBC), console.RunSinkHandlers(ctx)...)
+	// Durable session facts ride the same fan-out: one fact per target result, into a
+	// store every worktree of this repo shares (`magus activity` reads it back).
+	if h := beginSessionJournal(m.Root(), append([]string{"run"}, args...), version); h != nil {
+		captureHandlers = append(captureHandlers, h)
+	}
 	invCtx, endInvocation := m.BeginInvocation(ctx, journal.Command{
 		Arguments: append([]string{"run"}, args...), Cwd: cwd, Trigger: trigger,
 	}, version, captureHandlers...)

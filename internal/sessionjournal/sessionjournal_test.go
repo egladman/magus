@@ -1,0 +1,273 @@
+package sessionjournal
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	json "github.com/egladman/magus/internal/json"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestAppendReadRoundTrip(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	w, err := Open(dir, "sess1", SessionStart{Workspace: "/repo", Command: "run build"})
+	require.NoError(t, err)
+	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Project: "api", Outcome: OutcomePass, DurMs: 12}))
+
+	fold, err := Read(dir)
+	require.NoError(t, err)
+	require.Len(t, fold.Records, 2, "the first append also writes the session-start record")
+	assert.Zero(t, fold.Skipped)
+	assert.Equal(t, 1, fold.Sessions)
+
+	assert.Equal(t, Record{V: SchemaVersion, Session: "sess1", Seq: 1, Kind: KindSessionStart, Ts: fold.Records[0].Ts, Payload: fold.Records[0].Payload}, fold.Records[0])
+	assert.Equal(t, uint64(2), fold.Records[1].Seq)
+
+	var got TargetResult
+	require.NoError(t, json.Unmarshal(fold.Records[1].Payload, &got))
+	assert.Equal(t, TargetResult{Target: "build", Project: "api", Outcome: OutcomePass, DurMs: 12}, got)
+}
+
+// Open must not create the file: a magus command that records no fact should leave
+// no session behind, or `magus activity` fills up with runs that did nothing.
+func TestOpenWritesNothingUntilTheFirstFact(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	w, err := Open(dir, "sess1", SessionStart{})
+	require.NoError(t, err)
+
+	fold, err := Read(dir)
+	require.NoError(t, err)
+	assert.Empty(t, fold.Records)
+	assert.Zero(t, fold.Sessions)
+
+	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}))
+	fold, err = Read(dir)
+	require.NoError(t, err)
+	assert.Len(t, fold.Records, 2)
+}
+
+func TestOpenRejectsASessionIDThatCouldEscapeTheStore(t *testing.T) {
+	t.Parallel()
+	for _, id := range []string{"", "../escape", "a/b", "."} {
+		_, err := Open(t.TempDir(), id, SessionStart{})
+		require.Error(t, err, "session id %q", id)
+		assert.Contains(t, err.Error(), "sessionjournal:")
+	}
+}
+
+// Two writers with distinct session ids in one store are both visible to one fold.
+// This is the two-worktree done-check in miniature: the worktrees differ, the store
+// does not, so each sees the other's facts.
+func TestFoldSeesEveryWriterInTheStore(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	left, err := Open(dir, "wt-left", SessionStart{Workspace: "/repo/a"})
+	require.NoError(t, err)
+	right, err := Open(dir, "wt-right", SessionStart{Workspace: "/repo/b"})
+	require.NoError(t, err)
+
+	require.NoError(t, left.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
+	require.NoError(t, right.Append(KindTargetResult, TargetResult{Target: "test", Outcome: OutcomeFail}))
+	require.NoError(t, left.Append(KindTargetResult, TargetResult{Target: "lint", Outcome: OutcomePass}))
+
+	fold, err := Read(dir)
+	require.NoError(t, err)
+	assert.Equal(t, 2, fold.Sessions)
+	assert.Len(t, fold.Records, 5)
+
+	seen := map[string]int{}
+	for _, rec := range fold.Records {
+		seen[rec.Session]++
+	}
+	assert.Equal(t, map[string]int{"wt-left": 3, "wt-right": 2}, seen)
+
+	sessions := Summarize(fold)
+	require.Len(t, sessions, 2)
+	byID := map[string]Summary{}
+	for _, s := range sessions {
+		byID[s.Session] = s
+	}
+	assert.Equal(t, "/repo/a", byID["wt-left"].Workspace)
+	assert.Equal(t, "/repo/b", byID["wt-right"].Workspace)
+	assert.Len(t, byID["wt-left"].Targets, 2)
+	assert.Len(t, byID["wt-right"].Targets, 1)
+}
+
+// Ordering is by (Ts, Session, Seq). The tie-break matters more than the timestamp:
+// two worktrees appending in one millisecond must still fold to one stable order.
+func TestFoldOrdersByTimeThenSessionThenSeq(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	writeRaw(t, dir, "beta", []Record{
+		{V: 1, Session: "beta", Seq: 1, Kind: KindTargetResult, Ts: 100},
+		{V: 1, Session: "beta", Seq: 2, Kind: KindTargetResult, Ts: 100},
+	})
+	writeRaw(t, dir, "alpha", []Record{
+		{V: 1, Session: "alpha", Seq: 1, Kind: KindTargetResult, Ts: 100},
+		{V: 1, Session: "alpha", Seq: 2, Kind: KindTargetResult, Ts: 300},
+	})
+
+	fold, err := Read(dir)
+	require.NoError(t, err)
+
+	var order []string
+	for _, rec := range fold.Records {
+		order = append(order, rec.Session+"/"+string(rune('0'+rec.Seq)))
+	}
+	assert.Equal(t, []string{"alpha/1", "beta/1", "beta/2", "alpha/2"}, order)
+}
+
+// A journal is written by a process that can be killed mid-line, so a truncated
+// tail is expected. The read must surrender the bad line and nothing else.
+func TestReadToleratesACorruptTail(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	w, err := Open(dir, "sess1", SessionStart{})
+	require.NoError(t, err)
+	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
+
+	path := filepath.Join(dir, "sess1.jsonl")
+	f, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY, 0o644)
+	require.NoError(t, err)
+	_, err = f.WriteString(`{"v":1,"session":"sess1","seq":3,"kind":"target_res`)
+	require.NoError(t, err)
+	require.NoError(t, f.Close())
+
+	fold, err := Read(dir)
+	require.NoError(t, err, "a half-written line must never fail the read")
+	assert.Len(t, fold.Records, 2)
+	assert.Equal(t, 1, fold.Skipped)
+
+	// The session survives the damage rather than vanishing with it.
+	sessions := Summarize(fold)
+	require.Len(t, sessions, 1)
+	assert.Len(t, sessions[0].Targets, 1)
+}
+
+func TestReadCountsEveryUnusableLine(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sess1.jsonl")
+	body := strings.Join([]string{
+		`{"v":1,"session":"sess1","seq":1,"kind":"target_result","ts":1}`,
+		`not json at all`,
+		``, // a blank line is not damage; it is skipped without counting
+		`{"v":1,"seq":2,"kind":"target_result","ts":2}`, // no session: unattributable
+		`{"v":1,"session":"sess1","seq":3,"ts":3}`,      // no kind: uninterpretable
+	}, "\n")
+	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
+
+	fold, err := Read(dir)
+	require.NoError(t, err)
+	assert.Len(t, fold.Records, 1)
+	assert.Equal(t, 3, fold.Skipped)
+}
+
+// An unknown kind and an unknown payload field are what a NEWER magus writes. An
+// older reader must show less, never fail, and must not drop the session.
+func TestUnknownKindsAndFieldsAreIgnoredNotRejected(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sess1.jsonl")
+	body := strings.Join([]string{
+		`{"v":1,"session":"sess1","seq":1,"kind":"session_start","ts":10,"payload":{"workspace":"/repo","invented_field":"ignored"}}`,
+		`{"v":9,"session":"sess1","seq":2,"kind":"attention_requested","ts":20,"payload":{"whatever":true}}`,
+		`{"v":1,"session":"sess1","seq":3,"kind":"target_result","ts":30,"payload":{"target":"build","outcome":"pass","future":1}}`,
+	}, "\n")
+	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
+
+	fold, err := Read(dir)
+	require.NoError(t, err)
+	assert.Len(t, fold.Records, 3)
+	assert.Zero(t, fold.Skipped, "an unknown kind is not damage")
+
+	sessions := Summarize(fold)
+	require.Len(t, sessions, 1)
+	assert.Equal(t, "/repo", sessions[0].Workspace)
+	assert.Equal(t, 3, sessions[0].Facts, "an unrecognized fact still counts as activity")
+	assert.Equal(t, int64(30), sessions[0].LastMs, "an unrecognized fact still advances the clock")
+	require.Len(t, sessions[0].Targets, 1)
+	assert.Equal(t, "build", sessions[0].Targets[0].Target)
+}
+
+func TestSummarizeOrdersMostRecentFirst(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	writeRaw(t, dir, "old", []Record{{V: 1, Session: "old", Seq: 1, Kind: KindTargetResult, Ts: 100}})
+	writeRaw(t, dir, "new", []Record{{V: 1, Session: "new", Seq: 1, Kind: KindTargetResult, Ts: 900}})
+	writeRaw(t, dir, "mid", []Record{{V: 1, Session: "mid", Seq: 1, Kind: KindTargetResult, Ts: 500}})
+
+	fold, err := Read(dir)
+	require.NoError(t, err)
+
+	var ids []string
+	for _, s := range Summarize(fold) {
+		ids = append(ids, s.Session)
+	}
+	assert.Equal(t, []string{"new", "mid", "old"}, ids)
+}
+
+func TestReadMissingStoreIsEmptyNotAnError(t *testing.T) {
+	t.Parallel()
+	fold, err := Read(filepath.Join(t.TempDir(), "never-created"))
+	require.NoError(t, err, "no session has run yet is not a failure")
+	assert.Empty(t, fold.Records)
+	assert.Zero(t, fold.Sessions)
+}
+
+// Worktrees of one repo must resolve to one store, or a fact recorded in one is
+// invisible from the other and the whole feature is pointless.
+func TestDirIsSharedAcrossWorktreesOfOneRepo(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+
+	main := t.TempDir()
+	require.NoError(t, os.MkdirAll(filepath.Join(main, ".git", "worktrees", "feature"), 0o755))
+
+	linked := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(linked, ".git"),
+		[]byte("gitdir: "+filepath.Join(main, ".git", "worktrees", "feature")+"\n"), 0o644))
+
+	mainDir, err := Dir(main)
+	require.NoError(t, err)
+	linkedDir, err := Dir(linked)
+	require.NoError(t, err)
+	assert.Equal(t, mainDir, linkedDir)
+
+	unrelated, err := Dir(t.TempDir())
+	require.NoError(t, err)
+	assert.NotEqual(t, mainDir, unrelated)
+}
+
+func TestDirIsUnderTheUserStateDir(t *testing.T) {
+	state := t.TempDir()
+	t.Setenv("XDG_STATE_HOME", state)
+
+	dir, err := Dir(t.TempDir())
+	require.NoError(t, err)
+	assert.True(t, strings.HasPrefix(dir, filepath.Join(state, "magus", "sessions")),
+		"store %s is not under the user state dir", dir)
+}
+
+// writeRaw lays down a journal file directly, so a test can pin timestamps and
+// sequence numbers the Writer would otherwise stamp from the clock.
+func writeRaw(t *testing.T, dir, session string, records []Record) {
+	t.Helper()
+	var b strings.Builder
+	for _, rec := range records {
+		line, err := json.Marshal(rec)
+		require.NoError(t, err)
+		b.Write(line)
+		b.WriteByte('\n')
+	}
+	require.NoError(t, os.WriteFile(filepath.Join(dir, session+fileExt), []byte(b.String()), 0o644))
+}

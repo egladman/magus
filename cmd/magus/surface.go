@@ -38,6 +38,7 @@ var subcommands = []subcommand{
 	{Name: "vcs", Short: "staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)"},
 	{Name: "doctor", Short: "validate the workspace"},
 	{Name: "config", Short: "view or update magus configuration"},
+	{Name: "activity", Short: "show what recent magus sessions did, folded across every worktree of this repo"},
 	{Name: "memory", Short: "durable cross-session project memory (ls, get, put, delete, verify)"},
 	{Name: "notes", Short: "human-authored notes committed to the repo (ls, get, edit, verify)"},
 	{Name: "diff", Short: "read uncommitted changes in the order they deserve attention, generated folded"},

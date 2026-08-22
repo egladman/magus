@@ -22,6 +22,7 @@ var All = []Command{
 	vcsCommand,
 	doctorCommand,
 	configCommand,
+	activityCommand,
 	memoryCommand,
 	notesCommand,
 	diffCommand,
@@ -109,7 +110,7 @@ step at a time.`,
 			Flags: []Flag{
 				{Name: "explain", Kind: FlagBool, Doc: "For a ref with charms: show the per-charm argv trace (base then each charm)"},
 				{Name: "e", Kind: FlagBool, AliasOf: "explain", Doc: "Short for --explain"},
-				{Name: "cache", Kind: FlagBool, Doc: "Show the live cache key, the ref a run would print, and the component classes behind it"},
+				{Name: "cache", Kind: FlagBool, Doc: "Show the live cache key, the ref a run would print, the component classes behind it, and what moved since the last recorded run"},
 				{Name: "against", Kind: FlagString, Doc: "With --cache: diff the live key inputs against the stored lines behind an output `ref`"},
 				{Name: "inputs", Kind: FlagBool, Doc: "With --cache: list every key input line, so you can confirm a declared file was actually hashed"},
 				{Name: "no-default-charms", Kind: FlagBool, Doc: "With --cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)"},
@@ -1087,6 +1088,34 @@ base in yourself on the others, then run resolve.`,
 		{"Merge the base in and settle it in one step", "magus vcs resolve --against origin/main"},
 		{"Record what a delegated unit was handed", "magus vcs checkpoint"},
 		{"The one citable token, for a ledger cell", "magus vcs checkpoint -o name"},
+	},
+}
+
+var activityCommand = Command{
+	Name:        "activity",
+	Short:       "Show what recent magus sessions did",
+	Description: "List recent magus sessions and the targets they ran, folded across every worktree of this repository.",
+	Tags:        []string{"cli", "magus activity", "sessions", "journal", "worktrees"},
+	Long: `List recent magus sessions with the targets each one ran and how those
+runs ended.
+
+A session's facts are appended as it works and are keyed by repository
+identity rather than by checkout path, so every git worktree of one repo reads
+and writes the same journal. That is the point: what another worktree just
+finished is visible here without a daemon, a network, or a shared branch.
+
+The journal is append-only and grows; it is never rewritten. A line left
+half-written by a killed process is skipped and counted rather than failing
+the read, and a fact this magus does not recognize is still counted as
+activity. Use --limit to bound the listing, and -o json for the full records.`,
+	Usage: "magus activity [flags]",
+	Flags: []Flag{
+		{Name: "limit", Kind: FlagInt, Doc: "Show at most this many sessions (0 for all)"},
+	},
+	Examples: []Example{
+		{"Show recent sessions", "magus activity"},
+		{"Show the last five", "magus activity --limit 5"},
+		{"Full records as JSON", "magus activity -o json"},
 	},
 }
 

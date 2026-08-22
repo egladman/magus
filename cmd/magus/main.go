@@ -259,6 +259,13 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// staged and stop `git rebase --continue`, resolve would splice a section between
 		// conflict markers. Each verb opens what it needs under its own guard.
 		return dispatchProfile{needsConfig: true}
+	case "activity":
+		// Reads a file store keyed by repository identity: it needs the root PATH but
+		// never the magusfile, and it must stay readable when the workspace does not
+		// load - a broken magusfile is exactly when someone asks what the last runs
+		// did. Not forwarded either; there is no warm daemon state to reuse for a
+		// listing that is one directory read.
+		return dispatchProfile{needsConfig: true}
 	case "status":
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true}
 	case "server":
@@ -745,6 +752,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return doctorCmd(ctx, root, rc, subArgs)
 	case "config":
 		return configCmd(ctx, root, globalCfg, subArgs)
+	case "activity":
+		return activityCmd(ctx, root, subArgs)
 	case "memory":
 		return memoryCmd(ctx, root, subArgs)
 	case "notes":

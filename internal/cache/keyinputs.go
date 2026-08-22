@@ -91,7 +91,19 @@ func (s *OutputStore) KeyInputsByRef(ref string) ([]string, error) {
 	if err != nil {
 		return nil, err
 	}
-	data, err := os.ReadFile(filepath.Join(filepath.Dir(path), keyInputsName))
+	return readKeyInputs(filepath.Dir(path))
+}
+
+// KeyInputsForKey returns the stored pre-hash key inputs for an EXACT cache key, the
+// shape a manifest records. It does not scan the store the way KeyInputsByRef must: a
+// prefix search would be a slower route to the same directory, and it fails outright once
+// the key's attempt blobs have been pruned away while this sidecar remains.
+func (s *OutputStore) KeyInputsForKey(cacheKey string) ([]string, error) {
+	return readKeyInputs(filepath.Join(s.outputsDir(), cacheKey))
+}
+
+func readKeyInputs(dir string) ([]string, error) {
+	data, err := os.ReadFile(filepath.Join(dir, keyInputsName))
 	if err != nil {
 		return nil, err
 	}
@@ -143,6 +155,114 @@ func ClassDigests(inputs []string) []ClassDigest {
 		a := byClass[class]
 		sum := sha256.Sum256(a.h)
 		out = append(out, ClassDigest{Class: class, Digest: hex.EncodeToString(sum[:])[:classDigestHexLen], Count: a.count})
+	}
+	return out
+}
+
+// splitKeyInput separates a key-input line into the input's stable IDENTITY and the
+// VALUE keyed under it. A source file whose content moved has to read as ONE input
+// that changed, not as a line removed and an unrelated line added, and only the
+// per-class layouts written by hashStepInputs say where that boundary falls. A class
+// with no value slot (dep, charm, arg, ...) is its own identity, so it can only be
+// present or absent.
+func splitKeyInput(line string) (identity, value string) {
+	class, rest, ok := strings.Cut(line, ":")
+	if !ok {
+		return line, ""
+	}
+	switch class {
+	case "src": // src:<rel>:<contentHash>:<execBit>; the rel path may itself contain ':'
+		if i := strings.LastIndexByte(rest, ':'); i > 0 {
+			if j := strings.LastIndexByte(rest[:i], ':'); j > 0 {
+				return "src:" + rest[:j], rest[j+1:]
+			}
+		}
+	case "env": // env:NAME=<masked> or env:NAME:unset - both key under the variable
+		if name, v, ok := strings.Cut(rest, "="); ok {
+			return "env:" + name, v
+		}
+		if name, ok := strings.CutSuffix(rest, ":unset"); ok {
+			return "env:" + name, "unset"
+		}
+	case "tool": // tool:<name>:version=<v>
+		if name, v, ok := strings.Cut(rest, "="); ok {
+			return "tool:" + name, v
+		}
+	}
+	return line, ""
+}
+
+// KeyInputChange is one key input that does not agree between a recorded run's key and
+// the live one.
+type KeyInputChange struct {
+	Class string `json:"class"` // the component class: "src", "env", "tool", ...
+	Input string `json:"input"` // the input's identity: the file, variable, or tool
+	// Recorded and Live are the values the two keys hashed under Input. The *Absent
+	// flags separate "that key had no such input" from "it hashed an empty value":
+	// classes like dep and charm carry no value slot, so appearing and disappearing is
+	// the only difference they can express.
+	Recorded       string `json:"recorded,omitempty"`
+	RecordedAbsent bool   `json:"recorded_absent,omitempty"`
+	Live           string `json:"live,omitempty"`
+	LiveAbsent     bool   `json:"live_absent,omitempty"`
+}
+
+// KeyInputComparison is the negative lens on a cache key: how many inputs moved since a
+// recorded run, and which one moved first. First is nil exactly when Differences is 0.
+type KeyInputComparison struct {
+	Differences int             `json:"differences"`
+	First       *KeyInputChange `json:"first,omitempty"`
+}
+
+// CompareKeyInputs reports which inputs disagree between a recorded run's key inputs and
+// the live ones, in LIVE key order (inputs only the recorded key had trail behind, in
+// recorded order). Live order is the order hashStepInputs writes, so "first" means the
+// earliest component class - the target's own definition before its sources, sources
+// before env, env before tools - which is the order a reader wants to be told about: a
+// changed target definition explains a moved source hash, never the reverse.
+//
+// Both sides must already be masked (MaskKeyInputs); the store persists masked lines and
+// an unmasked live line would read as a difference on every env var. Identity, not the
+// whole line, is what pairs the two sides, so a source file whose hash moved counts once.
+// Multiplicity collapses: a line repeated within one side is compared once.
+func CompareKeyInputs(recorded, live []string) KeyInputComparison {
+	recordedVals := make(map[string]string, len(recorded))
+	for _, l := range recorded {
+		id, v := splitKeyInput(l)
+		recordedVals[id] = v
+	}
+	liveVals := make(map[string]string, len(live))
+	for _, l := range live {
+		id, v := splitKeyInput(l)
+		liveVals[id] = v
+	}
+	var changes []KeyInputChange
+	seen := make(map[string]struct{}, len(live))
+	add := func(c KeyInputChange) {
+		if _, dup := seen[c.Input]; dup {
+			return
+		}
+		seen[c.Input] = struct{}{}
+		c.Class, _, _ = strings.Cut(c.Input, ":")
+		changes = append(changes, c)
+	}
+	for _, l := range live {
+		id, v := splitKeyInput(l)
+		rv, ok := recordedVals[id]
+		if ok && rv == v {
+			continue
+		}
+		add(KeyInputChange{Input: id, Recorded: rv, RecordedAbsent: !ok, Live: v})
+	}
+	for _, l := range recorded {
+		id, v := splitKeyInput(l)
+		if _, ok := liveVals[id]; !ok {
+			add(KeyInputChange{Input: id, Recorded: v, LiveAbsent: true})
+		}
+	}
+	out := KeyInputComparison{Differences: len(changes)}
+	if len(changes) > 0 {
+		out.First = &changes[0]
 	}
 	return out
 }
