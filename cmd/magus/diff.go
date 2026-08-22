@@ -54,11 +54,11 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		// either on every tree change would re-render identical output forever.
 		return usagef("magus diff: --watch reads the working tree, so it cannot be combined with %s", src.label)
 	}
-	if rf.Preflight && rf.Tui {
+	if rf.Cost && rf.Tui {
 		// Refused rather than ignored. The viewer has nowhere to put a report, so accepting the
 		// flag would answer the question with a page that never mentions it - and a flag that
 		// silently does nothing is the failure this command's refusal matrix exists to prevent.
-		return usagef("magus diff: --preflight is a report and --tui is a viewport, so they cannot be combined; run `magus diff --preflight` for the report")
+		return usagef("magus diff: --cost is a report and --tui is a viewport, so they cannot be combined; run `magus diff --cost` for the report")
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -78,7 +78,7 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		return err
 	}
 
-	render := func() error { return renderDiff(ctx, m, src, opts, rf, root, rf.Preflight) }
+	render := func() error { return renderDiff(ctx, m, src, opts, rf, root, rf.Cost) }
 	if rf.Watch {
 		return watchDiff(ctx, m, render)
 	}
@@ -769,7 +769,7 @@ func (b *diffBridge) post(ctx context.Context, op diffSessionOp) {
 }
 
 func diffUsage(w *os.File) {
-	fmt.Fprintln(w, "Usage: magus diff [--generated] [--preflight] [flags]")
+	fmt.Fprintln(w, "Usage: magus diff [--generated] [--cost] [flags]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Read the working tree's uncommitted changes, ordered by what they can break.")
 	fmt.Fprintln(w, "It takes no ref: the subject is always the uncommitted tree.")
@@ -799,7 +799,7 @@ func diffUsage(w *os.File) {
 	fmt.Fprintln(w, "  --generated   include the folded declared outputs")
 	fmt.Fprintln(w, "  --tui         read it interactively, joined to the session the console")
 	fmt.Fprintln(w, "                and an agent share: ] and [ walk hunks, v marks one read")
-	fmt.Fprintln(w, "  --preflight   append what landing this costs: which projects rebuild, who")
+	fmt.Fprintln(w, "  --cost        append what landing this costs: which projects rebuild, who")
 	fmt.Fprintln(w, "                owns them, an estimate from recorded run times, what the")
 	fmt.Fprintln(w, "                advisors say, and which notes anchor what you changed.")
 	fmt.Fprintln(w, "                It gates nothing and changes no exit code.")

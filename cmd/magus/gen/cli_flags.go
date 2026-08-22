@@ -141,10 +141,10 @@ const (
 	FlagDescribeTargetInputs = "inputs"
 	// describe target: --no-default-charms
 	FlagDescribeTargetNoDefaultCharms = "no-default-charms"
+	// diff: --cost
+	FlagDiffCost = "cost"
 	// diff: --generated
 	FlagDiffGenerated = "generated"
-	// diff: --preflight
-	FlagDiffPreflight = "preflight"
 	// diff: --tui
 	FlagDiffTui = "tui"
 	// diff: --watch
@@ -942,7 +942,7 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 // DiffFlags are the flags declared for `magus diff`.
 type DiffFlags struct {
 	Generated bool // --generated
-	Preflight bool // --preflight
+	Cost      bool // --cost
 	Tui       bool // --tui
 	Watch     bool // --watch
 }
@@ -951,7 +951,7 @@ type DiffFlags struct {
 func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	var f DiffFlags
 	fs.BoolVar(&f.Generated, FlagDiffGenerated, false, "Include declared target outputs, which are folded away by default")
-	fs.BoolVar(&f.Preflight, FlagDiffPreflight, false, "Append what landing this costs: reach, ownership, an estimate from recorded run times, advisors, and note anchors")
+	fs.BoolVar(&f.Cost, FlagDiffCost, false, "Append what landing this costs: reach, ownership, an estimate from recorded run times, advisors, and note anchors")
 	fs.BoolVar(&f.Tui, FlagDiffTui, false, "Read the changeset interactively, joined to the session the console and an agent share")
 	fs.BoolVar(&f.Watch, FlagDiffWatch, false, "Re-read and re-render whenever the working tree changes")
 	return &f

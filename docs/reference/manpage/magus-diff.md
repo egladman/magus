@@ -11,7 +11,7 @@ Read the working tree's changes in the order they deserve attention
 
 ## Synopsis
 
-**magus** diff [--generated] [--preflight] [--tui] [--watch] [\<patch-file\>|-] [flags]
+**magus** diff [--generated] [--cost] [--tui] [--watch] [\<patch-file\>|-] [flags]
 
 ## Description
 
@@ -37,21 +37,23 @@ model - it reports who can see the thing you changed and lets you decide.
 The console's Diff surface reads the same annotations over the same session,
 and an agent can join that session through the magus_diff MCP tool.
 
---preflight appends what landing the change costs: which projects rebuild and
+--cost appends what landing the change costs: which projects rebuild and
 which were merely edited, who has been changing them, an estimate of the
 rebuild from recorded run durations, what the workspace's advisors say, and
 which human-authored notes anchor a file or symbol you touched. It is context
-and never a verdict - nothing is gated on it and the exit code is unchanged.
-Each section says when it could not measure something, so an empty one reads
-as "nobody looked" rather than as a clean bill of health.
+and never a verdict - nothing is gated on it and the exit code is unchanged;
+the name is not "preflight" because in this workspace's magusfiles a preflight
+target IS a gate, and this flag must never read as one. Each section says when
+it could not measure something, so an empty one reads as "nobody looked"
+rather than as a clean bill of health.
 
 ## Options
 
+**--cost**
+: Append what landing this costs: reach, ownership, an estimate from recorded run times, advisors, and note anchors
+
 **--generated**
 : Include declared target outputs, which are folded away by default
-
-**--preflight**
-: Append what landing this costs: reach, ownership, an estimate from recorded run times, advisors, and note anchors
 
 **--tui**
 : Read the changeset interactively, joined to the session the console and an agent share
@@ -76,7 +78,7 @@ magus diff --generated
 *Everything to know before landing it*
 
 ```sh
-magus diff --preflight
+magus diff --cost
 ```
 
 *Navigate it hunk by hunk and mark what you have read*

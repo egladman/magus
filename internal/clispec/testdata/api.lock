@@ -108,8 +108,8 @@ flag buzz/no-autoload
 flag buzz/t
 flag buzz/test
 flag clean/cache
+flag diff/cost
 flag diff/generated
-flag diff/preflight
 flag diff/tui
 flag diff/watch
 flag explain/global
