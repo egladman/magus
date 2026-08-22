@@ -155,6 +155,22 @@
   border-top: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-log-filter[hidden] { display: none; }
+
+/* The load/decode/fetch strip, mirroring the graph explorer's #graph-status: PF's padding is trimmed
+   so the notice sits in the panel rather than floating as a card inside it, and the title carries
+   body weight because the message IS the whole notice, not a headline over one. */
+#log-status.console-log-status {
+  margin: 0.5rem 0.8rem 0;
+  border-radius: var(--pf-t--global--border--radius--small);
+  font-size: 0.78rem; line-height: 1.45;
+  --pf-v6-c-alert--PaddingBlockStart: 0.45rem;
+  --pf-v6-c-alert--PaddingBlockEnd: 0.45rem;
+  --pf-v6-c-alert--PaddingInlineStart: 0.6rem;
+  --pf-v6-c-alert--PaddingInlineEnd: 0.6rem;
+}
+#log-status[hidden] { display: none; }
+#log-status .pf-v6-c-alert__title { font-size: 0.78rem; font-weight: 400; overflow-wrap: anywhere; }
+#log-status .pf-v6-c-alert__icon { font-size: 0.72rem; font-weight: 700; }
 .console-log-filter__op {
   font-weight: 600; font-size: 0.68rem; letter-spacing: 0.04em;
   color: var(--pf-t--global--text--color--subtle);

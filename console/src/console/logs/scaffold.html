@@ -162,6 +162,15 @@
            .console-log-filter/.console-log-filter__chip rules in logs.css. Hidden until you type. -->
       <div id="filter-chips" class="console-log-filter" hidden aria-hidden="true"></div>
 
+      <!-- Loading / decode / fetch feedback. setStatus (dom.ts) has always written here; the element
+           it wrote to was never in this scaffold, so six call sites covering every load and every
+           failure were silent and an aged-out run left the screen unchanged. Same shape as the graph
+           explorer's #graph-status: a PF Alert whose title IS the whole message. -->
+      <div id="log-status" class="pf-v6-c-alert pf-m-info console-log-status" role="status" hidden>
+        <div class="pf-v6-c-alert__icon" aria-hidden="true" id="log-status-icon">i</div>
+        <p class="pf-v6-c-alert__title" id="log-status-text"></p>
+      </div>
+
       <div class="console-render-scroll" id="log-scroll" tabindex="0">
         <div class="console-render-body" id="log-body" aria-label="Captured output"></div>
 
