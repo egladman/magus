@@ -137,7 +137,7 @@ func canonicalHost(host string) string {
 	h := asciiLower(strings.TrimSpace(host))
 	name, port, err := net.SplitHostPort(h)
 	if err != nil {
-		// No port (or unparseable). Strip IPv6 brackets so the bare form agrees with what
+		// No port (or unparsable). Strip IPv6 brackets so the bare form agrees with what
 		// the ported branch produces - SplitHostPort removes them, so leaving them here
 		// made "[::1]" and "[::1]:443" two different destinations.
 		return strings.TrimSuffix(strings.Trim(h, "[]"), ".")

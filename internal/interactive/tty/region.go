@@ -241,7 +241,7 @@ type Span struct {
 //
 // Text and Style are shorthand for the overwhelmingly common single-span row;
 // Spans is the general form and wins when both are set. They are not two code
-// paths - [Line.spans] normalises the shorthand into a one-element list and the
+// paths - [Line.spans] normalizes the shorthand into a one-element list and the
 // renderer only ever sees spans - so the convenience cannot drift from the
 // general case.
 type Line struct {
@@ -250,16 +250,16 @@ type Line struct {
 	Spans []Span
 }
 
-// SpansCopy returns this line's spans as a fresh slice, normalising the
+// SpansCopy returns this line's spans as a fresh slice, normalizing the
 // Text+Style shorthand on the way.
 //
 // Exported for a caller COMPOSING onto an existing line - the band appends a
 // divider and a second column to rows it has already built. Doing that by hand
-// means re-implementing the shorthand normalisation, and the copy is what stops
+// means re-implementing the shorthand normalization, and the copy is what stops
 // an append from writing into a slice the line still shares.
 func (r Line) SpansCopy() []Span { return append([]Span(nil), r.spans()...) }
 
-// spans normalises a Line into the form the renderer works with.
+// spans normalizes a Line into the form the renderer works with.
 func (r Line) spans() []Span {
 	if len(r.Spans) > 0 {
 		return r.Spans
@@ -303,11 +303,11 @@ func Cols(s string) int { return cols(s) }
 // lives in one place.
 func cols(s string) int {
 	// Escape sequences are SKIPPED, not counted. Some callers hand us text that
-	// already carries its own SGR - a status glyph coloured at the point it is
+	// already carries its own SGR - a status glyph colored at the point it is
 	// composed - and counting those bytes as columns padded the row short,
 	// putting the box's right border nine columns in from the edge on exactly
 	// the rows that had a glyph.
-	// Through escapeLen rather than a second scanner: this one recognised CSI
+	// Through escapeLen rather than a second scanner: this one recognized CSI
 	// only and stepped two bytes past an OSC, so a hyperlink's whole URI counted
 	// as visible columns. A failure ref is hyperlinked, so that inflated an
 	// eight-column span to seventy, clipped text that fit, and left the box's
@@ -617,8 +617,8 @@ const (
 )
 
 // dim styles a border glyph, or leaves it bare when the terminal does not want
-// colour. The border is drawn by this type rather than composed by a caller, so
-// the caller's colour decision cannot reach it - it has to ask.
+// color. The border is drawn by this type rather than composed by a caller, so
+// the caller's color decision cannot reach it - it has to ask.
 func (r *region) dim(s string) string {
 	if !WantsColor(r.w, r.probe) {
 		return s

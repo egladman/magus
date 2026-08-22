@@ -18,7 +18,7 @@ import (
 // line from exhausting server memory before the args-count check fires.
 const maxFrameBytes = 4 << 20 // 4 MiB
 
-// writeFrame serialises body via json.Marshal and writes a single JSONL line
+// writeFrame serializes body via json.Marshal and writes a single JSONL line
 // to w in the form {"type":"<typeName>",<body fields>}\n. body must marshal
 // to a JSON object; any other shape (array, scalar) is a programming error
 // and returns an error.

@@ -21,7 +21,7 @@
 @import "@patternfly/patternfly/components/Card/card.css";
 @import "@patternfly/patternfly/layouts/Gallery/gallery.css";
 /* W2 shell rebuild - the components the migrated chrome mounts:
- *   Label       - the status-bar chips (#console-demo, #offline-badge)
+ *   Label       - the status-bar chips (#offline-badge)
  *   Menu        - the floating settings popover (#settings-panel) surface
  *   Form/FormControl - the settings-panel controls (poll/host inputs, theme button)
  *   ModalBox + Backdrop + Bullseye - the keybindings editor and cheat sheet overlays
@@ -37,6 +37,10 @@
  *   EmptyState - the connect/front-door screen (#dash-connect) when no daemon is streaming.
  * Card + Gallery (already above) cover the dashboard tiles and the app-waffle launcher. */
 @import "@patternfly/patternfly/components/EmptyState/empty-state.css";
+/* Notes - the scope banners and the store repair warnings. Alert is the one component the
+ * console mounts whose absence is silent: an undeclared alert still renders its text, just as
+ * an unstyled paragraph, so the Notes surface shipped with every banner reading as body prose. */
+@import "@patternfly/patternfly/components/Alert/alert.css";
 /* W3 log viewer - the log viewer surface's added components:
  *   Toolbar - the file/query bar: the ref identity strip plus the filter field + action buttons.
  * Button (above) covers the toolbar/section action buttons; FormControl (above) the filter field
@@ -67,6 +71,6 @@
 @import "@patternfly/patternfly/components/TextInputGroup/text-input-group.css";
 /* The shell's left navigation rail (#console-sidebar, sidebar.ts) is a PF Nav: __list/__item/__link
  * with pf-m-current for the surface the active tab is showing. Collapsed it shows only __link-icon;
- * the widths and the collapsed geometry are retuned through PF's own --pf-v6-c-nav__link--* custom
+ * the widths and the collapsed geometry are returned through PF's own --pf-v6-c-nav__link--* custom
  * properties in console.css rather than by re-skinning the component. */
 @import "@patternfly/patternfly/components/Nav/nav.css";

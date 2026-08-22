@@ -728,7 +728,7 @@ func cellState(i, running, capacity, numCPU int) cellKind {
 }
 
 // The pool grid's palette, as SGR parameter codes. The escape wrapping
-// itself lives in tty.Colorize; these only choose the colours.
+// itself lives in tty.Colorize; these only choose the colors.
 const (
 	sgrPoolRunning = tty.SGRBrightGreen // a slot doing work
 	sgrPoolIdle    = tty.SGRDimGrey     // a free slot
@@ -1038,7 +1038,7 @@ func printLockStatus(w io.Writer, locks []types.StatusLock) {
 
 // paintStatusFrame draws one watch frame, redrawing in place when it can.
 //
-// The fallback is the old behaviour - erase the screen and reprint - and it is
+// The fallback is the old behavior - erase the screen and reprint - and it is
 // kept for the one case the in-place redraw genuinely cannot serve: a frame as
 // tall as the terminal, where erasing upward would walk off the top and eat the
 // transcript above. Falling back is worse than redrawing in place and much

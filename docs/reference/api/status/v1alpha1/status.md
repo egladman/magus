@@ -9,7 +9,7 @@ tags: [api, proto, connect, grpc, statusservice]
 
 StatusService serves the snapshot, and streams it for a live dashboard.
 
-Package `magus.status.v1alpha1`, defined in `proto/magus/status/v1alpha1/status.proto`. Source: [status.proto:179](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L179). Part of the [daemon API](../../index.md).
+Package `magus.status.v1alpha1`, defined in `proto/magus/status/v1alpha1/status.proto`. Source: [status.proto:187](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L187). Part of the [daemon API](../../index.md).
 
 ## Methods
 
@@ -17,7 +17,7 @@ Package `magus.status.v1alpha1`, defined in `proto/magus/status/v1alpha1/status.
 
 GetStatus returns the current snapshot.
 
-`POST /magus.status.v1alpha1.StatusService/GetStatus`: unary. Source: [status.proto:181](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L181).
+`POST /magus.status.v1alpha1.StatusService/GetStatus`: unary. Source: [status.proto:189](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L189).
 
 Takes [GetStatusRequest](#getstatusrequest), returns [GetStatusResponse](#getstatusresponse).
 
@@ -25,7 +25,7 @@ Takes [GetStatusRequest](#getstatusrequest), returns [GetStatusResponse](#getsta
 
 StreamStatus pushes a fresh snapshot whenever the pool changes (or on a heartbeat), so a dashboard reflects what is running without polling.
 
-`POST /magus.status.v1alpha1.StatusService/StreamStatus`: server streaming. Source: [status.proto:184](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L184).
+`POST /magus.status.v1alpha1.StatusService/StreamStatus`: server streaming. Source: [status.proto:192](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L192).
 
 Takes [StreamStatusRequest](#streamstatusrequest), returns [StreamStatusResponse](#streamstatusresponse).
 
@@ -59,6 +59,7 @@ Source: [status.proto:170](https://github.com/egladman/magus/blob/main/proto/mag
 | `errors` | int64 | 3 |  |
 | `size_bytes` | int64 | 4 | real on-disk size of the cache dir (0 = unknown/not computed) |
 | `size_cap_mb` | int32 | 5 | configured cap (MAGUS\_CACHE\_SIZE\_MB; 0 = unlimited) |
+| `saved_ms` | int64 | 6 | saved\_ms is the summed recorded duration of the runs those hits replayed - the work the cache avoided, measured rather than modeled: each figure is how long that exact target took on this machine when it last ran, carried on the cache entry.  It UNDERSTATES and never overstates. A hit on an entry written before the duration was recorded counts toward hits and adds nothing here, so a reader must not present this as the cache's lifetime saving - it is what this daemon has saved since it started. |
 
 Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](status.md#streamstatus).
 
@@ -66,7 +67,7 @@ Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](
 
 Config is the daemon's resolved, read-only configuration a dashboard shows so an operator can see what the daemon is set to do without a terminal round-trip. Static per session, so it rides GetStatusResponse (the one-shot), never the live Status frame.
 
-Source: [status.proto:201](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L201).
+Source: [status.proto:209](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L209).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -78,7 +79,7 @@ Used by: [GetStatus (response)](status.md#getstatus).
 
 ### GetStatusRequest
 
-Source: [status.proto:187](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L187).
+Source: [status.proto:195](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L195).
 
 No fields.
 
@@ -86,7 +87,7 @@ Used by: [GetStatus (request)](status.md#getstatus).
 
 ### GetStatusResponse
 
-Source: [status.proto:188](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L188).
+Source: [status.proto:196](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L196).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|
@@ -223,7 +224,7 @@ Used by: [GetStatus (response)](status.md#getstatus), [StreamStatus (response)](
 
 ### StreamStatusRequest
 
-Source: [status.proto:206](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L206).
+Source: [status.proto:214](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L214).
 
 No fields.
 
@@ -231,7 +232,7 @@ Used by: [StreamStatus (request)](status.md#streamstatus).
 
 ### StreamStatusResponse
 
-Source: [status.proto:207](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L207).
+Source: [status.proto:215](https://github.com/egladman/magus/blob/main/proto/magus/status/v1alpha1/status.proto#L215).
 
 | Field | Type | # | Description |
 |-------|------|---|-------------|

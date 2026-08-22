@@ -62,7 +62,7 @@ func (k *keyedLock) acquire(ctx context.Context, key string) (func(), error) {
 	}, nil
 }
 
-// hashLocks serialises cache.Run calls per (project, hash) within this process.
+// hashLocks serializes cache.Run calls per (project, hash) within this process.
 // Cross-process races produce duplicate work but never corrupt the cache (blobs are
 // content-addressed and written atomically).
 var hashLocks = newKeyedLock()

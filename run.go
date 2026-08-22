@@ -743,7 +743,7 @@ func checkToolWindows(projects []*types.Project, versions map[string]string) err
 					violations = append(violations, fmt.Sprintf("%s: %s %s is newer than the supported range (below %s)",
 						types.ProjectLabel(p.Path, p.Dir), tool, version, window.Below))
 				case spells.VerdictInside, spells.VerdictUnknown:
-					// Unknown belongs with Inside: an unparseable bound leaves nothing to
+					// Unknown belongs with Inside: an unparsable bound leaves nothing to
 					// compare, and a comparison magus could not make must not fail a build.
 				}
 			}
@@ -1020,7 +1020,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	vcsName, revision, dirty := m.CurrentRevision(ctx)
 
 	// Active charms participate in the cache key: a charm can change a target's
-	// behaviour (pass/fail or output), so charm-variant runs must not collide.
+	// behavior (pass/fail or output), so charm-variant runs must not collide.
 	// A charm-less run hashes identically to before, keeping existing entries valid.
 	// Normalized by applyRunKeying below, shared with ComputeTargetKey.
 	charmKey := opts.Charms
@@ -1156,7 +1156,7 @@ func (m *Magus) executeStages(ctx context.Context, stages []stage, scopeLabel st
 	// reads, so gating installation on RetryOnVolatile meant a workspace where no
 	// target opts in - which is this one - recorded nothing at all, and the
 	// forecaster predicted DefaultDurationMs for every project forever. Retrying
-	// stays gated: the flag rides on the runtime and Decide honours it, so a
+	// stays gated: the flag rides on the runtime and Decide honors it, so a
 	// target that never asked for a retry still never gets one.
 	var volatilityRT *volatility.Runtime
 	if m.cfg.Volatility.Enabled {

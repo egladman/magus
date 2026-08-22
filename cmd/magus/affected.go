@@ -585,7 +585,7 @@ func affectedPlan(ctx context.Context, root string, args []string) error {
 	}
 
 	// --plan goes through the shared renderer like every other structured command, so -o
-	// selects the encoding. Marshalling here directly would ignore it and print JSON for
+	// selects the encoding. Marshaling here directly would ignore it and print JSON for
 	// `-o yaml`, in both flag positions.
 	//
 	// FormatText maps to JSON rather than to a prose rendering, because the plan has

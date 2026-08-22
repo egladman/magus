@@ -1,0 +1,414 @@
+/* notes.css - the Notes surface's own sheet.
+ *
+ * Notes does not reuse logs/logs.css, though both surfaces build a panel frame and sharing one
+ * would save a sheet. The frame is shareable; the typography is not. `.console-render-body` is a
+ * monospace grid sized for log lines, so a note's title, its banners and its human prose all
+ * land at 12.8px mono across a pane's full width - a 140-character measure on a wide display.
+ * The log viewer's store head is a real <button>; here it would be an inert element wearing a
+ * hover tint and a pointer cursor.
+ *
+ * So the two share a shell contract and nothing else. Notes owns `.console-notes-app`
+ * (registered in console.css's fill chain beside the other surface roots) and every class below.
+ * Nothing here redefines a class logs.css also defines, which is what lets both sheets sit in
+ * the document when both surfaces are open.
+ *
+ * Colors come from the PF token set and the console's own --console-* palette, so light and
+ * dark need no per-mode rules here. */
+
+.console-notes-app {
+  --notes-pad: 0.65rem;
+  /* The one header row, spanning the whole surface. There used to be one per pane, holding
+     different things and sizing themselves independently - they came out 39.5px and 10.6px, so
+     the columns started 29px apart. One bar across both is the version with no alignment to
+     maintain. */
+  --notes-bar-h: 2.9rem;
+  display: flex; flex-direction: column; position: relative;
+  margin-top: 1.25rem;
+  height: calc(100svh - 12.5rem); min-height: 420px;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small); overflow: hidden;
+  background: var(--pf-t--global--background--color--primary--default);
+  font-size: 0.92rem;
+  /* Queried below. The split has to key on the PANE, not the viewport: this surface is mounted
+     in a tiled pane as often as in a whole tab, and a half-width pane on a wide display has a
+     phone's room to work in. */
+  container-type: inline-size; container-name: notes;
+}
+
+/* --- Two-pane body ----------------------------------------------------------------------- */
+.console-notes-app__main { flex: 1 1 auto; min-height: 0; display: flex; position: relative; }
+/* Its own stacking context, so the z-index PF puts on a selected ToggleGroup button competes
+   inside the pane instead of against the detail overlay that covers it. */
+.console-notes-app__pane {
+  flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column;
+  position: relative; z-index: 0;
+}
+
+/* --- Filter + scope ---------------------------------------------------------------------- */
+.console-notes-app__bar {
+  flex: 0 0 auto; display: flex; gap: 0.5rem; align-items: center;
+  min-height: var(--notes-bar-h); box-sizing: border-box;
+  padding: 0 var(--notes-pad);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-notes-app__bar[hidden] { display: none; }
+/* The filter owns the row outright. It shared it with a three-way scope toggle, which was a
+   control for a choice the store headings already make - collapsing one says what filtering to
+   the other said - and two controls of different natural heights on one line never sat right.
+
+   Sizing and the corner radius come from PF's FormControl, so the field matches every other
+   input in the console rather than carrying a second opinion about what a text box looks like. */
+.console-notes-app__search { flex: 1 1 auto; min-width: 0; }
+.console-notes-app__search .pf-v6-c-form-control__text { font-size: 0.82rem; }
+
+/* --- The list ---------------------------------------------------------------------------- */
+.console-notes-app__list { flex: 1 1 auto; min-height: 0; overflow-y: auto; }
+.console-notes-app__list:focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
+
+/* The store head carries the consequence sentence itself rather than a banner beneath it: what
+   a store IS outranks everything else on this surface, and a reader who scrolls past it has
+   lost the only fact separating the two. Sticky, so the scroll cannot lose it.
+
+   It is a real <button> that folds its store away, which is also the scope filter - collapsing
+   "Private" says what a Private/Shared toggle said, using an affordance the heading needs
+   anyway. An earlier revision inherited the log viewer's head styling and LOOKED clickable
+   while doing nothing; the repair was to make the affordance true rather than to remove it. */
+.console-notes-app__store {
+  position: sticky; top: 0; z-index: 1;
+  display: flex; align-items: baseline; gap: 0.5rem; width: 100%;
+  padding: 0.3rem var(--notes-pad);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border: 0; border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.7rem; letter-spacing: 0.07em; text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
+  text-align: left; cursor: pointer;
+}
+.console-notes-app__store:hover { background: var(--pf-t--global--background--color--primary--default); }
+.console-notes-app__store:focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
+/* CSS-drawn caret, so the source stays ASCII. Points down when the store is open. */
+.console-notes-app__store-twist {
+  flex: 0 0 auto; align-self: center; width: 0; height: 0;
+  border-left: 0.3em solid transparent; border-right: 0.3em solid transparent;
+  border-top: 0.36em solid currentcolor;
+  transition: transform 0.12s;
+}
+@media (prefers-reduced-motion: reduce) { .console-notes-app__store-twist { transition: none; } }
+.console-notes-app__store[data-collapsed] .console-notes-app__store-twist { transform: rotate(-90deg); }
+.console-notes-app__store-consequence {
+  margin-left: auto; text-transform: none; letter-spacing: 0;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+/* Two hues that read as "different kind of thing", deliberately NOT status colors - neither
+   store is a problem, and coloring private as a warning would say that it is. */
+.console-notes-app__store[data-scope="shared"] .console-notes-app__store-consequence { color: var(--console-slate); }
+.console-notes-app__store[data-scope="private"] .console-notes-app__store-consequence { color: var(--console-indigo); }
+
+.console-notes-app__note {
+  display: block; width: 100%; text-align: left; appearance: none; border: 0;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  background: none; color: inherit; font: inherit; cursor: pointer;
+  padding: 0.45rem var(--notes-pad) 0.45rem calc(var(--notes-pad) + 0.25rem);
+  position: relative; min-height: 2.75rem;
+}
+/* Anchor health as a rule down the edge, so a reader finds the broken notes by scanning one
+   column instead of reading a pair of chips on every row. */
+.console-notes-app__note::before {
+  content: ""; position: absolute; inset-block: 0; inset-inline-start: 0; width: 3px; background: none;
+}
+.console-notes-app__note[data-health="drifted"]::before { background: var(--console-status-warn); }
+.console-notes-app__note[data-health="dangling"]::before { background: var(--console-status-danger); }
+.console-notes-app__note[data-health="unverified"]::before { background: var(--pf-t--global--border--color--default); }
+.console-notes-app__note:hover { background: var(--pf-t--global--background--color--secondary--default); }
+.console-notes-app__note:focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
+.console-notes-app__note[aria-current="true"] { background: var(--pf-t--global--background--color--secondary--default); }
+.console-notes-app__note[aria-current="true"] .console-notes-app__note-title { color: var(--console-accent); }
+
+.console-notes-app__note-top { display: flex; align-items: baseline; gap: 0.5rem; }
+.console-notes-app__note-title { flex: 1 1 auto; min-width: 0; font-size: 0.9rem; font-weight: 500; line-height: 1.3; }
+.console-notes-app__note-age {
+  flex: 0 0 auto; font-family: var(--pf-t--global--font--family--mono); font-size: 0.7rem;
+  color: var(--pf-t--global--text--color--subtle); font-variant-numeric: tabular-nums;
+}
+.console-notes-app__note-age[data-staleness="outrun"] { color: var(--console-status-warn); }
+.console-notes-app__note-age[data-staleness="petrified"] { color: var(--console-status-danger); font-weight: 700; }
+.console-notes-app__note-meta {
+  display: flex; gap: 0.5rem; margin-top: 0.1rem;
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.7rem;
+  color: var(--pf-t--global--text--color--subtle);
+  overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
+}
+.console-notes-app__note-meta [data-health="drifted"] { color: var(--console-status-warn); }
+.console-notes-app__note-meta [data-health="dangling"] { color: var(--console-status-danger); }
+
+/* A store problem belongs in the list it describes, at one line, rather than stacked above it.
+   A real PF Alert flattened to span the list edge to edge: the component keeps the severity
+   semantics and the icon slot, and the sheet takes away only the card silhouette that would
+   make it float inside the list rather than read as part of it.
+
+   The full-bleed inline notice is the console's shape for this - the same treatment belongs on
+   any surface with something to say about the data it is showing. */
+.console-notes-app__issue.pf-v6-c-alert {
+  border-radius: 0; border-inline: 0; border-block-start: 0;
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  padding-block: 0.3rem; padding-inline: var(--notes-pad);
+  font-size: 0.75rem;
+}
+.console-notes-app__issue .pf-v6-c-alert__title { font-weight: 400; overflow-wrap: anywhere; }
+.console-notes-app__note-none {
+  padding: 0.6rem var(--notes-pad); color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem;
+}
+
+/* --- The note ---------------------------------------------------------------------------- */
+.console-notes-app__detail {
+  position: absolute; inset: 0; z-index: 2;
+  display: flex; flex-direction: column;
+  background: var(--pf-t--global--background--color--primary--default);
+  visibility: hidden;
+}
+.console-notes-app__detail[data-open] { visibility: visible; }
+/* Overlay mode only - it holds the way back, and in split mode the list never went away. The
+   split rule below removes it entirely rather than leaving an empty strip above the prose. */
+.console-notes-app__detail-bar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 0.5rem;
+  padding: 0.3rem var(--notes-pad);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+/* A badge, matching the "quoted" chip below: this states a property OF the note being read,
+   which is what a badge is for, where bare text on a header reads as commentary about the
+   header. Empty when nothing is open, and :empty keeps it from drawing an empty outline. */
+.console-notes-app__detail-scope {
+  margin-left: auto; flex: 0 0 auto;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid currentcolor; border-radius: var(--pf-t--global--border--radius--small);
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.62rem;
+  letter-spacing: 0.06em; text-transform: uppercase; white-space: nowrap;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-notes-app__detail-scope:empty { display: none; }
+/* Hue by scope, off the status palette - neither store is a problem, and tinting private as a
+   warning would say that it is. Same two hues the list heading uses, so one note's badge and
+   its store's heading are visibly the same fact. */
+.console-notes-app__detail-scope[data-scope="shared"] { color: var(--console-slate); }
+.console-notes-app__detail-scope[data-scope="private"] { color: var(--console-indigo); }
+.console-notes-app__detail-body { flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0.75rem var(--notes-pad) 1.25rem; }
+.console-notes-app__read { min-width: 0; }
+.console-notes-app__title { margin: 0 0 0.15rem; font-size: 1.02rem; line-height: 1.25; text-wrap: balance; }
+.console-notes-app__subtitle {
+  margin: 0 0 0.7rem; display: flex; flex-wrap: wrap; gap: 0.5rem;
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.7rem;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-notes-app__subtitle [data-staleness="outrun"] { color: var(--console-status-warn); }
+.console-notes-app__subtitle [data-staleness="petrified"] { color: var(--console-status-danger); }
+
+/* Rendered markdown, so normal wrapping: markdown's soft-break rule means a single newline
+   inside a paragraph reflows, and renderMarkdown has already joined those lines. `pre-wrap`
+   here would undo that and put the author's hard wrapping back. */
+.console-notes-app__prose {
+  margin: 0; font-size: 0.9rem; line-height: 1.6;
+  overflow-wrap: anywhere;
+  font-family: var(--pf-t--global--font--family--body);
+  color: var(--pf-t--global--text--color--regular);
+}
+.console-notes-app__md-p { margin: 0 0 0.7rem; }
+.console-notes-app__prose > :last-child { margin-bottom: 0; }
+/* Headings inside a note sit BELOW its title, which is the h2 above this prose - so they are
+   sized down rather than competing with it. */
+.console-notes-app__md-h {
+  margin: 1.1rem 0 0.35rem; line-height: 1.3; text-wrap: balance;
+  font-size: 0.95rem; font-weight: 700;
+}
+.console-notes-app__prose > .console-notes-app__md-h:first-child { margin-top: 0; }
+.console-notes-app__md-list { margin: 0 0 0.7rem; padding-left: 1.3rem; }
+.console-notes-app__md-list li { margin-bottom: 0.2rem; }
+/* Code keeps its own wrapping and scrolls rather than reflowing: a wrapped command is a command
+   that cannot be copied and run. */
+.console-notes-app__md-code {
+  margin: 0 0 0.7rem; padding: 0.5rem 0.6rem; overflow-x: auto;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-notes-app__md-code code {
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.78rem;
+  white-space: pre; overflow-wrap: normal;
+}
+.console-notes-app__prose :not(pre) > code {
+  padding: 0.05em 0.3em;
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.85em;
+  overflow-wrap: anywhere;
+}
+.console-notes-app__md-quote {
+  margin: 0 0 0.7rem; padding-left: 0.7rem;
+  border-left: 2px solid var(--pf-t--global--border--color--default);
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-notes-app__md-rule {
+  margin: 1rem 0; border: 0;
+  border-top: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-notes-app__prose a { color: var(--console-accent); }
+
+.console-notes-app__facts {
+  margin-top: 1rem; padding-top: 0.6rem;
+  border-top: 1px solid var(--pf-t--global--border--color--default);
+  display: grid; gap: 0.4rem;
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.73rem;
+}
+.console-notes-app__facts-head {
+  font-size: 0.65rem; letter-spacing: 0.09em; text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-notes-app__facts-head:not(:first-child) { margin-top: 0.35rem; }
+.console-notes-app__anchor { display: flex; gap: 0.45rem; align-items: baseline; }
+.console-notes-app__anchor-status {
+  flex: 0 0 auto; width: 0.5em; height: 0.5em; border-radius: 50%; margin-top: 0.35em;
+  background: var(--pf-t--global--border--color--default);
+}
+.console-notes-app__anchor-status[data-status="resolves"] { background: var(--console-status-ok); }
+.console-notes-app__anchor-status[data-status="drifted"] { background: var(--console-status-warn); }
+.console-notes-app__anchor-status[data-status="dangling"] { background: var(--console-status-danger); }
+/* Info blue rather than a fourth --console-status-* slot: those name the console's own states
+   (a pool running, a queue saturated), and this is a finding about a note. It has to read as
+   noted-not-alarming and stay distinct from the grey an unverified anchor falls back to. */
+.console-notes-app__anchor-status[data-status="body-changed"] {
+  background: var(--pf-t--global--icon--color--status--info--default);
+}
+.console-notes-app__anchor-target { flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; }
+/* An anchor's explanation and its graph node id render as text rather than as a title tooltip.
+   They carry the only copy saying what a verdict means, and a tooltip is undiscoverable with a
+   mouse and absent altogether on touch. */
+.console-notes-app__anchor-detail {
+  display: block; margin-top: 0.1rem; line-height: 1.45;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+/* A phone cannot run the command and a desktop reader has a terminal beside the console, so on
+   both the useful action is to copy it rather than to read it. */
+.console-notes-app__copy {
+  display: flex; align-items: flex-start; gap: 0.4rem;
+  padding: 0.3rem 0.4rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: var(--pf-t--global--background--color--secondary--default);
+}
+.console-notes-app__copy code {
+  flex: 1 1 auto; min-width: 0; overflow-wrap: anywhere; line-height: 1.45; font-size: 0.72rem;
+}
+.console-notes-app__copy .pf-v6-c-button { flex: 0 0 auto; font-size: 0.7rem; }
+
+.console-notes-app__blank {
+  flex: 1 1 auto; display: grid; place-content: center; padding: 2rem; text-align: center;
+  color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem;
+}
+
+/* --- Cold empty state --------------------------------------------------------------------
+   The [data-empty-*] "ways" hooks are styled in the shared console.css, so this only has to
+   center the block within the panel. */
+.console-notes-app__empty {
+  flex: 1 1 auto;
+  padding: clamp(1.5rem, 5vw, 3rem); color: var(--pf-t--global--text--color--subtle);
+  max-width: 44rem; margin: 0 auto; text-align: center;
+  display: flex; flex-direction: column; align-items: center; justify-content: center;
+  box-sizing: border-box;
+}
+.console-notes-app__empty[hidden] { display: none; }
+
+/* --- The split ---------------------------------------------------------------------------
+   With room for both, the detail stops being an overlay and becomes a second pane, so moving
+   down the list does not cost the reader the note they are reading. */
+@container notes (min-width: 46rem) {
+  .console-notes-app__pane {
+    flex: 0 0 21rem;
+    border-inline-end: 1px solid var(--pf-t--global--border--color--default);
+  }
+  .console-notes-app__detail { position: static; flex: 1 1 auto; min-width: 0; visibility: visible; }
+  /* The whole bar, not just the button inside it: the scope badge moved up to the shared
+     header, so what is left here has nothing to hold and would render as an empty strip. */
+  .console-notes-app__detail-bar { display: none; }
+  /* Sized to the column it acts on, so the filter ends where the list ends instead of reaching
+     across the reading pane. Below this width there is only one column to line up with, and it
+     takes the whole row. */
+  .console-notes-app__search { flex: 0 0 21rem; }
+}
+
+/* Wider still, the extra column buys context rather than line length: the measure is capped and
+   the note's facts move beside the prose instead of under it. */
+@container notes (min-width: 68rem) {
+  .console-notes-app__pane { flex-basis: 23rem; }
+  .console-notes-app__search { flex-basis: 23rem; }
+  .console-notes-app__detail-body {
+    display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 17rem);
+    gap: 1.5rem; align-items: start;
+    padding: 0.9rem 1rem 1.25rem;
+  }
+  .console-notes-app__read { max-width: 68ch; }
+  .console-notes-app__title { font-size: 1.12rem; }
+  .console-notes-app__facts {
+    margin-top: 0; padding-top: 0;
+    border-top: 0; border-inline-start: 1px solid var(--pf-t--global--border--color--default);
+    padding-inline-start: 1rem;
+  }
+  .console-notes-app__facts-head:first-child { margin-top: 0; }
+}
+
+/* --- Captured conversations ---------------------------------------------------------------
+   A capture is quoted material, and the reader has to see that before reading a word of it.
+   A chip marks it in the list; in the detail it renders as a thread.
+
+   The thread groups twice, and the grouping is what stops it reading as a monologue. The file
+   is a divider printed where it CHANGES, the way a channel names what is being discussed
+   instead of tagging every line. The speaker is printed once per run: a magus review has one
+   human in it, so repeating the name on every message made an ordinary review look like one
+   person talking to themselves. */
+.console-notes-app__quoted {
+  flex: 0 0 auto; align-self: center;
+  padding: 0 0.3em;
+  border: 1px solid var(--console-indigo); border-radius: var(--pf-t--global--border--radius--small);
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.6rem;
+  letter-spacing: 0.06em; text-transform: uppercase; color: var(--console-indigo);
+}
+
+.console-notes-app__thread { display: grid; gap: 0.35rem; margin-top: 0.9rem; }
+.console-notes-app__thread-file {
+  display: flex; align-items: center; gap: 0.5rem;
+  margin-top: 0.5rem; padding-bottom: 0.15rem;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.7rem;
+  color: var(--pf-t--global--text--color--subtle); overflow-wrap: anywhere;
+}
+.console-notes-app__thread-file:first-child { margin-top: 0; }
+
+.console-notes-app__entry {
+  position: relative;
+  padding: 0.3rem 0.6rem 0.4rem 0.75rem;
+  border-inline-start: 2px solid var(--pf-t--global--border--color--default);
+}
+/* Person and agent are separated by hue, because a tool's output reading as a colleague's
+   opinion is the one misreading a transcript must not allow. Neither is a status color. */
+.console-notes-app__entry[data-voice="person"] { border-inline-start-color: var(--console-slate); }
+.console-notes-app__entry[data-voice="agent"] { border-inline-start-color: var(--console-indigo); }
+/* A continued message keeps the rail and drops the name, so a run reads as one turn. */
+.console-notes-app__entry[data-continued] { padding-top: 0; }
+.console-notes-app__entry-author {
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.7rem; font-weight: 700;
+  color: var(--pf-t--global--text--color--regular); margin-bottom: 0.1rem;
+}
+.console-notes-app__entry-resolved {
+  display: inline-block; margin-bottom: 0.15rem; padding: 0 0.3em;
+  border-radius: var(--pf-t--global--border--radius--small);
+  background: color-mix(in srgb, var(--console-status-ok) 22%, transparent);
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.62rem;
+  letter-spacing: 0.05em; text-transform: uppercase;
+  color: var(--pf-t--global--text--color--regular);
+}
+.console-notes-app__entry-body {
+  margin: 0; font-size: 0.88rem; line-height: 1.55;
+  white-space: pre-wrap; overflow-wrap: anywhere;
+  font-family: var(--pf-t--global--font--family--body);
+  color: var(--pf-t--global--text--color--regular);
+}

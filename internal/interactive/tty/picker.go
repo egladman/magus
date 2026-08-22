@@ -153,7 +153,7 @@ func Pick(ctx context.Context, in *os.File, out io.Writer, p Probe, items []stri
 			// wheel is how a reader scrolls their own transcript, and magus
 			// does not take it on any surface - a picker that swallowed it
 			// would break scrollback for the seconds it is open, which is the
-			// behaviour that makes other tools unusable inside tmux.
+			// behavior that makes other tools unusable inside tmux.
 			if !ev.Press || ev.Button != MouseLeft {
 				continue
 			}

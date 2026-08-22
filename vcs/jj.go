@@ -489,7 +489,7 @@ func (v jjVCS) TrackedFiles(ctx context.Context, dir string, paths []string) ([]
 // "modified" is matched EXPLICITLY and anything else emits "?", the letter parseNameStatus
 // skips. The final branch used to be "M", so a status jj gained after this was written -
 // or one this translation never covered - was recorded as an edit to the path, which is a
-// guess dressed as a fact. Skipping loses the line, which is the documented behaviour for
+// guess dressed as a fact. Skipping loses the line, which is the documented behavior for
 // a line magus cannot read.
 //
 // Source and target are always both emitted: parseNameStatus reads the second for a rename

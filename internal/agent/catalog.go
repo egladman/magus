@@ -86,7 +86,7 @@ type AgentSkill struct {
 // not a summary, a truncation, or a model-generated paraphrase: there is exactly
 // one human-written body per skill, and its author brackets the spans that only
 // the full permutation keeps. So the two can never come to describe different
-// behaviour, they share one content digest, and they version together - which is
+// behavior, they share one content digest, and they version together - which is
 // the property a second hand-maintained file could not give.
 //
 // The reason to offer a shorter one at all: a skill is a bet about what the reader
@@ -122,7 +122,7 @@ const (
 	// steps from the tool surface on its own; what it cannot re-derive is
 	// which failures are silent, what is load-bearing, and where a judgment
 	// call is being asked of it. So simple is a bet ON the reader, not a
-	// lossy compression - which is why the split is a judgement an author
+	// lossy compression - which is why the split is a judgment an author
 	// records, and why anything a step cannot survive losing belongs in the
 	// unmarked core instead.
 	VariantSimple
@@ -628,7 +628,7 @@ var agentsSectionRe = regexp.MustCompile(`(?s)<!-- magus:skills:begin .*?-->.*?<
 //
 // Magus deliberately has no counterpart that WRITES this into AGENTS.md, and
 // the reason is the same one that makes an installer appending to your
-// .bashrc a bad neighbour: the file belongs to the developer, the merge logic
+// .bashrc a bad neighbor: the file belongs to the developer, the merge logic
 // is never as careful as it looks, and re-runs leave cruft nobody wrote and
 // nobody can audit. Instruct, do not mutate. Reading AGENTS.md back to grade
 // the block's stamp (CheckStatuses) is a different thing and stays.

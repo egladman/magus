@@ -1,7 +1,7 @@
 // Package retry provides exponential-backoff retry helpers: Do runs an
 // arbitrary operation with capped, context-aware backoff, and NewHTTPClient
 // wraps an http.Client so idempotent requests retry on transport errors and
-// 5xx responses (honouring Retry-After). Non-idempotent requests retry only on
+// 5xx responses (honoring Retry-After). Non-idempotent requests retry only on
 // transport errors, and request bodies are rewound between attempts.
 package retry
 
@@ -70,7 +70,7 @@ func WithOnRetry(fn func(attempt int, err error)) Option {
 }
 
 // WithFixedDelay holds the backoff constant at the [WithDelay] value rather than
-// doubling it each attempt — the curl --retry-delay behaviour. It has no effect
+// doubling it each attempt — the curl --retry-delay behavior. It has no effect
 // on [Do].
 func WithFixedDelay() Option { return func(o *options) { o.fixedDelay = true } }
 
@@ -148,7 +148,7 @@ func Do(ctx context.Context, fn func() error, opts ...Option) error {
 // retryTransport wraps an http.RoundTripper with the same exponential backoff
 // logic as Do. Idempotent methods (GET, HEAD, OPTIONS, PUT, DELETE) retry on
 // transport errors and 5xx responses. POST and PATCH retry only on transport
-// errors. Retry-After headers are honoured when present.
+// errors. Retry-After headers are honored when present.
 type retryTransport struct {
 	base http.RoundTripper
 	opts options

@@ -1030,12 +1030,20 @@ func (x *Workspace) GetSecretProvider() string {
 // session plus its real on-disk size. These are running counters (not static config like
 // the cap or immutability), so a dashboard plots hit-rate over time by sampling the stream.
 type Cache struct {
-	state         protoimpl.MessageState `protogen:"open.v1"`
-	Hits          int64                  `protobuf:"varint,1,opt,name=hits,proto3" json:"hits,omitempty"`
-	Misses        int64                  `protobuf:"varint,2,opt,name=misses,proto3" json:"misses,omitempty"`
-	Errors        int64                  `protobuf:"varint,3,opt,name=errors,proto3" json:"errors,omitempty"`
-	SizeBytes     int64                  `protobuf:"varint,4,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`   // real on-disk size of the cache dir (0 = unknown/not computed)
-	SizeCapMb     int32                  `protobuf:"varint,5,opt,name=size_cap_mb,json=sizeCapMb,proto3" json:"size_cap_mb,omitempty"` // configured cap (MAGUS_CACHE_SIZE_MB; 0 = unlimited)
+	state     protoimpl.MessageState `protogen:"open.v1"`
+	Hits      int64                  `protobuf:"varint,1,opt,name=hits,proto3" json:"hits,omitempty"`
+	Misses    int64                  `protobuf:"varint,2,opt,name=misses,proto3" json:"misses,omitempty"`
+	Errors    int64                  `protobuf:"varint,3,opt,name=errors,proto3" json:"errors,omitempty"`
+	SizeBytes int64                  `protobuf:"varint,4,opt,name=size_bytes,json=sizeBytes,proto3" json:"size_bytes,omitempty"`   // real on-disk size of the cache dir (0 = unknown/not computed)
+	SizeCapMb int32                  `protobuf:"varint,5,opt,name=size_cap_mb,json=sizeCapMb,proto3" json:"size_cap_mb,omitempty"` // configured cap (MAGUS_CACHE_SIZE_MB; 0 = unlimited)
+	// saved_ms is the summed recorded duration of the runs those hits replayed - the work the cache
+	// avoided, measured rather than modeled: each figure is how long that exact target took on this
+	// machine when it last ran, carried on the cache entry.
+	//
+	// It UNDERSTATES and never overstates. A hit on an entry written before the duration was recorded
+	// counts toward hits and adds nothing here, so a reader must not present this as the cache's
+	// lifetime saving - it is what this daemon has saved since it started.
+	SavedMs       int64 `protobuf:"varint,6,opt,name=saved_ms,json=savedMs,proto3" json:"saved_ms,omitempty"`
 	unknownFields protoimpl.UnknownFields
 	sizeCache     protoimpl.SizeCache
 }
@@ -1101,6 +1109,13 @@ func (x *Cache) GetSizeBytes() int64 {
 func (x *Cache) GetSizeCapMb() int32 {
 	if x != nil {
 		return x.SizeCapMb
+	}
+	return 0
+}
+
+func (x *Cache) GetSavedMs() int64 {
+	if x != nil {
+		return x.SavedMs
 	}
 	return 0
 }
@@ -1444,14 +1459,15 @@ const file_magus_status_v1alpha1_status_proto_rawDesc = "" +
 	"\tload_time\x18\x02 \x01(\v2\x1a.google.protobuf.TimestampR\bloadTime\x12D\n" +
 	"\x10last_access_time\x18\x03 \x01(\v2\x1a.google.protobuf.TimestampR\x0elastAccessTime\x122\n" +
 	"\x05cache\x18\x04 \x01(\v2\x1c.magus.status.v1alpha1.CacheR\x05cache\x12'\n" +
-	"\x0fsecret_provider\x18\x05 \x01(\tR\x0esecretProvider\"\x8a\x01\n" +
+	"\x0fsecret_provider\x18\x05 \x01(\tR\x0esecretProvider\"\xa5\x01\n" +
 	"\x05Cache\x12\x12\n" +
 	"\x04hits\x18\x01 \x01(\x03R\x04hits\x12\x16\n" +
 	"\x06misses\x18\x02 \x01(\x03R\x06misses\x12\x16\n" +
 	"\x06errors\x18\x03 \x01(\x03R\x06errors\x12\x1d\n" +
 	"\n" +
 	"size_bytes\x18\x04 \x01(\x03R\tsizeBytes\x12\x1e\n" +
-	"\vsize_cap_mb\x18\x05 \x01(\x05R\tsizeCapMb\"\x12\n" +
+	"\vsize_cap_mb\x18\x05 \x01(\x05R\tsizeCapMb\x12\x19\n" +
+	"\bsaved_ms\x18\x06 \x01(\x03R\asavedMs\"\x12\n" +
 	"\x10GetStatusRequest\"\xcb\x01\n" +
 	"\x11GetStatusResponse\x125\n" +
 	"\x06status\x18\x01 \x01(\v2\x1d.magus.status.v1alpha1.StatusR\x06status\x12H\n" +

@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <title>magus</title>
   <!--
-    The Android MASKABLE variant. Same artwork and colours as icon.svg; only the scale
+    The Android MASKABLE variant. Same artwork and colors as icon.svg; only the scale
     differs. A launcher crops a maskable icon to whatever shape it likes, so everything that
     must survive sits inside the central circle of 80% diameter (radius 204.8). scale 0.355
     puts the artwork's half-diagonal near 162, well inside it. The icon this replaced had 2%
@@ -19,7 +19,7 @@
     shows through it. Nothing draws the band, which is why it stays crisp at 16px instead of
     turning into a smear.
 
-    COLOUR. Ground #2e2820, hat #e0b47c, contrast 7.63:1. ONE hue at two intensities: the
+    COLOR. Ground #2e2820, hat #e0b47c, contrast 7.63:1. ONE hue at two intensities: the
     ground is the SAME ~34deg amber as the hat, dropped to a dark, low-saturation wash of it.
     That is the console launcher's device - a glyph sitting on a low-percentage tint of its own
     accent - borrowed here so the icon and the app read as one family.
@@ -27,12 +27,12 @@
     This REPLACES an earlier rule that said to keep the ground desaturated and opposite the hat
     in temperature, on the grounds that a hue behind a hue leaves neither reading as the
     subject. The objection is real and the mitigation is the intensity gap: at this distance
-    apart the ground reads as a tinted surface rather than a competing colour. The hue is
+    apart the ground reads as a tinted surface rather than a competing color. The hue is
     the mascot's own: skin teal for the console, staff-orb amber for the docs, which sit
     near-complementary so the two apps are unmistakable side by side. Figure and ground now separate by LUMINANCE
     alone, so the contrast numbers carry more weight than before, not less. No black and no white anywhere: an icon is a graphical object, where WCAG's
     floor is 3:1, so holding 7:1 would force saturation down to pastel. These sit near 7:1,
-    which keeps the hue reading as a colour while the shape still resolves at 16px.
+    which keeps the hue reading as a color while the shape still resolves at 16px.
   -->
   <rect width="512" height="512" fill="#2e2820"/>
   <g transform="translate(34.3 43.2) scale(0.355)" fill="#e0b47c">

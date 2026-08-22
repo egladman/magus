@@ -396,6 +396,7 @@ func roleFromRel(rel string) string {
 		return "changelog"
 	case "contributing":
 		return "contributing"
+	// Both spellings on purpose: the value is a FILENAME off disk, and a repo may ship either.
 	case "license", "licence":
 		return "license"
 	default:

@@ -385,7 +385,7 @@ var Magus = Module{
 					Doc:  "Read a credential by reference through the selected provider. Unlike the selections, this is called from inside a target, so its failure IS something a caller can handle.",
 					Args: []Arg{{Name: "ref", Type: TypeString}},
 					// A magus-resolved value rather than a bare str, which is what lets
-					// magus recognise it and keep it out of logs and cache keys.
+					// magus recognize it and keep it out of logs and cache keys.
 					Returns: []Ret{{Type: TypeString}},
 					Raises:  true,
 					Extern:  true,
@@ -784,7 +784,7 @@ func insightAnalyzer(ctx context.Context, member string) (types.InsightAnalyzer,
 
 // insightOptions decodes the window a Buzz caller asked for.
 //
-// An unknown key is an ERROR, not a default: dropping `{comits = 50}` would silently
+// An unknown key is an ERROR, not a default: dropping `{commits = 50}` would silently
 // scan 500 commits and answer a different question than the one asked, with nothing
 // to tell the author their typo did not take.
 func insightOptions(opts map[string]any) (types.InsightOptions, error) {

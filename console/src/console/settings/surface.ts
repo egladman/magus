@@ -22,7 +22,13 @@ import {
   getFocusRing,
   setFocusRing,
   saveFocusRing,
-  applyFocusRing,
+  getMotion,
+  setMotion,
+  saveMotion,
+  type MotionPref,
+  getNodeShapes,
+  setNodeShapes,
+  saveNodeShapes,
 } from "../../lib/settings";
 import { showRefreshToast, showToast } from "../../lib/refresh-toast";
 import { probeDaemon, normalizeDaemonHost, resolveDaemonHost } from "../../lib/daemon";
@@ -335,6 +341,8 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     host: getDefaultHost(),
     theme: getThemePref(),
     focusRing: getFocusRing(),
+    motion: getMotion(),
+    nodeShapes: getNodeShapes(),
     keymap: kb.keymap.get(),
   });
   let committed = readCommitted();
@@ -346,6 +354,8 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     host: committed.host,
     theme: committed.theme,
     focusRing: committed.focusRing,
+    motion: committed.motion,
+    nodeShapes: committed.nodeShapes,
   };
   const keymapDraft = createDraftCell<Keymap>({ ...committed.keymap }, () => recompute());
   const draftPrefs = (): Settings => ({
@@ -356,6 +366,8 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     host: normalizeDaemonHost(draftScalar.host) ?? draftScalar.host.trim(),
     theme: draftScalar.theme,
     focusRing: draftScalar.focusRing,
+    motion: draftScalar.motion,
+    nodeShapes: draftScalar.nodeShapes,
     keymap: keymapDraft.get(),
   });
 
@@ -365,6 +377,8 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     themeLabel: (t) => THEME_LABEL[t],
     hostLabel: (host) => (host === "" ? "loopback" : host),
     focusRingLabel: (on) => (on ? "On" : "Off"),
+    motionLabel: (v) => (v === "reduced" ? "Reduced" : "System"),
+    nodeShapesLabel: (on) => (on ? "On" : "Off"),
     commandLabel: (id) => kb.commands.find((c) => c.id === id)?.label ?? id,
     effectiveChord: (keymap, id) =>
       formatChord(mergeKeymap(kb.defaults, keymap)[id] ?? "", mac) || "None",
@@ -658,6 +672,82 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     ),
   );
 
+  // Motion, same 2-way shape. "System" is not "no reduction": it honors prefers-reduced-motion,
+  // which is why the other option is labeled Reduced rather than Off - it reduces motion here even
+  // when the OS is not asking for it anywhere.
+  const motionGroup = h("div", "pf-v6-c-toggle-group console-settings-motion");
+  motionGroup.setAttribute("role", "group");
+  motionGroup.setAttribute("aria-label", "Motion");
+  const motionButtons = new Map<MotionPref, HTMLButtonElement>();
+  for (const v of ["auto", "reduced"] as MotionPref[]) {
+    const item = h("div", "pf-v6-c-toggle-group__item");
+    const btn = h("button", "pf-v6-c-toggle-group__button") as HTMLButtonElement;
+    btn.type = "button";
+    btn.append(h("span", "pf-v6-c-toggle-group__text", v === "auto" ? "System" : "Reduced"));
+    btn.addEventListener("click", () => {
+      draftScalar.motion = v;
+      paintMotionToggle();
+      recompute();
+    });
+    item.append(btn);
+    motionGroup.append(item);
+    motionButtons.set(v, btn);
+  }
+  function paintMotionToggle(): void {
+    for (const [v, btn] of motionButtons) {
+      const on = draftScalar.motion === v;
+      btn.classList.toggle("pf-m-selected", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+  }
+  paintMotionToggle();
+  themeBody.append(
+    buildFormGroup(
+      "Motion",
+      null,
+      motionGroup,
+      "Reduced stills animation across the console, including the graph's physics layout. " +
+        "System follows your operating system's reduced-motion setting.",
+    ),
+  );
+
+  // Node shapes, same 2-way shape again.
+  const shapesGroup = h("div", "pf-v6-c-toggle-group console-settings-nodeshapes");
+  shapesGroup.setAttribute("role", "group");
+  shapesGroup.setAttribute("aria-label", "Node shapes");
+  const shapesButtons = new Map<boolean, HTMLButtonElement>();
+  for (const v of [true, false]) {
+    const item = h("div", "pf-v6-c-toggle-group__item");
+    const btn = h("button", "pf-v6-c-toggle-group__button") as HTMLButtonElement;
+    btn.type = "button";
+    btn.append(h("span", "pf-v6-c-toggle-group__text", v ? "On" : "Off"));
+    btn.addEventListener("click", () => {
+      draftScalar.nodeShapes = v;
+      paintShapesToggle();
+      recompute();
+    });
+    item.append(btn);
+    shapesGroup.append(item);
+    shapesButtons.set(v, btn);
+  }
+  function paintShapesToggle(): void {
+    for (const [v, btn] of shapesButtons) {
+      const on = draftScalar.nodeShapes === v;
+      btn.classList.toggle("pf-m-selected", on);
+      btn.setAttribute("aria-pressed", on ? "true" : "false");
+    }
+  }
+  paintShapesToggle();
+  themeBody.append(
+    buildFormGroup(
+      "Node shapes",
+      null,
+      shapesGroup,
+      "Give each graph node a shape for its family as well as a color, so kinds stay " +
+        "tellable apart without relying on hue. Off draws every node as a circle.",
+    ),
+  );
+
   // --- Keybindings: an optional keymap-PROFILE strip above the shared editor core over the DRAFT keymap.
   // The strip is a truthful readout of the current bindings, not a separate selection. Picking a named
   // preset stages its whole binding set into the draft immediately - there is no separate "Apply", since
@@ -889,10 +979,14 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
     draftScalar.host = p.host;
     draftScalar.theme = p.theme;
     draftScalar.focusRing = p.focusRing;
+    draftScalar.motion = p.motion;
+    draftScalar.nodeShapes = p.nodeShapes;
     pollSelect.value = String(p.poll);
     hostInput.value = p.host;
     paintThemeToggle();
     paintFocusRingToggle();
+    paintMotionToggle();
+    paintShapesToggle();
     keymapDraft.set({ ...p.keymap }); // re-renders the editor via its subscription; onChange recomputes
     recompute();
   }
@@ -917,16 +1011,17 @@ function buildSettings(host: HTMLElement, deps: SettingsDeps): () => void {
       if (keys.has("poll")) setPollMs(d.poll);
       if (keys.has("host")) setDefaultHost(d.host);
       if (keys.has("theme")) setTheme(false);
-      if (keys.has("focusRing")) {
-        setFocusRing(d.focusRing);
-        applyFocusRing(d.focusRing);
-      }
+      if (keys.has("focusRing")) setFocusRing(d.focusRing);
+      if (keys.has("motion")) setMotion(d.motion);
+      if (keys.has("nodeShapes")) setNodeShapes(d.nodeShapes);
       if (keys.has("keymap")) kb.keymap.set(d.keymap);
     } else {
       if (keys.has("poll")) savePollMs(d.poll);
       if (keys.has("host")) saveDefaultHost(d.host);
       if (keys.has("theme")) setTheme(true);
       if (keys.has("focusRing")) saveFocusRing(d.focusRing);
+      if (keys.has("motion")) saveMotion(d.motion);
+      if (keys.has("nodeShapes")) saveNodeShapes(d.nodeShapes);
       if (keys.has("keymap")) kb.keymap.persistOnly(d.keymap);
     }
     committed = { ...d, keymap: { ...d.keymap } };

@@ -70,7 +70,7 @@ test("the tree reads parents before children, which is the list's reading order"
 // The two edge kinds answer different questions - who spawned whom, and what has to finish first -
 // and the drawing has to be able to tell them apart. One list carrying both keeps the layout and
 // the renderer reading the identical set.
-test("parent edges and depends_on edges are both present and stay labelled", () => {
+test("parent edges and depends_on edges are both present and stay labeled", () => {
   const plan = buildPlan(TREE);
   assert.deepEqual(
     plan.edges.map((e) => [e.kind, e.from, e.to]),

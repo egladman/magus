@@ -9,7 +9,7 @@
 //
 // The discovery URL is overridable via Options.DiscoveryURL or the
 // MAGUS_UPDATE_URL environment variable (env-only; there is no magus.yaml
-// key). An organisation that self-hosts the site gets a private update
+// key). An organization that self-hosts the site gets a private update
 // channel for free: point that URL at the hosted copy of index.json and
 // index.json.sig.
 //
@@ -251,7 +251,7 @@ func FetchAndVerifyIndex(ctx context.Context, opts Options) (*ReleaseIndex, erro
 	return &idx, nil
 }
 
-// checkNotExpired refuses an index past its declared lifetime. An unparseable
+// checkNotExpired refuses an index past its declared lifetime. An unparsable
 // expires_at is refused too: the field exists to bound how long a stale index can be
 // replayed, so a client that cannot read it has no bound at all.
 func checkNotExpired(expiresAt string) error {

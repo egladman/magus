@@ -106,7 +106,7 @@ func CharmsFromContext(ctx context.Context) []string {
 }
 
 // HasCharm reports whether charm is among the active execution charms.
-// This membership test is how a spell opts into a charm's behaviour; charms it
+// This membership test is how a spell opts into a charm's behavior; charms it
 // does not test for are simply ignored. The query is normalized and the active
 // set is already canonical (WithCharms normalizes on store), so a spell that
 // tests has_charm("noCache") matches a "target:no-cache" suffix regardless of

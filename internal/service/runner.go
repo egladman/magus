@@ -124,7 +124,7 @@ func (ExecRunner) Stop(ctx context.Context, h Handle) {
 // stopProc shuts a service down: prefer its graceful Stop command, else SIGTERM the
 // process group; either way escalate to a hard group kill if it does not exit within
 // the grace window (or ctx ends first), and wait for it to be reaped unless ctx ends
-// before that too. Signalling and killing target the whole group (via
+// before that too. Signaling and killing target the whole group (via
 // internal/proc/run) so a wrapper's grandchildren are not orphaned.
 func stopProc(ctx context.Context, h *execHandle) {
 	select {

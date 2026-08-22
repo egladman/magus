@@ -45,13 +45,17 @@
    contract intact while sourcing those PF tokens - so a theme toggle re-tints the
    graph with no per-theme CSS here (the old two-theme --gk blocks are gone). */
 :root {
-  --gk-project: var(--console-node-project); --gk-spell: var(--console-node-spell);
-  --gk-op: var(--console-node-op); --gk-charm: var(--console-node-charm);
-  --gk-target: var(--console-node-target); --gk-module: var(--console-node-module);
-  --gk-method: var(--console-node-method); --gk-import: var(--console-node-import);
-  --gk-function: var(--console-node-function); --gk-file: var(--console-node-file);
+  --gk-project: var(--console-node-project); --gk-module: var(--console-node-module);
+  --gk-file: var(--console-node-file); --gk-dir: var(--console-node-dir);
+  --gk-target: var(--console-node-target); --gk-spell: var(--console-node-spell);
+  --gk-op: var(--console-node-op); --gk-tool: var(--console-node-tool);
+  --gk-function: var(--console-node-function); --gk-method: var(--console-node-method);
+  --gk-import: var(--console-node-import); --gk-package: var(--console-node-package);
+  --gk-symbol: var(--console-node-symbol);
   --gk-doc: var(--console-node-doc); --gk-rationale: var(--console-node-rationale);
-  --gk-diagnostic: var(--console-node-diagnostic); --gk-symbol: var(--console-node-symbol);
+  --gk-note: var(--console-node-note);
+  --gk-diagnostic: var(--console-node-diagnostic); --gk-charm: var(--console-node-charm);
+  --gk-owner: var(--console-node-owner); --gk-author: var(--console-node-author);
 }
 
 .console-graph-pagetitle { margin-bottom: 0.6rem; }
@@ -62,20 +66,23 @@
    card that appears on selection. Regions are set apart by borders, not custom color. */
 .console-graph-app {
   display: grid;
-  grid-template-columns: 20rem 1fr;
+  /* Sidebar, stage, detail. Unconditionally three: the detail column always has something to show
+     (the overview, when nothing is selected). */
+  grid-template-columns: 20rem 1fr 21rem;
   grid-template-rows: minmax(0, 1fr);
   gap: 0;
-  /* Same height as the log viewer's .panel (logs.css) so the two app panes match. */
-  height: calc(100svh - 12.5rem);
+  /* FILL the pane the shell hands this surface rather than computing a height from the viewport.
+     The old `calc(100svh - 12.5rem)` encoded how much chrome sat above and below and went stale
+     whenever that chrome changed; console.css's console-fill chain replaces those magic numbers
+     with a flex chain and wins over this rule wherever the surface is actually mounted. This is
+     the fallback for a mount that chain does not reach. */
+  flex: 1;
   min-height: 420px;
   border: 1px solid var(--pf-t--global--border--color--default);
   border-radius: var(--pf-t--global--border--radius--small);
   overflow: hidden;
   background: var(--pf-t--global--background--color--primary--default);
 }
-/* When an explain card is present the app becomes three columns (data-has-card is
-   toggled by the explorer on selection). */
-body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem; }
 
 .console-graph-sidebar {
   display: flex; flex-direction: column; min-height: 0;
@@ -89,7 +96,12 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
      spilled over the canvas and the legend button, overlapping the graph. */
   overflow-y: auto; overflow-x: hidden;
   border-right: 1px solid var(--pf-t--global--border--color--default);
-  background: var(--pf-t--global--background--color--secondary--default);
+  /* PRIMARY, not secondary. Secondary resolves to the same value the page body uses, so the
+     sidebar was not a panel sitting on the page - it WAS the page, and the app's white ended at
+     the canvas. Every white chip inside then read as a card floating on nothing. The border-right
+     and each section's border-bottom are what separate this column from the stage; the fill does
+     not have to, and when it tries it only says "outside the app". */
+  background: var(--pf-t--global--background--color--primary--default);
 }
 /* A quiet filter, not a headline search: the site search field's look (left
    magnifier, angular radius) but small and muted - the canvas is the main event. */
@@ -149,6 +161,9 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
 .console-graph-nodelist__pill:hover { border-color: var(--console-accent); background: var(--pf-t--global--background--color--primary--default); }
 .console-graph-nodelist__pill[aria-current="true"] { border-color: var(--console-accent); box-shadow: inset 0 0 0 1px var(--console-accent); }
 .console-graph-nodelist__label { flex: 0 1 auto; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: var(--pf-t--global--font--family--mono); }
+/* The number the active view ranked by, when it ranked by one. Subdued and never shrunk, so the
+   label ellipsizes into it rather than the score being the part that gets cut. */
+.console-graph-nodelist__metric { flex: 0 0 auto; margin-left: 0.35rem; font-size: 0.68rem; color: var(--pf-t--global--text--color--subtle); }
 /* The "+N more" hint and the no-matches line are real boxes (not display:contents), spanning the row. */
 #node-list li.console-graph-nodelist__more { display: block; flex-basis: 100%; width: 100%; padding: 0.35rem 0.2rem 0; font-size: 0.68rem; color: var(--pf-t--global--text--color--subtle); }
 #node-list li.console-graph-nodelist__empty { display: block; flex-basis: 100%; width: 100%; padding: 0.15rem 0.2rem; font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
@@ -184,50 +199,20 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
    this overlay shrinks to its content, so hang the dropdown from the right edge and size it to the
    buttons instead of a 2rem-wide sliver under the kebab. */
 .console-graph-stage__tools .pf-v6-c-toolbar__expandable-content { inset-inline: auto 0; width: max-content; }
-/* Legend toggle (#legend-toggle, a PF Button): hidden on desktop (the legend is always
-   open there). Shown only on mobile via the media query below, where it collapses the
-   legend off the canvas. Positioned top-left where the legend would otherwise sit. */
-#legend-toggle {
-  position: absolute; top: 0.6rem; left: 0.6rem; z-index: 3;
-  display: none; font-size: 0.72rem;
-  background: color-mix(in srgb, var(--pf-t--global--background--color--primary--default) 90%, transparent);
-}
-#legend-toggle .console-render-btn__icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
 /* Fullscreen: the panel fills the screen (like the playground's .panel:fullscreen);
    the opaque background is required or the element shows through to black. */
 .console-graph-app:fullscreen { height: 100%; width: 100%; border: 0; border-radius: 0; box-shadow: none; background: var(--pf-t--global--background--color--primary--default); }
-/* Result line ("what am I looking at"): a slim narration bar pinned to the top of the
-   stage, above the canvas but centered so it does not collide with the corner overlays
-   (stage tools top-right, legend top-left). Muted background/border like the bottom mode
-   indicator and status line; pointer-events:none so it never intercepts canvas drag/zoom.
-   z-index sits below the corner overlays (3) so those stay clickable if text ever runs
-   long enough to reach them. Hidden whenever no view/query is active - main.ts's
-   setResultLine mirrors what it already writes to the bottom #graph-status line, just
-   placed where the eye already is. */
-.console-graph-stage__result {
-  /* Sits BELOW the stage toolbar row (Fit / snapshot badge live at the top edge) so it never
-     collides with them; centered over the graph, clear of the top-left legend. */
-  position: absolute; top: 3rem; left: 50%; transform: translateX(-50%); z-index: 2;
-  max-width: min(60%, 30rem); margin: 0; padding: 0.25rem 0.65rem;
-  font-size: 0.74rem; line-height: 1.3; text-align: center;
-  color: var(--pf-t--global--text--color--regular);
-  background: color-mix(in srgb, var(--pf-t--global--background--color--secondary--default) 92%, transparent);
-  border: 1px solid var(--pf-t--global--border--color--default); border-radius: 0;
-  pointer-events: none;
-  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
-}
-.console-graph-stage__result[hidden] { display: none; }
-
 /* Legend: a compact overlay panel (translucent so the graph shows through) with a header
    row and a dense swatch+name+count list. The panel wrapper carries the position and chrome;
    the inner <ul> is the scrollable list. Positioned top-left over the canvas. */
+/* In the sidebar, under the Color control it is the key for - not floating over the canvas.
+   As an overlay it covered the stage's workspace label and the top-left of the graph, and being
+   translucent it made both hard to read rather than hiding either cleanly. It scrolls inside its
+   own box so twenty kinds cannot push the controls above it out of reach. */
 .console-graph-legend {
-  position: absolute; top: 0.6rem; left: 0.6rem; z-index: 3;
   display: flex; flex-direction: column; gap: 0.3rem;
-  padding: 0.4rem 0.5rem 0.45rem;
-  background: color-mix(in srgb, var(--pf-t--global--background--color--primary--default) 88%, transparent);
-  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
-  max-height: calc(100% - 1.2rem); min-height: 0;
+  margin-top: 0.6rem;
+  max-height: 14rem; min-height: 0; overflow-y: auto;
 }
 .console-graph-legend__title {
   margin: 0; padding: 0 0.25rem 0.3rem;
@@ -249,25 +234,30 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
   cursor: pointer; font-size: inherit; line-height: 1.5; text-align: left;
 }
 .console-graph-legend__row:hover { background: color-mix(in srgb, var(--console-accent) 14%, transparent); }
-/* Bottom status row: holds the status/hint line below the canvas instead of floating over it.
-   Its only child hides when empty, so the row collapses to nothing at rest. */
-.console-graph-bottombar {
-  display: flex; align-items: baseline; gap: 0.6rem;
-  margin: 0.5rem 0 var(--pad);
+/* Foot of the detail column. No padding and no gap: both children hide themselves when they have
+   nothing to say, and a container reserving space for them would leave a strip of dead chrome at
+   rest - which is what the full-width row this replaced did, at 28px. Spacing is on the children. */
+.console-graph-detail__foot {
+  display: flex; flex-direction: column;
 }
-/* Status/hint line: a quiet in-flow line BENEATH the graph app (it used to float
-   over the canvas, obscuring the graph). Empty by default -> hidden, so it never
-   sits as a persistent nag; it speaks up for loading, a view result, an error, or a
-   mode change the operator did not ask for. The bottom bar's only child, so hiding
-   it hides the whole row. */
-#graph-status {
-  flex: 1 1 auto; margin: 0; padding: 0.4rem 0.7rem;
-  font-size: 0.78rem; line-height: 1.45; color: var(--pf-t--global--text--color--subtle);
-  background: var(--pf-t--global--background--color--secondary--default);
-  border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
+/* Hint notice at the foot of the detail column: a PF Alert flattened to span the panel, the way
+   notes.css flattens its issue row. The icon and tint are the point - a grey sentence at the bottom
+   of a panel is something people scroll past. Only PF's padding is taken away, so the notice does
+   not float as a card inside the panel. */
+#graph-status.console-graph-hint {
+  margin: 0.5rem 0.8rem 0.8rem;
+  border-radius: var(--pf-t--global--border--radius--small);
+  font-size: 0.78rem; line-height: 1.45;
+  --pf-v6-c-alert--PaddingBlockStart: 0.45rem;
+  --pf-v6-c-alert--PaddingBlockEnd: 0.45rem;
+  --pf-v6-c-alert--PaddingInlineStart: 0.6rem;
+  --pf-v6-c-alert--PaddingInlineEnd: 0.6rem;
 }
-#graph-status:empty { display: none; }
-#graph-status[data-error] { color: var(--console-status-danger); border-color: var(--console-status-danger); }
+#graph-status[hidden] { display: none; }
+/* The title is the whole message, not a headline over a description, so body weight: PF's bold
+   turns a one-line hint into a shout. */
+#graph-status .pf-v6-c-alert__title { font-size: 0.78rem; font-weight: 400; overflow-wrap: anywhere; }
+#graph-status .pf-v6-c-alert__icon { font-size: 0.72rem; font-weight: 700; }
 
 /* Cold empty state (PatternFly EmptyState, #graph-empty-state): shown over the (empty) canvas
    when nothing is loaded. Mirrors the log viewer's #log-empty - an icon, a title/body, and two
@@ -292,8 +282,7 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
 .console-graph-app:has(#graph-empty-state:not([hidden])) .console-graph-stage > :not(#graph-empty-state),
 /* #id-level rules beat these elements' own #id display, which a plain class selector can't. */
 .console-graph-app:has(#graph-empty-state:not([hidden])) #graph-canvas,
-.console-graph-app:has(#graph-empty-state:not([hidden])) #graph-legend-panel,
-.console-graph-app:has(#graph-empty-state:not([hidden])) #legend-toggle { display: none; }
+.console-graph-app:has(#graph-empty-state:not([hidden])) #graph-legend-panel { display: none; }
 /* Give the cold-state prompt a tall-enough area and keep it vertically centered (PF EmptyState
    is already flex-centered), so it sits in the middle of the emptiness rather than at the top. */
 .console-graph-app:has(#graph-empty-state:not([hidden])) #graph-empty-state { position: static; min-height: min(60svh, 520px); }
@@ -302,24 +291,79 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
    style). The same attribute colors the legend swatches and the explain-card head. */
 .console-graph-kinddot { flex: 0 0 auto; width: 0.7em; height: 0.7em; border-radius: 50%; display: inline-block; background: #888; }
 .console-graph-kinddot[data-kind="project"] { background: var(--gk-project); }
+.console-graph-kinddot[data-kind="module"] { background: var(--gk-module); }
+.console-graph-kinddot[data-kind="file"] { background: var(--gk-file); }
+.console-graph-kinddot[data-kind="dir"] { background: var(--gk-dir); }
+.console-graph-kinddot[data-kind="target"] { background: var(--gk-target); }
 .console-graph-kinddot[data-kind="spell"] { background: var(--gk-spell); }
 .console-graph-kinddot[data-kind="op"] { background: var(--gk-op); }
-.console-graph-kinddot[data-kind="charm"] { background: var(--gk-charm); }
-.console-graph-kinddot[data-kind="target"] { background: var(--gk-target); }
-.console-graph-kinddot[data-kind="module"] { background: var(--gk-module); }
+.console-graph-kinddot[data-kind="tool"] { background: var(--gk-tool); }
+.console-graph-kinddot[data-kind="function"] { background: var(--gk-function); }
 .console-graph-kinddot[data-kind="method"] { background: var(--gk-method); }
 .console-graph-kinddot[data-kind="import"] { background: var(--gk-import); }
-.console-graph-kinddot[data-kind="function"] { background: var(--gk-function); }
-.console-graph-kinddot[data-kind="file"] { background: var(--gk-file); }
+.console-graph-kinddot[data-kind="package"] { background: var(--gk-package); }
+.console-graph-kinddot[data-kind="symbol"] { background: var(--gk-symbol); }
 .console-graph-kinddot[data-kind="doc"] { background: var(--gk-doc); }
 .console-graph-kinddot[data-kind="rationale"] { background: var(--gk-rationale); }
+.console-graph-kinddot[data-kind="note"] { background: var(--gk-note); }
 .console-graph-kinddot[data-kind="diagnostic"] { background: var(--gk-diagnostic); }
-.console-graph-kinddot[data-kind="symbol"] { background: var(--gk-symbol); }
+.console-graph-kinddot[data-kind="charm"] { background: var(--gk-charm); }
+.console-graph-kinddot[data-kind="owner"] { background: var(--gk-owner); }
+.console-graph-kinddot[data-kind="author"] { background: var(--gk-author); }
 
-/* Explain card: a third column on wide screens; plain HTML dl content. */
-#explain-card {
-  min-height: 0; overflow-y: auto; padding: 0.8rem;
+/* Kind dots carry the family SHAPE as well as the color, matching graph/shapes.ts. Without this
+   the legend would be a key to a code it does not contain: a reader who cannot separate two hues
+   has no way to learn which mark is which. Keyed on data-kind so the CSS that already knows the
+   kind-to-family mapping keeps knowing it, with no second attribute for renderers to set. */
+:root:not([data-node-shapes="off"]) {
+  /* A touch of radius: a hard-cornered 0.7em square reads as an artifact next to round siblings. */
+  .console-graph-kinddot[data-kind="project"],
+  .console-graph-kinddot[data-kind="module"],
+  .console-graph-kinddot[data-kind="dir"],
+  .console-graph-kinddot[data-kind="file"] { border-radius: 0.12em; }
+
+  /* Declarations - triangle */
+  .console-graph-kinddot[data-kind="target"],
+  .console-graph-kinddot[data-kind="spell"],
+  .console-graph-kinddot[data-kind="op"],
+  .console-graph-kinddot[data-kind="tool"] {
+    border-radius: 0;
+    clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+  }
+
+  /* Prose - diamond */
+  .console-graph-kinddot[data-kind="doc"],
+  .console-graph-kinddot[data-kind="rationale"],
+  .console-graph-kinddot[data-kind="note"] {
+    border-radius: 0;
+    clip-path: polygon(50% 0%, 100% 50%, 50% 100%, 0% 50%);
+  }
+
+  /* Problems - hexagon, flat-top to match the canvas */
+  .console-graph-kinddot[data-kind="diagnostic"],
+  .console-graph-kinddot[data-kind="charm"] {
+    border-radius: 0;
+    clip-path: polygon(25% 0%, 75% 0%, 100% 50%, 75% 100%, 25% 100%, 0% 50%);
+  }
+
+  /* People - ring. Masked, not bordered: the hole then scales with the dot. */
+  .console-graph-kinddot[data-kind="owner"],
+  .console-graph-kinddot[data-kind="author"] {
+    mask: radial-gradient(circle, transparent 0 46%, #000 47% 100%);
+  }
+
+  /* Code keeps the circle. */
+}
+
+/* Detail column: a flex column so the card takes the space and the readouts stay at the bottom.
+   The border is here rather than on the card so it runs full height before the card renders. */
+.console-graph-detail {
+  display: flex; flex-direction: column; min-height: 0;
   border-left: 1px solid var(--pf-t--global--border--color--default);
+}
+/* Explain card: plain HTML dl content, and the part of the column that scrolls. */
+#explain-card {
+  flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0.8rem;
   font-size: 0.82rem;
 }
 #explain-card[hidden] { display: none; }
@@ -331,6 +375,11 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
 #explain-card dl { margin: 0; display: grid; grid-template-columns: max-content 1fr; gap: 0.25rem 0.7rem; }
 #explain-card dt { color: var(--pf-t--global--text--color--subtle); font-size: 0.72rem; padding-top: 0.15rem; }
 #explain-card dd { margin: 0; overflow-wrap: anywhere; }
+/* The overview's closing paragraph: what to do next, quieter than the facts above it. */
+.console-graph-card__hint {
+  margin: 0.8rem 0 0; font-size: 0.74rem; line-height: 1.45;
+  color: var(--pf-t--global--text--color--subtle);
+}
 #explain-card code { font-size: 0.78em; }
 .console-graph-card__relgroup { margin-bottom: 0.4rem; }
 .console-graph-card__relname { display: block; font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); margin-bottom: 0.15rem; }
@@ -367,31 +416,39 @@ body[data-has-card] .console-graph-app { grid-template-columns: 20rem 1fr 21rem;
      The sidebar's children (search box, count row, node list) then overflowed and painted UNDER
      the canvas (.console-graph-stage sits later in DOM with no stacking context of its own),
      so a tap meant for "N nodes, N edges" landed on a graph node instead. */
-  .console-graph-app, body[data-has-card] .console-graph-app { grid-template-columns: 1fr; grid-template-rows: none; grid-auto-rows: min-content; height: auto; }
-  .console-graph-stage { height: 60svh; min-height: 320px; }
+  /* Stack into one column, and size the whole panel to the SAME budget the desktop rule above
+     uses - the pane the console shell actually hands this surface. The stacked rows used to be
+     40svh of sidebar plus 60svh of stage, which sums to the whole viewport and so could never
+     fit inside a pane that is the viewport minus the shell's chrome: the bottom of the canvas
+     fell outside the app's overflow:hidden box, unreachable and with no scroll to it. The stage
+     takes what the sidebar leaves instead of claiming a fixed slice. */
+  .console-graph-app {
+    grid-template-columns: 1fr;
+    grid-template-rows: auto minmax(0, 1fr);
+    grid-auto-rows: min-content;
+    flex: 1;
+    min-height: 320px;
+  }
+  .console-graph-stage { height: auto; min-height: 0; }
   .console-graph-sidebar { max-height: 40svh; border-right: 0; border-bottom: 1px solid var(--pf-t--global--border--color--default); }
-  #explain-card { border-left: 0; border-top: 1px solid var(--pf-t--global--border--color--default); max-height: 50svh; }
+  .console-graph-detail { border-left: 0; border-top: 1px solid var(--pf-t--global--border--color--default); max-height: 50svh; }
   /* Mobile canvas chrome: the stage tools collapse behind the PF kebab toggle (pf-m-show-on-lg,
-     shared ../toolbar.ts) - no bespoke label-dropping here. The legend hides behind the "Legend"
-     toggle and only appears when tapped. */
-  #legend-toggle { display: inline-flex; }
-  .console-graph-legend { display: none; top: 2.7rem; max-height: calc(100% - 3.4rem); }
-  .console-graph-legend[data-open] { display: flex; }
+     shared ../toolbar.ts) - no bespoke label-dropping here. The legend needs no mobile rule of
+     its own any more: it lives in the sidebar, which is already capped and scrolls. */
+  .console-graph-legend { max-height: 9rem; }
   /* The count/chevron toggle row is the tap target for the stats disclosure below; give it
      comfortable tap padding and a legible chevron (it was ~9px, effectively untappable). */
   .console-graph-sidebar__count { padding-block: 0.55rem; }
   .console-graph-sidebar__chevron { font-size: 1.6em; }
-  /* The node cloud OVERLAYS the canvas here instead of pushing it down in-flow: main.ts
-     positions this panel (fixed, viewport coordinates) under #list-toggle whenever it expands,
-     via setListExpanded's positionNodeListOverlay(). z-index sits above the stage tools/legend
-     (3-5) so it always wins a tap over the canvas beneath it. */
+  /* The node cloud stays IN FLOW here and scrolls inside its own box. It used to be a
+     position:fixed card that JS anchored under #list-toggle, which worked only while the toggle
+     was the LAST thing in the sidebar - once the results moved above the View and Source
+     sections, that floating card covered them. In flow it cannot: the sidebar is capped at
+     40svh and scrolls itself, so a long list moves the sidebar's own scrollbar and never
+     touches the canvas. */
   #node-list {
-    position: fixed; z-index: 6;
-    max-height: min(55svh, 420px); width: min(20rem, calc(100vw - 1.2rem));
-    border: 1px solid var(--pf-t--global--border--color--default);
-    border-radius: var(--pf-t--global--border--radius--small);
-    background: var(--pf-t--global--background--color--primary--default);
-    box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+    max-height: min(40svh, 320px);
+    overflow-y: auto;
   }
 }
 
@@ -432,11 +489,6 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
    carry the teaching per the discoverability phase). */
 .console-graph-display__layoutgroup { margin-top: 0.1rem; }
 
-/* Live layout-force sliders (the "alive" wobble is tunable). Stacked one per row so each label and
-   its slider fit the narrow drawer instead of wrapping mid-control. */
-.console-graph-display__forces { display: flex; flex-direction: column; gap: 0.4rem; margin-top: 0.2rem; }
-.console-graph-display__forces label { display: flex; align-items: center; justify-content: space-between; gap: 0.5rem; font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); margin: 0; }
-.console-graph-display__forces input[type="range"] { width: 8rem; flex: 0 0 auto; margin: 0; }
 
 /* Color groups: paint query matches a chosen color on top of the kind palette.
    The swatch color is genuinely dynamic (a user pick), so it rides an inline style
@@ -519,7 +571,13 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-views__chip[disabled]:hover, .console-graph-views__chip[data-disabled]:hover {
   border-color: var(--pf-t--global--border--color--default); background: var(--pf-t--global--background--color--primary--default); box-shadow: none;
 }
-.console-graph-views__chip[data-conditional] { display: none; } /* hidden until DurationMs data present */
+/* [data-conditional] marks a control the LOADED GRAPH cannot back: the critical-path chip with
+   no timing, the affected chip with no live diff, the kind:symbol example with no symbol nodes.
+   One rule for every element type, !important for the same reason the global [hidden] rule
+   needs it - a PF component class outspecifies a bare attribute selector, which is why the
+   duration preset used to need its `hidden` set separately and the marker meant two different
+   things depending on what it was written on. */
+[data-conditional] { display: none !important; }
 /* Chip sets display: inline-flex above, which would otherwise outspecify the [hidden]
    attribute's UA display:none (same fix as the stage tools below) - the "What runs in
    parallel?" chip (data-layoutjump) is hidden for non-target graphs via .hidden. */
@@ -535,7 +593,7 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 /* Phase 5: view command bar (magus query term-prompt idiom, self-contained here);
    the outer element here is a div, not an input wrapper. */
 .console-graph-views__cmdbar {
-  margin: 0.5rem 0 0; padding: 0.4rem 0.7rem;
+  margin: 0.5rem 0.8rem 0; padding: 0.4rem 0.7rem;
   border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default);
   font-family: var(--pf-t--global--font--family--mono); font-size: 0.78rem;
@@ -608,6 +666,22 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-sidebar__modes {
   padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
+/* Color and Graph side by side. Both are short toggle groups; stacked, they spent two rows of a
+   20rem column on controls that together do not fill one, and the column is the scarce axis here
+   (Arrangement stays full-width - it is the one group that genuinely needs the room). */
+.console-graph-sidebar__viewpair {
+  display: grid; grid-template-columns: auto auto; justify-content: start;
+  column-gap: 0.9rem; row-gap: 0.2rem; margin-top: 0.55rem;
+}
+.console-graph-sidebar__viewcell { min-width: 0; }
+/* Why a control cannot be used, stated under it. Subtle, because it is a fact about the session
+   rather than a warning - it must not read as "something is wrong", so it takes the subtle text
+   color and not a status one. */
+.console-graph-display__unavailable {
+  margin: 0.2rem 0 0; font-size: 0.68rem; font-style: italic;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-graph-sidebar__viewcell .console-graph-display__sublabel { margin-top: 0; }
 .console-graph-sidebar__modeslabel {
   margin: 0 0 0.35rem; padding: 0;
   font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
@@ -621,36 +695,48 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-sidebar__source .pf-v6-c-toggle-group__text,
 .console-graph-sidebar__modes .pf-v6-c-toggle-group__text { font-size: 0.78rem; line-height: 1.3; }
 
-/* Ask a question: the question-first view chips, surfaced directly in the sidebar (the
-   ref-drawer #ask-panel is display:none in the decoupled console). The chips reuse the
-   sanctioned .console-graph-views__chip styling below; this only frames the group. */
+/* Scope bar: what is currently applied, directly under the query field that is the commonest
+   way to change it. Each pill is a button whose whole surface clears the one thing it names, so
+   the trailing x is decoration rather than a second hit target. */
+.console-graph-scope {
+  padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
+  display: flex; flex-direction: column; gap: 0.3rem;
+}
+.console-graph-scope__pills { display: flex; flex-wrap: wrap; gap: 0.25rem; }
+.console-graph-scope__pill {
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.1rem 0.4rem;
+  font-size: 0.72rem; font-family: var(--pf-t--global--font--family--mono, monospace);
+  color: var(--pf-t--global--text--color--regular);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  cursor: pointer;
+}
+.console-graph-scope__pill:hover {
+  border-color: var(--pf-t--global--border--color--hover);
+  background: var(--pf-t--global--background--color--secondary--hover, var(--pf-t--global--background--color--secondary--default));
+}
+.console-graph-scope__pill::after { content: "x"; color: var(--pf-t--global--text--color--subtle); }
+.console-graph-scope__count {
+  margin: 0; font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle);
+}
+
+/* Ask a question: the question-first view chips, surfaced directly in the sidebar. The chips
+   reuse the sanctioned .console-graph-views__chip styling below; this only frames the group. */
 .console-graph-sidebar__views {
   padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-graph-sidebar__views .console-graph-views__body { gap: 0.3rem; }
+/* The second group's label needs air above it; the first is flush with the section padding. */
+.console-graph-sidebar__views .console-graph-views__body + .console-graph-sidebar__viewslabel {
+  margin-top: 0.6rem;
+}
 .console-graph-sidebar__viewslabel {
   margin: 0 0 0.35rem; padding: 0;
   font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
   color: var(--pf-t--global--text--color--subtle);
 }
-
-/* Colors and forces: a collapsed disclosure sitting in the sidebar alongside the other
-   framed sections (Display mode, Explore) - same padding/bottom-divider rhythm, but a
-   <details> since these controls are secondary (tuning, not the main flow) and stay
-   out of the way until opened. The summary matches the other sidebar section labels
-   (small, muted, tracked uppercase) rather than the bordered reference-panel summary. */
-.console-graph-sidebar__panel {
-  padding: 0.4rem 0.45rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
-}
-.console-graph-sidebar__panel > summary {
-  cursor: pointer; list-style: none;
-  margin: 0; padding: 0;
-  font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;
-  color: var(--pf-t--global--text--color--subtle);
-}
-.console-graph-sidebar__panel > summary::-webkit-details-marker { display: none; }
-.console-graph-sidebar__panel[open] > summary { margin-bottom: 0.5rem; }
-.console-graph-sidebar__panelbody { display: flex; flex-direction: column; }
 
 /* Phase 5: projection unfold button. Shown when default projection is active. A PF link Button,
    centered as a full-width sidebar row with the same bottom-border divider as the count row; PF
@@ -673,17 +759,29 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
   width: 100%; text-align: left; white-space: normal; font-size: 0.7rem; line-height: 1.35;
 }
 
-/* Phase 5: color preset buttons - PF secondary small Buttons. The pressed/active coding (set by
-   JS via data-active) fills the button with the accent by overriding PF's own button color vars,
-   so the active state reads at a glance and rides on top of PF's secondary styling in both themes. */
-.console-graph-colorgroup__presetrow { display: flex; flex-wrap: wrap; gap: 0.35rem; margin-bottom: 0.3rem; }
+/* Color presets: a PF ToggleGroup, the SAME component as Arrangement and Graph above and below
+   it. They were loose pf-m-small Buttons, which made one of three sibling control groups a
+   different height in a column where the other two agreed - and the odd height read as the odd
+   control, which it is not: all three are one setting with several values.
+   The active state rides data-active (set by JS, not PF's pf-m-selected, because a preset also
+   CLEARS on a second click) so it fills with the accent through the toggle-group's own vars. */
+/* No flex-wrap: a wrapped toggle group is not a toggle group, it is two stubs with the joined
+   segment look broken across a line break and the end caps landing mid-row. */
+.console-graph-colorgroup__presetrow { margin-top: 0.1rem; margin-bottom: 0.3rem; flex-wrap: nowrap; }
+/* PF rounds the group's ends off :first-child / :last-child. Duration is hidden unless the graph
+   carries timing, and a hidden cell is still the last child - so the end cap lands on a cell
+   nobody can see and the row reads as cut off. Give the last VISIBLE item the cap instead. */
+.console-graph-colorgroup__presetrow
+  .pf-v6-c-toggle-group__item:not([data-conditional]):has(+ [data-conditional])
+  .pf-v6-c-toggle-group__button {
+  border-start-end-radius: var(--pf-t--global--border--radius--control--default);
+  border-end-end-radius: var(--pf-t--global--border--radius--control--default);
+}
 .console-graph-colorgroup__preset[data-active] {
-  --pf-v6-c-button--BackgroundColor: var(--console-accent);
-  --pf-v6-c-button--Color: var(--pf-t--global--text--color--on-brand--default);
-  --pf-v6-c-button--BorderColor: var(--console-accent);
-  --pf-v6-c-button--hover--BackgroundColor: var(--console-accent);
-  --pf-v6-c-button--hover--Color: var(--pf-t--global--text--color--on-brand--default);
-  --pf-v6-c-button--hover--BorderColor: var(--console-accent);
+  --pf-v6-c-toggle-group__button--m-selected--BackgroundColor: var(--console-accent);
+  --pf-v6-c-toggle-group__button--m-selected--Color: var(--pf-t--global--text--color--on-brand--default);
+  background-color: var(--console-accent);
+  color: var(--pf-t--global--text--color--on-brand--default);
 }
 .console-graph-display__controlhint { margin: -0.15rem 0 0.3rem; font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
 
@@ -700,14 +798,6 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
   font-size: 0.7rem;
   color: var(--pf-t--global--text--color--subtle);
   margin: 0.15rem 0;
-}
-.console-graph-live__banner {
-  background: var(--console-status-danger, #c0392b);
-  color: #fff;
-  padding: 0.25rem 0.75rem;
-  font-size: 0.8rem;
-  border-radius: var(--pf-t--global--border--radius--small);
-  margin-bottom: 0.25rem;
 }
 .console-graph-live__rememberrow {
   font-size: 0.8rem;
@@ -726,3 +816,87 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 }
 .console-graph-loading[hidden] { display: none; }
 .console-graph-loading__label { margin: 0; color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem; }
+
+/* Question builder (querybuilder.ts): a PANEL in the detail column, not a modal. A modal covered
+   the canvas, and the canvas is what tells you whether the filter you are building is the one you
+   wanted - so it hid the only feedback that mattered. */
+.console-graph-qb { display: flex; flex-direction: column; min-height: 0; flex: 1 1 auto; }
+.console-graph-qb[hidden] { display: none; }
+.console-graph-qb__box { display: flex; flex-direction: column; min-height: 0; height: 100%; }
+.console-graph-qb__head {
+  display: flex; align-items: center; justify-content: space-between; gap: 0.5rem;
+  padding: 0.6rem 0.8rem; border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-graph-qb__title { font-size: 0.72rem; font-weight: 700; text-transform: uppercase; letter-spacing: 0.06em; color: var(--pf-t--global--text--color--subtle); }
+.console-graph-qb__close { margin: -0.3rem -0.3rem -0.3rem 0; }
+.console-graph-qb__body { display: block; flex: 1 1 auto; min-height: 0; overflow-y: auto; padding: 0.8rem; }
+.console-graph-qb__pane[hidden] { display: none; }
+.console-graph-qb__count { margin: 0.4rem 0 0; font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle); }
+.console-graph-qb__count[hidden] { display: none; }
+.console-graph-qb__copyrow { display: flex; gap: 0.9rem; margin-top: 0.4rem; }
+.console-graph-qb__foot { display: flex; gap: 0.6rem; padding: 0.5rem 0.8rem; border-top: 1px solid var(--pf-t--global--border--color--default); }
+
+.console-graph-qb__rows { display: flex; flex-direction: column; gap: 0.4rem; margin-bottom: 0.7rem; }
+/* Fixed columns rather than auto: the field select and the negate toggle stay put as rows are
+   added and removed, so the row a person is editing does not shift under the cursor. */
+/* Two lines per term in a 21rem column: the negate toggle and the field on one, the value beneath.
+   A single 4-column row needed 28rem and truncated the value box to uselessness. */
+.console-graph-qb__row { display: grid; grid-template-columns: 3.2rem minmax(0, 1fr) 1.8rem; gap: 0.3rem; align-items: center; }
+.console-graph-qb__value { grid-column: 1 / -1; }
+.console-graph-qb__neg { justify-content: center; font-variant: small-caps; }
+.console-graph-qb__neg[aria-pressed="true"] { color: var(--console-status-danger); font-weight: 700; }
+.console-graph-qb__empty { margin: 0 0 0.6rem; color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem; }
+.console-graph-qb__add { margin-bottom: 1rem; }
+
+.console-graph-qb__previewlabel { margin: 0 0 0.3rem; font-size: 0.68rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.08em; color: var(--pf-t--global--text--color--subtle); }
+/* The composed query, shown at reading size and not as a caption: it is the thing the builder
+   exists to teach, so it gets more weight than the controls that produced it. */
+.console-graph-qb__preview {
+  display: block; padding: 0.5rem 0.7rem;
+  background: var(--pf-t--global--background--color--secondary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  font-family: var(--pf-t--global--font--family--mono); font-size: 0.9rem;
+  overflow-wrap: anywhere;
+}
+.console-graph-qb__cli { display: block; margin-top: 0.45rem; color: var(--pf-t--global--text--color--subtle); font-family: var(--pf-t--global--font--family--mono); font-size: 0.78rem; overflow-wrap: anywhere; }
+.console-graph-qb__cli[hidden] { display: none; }
+.console-graph-qb__hint { margin: 0.7rem 0 0; color: var(--pf-t--global--text--color--subtle); font-size: 0.8rem; }
+
+/* One card per view. A button, not a row with a button in it: the whole card is the target. */
+.console-graph-qb__view {
+  display: grid; grid-template-columns: 1fr auto; gap: 0.15rem 0.7rem;
+  width: 100%; margin-bottom: 0.4rem; padding: 0.6rem 0.75rem; text-align: left;
+  background: var(--pf-t--global--background--color--primary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-radius: var(--pf-t--global--border--radius--small);
+  color: var(--pf-t--global--text--color--regular); cursor: pointer;
+}
+.console-graph-qb__view:hover:not(:disabled) { border-color: var(--console-accent); }
+.console-graph-qb__view:focus-visible { outline: 2px solid var(--console-accent); outline-offset: 1px; }
+.console-graph-qb__view:disabled { cursor: not-allowed; opacity: 0.6; }
+.console-graph-qb__viewlabel { font-weight: 600; font-size: 0.92rem; }
+.console-graph-qb__viewblurb { grid-column: 1; color: var(--pf-t--global--text--color--subtle); font-size: 0.82rem; }
+.console-graph-qb__viewcli { grid-column: 1; margin-top: 0.2rem; color: var(--pf-t--global--text--color--subtle); font-family: var(--pf-t--global--font--family--mono); font-size: 0.75rem; }
+/* Sits in the second column against the label, so "then click a node" reads as a property of the
+   view rather than another line of its description. */
+.console-graph-qb__viewpick { grid-column: 2; grid-row: 1; align-self: start; color: var(--console-accent); font-size: 0.72rem; white-space: nowrap; }
+.console-graph-qb__foot[hidden] { display: none; }
+
+/* Worked examples. Loading one fills the rows above rather than applying, so the query stays
+   editable - the point is to show what each term does, not to hand over an answer. */
+.console-graph-qb__examples { display: flex; flex-direction: column; gap: 0.3rem; margin-top: 0.4rem; }
+.console-graph-qb__example {
+  display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 0.1rem 0.8rem;
+  padding: 0.45rem 0.6rem; text-align: left; cursor: pointer;
+  background: transparent; color: var(--pf-t--global--text--color--regular);
+  border: 1px solid transparent; border-radius: var(--pf-t--global--border--radius--small);
+}
+.console-graph-qb__example:hover { border-color: var(--pf-t--global--border--color--default); background: var(--pf-t--global--background--color--secondary--default); }
+.console-graph-qb__example:focus-visible { outline: 2px solid var(--console-accent); outline-offset: 1px; }
+.console-graph-qb__exlabel { font-size: 0.88rem; font-weight: 500; }
+.console-graph-qb__exquery { grid-column: 2; grid-row: 1; font-family: var(--pf-t--global--font--family--mono); font-size: 0.76rem; color: var(--console-accent); white-space: nowrap; }
+.console-graph-qb__exnote { grid-column: 1 / -1; font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }
+.console-graph-qb__caps { margin: 0 0 0.7rem; padding-bottom: 0.5rem; border-bottom: 1px solid var(--pf-t--global--border--color--default); font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }
+/* A detach that the browser refused: keep the control, mark it spent. */
+.console-graph-qb__detach[data-detach-failed] { opacity: 0.45; }

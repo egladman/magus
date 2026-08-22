@@ -28,7 +28,7 @@ const minInteractiveHeight = 15
 // Nothing here is a Fail. A terminal that cannot do these things is not broken
 // and neither is the workspace: magus degrades to plain output on every one of
 // them. What a reader needs is to know WHICH way it degraded before they wonder
-// why the colours or the mouse are missing.
+// why the colors or the mouse are missing.
 func (r *runner) checkTerminal() types.DoctorCheck {
 	const name = "terminal capabilities"
 

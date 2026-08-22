@@ -240,7 +240,7 @@ fun encode(doc: {str: any}) > str {
 export fun main() > void !> any {
     final mode = os\env("REGISTRY_MODE") ?? "build";
     // Validated rather than dispatched on, because the fall-through case SIGNS. With
-    // only `fetch` and `verify` tested below, REGISTRY_MODE=verfiy did not verify
+    // only `fetch` and `verify` tested below, REGISTRY_MODE=verify did not verify
     // anything - it rebuilt index.json, overwrote the published file, signed it with
     // MAGUS_REGISTRY_KEY and reported success. The header sells verify as "a stranger
     // can run verify and get a diff rather than a promise"; a one-character slip

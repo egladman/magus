@@ -27,12 +27,8 @@ import {
   forceX,
   forceY,
   type Simulation,
-  type ForceManyBody,
-  type ForceLink,
-  type ForceX,
-  type ForceY,
 } from "d3-force";
-import { zoom as d3zoom, zoomIdentity, type ZoomBehavior } from "d3-zoom";
+import { zoom as d3zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } from "d3-zoom";
 import { drag as d3drag } from "d3-drag";
 import { select } from "d3-selection";
 // The loopback lock, the shared bearer token, and the fetch-based SSE reader used to
@@ -54,6 +50,7 @@ import {
 } from "../../lib/daemon";
 import { createClient } from "@connectrpc/connect";
 import { StatusService } from "../../gen/magus/status/v1alpha1/status_pb";
+import { GraphService } from "../../gen/magus/graph/v1alpha1/graph_pb";
 import {
   type GLink,
   type GNode,
@@ -63,7 +60,9 @@ import {
   endpointId,
 } from "./types.js";
 import { LAYERED_COL_W, LAYERED_MAX, layoutLayered, layoutWaves } from "./layout.js";
-import { CARD_COL_W, drawCard, measureCards } from "./cards.js";
+import { CARD_COL_W, DOT_R_PX, cardDetail, drawCard, measureCards } from "./cards.js";
+import { punchRing, shapeOfNode, traceNodeShape } from "./shapes.js";
+import { createQueryBuilder, type QueryBuilder } from "./querybuilder.js";
 import { RADIAL_MAX_RINGS, RADIAL_RING_R, layoutRadial } from "./radial.js";
 import { nodeDurationMs, formatDuration } from "./duration.js";
 import {
@@ -73,7 +72,23 @@ import {
   tick as particlesTick,
   type FlowEdge,
 } from "./particles.js";
-import { toMermaid } from "./mermaid.js";
+import {
+  type Insets,
+  NO_INSETS,
+  type Rect,
+  type WorldBox,
+  fitTransform,
+  overlayInsets,
+  recenterOn,
+  usableCenter,
+} from "./viewport.js";
+import {
+  type DependencyDegree,
+  dependencyDegrees,
+  disconnected,
+  mostDependedOn,
+  projectOwners as computeProjectOwners,
+} from "./views.js";
 import { flavorOf, isTargetGraph, targetGraphToNodeLink } from "./target-adapter.js";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { wireToolbarOverflow } from "../toolbar";
@@ -83,7 +98,8 @@ import { signal } from "../view";
 import { publishStatus } from "../status";
 
 // Runtime-only globals the monolith stashes on window: the live-mode "affected" id set that
-// the SSE handler writes for the view code to read, and the PWA File Handling API entry point.
+// refreshAffectedFromServer writes for the view code to read, and the PWA File Handling API
+// entry point.
 // LaunchQueue/LaunchParams are the minimal shape of the (not-yet-standard-typed) File Handling
 // API this code touches; a launched file arrives as a FileSystemFileHandle.
 interface LaunchParams {
@@ -108,30 +124,39 @@ declare global {
 // and may appear in graphs exported with those shards loaded.
 const KINDS = [
   "project",
+  "module",
+  "file",
+  "dir",
+  "target",
   "spell",
   "op",
-  "charm",
-  "target",
-  "module",
-  "method",
-  "import",
+  "tool",
   "function",
-  "file",
+  "method",
+  "symbol",
+  "import",
+  "package",
   "doc",
   "rationale",
+  "note",
   "diagnostic",
-  "symbol",
+  "charm",
+  "owner",
+  "author",
 ];
 
 // Relations, for grouping edges in the explain card. Order = display order.
 const RELATIONS = [
   "depends_on",
+  "produces",
+  "consumes",
   "contains",
   "imports",
   "calls",
   "uses",
   "references",
   "documents",
+  "annotates",
   "rationale_for",
 ];
 
@@ -144,6 +169,8 @@ const GRAPH_KEYMAP: Keymap = {
   "graph.search": "/", // focus the node search
   "graph.fit": "f", // zoom to fit
   "graph.layout": "l", // cycle force / layered / waves layout
+  "graph.focus.shallower": "[", // one hop less of the local graph
+  "graph.focus.deeper": "]", // one hop more
 };
 const keymapCell = persisted<Keymap>("keymap", {});
 // These handles are the DOM contract with graph.html; the page always provides them, so they are
@@ -186,6 +213,9 @@ interface Graph {
   sourceBase: string;
   relIndex?: Map<string, Set<string>>;
   adj?: Map<string, Set<string>>;
+  semanticAdj?: Map<string, Set<string>>;
+  projectOf?: Map<string, string>;
+  depDegrees?: Map<string, DependencyDegree>;
 }
 // graph is null until the first load, but every reader runs post-load (boot gates on it),
 // so it is typed non-null - `null as any` keeps the runtime null + the `if (!graph)` guards
@@ -216,6 +246,12 @@ function isLayoutMode(s: string): s is LayoutMode {
   return s === "force" || s === "layered" || s === "waves" || s === "radial";
 }
 let layoutMode: LayoutMode = "force";
+// Set once the operator picks a display mode from the [data-layout] toggle (or the layout
+// keybinding). askQuestion consults it: a question may auto-switch the arrangement while the
+// mode is still the flavor default, but once the operator has chosen one by hand it is a manual
+// override and a question emphasizes within it instead of moving it underneath them. Reset when
+// a new graph loads, since the mode resets to that flavor's default with it.
+let layoutPickedByHand = false;
 let graphFlavor: GraphFlavor = "knowledge"; // "knowledge" | "targets"; set in boot/replaceGraph
 // Per-wave membership from the last layoutWaves() call (wavesMeta[i] = the ids in
 // wave i - the array index IS the wave number), for draw()'s column bands/headers
@@ -231,11 +267,29 @@ let radialRings: string[][] | null = null;
 // selectNode with an id, or cleared on Esc/query/view activation.
 let pendingRadialPick = false;
 
-// Cards render for the targets flavor in the DAG-shaped modes only; the
-// knowledge constellation keeps circles (density makes cards unreadable).
-// Radial also stays circles for targets - rings are round, wide cards don't fit.
-const cardsActive = () =>
-  graphFlavor === "targets" && (layoutMode === "layered" || layoutMode === "waves");
+// Below this zoom NOTHING is labeled. At the scale that frames a whole workspace the overview's
+// job is shape, and no amount of legibility work makes a name useful there: it cannot be tied to
+// the dot it belongs to, so it is just text laid over the thing the reader is trying to see.
+// Framing magus's own 2373 nodes lands near k=0.45. The floor is well above that rather than
+// just above it, because "the whole cloud still fits on screen" is still the overview: at k=1
+// every one of this workspace's 74 hubs clears the size rule at once and the core goes back to
+// being a wall of text. Labels wait until the view is inspecting a REGION.
+const LABEL_MIN_ZOOM = 1.6;
+
+// Once labeling is on at all, this is the on-screen radius in CSS pixels a node must reach to
+// earn one - so names arrive biggest-hub-first as the view goes deeper, rather than all at once
+// the moment the floor is crossed.
+const LABEL_MIN_NODE_PX = 8;
+
+// Cards render in the DAG-shaped modes, either flavor: a named box beats a dot with the label
+// floating beside it, and both modes refuse above LAYERED_MAX so a card never has to survive the
+// full constellation. Radial stays circles - rings are round, wide cards do not fit.
+//
+// This is flavor-blind only because measureCards now covers EVERY node (see applyLayeredMode).
+// While it measured the laid-out subset, turning cards on here drew the match set as rectangles
+// and everything else as circles, which made the shape mean "is in the match set" and nothing
+// about the node.
+const cardsActive = () => layoutMode === "layered" || layoutMode === "waves";
 
 // isDagMode is true for the deterministic Sugiyama-family layouts (layered and
 // waves): the force sim stays stopped, edges route through dummy bend points,
@@ -288,6 +342,7 @@ let surfaceVisible = true;
 // listeners would keep running in the background after the graph closes.
 let stageResizeObserver: ResizeObserver | null = null;
 let themeObserver: MutationObserver | null = null;
+let motionObserver: MutationObserver | null = null;
 let lifecycleAbort: AbortController | null = null;
 // installKeybindings' teardown. It adds its own document keydown listener rather than taking
 // the lifecycle signal, so aborting the controller does not reach it: dropping this handle
@@ -296,10 +351,17 @@ let lifecycleAbort: AbortController | null = null;
 let uninstallKeys: (() => void) | null = null;
 
 // The graph stays gently "alive": the simulation never fully cools, so nodes
-// keep drifting (the Obsidian-like wobble). Disabled under prefers-reduced-motion,
+// keep drifting (the Obsidian-like wobble). Stilled when motion is suppressed,
 // and paused when the tab is hidden (see boot) so it isn't a background CPU drain.
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
-const idleAlpha = () => (reducedMotion.matches ? 0 : 0.006);
+
+// The OS preference, or the console's own Motion setting. One predicate rather than the media query
+// tested in five places, which is how a new switch reaches four of them and misses the fifth. The
+// console's CSS kill cannot reach the wobble, the particles or the camera glides - they are JS.
+function motionSuppressed(): boolean {
+  return reducedMotion.matches || document.documentElement.dataset.motion === "reduced";
+}
+const idleAlpha = () => (motionSuppressed() ? 0 : 0.006);
 
 // ---- motion layer (flow particles + live recency pulses) ------------------
 // Motion is OFF outside two states: an active path/subset view (blast, trace,
@@ -318,8 +380,7 @@ let motionRaf = 0;
 const flowActive = () =>
   (activeView === "trace" || activeView === "critical" || activeView === "blast") && !!matchSet;
 
-const motionEligible = () =>
-  !reducedMotion.matches && !document.hidden && (flowOn || pulsesPending);
+const motionEligible = () => !motionSuppressed() && !document.hidden && (flowOn || pulsesPending);
 
 // motionLoop keeps draw() repainting once per frame while motionEligible();
 // the moment it isn't (view cleared, tab hidden, reduced-motion turned on, or
@@ -357,6 +418,10 @@ interface Theme {
   border: string;
   accent: string;
   font: string;
+  // Edge opacity at rest and while something is highlighted. Theme-aware because the same alpha
+  // reads far heavier on white than on #292929, and 6000 edges of it is most of the ink on screen.
+  edgeAlpha: number;
+  edgeDimAlpha: number;
   kindColor: Record<string, string>;
 }
 let theme: Theme | null = null;
@@ -373,6 +438,8 @@ function readTheme(): Theme {
     border: v("--pf-t--global--border--color--default", "#dce3eb"),
     accent: v("--console-accent", "#0066cc"),
     font: v("--pf-t--global--font--family--body", "system-ui, sans-serif"),
+    edgeAlpha: parseFloat(v("--console-graph-edge-alpha", "0.3")) || 0.3,
+    edgeDimAlpha: parseFloat(v("--console-graph-edge-dim-alpha", "0.14")) || 0.14,
     kindColor,
   };
   return theme;
@@ -398,7 +465,7 @@ async function decodeFragment(b64url: string): Promise<GraphPayload> {
 // two had drifted on the case that matters: parseHash guards decodeURIComponent, this copy
 // called it bare, so a truncated shared link (a malformed percent-escape) threw a URIError out
 // of the graph explorer's boot path instead of degrading to the raw text. Aliased rather than
-// renamed at ~5 call sites, which keeps this change to the behaviour.
+// renamed at ~5 call sites, which keeps this change to the behavior.
 const hashParams = parseHash;
 
 async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
@@ -471,26 +538,15 @@ async function loadGraph(): Promise<{ data: GraphPayload; source: string }> {
   return { data: { nodes: [], links: [] }, source: "empty" };
 }
 
+// The notice is a PF Alert, so the text goes in the title slot and severity is a PF modifier -
+// an error then reads as an error everywhere in the console. Empty hides the whole notice.
 function setStatus(msg: string, isError?: boolean) {
   if (!statusEl) return;
-  statusEl.textContent = msg;
-  statusEl.toggleAttribute("data-error", !!isError);
-}
-
-// setResultLine narrates "what am I looking at" in the slim bar at the top of the
-// canvas stage - a concise mirror of the fuller text activateView already writes to
-// the bottom #graph-status line, placed where the eye already is. null hides it (the
-// default state: nothing active).
-function setResultLine(text: string | null) {
-  const line = el("graph-result-line");
-  if (!line) return;
-  if (text) {
-    line.textContent = text;
-    line.hidden = false;
-  } else {
-    line.textContent = "";
-    line.hidden = true;
-  }
+  const text = el("graph-status-text");
+  if (text) text.textContent = msg;
+  statusEl.classList.toggle("pf-m-danger", !!isError);
+  statusEl.classList.toggle("pf-m-info", !isError);
+  statusEl.hidden = !msg;
 }
 
 // ---- graph prep ------------------------------------------------------------
@@ -548,43 +604,68 @@ function incidentEdges(id: string) {
   return { out, inc };
 }
 
+function buildAdjacency(keep: (e: GLink) => boolean) {
+  const adj = new Map<string, Set<string>>();
+  const add = (a: string, b: string) => {
+    let s = adj.get(a);
+    if (!s) {
+      s = new Set();
+      adj.set(a, s);
+    }
+    s.add(b);
+  };
+  for (const e of graph.links) {
+    if (!keep(e)) continue;
+    const s = endpointId(e.source),
+      t = endpointId(e.target);
+    add(s, t);
+    add(t, s);
+  }
+  return adj;
+}
+
 // Undirected adjacency (node id -> Set of neighbor ids), built once per graph and
 // cached on the graph. draw() runs every tick + every hover, and focus/local-graph
 // BFS walks it, so a single precomputed map beats re-scanning all edges each time.
 function adjacency() {
-  if (!graph.adj) {
-    const adj = new Map<string, Set<string>>();
-    const add = (a: string, b: string) => {
-      let s = adj.get(a);
-      if (!s) {
-        s = new Set();
-        adj.set(a, s);
-      }
-      s.add(b);
-    };
-    for (const e of graph.links) {
-      const s = endpointId(e.source),
-        t = endpointId(e.target);
-      add(s, t);
-      add(t, s);
-    }
-    graph.adj = adj;
-  }
+  if (!graph.adj) graph.adj = buildAdjacency(() => true);
   return graph.adj;
 }
+
+// adjacency() minus the containment tree - see neighborhood() for why walking that tree by hop
+// count reaches most of the graph from anywhere in it. Cached alongside adjacency().
+function semanticAdjacency() {
+  if (!graph.semanticAdj) graph.semanticAdj = buildAdjacency((e) => e.relation !== "contains");
+  return graph.semanticAdj;
+}
+// Cached on the graph like adjacency(): the project: filter runs it once per node over the whole
+// list. prepareGraph returns a fresh object on every load, so the cache resets with the data.
+function projectOwners() {
+  if (!graph.projectOf) graph.projectOf = computeProjectOwners(graph.nodes, graph.links);
+  return graph.projectOf;
+}
+
 function neighbors(id: string | null) {
   return id ? adjacency().get(id) || null : null;
 }
 
-// neighborhood collects a node plus everything within `depth` hops - the node set
-// for a local/focus graph (Obsidian's local view). Reuses the adjacency map.
+// neighborhood collects a node plus everything within `depth` hops - the node set for a local/focus
+// graph (Obsidian's local view).
+//
+// Containment is TERMINAL: a contains edge is followed out of the seed and no further. Counting it
+// as an ordinary hop is what made this useless - from a function, hop 1 is its file, hop 2 is every
+// other function in that file, hop 3 every file in the dir, hop 4 every function in all of them. A
+// 4-hop walk from `eslint` collected 1284 of 2373 nodes, and the number measured how deeply the
+// tree nests rather than what the node is related to. You still see what a node contains and what
+// contains it; you no longer arrive at its second cousins.
 function neighborhood(id: string, depth: number) {
   const set = new Set<string>([id]);
   let frontier = [id];
   for (let d = 0; d < depth; d++) {
     const next = [];
     for (const nid of frontier) {
-      for (const nb of adjacency().get(nid) || []) {
+      const adj = d === 0 ? adjacency() : semanticAdjacency();
+      for (const nb of adj.get(nid) || []) {
         if (!set.has(nb)) {
           set.add(nb);
           next.push(nb);
@@ -597,6 +678,10 @@ function neighborhood(id: string, depth: number) {
 }
 
 // ---- layered DAG layout (see layout.ts for the pure Sugiyama algorithm) ----
+
+// PARKED_X is the off-canvas coordinate hidden nodes are pinned to (radial's unplaced set, the
+// default projection's non-projects) so the force simulation does not waste cycles on them.
+const PARKED_X = -1e6;
 
 // applyLayoutedMode: switch to layered layout for the visible node/link set.
 // Returns false (with a status message) when the scale guard fires.
@@ -614,7 +699,11 @@ function applyLayeredMode() {
     sim?.stop();
   }
   if (cardsActive()) {
-    measureCards(ctx, visNodes, (theme ?? readTheme()).font);
+    // Measure EVERY node, not just the laid-out subset. draw() paints a card only for a node
+    // carrying n.w, so measuring the subset makes the SHAPE mean "is in the match set" - matches
+    // as rectangles, everything else as circles, on one canvas - and n.w is sticky, so a node
+    // keeps its rectangle after the match set moves on. Card-or-dot is a property of the MODE.
+    measureCards(ctx, graph.nodes, (theme ?? readTheme()).font);
     layoutLayered(visNodes, graph.links, { colW: CARD_COL_W, rowH: 48 });
   } else {
     layoutLayered(visNodes, graph.links);
@@ -639,7 +728,7 @@ function applyWavesMode() {
     sim?.stop();
   }
   if (cardsActive()) {
-    measureCards(ctx, visNodes, (theme ?? readTheme()).font);
+    measureCards(ctx, graph.nodes, (theme ?? readTheme()).font); // see applyLayeredMode
     wavesMeta = layoutWaves(visNodes, graph.links, { colW: CARD_COL_W, rowH: 48 }).waves;
   } else {
     wavesMeta = layoutWaves(visNodes, graph.links).waves;
@@ -661,19 +750,34 @@ function reapplyDagLayout(): boolean {
 // visible subset) rather than accepting matchSet as-is - it narrows matchSet
 // to that placed set afterward so the node list/status agree with what's
 // drawn. Nodes that were visible but fell outside the placed set are parked
-// off-canvas (fx/fy = -1e6, the same convention parkHiddenNodes uses) so they
+// off-canvas (fx/fy = PARKED_X, the same convention parkHiddenNodes uses) so they
 // don't sit stacked at the origin. Stops the force simulation - radial pins
 // fx/fy like the dag modes, even though it is not one (see isDagMode).
-function applyRadialMode(): boolean {
+// Jump straight to radial when a node is already selected, else arm a one-shot pick that
+// switchLayout("radial")s on the next selectNode (see selectNode).
+function enterRadialPick(): void {
+  if (selected || focusId) {
+    switchLayout("radial");
+    return;
+  }
+  pendingRadialPick = true;
+  setStatus("Click a node to center the radial view.");
+}
+
+// Returns the set of nodes it PLACED, which is also what it leaves in matchSet - returned as well
+// because a caller that clears matchSet first cannot read it back through a narrowed binding. null
+// when there was no center to lay out around.
+function applyRadialMode(): Set<string> | null {
   const center = selected ?? focusId;
-  if (!center) return false; // switchLayout guards via layoutBlockedReason; safe fallback
+  if (!center) return null; // switchLayout guards via layoutBlockedReason; safe fallback
   const subsetAll = matchSet ? graph.nodes.filter((n) => must(matchSet).has(n.id)) : graph.nodes;
   const subset = subsetAll.some((n) => n.id === center) ? subsetAll : graph.nodes;
   sim?.stop();
-  // Radial deliberately takes the undirected adjacency() rather than graph.links: the ego
-  // neighborhood spans every edge kind (contains, imports, uses, ...), not just depends_on,
-  // so it has no colW/rowH opts like the DAG layouts - ring radius is fixed (RADIAL_RING_R).
-  const { rings } = layoutRadial(center, subset, adjacency());
+  // Undirected rather than graph.links: an ego neighborhood spans every edge kind, not just
+  // depends_on, so there are no colW/rowH opts here - ring radius is fixed (RADIAL_RING_R).
+  // Containment is excluded for the same reason neighborhood() drops it past the first hop: ring 2
+  // was every sibling in the center's file, and ring 3 and 4 were the rest of the repo.
+  const { rings } = layoutRadial(center, subset, semanticAdjacency());
   radialRings = rings;
   radialCenter = center;
   const placed = new Set<string>();
@@ -681,10 +785,10 @@ function applyRadialMode(): boolean {
   let hiddenCount = 0;
   for (const n of subset) {
     if (!placed.has(n.id)) {
-      n.fx = -1e6;
-      n.fy = -1e6;
-      n.x = -1e6;
-      n.y = -1e6;
+      n.fx = PARKED_X;
+      n.fy = PARKED_X;
+      n.x = PARKED_X;
+      n.y = PARKED_X;
       hiddenCount++;
     }
   }
@@ -699,11 +803,41 @@ function applyRadialMode(): boolean {
       (centerNode ? centerNode.label : center) +
       (hiddenCount ? "; " + hiddenCount + " more hidden" : ""),
   );
+  // matchSet just became the placed set, so the count row and node cloud have to be redrawn
+  // with it or they keep reporting whatever set was showing before radial narrowed it.
+  renderList();
   // Frame the freshly-placed rings. Radial centers on world origin, so without
   // this the camera stays wherever the previous layout left it and the rings
   // render off-screen (fitView calls draw()).
   fitView(matchSet);
-  return true;
+  return placed;
+}
+
+// unparkNodes releases only the nodes sitting at the parking coordinate, returning them to the
+// origin. Resetting x/y is not optional: a released node keeps its parked coordinate until the
+// simulation moves it, and a fitView over bounds a million units wide collapses the zoom to its
+// floor, so the canvas comes back blank.
+function unparkNodes() {
+  for (const n of graph.nodes) {
+    if (n.fx !== PARKED_X) continue;
+    n.fx = null;
+    n.fy = null;
+    n.x = 0;
+    n.y = 0;
+  }
+}
+
+// unpinAllNodes hands every node back to the simulation - the pins a DAG or radial layout set
+// as well as the parking pins - and lifts any parked node off PARKED_X on the way out.
+function unpinAllNodes() {
+  for (const n of graph.nodes) {
+    n.fx = null;
+    n.fy = null;
+    if (n.x === PARKED_X) {
+      n.x = 0;
+      n.y = 0;
+    }
+  }
 }
 
 // layoutBlockedReason says whether a mode can run right now; the returned string is
@@ -736,6 +870,7 @@ function cycleLayout() {
   for (let i = 1; i <= LAYOUT_ORDER.length; i++) {
     const next = LAYOUT_ORDER[(start + i) % LAYOUT_ORDER.length];
     if (!layoutBlockedReason(next)) {
+      layoutPickedByHand = true;
       switchLayout(next);
       return;
     }
@@ -753,26 +888,22 @@ function switchLayout(mode: LayoutMode) {
       return;
     }
   } else if (layoutMode === "radial") {
-    // Leaving radial: release whatever it parked off-canvas so the next
-    // layout can place those nodes again. Also reset x/y away from the -1e6
-    // parking spot (fitView(null) after this would otherwise include it in
-    // the bounds and collapse zoom to k=0.1) and clear matchSet, so the next
-    // layout shows the full graph instead of radial's placed set - the same
-    // recovery the other park-release sites use.
-    for (const n of graph.nodes) {
-      if (n.fx === -1e6) {
-        n.fx = null;
-        n.fy = null;
-        n.x = 0;
-        n.y = 0;
-      }
-    }
+    unparkNodes();
     radialCenter = null;
     radialRings = null;
-    matchSet = null;
+    // Radial narrowed matchSet to its placed set, and every control that produced the PREVIOUS one
+    // is still showing. Restoring only the query's matches left a lit blast chip over query nodes.
+    recomputeMatchSet();
   }
   layoutMode = mode;
   if (mode !== "waves") wavesMeta = null;
+  // Retire the previous switch's deferred camera work before scheduling this one's, and release a
+  // hover pin: pinHovered refuses to run in a DAG or radial layout, but releaseHoverPin has no
+  // matching guard, so a pin taken in force mode and carried across a switch would let the next
+  // mouse event null fx/fy on a node the new layout had deliberately fixed. Invisible until a
+  // resize restarts the sim, then one node drifts loose while its siblings stay frozen.
+  cancelCameraBeats();
+  releaseHoverPin();
   syncLayoutToggle();
   updateHash();
 
@@ -788,10 +919,7 @@ function switchLayout(mode: LayoutMode) {
       setStatus("too many nodes to lay out as " + mode + "; showing Force instead", true);
       // Clear fixed positions so the sim can move nodes, and any routes from
       // the dag pass so force mode never draws a stale curve.
-      for (const n of graph.nodes) {
-        n.fx = null;
-        n.fy = null;
-      }
+      unpinAllNodes();
       for (const e of graph.links) delete e.points;
       if (sim) {
         sim.alpha(0.5).restart();
@@ -801,6 +929,11 @@ function switchLayout(mode: LayoutMode) {
       // Don't write layout=<mode> to the hash.
       updateHash();
       draw();
+    } else if (mode === "layered") {
+      // Clear the refusal a previous, wider attempt left standing. Nothing else clears it, so
+      // narrowing the query and switching again succeeded under a banner still saying the
+      // layout was refused - the arrangement the operator is looking at, captioned as impossible.
+      setStatus("");
     } else if (mode === "waves" && wavesMeta) {
       const widest = wavesMeta.reduce((m, ids) => Math.max(m, ids.length), 0);
       setStatus(
@@ -811,16 +944,17 @@ function switchLayout(mode: LayoutMode) {
           " targets (max parallelism)",
       );
     }
+    // Frame the new arrangement. Here and not in applyLayeredMode/applyWavesMode, which
+    // liveApplyGraphUpdate re-runs on every SSE refresh - re-framing there would yank the
+    // camera out from under someone reading.
+    if (ok) frameArrangement();
   } else if (mode === "radial") {
     applyRadialMode();
   } else {
     // Force mode: clear fixed positions so the simulation takes over, and any
     // edge routes left over from a dag pass so force mode never draws a stale
     // curve.
-    for (const n of graph.nodes) {
-      n.fx = null;
-      n.fy = null;
-    }
+    unpinAllNodes();
     for (const e of graph.links) delete e.points;
     if (sim) {
       sim.alpha(0.5).restart();
@@ -828,7 +962,23 @@ function switchLayout(mode: LayoutMode) {
       startSimulation();
     }
     draw();
+    // Force unwinds the previous arrangement over about a second, so one frame taken now frames
+    // positions that are on their way somewhere else - the same reason the load-time reveal
+    // spends beats instead of a single fit. Each beat re-reads the camera: panning ends the
+    // follow (centeredOn is cleared), and a beat can land after another switch.
+    frameArrangement();
+    for (const at of REVEAL_BEATS_MS) {
+      scheduleCameraBeat(() => {
+        if (layoutMode !== "force") return;
+        if (centeredOn) centerOn(centeredOn);
+        else if (!cameraOwnedByOperator) fitView(matchSet);
+      }, at);
+    }
   }
+  // LAST, not beside the layoutMode assignment above: the scale guard can revert layered/waves to
+  // force after that point, and an overview written before the revert reports an arrangement that
+  // is not on the canvas.
+  syncOverview();
 }
 
 // ---- simulation + canvas ---------------------------------------------------
@@ -840,31 +990,79 @@ function resizeCanvas() {
   return { w: rect.width, h: rect.height, dpr };
 }
 
+// seedBigBang collapses every node onto one point so the simulation blows them outward into
+// place: the first thing a freshly loaded graph does is build its own shape in front of you,
+// with the load-time reveal pulling the camera back to keep the expanding cloud framed.
+//
+// It only seeds POSITIONS - d3-force uses a node's existing x/y when it has one and falls back
+// to its own phyllotaxis spiral otherwise, so this replaces that seed and nothing else.
+//
+// A DISC, not a point. Many-body repulsion grows without bound as distance goes to zero, so
+// stacking a few thousand nodes on one coordinate fires them out at a speed nothing recovers
+// from: the weakly-held ones - and this workspace has 556 with no dependency edge at all - keep
+// going until the fit clamps to its minimum scale and the graph reads as a starburst of
+// streaks. The radius grows with the square root of the node count, which is how the settled
+// area grows, so the burst stays proportionate on a small graph and a large one alike.
+//
+// Force mode only (the DAG layouts compute final coordinates, so there is nothing to expand
+// from), and never under prefers-reduced-motion, where a burst of movement is precisely the
+// thing being opted out of.
+function seedBigBang() {
+  if (isDagMode() || motionSuppressed() || !graph?.nodes.length) return;
+  const { w, h } = resizeCanvas();
+  const c = usableCenter(w, h, stageInsets());
+  const radius = 24 + Math.sqrt(graph.nodes.length) * 3;
+  for (const n of graph.nodes) {
+    // sqrt() on the radius keeps the disc evenly filled instead of clumping at the center,
+    // which is the same singularity in miniature.
+    const a = Math.random() * 2 * Math.PI;
+    const r = Math.sqrt(Math.random()) * radius;
+    n.x = c.x + Math.cos(a) * r;
+    n.y = c.y + Math.sin(a) * r;
+    n.vx = 0;
+    n.vy = 0;
+  }
+}
+
 function startSimulation() {
   if (sim) sim?.stop(); // stop the prior run (e.g. after loading a new file) - its timer would keep ticking
   const { w, h } = resizeCanvas();
+  // Settle in the part of the canvas the legend and toolbar do not cover: the cold view is
+  // never fitted, so wherever the cloud lands is the operator's first impression of the graph.
+  const simCenter = usableCenter(w, h, stageInsets());
   sim = forceSimulation<GNode, GLink>(graph.nodes)
     .force(
       "link",
       forceLink<GNode, GLink>(graph.links)
         .id((d) => d.id)
-        .distance(40)
+        .distance(55)
         .strength(0.4),
     )
-    .force("charge", forceManyBody().strength(-60).distanceMax(400))
-    .force("center", forceCenter(w / 2, h / 2))
+    // Repulsion is what makes the layout say anything, but only the SHORT-RANGE half of it.
+    // Raising the strength alone (-60 to -180) and letting it reach further just inflates the
+    // periphery: the low-degree nodes sail out, the fit zooms out to hold them, and the core
+    // that needed the room arrives back on screen smaller and denser than it started. Pushing
+    // hard over a SHORTER range spends the force where the crowding is, so clusters separate
+    // while the graph's overall extent stays roughly put.
+    .force("charge", forceManyBody().strength(-180).distanceMax(250))
+    .force("center", forceCenter(simCenter.x, simCenter.y))
     .force(
       "collide",
       forceCollide<GNode>().radius((d) => d.r + 2),
     )
-    .force("x", forceX(w / 2).strength(0.02))
-    .force("y", forceY(h / 2).strength(0.02))
+    .force("x", forceX(simCenter.x).strength(0.02))
+    .force("y", forceY(simCenter.y).strength(0.02))
     .alphaTarget(idleAlpha()) // decay toward a small floor, not 0, so it keeps gently moving
+    // d3's default decay spends about 300 ticks - five seconds - reaching that floor, which is
+    // a long time to watch a graph wobble before it is worth reading, and far too long for the
+    // opening burst to feel like one event. This settles in roughly a second.
+    .alphaDecay(0.06)
     .on("tick", draw);
 }
 
 function draw() {
   const th = theme ?? readTheme();
+  const shapesOn = root.dataset.nodeShapes !== "off"; // once per frame, not per node
   const dpr = window.devicePixelRatio || 1;
   ctx.save();
   ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -902,13 +1100,28 @@ function draw() {
           ctx.fillRect(waveX - colW / 2, minY - 40, colW, maxY - minY + 64);
         }
         ctx.globalAlpha = 1;
-        if (transform.k >= 0.35) {
+        // Wave headers are CHROME, so they paint at a constant screen size rather than scaling
+        // with the graph: sized in world units they were gated off below k=0.35, and the fit
+        // that frames a tall build DAG lands nearer k=0.15 - so the one view whose whole point
+        // is "these run at the same time" showed unlabeled bands at its own default zoom.
+        // What still degrades is how MUCH is written, decided by the room a column has on
+        // screen rather than by the zoom alone.
+        const px = (n: number) => n / transform.k; // world units that paint n screen pixels
+        const colScreenW = colW * transform.k;
+        // Three tiers, because a waves layout is far taller than it is wide - 63 targets stacked
+        // against 8 columns - so the fit that shows all of it leaves each column only ~32px.
+        // A bare index still tells the operator the bands are ordered stages.
+        if (colScreenW >= 18) {
           ctx.fillStyle = th.muted;
           ctx.textAlign = "center";
-          ctx.font = "10px " + th.font;
-          ctx.fillText("wave " + i, waveX, minY - 28);
-          ctx.font = "9px " + th.font;
-          ctx.fillText(ids.length + " in parallel", waveX, minY - 16);
+          const full = colScreenW >= 76;
+          const named = colScreenW >= 40;
+          ctx.font = px(full ? 10 : 9) + "px " + th.font;
+          ctx.fillText(named ? "wave " + i : String(i), waveX, minY - px(full ? 28 : 16));
+          if (full) {
+            ctx.font = px(9) + "px " + th.font;
+            ctx.fillText(ids.length + " in parallel", waveX, minY - px(16));
+          }
         }
       });
     }
@@ -938,11 +1151,24 @@ function draw() {
     }
   }
 
+  // Two emphasis layers, COMPOSED rather than one overriding the other:
+  //   scope     - matchSet, set by the query box, a view, or local-graph focus. What the user
+  //               asked to see. Out-of-scope nodes fade and their edges are skipped.
+  //   highlight - the selected or hovered node. A spotlight that ADDS its own neighborhood on
+  //               top of the scope, reaching outside it when the clicked node is not a match.
+  // The highlight must never suppress the scope: a selection left over from an earlier click
+  // would otherwise cancel the emphasis of every view and query run after it, so a chain the
+  // result line reports would not be the thing drawn on the canvas.
   const highlight = selected || hoverId;
   const near = neighbors(highlight);
+  const lit = (id: string) => id === highlight || !!near?.has(id);
+  // Cap on how big a neighborhood still earns the glow - see the shadow cost note in the node
+  // pass. A hub with hundreds of neighbors reads as a lit blob anyway, so the effect it buys
+  // there is small and the per-frame cost is not.
+  const glowNeighborhood = !!highlight && (near?.size ?? 0) <= 120;
 
   // Edges first, under the nodes. Dim edges not touching the highlighted node;
-  // under a query filter (no selection), dim edges not between two matches, so the
+  // under a query filter, dim edges not between two matches, so the
   // matching subgraph stands out instead of a full bright web.
   // projectionActive: hide all non-projection nodes/edges from the draw.
   // (Same flag computed below for nodes; computed here first for edges.)
@@ -952,6 +1178,9 @@ function draw() {
     !projectionUnfolded && projectionSet && !query && !focusId && !activeView
       ? projectionSet
       : null;
+  // The projection is its own visibility rule (nodes outside it are absent, not dim), so it
+  // stands in for the scope while it is active.
+  const scope = matchSet && !projectionActive ? matchSet : null;
   for (const e of graph.links) {
     // By draw time d3-force has resolved source/target from id strings to the node objects.
     const s = e.source as GNode,
@@ -975,21 +1204,34 @@ function draw() {
       if (t.w) tx = sLeft ? t.x - t.w / 2 : t.x + t.w / 2;
     }
     let active;
-    if (highlight) active = s.id === highlight || t.id === highlight;
-    else if (matchSet && !projectionActive) {
-      // Under a query filter, draw ONLY edges between two matches - skipping the
-      // rest keeps the matching subgraph clean instead of a faint full-web haze.
-      if (!(matchSet.has(s.id) && matchSet.has(t.id))) continue;
+    if (scope) {
+      // Under a filter, draw ONLY edges between two matches - skipping the rest keeps the
+      // matching subgraph clean instead of a faint full-web haze - plus the highlight's own
+      // edges, so clicking a node outside the filter still shows what it touches.
+      const inScope = scope.has(s.id) && scope.has(t.id);
+      if (!inScope && !(s.id === highlight || t.id === highlight)) continue;
       active = true;
-    } else active = true;
+    } else if (highlight) active = s.id === highlight || t.id === highlight;
+    else active = true;
     // Critical-path emphasis: an edge between two nodes both on the current
     // critical chain reads as the spine - thicker and at full alpha instead
     // of the default muted stroke.
     const criticalEdge =
       activeView === "critical" && !!matchSet && matchSet.has(s.id) && matchSet.has(t.id);
-    ctx.strokeStyle = active ? th.muted : th.border;
-    ctx.globalAlpha = criticalEdge ? 1 : active ? 0.55 : 0.1;
-    ctx.lineWidth = criticalEdge ? 2.2 / transform.k : 0.6 / transform.k;
+    // An edge touching the hovered or selected node draws in the accent, not the muted grey.
+    // Dimming everything else already isolates the neighborhood, but only by subtraction - the
+    // reader has to notice what did NOT fade. Coloring the incident edges says which lines are
+    // the answer, and it is the connections, not the nodes, that carry "what is this attached to".
+    const incident = !!highlight && (s.id === highlight || t.id === highlight);
+    // Everything non-incident keeps ONE color and only changes alpha. Dimming used to swap muted
+    // for border at the same time as dropping alpha 5.5x, and the two compounded into a jolt.
+    ctx.strokeStyle = incident ? th.accent : th.muted;
+    ctx.globalAlpha = incident || criticalEdge ? 1 : active ? th.edgeAlpha : th.edgeDimAlpha;
+    ctx.lineWidth = incident
+      ? 1.6 / transform.k
+      : criticalEdge
+        ? 2.2 / transform.k
+        : 0.6 / transform.k;
     // Cycle edges (from the target-graph adapter) get a dashed stroke so they
     // stand out from normal dependency edges. Layout-reversed edges (cycle-break
     // in layered mode) also render dashed.
@@ -1100,8 +1342,8 @@ function draw() {
     // Default projection: hide non-project nodes entirely (not dimmed; truly absent).
     if (projectionActive && !projectionActive.has(n.id)) continue;
     let alpha = 1;
-    if (highlight) alpha = n.id === highlight || (near && near.has(n.id)) ? 1 : 0.15;
-    else if (matchSet && !projectionActive) alpha = matchSet.has(n.id) ? 1 : 0.12;
+    if (scope) alpha = scope.has(n.id) || lit(n.id) ? 1 : 0.12;
+    else if (highlight) alpha = lit(n.id) ? 1 : 0.15;
     if (cardsActive() && n.w) {
       const kindColor = groupColorFor(n) || th.kindColor[n.kind] || "#888";
       drawCard(ctx, n, {
@@ -1118,10 +1360,23 @@ function draw() {
     }
     ctx.globalAlpha = alpha;
     const nodeColor = groupColorFor(n) || th.kindColor[n.kind] || "#888";
-    ctx.beginPath();
-    ctx.arc(n.x, n.y, n.r, 0, 2 * Math.PI);
+    // The hovered node and everything one hop from it GLOW, rather than merely failing to dim.
+    // Blur is divided by the zoom so the halo stays a constant size on screen instead of
+    // ballooning as the view zooms in. Skipped when the neighborhood is large: a canvas shadow
+    // is redrawn per node per frame, and a hub with hundreds of neighbors would pay for it on
+    // every tick of a simulation that never fully cools.
+    const glowing = glowNeighborhood && lit(n.id);
+    if (glowing) {
+      ctx.shadowColor = th.accent;
+      ctx.shadowBlur = (n.id === highlight ? 16 : 9) / transform.k;
+    }
+    const shape = shapesOn ? shapeOfNode(n) : "circle";
+    traceNodeShape(ctx, shape, n.x, n.y, n.r);
     ctx.fillStyle = nodeColor;
     ctx.fill();
+    if (glowing) ctx.shadowBlur = 0;
+    // After the glow is cleared, or the shadow prints inside the hole.
+    if (shape === "ring") punchRing(ctx, n.x, n.y, n.r, th.bg);
     // Anchor ring: target-graph anchor targets (top-level, nothing depends on
     // them within their project) get an outer ring in the same kind color so
     // they stand out without adding a new palette entry.
@@ -1137,8 +1392,7 @@ function draw() {
     if (n.id === selected) {
       ctx.lineWidth = 2 / transform.k;
       ctx.strokeStyle = th.accent;
-      ctx.beginPath();
-      ctx.arc(n.x, n.y, n.r, 0, 2 * Math.PI);
+      traceNodeShape(ctx, shape, n.x, n.y, n.r);
       ctx.stroke();
     }
   }
@@ -1153,7 +1407,7 @@ function draw() {
   // doesn't clip label text. tick() returning null (no flow, no unexpired
   // pulses) is what lets pulsesPending self-clear, which is in turn what lets
   // motionLoop stop re-arming itself once nothing is left to animate.
-  if (!reducedMotion.matches && !document.hidden) {
+  if (!motionSuppressed() && !document.hidden) {
     const motion = particlesTick(performance.now());
     if (!motion) {
       pulsesPending = false;
@@ -1211,11 +1465,17 @@ function draw() {
     if (n.x == null) continue;
     if (projectionActive && !projectionActive.has(n.id)) continue;
     if (cardsActive() && n.w) continue; // the label is painted inside the card
+    // Two exemptions from the zoom floor, both where the reader ASKED for a name: the hovered node
+    // and everything ONE HOP from it (the point of pointing at a node is to learn what it is
+    // attached to), and radial, which exists to name one node's neighbors. The one-hop half rides
+    // the same size cap as the glow - the overlap pass below is quadratic in what it keeps, so
+    // without the cap, pointing at the busiest node was the most expensive thing you could do.
     const show =
       n.id === highlight ||
-      n.degree > 24 ||
-      transform.k > 2.2 ||
-      (layoutMode === "radial" && radialPlacedCount <= 60);
+      (glowNeighborhood && lit(n.id)) ||
+      (layoutMode === "radial" && radialPlacedCount <= 60) ||
+      (transform.k >= LABEL_MIN_ZOOM &&
+        (transform.k > 2.2 || (n.degree > 24 && n.r * transform.k >= LABEL_MIN_NODE_PX)));
     if (!show) continue;
     if (matchSet && !projectionActive && !matchSet.has(n.id) && n.id !== highlight) continue;
     // Viewport cull (CSS px): drop off-screen labels so the greedy scan below only
@@ -1256,10 +1516,21 @@ function nodeAtPointer(event: MouseEvent): GNode | null | undefined {
   const py = (event.clientY - rect.top - transform.y) / transform.k;
   // Card mode: rectangular hit test in reverse draw order (so an overlapping
   // card on top wins), since sim.find's circle radius doesn't match card shape.
+  // The target has to match what was DRAWN: zoomed out far enough that cards paint as dots
+  // (cardDetail), a card-sized rectangle would claim a patch of empty canvas many times the
+  // mark the operator is aiming at. Dots take a generous screen-constant radius instead, so
+  // they stay reachable at the zoom that frames the whole DAG.
   if (cardsActive()) {
+    const dots = cardDetail(transform.k) === "dot";
+    const hitR = (DOT_R_PX + 5) / transform.k;
     for (let i = graph.nodes.length - 1; i >= 0; i--) {
       const n = graph.nodes[i];
-      if (n.x == null || !n.w || !n.h) continue;
+      if (n.x == null) continue;
+      if (dots) {
+        if ((px - n.x) ** 2 + (py - n.y) ** 2 <= hitR * hitR) return n;
+        continue;
+      }
+      if (!n.w || !n.h) continue;
       if (Math.abs(px - n.x) <= n.w / 2 && Math.abs(py - n.y) <= n.h / 2) return n;
     }
     return null;
@@ -1286,6 +1557,13 @@ function setupZoomDrag() {
     .scaleExtent([0.1, 8])
     .filter((event) => !event.button && event.type !== "dblclick")
     .on("zoom", (event) => {
+      // sourceEvent is null for the programmatic transforms fitView applies; a real wheel or
+      // drag means the operator has framed the graph themselves and the load-time reveal must
+      // stop moving the camera under their hands.
+      if (event.sourceEvent) {
+        cameraOwnedByOperator = true;
+        centeredOn = null; // panning away from a centered node ends the follow
+      }
       transform = event.transform;
       draw();
     });
@@ -1338,10 +1616,20 @@ function setupZoomDrag() {
     const n = nodeAtPointer(event);
     const id = n ? n.id : null;
     if (id !== hoverId) {
+      releaseHoverPin();
       hoverId = id;
+      pinHovered(id);
       canvas.style.cursor = id ? "pointer" : "grab";
       draw();
     }
+  });
+  // A pointer that leaves the canvas fires no further mousemove, so without this the node it was
+  // last over stays pinned for good - frozen out of the simulation with nothing to unfreeze it.
+  canvas.addEventListener("mouseleave", () => {
+    if (!hoverId && !hoverPinned) return;
+    releaseHoverPin();
+    hoverId = null;
+    draw();
   });
 }
 
@@ -1388,7 +1676,11 @@ function relSectionHtml(title: string, rows: IncidentRow[]) {
     byRel.get(r.rel)?.push(r);
   }
   let html = "<dt>" + escapeHtml(title) + "</dt><dd>";
-  const rels = [...byRel.keys()].sort((a, b) => RELATIONS.indexOf(a) - RELATIONS.indexOf(b));
+  const relRank = (r: string) => {
+    const i = RELATIONS.indexOf(r);
+    return i < 0 ? RELATIONS.length : i; // a relation this list predates trails the ones it names
+  };
+  const rels = [...byRel.keys()].sort((a, b) => relRank(a) - relRank(b) || (a < b ? -1 : 1));
   for (const rel of rels) {
     const items = byRel.get(rel);
     if (!items) continue;
@@ -1409,20 +1701,107 @@ function relSectionHtml(title: string, rows: IncidentRow[]) {
   return html + "</dd>";
 }
 
+// graphSource names where the loaded graph came from ("demo", "live", "local", "loopback",
+// "remote", "empty"), so the overview can say which one a reader is looking at.
+let graphSource = "empty";
+
+// SOURCE_PROSE turns that into a sentence. A reader who cannot tell the committed demo from
+// their own workspace cannot trust anything else the panel says.
+const SOURCE_PROSE: Record<string, string> = {
+  empty: "nothing loaded yet",
+  demo: "the committed demo export of the magus repo, not your workspace",
+  live: "a live workspace, refreshing as it changes",
+  local: "a graph.json you opened from this machine",
+  loopback: "a one-shot snapshot from a local magus",
+  remote: "a graph fetched from a URL",
+};
+
+// renderOverview fills the detail column when NOTHING is selected. That column used to collapse,
+// which left the surface answering "what am I looking at" nowhere at all: the arrangement, the
+// coloring and the scope were each legible only as a lit-up button somewhere in the sidebar, and
+// the canvas alone cannot say whether it is showing a filtered subset or a different graph.
+// It states the graph, then every setting currently acting on it, in sentences.
+function renderOverview() {
+  const scope = matchSet
+    ? matchSet.size + " of " + graph.nodes.length + " nodes match " + (query || "the active view")
+    : "No filter: every node is showing.";
+  const color = activePreset
+    ? (PRESET_RESULT_LINES[activePreset] ?? "A color grouping is active.")
+    : "Colored by node kind; the legend lists them.";
+  const rows: Array<[string, string]> = [
+    [
+      "Graph",
+      (graphFlavor === "targets" ? "The target graph" : "The knowledge graph") +
+        " - " +
+        (SOURCE_PROSE[graphSource] ?? "an unnamed source") +
+        ".",
+    ],
+    ["Size", graph.nodes.length + " nodes, " + graph.links.length + " edges."],
+    ["Arrangement", LAYOUT_TITLES[layoutMode]],
+    ["Color", color],
+    ["Scope", scope],
+  ];
+  let html = '<p class="console-graph-card__section">What you are looking at</p>';
+  html += "<dl>"; // #explain-card dl already carries the two-column grid
+  for (const [k, v] of rows) {
+    html += "<dt>" + escapeHtml(k) + "</dt><dd>" + escapeHtml(v) + "</dd>";
+  }
+  html += "</dl>";
+  // No counts in this sentence. The chips are conditional - cycles hides off the target graph,
+  // critical needs timing - so "the next three" was wrong the moment any of them was hidden.
+  html +=
+    '<p class="console-graph-card__hint">Click a node for its details. The questions on the left' +
+    " run what the CLI runs: the first group asks about one node you pick, the second asks about" +
+    " the whole graph.</p>";
+  cardEl.innerHTML = html;
+  cardEl.hidden = false;
+}
+
+// What the detail column is showing. "auto" is the column's normal life - the selected node's card,
+// or the overview when nothing is selected. "builder" means the question builder has the column.
+//
+// An explicit mode because three things now want that space, and the alternative is each one
+// reaching in to hide the others: the builder was doing exactly that, and closing it needed a
+// second reach-in to undo. One owner, one function that paints it.
+type DetailMode = "auto" | "builder";
+let detailMode: DetailMode = "auto";
+// Held so deactivate() can close it. bootWireEvents rebuilds it per activation.
+let queryBuilder: QueryBuilder | null = null;
+
+function setDetailMode(mode: DetailMode) {
+  detailMode = mode;
+  renderDetail();
+}
+
+function renderDetail() {
+  const host = el("query-builder-host");
+  const builderOwns = detailMode === "builder";
+  if (host) host.hidden = !builderOwns;
+  if (cardEl) cardEl.hidden = builderOwns;
+  if (builderOwns || !graph?.nodes) return;
+  if (selected && graph.byId.has(selected)) renderCard(selected);
+  else renderOverview();
+}
+
+// syncOverview repaints the column when the overview is what it should be showing. Routed through
+// renderDetail so a repaint triggered by a match-set change cannot paint over the builder.
+function syncOverview() {
+  if (!selected) renderDetail();
+}
+
 function renderCard(id: string | null) {
   const n = id ? graph.byId.get(id) : null;
+  // The tab name tracks the SELECTION, so it is set before the builder guard below - the reader
+  // selecting a node with the builder open still expects the tab to follow. Driven from here rather
+  // than from selectNode's several assignment sites: the card is the one place a selection renders.
+  docTitle.set(n?.label ?? null);
+  // The builder owns the column while it is open, so a selection changes what is SELECTED without
+  // evicting what the reader deliberately opened. Closing it repaints whatever is current.
+  if (detailMode === "builder") return;
   if (!n) {
-    cardEl.innerHTML = "";
-    cardEl.hidden = true;
-    document.body.toggleAttribute("data-has-card", false);
-    docTitle.set(null); // nothing selected: the tab falls back to "Graph Explorer"
+    renderOverview();
     return;
   }
-  document.body.toggleAttribute("data-has-card", true);
-  // The selected node is what this surface has open, so the console names its tab after it. Driven
-  // from here rather than from selectNode's several assignment sites: the card is the ONE place a
-  // selection is rendered, so the tab cannot disagree with what the panel shows.
-  docTitle.set(n.label);
   const { out, inc } = incidentEdges(n.id);
   let html = "";
   html += '<p class="console-graph-card__section">Node details</p>';
@@ -1463,20 +1842,13 @@ function renderCard(id: string | null) {
   html += relSectionHtml("outgoing", out);
   html += relSectionHtml("incoming", inc);
   html += "</dl>";
-  // Copy as Mermaid: copies the focus neighborhood (or current match set) as mermaid.
-  // It lives in the card so it is immediately reachable when a node is selected. It is
-  // a link-styled action (not a chunky button) so it sits quietly in the dense card and
-  // doesn't compete with the canvas toolbar's Copy as Mermaid; still a <button> because
-  // it acts (copies to clipboard) rather than navigates.
   html +=
-    '<div class="console-graph-card__actions"><button type="button" class="console-graph-card__mermaidlink" title="Copy this node\'s neighborhood as a Mermaid diagram (double-click the node first to focus its local graph, then copy). Mirrors the CLI: magus graph export -o mermaid --select id"><span class="console-graph-card__copyglyph" aria-hidden="true">&#10697;</span> Copy as Mermaid</button><button type="button" class="console-graph-card__noteslink" title="Open the workspace notes that explain decisions around this graph">Open workspace notes</button></div>';
+    '<div class="console-graph-card__actions"><button type="button" class="console-graph-card__noteslink" title="Open the workspace notes that explain decisions around this graph">Open workspace notes</button></div>';
   cardEl.innerHTML = html;
   cardEl.hidden = false;
   cardEl
     .querySelectorAll<HTMLElement>(".console-graph-card__ref")
     .forEach((b) => b.addEventListener("click", () => selectNode(b.dataset.id ?? null, true)));
-  const mermaidCardBtn = cardEl.querySelector<HTMLElement>(".console-graph-card__mermaidlink");
-  if (mermaidCardBtn) mermaidCardBtn.addEventListener("click", copyAsMermaid);
   const notesCardBtn = cardEl.querySelector<HTMLElement>(".console-graph-card__noteslink");
   if (notesCardBtn) notesCardBtn.addEventListener("click", () => openSurface({ pageId: "notes" }));
 }
@@ -1490,18 +1862,7 @@ function selectNode(id: string | null, center: boolean) {
       // Unfold this project: show its contains neighborhood.
       projectionUnfolded = true;
       projectionSet = null;
-      // Release any nodes that were parked off-screen by the projection. x/y must be reset
-      // too, not just fx/fy: a released node keeps the -1e6 parking coordinate until the sim
-      // moves it, and a fitView over a set containing one fits bounds a million units wide -
-      // zoom collapses and the canvas reads as blank. switchLayout gets this right.
-      for (const nd of graph.nodes) {
-        if (nd.fx === -1e6) {
-          nd.fx = null;
-          nd.fy = null;
-          nd.x = 0;
-          nd.y = 0;
-        }
-      }
+      unparkNodes();
       const projectNeighborhood = new Set([id]);
       for (const e of graph.links) {
         const s = endpointId(e.source),
@@ -1515,8 +1876,8 @@ function selectNode(id: string | null, center: boolean) {
         if (t === id && e.relation === "contains") projectNeighborhood.add(s);
       }
       matchSet = projectNeighborhood;
-      const btn = el("projection-unfold-btn");
-      if (btn) btn.hidden = true;
+      // Keep "Show full graph" visible: this branch narrows to ONE project's neighborhood, so
+      // the button is the way back out, and the status line below names it as such.
       setStatus("Showing " + id + " neighborhood. Press Esc or Show full graph to see everything.");
       renderList();
       if (matchSet.size) fitView(matchSet);
@@ -1568,20 +1929,232 @@ function selectNode(id: string | null, center: boolean) {
 function centerOn(id: string) {
   const n = graph.byId.get(id);
   if (!n || n.x == null || !zoomBehavior) return;
+  // Putting a node in the middle is a camera the operator asked for, so it is theirs from here.
+  // Remembering the subject is what lets a later resize re-center on THIS node: without it the
+  // resize re-frame refits the whole match set and sails the node just clicked off the screen.
+  cameraOwnedByOperator = true;
+  centeredOn = id;
   const { w, h } = resizeCanvas();
-  transform = zoomIdentity
-    .translate(w / 2 - n.x * transform.k, h / 2 - n.y * transform.k)
-    .scale(transform.k);
-  // Drive the REAL zoom behavior (not a throwaway d3zoom()) so a later pan/zoom
-  // continues from here instead of snapping back to a stale internal transform.
-  select(canvas).call(zoomBehavior.transform, transform);
+  // Center in the part of the canvas the legend and toolbar leave visible, not the raw middle.
+  const c = usableCenter(w, h, stageInsets());
+  // Shorter than a fit: this is a small move to a node the operator is already looking at, and
+  // a long glide there would feel like the view hesitating.
+  glideTo(
+    zoomIdentity.translate(c.x - n.x * transform.k, c.y - n.y * transform.k).scale(transform.k),
+    260,
+  );
 }
 
 // fitView frames a set of nodes (or all when ids is null) in the viewport - the
 // zoom-to-fit / reset-view action. Reuses the shared zoomBehavior + transform.
-function fitView(ids: Set<string> | null) {
+// The stage floats chrome over the canvas rather than beside it. These are the pieces that do,
+// measured live so a hidden one (the toolbar collapses to a kebab) contributes nothing. The
+// explain card is NOT here, and neither the legend nor the result line is any more: all three sit
+// beside the canvas now, so listing them would reserve a margin for something that covers
+// nothing - and the framing gets the whole left edge back.
+const STAGE_OVERLAYS = [".console-graph-stage__tools"];
+
+// stageInsets measures how far the stage chrome covers the canvas, so the framing below can
+// center the graph in what the operator can see instead of behind the legend.
+function stageInsets(): Insets {
+  if (!canvas) return NO_INSETS;
+  const view = canvas.getBoundingClientRect();
+  const overlays: Rect[] = [];
+  for (const sel of STAGE_OVERLAYS) {
+    for (const node of document.querySelectorAll<HTMLElement>(sel)) {
+      if (node.hidden) continue;
+      overlays.push(node.getBoundingClientRect());
+    }
+  }
+  return overlayInsets(view, overlays);
+}
+
+// Set once the operator pans or zooms by hand. The reveal below stops re-framing after that:
+// a camera that keeps moving while someone is reading is worse than a frame that came out loose.
+let cameraOwnedByOperator = false;
+// The node the camera is currently holding in the middle, if any. A stage resize re-centers on
+// it rather than re-framing, and a pan, zoom or fit releases it.
+let centeredOn: string | null = null;
+
+// The node currently held still because the pointer is on it. The simulation never fully cools -
+// that gentle drift is deliberate - but it means a node can wander out from under a stationary
+// cursor, dropping the highlight and darkening the neighborhood while the reader did nothing.
+// So the thing being pointed at stops; its neighbors carry on moving around it.
+let hoverPinned: string | null = null;
+
+function pinHovered(id: string | null) {
+  // Force mode only. The DAG layouts and radial pin every node themselves and run with the
+  // simulation stopped, so nothing drifts there and a pin of ours would be indistinguishable
+  // from theirs when it came time to release it.
+  if (!id || isDagMode() || layoutMode === "radial") return;
+  const n = graph?.byId.get(id);
+  // Only pin what is NOT already pinned: a parked node, or one held by a drag, belongs to
+  // whoever pinned it, and releasing that on mouseout would undo their work.
+  if (!n || n.fx != null) return;
+  n.fx = n.x;
+  n.fy = n.y;
+  hoverPinned = id;
+}
+
+function releaseHoverPin() {
+  if (!hoverPinned) return;
+  const n = graph?.byId.get(hoverPinned);
+  if (n && n.fx !== PARKED_X) {
+    n.fx = null;
+    n.fy = null;
+  }
+  hoverPinned = null;
+}
+
+// Camera moves GLIDE. fitView and centerOn used to write straight to the zoom behavior, and the
+// load reveal fires three fits inside the first second and a half - three instant jumps read as
+// the view being yanked about rather than as one camera moving. d3-transition would do this and
+// is not a dependency here; the easing is short enough to keep.
+let cameraTween = 0;
+
+// Every DEFERRED camera move - the load reveal's beats, the force-settle fits, the beats after a
+// switch into force - parked here so they have one owner.
+//
+// Each site used to fire-and-forget a setTimeout. Two consequences, both real: cycling force ->
+// layered -> force inside 1.4s let the FIRST switch's beats land during the second and yank a
+// camera the operator had since placed; and deactivate() left them queued to fire against a
+// surface the console had torn down. A pending camera move is only ever wanted by the most recent
+// request, so starting a new one cancels the last.
+let cameraBeats: ReturnType<typeof setTimeout>[] = [];
+
+function cancelCameraBeats() {
+  for (const t of cameraBeats) clearTimeout(t);
+  cameraBeats = [];
+}
+
+function scheduleCameraBeat(fn: () => void, ms: number) {
+  cameraBeats.push(setTimeout(fn, ms));
+}
+
+function applyTransform(t: ZoomTransform) {
+  transform = t;
+  // Drive the REAL zoom behavior (not a throwaway d3zoom()) so a later pan/zoom continues from
+  // here instead of snapping back to a stale internal transform. sourceEvent is null on these,
+  // which is how the zoom handler tells them from a gesture and leaves cameraOwnedByOperator be.
+  if (zoomBehavior) select(canvas).call(zoomBehavior.transform, t);
+}
+
+// glideTo eases the camera to `to`. Scale interpolates GEOMETRICALLY - zoom is multiplicative,
+// so a linear ramp between two scales races at one end and crawls at the other.
+function glideTo(to: ZoomTransform, ms = 340) {
+  if (cameraTween) {
+    cancelAnimationFrame(cameraTween);
+    cameraTween = 0;
+  }
+  if (!zoomBehavior) return;
+  const from = transform;
+  const still = Math.abs(from.k - to.k) < 1e-4 && Math.hypot(from.x - to.x, from.y - to.y) < 0.5;
+  if (ms <= 0 || still || motionSuppressed()) {
+    applyTransform(to);
+    return;
+  }
+  const started = performance.now();
+  const ratio = to.k / from.k;
+  const step = () => {
+    const p = Math.min(1, (performance.now() - started) / ms);
+    const e = 1 - (1 - p) ** 3; // ease-out cubic: fast to start, settles rather than stops
+    applyTransform(
+      zoomIdentity
+        .translate(from.x + (to.x - from.x) * e, from.y + (to.y - from.y) * e)
+        .scale(from.k * ratio ** e),
+    );
+    cameraTween = p < 1 ? requestAnimationFrame(step) : 0;
+  };
+  cameraTween = requestAnimationFrame(step);
+}
+
+// Frames at which the load-time reveal re-checks the framing of a FORCE layout. A cold force
+// layout keeps spreading for seconds, so a single early fit frames a cloud that then grows
+// straight back out of view - which is how a 2373-node graph came to land cropped to a corner.
+// The first beat is quick feedback, the last one catches the settled extent. A DAG layout needs
+// none of this: layoutLayered places every node in one pass, so its extent is final at once.
+const REVEAL_BEATS_MS = [300, 750, 1400];
+
+// revealWholeGraph frames the graph on load so it lands centered instead of cropped. Radial
+// frames itself in applyRadialMode, and a projection is already its own subset.
+function revealWholeGraph() {
+  if (!projectionUnfolded || !graph?.nodes.length) return;
+  // Only view/q/node name a SUBSET whose own framing must win. #data= and #src= say where the
+  // graph came from, not what to look at, so treating them as directives left every
+  // `magus graph open` link - and the whole targets flavor, which arrives that way - opening on
+  // an unframed corner of its own layout.
+  const p = hashParams();
+  if (p.view || p.q || p.node) return;
+  cameraOwnedByOperator = false;
+  // The beats are measured from when the canvas HAS A SIZE, not from now. The console can mount
+  // this surface into a pane that is still display:none, and it stays zero-width for as long as
+  // that takes - measured at over three seconds, past every beat. Scheduling on the wall clock
+  // meant all of them fired against a zero viewport, fitView refused each one, and the graph
+  // kept whatever framing the cold layout happened to leave it with.
+  void whenCanvasSized().then(() => {
+    // One pass places every node in a DAG layout, so its extent is final immediately.
+    if (isDagMode()) {
+      if (!cameraOwnedByOperator) fitView(matchSet);
+      return;
+    }
+    for (const at of REVEAL_BEATS_MS) {
+      scheduleCameraBeat(() => {
+        // Re-check the mode too: a beat can land after the operator switched layout or ran a view.
+        if (cameraOwnedByOperator || isDagMode() || activeView || focusId || query) return;
+        fitView(null);
+      }, at);
+    }
+  });
+}
+
+// whenCanvasSized resolves once the canvas has a non-zero box, or gives up after ~20s. Distinct
+// from waitForCanvasWidth, whose ~1s cap suits a load the operator is already watching; this one
+// waits out a surface mounted hidden, where there is nothing to be late for.
+//
+// A TIMER, not requestAnimationFrame: rAF stops entirely while the page is not being rendered -
+// the same pause the idle wobble relies on - and the whole point here is to wait out a surface
+// that is not being rendered yet, so an rAF poll deadlocks on exactly the case it exists for.
+function whenCanvasSized(): Promise<void> {
+  return new Promise((resolve) => {
+    if (canvas.clientWidth > 0) {
+      resolve();
+      return;
+    }
+    let waited = 0;
+    const timer = setInterval(() => {
+      waited += 100;
+      if (canvas.clientWidth > 0 || waited > 20_000) {
+        clearInterval(timer);
+        resolve();
+      }
+    }, 100);
+    // The 20s cap bounds one wait, but callers re-arm: a pane opened and closed repeatedly leaves
+    // an interval per attempt measuring a canvas no longer in the document. Resolve rather than
+    // hang, so the awaiting caller unwinds and fits a zero box nobody is looking at.
+    lifecycleAbort?.signal.addEventListener(
+      "abort",
+      () => {
+        clearInterval(timer);
+        resolve();
+      },
+      { once: true },
+    );
+  });
+}
+
+// A fit asked for while the canvas had no box, held until it has one. The console can mount this
+// surface into a pane that is still display:none for seconds, and every fit in that window - a
+// view's, a focus's, radial's - would otherwise be computed against a zero viewport, clamp to the
+// minimum scale and be silently dropped. Only the LAST one is worth replaying: they supersede.
+let pendingFit: { ids: Set<string> | null; glideMs?: number } | null = null;
+let pendingFitArmed = false;
+
+// worldBox is the bounding box of `ids` (or of every placed node when null), in world units.
+// Null when nothing in the set has a position yet. In a card mode the box measures the drawn
+// card rather than the dot radius, so a fit does not clip the labels it exists to make readable.
+function worldBox(ids: Set<string> | null): WorldBox | null {
   const pts = graph.nodes.filter((n) => n.x != null && (!ids || ids.has(n.id)));
-  if (!pts.length || !zoomBehavior) return;
+  if (!pts.length) return null;
   let minX = Infinity,
     minY = Infinity,
     maxX = -Infinity,
@@ -1595,17 +2168,63 @@ function fitView(ids: Set<string> | null) {
     minY = Math.min(minY, n.y - hh);
     maxY = Math.max(maxY, n.y + hh);
   }
+  return { minX, minY, maxX, maxY };
+}
+
+// glideMs 0 snaps instead of tweening. Used when there is no visual continuity to preserve -
+// a graph that was just REPLACED has nothing on screen the eye was tracking, so animating from
+// the old camera reads as a move rather than as an arrival.
+function fitView(ids: Set<string> | null, glideMs?: number) {
+  const pts = graph.nodes.filter((n) => n.x != null && (!ids || ids.has(n.id)));
+  if (!pts.length || !zoomBehavior) return; // setupZoomDrag has not run yet
+  if (canvas.clientWidth <= 0) {
+    // Carry glideMs through the deferral. Dropping it turned frameNewGraph's deliberate SNAP back
+    // into a 340ms glide whenever the surface was mounted hidden - reintroducing, on exactly the
+    // slowest path, the camera lurch that snapping exists to avoid.
+    pendingFit = { ids, glideMs };
+    if (!pendingFitArmed) {
+      pendingFitArmed = true;
+      void whenCanvasSized().then(() => {
+        pendingFitArmed = false;
+        const want = pendingFit;
+        pendingFit = null;
+        if (want && !cameraOwnedByOperator) fitView(want.ids, want.glideMs);
+      });
+    }
+    return;
+  }
+  const box = worldBox(ids);
+  if (!box) return;
+  centeredOn = null; // framing a set supersedes holding one node in the middle
   const { w, h } = resizeCanvas();
-  const pad = 48;
-  const k = Math.max(
-    0.1,
-    Math.min(8, Math.min((w - 2 * pad) / (maxX - minX || 1), (h - 2 * pad) / (maxY - minY || 1))),
-  );
-  const cx = (minX + maxX) / 2,
-    cy = (minY + maxY) / 2;
-  transform = zoomIdentity.translate(w / 2 - cx * k, h / 2 - cy * k).scale(k);
-  select(canvas).call(zoomBehavior.transform, transform);
+  const t = fitTransform(box, w, h, stageInsets());
+  glideTo(zoomIdentity.translate(t.x, t.y).scale(t.k), glideMs);
   draw();
+}
+
+// frameArrangement frames a freshly applied arrangement. A plain fit answers "where is the
+// set", and with a node selected that is not the question being asked: the operator is reading
+// one node, and every arrangement moves it somewhere else, so a fit hands back a legible layout
+// with the thing they were looking at lost inside it. Keep the fit's scale, land on the
+// selection. With nothing selected an arrangement switch is itself a request to re-frame, so it
+// supersedes a camera the operator had moved by hand.
+function frameArrangement() {
+  const n = selected ? graph.byId.get(selected) : null;
+  if (n && n.x != null && zoomBehavior && canvas.clientWidth > 0) {
+    const box = worldBox(matchSet);
+    if (box) {
+      const { w, h } = resizeCanvas();
+      const insets = stageInsets();
+      const t = recenterOn(fitTransform(box, w, h, insets), { x: n.x, y: n.y }, w, h, insets);
+      cameraOwnedByOperator = true;
+      centeredOn = selected;
+      glideTo(zoomIdentity.translate(t.x, t.y).scale(t.k));
+      draw();
+      return;
+    }
+  }
+  cameraOwnedByOperator = false;
+  fitView(matchSet);
 }
 
 // focusNode builds a LOCAL graph around a node (Obsidian's local view): the node
@@ -1615,6 +2234,13 @@ function fitView(ids: Set<string> | null) {
 function focusNode(id: string, depth: number) {
   const focusNodeObj = graph.byId.get(id);
   if (!focusNodeObj) return;
+  viewGeneration++; // a local graph is its own question; retire in-flight refinements
+  serverScores = null;
+  // A local graph is its own emphasis, so it retires whatever view was driving the canvas.
+  // Without this the chip stays lit, the result line keeps reporting the old view's answer and
+  // the command bar keeps offering its CLI idiom, while the canvas shows this neighborhood -
+  // and a canvas dblclick fires a plain click first, so it is one gesture.
+  if (activeView) clearView();
   focusId = id;
   focusDepth = depth;
   matchSet = neighborhood(id, depth);
@@ -1644,6 +2270,7 @@ function focusNode(id: string, depth: number) {
     }
     reapplyDagLayout();
   }
+  updateHash();
   fitView(matchSet);
 }
 
@@ -1653,13 +2280,14 @@ function changeFocusDepth(delta: number) {
 }
 
 function clearFocusOrQuery() {
+  viewGeneration++;
+  serverScores = null;
   focusId = null;
   matchSet = null;
   query = "";
   pendingRadialPick = false;
   if (searchEl) searchEl.value = "";
   setStatus("");
-  setResultLine(null);
   // Clear any active view.
   if (activeView) {
     activeView = null;
@@ -1690,28 +2318,52 @@ function clearFocusOrQuery() {
   }
 }
 
+// syncKindList fills the search-syntax reference with the kinds THIS graph carries, and hides
+// the kind:symbol example unless it has symbol nodes to find. The list used to be a hardcoded
+// enumeration in the scaffold, which drifted from both the schema and the payload; a search the
+// help advertises must be one the loaded data can answer.
+function syncKindList(counts: Map<string, number>) {
+  const kinds = legendKinds(counts);
+  if (kinds.length) {
+    // An empty graph leaves the scaffold's "the kinds in the legend" wording standing rather
+    // than blanking the sentence mid-clause.
+    for (const slot of document.querySelectorAll<HTMLElement>("[data-kindlist]")) {
+      slot.textContent = kinds.join(", ");
+    }
+  }
+  const noSymbols = !counts.has("symbol");
+  for (const ex of document.querySelectorAll<HTMLElement>('[data-q="kind:symbol"]')) {
+    const row = ex.closest("dt");
+    ex.toggleAttribute("data-conditional", noSymbols);
+    row?.toggleAttribute("data-conditional", noSymbols);
+    const dd = row?.nextElementSibling;
+    if (dd instanceof HTMLElement) dd.toggleAttribute("data-conditional", noSymbols);
+  }
+}
+
 // syncConditionalViews shows or hides the "What's slow?" (critical) view button
 // based on whether the current graph has DurationMs timing data. Called after
 // each graph load (boot and replaceGraph) so the button tracks the data.
+// Recomputes what the graph can currently answer. The VIEWS no longer read this from the DOM - the
+// builder asks viewUnavailable() at open time - but graphHasDurations is shared state, and the
+// color presets are still chips in the sidebar.
 function syncConditionalViews() {
   graphHasDurations = !!graph && graph.nodes.some((n) => nodeDurationMs(n) > 0);
-  document.querySelectorAll<HTMLElement>("[data-view='critical']").forEach((btn) => {
-    btn.toggleAttribute("data-conditional", !graphHasDurations);
+  // The "Color by duration" preset needs timing for the same reason the critical-path view does.
+  // The attribute rides the toggle-group ITEM, not the button inside it: hiding only the button
+  // leaves an empty cell holding the group's :last-child end cap, so the row renders squared off
+  // mid-air with the rounding on a cell nobody can see.
+  document.querySelectorAll<HTMLElement>("[data-preset-item='duration']").forEach((item) => {
+    item.toggleAttribute("data-conditional", !graphHasDurations);
   });
-  // The "Color by duration" preset shares the same conditional as the
-  // critical-path view: both need timing data to mean anything. It is a PF
-  // button, not a `.console-graph-views__chip`, so graph.css has no
-  // `[data-conditional]` display rule for it - set `hidden` directly (the
-  // global `[hidden] { display: none !important; }` override covers it),
-  // keeping `data-conditional` too as the same semantic marker the chip uses.
-  document.querySelectorAll<HTMLElement>("[data-preset='duration']").forEach((btn) => {
-    btn.toggleAttribute("data-conditional", !graphHasDurations);
-    btn.hidden = !graphHasDurations;
-  });
-  // The "What runs in parallel?" chip only makes sense for target graphs.
-  document.querySelectorAll<HTMLElement>("[data-layoutjump]").forEach((btn) => {
-    btn.hidden = graphFlavor !== "targets";
-  });
+  syncAffectedView();
+}
+
+// Retires the affected view if its set goes away underneath it - a live refresh can empty the diff
+// while the view is on screen, and it would otherwise keep highlighting a set that no longer exists.
+// Whether the view is OFFERED is the builder's question (viewUnavailable), asked when it opens.
+function syncAffectedView() {
+  if (!window._liveAffectedIds?.size && activeView === "affected") clearView();
 }
 
 // ---- color groups ----------------------------------------------------------
@@ -1828,7 +2480,11 @@ function termMatches(node: GNode, term: QueryTerm) {
         node.id === "project:" + v ||
         (node.kind === "target" && node.id.toLowerCase().startsWith("target:" + v + ":")) ||
         (node.attrs && (node.attrs.project || "").toLowerCase() === v) ||
-        node.id.toLowerCase() === v;
+        node.id.toLowerCase() === v ||
+        // Everything the project CONTAINS, transitively - its dirs, docs, files and the
+        // functions inside them. The id comparisons above only ever reach the project node
+        // and its targets.
+        (projectOwners().get(node.id) ?? "").toLowerCase() === "project:" + v;
       break;
     case "relation": {
       // relIndex is always built by the callers that run relation queries; treat an
@@ -1855,6 +2511,248 @@ function termMatches(node: GNode, term: QueryTerm) {
   return term.negated ? !hit : hit;
 }
 
+// serverScores is the rank the daemon gave each id for the CURRENT query, when a daemon
+// answered. Null offline, before the first answer, and whenever the query moves on - so the
+// list falls back to degree rather than ranking by a previous question's scores.
+let serverScores: Map<string, number> | null = null;
+
+// viewGeneration invalidates every in-flight refinement. ONE counter, bumped by everything that
+// reassigns matchSet - applyQuery, activateView, clearView, focusNode, unfoldProjection - because
+// the question on screen is what a refinement is answering, and any of those can change it.
+// Two counters (one for queries, one for views) left the cross case unguarded in both directions.
+let viewGeneration = 0;
+
+// graphClient is the typed GraphService client, or null when there is nothing to ask. Every verb
+// below is live-only and knowledge-only: a snapshot or the demo is not the daemon's graph even
+// when a daemon happens to be running, and GraphService answers about the knowledge graph rather
+// than the target graph - refining either against it would filter the canvas by a query run over
+// a different graph entirely.
+function graphClient() {
+  if (!liveHost || !liveToken || graphFlavor === "targets") return null;
+  return createClient(GraphService, createDaemonTransport(liveHost, liveToken));
+}
+
+// rpcOptions carries the surface's lifecycle signal into every RPC, so a request is CANCELLED
+// rather than merely ignored. The generation counters below discard a stale ANSWER; without this
+// the request itself still runs to completion on the daemon - one full graph query per keystroke,
+// computed for a result nobody reads - and lands on a surface deactivate() has torn down.
+function rpcOptions() {
+  return lifecycleAbort ? { signal: lifecycleAbort.signal } : undefined;
+}
+
+// answerStillWanted reports whether a refinement's answer is still the answer to the question on
+// screen. ONE check for all four refiners, because the failure they share is subtle: each was
+// guarded only by its own counter, and nothing else that reassigns matchSet - activateView,
+// clearView, focusNode, unfoldProjection - bumped either one. Typing a query and then clicking a
+// view chip inside the round trip left the query's answer overwriting the view's match set while
+// the chip stayed lit and the result line described the view: a canvas contradicting every label
+// around it.
+//
+// graphEpoch covers the other direction. The entry guards run BEFORE the await, so a switch to
+// the target graph mid-flight passed a check that was true when it was made and false by the time
+// the answer applied.
+function answerStillWanted(gen: number, epoch: number): boolean {
+  return gen === viewGeneration && epoch === graphEpoch;
+}
+
+// graphEpoch increments whenever the LOADED GRAPH is replaced (flavor switch, dropped file, live
+// refresh), so an in-flight answer about the previous graph cannot be applied to this one.
+let graphEpoch = 0;
+
+// refineBlastFromServer replaces the rebuild set with the daemon's, over the whole graph.
+//
+// It asks FindDependents, NOT ExplainNode. NodeContext.blast_radius is a different question
+// wearing a similar name - it counts everything reaching a node by ANY relation - so subtracting
+// the two numbers produces a difference that is not an undercount and means nothing. Measured on
+// spell:go: blast_radius 270, dependents 0, and the 0 is the correct answer to what the chip
+// asks, because a target USES a spell and never depends_on one.
+//
+// Same constraint as the traced path: ids the canvas was never sent cannot be lit up, so they are
+// reported rather than silently dropped from the count.
+// Why the last FindAffected could not answer definitively. Kept because "no affected set" then has
+// two causes the view must not conflate.
+let affectedFallback = "";
+
+// Re-asked on every live graph load rather than fetched once: the diff moves with the tree, not the
+// graph. Failure is silent - the view is supplementary, and a banner would talk over the reader.
+async function refreshAffectedFromServer() {
+  const client = graphClient();
+  if (!client) return;
+  const epoch = graphEpoch;
+  try {
+    const res = await client.findAffected({}, rpcOptions());
+    if (epoch !== graphEpoch) return;
+    affectedFallback = res.fallback;
+    // The daemon answers about the workspace; a projection may have collapsed some of it away.
+    const present = res.ids.filter((id) => graph.byId.has(id));
+    window._liveAffectedIds = present.length ? new Set(present) : undefined;
+    syncAffectedView();
+    // A chip click or a #view=affected link can land before the diff does, and activateView
+    // refuses the view while no set exists - so neither took effect the first time.
+    if (activeView === "affected" || hashParams().view === "affected") activateView("affected");
+  } catch {
+    /* network error; the chip keeps whatever it had */
+  }
+}
+
+async function refineBlastFromServer(nodeId: string, gen: number) {
+  const client = graphClient();
+  if (!client) return;
+  const epoch = graphEpoch;
+  try {
+    const res = await client.findDependents({ name: nodeId }, rpcOptions());
+    if (!answerStillWanted(gen, epoch) || activeView !== "blast") return;
+    const present = res.ids.filter((id) => graph.byId.has(id));
+    const offCanvas = res.ids.length - present.length;
+    matchSet = new Set([res.node, ...present]);
+    const label = graph.byId.get(res.node)?.label ?? res.node;
+    setStatus(
+      res.ids.length === 0
+        ? "Nothing depends on " + label + ", so nothing rebuilds when it changes."
+        : res.ids.length +
+            (res.ids.length === 1 ? " node rebuilds" : " nodes rebuild") +
+            " if you change " +
+            label +
+            (offCanvas ? "; " + offCanvas + " of them are not in this graph." : "."),
+    );
+    renderList();
+    syncOverview();
+    draw();
+  } catch {
+    // Local answer stands, which is the offline behavior and already on screen.
+  }
+}
+// refineTraceFromServer replaces the traced path with the daemon's.
+//
+// The local walk follows depends_on only, over the loaded payload; the daemon walks every
+// relation over the whole graph, so it finds chains the browser cannot and reports the relation
+// per hop. The server's answer is only USABLE here when every node on it is loaded - the canvas
+// cannot light up what it was never sent - so a path through an absent node is reported rather
+// than drawn.
+async function refineTraceFromServer(from: string, to: string, gen: number) {
+  const client = graphClient();
+  if (!client) return;
+  const epoch = graphEpoch;
+  try {
+    const res = await client.findPath({ from, to }, rpcOptions());
+    if (!answerStillWanted(gen, epoch) || activeView !== "trace") return;
+    if (!res.found) return; // the local walk already said so, in the operator's own words
+    const ids = [res.from, ...res.steps.map((s) => s.to)];
+    const missing = ids.filter((id) => !graph.byId.has(id));
+    if (missing.length) {
+      setStatus(
+        "The workspace has a " +
+          res.steps.length +
+          "-step path, through " +
+          missing.length +
+          (missing.length === 1 ? " node" : " nodes") +
+          " this graph does not carry. Showing the local one.",
+      );
+      return;
+    }
+    matchSet = new Set(ids);
+    setStatus(
+      "Path (" +
+        res.steps.length +
+        " steps): " +
+        res.steps
+          .map((s) => s.relation + " -> " + (graph.byId.get(s.to)?.label ?? s.to))
+          .join(", "),
+    );
+    renderList();
+    syncOverview(); // the match set just changed under the panel that reports its size
+    draw();
+  } catch {
+    // Local answer stands.
+  }
+}
+
+// suggestNodes fills the query box's completion list from the daemon's ranked candidates. It runs
+// on the SAME debounce as the query itself and shares its generation, so a stale answer cannot
+// repopulate the list under a newer prefix.
+//
+// A fielded term (kind:, project:, relation:) is left alone: ResolveNodes ranks NODE references,
+// so completing "kind:spe" against node ids would offer nonsense.
+async function suggestNodes(prefix: string, gen: number) {
+  const list = el("node-suggestions");
+  if (!list) return;
+  const client = graphClient();
+  if (!client || prefix.length < 2 || prefix.includes(":")) {
+    list.innerHTML = "";
+    return;
+  }
+  const epoch = graphEpoch;
+  try {
+    const res = await client.resolveNodes({ reference: prefix, limit: 8 }, rpcOptions());
+    if (!answerStillWanted(gen, epoch)) return;
+    list.innerHTML = res.matches
+      .map((m) => '<option value="' + escapeHtml(m.id) + '">' + escapeHtml(m.label) + "</option>")
+      .join("");
+  } catch {
+    list.innerHTML = "";
+  }
+}
+
+// refineQueryFromServer replaces the locally-computed match set with the daemon's, which is the
+// actual magus query grammar rather than the partial reimplementation matchSetFor carries.
+//
+// The local pass still runs FIRST and is what the operator sees while typing: a round trip per
+// keystroke would make the box feel broken, and the local answer approximates the server's well
+// enough to type against. This supersedes it when it lands.
+async function refineQueryFromServer(q: string, gen: number) {
+  const client = graphClient();
+  if (!client) return;
+  const epoch = graphEpoch;
+  try {
+    const res = await client.queryNodes({ query: q }, rpcOptions());
+    // Also require that a VIEW has not taken over the canvas since. answerStillWanted covers the
+    // counter and the graph; this covers "the operator asked a different KIND of question".
+    if (!answerStillWanted(gen, epoch) || activeView || focusId) return;
+    // The daemon searches the WHOLE graph; the canvas holds what it was sent. Symbols in
+    // particular are excluded from the browser's payload, so a symbol query can match on the
+    // server and have nothing to light up here. Intersect, then say what was left out - a
+    // silently smaller match count is the same lie the old local-only filter told.
+    const present = res.matches.filter((m) => graph.byId.has(m.id));
+    matchSet = new Set(present.map((m) => m.id));
+    serverScores = new Map(present.map((m) => [m.id, m.score]));
+    // matchCount, not matches.length. The proto carries both BECAUSE matches is a page, and the
+    // two coincide only while page_size is unset - the moment anyone pages this, subtracting the
+    // page size from the total would report a confident wrong number.
+    const offCanvas = res.matchCount - present.length;
+    const verdict = res.answer?.verdict ?? "";
+    const notes: string[] = [];
+    if (offCanvas > 0) notes.push(offCanvas + " more matched but are not in this graph");
+    if (verdict === "unknown") notes.push("coverage unknown (" + (res.answer?.reason ?? "") + ")");
+    if (notes.length)
+      setStatus(matchSet.size + " shown; " + notes.join("; "), verdict === "unknown");
+    setListExpanded(true);
+    renderList();
+    syncLayoutToggle();
+    syncOverview(); // the match set just changed under the panel that reports its size
+    draw();
+  } catch {
+    // A refinement that cannot reach the daemon leaves the local answer standing, which is
+    // the offline behavior and already on screen. Nothing to report.
+  }
+}
+
+// matchSetFor resolves a query string to the set of ids it matches, or null when the query
+// is empty. null means NO FILTER, which is not the same as a filter that matched nothing.
+//
+// This is a REIMPLEMENTATION of the magus query grammar, and a partial one. It stays because
+// the explorer runs with no daemon on every static path - the demo, a #data= snapshot, the
+// docs site - where there is nothing to ask. refineQueryFromServer supersedes it in live mode.
+function matchSetFor(q: string): Set<string> | null {
+  const terms = q ? parseQuery(q) : [];
+  if (!terms.length) return null;
+  if (!graph.relIndex) graph.relIndex = relationIndex();
+  const out = new Set<string>();
+  for (const n of graph.nodes) {
+    if (terms.every((t) => termMatches(n, t))) out.add(n.id);
+  }
+  return out;
+}
+
 function applyQuery(q: string) {
   focusId = null; // typing a query exits focus/lens/view mode
   pendingRadialPick = false;
@@ -1878,20 +2776,45 @@ function applyQuery(q: string) {
     flowOn = false;
   }
   query = q.trim();
-  const terms = query ? parseQuery(query) : [];
-  if (!terms.length) {
-    matchSet = null;
-  } else {
-    if (!graph.relIndex) graph.relIndex = relationIndex();
-    matchSet = new Set();
-    for (const n of graph.nodes) {
-      if (terms.every((t) => termMatches(n, t))) matchSet.add(n.id);
-    }
-    setListExpanded(true); // a query reveals its matches
-  }
+  matchSet = matchSetFor(query);
+  serverScores = null;
+  const gen = ++viewGeneration;
+  if (query) void refineQueryFromServer(query, gen);
+  void suggestNodes(query, gen);
+  if (matchSet) setListExpanded(true); // a query reveals its matches
   renderList();
   updateHash();
   syncLayoutToggle(); // availability tracks matchSet size
+  syncOverview();
+  // Radial owns placement: it pins its ego rings and parks everything else off-canvas. Left
+  // alone it would report matches sitting a million units off the canvas as visible, so the
+  // filter narrows to the matches radial actually PLACED. Re-placing over the whole graph
+  // first (matchSet cleared) rather than over the matches keeps the rings meaningful - the
+  // paths between matches run through nodes the filter excludes, and a BFS restricted to the
+  // matches alone would reach almost none of them.
+  if (layoutMode === "radial") {
+    const matches = matchSet;
+    matchSet = null;
+    const placed = applyRadialMode(); // re-places over the full graph, and leaves it in matchSet
+    if (matches && placed) {
+      matchSet = new Set([...matches].filter((id) => placed.has(id)));
+      const unreachable = matches.size - matchSet.size;
+      const centerNode = radialCenter ? graph.byId.get(radialCenter) : null;
+      setStatus(
+        matchSet.size +
+          " match" +
+          (matchSet.size === 1 ? "" : "es") +
+          " within " +
+          RADIAL_MAX_RINGS +
+          " hops of " +
+          (centerNode ? centerNode.label : radialCenter) +
+          (unreachable ? "; " + unreachable + " further out" : ""),
+      );
+      renderList();
+      fitView(matchSet);
+    }
+    return;
+  }
   // Re-run the dag layout (layered or waves) on the new visible subset.
   if (isDagMode()) {
     // Clear prior layout-reversed flags so cycle-break reruns cleanly.
@@ -1904,11 +2827,7 @@ function applyQuery(q: string) {
       layoutMode = "force";
       wavesMeta = null;
       syncLayoutToggle();
-      // Clear pinned positions so the force sim can move all nodes.
-      for (const n of graph.nodes) {
-        n.fx = null;
-        n.fy = null;
-      }
+      unpinAllNodes();
       if (sim) sim?.alpha(0.3).restart();
     }
     return;
@@ -1919,34 +2838,43 @@ function applyQuery(q: string) {
 // The node cloud is collapsed by default (canvas-first on load); a query, or the
 // count toggle, reveals it.
 let listExpanded = false;
-// Mobile only (graph.css scopes #node-list's position:fixed to the same breakpoint): the node
-// cloud overlays the canvas instead of pushing it down in-flow, since the stacked sidebar has
-// no headroom to push into without shoving the canvas off-screen. Desktop's #node-list keeps
-// its plain in-flow disclosure, so this query gates the JS half of that split.
-const mobileListQuery = matchMedia("(max-width: 900px)");
-let overlayResizeWired = false; // guards the resize listener in bootWireEvents against a second wiring
-// Places the fixed-position node-list panel directly under #list-toggle, clamped into the
-// viewport - the same placement idiom as help-popover.ts's place(). Re-run on open and on
-// resize/orientation change so a rotated phone doesn't leave the panel stranded.
-function positionNodeListOverlay() {
-  if (!mobileListQuery.matches) return;
-  const btn = el("list-toggle");
-  if (!btn) return;
-  const r = btn.getBoundingClientRect();
-  const margin = 8;
-  const w = listEl.getBoundingClientRect().width || 320;
-  let left = r.left;
-  if (left + w > window.innerWidth - margin) left = window.innerWidth - margin - w;
-  if (left < margin) left = margin;
-  listEl.style.left = left + "px";
-  listEl.style.top = r.bottom + 6 + "px";
-}
 function setListExpanded(v: boolean) {
+  const changed = listExpanded !== v;
   listExpanded = v;
   listEl.hidden = !v;
   const btn = el("list-toggle");
   if (btn) btn.setAttribute("aria-expanded", v ? "true" : "false");
-  if (v) positionNodeListOverlay();
+  // The toggle's own label reads "Show/Hide the N matching nodes" under a scope, so it has to be
+  // repainted when the disclosure flips. Only when it actually flipped: applyQuery expands and
+  // then renders on its own, so an unguarded repaint here would render the list twice for every
+  // keystroke that lands on an already-expanded list.
+  if (changed && graph) renderList();
+}
+
+// Cached per graph like adjacency(): the hubs ranking reads it once per node.
+function depDegrees() {
+  if (!graph.depDegrees) graph.depDegrees = dependencyDegrees(graph.nodes, graph.links);
+  return graph.depDegrees;
+}
+
+// rowMetric is the number the ACTIVE VIEW ranked by, when it ranked by one. A list that is
+// ordered but never says by what asks the reader to take the order on trust; worse, the fallback
+// order is raw degree, which is not what either of these views sorted on.
+function rowMetric(): { sort: (n: GNode) => number; text: (n: GNode) => string } | null {
+  if (activeView === "hubs") {
+    const deg = depDegrees();
+    return {
+      sort: (n) => deg.get(n.id)?.dependents ?? 0,
+      text: (n) => {
+        const d = deg.get(n.id)?.dependents ?? 0;
+        return d + (d === 1 ? " dependent" : " dependents");
+      },
+    };
+  }
+  if (activeView === "critical" && graphHasDurations) {
+    return { sort: (n) => nodeDurationMs(n), text: (n) => formatDuration(nodeDurationMs(n)) };
+  }
+  return null;
 }
 
 // The node list is the accessible twin of the canvas: it always reflects the
@@ -1954,10 +2882,30 @@ function setListExpanded(v: boolean) {
 function renderList() {
   const ms = matchSet;
   const pool = ms ? graph.nodes.filter((n) => ms.has(n.id)) : graph.nodes.slice();
-  pool.sort((a, b) => b.degree - a.degree || a.label.localeCompare(b.label));
+  const metric = rowMetric();
+  const scores = serverScores;
+  if (metric) {
+    pool.sort((a, b) => metric.sort(b) - metric.sort(a) || a.label.localeCompare(b.label));
+  } else if (scores) {
+    // The daemon's own relevance ranking, which is what `magus query` orders by. Degree below
+    // is the offline stand-in: it ranks the best-connected node first whether or not it has
+    // anything to do with what was typed.
+    pool.sort(
+      (a, b) => (scores.get(b.id) ?? 0) - (scores.get(a.id) ?? 0) || a.label.localeCompare(b.label),
+    );
+  } else {
+    pool.sort((a, b) => b.degree - a.degree || a.label.localeCompare(b.label));
+  }
   const shown = pool.slice(0, 300);
+  // The scope bar carries "N of TOTAL" whenever anything is applied, so this row drops the number
+  // then and states its own job instead - two counts within a few hundred pixels read as a
+  // disagreement waiting to happen.
   countEl.textContent = matchSet
-    ? matchSet.size + " match" + (matchSet.size === 1 ? "" : "es")
+    ? (listExpanded ? "Hide" : "Show") +
+      " the " +
+      matchSet.size +
+      " matching node" +
+      (matchSet.size === 1 ? "" : "s")
     : graph.nodes.length +
       " node" +
       (graph.nodes.length === 1 ? "" : "s") +
@@ -1994,6 +2942,9 @@ function renderList() {
         '<span class="console-graph-nodelist__label">' +
         escapeHtml(n.label) +
         "</span>" +
+        (metric
+          ? '<span class="console-graph-nodelist__metric">' + escapeHtml(metric.text(n)) + "</span>"
+          : "") +
         "</button></li>",
     )
     .join("");
@@ -2019,12 +2970,93 @@ function syncListSelection() {
   });
 }
 
+// legendKinds lists the kinds actually present, KINDS order first and anything else after it,
+// alphabetically. Filtering to KINDS alone silently dropped every kind the graph carries that
+// this list predates - `dir`, `package`, `tool` and `note` in magus's own graph - so the legend
+// claimed to enumerate node kinds while its counts did not add up to the node total. An unknown
+// kind has no --gk-<kind>, and both the dot and the canvas already fall back to grey.
+function legendKinds(counts: Map<string, number>): string[] {
+  const known = KINDS.filter((k) => counts.has(k));
+  const rest = [...counts.keys()].filter((k) => !KINDS.includes(k)).sort();
+  return [...known, ...rest];
+}
+
+// legendTitleEl is the legend's heading. It names what the SWATCHES mean, which stops being
+// "node kinds" the moment a color preset repaints the canvas by something else.
+function setLegendTitle(text: string) {
+  const t = document.querySelector<HTMLElement>(".console-graph-legend__title");
+  if (t) t.textContent = text;
+  if (legendEl) legendEl.setAttribute("aria-label", text);
+}
+
+// renderGroupLegend lists the ACTIVE color grouping - one row per project, spell or depth band
+// with the hue it was given. A color preset repaints every node, and the kind legend beside it
+// then describes a palette that is no longer on the canvas: the one panel whose whole job is to
+// say what the colors mean is the one saying something false. Rows are not clickable here, and
+// deliberately: a kind row filters to kind:<k>, but these groups already ARE the whole graph
+// partitioned, so "filter to this group" is the query box's job, not a legend click.
+function renderGroupLegend(preset: string) {
+  const counts = new Array<number>(groups.length).fill(0);
+  for (const n of graph.nodes) {
+    for (let i = 0; i < groups.length; i++) {
+      const g = groups[i];
+      const hit = g.nodeSet
+        ? g.nodeSet.has(n.id)
+        : g.terms.length > 0 && g.terms.every((t) => termMatches(n, t));
+      if (hit) {
+        counts[i]++;
+        break; // first match wins, exactly as groupColorFor resolves it
+      }
+    }
+  }
+  setLegendTitle(GROUP_LEGEND_TITLES[preset] ?? "Color groups");
+  legendEl.innerHTML = groups
+    .map((g, i) =>
+      counts[i] === 0
+        ? ""
+        : '<li><span class="console-graph-legend__row" role="presentation">' +
+          '<span class="console-graph-kinddot" style="background:' +
+          escapeHtml(g.color) +
+          '"></span>' +
+          escapeHtml(groupLabel(g.query)) +
+          ' <span class="console-graph-legend__count">' +
+          counts[i] +
+          "</span></span></li>",
+    )
+    .join("");
+}
+
+// The legend heading for each preset: what one swatch MEANS, in the reader's terms.
+const GROUP_LEGEND_TITLES: Record<string, string> = {
+  project: "Projects",
+  spell: "Spells (toolchain)",
+  depth: "Dependency depth",
+  duration: "Run duration",
+};
+
+// groupLabel strips the field prefix a group's query carries ("project:console" -> "console"),
+// because the heading above already says which field this is. `layer:N` reads as "depth N": the
+// number is a position in the dependency chain, and the bare integer says nothing.
+function groupLabel(q: string): string {
+  const i = q.indexOf(":");
+  if (i < 0) return q;
+  const field = q.slice(0, i);
+  const value = q.slice(i + 1);
+  return field === "layer" ? "depth " + value : value;
+}
+
 function renderLegend() {
-  const counts = new Map();
+  const counts = new Map<string, number>();
   for (const n of graph.nodes) counts.set(n.kind, (counts.get(n.kind) || 0) + 1);
+  syncKindList(counts);
+  if (activePreset && groups.length) {
+    renderGroupLegend(activePreset);
+    return;
+  }
+  setLegendTitle("Node kinds");
   // Each legend row is a button that filters to kind:<k> (the CLI query it maps to),
   // so clicking a color isolates that kind - a quick, Obsidian-style filter.
-  legendEl.innerHTML = KINDS.filter((k) => counts.has(k))
+  legendEl.innerHTML = legendKinds(counts)
     .map(
       (k) =>
         '<li><button type="button" class="console-graph-legend__row" data-kind="' +
@@ -2052,15 +3084,162 @@ function renderLegend() {
   );
 }
 
+// ---- scope bar ---------------------------------------------------------------
+// One row naming every emphasis in effect. A query, a view, a local-graph focus, the default
+// projection and a color preset can all be applied at once; before this the operator inferred
+// that from five widgets that never referred to each other.
+//
+// It RENDERS the live state rather than owning it - each pill delegates to the same clear path
+// the rest of the code uses. Making it the single source of truth is the separate refactor that
+// wants the graph contract first.
+interface ScopePill {
+  label: string;
+  title: string;
+  clear: () => void;
+}
+
+// termText renders a parsed term back to the grammar. parseQuery lowercases values and drops the
+// original spans, so this is a normalized form, not the operator's literal keystrokes - which is
+// also what makes a pill removable: the remaining terms re-serialize into a valid query.
+function termText(t: QueryTerm): string {
+  const value = /\s/.test(t.value) ? '"' + t.value + '"' : t.value;
+  return (t.negated ? "-" : "") + (t.field ? t.field + ":" : "") + value;
+}
+
+function labelFor(id: string): string {
+  return graph?.byId.get(id)?.label ?? id;
+}
+
+function scopePills(): ScopePill[] {
+  const pills: ScopePill[] = [];
+  const terms = query ? parseQuery(query) : [];
+  terms.forEach((t, i) => {
+    pills.push({
+      label: termText(t),
+      title: "Remove this term",
+      clear: () => {
+        const rest = terms
+          .filter((_, j) => j !== i)
+          .map(termText)
+          .join(" ");
+        searchEl.value = rest;
+        applyQuery(rest);
+      },
+    });
+  });
+  if (activeView) {
+    const subject = viewNodeTo
+      ? labelFor(viewNode ?? "") + " to " + labelFor(viewNodeTo)
+      : viewNode
+        ? labelFor(viewNode)
+        : "";
+    pills.push({
+      label: subject ? activeView + ": " + subject : activeView,
+      title: "Clear this view",
+      clear: clearView,
+    });
+  }
+  if (focusId) {
+    pills.push({
+      label:
+        "around " + labelFor(focusId) + ", " + focusDepth + (focusDepth === 1 ? " hop" : " hops"),
+      title: "Leave the local graph",
+      clear: clearFocus,
+    });
+  }
+  if (!projectionUnfolded && projectionSet) {
+    pills.push({
+      label: "projects only",
+      title: "Show the full graph",
+      clear: unfoldProjection,
+    });
+  }
+  if (activePreset) {
+    const preset = activePreset;
+    pills.push({
+      // The preset labels read "Color by project"; the pill already says color, so drop the prefix.
+      label:
+        "color: " +
+        (COLOR_PRESETS.find((p) => p.id === preset)?.label ?? preset).replace(/^Color by /, ""),
+      title: "Clear the color preset",
+      clear: () => applyPreset(preset),
+    });
+  }
+  return pills;
+}
+
+// clearFocus leaves the local graph WITHOUT taking the query with it - clearFocusOrQuery clears
+// both, which is right for Esc and wrong for a pill that names only the focus.
+function clearFocus() {
+  focusId = null;
+  matchSet = matchSetFor(query);
+  setStatus("");
+  renderList();
+  updateHash();
+  if (isDagMode()) reapplyDagLayout();
+  draw();
+}
+
+// renderScope repaints the bar. `previewCount` is the count for a query the operator is still
+// typing, which has not been applied yet - shown immediately so the field answers every
+// keystroke instead of waiting out the debounce.
+function renderScope(previewCount?: number) {
+  const bar = el("scope-bar");
+  const pillsEl = el("scope-pills");
+  const countEl = el("scope-count");
+  if (!bar || !pillsEl || !countEl) return;
+  const pills = graph ? scopePills() : [];
+  const typing = previewCount !== undefined;
+  if (!pills.length && !typing) {
+    bar.hidden = true;
+    return;
+  }
+  bar.hidden = false;
+  pillsEl.replaceChildren();
+  for (const p of pills) {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "console-graph-scope__pill";
+    b.textContent = p.label;
+    b.title = p.title;
+    b.addEventListener("click", p.clear);
+    pillsEl.append(b);
+  }
+  const total = graph?.nodes.length ?? 0;
+  const shown = typing ? previewCount : (matchSet?.size ?? total);
+  countEl.textContent =
+    shown + " of " + total + (typing ? " would match" : shown === total ? " shown" : " shown");
+}
+
 // Reflect selection, query, layout mode, active view, and color preset in the
 // hash WITHOUT clobbering a #data= fragment (round-tripping the whole graph
 // through history on every click would break the private-data contract).
 let suppressHash = false;
+
+// Fragment keys that name the GRAPH rather than the view: updateHash copies these through
+// rather than rewriting them. `data` is absent on purpose - it bails out of updateHash entirely.
+const SOURCE_HASH_KEYS = ["src", "port", "demo", "flavor"];
+
 function updateHash() {
+  renderScope(); // called wherever the applied state changes, which is what the bar reflects
   if (suppressHash) return;
   const params = hashParams();
-  if (params.data || params.src || params.port !== undefined) return; // keep fragment data/loopback/attach links intact
+  // #data= carries the whole gzipped graph. Rewriting a six-figure fragment through
+  // history.replaceState on every hover and click is not worth the shareability, so that one
+  // transport keeps its link untouched and its view state stays local.
+  if (params.data) return;
+  // The fragment carries two kinds of key and updateHash owns only one of them. SOURCE keys
+  // say which graph is loaded (where it came from, which flavor, whether this is the demo);
+  // they belong to whoever wrote the link and are copied through untouched. VIEW keys say what
+  // is being looked at, and are rewritten from live state below. Dropping the source keys is
+  // what left a `magus graph export --open --serve` session unable to share the view it was
+  // showing, and a reload of the demo landing on the empty state.
   const parts = [];
+  for (const key of SOURCE_HASH_KEYS) {
+    const v = params[key];
+    if (v === undefined) continue;
+    parts.push(v === "" ? key : key + "=" + encodeURIComponent(v));
+  }
   if (activeView) {
     parts.push("view=" + encodeURIComponent(activeView));
     if (viewNode) parts.push("node=" + encodeURIComponent(viewNode));
@@ -2078,20 +3257,26 @@ function updateHash() {
   if (location.hash !== next) history.replaceState(null, "", next);
 }
 
+// applyDeepLinks restores everything updateHash serializes. The two must stay symmetric: a
+// key written but not read back makes a shared link a lie about what the sender was looking at.
 function applyDeepLinks() {
   const params = hashParams();
   // Restore view state: #view=<id>&node=<id>[&to=<id>]
+  // "affected" is absent on purpose: its set arrives after this runs, so activating it here would
+  // hit activateView's "no diff" refusal. refreshAffectedFromServer re-reads the fragment instead.
   const validViews = ["blast", "trace", "critical", "hubs", "orphans", "cycles"];
-  if (params.view && validViews.includes(params.view)) {
+  const view = params.view && validViews.includes(params.view) ? params.view : null;
+  if (view) {
     projectionUnfolded = true; // views show the full graph
-    activateView(params.view, params.node || null, params.to || null);
-    return; // view takes precedence over q/node
+    activateView(view, params.node || null, params.to || null);
+  } else {
+    // q/node only apply when no view claimed them: a view owns #node= as its subject.
+    if (params.q) {
+      searchEl.value = params.q;
+      applyQuery(params.q);
+    }
+    if (params.node && graph.byId.has(params.node)) selectNode(params.node, true);
   }
-  if (params.q) {
-    searchEl.value = params.q;
-    applyQuery(params.q);
-  }
-  if (params.node && graph.byId.has(params.node)) selectNode(params.node, true);
   // Restore layout mode from the fragment (#layout=force|layered|waves|radial).
   // Only switch when the value is valid and differs from the current mode.
   // radial additionally requires a #node= that resolved above (selectNode sets
@@ -2102,6 +3287,7 @@ function applyDeepLinks() {
     if (params.layout === "radial" && !selected) {
       setStatus("radial needs a #node= to center on; showing the default layout instead.");
     } else if (params.layout !== layoutMode) {
+      layoutPickedByHand = true; // a mode named in the link is the sender's deliberate choice
       switchLayout(params.layout);
     }
   }
@@ -2115,13 +3301,15 @@ function applyDeepLinks() {
 // Swap in a graph loaded from a local file (the Open-file button and drag-drop
 // share this). Resets view state and restarts the layout.
 function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string) {
+  graphEpoch++; // a different graph; in-flight answers about the old one no longer apply
+  // A dropped file IS the provenance now. Without this the overview kept reporting whatever
+  // loaded at boot - open the demo, drag your own graph.json onto the canvas, and the panel still
+  // said "the committed demo export of the magus repo, not your workspace", which is the exact
+  // confusion it exists to prevent.
+  graphSource = "local";
   // A locally opened/dropped file supersedes whatever provenance badge was
   // showing for the graph that loaded at boot.
   updateSnapshotBadge(null);
-  // A graph is now loaded, so the "Ask" panel (a <details> collapsed while nothing is
-  // loaded) is worth opening - the questions operate on the loaded graph.
-  const askPanel = el("ask-panel") as HTMLDetailsElement | null;
-  if (askPanel) askPanel.open = true;
   // Detect and adapt flavor before prepareGraph, same as boot(). The knowledge
   // path is unchanged; the targets path is converted client-side.
   graphFlavor = flavorOf(data);
@@ -2152,6 +3340,7 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   }
   selected = null;
   hoverId = null;
+  hoverPinned = null; // the pinned node belonged to the graph being replaced
   focusId = null;
   matchSet = null;
   radialCenter = null;
@@ -2176,13 +3365,10 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
     .querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset")
     .forEach((b) => b.removeAttribute("data-active"));
   renderViewCommand(null, null, null);
-  // Apply projection: show only projects by default if the count is small.
-  const ps = buildProjectionSet();
-  if (ps) {
-    projectionUnfolded = false;
-    projectionSet = ps;
-    matchSet = new Set(ps);
-  } else projectionUnfolded = true;
+  // Same scale-guard decision boot() makes, through the same function: a second collapse rule
+  // here would make one file read differently depending on how it was opened. A dropped file
+  // carries no fragment directive - it supersedes whatever the URL said.
+  computeDefaultProjection(false);
   const ub = el("projection-unfold-btn");
   if (ub) ub.hidden = projectionUnfolded;
   renderCard(null);
@@ -2207,6 +3393,7 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
         ? "layered"
         : "force";
   layoutMode = requestedLayout;
+  layoutPickedByHand = false; // a fresh graph resets to its flavor default; so does the override
   if (layoutMode === "radial") selected = fragParams.node;
   wavesMeta = null;
   syncLayoutToggle();
@@ -2228,24 +3415,15 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   } else {
     startSimulation();
   }
-  // Park hidden nodes after the sim is built (projection reduces the visible set).
-  if (!projectionUnfolded && projectionSet) {
-    for (const n of graph.nodes) {
-      if (!projectionSet.has(n.id)) {
-        n.fx = -1e6;
-        n.fy = -1e6;
-        n.x = -1e6;
-        n.y = -1e6;
-      }
-    }
-  }
+  parkHiddenNodes(); // after the sim is built: the projection reduces the visible set
   draw();
+  revealWholeGraph();
   syncGraphKindToggle();
 }
 
 // syncLayoutToggle updates the layout toggle group's selected state, each mode
-// button's disabled/title (from layoutBlockedReason), the force sliders'
-// visibility, and the bottom-left stage mode indicator to match the current
+// button's disabled/title (from layoutBlockedReason), and the bottom-left stage
+// mode indicator to match the current
 // layoutMode WITHOUT switching the mode (used after loading a new graph where
 // the mode is set directly, and called from selectNode/applyQuery so
 // availability tracks state as it changes).
@@ -2253,13 +3431,35 @@ function syncLayoutToggle() {
   document.querySelectorAll<HTMLButtonElement>("[data-layout]").forEach((btn) => {
     const mode = btn.dataset.layout;
     if (!mode || !isLayoutMode(mode)) return;
-    btn.classList.toggle("pf-m-selected", mode === layoutMode);
+    const current = mode === layoutMode;
+    btn.classList.toggle("pf-m-selected", current);
     const reason = layoutBlockedReason(mode);
-    btn.disabled = !!reason;
+    // Never disable the mode that is showing. layoutBlockedReason reads matchSet.size, so a
+    // filter widening under a running Layered/Waves layout can block the very mode drawing the
+    // canvas; rendering it selected AND disabled says the operator both is and cannot be here.
+    // The reason still reaches them through the title.
+    btn.disabled = !!reason && !current;
     btn.title = reason ?? LAYOUT_TITLES[mode] ?? "";
   });
-  const forceControls = document.querySelector<HTMLElement>(".console-graph-display__forces");
-  if (forceControls) forceControls.hidden = layoutMode !== "force";
+  // Say WHY on the surface, not only on hover - the same reason the graph switch carries a note.
+  // Three of the four arrangements are disabled on a workspace-sized graph with nothing selected,
+  // which is the state the surface opens in, and a dead button whose explanation lives in a
+  // tooltip reads as broken rather than as conditional.
+  //
+  // DISTINCT reasons, not the first one: layered and waves share the node cap but radial has its
+  // own ("select a node first"), so showing only the first left the odd one out unexplained.
+  const note = el("arrangement-note");
+  if (note) {
+    const reasons = [
+      ...new Set(
+        LAYOUT_ORDER.filter((m) => m !== layoutMode)
+          .map((m) => layoutBlockedReason(m))
+          .filter((r): r is string => !!r),
+      ),
+    ];
+    note.textContent = reasons.join("; ");
+    note.hidden = reasons.length === 0;
+  }
 }
 
 // The graph-kind toggle group's per-kind titles when live. Mirrors scaffold.html's
@@ -2287,6 +3487,15 @@ function syncGraphKindToggle() {
     btn.disabled = !liveHost;
     btn.title = liveHost ? GRAPHKIND_TITLES[kind] : GRAPHKIND_LIVE_HINT;
   });
+  // Say WHY on the surface, not only on hover. A disabled control with the reason buried in a
+  // title attribute reads as broken: you click Target, nothing happens, and the explanation is
+  // somewhere you have to already suspect. Most sessions are a snapshot or the demo, so this is
+  // the common case, not the edge one.
+  const note = el("graphkind-note");
+  if (note) {
+    note.textContent = liveHost ? "" : "Live workspace only";
+    note.hidden = !!liveHost;
+  }
 }
 
 // switchGraphKind switches the live-loaded graph between the target and knowledge
@@ -2316,8 +3525,57 @@ async function switchGraphKind(kind: "targets" | "knowledge") {
     switchingGraphKind = false;
   }
   syncGraphKindToggle();
-  setStatus("Switched to the " + (kind === "targets" ? "target" : "knowledge") + " graph.");
+  frameNewGraph();
+  syncOverview(); // the panel names the flavor and the counts, and both just changed
+  // Nothing to announce. By the time a message would land, the toggle has moved, the legend has
+  // repainted to the new graph's kinds, the node count has changed and the overview names the
+  // flavor outright - a status line saying "switched to the target graph" is the fifth place
+  // claiming one fact, and the only one the reader has to notice separately.
+  setStatus("");
 }
+
+// frameNewGraph re-frames after the loaded graph is REPLACED wholesale.
+//
+// The camera that was showing is fitted to a graph that no longer exists - a different node count,
+// a different extent, different coordinates - so leaving it puts the new graph off-screen or
+// microscopic. This is not the SSE refresh case, which deliberately holds the camera still
+// (liveApplyGraphUpdate): that is the same graph moving slightly under someone reading it, while
+// this is an explicit "show me the other graph".
+//
+// ONE camera move, not a fit plus corrections.
+//
+// The load-time reveal spends several beats re-fitting because a cold force layout keeps spreading
+// and a single early fit frames a cloud that grows back out of view. Doing that HERE was wrong:
+// on load there is nothing on screen yet, so the beats read as the graph settling in, while on a
+// switch the graph is already visible and each beat reads as the camera lurching again - four
+// tweens over 1.4 seconds, which is exactly the "it shifts twice, something else is moving it"
+// this produced.
+//
+// A DAG layout places every node in one pass, so its extent is final and it can be fitted now.
+// Force spreads from a seeded disc for about a second (alphaDecay 0.06, see startSimulation), and
+// the disc is already centered on the usable area - so the graph is never off-screen while it
+// settles, and one fit afterwards is a single fluid motion instead of a hunt.
+function frameNewGraph() {
+  cancelCameraBeats(); // a new graph retires any settle still pending for the old one
+  cameraOwnedByOperator = false;
+  // SNAP, not glide. The old graph is gone, so there is nothing on screen for a tween to preserve
+  // continuity with - animating from the previous camera is a movement the eye has to follow for
+  // no information. Snapping reads as the new graph simply arriving, framed.
+  fitView(null, 0);
+  if (isDagMode()) return; // one pass, extent already final
+  // Then ONE glide, once the spread has settled. Without it the graph sits at the seed disc's
+  // framing and grows past the edges; with the load-time reveal's several beats it lurched
+  // repeatedly, which is what read as "it shifts twice, something else is moving it".
+  scheduleCameraBeat(() => {
+    // Re-check: the operator may have panned, or switched into a DAG mode, while it settled.
+    if (cameraOwnedByOperator || isDagMode()) return;
+    fitView(null);
+  }, FORCE_SETTLE_MS);
+}
+
+// How long a force layout takes to stop spreading, from startSimulation's alphaDecay. Long enough
+// that the fit lands on the settled extent; short enough not to read as a pause.
+const FORCE_SETTLE_MS = 900;
 
 async function readGraphFile(file: File | undefined) {
   if (!file) return;
@@ -2368,19 +3626,7 @@ function unfoldProjection() {
   matchSet = null;
   if (searchEl) searchEl.value = "";
   query = "";
-  // Release all parked nodes so the force sim (or layered layout) can place them. x/y are
-  // reset alongside fx/fy for the same reason switchLayout does it: left at -1e6, a released
-  // node poisons the next fitView's bounds and the canvas comes back blank.
-  if (graph) {
-    for (const n of graph.nodes) {
-      if (n.fx === -1e6) {
-        n.fx = null;
-        n.fy = null;
-        n.x = 0;
-        n.y = 0;
-      }
-    }
-  }
+  if (graph) unparkNodes();
   renderList();
   const btn = el("projection-unfold-btn");
   if (btn) btn.hidden = true;
@@ -2559,9 +3805,19 @@ function criticalPath() {
   return path.length > 1 ? path : null;
 }
 
+// How many nodes the hubs view calls hubs. A cutoff has to be somewhere and the ranking is
+// long-tailed; a dozen fills the canvas without turning the answer back into the whole graph.
+const HUB_LIMIT = 12;
+
 // Apply a named view. Updates activeView, viewNode, viewNodeTo, matchSet,
 // and the CLI idiom display. Serializes into the fragment via updateHash().
 function activateView(name: string, nodeId?: string | null, nodeTo?: string | null) {
+  // A view is a different question, so retire every in-flight refinement and the ranking the last
+  // one produced. Without the serverScores reset, renderList sorted a blast or orphans list by the
+  // PREVIOUS query's relevance: almost every id misses the map, `?? 0` flattens the key, and the
+  // degree fallback that is supposed to order these lists never runs.
+  viewGeneration++;
+  serverScores = null;
   activeView = name;
   viewNode = nodeId || null;
   viewNodeTo = nodeTo || null;
@@ -2593,7 +3849,6 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
         setStatus(
           "Click a node to see what depends on it (blast view). CLI: magus explain <node-id>",
         );
-        setResultLine(null);
         renderList();
         draw();
         updateHash();
@@ -2611,15 +3866,7 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
           (deps.size - 1 === 1 ? "" : "s") +
           ".",
       );
-      setResultLine(
-        "Showing the " +
-          (deps.size - 1) +
-          " target" +
-          (deps.size - 1 === 1 ? "" : "s") +
-          " that rebuild if you change " +
-          (n ? n.label : nodeId) +
-          ".",
-      );
+      void refineBlastFromServer(nodeId, ++viewGeneration);
       break;
     }
     case "trace": {
@@ -2627,7 +3874,6 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
         setStatus(
           "Click two nodes to find the path between them (trace view). CLI: magus path <a> <b>",
         );
-        setResultLine(null);
         renderList();
         draw();
         updateHash();
@@ -2644,9 +3890,6 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
             (nb ? nb.label : nodeTo) +
             ".",
         );
-        setResultLine(
-          "No path from " + (na ? na.label : nodeId) + " to " + (nb ? nb.label : nodeTo) + ".",
-        );
         matchSet = new Set([nodeId, nodeTo]);
       } else {
         matchSet = new Set(path);
@@ -2659,18 +3902,8 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
               })
               .join(" -> "),
         );
-        setResultLine(
-          "Path from " +
-            (na ? na.label : nodeId) +
-            " to " +
-            (nb ? nb.label : nodeTo) +
-            ", " +
-            (path.length - 1) +
-            " step" +
-            (path.length - 1 === 1 ? "" : "s") +
-            ".",
-        );
       }
+      void refineTraceFromServer(nodeId, nodeTo, ++viewGeneration);
       break;
     }
     case "critical": {
@@ -2679,7 +3912,6 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
         setStatus(
           "No duration data in this graph. Run `magus graph deps -o json` after a build to include timing.",
         );
-        setResultLine(null);
         matchSet = null;
       } else {
         matchSet = new Set(path);
@@ -2696,39 +3928,28 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
             formatDuration(total) +
             " total (longest duration-weighted chain).",
         );
-        setResultLine(
-          "Slowest chain: " +
-            path.length +
-            " target" +
-            (path.length === 1 ? "" : "s") +
-            ", " +
-            formatDuration(total) +
-            " total.",
-        );
       }
       break;
     }
     case "hubs": {
-      const top = graph.nodes
-        .slice()
-        .sort((a, b) => b.degree - a.degree)
-        .slice(0, 12);
-      matchSet = new Set(top.map((n) => n.id));
-      setStatus("What's a hub? The " + matchSet.size + " highest-degree nodes.");
-      setResultLine("The " + matchSet.size + " most depended-on targets.");
+      matchSet = new Set(mostDependedOn(graph.nodes, graph.links, HUB_LIMIT));
+      const n = matchSet.size;
+      setStatus(
+        n
+          ? "What's a hub? The " + n + " most depended-on node" + (n === 1 ? "" : "s") + "."
+          : "Nothing in this graph has a dependent.",
+      );
       break;
     }
     case "orphans": {
-      matchSet = new Set(graph.nodes.filter((n) => n.degree === 0).map((n) => n.id));
+      matchSet = new Set(disconnected(graph.nodes, graph.links));
+      const n = matchSet.size;
       setStatus(
         "What's dead? " +
-          matchSet.size +
-          " orphan node" +
-          (matchSet.size === 1 ? "" : "s") +
-          " with no edges.",
-      );
-      setResultLine(
-        matchSet.size + " target" + (matchSet.size === 1 ? "" : "s") + " nothing depends on.",
+          n +
+          " node" +
+          (n === 1 ? "" : "s") +
+          " of a kind that normally has dependencies, but with none either way.",
       );
       break;
     }
@@ -2747,13 +3968,9 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
             ids.size +
             " target(s) caught in a loop: a configuration error to fix.",
         );
-        setResultLine(
-          ids.size + " target" + (ids.size === 1 ? "" : "s") + " in circular dependencies.",
-        );
       } else {
         matchSet = null;
         setStatus("No circular dependencies: the dependency graph is acyclic.");
-        setResultLine("No circular dependencies.");
       }
       break;
     }
@@ -2762,7 +3979,6 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
       const aff = typeof nodeId === "object" && nodeId ? nodeId : window._liveAffectedIds;
       if (!aff || !aff.size) {
         setStatus("no affected nodes in current diff", true);
-        setResultLine(null);
         matchSet = null;
       } else {
         matchSet = aff;
@@ -2773,15 +3989,15 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
             (aff.size === 1 ? "" : "s") +
             " (live workspace).",
         );
-        setResultLine(
-          aff.size + " target" + (aff.size === 1 ? "" : "s") + " affected by your last change.",
-        );
       }
       break;
     }
   }
   setListExpanded(true);
   renderList();
+  // Only the deep-link path used to refresh this, so clicking a chip left "No filter: every node is
+  // showing" standing above a status line reporting twelve matches.
+  syncOverview();
   if (matchSet && matchSet.size) fitView(matchSet);
   updateHash();
   buildFlowEdges(); // matchSet is final now; no-ops for non-flow views
@@ -2789,6 +4005,8 @@ function activateView(name: string, nodeId?: string | null, nodeTo?: string | nu
 }
 
 function clearView() {
+  viewGeneration++; // see activateView: clearing is also a change of question
+  serverScores = null;
   activeView = null;
   viewNode = null;
   viewNodeTo = null;
@@ -2803,8 +4021,11 @@ function clearView() {
   query = "";
   setFlowEdges(null);
   flowOn = false;
-  setResultLine(null);
   renderList();
+  // Only the canvas line used to be cleared here, so the status line kept describing a view that
+  // was no longer active.
+  setStatus("");
+  syncOverview();
   updateHash();
   draw();
 }
@@ -2845,9 +4066,26 @@ function preferredModeForView(view: string): LayoutMode | null {
 // everything else goes through activateView. This only fires from an EXPLICIT
 // chip click; switchLayout calls from the [data-layout] toggle never call
 // this, so a manual mode pick is never second-guessed.
-function askQuestion(view: string) {
+// applyPreferredMode runs the arrangement half of a question: switch to the mode the view
+// reads best in, unless the operator has picked one by hand or the mode is unavailable at this
+// scale. Shared with the empty-state suggestion chips, which ask the same questions and so must
+// not behave differently from the Explore chips that ask them.
+function applyPreferredMode(view: string) {
   const want = preferredModeForView(view);
-  if (want && want !== layoutMode && !layoutBlockedReason(want)) switchLayout(want);
+  if (want && want !== layoutMode && !layoutPickedByHand && !layoutBlockedReason(want)) {
+    switchLayout(want);
+  }
+}
+
+function askQuestion(view: string) {
+  // The empty state is dismissed before the graph finishes arriving, so the chips are live for
+  // a beat over no data. Answering then writes a wrong answer that nothing recomputes once the
+  // nodes land - "Nothing has a dependent" over a graph with six thousand edges.
+  if (!graph?.nodes.length) {
+    setStatus("No graph loaded yet.", true);
+    return;
+  }
+  applyPreferredMode(view);
   if (view === "blast" || view === "trace") {
     // Enter picking mode: status tells user to click a node. Bypasses
     // activateView (no node picked yet), so clear any flow left over from
@@ -2869,12 +4107,14 @@ function askQuestion(view: string) {
     return;
   }
   if (view === "affected") {
-    // Affected view is wired separately in live mode; clicking here when not
-    // in live mode shows a hint instead of an empty view.
+    // Two different reasons to have no set, and the message says which: a VCS that could not
+    // produce a definitive diff is not the same problem as having no daemon.
     const aff = window._liveAffectedIds;
     if (!aff || !aff.size) {
       setStatus(
-        "affected view: requires live mode (magus graph export --open --follow) with a computed diff.",
+        affectedFallback
+          ? "affected view: the workspace could not compute a diff: " + affectedFallback
+          : "affected view: requires live mode (magus graph export --open --follow) with a computed diff.",
         true,
       );
       return;
@@ -2883,7 +4123,9 @@ function askQuestion(view: string) {
     return;
   }
   activateView(view);
-  if (view === "critical" && graphHasDurations && activePreset !== "duration") {
+  // Only fill an EMPTY preset slot: a preset the operator picked is theirs, and the timing
+  // colors are a convenience for reading the chain, not a requirement of the view.
+  if (view === "critical" && graphHasDurations && activePreset === null) {
     applyPreset("duration");
   }
 }
@@ -2979,74 +4221,6 @@ function buildQueryCmd(queryStr: string) {
   return "magus query " + (needsDDash ? "-- " : "") + shellQuote(queryStr);
 }
 
-// ---- Copy as Mermaid (toMermaid lives in mermaid.ts) -----------------------
-
-// Compute the node/link scope for "Copy as Mermaid": local-graph if a focus/ego
-// view is active, else current query matches, else all nodes (refused if >150).
-// Returns { nodes, links, refused } where refused is a plain-ASCII string or null.
-function mermaidScope() {
-  if (!graph) return { nodes: [], links: [], refused: "no graph loaded" };
-
-  let nodeIds;
-  if (focusId) {
-    // Local/ego view is active: use the focus neighborhood.
-    nodeIds = neighborhood(focusId, focusDepth);
-  } else if (matchSet) {
-    // Query filter or lens is active: use the match set.
-    nodeIds = matchSet;
-  } else {
-    // No filter: check size guard.
-    if (graph.nodes.length > 150) {
-      return {
-        nodes: [],
-        links: [],
-        refused: "narrow your focus first (double-click a node or add a query)",
-      };
-    }
-    nodeIds = null; // all
-  }
-
-  const nodes = nodeIds ? graph.nodes.filter((n) => nodeIds.has(n.id)) : graph.nodes;
-  if (nodes.length > 150) {
-    return {
-      nodes: [],
-      links: [],
-      refused: "narrow your focus first (double-click a node or add a query)",
-    };
-  }
-  const nodeSet = new Set(nodes.map((n) => n.id));
-  const links = graph.links.filter((e) => {
-    const s = endpointId(e.source),
-      t = endpointId(e.target);
-    return nodeSet.has(s) && nodeSet.has(t);
-  });
-  return { nodes, links, refused: null };
-}
-
-// copyAsMermaid: compute scope, emit mermaid, copy to clipboard, set status.
-function copyAsMermaid() {
-  if (!navigator.clipboard) {
-    setStatus("clipboard unavailable in this context", true);
-    return;
-  }
-  const { nodes, links, refused } = mermaidScope();
-  if (refused) {
-    setStatus(refused, true);
-    return;
-  }
-  const text = toMermaid(nodes, links, graphFlavor);
-  navigator.clipboard
-    .writeText("```mermaid\n" + text + "\n```")
-    .then(() => {
-      setStatus(
-        "Mermaid diagram copied (" + nodes.length + " nodes): paste into a GitHub comment or PR.",
-      );
-    })
-    .catch((err) => {
-      setStatus("Could not copy to clipboard: " + err.message, true);
-    });
-}
-
 // Build the full CLI command string for copy-to-clipboard.
 function viewCommandStr(name: string | null, nodeId?: string | null, nodeTo?: string | null) {
   switch (name) {
@@ -3054,7 +4228,10 @@ function viewCommandStr(name: string | null, nodeId?: string | null, nodeTo?: st
       if (!nodeId) return "magus explain <node-id>";
       return "magus explain " + shellQuote(nodeId);
     case "trace":
-      if (!nodeId || !nodeTo) return "magus path <a> <b>";
+      // Half-picked: name the node already chosen rather than printing a command that throws
+      // away what the surface knows.
+      if (!nodeId) return "magus path <a> <b>";
+      if (!nodeTo) return "magus path " + shellQuote(nodeId) + " <b>";
       return "magus path " + shellQuote(nodeId) + " " + shellQuote(nodeTo);
     default:
       return null; // no valid CLI equivalent
@@ -3124,17 +4301,24 @@ function renderSuggestions() {
   if (graphFlavor === "targets") {
     chips.push({
       text: "See the build order: what runs in parallel?",
-      action: () => switchLayout("waves"),
+      action: () => {
+        layoutPickedByHand = true; // an explicit "show me this arrangement", same as the chip
+        switchLayout("waves");
+      },
     });
   }
 
-  // 1. Highest-degree node ("biggest hub").
+  // 1. The most depended-on node.
   if (graph.nodes.length > 1 && chips.length < 3) {
-    const top = graph.nodes.slice().sort((a, b) => b.degree - a.degree)[0];
-    if (top && top.degree > 0) {
+    const topId = mostDependedOn(graph.nodes, graph.links, 1)[0];
+    const top = topId ? graph.byId.get(topId) : null;
+    if (top) {
       chips.push({
         text: top.label + " is the biggest hub: what depends on it?",
-        action: () => activateView("blast", top.id),
+        action: () => {
+          applyPreferredMode("blast");
+          activateView("blast", top.id);
+        },
       });
     }
   }
@@ -3147,20 +4331,28 @@ function renderSuggestions() {
     const src = cycleEdge ? endpointId(cycleEdge.source) : null;
     chips.push({
       text: "A dependency cycle was detected: trace its path?",
-      action: src ? () => activateView("trace", src) : () => activateView("hubs"),
+      action: src
+        ? () => {
+            applyPreferredMode("trace");
+            activateView("trace", src);
+          }
+        : () => {
+            applyPreferredMode("hubs");
+            activateView("hubs");
+          },
     });
   }
 
-  // 3. Orphan count.
-  const orphans = graph.nodes.filter((n) => n.degree === 0);
-  if (orphans.length > 0 && chips.length < 3) {
+  // 3. Dead-node count.
+  const dead = disconnected(graph.nodes, graph.links);
+  if (dead.length > 0 && chips.length < 3) {
     chips.push({
       text:
-        orphans.length +
-        " node" +
-        (orphans.length === 1 ? "" : "s") +
-        " with no edges: what's dead?",
-      action: () => activateView("orphans"),
+        dead.length + " node" + (dead.length === 1 ? "" : "s") + " depend on nothing: what's dead?",
+      action: () => {
+        applyPreferredMode("orphans");
+        activateView("orphans");
+      },
     });
   }
 
@@ -3169,16 +4361,21 @@ function renderSuggestions() {
     return;
   }
   wrap.hidden = false;
-  wrap.innerHTML = chips
-    .map(
-      (c, i) =>
-        '<button type="button" class="console-graph-views__chip console-graph-sidebar__suggestion" data-i="' +
-        i +
-        '">' +
-        escapeHtml(c.text) +
-        "</button>",
-    )
-    .join("");
+  // The heading rides in the same innerHTML as the chips so it appears and disappears with them;
+  // without it these read as a third, unlabeled group of Ask chips rather than as facts already
+  // computed about the graph in front of you.
+  wrap.innerHTML =
+    '<p class="console-graph-sidebar__viewslabel">In this graph</p>' +
+    chips
+      .map(
+        (c, i) =>
+          '<button type="button" class="console-graph-views__chip console-graph-sidebar__suggestion" data-i="' +
+          i +
+          '">' +
+          escapeHtml(c.text) +
+          "</button>",
+      )
+      .join("");
   wrap.querySelectorAll<HTMLElement>(".console-graph-sidebar__suggestion").forEach((b) => {
     b.addEventListener("click", () => {
       chips[Number(b.dataset.i)].action();
@@ -3353,6 +4550,9 @@ function applyPreset(presetId: string) {
     document
       .querySelectorAll<HTMLElement>(".console-graph-colorgroup__preset")
       .forEach((b) => b.removeAttribute("data-active"));
+    renderLegend(); // back to the kind palette, which is what the canvas shows again
+    setStatus(""); // the legend has already retitled back to "Node kinds"; nothing to add
+    syncOverview();
     draw();
     updateHash();
     return;
@@ -3370,9 +4570,32 @@ function applyPreset(presetId: string) {
     if (g.nodeSet) entry.nodeSet = g.nodeSet;
     groups.push(entry);
   }
+  // Repaint the legend onto the new grouping and SAY what changed. A preset recolours every
+  // node on the canvas and, before this, reported that nowhere: the legend kept describing the
+  // kind palette and the only trace of the click was the button's own fill.
+  renderLegend();
+  // The bottom status bar carries this, NOT the floating result line over the canvas. The result
+  // line is a strip centered on the stage: it lands on top of the legend - the one panel a reader
+  // is looking at when they change the coloring - and it puts the explanation nowhere near the
+  // control that produced it. The status bar already spans the foot of the app.
+  // Same reasoning as the graph switch: nothing to announce. The legend has already retitled from
+  // "Node kinds" to the grouping and listed every group with its hue, the overview's Color row
+  // states the meaning, and the sidebar hint under the control says a second click clears it. The
+  // sentence that used to go here restated all three.
+  setStatus("");
+  syncOverview();
   draw();
   updateHash();
 }
+
+// One line per preset saying what the canvas now MEANS - not what the control is called. Read by
+// the overview's Color row, which is where a reader asks the question.
+const PRESET_RESULT_LINES: Record<string, string> = {
+  project: "Colored by project: one hue per project, so boundaries show.",
+  spell: "Colored by spell: one hue per toolchain, so layers show.",
+  depth: "Colored by dependency depth: pale depends on nothing, dark depends on the most.",
+  duration: "Colored by run duration: hot is slow.",
+};
 
 // ---- live mode -------------------------------------------------------------
 
@@ -3407,7 +4630,7 @@ function applyPositions(newNodes: GNode[], prevPos: Map<string, NodePos>) {
     if (p) {
       n.x = p.x;
       n.y = p.y;
-      if (p.fx != null && p.fx !== -1e6) {
+      if (p.fx != null && p.fx !== PARKED_X) {
         n.fx = p.fx;
         n.fy = p.fy;
       }
@@ -3416,14 +4639,16 @@ function applyPositions(newNodes: GNode[], prevPos: Map<string, NodePos>) {
   }
 }
 
-// recomputeLiveMatchSet recomputes matchSet (and, for the default projection,
-// projectionSet) against the CURRENT graph for whatever activeView/query/
+// recomputeMatchSet recomputes matchSet (and, for the default projection,
+// projectionSet) against the CURRENT graph for whatever activeView/focus/query/
 // projection state is already in effect. It mirrors the per-view logic in
 // activateView and the filter logic in applyQuery, but - unlike calling those
 // functions directly - does not touch activeView/query/projectionUnfolded/
-// layoutMode/search or refit the camera. Used by liveApplyGraphUpdate so a
-// live refresh reseeds data without resetting the user's current exploration.
-function recomputeLiveMatchSet() {
+// layoutMode/search or refit the camera.
+//
+// Two callers - a live refresh, and leaving radial - both wanting "the controls did not move,
+// recompute what they say", rather than each restoring the part of the state it remembered.
+function recomputeMatchSet() {
   if (activeView) {
     switch (activeView) {
       case "blast":
@@ -3442,16 +4667,11 @@ function recomputeLiveMatchSet() {
         matchSet = path ? new Set(path) : null;
         break;
       }
-      case "hubs": {
-        const top = graph.nodes
-          .slice()
-          .sort((a, b) => b.degree - a.degree)
-          .slice(0, 12);
-        matchSet = new Set(top.map((n) => n.id));
+      case "hubs":
+        matchSet = new Set(mostDependedOn(graph.nodes, graph.links, HUB_LIMIT));
         break;
-      }
       case "orphans":
-        matchSet = new Set(graph.nodes.filter((n) => n.degree === 0).map((n) => n.id));
+        matchSet = new Set(disconnected(graph.nodes, graph.links));
         break;
       case "cycles": {
         const ids = new Set<string>();
@@ -3474,17 +4694,16 @@ function recomputeLiveMatchSet() {
     }
     return;
   }
+  // A local graph is emphasis too, and liveApplyGraphUpdate keeps focusId across a refresh:
+  // without this branch the refresh would drop the neighborhood while the status line still
+  // said the operator was in it.
+  if (focusId) {
+    matchSet = graph.byId.has(focusId) ? neighborhood(focusId, focusDepth) : null;
+    if (!matchSet) focusId = null; // the focus node vanished in this refresh
+    return;
+  }
   if (query) {
-    const terms = parseQuery(query);
-    if (!terms.length) {
-      matchSet = null;
-      return;
-    }
-    if (!graph.relIndex) graph.relIndex = relationIndex();
-    matchSet = new Set();
-    for (const n of graph.nodes) {
-      if (terms.every((t) => termMatches(n, t))) matchSet.add(n.id);
-    }
+    matchSet = matchSetFor(query);
     return;
   }
   if (!projectionUnfolded) {
@@ -3531,11 +4750,11 @@ function liveApplyGraphUpdate(data: GraphPayload) {
   if (hoverId && !graph.byId.has(hoverId)) hoverId = null;
   if (focusId && !graph.byId.has(focusId)) focusId = null;
 
-  // graphHasDurations must reflect the NEW graph before recomputeLiveMatchSet
+  // graphHasDurations must reflect the NEW graph before recomputeMatchSet
   // runs, since a "critical" activeView calls criticalPath(), which now reads
   // that cached flag instead of re-probing durations itself.
   syncConditionalViews();
-  recomputeLiveMatchSet();
+  recomputeMatchSet();
   parkHiddenNodes(); // re-park if the default projection is still active
 
   renderLegend();
@@ -3591,7 +4810,7 @@ function liveApplyGraphUpdate(data: GraphPayload) {
     startMotion();
   }
   draw();
-  updateLiveBadge();
+  publishLiveStatus();
   syncGraphKindToggle();
 }
 
@@ -3649,8 +4868,8 @@ function liveConnect() {
     (err) => {
       // Stream ended or errored: flip to disconnected, schedule reconnect.
       liveConnected = false;
-      updateLiveBadge();
-      showDisconnectBanner();
+      publishLiveStatus();
+      showStaleNotice();
       clearTimeout(liveReconnectTimer ?? undefined);
       liveReconnectTimer = setTimeout(
         () => {
@@ -3668,8 +4887,8 @@ function liveConnect() {
       // the NEXT graph event, which may be minutes away.
       liveConnected = true;
       liveReconnectDelay = 1000;
-      clearDisconnectBanner();
-      updateLiveBadge();
+      clearStaleNotice();
+      publishLiveStatus();
       if (surfaceVisible) {
         liveRefetchGraph();
         fetchLiveStatus();
@@ -3680,51 +4899,58 @@ function liveConnect() {
   );
 }
 
-function showDisconnectBanner() {
-  const banner = el("live-disconnect-banner");
-  if (!banner) return;
+// A dropped live connection speaks on the status line at the foot, not in a banner over the
+// canvas. The stage's top edge already carries the legend, the toolbar and the result line, so a
+// notice there is covered by one of them; and the CONNECTION half of the message duplicated the
+// console status bar's own dot. What is left is the one fact nothing else states: the graph on
+// screen is a snapshot from some earlier moment, and how much earlier.
+// staleNotice is the exact text this writer last put on the shared status line, or null. A
+// BOOLEAN was not enough: the line has several writers (views, queries, the color presets), and a
+// flag only records that we wrote at some point, not that our text is still the text showing. With
+// the flag, a view answering after a disconnect left the flag set, and the reconnect then cleared
+// the VIEW's answer. Comparing the text means we only ever clear our own.
+//
+// Showing it DOES overwrite whatever was there, on purpose: that the graph on screen is old
+// outranks any answer computed from it.
+let staleNotice: string | null = null;
+
+function showStaleNotice() {
   const now = new Date();
   const hhmm =
     now.getHours().toString().padStart(2, "0") + ":" + now.getMinutes().toString().padStart(2, "0");
-  banner.textContent = "disconnected, showing workspace as of " + hhmm + ", reconnecting...";
-  banner.hidden = false;
+  staleNotice = "Showing this workspace as of " + hhmm + "; reconnecting.";
+  setStatus(staleNotice);
 }
 
-function clearDisconnectBanner() {
-  const banner = el("live-disconnect-banner");
-  if (banner) {
-    banner.textContent = "";
-    banner.hidden = true;
-  }
+function clearStaleNotice() {
+  const mine = staleNotice;
+  if (!mine) return;
+  staleNotice = null;
+  const showing = el("graph-status")?.textContent ?? "";
+  if (showing !== mine) return; // superseded by a real answer; leave that one alone
+  setStatus("");
 }
 
-function updateLiveBadge() {
-  const badge = el("live-badge");
-  if (badge) {
-    if (liveHost) {
-      const ws = liveWorkspaceName || liveHost;
-      const content = badge.querySelector<HTMLElement>(".pf-v6-c-label__content");
-      if (content)
-        content.textContent = liveConnected ? "live: " + ws : "live: " + ws + " (connecting)";
-      badge.hidden = false;
-      // Blue PF Label when connected, grey while (re)connecting or disconnected.
-      badge.classList.toggle("pf-m-blue", liveConnected);
-      badge.classList.toggle("pf-m-grey", !liveConnected);
-    } else {
-      badge.hidden = true;
-    }
-  }
+// publishLiveStatus publishes the live connection state onto the shared console status bar. It
+// paints nothing on the surface itself.
+function publishLiveStatus() {
   // Mirror the live state onto the shared console status bar's connection dot, so the graph explorer
-  // reads the same as the dashboard and log viewer. A snapshot/demo graph has no live daemon link, so
-  // the dot stays at its default "not connected".
+  // reads the same as the dashboard and log viewer.
   if (surfaceVisible) {
+    // Connection state only: the bar answers one question, and the workspace identity is already
+    // beside it. A snapshot or demo graph has no link of its OWN, so it reports no connection and
+    // the shell's poller answers - claiming the dot to say "not connected" had this surface
+    // reporting on a daemon it never asked about.
+    const nodes = graph?.nodes.length ?? 0;
+    const count = nodes ? nodes + " nodes" : undefined;
     publishStatus(
       liveHost
         ? {
             connection: liveConnected ? "connected" : "connecting",
             label: liveConnected ? "connected" : "connecting...",
+            count,
           }
-        : { connection: "none", label: "not connected" },
+        : { count },
     );
   }
 }
@@ -3757,22 +4983,11 @@ async function fetchLiveStatus() {
     if (status.pool && status.pool.workspaces.length > 0) {
       liveWorkspaceName = status.pool.workspaces[0].root;
     }
-    // Render status strip.
-    const strip = el("live-status-strip");
-    if (strip && status.pool) {
-      const p = status.pool;
-      strip.textContent = "pool: " + p.running + "/" + p.capacity + " running";
-      if (p.queued > 0) strip.textContent += ", " + p.queued + " queued";
-      strip.hidden = false;
-    }
-    // Affected view (deferred): types.StatusOutput.Affected exists on the wire
-    // type but neither status producer (cmd/magus/status.go - no workspace/VCS
-    // context at that call site - or internal/webbridge/bridge.go) populates it
-    // yet, so status.pool.affected never arrives. Rather than ship client code
-    // that pretends to enable a view that can never actually receive data, the
-    // "affected" view button stays disabled (see the `disabled` attribute in
-    // graph.html) until a real Affected computation is wired server-side.
-    updateLiveBadge();
+    // No pool strip here: how many targets the daemon is running is session state the dashboard
+    // owns. The affected set does not come from here either - StatusOutput.Affected is on the wire
+    // type but `magus status` never opens a workspace, so it has no VCS context to fill it.
+    // GraphService.FindAffected answers instead (refreshAffectedFromServer).
+    publishLiveStatus();
   } catch {
     /* network error; badge stays */
   }
@@ -3825,8 +5040,10 @@ function applyLayoutAndSimulation(requestedLayout: string, flavor: GraphFlavor) 
   if (layoutMode === "radial") {
     layoutMode = flavor === "targets" ? "layered" : "force";
   }
+  layoutPickedByHand = false; // a fresh graph resets to its flavor default; so does the override
   wavesMeta = null;
   syncLayoutToggle();
+  seedBigBang();
   startSimulation();
   if (isDagMode()) {
     sim?.stop();
@@ -3849,10 +5066,10 @@ function parkHiddenNodes() {
   if (!projectionUnfolded && projectionSet) {
     for (const n of graph.nodes) {
       if (!projectionSet.has(n.id)) {
-        n.fx = -1e6;
-        n.fy = -1e6;
-        n.x = -1e6;
-        n.y = -1e6;
+        n.fx = PARKED_X;
+        n.fy = PARKED_X;
+        n.x = PARKED_X;
+        n.y = PARKED_X;
       }
     }
   }
@@ -3876,13 +5093,22 @@ function finishInteractiveSetup() {
   applyDeepLinks();
   // Emit empty-state suggestion chips.
   renderSuggestions();
+  // Fill the detail column. AFTER applyDeepLinks, so a #q=/#view= link is already reflected in
+  // what the overview reports rather than being described a frame before it applies.
+  syncOverview();
+  // And publish the node count, which needs a LOADED graph. The live-mode callers of this all fire
+  // around connection events, every one of which can happen before there are any nodes to count -
+  // so on the demo and snapshot paths the shell's count slot stayed empty.
+  publishLiveStatus();
 }
 
 // renderLoadedGraph runs boot's data-to-view pipeline (detect/prepare/project/status/layout/reveal),
 // excluding the one-time interaction wiring, so the demo button can re-run it in place.
 function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void {
   const flavor = flavorOf(loaded.data);
+  graphEpoch++; // see replaceGraph: a different graph retires in-flight answers about the old one
   graphFlavor = flavor;
+  graphSource = loaded.source;
   let rawForPrepare = loaded.data;
   let cycleWarnings: string[] = [];
   if (flavor === "targets") {
@@ -3944,12 +5170,6 @@ function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void
   applyLayoutAndSimulation(initialParams.layout, flavor);
   parkHiddenNodes();
 
-  // Wow reveal: once the cold force layout has spread out, frame the whole graph so it lands centered and
-  // fully in view instead of cropped to a corner. Only for the default full-graph view - a deep link or
-  // the perf-guard projection already frames its own subset, and layered layout is framed by applyLayeredMode.
-  if (projectionUnfolded && !hasFragmentDirective && !isDagMode() && graph.nodes.length) {
-    setTimeout(() => fitView(null), 700);
-  }
   syncGraphKindToggle();
 }
 
@@ -3962,6 +5182,11 @@ function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void
 export async function activate() {
   resolveDom();
   readTheme();
+  // FIRST, before anything that can outlive this activation. bootWireEvents used to create it, and
+  // that runs last - so revealWholeGraph's canvas-size poll and bootLive's FindAffected both started
+  // while it was still null, and both silently opted out of cancellation. Every comment promising
+  // "into every RPC" or "torn down takes the poll with it" was false for exactly those two.
+  lifecycleAbort = new AbortController();
 
   // Collapse the stage tools behind the PF toolbar kebab on narrow viewports (the shared
   // responsive-toolbar pattern the log viewer uses too). Wired before any early return so it
@@ -4020,6 +5245,9 @@ export async function activate() {
   // demo button re-run just the render (renderLoadedGraph) in place, without re-wiring listeners.
   renderLoadedGraph(loaded);
   finishInteractiveSetup();
+  // AFTER the wiring: fitView needs the zoom behavior setupZoomDrag installs and returns
+  // silently without it, so a reveal from inside renderLoadedGraph never framed anything.
+  revealWholeGraph();
 
   // Empty state: nothing loaded (no #data/#src, no live attach), so show the prompt instead. The pipeline ran on
   // an empty graph, so interactions are wired; a dropped file arrives via replaceGraph and dismisses
@@ -4036,13 +5264,9 @@ export async function activate() {
 // normal load path and the live-mode load path. Called at the end of boot() and
 // from the live-mode path before it returns.
 function bootWireEvents() {
-  // One AbortController for every window/document lifecycle listener this function wires
-  // (keydown, fullscreenchange, the theme matchMedia change, hashchange, visibilitychange,
-  // reduced-motion change), created up front so every addEventListener call below can route
-  // through its signal - deactivate() then removes them all with a single abort(). A reopened
-  // graph re-runs this block with a fresh controller.
-  lifecycleAbort = new AbortController();
-  const lifecycleSignal = lifecycleAbort.signal;
+  // The controller is activate()'s, not this function's - see the note there. Every
+  // addEventListener below routes through its signal, so deactivate() removes them with one abort().
+  const lifecycleSignal = must(lifecycleAbort).signal;
 
   // Debounce typing so a large graph isn't re-filtered + re-rendered on every
   // keystroke; the legend/example/deep-link paths call applyQuery directly (no wait).
@@ -4052,6 +5276,13 @@ function bootWireEvents() {
   // file against Node's lib.
   let queryTimer: ReturnType<typeof setTimeout> | undefined;
   searchEl.addEventListener("input", () => {
+    // Answer the keystroke immediately with the count, then apply on the debounce. Matching is a
+    // single pass over the node list, far cheaper than the re-layout and repaint applyQuery
+    // triggers - which is what the 120ms is protecting, not the matching.
+    const typed = searchEl.value.trim();
+    renderScope(
+      typed === query ? undefined : (matchSetFor(typed)?.size ?? graph?.nodes.length ?? 0),
+    );
     clearTimeout(queryTimer);
     queryTimer = setTimeout(() => {
       applyQuery(searchEl.value);
@@ -4089,18 +5320,27 @@ function bootWireEvents() {
   // Wire view buttons (.console-graph-views__chip). Every explicit click routes through
   // askQuestion (Decision 2: a question may auto-switch the display mode, guarded by
   // layoutBlockedReason) - never the [data-layout] toggle, which switches mode alone.
-  document.querySelectorAll<HTMLElement>(".console-graph-views__chip").forEach((b) => {
-    b.addEventListener("click", () => {
-      const v = b.dataset.view;
-      if (!v) return;
+  //
+  // Must stay delegated: the Reference drawer CLONES this surface's [data-ref-section] blocks,
+  // and cloneNode copies no listeners, so a querySelectorAll snapshot over the sources reaches
+  // no chip in the drawer.
+  document.addEventListener(
+    "click",
+    (ev) => {
+      const b = (ev.target as HTMLElement | null)?.closest<HTMLElement>(
+        ".console-graph-views__chip",
+      );
+      const v = b?.dataset.view;
+      if (!b || !v) return;
       if ((b as HTMLButtonElement).disabled || b.hasAttribute("data-disabled")) return;
       if (activeView === v) {
         clearView();
         return;
       }
       askQuestion(v);
-    });
-  });
+    },
+    { signal: lifecycleSignal },
+  );
 
   // Wire the clear-view button.
   const clearViewBtn = el("clear-view-btn");
@@ -4110,34 +5350,13 @@ function bootWireEvents() {
   const listToggle = el("list-toggle");
   if (listToggle) listToggle.addEventListener("click", () => setListExpanded(!listExpanded));
 
-  // Keep the mobile node-list overlay glued under its toggle across a resize/rotation. Wired
-  // once (bootWireEvents can re-run from the live-mode path); the listener itself no-ops via
-  // positionNodeListOverlay's own mobileListQuery/listExpanded guards, so a second registration
-  // would just be redundant rather than harmful, but there's no reason to keep both around.
-  if (!overlayResizeWired) {
-    overlayResizeWired = true;
-    window.addEventListener("resize", () => {
-      if (listExpanded) positionNodeListOverlay();
-    });
-  }
-
   // Zoom-to-fit: frame the current matches (or the whole graph) in the viewport.
   const fitBtn = el("fit-btn");
   if (fitBtn)
     fitBtn.addEventListener("click", () => fitView(matchSet && matchSet.size ? matchSet : null));
 
-  // Mobile-only legend toggle: on narrow screens the kind legend is collapsed off
-  // the canvas by default (CSS) so it doesn't cover the graph; this flips it open.
-  // Harmless on desktop, where the toggle is display:none and the legend is always
-  // shown.
-  const legendToggle = el("legend-toggle");
-  const legendPanel = el("graph-legend-panel");
-  if (legendToggle && legendPanel) {
-    legendToggle.addEventListener("click", () => {
-      const open = legendPanel.toggleAttribute("data-open");
-      legendToggle.setAttribute("aria-expanded", open ? "true" : "false");
-    });
-  }
+  // No legend toggle. It existed to get the legend off the canvas on a narrow screen; the legend
+  // is in the sidebar now, which scrolls, so there is nothing to collapse it away from.
 
   // No separate lens wiring. The hubs/orphans buttons are ordinary view chips - they carry
   // .console-graph-views__chip and data-view like every other question - so the chip handler
@@ -4155,43 +5374,16 @@ function bootWireEvents() {
     });
   });
 
-  // Live force sliders: adjust the running simulation and gently reheat.
-  const wireForce = (id: string, apply: (v: number) => void) => {
-    const input = el(id) as HTMLInputElement | null;
-    if (!input) return;
-    input.addEventListener("input", () => {
-      if (sim) {
-        apply(+input.value);
-        sim?.alpha(0.3).restart();
-      }
-    });
-  };
-  // d3's untyped `force(name)` accessor returns the base Force; cast to the concrete
-  // force type to reach its strength/distance setters. sim is non-null when wireForce
-  // invokes these (it guards on it), so the optional chain never short-circuits.
-  wireForce("force-charge", (v) =>
-    (sim?.force("charge") as ForceManyBody<GNode> | undefined)?.strength(-v),
-  );
-  wireForce("force-link", (v) =>
-    (sim?.force("link") as ForceLink<GNode, GLink> | undefined)?.distance(v),
-  );
-  wireForce("force-gravity", (v) => {
-    (sim?.force("x") as ForceX<GNode> | undefined)?.strength(v / 100);
-    (sim?.force("y") as ForceY<GNode> | undefined)?.strength(v / 100);
-  });
-
-  // Keyboard: Esc clears a focus/query; [ and ] shrink/grow the focus depth.
+  // Esc clears a focus/query. It stays a raw listener rather than a registered command because
+  // it is the conventional global dismiss and has to fire while the search box has focus, which
+  // the keybinding layer deliberately suppresses (isTyping). The focus-depth keys DID live here
+  // too; they are commands now, so they reach the Shortcuts view and can be rebound.
   document.addEventListener(
     "keydown",
     (e) => {
-      if (e.key === "Escape") {
-        clearFocusOrQuery();
-        if (searchEl.blur) searchEl.blur();
-        return;
-      }
-      if (e.target === searchEl) return; // don't hijack typing
-      if (e.key === "[") changeFocusDepth(-1);
-      else if (e.key === "]") changeFocusDepth(1);
+      if (e.key !== "Escape") return;
+      clearFocusOrQuery();
+      if (searchEl.blur) searchEl.blur();
     },
     { signal: lifecycleSignal },
   );
@@ -4221,14 +5413,32 @@ function bootWireEvents() {
     group: "Graph",
     run: () => cycleLayout(),
   });
+  registerCommand({
+    id: "graph.focus.shallower",
+    label: "Local graph: one hop less",
+    group: "Graph",
+    run: () => changeFocusDepth(-1),
+  });
+  registerCommand({
+    id: "graph.focus.deeper",
+    label: "Local graph: one hop more",
+    group: "Graph",
+    run: () => changeFocusDepth(1),
+  });
   uninstallKeys?.();
   uninstallKeys = installKeybindings(() => mergeKeymap(GRAPH_KEYMAP, keymapCell.get()));
 
   // Query-syntax reference: each example runs itself in the filter (teach-by-doing).
   // Scope to [data-q] so the lens/add-group buttons (which share .console-graph-help__example for its
-  // chip styling but carry no data-q) aren't wired as examples.
-  document.querySelectorAll<HTMLElement>(".console-graph-help__example[data-q]").forEach((b) =>
-    b.addEventListener("click", () => {
+  // chip styling but carry no data-q) aren't wired as examples. Delegated for the same reason the
+  // view chips are: these examples only ever render as reference-drawer clones.
+  document.addEventListener(
+    "click",
+    (ev) => {
+      const b = (ev.target as HTMLElement | null)?.closest<HTMLElement>(
+        ".console-graph-help__example[data-q]",
+      );
+      if (!b) return;
       const q = b.dataset.q ?? "";
       searchEl.value = q;
       applyQuery(q);
@@ -4237,12 +5447,9 @@ function bootWireEvents() {
         behavior: "smooth",
         block: "nearest",
       });
-    }),
+    },
+    { signal: lifecycleSignal },
   );
-
-  // "Copy as Mermaid" toolbar button: emit the current scope as a mermaid diagram.
-  const copyMermaidBtn = el("copy-mermaid-btn");
-  if (copyMermaidBtn) copyMermaidBtn.addEventListener("click", copyAsMermaid);
 
   // "Open file" toolbar button proxies to the hidden <input type=file>.
   const openBtn = el("open-file-btn");
@@ -4269,7 +5476,8 @@ function bootWireEvents() {
         // The canvas is sized to its box; refit after the panel resizes.
         resizeCanvas();
         if (sim) {
-          sim.force("center", forceCenter(canvas.clientWidth / 2, canvas.clientHeight / 2));
+          const c = usableCenter(canvas.clientWidth, canvas.clientHeight, stageInsets());
+          sim.force("center", forceCenter(c.x, c.y));
           sim.alpha(0.15).restart();
         }
         draw();
@@ -4300,6 +5508,23 @@ function bootWireEvents() {
     signal: lifecycleSignal,
   });
 
+  // Both settings apply live. draw() unconditionally because shapes are a paint-time property and a
+  // stilled canvas has no next tick to pick them up on.
+  motionObserver = new MutationObserver(() => {
+    if (sim) {
+      // motionEligible, not just motionSuppressed: the dag layouts hold their own coordinates and a
+      // restart would shake a settled Sugiyama apart, and a hidden or backgrounded surface has no
+      // reason to spin the simulation back up.
+      if (!motionEligible() || isDagMode() || !surfaceVisible) sim.alpha(0).stop();
+      else sim.alphaTarget(idleAlpha()).restart();
+    }
+    draw();
+  });
+  motionObserver.observe(root, {
+    attributes: true,
+    attributeFilter: ["data-motion", "data-node-shapes"],
+  });
+
   // Keep the canvas bitmap in lockstep with its CSS box. A ResizeObserver (not just
   // window "resize") is what makes this robust: the stage also changes size when the
   // details card opens/closes (the grid goes to three columns), when a disclosure
@@ -4316,10 +5541,18 @@ function bootWireEvents() {
       resizePending = false;
       resizeCanvas();
       if (sim) {
-        sim.force("center", forceCenter(canvas.clientWidth / 2, canvas.clientHeight / 2));
+        const c = usableCenter(canvas.clientWidth, canvas.clientHeight, stageInsets());
+        sim.force("center", forceCenter(c.x, c.y));
         sim.alpha(0.1).restart();
       }
-      draw();
+      // Selecting a node narrows the stage by the explain card's width, and a DAG layout keeps
+      // its pinned coordinates through that, so the framing goes stale with nothing to correct
+      // it. What the correction should BE depends on what the camera was doing: holding one
+      // node in the middle, re-center on it in the new box; framing the graph, re-fit; being
+      // driven by hand, leave it alone - moving it then yanks the view out from under a click.
+      if (centeredOn) centerOn(centeredOn);
+      else if (!cameraOwnedByOperator) fitView(matchSet);
+      else draw();
     });
   };
   // stageResizeObserver is disconnected (and the lifecycleSignal aborted, removing every
@@ -4370,7 +5603,9 @@ function bootWireEvents() {
     btn.addEventListener("click", () => {
       if (btn.disabled) return;
       const mode = btn.dataset.layout;
-      if (mode && isLayoutMode(mode)) switchLayout(mode);
+      if (!mode || !isLayoutMode(mode)) return;
+      layoutPickedByHand = true;
+      switchLayout(mode);
     });
   });
 
@@ -4385,29 +5620,50 @@ function bootWireEvents() {
   });
   syncGraphKindToggle();
 
-  // The Ask panel's "What runs in parallel?" chip is a layout jump, not a view:
-  // it carries no data-view attr, so the .console-graph-views__chip wiring
-  // above skips it.
-  document.querySelectorAll<HTMLElement>("[data-layoutjump]").forEach((b) => {
-    b.addEventListener("click", () => {
-      const mode = b.dataset.layoutjump;
-      if (mode && isLayoutMode(mode)) switchLayout(mode);
-    });
+  // The question builder, behind the kebab beside the filter box. It owns the views and the
+  // filter grammar that used to be two columns of chips.
+  queryBuilder = createQueryBuilder({
+    // Offered values come from the LOADED graph, so a picker never suggests a kind that matches
+    // nothing here.
+    kinds: () => [...new Set(graph?.nodes.map((n) => n.kind) ?? [])].sort(),
+    relations: () => [...new Set(graph?.links.map((e) => e.relation).filter(Boolean) ?? [])].sort(),
+    // projectOwners(), not the raw graph.projectOf cache it fills: that field is lazily populated
+    // the first time a project: term is parsed, so reading it directly gave the picker an empty
+    // list on every graph nobody had already filtered by project.
+    projects: () => [...new Set(projectOwners().values())].filter(Boolean).sort(),
+    currentQuery: () => query,
+    applyQuery: (q) => {
+      if (searchEl) searchEl.value = q;
+      applyQuery(q);
+    },
+    matchCount: () =>
+      matchSet ? { matched: matchSet.size, total: graph?.nodes.length ?? 0 } : null,
+    // askQuestion, not activateView: it is the documented single entry point, and it carries the
+    // empty-graph guard plus the preferred-layout switch. Going straight to activateView answered
+    // over a graph that had not arrived and left blast/critical in whatever layout was showing.
+    runView: askQuestion,
+    radialPick: enterRadialPick,
+    onClose: () => setDetailMode("auto"),
+    // Facts only. Which views those facts rule out is declared beside the views.
+    capabilities: () => ({
+      flavor: graphFlavor === "targets" ? "targets" : "knowledge",
+      hasDurations: graphHasDurations,
+      hasAffectedSet: !!window._liveAffectedIds?.size,
+      live: !!liveHost,
+      affectedFallback,
+    }),
   });
-
-  // The Ask panel's "What's around this?" chip: jump straight to radial when a
-  // node is already selected/focused, else enter a one-shot pick mode
-  // (pendingRadialPick) that switchLayout("radial")s on the next selectNode
-  // with an id (see selectNode).
-  document.querySelectorAll<HTMLElement>("[data-radialpick]").forEach((b) => {
-    b.addEventListener("click", () => {
-      if (selected || focusId) {
-        switchLayout("radial");
-      } else {
-        pendingRadialPick = true;
-        setStatus("Click a node to center the radial view.");
-      }
-    });
+  // Mounted in the detail column: it takes that column while open, so the canvas beside it stays
+  // visible and acts as the preview. setDetailMode owns which of the three the column shows.
+  const builder = must(queryBuilder);
+  el("query-builder-host")?.append(builder.el);
+  el("query-builder-btn")?.addEventListener("click", () => {
+    if (builder.isOpen()) {
+      builder.close();
+      return;
+    }
+    setDetailMode("builder");
+    builder.open();
   });
 
   // Wire the live-mode "Remember this workspace" checkbox.
@@ -4447,6 +5703,10 @@ async function bootLive() {
   if (!host) return false;
 
   liveHost = host;
+  // bootLive renders through its own skeleton-then-full path rather than renderLoadedGraph, so it
+  // has to name the source itself or the overview reports "an unnamed source" for the one case
+  // where the answer matters most - whether you are looking at your workspace or the demo.
+  graphSource = "live";
   liveFlavor = params.flavor || null;
 
   // Consume and store the token (strips it from the URL fragment).
@@ -4477,7 +5737,7 @@ async function bootLive() {
 
     // Fetch StatusService GetStatus for workspace name and pool info.
     await fetchLiveStatus();
-    updateLiveBadge();
+    publishLiveStatus();
 
     // Render the skeleton immediately.
     const flavor = flavorOf(skeletonData);
@@ -4517,7 +5777,10 @@ async function bootLive() {
     const unfoldBtnLive = el("projection-unfold-btn");
     if (unfoldBtnLive) unfoldBtnLive.hidden = projectionUnfolded;
     if (!projectionUnfolded) updateProjectionStatus();
-    else setStatus("live workspace connected");
+    // Nothing to announce on a successful connect: the console status bar carries a live
+    // connection dot that publishStatus already drives, so saying it again here was a second
+    // claim about the same fact taking a line of the surface to do it.
+    else setStatus("");
 
     renderLegend();
     renderList();
@@ -4525,6 +5788,10 @@ async function bootLive() {
     applyLayoutAndSimulation(params.layout, graphFlavor);
     parkHiddenNodes();
     finishInteractiveSetup();
+
+    // Not awaited: this decorates a view the reader has to open, so the first paint never waits
+    // on a VCS diff.
+    void refreshAffectedFromServer();
 
     // Connect SSE for live updates.
     liveConnect();
@@ -4565,7 +5832,7 @@ export function setVisible(visible: boolean): void {
   surfaceVisible = visible;
   if (visible) {
     if (sim) sim.alphaTarget(idleAlpha()).restart();
-    updateLiveBadge();
+    publishLiveStatus();
     if (liveRefreshPending) {
       liveRefreshPending = false;
       liveRefetchGraph();
@@ -4580,11 +5847,25 @@ export function deactivate(): void {
   // Forget the selected node: this module is a singleton the console re-activates on reopen, so a
   // stale label left here would name the reopened tab after a node it is no longer showing.
   docTitle.set(null);
+  // The same singleton hazard, twice more. A builder left open put detailMode in "builder", which
+  // survived the close and made renderCard early-return on the REOPENED graph - clicking a node
+  // painted nothing until you opened and closed the builder again. And a builder detached into its
+  // own window outlived the surface it drives, still calling applyQuery on a torn-down graph.
+  queryBuilder?.close();
+  detailMode = "auto";
   if (sim) sim?.stop();
   if (motionRaf) {
     cancelAnimationFrame(motionRaf);
     motionRaf = 0;
   }
+  // The camera's own two kinds of pending work, neither of which this used to stop: the glide is a
+  // self-perpetuating rAF chain that would keep calling applyTransform -> draw() on a hidden
+  // canvas, and the beats are timeouts queued to fit a surface the console has torn down.
+  if (cameraTween) {
+    cancelAnimationFrame(cameraTween);
+    cameraTween = 0;
+  }
+  cancelCameraBeats();
   resetMotion();
   flowOn = false;
   pulsesPending = false;
@@ -4603,6 +5884,10 @@ export function deactivate(): void {
   if (themeObserver) {
     themeObserver.disconnect();
     themeObserver = null;
+  }
+  if (motionObserver) {
+    motionObserver.disconnect();
+    motionObserver = null;
   }
   if (lifecycleAbort) {
     lifecycleAbort.abort();

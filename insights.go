@@ -26,7 +26,7 @@ func (m *Magus) insightScan(ctx context.Context, opts *types.InsightOptions) ([]
 }
 
 // Hotspots is the churn × complexity lens. The project view is the dependency graph
-// heat-coloured by churn (with authors, recency, blast radius, and CI duration on each
+// heat-colored by churn (with authors, recency, blast radius, and CI duration on each
 // node); --files ranks individual files by edit frequency weighted by complexity.
 func (m *Magus) Hotspots(ctx context.Context, opts types.InsightOptions) (types.HotspotOutput, error) {
 	scan, err := m.insightScan(ctx, &opts)

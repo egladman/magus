@@ -9,7 +9,7 @@
  * data-selected, data-readonly, data-back), never a --modifier class.
  *
  * The states read from the PF-native status tokens, so a theme toggle re-tints the plan with no
- * per-theme rule here. no_return gets its OWN colour (the neutral-but-marked purple family used for
+ * per-theme rule here. no_return gets its OWN color (the neutral-but-marked purple family used for
  * spells), deliberately NOT the danger red a failure gets: a unit that never returned is not a unit
  * that failed, and a reader must be able to tell them apart at a glance and by mark. */
 
@@ -127,7 +127,7 @@
   background: var(--pf-t--global--background--color--secondary--hover);
   box-shadow: inset 2px 0 0 var(--console-accent);
 }
-/* The mark is the non-colour channel: the state is readable from the two or four letters alone. */
+/* The mark is the non-color channel: the state is readable from the two or four letters alone. */
 .console-plan-list__mark {
   flex: 0 0 2.1rem;
   color: var(--console-plan-state, inherit);
@@ -154,7 +154,7 @@
    touched it in a while. Both read in the PF warning token, the same gold the stale-ledger note
    above uses - a warning, never a failure: the row is still the row, and magus derived neither of
    these from anything but what two agents wrote down. Each carries its own word, so the warning
-   survives with no colour at all. */
+   survives with no color at all. */
 .console-plan-list__warn,
 .console-plan-list__age[data-stale] {
   color: var(--console-status-warn);
@@ -173,7 +173,7 @@
   color: var(--pf-t--global--text--color--subtle);
 }
 
-/* One state, one colour, resolved ONCE per element that carries data-state and read by whatever
+/* One state, one color, resolved ONCE per element that carries data-state and read by whatever
    sits inside it (the list mark, the node box and its mark, the detail's state word). Scoped to
    the layout because data-state is a console-wide hook - the status bar's connection dot carries
    one too - and an unscoped attribute selector in a globally loaded sheet would tint it. */
@@ -184,7 +184,7 @@
 .console-plan-layout [data-state="no_return"] { --console-plan-state: var(--console-plan-no-return); }
 /* The run plan's idle takes the declared styling, and that is the whole mapping: a target nobody
    has started and a unit nobody has begun are the same fact told by two different tables, so they
-   must not be two different colours. running / pass / fail already mean the same in both. */
+   must not be two different colors. running / pass / fail already mean the same in both. */
 .console-plan-layout [data-state="idle"] { --console-plan-state: var(--console-plan-declared); }
 
 /* ---- the stage ------------------------------------------------------------ */
@@ -237,7 +237,7 @@
 
 .console-plan-node { cursor: pointer; }
 /* FLOATING, not secondary. Secondary is darker than the stage it sits on (#151515 against
-   #292929), so every node read as a hole punched in the surface with a coloured outline round it -
+   #292929), so every node read as a hole punched in the surface with a colored outline round it -
    an empty black box, not a card. Floating is the token for a surface lifted ABOVE its ground, in
    both themes, which is what a node on a canvas is. */
 .console-plan-node__box {
@@ -255,9 +255,9 @@
  * or high-contrast blink beside text somebody is reading is an irritant within a minute. Nothing
  * moves POSITION: the box does not grow, so the pulse cannot be mistaken for the layout shifting
  * under the reader, and the animation is on a property that neither reflows nor repaints its
- * neighbours.
+ * neighbors.
  *
- * The colour still says "running" on its own; this only adds emphasis, so a reader who never sees
+ * The color still says "running" on its own; this only adds emphasis, so a reader who never sees
  * the animation loses nothing. */
 @keyframes console-plan-breathe {
   0%,
@@ -285,9 +285,9 @@
      this", and a throbbing outline under a detail pane being read is a distraction. */
   animation: none;
 }
-/* A warned node keeps its state colour on the box - the state is still what it is - and turns its
+/* A warned node keeps its state color on the box - the state is still what it is - and turns its
    id gold, so a contested or untouched unit is findable in the drawing without reading the list.
-   The words themselves are in the node's title and in the list row beside it; a colour on the
+   The words themselves are in the node's title and in the list row beside it; a color on the
    picture is never the only place a warning is told. */
 .console-plan-node[data-warn] .console-plan-node__id,
 .console-plan-node[data-stale] .console-plan-node__id {
@@ -341,7 +341,7 @@
 .console-plan-detail__hint { margin: 0.3rem 0; color: var(--pf-t--global--text--color--subtle); }
 /* The 0.1rem gap is deliberate and applies WITHIN a pair - a label and the value it names should
    touch. The separation belongs BETWEEN pairs, and it comes from the label's own margin below;
-   with both set to hairlines every field ran into its neighbours and the pane read as one block. */
+   with both set to hairlines every field ran into its neighbors and the pane read as one block. */
 .console-plan-detail__fields { display: grid; grid-template-columns: 1fr; gap: 0.1rem; margin: 0; }
 .console-plan-detail__label {
   margin-top: 0.9rem;

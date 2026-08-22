@@ -41,7 +41,7 @@ func (d *buzzReplDriver) EvalLine(snippet string) ([]engine.Value, error) {
 }
 
 // IsIncomplete reports whether err is the parser hitting end-of-input mid-form,
-// signalling the REPL to read another line. Buzz primarily relies on LineDelta
+// signaling the REPL to read another line. Buzz primarily relies on LineDelta
 // brace counting; this catches single-line forms that need a continuation.
 func (d *buzzReplDriver) IsIncomplete(err error) bool {
 	if err == nil {

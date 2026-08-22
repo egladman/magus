@@ -135,8 +135,8 @@ function label(text: string, modifier?: string, title?: string): HTMLElement {
   return el;
 }
 
-// The marker is the NON-COLOUR channel for add and delete. Colour alone fails WCAG 1.4.1 and
-// fails anyone with a colour vision deficiency, and a diff is exactly the case where the two
+// The marker is the NON-COLOR channel for add and delete. Color alone fails WCAG 1.4.1 and
+// fails anyone with a color vision deficiency, and a diff is exactly the case where the two
 // states must be told apart to be read at all.
 function markerFor(kind: string): string {
   return kind === "add" ? "+" : kind === "del" ? "-" : " ";
@@ -186,7 +186,7 @@ function markEmphasis(hunk: Hunk): void {
   emphasisMarked.add(hunk);
 }
 
-// lineText renders a line's text with syntax colour and intra-line emphasis.
+// lineText renders a line's text with syntax color and intra-line emphasis.
 //
 // The two compose rather than compete: a syntax token owns the FOREGROUND, the emphasis range
 // owns the BACKGROUND. So the line is cut at the union of both boundaries and each piece
@@ -224,14 +224,14 @@ function lineText(line: DiffLine, lang: Language): HTMLElement {
     if (to <= from) continue;
     const piece = text.slice(from, to);
     const tok = toks.find((t) => t.start <= from && t.end >= to);
-    const emphasised = span !== undefined && span.start <= from && span.end >= to;
-    if (!tok && !emphasised) {
+    const emphasized = span !== undefined && span.start <= from && span.end >= to;
+    if (!tok && !emphasized) {
       el.append(document.createTextNode(piece));
       continue;
     }
     const classes = ["console-diff-row__text-part"];
     if (tok) classes.push(`console-diff-tok--${tok.cls}`);
-    if (emphasised) classes.push("console-diff-row__word");
+    if (emphasized) classes.push("console-diff-row__word");
     el.append(h("span", classes.join(" "), piece));
   }
   return el;

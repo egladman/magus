@@ -258,7 +258,7 @@ const AGENT = {
 
 // demoSession returns the annotated changeset and the paired-review state.
 //
-// Files are listed in READING ORDER, which is what the surface honours: the shared library's
+// Files are listed in READING ORDER, which is what the surface honors: the shared library's
 // contract change first because it is what everything else here is a consequence of, then the
 // two consumers it broke, then the new and deleted files, then the test and the doc. The
 // generated three sort out of the reading order entirely by role.

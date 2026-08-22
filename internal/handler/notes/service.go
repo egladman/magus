@@ -202,6 +202,20 @@ func (s *Service) toProto(ctx context.Context, n store.Note, sd scopedDir, res *
 	if !n.Modified.IsZero() {
 		out.ModifyTime = timestamppb.New(n.Modified)
 	}
+	// Carried on the LISTING as well as the read, unlike the body. A client has to be able to
+	// mark a capture in a list of notes: telling one apart only after opening it means a
+	// reader has already taken it for authored prose by the time they learn otherwise.
+	if n.Source != nil {
+		src := &notesv1.Source{
+			Kind: string(n.Source.Kind),
+			Ref:  n.Source.Ref,
+			AsOf: n.Source.AsOf,
+		}
+		if !n.Source.Captured.IsZero() {
+			src.Captured = timestamppb.New(n.Source.Captured)
+		}
+		out.Source = src
+	}
 	scoped := res
 	if res != nil {
 		bound := res.ForScope(string(sd.scope))
@@ -263,8 +277,6 @@ func anchorToProto(ctx context.Context, a store.Anchor, res *knowledge.NoteResol
 		out.Detail = "Nobody has re-read this note against the code since anchors began carrying a fingerprint, so drift cannot be detected here."
 		return out
 	}
-	// An if rather than a switch: the two arms turn on a compound condition, not on the
-	// value of one expression, so a tagged switch would have to invent a subject.
 	current, derr := res.Digest(ctx, a)
 	if derr != nil {
 		// Distinct from RESOLVES: the anchor is live, and whether the prose still holds is
@@ -276,10 +288,20 @@ func anchorToProto(ctx context.Context, a store.Anchor, res *knowledge.NoteResol
 	}
 	if current == "" || current == a.Digest {
 		out.Status = notesv1.AnchorStatus_ANCHOR_STATUS_RESOLVES
-	} else {
-		out.Status = notesv1.AnchorStatus_ANCHOR_STATUS_DRIFTED
-		out.Detail = "This still exists, but its content changed since the note was last reviewed. Re-read the note against the code as it is now; `magus notes edit` records the new fingerprint only when a person says it still holds."
+		return out
 	}
+	// The content moved. Grade it before calling it drift: a body edited under an unchanged
+	// declaration is the overwhelmingly common change and the one that almost never
+	// invalidates prose, so reporting it as drift is how a store teaches its reader to stop
+	// reading the verdicts. The rule lives in store so this and `magus notes verify` cannot
+	// drift apart.
+	if store.DeclarationHeld(ctx, res, a) {
+		out.Status = notesv1.AnchorStatus_ANCHOR_STATUS_BODY_CHANGED
+		out.Detail = "This changed inside a declaration that did not, which usually leaves prose about the interface standing. Re-read only if the note claims something about the implementation."
+		return out
+	}
+	out.Status = notesv1.AnchorStatus_ANCHOR_STATUS_DRIFTED
+	out.Detail = "This still exists, but its content changed since the note was last reviewed. Re-read the note against the code as it is now; `magus notes edit` records the new fingerprint only when a person says it still holds."
 	return out
 }
 
@@ -308,7 +330,7 @@ func staleness(nodes map[string]types.KnowledgeNode, nodeID string) (notesv1.Sta
 // outrunDays parses the divergence attr into the wire's int32, clamped.
 //
 // The attr is graph data rather than a value this process computed, so it is parsed
-// defensively: an unparseable or negative value reads as 0 (no divergence claimed), and a
+// defensively: an unparsable or negative value reads as 0 (no divergence claimed), and a
 // value past int32 is capped rather than wrapped into a negative day count that would
 // render as prose newer than the code it describes.
 func outrunDays(attr string) int32 {

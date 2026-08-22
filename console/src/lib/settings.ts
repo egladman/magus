@@ -57,8 +57,13 @@ export function getFocusRing(): boolean {
   return focusRing.get();
 }
 
+// set = persist AND apply. The two were separate exports every caller had to remember to pair, and
+// a set without its apply is a preference that is saved and invisible until the next load - which is
+// what savePollMs-style persistOnly is FOR. Boot still calls applyFocusRing on its own, because
+// there is nothing to persist there.
 export function setFocusRing(on: boolean): void {
   focusRing.set(on);
+  applyFocusRing(on);
 }
 
 // Durably save the focus-ring preference WITHOUT applying it to the running session (Settings "Save"):
@@ -73,4 +78,58 @@ export function saveFocusRing(on: boolean): void {
 export function applyFocusRing(on: boolean): void {
   if (on) document.documentElement.setAttribute("data-focus-ring", "always");
   else document.documentElement.removeAttribute("data-focus-ring");
+}
+
+// "auto" honors prefers-reduced-motion and nothing more; "reduced" stills the console regardless
+// of the OS. Both exist because the OS setting is all-or-nothing across every site a person visits,
+// and the graph's simulation never fully stops on its own. Mirrors the docs site, attribute name
+// included.
+export type MotionPref = "auto" | "reduced";
+
+const motion = persisted<MotionPref>("console-motion", "auto");
+
+export function getMotion(): MotionPref {
+  return motion.get();
+}
+
+export function setMotion(v: MotionPref): void {
+  motion.set(v);
+  applyMotion(v);
+}
+
+// Durably save WITHOUT applying to the running session (Settings "Save"). See persist.persistOnly.
+export function saveMotion(v: MotionPref): void {
+  motion.persistOnly(v);
+}
+
+// theme.ts sets the same attribute pre-paint from the stored value, so nothing outside this module
+// needs to call this: setMotion is the live path.
+function applyMotion(v: MotionPref): void {
+  if (v === "reduced") document.documentElement.setAttribute("data-motion", "reduced");
+  else document.documentElement.removeAttribute("data-motion");
+}
+
+// On by default: color alone cannot separate twenty kinds for a color-blind reader (graph/shapes.ts
+// carries the measurement), and SC 1.4.1 asks for a second channel rather than a better palette.
+const nodeShapes = persisted<boolean>("console-node-shapes", true);
+
+export function getNodeShapes(): boolean {
+  return nodeShapes.get();
+}
+
+export function setNodeShapes(on: boolean): void {
+  nodeShapes.set(on);
+  applyNodeShapes(on);
+}
+
+// Durably save WITHOUT applying to the running session (Settings "Save"). See persist.persistOnly.
+export function saveNodeShapes(on: boolean): void {
+  nodeShapes.persistOnly(on);
+}
+
+// An attribute rather than a shared cell: the graph is a separate bundle painting to a canvas, and
+// one MutationObserver over the root covers this and data-motion together.
+export function applyNodeShapes(on: boolean): void {
+  if (on) document.documentElement.removeAttribute("data-node-shapes");
+  else document.documentElement.setAttribute("data-node-shapes", "off");
 }

@@ -120,7 +120,7 @@ func (c *Cache) hashStepInputsMemo(ctx context.Context, s *Step, lines *[]string
 	if s.Spell != "" {
 		writeLine("spell:", s.Spell)
 	}
-	// Active charms (sorted by the caller) change behaviour, so they key the
+	// Active charms (sorted by the caller) change behavior, so they key the
 	// cache. Empty Charms adds nothing, so charm-less runs hash as before.
 	for _, c := range s.Charms {
 		writeLine("charm:", c)
@@ -451,7 +451,7 @@ func (c *Cache) hashFileWithMtime(abs string) (string, error) {
 	// io_uring tier's same guard above.
 	info2, err := os.Stat(abs)
 	if err != nil || info2.ModTime().UnixNano() != mtime || info2.Size() != size {
-		//nolint:nilerr // a failed re-stat means skip the fingerprint store, not fail the hash: h was computed from bytes we did read, and the store is an optimisation.
+		//nolint:nilerr // a failed re-stat means skip the fingerprint store, not fail the hash: h was computed from bytes we did read, and the store is an optimization.
 		return h, nil
 	}
 	c.mtimes.set(abs, h, mtime, size)
@@ -503,9 +503,9 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 	if len(globs) == 0 {
 		return nil, nil
 	}
-	normalised := make([]string, len(globs))
+	normalized := make([]string, len(globs))
 	for i, g := range globs {
-		normalised[i] = filepath.ToSlash(g)
+		normalized[i] = filepath.ToSlash(g)
 	}
 
 	// A wildcard-free glob names ONE file, so resolve it by stat rather than by the walk
@@ -520,8 +520,8 @@ func expandSources(globs []string, root string, outputGlobs, spellDirs []string)
 	// every file in node_modules. An exact path cannot expand that way - it is one file,
 	// named deliberately.
 	var exact []string
-	patterns := normalised[:0:0]
-	for _, g := range normalised {
+	patterns := normalized[:0:0]
+	for _, g := range normalized {
 		if strings.ContainsAny(g, "*?[{") {
 			patterns = append(patterns, g)
 			continue

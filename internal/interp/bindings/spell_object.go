@@ -79,7 +79,7 @@ func bindBuzzCommandMethod(h vm.Value, target string, tgt spells.Op) {
 }
 
 // execRecordToBuzz converts the shared {stdout, stderr, code, ok} exec object to
-// a Buzz map, marshalled the same way proc.exec's object is (see host.AnyVal):
+// a Buzz map, marshaled the same way proc.exec's object is (see host.AnyVal):
 // string/bool direct, int as a Buzz int.
 func execRecordToBuzz(rec map[string]any) vm.Value {
 	m := vm.NewMap()

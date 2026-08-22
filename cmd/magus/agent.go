@@ -1852,7 +1852,7 @@ const (
 	//
 	// DENIED, not advised: every tool matched here has an exact magus equivalent,
 	// so the deny costs nothing, and an advisory loses to a trained reflex. As an
-	// advisory it changed behaviour zero times over a long session and left the Go
+	// advisory it changed behavior zero times over a long session and left the Go
 	// build cache poisoned by uninstrumented raw runs.
 	runGuardContext = "magus covers this exactly and adds cache, sandbox, and affected tracking, so the deny costs you nothing. A raw WRITE (codegen, a formatter with -w/--write/--fix, go mod tidy, build output on a tracked path) also leaves the owning target reporting drift it did not cause - that half has no exceptions.\n" +
 		"The guard reads the command being RUN, so a launcher, a `VAR=value` prefix, or `bash -c '...'` reaches the same verdict. Run the magus command directly. Load the magus-run skill if not already loaded."
@@ -1966,7 +1966,7 @@ const (
 	// Advise, not deny: bounding a run is legitimate, and no deny trigger applies -
 	// nothing is unrecoverable, nothing is written, and the equivalent is close but
 	// not exact.
-	timeoutMagusAdvice = "magus has its own: `magus run <target> <project> --timeout 5m` (and the same flag on `magus affected`). It cancels the run rather than signalling the process, so the error names the target - `run ci: timed out after 5m` - and it logs elapsed/remaining heartbeats while the run is still going.\n" +
+	timeoutMagusAdvice = "magus has its own: `magus run <target> <project> --timeout 5m` (and the same flag on `magus affected`). It cancels the run rather than signaling the process, so the error names the target - `run ci: timed out after 5m` - and it logs elapsed/remaining heartbeats while the run is still going.\n" +
 		"An external `timeout` sees one opaque process: it cannot say which target was still running, and the SIGTERM lands wherever the run happened to be."
 )
 

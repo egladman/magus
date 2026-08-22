@@ -723,7 +723,7 @@ fun pad(s: str, width: int) > str !> any {
 //   - It reaches docker on STDIN, never argv. magus captures a command's arguments
 //     into the run log and the output store, so `-p <token>` would write the secret to
 //     both. opts.stdin is not captured.
-//   - It was resolved through magus\secret.read, so magus recognises the value and
+//   - It was resolved through magus\secret.read, so magus recognizes the value and
 //     redacts it from captured output. That covers what this file does not control:
 //     docker itself, or any later tool, echoing the token back.
 export fun image_login(ctx: magus\Context, args: [str]) > void !> any {
@@ -771,7 +771,7 @@ export fun image_scan(ctx: magus\Context, args: [str]) > void !> any {
 // gets switched off.
 //
 // So the compatible copyleft licenses are ignored explicitly and everything else at
-// HIGH/CRITICAL still fails. That direction matters: an unrecognised copyleft license is
+// HIGH/CRITICAL still fails. That direction matters: an unrecognized copyleft license is
 // NOT on the ignore list, so it fails loudly and someone looks at it. A denylist of
 // known-bad licenses would do the opposite and stay silent on anything unanticipated.
 //
@@ -1303,7 +1303,7 @@ fun write_notices(stage: str, binary: str) > void !> any {
 // Reads one module's license text from the module cache, or "" when none is present.
 fun read_module_license(modcache: str, path: str, version: str) > str !> any {
     final dir = fs\join(modcache, escape_module_path(path) + "@" + version);
-    foreach (name in ["LICENSE", "LICENSE.md", "LICENSE.txt", "LICENCE", "LICENCE.txt",
+    foreach (name in ["LICENSE", "LICENSE.md", "LICENSE.txt", "LICENSE", "LICENSE.txt",
                       "COPYING", "COPYING.md", "COPYING.txt"]) {
         final p = fs\join(dir, name);
         if (fs\exists(p)) { return fs\readFile(p); }
@@ -1313,7 +1313,7 @@ fun read_module_license(modcache: str, path: str, version: str) > str !> any {
 
 // Applies the module cache's case encoding: an uppercase letter becomes "!" plus its
 // lowercase form, so github.com/Masterminds/sprig is stored at github.com/!masterminds/sprig.
-// Without this every capitalised module path looks unlicensed - a false "missing license"
+// Without this every capitalized module path looks unlicensed - a false "missing license"
 // that would abort a release for no reason.
 fun escape_module_path(path: str) > str {
     var escaped = "";
@@ -1496,7 +1496,7 @@ export fun release_build(ctx: magus\Context, args: [str]) > void !> any {
     //
     // Note this makes the archive name and the CHARM default disagree on purpose: the bare
     // command produces the marked archive. That is tolerable only because both archives are
-    // now labelled at the point it matters - `_static` says what it is, and nothing has to
+    // now labeled at the point it matters - `_static` says what it is, and nothing has to
     // be inferred from a name's absence. Everything that fetches an archive by name asks
     // for `_static` EXPLICITLY (cmd/magus/selfupdate.go, every download guide), so no
     // consumer depends on which variant happens to hold the bare name.
@@ -1556,7 +1556,7 @@ export fun release_sign(ctx: magus\Context, args: [str]) > void !> any {
 // gopherbuzz's public API to magus's release schedule for no reason.
 //
 // The three candidates are COMPUTED, never chosen. Deciding which one a change
-// deserves is a judgement about what breaks for a consumer; that belongs to the
+// deserves is a judgment about what breaks for a consumer; that belongs to the
 // developer. magus supplies the mechanism and stops there.
 //
 // Neither path ever pushes - a human reviews the tags and pushes deliberately.
@@ -1783,6 +1783,13 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // profiles are undeclared residue, restored by nothing, and the badge target
     // finds no file to measure whenever the suite replays.
     ctx.writesFiles("coverage.out", "coverage.hand.out");
+    // types/kindpalette_drift_test.go reads CONSOLE sources to lock the node-kind palette to
+    // the Kind* constants. None of those paths is a declared source of this project, so
+    // without this the suite replays from cache on every console-only edit and the gate stays
+    // green while the thing it measures drifts underneath it. Measured: deleting a palette
+    // entry from tokens.css left `magus run test .` passing.
+    ctx.readsFiles("console/src/styles/tokens.css", "console/src/console/graph/graph.css",
+                   "console/src/console/graph/main.ts", "console/src/console/graph/shapes.ts");
     ctx.needs(format, buzz_test);
     go["go-test"](ctx.withEnv({"GOEXPERIMENT": "jsonv2"}), {"args": ["-race", "-covermode=atomic", "-coverprofile=coverage.out"]});
     // Measure hand-written code only. Generated files (protobuf accessors, mocks,
@@ -2041,7 +2048,7 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // workspace - so it would grade console's CSS and every other project's markdown as
     // part of the Go tree's lint. _typos.toml already narrows typos to prose by turning
     // the code types off; naming the files is the other half, and it is what this gate was
-    // missing when `unlabelled` reached main through CHANGELOG.md. It surfaced one shard
+    // missing when `unlabeled` reached main through CHANGELOG.md. It surfaced one shard
     // over, in the docs project, because docs/changelog.md is a GENERATED MIRROR of the
     // root file - so the error pointed at generated output while the fix belonged here.
     final prose = ["README.md", "CHANGELOG.md", "CONTRIBUTING.md", "AGENTS.md", "TODO.md"];
@@ -2307,7 +2314,7 @@ fun missing_input(path: str, project: str) > str {
 //
 // Named -generate, and excluded from the umbrella by name. The root `generate` target above
 // is `ctx.needs(ctx.glob("*-generate", "!deploy-generate"))`: the suffix would otherwise
-// enrol a full tree copy in every `magus run generate`, to satisfy a drift gate over output
+// enroll a full tree copy in every `magus run generate`, to satisfy a drift gate over output
 // that is deliberately gitignored. Before negation existed the only remedy was to avoid the
 // name - which is what termcast-record and termcast-showcase above still do, and what this
 // target was first called (build-site). Renaming around a matcher hides the reason at both

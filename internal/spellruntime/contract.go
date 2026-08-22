@@ -18,7 +18,7 @@ type ContractEntry struct {
 	// switch still said "manifests", so pathValues quietly stopped running, the Path
 	// objects were never reduced to strings, and the decoded field came back EMPTY with
 	// nothing pointing at the cause. The rename was reverted over it. One list means the
-	// next rename carries this behaviour along with it.
+	// next rename carries this behavior along with it.
 	//
 	// An enum rather than a bool per shape: with three of them, a second bool beside the
 	// first encodes "both set" as a reachable state that means nothing.

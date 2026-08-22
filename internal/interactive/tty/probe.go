@@ -100,7 +100,7 @@ func IsTerminalWriter(w io.Writer, p Probe) bool {
 //
 // TERM=dumb is not a hypothetical. Emacs shell-mode sets it, and the pty behind
 // it IS a terminal - so a descriptor check alone says yes and the cursor
-// addressing, scroll margins and colour all go out to something that will
+// addressing, scroll margins and color all go out to something that will
 // render them as literal garbage. That is the artifacting this whole package is
 // supposed to be incapable of.
 //
@@ -112,8 +112,8 @@ func CanRender(w io.Writer, p Probe) bool {
 
 // WantsHyperlinks reports whether OSC 8 hyperlinks may be written to w.
 //
-// Deliberately NOT gated on NO_COLOR: that variable is about colour, and a link
-// is not colour - stripping it would take away a way to reach something rather
+// Deliberately NOT gated on NO_COLOR: that variable is about color, and a link
+// is not color - stripping it would take away a way to reach something rather
 // than tone the output down. It IS gated on the two terminals known to render
 // the sequence badly rather than swallow it:
 //
@@ -121,7 +121,7 @@ func CanRender(w io.Writer, p Probe) bool {
 //   - screen, whose OSC pass-through mangles the sequence and leaves the URI
 //     visible in the output. tmux is fine and is not excluded.
 //
-// Everything else either honours OSC 8 or ignores an unknown OSC cleanly,
+// Everything else either honors OSC 8 or ignores an unknown OSC cleanly,
 // which is what makes emitting it safe rather than a gamble on the reader's
 // terminal.
 func WantsHyperlinks(w io.Writer, p Probe) bool {
@@ -142,14 +142,14 @@ func WantsHyperlinks(w io.Writer, p Probe) bool {
 }
 
 // WantsColor reports whether output written to w should carry ANSI
-// colour: w must be a terminal, and NO_COLOR must be unset.
+// color: w must be a terminal, and NO_COLOR must be unset.
 //
 // This is one question with one answer, so it lives in one place. Before
 // this existed, the cache's log handler, the doctor command, and the
 // status grid each decided it independently, and only two of the three
-// honoured NO_COLOR.
+// honored NO_COLOR.
 //
-// See https://no-color.org: any non-empty value disables colour. TERM=dumb
+// See https://no-color.org: any non-empty value disables color. TERM=dumb
 // disables it too, via [CanRender] - this function's documentation has always
 // said so, and until now only the NO_COLOR half was true.
 func WantsColor(w io.Writer, p Probe) bool {

@@ -128,7 +128,7 @@ func (b *depBarrier) waitForDeps(ctx context.Context, s Step) error {
 }
 
 // checkAcyclic reports an error if in-scope DependsOn edges form a cycle, using
-// three-colour DFS. A batch that passes this check cannot deadlock the barrier.
+// three-color DFS. A batch that passes this check cannot deadlock the barrier.
 func checkAcyclic(steps []Step) error {
 	inScope := make(map[string]bool, len(steps))
 	for _, s := range steps {

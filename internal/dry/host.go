@@ -876,7 +876,7 @@ func pureMagus() vm.Value {
 // The field READ is duplicated (a dozen lines, and the packages cannot share a helper
 // without internal/dry depending on the bindings layer it exists to stand in for); the
 // RULES are not - both call types.SecretGrant.Normalize, which is where every
-// judgement about a malformed grant lives. Duplicating the extraction is safe because
+// judgment about a malformed grant lives. Duplicating the extraction is safe because
 // it has no rules in it; duplicating the validation would not be. The message must
 // stay in step with the real one, including its example: the dry run is the pass most
 // likely to surface this error, so giving the user less to work with than the real

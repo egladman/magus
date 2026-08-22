@@ -14,7 +14,7 @@ package types
 type TermStyle string
 
 const (
-	// TermBold is emphasis without colour, readable on any background.
+	// TermBold is emphasis without color, readable on any background.
 	TermBold TermStyle = "1"
 	// TermDim lowers a line's signal without hiding it.
 	TermDim TermStyle = "2"

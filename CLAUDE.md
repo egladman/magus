@@ -54,7 +54,7 @@ Building is the exception, and it needs a reason:
 - a `magus.project` option, target policy, or other magusfile schema change (the
   released binary rejects a key it does not know, and then no magus command can
   even load the workspace - which is the situation above)
-- engine, daemon, spell-runtime, or CLI behaviour you are about to run
+- engine, daemon, spell-runtime, or CLI behavior you are about to run
 - a doctor check whose output you want to see against this tree
 
 Editing docs, workflows, or Go you are only unit-testing (`go test ./...` needs

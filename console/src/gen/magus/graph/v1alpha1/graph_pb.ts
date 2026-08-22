@@ -2,21 +2,22 @@
 // @generated from file magus/graph/v1alpha1/graph.proto (package magus.graph.v1alpha1, syntax proto3)
 /* eslint-disable */
 
-// Package magus.graph.v1alpha1 is the versioned wire contract for the knowledge-graph output the
-// daemon serves to the browser Graph Explorer (/api/v1/graph): an induced subgraph of nodes
-// and edges plus its shape metadata. It mirrors types.KnowledgeGraphOutput; field names match
-// that type's JSON so a protojson encoding is wire-compatible with the JSON the page already
-// consumes. A sibling of magus.viewer.v1alpha1 and magus.status.v1alpha1. buf-breaking gates this file.
+// Package magus.graph.v1alpha1 is the versioned wire contract for the knowledge graph the daemon
+// serves to the browser Graph Explorer. Two surfaces share it: the bulk subgraph document behind
+// GET /api/v1/graph (Graph/Node/Edge, mirroring types.KnowledgeGraphOutput - field names match
+// that type's JSON so a protojson encoding is wire-compatible with what the page already
+// consumes), and GraphService, the ranked-retrieval verbs below. A sibling of
+// magus.viewer.v1alpha1 and magus.status.v1alpha1. buf-breaking gates this file.
 
-import type { GenFile, GenMessage } from "@bufbuild/protobuf/codegenv2";
-import { fileDesc, messageDesc } from "@bufbuild/protobuf/codegenv2";
+import type { GenEnum, GenFile, GenMessage, GenService } from "@bufbuild/protobuf/codegenv2";
+import { enumDesc, fileDesc, messageDesc, serviceDesc } from "@bufbuild/protobuf/codegenv2";
 import type { Message } from "@bufbuild/protobuf";
 
 /**
  * Describes the file magus/graph/v1alpha1/graph.proto.
  */
 export const file_magus_graph_v1alpha1_graph: GenFile = /*@__PURE__*/
-  fileDesc("CiBtYWd1cy9ncmFwaC92MWFscGhhMS9ncmFwaC5wcm90bxIUbWFndXMuZ3JhcGgudjFhbHBoYTEi7AEKBUdyYXBoEhIKCmRlZmluaXRpb24YASABKAkSFgoOc2NoZW1hX3ZlcnNpb24YAiABKAUSEAoIZGlyZWN0ZWQYAyABKAgSEgoKbXVsdGlncmFwaBgEIAEoCBISCgpub2RlX2NvdW50GAUgASgFEhIKCmVkZ2VfY291bnQYBiABKAUSEwoLc291cmNlX2Jhc2UYByABKAkSKQoFbm9kZXMYCCADKAsyGi5tYWd1cy5ncmFwaC52MWFscGhhMS5Ob2RlEikKBWxpbmtzGAkgAygLMhoubWFndXMuZ3JhcGgudjFhbHBoYTEuRWRnZSKwAQoETm9kZRIKCgJpZBgBIAEoCRIMCgRraW5kGAIgASgJEg0KBWxhYmVsGAMgASgJEgsKA2RvYxgEIAEoCRIOCgZzb3VyY2UYBSABKAkSNAoFYXR0cnMYBiADKAsyJS5tYWd1cy5ncmFwaC52MWFscGhhMS5Ob2RlLkF0dHJzRW50cnkaLAoKQXR0cnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIm8KBEVkZ2USDgoGc291cmNlGAEgASgJEg4KBnRhcmdldBgCIAEoCRIQCghyZWxhdGlvbhgDIAEoCRISCgpjb25maWRlbmNlGAQgASgJEg0KBXNjb3JlGAUgASgBEhIKCnByb3ZlbmFuY2UYBiABKAlC4wEKGGNvbS5tYWd1cy5ncmFwaC52MWFscGhhMUIKR3JhcGhQcm90b1ABWklnaXRodWIuY29tL2VnbGFkbWFuL21hZ3VzL3Byb3RvL2dlbi9nby9tYWd1cy9ncmFwaC92MWFscGhhMTtncmFwaHYxYWxwaGExogIDTUdYqgIUTWFndXMuR3JhcGguVjFhbHBoYTHKAhRNYWd1c1xHcmFwaFxWMWFscGhhMeICIE1hZ3VzXEdyYXBoXFYxYWxwaGExXEdQQk1ldGFkYXRh6gIWTWFndXM6OkdyYXBoOjpWMWFscGhhMWIGcHJvdG8z");
+  fileDesc("CiBtYWd1cy9ncmFwaC92MWFscGhhMS9ncmFwaC5wcm90bxIUbWFndXMuZ3JhcGgudjFhbHBoYTEi7AEKBUdyYXBoEhIKCmRlZmluaXRpb24YASABKAkSFgoOc2NoZW1hX3ZlcnNpb24YAiABKAUSEAoIZGlyZWN0ZWQYAyABKAgSEgoKbXVsdGlncmFwaBgEIAEoCBISCgpub2RlX2NvdW50GAUgASgFEhIKCmVkZ2VfY291bnQYBiABKAUSEwoLc291cmNlX2Jhc2UYByABKAkSKQoFbm9kZXMYCCADKAsyGi5tYWd1cy5ncmFwaC52MWFscGhhMS5Ob2RlEikKBWxpbmtzGAkgAygLMhoubWFndXMuZ3JhcGgudjFhbHBoYTEuRWRnZSKwAQoETm9kZRIKCgJpZBgBIAEoCRIMCgRraW5kGAIgASgJEg0KBWxhYmVsGAMgASgJEgsKA2RvYxgEIAEoCRIOCgZzb3VyY2UYBSABKAkSNAoFYXR0cnMYBiADKAsyJS5tYWd1cy5ncmFwaC52MWFscGhhMS5Ob2RlLkF0dHJzRW50cnkaLAoKQXR0cnNFbnRyeRILCgNrZXkYASABKAkSDQoFdmFsdWUYAiABKAk6AjgBIm8KBEVkZ2USDgoGc291cmNlGAEgASgJEg4KBnRhcmdldBgCIAEoCRIQCghyZWxhdGlvbhgDIAEoCRISCgpjb25maWRlbmNlGAQgASgJEg0KBXNjb3JlGAUgASgBEhIKCnByb3ZlbmFuY2UYBiABKAkiVQoRUXVlcnlOb2Rlc1JlcXVlc3QSDQoFcXVlcnkYASABKAkSDgoGYnVkZ2V0GAIgASgFEg4KBm9mZnNldBgDIAEoBRIRCglwYWdlX3NpemUYBCABKAUiigIKElF1ZXJ5Tm9kZXNSZXNwb25zZRINCgVxdWVyeRgBIAEoCRIOCgZidWRnZXQYAiABKAUSEwoLbWF0Y2hfY291bnQYAyABKAUSDgoGb2Zmc2V0GAQgASgFEiwKB21hdGNoZXMYBSADKAsyGy5tYWd1cy5ncmFwaC52MWFscGhhMS5NYXRjaBIpCgVub2RlcxgGIAMoCzIaLm1hZ3VzLmdyYXBoLnYxYWxwaGExLk5vZGUSKQoFbGlua3MYByADKAsyGi5tYWd1cy5ncmFwaC52MWFscGhhMS5FZGdlEiwKBmFuc3dlchgIIAEoCzIcLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkFuc3dlciI3ChNSZXNvbHZlTm9kZXNSZXF1ZXN0EhEKCXJlZmVyZW5jZRgBIAEoCRINCgVsaW1pdBgCIAEoBSJEChRSZXNvbHZlTm9kZXNSZXNwb25zZRIsCgdtYXRjaGVzGAEgAygLMhsubWFndXMuZ3JhcGgudjFhbHBoYTEuTWF0Y2giZwoFTWF0Y2gSCgoCaWQYASABKAkSDAoEa2luZBgCIAEoCRINCgVsYWJlbBgDIAEoCRINCgVzY29yZRgEIAEoBRIRCglzdGFsZW5lc3MYBSABKAkSEwoLb3V0cnVuX2RheXMYBiABKAUiIgoSRXhwbGFpbk5vZGVSZXF1ZXN0EgwKBG5hbWUYASABKAkipAEKC05vZGVDb250ZXh0EigKBG5vZGUYASABKAsyGi5tYWd1cy5ncmFwaC52MWFscGhhMS5Ob2RlEhQKDGJsYXN0X3JhZGl1cxgCIAEoBRIqCgNvdXQYAyADKAsyHS5tYWd1cy5ncmFwaC52MWFscGhhMS5FZGdlUmVmEikKAmluGAQgAygLMh0ubWFndXMuZ3JhcGgudjFhbHBoYTEuRWRnZVJlZiKfAQoHRWRnZVJlZhIQCghyZWxhdGlvbhgBIAEoCRI2CglkaXJlY3Rpb24YAiABKA4yIy5tYWd1cy5ncmFwaC52MWFscGhhMS5FZGdlRGlyZWN0aW9uEg0KBW90aGVyGAMgASgJEhIKCm90aGVyX2tpbmQYBCABKAkSEwoLb3RoZXJfbGFiZWwYBSABKAkSEgoKcHJvdmVuYW5jZRgGIAEoCSIrCg9GaW5kUGF0aFJlcXVlc3QSDAoEZnJvbRgBIAEoCRIKCgJ0bxgCIAEoCSIlChVGaW5kRGVwZW5kZW50c1JlcXVlc3QSDAoEbmFtZRgBIAEoCSInCgpEZXBlbmRlbnRzEgwKBG5vZGUYASABKAkSCwoDaWRzGAIgAygJIiMKE0ZpbmRBZmZlY3RlZFJlcXVlc3QSDAoEYmFzZRgBIAEoCSJOCghBZmZlY3RlZBIMCgRiYXNlGAEgASgJEhUKDWNoYW5nZWRfZmlsZXMYAiABKAUSCwoDaWRzGAMgAygJEhAKCGZhbGxiYWNrGAQgASgJIl4KBFBhdGgSDAoEZnJvbRgBIAEoCRIKCgJ0bxgCIAEoCRINCgVmb3VuZBgDIAEoCBItCgVzdGVwcxgEIAMoCzIeLm1hZ3VzLmdyYXBoLnYxYWxwaGExLlBhdGhTdGVwIkcKCFBhdGhTdGVwEgwKBGZyb20YASABKAkSCgoCdG8YAiABKAkSEAoIcmVsYXRpb24YAyABKAkSDwoHZm9yd2FyZBgEIAEoCCIkChRHZXRHcmFwaFN0YXRzUmVxdWVzdBIMCgRraW5kGAEgASgJIpYCCgpHcmFwaFN0YXRzEhIKCm5vZGVfY291bnQYASABKAUSEgoKZWRnZV9jb3VudBgCIAEoBRIrCgRnb2RzGAMgAygLMh0ubWFndXMuZ3JhcGgudjFhbHBoYTEuR29kTm9kZRItCgdvcnBoYW5zGAQgAygLMhwubWFndXMuZ3JhcGgudjFhbHBoYTEuT3JwaGFuEjMKCGNvdmVyYWdlGAUgAygLMiEubWFndXMuZ3JhcGgudjFhbHBoYTEuRG9jQ292ZXJhZ2USFgoOaXNvbGF0ZWRfY291bnQYBiABKAUSFwoPY29tcG9uZW50X2NvdW50GAcgASgFEh4KFmxhcmdlc3RfY29tcG9uZW50X3NpemUYCCABKAUiWwoHR29kTm9kZRIKCgJpZBgBIAEoCRIMCgRraW5kGAIgASgJEg0KBWxhYmVsGAMgASgJEg4KBmRlZ3JlZRgEIAEoBRIKCgJpbhgFIAEoBRILCgNvdXQYBiABKAUiQQoGT3JwaGFuEgoKAmlkGAEgASgJEgwKBGtpbmQYAiABKAkSDQoFbGFiZWwYAyABKAkSDgoGcmVhc29uGAQgASgJImUKC0RvY0NvdmVyYWdlEgwKBGtpbmQYASABKAkSDQoFdG90YWwYAiABKAUSEgoKZG9jdW1lbnRlZBgDIAEoBRIPCgdwZXJjZW50GAQgASgFEhQKDHVuZG9jdW1lbnRlZBgFIAMoCSJYCgZBbnN3ZXISDwoHdmVyZGljdBgBIAEoCRIOCgZyZWFzb24YAiABKAkSLQoEZ2FwcxgDIAMoCzIfLm1hZ3VzLmdyYXBoLnYxYWxwaGExLlN5bWJvbEdhcCJWCglTeW1ib2xHYXASFAoMcHJvamVjdF9wYXRoGAEgASgJEhQKDHByb2plY3RfbmFtZRgCIAEoCRINCgVzdGF0ZRgDIAEoCRIOCgZkZXRhaWwYBCABKAkqXgoNRWRnZURpcmVjdGlvbhIeChpFREdFX0RJUkVDVElPTl9VTlNQRUNJRklFRBAAEhYKEkVER0VfRElSRUNUSU9OX09VVBABEhUKEUVER0VfRElSRUNUSU9OX0lOEAIynAUKDEdyYXBoU2VydmljZRJfCgpRdWVyeU5vZGVzEicubWFndXMuZ3JhcGgudjFhbHBoYTEuUXVlcnlOb2Rlc1JlcXVlc3QaKC5tYWd1cy5ncmFwaC52MWFscGhhMS5RdWVyeU5vZGVzUmVzcG9uc2USZQoMUmVzb2x2ZU5vZGVzEikubWFndXMuZ3JhcGgudjFhbHBoYTEuUmVzb2x2ZU5vZGVzUmVxdWVzdBoqLm1hZ3VzLmdyYXBoLnYxYWxwaGExLlJlc29sdmVOb2Rlc1Jlc3BvbnNlEloKC0V4cGxhaW5Ob2RlEigubWFndXMuZ3JhcGgudjFhbHBoYTEuRXhwbGFpbk5vZGVSZXF1ZXN0GiEubWFndXMuZ3JhcGgudjFhbHBoYTEuTm9kZUNvbnRleHQSTQoIRmluZFBhdGgSJS5tYWd1cy5ncmFwaC52MWFscGhhMS5GaW5kUGF0aFJlcXVlc3QaGi5tYWd1cy5ncmFwaC52MWFscGhhMS5QYXRoEl8KDkZpbmREZXBlbmRlbnRzEisubWFndXMuZ3JhcGgudjFhbHBoYTEuRmluZERlcGVuZGVudHNSZXF1ZXN0GiAubWFndXMuZ3JhcGgudjFhbHBoYTEuRGVwZW5kZW50cxJZCgxGaW5kQWZmZWN0ZWQSKS5tYWd1cy5ncmFwaC52MWFscGhhMS5GaW5kQWZmZWN0ZWRSZXF1ZXN0Gh4ubWFndXMuZ3JhcGgudjFhbHBoYTEuQWZmZWN0ZWQSXQoNR2V0R3JhcGhTdGF0cxIqLm1hZ3VzLmdyYXBoLnYxYWxwaGExLkdldEdyYXBoU3RhdHNSZXF1ZXN0GiAubWFndXMuZ3JhcGgudjFhbHBoYTEuR3JhcGhTdGF0c0LjAQoYY29tLm1hZ3VzLmdyYXBoLnYxYWxwaGExQgpHcmFwaFByb3RvUAFaSWdpdGh1Yi5jb20vZWdsYWRtYW4vbWFndXMvcHJvdG8vZ2VuL2dvL21hZ3VzL2dyYXBoL3YxYWxwaGExO2dyYXBodjFhbHBoYTGiAgNNR1iqAhRNYWd1cy5HcmFwaC5WMWFscGhhMcoCFE1hZ3VzXEdyYXBoXFYxYWxwaGEx4gIgTWFndXNcR3JhcGhcVjFhbHBoYTFcR1BCTWV0YWRhdGHqAhZNYWd1czo6R3JhcGg6OlYxYWxwaGExYgZwcm90bzM");
 
 /**
  * Graph is a knowledge-graph projection: nodes, edges (links), and shape metadata.
@@ -173,4 +174,885 @@ export type Edge = Message<"magus.graph.v1alpha1.Edge"> & {
  */
 export const EdgeSchema: GenMessage<Edge> = /*@__PURE__*/
   messageDesc(file_magus_graph_v1alpha1_graph, 2);
+
+/**
+ * @generated from message magus.graph.v1alpha1.QueryNodesRequest
+ */
+export type QueryNodesRequest = Message<"magus.graph.v1alpha1.QueryNodesRequest"> & {
+  /**
+   * the magus query grammar, verbatim
+   *
+   * @generated from field: string query = 1;
+   */
+  query: string;
+
+  /**
+   * neighborhood node budget; 0 = server default
+   *
+   * @generated from field: int32 budget = 2;
+   */
+  budget: number;
+
+  /**
+   * @generated from field: int32 offset = 3;
+   */
+  offset: number;
+
+  /**
+   * 0 = every match from offset on
+   *
+   * @generated from field: int32 page_size = 4;
+   */
+  pageSize: number;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.QueryNodesRequest.
+ * Use `create(QueryNodesRequestSchema)` to create a new message.
+ */
+export const QueryNodesRequestSchema: GenMessage<QueryNodesRequest> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 3);
+
+/**
+ * @generated from message magus.graph.v1alpha1.QueryNodesResponse
+ */
+export type QueryNodesResponse = Message<"magus.graph.v1alpha1.QueryNodesResponse"> & {
+  /**
+   * @generated from field: string query = 1;
+   */
+  query: string;
+
+  /**
+   * @generated from field: int32 budget = 2;
+   */
+  budget: number;
+
+  /**
+   * TOTAL matches, not this page
+   *
+   * @generated from field: int32 match_count = 3;
+   */
+  matchCount: number;
+
+  /**
+   * @generated from field: int32 offset = 4;
+   */
+  offset: number;
+
+  /**
+   * @generated from field: repeated magus.graph.v1alpha1.Match matches = 5;
+   */
+  matches: Match[];
+
+  /**
+   * @generated from field: repeated magus.graph.v1alpha1.Node nodes = 6;
+   */
+  nodes: Node[];
+
+  /**
+   * @generated from field: repeated magus.graph.v1alpha1.Edge links = 7;
+   */
+  links: Edge[];
+
+  /**
+   * @generated from field: magus.graph.v1alpha1.Answer answer = 8;
+   */
+  answer?: Answer;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.QueryNodesResponse.
+ * Use `create(QueryNodesResponseSchema)` to create a new message.
+ */
+export const QueryNodesResponseSchema: GenMessage<QueryNodesResponse> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 4);
+
+/**
+ * @generated from message magus.graph.v1alpha1.ResolveNodesRequest
+ */
+export type ResolveNodesRequest = Message<"magus.graph.v1alpha1.ResolveNodesRequest"> & {
+  /**
+   * @generated from field: string reference = 1;
+   */
+  reference: string;
+
+  /**
+   * @generated from field: int32 limit = 2;
+   */
+  limit: number;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.ResolveNodesRequest.
+ * Use `create(ResolveNodesRequestSchema)` to create a new message.
+ */
+export const ResolveNodesRequestSchema: GenMessage<ResolveNodesRequest> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 5);
+
+/**
+ * @generated from message magus.graph.v1alpha1.ResolveNodesResponse
+ */
+export type ResolveNodesResponse = Message<"magus.graph.v1alpha1.ResolveNodesResponse"> & {
+  /**
+   * @generated from field: repeated magus.graph.v1alpha1.Match matches = 1;
+   */
+  matches: Match[];
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.ResolveNodesResponse.
+ * Use `create(ResolveNodesResponseSchema)` to create a new message.
+ */
+export const ResolveNodesResponseSchema: GenMessage<ResolveNodesResponse> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 6);
+
+/**
+ * Match is one ranked node. staleness/outrun_days carry the EVIDENCE for a prose match that
+ * ranked down because the thing it describes moved on without it, so the weight is never silent.
+ * Empty on anything not penalized.
+ *
+ * @generated from message magus.graph.v1alpha1.Match
+ */
+export type Match = Message<"magus.graph.v1alpha1.Match"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string kind = 2;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: string label = 3;
+   */
+  label: string;
+
+  /**
+   * @generated from field: int32 score = 4;
+   */
+  score: number;
+
+  /**
+   * @generated from field: string staleness = 5;
+   */
+  staleness: string;
+
+  /**
+   * @generated from field: int32 outrun_days = 6;
+   */
+  outrunDays: number;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.Match.
+ * Use `create(MatchSchema)` to create a new message.
+ */
+export const MatchSchema: GenMessage<Match> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 7);
+
+/**
+ * @generated from message magus.graph.v1alpha1.ExplainNodeRequest
+ */
+export type ExplainNodeRequest = Message<"magus.graph.v1alpha1.ExplainNodeRequest"> & {
+  /**
+   * a node id, or any reference ResolveNodes accepts
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.ExplainNodeRequest.
+ * Use `create(ExplainNodeRequestSchema)` to create a new message.
+ */
+export const ExplainNodeRequestSchema: GenMessage<ExplainNodeRequest> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 8);
+
+/**
+ * @generated from message magus.graph.v1alpha1.NodeContext
+ */
+export type NodeContext = Message<"magus.graph.v1alpha1.NodeContext"> & {
+  /**
+   * @generated from field: magus.graph.v1alpha1.Node node = 1;
+   */
+  node?: Node;
+
+  /**
+   * How many nodes transitively REACH this one, by ANY relation. A reach measure - read it as
+   * "how connected is this", not as "what breaks if I change it". Those diverge: nothing
+   * depends_on a spell, so a spell scores in the hundreds here and has no dependents at all.
+   * FindDependents answers the rebuild question; do not substitute this for it.
+   *
+   * @generated from field: int32 blast_radius = 2;
+   */
+  blastRadius: number;
+
+  /**
+   * @generated from field: repeated magus.graph.v1alpha1.EdgeRef out = 3;
+   */
+  out: EdgeRef[];
+
+  /**
+   * @generated from field: repeated magus.graph.v1alpha1.EdgeRef in = 4;
+   */
+  in: EdgeRef[];
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.NodeContext.
+ * Use `create(NodeContextSchema)` to create a new message.
+ */
+export const NodeContextSchema: GenMessage<NodeContext> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 9);
+
+/**
+ * EdgeRef is one edge seen FROM a focus node, so direction is relative to that node.
+ *
+ * @generated from message magus.graph.v1alpha1.EdgeRef
+ */
+export type EdgeRef = Message<"magus.graph.v1alpha1.EdgeRef"> & {
+  /**
+   * @generated from field: string relation = 1;
+   */
+  relation: string;
+
+  /**
+   * @generated from field: magus.graph.v1alpha1.EdgeDirection direction = 2;
+   */
+  direction: EdgeDirection;
+
+  /**
+   * @generated from field: string other = 3;
+   */
+  other: string;
+
+  /**
+   * @generated from field: string other_kind = 4;
+   */
+  otherKind: string;
+
+  /**
+   * @generated from field: string other_label = 5;
+   */
+  otherLabel: string;
+
+  /**
+   * @generated from field: string provenance = 6;
+   */
+  provenance: string;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.EdgeRef.
+ * Use `create(EdgeRefSchema)` to create a new message.
+ */
+export const EdgeRefSchema: GenMessage<EdgeRef> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 10);
+
+/**
+ * @generated from message magus.graph.v1alpha1.FindPathRequest
+ */
+export type FindPathRequest = Message<"magus.graph.v1alpha1.FindPathRequest"> & {
+  /**
+   * @generated from field: string from = 1;
+   */
+  from: string;
+
+  /**
+   * @generated from field: string to = 2;
+   */
+  to: string;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.FindPathRequest.
+ * Use `create(FindPathRequestSchema)` to create a new message.
+ */
+export const FindPathRequestSchema: GenMessage<FindPathRequest> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 11);
+
+/**
+ * @generated from message magus.graph.v1alpha1.FindDependentsRequest
+ */
+export type FindDependentsRequest = Message<"magus.graph.v1alpha1.FindDependentsRequest"> & {
+  /**
+   * a node id, or any reference ResolveNodes accepts
+   *
+   * @generated from field: string name = 1;
+   */
+  name: string;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.FindDependentsRequest.
+ * Use `create(FindDependentsRequestSchema)` to create a new message.
+ */
+export const FindDependentsRequestSchema: GenMessage<FindDependentsRequest> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 12);
+
+/**
+ * Dependents is the transitive depends_on fan-in of one node. Ids only: a caller that wants a
+ * label already has the node, or can ask ExplainNode for the one it cares about.
+ *
+ * @generated from message magus.graph.v1alpha1.Dependents
+ */
+export type Dependents = Message<"magus.graph.v1alpha1.Dependents"> & {
+  /**
+   * the resolved node the walk started from
+   *
+   * @generated from field: string node = 1;
+   */
+  node: string;
+
+  /**
+   * everything that transitively depends on it; empty is a real answer
+   *
+   * @generated from field: repeated string ids = 2;
+   */
+  ids: string[];
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.Dependents.
+ * Use `create(DependentsSchema)` to create a new message.
+ */
+export const DependentsSchema: GenMessage<Dependents> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 13);
+
+/**
+ * @generated from message magus.graph.v1alpha1.FindAffectedRequest
+ */
+export type FindAffectedRequest = Message<"magus.graph.v1alpha1.FindAffectedRequest"> & {
+  /**
+   * base is the VCS ref to diff against. Empty takes the workspace's configured base - the
+   * same resolution `magus affected` uses - so a caller with no opinion gets the one the repo
+   * already agreed on.
+   *
+   * @generated from field: string base = 1;
+   */
+  base: string;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.FindAffectedRequest.
+ * Use `create(FindAffectedRequestSchema)` to create a new message.
+ */
+export const FindAffectedRequestSchema: GenMessage<FindAffectedRequest> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 14);
+
+/**
+ * Affected is the reach of one VCS diff: which projects a change forces work in.
+ *
+ * @generated from message magus.graph.v1alpha1.Affected
+ */
+export type Affected = Message<"magus.graph.v1alpha1.Affected"> & {
+  /**
+   * the ref actually diffed against, after resolution
+   *
+   * @generated from field: string base = 1;
+   */
+  base: string;
+
+  /**
+   * how many paths the diff carried
+   *
+   * @generated from field: int32 changed_files = 2;
+   */
+  changedFiles: number;
+
+  /**
+   * project node ids in the transitive reverse closure, sorted
+   *
+   * @generated from field: repeated string ids = 3;
+   */
+  ids: string[];
+
+  /**
+   * fallback is why the answer is not definitive: a shallow clone, no VCS, an unreadable base.
+   * ids is empty whenever it is set, and the two are read together - an empty ids with no
+   * fallback means the diff genuinely reaches nothing, which is a real answer.
+   *
+   * @generated from field: string fallback = 4;
+   */
+  fallback: string;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.Affected.
+ * Use `create(AffectedSchema)` to create a new message.
+ */
+export const AffectedSchema: GenMessage<Affected> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 15);
+
+/**
+ * @generated from message magus.graph.v1alpha1.Path
+ */
+export type Path = Message<"magus.graph.v1alpha1.Path"> & {
+  /**
+   * @generated from field: string from = 1;
+   */
+  from: string;
+
+  /**
+   * @generated from field: string to = 2;
+   */
+  to: string;
+
+  /**
+   * @generated from field: bool found = 3;
+   */
+  found: boolean;
+
+  /**
+   * @generated from field: repeated magus.graph.v1alpha1.PathStep steps = 4;
+   */
+  steps: PathStep[];
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.Path.
+ * Use `create(PathSchema)` to create a new message.
+ */
+export const PathSchema: GenMessage<Path> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 16);
+
+/**
+ * PathStep is one hop as WALKED (from -> to). forward=false means the path traversed the
+ * underlying edge against its own direction.
+ *
+ * @generated from message magus.graph.v1alpha1.PathStep
+ */
+export type PathStep = Message<"magus.graph.v1alpha1.PathStep"> & {
+  /**
+   * @generated from field: string from = 1;
+   */
+  from: string;
+
+  /**
+   * @generated from field: string to = 2;
+   */
+  to: string;
+
+  /**
+   * @generated from field: string relation = 3;
+   */
+  relation: string;
+
+  /**
+   * @generated from field: bool forward = 4;
+   */
+  forward: boolean;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.PathStep.
+ * Use `create(PathStepSchema)` to create a new message.
+ */
+export const PathStepSchema: GenMessage<PathStep> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 17);
+
+/**
+ * @generated from message magus.graph.v1alpha1.GetGraphStatsRequest
+ */
+export type GetGraphStatsRequest = Message<"magus.graph.v1alpha1.GetGraphStatsRequest"> & {
+  /**
+   * optional filter; empty = all kinds
+   *
+   * @generated from field: string kind = 1;
+   */
+  kind: string;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.GetGraphStatsRequest.
+ * Use `create(GetGraphStatsRequestSchema)` to create a new message.
+ */
+export const GetGraphStatsRequestSchema: GenMessage<GetGraphStatsRequest> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 18);
+
+/**
+ * @generated from message magus.graph.v1alpha1.GraphStats
+ */
+export type GraphStats = Message<"magus.graph.v1alpha1.GraphStats"> & {
+  /**
+   * @generated from field: int32 node_count = 1;
+   */
+  nodeCount: number;
+
+  /**
+   * @generated from field: int32 edge_count = 2;
+   */
+  edgeCount: number;
+
+  /**
+   * @generated from field: repeated magus.graph.v1alpha1.GodNode gods = 3;
+   */
+  gods: GodNode[];
+
+  /**
+   * @generated from field: repeated magus.graph.v1alpha1.Orphan orphans = 4;
+   */
+  orphans: Orphan[];
+
+  /**
+   * @generated from field: repeated magus.graph.v1alpha1.DocCoverage coverage = 5;
+   */
+  coverage: DocCoverage[];
+
+  /**
+   * @generated from field: int32 isolated_count = 6;
+   */
+  isolatedCount: number;
+
+  /**
+   * @generated from field: int32 component_count = 7;
+   */
+  componentCount: number;
+
+  /**
+   * @generated from field: int32 largest_component_size = 8;
+   */
+  largestComponentSize: number;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.GraphStats.
+ * Use `create(GraphStatsSchema)` to create a new message.
+ */
+export const GraphStatsSchema: GenMessage<GraphStats> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 19);
+
+/**
+ * @generated from message magus.graph.v1alpha1.GodNode
+ */
+export type GodNode = Message<"magus.graph.v1alpha1.GodNode"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string kind = 2;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: string label = 3;
+   */
+  label: string;
+
+  /**
+   * in + out
+   *
+   * @generated from field: int32 degree = 4;
+   */
+  degree: number;
+
+  /**
+   * @generated from field: int32 in = 5;
+   */
+  in: number;
+
+  /**
+   * @generated from field: int32 out = 6;
+   */
+  out: number;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.GodNode.
+ * Use `create(GodNodeSchema)` to create a new message.
+ */
+export const GodNodeSchema: GenMessage<GodNode> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 20);
+
+/**
+ * Orphan is a node missing the connection its KIND implies - a doc that documents nothing, a
+ * spell no target uses - with the reason in plain English. Not the same as "no edges at all":
+ * the reason is what makes it actionable.
+ *
+ * @generated from message magus.graph.v1alpha1.Orphan
+ */
+export type Orphan = Message<"magus.graph.v1alpha1.Orphan"> & {
+  /**
+   * @generated from field: string id = 1;
+   */
+  id: string;
+
+  /**
+   * @generated from field: string kind = 2;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: string label = 3;
+   */
+  label: string;
+
+  /**
+   * @generated from field: string reason = 4;
+   */
+  reason: string;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.Orphan.
+ * Use `create(OrphanSchema)` to create a new message.
+ */
+export const OrphanSchema: GenMessage<Orphan> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 21);
+
+/**
+ * DocCoverage is doc coverage for one documentable kind. undocumented is a capped sample, not
+ * the full set.
+ *
+ * @generated from message magus.graph.v1alpha1.DocCoverage
+ */
+export type DocCoverage = Message<"magus.graph.v1alpha1.DocCoverage"> & {
+  /**
+   * @generated from field: string kind = 1;
+   */
+  kind: string;
+
+  /**
+   * @generated from field: int32 total = 2;
+   */
+  total: number;
+
+  /**
+   * @generated from field: int32 documented = 3;
+   */
+  documented: number;
+
+  /**
+   * @generated from field: int32 percent = 4;
+   */
+  percent: number;
+
+  /**
+   * @generated from field: repeated string undocumented = 5;
+   */
+  undocumented: string[];
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.DocCoverage.
+ * Use `create(DocCoverageSchema)` to create a new message.
+ */
+export const DocCoverageSchema: GenMessage<DocCoverage> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 22);
+
+/**
+ * Answer classifies a result against what magus could actually search. A stated reason or any
+ * gap makes the verdict unknown WHETHER OR NOT the lookup matched - that is the difference from
+ * a plain emptiness check, and it is why a bare term matching nothing says nothing about whether
+ * a code symbol by that name exists.
+ *
+ * @generated from message magus.graph.v1alpha1.Answer
+ */
+export type Answer = Message<"magus.graph.v1alpha1.Answer"> & {
+  /**
+   * @generated from field: string verdict = 1;
+   */
+  verdict: string;
+
+  /**
+   * @generated from field: string reason = 2;
+   */
+  reason: string;
+
+  /**
+   * @generated from field: repeated magus.graph.v1alpha1.SymbolGap gaps = 3;
+   */
+  gaps: SymbolGap[];
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.Answer.
+ * Use `create(AnswerSchema)` to create a new message.
+ */
+export const AnswerSchema: GenMessage<Answer> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 23);
+
+/**
+ * SymbolGap is one project whose declared symbol index magus could not read: the evidence behind
+ * an unknown verdict. The project is flattened to its two wire fields rather than nested,
+ * because ProjectRef's third field is an absolute host path that never leaves the daemon.
+ *
+ * @generated from message magus.graph.v1alpha1.SymbolGap
+ */
+export type SymbolGap = Message<"magus.graph.v1alpha1.SymbolGap"> & {
+  /**
+   * workspace-relative; "." is the root
+   *
+   * @generated from field: string project_path = 1;
+   */
+  projectPath: string;
+
+  /**
+   * the human label, which differs from the path only at the root
+   *
+   * @generated from field: string project_name = 2;
+   */
+  projectName: string;
+
+  /**
+   * @generated from field: string state = 3;
+   */
+  state: string;
+
+  /**
+   * @generated from field: string detail = 4;
+   */
+  detail: string;
+};
+
+/**
+ * Describes the message magus.graph.v1alpha1.SymbolGap.
+ * Use `create(SymbolGapSchema)` to create a new message.
+ */
+export const SymbolGapSchema: GenMessage<SymbolGap> = /*@__PURE__*/
+  messageDesc(file_magus_graph_v1alpha1_graph, 24);
+
+/**
+ * @generated from enum magus.graph.v1alpha1.EdgeDirection
+ */
+export enum EdgeDirection {
+  /**
+   * @generated from enum value: EDGE_DIRECTION_UNSPECIFIED = 0;
+   */
+  UNSPECIFIED = 0,
+
+  /**
+   * the focus node is the edge's source
+   *
+   * @generated from enum value: EDGE_DIRECTION_OUT = 1;
+   */
+  OUT = 1,
+
+  /**
+   * the focus node is the edge's target
+   *
+   * @generated from enum value: EDGE_DIRECTION_IN = 2;
+   */
+  IN = 2,
+}
+
+/**
+ * Describes the enum magus.graph.v1alpha1.EdgeDirection.
+ */
+export const EdgeDirectionSchema: GenEnum<EdgeDirection> = /*@__PURE__*/
+  enumDesc(file_magus_graph_v1alpha1_graph, 0);
+
+/**
+ * GraphService answers the questions the CLI's query/explain/path/stats verbs answer, over the
+ * same knowledge graph. It exists so the browser stops reimplementing them: the Graph Explorer's
+ * filter was a second, divergent copy of the query grammar, scoring by raw degree over a payload
+ * the daemon had already sent whole.
+ *
+ * Every verb is read-only, so the daemon mounts the service behind the console read bearer.
+ *
+ * The definition and schema_version fields every domain output carries are deliberately absent
+ * here. The proto package IS the version and buf-breaking gates it, so a second version number
+ * could only ever disagree with the first; definition is CLI help prose, re-sent on every
+ * response to a typed client that already knows what it called.
+ *
+ * GET /api/v1/graph is NOT superseded. It is the bulk subgraph fetch - a whole document - which
+ * is a different job from ranked retrieval, and the page already speaks it.
+ *
+ * @generated from service magus.graph.v1alpha1.GraphService
+ */
+export const GraphService: GenService<{
+  /**
+   * QueryNodes resolves search terms to ranked matches plus the induced neighborhood, collected
+   * up to a node budget. Paginated: page with offset + len(matches) against match_count, which
+   * is the TOTAL, not the page size.
+   *
+   * @generated from rpc magus.graph.v1alpha1.GraphService.QueryNodes
+   */
+  queryNodes: {
+    methodKind: "unary";
+    input: typeof QueryNodesRequestSchema;
+    output: typeof QueryNodesResponseSchema;
+  },
+  /**
+   * ResolveNodes returns the ranked candidates for a partial reference, for completion. Cheaper
+   * than QueryNodes: matches only, no neighborhood.
+   *
+   * @generated from rpc magus.graph.v1alpha1.GraphService.ResolveNodes
+   */
+  resolveNodes: {
+    methodKind: "unary";
+    input: typeof ResolveNodesRequestSchema;
+    output: typeof ResolveNodesResponseSchema;
+  },
+  /**
+   * ExplainNode returns one node's context: its data, its in/out edges with provenance, and how
+   * many nodes transitively reach it. A name that resolves to nothing is NOT_FOUND.
+   *
+   * @generated from rpc magus.graph.v1alpha1.GraphService.ExplainNode
+   */
+  explainNode: {
+    methodKind: "unary";
+    input: typeof ExplainNodeRequestSchema;
+    output: typeof NodeContextSchema;
+  },
+  /**
+   * FindPath returns the shortest chain between two nodes, edges walked in either direction.
+   * found=false is an answer, not an error; an endpoint that resolves to nothing is NOT_FOUND.
+   *
+   * @generated from rpc magus.graph.v1alpha1.GraphService.FindPath
+   */
+  findPath: {
+    methodKind: "unary";
+    input: typeof FindPathRequestSchema;
+    output: typeof PathSchema;
+  },
+  /**
+   * FindDependents returns every node that transitively DEPENDS ON one, as ids - the answer to
+   * "what rebuilds if I change this".
+   *
+   * Deliberately not NodeContext.blast_radius, which is a different question wearing a similar
+   * name: that counts everything reaching a node by ANY relation. Nothing depends_on a spell (a
+   * target USES one), so a spell's blast_radius runs to the hundreds while its dependents are
+   * empty, and both are right. Ids rather than a count because the caller highlights them; a
+   * separate RPC rather than a field on NodeContext because a hub's list is long and an explain
+   * card should not carry it.
+   *
+   * @generated from rpc magus.graph.v1alpha1.GraphService.FindDependents
+   */
+  findDependents: {
+    methodKind: "unary";
+    input: typeof FindDependentsRequestSchema;
+    output: typeof DependentsSchema;
+  },
+  /**
+   * FindAffected returns the projects a VCS diff reaches, as graph node ids, so a viewer can
+   * highlight what the working tree touches. `magus affected` over the wire.
+   *
+   * Read-only like the rest of the service, but the only verb here that reads the VCS rather
+   * than the graph, so it is the only one whose answer changes while the graph stands still.
+   *
+   * @generated from rpc magus.graph.v1alpha1.GraphService.FindAffected
+   */
+  findAffected: {
+    methodKind: "unary";
+    input: typeof FindAffectedRequestSchema;
+    output: typeof AffectedSchema;
+  },
+  /**
+   * GetGraphStats returns where the workspace concentrates, neglects, and fragments.
+   *
+   * @generated from rpc magus.graph.v1alpha1.GraphService.GetGraphStats
+   */
+  getGraphStats: {
+    methodKind: "unary";
+    input: typeof GetGraphStatsRequestSchema;
+    output: typeof GraphStatsSchema;
+  },
+}> = /*@__PURE__*/
+  serviceDesc(file_magus_graph_v1alpha1_graph, 0);
 

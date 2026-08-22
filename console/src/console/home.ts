@@ -10,7 +10,7 @@
 // strand you in a window you did not ask for.
 import { openSurfaceWindow } from "../lib/appwindow";
 import type { PulseView } from "./pulse";
-import { assignSigils, renderSigil, sigilSpec, type SigilSpec } from "./sigil";
+import { assignSigils, describeSigil, renderSigil, sigilSpec, type SigilSpec } from "./sigil";
 import { shortName, workspaceScope } from "../lib/scope";
 
 // A surface the launcher can open: the pageId the console registered it under, and a human label.
@@ -77,7 +77,7 @@ const TAGLINES: Tagline[] = [
   { text: "Quiet hours. The cache is listening.", at: [22, 5] },
   { text: "Late one. Keep it cached.", at: [22, 5] },
 
-  // Narrower windows sit inside the broad ones above, so these are extra colour at the edges of the
+  // Narrower windows sit inside the broad ones above, so these are extra color at the edges of the
   // day rather than the only thing eligible there.
   { text: "Before the first coffee. Respect.", at: [4, 7] },
   { text: "The tree is quiet at this hour.", at: [4, 7] },
@@ -159,7 +159,7 @@ const SURFACE_ACCENTS: Record<string, string> = {
   // Clay, not one of the greens: the greens in this palette already mean "live/healthy" (moss on the
   // dashboard), and a note is not a status. A warm earth tone reads as something a person left behind.
   notes: "--console-clay", // soft terracotta: human prose, warm and hand-placed
-  actions: "--console-gold", // ochre yellow: the warm, worn key-cap tone of a keyboard
+  actions: "--console-gold", // ocher yellow: the warm, worn key-cap tone of a keyboard
   settings: "--console-stone", // neutral gray: utility
   // The two review surfaces take the remaining greens, kept clear of moss so neither reads
   // as health: spruce for the diff (deeper - the thing you sit and read), sage for the plan
@@ -200,7 +200,7 @@ const SURFACE_ICONS: Record<string, string> = {
   // pageId - see main.ts.)
   actions:
     '<rect x="2" y="6" width="20" height="12" rx="2"/><path d="M6 10h.01M10 10h.01M14 10h.01M18 10h.01"/><path data-motion="press" d="M8.5 14h7"/>',
-  // Diff: a split view - a centre rule with shorter lines either side. The left column grows
+  // Diff: a split view - a center rule with shorter lines either side. The left column grows
   // on hover, the one motion that reads as text arriving.
   diff: '<path d="M12 4v16"/><path data-motion="bars" d="M4 8h5M4 12h6M4 16h4"/><path d="M15 8h5M15 12h4M15 16h5"/>',
   // Plan: one unit branching into two, the shape of the delegation tree. The root pulses,
@@ -273,7 +273,36 @@ export function syncLauncherPulse(root: HTMLElement, p: PulseView | null): void 
   parts.push("Counts are daemon-wide.");
   hint.textContent = parts.join(". ");
 
+  paintSaved(root, p);
   paintSigil(root, p);
+}
+
+// paintSaved renders the headline figure: how much work the cache replayed instead of ran.
+//
+// Every millisecond here was MEASURED - each entry records how long the run that produced it took,
+// and a hit adds that entry's own figure. Nothing is averaged or extrapolated. It understates,
+// because an entry written before durations were recorded contributes nothing, which is why the
+// caption says "since this daemon started" rather than implying a lifetime total.
+//
+// Hidden below a minute: the number exists to be striking, and "0m" on a fresh daemon is an
+// argument against the cache rather than for it.
+function paintSaved(root: HTMLElement, p: PulseView): void {
+  const wrap = root.querySelector<HTMLElement>("[data-launcher-saved]");
+  const value = root.querySelector<HTMLElement>("[data-launcher-saved-value]");
+  const unit = root.querySelector<HTMLElement>("[data-launcher-saved-unit]");
+  if (!wrap || !value || !unit) return;
+  const ms = p.cache?.savedMs ?? 0;
+  wrap.hidden = ms < 60_000;
+  if (wrap.hidden) return;
+  const mins = Math.round(ms / 60_000);
+  if (mins < 90) {
+    value.textContent = String(mins);
+    unit.textContent = mins === 1 ? "minute the cache saved" : "minutes the cache saved";
+    return;
+  }
+  const hours = ms / 3_600_000;
+  value.textContent = hours < 10 ? hours.toFixed(1) : String(Math.round(hours));
+  unit.textContent = "hours the cache saved";
 }
 
 // paintSigil draws the mark for whichever workspace this window is answering for. Scope first,
@@ -298,8 +327,9 @@ function paintSigil(root: HTMLElement, p: PulseView): void {
   el.style.color = "var(" + spec.hue + ")";
   // The SHORT name, never the root. A full path carries a username, a client, an unreleased codename;
   // the sigil discloses none of that by construction, and a tooltip spelling the path out would hand
-  // back exactly what the mark was careful not to encode.
-  el.title = shortName(seed);
+  // back exactly what the mark was careful not to encode. describeSigil reads the SPEC, not the seed,
+  // for the same reason.
+  el.title = shortName(seed) + " - " + describeSigil(spec);
 }
 
 // syncLauncherChord names the palette's CURRENT key in the zero-tab hint. Called by the shell every
@@ -308,9 +338,23 @@ function paintSigil(root: HTMLElement, p: PulseView): void {
 export function syncLauncherChord(root: HTMLElement, chord: string): void {
   const hint = root.querySelector<HTMLElement>("[data-empty-hint]");
   if (!hint) return;
-  hint.textContent = chord
-    ? "Pick one from the rail, or press " + chord + " for the palette."
-    : "Pick one from the rail, or use the command palette.";
+  hint.textContent = "";
+  if (!chord) {
+    hint.textContent = "Pick one from the rail, or use the command palette.";
+    return;
+  }
+  // The chord is a KEYCAP YOU CAN PRESS, not a note about one. A hint that names a shortcut and
+  // does nothing when you click it teaches the shortcut to people who already knew it; clicking is
+  // how everyone else gets there, and they arrive having seen the chord that would have worked.
+  hint.append(document.createTextNode("Pick one from the rail, or press "));
+  const key = document.createElement("button");
+  key.type = "button";
+  key.className = "console-cheatsheet-kbd console-home__chord";
+  key.dataset.openPalette = "";
+  key.textContent = chord;
+  key.title = "Open the command palette";
+  key.setAttribute("aria-label", "Open the command palette (" + chord + ")");
+  hint.append(key, document.createTextNode(" for the palette."));
 }
 
 export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => void): HTMLElement {
@@ -541,6 +585,24 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
 
   ways.append(pickWay, demoWay);
 
-  root.append(sigil, title, sub, live, ways, gallery);
+  // The headline figure, bottom-right of the screen rather than in the reading column: it is not a
+  // step in the flow, it is the reason the tool exists, and it should be the thing your eye lands on
+  // once it has finished with the choices. Hidden until there is something to say (paintSaved).
+  const saved = document.createElement("div");
+  saved.dataset.launcherSaved = "";
+  saved.hidden = true;
+  const savedValue = document.createElement("span");
+  savedValue.dataset.launcherSavedValue = "";
+  const savedUnit = document.createElement("span");
+  savedUnit.dataset.launcherSavedUnit = "";
+  const savedNote = document.createElement("span");
+  savedNote.dataset.launcherSavedNote = "";
+  // The three lines read as ONE phrase downward - "22 / hours the cache saved / this session" -
+  // rather than a number with two labels stuck under it. The bound still has to be there, because
+  // this is the daemon's lifetime and not the cache's.
+  savedNote.textContent = "this session";
+  saved.append(savedValue, savedUnit, savedNote);
+
+  root.append(sigil, title, sub, live, ways, gallery, saved);
   return root;
 }

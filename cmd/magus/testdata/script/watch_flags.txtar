@@ -39,7 +39,7 @@ stderr 'ignore: pattern is empty'
 ! exec magus watch --ignore justastring
 stderr 'ignore: "justastring" is not in key=value form'
 
-# An unparseable duration is rejected at flag-parsing time too.
+# An unparsable duration is rejected at flag-parsing time too.
 ! exec magus watch -debounce notaduration
 stderr 'invalid value "notaduration" for flag -debounce'
 

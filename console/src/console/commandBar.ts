@@ -117,8 +117,8 @@ export interface CommandBarDeps {
 }
 
 export function createCommandBar(deps: CommandBarDeps): CommandBar {
-  // The bar: prompt | input | items. role=combobox semantics are overkill for a dmenu; a labelled
-  // dialog holding a labelled input and a listbox of options keeps the ARIA honest and simple.
+  // The bar: prompt | input | items. role=combobox semantics are overkill for a dmenu; a labeled
+  // dialog holding a labeled input and a listbox of options keeps the ARIA honest and simple.
   const bar = h("div", "console-shell-commandbar");
   bar.id = "command-bar";
   bar.hidden = true;

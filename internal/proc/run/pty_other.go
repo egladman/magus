@@ -13,7 +13,7 @@ import (
 // False here, and deliberately not faked. Windows has ConPTY, which is a different
 // API with different semantics, and wasm has no processes at all. A TTY request is
 // refused with a clear error rather than silently downgraded to pipes: silently
-// giving a caller the non-TTY behaviour they explicitly asked to avoid is the kind
+// giving a caller the non-TTY behavior they explicitly asked to avoid is the kind
 // of quiet wrong answer that costs an afternoon to track down.
 const ptySupported = false
 

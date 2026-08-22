@@ -114,7 +114,7 @@ func iouringHashBatch(files []relAbs) ([]string, error) {
 	return results, nil
 }
 
-// iouringMinBatch is the minimum file count at which io_uring amortises its setup cost.
+// iouringMinBatch is the minimum file count at which io_uring amortizes its setup cost.
 const iouringMinBatch = 16
 
 // hashFilesIoUring is the Linux fast-path for hashFiles. Returns false on ring failure;

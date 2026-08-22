@@ -29,7 +29,7 @@ func IsSurfaceRoute(seg string) bool {
 //
 // The distinction is the point. A redirect assembled from a request path is a redirect whose
 // destination the requester influenced, which is both a real hazard class and one a taint
-// analyser is right to flag (gosec G710). Returning the matched constant means the destination
+// analyzer is right to flag (gosec G710). Returning the matched constant means the destination
 // is drawn from this file's own list and can be nothing else, so the property holds by
 // construction rather than by the caller having validated first.
 func CanonicalSurfacePath(seg string) (string, bool) {

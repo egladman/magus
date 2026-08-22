@@ -177,14 +177,10 @@ func (g *Graph) Resolve(input string, limit int) []types.KnowledgeMatch {
 			continue
 		}
 		m := types.KnowledgeMatch{ID: id, Kind: n.Kind, Label: n.Label, Score: score}
-		// Prose whose subject moved on without it ranks below prose that kept up. The
-		// penalty is applied HERE rather than inside scoreNode so the evidence can travel
-		// with the match: a weight a reader cannot see is one they cannot argue with.
-		if p := stalenessPenalty(n.Attrs); p > 0 {
-			m.Score -= p
-			m.Staleness = n.Attrs[AttrStaleness]
-			m.OutrunDays, _ = strconv.Atoi(n.Attrs[AttrOutrunDays])
-		}
+		// Prose whose subject moved on is LABELED, never reordered - see stalenessLabel for
+		// why ranking on it is the wrong repair. The label travels with the match so a caller
+		// can show "400 days behind its subject" beside the result and let the reader judge.
+		m.Staleness, m.OutrunDays = stalenessLabel(n.Attrs)
 		matches = append(matches, m)
 	}
 	slices.SortFunc(matches, func(a, b types.KnowledgeMatch) int {
@@ -617,9 +613,46 @@ func (g *Graph) resolveSymbol(ref string) (string, bool) {
 	return "", false
 }
 
+// Dependents returns every node that transitively DEPENDS ON id, as ids, nearest first.
+//
+// Deliberately narrower than blastRadius below, which is a different question wearing a similar
+// name: blastRadius counts everything that reaches a node by ANY relation, so a doc that
+// documents a spell is in it. This walks `depends_on` alone, which is what "what rebuilds if I
+// change this" means - and the two diverge hard. Nothing depends_on a spell (a target USES one),
+// so a spell's blastRadius is in the hundreds while its Dependents is empty, and both are
+// correct answers to their own question.
+//
+// Ids rather than a count, because the caller highlights them. Unbudgeted: the result is bounded
+// by the depends_on subgraph, which is the build DAG rather than the whole knowledge graph.
+func (g *Graph) Dependents(id string) []string {
+	g.ensureAdj()
+	if _, ok := g.node(id); !ok {
+		return nil
+	}
+	seen := map[string]bool{id: true}
+	out := []string{}
+	queue := []string{id}
+	for len(queue) > 0 {
+		cur := queue[0]
+		queue = queue[1:]
+		for _, e := range g.in[cur] { // predecessors: e.Source depends_on cur
+			if e.Relation != types.RelationDependsOn || seen[e.Source] {
+				continue
+			}
+			seen[e.Source] = true
+			out = append(out, e.Source)
+			queue = append(queue, e.Source)
+		}
+	}
+	return out
+}
+
 // blastRadius returns how many other nodes can reach id by walking edges in their
-// natural direction. It is unbounded (walks the whole reachable component); a
-// budget/cap for hub nodes on very large graphs is Phase 8 scale work.
+// natural direction, over ANY relation. It is unbounded (walks the whole reachable
+// component); a budget/cap for hub nodes on very large graphs is Phase 8 scale work.
+//
+// A REACH measure, not a rebuild one - see Dependents above, which answers "what rebuilds"
+// over depends_on alone. The two diverge to the point of contradiction on a spell.
 func (g *Graph) blastRadius(id string) int {
 	g.ensureAdj()
 	seen := map[string]bool{id: true}

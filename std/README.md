@@ -55,7 +55,7 @@ signature, regenerate, and the docs (`magus describe module`, `docs/modules/*.md
 and the Buzz binding both follow. Adding a module is one descriptor + `Register`
 in `init()` + a `//go:generate` line.
 
-`std` itself stays VM-agnostic: the Buzz value marshalling and the trampolines
+`std` itself stays VM-agnostic: the Buzz value marshaling and the trampolines
 live in [`../host`](../host), and the few byte-level companions that can't
 be declared (the `crypto.hmacSha256` / `http.download` family, whose args cross
 as `[int]` byte lists the `TypeTag` set can't express) are hand-written VM glue in

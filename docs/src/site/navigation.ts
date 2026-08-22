@@ -43,7 +43,7 @@ export function initNav(): void {
   // Grouped sections are Pico <details> dropdowns, which is what makes them work without any
   // JavaScript - but <details> has no notion of "dismiss", so an opened group would otherwise
   // stay open until clicked again. These three handlers give it the dismissal a menu is
-  // expected to have, and every one degrades to the plain native behaviour if this script
+  // expected to have, and every one degrades to the plain native behavior if this script
   // never runs.
   const groups = (): HTMLDetailsElement[] =>
     Array.from(document.querySelectorAll<HTMLDetailsElement>(".nav-links details.dropdown"));

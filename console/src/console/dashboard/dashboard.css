@@ -290,7 +290,7 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 }
 /* Fill the panel's spare height instead of leaving it empty.
  *
- * The pool card is routinely stretched by a taller neighbour (Local cache), and the grid used to
+ * The pool card is routinely stretched by a taller neighbor (Local cache), and the grid used to
  * sit as a small block in the top-left with the rest of the card blank. Making the body a flex
  * column and letting the grid grow turns that dead space into bigger cubes, which is the whole
  * point of the seating read - a filled fraction of an AREA.
@@ -334,7 +334,7 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 .console-dashboard-pool__legend .console-dashboard-legend--running::before { background: var(--console-status-running); border-color: var(--console-status-running); }
 .console-dashboard-pool__legend .console-dashboard-legend--queued::before { border-style: dashed; border-color: var(--console-status-queued); background: transparent; }
 
-/* Agent seats: one cell per recently-active agent session, coloured by which host it came from.
+/* Agent seats: one cell per recently-active agent session, colored by which host it came from.
    Deliberately the same visual language as the pool grid above - a block of cells you read as a
    filled fraction rather than a number - because the two are the same question from opposite ends:
    the pool is magus's capacity, this is the demand arriving at it.
@@ -354,7 +354,7 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 }
 .console-dashboard-agents__seat[data-warm="yes"] { background: var(--console-stone); }
 /* Per-host hues from the console's earthy accent set, not the status palette: a host is an
-   identity, not a severity, and reusing the status colours here would make "codex" read as an
+   identity, not a severity, and reusing the status colors here would make "codex" read as an
    error. */
 .console-dashboard-agents__seat[data-host="claude-code"] { border-color: var(--console-clay); }
 .console-dashboard-agents__seat[data-host="claude-code"][data-warm="yes"] { background: var(--console-clay); }
@@ -367,7 +367,7 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 
 /* The seat key: which hue is which agent.
  *
- * Without it the seat row was decorative - four colours and nothing on the board saying what any of
+ * Without it the seat row was decorative - four colors and nothing on the board saying what any of
  * them meant, so the only reader who could decode it was the person who wrote the palette. The
  * swatch reuses the same tokens as the seats above, so the two cannot drift apart. */
 .console-dashboard-agents__key {
@@ -407,13 +407,13 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
   color: var(--pf-t--global--text--color--subtle);
 }
 /* Guard-judged rows read as documentation admonitions: a severity glyph, a tinted left edge, and
-   the text. Colour is the SECONDARY cue here, not the only one. It is invisible to a reader who
+   the text. Color is the SECONDARY cue here, not the only one. It is invisible to a reader who
    cannot separate the hues, and a tinted 1px edge does not resolve at all from across a room, which
    is the distance this tile is meant to be read from. The glyph survives both. */
 /* Compounded with .console-dashboard-row on purpose, not for emphasis. Both classes are on the same
    element at equal specificity, and the shared row rule is declared LATER in this file, so a lone
    .console-dashboard-agents__call silently lost every property the two share - align-items among
-   them, which is what left these glyphs sitting on the text baseline instead of centred. */
+   them, which is what left these glyphs sitting on the text baseline instead of centered. */
 .console-dashboard-row.console-dashboard-agents__call {
   /* Declared on the ROW, not on the block, because the row needs it for padding and custom
      properties inherit downward only. */
@@ -434,12 +434,12 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
  * The shared row rule spaces its children apart, which is right for the two-child rows it was
  * written for and wrong here: with a glyph added, three children got spread evenly and every tool
  * name landed at a DIFFERENT x, set by however long its meta text happened to be. The result was a
- * column of names you could not scan down. One auto margin restores two-group behaviour. */
+ * column of names you could not scan down. One auto margin restores two-group behavior. */
 .console-dashboard-row.console-dashboard-agents__call .console-dashboard-row__cmd { margin-right: auto; }
 /* The glyph is a badge, not a bare mark: a tinted block the same size as the status chips elsewhere
    in the console, so the severity has weight at a glance and the rows keep one left edge.
    display:block matters - an inline SVG sits on the text BASELINE, which is what left these
-   sitting low against the row rather than centred in it. */
+   sitting low against the row rather than centered in it. */
 /* Absolutely positioned, NOT a stretched flex item.
  *
  * The obvious spelling - align-self:stretch plus aspect-ratio:1 - is circular and blows up: stretch
@@ -556,7 +556,7 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 }
 [data-bigpicture] .console-dashboard-gantt__howto { font-size: calc(var(--bp-u) * 1); margin-bottom: calc(var(--bp-u) * 0.4); }
 /* The dashed-leader swatch: a short rule, not a filled square, because it stands for a LINE on the
-   chart and a square would read as another state colour. */
+   chart and a square would read as another state color. */
 .console-dashboard-gantt__legend .console-dashboard-legend--wait::before {
   width: 1.1em;
   height: 0;
@@ -578,7 +578,7 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 /* Run grouping: one tint per INVOCATION. Zebra here is deliberately coarse. Striping every target
    row would draw twenty alternating lines that compete with the bars; one band per run blocks the
    group instead, which is the unit an operator reads. The band is the whole grouping device - a
-   state-coloured rule alongside it was tried and removed, because the bars in the group already
+   state-colored rule alongside it was tried and removed, because the bars in the group already
    carry state and the rule only restated it in a second visual language. */
 .console-dashboard-gantt__runband { fill: var(--pf-t--global--text--color--regular); fill-opacity: 0; }
 .console-dashboard-gantt__runband[data-zebra="odd"] { fill-opacity: 0.04; }
@@ -656,7 +656,7 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
   overflow: hidden;
 }
 /* At rest (and under reduced motion, where density.ts never sets [data-marquee]) an over-long value
-   ellipsises. The inner span is what carries the text so the marquee below has something to move
+   ellipsis. The inner span is what carries the text so the marquee below has something to move
    that is not the clipping box itself. */
 .console-dashboard-row__meta > .console-dashboard-row__scroll {
   display: block; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
@@ -759,7 +759,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 /* Label ABOVE the control, not beside it - the standard form-field stack.
    Inline, the label read as a stray word that happened to sit next to some chips: nothing tied the
    two together, so it looked like loose text rather than part of one control. Stacked, the label
-   and the group read as a single labelled field, which is the same shape every other labelled
+   and the group read as a single labeled field, which is the same shape every other labeled
    control in the console uses and is why it now looks deliberate rather than appended. */
 .console-dashboard-viewbar__workspaces {
   display: flex;
@@ -783,7 +783,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   color: var(--pf-t--global--text--color--subtle);
   white-space: nowrap;
 }
-/* A labelled PatternFly SECONDARY button (bordered, not filled). It was a bare icon-only glyph and
+/* A labeled PatternFly SECONDARY button (bordered, not filled). It was a bare icon-only glyph and
    nobody could find it: a muted square in the corner of an empty row, with a monitor outline that
    does not read as "present this on a TV" unless you already know the feature exists. It keeps
    PF's own skin now, so only the position and the pressed state are set here.
@@ -792,7 +792,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
    first glance, and the console's filled blue already means running work. */
 .console-dashboard-viewbar__bigpicture { flex: 0 0 auto; }
 
-/* ICON BUTTONS: centre the glyph against the LABEL rather than letting it sit on the text baseline,
+/* ICON BUTTONS: center the glyph against the LABEL rather than letting it sit on the text baseline,
  * and gap them - the icon carries pf-m-start (PatternFly's own spacing modifier) but that margin is
  * scoped to a `.pf-v6-c-button` ancestor, and these buttons wear `.pf-v6-c-toggle-group__button`
  * instead, so the icon landed flush against the label with no space between them.
@@ -800,7 +800,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
  * An SVG is an inline replaced element, so by default its bottom edge lands on the baseline and the
  * icon rides visibly high next to the words - 2px, consistently. PatternFly does NOT do this for
  * us, which is the trap: a new button can wear pf-v6-c-button and every PF modifier, match on fill,
- * padding, radius and colour, and still have its glyph sit high, because the fix was never in the
+ * padding, radius and color, and still have its glyph sit high, because the fix was never in the
  * component to begin with.
  *
  * So this is the ONE place it lives, and every icon+label button in the dashboard is listed here.
@@ -868,7 +868,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
    the attribute absent, not one declaration below applies. */
 
 /* The unit. Every size in the mode derives from it, which is what lets one stylesheet be legible
-   at 3 metres on a 55-inch panel and still usable on a phone, with no per-element breakpoints.
+   at 3 meters on a 55-inch panel and still usable on a phone, with no per-element breakpoints.
    vmin, not vw: on a very wide or very short window the SHORTER axis is what limits how much can
    be shown, and sizing off vw there overflows vertically. The clamp floors it so a phone stays
    readable and ceilings it so a 4K panel does not turn into three enormous words. */
@@ -1082,7 +1082,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 [data-bigpicture] #dash-panels > .console-dashboard-split {
   height: 100%;
   /* NARROWER THAN THE GAP between panels (--bp-gap, 0.9u). At 1.1u the handle was wider than the
-     seam it sits in, so it spilled onto both neighbours - and because it re-enables pointer events,
+     seam it sits in, so it spilled onto both neighbors - and because it re-enables pointer events,
      that sliver sat ON TOP of the live-activity panel's heading and ate clicks meant for the text.
      Any width above the gap has that problem; 0.55u leaves clearance on both sides, and stays a
      usable col-resize target the way an IDE splitter is. */
@@ -1095,7 +1095,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   opacity: 0;
   transition: opacity 0.12s ease, background 0.12s ease;
 }
-/* Grey, not the running accent it used to take. --console-status-running is the colour the pool
+/* Grey, not the running accent it used to take. --console-status-running is the color the pool
    grid, the gantt bars and the timeline all use to mean "work is executing"; spending it on a
    divider made a piece of inert chrome look like a status readout, and put a second purple on the
    screen competing with the one that carries meaning. A splitter is furniture - it should read as
@@ -1238,10 +1238,10 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   grid-template-columns: repeat(auto-fit, minmax(calc(var(--bp-u) * 9.5), 1fr));
   gap: calc(var(--bp-u) * 0.4);
 }
-/* Left-aligned, like the board: a KPI strip is scanned down its left edge, and centring the values
+/* Left-aligned, like the board: a KPI strip is scanned down its left edge, and centering the values
    would leave each number starting at a different x for the eye to hunt for.
  *
- * The left inset is larger than the other three on purpose. Each stat carries a 3px coloured rule
+ * The left inset is larger than the other three on purpose. Each stat carries a 3px colored rule
  * at x=0 (.console-dashboard-stat::before), so padding that looks generous on the other edges still
  * leaves the text almost touching that rule. This padding had been tightened to squeeze five stats
  * into a three-column panel; the panel is four columns wide now, so the squeeze bought nothing and
@@ -1327,7 +1327,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
    container, so the canvas's `[data-bigpicture] #dash-panels > *` rule - which makes every panel a
    COLUMN flex container - also applied here at (1,1,0) and beat an unqualified rail rule at
    (0,2,0). The rail then stacked vertically: its card row became a column item, flex-grow worked on
-   the wrong axis, and the cards sat centred at their content width instead of spanning the bottom
+   the wrong axis, and the cards sat centered at their content width instead of spanning the bottom
    edge. Same lone-id-outranks-any-attributes trap as the grid placements above. */
 [data-bigpicture] #dash-panels > .console-dashboard-alertrail {
   display: flex;
@@ -1404,8 +1404,8 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
   flex: 1 1 auto; min-width: 0;
 }
 
-/* An alert CARD. The severity rides the left edge rather than colouring the message: coloured body
-   text is harder to read at distance and would collide with the ANSI colours elsewhere on the
+/* An alert CARD. The severity rides the left edge rather than coloring the message: colored body
+   text is harder to read at distance and would collide with the ANSI colors elsewhere on the
    board, while an edge carries the same information in the periphery - which is where an alert is
    noticed before it is read. */
 .console-dashboard-alertrail__card {
@@ -1574,7 +1574,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
  *
  * A fixed three-column grid fixes both: every card is identical, and the block's width is a
  * constant, so it stays put whatever the verdict says or the counts reach. */
-/* The verdict and its "?" on one line, the glyph centred against the text rather than sitting on
+/* The verdict and its "?" on one line, the glyph centered against the text rather than sitting on
    its baseline. */
 .console-dashboard-hero__verdictrow { display: flex; align-items: center; gap: 0.45rem; min-width: 0; }
 
@@ -1613,7 +1613,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 .console-dashboard-hero__fail[data-n="some"] { border-color: var(--console-status-danger); }
 /* A live-mode failing count deep-links to the failing run's log. */
 /* A linked count reads as clickable: pointer cursor, an arrow on the label, and a hover that picks
-   up its own status colour. Generalised from the failing count to any metric that has somewhere to
+   up its own status color. Generalized from the failing count to any metric that has somewhere to
    go, so the affordance means the same thing wherever it appears rather than being a special case
    of one number. */
 .console-dashboard-hero__metric[data-linked] { cursor: pointer; }
@@ -1629,9 +1629,9 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
    output tail (fed only when a raw-output buffer is present, i.e. the demo). */
 .console-dashboard-activity__note { display: inline-flex; align-items: center; gap: 0.6rem; }
 /* Styled as a PF secondary button (see activity.ts); only the outbound arrow and the no-wrap are
-   authored here. The colour and hover now come from the PF component rather than being hand-rolled,
+   authored here. The color and hover now come from the PF component rather than being hand-rolled,
    so it matches every other secondary button in the console. */
-/* Only what is specific to THIS button; its icon centring is shared with the Big Picture button in
+/* Only what is specific to THIS button; its icon centering is shared with the Big Picture button in
  * the icon-button rule above, and everything else comes from pf-v6-c-button pf-m-secondary. Earlier
  * revisions each grew a private fix here and each broke differently: a ::after pseudo-element for
  * the arrow (not a flex child, so it sat mid-box) and a hand-restated `color` (overrode the
@@ -1655,7 +1655,7 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
      Zebra striping gives the eye horizontal rails but nothing vertical, so the rows read as a stack
      of separate bands rather than one body of output; the rule binds them together and marks where
      the output starts, which matters most when a wrapped line makes the left edge ragged. Neutral
-     grey: this is structure, not status - the badges and ANSI colours carry the meaning. */
+     grey: this is structure, not status - the badges and ANSI colors carry the meaning. */
   border-left: 3px solid var(--pf-t--global--border--color--default);
   overflow-wrap: anywhere;
 }

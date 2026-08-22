@@ -66,11 +66,6 @@ export function initWorkspacePicker(
   btn.setAttribute("aria-expanded", "false");
   const label = document.createElement("span");
   label.className = "console-shell-scope__label";
-  // Shown only in the demo, beside the workspace's own name rather than instead of it.
-  const demoTag = document.createElement("span");
-  demoTag.className = "console-shell-scope__tag";
-  demoTag.textContent = "demo";
-  demoTag.hidden = true;
   // A caret, because aria-haspopup tells a screen reader this opens a menu and nothing told anyone
   // else. Without it the value reads as a status readout rather than as something to press.
   const caret = document.createElement("span");
@@ -79,7 +74,7 @@ export function initWorkspacePicker(
     '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" ' +
     'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
     '<path d="M6 9l6 6 6-6"/></svg>';
-  btn.append(label, demoTag, caret);
+  btn.append(label, caret);
   wrap.append(caption, btn);
 
   const menu = document.createElement("div");
@@ -110,12 +105,14 @@ export function initWorkspacePicker(
     // rule would have hidden the one control that offers anything at all on a first visit.
     wrap.hidden = false;
     const demo = inDemo();
-    // The control names the WORKSPACE, always. It used to read "Demo data" in the demo, which replaced
-    // the one fact it exists to report - you could be scoped to acme and the control would not say so.
-    // Demo-ness is a qualifier on that name, so it rides as a tag beside it, the same mark the menu
-    // rows carry.
-    label.textContent = shortName(scope);
-    demoTag.hidden = !demo;
+    // The control names the WORKSPACE and nothing else. It used to read "Demo data" (replacing the
+    // one fact it exists to report), then carried a "demo" tag beside the name - which put a word
+    // in the title bar that repeats what the status bar's connection dot already says, on every
+    // screen, permanently. The demo mark belongs in the MENU, against the row that enters it.
+    // "All", not shortName's "All workspaces": the caption beside this button already says
+    // Workspace, so the full phrase read as "Workspace All workspaces". The MENU row keeps the
+    // long form, because nothing there supplies the noun.
+    label.textContent = scope === ALL_WORKSPACES ? "All" : shortName(scope);
     const name = scope === ALL_WORKSPACES ? "all workspaces" : shortName(scope);
     btn.title =
       "Workspace: " +

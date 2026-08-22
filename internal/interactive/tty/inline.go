@@ -84,7 +84,7 @@ func (v *InlineView) Paint(frame string) bool {
 	// above it.
 	//
 	// ClipCols, not Clip: a frame handed to this may already be styled, and
-	// counting its escape bytes against a column budget cuts a coloured row in
+	// counting its escape bytes against a column budget cuts a colored row in
 	// the middle of a sequence. The terminal then reads what follows as
 	// parameters and eats it.
 	lines := strings.Split(strings.TrimRight(frame, "\n"), "\n")

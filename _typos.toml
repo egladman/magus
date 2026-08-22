@@ -32,6 +32,27 @@ ba = "ba"
 # case boundary and "corrects" the leading fragment to "On", which would rename the
 # feature; the accepted word is that fragment, as with "Ded" above.
 Pn = "Pn"
+# Lage is Microsoft's build tool, named beside turbo/nx/moon/bazel in the benchmark
+# harness. typos reads it as a misspelt "large".
+lage = "lage"
+# DELIBERATE near-misses in tests, where the value being wrong IS the test. Correcting them does
+# not fix a typo, it inverts the assertion: `parseHTTPRetry({"attemps": 3})` proves an unknown key
+# is REJECTED, and "attempts" makes it prove a valid key is rejected instead. Every one of these
+# was corrupted by the first autofix run over code, and each broke its test silently-looking (the
+# failure names the assertion, never the cause).
+bui = "bui"
+buil = "buil"
+abd = "abd"
+auther = "auther"
+staus = "staus"
+mport = "mport"
+attemps = "attemps"
+dcoker = "dcoker"
+# A git-describe fixture's abbreviated hash. typos reads hex as words and turned ga899daa3 into
+# ga899data3 - not a spelling at all, and the kind of edit no reviewer would catch in a diff.
+daa = "daa"
+# From "ancestor-descendant", which typos splits on the hyphen and flags the head of.
+anc = "anc"
 
 [files]
 # Skip generated / vendored trees and lockfiles - nothing to fix inside them, and
@@ -42,7 +63,12 @@ extend-exclude = [
   # docs reorg). Generated trees are also the worst false-positive source - the protobuf
   # TS descriptors are base64 blobs that read as hundreds of misspelled words.
   "**/gen/**",
-  "libs/gopherbuzz/testdata/**",
+  # The whole gopherbuzz tree, not just its testdata. It is a separate module that must match
+  # upstream Buzz behaviour, so its identifiers are upstream's - `ot` (an objectType local), `fo`,
+  # `mone` in a session test. Correcting them would either diverge from upstream or fight every
+  # sync, and neither is worth a spelling. This is a parity boundary, not an exemption we chose
+  # for our own prose.
+  "libs/gopherbuzz/**",
   "**/*.min.*",
   "**/*.wasm",
   "go.sum",
@@ -54,22 +80,7 @@ extend-exclude = [
 # when `typos` false-flags a real word (e.g. a deliberate abbreviation), never
 # for domain jargon that isn't in typos' typo->fix map to begin with.
 
-# Code is not prose. typos has no include-only filter - it walks the tree and scopes by
-# CONFIG, not argv (a glob passed as an argument is reported as a missing path) - so the
-# only way to point it at prose is to say which types are not it. 507 hits sat behind
-# that, nearly all British spellings in code comments, which is a separate decision from
-# gating prose and one nobody has made. Turning a type back on is how that decision gets
-# made, deliberately, rather than by which project happens to invoke the op.
-#
-# ts covers .tsx and .cts/.mts; js covers .jsx/.mjs/.cjs; c covers headers. See
-# `typos --type-list`.
-[type.go]
-check-file = false
-[type.ts]
-check-file = false
-[type.js]
-check-file = false
-[type.c]
-check-file = false
-[type.sh]
-check-file = false
+# Code IS checked. It was not until 2026-08-21: every code type was off, and the 507 hits
+# behind that were nearly all British spellings in comments. One spelling for the whole
+# tree is the point of pinning a locale, and a gate that stops at the file extension only
+# moves where the drift accumulates.

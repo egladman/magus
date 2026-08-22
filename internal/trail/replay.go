@@ -40,7 +40,7 @@ type Touch struct {
 	// `curl -H "Authorization: Bearer ..."`, plus multi-hundred-line heredocs and whole
 	// commit messages. Transcript one field up states the rule that breaks - "A POINTER, never
 	// content ... the expensive and sensitive detail stays where the host already put it" -
-	// and a review payload is read by every MCP client, so an agent asked to summarise it
+	// and a review payload is read by every MCP client, so an agent asked to summarize it
 	// reproduces whatever is in there. The program name is the part that explains the edit;
 	// anyone who needs the argument list opens the host's own transcript.
 	Ran []string `json:"ran,omitempty" yaml:"ran,omitempty"`
@@ -227,7 +227,7 @@ func ObservedCounts(base string, limit int) (reads, writes, shell int) {
 // treat as an assignment counts, so a path that happens to contain "=" is still a program.
 //
 // A command this cannot read reduces to the empty string and is dropped. Reporting a
-// best-guess program for an unparseable line would put an invented fact in a provenance
+// best-guess program for an unparsable line would put an invented fact in a provenance
 // record, and an admitted gap beats a low-confidence match here for the same reason it does
 // in the notes store.
 func commandProgram(cmd string) string {

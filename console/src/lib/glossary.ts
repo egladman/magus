@@ -34,7 +34,7 @@ export function glossaryUrl(term: string, slug?: string): string {
 }
 
 // glossaryLink returns an <a> for the term's glossary entry. It navigates to the glossary
-// page; see the note at the top of this file about the inline-panel behaviour that is
+// page; see the note at the top of this file about the inline-panel behavior that is
 // described in several places but does not exist.
 export function glossaryLink(
   term: string,

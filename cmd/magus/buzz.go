@@ -44,7 +44,7 @@ func buzzCmd(ctx context.Context, root string, args []string) error {
 
 	// Bound from the command registry rather than declared here. The -t/--test pair
 	// is ONE switch, which a generated binder can only express because the registry
-	// marks the second AliasOf the first; modelled as two flags they would get two
+	// marks the second AliasOf the first; modeled as two flags they would get two
 	// destinations and the shorthand would parse and then do nothing.
 	var bf *gen.BuzzFlags
 	rest, err := cmdParse("buzz", args, func(fs *flag.FlagSet) {

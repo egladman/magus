@@ -81,7 +81,7 @@ func archToken(goarch, goarm string) string {
 // binary with the latest (or a specified) release.
 //
 // Discovery reads ONLY the site's index.json. The GitHub API is not used.
-// MAGUS_UPDATE_URL overrides the discovery URL (e.g. for organisations that
+// MAGUS_UPDATE_URL overrides the discovery URL (e.g. for organizations that
 // self-host the site as a private update channel). If the index is unreachable,
 // the command fails with a clear error - there is no silent fallback.
 //

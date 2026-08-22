@@ -2,7 +2,7 @@
   <title>magus</title>
   <!--
     The SOURCE for the icon PNGs beside it. It carries NO media query on purpose: the
-    rasterizer renders in whatever colour scheme the machine happens to be in, so an
+    rasterizer renders in whatever color scheme the machine happens to be in, so an
     adaptive source would export whichever variant that machine preferred. favicon.svg is
     the adaptive one, and only the browser tab can adapt anyway - an apple-touch-icon and a
     manifest icon are each one fixed image.
@@ -33,14 +33,14 @@
     shows through it. Nothing draws the band, which is why it stays crisp at 16px instead of
     turning into a smear.
 
-    COLOUR. Ground #31302e, hat #8fc6b9, contrast 6.87:1. The hat carries the hue and the ground
+    COLOR. Ground #31302e, hat #8fc6b9, contrast 6.87:1. The hat carries the hue and the ground
     stays desaturated - put a hue behind a hue and neither reads as the subject. The hue is
     the mascot's own: skin teal for the console, staff-orb amber for the docs, which sit
     near-complementary so the two apps are unmistakable side by side. Each ground is nudged
     OPPOSITE its hat in temperature, so figure and ground separate by temperature as well as
     luminance. No black and no white anywhere: an icon is a graphical object, where WCAG's
     floor is 3:1, so holding 7:1 would force saturation down to pastel. These sit near 7:1,
-    which keeps the hue reading as a colour while the shape still resolves at 16px.
+    which keeps the hue reading as a color while the shape still resolves at 16px.
   -->
   <rect width="512" height="512" fill="#31302e"/>
   <g transform="translate(-35.8 -24.1) scale(0.4672)" fill="#8fc6b9">

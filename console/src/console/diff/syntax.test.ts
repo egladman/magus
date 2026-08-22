@@ -48,8 +48,8 @@ test("a closed block comment is exact", () => {
 });
 
 // The dominant shape in this codebase: long comment blocks whose opener is on another line, so
-// it cannot be derived from the hunk. Refusing to colour them leaves most of the screen unstyled.
-test("an unclosed block comment colours to end of line", () => {
+// it cannot be derived from the hunk. Refusing to color them leaves most of the screen unstyled.
+test("an unclosed block comment colors to end of line", () => {
   const line = "  /* the opener, continuing below";
   assert.equal(only(line, tokenize(line, "go"), "com"), "/* the opener, continuing below");
 });
@@ -62,7 +62,7 @@ test("a continuation line starting with * is a comment body", () => {
   assert.equal(only(line, got, "com"), "* so the palette follows the theme");
 });
 
-// Under-highlighting is invisible; a confidently wrong colour teaches the reader to distrust
+// Under-highlighting is invisible; a confidently wrong color teaches the reader to distrust
 // the whole column. A fragment must stay plain.
 test("an unterminated string is left plain rather than painted to end of line", () => {
   const line = 'msg := "an opener with no close';

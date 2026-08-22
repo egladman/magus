@@ -22,7 +22,7 @@
   --console-statusbar-h: 2.2rem;
   --console-refdrawer-w: 22rem;
   /* ZERO. The content used to be inset from the chrome by this much, which left a band of chrome
-     colour between the content and everything around it - under the tab strip, beside the rail, above
+     color between the content and everything around it - under the tab strip, beside the rail, above
      the status bar - so the content read as a slab dropped into the window rather than part of it.
      Depth comes from the boundary instead: a hairline plus a soft cast where the chrome meets the
      content (see the title bar, the status bar and the outlet below). Those edges are the only place
@@ -95,7 +95,7 @@ body[data-console-app] button[aria-disabled="true"] {
 
 /* The bottom status-bar FRAME (fixed rail + per-tab wrapper + clusters + the connection liveness
    dot) moved to overrides.css in the W2 shell rebuild - PatternFly has no status-bar component, so it
-   is the audited escape hatch. The discrete chips (#console-demo, #offline-badge) are PF Labels now
+   is the audited escape hatch. The discrete chips (#offline-badge) are PF Labels now
    (main.ts makeStatusBar). --console-statusbar-h / --console-pad (defined at the top of this file)
    are still consumed by both overrides.css and the console-fill layout below. */
 
@@ -152,6 +152,7 @@ body[data-console-fill] > main {
    percentage height against a flex parent, and it drops the apps' fixed heights + tall
    min-heights + Pico's section margin so short viewports still fit without a page scroll. */
 body[data-console-fill] > main > .console-graph-app,
+body[data-console-fill] > main > .console-notes-app,
 body[data-console-fill] > main > .console-render-panel {
   flex: 1 1 auto;
   min-height: 0;
@@ -202,14 +203,18 @@ body[data-console-fill] > main > .console-render-panel {
   flex-direction: column;
   max-width: none;
   margin-inline: 0;
-  /* A slim side gutter so a surface (esp. the log viewer) stretches nearly edge-to-edge instead of
-     keeping Pico's ~1rem .container-fluid inset - the console owns the whole width. */
-  padding-inline: 0.4rem;
+  /* Zero, not Pico's ~1rem .container-fluid inset: the console owns the whole width. It was a slim
+     0.4rem gutter, which read as a white strip down the seam between the rail and the surface -
+     this main is transparent, so the gutter showed the page ground against the rail's own surface
+     rather than any deliberate spacing. Surfaces that want breathing room set their own padding. */
+  padding-inline: 0;
 }
 #console-outlet div[data-pane-id] > main > .console-graph-app,
 #console-outlet div[data-pane-id] > main > .console-render-panel,
 /* Activity and Notes build their panel directly in the pane. Keep that implementation detail from changing the Console's outer
-   silhouette: the pane is the frame in every case. */
+   silhouette: the pane is the frame in every case. Notes carries its own root class because it
+   owns its own sheet; Activity still builds the shared .console-render-panel. */
+#console-outlet div[data-pane-id] > .console-notes-app,
 #console-outlet div[data-pane-id] > .console-render-panel {
   flex: 1 1 auto;
   min-height: 0;
@@ -267,6 +272,20 @@ body[data-console-fill] > main > .console-render-panel {
   outline-offset: -2px;
   z-index: 1;
 }
+/* Reduced motion, the console's own switch. A blanket kill rather than a second selector on the
+   dozen prefers-reduced-motion blocks, which would guarantee the two drift. Near-zero durations
+   rather than `animation: none`: a zero-LENGTH animation still fires animationend, and code
+   waiting on one would hang. Same attribute as the docs site. The graph's simulation is JS and
+   reads the preference itself. */
+:root[data-motion="reduced"] *,
+:root[data-motion="reduced"] *::before,
+:root[data-motion="reduced"] *::after {
+  animation-duration: 0.001ms !important;
+  animation-iteration-count: 1 !important;
+  transition-duration: 0.001ms !important;
+  scroll-behavior: auto !important;
+}
+
 /* The in-pane launcher: a fresh split pane is empty and offers the surfaces to drop in (a PF Gallery
    of Cards, built in tileView). Center the prompt + its card grid within the pane. */
 #console-outlet div[data-pane-id]:has([data-pane-launcher]) { align-items: center; justify-content: center; }
@@ -540,8 +559,18 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-titlebar [role="tab"],
 #console-titlebar #console-actions { -webkit-app-region: no-drag; app-region: no-drag; }
 
-/* The tab bar fills the title bar; the trailing control group sits at the right, on the tab row. */
-#console-tabs { flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch; }
+/* The tab bar fills the title bar; the trailing control group sits at the right, on the tab row.
+   The leading border separates it from the navigation rail below-left: without it the tab strip and
+   the rail read as one L-shaped piece of chrome, and the first tab looks like it belongs to the
+   rail. Matched to the rail's own edge so the two lines continue each other. */
+#console-tabs {
+  flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch;
+  border-inline-start: 1px solid var(--pf-t--global--border--color--default);
+}
+/* No rail on a phone (see the rail's own breakpoint), so nothing to separate from. */
+@media (max-width: 48rem) {
+  #console-tabs { border-inline-start: 0; }
+}
 
 /* Title-bar-right control group: the chrome buttons (command bar, apps, reference, settings gear) as PF
    plain icon Buttons centered on the tab row, and the positioning context for the apps-menu popover
@@ -549,11 +578,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-actions { flex: 0 0 auto; position: relative; display: flex; align-items: center; padding-inline: 0.35rem; }
 /* PF plain buttons default to align-items:baseline (sized for a text+icon button), so the title-bar
    icon-only buttons (apps menu, reference, gear) hang their svg off the baseline - a few px above the
-   button centre, most visible on mobile. Centre the icon so the three chrome buttons sit dead-centre. */
+   button center, most visible on mobile. Center the icon so the three chrome buttons sit dead-center. */
 #console-actions > .pf-v6-c-button { align-items: center; }
 #console-actions > .pf-v6-c-button > .pf-v6-c-button__icon { display: inline-flex; align-items: center; line-height: 0; }
 /* Each chrome button reads as a small inset control, NOT a full-height slab: a square-ish min width and
-   its own block padding give it a compact rounded hit area centred in the bar, so the hover/active
+   its own block padding give it a compact rounded hit area centered in the bar, so the hover/active
    background is a little rounded square with a gap above and below - not a rectangle spanning the whole
    bar height. On a phone the mobile block below stretches it to a finger-sized target instead. */
 #console-actions > .pf-v6-c-button {
@@ -673,18 +702,18 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    so an inherited override never reaches it. */
 #console-tabs .pf-v6-c-tabs__item,
 #console-tabs .pf-v6-c-tabs__link { border-radius: 0; }
-/* The current tab wears the colour of the CONTENT it shows, and the others wear the bar's - the
+/* The current tab wears the color of the CONTENT it shows, and the others wear the bar's - the
    browser-tab logic, where the active tab is contiguous with the page below it and the rest sit back
    in the strip.
    These were the other way round, and identically in both themes: the current tab took the title bar's
-   own primary (255 light / 41 dark, the exact colour it sits on) while the inactive ones took the page
+   own primary (255 light / 41 dark, the exact color it sits on) while the inactive ones took the page
    (242 / 21). So the selected tab was the invisible one and the unselected ones read as raised. The
    rounded top corners were the only cue still separating them, which is why squaring the tabs exposed
    this rather than caused it. */
 #console-tabs .pf-v6-c-tabs__item { background: transparent; }
 #console-tabs .pf-v6-c-tabs__item.pf-m-current {
   background: var(--pf-t--global--background--color--primary--default);
-  /* Lifted on the SIDES, which is where its neighbours are. Top and bottom are the strip's own edges -
+  /* Lifted on the SIDES, which is where its neighbors are. Top and bottom are the strip's own edges -
      the tab meets the window above and the content below, and casting onto either would fight the
      strip's own cast rather than separate one tab from the next. */
   box-shadow: var(--pf-t--global--box-shadow--sm--left), var(--pf-t--global--box-shadow--sm--right);
@@ -722,11 +751,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* The content CARD - the only curved thing in the shell, and the one surface that steps forward out
    of the chrome frame. Chrome is square and recessive; containers are raised and rounded.
    It is the DRAWER that carries this, not #console-outlet: the outlet holds the shell gutter as
-   padding, so painting the card there put the gutter INSIDE the card and left a ring of card colour
+   padding, so painting the card there put the gutter INSIDE the card and left a ring of card color
    around the content - a light strip above it, below it, and beside the tab strip. The gutter belongs
    between the frame and the card, so it has to stay outside the painted box.
    SQUARE and FLUSH: it meets the rail, the tab strip and the status bar directly, so it joins the
-   frame instead of floating in it. A radius here would cut a notch of chrome colour out of each
+   frame instead of floating in it. A radius here would cut a notch of chrome color out of each
    corner - the gap this change exists to remove, reintroduced four times over. */
 #console-outlet > #console-refdrawer {
   background: var(--pf-t--global--background--color--primary--default);
@@ -741,7 +770,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 
    Collapsed (no [data-expanded]) it is an icon strip; expanded it grows to show labels. The width is
    the ONLY thing that animates, and the transition is what makes it read as a native dock rather
-   than a re-render. Everything else about the rail is PatternFly's Nav, retuned through PF's own
+   than a re-render. Everything else about the rail is PatternFly's Nav, returned through PF's own
    per-link custom properties below rather than by re-skinning the component. */
 #console-sidebar {
   flex: 0 0 auto;
@@ -750,8 +779,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   overflow: hidden; /* labels are clipped, not wrapped, while the width animates */
   background: var(--pf-t--global--background--color--secondary--default);
   transition: width 0.14s ease;
-  /* PF centres a nav link's icon against a baseline and pads it for a full-width row. Neither suits a
-     square icon button, so both are retuned here - in PF's vocabulary, so a PF version bump carries. */
+  /* PF centers a nav link's icon against a baseline and pads it for a full-width row. Neither suits a
+     square icon button, so both are returned here - in PF's vocabulary, so a PF version bump carries. */
   --pf-v6-c-nav__link--AlignItems: center;
   --pf-v6-c-nav__link--PaddingInlineStart: 0;
   --pf-v6-c-nav__link--PaddingInlineEnd: 0;
@@ -803,9 +832,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-sidebar [data-rail-badge][hidden] { display: none; }
 
 /* The utility group sits at the foot rather than growing with the list above it, so Settings stays in
-   the same place whether six lenses are listed or sixteen. A hairline separates the two vocabularies -
-   the same rule the pool reading and the collapse control already use, so the rail's foot reads as one
-   stack of trailing controls rather than three unrelated bands. */
+   the same place whether six lenses are listed or sixteen. The rail's ONE hairline, separating the
+   surfaces from the controls; the pool reading above it deliberately has none. */
 #console-sidebar [data-rail-utility] {
   flex: 0 0 auto; overflow: visible;
   padding-block-start: 0;
@@ -824,7 +852,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   position: relative; /* the open-tab marker below is absolutely placed against the row */
   width: 100%; min-height: var(--console-sidebar-w);
   cursor: pointer; border: 0;
-  /* Collapsed, the row is a square target and the icon has to sit dead centre of it; expanded, the
+  /* Collapsed, the row is a square target and the icon has to sit dead center of it; expanded, the
      icon keeps that column and the label runs on beside it, so the icons stay on one vertical line
      through the whole transition instead of sliding sideways. */
   display: grid; grid-template-columns: var(--console-sidebar-w) minmax(0, 1fr); align-items: center; justify-items: center;
@@ -843,11 +871,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 /* The ACTIVE INDICATOR: a filled backdrop behind the current row's icon.
  *
- * Required, not decorative. WCAG 1.4.1 (Level A) forbids colour as the only thing distinguishing a
+ * Required, not decorative. WCAG 1.4.1 (Level A) forbids color as the only thing distinguishing a
  * state, and measured, current-vs-open differed by hue plus ONE pixel of bar width - which is not a
  * cue at this size, so the pair was near-indistinguishable in greyscale. Material's navigation rail
  * spec calls for exactly this: the selected destination carries an active indicator behind a filled
- * icon, not colour alone.
+ * icon, not color alone.
  *
  * On the ICON rather than the label, because the rail collapses to 44px and the labels are clipped
  * away - a bolder label would be a cue that vanishes in the state the rail spends most of its time in.
@@ -878,9 +906,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 /* WHERE YOU ARE. The saturated end of that axis, and the only row that ever carries it - exactly one
    row is current, so this is unambiguous even though both markers share a shape.
-   Semantic colour is a separate vocabulary and stays where it is - the pool dot below is a status
+   Semantic color is a separate vocabulary and stays where it is - the pool dot below is a status
    reading, so it keeps the status tokens. */
-/* WHERE YOU ARE. The one row carrying COLOUR, which is what separates it from every other mark on the
+/* WHERE YOU ARE. The one row carrying COLOR, which is what separates it from every other mark on the
    rail - the rest of the chrome is grey, so hue alone says "surfaced" without needing size or
    brightness. Wider than the quiet marker too: the two now differ on both axes, which is what makes
    the pair legible at a glance rather than on comparison. */
@@ -895,7 +923,8 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   flex: 0 0 auto; min-height: var(--console-sidebar-w);
   display: grid; grid-template-columns: var(--console-sidebar-w) 1fr;
   align-items: center; justify-items: center;
-  border-top: 1px solid var(--pf-t--global--border--color--default);
+  /* No rule of its own. The utility group below already draws one, and two hairlines a row apart
+     read as a mistake rather than as two bands. */
   font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle);
   white-space: nowrap;
 }
@@ -925,7 +954,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    is not a row of the list, so it should not take a row's shape. Sitting on the icon column means it
    lands under the same vertical line every glyph above it uses, whether or not labels are showing. */
 /* The collapse row is a nav row like the others now, so it needs nothing of its own - only the chevron
-   wants centring in the icon column at both widths. */
+   wants centering in the icon column at both widths. */
 #console-sidebar #console-sidebar-toggle { cursor: pointer; }
 /* No rail on a phone. Even collapsed it is a permanent 44px bite out of a screen that is already
    giving two rows to the title bar, and every surface it navigates to is one tap away in the
@@ -976,13 +1005,13 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    radius) lets the rounded corners read, so the panel presents as a distinct, inviting rounded
    surface floating in the outlet rather than a flush square fill. The radius is built from the large
    token (device-aware via the tokens.css platform gate), doubled so the curve is unmistakable. */
-/* The launcher column is CENTRED in a wide window rather than pinned to the left edge: left-aligned it
+/* The launcher column is CENTERED in a wide window rather than pinned to the left edge: left-aligned it
    left roughly two thirds of a desktop window empty with the cards huddled in one corner, which reads as
    a page that failed to load rather than as a home screen.
-   Centred by growing the horizontal PADDING, not by capping each child: the column's children align
+   Centered by growing the horizontal PADDING, not by capping each child: the column's children align
    against each other (the heading and lede take their own narrower measure, the demo pill floats to the
    trailing edge), and those relationships survive a padded content box while a per-child max-width would
-   have to restate every one of them. The max() keeps the phone gutter when there is nothing to centre. */
+   have to restate every one of them. The max() keeps the phone gutter when there is nothing to center. */
 #console-outlet [data-surface="home"] { position: relative; flex: 1 1 auto; align-self: stretch; min-height: 0; display: flex; flex-direction: column; overflow: auto; margin: 0; padding-block: 2rem; padding-inline: max(1.25rem, (100% - var(--console-launcher-w)) / 2); background: var(--pf-t--global--background--color--secondary--default); }
 
 /* Launch-the-demo affordance: a quiet icon pill below the cards, right-aligned, that expands to show its
@@ -1017,6 +1046,43 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    moment the cards overflow - which is exactly the mobile case, leaving the pill flush against the last
    card. A margin-bottom here cannot collapse, so the pill keeps its own space at every card count. */
 #console-outlet [data-surface="home"] .pf-v6-l-gallery { margin-bottom: 2.5rem; }
+
+/* The cache figure: a big-number stat parked in the bottom-right corner. Absolutely positioned so it
+   sits in the empty quadrant the reading column leaves rather than pushing the flow down - it is a
+   closing remark, not a step. Right-aligned and set in the display face at a size nothing else on
+   the screen uses, because it is the one number that answers "was any of this worth it". */
+#console-outlet [data-surface="home"] [data-launcher-saved] {
+  position: absolute; right: max(1.25rem, (100% - var(--console-launcher-w)) / 2); bottom: 1.75rem;
+  display: grid; justify-items: end; gap: 0; text-align: right;
+  pointer-events: none;
+}
+/* Each line holds its own line. A wrapped caption under a big number reads as a disclaimer, and
+   the whole point of the figure is that it lands in one look. */
+#console-outlet [data-surface="home"] [data-launcher-saved] > * { white-space: nowrap; }
+#console-outlet [data-surface="home"] [data-launcher-saved][hidden] { display: none; }
+/* Subtle on purpose. At full text color the figure competed with the choices for first look, and
+   it is a closing remark, not the thing you came to do - the SIZE carries it, so the color does
+   not have to. Subtle at reduced opacity, which keeps it legible on both grounds without a second
+   hard-coded grey. */
+#console-outlet [data-surface="home"] [data-launcher-saved-value] {
+  font-size: clamp(3rem, 9vw, 5.5rem); font-weight: 700; line-height: 0.9;
+  letter-spacing: -0.04em; font-variant-numeric: tabular-nums;
+  color: var(--pf-t--global--text--color--subtle); opacity: 0.55;
+}
+#console-outlet [data-surface="home"] [data-launcher-saved-unit] {
+  font-size: 0.95rem; font-weight: 600; letter-spacing: -0.01em; margin-top: 0.2rem;
+  color: var(--pf-t--global--text--color--subtle); opacity: 0.75;
+}
+#console-outlet [data-surface="home"] [data-launcher-saved-note] {
+  font-size: 0.72rem; margin-top: 0.25rem; color: var(--pf-t--global--text--color--subtle);
+  opacity: 0.7;
+}
+/* A phone has no empty quadrant to park it in, so it returns to the flow. */
+@media (max-width: 48rem) {
+  #console-outlet [data-surface="home"] [data-launcher-saved] {
+    position: static; justify-items: start; text-align: left; margin-top: 1.5rem; max-width: none;
+  }
+}
 /* The launcher grid and the rail are the SAME eight destinations. Which one is the navigator is a
    question of width, and exactly one answers it at a time - the same complementary pair the rail and
    the Applications menu form, on the same 48rem edge.
@@ -1106,7 +1172,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   .console-cast, .console-cast__mark { transition: none; }
 }
 
-/* The workspace's sigil, above the heading. Tinted by the inline colour sigil.ts sets, so the mark
+/* The workspace's sigil, above the heading. Tinted by the inline color sigil.ts sets, so the mark
    takes the workspace's hue the way every launcher card takes its surface's.
    It sits in a MEDALLION rather than loose on the page: as a bare line drawing it read as something
    that had come adrift, because nothing on this screen bounds it and it is the only drawn thing on it.
@@ -1121,6 +1187,20 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   box-shadow: inset 0 0 0 1px color-mix(in srgb, currentcolor 22%, transparent);
 }
 [data-launcher-sigil][hidden] { display: none; }
+
+/* The mark turns, slowly enough that you notice it only if you look. 90s a revolution is about 4
+   degrees a second - below the threshold where peripheral vision registers motion, so it never
+   competes with the choices beside it. The MEDALLION stays put; only the drawing inside it turns,
+   or the disc's inset ring would appear to wobble.
+   Linear, because any easing makes a continuous rotation visibly stutter at the seam. */
+@keyframes console-sigil-turn { to { transform: rotate(360deg); } }
+[data-launcher-sigil] > svg { animation: console-sigil-turn 90s linear infinite; }
+/* Both opt-outs, since one is the OS preference and the other is the console's own setting; the
+   blanket data-motion rule near-zeroes durations, which for an infinite spin would read as a blur. */
+@media (prefers-reduced-motion: reduce) {
+  [data-launcher-sigil] > svg { animation: none; }
+}
+:root[data-motion="reduced"] [data-launcher-sigil] > svg { animation: none !important; }
 
 /* The welcome screen's live reading, under the tagline. A LINE, not a card: as a card it wrapped the
    ways row and gave a reading the loudest button on the screen. The count leads, the detail follows
@@ -1137,10 +1217,17 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    this the menu presents fabricated workspaces as though a daemon had loaded them. Also tags the demo
    action itself before you are in it. Subtle, because it is a qualifier on the name beside it rather
    than a status of its own. */
+/* A real label, not small caps floating beside the name. It appears ONLY on the menu rows, where it
+   marks a synthetic workspace as fabricated - a claim that has to look deliberate, because the roots
+   are spelled like real checkouts. The closed control never carries it: the workspace name is the
+   one fact that control reports, and the status bar already says "demo". */
 .console-shell-scope__tag {
   margin-inline-start: 0.5rem;
-  font-size: 0.64rem; font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase;
+  padding: 0.05rem 0.35rem; border-radius: 999px;
+  font-size: 0.62rem; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase;
   color: var(--pf-t--global--text--color--subtle);
+  background: var(--pf-t--global--background--color--secondary--default);
+  border: 1px solid var(--pf-t--global--border--color--default);
 }
 /* The demo row is an ACTION, not one of the scopes above it - entering the demo changes whether
    anything on screen is real, which is a different question from which workspace to look at. The rule
@@ -1412,7 +1499,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 @keyframes console-launcher-wave { 50% { transform: translateY(-1.5px) scaleY(1.2); } }
 /* The keyboard's spacebar depresses and comes back - the smallest motion in the set, because a key
-   travelling further than a key travels stops reading as a key. */
+   traveling further than a key travels stops reading as a key. */
 @media (hover: hover) {
   .console-launcher-card:hover .console-launcher-card__icon [data-motion="press"] { animation: console-launcher-press 0.45s var(--console-ease, ease); }
 }
@@ -1833,3 +1920,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   color: var(--pf-t--global--text--color--regular); background: var(--pf-t--global--background--color--secondary--default);
 }
 .console-zoom :focus-visible { outline: 2px solid var(--console-accent); outline-offset: 1px; }
+
+/* A detached panel fills the window it was moved into. */
+[data-detached-host] { margin: 0; height: 100vh; display: flex; flex-direction: column; background: var(--pf-t--global--background--color--primary--default); }
+[data-detached-host] > * { flex: 1 1 auto; min-height: 0; }
+/* The gap the panel left behind, so a moved panel does not read as a closed one. */
+[data-detached-placeholder] { padding: 1rem 0.8rem; color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem; }

@@ -33,7 +33,7 @@ func EncodeFragmentRaw(raw []byte) (string, error) {
 }
 
 // encodeFragmentRaw is the inner encoder: gzip BestCompression + base64url (no
-// padding). Callers that have already marshalled their payload use this directly.
+// padding). Callers that have already marshaled their payload use this directly.
 func encodeFragmentRaw(raw []byte) (string, error) {
 	var buf bytes.Buffer
 	zw, err := gzip.NewWriterLevel(&buf, gzip.BestCompression)
@@ -366,7 +366,7 @@ func targetGraphIR(out types.TargetGraphOutput) renderGraph {
 			if s := stageOf[n.Name]; s != "" {
 				group = prefix + "stage_" + mermaidID(s)
 			}
-			// Every target is a single node coloured by role; spells are not boxed
+			// Every target is a single node colored by role; spells are not boxed
 			// inside it. Two roles only: a top-level target (nothing depends on it — a
 			// typical entry point) versus a plain target pulled in as a dependency.
 			// Both are runnable; the split is a hint, not a rule.

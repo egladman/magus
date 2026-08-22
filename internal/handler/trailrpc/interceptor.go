@@ -43,7 +43,7 @@ import (
 // neither is UNCLASSIFIED - recorded at runtime (fail-closed) and rejected by TestKnownVerbs at build.
 var (
 	mutatingVerbs = []string{"Clear", "Delete", "Put", "Revoke", "Rotate", "Run", "Sync", "Create", "Update", "Set", "Submit", "Remove", "Mint"}
-	readVerbs     = []string{"Get", "List", "Stream", "Watch", "Describe", "Export", "Query", "Explain"}
+	readVerbs     = []string{"Get", "List", "Stream", "Watch", "Describe", "Export", "Query", "Explain", "Find", "Resolve"}
 )
 
 // leadingWord returns a PascalCase method's first word: the run up to (not including) the second uppercase

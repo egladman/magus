@@ -93,7 +93,7 @@ export function setLayout(ws: Workspace, tabId: string, layout: Pane): Workspace
 
 // renameTab retitles a tab. This is the path a surface's open document takes to the tab bar: the
 // console calls it when the focused pane reports a new document (page.ts's TitleSource), so a tab
-// reads as what it is showing rather than as which surface it is - the editor/browser behaviour.
+// reads as what it is showing rather than as which surface it is - the editor/browser behavior.
 // An unknown id or an unchanged title returns the INPUT unchanged, so a surface that re-reports the
 // same document cannot churn the persisted cell or wake its subscribers.
 //

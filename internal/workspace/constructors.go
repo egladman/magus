@@ -138,7 +138,7 @@ func WithToolBounds(bounds map[string]spells.VersionBounds) ProjectOption {
 	}
 }
 
-// WithTarget attaches a behavioural policy to the named target. name is
+// WithTarget attaches a behavioral policy to the named target. name is
 // normalized (see types.DefaultTargetNameNormalizer) so a policy declared
 // under any spelling matches the target under any other.
 func WithTarget(name string, opts ...TargetOption) ProjectOption {

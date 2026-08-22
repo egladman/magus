@@ -35,7 +35,7 @@ const ListProjectsContract = "list_projects"
 // Spells is a list of NAMES rather than handles: a spell cannot hold another spell's
 // handle, so a provider has only the name to give. Every name must resolve.
 //
-// The record crosses INTO magus as a Buzz object and is marshalled back out as JSON by
+// The record crosses INTO magus as a Buzz object and is marshaled back out as JSON by
 // the provider cache, keyed by the json tags below. Those tags are not decoration -
 // without them the cache encoded under Go field names, which musttag could not see. A
 // rename here is a wire change in two directions: regenerate the mirror, and bump

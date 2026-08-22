@@ -413,7 +413,7 @@ test("an overlap warns on both rows and names the other unit in the detail", asy
       ["a", "b"],
       "the unit with no reported overlap carries no warning",
     );
-    // In words, not in colour alone.
+    // In words, not in color alone.
     assert.match(warned[0]?.textContent ?? "", /overlap/);
     assert.equal(host.querySelectorAll(".console-plan-node[data-warn]").length, 2);
 
@@ -582,7 +582,7 @@ test("the run plan draws one node per target and one list row per target", async
       (n) => n.dataset.state,
     );
     assert.deepEqual(states.sort(), ["idle", "pass", "running"]);
-    // The whole node is labelled project:target, which is the id the contract gives it.
+    // The whole node is labeled project:target, which is the id the contract gives it.
     assert.match(host.querySelector(".console-plan-list__id")?.textContent ?? "", /\.:generate/);
   } finally {
     teardown();

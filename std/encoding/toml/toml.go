@@ -43,7 +43,7 @@ var Module = std.Module{
 	},
 }
 
-// TOMLParse decodes source as TOML. Unmarshaling into interface{} yields
+// TOMLParse decodes source as TOML. Unmarshalling into interface{} yields
 // map[string]interface{} for tables (a TOML document is always a top-level
 // table), so the result is safe to pass across the Buzz boundary.
 func TOMLParse(_ context.Context, source string) (any, error) {

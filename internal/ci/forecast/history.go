@@ -1,6 +1,6 @@
 // CACHE-SAFETY NOTICE
 //
-// History is serialised to JSON and cached in GitHub Actions (or any other CI
+// History is serialized to JSON and cached in GitHub Actions (or any other CI
 // cache backend). The schema is intentionally locked to integer timing data and
 // workspace-relative project paths. The following fields and their types are the
 // COMPLETE allowed set:
@@ -83,7 +83,7 @@ const (
 
 // Millis is a duration expressed as whole milliseconds. Using a named type
 // for the scheduling-cost parameters prevents mixing up the positional int64
-// arguments. JSON marshalling uses the underlying int64.
+// arguments. JSON marshaling uses the underlying int64.
 type Millis int64
 
 // History is the rolling store of per-project/per-target durations and scheduling constants.

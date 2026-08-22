@@ -71,8 +71,8 @@ export function activityTile(): Tile {
   // component classes, the same __icon pf-m-start + __text children, in the same order.
   //
   // A <button> rather than the <a> this was through two revisions, so it is the same ELEMENT as the
-  // control it has to match, not an anchor dressed as one. The glyph's vertical centring is not a
-  // PatternFly behaviour at all - it comes from the shared icon-button rule in dashboard.css, which
+  // control it has to match, not an anchor dressed as one. The glyph's vertical centering is not a
+  // PatternFly behavior at all - it comes from the shared icon-button rule in dashboard.css, which
   // this button is listed in alongside the Big Picture button.
   //
   // The cost is that a middle-click no longer opens a new tab, so the click handler below opens the
@@ -338,7 +338,7 @@ export function activityTile(): Tile {
         // Ease down to the tail rather than snapping to it. `scrollTop = scrollHeight` teleports,
         // so a new line arriving reads as the whole buffer flinching upward - which is unpleasant
         // to read at a desk and genuinely hard to follow on a wall display, where the eye is
-        // already working at the edge of legibility. The distance travelled is a line or two, so
+        // already working at the edge of legibility. The distance traveled is a line or two, so
         // smooth here is a nudge, not a ride.
         //
         // Guarded on prefers-reduced-motion: this is content that moves on its own, which is the

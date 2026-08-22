@@ -21,6 +21,8 @@ const base: Settings = {
   host: "127.0.0.1:7391",
   theme: "dark",
   focusRing: false,
+  motion: "reduced",
+  nodeShapes: false,
   keymap: { "console.tab.close": "mod+w" },
 };
 
@@ -40,6 +42,8 @@ test("buildSettingsEnvelope: wraps the snapshot in the versioned envelope", () =
       host: "127.0.0.1:7391",
       theme: "dark",
       focusRing: false,
+      motion: "reduced",
+      nodeShapes: false,
       keymap: { "console.tab.close": "mod+w" },
     },
     layout: {
@@ -54,11 +58,27 @@ test("buildSettingsEnvelope: wraps the snapshot in the versioned envelope", () =
 
 test("round-trip: import(build(p)) restores every value onto a different current", () => {
   const raw = JSON.stringify(buildSettingsEnvelope(base, baseLayout));
-  const current: Settings = { poll: 5000, host: "", theme: "auto", focusRing: true, keymap: {} };
+  const current: Settings = {
+    poll: 5000,
+    host: "",
+    theme: "auto",
+    focusRing: true,
+    motion: "auto",
+    nodeShapes: true,
+    keymap: {},
+  };
   const res = importSettings(raw, current, baseLayout);
   assert.ok(res.ok);
   assert.deepEqual(res.next, base);
-  assert.deepEqual(res.applied.sort(), ["focusRing", "host", "keymap", "poll", "theme"]);
+  assert.deepEqual(res.applied.sort(), [
+    "focusRing",
+    "host",
+    "keymap",
+    "motion",
+    "nodeShapes",
+    "poll",
+    "theme",
+  ]);
 });
 
 test("import: unknown keys are ignored but reported, known keys still apply", () => {
@@ -194,6 +214,8 @@ const diffCtx: DiffContext = {
   themeLabel: (t) => (t === "auto" ? "System" : t === "light" ? "Light" : "Dark"),
   hostLabel: (h) => (h === "" ? "loopback" : h),
   focusRingLabel: (on) => (on ? "On" : "Off"),
+  motionLabel: (v) => (v === "reduced" ? "Reduced" : "System"),
+  nodeShapesLabel: (on) => (on ? "On" : "Off"),
   commandLabel: (id) => (id === "console.tab.close" ? "Close pane or tab" : id),
   effectiveChord: (keymap, id) => {
     const chord = Object.prototype.hasOwnProperty.call(keymap, id) ? keymap[id] : "mod+w"; // "mod+w" = the default

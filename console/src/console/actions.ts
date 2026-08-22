@@ -113,7 +113,7 @@ export function createActionsSurface(deps: ActionsSurfaceDeps): PageModule<null,
         for (const cmd of cmds) {
           // Each command is its own row element (a subgrid spanning the list's 3 tracks) rather than three
           // loose grid cells, so alternate rows can carry a zebra band - the eye tracks a token across to
-          // its chord without drifting onto the neighbour on these wide, space-maximized lines. The row
+          // its chord without drifting onto the neighbor on these wide, space-maximized lines. The row
           // is also a click-to-run control (role=button; a real <button> can't wrap a subgrid row plus a
           // nested real <button> for the edit action below).
           const row = h("div", "console-commands-row");

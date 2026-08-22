@@ -26,7 +26,7 @@ func doctorCmd(ctx context.Context, root string, rc runConfig, args []string) er
 			fmt.Fprintln(os.Stderr, "Validate the workspace: config file schema, cache writability,")
 			fmt.Fprintln(os.Stderr, "discoverable projects, language coverage, a ci target, magusfile")
 			fmt.Fprintln(os.Stderr, "syntax, spell docs, dependency cycles, workspace-escaping symlinks,")
-			fmt.Fprintln(os.Stderr, "recognised env vars, charm/target name collisions, and VCS")
+			fmt.Fprintln(os.Stderr, "recognized env vars, charm/target name collisions, and VCS")
 			fmt.Fprintln(os.Stderr, "base-ref reachability.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Findings come at two levels. [fail] is a workspace that is wrong -")
@@ -91,8 +91,8 @@ func emitDoctor(opts OutputOptions, out types.DoctorReport) error {
 	}
 
 	// Doctor's report stays on stdout (it is the command's primary output, meant to be
-	// piped/grepped) but shares the cache's coloured [pass]/[fail] status glyphs so the
-	// whole tool reads consistently. Colour only when stdout is a TTY and NO_COLOR is unset.
+	// piped/grepped) but shares the cache's colored [pass]/[fail] status glyphs so the
+	// whole tool reads consistently. Color only when stdout is a TTY and NO_COLOR is unset.
 	color := tty.WantsColor(os.Stdout, tty.SystemProbe)
 
 	if out.Workspace != "" {
@@ -119,7 +119,7 @@ func emitDoctor(opts OutputOptions, out types.DoctorReport) error {
 }
 
 // statusGlyph renders a doctor check's status with the shared [pass]/[fail] glyphs,
-// coloured (green/red) when color is true. Mirrors the cache handler's glyphs so a
+// colored (green/red) when color is true. Mirrors the cache handler's glyphs so a
 // failed check and a failed build look identical across the tool.
 func statusGlyph(status types.DoctorCheckStatus, color bool) string {
 	label, code := "[?]", "0"
@@ -129,7 +129,7 @@ func statusGlyph(status types.DoctorCheckStatus, color bool) string {
 	case types.DoctorFail:
 		label, code = "[fail]", "31" // red
 	case types.DoctorAdvice:
-		// Yellow, not red: it did not fail, and colouring it like a failure would
+		// Yellow, not red: it did not fail, and coloring it like a failure would
 		// undo the whole point of the level.
 		label, code = "[advice]", "33"
 	}
@@ -191,7 +191,7 @@ func buildDaemonInfo(ctx context.Context) doctor.DaemonInfo {
 // It dispatches EXISTING magus subcommands, never a private repair routine, and that is
 // the safety property rather than an implementation detail: --fix can only do things you
 // could have typed yourself and can inspect afterwards. A finding whose remedy needs
-// judgement - narrow this over-wide glob, or accept that the key is deliberately volatile?
+// judgment - narrow this over-wide glob, or accept that the key is deliberately volatile?
 // - declares no Fix and stays a report, which is why this can be blunt about running what
 // it is given.
 //

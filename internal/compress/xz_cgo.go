@@ -17,13 +17,13 @@ package compress
 #include <stdlib.h>
 #include <string.h>
 
-// mg_lzma_alloc allocates and zero-initialises an lzma_stream on the C heap.
+// mg_lzma_alloc allocates and zero-initializes an lzma_stream on the C heap.
 // (lzma_stream contains internal C pointers; it must NOT live in Go memory.)
 static lzma_stream* mg_lzma_alloc(void) {
     return (lzma_stream*)calloc(1, sizeof(lzma_stream));
 }
 
-// mg_lzma_init_decoder initialises s for xz / lzma2 stream decoding.
+// mg_lzma_init_decoder initializes s for xz / lzma2 stream decoding.
 // Returns 0 (LZMA_OK) on success; non-zero on error.
 static int mg_lzma_init_decoder(lzma_stream* s) {
     return (int)lzma_stream_decoder(s, UINT64_MAX, LZMA_CONCATENATED);
@@ -83,7 +83,7 @@ type xzCGOReader struct {
 	outStart  int
 	outEnd    int
 	rEOF      bool // underlying reader returned io.EOF
-	streamEnd bool // liblzma signalled LZMA_STREAM_END
+	streamEnd bool // liblzma signaled LZMA_STREAM_END
 	closed    bool
 }
 

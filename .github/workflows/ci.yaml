@@ -298,6 +298,27 @@ jobs:
           shard:    ${{ matrix.shard }}
           n-shards: ${{ needs.plan.outputs.count }}
 
+      # The notes store's anchors, gated on the ONE finding worth blocking a merge for.
+      #
+      # --strict fails on a dangling anchor and on nothing else. A dangling anchor means a
+      # rename or a delete in this very diff broke a pointer, and the fix is bounded and
+      # obvious. Drift never fails: it asks a person to re-read prose against code and judge,
+      # and a gate that blocks on a judgement call is one people permanently route around.
+      #
+      # Here rather than inside the `ci` target, and that is not a style choice. A magusfile
+      # target cannot run this without shelling out to `./magus` from inside a magus run, and
+      # the nested invocation regenerates the graph indexes mid-run - MGS4007, measured, three
+      # MAGUS.md files rewritten by a target that declared them as sources.
+      #
+      # --shared only: the private store is machine-local by definition, so gating on it would
+      # fail CI for files no runner can see. Runs on shard 1 alone; the store is workspace-wide
+      # and checking it once per shard would report one dangling anchor N times.
+      - name: Verify note anchors
+        if: matrix.shard == 1
+        uses: ./.github/actions/magus
+        with:
+          command: notes verify --strict --shared
+
       # magus truncates a failing target's captured output to "likely diagnostics"
       # in the console, which drops thousands of lines - including, repeatedly, the
       # assertion that actually failed. The full text is on disk in the run log, and

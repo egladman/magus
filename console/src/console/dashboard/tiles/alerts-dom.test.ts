@@ -19,7 +19,7 @@ function fire(detail: Record<string, unknown>): void {
 
 // The rail is shown by a data attribute, not by `hidden`: display is not animatable, so toggling it
 // made the rail snap in and out. Asserting on the attribute keeps these tests pinned to the
-// behaviour (is it announcing?) rather than to the mechanism that produces it.
+// behavior (is it announcing?) rather than to the mechanism that produces it.
 function shown(el: HTMLElement): boolean {
   return el.hasAttribute("data-shown");
 }

@@ -1,7 +1,7 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
   <title>magus</title>
   <!--
-    The Android MASKABLE variant. Same artwork and colours as icon.svg; only the scale
+    The Android MASKABLE variant. Same artwork and colors as icon.svg; only the scale
     differs. A launcher crops a maskable icon to whatever shape it likes, so everything that
     must survive sits inside the central circle of 80% diameter (radius 204.8). scale 0.355
     puts the artwork's half-diagonal near 162, well inside it. The icon this replaced had 2%
@@ -19,14 +19,14 @@
     shows through it. Nothing draws the band, which is why it stays crisp at 16px instead of
     turning into a smear.
 
-    COLOUR. Ground #31302e, hat #8fc6b9, contrast 6.87:1. The hat carries the hue and the ground
+    COLOR. Ground #31302e, hat #8fc6b9, contrast 6.87:1. The hat carries the hue and the ground
     stays desaturated - put a hue behind a hue and neither reads as the subject. The hue is
     the mascot's own: skin teal for the console, staff-orb amber for the docs, which sit
     near-complementary so the two apps are unmistakable side by side. Each ground is nudged
     OPPOSITE its hat in temperature, so figure and ground separate by temperature as well as
     luminance. No black and no white anywhere: an icon is a graphical object, where WCAG's
     floor is 3:1, so holding 7:1 would force saturation down to pastel. These sit near 7:1,
-    which keeps the hue reading as a colour while the shape still resolves at 16px.
+    which keeps the hue reading as a color while the shape still resolves at 16px.
   -->
   <rect width="512" height="512" fill="#31302e"/>
   <g transform="translate(34.3 43.2) scale(0.355)" fill="#8fc6b9">

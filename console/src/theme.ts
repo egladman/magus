@@ -30,6 +30,17 @@
     /* ignore */
   }
 
+  // Pre-paint for the same reason the theme is: the boot reveal and the graph's first camera glide
+  // start on the first frame, so applying this later lets through exactly what it was set to stop.
+  // Read raw because this IIFE has no imports; the key and JSON encoding are persist.ts's.
+  try {
+    if (JSON.parse(localStorage.getItem("magus:console-motion") || '"auto"') === "reduced") {
+      root.setAttribute("data-motion", "reduced");
+    }
+  } catch (e) {
+    /* storage disabled or value corrupt: leave motion at its default */
+  }
+
   function get(): Theme {
     try {
       return (localStorage.getItem("theme") || "auto") as Theme;

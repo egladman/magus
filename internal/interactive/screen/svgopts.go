@@ -52,7 +52,7 @@ func (o SVGOptions) withDefaults() SVGOptions {
 	return o
 }
 
-// Theme maps the attributes magus emits to colours. Only the eight SGR
+// Theme maps the attributes magus emits to colors. Only the eight SGR
 // foregrounds it actually uses are named; anything else renders as the default,
 // which is the same restraint the emulator keeps about sequences it does not
 // know.
@@ -104,9 +104,9 @@ var LightTheme = Theme{
 // opacity that draw it.
 //
 // Reverse video is drawn as a real swap - a filled rectangle behind
-// background-coloured text - because it marks the selected row of an
+// background-colored text - because it marks the selected row of an
 // interactive band and has to read as selected in a picture, not merely as
-// differently coloured.
+// differently colored.
 func (t Theme) resolve(st sgrState) (fill, bg, weight, opacity string) {
 	fill = t.Foreground
 	switch st.fg {

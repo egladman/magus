@@ -1,32 +1,11 @@
 <main class="console-graph-main">
 
-    <!-- The blocks below marked [data-ref-section] are this surface's reference copy (Ask, Views, Search
+    <!-- The blocks below marked [data-ref-section] are this surface's reference copy (Views, Search
          syntax, Loading a graph by URL). ref-drawer.ts CLONES them into the Reference
          panel (#console-refpanel, opened from the title-bar Reference button) each time it opens, and
          again on a tab change while docked - cloning, not moving, so the surface can unmount and remount
          freely. The sources are hidden in place by [data-ref-section]{display:none} (overrides.css);
          only the clones are shown. -->
-    <!-- Views panel - question-first navigation. The one [data-ref-section] the drawer SKIPS (by its
-         #ask-panel id): its chips are the live sidebar control, not reference copy. -->
-    <details class="console-graph-views" data-ref-section id="ask-panel">
-      <summary>Explore</summary>
-      <div class="console-graph-help__body">
-        <p class="console-graph-views__hint">Things you can do with a workspace's graph. Click one to explore, or write your own query below.</p>
-        <div class="console-graph-views__body">
-        <button type="button" class="console-graph-views__chip" data-view="blast" title="Pick a target, then see everything that would rebuild if you change it. CLI: magus explain &lt;target&gt;">See what rebuilds when I change a target</button>
-        <button type="button" class="console-graph-views__chip" data-view="trace" title="Pick two targets to see the dependency path between them. CLI: magus path &lt;a&gt; &lt;b&gt;">Trace the path between two targets</button>
-        <button type="button" class="console-graph-views__chip" data-layoutjump="waves" title="Switch to the waves layout: each column is a set of targets magus can run at the same time. CLI: magus describe graph -o json">Show the build order</button>
-        <button type="button" class="console-graph-views__chip" data-view="critical" data-conditional title="The longest duration-weighted chain of targets. Shown when the graph has timing (run a build first: magus graph deps -o json)">Find the slowest chain</button>
-        <button type="button" class="console-graph-views__chip" data-view="cycles" title="Highlight targets caught in a circular dependency, where A needs B needs A. magus cannot order these, so it is a configuration error to fix. CLI: magus graph verify">Find circular dependencies</button>
-        <button type="button" class="console-graph-views__chip" data-radialpick title="Pick a target to see its neighborhood as rings by distance.">See a target's neighbors</button>
-        <button type="button" class="console-graph-views__chip" data-view="hubs" title="The highest-degree targets, the ones everything touches. CLI: magus query kind:target">Show the most depended-on targets</button>
-        <button type="button" class="console-graph-views__chip" data-view="orphans" title="Targets with no dependents, potentially dead or unconfigured. CLI: magus query -kind:project">Show targets nothing depends on</button>
-        <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode: magus graph export --open --follow">See what my last change affects</button>
-        <button type="button" id="clear-view-btn" class="console-graph-views__clear" hidden>Clear</button>
-        </div>
-      </div>
-    </details>
-
     <details class="console-graph-help" data-ref-section>
       <summary>Views</summary>
       <div class="console-graph-help__body">
@@ -37,8 +16,8 @@
           <tr><td>What breaks if I change this?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="blast">blast</button></td><td><code>magus explain &lt;node-id-or-name&gt;</code></td></tr>
           <tr><td>Why does A depend on B?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="trace">trace</button></td><td><code>magus path &lt;a&gt; &lt;b&gt;</code></td></tr>
           <tr><td>What's slow?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="critical" data-conditional>critical</button></td><td><code>magus graph deps -o json</code></td></tr>
-          <tr><td>What's a hub?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="hubs">hubs</button></td><td><code>magus query kind:target</code></td></tr>
-          <tr><td>What's dead?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="orphans">orphans</button></td><td><code>magus query -kind:project</code></td></tr>
+          <tr><td>What's a hub?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="hubs">hubs</button></td><td>no CLI equivalent</td></tr>
+          <tr><td>What's dead?</td><td><button type="button" class="console-graph-views__chip console-graph-help__example" data-view="orphans">orphans</button></td><td>no CLI equivalent</td></tr>
         </tbody>
       </table>
       </div>
@@ -52,7 +31,7 @@
         <dt><button type="button" class="console-graph-help__example" data-q="render">Match text anywhere</button></dt>
         <dd>Free text like <code>render</code> matches a node's id, label, or doc.</dd>
         <dt><button type="button" class="console-graph-help__example" data-q="kind:spell">Keep one kind of node</button></dt>
-        <dd><code>kind:spell</code>: one of project, target, spell, op, charm, module, method, import, function, file, doc, rationale, diagnostic, symbol. (Or click a legend color.)</dd>
+        <dd><code>kind:spell</code>: one of <span data-kindlist>the kinds in the legend</span>. (Or click a legend color.)</dd>
         <dt><button type="button" class="console-graph-help__example" data-q="kind:target">Show every target</button></dt>
         <dd><code>kind:target</code> lists all targets. In a target graph (<code>magus describe graph -o json</code>), anchor targets (those nothing depends on within their project) get a ring outline.</dd>
         <dt><button type="button" class="console-graph-help__example" data-q="project:website">Show a project and its targets</button></dt>
@@ -67,8 +46,8 @@
         <dd>Quote a value with spaces to keep it one term: <code>"spell op"</code>.</dd>
         <dt><button type="button" class="console-graph-help__example" data-q="kind:target -id:generate">Combine terms</button></dt>
         <dd>All terms must match: <code>kind:target -id:generate</code> lists targets whose id lacks "generate".</dd>
-        <dt><button type="button" class="console-graph-help__example" data-q="kind:symbol">Show code symbols</button></dt>
-        <dd><code>kind:symbol</code>: SCIP code-symbol nodes (from <code>magus refs</code>), when present.</dd>
+        <dt data-conditional><button type="button" class="console-graph-help__example" data-q="kind:symbol" data-conditional>Show code symbols</button></dt>
+        <dd data-conditional><code>kind:symbol</code>: SCIP code-symbol nodes (from <code>magus refs</code>). Shown only when the loaded graph carries them - the live daemon graph excludes the @symbols shards.</dd>
       </dl>
       <p>A query dims non-matching nodes and hides edges except those between two matches, so the matching subgraph stands out. The same string works as <code>magus query "&lt;terms&gt;"</code> on the command line, or as a <code>#q=</code> deep link on this page.</p>
       <p><b>Local graph:</b> double-click any node (on the canvas or a pill) to isolate its neighborhood; <kbd>[</kbd>/<kbd>]</kbd> change depth, <kbd>Esc</kbd> clears. <b>Fit</b> frames everything (or the current matches).</p>
@@ -77,7 +56,7 @@
 
     <section class="console-graph-app">
       <aside class="console-graph-sidebar">
-        <!-- Query bar: a labelled PF input-group. The "magus query" prompt is a LABEL above the field,
+        <!-- Query bar: a labeled PF input-group. The "magus query" prompt is a LABEL above the field,
              not an inline addon - as an addon it ate a third of the 18rem sidebar and truncated the
              field to "kind:...". Keeps #node-search and #search-copy-btn (main.ts wires them by id). -->
         <div class="console-graph-sidebar__search">
@@ -85,7 +64,12 @@
           <div class="pf-v6-c-input-group console-graph-querybar">
             <div class="pf-v6-c-input-group__item pf-m-fill">
               <span class="pf-v6-c-form-control">
-                <input id="node-search" type="text" placeholder="Type to filter, like kind:spell" aria-label="Query the graph" aria-describedby="query-prompt" spellcheck="false" autocomplete="off" disabled>
+                <input id="node-search" type="text" placeholder="Type to filter, like kind:spell" aria-label="Query the graph" aria-describedby="query-prompt" spellcheck="false" autocomplete="off" list="node-suggestions" disabled>
+                <!-- Completion candidates from GraphService.ResolveNodes, filled only in live mode.
+                     A native datalist rather than a bespoke dropdown: it is keyboard- and
+                     screen-reader-correct for free, and an EMPTY one (offline, where there is
+                     nothing to ask) simply offers nothing rather than needing to be hidden. -->
+                <datalist id="node-suggestions"></datalist>
               </span>
             </div>
             <div class="pf-v6-c-input-group__item">
@@ -97,107 +81,117 @@
               </button>
             </div>
             <div class="pf-v6-c-input-group__item">
+              <!-- Opens the question builder (querybuilder.ts). It replaced two columns of prebuilt
+                   chips: those ran the right query and taught nothing, because the string they
+                   typed was never shown. -->
+              <button id="query-builder-btn" type="button" class="pf-v6-c-button pf-m-control" title="Build a filter, or run a view" aria-label="Ask the graph">
+                <span class="pf-v6-c-button__icon" aria-hidden="true">
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+                </span>
+              </button>
+            </div>
+            <div class="pf-v6-c-input-group__item">
               <button id="search-copy-btn" type="button" class="pf-v6-c-button pf-m-control" title="Copy this query as a shell command" aria-label="Copy magus query command">
                 <span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
               </button>
             </div>
           </div>
         </div>
-        <!-- Graph source: which graph you are viewing (build vs knowledge) - more fundamental
-             than how it is arranged, so it sits above Display mode. Only switchable against a
-             live daemon (which serves both flavors); in a static snapshot both buttons are
-             disabled with a hint. main.ts drives selection via pf-m-selected and each button's
-             disabled/title (see syncGraphKindToggle/switchGraphKind). -->
-        <div class="console-graph-sidebar__source">
-          <p class="console-graph-sidebar__sourcelabel">Graph</p>
-          <div class="pf-v6-c-toggle-group console-graph-display__kindgroup" role="group" aria-label="Graph">
-            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="targets" title="The target graph: targets and what they depend on. Switch requires a live workspace (magus graph export --open --follow)."><span class="pf-v6-c-toggle-group__text">Target</span></button></div>
-            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="knowledge" title="The full code graph: projects, targets, spells, modules, files, docs. Switch requires a live workspace (magus graph export --open --follow)."><span class="pf-v6-c-toggle-group__text">Knowledge</span></button></div>
-          </div>
+        <!-- SCOPE: every emphasis currently applied, in one place. A query, a view, a local-graph
+             focus, the projection and a color preset can all be live at once, and the operator
+             was left to infer that from five separate widgets. Each pill clears the one thing it
+             names. Rendered from the live state by renderScope() - it does not OWN the state,
+             which is the separate refactor the graph contract has to come first for. -->
+        <div id="scope-bar" class="console-graph-scope" hidden>
+          <div id="scope-pills" class="console-graph-scope__pills" role="group" aria-label="Applied scope"></div>
+          <p id="scope-count" class="console-graph-scope__count" aria-live="polite"></p>
         </div>
-        <!-- Display mode: ALWAYS VISIBLE (Decision 3, discoverability phase) - the manual
-             override for the arrangement axis, distinct from the "Ask a question" views
-             below (the emphasis/filter axis). Same PF toggle group main.ts previously kept
-             collapsed inside "Colors and forces"; it now lives here so a user can see and
-             change the mode without opening a details panel. main.ts drives selection via
-             pf-m-selected and each button's disabled/title (see syncLayoutToggle/layoutAvailable). -->
-        <div class="console-graph-sidebar__modes">
-          <p class="console-graph-sidebar__modeslabel">Display mode</p>
-          <div class="pf-v6-c-toggle-group console-graph-display__layoutgroup" role="group" aria-label="Layout">
-            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="force" title="Free-floating physics layout: clusters and highly-connected hubs pop out. Best for exploring the whole graph."><span class="pf-v6-c-toggle-group__text">Force</span></button></div>
-            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="layered" title="Left-to-right dependency flow: what depends on what, arranged in tiers. Best for reading direction."><span class="pf-v6-c-toggle-group__text">Layered</span></button></div>
-            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="waves" title="Build order: each column is a set of targets magus can run in parallel. Best for seeing what runs when."><span class="pf-v6-c-toggle-group__text">Waves</span></button></div>
-            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="radial" title="Rings around one node by distance: its neighborhood at a glance. Pick a node first."><span class="pf-v6-c-toggle-group__text">Radial</span></button></div>
-          </div>
-        </div>
-        <!-- Ask a question: the question-first views, surfaced in the sidebar. The original
-             #ask-panel reference block is display:none in the decoupled console (no ref drawer),
-             so these are the live control. Reuses the sanctioned console-graph-views__chip
-             escape hatch; main.ts wires them by class + data-view. Order matches the
-             #ask-panel reference copy (keep both in sync). -->
-        <div class="console-graph-views console-graph-sidebar__views" aria-label="Explore">
-          <p class="console-graph-sidebar__viewslabel">Explore</p>
-          <div class="console-graph-views__body" role="group" aria-label="Explore views">
-            <button type="button" class="console-graph-views__chip" data-view="blast" title="Pick a target, then see everything that would rebuild if you change it. CLI: magus explain &lt;target&gt;">See what rebuilds when I change a target</button>
-            <button type="button" class="console-graph-views__chip" data-view="trace" title="Pick two targets to see the dependency path between them. CLI: magus path &lt;a&gt; &lt;b&gt;">Trace the path between two targets</button>
-            <button type="button" class="console-graph-views__chip" data-layoutjump="waves" title="Switch to the waves layout: each column is a set of targets magus can run at the same time. CLI: magus describe graph -o json">Show the build order</button>
-            <button type="button" class="console-graph-views__chip" data-view="critical" data-conditional title="The longest duration-weighted chain of targets. Shown when the graph has timing (run a build first: magus graph deps -o json)">Find the slowest chain</button>
-            <button type="button" class="console-graph-views__chip" data-view="cycles" title="Highlight targets caught in a circular dependency, where A needs B needs A. magus cannot order these, so it is a configuration error to fix. CLI: magus graph verify">Find circular dependencies</button>
-            <button type="button" class="console-graph-views__chip" data-radialpick title="Pick a target to see its neighborhood as rings by distance.">See a target's neighbors</button>
-            <button type="button" class="console-graph-views__chip" data-view="hubs" title="The highest-degree targets, the ones everything touches. CLI: magus query kind:target">Show the most depended-on targets</button>
-            <button type="button" class="console-graph-views__chip" data-view="orphans" title="Targets with no dependents, potentially dead or unconfigured. CLI: magus query -kind:project">Show targets nothing depends on</button>
-            <button type="button" class="console-graph-views__chip" data-view="affected" disabled data-disabled title="Requires live mode: magus graph export --open --follow">See what my last change affects</button>
-          </div>
-        </div>
-        <!-- Colors and forces: the interactive display controls, collapsed by default so
-             the sidebar's default state stays search + modes + explore. Lives here (not
-             in the Reference drawer) because these are LIVE controls, not documentation -
-             the reference copy at the top of <main> was removed when this moved. -->
-        <details class="console-graph-sidebar__panel">
-          <summary>Colors and forces</summary>
-          <div class="console-graph-sidebar__panelbody">
-            <p class="console-graph-display__sublabel">Layout forces</p>
-            <div class="console-graph-display__forces" role="group" aria-label="Layout forces">
-              <label>Repel <input type="range" id="force-charge" min="20" max="200" value="60" step="5"></label>
-              <label>Link length <input type="range" id="force-link" min="10" max="140" value="40" step="5"></label>
-              <label>Gravity <input type="range" id="force-gravity" min="0" max="10" value="2" step="1"></label>
-            </div>
-            <p class="console-graph-display__sublabel">Color presets</p>
-            <p class="console-graph-display__controlhint">One-click color coding over the kind palette. Active preset serializes to the URL.</p>
-            <div class="console-graph-colorgroup__presetrow">
-              <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="spell" title="Color each spell a distinct hue: shows toolchain as architectural layer"><span class="pf-v6-c-button__text">Color by spell</span></button>
-              <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="project" title="Color each project a distinct hue: shows project boundaries"><span class="pf-v6-c-button__text">Color by project</span></button>
-              <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="depth" title="Color by DAG depth (longest-path layer index from the layered layout): shows architectural layers"><span class="pf-v6-c-button__text">Color by DAG depth</span></button>
-              <button type="button" class="pf-v6-c-button pf-m-secondary pf-m-small console-graph-colorgroup__preset" data-preset="duration" data-conditional hidden title="Color by run duration: hot is slow. Shown when the graph carries timing (run a build first: magus graph deps -o json)."><span class="pf-v6-c-button__text">Color by duration</span></button>
-            </div>
-          </div>
-        </details>
-        <!-- Phase 5: projection unfold button - shown when default projection is active. -->
-        <button id="projection-unfold-btn" type="button" class="pf-v6-c-button pf-m-link console-graph-sidebar__unfold" hidden><span class="pf-v6-c-button__text">Show full graph</span></button>
-        <!-- Phase 5: empty-state suggestion chips - populated after graph loads. -->
+        <!-- The prebuilt question chips moved into the builder behind the kebab above. They were
+             two columns of buttons that each typed a query nobody was shown, so they answered the
+             question you clicked and left you no better at asking the next one. Clear stays here:
+             it is a state control, not a question. -->
+        <button type="button" id="clear-view-btn" class="console-graph-views__clear" hidden>Clear</button>
+        <!-- RESULTS: what the search or the question actually returned, directly under the controls
+             that produce it. This used to sit at the very foot of the panel, below every display
+             control, so the answer was the last thing on screen. -->
         <div id="suggestions" class="console-graph-sidebar__suggestions" hidden aria-label="Suggestions"></div>
+        <button id="projection-unfold-btn" type="button" class="pf-v6-c-button pf-m-link console-graph-sidebar__unfold" hidden><span class="pf-v6-c-button__text">Show full graph</span></button>
         <button id="list-toggle" class="pf-v6-c-button pf-m-link console-graph-sidebar__count" type="button" aria-expanded="false" aria-controls="node-list">
           <span class="pf-v6-c-button__text" id="graph-count">loading...</span>
           <span class="console-graph-sidebar__chevron" aria-hidden="true"></span>
         </button>
         <ul id="node-list" aria-label="Graph nodes" hidden></ul>
+        <!-- VIEW: how the graph is DRAWN - arrangement and color, the two halves of one question,
+             which were split across an always-visible block and a collapsed disclosure. The layout
+             toggle stays always-visible (Decision 3, discoverability phase): it is the manual
+             override for the arrangement axis, and main.ts drives selection and each button's
+             disabled/title from syncLayoutToggle. -->
+        <div class="console-graph-sidebar__modes">
+          <p class="console-graph-sidebar__modeslabel" id="arrangement-label">Arrangement</p>
+          <div class="pf-v6-c-toggle-group console-graph-display__layoutgroup" role="group" aria-labelledby="arrangement-label">
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="force" title="Free-floating physics layout: clusters and highly-connected hubs pop out. Best for exploring the whole graph."><span class="pf-v6-c-toggle-group__text">Force</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="layered" title="Left-to-right dependency flow: what depends on what, arranged in tiers. Best for reading direction."><span class="pf-v6-c-toggle-group__text">Layered</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="waves" title="Build order: each column is a set of targets magus can run in parallel. Best for seeing what runs when."><span class="pf-v6-c-toggle-group__text">Waves</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="radial" title="Rings around one node by distance: its neighborhood at a glance. Pick a node first."><span class="pf-v6-c-toggle-group__text">Radial</span></button></div>
+          </div>
+          <p id="arrangement-note" class="console-graph-display__unavailable" hidden></p>
+          <!-- Color and Graph pair on one row: each is a short toggle group, and stacked they
+               spent two full rows of a 20rem column on controls that together do not fill one. -->
+          <div class="console-graph-sidebar__viewpair">
+          <div class="console-graph-sidebar__viewcell">
+          <p class="console-graph-display__sublabel" id="color-label">Color</p>
+          <div class="pf-v6-c-toggle-group console-graph-colorgroup__presetrow" role="group" aria-labelledby="color-label">
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="project" title="Give each project its own hue, so the boundaries show on the canvas."><span class="pf-v6-c-toggle-group__text">Project</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="spell" title="Give each spell its own hue, so the toolchain shows as an architectural layer."><span class="pf-v6-c-toggle-group__text">Spell</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="depth" title="Shade by how deep a node sits in the dependency chain: pale depends on nothing, dark depends on the most. Computed here from the layered layout; there is no layer: query field to type."><span class="pf-v6-c-toggle-group__text">Depth</span></button></div>
+            <div class="pf-v6-c-toggle-group__item" data-conditional data-preset-item="duration"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="duration" title="Shade by how long a node took to run: hot is slow. Shown once the graph carries timing (run a build first)."><span class="pf-v6-c-toggle-group__text">Duration</span></button></div>
+          </div>
+          </div>
+          <!-- SOURCE: which graph is loaded. Switchable only against a live daemon that serves
+               both flavors - in a snapshot, a dropped file or the demo both buttons are disabled,
+               which is most sessions, so it shares a row rather than taking one. Loading a
+               different graph entirely is the stage toolbar's Open file. main.ts drives selection
+               and disabled/title from syncGraphKindToggle/switchGraphKind. -->
+          <div class="console-graph-sidebar__viewcell">
+          <p class="console-graph-display__sublabel" id="graphkind-label">Graph</p>
+          <div class="pf-v6-c-toggle-group console-graph-display__kindgroup" role="group" aria-labelledby="graphkind-label">
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="targets" title="The target graph: targets and what they depend on. Switch requires a live workspace (magus graph export --open --follow)."><span class="pf-v6-c-toggle-group__text">Target</span></button></div>
+            <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="knowledge" title="The full code graph: projects, targets, spells, modules, files, docs. Switch requires a live workspace (magus graph export --open --follow)."><span class="pf-v6-c-toggle-group__text">Knowledge</span></button></div>
+          </div>
+          <p id="graphkind-note" class="console-graph-display__unavailable" hidden></p>
+          </div>
+          </div>
+          <p class="console-graph-display__controlhint">Color paints over the kind palette; click an active one to clear it.</p>
+          <!-- The KEY for whatever coloring is active, directly under the control that sets it.
+               It used to float over the canvas at 88% opacity, which put it on top of the stage's
+               workspace label and the top-left of the graph itself. Its rows are filters
+               (click -> kind:<k>), so it belongs in the control column, not over the drawing. -->
+          <div id="graph-legend-panel" class="console-graph-legend">
+            <p class="console-graph-legend__title">Node kinds</p>
+            <ul id="graph-legend" aria-label="Node kinds"></ul>
+          </div>
+        </div>
       </aside>
 
       <div class="console-graph-stage">
-        <div id="live-disconnect-banner" class="console-graph-live__banner" hidden role="alert"></div>
         <!-- Stage tools: a RESPONSIVE PatternFly Toolbar overlaid on the canvas, collapsing the SAME
-             way as the log viewer (shared ../toolbar.ts). The Fit / Open file / Copy as Mermaid /
+             way as the log viewer (shared ../toolbar.ts). The Fit / Open file /
              Fullscreen actions sit in a pf-m-toggle-group pf-m-show-on-lg: below lg they fold behind
              the single kebab toggle into the __expandable-content dropdown; at lg+ they sit inline.
              The provenance badges (live/snapshot, usually hidden) stay put. -->
         <div class="pf-v6-c-toolbar console-graph-stage__tools">
           <div class="pf-v6-c-toolbar__content">
             <div class="pf-v6-c-toolbar__content-section">
-              <span id="live-badge" class="pf-v6-c-label pf-m-blue pf-m-compact" hidden aria-live="polite"><span class="pf-v6-c-label__content"></span></span>
+              <!-- No live badge here: which workspace this is, and whether it is connected, are
+                   SESSION facts and the console status bar owns them (publishStatus). A copy over
+                   the canvas was a second claim about the same thing, spelled as a full absolute
+                   path. The snapshot badge stays: a snapshot has no connection state for the
+                   status bar to carry, and "you are looking at a file, not a workspace" is not
+                   said anywhere else. -->
               <span id="snapshot-badge" class="pf-v6-c-label pf-m-grey pf-m-compact" hidden aria-live="polite"><span class="pf-v6-c-label__content"></span></span>
               <div class="pf-v6-c-toolbar__group pf-m-toggle-group pf-m-show-on-lg" data-overflow-group="graphtools">
                 <div class="pf-v6-c-toolbar__toggle">
-                  <button class="pf-v6-c-button pf-m-plain" type="button" data-overflow-toggle aria-expanded="false" aria-label="Stage tools" title="Fit, open a graph file, copy as Mermaid, fullscreen">
+                  <button class="pf-v6-c-button pf-m-plain" type="button" data-overflow-toggle aria-expanded="false" aria-label="Stage tools" title="Fit, open a graph file, fullscreen">
                     <span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></span>
                   </button>
                 </div>
@@ -208,9 +202,6 @@
                   <button id="open-file-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Load a graph.json you exported with `magus graph export -o json` (or drag one onto the canvas)"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Open file</span></button>
                 </div>
                 <div class="pf-v6-c-toolbar__item">
-                  <button id="copy-mermaid-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Copy the current selection (or focus neighborhood) as a Mermaid diagram: paste into a GitHub PR or docs. Refused over 150 nodes; narrow first."><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Copy as Mermaid</span></button>
-                </div>
-                <div class="pf-v6-c-toolbar__item">
                   <button id="fullscreen-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-pressed="false" title="Expand the explorer to fill the screen"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M8 3H5a2 2 0 0 0-2 2v3m18 0V5a2 2 0 0 0-2-2h-3M3 16v3a2 2 0 0 0 2 2h3m10 0h3a2 2 0 0 0 2-2v-3"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Fullscreen</span></button>
                 </div>
               </div>
@@ -219,15 +210,6 @@
             <div class="pf-v6-c-toolbar__expandable-content" data-overflow-panel="graphtools"></div>
           </div>
         </div>
-        <!-- Legend toggle: only shown on mobile (CSS), where the legend is collapsed
-             by default so it doesn't cover the graph. Desktop keeps the legend open. -->
-        <button id="legend-toggle" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" aria-expanded="false" aria-controls="graph-legend-panel">
-          <span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><line x1="11" y1="6" x2="20" y2="6"/><line x1="11" y1="18" x2="20" y2="18"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Legend</span></button>
-        <!-- Result line: a slim narration of "what am I looking at" for the active view/query,
-             at the top of the stage. Hidden (and empty) when nothing is active - the bottom
-             #graph-status line carries the same text too, but this one sits where the eye
-             already is (over the canvas) instead of below the whole app. -->
-        <p id="graph-result-line" class="console-graph-stage__result" hidden aria-live="polite"></p>
         <canvas id="graph-canvas" aria-label="Force-directed knowledge graph. Use the node list to navigate without the canvas."></canvas>
         <!-- Load spinner: shown while boot fetches the demo graph.json (~1.4MB). main.ts toggles it
              around `await loadGraph()`; hidden by default (a cold visit shows the empty state instead). -->
@@ -235,11 +217,11 @@
           <svg class="pf-v6-c-spinner pf-m-lg" role="status" viewBox="0 0 100 100" aria-label="Loading the graph"><circle class="pf-v6-c-spinner__path" cx="50" cy="50" r="45" fill="none"></circle></svg>
           <p class="console-graph-loading__label">Loading the graph...</p>
         </div>
-        <div id="graph-legend-panel" class="console-graph-legend">
-          <p class="console-graph-legend__title">Node kinds</p>
-          <ul id="graph-legend" aria-label="Node kinds"></ul>
+        <!-- A live control, so it belongs here and not in a [data-ref-section] block: main.ts
+             wires it by id, and the drawer's clones are id-stripped. Un-hidden in live mode. -->
+        <div id="live-remember-row" class="console-graph-live__rememberrow" hidden>
+          <label><input type="checkbox" id="live-remember-cb"> Remember this workspace (store token in localStorage)</label>
         </div>
-        <p id="live-status-strip" class="console-graph-live__strip" hidden aria-live="polite"></p>
         <!-- Empty state: shown when nothing is loaded (no #data/#src/#port and the demo has
              not been launched). Mirrors the log viewer's empty state - an intuitive prompt
              with the command to open your own graph plus a button to try the demo. We do NOT
@@ -273,28 +255,30 @@
         </div>
       </div>
 
-      <div id="explain-card" aria-live="polite" hidden></div>
+      <!-- Detail column: the card scrolls, the two "what is happening now" readouts sit under it.
+           Both used to span the full width below the canvas, as far from the view they describe as
+           the layout allowed. -->
+      <div class="console-graph-detail">
+        <!-- The question builder mounts here (querybuilder.ts) and takes the column while it is
+             open. A panel rather than a modal: a modal covers the canvas, and the canvas is the
+             preview - the whole point is watching the graph narrow as you pick terms. -->
+        <div id="query-builder-host" hidden></div>
+        <div id="explain-card" aria-live="polite" hidden></div>
+        <div class="console-graph-detail__foot">
+          <!-- Term-prompt view command bar (same idiom as playground.html), populated by
+               renderViewCommand(). Hidden when the active view has no exact CLI equivalent. -->
+          <div id="view-cmd" class="console-graph-views__cmdbar" hidden aria-live="polite" aria-label="CLI command for active view"></div>
+          <!-- The surface's live region, as the console's inline notice. The icon slot is not
+               decoration: PF lays the component out as a grid around it, and an alert without one
+               reads as body text. role=status because the layout toggle shows which mode is active
+               but announces nothing when one changes on its own (switchLayout's scale guard). -->
+          <div id="graph-status" class="pf-v6-c-alert pf-m-info console-graph-hint" role="status" hidden>
+            <div class="pf-v6-c-alert__icon" aria-hidden="true">i</div>
+            <p class="pf-v6-c-alert__title" id="graph-status-text"></p>
+          </div>
+        </div>
+      </div>
     </section>
-
-    <!-- Phase 5: term-prompt view command bar (same idiom as playground.html).
-         Shows the CLI-equivalent command for the active view; hidden when no view is
-         active or the view has no exact CLI equivalent (earn the prompt rule, 0.5).
-         Lives BELOW the canvas with the status line - both are "what's happening now"
-         readouts, so the CLI echo sits next to the result it describes rather than
-         wedged into the controls stack above the graph. -->
-    <div id="view-cmd" class="console-graph-views__cmdbar" hidden aria-live="polite" aria-label="CLI command for active view">
-      <!-- populated by renderViewCommand() -->
-    </div>
-
-    <!-- Bottom status row: the status/hint line, OUT of the canvas overlay so it never
-         obscures the graph. Empty (display:none) unless there is something to report -
-         loading, a view result, an error, or a mode change the operator did not ask for
-         (switchLayout's scale-guard revert) - so the row costs nothing at rest.
-         role=status makes it the surface's live region: the DISPLAY MODE toggle shows
-         which layout is active but announces nothing when one changes on its own. -->
-    <div class="console-graph-bottombar">
-      <p id="graph-status" role="status">Loading graph...</p>
-    </div>
 
     <input id="graph-file" type="file" accept="application/json,.json" aria-label="Load a graph.json file" hidden>
 
@@ -319,9 +303,6 @@
         <dd>Apply a color preset on load: <code>spell</code>, <code>project</code>, or <code>depth</code>.</dd>
       </dl>
       <p>Combine them with <code>&amp;</code>: <code>#data=...&amp;node=target:.:build</code>. A raw <code>graph.json</code> (from <code>magus graph export -o json</code>) also loads via the <b>Open file</b> button or drag-and-drop.</p>
-      <div id="live-remember-row" class="console-graph-live__rememberrow" hidden>
-        <label><input type="checkbox" id="live-remember-cb"> Remember this workspace (store token in localStorage)</label>
-      </div>
       </div>
     </details>
 

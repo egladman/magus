@@ -53,7 +53,7 @@ export interface NotifyLink {
 // to say WHERE a signal came from: it names the surface or feature that raised it ("Settings", "Log
 // Viewer", "Dashboard", "Activity", "Share") and is rendered as a quiet chip on both the transient
 // toast and the history entry - a toast fires globally, so its origin matters in the moment too, not just
-// in scrollback. `kind` defaults to "ok" (history tier). `link` may be a bare href string (labelled
+// in scrollback. `kind` defaults to "ok" (history tier). `link` may be a bare href string (labeled
 // "Open") or a full {label, href}. `key` is the dedupe key: a notification whose key was already admitted
 // this session is dropped, so a surface that re-detects the same event on every poll or re-render
 // notifies only on the transition (see the store's dedupe). `at` is injectable for tests.
@@ -312,7 +312,7 @@ export function mountNotificationCenter(): NotificationCenter {
   const actions = document.getElementById("console-actions");
 
   // The bell button, inserted just before the settings gear so it sits in the same plain-icon control
-  // group as its neighbours. A red dot rides the corner when an unseen error-tier notification waits.
+  // group as its neighbors. A red dot rides the corner when an unseen error-tier notification waits.
   const bell = document.createElement("button");
   bell.id = "console-notifybtn";
   bell.className = "pf-v6-c-button pf-m-plain";

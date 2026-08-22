@@ -89,7 +89,7 @@ type Row struct {
 	Text string
 	// Emph is which PART of Text changed, in BYTES of Text, on a RowLine that could be paired
 	// with its counterpart. The zero span means there is nothing to draw harder than the rest -
-	// the line has no partner, or the whole of it changed and the row colour already says so.
+	// the line has no partner, or the whole of it changed and the row color already says so.
 	Emph diff.Span
 }
 
@@ -473,8 +473,8 @@ func (m *Model) talkRows(file, row int, h *Hunk) []Row {
 //
 // The pairing is the state machine console/src/console/diff/main.ts runs before it paints: each
 // run of removed lines against the run of added lines that follows it. The two surfaces have to
-// emphasise the same bytes, or one changeset reads as two. diff.PairForEmphasis is what refuses
-// a run whose halves are different lengths, so a rewrite is emphasised and an insertion is left
+// emphasize the same bytes, or one changeset reads as two. diff.PairForEmphasis is what refuses
+// a run whose halves are different lengths, so a rewrite is emphasized and an insertion is left
 // alone rather than paired with whatever line happens to sit above it.
 //
 // The spans returned index the RAW line, marker byte included, because that is what the renderer

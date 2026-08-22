@@ -20,6 +20,29 @@ export const CARD_COL_W = 240; // CARD_MAX_W plus gutter; the DAG column spacing
 
 const STRIP_W = 3; // world units; a fill, so it scales with the card like the rest of its geometry
 
+// Cards are laid out in WORLD units, so the zoom that frames a whole build DAG also shrinks
+// them: at the scale that fits 111 targets on screen a 12-unit label paints about two pixels
+// tall, and a column of cards reads as noise rather than as nodes. Card geometry therefore
+// degrades with zoom, in two steps.
+const LABEL_MIN_PX = 7; // below this a 12-unit label is a smear, not text
+const BOX_MIN_PX = 11; // below this a 34-unit card is a sliver, so draw the node as a dot
+export const DOT_R_PX = 3; // screen radius of the dot form, held constant as the zoom changes
+
+/**
+ * CardDetail is how much of a card is worth painting at the current zoom.
+ *   full  - box, kind strip and text
+ *   plain - box and kind strip; the block structure still reads, the text would not
+ *   dot   - a screen-constant dot, the same visual language the force view uses
+ */
+export type CardDetail = "full" | "plain" | "dot";
+
+/** cardDetail picks the form a card takes at scale `zoomK`. */
+export function cardDetail(zoomK: number): CardDetail {
+  if (CARD_H * zoomK < BOX_MIN_PX) return "dot";
+  if (12 * zoomK < LABEL_MIN_PX) return "plain";
+  return "full";
+}
+
 export interface CardTheme {
   bg: string;
   text: string;
@@ -37,13 +60,23 @@ function clamp(min: number, v: number, max: number): number {
 // label width, clamped to [CARD_MIN_W, CARD_MAX_W]. Call before layoutLayered/
 // layoutWaves so column spacing can account for card width.
 export function measureCards(ctx: CanvasRenderingContext2D, nodes: GNode[], font: string): void {
-  ctx.font = "500 12px " + font;
+  const spec = "500 12px " + font;
+  ctx.font = spec;
+  // Every layout switch re-runs this over the whole graph - a few thousand measureText calls for
+  // values that cannot have moved. The font is the one input that invalidates a measurement; a new
+  // graph brings unmeasured nodes and needs no invalidation of its own.
+  const refont = spec !== measuredFont;
+  measuredFont = spec;
   for (const n of nodes) {
+    if (!refont && n.w != null) continue;
     const labelW = ctx.measureText(n.label).width;
     n.w = clamp(CARD_MIN_W, labelW + 2 * CARD_PAD_X, CARD_MAX_W);
     n.h = CARD_H;
   }
 }
+
+// The font the cached n.w measurements were taken with; the cache itself lives on the nodes.
+let measuredFont = "";
 
 // ellipsize returns text unchanged when it already fits within maxW (given
 // ctx's current font); otherwise it grows a head/tail keep-window evenly from
@@ -94,6 +127,26 @@ export function drawCard(
   },
 ): void {
   const { theme, kindColor, alpha, selected, anchor, zoomK, durationText } = opts;
+  const detail = cardDetail(zoomK);
+  if (detail === "dot") {
+    // World radius that paints a constant DOT_R_PX on screen, so the overview stays legible
+    // however far out the fit had to zoom.
+    const r = DOT_R_PX / zoomK;
+    ctx.globalAlpha = alpha;
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, r, 0, 2 * Math.PI);
+    ctx.fillStyle = kindColor;
+    ctx.fill();
+    if (selected) {
+      ctx.lineWidth = 2 / zoomK;
+      ctx.strokeStyle = theme.accent;
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, r + 2 / zoomK, 0, 2 * Math.PI);
+      ctx.stroke();
+    }
+    ctx.globalAlpha = 1;
+    return;
+  }
   const w = n.w ?? CARD_MIN_W;
   const h = n.h ?? CARD_H;
   const x = n.x - w / 2;
@@ -125,6 +178,16 @@ export function drawCard(
     const inset = 2.5;
     ctx.strokeRect(x + inset, y + inset, w - 2 * inset, h - 2 * inset);
     ctx.globalAlpha = priorAlpha;
+  }
+
+  if (detail === "plain") {
+    if (selected) {
+      ctx.lineWidth = 2 / zoomK;
+      ctx.strokeStyle = theme.accent;
+      ctx.strokeRect(x, y, w, h);
+    }
+    ctx.globalAlpha = 1;
+    return;
   }
 
   // Label (+ optional project subtitle), left-aligned after the strip and padding.

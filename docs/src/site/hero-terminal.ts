@@ -295,7 +295,7 @@ export function initHeroTerminal(): void {
   // that this box is live. It looks like a screenshot of a shell with one command
   // already typed, and anyone who presses Enter finds out.
   term.setAttribute("data-hero-terminal", "live");
-  // The static transcript was labelled as an image for assistive tech, which is
+  // The static transcript was labeled as an image for assistive tech, which is
   // right for a fixed picture of output and wrong for a live control.
   term.removeAttribute("role");
   term.removeAttribute("aria-label");

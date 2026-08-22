@@ -7,7 +7,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { parseAnsi, stripAnsi } from "./ansi";
 
-test("stripAnsi removes SGR colour sequences", () => {
+test("stripAnsi removes SGR color sequences", () => {
   assert.equal(stripAnsi("\x1b[31mfail\x1b[0m"), "fail");
 });
 
@@ -43,12 +43,12 @@ test("parseAnsi drops cursor control instead of emitting it as text", () => {
   assert.ok(!text.includes("\x1b"));
 });
 
-test("parseAnsi keeps colour state across an interleaved control sequence", () => {
-  const coloured = parseAnsi("\x1b[31mred\x1b[Kstill red").filter((s) => s.text.length > 0);
-  for (const seg of coloured) {
+test("parseAnsi keeps color state across an interleaved control sequence", () => {
+  const colored = parseAnsi("\x1b[31mred\x1b[Kstill red").filter((s) => s.text.length > 0);
+  for (const seg of colored) {
     assert.ok(seg.cls.includes("console-render-ansi__fg--red"));
   }
-  assert.equal(coloured.map((s) => s.text).join(""), "redstill red");
+  assert.equal(colored.map((s) => s.text).join(""), "redstill red");
 });
 
 test("parseAnsi returns one empty run for an empty line", () => {

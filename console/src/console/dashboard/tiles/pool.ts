@@ -14,7 +14,7 @@ export function poolTile(): Tile {
     note: "0 / 0 slots",
     why:
       "How much concurrency is actually in use. Full with work queued means raising it will help." +
-      " Mostly empty while runs drag means the graph is serialised and more slots change nothing.",
+      " Mostly empty while runs drag means the graph is serialized and more slots change nothing.",
   });
   const grid = h("div", "console-dashboard-pool__grid");
   grid.setAttribute("aria-label", "Concurrency slots");

@@ -19,14 +19,14 @@ import (
 
 // Callback is the host-side handle for a VM-side function value passed as
 // an argument. The generated bindings layer wraps a buzz.Session + function value.
-// Impls invoke the callback via Call; args are marshalled per VM convention.
+// Impls invoke the callback via Call; args are marshaled per VM convention.
 type Callback interface {
 	Call(ctx context.Context, args ...any) ([]any, error)
 }
 
 // TypeTag classifies the shape of a value crossing the VM boundary. Each tag
 // has a canonical Go type that Impls accept (for args) or return; codegen
-// emits per-VM marshalling that produces or consumes that Go type.
+// emits per-VM marshaling that produces or consumes that Go type.
 type TypeTag int
 
 // The TypeTag constants enumerate the parameter and return types a binding
@@ -135,7 +135,7 @@ type Ret struct {
 	// Impl returns a Go struct carrying BuzzObject (or a slice of them). Empty for a
 	// scalar return.
 	//
-	// Documentation for the CHECKER and the reader, not a marshalling instruction:
+	// Documentation for the CHECKER and the reader, not a marshaling instruction:
 	// the generator already recognizes an object by reflecting on the Impl. What
 	// was missing is the NAME - without it a method's return types as {str: any}
 	// outside the generator, so nothing checks the field names.

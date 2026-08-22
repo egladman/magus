@@ -24,7 +24,7 @@ import (
 
 // snapshot records the project's declared outputs into the cache and writes the manifest.
 // A project with no declared outputs records an empty manifest (correct cache hit on rerun).
-func (c *Cache) snapshot(ctx context.Context, s Step, hash string) ([]string, error) {
+func (c *Cache) snapshot(ctx context.Context, s Step, hash string, ran time.Duration) ([]string, error) {
 	root := s.WorkspaceRoot
 	matches, err := expandOutputGlobs(s.Outputs, root)
 	if err != nil {
@@ -55,6 +55,7 @@ func (c *Cache) snapshot(ctx context.Context, s Step, hash string) ([]string, er
 		Target:      s.Target,
 		CreatedAt:   time.Now().UTC(),
 		Platform:    c.platform,
+		DurationMs:  ran.Milliseconds(),
 	}
 	// Carry the target's return value onto the entry so a hit can replay it; absent
 	// for a void target, which is nearly all of them.
@@ -245,7 +246,7 @@ func (c *Cache) replay(ctx context.Context, m *Manifest, root string) ([]string,
 	return paths, nil
 }
 
-// replayBlob materialises blob at dst (dst must not exist). Tries reflink (CoW) → copy.
+// replayBlob materializes blob at dst (dst must not exist). Tries reflink (CoW) → copy.
 // Both yield a file with an independent inode, so a downstream in-place rewrite (or the
 // caller's chmod) cannot mutate the shared CAS blob. Hard-linking is deliberately not used:
 // it would alias the blob inode and silently poison the cache on the next in-place write.

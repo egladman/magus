@@ -20,6 +20,7 @@ Start the daemon with `magus server start`. See [the console reference](../conso
 | Service | Methods | Package |
 |---------|---------|--------|
 | [ActivityService](activity/v1alpha1/activity.md) | 2 | `magus.activity.v1alpha1` |
+| [GraphService](graph/v1alpha1/graph.md) | 7 | `magus.graph.v1alpha1` |
 | [InsightService](insight/v1alpha1/insight.md) | 1 | `magus.insight.v1alpha1` |
 | [JobService](job/v1alpha1/job.md) | 2 | `magus.job.v1alpha1` |
 | [MemoryService](memory/v1alpha1/memory.md) | 5 | `magus.memory.v1alpha1` |
@@ -36,7 +37,6 @@ A package with no service of its own: its types are documented here instead of o
 
 | Package | File |
 |---------|------|
-| [magus.graph.v1alpha1](graph/v1alpha1/graph.md) | `proto/magus/graph/v1alpha1/graph.proto` |
 | [magus.query.v1alpha1](query/v1alpha1/query.md) | `proto/magus/query/v1alpha1/query.proto` |
 
 ## Calling a method without a generated client

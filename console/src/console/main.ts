@@ -73,7 +73,13 @@ import { createClient } from "@connectrpc/connect";
 import { StatusService } from "../gen/magus/status/v1alpha1/status_pb";
 import { mountSharePanel } from "./share";
 import { mountActivityDrawer } from "./activityDrawer";
-import { applyFocusRing, getFocusRing, getDefaultHost } from "../lib/settings";
+import {
+  applyFocusRing,
+  getFocusRing,
+  getDefaultHost,
+  applyNodeShapes,
+  getNodeShapes,
+} from "../lib/settings";
 import { browserInstallHost, createInstallStore } from "../lib/install";
 import { registerServiceWorker } from "../lib/sw";
 import type { PageController, PageModule } from "./page";
@@ -452,6 +458,10 @@ function setPanesIcon(btn: HTMLElement, mode: "row" | "col"): void {
 // notConnectedHint is the #console-conn accessible name / tooltip when the console is not connected: it
 // names the CONFIGURED daemon address so a disconnected user sees the target without opening Settings,
 // and always ends in the click hint (the item jumps to the daemon-address field). Empty host = unset.
+// The last /readyz answer, so a tab switch can paint the bar that just docked without waiting out
+// the poll interval. Module-level because the poller and the tab swap are separate closures.
+let lastReadiness: { report: ReadinessReport | null; host: string; at: number } | null = null;
+
 function notConnectedHint(host: string): string {
   return host
     ? "Not connected to " + host + ". Click to change the daemon address."
@@ -467,11 +477,10 @@ function notConnectedHint(host: string): string {
 // The text items (#console-conn with its liveness dot, #console-count, #console-observing) are plain
 // spans the surfaces write via textContent + [data-state], styled ID-scoped in overrides.css.
 // #console-conn also gets a periodic /readyz enrichment from startConsole's readiness poller below.
-// Ownership split (see enrichConnHealth): the active surface owns textContent + data-state (the link
-// signal); the poller owns title + data-health. The poller writes data-health regardless of tab count
-// but ONLY while data-state is already "connected" (health refines the connected color, never overrides
-// a not-connected dot), and it takes over textContent/data-state only at zero tabs, where the launcher's
-// default bar has no surface behind it.
+// Ownership split (see enrichConnHealth): a surface with a link of its OWN claims textContent +
+// data-state by stamping data-owner through publishStatus; the poller owns title + data-health
+// always, and owns textContent/data-state on any bar nobody claimed. data-health is written only
+// while data-state is already "connected", so health refines the dot but never overrides it.
 // Only .console-shell-statusbar__right stays a class - the log viewer queries it to inject its zoom control.
 //
 // withPanesButton adds the Panes tray toggle (data-panes-toggle) to the right cluster - every TAB's bar
@@ -484,11 +493,21 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
   const conn = document.createElement("span");
   conn.id = "console-conn";
   conn.setAttribute("aria-live", "polite");
-  conn.textContent = "not connected";
-  // Start in the honest not-connected state so the liveness dot reads RED until something proves a link,
-  // rather than the muted default color. A surface overwrites data-state the instant it mounts; the
-  // launcher's own bar (no surface behind it) keeps "none" until the readiness poller resolves a host.
-  conn.dataset.state = "none";
+  // The FRAGMENT decides demo, the same authority the readiness pulse and the connect screen already
+  // use. Leaving it to each surface to stamp meant only the Dashboard ever did, so a demo console read
+  // "demo" on one tab and "not connected" on the next - two answers to "what am I looking at", one of
+  // them wrong, in the one bar that exists to answer it.
+  //
+  // Safe to decide at construction now: demo mode is reachable ONLY through the Workspace menu, which
+  // sets #demo and remounts every tab. It was not always - each surface used to carry a "See the demo"
+  // button that entered demo with no fragment, which is why this was deferred to the surfaces at all.
+  const demoing = wantsDemo(parseHash());
+  conn.textContent = demoing ? "demo" : "not connected";
+  // Otherwise start in the honest not-connected state so the liveness dot reads RED until something
+  // proves a link, rather than the muted default color. A surface overwrites data-state the instant it
+  // mounts; the launcher's own bar (no surface behind it) keeps "none" until the readiness poller
+  // resolves a host.
+  conn.dataset.state = demoing ? "demo" : "none";
   // Clickable: a disconnected user's fastest fix is the daemon-address field, so the status pill
   // itself is the shortcut there (openDaemonSettings, wired via the delegated listener below). role +
   // tabindex make it a real keyboard-reachable control since a bare <span> is neither by default; the
@@ -499,7 +518,11 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
   // Surface the CONFIGURED daemon address up front, so a disconnected user reads what address the console
   // is trying without opening Settings. Both the accessible name and the hover tooltip carry it; the
   // readiness poller keeps the tooltip current once it has probed. notConnectedHint owns the wording.
-  const hint = notConnectedHint(getDefaultHost());
+  // The demo sentence is the same one the readiness poller writes, set here too so it is right from
+  // the first paint rather than from the first poll tick.
+  const hint = demoing
+    ? "Demo data is synthetic. Click to change the daemon address."
+    : notConnectedHint(getDefaultHost());
   conn.setAttribute("aria-label", hint);
   conn.title = hint;
   left.append(conn);
@@ -513,6 +536,11 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
     viewOnly.title = "This is a read-only view shared over the network.";
     left.append(viewOnly);
   }
+  // No separate "demo data" tag beside this. There was one, revealed per surface, and next to a
+  // connection dot that now reads "demo" on every tab it was the same sentence twice in one bar.
+  // The disclosure a reader needs - that sample prose is asserting things nobody said - is what the
+  // dot says, for as long as demo mode is on, on every surface rather than only the ones that
+  // remembered to raise it.
   const right = document.createElement("div");
   right.dataset.cluster = "";
   right.className = "console-shell-statusbar__right";
@@ -788,6 +816,9 @@ export function startConsole(
 
   loadBuildInfo(); // fetch the build fingerprint once; fills every status bar's version chip
   applyFocusRing(getFocusRing()); // apply the persisted focus-ring preference before anything renders
+  // Before the graph mounts and reads the attribute. Motion is not here - theme.ts applies it
+  // pre-paint, because the boot reveal it suppresses runs before this does.
+  applyNodeShapes(getNodeShapes());
   const hadSavedWorkspace = hasSavedWorkspace();
   const ws = workspaceStore();
   const mounts = new Map<string, Mounted>(); // tabId -> its mounted tile + status bar
@@ -818,6 +849,7 @@ export function startConsole(
   const launcher = buildLauncher(SURFACES, open);
   launcher.hidden = true;
   outlet.append(launcher);
+  let launcherChordWired = false;
   const launcherStatus = makeStatusBar(false); // zero tabs, zero panes: no Panes tray button
 
   // mountSurface is how a tile mounts one surface into a pane host: resolve the registered module and
@@ -887,7 +919,7 @@ export function startConsole(
 
   // syncWindowTitle mirrors the active tab into document.title, so the browser tab, the installed
   // PWA's window, and the OS task switcher all say what you are looking at - the other half of the
-  // behaviour, and the reason a tab-title change has to reach past the bar. With no tab active the
+  // behavior, and the reason a tab-title change has to reach past the bar. With no tab active the
   // console is on its launcher, so the title falls back to the document's own static name.
   function syncWindowTitle(): void {
     if (appModeTitle !== null) {
@@ -955,11 +987,22 @@ export function startConsole(
     // Restamp the palette's chord on the way in: it is remappable, and the launcher was built long
     // before this keymap was read.
     if (!launcher.hidden) syncLauncherChord(launcher, chordFor("console.actionBar.open"));
+    // Delegated once, on the launcher: syncLauncherChord rebuilds the keycap on every reveal, so a
+    // listener bound to the button itself would be rebound each time.
+    if (!launcherChordWired) {
+      launcherChordWired = true;
+      launcher.addEventListener("click", (ev) => {
+        if ((ev.target as HTMLElement).closest("[data-open-palette]")) {
+          dispatchCommand("console.actionBar.open");
+        }
+      });
+    }
     // Empty state flag for CSS: with zero tabs there is nothing on the (mobile) tab row, so the phone
     // title bar collapses back from two rows to one (see console.css) instead of reserving an empty
     // second row on the launcher screen.
     document.documentElement.toggleAttribute("data-no-tabs", active == null);
     statusHost.replaceChildren(active ? active.status : launcherStatus);
+    applyReadiness(); // a fresh tab's bar has never been painted; an old one holds a stale reading
     // Switching tabs moves focus without the tile emitting: it is the same focused pane it always had,
     // so nothing inside it changed. Read it here instead.
     const shot = active?.tile.snapshot();
@@ -1906,7 +1949,9 @@ export function startConsole(
         running: 5,
         queued: 2,
         workspaces: [DEMO_WORKSPACE_ROOT, "~/Repos/magus"],
-        cache: { hits: 412, misses: 77 },
+        // 412 hits averaging a bit over three minutes each - a plausible afternoon, and enough to
+        // show the headline figure the demo exists to show.
+        cache: { hits: 412, misses: 77, savedMs: 79_200_000 },
       });
       railBadges.set({});
       // The picker is fed here too. Its list otherwise arrives only from the dashboard's publisher,
@@ -1970,41 +2015,50 @@ export function startConsole(
     }
     const startedAt = Date.now();
     fetchReadiness(host).then((report) => {
-      const conn = document.getElementById("console-conn");
-      if (!conn) return; // momentarily absent between tab swaps
-      if (conn.dataset.state === "demo") {
-        const hint = "Demo data is synthetic. Click to change the daemon address.";
-        conn.title = hint;
-        conn.setAttribute("aria-label", hint);
-        delete conn.dataset.health;
-        return;
-      }
-      const ageSec = Math.max(0, Math.round((Date.now() - startedAt) / 1000));
-      // The tooltip is always safe to enrich - no surface writes conn.title, so this never contends.
-      conn.title = formatReadinessTitle(report, ageSec, host);
-      // At ZERO tabs the launcher's default bar has no surface behind it, so the poller owns the text +
-      // state outright (a reachable+ready daemon reads "connected", otherwise "disconnected" = red).
-      if (ws.get().activeId == null) {
-        conn.textContent = report
-          ? report.ready
-            ? "daemon ready"
-            : "daemon not ready"
-          : "not connected";
-        conn.dataset.state = report?.ready ? "connected" : "disconnected";
-      }
-      // Keep the accessible name naming the address it is probing: connected reads "Connected to <host>",
-      // anything else falls back to the not-connected hint (which also names <host>). Read AFTER the
-      // zero-tab state update above, and runs regardless of tab count so an open-but-disconnected surface
-      // still surfaces the address on the conn item.
-      conn.setAttribute(
-        "aria-label",
-        conn.dataset.state === "connected"
-          ? "Connected to " + host + ". Click to change the daemon address."
-          : notConnectedHint(host),
-      );
-      // Health enrichment runs regardless of tab count, gated on the (surface- or poller-set) data-state.
-      enrichConnHealth(conn, report);
+      lastReadiness = { report, host, at: startedAt };
+      applyReadiness();
     });
+  }
+
+  // Called by the poller AND by every tab switch: bars are per-tab and the poller only reaches the
+  // docked one, so a tab activated between polls would show its construction-time default.
+  function applyReadiness(): void {
+    if (!lastReadiness) return;
+    const { report, host, at } = lastReadiness;
+    const conn = document.getElementById("console-conn");
+    if (!conn) return; // momentarily absent between tab swaps
+    if (conn.dataset.state === "demo") {
+      const hint = "Demo data is synthetic. Click to change the daemon address.";
+      conn.title = hint;
+      conn.setAttribute("aria-label", hint);
+      delete conn.dataset.health;
+      return;
+    }
+    const ageSec = Math.max(0, Math.round((Date.now() - at) / 1000));
+    // The tooltip is always safe to enrich - no surface writes conn.title, so this never contends.
+    conn.title = formatReadinessTitle(report, ageSec, host);
+    // The poller owns any bar no surface has claimed: the launcher's zero-tab bar, and every
+    // surface with no daemon link of its own - which used to sit on "not connected" all session.
+    if (!conn.dataset.owner) {
+      conn.textContent = report
+        ? report.ready
+          ? "daemon ready"
+          : "daemon not ready"
+        : "not connected";
+      conn.dataset.state = report?.ready ? "connected" : "disconnected";
+    }
+    // Keep the accessible name naming the address it is probing: connected reads "Connected to <host>",
+    // anything else falls back to the not-connected hint (which also names <host>). Read AFTER the
+    // state update above, and runs whoever owns the dot so an open-but-disconnected surface still
+    // surfaces the address on the conn item.
+    conn.setAttribute(
+      "aria-label",
+      conn.dataset.state === "connected"
+        ? "Connected to " + host + ". Click to change the daemon address."
+        : notConnectedHint(host),
+    );
+    // Health enrichment runs whoever owns the dot, gated on the (surface- or poller-set) data-state.
+    enrichConnHealth(conn, report);
   }
   pollReadiness();
   setInterval(() => {
@@ -2094,15 +2148,15 @@ export function startConsole(
       css: "logs/logs.css",
     }),
   );
-  // Notes reuses logs.css rather than authoring its own: it renders on PF components plus the
-  // shared console-render-* frame the log viewer and the trail already load, so a third sheet
-  // would be a copy of rules that are already there.
+  // Notes authors its own sheet. It shares a panel-frame shape with the log viewer and the
+  // trail, but not their typography: .console-render-body is a monospace grid sized for log
+  // lines, and a note is human prose that has to wrap to a reading measure.
   register(
     moduleSurface({
       id: "notes",
       title: "Notes",
       bundle: "notes/notes.js",
-      css: "logs/logs.css",
+      css: "notes/notes.css",
     }),
   );
   // Review authors its own sheet rather than reusing logs.css: the hunk stream is virtualized

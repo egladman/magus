@@ -667,12 +667,12 @@ func cleanComments(loc protoreflect.SourceLocation) string {
 
 // clean folds a comment block into one paragraph and escapes what would otherwise break the
 // Markdown it lands in. Proto comments are prose written for a .proto file, not for
-// Markdown, so three things have to be neutralised:
+// Markdown, so three things have to be neutralized:
 //
 //	|  this schema already writes pipes in prose ("RUNNING -> PASSED|FAILED|CACHED"), which
 //	   would split a table row into extra columns.
 //	_  an identifier fragment like "the STATE_ prefix" opens an emphasis span that never
-//	   closes, italicising the rest of the page. Escaping every underscore also renders
+//	   closes, italicizing the rest of the page. Escaping every underscore also renders
 //	   snake_case names correctly, so there is no case where leaving one bare is better.
 //	a bare URL in prose (graph.proto's source_base comment names one as an example) trips
 //	   the site's no-bare-urls lint rule; wrapped in <...> it renders as a real link instead.

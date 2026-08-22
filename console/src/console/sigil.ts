@@ -7,7 +7,7 @@
 // logic by design. The eye reads an asymmetric scatter as noise and a symmetric figure as intentional,
 // which is why every identicon that looks designed is built on mirror or rotational symmetry.
 //
-// So: generate ONE small motif from the hash, then repeat it k times around the centre. Symmetry does
+// So: generate ONE small motif from the hash, then repeat it k times around the center. Symmetry does
 // the aesthetic work, and it cannot come out ugly; the motif carries the entropy.
 //
 // The motif begins and ends on the two edges of its wedge AT THE SAME RADIUS, so the rotated copies
@@ -60,7 +60,7 @@ export const SIGIL_HUES = [
 type Pt = { t: number; r: number };
 
 export interface SigilSpec {
-  folds: number; // how many times the motif repeats around the centre
+  folds: number; // how many times the motif repeats around the center
   mirror: boolean; // reflect within each wedge, for dihedral rather than plain rotational symmetry
   edge: number; // the radius where one wedge hands over to the next
   motif: Pt[];
@@ -133,6 +133,45 @@ export function specKey(s: SigilSpec): string {
   ].join("|");
 }
 
+// How many distinct marks can actually OCCUR - which is not the size of the parameter space.
+//
+// The parameters multiply out to roughly 190 billion, but every spec is drawn from a stream seeded by
+// one 32-bit FNV hash, so at most 2^32 of them are reachable however many knobs there are. The hash
+// is the binding constraint and the smaller number is the true one; quoting the parameter count would
+// overstate the space by ~44x.
+export const SIGIL_SPACE = (() => {
+  const perPoint = 7 * 7;
+  const motifs = [2, 3, 4].reduce((n, count) => n + perPoint ** count, 0);
+  const parameters = motifs * 6 * 4 * 7 * 3 * 2 * 2 * 2 * SIGIL_HUES.length; // folds, edges, bulges, cores, ring, orbs, mirror, hue
+  return Math.min(parameters, 2 ** 32);
+})();
+
+// describeSigil says what THIS mark is and where it came from, in the second person. It reads the
+// spec rather than the seed: the path is never disclosed (see the module note), and the shape is the
+// part that is actually on screen.
+export function describeSigil(spec: SigilSpec): string {
+  const shape = spec.bulge > 0 ? "petals bowed outward" : "petals cupped inward";
+  const sym = spec.mirror ? "mirrored" : "rotational";
+  const extras: string[] = [];
+  if (spec.ring) extras.push("ringed");
+  if (spec.orbs) extras.push("tipped with orbs");
+  if (spec.core === 1) extras.push("dotted at the center");
+  if (spec.core === 2) extras.push("with an inner ring");
+  const trim = extras.length ? ", " + extras.join(", ") : "";
+  const space =
+    SIGIL_SPACE >= 1e9
+      ? (SIGIL_SPACE / 1e9).toFixed(1) + " billion"
+      : Math.round(SIGIL_SPACE / 1e6) + " million";
+  return (
+    `${spec.folds}-fold ${sym} symmetry, ${shape}${trim}. ` +
+    `Hashed from this workspace's path - the same mark every time you open it, and never the ` +
+    `path back out of it. ` +
+    `One of about ${space}, bounded by the 32-bit hash rather than by the shapes. Any two ` +
+    `workspaces loaded at once are guaranteed to differ: ` +
+    `if their marks would collide, the second is re-seeded until it does not.`
+  );
+}
+
 // assignSigils turns the workspaces a daemon has loaded into marks that are DISTINCT FROM EACH OTHER.
 //
 // Uniqueness cannot be guaranteed against arbitrary inputs - finitely many pictures, unboundedly many
@@ -186,7 +225,7 @@ export function renderSigil(spec: SigilSpec, size = 44): string {
     const [x1, y1] = ring[i % ring.length];
     const mx = (x0 + x1) / 2;
     const my = (y0 + y1) / 2;
-    // Push along the line from the centre through the midpoint, which keeps the bow radial and so
+    // Push along the line from the center through the midpoint, which keeps the bow radial and so
     // keeps the k-fold symmetry exact.
     const dx = mx - c;
     const dy = my - c;

@@ -23,7 +23,7 @@ import (
 //
 // TSV is this module with delimiter set to a tab rather than a separate module:
 // the format differs by one character and nothing else, so a second name would be
-// two things to learn for one behaviour.
+// two things to learn for one behavior.
 //
 // The options are ORDINARY OPTIONAL ARGUMENTS, not an opts map. Most of the
 // stdlib's older methods take {str: any} bags, which means a misspelled key is

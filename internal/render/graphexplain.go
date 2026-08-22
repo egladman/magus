@@ -38,7 +38,18 @@ var relationPhrase = map[string][2]string{
 	types.RelationProduces:     {"produces", "produced by"},
 	types.RelationConsumes:     {"consumes", "consumed by"},
 	types.RelationAuthored:     {"authored", "authored by"},
+	types.RelationAnnotates:    {"is about", "NOTE"},
 }
+
+// proseFirst are the in-edges hoisted above every other group on a node's card.
+//
+// A note is the only thing on this card a person wrote, and the only thing a rebuild cannot
+// recover. Left in first-seen order it sorted after the out-edges, which on a real project
+// meant landing past 65 `contains` and 104 `depends on` entries - present in the output and
+// unreadable in practice. Delivery is the whole problem this store has: prose nobody meets
+// at the moment they need it may as well not be written, so the one group that carries it
+// goes first.
+var proseFirst = map[string]bool{types.RelationAnnotates: true}
 
 // phraseFor returns the natural-language verb for a relation in the given
 // direction, falling back to the raw relation name (with an "-> "/"<- " marker for
@@ -130,8 +141,9 @@ func ExplainText(out types.KnowledgeExplainOutput) string {
 }
 
 type relationGroup struct {
-	header string
-	ids    []string
+	header   string
+	relation string
+	ids      []string
 }
 
 // relationGroups buckets a node's edges by (direction, relation) in first-seen
@@ -156,16 +168,27 @@ func relationGroups(out types.KnowledgeExplainOutput) []relationGroup {
 			if len(ids) > 1 {
 				header = fmt.Sprintf("%s (%d)", header, len(ids))
 			}
-			groups = append(groups, relationGroup{header: header, ids: ids})
+			groups = append(groups, relationGroup{header: header, relation: rel, ids: ids})
 		}
 		return groups
 	}
-	return append(build(out.Out, true), build(out.In, false)...)
+	in := build(out.In, false)
+	// Hoisted from the in-edges, keeping every other group's order untouched.
+	var prose, rest []relationGroup
+	for _, g := range in {
+		if proseFirst[g.relation] {
+			prose = append(prose, g)
+		} else {
+			rest = append(rest, g)
+		}
+	}
+	groups := append(prose, build(out.Out, true)...)
+	return append(groups, rest...)
 }
 
 // writeGroup prints "<header>  <id>, <id>, ...", wrapping the ID list at wrapCol
 // with a hanging indent aligned under the first ID, so a group reads as one
-// labelled row however long its list. The trailing comma on a wrapped line signals
+// labeled row however long its list. The trailing comma on a wrapped line signals
 // the list continues.
 func writeGroup(b *strings.Builder, header string, ids []string, w int) {
 	indent := w + 2
@@ -192,7 +215,7 @@ func writeGroup(b *strings.Builder, header string, ids []string, w int) {
 }
 
 // PathText renders a shortest path as the chain of natural-language steps from the
-// source to the target, one labelled step per hop (direction folded into the verb).
+// source to the target, one labeled step per hop (direction folded into the verb).
 func PathText(out types.KnowledgePathOutput) string {
 	var b strings.Builder
 	steps := "no path"

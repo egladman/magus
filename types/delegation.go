@@ -178,7 +178,7 @@ type DelegationReport struct {
 
 // NewDelegationReport wraps the rows and derives the overlaps. Derived on READ and
 // never stored: an overlap is a relation between two rows, so storing it on either
-// one would mean a row that stopped being true when its neighbour changed.
+// one would mean a row that stopped being true when its neighbor changed.
 //
 // The single door onto a report, which is why the empty case is normalized HERE: an
 // unwritten ledger serves "units":[] rather than null, and the MCP tool and the HTTP

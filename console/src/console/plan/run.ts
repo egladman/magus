@@ -36,7 +36,7 @@ export const RUN_STATE_LABEL: Record<RunState, string> = {
   fail: "fail",
 };
 
-// The NON-COLOUR channel on a node, the same call the ledger view makes for the same reason: colour
+// The NON-COLOR channel on a node, the same call the ledger view makes for the same reason: color
 // alone fails WCAG 1.4.1 on a surface whose entire content is states told apart. The three shared
 // states keep the ledger's marks so a reader who has learned one view has learned both.
 export const RUN_STATE_MARK: Record<RunState, string> = {

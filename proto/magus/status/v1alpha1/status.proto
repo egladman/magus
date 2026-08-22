@@ -173,6 +173,14 @@ message Cache {
   int64 errors = 3;
   int64 size_bytes = 4;   // real on-disk size of the cache dir (0 = unknown/not computed)
   int32 size_cap_mb = 5;  // configured cap (MAGUS_CACHE_SIZE_MB; 0 = unlimited)
+  // saved_ms is the summed recorded duration of the runs those hits replayed - the work the cache
+  // avoided, measured rather than modeled: each figure is how long that exact target took on this
+  // machine when it last ran, carried on the cache entry.
+  //
+  // It UNDERSTATES and never overstates. A hit on an entry written before the duration was recorded
+  // counts toward hits and adds nothing here, so a reader must not present this as the cache's
+  // lifetime saving - it is what this daemon has saved since it started.
+  int64 saved_ms = 6;
 }
 
 // StatusService serves the snapshot, and streams it for a live dashboard.

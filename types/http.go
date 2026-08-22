@@ -16,7 +16,7 @@ package types
 // directions at once - it silently triples the cost of a genuinely failing request
 // (and the wait before the failure is reported), and it can mask a real outage
 // long enough that a build looks merely slow. Retrying is a decision about a
-// specific endpoint's behaviour, so the caller states it.
+// specific endpoint's behavior, so the caller states it.
 type HTTPRetry struct {
 	// Attempts is the TOTAL number of tries, not the number of retries after the
 	// first. 0 and 1 both mean "run it once"; 3 means one attempt plus two

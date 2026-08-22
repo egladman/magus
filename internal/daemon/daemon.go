@@ -43,6 +43,7 @@ import (
 	"github.com/egladman/magus/internal/share"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/proto/gen/go/magus/activity/v1alpha1/activityv1alpha1connect"
+	"github.com/egladman/magus/proto/gen/go/magus/graph/v1alpha1/graphv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/insight/v1alpha1/insightv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/job/v1alpha1/jobv1alpha1connect"
 	"github.com/egladman/magus/proto/gen/go/magus/memory/v1alpha1/memoryv1alpha1connect"
@@ -553,6 +554,27 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			notesPath, notesHandler := notesv1alpha1connect.NewNotesServiceHandler(noteshandler.NewService(opts.Magus, opts.Config), notesAudit)
 			httpServer.Handle(notesPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleReadBearer, notesHandler))))
 			log.InfoContext(ctx, "[BRIDGE] notes service mounted", slog.String("path", notesPath))
+
+			// Graph service: the typed surface for the knowledge graph's own verbs - query,
+			// resolve, explain, path, stats. It exists so the browser stops reimplementing them;
+			// the Graph Explorer's filter was a second, divergent copy of the query grammar,
+			// scoring by raw degree over a payload /api/v1/graph had already sent whole. That
+			// route stays: a bulk subgraph document is a different job from ranked retrieval.
+			//
+			// Deliberately NOT in shareGuarded, for the same reason /api/v1/graph is not: a
+			// leaked share link must not reach the workspace's structure. No audit interceptor
+			// either: unlike notes and memory, nothing here is attributable to a person, and the
+			// same facts are already served unaudited over /api/v1/graph.
+			//
+			// VerifyConsoleBearer, NOT the read-tier verifier its read-only contract would
+			// suggest. This service and /api/v1/graph are two doors onto ONE body of data, and
+			// /api/ is mounted at the write tier - so the read tier here would let a viewer
+			// credential page the whole graph through QueryNodes after being refused the bulk
+			// route, which is a hole rather than a convenience. The tiers move together or the
+			// weaker one decides.
+			graphPath, graphServiceHandler := graphv1alpha1connect.NewGraphServiceHandler(graphhandler.NewService(opts.Magus))
+			httpServer.Handle(graphPath, httpx.GuardRebind(activityAllowed, cors(httpx.BearerGuard(auth.VerifyConsoleBearer, graphServiceHandler))))
+			log.InfoContext(ctx, "[BRIDGE] graph service mounted", slog.String("path", graphPath))
 
 			log.InfoContext(ctx, "[BRIDGE] console mounted", slog.String("addr", addr.String()))
 		}

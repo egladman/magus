@@ -31,12 +31,12 @@ const SVG_NS = "http://www.w3.org/2000/svg";
 // noticeGlyph draws the severity mark that leads a guard-judged row: the same note / warning
 // vocabulary a documentation admonition uses.
 //
-// Colour alone was carrying the whole distinction before, which fails twice over. It is invisible
-// to anyone who cannot separate the two hues, and on a wall display several metres away a tinted
+// Color alone was carrying the whole distinction before, which fails twice over. It is invisible
+// to anyone who cannot separate the two hues, and on a wall display several meters away a tinted
 // row edge is simply not resolvable - the tile is meant to be readable from across a room. A shape
 // survives both, and reads the same way an operator already reads a docs callout.
 //
-// Stroked in currentColor so the stylesheet owns severity colour in one place.
+// Stroked in currentColor so the stylesheet owns severity color in one place.
 function noticeGlyph(kind: "deny" | "advise" | "pass"): SVGElement {
   const svg = document.createElementNS(SVG_NS, "svg");
   svg.setAttribute("viewBox", "0 0 16 16");
@@ -152,7 +152,7 @@ export function agentsTile(): Tile {
         //
         // Keyed on atMs because the trail assigns no id of its own. Epoch milliseconds are unique
         // per producer in practice, and the trail is append-only, so the worst case of a collision
-        // is revealing the neighbouring row of the same millisecond rather than a wrong one.
+        // is revealing the neighboring row of the same millisecond rather than a wrong one.
         const link = h("a", "console-dashboard-row__cmd") as HTMLAnchorElement;
         link.href = "../activity/#at=" + String(c.atMs);
         link.append(h("code", undefined, tool));
@@ -169,9 +169,9 @@ export function agentsTile(): Tile {
     );
   }
 
-  // A key for the seat colours, built from the hosts actually present.
+  // A key for the seat colors, built from the hosts actually present.
   //
-  // The seats were coloured by host with nothing anywhere saying which colour meant which agent, so
+  // The seats were colored by host with nothing anywhere saying which color meant which agent, so
   // the row of cubes was decorative to everyone but its author. Derived from the live view rather
   // than hardcoded, so it lists the agents actually driving this daemon and cannot drift from the
   // palette in dashboard.css.
@@ -187,7 +187,7 @@ export function agentsTile(): Tile {
   }
 
   function renderSeats(view: AgentActivityView, now: number): void {
-    // One cell per session, coloured by its host, dimmed once its last call is older than RECENT_MS.
+    // One cell per session, colored by its host, dimmed once its last call is older than RECENT_MS.
     // Capped so a daemon serving a swarm cannot grow the DOM without bound; the residual rides the
     // header note, which never truncates.
     const cells: HTMLElement[] = [];
@@ -209,7 +209,7 @@ export function agentsTile(): Tile {
       ...hosts.map((hv) => {
         const li = h("li", "console-dashboard-row console-dashboard-agents__call");
         // Same severity vocabulary as the per-call rows below, so one glyph means one thing
-        // everywhere in the tile. A host's severity is the worst judgement any of its calls got.
+        // everywhere in the tile. A host's severity is the worst judgment any of its calls got.
         const sev = hv.denied > 0 ? "deny" : hv.advised > 0 ? "advise" : "pass";
         li.dataset.decision = sev;
         li.append(noticeGlyph(sev));

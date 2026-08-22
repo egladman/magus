@@ -72,13 +72,13 @@ type Field struct {
 //	MAGUS_OUTPUT (-o, --output, output)
 //	MAGUS_HINTS_ENABLED (env-only, hints.enabled)
 //
-// For the labelled multi-line block, use [Field.Describe].
+// For the labeled multi-line block, use [Field.Describe].
 func (f Field) String() string {
 	flags := flagsLabel(f.Flag)
 	return fmt.Sprintf("%s (%s, %s)", f.EnvVar, flags, f.YamlPath)
 }
 
-// Describe renders a Field as a labelled three-line block:
+// Describe renders a Field as a labeled three-line block:
 //
 //	Env: MAGUS_CACHE_DIR
 //	Flags: --cache-dir

@@ -45,7 +45,7 @@ type ExecOptions struct {
 	// TTY runs the child attached to a pseudo-terminal instead of pipes.
 	//
 	// The difference between the output a tool gives YOU and the output it gives a
-	// pipe: nearly every modern CLI calls isatty() and drops colour and progress
+	// pipe: nearly every modern CLI calls isatty() and drops color and progress
 	// rendering, so without this magus shows and caches that degraded form.
 	//
 	// Two consequences. A terminal is ONE stream, so stdout and stderr arrive

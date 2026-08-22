@@ -27,7 +27,7 @@ var hostDeclsFS embed.FS
 // ModuleDecls returns the Buzz declarations for a host module by import path, and
 // whether any exist. A module with no generated declarations is not an error: the
 // caller simply registers the native implementation without them, which is the
-// behaviour every module had before these existed.
+// behavior every module had before these existed.
 func ModuleDecls(module string) (string, bool) {
 	b, err := fs.ReadFile(hostDeclsFS, "gen/decls/"+module+".buzz")
 	if err != nil {

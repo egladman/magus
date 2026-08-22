@@ -196,7 +196,7 @@ changed surface and left alone because they are outside this PR's subject.
    `Flag.Default` has the wrong type, four lines from a `Kind` switch that
    PANICS with reasoning that applies identically. That was defensible while the
    registry only fed documentation; the binders are now the real CLI, so a wrong
-   `Default` is a runtime behaviour bug. `flagDefaultLiteral` in the generator
+   `Default` is a runtime behavior bug. `flagDefaultLiteral` in the generator
    repeats the same silent fallback.
 2. `writeBinder` does not dedup flag names within one command; `constsFor` does,
    but only for the const block. A duplicate name inside one `Flags` list emits

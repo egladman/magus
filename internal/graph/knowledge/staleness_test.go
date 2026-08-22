@@ -97,17 +97,26 @@ func TestAnnotateProseStalenessIsSilentWithoutEvidence(t *testing.T) {
 	})
 }
 
-func TestStalenessPenalty(t *testing.T) {
-	assert.Equal(t, 0, stalenessPenalty(nil), "unmeasured is never penalized")
-	assert.Equal(t, 0, stalenessPenalty(map[string]string{AttrStaleness: StalenessCurrent}))
-	assert.Less(t, stalenessPenalty(map[string]string{AttrStaleness: StalenessOutrun}),
-		stalenessPenalty(map[string]string{AttrStaleness: StalenessPetrified}),
-		"further behind must rank lower")
+func TestStalenessLabel(t *testing.T) {
+	verdict, days := stalenessLabel(nil)
+	assert.Empty(t, verdict, "unmeasured makes no claim")
+	assert.Zero(t, days)
+
+	verdict, _ = stalenessLabel(map[string]string{AttrStaleness: StalenessCurrent})
+	assert.Empty(t, verdict, "keeping up is not a finding")
+
+	verdict, days = stalenessLabel(map[string]string{
+		AttrStaleness: StalenessPetrified, AttrOutrunDays: "400",
+	})
+	assert.Equal(t, StalenessPetrified, verdict)
+	assert.Equal(t, 400, days, "the day count is the evidence and must reach the caller")
 }
 
-// TestResolveCarriesTheEvidenceForItsWeight is the guard on the one thing that makes
-// ranking acceptable: the reader can see why something sank.
-func TestResolveCarriesTheEvidenceForItsWeight(t *testing.T) {
+// Staleness annotates and never reorders. The subject that keeps moving is where knowledge is
+// worth most (churn predicts defect density), and prose whose subject is gone is often the
+// only surviving evidence of why it went - ranking either one down buries it exactly when it
+// is needed. Guru and g3doc both label rather than demote for the same reason.
+func TestResolveLabelsStalenessWithoutReordering(t *testing.T) {
 	g := NewGraph()
 	g.AddNode(types.KnowledgeNode{
 		ID: "doc:docs/cache.md", Kind: types.KindDoc, Label: "cache",
@@ -118,13 +127,17 @@ func TestResolveCarriesTheEvidenceForItsWeight(t *testing.T) {
 	matches := g.Resolve("cache", 0)
 	require.Len(t, matches, 2)
 
-	assert.Equal(t, "doc:docs/cache-current.md", matches[0].ID, "prose that kept up ranks first")
-	assert.Empty(t, matches[0].Staleness, "an unpenalized match carries no staleness claim")
+	byID := map[string]types.KnowledgeMatch{}
+	for _, m := range matches {
+		byID[m.ID] = m
+	}
+	stale, current := byID["doc:docs/cache.md"], byID["doc:docs/cache-current.md"]
 
-	assert.Equal(t, "doc:docs/cache.md", matches[1].ID)
-	assert.Equal(t, StalenessPetrified, matches[1].Staleness)
-	assert.Equal(t, 400, matches[1].OutrunDays, "the number is the evidence, and it must reach the caller")
-	assert.Less(t, matches[1].Score, matches[0].Score)
+	assert.Equal(t, current.Score, stale.Score, "being behind costs a match no rank")
+	assert.Equal(t, StalenessPetrified, stale.Staleness)
+	assert.Equal(t, 400, stale.OutrunDays, "the number is the evidence, and it must reach the caller")
+	assert.Empty(t, current.Staleness, "prose that kept up carries no staleness claim")
+	assert.Zero(t, current.OutrunDays)
 }
 
 func nodeIn(t *testing.T, shards []Shard, id string) types.KnowledgeNode {

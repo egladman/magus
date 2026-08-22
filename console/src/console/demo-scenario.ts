@@ -47,13 +47,13 @@ const MIN = 60_000;
 // every surface; a reader who learns "services/identity:test" in the tree meets the same name in
 // the trail, the waterfall, and the dashboard.
 //
-// The tree is the conventional four-bucket monorepo layout, so its shape is recognisable before any
+// The tree is the conventional four-bucket monorepo layout, so its shape is recognizable before any
 // of the names are:
 //   services/gateway   services/identity   services/ledger   services/catalog   (Go)
 //   apps/dashboard     apps/admin                                               (TypeScript)
 //   libs/authkit       libs/protocol       libs/ui                              (shared)
 //   tools/migrate      docs                .                                    (support + root)
-// libs/authkit is the shared library at the centre of the story; services/identity and
+// libs/authkit is the shared library at the center of the story; services/identity and
 // apps/dashboard are the two downstream consumers its change broke.
 export const WORKSPACE = "acme";
 export const WORKSPACE_ROOT = "~/Repos/acme";
@@ -275,7 +275,7 @@ export function scenarioRuns(now: number): ScenarioRun[] {
     // A cache hit that REPLAYS its stored output: 180ms of wall clock reporting a 3.71s vite build.
     // That gap is the single clearest statement of what the cache is for, and it is why this run
     // keeps its stdout while the cached Go build below keeps none. The ANSI here is vite's own -
-    // it is the one tool in the sweep that colours its summary.
+    // it is the one tool in the sweep that colors its summary.
     {
       ref: "outci7a2",
       inv: INV_CI,

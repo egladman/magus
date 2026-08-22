@@ -1,7 +1,7 @@
 package diff
 
-// Span is a half-open [Start, End) range of a line to emphasise, in BYTES. The zero Span means
-// there is nothing to emphasise on that side; Emphasize never returns a span that marks
+// Span is a half-open [Start, End) range of a line to emphasize, in BYTES. The zero Span means
+// there is nothing to emphasize on that side; Emphasize never returns a span that marks
 // nothing, so the zero value is unambiguous.
 type Span struct {
 	Start int
@@ -19,15 +19,15 @@ func (s Span) Empty() bool { return s.End <= s.Start }
 // by eye across two nearly identical rows.
 //
 // The algorithm is deliberately NOT a full word-level diff. It takes the common prefix and the
-// common suffix on TOKEN boundaries and emphasises the span between them. That is exact when a
+// common suffix on TOKEN boundaries and emphasizes the span between them. That is exact when a
 // line has one edit region - overwhelmingly the common case - and it degrades to "the whole
 // middle changed" otherwise, which is true rather than merely plausible. A real LCS would be
 // more precise on multi-region edits and would also, on the lines where it disagrees with the
 // eye, produce confident nonsense.
 //
 // Two empty spans mean the lines are identical, one side is empty, or the two differ so
-// completely that emphasising everything would be noise rather than signal - in each case the
-// row colour already says all there is to say.
+// completely that emphasizing everything would be noise rather than signal - in each case the
+// row color already says all there is to say.
 //
 // This is a port of console/src/console/diff/words.ts, which stays the source of truth. The
 // two must agree exactly or the same changed line is highlighted differently in the browser
@@ -71,7 +71,7 @@ func Emphasize(before, after string) (Span, Span) {
 	aEnd := max(p, forwardToBoundary(a, len(a)-s))
 
 	// If the changed span is the entire line on both sides, emphasis adds nothing the row
-	// colour did not already carry, so say so by returning nothing.
+	// color did not already carry, so say so by returning nothing.
 	if p == 0 && bEnd == len(b) && aEnd == len(a) {
 		return Span{}, Span{}
 	}
@@ -89,7 +89,7 @@ type EmphasisPair struct {
 //
 // Pairing is strictly positional and only within a run of equal length. An unequal run means
 // lines were added or removed rather than rewritten, and pairing across that boundary invents a
-// correspondence the patch does not contain - which would emphasise the wrong half of two
+// correspondence the patch does not contain - which would emphasize the wrong half of two
 // unrelated lines and read as a confident lie.
 func PairForEmphasis(dels, adds []int) []EmphasisPair {
 	if len(dels) == 0 || len(dels) != len(adds) {

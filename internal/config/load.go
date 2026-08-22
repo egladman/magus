@@ -274,7 +274,7 @@ func mergeStruct(dst, src reflect.Value) {
 
 // parseBoolEnv parses a boolean environment variable value using a
 // case-insensitive comparison. "true", "1", "yes" → true; "false", "0", "no"
-// → false. Any unrecognised value returns fallback unchanged.
+// → false. Any unrecognized value returns fallback unchanged.
 //
 //nolint:unused // canonical reference implementation that cmd/magus-utils config codegen mirrors into generated config loaders.
 func parseBoolEnv(v string, fallback bool) bool {

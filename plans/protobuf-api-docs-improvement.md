@@ -317,7 +317,7 @@ bytes as base64, Timestamp/Duration as strings, enums by name. Short, one place,
 from every page. This is the highest ratio of reader-pain-removed to work on the list.
 
 **4b. Per-method example.** A `curl` with a JSON skeleton synthesized from the request
-message, in protojson casing, honouring the validation bounds from 2a so the example is
+message, in protojson casing, honoring the validation bounds from 2a so the example is
 actually accepted. Keep the generated skeleton shallow (one level, scalars only) rather
 than trying to be complete.
 

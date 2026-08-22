@@ -13,7 +13,7 @@ package types
 type DoctorCheckStatus string
 
 // DoctorFail and DoctorAdvice are a deliberate split, and which one a check returns
-// is a statement about whose judgement is involved.
+// is a statement about whose judgment is involved.
 //
 // DoctorFail is for a workspace that is WRONG in a way nobody's taste can rescue:
 // a dependency cycle, a magusfile that will not parse, two targets claiming one
@@ -59,7 +59,7 @@ type DoctorCheck struct {
 	//
 	// An EXISTING first-class command, never a private repair routine. That is the whole
 	// safety property: --fix can only do things you could have typed yourself and can
-	// inspect afterwards, and a check whose remedy needs judgement (narrow this glob, or
+	// inspect afterwards, and a check whose remedy needs judgment (narrow this glob, or
 	// accept the volatility?) simply declares no Fix and stays a report. It is also why a
 	// config remedy is `config set ...` rather than a writer of its own - there is exactly
 	// one thing in magus that edits config, and this is not a second one.

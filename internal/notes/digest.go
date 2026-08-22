@@ -78,3 +78,38 @@ func DigestRange(src string, start, end int) string {
 	}
 	return Digest(lines[start-1 : end])
 }
+
+// DigestDecl fingerprints just the DECLARATION at the head of [start, end] - the first
+// non-blank line of the range - so a change to what the anchored thing IS can be told apart
+// from a change to how it does it.
+//
+// This exists because the body fingerprint alone reports far more than it should. Measured
+// across 1,496 repositories, only about one code change in thirty-eight to a documented
+// subject actually invalidates the prose about it; a hash over the whole body fires on all
+// thirty-eight. The same study measured WHICH changes matter, and the answer is structural:
+// a signature or constructor change is 39-105x more likely to be accompanied by a prose
+// update than a rename, a literal, or an expression edit. So the declaration line carries
+// almost all of the signal, and the body carries almost all of the noise.
+//
+// One line, and no parser, deliberately. magus fingerprints whatever SCIP can index, and a
+// per-language parser would grade a few languages precisely and silently do nothing for the
+// rest - which is the failure mode the body digest already avoided by normalizing whitespace
+// instead of parsing. A first non-blank line is a heuristic for a signature, not a parse: it
+// is right for C-family, Go, Java, TypeScript, Python and Rust declarations, and wrong for a
+// signature wrapped across lines or preceded by an attribute or decorator. Being wrong here
+// costs a grade, never a verdict - the body digest still detects the change either way.
+func DigestDecl(src string, start, end int) string {
+	if start < 1 || end < start {
+		return ""
+	}
+	lines := strings.Split(src, "\n")
+	if start > len(lines) || end > len(lines) {
+		return ""
+	}
+	for _, line := range lines[start-1 : end] {
+		if norm := normalizeLine(line); norm != "" {
+			return Digest([]string{norm})
+		}
+	}
+	return ""
+}
