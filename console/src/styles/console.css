@@ -203,11 +203,17 @@ body[data-console-fill] > main > .console-render-panel {
   flex-direction: column;
   max-width: none;
   margin-inline: 0;
-  /* Zero, not Pico's ~1rem .container-fluid inset: the console owns the whole width. It was a slim
-     0.4rem gutter, which read as a white strip down the seam between the rail and the surface -
-     this main is transparent, so the gutter showed the page ground against the rail's own surface
-     rather than any deliberate spacing. Surfaces that want breathing room set their own padding. */
-  padding-inline: 0;
+  /* The pane is a layout container, so it holds no opinion about content inset - it reads one the
+     surface sets, the way PF's page__main-section takes --pf-v6-c-page__main-section--PaddingInline.
+     A surface that PAINTS its own panel (Graph, Log Viewer, Diff, Activity) wants the default 0 and
+     runs to the rail; a flat 0.4rem there showed page ground against the rail's surface and read as
+     a white strip down the seam. A surface whose content sits bare on the page ground (Dashboard)
+     opts in, because nothing else keeps its text off the glass on a phone.
+
+     Declared here rather than as competing padding rules: this selector carries an id, so it beats
+     any class a surface sheet can write, and a shorthand over there silently loses its inline
+     longhands to it. A custom property inherits instead of competing. */
+  padding-inline: var(--console-surface-pad, 0);
 }
 #console-outlet div[data-pane-id] > main > .console-graph-app,
 #console-outlet div[data-pane-id] > main > .console-render-panel,

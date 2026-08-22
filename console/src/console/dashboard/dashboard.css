@@ -23,8 +23,17 @@
 body[data-dash-native] { margin: 0; }
 /* Reserve --console-statusbar-h of bottom padding so the fixed status bar never overlaps the
    last tile at any scroll position. */
+/* The dashboard mounts AS the pane's main, and its content sits bare on the page ground rather than
+   inside a panel it paints - so the inset below is the only thing between a heading and the edge of
+   a phone screen. --console-surface-pad is what the shell's pane rule reads (console.css); the
+   padding shorthand covers the standalone page, where no pane rule applies. */
 [data-dash-native] .console-dashboard-main,
-.console-dashboard-main { max-width: none; margin: 0; padding: var(--console-pad); padding-bottom: calc(var(--console-pad) + var(--console-statusbar-h)); }
+.console-dashboard-main {
+  --console-surface-pad: var(--console-pad);
+  max-width: none; margin: 0;
+  padding: var(--console-pad);
+  padding-bottom: calc(var(--console-pad) + var(--console-statusbar-h));
+}
 
 .console-dashboard-main[data-mode="plan"] {
   display: flex;
