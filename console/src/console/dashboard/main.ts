@@ -407,7 +407,7 @@ function mountTiles(): void {
     })),
   ];
   const appendSection = (section: BoardSection, title: string, description: string): void => {
-    host.append(boardSection(title, description));
+    host.append(boardSection(title, description, true));
     for (const item of boardTiles) if (item.section === section) host.append(item.tile.el);
   };
   appendSection("live", "Live work", "Decide, coordinate, and follow the work that is moving now.");
