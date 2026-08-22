@@ -1008,18 +1008,22 @@
 
 /* Intra-line emphasis: the part of a changed line that actually changed.
  *
- * Deliberately a background wash rather than a second foreground color. The row already
- * carries add/delete as color AND as a +/- marker, and stacking another hue on the text
- * would compete with syntax meaning and with the accessibility work above. A wash keeps the
- * text contrast that the row already earned. */
+ * An underline, not a background wash. A wash sits between the row tint and the text drawn on
+ * it, so it changes the effective background every syntax color is measured against - and this
+ * word can carry a syntax color, since the emphasis span and a `console-diff-tok--*` span are
+ * the same element (see textFromTokens). Measured: even a 1% wash pulled the comment token
+ * below AA in dark, because that token's shade already spends its whole margin on the row
+ * tint alone (see the palette note at the top of this file). A decorative underline in the
+ * accent color adds the channel without touching the text's background at all. */
 .console-diff-row__word {
-  border-radius: 2px;
-  /* Sits ON TOP of the row tint, so it has to be materially stronger than it to read at all. */
-  background: color-mix(in srgb, var(--console-diff-add) 38%, transparent);
+  text-decoration-line: underline;
+  text-decoration-color: var(--console-diff-add);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
 }
 
 [data-kind="del"] .console-diff-row__word {
-  background: color-mix(in srgb, var(--console-diff-del) 38%, transparent);
+  text-decoration-color: var(--console-diff-del);
 }
 
 /* Syntax color.
