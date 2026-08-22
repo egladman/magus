@@ -99,7 +99,7 @@ type Record struct {
 // reaches magus only through the hook payloads internal/trail records, and joining
 // the two stores is later work. An empty Host means "not known", never "a human".
 //
-// Unit is the work-ledger unit the session was launched under, from the MAGUS_UNIT environment
+// Unit is the work-ledger unit the session was launched under, from the MAGUS_DELEGATION_UNIT environment
 // channel (trail.UnitFromEnv). Attribution is cooperative: an empty Unit means the session
 // claimed none, which is the designed outcome for anything a person started by hand, never an
 // error and never a session that belongs to no work.

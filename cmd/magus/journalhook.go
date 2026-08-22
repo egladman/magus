@@ -30,7 +30,7 @@ func withSessionJournal(handlers []slog.Handler, root, verb string, args []strin
 	//
 	// On an ADOPTED run this reads the DAEMON's environment, not the client's: proc
 	// forwards argv, cwd and root over the socket and no environment at all, so a run
-	// launched with MAGUS_UNIT set records no unit once the daemon adopts it. Fixing it
+	// launched with MAGUS_DELEGATION_UNIT set records no unit once the daemon adopts it. Fixing it
 	// means carrying the unit on the proc request and off proc's context here, which is a
 	// protocol change rather than a wiring one.
 	h := sessions.NewFactHandler(root, sessions.SessionStart{

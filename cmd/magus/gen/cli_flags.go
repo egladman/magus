@@ -1066,7 +1066,7 @@ func BindHook(fs *flag.FlagSet) *HookFlags {
 	var f HookFlags
 	fs.BoolVar(&f.Path, FlagHookPath, false, "Judge the input as a file path an edit is about to write, not as a shell command")
 	fs.BoolVar(&f.Observe, FlagHookObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
-	fs.StringVar(&f.Unit, FlagHookUnit, "", "The delegation unit this call is acting as, graded against the ledger's declared write boundary (defaults to $MAGUS_UNIT)")
+	fs.StringVar(&f.Unit, FlagHookUnit, "", "The delegation unit this call is acting as, graded against the ledger's declared write boundary (defaults to $MAGUS_DELEGATION_UNIT)")
 	fs.StringVar(&f.AgentName, FlagHookAgentName, "", "Name of the agent host this invocation came from (attribution only)")
 	fs.StringVar(&f.Session, FlagHookSession, "", "The host's own session id for this invocation")
 	fs.StringVar(&f.Transcript, FlagHookTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")

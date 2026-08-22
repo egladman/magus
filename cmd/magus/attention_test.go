@@ -20,7 +20,7 @@ import (
 func attentionTestRoot(t *testing.T) string {
 	t.Helper()
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	// A developer running with MAGUS_UNIT set would otherwise have it stamped on every request
+	// A developer running with MAGUS_DELEGATION_UNIT set would otherwise have it stamped on every request
 	// these tests raise. A test that wants one sets it after this call.
 	t.Setenv(trail.EnvUnit, "")
 	global = globalFlags{}

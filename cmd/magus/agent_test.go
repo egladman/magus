@@ -1613,7 +1613,7 @@ func TestGradeDelegatedWriteUnenrolled(t *testing.T) {
 	require.Equal(t, "advise", got.Decision)
 	assert.Contains(t, got.Context, "unit-a", "the advisory must name the unit already working there")
 	assert.Contains(t, got.Context, "own the ledger store")
-	assert.Contains(t, got.Context, "MAGUS_UNIT", "the advisory must say how to enroll")
+	assert.Contains(t, got.Context, "MAGUS_DELEGATION_UNIT", "the advisory must say how to enroll")
 	assert.Contains(t, got.Context, "seatbelt", "the advisory must say why it is not a block")
 }
 
@@ -1627,7 +1627,7 @@ func TestGradeDelegatedWriteInvalidUnitID(t *testing.T) {
 		got := gradeDelegatedWrite(ctx, "unit b!", filepath.Join(root, "README.md"))
 		require.Equal(t, "advise", got.Decision)
 		assert.Contains(t, got.Context, "not a valid unit id")
-		assert.Contains(t, got.Context, "MAGUS_UNIT")
+		assert.Contains(t, got.Context, "MAGUS_DELEGATION_UNIT")
 	})
 
 	t.Run("over-long ids are invalid too", func(t *testing.T) {
@@ -1733,7 +1733,7 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 		assert.Equal(t, "deny\n", got)
 	})
 
-	t.Run("MAGUS_UNIT supplies the default", func(t *testing.T) {
+	t.Run("MAGUS_DELEGATION_UNIT supplies the default", func(t *testing.T) {
 		t.Setenv(envHookUnit, "unit-b")
 		_, err := run(owned, "--path", "-o", "name")
 		var silent errSilent

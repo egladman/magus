@@ -72,7 +72,7 @@ const MaxUnitIDLen = 128
 //
 // The narrowness is a security property, not a naming preference. A unit id is EXEMPT
 // from the redaction internal/trail applies to every other event field, so every channel
-// that can stamp one - a delegation marker, the MAGUS_UNIT environment channel, a
+// that can stamp one - a delegation marker, the MAGUS_DELEGATION_UNIT environment channel, a
 // producer's own field - has to pass its candidate through here first, or the exemption
 // becomes a way to carry a credential onto an event line.
 //

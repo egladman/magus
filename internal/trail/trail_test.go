@@ -291,7 +291,7 @@ func TestUnitFromEnv_ReadsAValidID(t *testing.T) {
 	require.Empty(t, UnitFromEnv(), "an unset channel is a session that claims no unit, not an error")
 }
 
-// The note is what keeps a typo'd MAGUS_UNIT from looking like a fleet that simply never
+// The note is what keeps a typo'd MAGUS_DELEGATION_UNIT from looking like a fleet that simply never
 // attributed anything: the value is dropped either way, and only the note says why.
 func TestUnitFromEnv_DropsAnInvalidIDWithANote(t *testing.T) {
 	t.Setenv(EnvUnit, "not a unit id")
@@ -303,7 +303,7 @@ func TestUnitFromEnv_DropsAnInvalidIDWithANote(t *testing.T) {
 		require.Empty(t, UnitFromEnv())
 	})
 
-	assert.Equal(t, 1, strings.Count(logged, "MAGUS_UNIT"), "the environment cannot change under a running worker, so the note cannot repeat")
+	assert.Equal(t, 1, strings.Count(logged, "MAGUS_DELEGATION_UNIT"), "the environment cannot change under a running worker, so the note cannot repeat")
 	assert.Contains(t, logged, "letters, digits", "the note names the rule the value failed")
 	assert.NotContains(t, logged, "not a unit id", "the value failed the charset that makes a unit safe to log unredacted")
 }

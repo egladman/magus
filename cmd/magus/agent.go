@@ -782,7 +782,7 @@ type writeGrade struct {
 // the reader that turns those declared facts into a verdict, and the only one.
 //
 // It is a SEATBELT FOR COOPERATING HARNESSES, NOT A SANDBOX. An un-enrolled writer - a
-// person editing their own repo with no MAGUS_UNIT set - is advised and never blocked.
+// person editing their own repo with no MAGUS_DELEGATION_UNIT set - is advised and never blocked.
 // magus cannot tell "not part of the fleet" from "part of it and not saying so", and of
 // the two ways to be wrong, blocking a human in their own checkout is the one that must
 // not happen.

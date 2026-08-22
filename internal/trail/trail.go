@@ -143,7 +143,7 @@ type Event struct {
 	Session       string `json:"session,omitempty"`       // the host's own session id, when its event carried one
 	Workspace     string `json:"workspace,omitempty"`     // repo-relative or absolute root the action pertained to; "" for daemon-wide (an MCP call is not bound to one workspace)
 	Action        string `json:"action"`                  // the specific action: a tool name, a job command, "connector.create"
-	Unit          string `json:"unit,omitempty"`          // work-ledger unit this action belongs to, when the producer could correlate one (a delegation marker, or the MAGUS_UNIT channel); "" when uncorrelated
+	Unit          string `json:"unit,omitempty"`          // work-ledger unit this action belongs to, when the producer could correlate one (a delegation marker, or the MAGUS_DELEGATION_UNIT channel); "" when uncorrelated
 	Outcome       string `json:"outcome"`                 // one of the Outcome* constants
 	Error         string `json:"error,omitempty"`         // error text when Outcome is OutcomeError
 	DurMs         int64  `json:"dur_ms,omitempty"`        // wall-clock, on call-shaped actions
@@ -248,7 +248,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	respRef, respBytes := WriteBlob(ctx, base, "agent", response)
 
 	// A supplied unit is what the producer could correlate at the observation itself and wins;
-	// MAGUS_UNIT is this process's own claim about itself and fills the gap. A supplied one that
+	// MAGUS_DELEGATION_UNIT is this process's own claim about itself and fills the gap. A supplied one that
 	// fails types.ValidUnitID falls through to the environment rather than being stamped, on the same
 	// reasoning as everywhere else: no join beats a wrong one.
 	//
@@ -382,7 +382,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 
 // EnvUnit names the environment variable a worker process carries its work-ledger unit in. It is
 // exported so a spawner and a worker cannot disagree about the spelling of the channel.
-const EnvUnit = "MAGUS_UNIT"
+const EnvUnit = "MAGUS_DELEGATION_UNIT"
 
 // unitEnvNoteOnce holds the malformed-unit note to one per process. The environment does not
 // change under a running worker, so the same bad value would otherwise be reported once per
@@ -394,7 +394,7 @@ var unitEnvNoteOnce sync.Once
 //
 // This is the second of the two unit channels, and the two say different things. The delegation
 // marker (see unitFromContext) is the ORCHESTRATOR's assertion about a handoff it is making;
-// MAGUS_UNIT is the WORKER's own claim about itself. Where both are available the marker wins:
+// MAGUS_DELEGATION_UNIT is the WORKER's own claim about itself. Where both are available the marker wins:
 // the party doing the partitioning is the one that knows the partition.
 //
 // A value failing [types.ValidUnitID] yields "" plus a one-time note. Dropping it rather than stamping
@@ -411,7 +411,7 @@ func UnitFromEnv() string {
 			// makes a unit safe to carry unredacted, so it is the one string here that could
 			// be anything at all.
 			slog.WarnContext(context.Background(),
-				"magus: ignoring MAGUS_UNIT and recording no unit for this process: a unit id is letters, digits and -_./: only, and never empty",
+				"magus: ignoring MAGUS_DELEGATION_UNIT and recording no unit for this process: a unit id is letters, digits and -_./: only, and never empty",
 				slog.Int("length", len(id)),
 				slog.Int("max_length", types.MaxUnitIDLen))
 		})
@@ -890,7 +890,7 @@ func validRef(ref string) bool {
 // of which a credential can occupy, and all of which a reader filters on by exact match. Redacting
 // them would break the activity view to protect nothing - the same reasoning that leaves slog
 // attribute KEYS alone in internal/secret. Unit is the one of those derived from free text - a
-// delegation prompt, or the MAGUS_UNIT environment channel - rather than supplied by a caller,
+// delegation prompt, or the MAGUS_DELEGATION_UNIT environment channel - rather than supplied by a caller,
 // which is why every channel that can stamp one runs it through [types.ValidUnitID]'s bare-identifier
 // rule before it can reach this exemption.
 func redactEvent(ctx context.Context, e Event) Event {

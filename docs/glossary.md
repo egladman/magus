@@ -291,7 +291,7 @@ back when grading a write. See [doctrine.md](doctrine.md).
 
 ### Unit id
 
-The short identifier a worker carries (the `--unit` flag or `MAGUS_UNIT`) so
+The short identifier a worker carries (the `--unit` flag or `MAGUS_DELEGATION_UNIT`) so
 its runs, journal facts, and guard verdicts attribute to its delegation unit.
 Letters, digits and `-_./:` only.
 
