@@ -777,7 +777,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   width: var(--console-sidebar-w);
   display: flex; flex-direction: column;
   overflow: hidden; /* labels are clipped, not wrapped, while the width animates */
-  background: var(--pf-t--global--background--color--secondary--default);
+  /* --console-chrome, not the raw secondary token, because the rail is the third face of the one
+     continuous frame the title bar and status bar make. Those two moved to --console-chrome when the
+     dark ground was corrected; the rail did not, so in dark it sat at #151515 between two bars at
+     #242424 - a seam down the left edge of exactly the surface that is meant not to have one. */
+  background: var(--console-chrome);
   transition: width 0.14s ease;
   /* PF centers a nav link's icon against a baseline and pads it for a full-width row. Neither suits a
      square icon button, so both are returned here - in PF's vocabulary, so a PF version bump carries. */

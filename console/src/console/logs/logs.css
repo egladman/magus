@@ -58,7 +58,10 @@
    hairline) and the row padding are here; the flex/wrap is PatternFly's. */
 #log-bar {
   flex: 0 0 auto;
-  background: var(--pf-t--global--background--color--secondary--default);
+  /* --console-chrome: this toolbar frames the content the same way the shell's bars do, and the raw
+     secondary token puts it a plane below them in dark (#151515 against #242424). One token for
+     everything that is chrome is what keeps the surface from showing seams where it joins the shell. */
+  background: var(--console-chrome);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
   font-size: 0.8rem;
 }
@@ -406,7 +409,10 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
   flex: 0 0 clamp(10rem, 24%, 15rem); display: flex; flex-direction: column;
   min-height: 0; min-width: 0;
   border-right: 1px solid var(--pf-t--global--border--color--default);
-  background: var(--pf-t--global--background--color--secondary--default);
+  /* Chrome, so the chrome token - it sits directly against the navigation rail, and the two reading
+     as different planes was the seam most visible on this surface. Below 48rem it also floats OVER
+     the content as an overlay, where the raw secondary token had it darker than what it covered. */
+  background: var(--console-chrome);
 }
 .console-log-runs[hidden] { display: none; }
 .console-log-runs__head {
