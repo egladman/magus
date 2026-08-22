@@ -103,11 +103,16 @@
  * readout of the persisted split direction (panesIcon) rather than a static icon, so it stays a touch
  * brighter than "muted chrome" and gets the accent while its popup is open. */
 #console-statusbar .console-shell-statusbar__panes {
-  padding: 0 0.15rem; min-height: 0; line-height: 0; border: 0; background: none;
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0 0.15rem; min-height: 0; border: 0; background: none;
   color: var(--pf-t--global--text--color--subtle); opacity: 0.8;
 }
 #console-statusbar .console-shell-statusbar__panes:hover { opacity: 1; }
 #console-statusbar .console-shell-statusbar__panes[aria-expanded="true"] { color: var(--console-accent); opacity: 1; }
+/* Spells out the icon's orientation (main.ts's setPanesIcon keeps it in sync) - tiling is not a
+   metaphor every reader already carries, and the glyph alone assumes it is. Own line-height: the
+   button above still wants its icon at line-height 0, but that would squash this text to nothing. */
+#console-statusbar .console-shell-statusbar__panes-label { line-height: 1.35; white-space: nowrap; }
 
 /* Connection liveness item: a leading dot whose color IS the link/health state, read from the
  * console status tokens (theme-aware). Only the DOT carries the status color (via the

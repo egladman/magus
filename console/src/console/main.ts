@@ -453,6 +453,12 @@ function setPanesIcon(btn: HTMLElement, mode: "row" | "col"): void {
   btn.dataset.panesMode = mode;
   const iconSpan = btn.querySelector<HTMLElement>(".pf-v6-c-button__icon");
   if (iconSpan) iconSpan.replaceChildren(panesIcon(mode));
+  // The icon alone assumes the reader already knows what a split-pane glyph means - a fair bet for
+  // someone who has used a tiling window manager before, a bad one for someone who has not. Same
+  // words the Panes tray itself uses (Split horizontal / Split vertical), so a reader who opens the
+  // tray to check finds the term already familiar rather than a second vocabulary to learn.
+  const labelSpan = btn.querySelector<HTMLElement>(".console-shell-statusbar__panes-label");
+  if (labelSpan) labelSpan.textContent = mode === "row" ? "Horizontal" : "Vertical";
 }
 
 // notConnectedHint is the #console-conn accessible name / tooltip when the console is not connected: it
@@ -594,10 +600,15 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
     const panesIconSpan = document.createElement("span");
     panesIconSpan.className = "pf-v6-c-button__icon";
     panesIconSpan.append(panesIcon(splitMode.get()));
+    // Spells out the icon's orientation in words (setPanesIcon keeps it in sync) - tiling is not
+    // a metaphor everyone already carries, and the glyph alone assumes it is.
+    const panesLabelSpan = document.createElement("span");
+    panesLabelSpan.className = "console-shell-statusbar__panes-label";
+    panesLabelSpan.textContent = splitMode.get() === "row" ? "Horizontal" : "Vertical";
     // Record the rendered mode so setPanesIcon (refreshPanesTray, incl. on every popup open) treats an
     // unchanged mode as a no-op and never detaches this glyph's nodes out from under a tap in progress.
     panes.dataset.panesMode = splitMode.get();
-    panes.append(panesIconSpan);
+    panes.append(panesIconSpan, panesLabelSpan);
     right.append(panes);
   }
   // Share a read-only view: a quiet share-glyph button, loopback-console only (a read-only viewer can't
