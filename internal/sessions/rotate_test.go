@@ -1,4 +1,4 @@
-package sessionjournal
+package sessions
 
 import (
 	"os"
@@ -18,7 +18,7 @@ const retention = 30 * 24 * time.Hour
 func msAgo(age time.Duration) int64 { return time.Now().Add(-age).UnixMilli() }
 
 // writeAged lays down a session file and backdates its modification time to match.
-// Both halves matter and they are not the same knob: rotation DECIDES on the newest
+// Both halves matter and they are not the same knob: pruning DECIDES on the newest
 // record, and only reads a file at all once its modification time says it might be
 // old enough to be worth reading.
 func writeAged(t *testing.T, dir, session string, age time.Duration, records []Record) {
@@ -28,7 +28,7 @@ func writeAged(t *testing.T, dir, session string, age time.Duration, records []R
 	require.NoError(t, os.Chtimes(filepath.Join(dir, session+fileExt), when, when))
 }
 
-// storedSessions names the journals still on disk, sorted.
+// storedSessions names the session files still on disk, sorted.
 func storedSessions(t *testing.T, dir string) []string {
 	t.Helper()
 	entries, err := os.ReadDir(dir)
@@ -45,12 +45,12 @@ func storedSessions(t *testing.T, dir string) []string {
 
 func mustRead(t *testing.T, dir string) Fold {
 	t.Helper()
-	fold, err := Read(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 	return fold
 }
 
-func TestRotatePrunesASessionWhoseNewestFactAgedOut(t *testing.T) {
+func TestPruneDeletesASessionWhoseNewestFactAgedOut(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
@@ -61,7 +61,7 @@ func TestRotatePrunesASessionWhoseNewestFactAgedOut(t *testing.T) {
 		attRecord(t, "fresh", 1, msAgo(time.Hour), KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}),
 	})
 
-	Rotate(dir, retention)
+	Prune(dir, retention)
 
 	assert.Equal(t, []string{"fresh"}, storedSessions(t, dir))
 	assert.Len(t, mustRead(t, dir).Records, 1)
@@ -69,9 +69,9 @@ func TestRotatePrunesASessionWhoseNewestFactAgedOut(t *testing.T) {
 
 // A session that has run for months keeps its whole history, back to its first fact.
 // Retention is a question about the file, and the answer is delete or leave alone:
-// dropping the old records out of a live journal would leave a file whose beginning
-// is missing, which nothing that reads one is written to expect.
-func TestRotateKeepsEveryFactInAFileItSpares(t *testing.T) {
+// dropping the old records out of a live session file would leave a file whose
+// beginning is missing, which nothing that reads one is written to expect.
+func TestPruneKeepsEveryFactInAFileItSpares(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
@@ -81,7 +81,7 @@ func TestRotateKeepsEveryFactInAFileItSpares(t *testing.T) {
 		attRecord(t, "long-lived", 3, msAgo(time.Hour), KindTargetResult, TargetResult{Target: "lint", Outcome: OutcomePass}),
 	})
 
-	Rotate(dir, retention)
+	Prune(dir, retention)
 
 	assert.Equal(t, []string{"long-lived"}, storedSessions(t, dir),
 		"the newest record is inside the window, so the file is not old")
@@ -91,7 +91,7 @@ func TestRotateKeepsEveryFactInAFileItSpares(t *testing.T) {
 // The modification time is a pre-filter, never the verdict. A file the filesystem
 // calls ancient but whose records are recent survives, because a copy, a restore or a
 // touch can move a modification time without adding or removing a single fact.
-func TestRotateDecidesOnRecordsNotOnTheFilesystemClock(t *testing.T) {
+func TestPruneDecidesOnRecordsNotOnTheFilesystemClock(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
@@ -99,7 +99,7 @@ func TestRotateDecidesOnRecordsNotOnTheFilesystemClock(t *testing.T) {
 		attRecord(t, "misdated", 1, msAgo(time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
 	})
 
-	Rotate(dir, retention)
+	Prune(dir, retention)
 
 	assert.Equal(t, []string{"misdated"}, storedSessions(t, dir))
 }
@@ -107,7 +107,7 @@ func TestRotateDecidesOnRecordsNotOnTheFilesystemClock(t *testing.T) {
 // Rule 1: a request nobody has answered pins every file naming it, however old. The
 // queue belongs to a person, and a retention window that emptied it would be an
 // expiry - the one thing this package refuses to have.
-func TestRotateExemptsAFileHoldingAStillOpenRequest(t *testing.T) {
+func TestPruneExemptsAFileHoldingAStillOpenRequest(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	age := 200 * 24 * time.Hour
@@ -119,20 +119,20 @@ func TestRotateExemptsAFileHoldingAStillOpenRequest(t *testing.T) {
 		attRecord(t, "quiet", 1, msAgo(age), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
 	})
 
-	Rotate(dir, retention)
+	Prune(dir, retention)
 
 	assert.Equal(t, []string{"blocked"}, storedSessions(t, dir),
 		"the exemption covers the blocked session only; its neighbor ages out normally")
 
-	open := OpenAttention(mustRead(t, dir))
+	open := AttentionQueue(mustRead(t, dir))
 	require.Len(t, open, 1)
 	assert.Equal(t, "att-1", open[0].ID)
 }
 
 // Rule 2, the resurrection half. The agent that raised the block is still running, so
 // its file is young; the person who disposed of it has not run magus since, so theirs
-// is old. Pruning the dispose alone would put an answered request back in the queue.
-func TestRotateWillNotResurrectARequestByPruningItsDispose(t *testing.T) {
+// is old. Deleting the dispose alone would put an answered request back in the queue.
+func TestPruneWillNotResurrectARequestByDeletingItsDispose(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
@@ -144,18 +144,18 @@ func TestRotateWillNotResurrectARequestByPruningItsDispose(t *testing.T) {
 		attRecord(t, "human", 1, msAgo(199*24*time.Hour), KindAttentionDispose, AttentionDispose{Request: "att-1", Note: "handled"}),
 	})
 
-	require.Empty(t, OpenAttention(mustRead(t, dir)), "the request is answered before rotation runs")
+	require.Empty(t, AttentionQueue(mustRead(t, dir)), "the request is answered before pruning runs")
 
-	Rotate(dir, retention)
+	Prune(dir, retention)
 
 	assert.Equal(t, []string{"agent", "human"}, storedSessions(t, dir))
-	assert.Empty(t, OpenAttention(mustRead(t, dir)),
+	assert.Empty(t, AttentionQueue(mustRead(t, dir)),
 		"an answered request must not come back because its answer was garbage-collected")
 }
 
 // Rule 2, the other half: once no file naming a request is young enough to spare, the
-// whole request goes at once. Nothing is left half-pruned.
-func TestRotatePrunesARequestsFilesTogetherOnceBothAgedOut(t *testing.T) {
+// whole request goes at once. Nothing is left half-deleted.
+func TestPruneDeletesARequestsFilesTogetherOnceBothAgedOut(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	age := 200 * 24 * time.Hour
@@ -167,7 +167,7 @@ func TestRotatePrunesARequestsFilesTogetherOnceBothAgedOut(t *testing.T) {
 		attRecord(t, "human", 1, msAgo(age-time.Hour), KindAttentionDispose, AttentionDispose{Request: "att-1", Note: "handled"}),
 	})
 
-	Rotate(dir, retention)
+	Prune(dir, retention)
 
 	assert.Empty(t, storedSessions(t, dir))
 	assert.Empty(t, Attention(mustRead(t, dir)))
@@ -178,9 +178,9 @@ func TestRotatePrunesARequestsFilesTogetherOnceBothAgedOut(t *testing.T) {
 // att-open pins the agent file, which pins att-done, which pins the human file - and
 // nothing but the pinning would stop att-done's open from outliving its dispose.
 //
-// One pass in an unlucky map order gets this wrong, which is why rotation iterates to
+// One pass in an unlucky map order gets this wrong, which is why pruning iterates to
 // a fixed point.
-func TestRotateExemptionPropagatesThroughASharedFile(t *testing.T) {
+func TestPruneExemptionPropagatesThroughASharedFile(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	age := 200 * 24 * time.Hour
@@ -193,18 +193,18 @@ func TestRotateExemptionPropagatesThroughASharedFile(t *testing.T) {
 		attRecord(t, "human", 1, msAgo(age), KindAttentionDispose, AttentionDispose{Request: "att-done", Note: "handled"}),
 	})
 
-	Rotate(dir, retention)
+	Prune(dir, retention)
 
 	assert.Equal(t, []string{"agent", "human"}, storedSessions(t, dir))
 
-	open := OpenAttention(mustRead(t, dir))
+	open := AttentionQueue(mustRead(t, dir))
 	require.Len(t, open, 1, "att-done stays answered; only att-open is still a wait")
 	assert.Equal(t, "att-open", open[0].ID)
 }
 
 // Every producer opens, so opening is where the store pays for its own housekeeping.
 // Open writes no record, so a store with nothing left to keep ends up empty.
-func TestOpenRotatesTheStore(t *testing.T) {
+func TestOpenPrunesTheStore(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
@@ -219,8 +219,8 @@ func TestOpenRotatesTheStore(t *testing.T) {
 }
 
 // A writer must never delete the file it is about to append to, whatever the clock
-// says about the journal already sitting under its session id.
-func TestOpenNeverPrunesItsOwnJournal(t *testing.T) {
+// says about the session file already sitting under its session id.
+func TestOpenNeverPrunesItsOwnSessionFile(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
@@ -236,7 +236,7 @@ func TestOpenNeverPrunesItsOwnJournal(t *testing.T) {
 	assert.Len(t, mustRead(t, dir).Records, 3, "the old fact, the session start, and the new fact")
 }
 
-func TestRotateWithANonPositiveWindowKeepsEverything(t *testing.T) {
+func TestPruneWithANonPositiveWindowKeepsEverything(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
@@ -244,17 +244,17 @@ func TestRotateWithANonPositiveWindowKeepsEverything(t *testing.T) {
 		attRecord(t, "ancient", 1, msAgo(400*24*time.Hour), KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}),
 	})
 
-	Rotate(dir, 0)
-	Rotate(dir, -time.Hour)
+	Prune(dir, 0)
+	Prune(dir, -time.Hour)
 
 	assert.Equal(t, []string{"ancient"}, storedSessions(t, dir))
 }
 
-// Rotation in one process runs against a fold another process is in the middle of
+// Pruning in one process runs against a fold another process is in the middle of
 // reading, so a listed file can be gone by the time the reader opens it. That is
 // housekeeping finishing first, not corruption, and it must not surface as either an
 // error or a damaged-line count.
-func TestReadTreatsAFileThatVanishedMidFoldAsAbsent(t *testing.T) {
+func TestReadAllTreatsAFileThatVanishedMidFoldAsAbsent(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
@@ -264,16 +264,16 @@ func TestReadTreatsAFileThatVanishedMidFoldAsAbsent(t *testing.T) {
 
 	// A dangling symlink reproduces the race deterministically: the directory lists
 	// the name, and the open that follows fails with ENOENT - exactly what a reader
-	// meets when rotation unlinks a file between those two calls.
-	if err := os.Symlink(filepath.Join(dir, "already-rotated"), filepath.Join(dir, "gone"+fileExt)); err != nil {
+	// meets when pruning unlinks a file between those two calls.
+	if err := os.Symlink(filepath.Join(dir, "already-pruned"), filepath.Join(dir, "gone"+fileExt)); err != nil {
 		t.Skipf("symlinks unavailable on this platform: %v", err)
 	}
 
-	fold, err := Read(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err, "a pruned file must not fail the fold")
 	assert.Len(t, fold.Records, 1)
 	assert.Equal(t, 1, fold.Sessions, "a file that is no longer there is not a session anybody can read")
-	assert.Zero(t, fold.Skipped, "rotation is not damage")
+	assert.Zero(t, fold.Skipped, "pruning is not damage")
 }
 
 func TestReadFileReportsAMissingFileAsVanishedNotSkipped(t *testing.T) {

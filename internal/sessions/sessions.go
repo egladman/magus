@@ -1,17 +1,17 @@
-// Package sessionjournal is the append-only journal of facts one magus SESSION
-// produced, kept where every worktree of a repository can read it.
+// Package sessions is the append-only record of what magus sessions did, kept
+// where every worktree of a repository can read it.
 //
-// It is a third thing beside the two journals that already exist, and the
-// distinction is what the whole feature rests on:
+// It is a third store beside the two that already exist, and SCOPE is what tells
+// the three apart:
 //
-//   - internal/journal is the EXECUTION journal: every line one invocation
-//     emitted (exec, output, result), scoped to that run and discarded with it.
-//   - internal/trail is the ACTIVITY trail: consequential actions taken against
-//     the daemon, scoped to a machine.
-//   - this package is the SESSION journal: the durable facts of a session, folded
-//     across worktrees. It answers "what has been happening in this repo lately",
-//     which neither of the others can, because one is per-run and the other is
-//     per-daemon.
+//   - internal/journal is the EXECUTION JOURNAL, scoped to a run: every line one
+//     invocation emitted (exec, output, result), discarded with that invocation.
+//   - internal/trail is the ACTIVITY TRAIL, scoped to a machine: consequential
+//     actions taken against the daemon.
+//   - this package holds SESSIONS, scoped to a repository: the durable facts of a
+//     session, folded across worktrees. It answers "what has been happening in this
+//     repo lately", which neither of the others can, because one is per-run and the
+//     other is per-daemon.
 //
 // The name is NOT internal/journal, which the design called for: that import path
 // is taken by the execution journal above, and that package documents itself as a
@@ -29,14 +29,14 @@
 // setups magus is built for; where it is not, an interleave surfaces as a line no
 // reader can decode and lands in [Fold.Skipped], never as a record that lies.
 //
-// A file, however, is not grow-only: [Rotate] deletes whole session files whose
+// A file, however, is not grow-only: [Prune] deletes whole session files whose
 // newest fact has aged out, and [Open] runs it opportunistically so the store bounds
-// itself without a daemon. Two rules keep that from rewriting history a reader is
+// itself without a daemon. Two rules keep that from destroying history a reader is
 // still using - a still-open attention request pins every file naming it, and a
-// request's records are pruned as a unit - and [Rotate] documents why each is
+// request's records are deleted as a unit - and [Prune] documents why each is
 // necessary. Because another process can prune while this one is folding, every
 // reader here treats a file that disappears mid-read as absent rather than damaged.
-package sessionjournal
+package sessions
 
 import (
 	"bufio"
@@ -63,7 +63,7 @@ import (
 // can tell a record it merely does not recognize from one written by a future
 // magus: readers IGNORE what they cannot interpret (an unknown kind, an unknown
 // payload field, a higher version) rather than failing, so an old binary reading a
-// newer journal degrades to showing less instead of refusing to read.
+// newer store degrades to showing less instead of refusing to read.
 const SchemaVersion = 1
 
 // Kinds of fact a session records. A reader must tolerate a kind it does not know:
@@ -128,7 +128,7 @@ type TargetResult struct {
 	Unit     string `json:"unit,omitempty"`
 }
 
-// sessionRE is the session-id shape, which doubles as the journal file's basename:
+// sessionRE is the session-id shape, which doubles as the session file's basename:
 // it must not be able to escape the store directory.
 var sessionRE = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9_-]*$`)
 
@@ -146,7 +146,7 @@ const fileExt = ".jsonl"
 func Dir(root string) (string, error) {
 	base, err := config.UserStateDir()
 	if err != nil {
-		return "", fmt.Errorf("sessionjournal: resolve state dir: %w (set XDG_STATE_HOME to a writable absolute path)", err)
+		return "", fmt.Errorf("sessions: resolve state dir: %w (set XDG_STATE_HOME to a writable absolute path)", err)
 	}
 	id := repoIdentity(root)
 	sum := sha256.Sum256([]byte(id))
@@ -194,24 +194,24 @@ type Writer struct {
 //
 // It writes NOTHING: the session file appears with the first fact, and start is
 // emitted as the KindSessionStart record just ahead of it. A magus command that
-// produces no facts therefore leaves no journal entry at all, rather than a
+// produces no facts therefore leaves no session entry at all, rather than a
 // session that only ever says it began.
 //
-// Opening also rotates the store at [DefaultRetention], which is what keeps a
-// grow-only journal bounded without a daemon or a cron: every producer opens, so
+// Opening also prunes the store at [DefaultRetention], which is what keeps a
+// grow-only store bounded without a daemon or a cron: every producer opens, so
 // every producer pays a little of the housekeeping. It is best-effort and cannot
-// fail the open - see [Rotate].
+// fail the open - see [Prune].
 //
 // A session id that already has a file is RESUMED rather than restarted: see
 // [Writer.resume].
 func Open(dir, session string, start SessionStart) (*Writer, error) {
 	if !sessionRE.MatchString(session) {
-		return nil, fmt.Errorf("sessionjournal: session id %q must be alphanumeric with - and _ (it names the journal file); mint one with journal.NewInvocationID", session)
+		return nil, fmt.Errorf("sessions: session id %q must be alphanumeric with - and _ (it names the session file); mint one with journal.NewInvocationID", session)
 	}
 	if err := os.MkdirAll(dir, 0o755); err != nil {
-		return nil, fmt.Errorf("sessionjournal: create store %s: %w", dir, err)
+		return nil, fmt.Errorf("sessions: create store %s: %w", dir, err)
 	}
-	rotate(dir, DefaultRetention, session+fileExt)
+	prune(dir, DefaultRetention, session+fileExt)
 	w := &Writer{path: filepath.Join(dir, session+fileExt), session: session, start: start}
 	w.resume()
 	return w, nil
@@ -226,7 +226,7 @@ func Open(dir, session string, start SessionStart) (*Writer, error) {
 // arbitrarily within a millisecond.
 //
 // It seeds the sequence only. The resumed writer still emits its own session-start,
-// because it is a different invocation with its own command line, and the journal
+// because it is a different invocation with its own command line, and the store
 // says so rather than inheriting the first one's.
 //
 // A fresh session, which is the common case, costs one failed open - the file does
@@ -246,8 +246,8 @@ func (w *Writer) resume() {
 // The first call also writes the session-start record, so seq 1 is always the start.
 // An [AttentionOpen] payload is stored with its Message clamped to
 // [MaxMessageBytes]. Errors are returned rather than swallowed, but callers on the
-// run path must not fail a build over one - a journal that can break a build is worse
-// than no journal.
+// run path must not fail a build over one - a store that can break a build is worse
+// than no store.
 func (w *Writer) Append(kind string, payload any) error {
 	// The message bound is applied HERE rather than at the producer because it
 	// protects the store, not the caller: a message is whatever a hook piped to
@@ -276,13 +276,13 @@ func (w *Writer) write(kind string, payload any) error {
 	if payload != nil {
 		raw, err := json.Marshal(payload)
 		if err != nil {
-			return fmt.Errorf("sessionjournal: encode %s payload: %w", kind, err)
+			return fmt.Errorf("sessions: encode %s payload: %w", kind, err)
 		}
 		rec.Payload = raw
 	}
 	line, err := json.Marshal(rec)
 	if err != nil {
-		return fmt.Errorf("sessionjournal: encode %s record: %w", kind, err)
+		return fmt.Errorf("sessions: encode %s record: %w", kind, err)
 	}
 
 	// Opened and closed per append rather than held: a session's facts are
@@ -290,51 +290,51 @@ func (w *Writer) write(kind string, payload any) error {
 	// path is positioned to run. See internal/trail, which made the same trade.
 	f, err := os.OpenFile(w.path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o644)
 	if err != nil {
-		return fmt.Errorf("sessionjournal: open %s: %w", w.path, err)
+		return fmt.Errorf("sessions: open %s: %w", w.path, err)
 	}
 	defer func() { _ = f.Close() }()
 	if _, err := f.Write(append(line, '\n')); err != nil {
-		return fmt.Errorf("sessionjournal: append to %s: %w", w.path, err)
+		return fmt.Errorf("sessions: append to %s: %w", w.path, err)
 	}
 	w.seq++
 	return nil
 }
 
-// Fold is the union of every session journal in one store, ordered.
+// Fold is the union of every session file in one store, ordered.
 type Fold struct {
 	// Records are ordered by (Ts, Session, Seq). Session and Seq break the tie
 	// because wall-clock alone cannot: two worktrees appending in the same
 	// millisecond would otherwise order differently on each read.
 	Records []Record
 
-	// Sessions counts the journal files read, INCLUDING any that contributed no
+	// Sessions counts the session files read, INCLUDING any that contributed no
 	// usable record - the difference between "no sessions" and "sessions nobody
 	// could parse" is the thing a reader most needs to see.
 	Sessions int
 
-	// Skipped counts lines that were not a decodable record. A journal is written
-	// by a process that can be killed mid-line, so a truncated tail is expected,
-	// not corruption to report as an error. A line longer than the reader's budget
-	// counts here too, and costs only itself: the records after it still load.
+	// Skipped counts lines that were not a decodable record. A session file is
+	// written by a process that can be killed mid-line, so a truncated tail is
+	// expected, not corruption to report as an error. A line longer than the reader's
+	// budget counts here too, and costs only itself: the records after it still load.
 	Skipped int
 }
 
-// Read folds every session journal under dir.
+// ReadAll folds every session file under dir.
 //
 // A missing store is an empty Fold and no error: no session has run yet. An
 // undecodable line is skipped and counted in Skipped rather than failing the read,
 // so one killed process cannot make the whole history unreadable. A file listed by
-// the directory but gone by the time it is opened was rotated away by another
-// process mid-fold; it counts as neither a session nor damage. Only an unreadable
-// DIRECTORY is an error.
-func Read(dir string) (Fold, error) {
+// the directory but gone by the time it is opened was pruned by another process
+// mid-fold; it counts as neither a session nor damage. Only an unreadable DIRECTORY
+// is an error.
+func ReadAll(dir string) (Fold, error) {
 	var fold Fold
 	entries, err := os.ReadDir(dir)
 	if err != nil {
 		if os.IsNotExist(err) {
 			return fold, nil
 		}
-		return fold, fmt.Errorf("sessionjournal: read store %s: %w", dir, err)
+		return fold, fmt.Errorf("sessions: read store %s: %w", dir, err)
 	}
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasSuffix(e.Name(), fileExt) {
@@ -354,7 +354,7 @@ func Read(dir string) (Fold, error) {
 
 // sortRecords puts a fold in the (Ts, Session, Seq) order every reader downstream is
 // specified against - [Attention]'s collapse rules in particular are defined over it.
-// Anything that assembles a [Fold] outside [Read] has to apply it too.
+// Anything that assembles a [Fold] outside [ReadAll] has to apply it too.
 func sortRecords(records []Record) {
 	slices.SortStableFunc(records, func(a, b Record) int {
 		if c := cmp.Compare(a.Ts, b.Ts); c != 0 {
@@ -374,15 +374,15 @@ func sortRecords(records []Record) {
 // skipped like any other unusable line, and only itself.
 const maxLineBytes = 1 << 20
 
-// readFile decodes one session journal, returning what it could read, how many lines
-// it could not, and whether the file was not there at all.
+// readFile decodes one session file, returning what it could read, how many lines it
+// could not, and whether the file was not there at all.
 //
-// The vanished case is separated from the unreadable one because rotation can delete
-// a file between a caller's directory listing and this open. Nothing was lost that
-// the caller could have read, so counting it as damage would report corruption every
-// time housekeeping ran. Any OTHER open failure - a permission, a device error - is
-// real and counts as a skipped line, on the same reasoning as a corrupt tail: a
-// partial history beats a refused one.
+// The vanished case is separated from the unreadable one because pruning can delete a
+// file between a caller's directory listing and this open. Nothing was lost that the
+// caller could have read, so counting it as damage would report corruption every time
+// housekeeping ran. Any OTHER open failure - a permission, a device error - is real
+// and counts as a skipped line, on the same reasoning as a corrupt tail: a partial
+// history beats a refused one.
 func readFile(path string) (records []Record, skipped int, vanished bool) {
 	f, err := os.Open(path)
 	if err != nil {

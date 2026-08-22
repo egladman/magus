@@ -8,7 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/sessionjournal"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,7 +41,7 @@ func captureJournalRecord(t *testing.T, e journal.Event) slog.Record {
 
 // firstPayload returns the raw payload of the first record of kind, which is what the
 // shape assertions compare: the bytes on disk, not a re-decoded copy of them.
-func firstPayload(t *testing.T, fold sessionjournal.Fold, kind string) string {
+func firstPayload(t *testing.T, fold sessions.Fold, kind string) string {
 	t.Helper()
 	for _, rec := range fold.Records {
 		if rec.Kind == kind {
@@ -52,68 +52,68 @@ func firstPayload(t *testing.T, fold sessionjournal.Fold, kind string) string {
 	return ""
 }
 
-func TestAppendSessionJournalRecordsAffectedResults(t *testing.T) {
+func TestWithSessionJournalRecordsAffectedResults(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 
-	handlers := appendSessionJournal(nil, root, "affected", []string{"ci", "--base", "main"})
+	handlers := withSessionJournal(nil, root, "affected", []string{"ci", "--base", "main"})
 	require.Len(t, handlers, 1)
 
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass, DurMs: 20, Ref: "out1"})
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "test", Project: "api", Status: journal.StatusFail})
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "lint", Project: "web", Status: journal.StatusCached})
 
-	dir, err := sessionjournal.Dir(root)
+	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessionjournal.Read(dir)
+	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
 
-	sessions := sessionjournal.Summarize(fold)
-	require.Len(t, sessions, 1)
-	assert.Equal(t, "inv1", sessions[0].Session, "the invocation id is the session id")
-	assert.Equal(t, "affected ci --base main", sessions[0].Command)
-	assert.Equal(t, root, sessions[0].Workspace)
-	assert.Equal(t, []sessionjournal.TargetResult{
-		{Target: "build", Project: "api", Outcome: sessionjournal.OutcomePass, DurMs: 20, Ref: "out1"},
-		{Target: "test", Project: "api", Outcome: sessionjournal.OutcomeFail},
-		{Target: "lint", Project: "web", Outcome: sessionjournal.OutcomePass, Replayed: true},
-	}, sessions[0].Targets)
+	summaries := sessions.Summarize(fold)
+	require.Len(t, summaries, 1)
+	assert.Equal(t, "inv1", summaries[0].Session, "the invocation id is the session id")
+	assert.Equal(t, "affected ci --base main", summaries[0].Command)
+	assert.Equal(t, root, summaries[0].Workspace)
+	assert.Equal(t, []sessions.TargetResult{
+		{Target: "build", Project: "api", Outcome: sessions.OutcomePass, DurMs: 20, Ref: "out1"},
+		{Target: "test", Project: "api", Outcome: sessions.OutcomeFail},
+		{Target: "lint", Project: "web", Outcome: sessions.OutcomePass, Replayed: true},
+	}, summaries[0].Targets)
 
 	require.Len(t, fold.Records, 4, "one session-start plus one fact per result")
-	assert.Equal(t, sessionjournal.KindSessionStart, fold.Records[0].Kind)
+	assert.Equal(t, sessions.KindSessionStart, fold.Records[0].Kind)
 	assert.Equal(t, uint64(1), fold.Records[0].Seq)
 }
 
-// `magus activity` is a view of the repository, so a fact must not carry a trace of which
+// `magus sessions` is a view of the repository, so a fact must not carry a trace of which
 // command produced it. Comparing the raw payload bytes is what pins that: a field added
 // to one path and not the other would diverge here before anyone noticed in the view.
-func TestAppendSessionJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
+func TestWithSessionJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	runRoot, affectedRoot := t.TempDir(), t.TempDir()
 
 	result := journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusCached, DurMs: 7, Ref: "out9"}
 
-	runHandlers := appendSessionJournal(nil, runRoot, "run", []string{"ci", "api"})
+	runHandlers := withSessionJournal(nil, runRoot, "run", []string{"ci", "api"})
 	require.Len(t, runHandlers, 1)
 	emitJournalEvent(t, runHandlers[0], result)
 
-	affectedHandlers := appendSessionJournal(nil, affectedRoot, "affected", []string{"ci"})
+	affectedHandlers := withSessionJournal(nil, affectedRoot, "affected", []string{"ci"})
 	require.Len(t, affectedHandlers, 1)
 	emitJournalEvent(t, affectedHandlers[0], result)
 
-	runDir, err := sessionjournal.Dir(runRoot)
+	runDir, err := sessions.Dir(runRoot)
 	require.NoError(t, err)
-	runFold, err := sessionjournal.Read(runDir)
+	runFold, err := sessions.ReadAll(runDir)
 	require.NoError(t, err)
 
-	affectedDir, err := sessionjournal.Dir(affectedRoot)
+	affectedDir, err := sessions.Dir(affectedRoot)
 	require.NoError(t, err)
-	affectedFold, err := sessionjournal.Read(affectedDir)
+	affectedFold, err := sessions.ReadAll(affectedDir)
 	require.NoError(t, err)
 
 	assert.Equal(t,
-		firstPayload(t, runFold, sessionjournal.KindTargetResult),
-		firstPayload(t, affectedFold, sessionjournal.KindTargetResult))
+		firstPayload(t, runFold, sessions.KindTargetResult),
+		firstPayload(t, affectedFold, sessions.KindTargetResult))
 
 	// The two stores must also agree on the record envelope; only the recorded command
 	// line, which names the workspace and the verb, is allowed to differ.
@@ -126,9 +126,9 @@ func TestAppendSessionJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 }
 
 // The unit is stamped in the shared wiring, not per command, for the same reason the fact shape
-// is: `magus activity` is a view of the repository, and a unit that only `run` recorded would
+// is: `magus sessions` is a view of the repository, and a unit that only `run` recorded would
 // read as a fleet that stopped working the moment it ran `affected`.
-func TestAppendSessionJournalStampsTheUnitOnEveryVerb(t *testing.T) {
+func TestWithSessionJournalStampsTheUnitOnEveryVerb(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	t.Setenv(trail.EnvUnit, "fleet/f3")
 
@@ -138,38 +138,38 @@ func TestAppendSessionJournalStampsTheUnitOnEveryVerb(t *testing.T) {
 	} {
 		t.Run(verb, func(t *testing.T) {
 			root := t.TempDir()
-			handlers := appendSessionJournal(nil, root, verb, args)
+			handlers := withSessionJournal(nil, root, verb, args)
 			require.Len(t, handlers, 1)
 			emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusPass})
 
-			dir, err := sessionjournal.Dir(root)
+			dir, err := sessions.Dir(root)
 			require.NoError(t, err)
-			fold, err := sessionjournal.Read(dir)
+			fold, err := sessions.ReadAll(dir)
 			require.NoError(t, err)
 
-			sessions := sessionjournal.Summarize(fold)
-			require.Len(t, sessions, 1)
-			assert.Equal(t, "fleet/f3", sessions[0].Unit)
-			require.Len(t, sessions[0].Targets, 1)
-			assert.Equal(t, "fleet/f3", sessions[0].Targets[0].Unit)
+			summaries := sessions.Summarize(fold)
+			require.Len(t, summaries, 1)
+			assert.Equal(t, "fleet/f3", summaries[0].Unit)
+			require.Len(t, summaries[0].Targets, 1)
+			assert.Equal(t, "fleet/f3", summaries[0].Targets[0].Unit)
 		})
 	}
 }
 
 // An unwritable store must cost the run nothing: journaling is best-effort, and a handler
 // that reported an error here would be a build failure caused by bookkeeping.
-func TestAppendSessionJournalSurvivesAnUnwritableStore(t *testing.T) {
+func TestWithSessionJournalSurvivesAnUnwritableStore(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 
 	// A regular file where the store directory belongs: MkdirAll then fails for a reason
 	// no permission bit can be chmod-ed away, which a test running as root would defeat.
-	dir, err := sessionjournal.Dir(root)
+	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(dir), 0o755))
 	require.NoError(t, os.WriteFile(dir, []byte("blocked\n"), 0o644))
 
-	handlers := appendSessionJournal(nil, root, "affected", []string{"ci"})
+	handlers := withSessionJournal(nil, root, "affected", []string{"ci"})
 	require.Len(t, handlers, 1, "the store is only opened on the first fact, so wiring still succeeds")
 
 	rec := captureJournalRecord(t, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass})
@@ -185,13 +185,13 @@ func TestAppendSessionJournalSurvivesAnUnwritableStore(t *testing.T) {
 
 // With no resolvable state directory there is nowhere to journal, and a machine in that
 // state must still be able to run builds.
-func TestAppendSessionJournalLeavesHandlersAloneWithoutAStateDir(t *testing.T) {
+func TestWithSessionJournalLeavesHandlersAloneWithoutAStateDir(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", "")
 	t.Setenv("HOME", "")
 	t.Setenv("USERPROFILE", "")
 	t.Setenv("LocalAppData", "")
 
 	existing := []slog.Handler{&journalRecordSink{}}
-	got := appendSessionJournal(existing, t.TempDir(), "affected", []string{"ci"})
+	got := withSessionJournal(existing, t.TempDir(), "affected", []string{"ci"})
 	assert.Equal(t, existing, got)
 }

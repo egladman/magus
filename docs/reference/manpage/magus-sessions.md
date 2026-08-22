@@ -1,29 +1,29 @@
 ---
-title: magus activity
+title: magus sessions
 generated_from: internal/clispec/registry.go
-description: List recent magus sessions and the targets they ran, folded across every worktree of this repository.
-tags: [cli, magus activity, sessions, journal, worktrees]
+description: List past magus sessions and the targets they ran, from the repository-scoped store every worktree shares.
+tags: [cli, magus sessions, sessions, history, worktrees]
 ---
 
-# magus-activity
+# magus-sessions
 
-Show what recent magus sessions did
+List past magus sessions in this repository
 
 ## Synopsis
 
-**magus** activity [flags]
+**magus** sessions [flags]
 
 ## Description
 
-List recent magus sessions with the targets each one ran and how those
+List past magus sessions with the targets each one ran and how those
 runs ended.
 
 A session's facts are appended as it works and are keyed by repository
 identity rather than by checkout path, so every git worktree of one repo reads
-and writes the same journal. That is the point: what another worktree just
+and writes the same store. That is the point: what another worktree just
 finished is visible here without a daemon, a network, or a shared branch.
 
-The journal is append-only and grows; it is never rewritten. A line left
+The store is append-only and grows; it is never rewritten. A line left
 half-written by a killed process is skipped and counted rather than failing
 the read, and a fact this magus does not recognize is still counted as
 activity. Use --limit to bound the listing, and -o json for the full records.
@@ -38,19 +38,19 @@ activity. Use --limit to bound the listing, and -o json for the full records.
 *Show recent sessions*
 
 ```sh
-magus activity
+magus sessions
 ```
 
 *Show the last five*
 
 ```sh
-magus activity --limit 5
+magus sessions --limit 5
 ```
 
 *Full records as JSON*
 
 ```sh
-magus activity -o json
+magus sessions -o json
 ```
 
 ## See Also

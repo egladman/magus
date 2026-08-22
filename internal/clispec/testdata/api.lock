@@ -71,7 +71,6 @@ config volatility.bootstrap_samples
 config volatility.enabled
 config volatility.min_samples
 config volatility.threshold
-flag activity/limit
 flag affected/b
 flag affected/base
 flag affected/bisect
@@ -159,6 +158,7 @@ flag run/step
 flag run/timeout
 flag run/upstream
 flag run/wait
+flag sessions/limit
 flag status/W
 flag status/c
 flag status/compact
@@ -173,7 +173,6 @@ flag watch/debounce
 flag watch/ignore
 flag watch/initial
 flag watch/null
-subcommand activity
 subcommand affected
 subcommand agent
 subcommand attention
@@ -199,6 +198,7 @@ subcommand refs
 subcommand run
 subcommand self
 subcommand server
+subcommand sessions
 subcommand status
 subcommand vcs
 subcommand version

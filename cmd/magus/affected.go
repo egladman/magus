@@ -328,9 +328,9 @@ func affected(ctx context.Context, root string, _ runConfig, args []string) erro
 	captureHandlers := append(liveHandlers(liveBC), console.RunSinkHandlers(ctx)...)
 	// Durable session facts ride the same fan-out here as on the run path: one fact per
 	// target result, into the store every worktree of this repo shares. Without it
-	// `magus activity` would show a repository where only `magus run` ever happened,
+	// `magus sessions` would show a repository where only `magus run` ever happened,
 	// and CI runs through this path.
-	captureHandlers = appendSessionJournal(captureHandlers, m.Root(), "affected", args)
+	captureHandlers = withSessionJournal(captureHandlers, m.Root(), "affected", args)
 	invCtx, endInvocation := m.BeginInvocation(ctx, journal.Command{
 		Arguments: append([]string{"affected"}, args...), Cwd: cwd, Trigger: trigger,
 	}, version, captureHandlers...)

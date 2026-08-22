@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/egladman/magus/internal/sessionjournal"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
@@ -54,12 +54,12 @@ func captureWarnings(t *testing.T, fn func()) string {
 
 func openRequestIDs(t *testing.T, root string) []string {
 	t.Helper()
-	dir, err := sessionjournal.Dir(root)
+	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessionjournal.Read(dir)
+	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
 	var ids []string
-	for _, req := range sessionjournal.OpenAttention(fold) {
+	for _, req := range sessions.AttentionQueue(fold) {
 		ids = append(ids, req.ID)
 	}
 	return ids
@@ -139,11 +139,11 @@ func TestRecordAttentionOpenStoresTheUnit(t *testing.T) {
 	t.Setenv(trail.EnvUnit, "fleet/f3")
 	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
 
-	dir, err := sessionjournal.Dir(root)
+	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessionjournal.Read(dir)
+	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
-	open := sessionjournal.OpenAttention(fold)
+	open := sessions.AttentionQueue(fold)
 	require.Len(t, open, 1)
 	assert.Equal(t, "fleet/f3", open[0].Unit)
 }
@@ -155,11 +155,11 @@ func TestRecordAttentionOpenDropsAnInvalidUnit(t *testing.T) {
 	t.Setenv(trail.EnvUnit, "not a unit id")
 	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
 
-	dir, err := sessionjournal.Dir(root)
+	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessionjournal.Read(dir)
+	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
-	open := sessionjournal.OpenAttention(fold)
+	open := sessions.AttentionQueue(fold)
 	require.Len(t, open, 1)
 	assert.Empty(t, open[0].Unit)
 }
@@ -180,7 +180,7 @@ func TestAttentionListEmptyStateNamesTheProducer(t *testing.T) {
 func TestAttentionListJSONCarriesTheRecordsAndTheStore(t *testing.T) {
 	root := attentionTestRoot(t)
 	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
-	dir, err := sessionjournal.Dir(root)
+	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
 
 	out := captureStdout(t, func() {
@@ -208,7 +208,7 @@ func TestAttentionListNameFormatPrintsIDsOnly(t *testing.T) {
 
 func TestAttentionDisposeUnknownIDNamesTheMechanismAndTheNextStep(t *testing.T) {
 	root := attentionTestRoot(t)
-	dir, err := sessionjournal.Dir(root)
+	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
 
 	err = attentionCmd(context.Background(), root, []string{"dispose", "att-doesnotexist"})
@@ -225,11 +225,11 @@ func TestAttentionDisposeClosesOnceAndRefusesASecondTime(t *testing.T) {
 	require.Len(t, ids, 1)
 
 	out := captureStdout(t, func() {
-		require.NoError(t, attentionCmd(context.Background(), root, []string{"dispose", ids[0], "-note", "pushed it myself"}))
+		require.NoError(t, attentionCmd(context.Background(), root, []string{"dispose", ids[0], "-reason", "pushed it myself"}))
 	})
 	assert.Contains(t, out, "disposed "+ids[0])
 	assert.Contains(t, out, "needs approval to push")
-	assert.Contains(t, out, "note: pushed it myself")
+	assert.Contains(t, out, "reason: pushed it myself")
 
 	assert.Empty(t, openRequestIDs(t, root), "a disposed request leaves the queue")
 
@@ -282,8 +282,9 @@ func TestRecordAttentionOpenDedupesARefiredBlock(t *testing.T) {
 	}
 	assert.Len(t, openRequestIDs(t, root), 1, "a hook that fires on every prompt must not queue one request per prompt")
 
-	// Only the four id inputs distinguish requests; the same block from a second agent
-	// session is a second block, because a different agent is waiting.
+	// Only the session and the three digested payload fields distinguish requests, so
+	// the same block from a second agent session is a second block: a different agent
+	// is waiting.
 	other := blockedEvent("needs a decision")
 	other.Source.ID = "sess-2"
 	require.NoError(t, recordAttentionOpen(root, other))

@@ -10,7 +10,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/sessionjournal"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -36,23 +36,23 @@ func TestSessionFactHandlerRecordsOneFactPerTargetResult(t *testing.T) {
 	emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "test", Project: "api", Status: journal.StatusFail, DurMs: 5})
 	emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "lint", Project: "web", Status: journal.StatusCached})
 
-	dir, err := sessionjournal.Dir(root)
+	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessionjournal.Read(dir)
+	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
 
-	sessions := sessionjournal.Summarize(fold)
-	require.Len(t, sessions, 1)
-	assert.Equal(t, "inv1", sessions[0].Session, "the invocation id is the session id")
-	assert.Equal(t, "run build", sessions[0].Command)
-	assert.Equal(t, root, sessions[0].Workspace)
-	assert.Equal(t, 3, len(sessions[0].Targets))
+	summaries := sessions.Summarize(fold)
+	require.Len(t, summaries, 1)
+	assert.Equal(t, "inv1", summaries[0].Session, "the invocation id is the session id")
+	assert.Equal(t, "run build", summaries[0].Command)
+	assert.Equal(t, root, summaries[0].Workspace)
+	assert.Equal(t, 3, len(summaries[0].Targets))
 
 	// One session-start plus one fact per result, and the start is always seq 1.
 	require.Len(t, fold.Records, 4)
-	assert.Equal(t, sessionjournal.KindSessionStart, fold.Records[0].Kind)
+	assert.Equal(t, sessions.KindSessionStart, fold.Records[0].Kind)
 	assert.Equal(t, uint64(1), fold.Records[0].Seq)
-	assert.Equal(t, sessionjournal.SchemaVersion, fold.Records[0].V)
+	assert.Equal(t, sessions.SchemaVersion, fold.Records[0].V)
 }
 
 func TestSessionFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
@@ -68,18 +68,18 @@ func TestSessionFactHandlerMapsStatusOntoOutcomeAndReplay(t *testing.T) {
 	emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "test", Project: "api", Status: journal.StatusFail})
 	emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "lint", Project: "web", Status: journal.StatusCached})
 
-	dir, err := sessionjournal.Dir(root)
+	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessionjournal.Read(dir)
+	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
-	sessions := sessionjournal.Summarize(fold)
-	require.Len(t, sessions, 1)
+	summaries := sessions.Summarize(fold)
+	require.Len(t, summaries, 1)
 
-	assert.Equal(t, []sessionjournal.TargetResult{
-		{Target: "build", Project: "api", Outcome: sessionjournal.OutcomePass, DurMs: 20, Ref: "out1"},
-		{Target: "test", Project: "api", Outcome: sessionjournal.OutcomeFail},
-		{Target: "lint", Project: "web", Outcome: sessionjournal.OutcomePass, Replayed: true},
-	}, sessions[0].Targets)
+	assert.Equal(t, []sessions.TargetResult{
+		{Target: "build", Project: "api", Outcome: sessions.OutcomePass, DurMs: 20, Ref: "out1"},
+		{Target: "test", Project: "api", Outcome: sessions.OutcomeFail},
+		{Target: "lint", Project: "web", Outcome: sessions.OutcomePass, Replayed: true},
+	}, summaries[0].Targets)
 }
 
 // Everything that is not a target result must leave no trace, or the session journal
@@ -98,16 +98,16 @@ func TestSessionFactHandlerIgnoresEverythingButResults(t *testing.T) {
 	emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Target: "build", Status: journal.StatusPass})
 	emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Status: journal.StatusPass})
 
-	dir, err := sessionjournal.Dir(root)
+	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessionjournal.Read(dir)
+	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
 	assert.Empty(t, fold.Records, "a run that produced no target result leaves no session")
 }
 
 // Two invocations against two worktrees of one repo must land in one store, which is
-// what makes `magus activity` a cross-worktree view rather than a per-checkout one.
-func TestActivityFoldsSessionsFromEveryWorktree(t *testing.T) {
+// what makes `magus sessions` a cross-worktree view rather than a per-checkout one.
+func TestSessionsFoldsSessionsFromEveryWorktree(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
 	main := t.TempDir()
@@ -124,15 +124,15 @@ func TestActivityFoldsSessionsFromEveryWorktree(t *testing.T) {
 	emitJournalEvent(t, mainH, journal.Event{Kind: journal.KindResult, Inv: "invMain", Target: "build", Project: "api", Status: journal.StatusPass})
 	emitJournalEvent(t, linkedH, journal.Event{Kind: journal.KindResult, Inv: "invLinked", Target: "test", Project: "api", Status: journal.StatusFail})
 
-	dir, err := sessionjournal.Dir(main)
+	dir, err := sessions.Dir(main)
 	require.NoError(t, err)
-	fold, err := sessionjournal.Read(dir)
+	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
 
-	sessions := sessionjournal.Summarize(fold)
-	require.Len(t, sessions, 2, "both worktrees write into one store")
+	summaries := sessions.Summarize(fold)
+	require.Len(t, summaries, 2, "both worktrees write into one store")
 	var ids []string
-	for _, s := range sessions {
+	for _, s := range summaries {
 		ids = append(ids, s.Session)
 	}
 	slices.Sort(ids)
@@ -141,22 +141,22 @@ func TestActivityFoldsSessionsFromEveryWorktree(t *testing.T) {
 
 func TestSummarizeTargetsCollapsesRepeats(t *testing.T) {
 	t.Parallel()
-	got := summarizeTargets([]sessionjournal.TargetResult{
-		{Target: "build", Project: "api", Outcome: sessionjournal.OutcomePass},
-		{Target: "build", Project: "api", Outcome: sessionjournal.OutcomePass},
-		{Target: "build", Project: "web", Outcome: sessionjournal.OutcomeFail},
-		{Target: "lint", Project: "web", Outcome: sessionjournal.OutcomePass, Replayed: true},
+	got := summarizeTargets([]sessions.TargetResult{
+		{Target: "build", Project: "api", Outcome: sessions.OutcomePass},
+		{Target: "build", Project: "api", Outcome: sessions.OutcomePass},
+		{Target: "build", Project: "web", Outcome: sessions.OutcomeFail},
+		{Target: "lint", Project: "web", Outcome: sessions.OutcomePass, Replayed: true},
 	})
 	assert.Equal(t, "build api (pass), build web (fail), lint web (pass, cached)", got)
 }
 
 // A store that cannot be written is the case where silence lies: nothing is recorded,
-// and `magus activity` then reports in good faith that no session has run.
+// and `magus sessions` then reports in good faith that no session has run.
 func TestSessionFactHandlerWarnsOnceWhenTheStoreIsUnwritable(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 
-	dir, err := sessionjournal.Dir(root)
+	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
 	require.NoError(t, os.MkdirAll(filepath.Dir(dir), 0o755))
 	// A regular file where the store directory belongs. It fails the MkdirAll inside
@@ -172,15 +172,15 @@ func TestSessionFactHandlerWarnsOnceWhenTheStoreIsUnwritable(t *testing.T) {
 		emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "test", Status: journal.StatusPass})
 	})
 
-	assert.Equal(t, 1, strings.Count(logged, "not recorded in the session journal"),
+	assert.Equal(t, 1, strings.Count(logged, "not recorded in the session store"),
 		"the handler breaks once, so the warning cannot repeat per target")
 	assert.Contains(t, logged, dir, "the warning names the store a person has to go look at")
 }
 
-// activityUnitCell returns the UNIT cell of the row for session, which is the column the console
+// sessionsUnitCell returns the UNIT cell of the row for session, which is the column the console
 // drawer's join is waiting on. Reading it positionally rather than searching the whole listing is
 // what makes the "-" case assertable: a dash appears in every unattributed column.
-func activityUnitCell(t *testing.T, out, session string) string {
+func sessionsUnitCell(t *testing.T, out, session string) string {
 	t.Helper()
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
@@ -193,7 +193,7 @@ func activityUnitCell(t *testing.T, out, session string) string {
 	return ""
 }
 
-func TestActivityRendersTheUnitColumnAttributedAndNot(t *testing.T) {
+func TestSessionsRendersTheUnitColumnAttributedAndNot(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	global = globalFlags{}
 	root := t.TempDir()
@@ -210,12 +210,12 @@ func TestActivityRendersTheUnitColumnAttributedAndNot(t *testing.T) {
 	emitJournalEvent(t, bare, journal.Event{Kind: journal.KindResult, Inv: "invBare", Target: "test", Status: journal.StatusPass})
 
 	out := captureStdout(t, func() {
-		require.NoError(t, activityCmd(context.Background(), root, nil))
+		require.NoError(t, sessionsCmd(context.Background(), root, nil))
 	})
 
 	assert.Contains(t, out, "UNIT")
-	assert.Equal(t, "fleet/f3", activityUnitCell(t, out, "invUnit"))
-	assert.Equal(t, "-", activityUnitCell(t, out, "invBare"), "an unattributed session reads like an unknown HOST, not like a blank")
+	assert.Equal(t, "fleet/f3", sessionsUnitCell(t, out, "invUnit"))
+	assert.Equal(t, "-", sessionsUnitCell(t, out, "invBare"), "an unattributed session reads like an unknown HOST, not like a blank")
 }
 
 func TestSessionFactHandlerStampsTheUnitOnEveryFact(t *testing.T) {
@@ -228,16 +228,16 @@ func TestSessionFactHandlerStampsTheUnitOnEveryFact(t *testing.T) {
 	emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
 	emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "test", Status: journal.StatusPass})
 
-	dir, err := sessionjournal.Dir(root)
+	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessionjournal.Read(dir)
+	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
 
-	sessions := sessionjournal.Summarize(fold)
-	require.Len(t, sessions, 1)
-	assert.Equal(t, "fleet/f3", sessions[0].Unit)
-	require.Len(t, sessions[0].Targets, 2)
-	for _, target := range sessions[0].Targets {
+	summaries := sessions.Summarize(fold)
+	require.Len(t, summaries, 1)
+	assert.Equal(t, "fleet/f3", summaries[0].Unit)
+	require.Len(t, summaries[0].Targets, 2)
+	for _, target := range summaries[0].Targets {
 		assert.Equal(t, "fleet/f3", target.Unit, "a fact read on its own still says whose work it was")
 	}
 }
@@ -254,26 +254,26 @@ func TestSessionFactHandlerDropsAnInvalidUnit(t *testing.T) {
 	require.NotNil(t, h)
 	emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
 
-	dir, err := sessionjournal.Dir(root)
+	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
-	fold, err := sessionjournal.Read(dir)
+	fold, err := sessions.ReadAll(dir)
 	require.NoError(t, err)
 
-	sessions := sessionjournal.Summarize(fold)
-	require.Len(t, sessions, 1)
-	assert.Empty(t, sessions[0].Unit)
-	require.Len(t, sessions[0].Targets, 1)
-	assert.Empty(t, sessions[0].Targets[0].Unit)
+	summaries := sessions.Summarize(fold)
+	require.Len(t, summaries, 1)
+	assert.Empty(t, summaries[0].Unit)
+	require.Len(t, summaries[0].Targets, 1)
+	assert.Empty(t, summaries[0].Targets[0].Unit)
 }
 
-func TestActivityRejectsPositionalArguments(t *testing.T) {
-	err := activityCmd(context.Background(), t.TempDir(), []string{"yesterday"})
+func TestSessionsRejectsPositionalArguments(t *testing.T) {
+	err := sessionsCmd(context.Background(), t.TempDir(), []string{"yesterday"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--limit")
 }
 
-func TestActivityRejectsANegativeLimit(t *testing.T) {
-	err := activityCmd(context.Background(), t.TempDir(), []string{"--limit=-1"})
+func TestSessionsRejectsANegativeLimit(t *testing.T) {
+	err := sessionsCmd(context.Background(), t.TempDir(), []string{"--limit=-1"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "zero or more")
 	assert.Contains(t, err.Error(), "0 lists every session", "the error names the value that means what -1 was reaching for")

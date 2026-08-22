@@ -441,6 +441,7 @@ reference/logging/
 reference/manpage/
 reference/manpage/magus-affected/
 reference/manpage/magus-agent/
+reference/manpage/magus-attention/
 reference/manpage/magus-buzz/
 reference/manpage/magus-clean/
 reference/manpage/magus-completion/
@@ -464,6 +465,7 @@ reference/manpage/magus-refs/
 reference/manpage/magus-run/
 reference/manpage/magus-self/
 reference/manpage/magus-server/
+reference/manpage/magus-sessions/
 reference/manpage/magus-status/
 reference/manpage/magus-tail/
 reference/manpage/magus-vcs/
@@ -623,6 +625,7 @@ tags/graph/
 tags/graphml/
 tags/grpc/
 tags/guard/
+tags/history/
 tags/hooks/
 tags/host-modules/
 tags/hotspots/

@@ -302,8 +302,8 @@ func runTarget(ctx context.Context, root string, _ runConfig, args []string) err
 	// carried on ctx; a plain CLI run has no sink, so this is empty there.
 	captureHandlers := append(liveHandlers(liveBC), console.RunSinkHandlers(ctx)...)
 	// Durable session facts ride the same fan-out: one fact per target result, into a
-	// store every worktree of this repo shares (`magus activity` reads it back).
-	captureHandlers = appendSessionJournal(captureHandlers, m.Root(), "run", args)
+	// store every worktree of this repo shares (`magus sessions` reads it back).
+	captureHandlers = withSessionJournal(captureHandlers, m.Root(), "run", args)
 	invCtx, endInvocation := m.BeginInvocation(ctx, journal.Command{
 		Arguments: append([]string{"run"}, args...), Cwd: cwd, Trigger: trigger,
 	}, version, captureHandlers...)

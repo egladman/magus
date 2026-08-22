@@ -1,4 +1,4 @@
-package sessionjournal
+package sessions
 
 import (
 	"os"
@@ -20,7 +20,7 @@ func TestAppendReadRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Project: "api", Outcome: OutcomePass, DurMs: 12}))
 
-	fold, err := Read(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 	require.Len(t, fold.Records, 2, "the first append also writes the session-start record")
 	assert.Zero(t, fold.Skipped)
@@ -35,7 +35,7 @@ func TestAppendReadRoundTrip(t *testing.T) {
 }
 
 // Open must not create the file: a magus command that records no fact should leave
-// no session behind, or `magus activity` fills up with runs that did nothing.
+// no session behind, or `magus sessions` fills up with runs that did nothing.
 func TestOpenWritesNothingUntilTheFirstFact(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -43,13 +43,13 @@ func TestOpenWritesNothingUntilTheFirstFact(t *testing.T) {
 	w, err := Open(dir, "sess1", SessionStart{})
 	require.NoError(t, err)
 
-	fold, err := Read(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 	assert.Empty(t, fold.Records)
 	assert.Zero(t, fold.Sessions)
 
 	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}))
-	fold, err = Read(dir)
+	fold, err = ReadAll(dir)
 	require.NoError(t, err)
 	assert.Len(t, fold.Records, 2)
 }
@@ -70,7 +70,7 @@ func TestAppendBoundsAnOversizedAttentionMessage(t *testing.T) {
 		Message: strings.Repeat("x", MaxMessageBytes*4),
 	}))
 
-	fold, err := Read(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 	require.Len(t, fold.Records, 2)
 
@@ -95,7 +95,7 @@ func TestBoundedMessageCutsOnARuneBoundary(t *testing.T) {
 
 // One oversized line must cost one record and nothing else. A bufio.Scanner abandons
 // the rest of the file on ErrTooLong, which hides every LATER fact.
-func TestReadSkipsAnOversizedLineAndKeepsReading(t *testing.T) {
+func TestReadAllSkipsAnOversizedLineAndKeepsReading(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sess1.jsonl")
@@ -107,7 +107,7 @@ func TestReadSkipsAnOversizedLineAndKeepsReading(t *testing.T) {
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
 
-	fold, err := Read(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 	assert.Equal(t, 1, fold.Skipped)
 	require.Len(t, fold.Records, 2)
@@ -132,11 +132,11 @@ func TestOversizedOpenDoesNotHideALaterOne(t *testing.T) {
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
 
-	fold, err := Read(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 	assert.Equal(t, 1, fold.Skipped)
 
-	open := OpenAttention(fold)
+	open := AttentionQueue(fold)
 	require.Len(t, open, 1, "the open after the oversized line must still fold")
 	assert.Equal(t, "att-small", open[0].ID)
 	assert.Equal(t, "needs a decision", open[0].Message)
@@ -158,7 +158,7 @@ func TestOpenResumesTheSequenceOfAnExistingSession(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, second.Append(KindTargetResult, TargetResult{Target: "lint", Outcome: OutcomePass}))
 
-	fold, err := Read(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 	require.Len(t, fold.Records, 5, "each writer declares its own command line")
 
@@ -176,7 +176,7 @@ func TestOpenRejectsASessionIDThatCouldEscapeTheStore(t *testing.T) {
 	for _, id := range []string{"", "../escape", "a/b", "."} {
 		_, err := Open(t.TempDir(), id, SessionStart{})
 		require.Error(t, err, "session id %q", id)
-		assert.Contains(t, err.Error(), "sessionjournal:")
+		assert.Contains(t, err.Error(), "sessions:")
 	}
 }
 
@@ -196,7 +196,7 @@ func TestFoldSeesEveryWriterInTheStore(t *testing.T) {
 	require.NoError(t, right.Append(KindTargetResult, TargetResult{Target: "test", Outcome: OutcomeFail}))
 	require.NoError(t, left.Append(KindTargetResult, TargetResult{Target: "lint", Outcome: OutcomePass}))
 
-	fold, err := Read(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 	assert.Equal(t, 2, fold.Sessions)
 	assert.Len(t, fold.Records, 5)
@@ -234,7 +234,7 @@ func TestFoldOrdersByTimeThenSessionThenSeq(t *testing.T) {
 		{V: 1, Session: "alpha", Seq: 2, Kind: KindTargetResult, Ts: 300},
 	})
 
-	fold, err := Read(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 
 	var order []string
@@ -244,9 +244,9 @@ func TestFoldOrdersByTimeThenSessionThenSeq(t *testing.T) {
 	assert.Equal(t, []string{"alpha/1", "beta/1", "beta/2", "alpha/2"}, order)
 }
 
-// A journal is written by a process that can be killed mid-line, so a truncated
+// A session file is written by a process that can be killed mid-line, so a truncated
 // tail is expected. The read must surrender the bad line and nothing else.
-func TestReadToleratesACorruptTail(t *testing.T) {
+func TestReadAllToleratesACorruptTail(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
@@ -261,7 +261,7 @@ func TestReadToleratesACorruptTail(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.Close())
 
-	fold, err := Read(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err, "a half-written line must never fail the read")
 	assert.Len(t, fold.Records, 2)
 	assert.Equal(t, 1, fold.Skipped)
@@ -272,7 +272,7 @@ func TestReadToleratesACorruptTail(t *testing.T) {
 	assert.Len(t, sessions[0].Targets, 1)
 }
 
-func TestReadCountsEveryUnusableLine(t *testing.T) {
+func TestReadAllCountsEveryUnusableLine(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sess1.jsonl")
@@ -285,7 +285,7 @@ func TestReadCountsEveryUnusableLine(t *testing.T) {
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
 
-	fold, err := Read(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 	assert.Len(t, fold.Records, 1)
 	assert.Equal(t, 3, fold.Skipped)
@@ -304,7 +304,7 @@ func TestUnknownKindsAndFieldsAreIgnoredNotRejected(t *testing.T) {
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
 
-	fold, err := Read(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 	assert.Len(t, fold.Records, 3)
 	assert.Zero(t, fold.Skipped, "an unknown kind is not damage")
@@ -325,7 +325,7 @@ func TestSummarizeOrdersMostRecentFirst(t *testing.T) {
 	writeRaw(t, dir, "new", []Record{{V: 1, Session: "new", Seq: 1, Kind: KindTargetResult, Ts: 900}})
 	writeRaw(t, dir, "mid", []Record{{V: 1, Session: "mid", Seq: 1, Kind: KindTargetResult, Ts: 500}})
 
-	fold, err := Read(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 
 	var ids []string
@@ -345,7 +345,7 @@ func TestUnitSurvivesTheStoreOnBothPayloads(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass, Unit: "fleet/f3"}))
 
-	fold, err := Read(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 	require.Len(t, fold.Records, 2)
 
@@ -362,7 +362,7 @@ func TestUnitSurvivesTheStoreOnBothPayloads(t *testing.T) {
 	assert.Equal(t, "fleet/f3", sessions[0].Unit, "the view reads the unit off the session, not off each fact")
 }
 
-// The field is additive: a journal written before it existed still reads, and the sessions in it
+// The field is additive: a session file written before it existed still reads, and the sessions in it
 // summarize as unattributed rather than as damage.
 func TestASessionWrittenWithoutAUnitStillReads(t *testing.T) {
 	t.Parallel()
@@ -374,7 +374,7 @@ func TestASessionWrittenWithoutAUnitStillReads(t *testing.T) {
 	}, "\n")
 	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
 
-	fold, err := Read(dir)
+	fold, err := ReadAll(dir)
 	require.NoError(t, err)
 	assert.Zero(t, fold.Skipped)
 
@@ -385,9 +385,9 @@ func TestASessionWrittenWithoutAUnitStillReads(t *testing.T) {
 	assert.Empty(t, sessions[0].Targets[0].Unit)
 }
 
-func TestReadMissingStoreIsEmptyNotAnError(t *testing.T) {
+func TestReadAllMissingStoreIsEmptyNotAnError(t *testing.T) {
 	t.Parallel()
-	fold, err := Read(filepath.Join(t.TempDir(), "never-created"))
+	fold, err := ReadAll(filepath.Join(t.TempDir(), "never-created"))
 	require.NoError(t, err, "no session has run yet is not a failure")
 	assert.Empty(t, fold.Records)
 	assert.Zero(t, fold.Sessions)
@@ -426,7 +426,7 @@ func TestDirIsUnderTheUserStateDir(t *testing.T) {
 		"store %s is not under the user state dir", dir)
 }
 
-// writeRaw lays down a journal file directly, so a test can pin timestamps and
+// writeRaw lays down a session file directly, so a test can pin timestamps and
 // sequence numbers the Writer would otherwise stamp from the clock.
 func writeRaw(t *testing.T, dir, session string, records []Record) {
 	t.Helper()

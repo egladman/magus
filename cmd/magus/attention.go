@@ -13,7 +13,7 @@ import (
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/journal"
-	"github.com/egladman/magus/internal/sessionjournal"
+	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
 )
@@ -31,7 +31,7 @@ func attentionCmd(_ context.Context, root string, args []string) error {
 	// passed one: attention loads no workspace, so nothing downstream resolves it. Left
 	// empty it would key the store on "", and every repository on the machine would
 	// share one queue that belongs to none of them.
-	root = attentionRoot(root)
+	root = resolveRootOrEmpty(root)
 	if root == "" {
 		return fmt.Errorf("magus attention: no magus workspace found from this directory, and the queue is per-repository; run it inside a workspace, or name one with --root <path>")
 	}
@@ -57,7 +57,7 @@ func attentionCmd(_ context.Context, root string, args []string) error {
 
 func attentionUsage() {
 	fmt.Fprintln(os.Stderr, "Usage: magus attention [ls] [flags]")
-	fmt.Fprintln(os.Stderr, "       magus attention dispose <id> [-note <text>]")
+	fmt.Fprintln(os.Stderr, "       magus attention dispose <id> [-reason <text>]")
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "List the blocks agents have raised in this repository and close one.")
 	fmt.Fprintln(os.Stderr, "A request is opened by `magus notify` when the event's outcome is waiting")
@@ -69,8 +69,8 @@ func attentionUsage() {
 }
 
 type attentionListOutput struct {
-	Requests []sessionjournal.AttentionRequest `json:"requests"`
-	Store    string                            `json:"store"`
+	Requests []sessions.AttentionRequest `json:"requests"`
+	Store    string                      `json:"store"`
 }
 
 func attentionList(root string, args []string) error {
@@ -79,7 +79,7 @@ func attentionList(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "Usage: magus attention ls [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "List every open request, oldest first. Disposed requests are not listed;")
-			fmt.Fprintln(os.Stderr, "they stay in the journal and are visible with -o json after disposal.")
+			fmt.Fprintln(os.Stderr, "they stay in the session store and are visible with -o json after disposal.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -92,15 +92,15 @@ func attentionList(root string, args []string) error {
 		return usagef("magus attention ls: takes no arguments (got %q); close one request with `magus attention dispose <id>`", rest[0])
 	}
 
-	dir, err := sessionjournal.Dir(root)
+	dir, err := sessions.Dir(root)
 	if err != nil {
 		return err
 	}
-	fold, err := sessionjournal.Read(dir)
+	fold, err := sessions.ReadAll(dir)
 	if err != nil {
 		return err
 	}
-	requests := sessionjournal.OpenAttention(fold)
+	requests := sessions.AttentionQueue(fold)
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -118,7 +118,7 @@ func attentionList(root string, args []string) error {
 	return emitFormatted(opts, attentionListOutput{Requests: requests, Store: dir})
 }
 
-func renderAttentionText(requests []sessionjournal.AttentionRequest, dir string) error {
+func renderAttentionText(requests []sessions.AttentionRequest, dir string) error {
 	if len(requests) == 0 {
 		// An empty queue is the good state, so this says how a request would get here
 		// rather than reporting a fault.
@@ -143,7 +143,7 @@ func renderAttentionText(requests []sessionjournal.AttentionRequest, dir string)
 	if err := tw.Flush(); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stdout, "\n%d open request(s); close one with `magus attention dispose <id> -note <text>`. Nothing here closes on its own.\n", len(requests))
+	fmt.Fprintf(os.Stdout, "\n%d open request(s); close one with `magus attention dispose <id> -reason <text>`. Nothing here closes on its own.\n", len(requests))
 	return nil
 }
 
@@ -155,13 +155,13 @@ func attentionOneLine(s string) string {
 }
 
 func attentionDispose(root string, args []string) error {
-	var note string
+	var reason string
 	rest, err := cmdParse("attention dispose", args, func(fs *flag.FlagSet) {
-		fs.StringVar(&note, "note", "", "Record why the request is being closed, alongside the disposition")
+		fs.StringVar(&reason, "reason", "", "Record why the request is being closed, alongside the disposition")
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus attention dispose <id> [-note <text>]")
+			fmt.Fprintln(os.Stderr, "Usage: magus attention dispose <id> [-reason <text>]")
 			fmt.Fprintln(os.Stderr, "")
-			fmt.Fprintln(os.Stderr, "Close one open request. The disposition is appended to the session journal,")
+			fmt.Fprintln(os.Stderr, "Close one open request. The disposition is appended to the session store,")
 			fmt.Fprintln(os.Stderr, "so every worktree of this repo sees the request close. A request closes")
 			fmt.Fprintln(os.Stderr, "once: disposing an already-closed id is an error, not a second closure.")
 			fmt.Fprintln(os.Stderr, "")
@@ -177,18 +177,18 @@ func attentionDispose(root string, args []string) error {
 	}
 	id := rest[0]
 
-	dir, err := sessionjournal.Dir(root)
+	dir, err := sessions.Dir(root)
 	if err != nil {
 		return err
 	}
-	fold, err := sessionjournal.Read(dir)
+	fold, err := sessions.ReadAll(dir)
 	if err != nil {
 		return err
 	}
-	all := sessionjournal.Attention(fold)
-	i := slices.IndexFunc(all, func(r sessionjournal.AttentionRequest) bool { return r.ID == id })
+	all := sessions.Attention(fold)
+	i := slices.IndexFunc(all, func(r sessions.AttentionRequest) bool { return r.ID == id })
 	if i < 0 {
-		return fmt.Errorf("magus attention dispose: no request %q in the session journal at %s; run `magus attention` to list the open ids", id, dir)
+		return fmt.Errorf("magus attention dispose: no request %q in the session store at %s; run `magus attention` to list the open ids", id, dir)
 	}
 	req := all[i]
 	if req.Disposed {
@@ -197,9 +197,9 @@ func attentionDispose(root string, args []string) error {
 	}
 
 	// A fresh session per disposal, because a disposal IS its own invocation: it is
-	// what makes the journal say which run of magus closed the request, and by
+	// what makes the store say which run of magus closed the request, and by
 	// extension which person was at the keyboard.
-	w, err := sessionjournal.Open(dir, journal.NewInvocationID(), sessionjournal.SessionStart{
+	w, err := sessions.Open(dir, journal.NewInvocationID(), sessions.SessionStart{
 		Workspace: root,
 		Command:   "attention dispose " + id,
 		Version:   version,
@@ -207,18 +207,18 @@ func attentionDispose(root string, args []string) error {
 	if err != nil {
 		return err
 	}
-	if err := w.Append(sessionjournal.KindAttentionDispose, sessionjournal.AttentionDispose{Request: id, Note: note}); err != nil {
+	if err := w.Append(sessions.KindAttentionDispose, sessions.AttentionDispose{Request: id, Note: reason}); err != nil {
 		return err
 	}
 
 	// Re-read rather than patching the copy in hand: the disposal's timestamp and
-	// session are whatever the journal stored, and a hand-assembled answer here could
+	// session are whatever the store recorded, and a hand-assembled answer here could
 	// disagree with what every other worktree is about to read.
-	if fold, err = sessionjournal.Read(dir); err != nil {
+	if fold, err = sessions.ReadAll(dir); err != nil {
 		return err
 	}
-	all = sessionjournal.Attention(fold)
-	if j := slices.IndexFunc(all, func(r sessionjournal.AttentionRequest) bool { return r.ID == id }); j >= 0 {
+	all = sessions.Attention(fold)
+	if j := slices.IndexFunc(all, func(r sessions.AttentionRequest) bool { return r.ID == id }); j >= 0 {
 		req = all[j]
 	}
 
@@ -239,8 +239,8 @@ func attentionDispose(root string, args []string) error {
 		orDash(req.Source),
 		req.Session)
 	fmt.Fprintf(os.Stdout, "  %s\n", attentionOneLine(req.Message))
-	if note != "" {
-		fmt.Fprintf(os.Stdout, "  note: %s\n", note)
+	if reason != "" {
+		fmt.Fprintf(os.Stdout, "  reason: %s\n", reason)
 	}
 	return nil
 }
@@ -257,7 +257,7 @@ func attentionDispose(root string, args []string) error {
 //
 // Re-filing a block that is already open is a no-op. An agent hook may fire on every
 // prompt, and the queue has to hold one row per block rather than one per attempt -
-// see [sessionjournal.RequestID] for how the two are told apart. An event carrying no
+// see [sessions.RequestID] for how the two are told apart. An event carrying no
 // Source.ID opens nothing, for the same reason: there is no request without the
 // session that raised it.
 func recordAttentionOpen(root string, ev types.Event) error {
@@ -266,41 +266,48 @@ func recordAttentionOpen(root string, ev types.Event) error {
 	}
 	if ev.Source.ID == "" {
 		// An empty agent session is not an id, it is the absence of one, and
-		// [sessionjournal.RequestID] would happily digest it: every producer that sent
+		// [sessions.RequestID] would happily digest it: every producer that sent
 		// none would collapse onto ONE request, and a single dispose would close blocks
 		// nobody had read. No id, no durable request - the same graceful path as no
 		// repository, because the notification itself still fires.
 		noteMissingAttentionSource()
 		return nil
 	}
-	root = attentionRoot(root)
+	root = resolveRootOrEmpty(root)
 	if root == "" {
 		// No repository, so no queue to join. A notification raised outside a workspace
 		// still notifies; it just has nowhere durable to live.
 		return nil
 	}
-	dir, err := sessionjournal.Dir(root)
+	dir, err := sessions.Dir(root)
 	if err != nil {
 		return err
 	}
 
-	source, where := attentionSource(ev.Source), attentionWhere(ev.Where)
+	open := sessions.AttentionOpen{
+		Outcome:  string(ev.Outcome),
+		Severity: string(ev.Severity),
+		Source:   attentionSource(ev.Source),
+		Where:    attentionWhere(ev.Where),
+		// Not an input to the id, on purpose - see RequestID. It rides the payload so the queue
+		// can say WHOSE work is blocked without the row's identity moving when a fleet
+		// re-partitions.
+		Unit:    trail.UnitFromEnv(),
+		Message: ev.Message,
+	}
 	// The AGENT's session, not this magus invocation's: a re-fire is a second magus
 	// process, and keying on that would mint a fresh id every time.
-	id := sessionjournal.RequestID(ev.Source.ID, source, where, ev.Message)
-	// Not an input to the id, on purpose - see RequestID. It rides the payload so the queue can
-	// say WHOSE work is blocked without the row's identity moving when a fleet re-partitions.
-	unit := trail.UnitFromEnv()
+	open.Request = sessions.RequestID(ev.Source.ID, open)
 
-	fold, err := sessionjournal.Read(dir)
+	fold, err := sessions.ReadAll(dir)
 	if err != nil {
 		return err
 	}
-	if slices.ContainsFunc(sessionjournal.OpenAttention(fold), func(req sessionjournal.AttentionRequest) bool { return req.ID == id }) {
+	if slices.ContainsFunc(sessions.AttentionQueue(fold), func(req sessions.AttentionRequest) bool { return req.ID == open.Request }) {
 		return nil
 	}
 
-	w, err := sessionjournal.Open(dir, journal.NewInvocationID(), sessionjournal.SessionStart{
+	w, err := sessions.Open(dir, journal.NewInvocationID(), sessions.SessionStart{
 		Workspace: root,
 		Command:   "notify",
 		Version:   version,
@@ -308,25 +315,18 @@ func recordAttentionOpen(root string, ev types.Event) error {
 	if err != nil {
 		return err
 	}
-	return w.Append(sessionjournal.KindAttentionOpen, sessionjournal.AttentionOpen{
-		Request:  id,
-		Outcome:  string(ev.Outcome),
-		Severity: string(ev.Severity),
-		Source:   source,
-		Where:    where,
-		Unit:     unit,
-		Message:  ev.Message,
-	})
+	return w.Append(sessions.KindAttentionOpen, open)
 }
 
-// attentionRoot resolves the repository whose queue a request belongs in.
+// resolveRootOrEmpty resolves the repository a per-repository store belongs to,
+// falling back to workspace discovery when the caller passed no --root.
 //
 // notify runs with no workspace loaded - it has to work from a hook, in whatever
 // directory the agent happens to be in - so root arrives empty unless --root was
 // passed. Left that way, every caller would key the store on nothing and share one
 // bogus queue across every repository on the machine. An unresolvable root returns
 // empty, which the caller reads as "not in a repository".
-func attentionRoot(root string) string {
+func resolveRootOrEmpty(root string) string {
 	if root != "" {
 		return root
 	}

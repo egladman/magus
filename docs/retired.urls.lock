@@ -253,3 +253,7 @@ tags/magus-vcs/
 # The evals project was deleted before 0.4.0 shipped its harness; the page has no
 # successor to redirect to.
 development/evals/
+
+# magus activity was renamed to magus sessions before either shipped in a
+# release; the store-collision review that forced it is in the branch history.
+reference/manpage/magus-activity/

@@ -1,4 +1,4 @@
-package sessionjournal
+package sessions
 
 import (
 	"os"
@@ -10,7 +10,7 @@ import (
 )
 
 // DefaultRetention is how long a session file outlives its newest fact. [Open]
-// rotates with it; a caller that wants a different window calls [Rotate] directly.
+// prunes with it; a caller that wants a different window calls [Prune] directly.
 //
 // There is no config key and no environment variable behind this on purpose: the
 // store is shared by every worktree of a repository, so a per-checkout override
@@ -18,11 +18,12 @@ import (
 // workspace-level setting is a decision to take once, not a knob to add ahead of it.
 const DefaultRetention = 30 * 24 * time.Hour
 
-// Rotate deletes whole session files whose newest fact is older than retain.
+// Prune deletes whole session files whose newest fact is older than retain.
 //
-// Whole files only. A journal is append-only or absent, and truncating one would
-// produce a third state - a file whose beginning is missing - that no reader in this
-// package is written to expect. A retain of zero or less disables rotation entirely.
+// Deleting is all it does. Nothing here rolls a file over, renames one, or truncates
+// one: a session file is append-only or absent, and a truncation would produce a
+// third state - a file whose beginning is missing - that no reader in this package is
+// written to expect. A retain of zero or less disables pruning entirely.
 //
 // It is best-effort and reports nothing: every failure path leaves the store exactly
 // as it found it. Callers on the write path must not be able to lose a fact because
@@ -32,31 +33,31 @@ const DefaultRetention = 30 * 24 * time.Hour
 //
 // An attention request is raised in one session's file and disposed of in another's
 // (see [Attention]), so the records of one request routinely straddle two files that
-// age out at different times. Pruning one of the pair changes what the queue says:
+// age out at different times. Deleting one of the pair changes what the queue says:
 //
-//   - Prune the file holding the dispose while the open survives, and [OpenAttention]
-//     RESURRECTS a request a person already answered.
-//   - Prune the file holding a still-open request, and the queue silently loses a
+//   - Delete the file holding the dispose while the open survives, and
+//     [AttentionQueue] RESURRECTS a request a person already answered.
+//   - Delete the file holding a still-open request, and the queue silently loses a
 //     wait nobody has answered - an expiry, which this package does not have.
 //
-// Two rules close both, and both are decidable from the store alone, because rotation
+// Two rules close both, and both are decidable from the store alone, because pruning
 // reads exactly the fold a reader would:
 //
 //  1. Every file naming a request that is currently OPEN is exempt, at any age. A
 //     request is closed by a person or not at all.
-//  2. A request's records are pruned as a UNIT: if any file naming a request is too
-//     young to prune, every file naming that request is exempt. So a disposed request
+//  2. A request's records are deleted as a UNIT: if any file naming a request is too
+//     young to delete, every file naming that request is exempt. So a disposed request
 //     either disappears whole or stays whole, and neither half can outlive the other.
 //
 // Rule 2 keeps a file alive while a younger sibling shares one of its requests, which
 // delays that file rather than pinning it: the sibling ages out too, and then both go.
 // Rule 1 does pin, for as long as the request stays open, which is the intended trade.
-func Rotate(dir string, retain time.Duration) { rotate(dir, retain, "") }
+func Prune(dir string, retain time.Duration) { prune(dir, retain, "") }
 
-// rotate is [Rotate] with the caller's own journal held back. Open passes its session
-// file so a writer can never delete the file it is about to append to, whatever the
-// clock or a reused session id says.
-func rotate(dir string, retain time.Duration, keep string) {
+// prune is [Prune] with the caller's own session file held back. Open passes its
+// session file so a writer can never delete the file it is about to append to,
+// whatever the clock or a reused session id says.
+func prune(dir string, retain time.Duration, keep string) {
 	if retain <= 0 {
 		return
 	}
@@ -71,8 +72,8 @@ func rotate(dir string, retain time.Duration, keep string) {
 	// calls young is left alone unread, and one it calls stale still has to prove it by
 	// its records below. The filter can therefore only ever spare a file that could
 	// have gone - a copy or a restore rewrites a modification time without touching a
-	// record - and never prune one that should have stayed. That is what makes the
-	// common case, a store with nothing old enough to prune, cost a ReadDir and no
+	// record - and never delete one that should have stayed. That is what makes the
+	// common case, a store with nothing old enough to delete, cost a ReadDir and no
 	// file reads at all.
 	var names []string
 	stale := make(map[string]time.Time)
@@ -117,7 +118,7 @@ func rotate(dir string, retain time.Duration, keep string) {
 			}
 		}
 		// last stays zero for a file with no decodable record, which reads as older
-		// than any cutoff and prunes it. That is the right answer: it is the file of
+		// than any cutoff and deletes it. That is the right answer: it is the file of
 		// a session that recorded nothing anybody can still use.
 		if _, ok := stale[name]; ok && last < cutoffMs {
 			candidates[name] = true
@@ -129,7 +130,7 @@ func rotate(dir string, retain time.Duration, keep string) {
 
 	sortRecords(all)
 	openIDs := make(map[string]bool)
-	for _, req := range OpenAttention(Fold{Records: all}) {
+	for _, req := range AttentionQueue(Fold{Records: all}) {
 		openIDs[req.ID] = true
 	}
 
@@ -154,7 +155,7 @@ func rotate(dir string, retain time.Duration, keep string) {
 	for name := range candidates {
 		path := filepath.Join(dir, name)
 		// A session idle past the window can still wake up and append. Re-stat so a
-		// file that grew after the fold was read survives: the decision to prune it
+		// file that grew after the fold was read survives: the decision to delete it
 		// was made about contents it no longer has.
 		info, err := os.Stat(path)
 		if err != nil || !info.ModTime().Equal(stale[name]) {
@@ -178,7 +179,7 @@ func prunableTogether(candidates map[string]bool, files map[string]bool) bool {
 // attentionID returns the request a record names, or "" for a record that names none.
 //
 // The payload is decoded through a narrow struct shared by both kinds rather than
-// through [AttentionOpen] and [AttentionDispose]: rotation needs the id and nothing
+// through [AttentionOpen] and [AttentionDispose]: pruning needs the id and nothing
 // else, and a decode that ignores the rest cannot start disagreeing with [Attention]
 // about a field neither of them reads. A record whose id fails to decode is one
 // [Attention] also skips, so it holds no file back.

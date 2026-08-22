@@ -11,8 +11,6 @@ import (
 //
 // Regenerate with: cd magus && go generate ./cmd/magus/...
 const (
-	// activity: --limit
-	FlagActivityLimit = "limit"
 	// affected: --b
 	FlagAffectedB = "b"
 	// affected: --base
@@ -73,8 +71,8 @@ const (
 	FlagAgentPrune = "prune"
 	// agent: --tar
 	FlagAgentTar = "tar"
-	// attention dispose: --note
-	FlagAttentionDisposeNote = "note"
+	// attention dispose: --reason
+	FlagAttentionDisposeReason = "reason"
 	// buzz: --C
 	FlagBuzzC = "C"
 	// buzz: --e
@@ -317,6 +315,8 @@ const (
 	FlagServerStopServices = "services"
 	// server stop: --socket
 	FlagServerStopSocket = "socket"
+	// sessions: --limit
+	FlagSessionsLimit = "limit"
 	// status: --W
 	FlagStatusW = "W"
 	// status: --c
@@ -899,27 +899,27 @@ func BindConfigConsoleTokenCreate(fs *flag.FlagSet) *ConfigConsoleTokenCreateFla
 	return &f
 }
 
-// ActivityFlags are the flags declared for `magus activity`.
-type ActivityFlags struct {
+// SessionsFlags are the flags declared for `magus sessions`.
+type SessionsFlags struct {
 	Limit int // --limit
 }
 
-// BindActivity registers `magus activity`'s flags on fs and returns the destination.
-func BindActivity(fs *flag.FlagSet) *ActivityFlags {
-	var f ActivityFlags
-	fs.IntVar(&f.Limit, FlagActivityLimit, 0, "Show at most this many sessions (0 for all)")
+// BindSessions registers `magus sessions`'s flags on fs and returns the destination.
+func BindSessions(fs *flag.FlagSet) *SessionsFlags {
+	var f SessionsFlags
+	fs.IntVar(&f.Limit, FlagSessionsLimit, 0, "Show at most this many sessions (0 for all)")
 	return &f
 }
 
 // AttentionDisposeFlags are the flags declared for `magus attention dispose`.
 type AttentionDisposeFlags struct {
-	Note string // --note
+	Reason string // --reason
 }
 
 // BindAttentionDispose registers `magus attention dispose`'s flags on fs and returns the destination.
 func BindAttentionDispose(fs *flag.FlagSet) *AttentionDisposeFlags {
 	var f AttentionDisposeFlags
-	fs.StringVar(&f.Note, FlagAttentionDisposeNote, "", "Record why the request is being closed, alongside the disposition")
+	fs.StringVar(&f.Reason, FlagAttentionDisposeReason, "", "Record why the request is being closed, alongside the disposition")
 	return &f
 }
 

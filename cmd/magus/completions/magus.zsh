@@ -58,7 +58,7 @@ _magus() {
                 'vcs:staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)'
                 'doctor:validate the workspace'
                 'config:view or update magus configuration'
-                'activity:show what recent magus sessions did, folded across every worktree of this repo'
+                'sessions:show what recent magus sessions did, folded across every worktree of this repo'
                 'attention:list the blocks agents raised and dispose of one (ls, dispose)'
                 'memory:durable cross-session project memory (ls, get, put, delete, verify)'
                 'notes:human-authored notes committed to the repo (ls, get, edit, verify)'

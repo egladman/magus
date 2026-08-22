@@ -259,7 +259,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// staged and stop `git rebase --continue`, resolve would splice a section between
 		// conflict markers. Each verb opens what it needs under its own guard.
 		return dispatchProfile{needsConfig: true}
-	case "activity":
+	case "sessions":
 		// Reads a file store keyed by repository identity: it needs the root PATH but
 		// never the magusfile, and it must stay readable when the workspace does not
 		// load - a broken magusfile is exactly when someone asks what the last runs
@@ -267,7 +267,7 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// listing that is one directory read.
 		return dispatchProfile{needsConfig: true}
 	case "attention":
-		// Same store, same reasons as activity. It must additionally stay usable while
+		// Same store, same reasons as sessions. It must additionally stay usable while
 		// the workspace is broken: an agent blocked on a person is exactly the state a
 		// half-finished edit produces, and a queue that needed a loadable magusfile
 		// would go dark when it is needed most.
@@ -758,8 +758,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return doctorCmd(ctx, root, rc, subArgs)
 	case "config":
 		return configCmd(ctx, root, globalCfg, subArgs)
-	case "activity":
-		return activityCmd(ctx, root, subArgs)
+	case "sessions":
+		return sessionsCmd(ctx, root, subArgs)
 	case "attention":
 		return attentionCmd(ctx, root, subArgs)
 	case "memory":

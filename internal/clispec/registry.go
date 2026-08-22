@@ -22,7 +22,7 @@ var All = []Command{
 	vcsCommand,
 	doctorCommand,
 	configCommand,
-	activityCommand,
+	sessionsCommand,
 	attentionCommand,
 	memoryCommand,
 	notesCommand,
@@ -1092,31 +1092,31 @@ base in yourself on the others, then run resolve.`,
 	},
 }
 
-var activityCommand = Command{
-	Name:        "activity",
-	Short:       "Show what recent magus sessions did",
-	Description: "List recent magus sessions and the targets they ran, folded across every worktree of this repository.",
-	Tags:        []string{"cli", "magus activity", "sessions", "journal", "worktrees"},
-	Long: `List recent magus sessions with the targets each one ran and how those
+var sessionsCommand = Command{
+	Name:        "sessions",
+	Short:       "List past magus sessions in this repository",
+	Description: "List past magus sessions and the targets they ran, from the repository-scoped store every worktree shares.",
+	Tags:        []string{"cli", "magus sessions", "sessions", "history", "worktrees"},
+	Long: `List past magus sessions with the targets each one ran and how those
 runs ended.
 
 A session's facts are appended as it works and are keyed by repository
 identity rather than by checkout path, so every git worktree of one repo reads
-and writes the same journal. That is the point: what another worktree just
+and writes the same store. That is the point: what another worktree just
 finished is visible here without a daemon, a network, or a shared branch.
 
-The journal is append-only and grows; it is never rewritten. A line left
+The store is append-only and grows; it is never rewritten. A line left
 half-written by a killed process is skipped and counted rather than failing
 the read, and a fact this magus does not recognize is still counted as
 activity. Use --limit to bound the listing, and -o json for the full records.`,
-	Usage: "magus activity [flags]",
+	Usage: "magus sessions [flags]",
 	Flags: []Flag{
 		{Name: "limit", Kind: FlagInt, Doc: "Show at most this many sessions (0 for all)"},
 	},
 	Examples: []Example{
-		{"Show recent sessions", "magus activity"},
-		{"Show the last five", "magus activity --limit 5"},
-		{"Full records as JSON", "magus activity -o json"},
+		{"Show recent sessions", "magus sessions"},
+		{"Show the last five", "magus sessions --limit 5"},
+		{"Full records as JSON", "magus sessions -o json"},
 	},
 }
 
@@ -1146,7 +1146,7 @@ open updates nothing and adds no second row.`,
 			Name:  "dispose",
 			Short: "Close one open request by id",
 			Flags: []Flag{
-				{Name: "note", Kind: FlagString, Doc: "Record why the request is being closed, alongside the disposition"},
+				{Name: "reason", Kind: FlagString, Doc: "Record why the request is being closed, alongside the disposition"},
 			},
 		},
 	},
@@ -1154,7 +1154,7 @@ open updates nothing and adds no second row.`,
 		{"List open requests", "magus attention"},
 		{"Full records as JSON", "magus attention ls -o json"},
 		{"Close one request", "magus attention dispose att-3f9c1a2b4d5e"},
-		{"Close one, saying why", `magus attention dispose att-3f9c1a2b4d5e -note "approved and pushed by hand"`},
+		{"Close one, saying why", `magus attention dispose att-3f9c1a2b4d5e -reason "approved and pushed by hand"`},
 	},
 }
 

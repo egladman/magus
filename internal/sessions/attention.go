@@ -1,4 +1,4 @@
-package sessionjournal
+package sessions
 
 import (
 	"cmp"
@@ -25,10 +25,10 @@ const (
 // AttentionOpen is the payload of a raised block: one normalized attention event,
 // plus the request id it stays addressable by.
 //
-// The event is flattened to strings rather than embedded as a types.Event. A journal
-// is read by binaries older than the one that wrote it, and nesting an envelope that
-// carries its own schema version would leave such a reader two versions to reconcile
-// for one fact.
+// The event is flattened to strings rather than embedded as a types.Event. A session
+// file is read by binaries older than the one that wrote it, and nesting an envelope
+// that carries its own schema version would leave such a reader two versions to
+// reconcile for one fact.
 // Unit is the work-ledger unit the RAISING session was launched under, which is what lets a
 // person reading the queue see which slice of a fleet's work is blocked. It is attribution and
 // not identity: see [RequestID] for why it stays out of the id.
@@ -46,7 +46,7 @@ type AttentionOpen struct {
 //
 // The message is whatever a producer piped to `magus notify` on stdin, and in
 // practice that is a hook forwarding an agent's text - a prompt, a tool argument, a
-// transcript tail. The journal is grow-only and every reader folds the WHOLE store
+// transcript tail. The store is grow-only and every reader folds the WHOLE store
 // into memory, so one unbounded message is a cost every later read of this repository
 // pays. 4 KiB is far past what a person can act on from a queue row and far short of
 // a line that makes the fold expensive.
@@ -85,8 +85,9 @@ type AttentionDispose struct {
 }
 
 // RequestID derives the identity of one blocked request from the session that raised
-// it and what it says. The result is stable: the same four inputs always name the
-// same request, on any machine and in any worktree.
+// it and what o says. Exactly three of o's fields are read - Source, Where and
+// Message - and the result is stable: the same session and the same three values
+// always name the same request, on any machine and in any worktree.
 //
 // That determinism is the whole dedupe mechanism. An agent re-fires a block freely -
 // a hook that runs on every prompt, a retried tool call - and each re-fire has to
@@ -105,8 +106,8 @@ type AttentionDispose struct {
 //
 // Fields are joined with NUL, which none of them can contain, so no pair of values
 // can concatenate into another pair's digest.
-func RequestID(session, source, where, message string) string {
-	sum := sha256.Sum256([]byte(session + "\x00" + source + "\x00" + where + "\x00" + message))
+func RequestID(session string, o AttentionOpen) string {
+	sum := sha256.Sum256([]byte(session + "\x00" + o.Source + "\x00" + o.Where + "\x00" + o.Message))
 	return "att-" + hex.EncodeToString(sum[:])[:12]
 }
 
@@ -134,7 +135,7 @@ type AttentionRequest struct {
 	Disposes int `json:"disposes,omitempty"`
 }
 
-// Attention folds a journal into one entry per request id, oldest first.
+// Attention folds a store into one entry per request id, oldest first.
 //
 // Three rules, all decided HERE rather than at write time, because the producers are
 // separate processes in separate worktrees and nothing serializes them:
@@ -144,13 +145,13 @@ type AttentionRequest struct {
 //     block came back, and a queue that swallowed it would be hiding a live wait
 //     behind an answer that was given to a different one.
 //   - The first dispose closes the request. A later dispose of the same id is still a
-//     record in the journal - nothing here rewrites one - but it only advances
+//     record in the store - nothing here rewrites one - but it only advances
 //     Disposes, and cannot change who closed the request or when.
 //   - A dispose naming an id with no open counts for nothing. It is not corruption:
 //     the open may sit in a file another process has not finished writing, or in a
 //     kind this build does not know.
 //
-// "First" is well defined because [Read] has already ordered the fold by
+// "First" is well defined because [ReadAll] has already ordered the fold by
 // (Ts, Session, Seq). Records are consumed in that order and must not be handed to
 // this function out of it; the returned slice is sorted separately, by when each
 // request was last raised.
@@ -221,9 +222,9 @@ func Attention(fold Fold) []AttentionRequest {
 	return out
 }
 
-// OpenAttention is [Attention] narrowed to the requests nobody has disposed of - the
+// AttentionQueue is [Attention] narrowed to the requests nobody has disposed of - the
 // queue itself. Oldest first, so whatever has been waiting longest reads at the top.
-func OpenAttention(fold Fold) []AttentionRequest {
+func AttentionQueue(fold Fold) []AttentionRequest {
 	all := Attention(fold)
 	out := make([]AttentionRequest, 0, len(all))
 	for _, req := range all {

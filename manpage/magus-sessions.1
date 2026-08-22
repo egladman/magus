@@ -1,19 +1,19 @@
-.TH MAGUS-ACTIVITY 1 "" "magus" "magus Manual"
+.TH MAGUS-SESSIONS 1 "" "magus" "magus Manual"
 .SH NAME
-magus\-activity \- Show what recent magus sessions did
+magus\-sessions \- List past magus sessions in this repository
 .SH SYNOPSIS
 .B magus
-.RI "activity [flags]"
+.RI "sessions [flags]"
 .SH DESCRIPTION
-List recent magus sessions with the targets each one ran and how those
+List past magus sessions with the targets each one ran and how those
 runs ended.
 .PP
 A session's facts are appended as it works and are keyed by repository
 identity rather than by checkout path, so every git worktree of one repo reads
-and writes the same journal. That is the point: what another worktree just
+and writes the same store. That is the point: what another worktree just
 finished is visible here without a daemon, a network, or a shared branch.
 .PP
-The journal is append\-only and grows; it is never rewritten. A line left
+The store is append\-only and grows; it is never rewritten. A line left
 half\-written by a killed process is skipped and counted rather than failing
 the read, and a fact this magus does not recognize is still counted as
 activity. Use \-\-limit to bound the listing, and \-o json for the full records.
@@ -27,19 +27,19 @@ Show at most this many sessions (0 for all)
 \fIShow recent sessions\fR
 .PP
 .EX
-magus activity
+magus sessions
 .EE
 .PP
 \fIShow the last five\fR
 .PP
 .EX
-magus activity --limit 5
+magus sessions --limit 5
 .EE
 .PP
 \fIFull records as JSON\fR
 .PP
 .EX
-magus activity -o json
+magus sessions -o json
 .EE
 .PP
 .SH SEE ALSO
