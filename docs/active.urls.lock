@@ -160,6 +160,7 @@ development/projects/website/
 development/proto/
 development/website/
 diagnostics/
+doctrine/
 documentation/
 download/
 download/docker/
@@ -579,6 +580,7 @@ tags/dependency-graph/
 tags/depends-on/
 tags/depends/
 tags/describe/
+tags/design/
 tags/desktop/
 tags/detach/
 tags/determinism/
@@ -686,6 +688,7 @@ tags/ownership/
 tags/passthrough/
 tags/path/
 tags/permissions/
+tags/philosophy/
 tags/picker/
 tags/platform/
 tags/plugin/
