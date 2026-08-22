@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2376,
-  "edge_count": 6249,
+  "edge_count": 6252,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -31007,6 +31007,14 @@
     },
     {
       "source": "doc:docs/glossary.md",
+      "target": "doc:docs/doctrine.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/glossary.md"
+    },
+    {
+      "source": "doc:docs/glossary.md",
       "target": "doc:docs/reference/buzz/index.md",
       "relation": "references",
       "confidence": "extracted",
@@ -31019,6 +31027,22 @@
       "relation": "references",
       "confidence": "extracted",
       "score": 1,
+      "provenance": "docs/glossary.md"
+    },
+    {
+      "source": "doc:docs/glossary.md",
+      "target": "doc:docs/reference/manpage/magus-attention.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/glossary.md"
+    },
+    {
+      "source": "doc:docs/glossary.md",
+      "target": "doc:docs/reference/manpage/magus-notify.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
       "provenance": "docs/glossary.md"
     },
     {
