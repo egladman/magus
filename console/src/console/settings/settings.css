@@ -104,8 +104,11 @@
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-.console-settings-actionbar__status[data-kind="ok"] { color: var(--console-status-ok); }
-.console-settings-actionbar__status[data-kind="error"] { color: var(--console-status-queued); }
+/* A live region carrying import failures and clipboard errors, so the text tier. --console-status-queued
+   is the SATURATION red and was reading 4.19:1 in dark here; danger-text is 6.89:1 and is the right
+   semantic besides - this reports a failure, not a full pool. */
+.console-settings-actionbar__status[data-kind="ok"] { color: var(--console-status-ok-text); }
+.console-settings-actionbar__status[data-kind="error"] { color: var(--console-status-danger-text); }
 
 /* --- Pending diff: the readable before -> after list ---------------------------------------------
  * One row per changed field, hidden entirely when the draft matches the baseline. The before/after

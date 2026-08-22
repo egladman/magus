@@ -340,7 +340,7 @@
    content and the ellipsis as a "keep going / pause to save" hint. */
 [data-kbeditor] [data-kbcap-more] { color: var(--pf-t--global--text--color--subtle); font-weight: 400; }
 [data-kbeditor] [data-chord][data-disabled] { color: var(--pf-t--global--text--color--subtle); font-style: italic; }
-[data-kbeditor] [data-conflict] { color: var(--console-status-queued); font-size: 0.72rem; white-space: nowrap; }
+[data-kbeditor] [data-conflict] { color: var(--console-status-danger-text); font-size: 0.72rem; white-space: nowrap; }
 [data-kbeditor] [data-kactions] { margin-left: auto; display: flex; gap: 0.3rem; flex: 0 0 auto; }
 /* The row controls carry a leading glyph; center the button row and the inline <svg> so the glyph
  * lines up with the label instead of hanging off PF's default baseline alignment. */

@@ -154,14 +154,16 @@
   --console-status-danger: var(--pf-t--global--icon--color--status--danger--default);   /* error      (red)   */
 
   /* --- The TEXT tier of the same semantics ---------------------------------------------
-     PatternFly ships a separate, lighter ramp for status TEXT, and the console was painting words
-     with the ICON slots above. The icon tier is tuned to read as a shape on a surface; as text on the
-     dark theme it lands at 4.19:1, under WCAG AA's 4.5 for body copy. Measured on the dashboard hero,
-     where "Attention needed" is the single most important sentence on the board - the one state that
-     has to be unmissable was the one failing the floor.
-     The icon slots stay exactly as they are: they are correct for dots, borders and glyphs, which is
-     what they were chosen for. Use these ONLY where the color lands on a glyph the reader is
-     expected to READ. */
+     The icon slots above are tuned to read as a shape on a surface; as text they can land under
+     WCAG AA's 4.5 for body copy. Use these ONLY where the color lands on a glyph the reader is
+     expected to READ - dots, borders and glyphs keep the icon tier.
+
+     PF's text ramp is not a lighter ramp per hue, which is the trap here. Resolved out of
+     patternfly-base.css, --pf-t--global--text--color--status--*--default is the SAME token as the
+     icon slot for ok and for warn, in both themes; only danger differs, and only in dark
+     (#f0561d 4.19:1 -> #f89b78 6.89:1). So warn cannot be fixed by aliasing PF's text token, and is
+     pinned below to the ramp step that clears the floor. ok passes on the icon value either way
+     (5.74 light, 6.45 dark) and aliases for symmetry. */
   /* The chrome surface: title bar, navigation rail, status bar. One slot, because those three are one
      continuous frame and must never drift apart.
      LIGHT: the recessive tone. Content is white paper sitting on it, and the elevation reads because
@@ -170,7 +172,9 @@
   --console-chrome: var(--pf-t--global--background--color--secondary--default);
 
   --console-status-ok-text: var(--pf-t--global--text--color--status--success--default);
-  --console-status-warn-text: var(--pf-t--global--text--color--status--warning--default);
+  /* warning--500 (yellow-70 #73480b): 7.89:1 on white, 7.16:1 on the secondary ground. The default
+     step is #dca614, 2.21:1 on white - the dashboard hero's "Attention needed" sat there. */
+  --console-status-warn-text: var(--pf-t--global--color--status--warning--500);
   --console-status-danger-text: var(--pf-t--global--text--color--status--danger--default);
 
   /* --- 3b. Earthy card palette -----------------------------------------------------------
@@ -289,6 +293,10 @@
      ground were both #151515, exactly equal. The cue that works said one plane; the cue that does not
      work said two. That is what read as flat. */
   --console-chrome: #242424;
+
+  /* PF does not remap warning--500 for dark, so the light pin would paint #73480b on #292929 at
+     1.84:1. Dark's default step is #ffcc17, 12.09:1 - both tiers agree here and both clear. */
+  --console-status-warn-text: var(--pf-t--global--text--color--status--warning--default);
 
   /* The earthy card palette's dark ramp (lighter, so the hues read on the dark card). Plain custom
      properties, not theme-aware PF tokens, so they are restated here. */

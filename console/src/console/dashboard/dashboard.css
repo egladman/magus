@@ -118,7 +118,7 @@ body[data-dash-native] { margin: 0; }
 .console-dashboard-delegation__item[data-state="no_return"] .console-dashboard-delegation__mark { color: var(--console-status-danger); }
 .console-dashboard-delegation__id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .console-dashboard-delegation__state { font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); }
-.console-dashboard-delegation__note { min-height: 1.2em; margin: 0.65rem 0 0; color: var(--console-status-warn); font-size: var(--pf-t--global--font--size--sm); }
+.console-dashboard-delegation__note { min-height: 1.2em; margin: 0.65rem 0 0; color: var(--console-status-warn-text); font-size: var(--pf-t--global--font--size--sm); }
 
 /* Panels: a responsive 2-column grid. Tiles span the full width by default; a compact tile opts
    into a single column with [data-half] so it pairs with a neighbor instead of eating a whole
@@ -261,9 +261,11 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 .console-dashboard-stat[data-accent="info"]::before { background: var(--console-status-running); }
 .console-dashboard-stat__key { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-stat__value { font-size: 1.5rem; font-weight: 700; font-family: var(--pf-t--global--font--family--mono); line-height: 1.1; }
-.console-dashboard-stat[data-accent="hit"] .console-dashboard-stat__value { color: var(--console-status-ok); }
-.console-dashboard-stat[data-accent="miss"] .console-dashboard-stat__value { color: var(--console-status-warn); }
-.console-dashboard-stat[data-accent="err"] .console-dashboard-stat__value { color: var(--console-status-danger); }
+/* A KPI numeral is 24px bold, so it is WCAG "large text" at a 3:1 floor rather than 4.5 - and the
+   warn icon value is 2.21:1, under even that. Text tier for all three so they move together. */
+.console-dashboard-stat[data-accent="hit"] .console-dashboard-stat__value { color: var(--console-status-ok-text); }
+.console-dashboard-stat[data-accent="miss"] .console-dashboard-stat__value { color: var(--console-status-warn-text); }
+.console-dashboard-stat[data-accent="err"] .console-dashboard-stat__value { color: var(--console-status-danger-text); }
 
 /* Pool occupancy grid: airplane-seating cubes. Running = filled (info blue), free = outlined,
    queued = dashed (saturation red).
@@ -469,12 +471,12 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 }
 .console-dashboard-row.console-dashboard-agents__call[data-decision="deny"] { border-left-color: var(--console-status-danger); }
 .console-dashboard-row.console-dashboard-agents__call[data-decision="deny"] .console-dashboard-agents__notice {
-  color: var(--console-status-danger);
+  color: var(--console-status-danger-text);
   background: color-mix(in srgb, var(--console-status-danger) 16%, transparent);
 }
 .console-dashboard-row.console-dashboard-agents__call[data-decision="advise"] { border-left-color: var(--console-status-warn); }
 .console-dashboard-row.console-dashboard-agents__call[data-decision="advise"] .console-dashboard-agents__notice {
-  color: var(--console-status-warn);
+  color: var(--console-status-warn-text);
   background: color-mix(in srgb, var(--console-status-warn) 18%, transparent);
 }
 [data-bigpicture] .console-dashboard-row.console-dashboard-agents__call { --agents-notice-w: calc(var(--bp-u) * 2.8); }
@@ -504,12 +506,14 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 [data-bigpicture] .console-dashboard-delegation__id { font-size: calc(var(--bp-u) * 1.05); }
 [data-bigpicture] .console-dashboard-delegation__note { display: none; }
 
-/* Legend swatches, shared by the charts and the utilization grid. */
+/* Legend swatches, shared by the charts and the utilization grid.
+   The label takes the TEXT tier and the swatch keeps the ICON tier: the square is a shape and wants
+   the saturated value, the word beside it has to clear the body-copy floor. They diverge for warn. */
 .console-dashboard-legend::before { content: ""; display: inline-block; width: 0.6em; height: 0.6em; border-radius: 2px; margin-right: 0.3em; vertical-align: middle; }
-.console-dashboard-legend--hit { color: var(--console-status-ok); } .console-dashboard-legend--hit::before { background: var(--console-status-ok); }
-.console-dashboard-legend--miss { color: var(--console-status-warn); } .console-dashboard-legend--miss::before { background: var(--console-status-warn); }
+.console-dashboard-legend--hit { color: var(--console-status-ok-text); } .console-dashboard-legend--hit::before { background: var(--console-status-ok); }
+.console-dashboard-legend--miss { color: var(--console-status-warn-text); } .console-dashboard-legend--miss::before { background: var(--console-status-warn); }
 .console-dashboard-legend--p50 { color: var(--console-status-running); } .console-dashboard-legend--p50::before { background: var(--console-status-running); }
-.console-dashboard-legend--p95 { color: var(--console-status-warn); } .console-dashboard-legend--p95::before { background: var(--console-status-warn); }
+.console-dashboard-legend--p95 { color: var(--console-status-warn-text); } .console-dashboard-legend--p95::before { background: var(--console-status-warn); }
 .console-dashboard-legend--p99 { color: var(--console-status-danger); } .console-dashboard-legend--p99::before { background: var(--console-status-danger); }
 .console-dashboard-legend--queued { color: var(--console-status-queued); } .console-dashboard-legend--queued::before { background: var(--console-status-queued); }
 .console-dashboard-tile__note .console-dashboard-legend { margin-left: 0.6rem; }
@@ -712,7 +716,7 @@ a.console-dashboard-row { text-decoration: none; color: inherit; cursor: pointer
 a.console-dashboard-row:hover { border-color: var(--console-status-running); background: var(--pf-t--global--background--color--primary--default); }
 a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; color: var(--console-status-running); font-size: 0.85em; }
 .console-dashboard-row__wscache { display: flex; gap: 0.5rem; font-size: 0.68rem; }
-.console-dashboard-row__wscache [data-cache="hit"] { color: var(--console-status-ok); } .console-dashboard-row__wscache [data-cache="miss"] { color: var(--console-status-warn); } .console-dashboard-row__wscache [data-cache="err"] { color: var(--console-status-danger); }
+.console-dashboard-row__wscache [data-cache="hit"] { color: var(--console-status-ok-text); } .console-dashboard-row__wscache [data-cache="miss"] { color: var(--console-status-warn-text); } .console-dashboard-row__wscache [data-cache="err"] { color: var(--console-status-danger-text); }
 
 /* A declared secret provider, shown as its initial in a square monospaced slot. Square and
    flush-cornered on purpose: a circle here would read as a person's avatar, and the thing
@@ -744,9 +748,9 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 /* Shared-service run state, colored by state (normal case, not all-caps). */
 .console-dashboard-service__meta { display: inline-flex; align-items: baseline; gap: 0.35rem; }
 .console-dashboard-service__state { font-weight: 600; }
-.console-dashboard-service__state[data-state="running"] { color: var(--console-status-ok); }
-.console-dashboard-service__state[data-state="starting"] { color: var(--console-status-warn); }
-.console-dashboard-service__state[data-state="failed"] { color: var(--console-status-danger); }
+.console-dashboard-service__state[data-state="running"] { color: var(--console-status-ok-text); }
+.console-dashboard-service__state[data-state="starting"] { color: var(--console-status-warn-text); }
+.console-dashboard-service__state[data-state="failed"] { color: var(--console-status-danger-text); }
 .console-dashboard-service__state[data-state="idle"] { color: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-row__empty { font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle); margin: 0.2rem 0 0; }
 

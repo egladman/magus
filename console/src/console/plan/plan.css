@@ -70,7 +70,7 @@
 .console-plan-note {
   margin: 0;
   font-size: 0.75rem;
-  color: var(--console-status-warn);
+  color: var(--console-status-warn-text);
 }
 /* The target override is the only thing after the summary now, so it takes the free space and sits
    right on its own. */
@@ -157,7 +157,7 @@
    survives with no color at all. */
 .console-plan-list__warn,
 .console-plan-list__age[data-stale] {
-  color: var(--console-status-warn);
+  color: var(--console-status-warn-text);
 }
 .console-plan-list__warn {
   flex: 0 0 auto;

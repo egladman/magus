@@ -937,7 +937,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-sidebar:not([data-expanded]) #console-sidebar-pulse { grid-template-columns: 1fr; }
 #console-sidebar:not([data-expanded]) #console-sidebar-pulse .pf-v6-c-nav__link-icon { display: none; }
 #console-sidebar:not([data-expanded]) #console-sidebar-pulse[data-state="running"] { color: var(--console-status-running); }
-#console-sidebar:not([data-expanded]) #console-sidebar-pulse[data-state="queued"] { color: var(--console-status-warn); }
+#console-sidebar:not([data-expanded]) #console-sidebar-pulse[data-state="queued"] { color: var(--console-status-warn-text); }
 #console-sidebar #console-sidebar-pulse .pf-v6-c-nav__link-icon {
   /* min-inline-size:0 because PF gives a nav link's icon slot a min-width sized for a real glyph
      (~19px); a min-width outranks width, so without this the dot renders as a pill, not a circle. */
@@ -1287,7 +1287,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-shell-signin__confirm:disabled { cursor: not-allowed; }
 /* An address should always have resolved by the time this screen opens; when it has not, say so in a
    different voice than a host that is present. */
-.console-shell-signin__value[data-anomaly] { color: var(--console-status-warn); }
+.console-shell-signin__value[data-anomaly] { color: var(--console-status-warn-text); }
 /* The remembered pick, marked but never applied - a scope nobody chose is the failure this screen
    exists to prevent, so this is a hint about where the answer starts, not a decision already taken. */
 .console-shell-signin__choice[data-suggested] .pf-v6-c-menu__item-text::after {
