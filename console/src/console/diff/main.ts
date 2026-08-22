@@ -256,6 +256,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // real origin and the showcase would start writing a stranger's review session.
   const demo = wantsDemo(parseHash());
 
+  // The shell's 48rem inversion. Both width-dependent defaults on this surface key off it: the file
+  // index below, and the view mode in the state literal.
+  const narrow = window.matchMedia("(max-width: 47.999rem)");
+
   const state: State = {
     changeset: { primary: [], generated: [] },
     files: [],
@@ -265,7 +269,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
     hunkOrdinalByRow: new Int32Array(),
     fileRows: [],
     fileOf: [],
-    mode: modeCell.get() ?? "unified",
+    // Unified on a phone whatever the reader last picked on a desktop. Split halves an already
+    // narrow pane into two columns that each spend ~7ch on gutters and markers before any code, and
+    // the preference is NOT overwritten here - widen the window and split comes back.
+    mode: narrow.matches ? "unified" : (modeCell.get() ?? "unified"),
     cursor: -1,
     session: null,
     viewed: new Set(),
@@ -411,7 +418,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   main.append(toolbar, context, rail, viewport, overview, empty);
   root.append(sidebar, reopenBtn, main);
-  applySidebar(sidebarCell.get() ?? false);
+  // Below the shell's 48rem inversion the index starts COLLAPSED, whatever is stored. Its column
+  // floor is 180px, so on a 375px phone it took 48% of the screen and left the hunk stream 194px to
+  // render 1163px of content. The stored preference is deliberately NOT consulted here: it is
+  // overwhelmingly set on a desktop, and honouring an "open" from there is exactly how the 48%
+  // sidebar comes back. Opening it on a phone still works and lasts the session, which is the same
+  // per-session treatment the log viewer's run browser gives its own index (logs/runtree.ts).
+  // JS-driven rather than a media query because the collapse is expressed with the hidden attribute.
+  applySidebar(narrow.matches ? true : sidebarCell.get());
   host.append(root);
   root.dataset.phase = "loading";
 
