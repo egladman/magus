@@ -145,6 +145,10 @@ export function chevron(): SVGElement {
 interface NodeSpec {
   label: string;
   count?: number; // a child count badge (branches)
+  // What count is counting - a project's badge counts targets, a target's counts runs, and a
+  // bare number reads the same at either depth. Turns the badge's title/aria-label into "N
+  // targets" / "N runs" without touching the compact digit the tree itself shows.
+  countUnit?: string;
   status?: "pass" | "fail"; // a leaf's outcome dot
   title?: string;
   children?: NodeSpec[];
@@ -203,6 +207,11 @@ function makeNode(
     const b = document.createElement("span");
     b.className = "pf-v6-c-badge pf-m-read";
     b.textContent = String(spec.count);
+    if (spec.countUnit) {
+      const label = spec.count + " " + spec.countUnit + (spec.count === 1 ? "" : "s");
+      b.title = label;
+      b.setAttribute("aria-label", label);
+    }
     badge.append(b);
     container.append(badge);
   }
@@ -280,6 +289,7 @@ export function renderRunTree(
       targetSpecs.push({
         label: tgt,
         count: list.length,
+        countUnit: "run",
         children: list.map((r) => ({
           label: relTime(r.timestamp_ms, now),
           status: r.failed ? "fail" : "pass",
@@ -296,7 +306,12 @@ export function renderRunTree(
         })),
       });
     }
-    projectSpecs.push({ label: proj, count: targetSpecs.length, children: targetSpecs });
+    projectSpecs.push({
+      label: proj,
+      count: targetSpecs.length,
+      countUnit: "target",
+      children: targetSpecs,
+    });
   }
 
   const tree = document.createElement("div");
