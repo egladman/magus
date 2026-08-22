@@ -515,9 +515,17 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 .console-dashboard-legend::before { content: ""; display: inline-block; width: 0.6em; height: 0.6em; border-radius: 2px; margin-right: 0.3em; vertical-align: middle; }
 .console-dashboard-legend--hit { color: var(--console-status-ok-text); } .console-dashboard-legend--hit::before { background: var(--console-status-ok); }
 .console-dashboard-legend--miss { color: var(--console-status-warn-text); } .console-dashboard-legend--miss::before { background: var(--console-status-warn); }
-.console-dashboard-legend--p50 { color: var(--console-status-running); } .console-dashboard-legend--p50::before { background: var(--console-status-running); }
-.console-dashboard-legend--p95 { color: var(--console-status-warn-text); } .console-dashboard-legend--p95::before { background: var(--console-status-warn); }
-.console-dashboard-legend--p99 { color: var(--console-status-danger); } .console-dashboard-legend--p99::before { background: var(--console-status-danger); }
+/* Rule swatches, not filled squares, for the three chart LINES they stand for - see the gantt's
+   dashed-leader swatch for the same reasoning. Solid/dashed/dotted mirrors the chart's own
+   line-dash pattern (latency.ts), so the legend and the plot agree on more than hue. */
+.console-dashboard-legend--p50::before,
+.console-dashboard-legend--p95::before,
+.console-dashboard-legend--p99::before {
+  width: 1.1em; height: 0; border-radius: 0; background: none;
+}
+.console-dashboard-legend--p50 { color: var(--console-status-running); } .console-dashboard-legend--p50::before { border-top: 2px solid var(--console-status-running); }
+.console-dashboard-legend--p95 { color: var(--console-status-warn-text); } .console-dashboard-legend--p95::before { border-top: 2px dashed var(--console-status-warn); }
+.console-dashboard-legend--p99 { color: var(--console-status-danger); } .console-dashboard-legend--p99::before { border-top: 2px dotted var(--console-status-danger); }
 .console-dashboard-legend--queued { color: var(--console-status-queued); } .console-dashboard-legend--queued::before { background: var(--console-status-queued); }
 .console-dashboard-tile__note .console-dashboard-legend { margin-left: 0.6rem; }
 

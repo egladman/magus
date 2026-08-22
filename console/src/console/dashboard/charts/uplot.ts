@@ -57,6 +57,12 @@ export interface SeriesSpec {
   colorVar: string;
   fillVar?: string;
   width?: number;
+  // A canvas line-dash pattern (uPlot passes it straight to CanvasRenderingContext2D.setLineDash).
+  // Hue alone does not survive greyscale or colorblind simulation, and several charts here plot
+  // more than one same-purpose series (percentiles, comparable rates) with no other channel
+  // telling them apart - see the gantt's dashed "wait" leader for the same reasoning applied to
+  // an SVG stroke instead of a chart line.
+  dash?: number[];
 }
 
 export interface ChartSpec {
@@ -113,6 +119,7 @@ export class TimeChart {
           stroke: cssVar(s.colorVar),
           fill: s.fillVar ? cssVar(s.fillVar) : undefined,
           width: s.width ?? 1.5,
+          dash: s.dash,
           points: { show: false },
         })),
       ],
