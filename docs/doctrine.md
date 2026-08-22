@@ -53,11 +53,11 @@ account for is a defect in the same class as a wrong answer.
 
 magus could automate each row below, and does not.
 
-| stays manual                | because                                                                                                      |
-| --------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| stays manual                | because                                                                                                                                               |
+| --------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------------- |
 | disposing an agent request  | an event that means "blocked on input" or "blocked on approval" exists to reach a person; answering it for them removes the person it exists to reach |
-| applying suggested changes  | a suggestion lands only when a person accepts it                                                             |
-| writing the knowledge store | notes are human-authored by construction: there is no author field to spoof, because authorship rides version control |
+| applying suggested changes  | a suggestion lands only when a person accepts it                                                                                                      |
+| writing the knowledge store | notes are human-authored by construction: there is no author field to spoof, because authorship rides version control                                 |
 
 All three would be cheap to build. Each removes the person at the point where
 the mechanism needs their judgment, so each stays out.
