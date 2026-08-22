@@ -81,12 +81,13 @@ export function utilizationTile(): Tile {
 
   // utilColor maps a sample to a fill + opacity ramp (a hand-rolled linear scale, no
   // d3-scale dep). A queued sample (queued > 0) switches to the queued color.
-  // An unmeasured tick gets the muted color, NOT the idle ramp: a square nobody measured
-  // must not read as a square that was idle. Both are faint, so they are distinguished by
-  // hue and by the tooltip rather than by opacity alone.
+  // An unmeasured tick gets the subtle neutral, NOT the idle ramp: a square nobody measured
+  // must not read as a square that was idle.
+  // The tooltip is what actually carries that distinction. At 0.1 against idle's 0.06 the two
+  // are a few percent of alpha apart, so neither opacity nor hue separates them on their own.
   function utilColor(s: SampleView): { fill: string; opacity: number } {
     if (s.running === null || s.queued === null) {
-      return { fill: cssVar("--console-fg-muted"), opacity: 0.1 };
+      return { fill: cssVar("--pf-t--global--icon--color--subtle"), opacity: 0.1 };
     }
     let u: number;
     if (s.capacity !== null && s.capacity > 0) u = Math.min(1, s.running / s.capacity);
