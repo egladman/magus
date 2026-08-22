@@ -397,7 +397,10 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// The environment supplies the DEFAULT, so an explicit --unit still wins: a shell
 	// that exported the variable for a whole session must not outrank a per-call
 	// override. Same shape `magus run` uses for MAGUS_SHARD.
-	envDefault(fset, flagHookUnit, os.Getenv(envHookUnit))
+	// trail.UnitFromEnv, never a raw Getenv: the journal producers read the variable
+	// through the same helper, and two readers with different trimming rules split one
+	// exported unit into a journal identity and an unguarded write.
+	envDefault(fset, flagHookUnit, trail.UnitFromEnv())
 	// The whole display set, not a hand-rolled -o: this command used to define
 	// its own output flag and so silently lacked -s, -q, -v and --tee. That gap
 	// is the reason for the rule - a flag accepted on most commands teaches
@@ -757,7 +760,7 @@ func resolveSymlinks(path string) string {
 // and a worker that only inherits an environment exports the variable.
 const (
 	flagHookUnit = "unit"
-	envHookUnit  = "MAGUS_UNIT"
+	envHookUnit  = trail.EnvUnit
 )
 
 // fleetGrade is what the delegation ledger has to say about one write. Separate from

@@ -436,7 +436,8 @@ func UnitFromEnv() string {
 			// The value itself is deliberately not logged: it failed the charset check that
 			// makes a unit safe to carry unredacted, so it is the one string here that could
 			// be anything at all.
-			slog.Warn("magus: ignoring MAGUS_UNIT and recording no unit for this process: a unit id is letters, digits and -_./: only, and never empty",
+			slog.WarnContext(context.Background(),
+				"magus: ignoring MAGUS_UNIT and recording no unit for this process: a unit id is letters, digits and -_./: only, and never empty",
 				slog.Int("length", len(id)),
 				slog.Int("max_length", MaxUnitIDLen))
 		})
