@@ -88,6 +88,17 @@ composition{{if .Full}}. A worker hand-sequencing lint, format, and test is re-d
 order the magusfile already owns, and the step it forgets fails silently by
 omission{{end}}.
 
+Decide each unit's validation PLANE with its target. A worker environment that
+cannot execute magus at all - an isolated tree with no usable binary, or a
+guard that routes raw language tools back to targets it cannot run - cannot
+validate anything it writes. Mark that unit's validation ROOT-DEFERRED in the
+ledger before spawning: the worker writes the tests, stops at the static checks
+its environment does run, and says so; the root executes the unit's target
+centrally before accepting{{if .Full}}. Leaving each worker to discover the wall
+spends its budget on the discovery, once per worker, and its report then reads
+"done" with nothing executed - which the acceptance-evidence rule above already
+refuses to accept{{end}}.
+
 A worker may delegate again. What it may not do is delegate without shrinking the
 problem{{if .Full}} - that is the shape that does not terminate, and the cost people
 attribute to "multi-agent" is almost always this{{end}}. Three rules give it a
@@ -213,6 +224,18 @@ Every worker prompt must include its row, relevant graph evidence, and the globa
 spawn rule. Require the worker to preserve unrelated changes, stay inside owned
 paths, avoid generated outputs, run only its assigned Magus target, and return
 changed paths, validation evidence, descendants it created, and unresolved risks.
+
+The checkpoint you recorded is what you HANDED the unit; a worker's first
+required act is reporting the base it actually LANDED ON, because hosts that
+isolate workers in per-worker trees routinely branch them from an older
+revision than the tree you partitioned{{if .Full}} - and every diff-since-checkpoint
+in Integrate and verify silently lies when the recorded base is not the real
+one{{end}}. When the bases differ, either respawn from the right revision or have
+the worker materialize the files it builds on from the intended revision
+(`git show <rev>:<path> > <path>`, verifying each blob against
+`git rev-parse <rev>:<path>`) and record the intended revision as the row's
+checkpoint{{if .Full}}. A worker that edits stale content without noticing
+reports clean validation against a tree nobody will ever merge{{end}}.
 Also name any fact that will READ as drift to the worker's snapshot - a project
 deleted this session, a rename, an index regenerated underneath it - never a
 generic "expect drift" line{{if .Full}}, which only primes the worker to dismiss real

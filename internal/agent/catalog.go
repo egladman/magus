@@ -35,7 +35,11 @@ import (
 // 39: `magus graph verify` is gone; the installed copies are graded by `magus
 // doctor`'s agent skills check, which every skill that named the old verb now
 // points at.
-const SkillVersion = 39
+// 40: magus-delegate-multi-agent learns two delegation failure modes observed
+// in the field: a worker's actual base can differ from the handed checkpoint
+// (verify it, or materialize and re-record), and a unit whose environment
+// cannot execute magus gets ROOT-DEFERRED validation up front.
+const SkillVersion = 40
 
 const skillLicense = "GPL-3.0-or-later"
 
