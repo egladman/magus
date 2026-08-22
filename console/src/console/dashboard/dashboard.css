@@ -134,7 +134,10 @@ body[data-dash-native] { margin: 0; }
 #dash-panels > * { grid-column: 1 / -1; }
 #dash-panels > [data-half] { grid-column: span 1; }
 
-@media (min-width: 761px) {
+/* 48rem/47.999rem (768px), not 761/760: that pair was a clean complement of each other but not
+   of the shell's own phone breakpoint (console.css), so a window between 761 and 767px had the
+   shell already in phone chrome while the board still rendered its multi-column grid. */
+@media (min-width: 48rem) {
   /* Keep the live-work story wide; pair supporting diagnostics. */
   #dash-panels > [data-card="pool"],
   #dash-panels > [data-card="cache-local"],
@@ -195,7 +198,7 @@ body[data-dash-native] { margin: 0; }
   :root:not([data-bigpicture]) #dash-panels > [data-card="agents"] .console-dashboard-agents__key { display: none; }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 47.999rem) {
   /* minmax(0, 1fr), NOT 1fr: a plain 1fr column is min-content-sized, so a tile with wide
      unshrinkable content (a chart/gantt/table) blows the single column past the viewport. */
   #dash-panels { grid-template-columns: minmax(0, 1fr); }
