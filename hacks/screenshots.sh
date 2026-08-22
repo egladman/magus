@@ -28,7 +28,6 @@ cd "$repo_root"
 
 out_dir=assets/screenshots
 port=${MAGUS_SHOT_PORT:-8231}
-scale=2
 
 find_chrome() {
   local c
@@ -44,17 +43,29 @@ find_chrome() {
   return 1
 }
 
-# name|path under the served tree|viewport
+# name|path under the served tree|width|height|scale|mobile(0|1)
 # The #demo fragment is what each surface reads to enter the daemon-free showcase, so
 # these need no daemon and no workspace.
 # Only what the site actually shows. Adding a surface here is the whole cost of adding a
 # screenshot; committing one nothing references is just weight in the repo.
+#
+# The -mobile shots are a real phone: 375x812 at 3x with mobile emulation ON, so they carry BOTH
+# things that make the console different there - the layout below the shell's 48rem inversion (the
+# navigation rail gives way to the launcher grid, the diff's file index collapses to a reopen rail,
+# the log waterfall holds its drawn width and scrolls) AND the touch-target sizing, which is keyed
+# on (pointer: coarse) rather than on width and so does not follow from a narrow window alone.
+#
+# Both of those need CDP device emulation; the plain --screenshot flag form cannot express either.
+# hacks/screenshot.mjs is that driver and explains the two limits it exists to get past.
 shots=(
-  "console-dashboard|console/dashboard/#demo|1280,820"
-  "console-graph|console/graph/#demo|1280,820"
-  "console-logs|console/logs/#demo|1280,820"
-  "console-activity|console/activity/#demo|1280,820"
-  "console-diff|console/diff/#demo|1280,820"
+  "console-dashboard|console/dashboard/#demo|1280|820|2|0"
+  "console-graph|console/graph/#demo|1280|820|2|0"
+  "console-logs|console/logs/#demo|1280|820|2|0"
+  "console-activity|console/activity/#demo|1280|820|2|0"
+  "console-diff|console/diff/#demo|1280|820|2|0"
+  "console-diff-mobile|console/diff/#demo|375|812|3|1"
+  "console-logs-mobile|console/logs/#demo|375|812|3|1"
+  "console-dashboard-mobile|console/dashboard/#demo|375|812|3|1"
 )
 
 want=${1:-}
@@ -85,21 +96,12 @@ for _ in $(seq 1 40); do
 done
 
 for shot in "${shots[@]}"; do
-  IFS='|' read -r name path size <<<"$shot"
+  IFS='|' read -r name path w h scale mobile <<<"$shot"
   [ -n "$want" ] && [ "$want" != "$name" ] && continue
-  echo "==> $name  ($size @${scale}x)"
-  # --force-prefers-reduced-motion is load-bearing, not a preference: a surface with a
-  # perpetual animation loop (the graph's motion layer) never lets virtual time complete,
-  # because --virtual-time-budget must simulate every queued frame. Every surface gates
-  # its loops on prefers-reduced-motion, so forcing it is what makes the budget finite.
-  "$chrome" \
-    --headless=new --disable-gpu --no-sandbox --hide-scrollbars \
-    --force-prefers-reduced-motion \
-    --force-device-scale-factor="$scale" \
-    --window-size="$size" \
-    --virtual-time-budget=8000 \
-    --screenshot="$out_dir/$name.png" \
-    "http://127.0.0.1:$port/$path" >/dev/null 2>&1
+  label=$([ "$mobile" = 1 ] && echo "mobile" || echo "desktop")
+  echo "==> $name  (${w}x${h} @${scale}x, $label)"
+  node "$repo_root/hacks/screenshot.mjs" \
+    "$chrome" "http://127.0.0.1:$port/$path" "$out_dir/$name.png" "$w" "$h" "$scale" "$mobile"
   [ -s "$out_dir/$name.png" ] || { echo "screenshots: $name produced nothing" >&2; exit 1; }
 done
 

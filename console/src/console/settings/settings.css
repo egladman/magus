@@ -41,8 +41,12 @@
 .console-settings-tabs .pf-v6-c-tabs__item {
   margin-bottom: -1px;
 }
-.console-settings-tabs .pf-v6-c-tabs__link {
-  min-height: 2.5rem;
+/* The default control tier rather than a bare 2.5rem. The 40px it used to carry was the only
+   instance of that number anywhere in the console, and it stacked under the shell's own 44px tab
+   strip - two tab strips, neither on a declared step. PF's untouched tabs link is 29px, which is too
+   quiet for the surface's primary navigation, so this takes the default tier instead of the compact one. */
+.console-settings-tabs[data-control-size] .pf-v6-c-tabs__link {
+  min-block-size: var(--console-control-block-size);
   padding-inline: var(--pf-t--global--spacer--md);
   color: var(--pf-t--global--text--color--subtle);
 }
@@ -104,8 +108,11 @@
   font-size: var(--pf-t--global--font--size--body--sm);
   color: var(--pf-t--global--text--color--subtle);
 }
-.console-settings-actionbar__status[data-kind="ok"] { color: var(--console-status-ok); }
-.console-settings-actionbar__status[data-kind="error"] { color: var(--console-status-queued); }
+/* A live region carrying import failures and clipboard errors, so the text tier. --console-status-queued
+   is the SATURATION red and was reading 4.19:1 in dark here; danger-text is 6.89:1 and is the right
+   semantic besides - this reports a failure, not a full pool. */
+.console-settings-actionbar__status[data-kind="ok"] { color: var(--console-status-ok-text); }
+.console-settings-actionbar__status[data-kind="error"] { color: var(--console-status-danger-text); }
 
 /* --- Pending diff: the readable before -> after list ---------------------------------------------
  * One row per changed field, hidden entirely when the draft matches the baseline. The before/after
@@ -133,10 +140,13 @@
   font-weight: var(--pf-t--global--font--weight--heading--bold);
   color: var(--pf-t--global--text--color--regular);
 }
-/* The view toggle sits quietly at the end of the header; compact so it does not tower over the heading. */
+/* The view toggle sits quietly at the end of the header; compact so it does not tower over the heading.
+   Same control as the plan surface's source switch, so it takes its height from the same token rather
+   than from a second copy of the same padding guess. */
 .console-settings-diff__view { margin-left: auto; }
 .console-settings-diff__view .pf-v6-c-toggle-group__button {
-  padding-block: 0.15rem;
+  block-size: var(--console-control-block-size);
+  padding-block: 0;
   padding-inline: 0.5rem;
   font-size: var(--pf-t--global--font--size--body--sm);
 }
@@ -313,7 +323,11 @@
   background: var(--pf-t--global--background--color--secondary--default);
 }
 .console-settings-memory__cursorbody { display: flex; align-items: flex-end; gap: var(--pf-t--global--spacer--sm); }
-.console-settings-memory__cursorbody textarea { flex: 1; resize: vertical; }
+/* flex on the WRAPPER, resize on the control. PF's FormControl is a span around the textarea, so the
+   wrapper is the flex item here - `flex: 1` on the textarea inside it is inert and the field
+   collapses to its intrinsic width beside the Save button. */
+.console-settings-memory__cursorfield { flex: 1; }
+.console-settings-memory__cursorbody textarea { resize: vertical; }
 .console-settings-memory__title {
   margin: 0;
   font-size: var(--pf-t--global--font--size--body--default);
@@ -371,7 +385,10 @@
 .console-settings-memory__label { font-size: var(--pf-t--global--font--size--body--sm); color: var(--pf-t--global--text--color--subtle); }
 .console-settings-memory__refs { display: flex; flex-direction: column; gap: 0.3rem; }
 .console-settings-memory__refrow { display: flex; gap: var(--pf-t--global--spacer--sm); align-items: center; }
-.console-settings-memory__refrow input { flex: 1; }
+/* The target field grows, the kind select does not - so this is on the target's own wrapper rather
+   than on every .pf-v6-c-form-control in the row. Same wrapper-is-the-flex-item reason as the
+   cursor field above. */
+.console-settings-memory__reftarget { flex: 1; }
 .console-settings-memory__editactions { display: flex; gap: var(--pf-t--global--spacer--sm); }
 
 /* --- About: source/license/feedback, the quiet section at the foot of the page ----------------------

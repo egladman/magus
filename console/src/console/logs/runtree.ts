@@ -145,6 +145,10 @@ export function chevron(): SVGElement {
 interface NodeSpec {
   label: string;
   count?: number; // a child count badge (branches)
+  // What count is counting - a project's badge counts targets, a target's counts runs, and a
+  // bare number reads the same at either depth. Turns the badge's title/aria-label into "N
+  // targets" / "N runs" without touching the compact digit the tree itself shows.
+  countUnit?: string;
   status?: "pass" | "fail"; // a leaf's outcome dot
   title?: string;
   children?: NodeSpec[];
@@ -203,6 +207,11 @@ function makeNode(
     const b = document.createElement("span");
     b.className = "pf-v6-c-badge pf-m-read";
     b.textContent = String(spec.count);
+    if (spec.countUnit) {
+      const label = spec.count + " " + spec.countUnit + (spec.count === 1 ? "" : "s");
+      b.title = label;
+      b.setAttribute("aria-label", label);
+    }
     badge.append(b);
     container.append(badge);
   }
@@ -280,6 +289,7 @@ export function renderRunTree(
       targetSpecs.push({
         label: tgt,
         count: list.length,
+        countUnit: "run",
         children: list.map((r) => ({
           label: relTime(r.timestamp_ms, now),
           status: r.failed ? "fail" : "pass",
@@ -296,7 +306,12 @@ export function renderRunTree(
         })),
       });
     }
-    projectSpecs.push({ label: proj, count: targetSpecs.length, children: targetSpecs });
+    projectSpecs.push({
+      label: proj,
+      count: targetSpecs.length,
+      countUnit: "target",
+      children: targetSpecs,
+    });
   }
 
   const tree = document.createElement("div");
@@ -356,8 +371,20 @@ function iconButton(id: string, label: string, title: string, paths: string[]): 
 // the .console-log-runs styles); only what fills treeBox differs.
 export interface CollapsiblePanel {
   head: HTMLElement; // the header row, so a caller can inject extra chrome (e.g. a count)
+  // The BODY's header, the index header's opposite number across the splitter. It exists so the two
+  // rules land on one line: the index header ended in a hairline that stopped dead at the splitter
+  // with nothing continuing it, which read as a line drawn halfway across the surface (measured at
+  // 8.2px above where the body's first row ended). bodyTitle is the text in it - callers write what
+  // the body is currently showing, so the row earns its height instead of being spacing in disguise.
+  bodyHead: HTMLElement;
+  bodyTitle: HTMLElement;
   treeBox: HTMLElement; // the caller (re)renders its tree into this
   refreshBtn: HTMLButtonElement;
+  // The slim reopen rail shown while the panel is auto-collapsed on a phone. head's own chrome
+  // (including anything a caller injected into it, like a count) is hidden along with the rest
+  // of the aside in that state - this is the one element still on screen, so it is the caller's
+  // only way to keep a count reachable without the tree.
+  reopen: HTMLButtonElement;
   // applyDefault sets the open state after a (re)load from whether the panel now has content: an
   // empty panel collapses (to the rail, or fully hidden when hideWhenEmpty), a populated one opens -
   // except on a phone, where an open aside would crush the content pane, so it starts collapsed to
@@ -373,6 +400,7 @@ export function mountCollapsiblePanel(opts: {
   scroll: HTMLElement;
   title: string;
   label: string;
+  bodyTitle: string; // the body header's resting text, before a caller names what is on screen
   onRefresh: () => void;
   hideWhenEmpty: boolean;
 }): CollapsiblePanel | null {
@@ -408,7 +436,19 @@ export function mountCollapsiblePanel(opts: {
   reopen.classList.add("console-log-runs__reopen");
   reopen.hidden = true;
 
-  split.append(aside, reopen, opts.scroll);
+  // The body column: a header row over the scroller, so the scroller keeps scrolling under a header
+  // that stays put. scroll cannot simply gain a border-top - it scrolls, and the line would go with it.
+  const body = document.createElement("div");
+  body.className = "console-log-body";
+  const bodyHead = document.createElement("div");
+  bodyHead.className = "console-log-body__head";
+  const bodyTitle = document.createElement("span");
+  bodyTitle.className = "console-log-body__title";
+  bodyTitle.textContent = opts.bodyTitle;
+  bodyHead.append(bodyTitle);
+  body.append(bodyHead, opts.scroll);
+
+  split.append(aside, reopen, body);
 
   // The open state is JS-driven (the hidden attribute), so the phone default lives here (matchMedia)
   // rather than duplicated into logs.css - the same breakpoint the app shell uses (console.css).
@@ -427,8 +467,11 @@ export function mountCollapsiblePanel(opts: {
 
   return {
     head,
+    bodyHead,
+    bodyTitle,
     treeBox,
     refreshBtn,
+    reopen,
     applyDefault: (hasContent: boolean): void => {
       if (!hasContent) {
         apply(opts.hideWhenEmpty ? "hidden" : "closed");
@@ -449,6 +492,7 @@ export function initRunBrowser(deps: RunBrowserDeps): { refresh: () => void } {
     scroll: deps.scroll,
     title: "Recent runs",
     label: "Recent runs",
+    bodyTitle: "Output",
     onRefresh: () => {
       void load();
     },

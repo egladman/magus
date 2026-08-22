@@ -87,6 +87,9 @@ export class SortableTable<T> {
   private sortKey: string;
   private sortDir: 1 | -1;
   private empty: HTMLElement;
+  private emptyText: string;
+  private wrap: HTMLElement;
+  private unresolved: string | null = null;
 
   constructor(cols: Column<T>[], opts: { sortKey?: string; emptyText?: string } = {}) {
     this.cols = cols;
@@ -94,6 +97,7 @@ export class SortableTable<T> {
     this.sortDir = 1;
 
     const wrap = h("div", "console-dashboard-table__wrap");
+    this.wrap = wrap;
     const table = h("table", "console-dashboard-table");
     const thead = h("thead");
     const tr = h("tr");
@@ -112,13 +116,35 @@ export class SortableTable<T> {
     table.append(thead, this.tbody);
     wrap.append(table);
 
-    this.empty = h("p", "console-dashboard-row__empty", opts.emptyText ?? "No data yet.");
+    this.emptyText = opts.emptyText ?? "No data yet.";
+    this.empty = h("p", "console-dashboard-row__empty", this.emptyText);
     this.empty.hidden = true;
 
     const host = h("div");
     host.append(wrap, this.empty);
     this.el = host;
     this.syncHeaders();
+  }
+
+  // setUnresolved swaps the empty line's copy for a reason the table has no rows to show, and hides
+  // the TABLE (header and body both) while it stands. Without it a table that never received data
+  // renders as a bare header - a shape that reads as "measured, and there was nothing", which is
+  // the one claim it cannot make. Pass null once data arrives.
+  setUnresolved(reason: string | null): void {
+    // Idempotent: every tile calls this on EVERY store frame, and the live status stream produces
+    // them continuously. Without this the null case re-sorts and rebuilds the whole tbody a second
+    // time per frame, on top of the setRows() that follows it.
+    if (reason === this.unresolved) return;
+    this.unresolved = reason;
+    if (reason === null) {
+      this.empty.textContent = this.emptyText;
+      this.wrap.hidden = false;
+      this.render();
+      return;
+    }
+    this.empty.textContent = reason;
+    this.empty.hidden = false;
+    this.wrap.hidden = true;
   }
 
   setRows(rows: T[]): void {
@@ -164,6 +190,8 @@ export class SortableTable<T> {
       }
       this.tbody.append(tr);
     }
-    this.empty.hidden = sorted.length > 0;
+    // A pending reason outranks the row count: rows arriving from an earlier poll must not turn the
+    // reason back into a header a reader would take as current.
+    this.empty.hidden = this.unresolved === null && sorted.length > 0;
   }
 }

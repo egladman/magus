@@ -130,16 +130,16 @@
   flex: 0 0 auto; font-family: var(--pf-t--global--font--family--mono); font-size: 0.7rem;
   color: var(--pf-t--global--text--color--subtle); font-variant-numeric: tabular-nums;
 }
-.console-notes-app__note-age[data-staleness="outrun"] { color: var(--console-status-warn); }
-.console-notes-app__note-age[data-staleness="petrified"] { color: var(--console-status-danger); font-weight: 700; }
+.console-notes-app__note-age[data-staleness="outrun"] { color: var(--console-status-warn-text); }
+.console-notes-app__note-age[data-staleness="petrified"] { color: var(--console-status-danger-text); font-weight: 700; }
 .console-notes-app__note-meta {
   display: flex; gap: 0.5rem; margin-top: 0.1rem;
   font-family: var(--pf-t--global--font--family--mono); font-size: 0.7rem;
   color: var(--pf-t--global--text--color--subtle);
   overflow: hidden; white-space: nowrap; text-overflow: ellipsis;
 }
-.console-notes-app__note-meta [data-health="drifted"] { color: var(--console-status-warn); }
-.console-notes-app__note-meta [data-health="dangling"] { color: var(--console-status-danger); }
+.console-notes-app__note-meta [data-health="drifted"] { color: var(--console-status-warn-text); }
+.console-notes-app__note-meta [data-health="dangling"] { color: var(--console-status-danger-text); }
 
 /* A store problem belongs in the list it describes, at one line, rather than stacked above it.
    A real PF Alert flattened to span the list edge to edge: the component keeps the severity
@@ -200,8 +200,8 @@
   font-family: var(--pf-t--global--font--family--mono); font-size: 0.7rem;
   color: var(--pf-t--global--text--color--subtle);
 }
-.console-notes-app__subtitle [data-staleness="outrun"] { color: var(--console-status-warn); }
-.console-notes-app__subtitle [data-staleness="petrified"] { color: var(--console-status-danger); }
+.console-notes-app__subtitle [data-staleness="outrun"] { color: var(--console-status-warn-text); }
+.console-notes-app__subtitle [data-staleness="petrified"] { color: var(--console-status-danger-text); }
 
 /* Rendered markdown, so normal wrapping: markdown's soft-break rule means a single newline
    inside a paragraph reflows, and renderMarkdown has already joined those lines. `pre-wrap`

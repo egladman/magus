@@ -932,6 +932,16 @@ export interface DashboardState {
   metrics: MetricsView | null;
   samples: SampleView[];
   insight: InsightView | null;
+  // Why the insight lenses have no data, or null when they do. A tile with `insight === null` cannot
+  // tell "the daemon has not answered yet" from "it answered and the window is empty", and the two
+  // want opposite copy: the first is unknown, the second is a measured absence.
+  // "Note" and not "Error": most of its values are not errors. It carries not-connected, reading,
+  // and failed alike - whatever the reason there is nothing to show. transport.ts owns every
+  // transition; nothing else writes it.
+  insightNote: string | null;
+  // When the insight lenses last actually answered (epoch ms), so the reader can tell a fresh
+  // read from a stale one without pressing Refresh to find out. null until the first success.
+  insightUpdatedAt: number | null;
   tools: ToolsView | null;
   // Agent traffic seen in the recent window (mapAgentActivity). null until the activity poll has
   // produced a frame, or when the daemon serves no trail.
@@ -959,6 +969,10 @@ export function initialState(): DashboardState {
     metrics: null,
     samples: [],
     insight: null,
+    // Not "Reading history..." - at construction no daemon is attached and nothing is reading.
+    // startInsight sets that once a poll actually begins.
+    insightNote: "Not connected.",
+    insightUpdatedAt: null,
     tools: null,
     agents: null,
     logLines: [],

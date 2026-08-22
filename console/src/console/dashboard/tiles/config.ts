@@ -4,7 +4,17 @@
 // an operator see what the daemon is set to do without dropping to the terminal.
 
 import type { DashboardState, ConfigView } from "../state";
-import { Card, h, type Tile } from "./card";
+import { Card, h, helpGlyph, type Tile } from "./card";
+
+// graphLink points a charm pill at the Graph Explorer's own deep-link grammar (kind:/project:/
+// relation:/id:/symbol:, the browser twin of `magus query` - see graph/main.ts's QUERY_FIELDS),
+// scoped to that charm's own node so its "uses" edges are one click from here instead of a
+// hand-typed query in a different surface.
+function graphLink(query: string): HTMLAnchorElement {
+  const a = document.createElement("a");
+  a.href = "../graph/#q=" + encodeURIComponent(query);
+  return a;
+}
 
 // Color a default charm by its EFFECT, mapped to a PatternFly Label color modifier: rw mutates the
 // tree (loud -> red), cd delivers a side effect (blue), gha shapes output (benign -> green). A custom
@@ -22,9 +32,11 @@ export function configTile(): Tile {
   const body = h("div", "console-dashboard-config__body");
   card.body.append(body);
 
-  function row(key: string, valueEl: HTMLElement): HTMLElement {
+  function row(key: string, valueEl: HTMLElement, why?: string): HTMLElement {
     const r = h("div", "console-dashboard-config__row");
-    r.append(h("span", "console-dashboard-config__key", key), valueEl);
+    const k = h("span", "console-dashboard-config__key", key);
+    if (why) k.append(helpGlyph(why, key));
+    r.append(k, valueEl);
     return r;
   }
 
@@ -34,7 +46,9 @@ export function configTile(): Tile {
     if (c.defaultCharms.length) {
       for (const ch of c.defaultCharms) {
         const color = charmColor(ch);
-        const p = h("span", "pf-v6-c-label pf-m-compact" + (color ? " pf-m-" + color : ""));
+        const p = graphLink("kind:charm " + ch);
+        p.className = "pf-v6-c-label pf-m-compact" + (color ? " pf-m-" + color : "");
+        p.title = "Open the graph explorer scoped to every use of the " + ch + " charm.";
         p.append(h("span", "pf-v6-c-label__content", ch));
         pills.append(p);
       }
@@ -42,7 +56,13 @@ export function configTile(): Tile {
       pills.append(h("span", "console-dashboard-config__value", "none"));
     }
     const rows = [
-      row("Default charms", pills),
+      row(
+        "Default charms",
+        pills,
+        "Applied to every target that does not declare its own: rw allows the run to modify the" +
+          " tree, cd delivers a side effect (a deploy or publish), gha shapes CI output. Click a" +
+          " charm to see everything that uses it in the graph explorer.",
+      ),
       row(
         "Concurrency",
         h(
@@ -50,8 +70,14 @@ export function configTile(): Tile {
           "console-dashboard-config__value",
           c.concurrency ? String(c.concurrency) : "auto",
         ),
+        "The most targets this daemon runs at once. auto sizes to the machine's CPU count.",
       ),
-      row("Sandbox", h("span", "console-dashboard-config__value", c.sandbox ? "on" : "off")),
+      row(
+        "Sandbox",
+        h("span", "console-dashboard-config__value", c.sandbox ? "on" : "off"),
+        "Whether target execution is confined to a sandbox that can restrict filesystem and" +
+          " network access beyond a target's own declared workspace.",
+      ),
     ];
     // The daemon's magus version lives here with the rest of the config, not as a stray number card.
     // Show the daemon version too only when it differs from the reported magus version.

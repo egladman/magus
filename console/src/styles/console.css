@@ -19,6 +19,9 @@
      breakpoint below). Anything positioning itself under the chrome reads THIS, not the row height, or
      it lands a row out on mobile. */
   --console-topchrome-h: var(--console-titlebar-h);
+  /* 2.2rem is 35.2px, which is shorter than the 44pt hit region Apple asks of a button, so the bar
+     itself is the reason its tray icons cannot meet it. Grown on a coarse pointer in the block at the
+     foot of this file, PAIRED with the tray-button sizing in overrides.css (which owns #console-statusbar). */
   --console-statusbar-h: 2.2rem;
   --console-refdrawer-w: 22rem;
   /* ZERO. The content used to be inset from the chrome by this much, which left a band of chrome
@@ -127,11 +130,22 @@ body[data-console-fill] {
   grid-template-rows: auto minmax(0, 1fr) auto;
   overflow: hidden;
 }
-body[data-console-fill] > header { flex: 0 0 auto; grid-column: 2; grid-row: 1; } /* the app bar keeps its natural height */
-body[data-console-fill] > main { grid-column: 2; grid-row: 2; }
+/* The frame spans the title row AND the content row, so the two are one box for painting purposes
+   (see index.html for why that matters). Inside it they stack as they did as grid rows: the bar at
+   its natural height, the outlet taking the rest. The status bar stays a body-level grid row - it is
+   chrome, it is what the frame casts DOWN onto, and putting it inside would make it cast on itself. */
+body[data-console-fill] > #console-frame {
+  grid-column: 2; grid-row: 1 / 3;
+  display: flex; flex-direction: column;
+  min-height: 0; overflow: hidden;
+}
+#console-frame > header { flex: 0 0 auto; } /* the app bar keeps its natural height */
 body[data-console-fill] > #console-sidebar { grid-column: 1; grid-row: 1 / -1; }
 body[data-console-fill] > footer { grid-column: 2; grid-row: 3; }
-body[data-console-fill] > main {
+/* Addressed by id rather than as `body[data-console-fill] > main`, which it no longer is now that the
+   frame is between them. The id keeps the same specificity that selector had against the
+   #console-outlet block further down, so which one wins each shared property is unchanged. */
+#console-outlet {
   flex: 1 1 auto;
   min-height: 0;            /* let the card shrink to fit rather than forcing a page scroll */
   overflow: hidden;
@@ -151,9 +165,9 @@ body[data-console-fill] > main {
 /* The app card stretches to fill the main region as a flex child - more robust than a
    percentage height against a flex parent, and it drops the apps' fixed heights + tall
    min-heights + Pico's section margin so short viewports still fit without a page scroll. */
-body[data-console-fill] > main > .console-graph-app,
-body[data-console-fill] > main > .console-notes-app,
-body[data-console-fill] > main > .console-render-panel {
+#console-outlet > .console-graph-app,
+#console-outlet > .console-notes-app,
+#console-outlet > .console-render-panel {
   flex: 1 1 auto;
   min-height: 0;
   height: auto;
@@ -301,7 +315,15 @@ body[data-console-fill] > main > .console-render-panel {
    of Cards, built in tileView). Center the prompt + its card grid within the pane. */
 #console-outlet div[data-pane-id]:has([data-pane-launcher]) { align-items: center; justify-content: center; }
 #console-outlet [data-pane-launcher] { margin: 0 0 0.75rem; color: var(--pf-t--global--text--color--subtle); text-align: center; }
-#console-outlet [data-pane-launcher] + .pf-v6-l-gallery { width: 100%; max-width: 26rem; padding: 0 1rem; }
+/* No max-width cap: that used to force PF's own responsive grid down to one narrow centered
+   column regardless of how wide the pane actually was, which is correct for a slim tiled pane but
+   wastes most of a wide one - a plain 2-pane split leaves this one nearly full width. Same
+   min-column value the home launcher already uses (:1127 below), so a split pane's picker and
+   the full-page one settle into the same rhythm instead of two different grids. */
+#console-outlet [data-pane-launcher] + .pf-v6-l-gallery {
+  width: 100%; padding: 0 1rem;
+  --pf-v6-l-gallery--GridTemplateColumns--min: 17rem;
+}
 /* PF cards ship no border; the home launcher cards add a hairline (console-launcher-card). The compact
    in-pane picker cards did not, so a split pane's surface picker looked flat and off-language. Match the
    hairline + hover here so the two launchers read the same. */
@@ -547,21 +569,23 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      chrome, not a page section, so zero both. Without this the border-box height collapses the
      content area to a ~2px sliver and the tabs render as a clipped, unreadable strip. */
   margin: 0; padding: 0;
-  /* ONE chrome surface. The title bar, the navigation rail and the status bar all take this same
-     recessive tone, so they read as a single frame wrapping the content down the left and along the
-     top and bottom - the shape Firefox uses - rather than as three bars meeting at corners. The
-     content is what steps forward out of it (see the outlet's card below); the frame stays back.
-     The border and the cast here face the CONTENT, not the rail: this edge is where the chrome ends,
-     so it is where the depth belongs. The cast is what makes a surface scrolling under the tab strip
-     pass beneath something rather than meet a flat seam. */
-  background: var(--console-chrome);
-  border-bottom: 1px solid var(--pf-t--global--border--color--default);
-  box-shadow: var(--pf-t--global--box-shadow--sm--bottom);
-  /* A soft cast DOWN over the content, so a surface scrolling under the bar passes beneath
-     something rather than meeting a flat seam. The hairline above stays: it is what holds the
-     edge crisp at rest, and the shadow only reads once there is content behind it. PF's
-     directional token rather than a hand-rolled rgba, so it tracks the theme like every other
-     elevation here. */
+  /* The CONTENT tone, not the chrome tone. A tab is contiguous with the page it shows - that is the
+     whole browser-tab metaphor - and it cannot be, on a strip painted the same colour as the rail:
+     the active tab was a white island in a grey band that then met a white page at a seam. Painting
+     the strip itself the content colour makes the tab row and the page below it ONE surface, which
+     is what the metaphor was always claiming. The frame is now just the rail and the status bar,
+     wrapping that surface on two sides.
+     Which inverts what the tabs themselves have to do: see the pf-m-current rules further down, where
+     the INACTIVE tabs take the chrome fill and recede, rather than the active one taking white and
+     advancing. Same logic, opposite assignment, because the ground moved out from under it.
+     NO border-bottom, and no baseline under the strip either - the inactive tabs already ARE one. Each
+     is filled to the chrome tone and reaches the bottom of the row, so the run of them draws a line
+     across it that the current tab breaks by being the page colour. Adding a real border under that
+     put a second grey immediately below each chip's own grey edge, and two adjacent bands of it read
+     as one doubled line rather than as a rule. The chips draw the edge; nothing else needs to.
+     NO cast either. The bar used to throw --sm--bottom down over the content, which put the elevation
+     on the wrong body - chrome that is meant to stay back was the thing lifted. */
+  background: var(--pf-t--global--background--color--primary--default);
   -webkit-app-region: drag; app-region: drag;
 }
 /* Interactive title-bar children opt out of the drag region so a click activates them (a drag region
@@ -571,22 +595,36 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-titlebar #console-actions { -webkit-app-region: no-drag; app-region: no-drag; }
 
 /* The tab bar fills the title bar; the trailing control group sits at the right, on the tab row.
-   The leading border separates it from the navigation rail below-left: without it the tab strip and
-   the rail read as one L-shaped piece of chrome, and the first tab looks like it belongs to the
-   rail. Matched to the rail's own edge so the two lines continue each other. */
+   NO leading border. It used to carry one to separate the strip from the rail, and that was right
+   when the strip was the outermost thing on this row - but the frame around it draws that same edge
+   now, one level out and down its whole height. Both together put two hairlines side by side at the
+   tab row and one below it, so the left edge read thicker beside the tabs than beside the content:
+   a doubled line whose seam landed exactly where the strip ends. */
 #console-tabs {
   flex: 1 1 auto; min-width: 0; display: flex; align-items: stretch;
-  border-inline-start: 1px solid var(--pf-t--global--border--color--default);
 }
-/* No rail on a phone (see the rail's own breakpoint), so nothing to separate from. */
-@media (max-width: 48rem) {
-  #console-tabs { border-inline-start: 0; }
+/* The TRAILING edge, where the scrolling run ends and the fixed controls begin.
+   STRAIGHT, and that is a decision rather than an oversight. A radius was tried here, to mirror the
+   frame's bottom-left corner - but a corner is two edges meeting, and this box has only this one. The
+   bottom edge it would curve into cannot exist: the inactive tabs are filled to the chrome tone and
+   their run IS the line across the bottom of the strip, so a real border under them puts a second
+   grey directly below each chip's own grey edge and the pair reads as one doubled rule. Given the
+   choice between the chips and the corner, the chips carry more - they are what tells you which tab
+   you are not looking at - so the corner goes and this line stays square.
+   Gated: below 48rem the tabs and the controls are stacked rows, not neighbours on one, and there is
+   nothing to divide. */
+@media (min-width: 48rem) {
+  #console-tabs { border-inline-end: 1px solid var(--pf-t--global--border--color--default); }
 }
 
 /* Title-bar-right control group: the chrome buttons (command bar, apps, reference, settings gear) as PF
    plain icon Buttons centered on the tab row, and the positioning context for the apps-menu popover
    (#console-appmenu, anchored in overrides.css). A slim inline gutter keeps them off the window edge. */
 #console-actions { flex: 0 0 auto; position: relative; display: flex; align-items: center; padding-inline: 0.35rem; }
+/* The rule that parts the controls from the tabs is the TAB RUN's trailing border above, not one
+   here. Same line on the page, drawn by the neighbour that can curve it: a border on this cluster is
+   straight by construction, because the corner it would have to round belongs to the run that ends,
+   not to the fixed group that follows. */
 /* PF plain buttons default to align-items:baseline (sized for a text+icon button), so the title-bar
    icon-only buttons (apps menu, reference, gear) hang their svg off the baseline - a few px above the
    button center, most visible on mobile. Center the icon so the three chrome buttons sit dead-center. */
@@ -614,18 +652,20 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      of the title bar and again of the status bar, which reads as two slim strips the content failed to
      fill rather than as deliberate framing. The two chrome rails already frame the content, and 19px of
      a phone's height is worth more than the effect. */
-  body[data-console-fill] > main { padding-block: 0; }
-  /* Widen the PANE to the bezel once a surface is mounted, and paint it. The title bar casts DOWN
-     onto whatever sits under it, and an opaque box painted after the static header covers the part
-     it overlaps - so an inset pane leaves the cast showing in the two rails beside it, and the
-     phone gets a stub of shadow in each top corner with nothing between them. That reads as a
-     rendering artifact, not as elevation. Widening the pane covers the cast edge to edge; the fill
-     is what does the covering, since the pane is otherwise transparent down to the page grey.
-     The pane's own 0.4rem keeps its content off the bezel - only the shell's 0.6rem goes, so this
-     buys 19px of width without pushing anything flush. The LAUNCHER keeps the shell gutter
-     (data-no-tabs): it has no pane, and its cards want the page grey around them. */
-  html:not([data-no-tabs]) body[data-console-fill] > main { padding-inline: 0; }
-  #console-outlet div[data-pane-id] { background: var(--pf-t--global--background--color--secondary--default); }
+  #console-outlet { padding-block: 0; }
+  /* Widen the PANE to the bezel once a surface is mounted. The pane's own 0.4rem keeps its content
+     off the glass - only the shell's 0.6rem goes, so this buys 19px of width without pushing
+     anything flush. The LAUNCHER keeps the shell gutter (data-no-tabs): it has no pane, and its
+     cards want the page grey around them.
+     There is no fill here any more. The pane used to paint itself the secondary token, for one
+     reason: the title bar cast DOWN onto whatever sat under it, an inset pane left that cast showing
+     in the rails beside it, and the phone got a stub of shadow in each top corner. The title bar no
+     longer casts at all (overrides.css, and the outlet's own rule) so there is nothing left to
+     cover - and the fill was not free. It was the SAME token the zebra band on a command row uses,
+     so every banded row on a phone was painted its ground's exact colour and the alternation that
+     makes those rows readable was invisible at every width below this breakpoint. Transparent, the
+     pane falls through to the drawer's white, which is what the desktop already shows. */
+  html:not([data-no-tabs]) #console-outlet { padding-inline: 0; }
   /* Zero open tabs (the launcher screen): the second row would be empty, so collapse back to a single
      row - drop the doubled height and hide the empty tab strip, so the home screen isn't topped by a
      blank bar. data-no-tabs is set in main.ts's show() when the workspace has no active tab. */
@@ -640,6 +680,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
     order: -1; height: var(--console-titlebar-h); justify-content: flex-end;
     border-bottom: 1px solid var(--pf-t--global--border--color--default);
   }
+  /* The command palette trigger splits off to the row's leading edge on a phone, where every
+     other action button (workspace, applications, reference, settings) is otherwise one
+     indistinguishable cluster jammed against the trailing edge with nothing to tell them apart
+     at a glance. auto margin, not order or a second flex line: it needs no DOM change and no
+     second row, it just claims the row's slack so everything after it gets pushed to the end. */
+  #console-commandbar-btn { margin-inline-end: auto; }
   /* On a phone the chrome buttons ARE the tap target, so stretch them to the row height for a
      finger-sized (~44px) hit area (the desktop gap above matters only for the mouse hover). Match the
      WIDTH to that stretched height so the button box - and thus its hover/active highlight - is a SQUARE
@@ -680,6 +726,51 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    (role=tablist/tab, aria-selected). See tabBar.ts and README.md. */
 /* The shell's one keyboard-focus cue. The rail is listed because PatternFly gives a focused nav link
    only the same background tint it gives a hovered one, which tells a keyboard user nothing. */
+/* The overflow controls (main.ts's wireTabOverflowCue): one per edge, pinned over the ends of the
+   strip, each naming how many tabs it is hiding. Outside the phone media query on purpose - the strip
+   overflows on a narrow DESKTOP window just as readily (measured: 231px of overflow at 900px with
+   seven tabs), and the cue used to live in that block, so the case with a mouse and no swipe gesture
+   was the one getting nothing.
+   Absolute over the strip rather than flex siblings beside it: as siblings they would shorten the
+   scroller every time they appeared, which changes what overflows, which changes whether they should
+   be there - a layout that oscillates. Overlaid, they take no space and the tabs simply pass beneath.
+   Opaque for that same reason: what is underneath has to be covered, not blended. */
+#console-tabs { position: relative; }
+.console-tabs-more {
+  position: absolute; inset-block: 0; z-index: 1;
+  display: none; align-items: center; gap: 0.15rem;
+  border: 0;
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: 0.72rem; line-height: 1; cursor: pointer;
+}
+.console-tabs-more[hidden] { display: none; }
+/* The control's own background IS the transition. Opaque with a hairline on its inner edge, it
+   guillotined whatever tab it covered mid-word - a hard vertical cut through a word, which reads as
+   damage rather than as continuation. A ramp to the strip's own colour lets the run dissolve into the
+   control instead: a fade cannot be an ending, so text that stops inside one is text that goes on.
+   The ramp reaches solid BEFORE the padding ends, which is what the two numbers below are doing -
+   0.25rem of clear ground between the last of the tab and the first of the count, so the two never
+   read as one string. Same rules at every width: the phone and a narrow desktop window get the same
+   control, because it is the same problem. */
+.console-tabs-more[data-tab-scroll="start"] {
+  inset-inline-start: 0;
+  padding-inline: 0.55rem 2.75rem;
+  background: linear-gradient(to right, var(--pf-t--global--background--color--primary--default) 2.5rem, transparent);
+}
+.console-tabs-more[data-tab-scroll="end"] {
+  inset-inline-end: 0;
+  padding-inline: 2.75rem 0.55rem;
+  background: linear-gradient(to left, var(--pf-t--global--background--color--primary--default) 2.5rem, transparent);
+}
+#console-tabs[data-tab-overflow="start"] .console-tabs-more[data-tab-scroll="start"],
+#console-tabs[data-tab-overflow="end"] .console-tabs-more[data-tab-scroll="end"],
+#console-tabs[data-tab-overflow="both"] .console-tabs-more { display: flex; }
+/* Colour only on hover, never the background: swapping the ramp for a flat fill would snap the hard
+   edge back the moment the pointer arrived, which is the thing this shape exists to avoid. */
+.console-tabs-more:hover { color: var(--pf-t--global--text--color--regular); }
+.console-tabs-more__count { font-variant-numeric: tabular-nums; font-weight: 600; }
+.console-tabs-more svg { inline-size: 0.85rem; block-size: 0.85rem; }
+
 #console-tabs :focus-visible, #console-outlet [data-open]:focus-visible,
 #console-sidebar :focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
 
@@ -708,6 +799,14 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    The link's own radius goes too: it is transparent at rest, so its 9px only ever showed as a stray
    curve under a focus ring. */
 #console-tabs { --pf-v6-c-tabs__link--after--BorderColor: transparent; }
+/* The line above is inherited and never reaches the current tab: .pf-v6-c-tabs__item.pf-m-current
+   re-declares this same property on ITSELF (tabs.css:510, reading the brand accent), and a
+   declaration on the element always wins over one inherited from an ancestor no matter how
+   specific the ancestor's selector is. Measured: a 3px teal bar survived every review of this
+   file because reading the source here looked right - only a computed style on the actual
+   .pf-m-current element showed the leftover accent width and color. Same fix shape as the
+   radius override below, just missed for this property the first time. */
+#console-tabs .pf-v6-c-tabs__item.pf-m-current { --pf-v6-c-tabs__link--after--BorderColor: transparent; }
 /* The link's radius is set as a property rather than through PF's --pf-v6-c-tabs__link--BorderRadius,
    because PatternFly declares that variable on .pf-v6-c-tabs itself - a closer ancestor than this host,
    so an inherited override never reaches it. */
@@ -721,13 +820,23 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    (242 / 21). So the selected tab was the invisible one and the unselected ones read as raised. The
    rounded top corners were the only cue still separating them, which is why squaring the tabs exposed
    this rather than caused it. */
-#console-tabs .pf-v6-c-tabs__item { background: transparent; }
+/* INACTIVE tabs carry the fill, the current one does not: the strip is the content colour now (see
+   #console-titlebar), so it is the tabs you are NOT looking at that have to step back off the page.
+   Transparent here would leave every tab flush with the surface and the active one unmarked. */
+#console-tabs .pf-v6-c-tabs__item { background: var(--console-chrome); }
 #console-tabs .pf-v6-c-tabs__item.pf-m-current {
-  background: var(--pf-t--global--background--color--primary--default);
+  background: transparent;
   /* Lifted on the SIDES, which is where its neighbors are. Top and bottom are the strip's own edges -
      the tab meets the window above and the content below, and casting onto either would fight the
      strip's own cast rather than separate one tab from the next. */
   box-shadow: var(--pf-t--global--box-shadow--sm--left), var(--pf-t--global--box-shadow--sm--right);
+}
+/* ...but the FIRST tab casts only right. It has no left neighbour to be separated from - what is over
+   there is the frame's own edge, and the cast landed on top of that hairline as a soft smudge, making
+   the border read thicker along the tab row than along the content below it. Two different weights on
+   one continuous edge, and the seam between them exactly where the strip ends. */
+#console-tabs .pf-v6-c-tabs__item.pf-m-current:first-child {
+  box-shadow: var(--pf-t--global--box-shadow--sm--right);
 }
 #console-tabs .pf-v6-c-tabs__item.pf-m-current .pf-v6-c-tabs__link { color: var(--pf-t--global--text--color--regular); }
 #console-tabs .pf-v6-c-tabs__item:not(.pf-m-current) .pf-v6-c-tabs__link { color: var(--pf-t--global--text--color--subtle); }
@@ -754,10 +863,41 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    child; with the navigation rail beside the Drawer, column stacks them vertically. */
 #console-outlet {
   flex: 1 1 auto; min-height: 0; overflow: hidden; display: flex; flex-direction: row;
-  /* The rail's edge, drawn on the CONTENT rather than on the rail: a border on the rail itself would
-     run its full height and cut it away from the title bar and status bar, which are the same
-     continuous surface. Here it spans exactly the content's height, which is the boundary it marks. */
-  border-left: 1px solid var(--pf-t--global--border--color--default);
+}
+/* Everything that describes the EDGE of the content surface lives on the frame, because the frame is
+   that surface. Held on the outlet instead, all three stopped at the outlet's top and left the tab
+   strip above them outside the shape they were describing.
+   The cast: LEFT and DOWN only, two directional tokens rather than the even --sm. Upward the frame's
+   neighbour is the window edge, and the tab strip inside it is contiguous with its own content, so
+   there is nothing above for it to sit in front of. The rail and the status bar are chrome it
+   genuinely does, so those two faces carry it.
+   The z-index is what makes the downward one show. The status bar is a later grid sibling carrying
+   z-index 20, so it painted over that cast and the bottom edge stayed flat - the shadow was in the
+   stylesheet and invisible on screen. One above it puts the cast on top of the chrome it falls on;
+   the rows do not overlap, so nothing else changes stacking. */
+#console-frame {
+  box-shadow: var(--pf-t--global--box-shadow--sm--left), var(--pf-t--global--box-shadow--sm--bottom);
+  z-index: 21;
+}
+/* ONE rounded corner in the whole shell: the bottom-left, where the pane's edge meets the rail and
+   the status bar at once. That single curve is what lifts the pane out of the frame; a second one at
+   the top-left did not read as symmetry, it read as a rectangle with its corners shaved, and it put a
+   curve directly beside the tab strip, which has square-butted items and a shape of its own.
+   Nothing on the right: a corner is only worth drawing where there is chrome behind it to curve away
+   from, and at the window's own edge the curve just bites a notch of page out of the content.
+   Gated on the rail's 48rem edge for that same reason - below it the rail is gone (see its
+   display:none above) and the pane's left edge IS the window's, where the curve chipped the corner of
+   a phone screen. Change that breakpoint and this one moves with it.
+   The large token doubled: at 9px the curve reads as a rendering artefact, at 18px as a decision. */
+@media (min-width: 48rem) {
+  /* One border and one corner for the whole surface, on the frame. Both mark the boundary with the
+     RAIL, so both are gated on the rail existing: below this width it is hidden, the frame's left
+     edge IS the window's, and an unconditional border ran down the outermost pixel of a phone with
+     nothing on the far side of it while the corner bit a notch out of the content. */
+  #console-frame {
+    border-left: 1px solid var(--pf-t--global--border--color--default);
+    border-end-start-radius: calc(var(--pf-t--global--border--radius--large) * 2);
+  }
 }
 /* The content CARD - the only curved thing in the shell, and the one surface that steps forward out
    of the chrome frame. Chrome is square and recessive; containers are raised and rounded.
@@ -765,9 +905,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    padding, so painting the card there put the gutter INSIDE the card and left a ring of card color
    around the content - a light strip above it, below it, and beside the tab strip. The gutter belongs
    between the frame and the card, so it has to stay outside the painted box.
-   SQUARE and FLUSH: it meets the rail, the tab strip and the status bar directly, so it joins the
-   frame instead of floating in it. A radius here would cut a notch of chrome color out of each
-   corner - the gap this change exists to remove, reintroduced four times over. */
+   SQUARE and FLUSH here, still: the corners are the OUTLET's to round (see its rule above), because
+   the outlet is the box the frame actually meets. Rounding this inner box too would curve a second
+   edge a pixel inside the first and read as a doubled line. Note the shape it takes is no longer
+   square on all four corners - two of them follow the outlet's radius - but that is the outlet
+   clipping this box, not this box asking for it. */
 #console-outlet > #console-refdrawer {
   background: var(--pf-t--global--background--color--primary--default);
   overflow: hidden;
@@ -788,7 +930,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   width: var(--console-sidebar-w);
   display: flex; flex-direction: column;
   overflow: hidden; /* labels are clipped, not wrapped, while the width animates */
-  background: var(--pf-t--global--background--color--secondary--default);
+  /* --console-chrome, not the raw secondary token, because the rail is the third face of the one
+     continuous frame the title bar and status bar make. Those two moved to --console-chrome when the
+     dark ground was corrected; the rail did not, so in dark it sat at #151515 between two bars at
+     #242424 - a seam down the left edge of exactly the surface that is meant not to have one. */
+  background: var(--console-chrome);
   transition: width 0.14s ease;
   /* PF centers a nav link's icon against a baseline and pads it for a full-width row. Neither suits a
      square icon button, so both are returned here - in PF's vocabulary, so a PF version bump carries. */
@@ -820,6 +966,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    that scrolls when the surfaces outgrow the window) otherwise spreads the rows over the full height
    and each one comes out as tall as the space allows. */
 #console-sidebar .pf-v6-c-nav__list { flex: 1 1 auto; align-content: start; overflow-y: auto; overflow-x: hidden; }
+/* ...but only the DESTINATIONS scroll. The two control groups are flex:0 0 auto above, so a rail with
+   more apps than height scrolls them between a toggle that stays at the top and a Settings row that
+   stays at the bottom - which is the whole point of pinning either one to a corner. */
 /* A row's count. Square and normal-case like every other chip in this shell - PatternFly's Badge is a
    pill, and pills are off the house style, so this is authored rather than borrowed.
    Collapsed it overlays the icon's top-trailing corner, the dock convention (VS Code, and every OS
@@ -842,8 +991,26 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 }
 #console-sidebar [data-rail-badge][hidden] { display: none; }
 
+/* The lead group: the rail-collapse row, alone at the top (sidebar.ts). It is a separate list for
+   PINNING, not for separation - the destinations between the two control groups scroll, and a toggle
+   sitting in that run would scroll off the corner it was moved to. Visually it is meant to be part of
+   the run: no rule under it and no gap after it, so it reads as the first square in one continuous
+   column of squares rather than as a control the rail holds at arm's length. */
+#console-sidebar [data-rail-lead] {
+  flex: 0 0 auto; overflow: visible;
+  /* Exactly the title bar's band, so the toggle square in column 1 fills the same row the tab strip
+     fills in column 2. Explicit and border-box rather than letting the row size the group: left to
+     itself it came to the row height plus padding, which pushed the apps below out of alignment. */
+  box-sizing: border-box;
+  block-size: var(--console-topchrome-h);
+  padding-block: 0;
+  /* Cancel exactly the gap PatternFly puts between nav lists, for this edge only. In PF's own token
+     so it tracks a version bump, and negative rather than zeroing the property on the rail, which
+     would close the utility group's gap at the other end too - that one is doing real work. */
+  margin-block-end: calc(-1 * var(--pf-v6-c-nav--RowGap));
+}
 /* The utility group sits at the foot rather than growing with the list above it, so Settings stays in
-   the same place whether six lenses are listed or sixteen. The rail's ONE hairline, separating the
+   the same place whether six lenses are listed or sixteen. The rail's other hairline, separating the
    surfaces from the controls; the pool reading above it deliberately has none. */
 #console-sidebar [data-rail-utility] {
   flex: 0 0 auto; overflow: visible;
@@ -880,18 +1047,16 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   inline-size: 1.75rem; block-size: 1.75rem;
   border-radius: var(--pf-t--global--border--radius--small);
 }
-/* The ACTIVE INDICATOR: a filled backdrop behind the current row's icon.
+/* The ACTIVE INDICATOR: a filled backdrop behind the current row.
  *
  * Required, not decorative. WCAG 1.4.1 (Level A) forbids color as the only thing distinguishing a
  * state, and measured, current-vs-open differed by hue plus ONE pixel of bar width - which is not a
- * cue at this size, so the pair was near-indistinguishable in greyscale. Material's navigation rail
- * spec calls for exactly this: the selected destination carries an active indicator behind a filled
- * icon, not color alone.
+ * cue at this size, so the pair was near-indistinguishable in greyscale.
  *
- * On the ICON rather than the label, because the rail collapses to 44px and the labels are clipped
- * away - a bolder label would be a cue that vanishes in the state the rail spends most of its time in.
- * Slightly-rounded and not a pill: the shell has no capsules. */
-#console-sidebar .pf-v6-c-nav__link.pf-m-current .pf-v6-c-nav__link-icon {
+ * On the whole row, not just the icon: a fill sized to the 1.75rem icon read as a second, smaller
+ * box floating inside the 44px row rather than as the row's own state. The row is already forced
+ * to BorderRadius 0 above (chrome is square), so the fill takes that shape for free. */
+#console-sidebar .pf-v6-c-nav__link.pf-m-current {
   background: color-mix(in srgb, var(--console-accent) 26%, transparent);
 }
 /* The label is present in the DOM in both states and clipped by the rail's overflow when collapsed;
@@ -948,7 +1113,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-sidebar:not([data-expanded]) #console-sidebar-pulse { grid-template-columns: 1fr; }
 #console-sidebar:not([data-expanded]) #console-sidebar-pulse .pf-v6-c-nav__link-icon { display: none; }
 #console-sidebar:not([data-expanded]) #console-sidebar-pulse[data-state="running"] { color: var(--console-status-running); }
-#console-sidebar:not([data-expanded]) #console-sidebar-pulse[data-state="queued"] { color: var(--console-status-warn); }
+#console-sidebar:not([data-expanded]) #console-sidebar-pulse[data-state="queued"] { color: var(--console-status-warn-text); }
 #console-sidebar #console-sidebar-pulse .pf-v6-c-nav__link-icon {
   /* min-inline-size:0 because PF gives a nav link's icon slot a min-width sized for a real glyph
      (~19px); a min-width outranks width, so without this the dot renders as a pill, not a circle. */
@@ -1009,7 +1174,11 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    supplies the page background itself (the PF primary page token, theme-aware light/dark) - otherwise
    its themed dark-on-light text would sit on the app's dark outlet and vanish in light mode. It takes
    the SECONDARY page token (the PF "grey page" behind primary-white cards) so the clickable Cards keep
-   their contrast in both themes. */
+   their contrast in both themes - but only BELOW the 48rem edge, where those white cards are what is on
+   screen. Above it the gallery retires (see the breakpoint below) and the two ways-cards that replace it
+   are secondary-filled, so the ground goes primary-white there: grey-on-grey left the ways-cards reading
+   as bare outlines, and it made the empty state the same tone as the rail, the title bar, and the status
+   bar - one continuous slab of chrome with no content surface anywhere in the window. */
 /* Fill the outlet so the launcher's background covers the whole panel - otherwise the surface stops
    at its content height and the page shows through below it, reading as two different backgrounds.
    A small inset from the outlet edges plus a generous radius (larger than the card tiles' container
@@ -1078,15 +1247,15 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-outlet [data-surface="home"] [data-launcher-saved-value] {
   font-size: clamp(3rem, 9vw, 5.5rem); font-weight: 700; line-height: 0.9;
   letter-spacing: -0.04em; font-variant-numeric: tabular-nums;
-  color: var(--pf-t--global--text--color--subtle); opacity: 0.55;
+  color: var(--pf-t--global--text--color--subtle); opacity: 0.38;
 }
 #console-outlet [data-surface="home"] [data-launcher-saved-unit] {
   font-size: 0.95rem; font-weight: 600; letter-spacing: -0.01em; margin-top: 0.2rem;
-  color: var(--pf-t--global--text--color--subtle); opacity: 0.75;
+  color: var(--pf-t--global--text--color--subtle); opacity: 0.55;
 }
 #console-outlet [data-surface="home"] [data-launcher-saved-note] {
   font-size: 0.72rem; margin-top: 0.25rem; color: var(--pf-t--global--text--color--subtle);
-  opacity: 0.7;
+  opacity: 0.5;
 }
 /* A phone has no empty quadrant to park it in, so it returns to the flow. */
 @media (max-width: 48rem) {
@@ -1105,6 +1274,9 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 #console-outlet [data-surface="home"] [data-launcher-ways] { display: none; }
 @media (min-width: 48rem) {
   #console-outlet [data-surface="home"] .pf-v6-l-gallery { display: none; }
+  /* Safe here and only here: the white cards that needed a grey ground are the ones the line above
+     retires. What remains is secondary-filled, so it gains contrast from this rather than losing it. */
+  #console-outlet [data-surface="home"] { background: var(--pf-t--global--background--color--primary--default); }
   /* The demo pill goes with the grid: the demo is one of the two ways below, and offering it twice on
      one screen is the duplication this whole change is about. */
   #console-outlet [data-surface="home"] .console-launcher-demo { display: none; }
@@ -1298,7 +1470,7 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 .console-shell-signin__confirm:disabled { cursor: not-allowed; }
 /* An address should always have resolved by the time this screen opens; when it has not, say so in a
    different voice than a host that is present. */
-.console-shell-signin__value[data-anomaly] { color: var(--console-status-warn); }
+.console-shell-signin__value[data-anomaly] { color: var(--console-status-warn-text); }
 /* The remembered pick, marked but never applied - a scope nobody chose is the failure this screen
    exists to prevent, so this is a hint about where the answer starts, not a decision already taken. */
 .console-shell-signin__choice[data-suggested] .pf-v6-c-menu__item-text::after {
@@ -1669,7 +1841,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
     inset-inline-end: 0; inset-inline-start: auto;
     width: var(--pf-v6-c-drawer__panel--md--FlexBasis, var(--console-refdrawer-w)); max-width: 100%;
     margin: 0; transform: none;
-    box-shadow: var(--pf-t--global--box-shadow--lg);
+    /* LEFT only, not the full-perimeter --lg blur: the panel's top and bottom edges already sit
+       flush against the title bar and the status bar, so a shadow there has nowhere to cast but
+       onto that chrome - which read as a hazy wash bleeding down over the status bar. The left
+       edge is the only one actually separating the panel from something behind it (the content
+       pane), so that is the only side that needs the cast. */
+    box-shadow: var(--pf-t--global--box-shadow--lg--left);
     z-index: var(--pf-t--global--z-index--200);
   }
 }
@@ -1858,7 +2035,15 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
    its chord can sit far apart; a faint alternating fill keeps the eye on one row across the gap. Subtle
    (the secondary surface token) and theme-aware, so it never fights the text. */
 .console-commands-row:nth-child(odd) { background: var(--pf-t--global--background--color--secondary--default); }
-.console-commands-row:hover { background: color-mix(in srgb, var(--console-accent) 8%, transparent); }
+/* Hover is ONE colour on every row, and it is mixed over the ZEBRA tone rather than over transparent.
+   Over transparent it composited against whatever the row already had, so hovering a banded row swapped
+   its fill for 8% accent on white and landed 2/1/0 per channel away from the band it replaced - a state
+   change you could not see on half the table. Mixing over the band instead pins the hover a fixed
+   accent-distance from it in both themes: measured 29/22/23 from a banded row and 42/35/36 from a plain
+   one, so the row under the pointer reads the same wherever it falls in the alternation. */
+.console-commands-row:hover {
+  background: color-mix(in srgb, var(--console-accent) 16%, var(--pf-t--global--background--color--secondary--default));
+}
 .console-commands-row:focus-visible { outline: 2px solid var(--console-accent); outline-offset: -2px; }
 .console-commands-token {
   font-family: var(--pf-t--global--font--family--mono); font-size: 0.78rem;
@@ -1937,3 +2122,34 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 [data-detached-host] > * { flex: 1 1 auto; min-height: 0; }
 /* The gap the panel left behind, so a moved panel does not read as a closed one. */
 [data-detached-placeholder] { padding: 1rem 0.8rem; color: var(--pf-t--global--text--color--subtle); font-size: 0.85rem; }
+
+/* --- Touch targets ------------------------------------------------------------------------------
+   Apple's HIG asks a button for a hit region of at least 44x44 pt. The shell's own chrome is the
+   worst offender in this console: measured at a 375px viewport, the status-bar tray icons are 19x14
+   and the zoom stepper is 18x18. They are small because the bar is: --console-statusbar-h is 35.2px,
+   so a 44px target could not fit in it whatever the button asked for.
+
+   Keyed on the pointer rather than the width, for the same reason as the control token in tokens.css:
+   a touchscreen laptop needs the bigger target at any width, and a narrow desktop window does not.
+
+   The GLYPHS are deliberately left alone. Growing a 14px icon to fill 44px would turn a quiet status
+   strip into a toolbar; what is too small here is the region you can hit, not the thing you can see.
+
+   PAIRED with the #console-statusbar tray-button rule in overrides.css, which owns that element.
+   Change one, change the other. */
+@media (pointer: coarse) {
+  :root {
+    --console-statusbar-h: 44px;
+  }
+  /* Height only, for the same reason as the tray buttons in overrides.css: widening these to 44 as
+     well put 395px of content in a 375px bar and clipped the shortcuts button off the end. Three
+     stepper buttons are the cheapest 78px to give back, and vertical is the dimension that was
+     actually hard to hit. */
+  .console-zoom .console-zoom__btn {
+    min-block-size: 44px;
+    height: auto;
+  }
+  .console-zoom .console-zoom__readout {
+    min-block-size: 44px;
+  }
+}

@@ -28,6 +28,8 @@ import {
   buildRows,
   byHunk,
   hunkRowIndexes,
+  hunksRead,
+  activeFileTarget,
   fileRowIndexes,
   nextIndexAfter,
   prevIndexBefore,
@@ -256,6 +258,17 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // real origin and the showcase would start writing a stranger's review session.
   const demo = wantsDemo(parseHash());
 
+  // Both width-dependent defaults on this surface key off this: the file index, and the view mode.
+  //
+  // The measurement is the PANE, not the window. This surface tiles, so two panes on a 1440px
+  // desktop give it ~700px each while a viewport query still reads "wide" - and it would then open
+  // a 180px index floor and a two-column split inside a pane with no room for either, which is the
+  // exact geometry the defaults exist to avoid. The window is only the bootstrap guess, used for
+  // the state literal below because no DOM exists yet to measure; the observer at the foot of
+  // activate() corrects it as soon as the surface has a box, and on every retile after that.
+  const NARROW_PX = 768; // the shell's 48rem inversion, in px
+  let paneNarrow = window.innerWidth < NARROW_PX;
+
   const state: State = {
     changeset: { primary: [], generated: [] },
     files: [],
@@ -265,7 +278,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
     hunkOrdinalByRow: new Int32Array(),
     fileRows: [],
     fileOf: [],
-    mode: modeCell.get() ?? "unified",
+    // Unified on a phone whatever the reader last picked on a desktop. Split halves an already
+    // narrow pane into two columns that each spend ~7ch on gutters and markers before any code.
+    // The preference is NOT overwritten, so the next load on a wide viewport is split again -
+    // this is read ONCE at mount and nothing listens for a resize, so widening the CURRENT window
+    // does not bring split back until the surface is remounted.
+    mode: paneNarrow ? "unified" : modeCell.get(),
     cursor: -1,
     session: null,
     viewed: new Set(),
@@ -299,11 +317,13 @@ export function activate(host: HTMLElement): SurfaceInstance {
   sidebarHead.append(sidebarTitle, hideBtn);
 
   // Keep filtering in the index at every diff size.
-  const sidebarFilter = h("input", "console-diff-sidebar__filter") as HTMLInputElement;
+  const sidebarFilterWrap = h("span", "pf-v6-c-form-control console-diff-sidebar__filter");
+  const sidebarFilter = h("input", "pf-v6-c-form-control__text") as HTMLInputElement;
   sidebarFilter.type = "search";
   sidebarFilter.placeholder = "Filter files";
   sidebarFilter.setAttribute("aria-label", "Filter changed files");
   sidebarFilter.autocomplete = "off";
+  sidebarFilterWrap.append(sidebarFilter);
   const sidebarIndex = h("div", "console-diff-sidebar__index");
   sidebarIndex.setAttribute("role", "list");
   sidebarIndex.setAttribute("aria-label", "Changed files index");
@@ -312,7 +332,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
   sidebarSpacer.append(sidebarWindow);
   sidebarIndex.append(sidebarSpacer);
   const sidebarGenerated = h("div", "console-diff-sidebar__generated");
-  sidebar.append(sidebarHead, sidebarFilter, sidebarIndex, sidebarGenerated);
+  sidebar.append(sidebarHead, sidebarFilterWrap, sidebarIndex, sidebarGenerated);
 
   const reopenBtn = h("button", "console-diff-reopen");
   reopenBtn.type = "button";
@@ -326,12 +346,18 @@ export function activate(host: HTMLElement): SurfaceInstance {
     reopenBtn.hidden = !collapsed;
     hideBtn.setAttribute("aria-expanded", collapsed ? "false" : "true");
   };
+  // Below the breakpoint the toggle applies for the session but is NOT written down. The collapse
+  // there is forced by width rather than chosen, so persisting it would let one phone visit rewrite
+  // a preference the reader set on a desktop - in both directions.
+  const rememberSidebar = (collapsed: boolean): void => {
+    if (!paneNarrow) sidebarCell.set(collapsed);
+  };
   hideBtn.addEventListener("click", () => {
-    sidebarCell.set(true);
+    rememberSidebar(true);
     applySidebar(true);
   });
   reopenBtn.addEventListener("click", () => {
-    sidebarCell.set(false);
+    rememberSidebar(false);
     applySidebar(false);
   });
   sidebar.setAttribute("aria-label", "Changed files");
@@ -342,6 +368,9 @@ export function activate(host: HTMLElement): SurfaceInstance {
   const collaborationNotice = h("span", "console-diff-collaboration");
   collaborationNotice.setAttribute("role", "status");
   collaborationNotice.setAttribute("aria-live", "polite");
+  collaborationNotice.addEventListener("animationend", () =>
+    collaborationNotice.classList.remove("is-flash"),
+  );
   toolbar.append(statsEl, collaborationNotice);
   // Keep context outside the fixed-height virtual stream.
   const context = h("aside", "console-diff-context");
@@ -411,7 +440,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   main.append(toolbar, context, rail, viewport, overview, empty);
   root.append(sidebar, reopenBtn, main);
-  applySidebar(sidebarCell.get() ?? false);
+  // Below the shell's 48rem inversion the index starts COLLAPSED, whatever is stored. Its column
+  // floor is 180px, so on a 375px phone it took 48% of the screen and left the hunk stream 194px to
+  // render 1163px of content. The stored preference is deliberately NOT consulted here: it is
+  // overwhelmingly set on a desktop, and honouring an "open" from there is exactly how the 48%
+  // sidebar comes back. Opening it on a phone still works and lasts the session, which is the same
+  // per-session treatment the log viewer's run browser gives its own index (logs/runtree.ts).
+  // JS-driven rather than a media query because the collapse is expressed with the hidden attribute.
+  applySidebar(paneNarrow ? true : sidebarCell.get());
   host.append(root);
   root.dataset.phase = "loading";
 
@@ -569,7 +605,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
         digestPaintQueued = true;
         requestAnimationFrame(() => {
           digestPaintQueued = false;
-          if (!disposed) paint(true);
+          if (!disposed) {
+            paint(true);
+            // The "N/M hunks read" chip counts only hunks whose digest is known (see
+            // renderToolbar), so a hunk carrying a mark from an earlier session stays uncounted
+            // until it scrolls into view and its digest resolves here. Re-render the chip at that
+            // point rather than leaving it to catch up on some unrelated toolbar change.
+            renderToolbar();
+          }
         });
       });
     }
@@ -652,6 +695,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
   const sidebarItems = new Map<number, HTMLButtonElement>();
   let activeSidebarFile: HTMLButtonElement | undefined;
   let activeSidebarRow = -1;
+  // The sidebar lists PRIMARY files only, so a row inside a generated file resolves to no entry
+  // in sidebarItems - markActiveFile used to just clear the last highlight and set nothing, which
+  // blanked the one indicator the reader has for where they are the moment they scrolled somewhere
+  // the index cannot show. The generated group's own toggle is the honest stand-in.
+  let activeGeneratedToggle: HTMLButtonElement | undefined;
   let sidebarEntries: FileIndexEntry[] = [];
   let sidebarOffsets = [0];
   let sidebarPaintedFirst = -1;
@@ -777,8 +825,30 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const fileRow = state.fileOf[rowAt(state.offsets, top)] ?? -1;
     if (fileRow === activeSidebarRow) return;
     activeSidebarFile?.removeAttribute("aria-current");
-    activeSidebarFile = sidebarItems.get(fileRow);
-    activeSidebarFile?.setAttribute("aria-current", "true");
+    activeGeneratedToggle?.removeAttribute("aria-current");
+    const candidate = sidebarItems.get(fileRow);
+    // activeFileTarget (rows.ts) makes the DECISION; this is just wiring it to the two elements
+    // that can show it. "generated" is a real file row the index has no entry for - the whole
+    // point of the fallback - so hasSidebarEntry is exactly "did the lookup above find one".
+    switch (activeFileTarget(fileRow, candidate !== undefined)) {
+      case "file":
+        activeSidebarFile = candidate;
+        activeGeneratedToggle = undefined;
+        activeSidebarFile?.setAttribute("aria-current", "true");
+        break;
+      case "generated":
+        activeSidebarFile = undefined;
+        // Re-queried rather than cached: the toggle button is replaced on every renderSidebar.
+        activeGeneratedToggle =
+          sidebarGenerated.querySelector<HTMLButtonElement>(".console-diff-sidebar__group") ??
+          undefined;
+        activeGeneratedToggle?.setAttribute("aria-current", "true");
+        break;
+      case "none":
+        activeSidebarFile = undefined;
+        activeGeneratedToggle = undefined;
+        break;
+    }
     activeSidebarRow = fileRow;
   };
 
@@ -812,6 +882,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
   };
 
   const canCollaborate = (): boolean => demo || state.collaboration === "live";
+  // The mouse path to these actions disables its button and explains why in a title; a keyboard
+  // shortcut has no button to disable, so this restarts the toolbar notice's flash animation to
+  // point at the sentence that already gives the same reason, instead of a second copy of it.
+  const flashCollaborationNotice = (): void => {
+    collaborationNotice.classList.remove("is-flash");
+    void collaborationNotice.offsetWidth;
+    collaborationNotice.classList.add("is-flash");
+  };
   const setCollaboration = (next: CollaborationState): void => {
     if (state.collaboration === next) return;
     state.collaboration = next;
@@ -835,8 +913,16 @@ export function activate(host: HTMLElement): SurfaceInstance {
     hunk: { newStart: number; newCount: number },
     focus = false,
   ): Promise<void> => {
-    // Demo fixtures cannot provide workspace context.
-    if (demo) return;
+    // Demo fixtures cannot provide workspace context. The row button is withheld in demo for the
+    // same reason (see renderRow), but the p key and command-bar entry have no button to withhold,
+    // so they still need to say why nothing happened rather than doing nothing silently.
+    if (demo) {
+      context.hidden = false;
+      contextTitle.textContent = file.path;
+      contextBody.textContent = "Surrounding code is unavailable in this showcase.";
+      if (focus) context.focus();
+      return;
+    }
     const asOf = state.session?.as_of;
     if (!asOf || state.collaboration !== "live") {
       context.hidden = false;
@@ -1122,8 +1208,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
         ),
       );
     }
-    // Session state remains authoritative before an off-screen digest exists.
-    const read = state.viewed.size;
+    // state.viewed.size used to be the numerator here, and it is the WHOLE SESSION's marked set -
+    // every hunk ever read, including ones no longer in state.hunks (folded into "generated",
+    // filtered out, or from a build that has since rebuilt). Denominator is the CURRENT stream.
+    // Fold the generated group after reading hunks inside it and the two stop describing the same
+    // set: the chip read "12/8" and the green complete state fired on a coincidence, not on the
+    // stream actually being read. hunksRead (rows.ts) counts the intersection instead - see it for
+    // the undercount tradeoff that fix makes.
+    const read = hunksRead(state.hunks, state.digestByRow, state.viewed);
     chips.push(
       label(
         `${read}/${state.hunks.length} hunks read`,
@@ -1162,6 +1254,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     });
     const needle = sidebarFilter.value.trim().toLocaleLowerCase();
     sidebarEntries = [];
+    let shownTotal = 0;
     for (const [project, entries] of groups) {
       const shown = needle
         ? entries.filter(({ o }) =>
@@ -1169,6 +1262,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
           )
         : entries;
       if (shown.length === 0) continue;
+      shownTotal += shown.length;
       sidebarEntries.push({ kind: "project", project, count: shown.length });
       for (const { i } of shown) sidebarEntries.push({ kind: "file", project, changeIndex: i });
     }
@@ -1176,22 +1270,30 @@ export function activate(host: HTMLElement): SurfaceInstance {
     for (const entry of sidebarEntries)
       sidebarOffsets.push((sidebarOffsets.at(-1) ?? 0) + sidebarEntryHeight(entry));
     sidebarSpacer.style.height = `${sidebarOffsets.at(-1) ?? 0}px`;
-    sidebarTitle.textContent = `Files (${state.changeset.primary.length})`;
+    // The total, always - filtering to 2 of 7 files while the heading kept reading "Files (7)"
+    // was a count that stopped matching what was under it the moment the reader typed anything.
+    const total = state.changeset.primary.length;
+    sidebarTitle.textContent =
+      shownTotal === total ? `Files (${total})` : `Files (${shownTotal} of ${total})`;
     sidebarIndex.scrollTop = 0;
     sidebarPaintedFirst = -1;
     sidebarPaintedLast = -1;
     paintSidebar(true);
     const generated = document.createDocumentFragment();
     if (state.changeset.generated.length > 0) {
-      // Same fold affordance as an activity section - the twist caret plus aria-expanded and
-      // data-collapsed - so a collapsible in the sidebar reads the way collapsibles read
-      // everywhere else in the console. It was a bare button styled like nothing else.
-      const g = h("button", "console-diff-sidebar__group console-render-section__head");
+      // Its own twist caret rather than the log viewer's console-render-section one: that class is
+      // styled only in logs.css, which this surface never loads (verified cold - the button rendered
+      // display:inline-block with a 0x0 caret when Diff was the first surface opened in a session,
+      // and only looked right because an earlier visit to Logs/Activity/Notes had pulled the sheet
+      // in already). The rotation is also driven off this button's OWN aria-expanded rather than a
+      // [data-collapsed] ancestor, because this button has no such ancestor - logs.css's selector
+      // could never have matched it even with the sheet loaded.
+      const g = h("button", "console-diff-sidebar__group");
       g.type = "button";
       g.setAttribute("aria-expanded", state.showGenerated ? "true" : "false");
-      const twist = h("span", "console-render-section__twist");
+      const twist = h("span", "console-diff-sidebar__grouptwist");
       twist.setAttribute("aria-hidden", "true");
-      const gLabel = h("span", "console-render-section__title");
+      const gLabel = h("span", "console-diff-sidebar__grouplabel");
       gLabel.textContent = `${state.changeset.generated.length} generated`;
       g.append(twist, gLabel);
       g.title = state.showGenerated
@@ -1224,13 +1326,16 @@ export function activate(host: HTMLElement): SurfaceInstance {
       const reason = h("span", "console-diff-rail__reason", s.reason);
       const go = h("button", "console-diff-rail__go");
       go.type = "button";
-      go.textContent = "go [g]";
+      // The key rides as its own <kbd>, the same chip the Shortcuts overlay and the Actions
+      // surface use for a physical key - not "[g]" folded into the label, which reads as part
+      // of the word rather than a key you can press.
+      go.append("go ", h("kbd", "console-cheatsheet-kbd", "g"));
       go.disabled = !canCollaborate();
       if (go.disabled) go.title = "Agent collaboration is unavailable";
       go.addEventListener("click", () => acceptSuggestion(s.id));
       const skip = h("button", "console-diff-rail__skip");
       skip.type = "button";
-      skip.textContent = "skip [x]";
+      skip.append("skip ", h("kbd", "console-cheatsheet-kbd", "x"));
       skip.disabled = !canCollaborate();
       if (skip.disabled) skip.title = "Agent collaboration is unavailable";
       skip.addEventListener("click", () => sync({ op: "answer", id: s.id, on: false }));
@@ -1357,7 +1462,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (i === null) return;
     const digest = await digestForHunk(i);
     if (!digest) return;
-    if (!canCollaborate()) return;
+    if (!canCollaborate()) {
+      flashCollaborationNotice();
+      return;
+    }
     const on = !state.viewed.has(digest);
     void sync({ op: "viewed", digest, on });
   };
@@ -1374,14 +1482,17 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // the code they are remarking on while they type. The composer sits in the stream for the
   // same reason the comments do.
   const composeComment = (): void => {
-    if (!canCollaborate()) return;
+    if (!canCollaborate()) {
+      flashCollaborationNotice();
+      return;
+    }
     const i = currentHunkRow();
     if (i === null) return;
     const row = state.rows[i];
     if (!row || row.kind !== "hunk") return;
 
     // One composer at a time; a second press re-focuses rather than stacking boxes.
-    const existing = scroll.querySelector<HTMLInputElement>(".console-diff-composer__input");
+    const existing = scroll.querySelector<HTMLInputElement>(".console-diff-composer__input input");
     if (existing) {
       existing.focus();
       return;
@@ -1390,7 +1501,8 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const box = h("div", "console-diff-composer");
     const where = h("span", "console-diff-composer__where");
     where.textContent = `${row.file.path} hunk ${row.index + 1}`;
-    const input = h("input", "console-diff-composer__input");
+    const inputWrap = h("span", "pf-v6-c-form-control console-diff-composer__input");
+    const input = h("input", "pf-v6-c-form-control__text");
     input.type = "text";
     input.placeholder =
       "Say what is wrong, or what you had to work out. Enter to post, Esc to cancel.";
@@ -1414,7 +1526,8 @@ export function activate(host: HTMLElement): SurfaceInstance {
       if (!body) return;
       sync({ op: "comment", path: row.file.path, hunk: row.index, body });
     });
-    box.append(where, input);
+    inputWrap.append(input);
+    box.append(where, inputWrap);
     // Pinned rather than inserted into the virtualized window: the window is replaced wholesale
     // on every scroll frame, so a composer living in it would be destroyed mid-sentence.
     scroll.append(box);
@@ -1424,7 +1537,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
   // resolveHere closes the first unresolved comment on the hunk the cursor is in. Either party
   // may resolve - see the store - so this needs no author check.
   const resolveHere = (): void => {
-    if (!canCollaborate()) return;
+    if (!canCollaborate()) {
+      flashCollaborationNotice();
+      return;
+    }
     const i = currentHunkRow();
     if (i === null) return;
     const row = state.rows[i];
@@ -1440,7 +1556,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const target = id ? pending.find((s) => s.id === id) : pending[0];
     if (!target) return;
     // Accepting is the ONLY path from an agent's suggestion to the reader's viewport.
-    if (!canCollaborate()) return;
+    if (!canCollaborate()) {
+      flashCollaborationNotice();
+      return;
+    }
     void sync({ op: "answer", id: target.id, on: true }).then((saved) => {
       if (!saved || disposed) return;
       const row = state.rows.findIndex(
@@ -1462,7 +1581,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
   const setMode = async (m: ViewMode): Promise<void> => {
     if (m === state.mode) return;
     state.mode = m;
-    modeCell.set(m);
+    // Same rule as the index toggle: a mode the PANE forced is not a preference. Persisting it
+    // would let one narrow tile rewrite the choice the reader made at full width, and the width
+    // observer below drives this same function.
+    if (!paneNarrow) modeCell.set(m);
     await rebuild();
   };
 
@@ -1732,6 +1854,30 @@ export function activate(host: HTMLElement): SurfaceInstance {
       setCollaboration("degraded");
     }
   };
+
+  // The pane-width defaults. Installed here, at the foot of activate(), because it drives setMode
+  // and so must be declared after it. ResizeObserver fires once on observe with the current box, so
+  // the bootstrap guess taken from the window above is corrected as soon as the surface is laid
+  // out, and again on every retile - which is the case a viewport query cannot see at all.
+  //
+  // Applied only on a CHANGE of state, never per resize tick: setMode rebuilds the row model, and
+  // running that on every pixel of a drag would be the whole stream re-laid out continuously.
+  const applyPaneWidth = (width: number): void => {
+    if (width <= 0) return; // detached or display:none - not a measurement
+    const isNarrow = width < NARROW_PX;
+    if (isNarrow === paneNarrow) return;
+    paneNarrow = isNarrow;
+    applySidebar(isNarrow ? true : sidebarCell.get());
+    void setMode(isNarrow ? "unified" : modeCell.get());
+  };
+  const paneResize =
+    typeof ResizeObserver === "undefined"
+      ? null
+      : new ResizeObserver((entries) => {
+          if (!disposed) applyPaneWidth(entries[0].contentRect.width);
+        });
+  paneResize?.observe(root);
+  controller.signal.addEventListener("abort", () => paneResize?.disconnect(), { once: true });
 
   void load();
 

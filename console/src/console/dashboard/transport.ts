@@ -394,11 +394,18 @@ export class DashboardTransport {
   private startInsight(host: string): void {
     this.stopInsight();
     this.insightHost = host;
+    // Said HERE, not at construction: before a daemon is attached nothing is reading anything, and
+    // seeding this in the initial state made six tiles claim a read was in progress on a dashboard
+    // that had never connected.
+    this.store.set({ insightNote: "Reading history..." });
     void this.fetchInsight();
     this.insightTimer = setInterval(() => void this.fetchInsight(), getPollMs());
   }
 
   private stopInsight(): void {
+    // Nothing will poll again, so leaving the in-progress note standing would keep asserting a read
+    // that has stopped - the same lie this field exists to remove, one state further along.
+    if (this.insightHost) this.store.set({ insightNote: "Not connected." });
     this.insightHost = null;
     if (this.insightAbort) {
       this.insightAbort.abort();
@@ -410,24 +417,52 @@ export class DashboardTransport {
     }
   }
 
-  // refreshInsight forces an out-of-band refetch (the section's refresh button).
-  refreshInsight(): void {
-    if (this.insightHost) void this.fetchInsight();
+  // refreshInsight forces an out-of-band refetch (the section's refresh button). Returns the
+  // fetch's promise, not fire-and-forget, so the button can show feedback for exactly the
+  // duration of the click that asked for it - a background poll tick has no caller to tell.
+  refreshInsight(): Promise<void> {
+    return this.insightHost ? this.fetchInsight() : Promise.resolve();
   }
 
   private async fetchInsight(): Promise<void> {
     if (this.stopped || this.suspended) return;
     const host = this.insightHost;
     if (!host) return;
-    if (this.insightAbort) this.insightAbort.abort();
-    this.insightAbort = new AbortController();
+    // A tick that lands while the previous one is still running SKIPS rather than superseding it.
+    // The history walk can outrun the poll interval (the floor is 2s), and aborting-and-restarting
+    // every tick then means no request ever finishes: the tiles would sit on "Reading history..."
+    // for as long as the dashboard is open, which is a worse lie than stale numbers. stopInsight
+    // still aborts, so teardown is unaffected.
+    if (this.insightAbort) return;
+    const ctrl = new AbortController();
+    this.insightAbort = ctrl;
     try {
       const client = createClient(InsightService, createDaemonTransport(host, getLiveToken()));
-      const resp = await client.getInsight({}, { signal: this.insightAbort.signal });
-      this.store.set({ insight: mapInsight(resp) });
-    } catch {
-      // An abort, a network blip, or a daemon with no workspace (CodeUnavailable): leave the
-      // prior insight in place; the poll retries.
+      const resp = await client.getInsight({}, { signal: ctrl.signal });
+      // The SUCCESS path needs the same guard as the catch. A superseded poll can still resolve if
+      // its body was already buffered when the next tick aborted it, and writing here would both
+      // overwrite the newer poll's insight and clear an error the newer poll had just recorded.
+      if (ctrl.signal.aborted) return;
+      this.store.set({
+        insight: mapInsight(resp),
+        insightNote: null,
+        insightUpdatedAt: Date.now(),
+      });
+    } catch (e) {
+      // A network blip or a daemon with no workspace (CodeUnavailable): leave the prior insight in
+      // place; the poll retries. But RECORD it, because on the first connect there is no prior
+      // insight to leave and the tiles would otherwise report an empty window as a measured result.
+      //
+      // Tested on ctrl's own signal rather than the error: a superseded poll is this poller
+      // cancelling itself and is not a failure, and the transport does not promise a stable error
+      // shape for it (a fetch abort and a Connect Canceled do not look alike).
+      if (ctrl.signal.aborted) return;
+      const msg = e instanceof Error ? e.message : String(e);
+      this.store.set({ insightNote: "The daemon did not answer (" + msg + ")." });
+    } finally {
+      // Releases the in-flight latch above. Guarded on identity so a poll that stopInsight already
+      // superseded cannot clear a NEWER poll's controller on its way out.
+      if (this.insightAbort === ctrl) this.insightAbort = null;
     }
   }
 

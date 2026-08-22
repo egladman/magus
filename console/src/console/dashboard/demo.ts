@@ -775,6 +775,10 @@ export function startDemo(store: Store<DashboardState>): DemoHandle {
       metrics: buildMetrics(now, j++),
       samples: samples.slice(),
       insight,
+      // t0, not now: insight is built once above and never changes tick to tick, so a
+      // "last ran" that ticked with it would claim a poll happened every second when nothing
+      // about the data actually did.
+      insightUpdatedAt: t0,
       agents: buildAgents(now),
       logLines: logBuf.slice(),
     });

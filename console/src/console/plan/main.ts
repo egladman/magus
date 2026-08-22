@@ -437,6 +437,9 @@ function buildScaffold(host: HTMLElement, markerBase: string): Refs {
   root.dataset.phase = "loading";
 
   const toolbar = h("div", "console-plan-toolbar");
+  // Opts every control on this row into the shared compact height. The row carried two: a toggle
+  // group hand-shrunk to ~23px and a form control left at PF's 37px, on the same baseline.
+  toolbar.dataset.controlSize = "compact";
 
   // The source switch, a PF ToggleGroup - the console's segmented-control idiom (the settings
   // surface's Pretty|Raw switch, the log viewer's Log|Timeline). First in the toolbar because it

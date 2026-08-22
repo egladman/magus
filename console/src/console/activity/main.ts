@@ -255,11 +255,19 @@ export function activate(host: HTMLElement): SurfaceInstance {
     scroll: refs.scroll,
     title: "Events",
     label: "Event index",
+    bodyTitle: "Detail",
     onRefresh: load,
     hideWhenEmpty: true,
   });
   const conn = h("span", "console-activity-conn");
-  if (panel) panel.head.insertBefore(conn, panel.refreshBtn);
+  // On a phone the panel auto-collapses and takes conn with it - it lives in head, which is
+  // hidden along with the rest of the aside. reopen is the one piece of the panel still on
+  // screen in that state, so the count rides there too instead of vanishing with the tree.
+  const countBadge = h("span", "console-log-runs__reopen-badge");
+  if (panel) {
+    panel.head.insertBefore(conn, panel.refreshBtn);
+    panel.reopen.append(countBadge);
+  }
 
   // reveal scrolls a section into view and expands it, so clicking an index leaf lands on that event.
   function reveal(index: number, sectionEls: HTMLElement[]): void {
@@ -282,7 +290,13 @@ export function activate(host: HTMLElement): SurfaceInstance {
     const has = events.length > 0;
     refs.empty.hidden = has;
     const n = events.length;
-    conn.textContent = n + (n === 1 ? " event" : " events");
+    // "N events" is the count LOADED, not the count the daemon holds - the trail pages. Saying so
+    // costs one character and stops the number reading as a total, which it only is on the last page.
+    conn.textContent = n + (n === 1 ? " event" : " events") + (nextPageToken ? "+" : "");
+    // The badge stays a bare number - a corner overlay has no room for a sentence, and unlike conn
+    // it is not cleared to an error/status string elsewhere, so it always reflects what is actually
+    // loaded even while conn is saying something else (e.g. a failed "load older" page).
+    countBadge.textContent = n > 0 ? String(n) + (nextPageToken ? "+" : "") : "";
     if (panel) {
       renderIndexTree(panel.treeBox, events, Date.now(), (i) => reveal(i, sectionEls));
       panel.applyDefault(has);
@@ -314,7 +328,11 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (index >= 0) reveal(index, sectionEls);
   }
 
-  function showEmpty(title: string, sub: string, connText: string): void {
+  // keepIndex holds the event index open even though there is nothing to list. The refresh control
+  // lives in that panel's header, and applyDefault(false) with hideWhenEmpty hides the panel AND its
+  // reopen rail - so on a failure the one affordance that could retry goes away with the data, and
+  // this surface has no toolbar to fall back on. A cold or genuinely empty trail still collapses it.
+  function showEmpty(title: string, sub: string, connText: string, keepIndex = false): void {
     refs.body.replaceChildren();
     refs.empty.hidden = false;
     refs.emptyTitle.textContent = title;
@@ -322,7 +340,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     conn.textContent = connText;
     if (panel) {
       renderIndexTree(panel.treeBox, [], Date.now(), () => {});
-      panel.applyDefault(false);
+      panel.applyDefault(keepIndex);
     }
   }
 
@@ -330,9 +348,26 @@ export function activate(host: HTMLElement): SurfaceInstance {
     if (loading) return;
     loading = true;
     if (!pageToken) {
-      conn.textContent = "connecting...";
+      // COLD loads only. showEmpty clears the body, and this same branch is what the index panel's
+      // refresh button re-enters - so painting it unconditionally blanks a populated trail before
+      // the request has even started, and hides the panel holding the button that was just pressed.
+      // Measured against the prior list, because the reset below is about to empty it.
+      const cold = loadedEvents.length === 0;
       loadedEvents = [];
       nextPageToken = "";
+      conn.textContent = "connecting...";
+      // The card's default copy is "No daemon connected", and it is visible from the first paint.
+      // Until this request answers, that is a verdict nothing has reached: say what is happening
+      // instead of asserting an absence, and let the response replace it either way. keepIndex so
+      // the refresh control stays reachable while the request is in flight.
+      if (cold) {
+        showEmpty(
+          "Connecting",
+          "Reading the activity trail from " + daemonHost + ".",
+          "connecting...",
+          true,
+        );
+      }
     }
     try {
       const client = createClient(ActivityService, createDaemonTransport(daemonHost));
@@ -353,6 +388,14 @@ export function activate(host: HTMLElement): SurfaceInstance {
     } catch (e) {
       if (stale) return;
       const msg = e instanceof Error ? e.message : String(e);
+      // A failed "load older" page must not take the pages already on screen with it. loadedEvents
+      // still holds them, so re-render rather than clearing to an error card the reader would have
+      // no way back from - the paging button comes back with it and is the retry.
+      if (pageToken && loadedEvents.length > 0) {
+        render(loadedEvents);
+        conn.textContent = "could not load older activity";
+        return;
+      }
       showEmpty(
         "Could not reach the daemon",
         "The daemon at " +
@@ -361,6 +404,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
           msg +
           "). Start it with: magus server start",
         "not connected",
+        true,
       );
     } finally {
       loading = false;

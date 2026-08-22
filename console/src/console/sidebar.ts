@@ -349,11 +349,19 @@ export function createSidebar(
   pulseText.className = "pf-v6-c-nav__link-text";
   pulseEl.append(pulseDot, pulseText);
 
-  // A ROW in the utility group, not a control tacked onto the rail's foot. It was a bare icon button
-  // sitting alone under a hairline, which read as a band with a glyph adrift in it rather than as
-  // something to press - and at the expanded width it had 140px of empty rail beside it. Built from
-  // the same nav markup as Settings, so it inherits the row's geometry, hover and focus treatment and
-  // lines up with every glyph above it.
+  // A ROW, not a control tacked onto the rail: it was a bare icon button sitting alone under a
+  // hairline, which read as a band with a glyph adrift in it rather than as something to press - and
+  // at the expanded width it had 140px of empty rail beside it. Built from the same nav markup as
+  // Settings, so it inherits the row's geometry, hover and focus treatment and lines up with every
+  // glyph above it.
+  //
+  // It LEADS the rail (see toggleList below), and that is a placement decision rather than an
+  // arrangement one. The rail spans the full window height, so its first row is the window's own
+  // top-left corner - the first thing read in this layout, and a screen corner, which is the easiest
+  // target a pointer has. That slot used to go to whichever surface the registry happened to list
+  // first, and an accident of ordering read as a judgment about which app matters most. The control
+  // that owns the rail is not a member of the list it owns, so it is the one thing there that can
+  // hold the corner without claiming rank over its neighbours.
   const toggleItem = document.createElement("li");
   toggleItem.className = "pf-v6-c-nav__item";
   const toggle = document.createElement("button");
@@ -394,8 +402,14 @@ export function createSidebar(
       "../documentation/",
     ),
   );
-  utilityList.append(toggleItem);
-  host.replaceChildren(list, pulseEl, utilityList);
+  // Its own list rather than the head of the apps list, mirroring the utility group at the foot: the
+  // rail is one PF Nav with a control group at each end and the destinations between them, so the
+  // toggle can never be mistaken for the first destination or be reordered along with them.
+  const toggleList = document.createElement("ul");
+  toggleList.className = "pf-v6-c-nav__list";
+  toggleList.dataset.railLead = "";
+  toggleList.append(toggleItem);
+  host.replaceChildren(toggleList, list, pulseEl, utilityList);
 
   const paintRows = (): void => {
     for (const item of sidebarItems(ws.get(), surfaces, focused.get())) {

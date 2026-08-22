@@ -10,6 +10,7 @@
 import assert from "node:assert/strict";
 import { test, beforeEach, afterEach } from "node:test";
 import { activate } from "./main";
+import { dispatchCommand } from "../commands";
 
 const realFetch = globalThis.fetch;
 
@@ -109,6 +110,22 @@ test("#demo does not advertise workspace context it cannot provide", async () =>
   dispose.deactivate();
 });
 
+// The row button above is withheld on purpose, but the p key and the command palette reach the
+// same action through no button at all - so a demo reader who finds either must still be told
+// why nothing came up, not met with silence.
+test("#demo answers the peek command instead of doing nothing", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.context.peek"));
+  const context = document.querySelector<HTMLElement>(".console-diff-context");
+  assert.equal(context?.hidden, false);
+  assert.match(context?.textContent ?? "", /unavailable in this showcase/);
+
+  dispose.deactivate();
+});
+
 // The surface used to carry its own "See the demo" button. It does not any more - one entry point for
 // the whole console, the title bar's Workspace menu - so what it owes someone with no daemon is a
 // SENTENCE naming where a populated version lives, not a dead end. Every /console/<surface>/ path is
@@ -142,4 +159,62 @@ test("#demo still loads the fabricated changeset", async () => {
   assert.ok(document.querySelector(".console-diff-row__path"));
 
   dispose.deactivate();
+});
+
+// The pane-width defaults. These key off the surface's OWN box, not the viewport, because the
+// surface tiles: two panes on a wide desktop give it far less room than the window suggests, and a
+// viewport query reads "wide" for both. happy-dom does no layout, so the ResizeObserver is stubbed
+// and driven by hand - which is also the only way to exercise a retile without a real browser.
+//
+// The stub is restored in the same test. Isolation is `none`, so a leaked global would follow every
+// other *-dom test in the process.
+test("the diff sizes itself from its own pane, not the window", async () => {
+  const realRO = globalThis.ResizeObserver;
+  // activate() installs two observers (the sidebar virtualizer's and the pane's); keep the one
+  // watching the layout root.
+  let paneCb: ResizeObserverCallback | null = null;
+  class CapturingRO {
+    constructor(private cb: ResizeObserverCallback) {}
+    observe(el: Element): void {
+      if (el.classList.contains("console-diff-layout")) paneCb = this.cb;
+    }
+    unobserve(): void {}
+    disconnect(): void {}
+  }
+  globalThis.ResizeObserver = CapturingRO as unknown as typeof ResizeObserver;
+
+  try {
+    location.hash = "#demo";
+    const dispose = activate(document.body);
+    await settle();
+
+    const root = document.querySelector<HTMLElement>(".console-diff-layout");
+    assert.ok(paneCb, "the surface must observe its own root");
+    // happy-dom reports innerWidth 1024, so the surface mounts in its wide defaults.
+    assert.equal(root?.dataset.sidebar, "open");
+
+    const resizeTo = async (width: number): Promise<void> => {
+      (paneCb as ResizeObserverCallback)(
+        [{ contentRect: { width } } as ResizeObserverEntry],
+        {} as ResizeObserver,
+      );
+      await settle();
+    };
+
+    // A 700px PANE on an unchanged 1024px window: the case a viewport query cannot see.
+    await resizeTo(700);
+    assert.equal(root?.dataset.sidebar, "collapsed", "a narrow pane folds the index");
+
+    // Retiled back to full width, the index returns.
+    await resizeTo(1200);
+    assert.equal(root?.dataset.sidebar, "open", "a wide pane restores the index");
+
+    // A zero box is a detached or hidden surface, not a measurement, and must not collapse it.
+    await resizeTo(0);
+    assert.equal(root?.dataset.sidebar, "open", "an unlaid-out box is not a narrow one");
+
+    dispose.deactivate();
+  } finally {
+    globalThis.ResizeObserver = realRO;
+  }
 });

@@ -43,6 +43,7 @@ import { applyFilterFromInput, renderFilterChips, setFilter } from "./filter";
 import { clearMarks, runSearch, stepActiveMark } from "./search";
 import { graphAvailable, openInGraph, shareLink } from "./share";
 import { connectLive, setLiveVisible } from "./live";
+import { publishStatus } from "../status";
 import { startDemo, stopDemo } from "./demo";
 import { installKeybindings, mergeKeymap, registerCommand, type Keymap } from "../commands";
 import { mountZoomControl, type ZoomControl } from "../zoomControl";
@@ -388,7 +389,12 @@ function finishLoad(ref: string, statusMsg: string): void {
   // render() so a stale timeline=true from a previous log cannot try to plot a text log.
   updateTimelineControl();
   render();
-  setStatus(statusMsg);
+  // Clear the strip rather than parking the summary in it: the strip is for a state the reader is
+  // waiting on or has to act on, and a permanent info alert over every log that loaded fine is
+  // neither. The summary is metadata, so it goes to the shared bar's count slot - the same slot the
+  // live tail already uses for "N events".
+  setStatus("");
+  publishStatus({ count: statusMsg });
   const foldBtn = el("fold-all-btn");
   if (foldBtn)
     (foldBtn as HTMLButtonElement).disabled =

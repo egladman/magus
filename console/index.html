@@ -53,6 +53,16 @@
        the content both begin to its right. That is the macOS rule - one leading sidebar may span the
        full height and take the space from the titlebar - and it is why this is not inside <main>. -->
   <nav id="console-sidebar" class="pf-v6-c-nav" aria-label="Applications"></nav>
+  <!-- The content FRAME: the tab strip and the panes below it are one surface, so they are one
+       element. This exists for a reason a wrapper usually does not - a shadow. The frame casts left
+       onto the rail and down onto the status bar, and that cast has to be unbroken down the whole
+       edge. Split across the header and the main it cannot be: PatternFly's directional elevation
+       token carries a -4px SPREAD, which insets each box's shadow four pixels on every side, so two
+       stacked boxes pull their casts away from the seam they share and leave an eight-pixel gap in
+       the line exactly where the tabs meet the content. One box, one cast. The frame also owns the
+       rail-facing border and the rounded bottom-left corner, for the same reason: they describe the
+       edge of the content surface, and the content surface is this. -->
+  <div id="console-frame">
   <header id="console-titlebar">
     <div id="console-tabs"></div>
     <!-- Title-bar-right control group: PatternFly plain (borderless) icon Buttons sitting ON the tab row
@@ -170,6 +180,7 @@
       </div>
     </div>
   </main>
+  </div>
   <footer id="console-statusbar"></footer>
 
   <!-- Console-wide reference. ref-drawer.ts clones these into the Reference panel AFTER whatever the

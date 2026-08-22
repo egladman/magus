@@ -66,10 +66,12 @@ export function latencyTile(): Tile {
     gridEl.append(fig);
     readouts[k] = ro;
     charts[k] = new TimeChart(plot, {
+      // Dash, not just hue, tells the three lines apart in greyscale or for a colorblind reader -
+      // solid/dashed/dotted, matching p50 through p99's rising severity.
       series: [
         { label: "p50", colorVar: "--console-status-running" },
-        { label: "p95", colorVar: "--console-status-warn" },
-        { label: "p99", colorVar: "--console-status-danger" },
+        { label: "p95", colorVar: "--console-status-warn", dash: [6, 3] },
+        { label: "p99", colorVar: "--console-status-danger", dash: [1, 3] },
       ],
       yFormat: (v) => fmtDur(v),
       ySize: 54,

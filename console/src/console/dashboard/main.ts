@@ -25,7 +25,7 @@ import { bind } from "../view";
 import { initialState, type DashboardState, type ConnView } from "./state";
 import { DashboardTransport } from "./transport";
 import { startDemo, type DemoHandle } from "./demo";
-import type { Tile } from "./tiles/card";
+import { helpGlyph, type Tile } from "./tiles/card";
 import { poolTile } from "./tiles/pool";
 import { utilizationTile } from "./tiles/utilization";
 import { cacheStatsTile } from "./tiles/cacheStats";
@@ -276,16 +276,24 @@ function wireNotifications(): void {
 let tiles: Tile[] = [];
 let rotator: Rotator | null = null;
 
-// Board sections label direct panel children.
-function boardSection(label: string, detail: string): HTMLElement {
+// Board sections label direct panel children. asHint puts detail behind the shared "?" glyph
+// instead of an always-visible sentence - for a section read on every load (unlike a tile's own
+// why, opened only on demand), a full sentence in the default view competes with the cards it
+// introduces for exactly the attention those cards are trying to earn.
+function boardSection(label: string, detail: string, asHint = false): HTMLElement {
   const section = document.createElement("div");
   section.className = "console-dashboard-section";
   section.dataset.boardOnly = "";
   const title = document.createElement("h2");
   title.textContent = label;
-  const sub = document.createElement("p");
-  sub.textContent = detail;
-  section.append(title, sub);
+  section.append(title);
+  if (asHint) {
+    section.append(helpGlyph(detail, label));
+  } else {
+    const sub = document.createElement("p");
+    sub.textContent = detail;
+    section.append(sub);
+  }
   return section;
 }
 // Store subscriptions taken out by mountTiles, and the controller for activate()'s
@@ -399,7 +407,7 @@ function mountTiles(): void {
     })),
   ];
   const appendSection = (section: BoardSection, title: string, description: string): void => {
-    host.append(boardSection(title, description));
+    host.append(boardSection(title, description, true));
     for (const item of boardTiles) if (item.section === section) host.append(item.tile.el);
   };
   appendSection("live", "Live work", "Decide, coordinate, and follow the work that is moving now.");
@@ -417,6 +425,7 @@ function mountTiles(): void {
     boardSection(
       "Workspace intelligence",
       "Longer-horizon signals that explain why this workspace behaves the way it does.",
+      true,
     ),
   );
   for (const item of boardTiles) {
@@ -434,7 +443,7 @@ function mountTiles(): void {
   host.append(split.el);
   boardDisposers = [() => alerts.destroy(), () => split.destroy()];
 
-  tiles = [header, ...boardTiles.map((item) => item.tile)];
+  tiles = [header, insight, ...boardTiles.map((item) => item.tile)];
   boardOnlyTiles = new Set(
     boardTiles.filter((item) => item.bigPicture === "board").map((item) => item.tile),
   );

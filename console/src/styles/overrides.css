@@ -30,11 +30,16 @@
   min-height: var(--console-statusbar-h);
   padding: 0.1rem var(--console-pad);
   /* The same recessive tone as the title bar and the navigation rail - the three are one continuous
-     chrome surface wrapping the content, so no seam is drawn BETWEEN them. The border and cast here
-     face the content above, which is where the chrome ends and the depth belongs. */
+     chrome surface wrapping the content, so no seam is drawn BETWEEN them. The border faces the
+     content above, which is where the chrome ends. The CAST that used to face that way is gone: it
+     had the frame lifted over the content it wraps, which is backwards. The outlet casts down onto
+     this bar now (console.css), so the elevation sits on the raised body instead of the ground.
+     NO border either, at any width. One mark per seam: the hairline and the cast were both drawing
+     this same edge, and because the cast is offset a pixel DOWNWARD its strongest lobe landed
+     directly beneath the hairline - a crisp line with a soft one under it, which reads as a doubled
+     border rather than as one edge. The cast is the mark that survives, since it is the one that says
+     which side is raised; the bar and the pane above it can share a tone and still separate. */
   background: var(--console-chrome);
-  border-top: 1px solid var(--pf-t--global--border--color--default);
-  box-shadow: var(--pf-t--global--box-shadow--sm--top);
   font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle);
   overflow: hidden; /* a stray long value truncates with the bar, never scrolls the page */
   -webkit-user-select: none; user-select: none; /* chrome rail, like a native window edge */
@@ -99,15 +104,39 @@
 #console-statusbar .console-shell-statusbar__activity:hover,
 #console-statusbar .console-shell-statusbar__share:hover { opacity: 1; }
 
-/* Panes tray toggle (main.ts): the same quiet weight as the shortcuts button, but its glyph is a live
- * readout of the persisted split direction (panesIcon) rather than a static icon, so it stays a touch
- * brighter than "muted chrome" and gets the accent while its popup is open. */
+/* Panes tray toggle (main.ts): nearly the quiet weight of the shortcuts button, but its glyph is a
+ * live readout of the persisted split direction (panesIcon) rather than a static icon, so it stays a
+ * touch brighter than "muted chrome" and gets the accent while its popup is open. Alone among the
+ * tray buttons it also carries a word, which is what earns it the fill below. */
 #console-statusbar .console-shell-statusbar__panes {
-  padding: 0 0.15rem; min-height: 0; line-height: 0; border: 0; background: none;
+  display: inline-flex; align-items: center; gap: 0.3rem;
+  padding: 0.1rem 0.4rem; min-height: 0; border: 0;
+  /* The glyph and its word are ONE control, but at the bar's 0.9rem gap a bare label sitting among
+     three bare glyphs read as a fourth, unrelated item. A quiet fill - the view-only chip's wash
+     without its border - closes the pair into a single pill, so the word is obviously the icon's
+     rather than the share button's. */
+  background: color-mix(in srgb, var(--pf-t--global--text--color--regular) 7%, transparent);
+  border-radius: var(--pf-t--global--border--radius--small);
+  /* PF's button base sets 14px, which made this the LARGEST text in an 11.5px bar: the label shouted
+     while the control it names is deliberately quiet chrome. Inherit puts it back on the bar's size. */
+  font-size: inherit;
   color: var(--pf-t--global--text--color--subtle); opacity: 0.8;
 }
-#console-statusbar .console-shell-statusbar__panes:hover { opacity: 1; }
+#console-statusbar .console-shell-statusbar__panes:hover {
+  opacity: 1;
+  background: color-mix(in srgb, var(--pf-t--global--text--color--regular) 12%, transparent);
+}
 #console-statusbar .console-shell-statusbar__panes[aria-expanded="true"] { color: var(--console-accent); opacity: 1; }
+/* The glyph is an inline SVG, so it sat on the baseline of a line box the button's line-height sized -
+   two pixels above the label's optical centre, which is the misalignment you see before you can name
+   it. Its own flex box takes the line box out of the equation and centres the glyph on its metrics. */
+#console-statusbar .console-shell-statusbar__panes .pf-v6-c-button__icon {
+  display: flex; align-items: center; line-height: 0;
+}
+/* Spells out the icon's orientation (main.ts's setPanesIcon keeps it in sync) - tiling is not a
+   metaphor every reader already carries, and the glyph alone assumes it is. Own line-height: the
+   button above still wants its icon at line-height 0, but that would squash this text to nothing. */
+#console-statusbar .console-shell-statusbar__panes-label { line-height: 1.35; white-space: nowrap; }
 
 /* Connection liveness item: a leading dot whose color IS the link/health state, read from the
  * console status tokens (theme-aware). Only the DOT carries the status color (via the
@@ -340,7 +369,7 @@
    content and the ellipsis as a "keep going / pause to save" hint. */
 [data-kbeditor] [data-kbcap-more] { color: var(--pf-t--global--text--color--subtle); font-weight: 400; }
 [data-kbeditor] [data-chord][data-disabled] { color: var(--pf-t--global--text--color--subtle); font-style: italic; }
-[data-kbeditor] [data-conflict] { color: var(--console-status-queued); font-size: 0.72rem; white-space: nowrap; }
+[data-kbeditor] [data-conflict] { color: var(--console-status-danger-text); font-size: 0.72rem; white-space: nowrap; }
 [data-kbeditor] [data-kactions] { margin-left: auto; display: flex; gap: 0.3rem; flex: 0 0 auto; }
 /* The row controls carry a leading glyph; center the button row and the inline <svg> so the glyph
  * lines up with the label instead of hanging off PF's default baseline alignment. */
@@ -576,3 +605,57 @@
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-shell-activity__empty[hidden] { display: none; }
+
+/* Touch targets in the status bar. Apple's HIG asks for a 44x44 pt hit region; these tray icons
+   measure 19x14 because the button carries `padding: 0 2.4px` around a 14px glyph.
+   Only the REGION grows - the glyph stays 14px, so the bar reads the same and stops being a row of
+   targets you have to aim at.
+   PAIRED with the (pointer: coarse) block at the foot of console.css, which grows the bar itself to
+   44px so these fit; without that half this rule would just overflow the bar. Change one, change the other. */
+/* Below the shell's inversion AND on a touch pointer, two of the four tray controls are controls for
+ * things the device does not have: the cheat sheet lists KEYBOARD shortcuts, and Panes opens the
+ * tiling tray, which this width has already folded away in favour of the launcher grid. Dropping
+ * them is not dropping function - the function is what is absent - and it is what buys the room for
+ * the two that remain to take a full 44x44 target. Four 44px-wide buttons plus the zoom stepper
+ * measure 499px of content in a 375px bar that clips, which is how Panes, Share and Keyboard
+ * shortcuts went off the end when width was raised without this.
+ *
+ * BOTH conditions, not just the pointer: a touchscreen laptop at 1280px is coarse too, and there
+ * tiling works and the rail is present, so hiding its control would remove something real. */
+@media (pointer: coarse) {
+  #console-statusbar .pf-v6-c-button.pf-m-plain {
+    /* Height wherever the pointer is coarse; width only below the inversion, in the block after this
+       one. 14px was the dimension that made these hard to hit at all. Above the inversion the bar
+       keeps all four controls at 19x44, which still clears WCAG 2.5.8 through its spacing exception
+       (checked: no two target centres within 24px) - it is Apple's 44x44 that wants the width. */
+    min-block-size: 44px;
+    /* Centring is not optional here: these buttons carry `line-height: 0` (see the tray rules above),
+       which pins the glyph to the top of whatever box it is in. At the old 19x14 the box WAS the
+       glyph so it never showed; grow the box and the icon hangs at the top of it. */
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+  }
+  /* Panes drops the fill it carries elsewhere. At 44px the pill is as tall as the bar itself, and a
+     slab that size stops reading as "these two belong together" and starts reading as "this control
+     is active" - which is what the accent on [aria-expanded] already means. The 44px box is grouping
+     enough on its own; the wash was only ever there to fight the 0.9rem gap at chrome scale. */
+  #console-statusbar .pf-v6-c-button.console-shell-statusbar__panes,
+  #console-statusbar .pf-v6-c-button.console-shell-statusbar__panes:hover {
+    background: none;
+  }
+}
+
+/* AFTER the block above, and not merged into it, because `display: none` here has to beat the
+ * `display: inline-flex` there. Both selectors are one id and two classes, so specificity cannot
+ * settle it and source order does - written before it, the hide silently lost and the buttons
+ * stayed on screen at 44px wide, pushing two of them off the end of the bar. */
+@media (pointer: coarse) and (max-width: 47.999rem) {
+  #console-statusbar .pf-v6-c-button.console-shell-statusbar__shortcuts,
+  #console-statusbar .pf-v6-c-button.console-shell-statusbar__panes {
+    display: none;
+  }
+  #console-statusbar .pf-v6-c-button.pf-m-plain {
+    min-inline-size: 44px;
+  }
+}

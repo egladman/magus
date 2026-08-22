@@ -58,7 +58,10 @@
    hairline) and the row padding are here; the flex/wrap is PatternFly's. */
 #log-bar {
   flex: 0 0 auto;
-  background: var(--pf-t--global--background--color--secondary--default);
+  /* --console-chrome: this toolbar frames the content the same way the shell's bars do, and the raw
+     secondary token puts it a plane below them in dark (#151515 against #242424). One token for
+     everything that is chrome is what keeps the surface from showing seams where it joins the shell. */
+  background: var(--console-chrome);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
   font-size: 0.8rem;
 }
@@ -155,6 +158,22 @@
   border-top: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-log-filter[hidden] { display: none; }
+
+/* The load/decode/fetch strip, mirroring the graph explorer's #graph-status: PF's padding is trimmed
+   so the notice sits in the panel rather than floating as a card inside it, and the title carries
+   body weight because the message IS the whole notice, not a headline over one. */
+#log-status.console-log-status {
+  margin: 0.5rem 0.8rem 0;
+  border-radius: var(--pf-t--global--border--radius--small);
+  font-size: 0.78rem; line-height: 1.45;
+  --pf-v6-c-alert--PaddingBlockStart: 0.45rem;
+  --pf-v6-c-alert--PaddingBlockEnd: 0.45rem;
+  --pf-v6-c-alert--PaddingInlineStart: 0.6rem;
+  --pf-v6-c-alert--PaddingInlineEnd: 0.6rem;
+}
+#log-status[hidden] { display: none; }
+#log-status .pf-v6-c-alert__title { font-size: 0.78rem; font-weight: 400; overflow-wrap: anywhere; }
+#log-status .pf-v6-c-alert__icon { font-size: 0.72rem; font-weight: 700; }
 .console-log-filter__op {
   font-weight: 600; font-size: 0.68rem; letter-spacing: 0.04em;
   color: var(--pf-t--global--text--color--subtle);
@@ -176,7 +195,11 @@
   font-family: var(--pf-t--global--font--family--mono);
   /* --log-zoom (set by applyZoom in main.ts) scales the text view; it defaults to 1. */
   font-size: calc(0.8rem * var(--log-zoom, 1)); line-height: 1.6;
-  padding: 0.4rem 0;
+  /* No padding at the TOP. The body now sits under its own header (.console-log-body__head), and
+     0.4rem there left the first row floating below that header's hairline instead of starting against
+     it - a thin band of dead white in the one place the eye lands first. The bottom keeps its 0.4rem:
+     that end has no rule to sit against, and the last row wants clearance from the pane edge. */
+  padding: 0 0 0.4rem;
 }
 /* Waterfall zoom: magnify the SVG itself (a width:100% SVG re-fits under a body zoom). */
 .console-render-body[data-waterfall] .console-log-waterfall__svg { zoom: var(--log-zoom, 1); }
@@ -245,6 +268,16 @@
 /* Invocation group header in a multi-invocation waterfall: the command, bolded. */
 .console-log-waterfall__grouphead { font-size: 10px; font-weight: 600; fill: var(--pf-t--global--text--color--regular); font-family: var(--pf-t--global--font--family--mono); }
 .console-log-waterfall__label--step { fill: var(--pf-t--global--text--color--subtle); font-size: 8px; }
+/* The chart is authored in a fixed 900-unit viewBox and scales to the panel, so its type scales with
+   it: at a 375px viewport the whole drawing renders at 0.357 and the 8px axis labels land at 2.85px.
+   Hold the drawing at the width it was drawn for and let the panel scroll across it, rather than
+   shrinking the labels to nothing to avoid a scrollbar. Scoped to [data-waterfall] so the text log,
+   which wraps and must not scroll sideways, is untouched. The zoom stepper still composes on top
+   (it applies `zoom` to this same element), so scaling back down to fit stays one control away. */
+@media (max-width: 47.999rem) {
+  .console-render-body[data-waterfall] { overflow-x: auto; }
+  .console-render-body[data-waterfall] .console-log-waterfall__svg { min-inline-size: 900px; }
+}
 .console-log-waterfall__bar { fill: var(--console-accent); }
 .console-log-waterfall__bar.console-log-waterfall__bar--step { fill: var(--pf-t--global--text--color--subtle); opacity: 0.7; }
 .console-log-waterfall__bar[data-status="pass"] { fill: var(--console-status-ok); }
@@ -390,14 +423,42 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
   flex: 0 0 clamp(10rem, 24%, 15rem); display: flex; flex-direction: column;
   min-height: 0; min-width: 0;
   border-right: 1px solid var(--pf-t--global--border--color--default);
-  background: var(--pf-t--global--background--color--secondary--default);
+  /* Chrome, so the chrome token - it sits directly against the navigation rail, and the two reading
+     as different planes was the seam most visible on this surface. Below 48rem it also floats OVER
+     the content as an overlay, where the raw secondary token had it darker than what it covered. */
+  background: var(--console-chrome);
 }
 .console-log-runs[hidden] { display: none; }
+/* ONE height for both column headers, and it is a floor rather than a fixed size so injected chrome
+   (activity puts its connection chip in the index header) can still grow the row. The two differ in
+   content - the index header carries icon buttons, the body header only a word - so left to their
+   intrinsic heights they came out 37.8 and 32.5, and their rules landed 5.3px apart. The number is
+   the taller of the two, rounded up to a whole pixel at the default scale. If a caller ever injects
+   something taller than this into either header, they part again and this has to become a real
+   shared measurement rather than a floor. */
+.console-log-split { --console-log-head-h: 2.375rem; }
+.console-log-runs__head,
+.console-log-body__head {
+  box-sizing: border-box;
+  min-block-size: var(--console-log-head-h);
+}
 .console-log-runs__head {
   flex: 0 0 auto; display: flex; align-items: center; gap: 0.15rem;
   padding: 0.4rem 0.35rem 0.4rem 0.7rem;
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
+/* The BODY column: the header row and the scroller under it, stacked. The scroller has to stay the
+   flexing child so it still scrolls internally rather than growing the split. */
+.console-log-body { flex: 1 1 auto; min-width: 0; min-height: 0; display: flex; flex-direction: column; }
+/* The index header's opposite number, and the reason it exists is the RULE. Every metric here is
+   copied from .console-log-runs__head rather than chosen: same padding, same border, so the two
+   hairlines resolve to the same y and read as one line across the surface. Change one, change both. */
+.console-log-body__head {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 0.15rem;
+  padding: 0.4rem 0.35rem 0.4rem 0.7rem;
+  border-bottom: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-log-body__title { margin-right: auto; font-size: 0.78rem; font-weight: 600; color: var(--pf-t--global--text--color--regular); }
 .console-log-runs__title { margin-right: auto; font-size: 0.78rem; font-weight: 600; color: var(--pf-t--global--text--color--regular); }
 .console-log-runs__tree { flex: 1 1 auto; overflow: auto; padding: 0.35rem 0.2rem 0.6rem; }
 .console-log-runs__empty { margin: 0.5rem 0.7rem; font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); line-height: 1.5; }
@@ -405,12 +466,23 @@ main .console-log-help > summary:not([role]), main .console-log-help[open] > sum
 .console-log-runs__dot { display: inline-block; width: 7px; height: 7px; margin-right: 0.45rem; border-radius: 50%; flex: 0 0 auto; background: var(--pf-t--global--text--color--subtle); }
 .console-log-runs__dot[data-status="pass"] { background: var(--console-status-ok); }
 .console-log-runs__dot[data-status="fail"] { background: var(--console-status-danger); }
-/* The slim reopen rail, shown only while the aside is hidden but runs exist. */
+/* The slim reopen rail, shown only while the aside is hidden but runs exist. Column, not PF's
+   default row, so a caller's count badge (activity's event count - see console-log-runs__reopen-badge
+   below) stacks under the icon instead of squeezing beside it in a rail this narrow. */
 .console-log-runs__reopen {
   flex: 0 0 auto; align-self: stretch; border-right: 1px solid var(--pf-t--global--border--color--default);
   border-radius: 0; padding-inline: 0.15rem;
+  display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 0.2rem;
 }
 .console-log-runs__reopen[hidden] { display: none; }
+/* The count a caller injects (activity: how many events are loaded) so it survives the panel
+   auto-collapsing on a phone - see the CollapsiblePanel.reopen doc in runtree.ts for why head's
+   own count does not. Empty by default (unset by any caller that has none, e.g. the log viewer's
+   run browser), so :empty hides it rather than reserving space for a badge nobody filled in. */
+.console-log-runs__reopen-badge {
+  font-size: 0.62rem; line-height: 1; color: var(--pf-t--global--text--color--subtle);
+}
+.console-log-runs__reopen-badge:empty { display: none; }
 /* Keep the tree readable in the dense panel: the run leaves are mono (they read as data/timestamps). */
 .console-log-runs .pf-v6-c-tree-view__node-text { font-size: 0.78rem; }
 .console-log-runs__tree .pf-v6-c-tree-view__list-item:not([aria-expanded]) .pf-v6-c-tree-view__node-text { font-family: var(--pf-t--global--font--family--mono); }

@@ -22,7 +22,7 @@ import {
   tabHostsSurface,
   type TabState,
 } from "./tabs";
-import { createTabBar } from "./tabBar";
+import { createTabBar, tabViews } from "./tabBar";
 import { createSidebar } from "./sidebar";
 import { fetchPulse, type PulseView } from "./pulse";
 import { fetchDiffCount, type Badge } from "./badges";
@@ -438,6 +438,101 @@ function panesIcon(mode: "row" | "col"): SVGElement {
   return svg;
 }
 
+// wireTabOverflowCue stamps the tab strip with WHICH SIDE still has tabs off screen, so the strip can
+// fade that edge (console.css). On a phone the row scrolls horizontally and its scrollbar is hidden -
+// deliberately, because the strip is swiped rather than dragged - and hiding it took away the only cue
+// the row had that anything lay past the edge. A partially clipped tab is a cue when one happens to
+// straddle the boundary, and nothing at all when the last visible tab ends flush.
+//
+// The element that actually scrolls is PatternFly's <ul class="pf-v6-c-tabs__list">, NOT the host: the
+// host's own overflow-x never engages, because .pf-v6-c-tabs between them is overflow:hidden and clips
+// the run before it can reach the host. Measured, not assumed - the host reports scrollWidth ===
+// clientWidth with seven tabs open while the list reports 856 against 375.
+//
+// Everything is bound to the HOST anyway, because tabBar's render() builds a brand new <ul> on every
+// workspace change and anything held on the old one dies silently at the first tab open. Hence
+// capture for the scroll (scroll does not bubble, but it does reach an ancestor listening in the
+// capture phase) and a MutationObserver for the swap itself. Three triggers, one read: the DOM is
+// asked every time rather than any of this being cached.
+function wireTabOverflowCue(host: HTMLElement): void {
+  // One control per edge, pinned over the strip's ends and opaque, so the tabs scroll UNDERNEATH them.
+  // A fade was the first attempt and it was too quiet to do the job: it says "something continues"
+  // only if you already suspect it might, it cannot be pressed, and at the trailing edge it competed
+  // with the controls cluster next door. A button that names the number of tabs you cannot see states
+  // the thing outright and is also the way to reach them.
+  const button = (edge: "start" | "end"): HTMLButtonElement => {
+    const b = document.createElement("button");
+    b.type = "button";
+    b.className = "console-tabs-more";
+    b.dataset.tabScroll = edge;
+    const icon = svgIcon();
+    const path = document.createElementNS("http://www.w3.org/2000/svg", "polyline");
+    path.setAttribute("points", edge === "start" ? "15 6 9 12 15 18" : "9 6 15 12 9 18");
+    icon.append(path);
+    const count = document.createElement("span");
+    count.className = "console-tabs-more__count";
+    // The glyph leads at the start edge and trails at the end edge, so the chevron is always on the
+    // outside pointing off-screen and the number sits between it and the tabs it counts.
+    b.append(...(edge === "start" ? [icon, count] : [count, icon]));
+    b.addEventListener("click", () => {
+      const strip = host.querySelector<HTMLElement>(".pf-v6-c-tabs__list");
+      // A page at a time rather than a fixed pixel step, and 80% of it so one tab stays on screen as
+      // an anchor - a full page leaves nothing shared between before and after.
+      if (strip) strip.scrollBy({ left: (edge === "start" ? -1 : 1) * strip.clientWidth * 0.8 });
+    });
+    return b;
+  };
+  const controls = { start: button("start"), end: button("end") };
+  host.append(controls.start, controls.end);
+
+  const update = (): void => {
+    const strip = host.querySelector<HTMLElement>(".pf-v6-c-tabs__list");
+    // Sub-pixel slack: fractional tab widths leave a fraction of a pixel unscrolled at a true end, and
+    // without the tolerance the trailing control never clears on a strip scrolled all the way over.
+    const max = strip ? strip.scrollWidth - strip.clientWidth : 0;
+    if (!strip || max <= 1) {
+      delete host.dataset.tabOverflow;
+      return;
+    }
+    const more = { start: strip.scrollLeft > 1, end: strip.scrollLeft < max - 1 };
+    host.dataset.tabOverflow = more.start && more.end ? "both" : more.start ? "start" : "end";
+    // Counted from the RENDERED boxes rather than from scroll arithmetic: tabs are not a uniform
+    // width (the active one keeps its whole label while the rest ellipsize), so there is no tab count
+    // to derive from a pixel offset. A tab straddling the edge counts as hidden - it is one you
+    // cannot read, which is what the number is answering.
+    const edge = strip.getBoundingClientRect();
+    const tabs = [...strip.querySelectorAll<HTMLElement>("[data-tab-id]")].map((t) =>
+      t.getBoundingClientRect(),
+    );
+    for (const side of ["start", "end"] as const) {
+      const n = tabs.filter((b) =>
+        side === "end" ? b.right > edge.right + 1 : b.left < edge.left - 1,
+      ).length;
+      const el = controls[side];
+      el.hidden = !more[side];
+      const label = el.querySelector<HTMLElement>(".console-tabs-more__count");
+      // Written only when it CHANGES, and that guard is load-bearing rather than an optimisation.
+      // Assigning textContent replaces the text node, which is a childList mutation inside the very
+      // subtree the observer below watches - so an unconditional write re-entered update() on its own
+      // output and hung the tab. Comparing first makes the loop converge on the first pass.
+      const text = String(n);
+      if (label && label.textContent !== text) label.textContent = text;
+      const name = n === 1 ? "1 more tab" : n + " more tabs";
+      if (el.getAttribute("aria-label") !== name) {
+        el.setAttribute("aria-label", name);
+        el.title = name;
+      }
+    }
+  };
+  host.addEventListener("scroll", update, { capture: true, passive: true });
+  new ResizeObserver(update).observe(host);
+  // childList only: update() writes an attribute on the host, and observing attributes here would
+  // have it retrigger itself. The controls are appended before this starts, so their own insertion is
+  // not one of the mutations it sees.
+  new MutationObserver(update).observe(host, { childList: true, subtree: true });
+  update();
+}
+
 // setPanesIcon repaints an already-built tray button's glyph in place - called once per tray button at
 // creation, and again on every button whenever the split mode changes (refreshPanesTray).
 //
@@ -453,6 +548,12 @@ function setPanesIcon(btn: HTMLElement, mode: "row" | "col"): void {
   btn.dataset.panesMode = mode;
   const iconSpan = btn.querySelector<HTMLElement>(".pf-v6-c-button__icon");
   if (iconSpan) iconSpan.replaceChildren(panesIcon(mode));
+  // The icon alone assumes the reader already knows what a split-pane glyph means - a fair bet for
+  // someone who has used a tiling window manager before, a bad one for someone who has not. Same
+  // words the Panes tray itself uses (Split horizontal / Split vertical), so a reader who opens the
+  // tray to check finds the term already familiar rather than a second vocabulary to learn.
+  const labelSpan = btn.querySelector<HTMLElement>(".console-shell-statusbar__panes-label");
+  if (labelSpan) labelSpan.textContent = mode === "row" ? "Horizontal" : "Vertical";
 }
 
 // notConnectedHint is the #console-conn accessible name / tooltip when the console is not connected: it
@@ -594,10 +695,15 @@ function makeStatusBar(withPanesButton = true): HTMLElement {
     const panesIconSpan = document.createElement("span");
     panesIconSpan.className = "pf-v6-c-button__icon";
     panesIconSpan.append(panesIcon(splitMode.get()));
+    // Spells out the icon's orientation in words (setPanesIcon keeps it in sync) - tiling is not
+    // a metaphor everyone already carries, and the glyph alone assumes it is.
+    const panesLabelSpan = document.createElement("span");
+    panesLabelSpan.className = "console-shell-statusbar__panes-label";
+    panesLabelSpan.textContent = splitMode.get() === "row" ? "Horizontal" : "Vertical";
     // Record the rendered mode so setPanesIcon (refreshPanesTray, incl. on every popup open) treats an
     // unchanged mode as a no-op and never detaches this glyph's nodes out from under a tap in progress.
     panes.dataset.panesMode = splitMode.get();
-    panes.append(panesIconSpan);
+    panes.append(panesIconSpan, panesLabelSpan);
     right.append(panes);
   }
   // Share a read-only view: a quiet share-glyph button, loopback-console only (a read-only viewer can't
@@ -1107,6 +1213,7 @@ export function startConsole(
     },
   });
   tabBarHost.append(bar.el);
+  wireTabOverflowCue(tabBarHost);
 
   // Wire the title-bar settings gear to OPEN the Settings surface as a tab (single-instance: open()
   // focuses it if it is already open). The old gear popover was retired; its controls live on the
@@ -1407,7 +1514,28 @@ export function startConsole(
     commands: listCommands,
     keymap: () => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()),
     mac: isMac(),
-    onRun: (id) => dispatchCommand(id),
+    onRun: (id, arg) => dispatchCommand(id, arg),
+  });
+  // Go to tab: the first command that takes a TARGET, and the reason the palette learned to ask for
+  // one. Until now an open tab was reachable only by clicking it, which on a strip that scrolls means
+  // finding it first - the thing the edge controls make possible but not quick.
+  //
+  // The targets come from tabViews, the same pure mapping the strip itself renders, so the names in
+  // the palette are exactly the names on the tabs - including the parent-directory hint two tabs grow
+  // when they would otherwise both read main.ts. Derived per call: the list is whatever is open at the
+  // moment the question is asked, and nothing has to invalidate it when a tab opens or closes.
+  registerCommand({
+    id: "console.tab.goto",
+    label: "Go to tab",
+    group: "Tabs",
+    targets: () =>
+      tabViews(ws.get()).map((t) => ({
+        value: t.id,
+        label: t.hint ? t.title + " - " + t.hint : t.title,
+      })),
+    run: (arg) => {
+      if (typeof arg === "string") activateTab(arg);
+    },
   });
   document.body.append(commandBar.el);
   registerCommand({

@@ -17,17 +17,33 @@
   --console-diff-add: var(--pf-t--global--color--status--success--default, #3e8635);
   --console-diff-del: var(--pf-t--global--color--status--danger--default, #c9190b);
   --console-diff-surface: var(--pf-t--global--background--color--primary--default, #ffffff);
-  --console-diff-panel: var(--pf-t--global--background--color--secondary--default, #f2f2f2);
+  /* The surface's chrome plane - sidebar, toolbar, peek panel. --console-chrome rather than the raw
+     secondary token so this joins the shell's frame instead of sitting a plane below it: in dark the
+     raw token is #151515 against a rail and title bar at #242424, which drew a seam exactly where the
+     surface meets the shell. Identical to the old value in light, where both resolve to #f2f2f2. */
+  --console-diff-panel: var(--console-chrome, #f2f2f2);
 
-  --console-syn-comment: #636d76;
-  --console-syn-keyword: #715bb0;
-  --console-syn-string: #3d7a50;
+  /* comment/keyword/string are a shade down from #636d76 / #715bb0 / #3d7a50: on a tinted row they
+     measured 4.47, 4.65 and 4.26, and the first and last were under AA. The shift is 1-5% toward
+     black and hue-preserving, so the theme reads the same.
+     Light adjusts the PALETTE where dark adjusts the TINT, and that is deliberate rather than
+     inconsistent: here the tokens needed a few percent, while in dark clearing the same bar by
+     colour alone wanted a third of the way to white - a visibly different comment. Each theme
+     moves whichever costs less to look at. */
+  --console-syn-comment: #606a72;
+  --console-syn-keyword: #705aae;
+  --console-syn-string: #3a744c;
   --console-syn-number: #8d5e26;
   --console-syn-function: #2f6aad;
 }
 
 :root.pf-v6-theme-dark {
-  --console-syn-comment: #838e98;
+  /* Lifted from #838e98, which was 4.36:1 on the plain dark ground and 2.84:1 once an added row's
+     tint went under it - failing AA before any tint and badly after. Comments are the one token
+     this bites: keyword, string, number and function all clear on their own. Paired with the
+     lighter dark row tint below; neither change clears AA alone, and the pair puts the worst of the
+     fifteen token/ground combinations at 4.52:1. */
+  --console-syn-comment: #9da6ae;
   --console-syn-keyword: #b79ae6;
   --console-syn-string: #8fc79b;
   --console-syn-number: #dbab77;
@@ -53,6 +69,11 @@
   height: 100%;
   min-height: 0;
   overflow: hidden;
+  /* Shared by the sidebar head and the toolbar so their bottom hairlines land on the same row.
+     Independently, the two are sized by unrelated content - a title versus a row of PF chips -
+     and drift out of alignment the moment either one's content changes. One number, read by
+     both, is what keeps that from happening again. */
+  --console-diff-head-block-size: 2.5rem;
 }
 
 /* Collapsed, the index gives its column back to the diff and leaves only the reopen rail. The
@@ -61,12 +82,18 @@
   grid-template-columns: auto minmax(0, 1fr);
 }
 
+/* min-block-size shared with .console-diff-toolbar (see .console-diff-layout): each pane's
+   header is sized by unrelated content - a title here, a row of PF chips there - so nothing
+   holds their bottom edges to the same row without an explicit shared height. Without it the
+   hairline below stops at the pane boundary and meets .console-diff-sidebar's own border as a
+   T instead of a straight line across the surface. */
 .console-diff-sidebar__head {
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: var(--pf-t--global--spacer--xs);
-  padding-block-end: var(--pf-t--global--spacer--xs);
+  min-block-size: var(--console-diff-head-block-size);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
 }
 
 /* No uppercase, no letter-spacing. Both are shouting devices, and this is the quietest thing on
@@ -111,6 +138,11 @@
   overflow: hidden;
   border-inline-end: 1px solid var(--pf-t--global--border--color--default);
   padding: var(--pf-t--global--spacer--sm);
+  /* The toolbar it has to line up with carries no padding above itself at all - its header row
+     is centered by height, not pushed down by padding. Matching that here is what the shared
+     header height above needs to land the two hairlines on the same row, not merely give the
+     two headers the same height starting from different tops. */
+  padding-block-start: 0;
   display: flex;
   flex-direction: column;
   gap: 2px;
@@ -120,12 +152,9 @@
 .console-diff-sidebar__filter {
   flex: none;
   min-width: 0;
-  box-sizing: border-box;
   width: 100%;
-  border: 1px solid var(--pf-t--global--border--color--default);
-  background: var(--pf-t--global--background--color--primary--default);
-  color: inherit;
-  padding: 2px var(--pf-t--global--spacer--xs);
+}
+.console-diff-sidebar__filter .pf-v6-c-form-control__text {
   font: var(--pf-t--global--font--body--sm);
 }
 
@@ -154,9 +183,12 @@
 }
 
 /* The file being read. A left edge rather than a fill: the row already carries a status color
-   and a reach count, and a block of background would compete with both. */
+   and a reach count, and a block of background would compete with both.
+   No background declaration on purpose - it used to repeat the sidebar's own fill, which was a
+   no-op only for as long as the two tokens happened to agree. Once the sidebar joined the chrome
+   plane they stopped agreeing, and the dead line would have started painting the fill the comment
+   above rules out. */
 .console-diff-sidebar__item[aria-current="true"] {
-  background: var(--pf-t--global--background--color--secondary--default);
   box-shadow: inset 2px 0 0 var(--console-accent);
 }
 
@@ -272,10 +304,17 @@
   container: diff-main / inline-size;
 }
 
+/* display:column rather than the block flow this replaced, so the chip row and (when shown) the
+   collaboration sentence still stack top to bottom - only now as flex items, so justify-content
+   can center that stack inside the fixed min-block-size shared with the sidebar head above. */
 .console-diff-toolbar {
   background: var(--console-diff-panel);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 2px;
+  min-block-size: var(--console-diff-head-block-size);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
-  padding-block: var(--pf-t--global--spacer--xs);
   padding-inline: var(--pf-t--global--spacer--sm);
 }
 
@@ -290,9 +329,26 @@
   flex-wrap: wrap;
 }
 
+/* aria-live sentences, so the text tier rather than the icon one: the icon value is 1.97:1 on the
+   toolbar ground in light. See the tier note in tokens.css. */
 .console-diff-collaboration:not(:empty) {
-  color: var(--pf-t--global--icon--color--status--warning--default);
+  color: var(--console-status-warn-text);
   font-size: var(--pf-t--global--font--size--sm);
+}
+
+/* Draws the eye to the sentence above when a keyboard-only action (v/c/r/g) was refused for the
+   same reason the sentence already gives, rather than duplicating that reason in a second place. */
+.console-diff-collaboration.is-flash {
+  border-radius: 3px;
+  animation: console-diff-collab-flash 900ms ease-out;
+}
+@keyframes console-diff-collab-flash {
+  from {
+    background: color-mix(in srgb, var(--console-status-warn-text) 30%, transparent);
+  }
+  to {
+    background: transparent;
+  }
 }
 
 /* Bounded in-place code context. */
@@ -439,15 +495,21 @@
   box-shadow: inset 2px 0 0 var(--console-diff-del);
 }
 
-/* Dark needs a heavier mix: the same 12% over a dark surface is very nearly invisible. */
+/* Dark needs a heavier mix than light: 12% over a dark surface is very nearly invisible.
+   14 and not the 22 this was: every point of tint lightens the ground the CODE is read on, and at
+   22 the comment token measured 2.84:1 and keyword 3.97:1 on an added line. 14 is the most tint
+   that leaves all five tokens above AA once the comment is lifted (see the palette note at the top
+   of this file); above it a second token starts failing and the fix stops being one colour.
+   What is given up is small and is not the only cue: the band drops from 1.36:1 against the surface
+   to 1.30:1, and the +/- glyph and the 2px inset accent bar are the other two channels. */
 :root.pf-v6-theme-dark .console-diff-row[data-kind="add"],
 :root.pf-v6-theme-dark .console-diff-row__side[data-kind="add"] {
-  background: color-mix(in srgb, var(--console-diff-add) 22%, var(--console-diff-surface));
+  background: color-mix(in srgb, var(--console-diff-add) 14%, var(--console-diff-surface));
 }
 
 :root.pf-v6-theme-dark .console-diff-row[data-kind="del"],
 :root.pf-v6-theme-dark .console-diff-row__side[data-kind="del"] {
-  background: color-mix(in srgb, var(--console-diff-del) 22%, var(--console-diff-surface));
+  background: color-mix(in srgb, var(--console-diff-del) 14%, var(--console-diff-surface));
 }
 
 /* The header is CHROME, not content, so it holds the pane instead of joining the code's
@@ -697,6 +759,9 @@
 
 .console-diff-rail__go,
 .console-diff-rail__skip {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
   border: 1px solid var(--pf-t--global--border--color--default);
   background: var(--pf-t--global--background--color--primary--default);
   color: inherit;
@@ -786,10 +851,8 @@
 .console-diff-composer__input {
   flex: 1 1 auto;
   min-width: 0;
-  background: var(--pf-t--global--background--color--primary--default);
-  color: inherit;
-  border: 1px solid var(--pf-t--global--border--color--default);
-  padding: 2px var(--pf-t--global--spacer--xs);
+}
+.console-diff-composer__input .pf-v6-c-form-control__text {
   font: inherit;
 }
 
@@ -837,6 +900,9 @@
 }
 
 .console-diff-sidebar__group {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
   margin-block-start: var(--pf-t--global--spacer--sm);
   padding: 2px var(--pf-t--global--spacer--xs);
   border: 1px dashed var(--pf-t--global--border--color--default);
@@ -845,6 +911,32 @@
   cursor: pointer;
   font-size: var(--pf-t--global--font--size--xs);
   text-align: start;
+}
+.console-diff-sidebar__grouplabel {
+  flex: 1 1 auto;
+}
+/* CSS-drawn disclosure caret, the border-triangle technique (keeps the source ASCII rather than an
+   authored SVG for a mark this small). Points down when expanded, rotated flat when not - driven off
+   the button's own aria-expanded, since this button IS the disclosure, not a child of one. */
+.console-diff-sidebar__grouptwist {
+  flex: 0 0 auto;
+  display: inline-block;
+  width: 0;
+  height: 0;
+  border-left: 0.3em solid transparent;
+  border-right: 0.3em solid transparent;
+  border-top: 0.36em solid var(--pf-t--global--text--color--subtle);
+  transition: transform 0.12s;
+}
+.console-diff-sidebar__group[aria-expanded="false"] .console-diff-sidebar__grouptwist {
+  transform: rotate(-90deg);
+}
+/* Same accent-edge treatment as a primary file's aria-current, and the same reason for a border
+   over a fill: this button already carries its own dashed border, and a background would compete
+   with it. This is the position indicator for a scroll position the file index otherwise has no
+   entry for at all - a generated file is never listed, only folded under this one row. */
+.console-diff-sidebar__group[aria-current="true"] {
+  box-shadow: inset 2px 0 0 var(--console-accent);
 }
 
 /* The overview. Esc lands here: the whole changeset on one screen, so a reader can decide what
@@ -942,18 +1034,22 @@
 
 /* Intra-line emphasis: the part of a changed line that actually changed.
  *
- * Deliberately a background wash rather than a second foreground color. The row already
- * carries add/delete as color AND as a +/- marker, and stacking another hue on the text
- * would compete with syntax meaning and with the accessibility work above. A wash keeps the
- * text contrast that the row already earned. */
+ * An underline, not a background wash. A wash sits between the row tint and the text drawn on
+ * it, so it changes the effective background every syntax color is measured against - and this
+ * word can carry a syntax color, since the emphasis span and a `console-diff-tok--*` span are
+ * the same element (see textFromTokens). Measured: even a 1% wash pulled the comment token
+ * below AA in dark, because that token's shade already spends its whole margin on the row
+ * tint alone (see the palette note at the top of this file). A decorative underline in the
+ * accent color adds the channel without touching the text's background at all. */
 .console-diff-row__word {
-  border-radius: 2px;
-  /* Sits ON TOP of the row tint, so it has to be materially stronger than it to read at all. */
-  background: color-mix(in srgb, var(--console-diff-add) 38%, transparent);
+  text-decoration-line: underline;
+  text-decoration-color: var(--console-diff-add);
+  text-decoration-thickness: 2px;
+  text-underline-offset: 2px;
 }
 
 [data-kind="del"] .console-diff-row__word {
-  background: color-mix(in srgb, var(--console-diff-del) 38%, transparent);
+  text-decoration-color: var(--console-diff-del);
 }
 
 /* Syntax color.

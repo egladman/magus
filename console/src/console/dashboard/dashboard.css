@@ -62,6 +62,11 @@ body[data-dash-native] { margin: 0; }
   align-items: baseline;
   gap: 0.7rem;
   padding-block: var(--pf-t--global--spacer--md) var(--pf-t--global--spacer--xs);
+  /* Matches the card body's own inline padding below (#dash-panels > [data-card] >
+     .pf-v6-c-card__body) - without it this heading's text sits flush against the grid's edge
+     while every card's title sits inset behind its own padding, so the row above the cards
+     reads as unindented even though it occupies the same grid column. */
+  padding-inline: clamp(0.75rem, 1vw, 1rem);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-dashboard-section h2 { margin: 0; font-size: var(--pf-t--global--font--size--lg); }
@@ -118,7 +123,7 @@ body[data-dash-native] { margin: 0; }
 .console-dashboard-delegation__item[data-state="no_return"] .console-dashboard-delegation__mark { color: var(--console-status-danger); }
 .console-dashboard-delegation__id { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .console-dashboard-delegation__state { font-size: 0.7rem; color: var(--pf-t--global--text--color--subtle); }
-.console-dashboard-delegation__note { min-height: 1.2em; margin: 0.65rem 0 0; color: var(--console-status-warn); font-size: var(--pf-t--global--font--size--sm); }
+.console-dashboard-delegation__note { min-height: 1.2em; margin: 0.65rem 0 0; color: var(--console-status-warn-text); font-size: var(--pf-t--global--font--size--sm); }
 
 /* Panels: a responsive 2-column grid. Tiles span the full width by default; a compact tile opts
    into a single column with [data-half] so it pairs with a neighbor instead of eating a whole
@@ -130,11 +135,22 @@ body[data-dash-native] { margin: 0; }
   grid-auto-flow: row dense;
   align-items: stretch;
   gap: var(--console-gap);
+  /* The shell's shared pane <main> is deliberately padding-inline: 0 (console.css) so surfaces
+     that want edge-to-edge (the graph, notes) get it - which left the dashboard's own cards
+     butted against the rail on the left, the pane's own edge on the right, and the tab strip /
+     status bar top and bottom, with no line of their own to answer the rail's and status bar's.
+     ONE rule here, reusing the same --console-gap already used between cards, rather than a
+     margin patched onto whichever card happens to sit at an edge this week. Big Picture mode
+     overrides this with its own --bp-pad immediately below, so a wall display stays edge-to-edge. */
+  padding: var(--console-gap);
 }
 #dash-panels > * { grid-column: 1 / -1; }
 #dash-panels > [data-half] { grid-column: span 1; }
 
-@media (min-width: 761px) {
+/* 48rem/47.999rem (768px), not 761/760: that pair was a clean complement of each other but not
+   of the shell's own phone breakpoint (console.css), so a window between 761 and 767px had the
+   shell already in phone chrome while the board still rendered its multi-column grid. */
+@media (min-width: 48rem) {
   /* Keep the live-work story wide; pair supporting diagnostics. */
   #dash-panels > [data-card="pool"],
   #dash-panels > [data-card="cache-local"],
@@ -195,7 +211,7 @@ body[data-dash-native] { margin: 0; }
   :root:not([data-bigpicture]) #dash-panels > [data-card="agents"] .console-dashboard-agents__key { display: none; }
 }
 
-@media (max-width: 760px) {
+@media (max-width: 47.999rem) {
   /* minmax(0, 1fr), NOT 1fr: a plain 1fr column is min-content-sized, so a tile with wide
      unshrinkable content (a chart/gantt/table) blows the single column past the viewport. */
   #dash-panels { grid-template-columns: minmax(0, 1fr); }
@@ -218,9 +234,15 @@ button[data-collapse] {
 }
 button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); background: var(--pf-t--global--background--color--secondary--default); }
 [data-caret]::before { content: "\25BE"; font-size: 1.1rem; line-height: 1; }
-/* Collapsed: the caret points right and the card body folds away (the header stays). */
+/* Collapsed: the caret points right and the card body folds away (the header stays). The
+   min-block-size the width tiers above give every card (so a short one does not look broken
+   next to a tall row-mate) is exactly what a collapsed card must NOT keep, or hiding its body
+   leaves an empty box the height of whatever the tier demands - the #dash-panels selector
+   here matches those tiers' id+1-attribute specificity plus one more attribute, so it wins
+   regardless of which tier is active without needing a copy in each one. */
 [data-card][data-collapsed] [data-caret] { transform: rotate(-90deg); }
 [data-card][data-collapsed] > .pf-v6-c-card__body { display: none; }
+#dash-panels > [data-card][data-collapsed] { min-block-size: 0; }
 
 /* Card title + its "?" affordance on ONE line. PF's card__title is a block, so the glyph wrapped
    underneath the heading and read as a stray character rather than as part of the title. */
@@ -261,9 +283,11 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 .console-dashboard-stat[data-accent="info"]::before { background: var(--console-status-running); }
 .console-dashboard-stat__key { font-size: 0.66rem; text-transform: uppercase; letter-spacing: 0.05em; color: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-stat__value { font-size: 1.5rem; font-weight: 700; font-family: var(--pf-t--global--font--family--mono); line-height: 1.1; }
-.console-dashboard-stat[data-accent="hit"] .console-dashboard-stat__value { color: var(--console-status-ok); }
-.console-dashboard-stat[data-accent="miss"] .console-dashboard-stat__value { color: var(--console-status-warn); }
-.console-dashboard-stat[data-accent="err"] .console-dashboard-stat__value { color: var(--console-status-danger); }
+/* A KPI numeral is 24px bold, so it is WCAG "large text" at a 3:1 floor rather than 4.5 - and the
+   warn icon value is 2.21:1, under even that. Text tier for all three so they move together. */
+.console-dashboard-stat[data-accent="hit"] .console-dashboard-stat__value { color: var(--console-status-ok-text); }
+.console-dashboard-stat[data-accent="miss"] .console-dashboard-stat__value { color: var(--console-status-warn-text); }
+.console-dashboard-stat[data-accent="err"] .console-dashboard-stat__value { color: var(--console-status-danger-text); }
 
 /* Pool occupancy grid: airplane-seating cubes. Running = filled (info blue), free = outlined,
    queued = dashed (saturation red).
@@ -469,12 +493,12 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 }
 .console-dashboard-row.console-dashboard-agents__call[data-decision="deny"] { border-left-color: var(--console-status-danger); }
 .console-dashboard-row.console-dashboard-agents__call[data-decision="deny"] .console-dashboard-agents__notice {
-  color: var(--console-status-danger);
+  color: var(--console-status-danger-text);
   background: color-mix(in srgb, var(--console-status-danger) 16%, transparent);
 }
 .console-dashboard-row.console-dashboard-agents__call[data-decision="advise"] { border-left-color: var(--console-status-warn); }
 .console-dashboard-row.console-dashboard-agents__call[data-decision="advise"] .console-dashboard-agents__notice {
-  color: var(--console-status-warn);
+  color: var(--console-status-warn-text);
   background: color-mix(in srgb, var(--console-status-warn) 18%, transparent);
 }
 [data-bigpicture] .console-dashboard-row.console-dashboard-agents__call { --agents-notice-w: calc(var(--bp-u) * 2.8); }
@@ -504,13 +528,23 @@ button[data-collapse]:hover { color: var(--pf-t--global--text--color--regular); 
 [data-bigpicture] .console-dashboard-delegation__id { font-size: calc(var(--bp-u) * 1.05); }
 [data-bigpicture] .console-dashboard-delegation__note { display: none; }
 
-/* Legend swatches, shared by the charts and the utilization grid. */
+/* Legend swatches, shared by the charts and the utilization grid.
+   The label takes the TEXT tier and the swatch keeps the ICON tier: the square is a shape and wants
+   the saturated value, the word beside it has to clear the body-copy floor. They diverge for warn. */
 .console-dashboard-legend::before { content: ""; display: inline-block; width: 0.6em; height: 0.6em; border-radius: 2px; margin-right: 0.3em; vertical-align: middle; }
-.console-dashboard-legend--hit { color: var(--console-status-ok); } .console-dashboard-legend--hit::before { background: var(--console-status-ok); }
-.console-dashboard-legend--miss { color: var(--console-status-warn); } .console-dashboard-legend--miss::before { background: var(--console-status-warn); }
-.console-dashboard-legend--p50 { color: var(--console-status-running); } .console-dashboard-legend--p50::before { background: var(--console-status-running); }
-.console-dashboard-legend--p95 { color: var(--console-status-warn); } .console-dashboard-legend--p95::before { background: var(--console-status-warn); }
-.console-dashboard-legend--p99 { color: var(--console-status-danger); } .console-dashboard-legend--p99::before { background: var(--console-status-danger); }
+.console-dashboard-legend--hit { color: var(--console-status-ok-text); } .console-dashboard-legend--hit::before { background: var(--console-status-ok); }
+.console-dashboard-legend--miss { color: var(--console-status-warn-text); } .console-dashboard-legend--miss::before { background: var(--console-status-warn); }
+/* Rule swatches, not filled squares, for the three chart LINES they stand for - see the gantt's
+   dashed-leader swatch for the same reasoning. Solid/dashed/dotted mirrors the chart's own
+   line-dash pattern (latency.ts), so the legend and the plot agree on more than hue. */
+.console-dashboard-legend--p50::before,
+.console-dashboard-legend--p95::before,
+.console-dashboard-legend--p99::before {
+  width: 1.1em; height: 0; border-radius: 0; background: none;
+}
+.console-dashboard-legend--p50 { color: var(--console-status-running); } .console-dashboard-legend--p50::before { border-top: 2px solid var(--console-status-running); }
+.console-dashboard-legend--p95 { color: var(--console-status-warn-text); } .console-dashboard-legend--p95::before { border-top: 2px dashed var(--console-status-warn); }
+.console-dashboard-legend--p99 { color: var(--console-status-danger); } .console-dashboard-legend--p99::before { border-top: 2px dotted var(--console-status-danger); }
 .console-dashboard-legend--queued { color: var(--console-status-queued); } .console-dashboard-legend--queued::before { background: var(--console-status-queued); }
 .console-dashboard-tile__note .console-dashboard-legend { margin-left: 0.6rem; }
 
@@ -712,7 +746,7 @@ a.console-dashboard-row { text-decoration: none; color: inherit; cursor: pointer
 a.console-dashboard-row:hover { border-color: var(--console-status-running); background: var(--pf-t--global--background--color--primary--default); }
 a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; color: var(--console-status-running); font-size: 0.85em; }
 .console-dashboard-row__wscache { display: flex; gap: 0.5rem; font-size: 0.68rem; }
-.console-dashboard-row__wscache [data-cache="hit"] { color: var(--console-status-ok); } .console-dashboard-row__wscache [data-cache="miss"] { color: var(--console-status-warn); } .console-dashboard-row__wscache [data-cache="err"] { color: var(--console-status-danger); }
+.console-dashboard-row__wscache [data-cache="hit"] { color: var(--console-status-ok-text); } .console-dashboard-row__wscache [data-cache="miss"] { color: var(--console-status-warn-text); } .console-dashboard-row__wscache [data-cache="err"] { color: var(--console-status-danger-text); }
 
 /* A declared secret provider, shown as its initial in a square monospaced slot. Square and
    flush-cornered on purpose: a circle here would read as a person's avatar, and the thing
@@ -737,16 +771,16 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 /* Configuration card: key/value rows; default charms are PF Labels colored by effect (built in config.ts). */
 .console-dashboard-config__body { display: flex; flex-direction: column; gap: 0.5rem; }
 .console-dashboard-config__row { display: flex; align-items: center; justify-content: space-between; gap: 0.75rem; }
-.console-dashboard-config__key { font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pf-t--global--text--color--subtle); }
+.console-dashboard-config__key { display: inline-flex; align-items: center; gap: 0.3rem; font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em; color: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-config__value { font-size: 0.85rem; color: var(--pf-t--global--text--color--regular); font-family: var(--pf-t--global--font--family--mono); }
 .console-dashboard-config__charms { display: flex; flex-wrap: wrap; gap: 0.35rem; justify-content: flex-end; }
 
 /* Shared-service run state, colored by state (normal case, not all-caps). */
 .console-dashboard-service__meta { display: inline-flex; align-items: baseline; gap: 0.35rem; }
 .console-dashboard-service__state { font-weight: 600; }
-.console-dashboard-service__state[data-state="running"] { color: var(--console-status-ok); }
-.console-dashboard-service__state[data-state="starting"] { color: var(--console-status-warn); }
-.console-dashboard-service__state[data-state="failed"] { color: var(--console-status-danger); }
+.console-dashboard-service__state[data-state="running"] { color: var(--console-status-ok-text); }
+.console-dashboard-service__state[data-state="starting"] { color: var(--console-status-warn-text); }
+.console-dashboard-service__state[data-state="failed"] { color: var(--console-status-danger-text); }
 .console-dashboard-service__state[data-state="idle"] { color: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-row__empty { font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle); margin: 0.2rem 0 0; }
 
@@ -1724,11 +1758,16 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 /* Insight section band: a labeled divider above the five insight lens tiles, with a manual
    refresh button (the lenses are an on-demand poll, not the live stream). */
 .console-dashboard-insight { margin-top: 0.4rem; }
-.console-dashboard-insight__head { display: flex; align-items: center; gap: 0.6rem; }
+/* Matches the card body's own inline padding (#dash-panels > [data-card] > .pf-v6-c-card__body):
+   without it this band's title sits flush against the grid's edge while every card's title sits
+   inset behind its own padding - see the same reasoning on .console-dashboard-section above. */
+.console-dashboard-insight__head { display: flex; align-items: center; gap: 0.6rem; padding-inline: clamp(0.75rem, 1vw, 1rem); }
 .console-dashboard-insight__title { font-size: 1.05rem; margin: 0; }
-.console-dashboard-insight__sub { margin: 0.2rem 0 0; font-size: 0.78rem; color: var(--pf-t--global--text--color--subtle); }
+/* Pushes itself AND the refresh button after it to the row's trailing edge, so the two read as
+   one cluster ("last answered - refresh it") while the title and its "?" stay leading. */
+.console-dashboard-insight__lastran { margin-inline-start: auto; font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
 .console-dashboard-insight__refresh {
-  margin: 0 0 0 auto; padding: 0.2rem 0.6rem; width: auto; font-size: 0.72rem;
+  padding: 0.2rem 0.6rem; width: auto; font-size: 0.72rem;
   border: 1px solid var(--pf-t--global--border--color--default); border-radius: var(--pf-t--global--border--radius--small);
   background: var(--pf-t--global--background--color--secondary--default); color: var(--console-status-running); cursor: pointer;
 }

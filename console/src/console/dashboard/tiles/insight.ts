@@ -29,7 +29,7 @@ import type {
 } from "../state";
 import { fmtCount } from "../state";
 import { SortableTable, type Column } from "./widgets";
-import { Card, h, type Tile } from "./card";
+import { Card, h, helpGlyph, type Tile } from "./card";
 
 const flag = (on: boolean, label: string): string => (on ? label : "-");
 // A signed integer for the trend delta so a rising project reads "+N" and a cooling one "-N".
@@ -123,7 +123,12 @@ function hotspotFilesTile(): Tile {
   return {
     el: card.el,
     update(s: DashboardState) {
-      if (!s.insight) return;
+      if (!s.insight) {
+        table.setUnresolved(s.insightNote);
+        card.setNote("");
+        return;
+      }
+      table.setUnresolved(null);
       const moved = s.insight.hotspotFiles.filter((f) => f.moves > 0).length;
       card.setNote(
         `${s.insight.hotspotFiles.length} files, ${s.insight.commits} commits` +
@@ -149,7 +154,12 @@ function hotspotsTile(): Tile {
   return {
     el: card.el,
     update(s: DashboardState) {
-      if (!s.insight) return;
+      if (!s.insight) {
+        table.setUnresolved(s.insightNote);
+        card.setNote("");
+        return;
+      }
+      table.setUnresolved(null);
       card.setNote(`${s.insight.hotspots.length} projects, ${s.insight.commits} commits`);
       table.setRows(s.insight.hotspots);
     },
@@ -191,7 +201,12 @@ function affinityTile(): Tile {
   return {
     el: card.el,
     update(s: DashboardState) {
-      if (!s.insight) return;
+      if (!s.insight) {
+        table.setUnresolved(s.insightNote);
+        card.setNote("");
+        return;
+      }
+      table.setUnresolved(null);
       const hidden = s.insight.affinity.filter((p) => p.hidden).length;
       card.setNote(`${s.insight.affinity.length} pairs, ${hidden} hidden`);
       table.setRows(s.insight.affinity);
@@ -247,7 +262,12 @@ function ownershipTile(): Tile {
   return {
     el: card.el,
     update(s: DashboardState) {
-      if (!s.insight) return;
+      if (!s.insight) {
+        table.setUnresolved(s.insightNote);
+        card.setNote("");
+        return;
+      }
+      table.setUnresolved(null);
       const bus1 = s.insight.ownership.filter((o) => o.busFactor1).length;
       card.setNote(`${s.insight.ownership.length} projects, ${bus1} bus-factor-1`);
       table.setRows(s.insight.ownership);
@@ -297,7 +317,12 @@ function trendTile(): Tile {
   return {
     el: card.el,
     update(s: DashboardState) {
-      if (!s.insight) return;
+      if (!s.insight) {
+        table.setUnresolved(s.insightNote);
+        card.setNote("");
+        return;
+      }
+      table.setUnresolved(null);
       const rising = s.insight.trend.filter((t) => t.delta > 0).length;
       card.setNote(`${s.insight.trend.length} projects, ${rising} rising`);
       table.setRows(s.insight.trend);
@@ -356,7 +381,12 @@ function volatilityTile(): Tile {
   return {
     el: card.el,
     update(s: DashboardState) {
-      if (!s.insight) return;
+      if (!s.insight) {
+        table.setUnresolved(s.insightNote);
+        card.setNote("");
+        return;
+      }
+      table.setUnresolved(null);
       const v = s.insight.volatility;
       if (!v) {
         card.setNote("no run history");
@@ -377,24 +407,38 @@ function volatilityTile(): Tile {
 
 // insightSection builds the labeled "Insight" band (heading + a manual refresh
 // button) and the five lens tiles. main.ts mounts the band and forwards store
-// updates to each tile. onRefresh forces an out-of-band /api/v1/insight refetch.
-export function insightSection(onRefresh: () => void): { el: HTMLElement; tiles: Tile[] } {
+// updates to each tile, and to the band itself (it is a Tile too, purely so its
+// "last ran" text has a hook into the same subscription every other tile uses).
+// onRefresh forces an out-of-band /api/v1/insight refetch, returning its promise
+// so the button can show it is doing something: the poll it forces can take
+// seconds, and nothing else about the tiles visibly changes until it resolves.
+export function insightSection(
+  onRefresh: () => Promise<void>,
+): { el: HTMLElement; tiles: Tile[] } & Tile {
   const band = h("div", "console-dashboard-insight");
   const head = h("div", "console-dashboard-insight__head");
   head.append(h("h2", "console-dashboard-insight__title", "Insight"));
+  head.append(
+    helpGlyph(
+      "Where a codebase's attention and risk concentrate: five lenses read git history, volatility reads run outcomes.",
+      "Insight",
+    ),
+  );
+  const lastRan = h("span", "console-dashboard-insight__lastran");
+  head.append(lastRan);
   const refresh = h("button", "console-dashboard-insight__refresh", "Refresh");
   refresh.type = "button";
   refresh.title = "Refetch the insight lenses now";
-  refresh.addEventListener("click", () => onRefresh());
+  refresh.addEventListener("click", () => {
+    refresh.disabled = true;
+    refresh.textContent = "Refreshing…";
+    void onRefresh().finally(() => {
+      refresh.disabled = false;
+      refresh.textContent = "Refresh";
+    });
+  });
   head.append(refresh);
   band.append(head);
-  band.append(
-    h(
-      "p",
-      "console-dashboard-insight__sub",
-      "Where a codebase's attention and risk concentrate: four lenses read git history, volatility reads run outcomes.",
-    ),
-  );
 
   const tiles = [
     hotspotsTile(),
@@ -404,5 +448,21 @@ export function insightSection(onRefresh: () => void): { el: HTMLElement; tiles:
     trendTile(),
     volatilityTile(),
   ];
-  return { el: band, tiles };
+  return {
+    el: band,
+    tiles,
+    update(s: DashboardState): void {
+      if (!s.insightUpdatedAt) {
+        lastRan.textContent = "";
+        return;
+      }
+      const t = new Date(s.insightUpdatedAt).toLocaleTimeString([], {
+        hour: "2-digit",
+        minute: "2-digit",
+      });
+      lastRan.textContent = "ran " + t;
+      lastRan.title = "The insight lenses last answered at " + t + ".";
+    },
+    destroy(): void {},
+  };
 }
