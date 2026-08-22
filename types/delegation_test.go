@@ -1,10 +1,39 @@
 package types
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 )
+
+// TestValidUnitID pins the rule every unit channel shares. The marker scanner is not the
+// only producer: whatever stamps a Unit has to agree with this, or internal/trail's
+// redaction exemption starts covering strings nobody checked.
+func TestValidUnitID(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		id   string
+		want bool
+	}{
+		"plain":               {"MGS1021", true},
+		"every separator":     {"a.b:c_d-1/2", true},
+		"branch shaped":       {"feat/spawn-capture", true},
+		"at the length cap":   {strings.Repeat("u", MaxUnitIDLen), true},
+		"past the length cap": {strings.Repeat("u", MaxUnitIDLen+1), false},
+		"empty":               {"", false},
+		"space":               {"two words", false},
+		"punctuation":         {"MGS1021!", false},
+		"newline":             {"unit\n", false},
+		"non-ascii":           {"unit-é", false},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			assert.Equal(t, tc.want, ValidUnitID(tc.id))
+		})
+	}
+}
 
 func owner(id string, state DelegationState, paths ...string) DelegationUnit {
 	return DelegationUnit{ID: id, State: state, OwnedPaths: paths}

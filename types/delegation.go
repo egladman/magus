@@ -61,6 +61,39 @@ func (s DelegationState) terminal() bool {
 	return s == StatePass || s == StateFail || s == StateNoReturn
 }
 
+// MaxUnitIDLen bounds a unit id: long enough for a branch-shaped ledger name, short
+// enough that the id stays a correlation key rather than a payload riding every event
+// line.
+const MaxUnitIDLen = 128
+
+// ValidUnitID reports whether id may be stamped as a work-ledger unit: letters, digits
+// and the separators -_./: a ledger row or a branch-shaped unit name uses, never empty,
+// at most [MaxUnitIDLen] characters.
+//
+// The narrowness is a security property, not a naming preference. A unit id is EXEMPT
+// from the redaction internal/trail applies to every other event field, so every channel
+// that can stamp one - a delegation marker, the MAGUS_UNIT environment channel, a
+// producer's own field - has to pass its candidate through here first, or the exemption
+// becomes a way to carry a credential onto an event line.
+//
+// It lives beside [DelegationUnit] rather than in the package that redacts, because the
+// ledger and the trail are two readers of one id: a validator owned by either would
+// leave the other free to accept an id the first would refuse.
+func ValidUnitID(id string) bool {
+	if id == "" || len(id) > MaxUnitIDLen {
+		return false
+	}
+	for _, c := range id {
+		switch {
+		case c >= 'a' && c <= 'z', c >= 'A' && c <= 'Z', c >= '0' && c <= '9':
+		case c == '-', c == '_', c == '.', c == '/', c == ':':
+		default:
+			return false
+		}
+	}
+	return true
+}
+
 // DelegationUnit is one row of an orchestrating agent's delegation ledger: what that
 // agent DECLARED about a piece of work it handed out, recorded so a human can see the
 // plan the agents are running.

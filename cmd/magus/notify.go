@@ -5,6 +5,7 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/exec"
 	"runtime"
@@ -81,15 +82,48 @@ func notifyCmd(ctx context.Context, root string, in io.Reader, out io.Writer, ar
 // eventFromStdin accepts only a complete canonical event as structured input.
 // Anything else remains a plain-text message. That strict boundary avoids
 // quietly treating a producer's partial JSON object as a valid wire contract.
+//
+// A body that LOOKS like an envelope and fails is warned about first. The demotion is
+// still the right outcome - the notification fires either way, and a hook must not exit
+// non-zero over metadata - but silence made it undiagnosable: a producer sending a
+// half-built envelope saw a working notification, an empty source, and therefore no
+// attention request, with nothing anywhere saying why.
 func eventFromStdin(body []byte) types.Event {
 	trimmed := strings.TrimSpace(string(body))
 	if len(trimmed) > 0 && trimmed[0] == '{' {
 		var ev types.Event
-		if err := json.Unmarshal([]byte(trimmed), &ev); err == nil && ev.Message != "" && ev.Outcome != "" && ev.Source.Kind != "" {
+		err := json.Unmarshal([]byte(trimmed), &ev)
+		if err == nil && ev.Message != "" && ev.Outcome != "" && ev.Source.Kind != "" {
 			return ev
 		}
+		noteUnusableEnvelope(err, ev)
 	}
 	return types.Event{Message: trimmed}
+}
+
+// noteUnusableEnvelope reports a JSON object that could not be read as an event, and
+// names which half failed: the parse, or the three fields an envelope must carry. A
+// producer debugging this cannot see either from the outside - both paths produce the
+// same working plain-text notification.
+func noteUnusableEnvelope(err error, ev types.Event) {
+	if err != nil {
+		slog.Warn("magus notify: stdin looks like a JSON envelope but did not parse, so it was sent as plain text; no attention request can be opened from a prose message",
+			slog.String("error", err.Error()))
+		return
+	}
+	var missing []string
+	if ev.Message == "" {
+		missing = append(missing, "message")
+	}
+	if ev.Outcome == "" {
+		missing = append(missing, "outcome")
+	}
+	if ev.Source.Kind == "" {
+		missing = append(missing, "source.kind")
+	}
+	slog.Warn("magus notify: stdin parsed as JSON but is not a complete event envelope, so it was sent as plain text; no attention request can be opened from a prose message",
+		slog.String("missing", strings.Join(missing, ", ")),
+		slog.String("next", "send message, outcome and source.kind together, and source.id to make the event addressable as a request"))
 }
 
 func normalizeEvent(ev *types.Event) {

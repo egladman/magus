@@ -2,17 +2,16 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"log/slog"
 	"os"
-	"slices"
 	"strings"
 	"text/tabwriter"
 	"time"
 
 	"github.com/egladman/magus"
-	"github.com/egladman/magus/internal/journal"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
@@ -66,6 +65,13 @@ func attentionUsage() {
 	fmt.Fprintln(os.Stderr, "")
 	fmt.Fprintln(os.Stderr, "The queue is keyed by repository identity, so every git worktree of this")
 	fmt.Fprintln(os.Stderr, "repo lists and disposes the same requests.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "With -q, ls prints nothing and answers with its exit status: 0 when a request")
+	fmt.Fprintln(os.Stderr, "is open, 1 when the queue is empty. That is the form to test in a shell")
+	fmt.Fprintln(os.Stderr, "prompt or a wrapper script.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "dispose takes a full id or any unambiguous prefix of one; an ambiguous")
+	fmt.Fprintln(os.Stderr, "prefix is refused and names the candidates.")
 }
 
 type attentionListOutput struct {
@@ -80,6 +86,11 @@ func attentionList(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "List every open request, oldest first. Disposed requests are not listed;")
 			fmt.Fprintln(os.Stderr, "they stay in the session store and are visible with -o json after disposal.")
+			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "With -q, print nothing and report the queue as an exit status: 0 when at")
+			fmt.Fprintln(os.Stderr, "least one request is open, 1 when the queue is empty. Nothing is wrong in")
+			fmt.Fprintln(os.Stderr, "either case; the status answers `is anyone waiting on me` for a shell")
+			fmt.Fprintln(os.Stderr, "prompt or a wrapper script.")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
@@ -101,6 +112,18 @@ func attentionList(root string, args []string) error {
 		return err
 	}
 	requests := sessions.AttentionQueue(fold)
+
+	// -q answers the question instead of printing it, before the output format is even
+	// resolved: the caller asked for no output, so the format it would have used cannot
+	// matter. errSilent carries the status without a message, because an empty queue is
+	// the GOOD state and printing an error for it would train people to ignore the
+	// command that reports a real block.
+	if global.quiet {
+		if len(requests) == 0 {
+			return errSilent{exitCode: 1}
+		}
+		return nil
+	}
 
 	opts, err := outputOptionsOrDefault()
 	if err != nil {
@@ -165,6 +188,10 @@ func attentionDispose(root string, args []string) error {
 			fmt.Fprintln(os.Stderr, "so every worktree of this repo sees the request close. A request closes")
 			fmt.Fprintln(os.Stderr, "once: disposing an already-closed id is an error, not a second closure.")
 			fmt.Fprintln(os.Stderr, "")
+			fmt.Fprintln(os.Stderr, "<id> may be any unambiguous prefix of a request id, the way a short")
+			fmt.Fprintln(os.Stderr, "revision names a commit. An ambiguous prefix is refused and lists what it")
+			fmt.Fprintln(os.Stderr, "matched.")
+			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
 			fs.PrintDefaults()
 		}
@@ -175,51 +202,17 @@ func attentionDispose(root string, args []string) error {
 	if len(rest) != 1 {
 		return usagef("magus attention dispose: needs exactly one request id (got %d); run `magus attention` to list the open ids", len(rest))
 	}
-	id := rest[0]
 
 	dir, err := sessions.Dir(root)
 	if err != nil {
 		return err
 	}
-	fold, err := sessions.ReadAll(dir)
-	if err != nil {
-		return err
-	}
-	all := sessions.Attention(fold)
-	i := slices.IndexFunc(all, func(r sessions.AttentionRequest) bool { return r.ID == id })
-	if i < 0 {
-		return fmt.Errorf("magus attention dispose: no request %q in the session store at %s; run `magus attention` to list the open ids", id, dir)
-	}
-	req := all[i]
-	if req.Disposed {
-		return fmt.Errorf("magus attention dispose: request %s was already disposed by session %s at %s; a request closes once and stays closed, so run `magus attention` to see what is still open",
-			id, req.DisposedBy, time.UnixMilli(req.DisposedMs).Format(time.RFC3339))
-	}
-
-	// A fresh session per disposal, because a disposal IS its own invocation: it is
-	// what makes the store say which run of magus closed the request, and by
-	// extension which person was at the keyboard.
-	w, err := sessions.Open(dir, journal.NewInvocationID(), sessions.SessionStart{
+	req, err := sessions.DisposeRequest(dir, rest[0], reason, sessions.SessionStart{
 		Workspace: root,
-		Command:   "attention dispose " + id,
 		Version:   version,
 	})
 	if err != nil {
-		return err
-	}
-	if err := w.Append(sessions.KindAttentionDispose, sessions.AttentionDispose{Request: id, Note: reason}); err != nil {
-		return err
-	}
-
-	// Re-read rather than patching the copy in hand: the disposal's timestamp and
-	// session are whatever the store recorded, and a hand-assembled answer here could
-	// disagree with what every other worktree is about to read.
-	if fold, err = sessions.ReadAll(dir); err != nil {
-		return err
-	}
-	all = sessions.Attention(fold)
-	if j := slices.IndexFunc(all, func(r sessions.AttentionRequest) bool { return r.ID == id }); j >= 0 {
-		req = all[j]
+		return disposeError(err, rest[0], dir)
 	}
 
 	opts, err := outputOptionsOrDefault()
@@ -245,21 +238,36 @@ func attentionDispose(root string, args []string) error {
 	return nil
 }
 
+// disposeError gives each refusal from [sessions.DisposeRequest] its next step. The
+// store decides WHICH refusal applies - that is the identity contract - and this decides
+// what a person does about it, which is why the store path and the listing command are
+// added here rather than baked into the sentinel.
+func disposeError(err error, ref, dir string) error {
+	var (
+		ambiguous *sessions.AmbiguousRequestError
+		disposed  *sessions.DisposedError
+	)
+	switch {
+	case errors.Is(err, sessions.ErrNoRequest):
+		return fmt.Errorf("magus attention dispose: no request matches %q in the session store at %s; run `magus attention` to list the open ids", ref, dir)
+	case errors.As(err, &ambiguous):
+		return fmt.Errorf("magus attention dispose: %w; name one of them, or add enough characters to tell them apart", ambiguous)
+	case errors.As(err, &disposed):
+		return fmt.Errorf("magus attention dispose: %w; a request closes once and stays closed, so run `magus attention` to see what is still open", disposed)
+	}
+	return err
+}
+
 // ---- producer ----
 
-// recordAttentionOpen files an agent-raised block as a durable open request, so a
-// notification nobody happened to be looking at is still answerable afterwards, from
-// any worktree of the repository.
+// recordAttentionOpen normalizes an event into an [sessions.AttentionOpen] and files it.
+// The write lifecycle - dedupe, id derivation, the record itself - belongs to
+// [sessions.OpenRequest]; what stays here is the two gates that decide whether an event
+// is a request at all, and the flattening of the event onto the store's string fields.
 //
 // Only waiting and permission open one. Those two outcomes mean the work has STOPPED
 // until a person acts; a failure or a finished run is news, and news that queued up
 // for disposal would teach people to clear the queue without reading it.
-//
-// Re-filing a block that is already open is a no-op. An agent hook may fire on every
-// prompt, and the queue has to hold one row per block rather than one per attempt -
-// see [sessions.RequestID] for how the two are told apart. An event carrying no
-// Source.ID opens nothing, for the same reason: there is no request without the
-// session that raised it.
 func recordAttentionOpen(root string, ev types.Event) error {
 	if ev.Outcome != types.OutcomeWaiting && ev.Outcome != types.OutcomePermission {
 		return nil
@@ -287,35 +295,19 @@ func recordAttentionOpen(root string, ev types.Event) error {
 	open := sessions.AttentionOpen{
 		Outcome:  string(ev.Outcome),
 		Severity: string(ev.Severity),
-		Source:   attentionSource(ev.Source),
+		Source:   sessions.SourceLabel(ev.Source.Kind, ev.Source.Sub),
 		Where:    attentionWhere(ev.Where),
-		// Not an input to the id, on purpose - see RequestID. It rides the payload so the queue
-		// can say WHOSE work is blocked without the row's identity moving when a fleet
-		// re-partitions.
+		// Not an input to the id, on purpose - see sessions.RequestID. It rides the payload so
+		// the queue can say WHOSE work is blocked without the row's identity moving when a
+		// fleet re-partitions.
 		Unit:    trail.UnitFromEnv(),
 		Message: ev.Message,
 	}
-	// The AGENT's session, not this magus invocation's: a re-fire is a second magus
-	// process, and keying on that would mint a fresh id every time.
-	open.Request = sessions.RequestID(ev.Source.ID, open)
-
-	fold, err := sessions.ReadAll(dir)
-	if err != nil {
-		return err
-	}
-	if slices.ContainsFunc(sessions.AttentionQueue(fold), func(req sessions.AttentionRequest) bool { return req.ID == open.Request }) {
-		return nil
-	}
-
-	w, err := sessions.Open(dir, journal.NewInvocationID(), sessions.SessionStart{
+	_, _, err = sessions.OpenRequest(dir, ev.Source.ID, open, sessions.SessionStart{
 		Workspace: root,
-		Command:   "notify",
 		Version:   version,
 	})
-	if err != nil {
-		return err
-	}
-	return w.Append(sessions.KindAttentionOpen, open)
+	return err
 }
 
 // resolveRootOrEmpty resolves the repository a per-repository store belongs to,
@@ -335,15 +327,6 @@ func resolveRootOrEmpty(root string) string {
 		return ""
 	}
 	return resolved
-}
-
-// attentionSource renders an event's producer as one addressable label, so the queue
-// column and the request id agree on what "who raised this" means.
-func attentionSource(s types.EventSource) string {
-	if s.Sub == "" {
-		return s.Kind
-	}
-	return s.Kind + "/" + s.Sub
 }
 
 // attentionWhere renders where a person has to go to act. The workspace is always

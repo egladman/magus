@@ -43,6 +43,45 @@ func TestEventFromStdin(t *testing.T) {
 	assert.Equal(t, types.Event{Message: "build failed"}, eventFromStdin([]byte("build failed")))
 }
 
+// A body that LOOKS like an envelope and fails still demotes to prose - the notification
+// has to fire either way - but silently it was undiagnosable: the producer saw a working
+// notification, no attention request, and nothing anywhere saying why.
+func TestEventFromStdinWarnsOnAnUnusableEnvelope(t *testing.T) {
+	for name, tc := range map[string]struct {
+		body  string
+		wants []string
+	}{
+		"missing every required field": {
+			`{"severity":"warning"}`,
+			[]string{"not a complete event envelope", "message", "outcome", "source.kind"},
+		},
+		"missing only the source": {
+			`{"outcome":"waiting","message":"needs a decision"}`,
+			[]string{"not a complete event envelope", "source.kind"},
+		},
+		"unparseable json object": {
+			`{"outcome":"waiting",`,
+			[]string{"did not parse"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			var ev types.Event
+			logged := captureWarnings(t, func() { ev = eventFromStdin([]byte(tc.body)) })
+
+			assert.Equal(t, tc.body, ev.Message, "the body is still delivered as prose")
+			for _, want := range tc.wants {
+				assert.Contains(t, logged, want)
+			}
+		})
+	}
+}
+
+// Prose is the documented input, not a degraded envelope, so it must warn about nothing.
+func TestEventFromStdinIsSilentForPlainText(t *testing.T) {
+	logged := captureWarnings(t, func() { eventFromStdin([]byte("build failed")) })
+	assert.Empty(t, logged)
+}
+
 func TestNotifyCmd(t *testing.T) {
 	// A waiting or permission event opens a real attention request, so the store is
 	// redirected here; without it these subtests would file requests into the

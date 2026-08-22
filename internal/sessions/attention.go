@@ -4,8 +4,11 @@ import (
 	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
+	"fmt"
 	"slices"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	json "github.com/egladman/magus/internal/json"
@@ -233,4 +236,177 @@ func AttentionQueue(fold Fold) []AttentionRequest {
 		}
 	}
 	return out
+}
+
+// SourceLabel renders an event's producer as one addressable label.
+//
+// It lives beside [RequestID] because it feeds it: the label is one of the three digest
+// inputs, so the queue's SOURCE column and a request's identity are the same string by
+// construction. Splitting the two apart is how they would come to disagree, and a
+// disagreement there re-keys every open request without touching a block.
+func SourceLabel(kind, sub string) string {
+	if sub == "" {
+		return kind
+	}
+	return kind + "/" + sub
+}
+
+// ErrNoRequest reports a request reference that names nothing in the store.
+var ErrNoRequest = errors.New("no such attention request")
+
+// AmbiguousRequestError reports a prefix matching more than one request. It names every
+// candidate, because the next thing the caller has to do is pick one and the ids differ
+// only past the prefix they typed.
+type AmbiguousRequestError struct {
+	Prefix     string
+	Candidates []string
+}
+
+func (e *AmbiguousRequestError) Error() string {
+	return fmt.Sprintf("%q matches %d requests (%s)", e.Prefix, len(e.Candidates), strings.Join(e.Candidates, ", "))
+}
+
+// DisposedError reports a request that was already closed, and by whom. A request closes
+// once: a second dispose is recorded but changes nothing, so refusing here is what keeps
+// the caller from reporting a closure it did not perform.
+type DisposedError struct {
+	ID         string
+	DisposedBy string
+	DisposedMs int64
+}
+
+func (e *DisposedError) Error() string {
+	return fmt.Sprintf("request %s was already disposed by session %s at %s",
+		e.ID, e.DisposedBy, time.UnixMilli(e.DisposedMs).Format(time.RFC3339))
+}
+
+// ResolveRequestID resolves ref - a full request id or an unambiguous prefix of one -
+// against every request in fold, disposed ones included.
+//
+// The prefix form exists because the id is a truncated digest: it is unguessable, so it
+// has to be copied off a listing, and typing twelve hex characters to close a queue of
+// three is friction with no safety in it. Git settled this convention and a person
+// already reads short hashes that way.
+//
+// Ambiguity is an error naming the candidates rather than a pick. An id addresses a
+// person's decision to close a block, and resolving a tie by any rule this function
+// could invent - oldest, first sorted - closes a request nobody chose.
+//
+// Disposed requests are candidates on purpose: a prefix that resolves to a closed
+// request has to report THAT (see [DisposeRequest]), not read as a typo.
+func ResolveRequestID(fold Fold, ref string) (string, error) {
+	return resolveRequestID(Attention(fold), ref)
+}
+
+// resolveRequestID resolves against an already-folded queue, so a caller holding one
+// does not fold it twice.
+func resolveRequestID(all []AttentionRequest, ref string) (string, error) {
+	if ref == "" {
+		return "", ErrNoRequest
+	}
+	// An exact id wins over the prefix scan. Without that, a request whose id is a
+	// prefix of another's could never be addressed at all.
+	if slices.ContainsFunc(all, func(r AttentionRequest) bool { return r.ID == ref }) {
+		return ref, nil
+	}
+	var matches []string
+	for _, req := range all {
+		if strings.HasPrefix(req.ID, ref) {
+			matches = append(matches, req.ID)
+		}
+	}
+	switch len(matches) {
+	case 0:
+		return "", ErrNoRequest
+	case 1:
+		return matches[0], nil
+	default:
+		slices.Sort(matches)
+		return "", &AmbiguousRequestError{Prefix: ref, Candidates: matches}
+	}
+}
+
+// OpenRequest files a raised block under dir as a durable open request, so a
+// notification nobody happened to be looking at is still answerable afterwards, from any
+// worktree of the repository.
+//
+// agentSession is the AGENT's session id, not this magus invocation's: a re-fire is a
+// second magus process, and keying on that would mint a fresh id every time. It fills
+// open.Request via [RequestID], so the caller must not set that field.
+//
+// Re-filing a block that is already open is a no-op reporting opened=false. An agent
+// hook may fire on every prompt, and the queue has to hold one row per block rather than
+// one per attempt. A block that was raised, disposed, and has come back opens again -
+// see [Attention] for why.
+//
+// start describes the writing invocation; its Command is set here, and the session id is
+// minted by [NewID]. The returned id is the request's, addressable whether or not this
+// call wrote anything.
+func OpenRequest(dir, agentSession string, open AttentionOpen, start SessionStart) (id string, opened bool, err error) {
+	open.Request = RequestID(agentSession, open)
+	fold, err := ReadAll(dir)
+	if err != nil {
+		return open.Request, false, err
+	}
+	if slices.ContainsFunc(AttentionQueue(fold), func(req AttentionRequest) bool { return req.ID == open.Request }) {
+		return open.Request, false, nil
+	}
+	start.Command = "notify"
+	w, err := Open(dir, NewID(), start)
+	if err != nil {
+		return open.Request, false, err
+	}
+	if err := w.Append(KindAttentionOpen, open); err != nil {
+		return open.Request, false, err
+	}
+	return open.Request, true, nil
+}
+
+// DisposeRequest closes the request ref names under dir and returns it as the store now
+// reads it. ref is a full id or an unambiguous prefix ([ResolveRequestID]).
+//
+// A request closes once. An already-closed one is a [DisposedError] rather than a second
+// closure: [Attention] would record the extra dispose and keep the first one's answer, so
+// reporting success here would credit this caller with a closure it did not perform.
+// Unresolvable refs surface as [ErrNoRequest] or [AmbiguousRequestError].
+//
+// The disposal writes its OWN session, because a disposal IS its own invocation: it is
+// what makes the store say which run of magus closed the request, and by extension which
+// person was at the keyboard. start describes it; its Command is set here.
+//
+// The returned request is re-read from the store rather than patched in memory: the
+// disposal's timestamp and session are whatever landed on disk, and a hand-assembled
+// answer could disagree with what every other worktree is about to read.
+func DisposeRequest(dir, ref, reason string, start SessionStart) (AttentionRequest, error) {
+	fold, err := ReadAll(dir)
+	if err != nil {
+		return AttentionRequest{}, err
+	}
+	all := Attention(fold)
+	id, err := resolveRequestID(all, ref)
+	if err != nil {
+		return AttentionRequest{}, err
+	}
+	req := all[slices.IndexFunc(all, func(r AttentionRequest) bool { return r.ID == id })]
+	if req.Disposed {
+		return req, &DisposedError{ID: id, DisposedBy: req.DisposedBy, DisposedMs: req.DisposedMs}
+	}
+
+	start.Command = "attention dispose " + id
+	w, err := Open(dir, NewID(), start)
+	if err != nil {
+		return AttentionRequest{}, err
+	}
+	if err := w.Append(KindAttentionDispose, AttentionDispose{Request: id, Note: reason}); err != nil {
+		return AttentionRequest{}, err
+	}
+
+	if fold, err = ReadAll(dir); err != nil {
+		return AttentionRequest{}, err
+	}
+	all = Attention(fold)
+	if i := slices.IndexFunc(all, func(r AttentionRequest) bool { return r.ID == id }); i >= 0 {
+		req = all[i]
+	}
+	return req, nil
 }

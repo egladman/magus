@@ -823,14 +823,14 @@ func gradeDelegatedWrite(ctx context.Context, actingUnit, writePath string) writ
 	}
 
 	notice := ""
-	if actingUnit != "" && !trail.ValidUnitID(actingUnit) {
+	if actingUnit != "" && !types.ValidUnitID(actingUnit) {
 		// Treated as absent rather than rejected: an id magus cannot parse is an id it
 		// cannot look up either, and erroring would block the tool call over metadata. The
 		// notice is what keeps a typo from silently buying un-enrolled treatment.
 		notice = fmt.Sprintf(
 			"magus workspace: fix the unit id and re-run, so the guard can grade this write against your unit's declared boundary.\n"+
 				"%s=%q is not a valid unit id (at most %d characters of A-Za-z0-9-_./:), so this call was graded as if it named no unit.\n",
-			envHookUnit, actingUnit, trail.MaxUnitIDLen)
+			envHookUnit, actingUnit, types.MaxUnitIDLen)
 		actingUnit = ""
 	}
 

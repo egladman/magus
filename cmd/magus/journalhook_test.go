@@ -156,6 +156,31 @@ func TestWithSessionJournalStampsTheUnitOnEveryVerb(t *testing.T) {
 	}
 }
 
+// A unit that fails the id rule is dropped rather than stamped, which is what keeps the trail's
+// redaction exemption honest. The drop happens in the wiring, because that is where the
+// environment is read; the note explaining it is asserted in internal/trail, where the one-time
+// gate can be reset. Here the observable fact is that nothing was attributed.
+func TestWithSessionJournalDropsAnInvalidUnit(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv(trail.EnvUnit, "not a unit id")
+	root := t.TempDir()
+
+	handlers := withSessionJournal(nil, root, "run", []string{"build"})
+	require.Len(t, handlers, 1)
+	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
+
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	fold, err := sessions.ReadAll(dir)
+	require.NoError(t, err)
+
+	summaries := sessions.Summarize(fold)
+	require.Len(t, summaries, 1)
+	assert.Empty(t, summaries[0].Unit)
+	require.Len(t, summaries[0].Targets, 1)
+	assert.Empty(t, summaries[0].Targets[0].Unit)
+}
+
 // An unwritable store must cost the run nothing: journaling is best-effort, and a handler
 // that reported an error here would be a build failure caused by bookkeeping.
 func TestWithSessionJournalSurvivesAnUnwritableStore(t *testing.T) {

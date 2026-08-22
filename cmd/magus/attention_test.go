@@ -349,9 +349,87 @@ func TestAttentionWhereNarrowsToTheProject(t *testing.T) {
 	}))
 }
 
+// The SOURCE column and the request id read the same label, so a producer that renders
+// one way in the listing cannot key another way in the digest.
 func TestAttentionSourceLabelsTheProducer(t *testing.T) {
-	t.Parallel()
+	root := attentionTestRoot(t)
+	ev := blockedEvent("needs a decision")
+	require.NoError(t, recordAttentionOpen(root, ev))
 
-	assert.Equal(t, "agent/claude", attentionSource(types.EventSource{Kind: "agent", Sub: "claude"}))
-	assert.Equal(t, "magus", attentionSource(types.EventSource{Kind: "magus"}))
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	fold, err := sessions.ReadAll(dir)
+	require.NoError(t, err)
+	queue := sessions.AttentionQueue(fold)
+	require.Len(t, queue, 1)
+
+	assert.Equal(t, "agent/claude", queue[0].Source)
+	assert.Equal(t, sessions.RequestID(ev.Source.ID, sessions.AttentionOpen{
+		Source:  sessions.SourceLabel(ev.Source.Kind, ev.Source.Sub),
+		Where:   attentionWhere(ev.Where),
+		Message: ev.Message,
+	}), queue[0].ID)
+}
+
+// -q asks a question rather than printing an answer, so the exit status IS the answer:
+// an empty queue is the good state and must not read as a fault.
+func TestAttentionQuietAnswersWithTheExitStatus(t *testing.T) {
+	root := attentionTestRoot(t)
+
+	global.quiet = true
+	out := captureStdout(t, func() {
+		err := attentionCmd(context.Background(), root, []string{"ls"})
+		var silent errSilent
+		require.ErrorAs(t, err, &silent)
+		assert.Equal(t, 1, silent.exitCode, "nothing is open")
+	})
+	assert.Empty(t, out, "-q prints nothing")
+
+	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+
+	global.quiet = true
+	out = captureStdout(t, func() {
+		assert.NoError(t, attentionCmd(context.Background(), root, []string{"ls"}), "a request is open")
+	})
+	assert.Empty(t, out)
+}
+
+func TestAttentionDisposeAcceptsAnUnambiguousPrefix(t *testing.T) {
+	root := attentionTestRoot(t)
+	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+	id := openRequestIDs(t, root)[0]
+
+	out := captureStdout(t, func() {
+		require.NoError(t, attentionCmd(context.Background(), root, []string{"dispose", id[:8]}))
+	})
+	assert.Contains(t, out, "disposed "+id, "the confirmation names the full id, not the prefix that was typed")
+	assert.Empty(t, openRequestIDs(t, root))
+}
+
+func TestAttentionDisposeRefusesAnAmbiguousPrefixAndNamesTheCandidates(t *testing.T) {
+	root := attentionTestRoot(t)
+	first := blockedEvent("one")
+	second := blockedEvent("two")
+	second.Source.ID = "sess-2"
+	require.NoError(t, recordAttentionOpen(root, first))
+	require.NoError(t, recordAttentionOpen(root, second))
+	ids := openRequestIDs(t, root)
+	require.Len(t, ids, 2)
+
+	err := attentionCmd(context.Background(), root, []string{"dispose", "att-"})
+	require.Error(t, err)
+	for _, id := range ids {
+		assert.Contains(t, err.Error(), id, "a person cannot choose between candidates the error does not name")
+	}
+	assert.Len(t, openRequestIDs(t, root), 2, "an ambiguous prefix closes nothing")
+}
+
+func TestAttentionDisposeReportsAPrefixThatMatchesNothing(t *testing.T) {
+	root := attentionTestRoot(t)
+	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
+
+	err := attentionCmd(context.Background(), root, []string{"dispose", "att-zzzz"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "no request matches")
+	assert.Contains(t, err.Error(), "magus attention", "the refusal names how to see the open ids")
 }

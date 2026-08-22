@@ -159,6 +159,7 @@ flag run/timeout
 flag run/upstream
 flag run/wait
 flag sessions/limit
+flag sessions/since
 flag status/W
 flag status/c
 flag status/compact

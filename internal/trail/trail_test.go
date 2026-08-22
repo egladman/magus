@@ -283,31 +283,6 @@ func TestUnitFromContext(t *testing.T) {
 	}
 }
 
-// TestValidUnitID pins the rule every unit channel shares. It is exported because the marker
-// scanner is not the only producer any more: whatever stamps a Unit has to agree with this, or
-// the redaction exemption starts covering strings nobody checked.
-func TestValidUnitID(t *testing.T) {
-	for name, tc := range map[string]struct {
-		id   string
-		want bool
-	}{
-		"plain":               {"MGS1021", true},
-		"every separator":     {"a.b:c_d-1/2", true},
-		"branch shaped":       {"feat/spawn-capture", true},
-		"at the length cap":   {strings.Repeat("u", MaxUnitIDLen), true},
-		"past the length cap": {strings.Repeat("u", MaxUnitIDLen+1), false},
-		"empty":               {"", false},
-		"space":               {"two words", false},
-		"punctuation":         {"MGS1021!", false},
-		"newline":             {"unit\n", false},
-		"non-ascii":           {"unit-é", false},
-	} {
-		t.Run(name, func(t *testing.T) {
-			require.Equal(t, tc.want, ValidUnitID(tc.id))
-		})
-	}
-}
-
 func TestUnitFromEnv_ReadsAValidID(t *testing.T) {
 	t.Setenv(EnvUnit, "  feat/spawn-capture  ")
 	require.Equal(t, "feat/spawn-capture", UnitFromEnv(), "surrounding whitespace is formatting, not part of the id")

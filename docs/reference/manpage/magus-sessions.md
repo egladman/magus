@@ -28,10 +28,18 @@ half-written by a killed process is skipped and counted rather than failing
 the read, and a fact this magus does not recognize is still counted as
 activity. Use --limit to bound the listing, and -o json for the full records.
 
+--since bounds the listing by AGE instead of by count, taking either a duration
+back from now (2h, 45m, 168h) or an RFC3339 instant. It compares against each
+session's last fact, not its first, so a long session that is still working
+stays listed however long ago it began.
+
 ## Options
 
 **--limit** *int*
 : Show at most this many sessions (0 for all)
+
+**--since** *string*
+: Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp
 
 ## Examples
 
@@ -45,6 +53,18 @@ magus sessions
 
 ```sh
 magus sessions --limit 5
+```
+
+*Show today's work*
+
+```sh
+magus sessions --since 24h
+```
+
+*Show everything since an incident*
+
+```sh
+magus sessions --since 2026-08-20T09:00:00Z --limit 0
 ```
 
 *Full records as JSON*

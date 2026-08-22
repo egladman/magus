@@ -317,6 +317,8 @@ const (
 	FlagServerStopSocket = "socket"
 	// sessions: --limit
 	FlagSessionsLimit = "limit"
+	// sessions: --since
+	FlagSessionsSince = "since"
 	// status: --W
 	FlagStatusW = "W"
 	// status: --c
@@ -901,13 +903,15 @@ func BindConfigConsoleTokenCreate(fs *flag.FlagSet) *ConfigConsoleTokenCreateFla
 
 // SessionsFlags are the flags declared for `magus sessions`.
 type SessionsFlags struct {
-	Limit int // --limit
+	Limit int    // --limit
+	Since string // --since
 }
 
 // BindSessions registers `magus sessions`'s flags on fs and returns the destination.
 func BindSessions(fs *flag.FlagSet) *SessionsFlags {
 	var f SessionsFlags
 	fs.IntVar(&f.Limit, FlagSessionsLimit, 0, "Show at most this many sessions (0 for all)")
+	fs.StringVar(&f.Since, FlagSessionsSince, "", "Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
 	return &f
 }
 

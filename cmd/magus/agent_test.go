@@ -1631,7 +1631,7 @@ func TestGradeDelegatedWriteInvalidUnitID(t *testing.T) {
 	})
 
 	t.Run("over-long ids are invalid too", func(t *testing.T) {
-		got := gradeDelegatedWrite(ctx, strings.Repeat("u", trail.MaxUnitIDLen+1), filepath.Join(root, "README.md"))
+		got := gradeDelegatedWrite(ctx, strings.Repeat("u", types.MaxUnitIDLen+1), filepath.Join(root, "README.md"))
 		require.Equal(t, "advise", got.Decision)
 		assert.Contains(t, got.Context, "not a valid unit id")
 	})
