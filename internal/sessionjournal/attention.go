@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"slices"
 	"strings"
+	"unicode/utf8"
 
 	json "github.com/egladman/magus/internal/json"
 )
@@ -34,7 +35,40 @@ type AttentionOpen struct {
 	Severity string `json:"severity,omitempty"`
 	Source   string `json:"source,omitempty"`
 	Where    string `json:"where,omitempty"`
-	Message  string `json:"message"`
+	Message  string `json:"message"` // clamped to MaxMessageBytes when written
+}
+
+// MaxMessageBytes bounds the Message one [AttentionOpen] may carry into the store.
+//
+// The message is whatever a producer piped to `magus notify` on stdin, and in
+// practice that is a hook forwarding an agent's text - a prompt, a tool argument, a
+// transcript tail. The journal is grow-only and every reader folds the WHOLE store
+// into memory, so one unbounded message is a cost every later read of this repository
+// pays. 4 KiB is far past what a person can act on from a queue row and far short of
+// a line that makes the fold expensive.
+const MaxMessageBytes = 4 << 10
+
+// messageTruncated ends a message that was cut, so a reader can tell a short message
+// from a long one nobody kept.
+const messageTruncated = "... [truncated]"
+
+// bounded clamps Message to [MaxMessageBytes], cutting on a rune boundary so the
+// stored line stays valid UTF-8. The marker is appended past the bound rather than
+// carved out of it: the constant says what a producer may send, and a marker
+// competing for that budget would make the two harder to reason about than either.
+//
+// The request id is derived from the message the producer SENT (see [RequestID]), not
+// from this copy, so two long blocks that share a 4 KiB prefix stay two requests.
+func (o AttentionOpen) bounded() AttentionOpen {
+	if len(o.Message) <= MaxMessageBytes {
+		return o
+	}
+	cut := MaxMessageBytes
+	for cut > 0 && !utf8.RuneStart(o.Message[cut]) {
+		cut--
+	}
+	o.Message = o.Message[:cut] + messageTruncated
+	return o
 }
 
 // AttentionDispose is the payload of a person closing a request.

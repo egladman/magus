@@ -38,6 +38,9 @@ func activityCmd(_ context.Context, root string, args []string) error {
 	if len(rest) > 0 {
 		return usagef("magus activity: takes no arguments (got %q); use --limit to bound the listing", rest[0])
 	}
+	if limit < 0 {
+		return usagef("magus activity: --limit must be zero or more (got %d); 0 lists every session", limit)
+	}
 
 	root = attentionRoot(root)
 	if root == "" {
@@ -200,7 +203,7 @@ func (h *sessionFactHandler) Handle(_ context.Context, r slog.Record) error {
 	if h.writer == nil {
 		w, err := sessionjournal.Open(h.dir, e.Inv, h.start)
 		if err != nil {
-			h.broken = true
+			h.stopRecording(err)
 			return nil
 		}
 		h.writer = w
@@ -216,9 +219,25 @@ func (h *sessionFactHandler) Handle(_ context.Context, r slog.Record) error {
 		// One failed append means the store is unwritable (a full disk, a read-only
 		// state dir); retrying per target would repeat the same failure once per
 		// result and slow the run down to prove it.
-		h.broken = true
+		h.stopRecording(err)
 	}
 	return nil
+}
+
+// stopRecording abandons the session journal for the rest of this invocation, and
+// says so once - h.broken gates every later Handle, so this cannot repeat per target.
+//
+// Failing silently is what made an unwritable store indistinguishable from an idle
+// repository: nothing recorded, and `magus activity` then reporting in good faith
+// that no session has run yet. The warning is what keeps that empty state honest.
+//
+// The caller holds h.mu. slog.Warn cannot re-enter it: a plain log record carries no
+// journal event, so Handle returns before it reaches the lock.
+func (h *sessionFactHandler) stopRecording(err error) {
+	h.broken = true
+	slog.Warn("magus: this run was not recorded in the session journal, so `magus activity` will not list it; check the store is writable and has space",
+		slog.String("store", h.dir),
+		slog.String("error", err.Error()))
 }
 
 func (h *sessionFactHandler) WithAttrs([]slog.Attr) slog.Handler { return h }

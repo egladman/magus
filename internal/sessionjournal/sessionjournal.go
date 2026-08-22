@@ -19,9 +19,15 @@
 // there even if the name were free.
 //
 // Records are grow-only. Nothing here mutates or rewrites a record, which is what
-// makes concurrent producers in different worktrees safe without a lock: a POSIX
-// append of one short line is atomic, so two magus processes appending to two
-// session files (or the same one) cannot interleave a line.
+// makes concurrent producers in different worktrees safe without a lock: on a LOCAL
+// filesystem a POSIX append of one short line is atomic, so two magus processes
+// appending to two session files (or the same one) cannot interleave a line.
+//
+// A network mount is outside that guarantee. NFS and SMB implement O_APPEND by
+// seeking on the client, so two hosts appending to one file there can interleave
+// mid-line. The store is user state under XDG_STATE_HOME, which is local on the
+// setups magus is built for; where it is not, an interleave surfaces as a line no
+// reader can decode and lands in [Fold.Skipped], never as a record that lies.
 //
 // A file, however, is not grow-only: [Rotate] deletes whole session files whose
 // newest fact has aged out, and [Open] runs it opportunistically so the store bounds
@@ -34,10 +40,13 @@ package sessionjournal
 
 import (
 	"bufio"
+	"bytes"
 	"cmp"
 	"crypto/sha256"
 	"encoding/hex"
+	"errors"
 	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -181,6 +190,9 @@ type Writer struct {
 // grow-only journal bounded without a daemon or a cron: every producer opens, so
 // every producer pays a little of the housekeeping. It is best-effort and cannot
 // fail the open - see [Rotate].
+//
+// A session id that already has a file is RESUMED rather than restarted: see
+// [Writer.resume].
 func Open(dir, session string, start SessionStart) (*Writer, error) {
 	if !sessionRE.MatchString(session) {
 		return nil, fmt.Errorf("sessionjournal: session id %q must be alphanumeric with - and _ (it names the journal file); mint one with journal.NewInvocationID", session)
@@ -189,20 +201,51 @@ func Open(dir, session string, start SessionStart) (*Writer, error) {
 		return nil, fmt.Errorf("sessionjournal: create store %s: %w", dir, err)
 	}
 	rotate(dir, DefaultRetention, session+fileExt)
-	return &Writer{path: filepath.Join(dir, session+fileExt), session: session, start: start}, nil
+	w := &Writer{path: filepath.Join(dir, session+fileExt), session: session, start: start}
+	w.resume()
+	return w, nil
 }
 
-// Session returns the id this writer appends under.
-func (w *Writer) Session() string { return w.session }
+// resume continues the numbering an earlier writer left in the session file.
+//
+// Two processes reach one file whenever a session id is reused - a retried command, a
+// daemon and a CLI sharing an invocation id. Starting every writer at seq 1 makes
+// (Session, Seq) stop identifying one record: the second process stamps numbers the
+// first already used, and the fold's tie-break then interleaves two runs' facts
+// arbitrarily within a millisecond.
+//
+// It seeds the sequence only. The resumed writer still emits its own session-start,
+// because it is a different invocation with its own command line, and the journal
+// says so rather than inheriting the first one's.
+//
+// A fresh session, which is the common case, costs one failed open - the file does
+// not exist until the first fact.
+func (w *Writer) resume() {
+	records, _, _ := readFile(w.path)
+	for _, rec := range records {
+		if rec.Seq > w.seq {
+			w.seq = rec.Seq
+		}
+	}
+}
 
 // Append records one fact. payload is marshaled as the record's payload object; a
 // nil payload writes the fact with none.
 //
-// The first call also writes the session-start record, so seq 1 is always the
-// start. Errors are returned rather than swallowed, but callers on the run path
-// must not fail a build over one - a journal that can break a build is worse than
-// no journal.
+// The first call also writes the session-start record, so seq 1 is always the start.
+// An [AttentionOpen] payload is stored with its Message clamped to
+// [MaxMessageBytes]. Errors are returned rather than swallowed, but callers on the
+// run path must not fail a build over one - a journal that can break a build is worse
+// than no journal.
 func (w *Writer) Append(kind string, payload any) error {
+	// The message bound is applied HERE rather than at the producer because it
+	// protects the store, not the caller: a message is whatever a hook piped to
+	// `magus notify` on stdin, and one unbounded line is a line every future reader of
+	// this repository pays for. A producer that forgets is the case this exists for.
+	if open, ok := payload.(AttentionOpen); ok {
+		payload = open.bounded()
+	}
+
 	w.mu.Lock()
 	defer w.mu.Unlock()
 
@@ -260,7 +303,8 @@ type Fold struct {
 
 	// Skipped counts lines that were not a decodable record. A journal is written
 	// by a process that can be killed mid-line, so a truncated tail is expected,
-	// not corruption to report as an error.
+	// not corruption to report as an error. A line longer than the reader's budget
+	// counts here too, and costs only itself: the records after it still load.
 	Skipped int
 }
 
@@ -312,6 +356,13 @@ func sortRecords(records []Record) {
 	})
 }
 
+// maxLineBytes is the longest line readFile will try to decode. A record carries no
+// bodies (a target ref, not its output) and [MaxMessageBytes] bounds the one
+// free-text field a producer controls, so a line past this was written by something
+// that did not agree with those rules - an older magus, or a hand-edited file. It is
+// skipped like any other unusable line, and only itself.
+const maxLineBytes = 1 << 20
+
 // readFile decodes one session journal, returning what it could read, how many lines
 // it could not, and whether the file was not there at all.
 //
@@ -331,27 +382,56 @@ func readFile(path string) (records []Record, skipped int, vanished bool) {
 	}
 	defer func() { _ = f.Close() }()
 
-	sc := bufio.NewScanner(f)
-	// A record carries no bodies (a target ref, not its output), so the default
-	// 64KiB line budget is generous; raising it guards against a pathological
-	// target name rather than an expected one.
-	sc.Buffer(make([]byte, 0, 64*1024), 1024*1024)
-	for sc.Scan() {
-		line := strings.TrimSpace(sc.Text())
-		if line == "" {
-			continue
-		}
-		var rec Record
-		if err := json.Unmarshal([]byte(line), &rec); err != nil || rec.Session == "" || rec.Kind == "" {
+	br := bufio.NewReader(f)
+	for {
+		line, over, err := readLine(br, maxLineBytes)
+		if over {
+			// One oversized line costs one record and nothing else. Stopping the file
+			// here - which is what a bufio.Scanner does on ErrTooLong - would hide every
+			// LATER record, and a later record is exactly what the attention queue looks
+			// for: with the tail invisible, no dispose is ever found and every request in
+			// the file re-opens forever.
 			skipped++
+		} else if trimmed := bytes.TrimSpace(line); len(trimmed) > 0 {
+			var rec Record
+			if json.Unmarshal(trimmed, &rec) != nil || rec.Session == "" || rec.Kind == "" {
+				skipped++
+			} else {
+				records = append(records, rec)
+			}
+		}
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				skipped++
+			}
+			return records, skipped, false
+		}
+	}
+}
+
+// readLine reads one newline-terminated line, discarding whatever it holds past
+// limit. over reports that the line was cut; err is io.EOF at the end of the file, or
+// the read failure that ended it.
+//
+// Discarding the remainder rather than buffering it is what bounds the reader's
+// memory against a line nobody can use, and the file stays positioned at the start of
+// the next line either way, so nothing after the oversized line is lost.
+func readLine(br *bufio.Reader, limit int) ([]byte, bool, error) {
+	var line []byte
+	var over bool
+	for {
+		chunk, err := br.ReadSlice('\n')
+		if room := limit - len(line); len(chunk) > room {
+			over = true
+			line = append(line, chunk[:room]...)
+		} else {
+			line = append(line, chunk...)
+		}
+		if errors.Is(err, bufio.ErrBufferFull) {
 			continue
 		}
-		records = append(records, rec)
+		return line, over, err
 	}
-	if sc.Err() != nil {
-		skipped++
-	}
-	return records, skipped, false
 }
 
 // Summary is one session as a reader meets it: who, when, and what it ran.

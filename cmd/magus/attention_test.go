@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"context"
+	"log/slog"
 	"strings"
 	"testing"
 
@@ -31,6 +32,20 @@ func blockedEvent(message string) types.Event {
 		Where:         &types.EventLocation{Workspace: types.Path{Value: "/repo", IsDir: true}},
 		Message:       message,
 	}
+}
+
+// captureWarnings installs a slog handler for the duration of fn and returns what it
+// logged. The producers here report a request they could NOT open through slog rather
+// than an error - a non-zero exit from an agent hook interrupts the very session the
+// notification exists to help - so the default logger is the only place to observe it.
+func captureWarnings(t *testing.T, fn func()) string {
+	t.Helper()
+	var buf bytes.Buffer
+	prev := slog.Default()
+	slog.SetDefault(slog.New(slog.NewTextHandler(&buf, &slog.HandlerOptions{Level: slog.LevelWarn})))
+	t.Cleanup(func() { slog.SetDefault(prev) })
+	fn()
+	return buf.String()
 }
 
 func openRequestIDs(t *testing.T, root string) []string {
@@ -190,6 +205,23 @@ func TestRecordAttentionOpenDedupesARefiredBlock(t *testing.T) {
 	other.Source.ID = "sess-2"
 	require.NoError(t, recordAttentionOpen(root, other))
 	assert.Len(t, openRequestIDs(t, root), 2)
+}
+
+// The request id keys on the agent session that raised the block. An event with none
+// would key every such producer on "", folding unrelated blocks into one row that a
+// single dispose closes.
+func TestRecordAttentionOpenRefusesAnEventWithNoSourceID(t *testing.T) {
+	root := attentionTestRoot(t)
+
+	ev := blockedEvent("needs a decision")
+	ev.Source.ID = ""
+	logged := captureWarnings(t, func() {
+		assert.NoError(t, recordAttentionOpen(root, ev), "a missing source.id must not fail the notification")
+	})
+
+	assert.Empty(t, openRequestIDs(t, root))
+	assert.Contains(t, logged, "source.id", "the note names the field that is missing")
+	assert.Contains(t, logged, "wrapper", "and who has to send it")
 }
 
 func TestRecordAttentionOpenSkipsWhenThereIsNoRepository(t *testing.T) {

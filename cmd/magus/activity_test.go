@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/journal"
@@ -145,8 +146,42 @@ func TestSummarizeTargetsCollapsesRepeats(t *testing.T) {
 	assert.Equal(t, "build api (pass), build web (fail), lint web (pass, cached)", got)
 }
 
+// A store that cannot be written is the case where silence lies: nothing is recorded,
+// and `magus activity` then reports in good faith that no session has run.
+func TestSessionFactHandlerWarnsOnceWhenTheStoreIsUnwritable(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	root := t.TempDir()
+
+	dir, err := sessionjournal.Dir(root)
+	require.NoError(t, err)
+	require.NoError(t, os.MkdirAll(filepath.Dir(dir), 0o755))
+	// A regular file where the store directory belongs. It fails the MkdirAll inside
+	// Open the way a full disk or a read-only state dir would, without forging a
+	// permission bit a test running as root would then ignore.
+	require.NoError(t, os.WriteFile(dir, []byte("not a directory"), 0o644))
+
+	h := beginSessionJournal(root, []string{"run", "build"}, "v0")
+	require.NotNil(t, h)
+
+	logged := captureWarnings(t, func() {
+		emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
+		emitJournalEvent(t, h, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "test", Status: journal.StatusPass})
+	})
+
+	assert.Equal(t, 1, strings.Count(logged, "not recorded in the session journal"),
+		"the handler breaks once, so the warning cannot repeat per target")
+	assert.Contains(t, logged, dir, "the warning names the store a person has to go look at")
+}
+
 func TestActivityRejectsPositionalArguments(t *testing.T) {
 	err := activityCmd(context.Background(), t.TempDir(), []string{"yesterday"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--limit")
+}
+
+func TestActivityRejectsANegativeLimit(t *testing.T) {
+	err := activityCmd(context.Background(), t.TempDir(), []string{"--limit=-1"})
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "zero or more")
+	assert.Contains(t, err.Error(), "0 lists every session", "the error names the value that means what -1 was reaching for")
 }

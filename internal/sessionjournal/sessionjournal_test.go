@@ -5,6 +5,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	json "github.com/egladman/magus/internal/json"
 	"github.com/stretchr/testify/assert"
@@ -51,6 +52,123 @@ func TestOpenWritesNothingUntilTheFirstFact(t *testing.T) {
 	fold, err = Read(dir)
 	require.NoError(t, err)
 	assert.Len(t, fold.Records, 2)
+}
+
+// A message is whatever a hook piped to `magus notify`, so an unbounded one is one
+// process's decision that every later read of this repository pays for. The bound is
+// applied at write time, which is what makes it hold for a producer that never heard
+// of it.
+func TestAppendBoundsAnOversizedAttentionMessage(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	w, err := Open(dir, "sess1", SessionStart{})
+	require.NoError(t, err)
+	require.NoError(t, w.Append(KindAttentionOpen, AttentionOpen{
+		Request: "att-1",
+		Outcome: "waiting",
+		Message: strings.Repeat("x", MaxMessageBytes*4),
+	}))
+
+	fold, err := Read(dir)
+	require.NoError(t, err)
+	require.Len(t, fold.Records, 2)
+
+	var got AttentionOpen
+	require.NoError(t, json.Unmarshal(fold.Records[1].Payload, &got))
+	// The marker is what lets a reader tell a short message from a long one nobody kept.
+	assert.Equal(t, strings.Repeat("x", MaxMessageBytes)+messageTruncated, got.Message)
+}
+
+func TestBoundedMessageCutsOnARuneBoundary(t *testing.T) {
+	t.Parallel()
+
+	// U+4E16 encodes to three bytes, and the bound is not a multiple of three, so the
+	// cut lands mid-rune unless it is walked back.
+	cut := AttentionOpen{Message: strings.Repeat(string(rune(0x4e16)), MaxMessageBytes)}.bounded()
+	assert.True(t, utf8.ValidString(cut.Message), "a mid-rune cut stores bytes no reader can decode")
+	assert.LessOrEqual(t, len(cut.Message), MaxMessageBytes+len(messageTruncated))
+
+	short := AttentionOpen{Request: "att-1", Message: "needs a decision"}
+	assert.Equal(t, short, short.bounded(), "a message inside the bound is stored verbatim")
+}
+
+// One oversized line must cost one record and nothing else. A bufio.Scanner abandons
+// the rest of the file on ErrTooLong, which hides every LATER fact.
+func TestReadSkipsAnOversizedLineAndKeepsReading(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sess1.jsonl")
+
+	body := strings.Join([]string{
+		`{"v":1,"session":"sess1","seq":1,"kind":"target_result","ts":1,"payload":{"target":"build","outcome":"pass"}}`,
+		`{"v":1,"session":"sess1","seq":2,"kind":"target_result","ts":2,"payload":{"target":"` + strings.Repeat("x", maxLineBytes*2) + `"}}`,
+		`{"v":1,"session":"sess1","seq":3,"kind":"target_result","ts":3,"payload":{"target":"lint","outcome":"pass"}}`,
+	}, "\n")
+	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
+
+	fold, err := Read(dir)
+	require.NoError(t, err)
+	assert.Equal(t, 1, fold.Skipped)
+	require.Len(t, fold.Records, 2)
+	assert.Equal(t, uint64(1), fold.Records[0].Seq)
+	assert.Equal(t, uint64(3), fold.Records[1].Seq, "the record after the oversized line is the one a scanner loses")
+}
+
+// The composed case: a request opened on an oversized line is unreadable, and the
+// normal open after it must still reach the queue. A file that hid its own tail would
+// also defeat attention dedupe, because dedupe IS a search for a later record.
+//
+// Both lines are written raw, because the write-time bound means no current magus
+// produces the first one - an older binary, or a hand-edited file, does.
+func TestOversizedOpenDoesNotHideALaterOne(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+	path := filepath.Join(dir, "sess1.jsonl")
+
+	body := strings.Join([]string{
+		`{"v":1,"session":"sess1","seq":1,"kind":"attention_open","ts":1,"payload":{"request":"att-huge","outcome":"waiting","message":"` + strings.Repeat("x", maxLineBytes*2) + `"}}`,
+		`{"v":1,"session":"sess1","seq":2,"kind":"attention_open","ts":2,"payload":{"request":"att-small","outcome":"waiting","message":"needs a decision"}}`,
+	}, "\n")
+	require.NoError(t, os.WriteFile(path, []byte(body+"\n"), 0o644))
+
+	fold, err := Read(dir)
+	require.NoError(t, err)
+	assert.Equal(t, 1, fold.Skipped)
+
+	open := OpenAttention(fold)
+	require.Len(t, open, 1, "the open after the oversized line must still fold")
+	assert.Equal(t, "att-small", open[0].ID)
+	assert.Equal(t, "needs a decision", open[0].Message)
+}
+
+// A session id is reached twice whenever it is reused - a resumed agent session, a
+// retried command - and the second writer has to continue the numbering rather than
+// restart it, or (Session, Seq) stops identifying one record.
+func TestOpenResumesTheSequenceOfAnExistingSession(t *testing.T) {
+	t.Parallel()
+	dir := t.TempDir()
+
+	first, err := Open(dir, "sess1", SessionStart{Command: "run build"})
+	require.NoError(t, err)
+	require.NoError(t, first.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass}))
+	require.NoError(t, first.Append(KindTargetResult, TargetResult{Target: "test", Outcome: OutcomePass}))
+
+	second, err := Open(dir, "sess1", SessionStart{Command: "run lint"})
+	require.NoError(t, err)
+	require.NoError(t, second.Append(KindTargetResult, TargetResult{Target: "lint", Outcome: OutcomePass}))
+
+	fold, err := Read(dir)
+	require.NoError(t, err)
+	require.Len(t, fold.Records, 5, "each writer declares its own command line")
+
+	var seqs []uint64
+	for _, rec := range fold.Records {
+		seqs = append(seqs, rec.Seq)
+	}
+	assert.Equal(t, []uint64{1, 2, 3, 4, 5}, seqs, "the second writer continues the numbering instead of reusing seq 1")
+	assert.Equal(t, KindSessionStart, fold.Records[0].Kind)
+	assert.Equal(t, KindSessionStart, fold.Records[3].Kind)
 }
 
 func TestOpenRejectsASessionIDThatCouldEscapeTheStore(t *testing.T) {

@@ -255,9 +255,20 @@ func attentionDispose(root string, args []string) error {
 //
 // Re-filing a block that is already open is a no-op. An agent hook may fire on every
 // prompt, and the queue has to hold one row per block rather than one per attempt -
-// see [sessionjournal.RequestID] for how the two are told apart.
+// see [sessionjournal.RequestID] for how the two are told apart. An event carrying no
+// Source.ID opens nothing, for the same reason: there is no request without the
+// session that raised it.
 func recordAttentionOpen(root string, ev types.Event) error {
 	if ev.Outcome != types.OutcomeWaiting && ev.Outcome != types.OutcomePermission {
+		return nil
+	}
+	if ev.Source.ID == "" {
+		// An empty agent session is not an id, it is the absence of one, and
+		// [sessionjournal.RequestID] would happily digest it: every producer that sent
+		// none would collapse onto ONE request, and a single dispose would close blocks
+		// nobody had read. No id, no durable request - the same graceful path as no
+		// repository, because the notification itself still fires.
+		noteMissingAttentionSource()
 		return nil
 	}
 	root = attentionRoot(root)
@@ -350,4 +361,13 @@ func attentionWhere(where *types.EventLocation) string {
 func noteAttentionOpenFailure(err error) {
 	slog.Warn("magus notify: the attention request was not recorded, so `magus attention` will not list it",
 		slog.String("error", err.Error()))
+}
+
+// noteMissingAttentionSource reports the one event shape that cannot become a durable
+// request. Like [noteAttentionOpenFailure] it leaves the notification itself alone -
+// the desktop alert still fires - and says what the producer has to change, because
+// an agent whose blocks never reach the queue has no other symptom.
+func noteMissingAttentionSource() {
+	slog.Warn("magus notify: the event carries no source.id, so no attention request was opened; a request id keys on the agent session that raised the block, and an empty one would merge unrelated producers into a single row",
+		slog.String("next", "have the agent wrapper send source.id, the host's own session identifier, in the event envelope"))
 }
