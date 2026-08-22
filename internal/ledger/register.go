@@ -22,7 +22,7 @@ var (
 //
 // A FACT, NOT A GATE. Every verdict registers, BaseDiverged included: refusing here would
 // leave the orchestrator with no record that a worker went to the wrong base, which is the
-// one case the record is for. The caller gets the verdict and [RegisterAdvice]'s reading
+// one case the record is for. The caller gets the verdict and [RegistrationAdvice]'s reading
 // of it, and decides.
 //
 // It is the ONE write here that does not create the row it names. Put and Update declare a
@@ -43,20 +43,21 @@ func (s *Store) Register(ctx context.Context, id, reportedBase string) (types.De
 				" orchestrator handed you", ErrUnknownUnit, id)
 		}
 		cur.ReportedBase = base
-		cur.BaseVerdict = BaseVerdict(cur.Checkpoint, base)
+		cur.BaseVerdict = CompareBase(cur.Checkpoint, base)
 		cur.Registered = now
 		return nil
 	})
 }
 
-// BaseVerdict compares the checkpoint a unit was handed with the base its worker
+// CompareBase compares the checkpoint a unit was handed with the base its worker
 // reported, both as `magus vcs checkpoint -o name` prints them: `<rev>` for a clean tree,
 // `<rev>+<digest>` for a dirty one.
 //
-// Exported because the agent guard grades writes against the same comparison, and two
-// definitions of "is this worker on its base" that could disagree is worse than either.
+// Exported to keep "is this worker on its base" spelled once. Register is the only caller
+// today; a later reader that needs the same question answered - the agent guard, the
+// console - should call this rather than grow a second comparison that can drift from it.
 // See types.DelegationBaseVerdict for why the answer is not a boolean.
-func BaseVerdict(checkpoint, reported string) types.DelegationBaseVerdict {
+func CompareBase(checkpoint, reported string) types.DelegationBaseVerdict {
 	checkpoint, reported = strings.TrimSpace(checkpoint), strings.TrimSpace(reported)
 	switch {
 	case checkpoint == "" || reported == "":
@@ -77,12 +78,12 @@ func baseRevision(token string) string {
 	return rev
 }
 
-// RegisterAdvice is what the registering worker is told: what the verdict means in terms
-// of the two tokens it compared, and what to do next.
+// RegistrationAdvice is what the registering worker is told: what the verdict means in
+// terms of the two tokens it compared, and what to do next.
 //
 // Derived from the row, never stored. The verdict is the fact; this is one rendering of
 // it, and a stored sentence would be a second thing to keep true when the wording changes.
-func RegisterAdvice(u types.DelegationUnit) string {
+func RegistrationAdvice(u types.DelegationUnit) string {
 	switch u.BaseVerdict {
 	case types.BaseMatch:
 		return fmt.Sprintf("registered unit %s on %s, which is the checkpoint it was handed. Nothing to reconcile; carry on.",

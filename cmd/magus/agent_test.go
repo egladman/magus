@@ -1669,10 +1669,10 @@ func TestGradeDelegatedWriteCorruptLedger(t *testing.T) {
 	assert.Contains(t, got.Context, "magus_ledger", "the advisory must name the surface that re-declares the plan")
 }
 
-// TestMatchDeclared pins the glob vocabulary a denial rests on. The precision matters more
-// here than in types.pathsIntersect, which over-reports on purpose: this answer blocks a
-// write, and a guard that blocks legitimate edits is one agents learn to route around.
-func TestMatchDeclared(t *testing.T) {
+// TestDeclarationCovering pins the glob vocabulary a denial rests on. The precision matters
+// more here than in types.pathsIntersect, which over-reports on purpose: this answer blocks
+// a write, and a guard that blocks legitimate edits is one agents learn to route around.
+func TestDeclarationCovering(t *testing.T) {
 	t.Parallel()
 	for _, tt := range []struct {
 		decl, rel string
@@ -1697,13 +1697,13 @@ func TestMatchDeclared(t *testing.T) {
 		{"/", "internal/ledger/store.go", false},
 	} {
 		t.Run(tt.decl+" vs "+tt.rel, func(t *testing.T) {
-			_, got := matchDeclared([]string{tt.decl}, tt.rel)
+			_, got := declarationCovering([]string{tt.decl}, tt.rel)
 			assert.Equal(t, tt.want, got)
 		})
 	}
 
 	t.Run("returns the declaration it matched, verbatim", func(t *testing.T) {
-		decl, ok := matchDeclared([]string{"docs/**", "internal/ledger/**"}, "internal/ledger/store.go")
+		decl, ok := declarationCovering([]string{"docs/**", "internal/ledger/**"}, "internal/ledger/store.go")
 		require.True(t, ok)
 		assert.Equal(t, "internal/ledger/**", decl, "a denial quotes the declaration as the orchestrator wrote it")
 	})

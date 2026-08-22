@@ -74,7 +74,7 @@ func TestStoreRegister(t *testing.T) {
 			assert.Equal(t, tt.checkpoint, got.Checkpoint, "registering does not overwrite the checkpoint it compares against")
 			assert.Equal(t, types.StateDeclared, got.State, "registering advances no state; that is the caller's put")
 
-			advice := RegisterAdvice(got)
+			advice := RegistrationAdvice(got)
 			assert.Contains(t, advice, "u1")
 			for _, want := range tt.says {
 				assert.Contains(t, advice, want)
@@ -151,7 +151,7 @@ func TestStoreRegisterIsIdempotentPerBase(t *testing.T) {
 	assert.Equal(t, diverged.Created, settled.Created)
 }
 
-func TestBaseVerdict(t *testing.T) {
+func TestCompareBase(t *testing.T) {
 	t.Parallel()
 
 	tests := []struct {
@@ -186,7 +186,7 @@ func TestBaseVerdict(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 
-			assert.Equal(t, tt.want, BaseVerdict(tt.checkpoint, tt.reported))
+			assert.Equal(t, tt.want, CompareBase(tt.checkpoint, tt.reported))
 		})
 	}
 }

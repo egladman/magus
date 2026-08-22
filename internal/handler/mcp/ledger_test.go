@@ -136,7 +136,7 @@ func TestLedgerTool(t *testing.T) {
 	t.Run("register records the reported base and returns the verdict", func(t *testing.T) {
 		invoke(t, map[string]any{"op": "put", "id": "unit-reg", "checkpoint": "aaaa1111", "state": "declared"})
 
-		resp := invoke(t, map[string]any{"op": "register", "id": "unit-reg", "base": "bbbb2222"})
+		resp := invoke(t, map[string]any{"op": "register", "id": "unit-reg", "reported_base": "bbbb2222"})
 		got, ok := resp.Data.(types.DelegationUnit)
 		require.True(t, ok)
 		assert.Equal(t, types.BaseDiverged, got.BaseVerdict)
@@ -158,7 +158,7 @@ func TestLedgerTool(t *testing.T) {
 
 	t.Run("register on an unknown id names where the declared ids are", func(t *testing.T) {
 		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{
-			"op": "register", "id": "never-declared", "base": "aaaa1111",
+			"op": "register", "id": "never-declared", "reported_base": "aaaa1111",
 		}})
 		require.ErrorIs(t, err, ledger.ErrUnknownUnit)
 		assert.Contains(t, err.Error(), "magus_ledger list")

@@ -18,7 +18,10 @@ authorship from the surface that performed the write, so a change made through
 the agent surface carries an agent's name no matter what the writer reports
 about itself. Interrupting a person costs attention, and the suggestion
 operation reflects that: it requires a stated reason before the proposal
-reaches anyone.
+reaches anyone. The delegation ledger has no CLI verb, unlike the attention
+events `notify` raises, because an attention event is addressed to a person
+while the ledger is an agent-to-agent declaration read back by the guard and
+the console.
 
 Automated review is wrong at a steady rate, and wrong in a characteristic way:
 the confident finding that "fixes" behavior somebody chose on purpose. The

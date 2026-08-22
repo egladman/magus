@@ -468,8 +468,8 @@ var Magus = Module{
 				{
 					Name: "register",
 					Doc: "Report the base a worker actually landed on, and learn how it compares " +
-						"with the checkpoint the unit was handed. base is a checkpoint token in the " +
-						"form `magus vcs checkpoint -o name` prints: `<rev>`, or `<rev>+<digest>` " +
+						"with the checkpoint the unit was handed. reported_base is a checkpoint token " +
+						"in the form `magus vcs checkpoint -o name` prints: `<rev>`, or `<rev>+<digest>` " +
 						"when the tree is dirty. Returns {unit, advice}: the stored row, and a " +
 						"sentence naming both revisions and what to do next. The row carries " +
 						"reported_base, registered, and base_verdict - one of match (same token), " +
@@ -486,7 +486,7 @@ var Magus = Module{
 						"when there is no workspace to read.",
 					Args: []Arg{
 						{Name: "id", Type: TypeString},
-						{Name: "base", Type: TypeString},
+						{Name: "reported_base", Type: TypeString},
 					},
 					Returns: []Ret{{Type: TypeAnyMap}},
 					Raises:  true,
@@ -949,7 +949,7 @@ func MagusPutLedger(ctx context.Context, id string, opts map[string]any) (types.
 
 // MagusRegisterLedger backs magus\ledger.register: a worker reports the base it actually
 // landed on, and learns how that compares with the checkpoint its unit was handed. It
-// returns the stored row and internal/ledger.RegisterAdvice's reading of the verdict, the
+// returns the stored row and internal/ledger.RegistrationAdvice's reading of the verdict, the
 // same pair the magus_ledger tool's "register" op answers with.
 //
 // The verdict is a FACT, never a refusal - a diverged registration is recorded and
@@ -963,7 +963,7 @@ func MagusRegisterLedger(ctx context.Context, id, base string) (types.Delegation
 	if err != nil {
 		return types.DelegationUnit{}, "", err
 	}
-	return unit, ledger.RegisterAdvice(unit), nil
+	return unit, ledger.RegistrationAdvice(unit), nil
 }
 
 // MagusClearLedger backs magus\ledger.clear, matching the magus_ledger MCP tool's

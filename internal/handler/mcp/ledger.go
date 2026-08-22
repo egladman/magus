@@ -59,11 +59,11 @@ func (t *ledgerTool) Invoke(ctx context.Context, req spells.InvokeRequest) (spel
 		// has to know to look for; the sentence names both revisions and what to do next.
 		stored, err := t.store.Register(ctx,
 			strings.TrimSpace(paramString(req.Params, "id", "")),
-			paramString(req.Params, "base", ""))
+			paramString(req.Params, "reported_base", ""))
 		if err != nil {
 			return spells.InvokeResponse{}, err
 		}
-		return spells.InvokeResponse{Text: ledger.RegisterAdvice(stored), Data: stored}, nil
+		return spells.InvokeResponse{Text: ledger.RegistrationAdvice(stored), Data: stored}, nil
 
 	case "clear":
 		// Report what was dropped. Clearing is how a fresh plan starts, and it is also

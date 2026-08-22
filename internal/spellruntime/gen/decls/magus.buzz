@@ -515,6 +515,6 @@ export object ledger {
     static extern fun clear() > int !> any;
     static extern fun list() > DelegationReport !> any;
     static extern fun put(id: str, opts: {str: any} = {<str: any>}) > DelegationUnit !> any;
-    static extern fun register(id: str, base: str) > {str: any} !> any;
+    static extern fun register(id: str, reported_base: str) > {str: any} !> any;
 }
 

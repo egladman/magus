@@ -763,11 +763,11 @@ const (
 	envHookUnit  = trail.EnvUnit
 )
 
-// fleetGrade is what the delegation ledger has to say about one write. Separate from
+// writeGrade is what the delegation ledger has to say about one write. Separate from
 // guardVerdict because the empty Decision means "no opinion", which the wire's "pass"
 // does not: a rule that stayed silent and a rule that cleared the write are different
 // facts, and only the first may be overridden by a later rule.
-type fleetGrade struct {
+type writeGrade struct {
 	Decision string // "", "deny", or "advise"
 	Reason   string
 	Context  string
@@ -790,14 +790,14 @@ type fleetGrade struct {
 // Every uncertainty fails OPEN with at most an advisory: no ledger, no live units, a file
 // that will not parse, a path outside the workspace. A rule the guard cannot evaluate must
 // not block a tool call.
-func gradeDelegatedWrite(ctx context.Context, actingUnit, writePath string) fleetGrade {
+func gradeDelegatedWrite(ctx context.Context, actingUnit, writePath string) writeGrade {
 	writePath = strings.TrimSpace(writePath)
 	if writePath == "" {
-		return fleetGrade{}
+		return writeGrade{}
 	}
 	location := hookActivityTrail(ctx)
 	if location.base == "" {
-		return fleetGrade{}
+		return writeGrade{}
 	}
 	store := ledger.NewStore(ledger.Location{CacheDir: location.base, Root: location.workspace})
 	units, err := store.List()
@@ -805,21 +805,21 @@ func gradeDelegatedWrite(ctx context.Context, actingUnit, writePath string) flee
 		// An ABSENT ledger is not this branch: the store reads it as an empty one, which
 		// falls through to the no-live-units return below and costs a stat. Only a file
 		// that exists and will not parse arrives here, and it is worth a word, because a
-		// fleet whose boundary silently stopped being checked looks exactly like a fleet
+		// delegation whose boundary silently stopped being checked looks exactly like one
 		// nobody declared.
-		return fleetGrade{Decision: "advise", Context: fmt.Sprintf(
-			"magus workspace: no delegation boundary was checked for this write. Re-declare the plan with the magus_ledger tool if a fleet is meant to be running.\n"+
+		return writeGrade{Decision: "advise", Context: fmt.Sprintf(
+			"magus workspace: no delegation boundary was checked for this write. Re-declare the plan with the magus_ledger tool if delegated work is meant to be running.\n"+
 				"This workspace's delegation ledger could not be read: %v. The guard fails open rather than blocking on a file it cannot parse, so an owned-path collision would pass unnoticed until someone reads the diff.", err)}
 	}
 	live := liveDelegationUnits(units)
 	if len(live) == 0 {
-		return fleetGrade{}
+		return writeGrade{}
 	}
 	rel, inside := workspaceRelative(location.workspace, writePath)
 	if !inside {
 		// The ledger's paths are workspace-relative, so a write outside the workspace has
 		// nothing to be graded against.
-		return fleetGrade{}
+		return writeGrade{}
 	}
 
 	notice := ""
@@ -841,15 +841,15 @@ func gradeDelegatedWrite(ctx context.Context, actingUnit, writePath string) flee
 	// unit whose plan already ended has no boundary left to grade against, and denying on
 	// one would block work whose ledger row is simply stale.
 	if owner, owned := ownerOf(live, rel, ""); owned {
-		return fleetGrade{Decision: "advise", Context: notice + fmt.Sprintf(
+		return writeGrade{Decision: "advise", Context: notice + fmt.Sprintf(
 			"magus workspace: if you are unit %s, set %s=%s (or pass --unit %s) so the guard grades your writes; if you are not, expect a concurrent agent to be editing this file and coordinate before you save.\n"+
 				"%s is inside the paths delegation unit %s (%s) declared it owns, and that unit is %s. This is an advisory and not a block: the guard is a seatbelt for harnesses that opt in, not a sandbox, so an editor magus cannot attribute is never stopped from writing its own repository.",
 			owner.ID, envHookUnit, owner.ID, owner.ID, rel, owner.ID, goalLine(owner), owner.State)}
 	}
 	if notice != "" {
-		return fleetGrade{Decision: "advise", Context: strings.TrimRight(notice, "\n")}
+		return writeGrade{Decision: "advise", Context: strings.TrimRight(notice, "\n")}
 	}
-	return fleetGrade{}
+	return writeGrade{}
 }
 
 // gradeAgainstOwnUnit judges a write made by a unit that IS in the live set.
@@ -858,23 +858,23 @@ func gradeDelegatedWrite(ctx context.Context, actingUnit, writePath string) flee
 // specific of two declarations the same orchestrator wrote. A write that no live unit
 // claims passes: an orchestrator's owned set is a plan, not a census, and denying on
 // unclaimed ground would block a unit from a file nobody is competing for.
-func gradeAgainstOwnUnit(me types.DelegationUnit, live []types.DelegationUnit, rel string) fleetGrade {
-	if decl, forbidden := matchDeclared(me.ForbiddenPaths, rel); forbidden {
-		return fleetGrade{Decision: "deny", Reason: fmt.Sprintf(
+func gradeAgainstOwnUnit(me types.DelegationUnit, live []types.DelegationUnit, rel string) writeGrade {
+	if decl, forbidden := declarationCovering(me.ForbiddenPaths, rel); forbidden {
+		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: work inside your own owned paths, or report a checkpoint to the orchestrator and ask for the boundary to be widened before you touch this.\n"+
 				"%s is covered by %q, which your delegation unit %s (%s) declared FORBIDDEN. The declaration is the orchestrator's, recorded in this workspace's ledger; magus is reading it back, not inventing a rule.",
 			rel, decl, me.ID, goalLine(me))}
 	}
-	if _, mine := matchDeclared(me.OwnedPaths, rel); mine {
-		return fleetGrade{}
+	if _, mine := declarationCovering(me.OwnedPaths, rel); mine {
+		return writeGrade{}
 	}
 	if owner, owned := ownerOf(live, rel, me.ID); owned {
-		return fleetGrade{Decision: "deny", Reason: fmt.Sprintf(
+		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: edit inside your own owned paths, or ask the orchestrator to re-partition the plan. If unit %s has finished with this file, have it release the path by shrinking its owned_paths with the magus_ledger tool, then retry.\n"+
 				"%s is owned by delegation unit %s (%s), which is %s right now, and you are unit %s. Two agents editing one path is the collision the delegation ledger exists to make visible; this guard is where the declaration gets read.",
 			owner.ID, rel, owner.ID, goalLine(owner), owner.State, me.ID)}
 	}
-	return fleetGrade{}
+	return writeGrade{}
 }
 
 // liveDelegationUnits are the rows a write can still collide with: declared and running.
@@ -915,14 +915,14 @@ func ownerOf(live []types.DelegationUnit, rel, exclude string) (types.Delegation
 		if u.ID == exclude {
 			continue
 		}
-		if _, ok := matchDeclared(u.OwnedPaths, rel); ok {
+		if _, ok := declarationCovering(u.OwnedPaths, rel); ok {
 			return u, true
 		}
 	}
 	return types.DelegationUnit{}, false
 }
 
-// matchDeclared reports which declaration covers rel, and whether any did. rel is
+// declarationCovering reports which declaration covers rel, and whether any did. rel is
 // workspace-relative and slash-separated, as the ledger's declarations are.
 //
 // A declaration covers the SUBTREE beneath what it names, which is what an orchestrator
@@ -935,7 +935,7 @@ func ownerOf(live []types.DelegationUnit, rel, exclude string) (types.Delegation
 // human reads and wrong here, where the answer denies a write: a guard that blocks
 // legitimate edits is one agents learn to route around, and routing around it is the
 // failure the whole ledger design is built to avoid.
-func matchDeclared(decls []string, rel string) (string, bool) {
+func declarationCovering(decls []string, rel string) (string, bool) {
 	for _, raw := range decls {
 		decl := path.Clean(strings.TrimSpace(raw))
 		if decl == "." || decl == "/" {

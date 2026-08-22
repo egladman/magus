@@ -46,7 +46,7 @@ func buildLedgerNS(obs buzz.DirectObserver) vm.Value {
 	}))
 	// register answers with a two-key map rather than the row alone, which is the shape
 	// list and put use. The advice sentence is DERIVED from the row and not a field on it
-	// (see ledger.RegisterAdvice), so folding it in beside the row's own keys would put a
+	// (see ledger.RegistrationAdvice), so folding it in beside the row's own keys would put a
 	// rendering where a caller reads facts; "unit" and "advice" keep the two apart.
 	ns.MapSet("register", directVal(obs, "magus.ledger.register", func(ctx context.Context, args []vm.Value) (vm.Value, error) {
 		unit, advice, err := std.MagusRegisterLedger(ctx, bindinggen.Str(args, 0), bindinggen.Str(args, 1))
