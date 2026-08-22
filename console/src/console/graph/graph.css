@@ -220,9 +220,17 @@
   color: var(--pf-t--global--text--color--subtle);
   border-bottom: 1px solid var(--pf-t--global--border--color--default);
 }
+/* TWO columns. Each entry is a swatch, a short kind name and a count - well under half the
+   sidebar's width - so a single column spent the whole legend's height on a list that was mostly
+   empty space to the right of it, and pushed the tail of the kinds under a scroll. Two columns fit
+   the full set without scrolling at the 14rem cap above.
+   Row-major (grid, not multicol) so the palette's family grouping - structure, declarations, prose,
+   people - stays adjacent in reading order instead of being split down the middle of the list. */
 #graph-legend {
   margin: 0; padding: 0; list-style: none;
-  display: flex; flex-direction: column; gap: 0.1rem;
+  display: grid; grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 0.1rem 0.35rem;
+  align-content: start;
   font-size: 0.72rem; line-height: 1.5;
   overflow-y: auto; min-height: 0;
 }
