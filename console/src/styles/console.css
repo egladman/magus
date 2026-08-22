@@ -573,9 +573,6 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
      NO cast either. The bar used to throw --sm--bottom down over the content, which put the elevation
      on the wrong body - chrome that is meant to stay back was the thing lifted. */
   background: var(--pf-t--global--background--color--primary--default);
-  /* The rail's edge, on this row as it already is on the outlet below (that rule carries the same
-     hairline for the same reason). Needed now that the two are different colours meeting. */
-  border-left: 1px solid var(--pf-t--global--border--color--default);
   -webkit-app-region: drag; app-region: drag;
 }
 /* Interactive title-bar children opt out of the drag region so a click activates them (a drag region
@@ -600,14 +597,16 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
 /* Title-bar-right control group: the chrome buttons (command bar, apps, reference, settings gear) as PF
    plain icon Buttons centered on the tab row, and the positioning context for the apps-menu popover
    (#console-appmenu, anchored in overrides.css). A slim inline gutter keeps them off the window edge. */
-/* A rule between the tabs and the controls. They share one row, and with the strip now the content
-   colour the two runs met as one undivided band - a tab clipped by the overflow could sit directly
-   against the workspace selector and read as another control. The line says where the scrolling run
-   ends and the fixed cluster begins. */
-#console-actions {
-  flex: 0 0 auto; position: relative; display: flex; align-items: center;
-  padding-inline: 0.35rem;
-  border-inline-start: 1px solid var(--pf-t--global--border--color--default);
+#console-actions { flex: 0 0 auto; position: relative; display: flex; align-items: center; padding-inline: 0.35rem; }
+/* A rule between the tabs and the controls, where the two share a ROW. With the strip now the content
+   colour the two runs met as one undivided band, and a tab clipped by the overflow could sit directly
+   against the workspace selector and read as another control; the line says where the scrolling run
+   ends and the fixed cluster begins.
+   Only above 48rem, because only above it are they side by side. Below, the bar stacks into two rows
+   already parted by a horizontal hairline, this cluster spans the full width, and an inline-start
+   border lands on the phone's own left edge with nothing to its left to be divided from. */
+@media (min-width: 48rem) {
+  #console-actions { border-inline-start: 1px solid var(--pf-t--global--border--color--default); }
 }
 /* PF plain buttons default to align-items:baseline (sized for a text+icon button), so the title-bar
    icon-only buttons (apps menu, reference, gear) hang their svg off the baseline - a few px above the
@@ -859,6 +858,12 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
     border-left: 1px solid var(--pf-t--global--border--color--default);
     border-end-start-radius: calc(var(--pf-t--global--border--radius--large) * 2);
   }
+  /* The title bar takes the same edge, for the same reason and behind the same gate: it is the other
+     half of the boundary the rail makes, now that the strip is the content colour and the two are
+     different tones meeting. Below this width there is no rail, and the line was drawing down the
+     outermost pixel of the phone with the window on one side of it - on BOTH rows, since the border
+     spans the bar's whole height and the bar stacks into two there. */
+  #console-titlebar { border-left: 1px solid var(--pf-t--global--border--color--default); }
 }
 /* The content CARD - the only curved thing in the shell, and the one surface that steps forward out
    of the chrome frame. Chrome is square and recessive; containers are raised and rounded.
