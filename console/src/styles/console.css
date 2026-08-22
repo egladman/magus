@@ -203,9 +203,11 @@ body[data-console-fill] > main > .console-render-panel {
   flex-direction: column;
   max-width: none;
   margin-inline: 0;
-  /* A slim side gutter so a surface (esp. the log viewer) stretches nearly edge-to-edge instead of
-     keeping Pico's ~1rem .container-fluid inset - the console owns the whole width. */
-  padding-inline: 0.4rem;
+  /* Zero, not Pico's ~1rem .container-fluid inset: the console owns the whole width. It was a slim
+     0.4rem gutter, which read as a white strip down the seam between the rail and the surface -
+     this main is transparent, so the gutter showed the page ground against the rail's own surface
+     rather than any deliberate spacing. Surfaces that want breathing room set their own padding. */
+  padding-inline: 0;
 }
 #console-outlet div[data-pane-id] > main > .console-graph-app,
 #console-outlet div[data-pane-id] > main > .console-render-panel,
