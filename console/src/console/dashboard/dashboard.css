@@ -135,6 +135,14 @@ body[data-dash-native] { margin: 0; }
   grid-auto-flow: row dense;
   align-items: stretch;
   gap: var(--console-gap);
+  /* The shell's shared pane <main> is deliberately padding-inline: 0 (console.css) so surfaces
+     that want edge-to-edge (the graph, notes) get it - which left the dashboard's own cards
+     butted against the rail on the left, the pane's own edge on the right, and the tab strip /
+     status bar top and bottom, with no line of their own to answer the rail's and status bar's.
+     ONE rule here, reusing the same --console-gap already used between cards, rather than a
+     margin patched onto whichever card happens to sit at an edge this week. Big Picture mode
+     overrides this with its own --bp-pad immediately below, so a wall display stays edge-to-edge. */
+  padding: var(--console-gap);
 }
 #dash-panels > * { grid-column: 1 / -1; }
 #dash-panels > [data-half] { grid-column: span 1; }
