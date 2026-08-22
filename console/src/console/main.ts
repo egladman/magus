@@ -22,7 +22,7 @@ import {
   tabHostsSurface,
   type TabState,
 } from "./tabs";
-import { createTabBar } from "./tabBar";
+import { createTabBar, tabViews } from "./tabBar";
 import { createSidebar } from "./sidebar";
 import { fetchPulse, type PulseView } from "./pulse";
 import { fetchDiffCount, type Badge } from "./badges";
@@ -1514,7 +1514,28 @@ export function startConsole(
     commands: listCommands,
     keymap: () => mergeKeymap(CONSOLE_KEYMAP, keymapCell.get()),
     mac: isMac(),
-    onRun: (id) => dispatchCommand(id),
+    onRun: (id, arg) => dispatchCommand(id, arg),
+  });
+  // Go to tab: the first command that takes a TARGET, and the reason the palette learned to ask for
+  // one. Until now an open tab was reachable only by clicking it, which on a strip that scrolls means
+  // finding it first - the thing the edge controls make possible but not quick.
+  //
+  // The targets come from tabViews, the same pure mapping the strip itself renders, so the names in
+  // the palette are exactly the names on the tabs - including the parent-directory hint two tabs grow
+  // when they would otherwise both read main.ts. Derived per call: the list is whatever is open at the
+  // moment the question is asked, and nothing has to invalidate it when a tab opens or closes.
+  registerCommand({
+    id: "console.tab.goto",
+    label: "Go to tab",
+    group: "Tabs",
+    targets: () =>
+      tabViews(ws.get()).map((t) => ({
+        value: t.id,
+        label: t.hint ? t.title + " - " + t.hint : t.title,
+      })),
+    run: (arg) => {
+      if (typeof arg === "string") activateTab(arg);
+    },
   });
   document.body.append(commandBar.el);
   registerCommand({

@@ -6,13 +6,30 @@
 // listener is a pure function (the registry map, chord normalization, keymap merge, and command
 // resolution), unit-tested without a browser.
 
+// One candidate for a command that takes a target: the value handed to run(), and the prose the
+// palette lists and filters on. Pure data - a target list is derived on demand, never stored.
+export interface CommandTarget {
+  value: string;
+  label: string;
+}
+
 // A command: a stable id, a human label for menus/command bar, an optional group for ordering, and
 // the handler. arg carries an optional payload (e.g. a direction for a "focus pane" command).
+//
+// targets is what makes that payload reachable from the palette. A command that declares it does not
+// act on Enter: the palette asks targets() for the candidates and runs the command with the chosen
+// one's value. The alternative was registering one command per thing you might pick - a command per
+// open tab - which is the wrong shape twice over: it makes the registry churn as tabs open and close,
+// and it puts entries in every catalogue that reads it (the cheat sheet, the Shortcuts surface)
+// offering to bind a keyboard shortcut to a tab that will not exist in a minute. A tab is an ARGUMENT
+// to "go to tab", not a command in its own right, and one bindable command that asks which is the
+// shape that says so.
 export interface Command {
   id: string;
   label: string;
   group?: string;
   run: (arg?: unknown) => void;
+  targets?: () => CommandTarget[];
 }
 
 // A chord is a canonical modifier+key string: modifiers in the fixed order mod, alt, shift, then

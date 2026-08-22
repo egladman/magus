@@ -12,7 +12,7 @@
 // bar), so its classes follow the README.md formula: console-shell-commandbar__<element>, transient
 // selection state as data-selected. Styled in console.css against PF tokens so both themes work.
 
-import { type Command, type Keymap } from "./commands";
+import { type Command, type CommandTarget, type Keymap } from "./commands";
 import { h } from "./view";
 
 // A command ranked against a query: the command, the character indices HIT in its display token (for
@@ -109,11 +109,32 @@ export interface CommandBar {
 // edit is reflected on next open), the platform accelerator for chord labels, and how to run a chosen
 // command (the console dispatches + the command bar closes). keymap/mac are part of the injection contract
 // even though the dmenu row shows no chords (the keybindings editor owns chord display now).
+// matchTargets is matchCommands for the second stage: the same fuzzy rank, over a target's prose
+// label rather than a command token. Targets have no token - a tab is named, not addressed - so the
+// hits ARE the label's, and the row highlights them directly.
+export function matchTargets(targets: CommandTarget[], query: string): TargetMatch[] {
+  const q = query.trim().toLowerCase();
+  if (q === "") return targets.map((target) => ({ target, hits: [], score: 0 }));
+  const out: TargetMatch[] = [];
+  for (const target of targets) {
+    const m = fuzzyMatch(q, target.label);
+    if (m) out.push({ target, hits: m.hits, score: m.score });
+  }
+  out.sort((a, b) => b.score - a.score);
+  return out;
+}
+
+export interface TargetMatch {
+  target: CommandTarget;
+  hits: number[];
+  score: number;
+}
+
 export interface CommandBarDeps {
   commands(): Command[];
   keymap(): Keymap;
   mac: boolean;
-  onRun(id: string): void;
+  onRun(id: string, arg?: unknown): void;
 }
 
 export function createCommandBar(deps: CommandBarDeps): CommandBar {
@@ -148,6 +169,10 @@ export function createCommandBar(deps: CommandBarDeps): CommandBar {
 
   let filtered: CommandMatch[] = [];
   let selected = 0;
+  // The second stage, when a command that takes a target has been picked but not yet run. Null is
+  // stage one. The bar keeps no other mode flag: everything that differs - what gets filtered, what a
+  // row shows, what Enter and Escape do - reads this.
+  let stage: { command: Command; matches: TargetMatch[] } | null = null;
 
   // syncTyped drives the suggestion row's slide-in: while the input is empty (placeholder showing)
   // the row rests shifted to the right (a gap after the prompt); on the first keystroke data-typed
@@ -162,23 +187,45 @@ export function createCommandBar(deps: CommandBarDeps): CommandBar {
   // the command's canonical token with the query's matched chars highlighted. dmenu shows only what
   // fits: the items container clips overflow, and markSelection scrolls the selected one into view, so
   // arrowing past the edge pages the row without any extra chrome.
+  // row builds one option. Both stages render the same shape - a token with its matched characters
+  // lit - because to the reader they are the same gesture: narrow a list, pick one.
+  function row(
+    text: string,
+    hits: number[],
+    i: number,
+    name: string,
+    onPick: () => void,
+  ): HTMLElement {
+    const btn = h("button", "console-shell-commandbar__item");
+    btn.type = "button";
+    btn.title = name;
+    btn.tabIndex = -1; // the input keeps focus; the row is keyboard-driven from there
+    btn.setAttribute("role", "option");
+    btn.setAttribute("aria-selected", i === selected ? "true" : "false");
+    btn.setAttribute("aria-label", name);
+    if (i === selected) btn.dataset.selected = "";
+    btn.append(highlightToken(text, hits));
+    btn.addEventListener("click", onPick);
+    return btn;
+  }
+
   function renderItems(): void {
+    items.replaceChildren();
+    if (stage) {
+      stage.matches = matchTargets(stage.command.targets?.() ?? [], input.value);
+      if (selected >= stage.matches.length) selected = Math.max(0, stage.matches.length - 1);
+      stage.matches.forEach((m, i) => {
+        items.append(row(m.target.label, m.hits, i, m.target.label, () => run(m.target.value)));
+      });
+      updatePreview();
+      return;
+    }
     filtered = matchCommands(deps.commands(), input.value);
     if (selected >= filtered.length) selected = Math.max(0, filtered.length - 1);
-    items.replaceChildren();
     filtered.forEach((m, i) => {
       const token = displayToken(m.command.id);
-      const btn = h("button", "console-shell-commandbar__item");
-      btn.type = "button";
+      const btn = row(token, m.hits, i, token + " - " + m.command.label, () => pick(m.command));
       btn.dataset.cmd = m.command.id;
-      btn.title = m.command.label; // prose meaning on hover; the row shows the terse token
-      btn.tabIndex = -1; // the input keeps focus; the row is keyboard-driven from there
-      btn.setAttribute("role", "option");
-      btn.setAttribute("aria-selected", i === selected ? "true" : "false");
-      btn.setAttribute("aria-label", token + " - " + m.command.label);
-      if (i === selected) btn.dataset.selected = "";
-      btn.append(highlightToken(token, m.hits));
-      btn.addEventListener("click", () => run(m.command.id));
       items.append(btn);
     });
     updatePreview();
@@ -187,6 +234,13 @@ export function createCommandBar(deps: CommandBarDeps): CommandBar {
   // updatePreview shows the selected command's plain-language label at the bar's right end, so the
   // terse token in the row always has a meaning visible for the focused command.
   function updatePreview(): void {
+    if (stage) {
+      // In stage two the label is already the row text, so repeating it would say the same thing
+      // twice across the bar. The preview names the COMMAND instead, which is the thing that has
+      // scrolled out of sight now that the row lists targets.
+      preview.textContent = stage.command.label;
+      return;
+    }
     const m = filtered[selected];
     preview.textContent = m ? m.command.label : "";
   }
@@ -206,27 +260,60 @@ export function createCommandBar(deps: CommandBarDeps): CommandBar {
   }
 
   function move(delta: number): void {
-    if (filtered.length === 0) return;
-    selected = (selected + delta + filtered.length) % filtered.length;
+    const n = stage ? stage.matches.length : filtered.length;
+    if (n === 0) return;
+    selected = (selected + delta + n) % n;
     markSelection();
   }
 
-  function run(id: string): void {
+  // pick handles Enter on stage one: a command that declares targets does not run, it ASKS. The bar
+  // stays open with the query cleared, so the characters that found the command are not then filtering
+  // its targets. The prompt changes from the verb to the command, which is what the bar is now asking
+  // about - a command with no targets is unaffected and runs as it always did.
+  function pick(command: Command): void {
+    if (!command.targets) {
+      run(command.id);
+      return;
+    }
+    stage = { command, matches: [] };
+    prompt.textContent = command.label.toLowerCase();
+    input.value = "";
+    input.placeholder = "Pick a target";
+    selected = 0;
+    syncTyped();
+    renderItems();
+  }
+
+  // run closes and dispatches. In stage two the id is the STAGED command's and the argument is the
+  // chosen target's value; in stage one there is no argument and the id is the command's own.
+  function run(idOrValue: string): void {
+    const staged = stage;
     close();
-    deps.onRun(id);
+    if (staged) deps.onRun(staged.command.id, idOrValue);
+    else deps.onRun(idOrValue);
   }
 
   function open(): void {
     bar.hidden = false;
-    input.value = "";
-    selected = 0;
-    syncTyped(); // reset to the pre-typing resting position (row shifted right, gap after the prompt)
+    reset();
     renderItems();
     input.focus();
   }
 
+  // reset returns the bar to stage one. Called on open and when Escape backs out of a target list, so
+  // a bar reopened after picking a target never resumes mid-question.
+  function reset(): void {
+    stage = null;
+    prompt.textContent = "run";
+    input.value = "";
+    input.placeholder = "Run a command";
+    selected = 0;
+    syncTyped(); // reset to the pre-typing resting position (row shifted right, gap after the prompt)
+  }
+
   function close(): void {
     bar.hidden = true;
+    reset();
   }
 
   input.addEventListener("input", () => {
@@ -251,10 +338,19 @@ export function createCommandBar(deps: CommandBarDeps): CommandBar {
       move(-1);
     } else if (ev.key === "Enter") {
       ev.preventDefault();
-      if (filtered[selected]) run(filtered[selected].command.id);
+      if (stage) {
+        const m = stage.matches[selected];
+        if (m) run(m.target.value);
+      } else if (filtered[selected]) pick(filtered[selected].command);
     } else if (ev.key === "Escape") {
       ev.preventDefault();
-      close();
+      // Escape backs OUT of a target list rather than dismissing outright: having answered "which
+      // command" you should be able to take that answer back without losing the bar and starting over.
+      // A second Escape, now at stage one, closes.
+      if (stage) {
+        reset();
+        renderItems();
+      } else close();
     }
     ev.stopPropagation();
   });
