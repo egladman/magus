@@ -7,7 +7,6 @@
 // in the same PR - a regeneration always arrives with the change that caused it.
 //
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
-import "os";
 import "proc";
 import "advice";
 import "magus";
@@ -60,9 +59,9 @@ fun suspect(files: [FileEntry]) > [str] {
 }
 
 fun body(files: [str]) > str {
-    var text = "**These are generated files, and nothing that produces them changed in this pull request:**\n\n";
-    foreach (f in files) { text = text + "- `" + f + "`\n"; }
-    return text
+    final parts = mut ["**These are generated files, and nothing that produces them changed in this pull request:**\n\n"];
+    foreach (f in files) { parts.append("- `" + f + "`\n"); }
+    return parts.join("")
         + "\nIf you edited them by hand, the edit will not survive: the next run of the "
         + "producing target overwrites it, and CI's drift gate fails until then. Change "
         + "the source of truth instead, then regenerate:\n\n"

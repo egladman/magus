@@ -9,7 +9,6 @@
 // the whole pipeline is one command they can run before pushing.
 //
 // Reads REPO, PR_NUMBER, PR_AUTHOR.
-import "os";
 import "proc";
 import "advice";
 import "serialize";

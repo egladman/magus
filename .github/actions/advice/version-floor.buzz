@@ -9,7 +9,6 @@
 // Silent unless this PR changes that line, which is almost never.
 //
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
-import "os";
 import "proc";
 import "advice";
 import "std";

@@ -19,7 +19,6 @@
 // output. The diagram follows, for the reader who wants the shape rather than the rows.
 //
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA, FANOUT_SHARE.
-import "os";
 import "proc";
 import "advice";
 import "magus";
@@ -49,26 +48,26 @@ export fun trips(reached: int, total: int, share: float) > bool {
 }
 
 fun body(projects: [str], reasons: [str], total: int, diagram: str) > str {
-    var text = "**This change reaches " + "{projects.len()}" + " of " + "{total}"
+    final parts = mut ["**This change reaches " + "{projects.len()}" + " of " + "{total}"
         + " projects.**\n\n"
         + "The reach comes from how this workspace is wired: a project is here because "
         + "it sits downstream of one you edited. All " + "{projects.len()}" + " of them "
         + "rebuild and retest.\n\n"
-        + "| project | why it is in the set |\n| --- | --- |\n";
+        + "| project | why it is in the set |\n| --- | --- |\n"];
     for (var i = 0; i < projects.len(); i = i + 1) {
-        text = text + "| `" + projects[i] + "` | " + reasons[i] + " |\n";
+        parts.append("| `" + projects[i] + "` | " + reasons[i] + " |\n");
     }
     if (diagram != "") {
-        text = text + "\n```mermaid\n" + diagram.trim() + "\n```\n";
+        parts.append("\n```mermaid\n" + diagram.trim() + "\n```\n");
     }
     if (projects.len() < total) {
-        text = text + "\nIf this is more than the change needs to touch, splitting it "
-            + "makes each piece cheaper to review and to revert.\n";
+        parts.append("\nIf this is more than the change needs to touch, splitting it "
+            + "makes each piece cheaper to review and to revert.\n");
     } else {
-        text = text + "\nEverything is downstream of what you edited, so splitting the "
-            + "change would not shrink any piece - the coupling is upstream of this diff.\n";
+        parts.append("\nEverything is downstream of what you edited, so splitting the "
+            + "change would not shrink any piece - the coupling is upstream of this diff.\n");
     }
-    return text
+    return parts.join("")
         + "\nIf that matches what you expected, there is nothing to do here. If it "
         + "surprises you, look at the dependency graph before this pull request: "
         + "`magus affected --explain <project>` lists the files that pulled one in, and "
