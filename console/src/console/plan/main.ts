@@ -750,10 +750,7 @@ export function activate(host: HTMLElement): PlanInstance {
     // A real <code> element, as every other surface writes a command.
     if (cmd) refs.emptyBody.append(" ", h("code", undefined, cmd), ".");
     if (offerDemo) {
-      refs.emptyBody.append(
-        " ",
-        "Pick Demo data from the Workspace menu to see a fabricated plan.",
-      );
+      refs.emptyBody.append(" ", "Pick acme from the Workspace menu to see a fabricated plan.");
     }
   };
 

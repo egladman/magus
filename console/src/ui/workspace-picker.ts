@@ -28,6 +28,11 @@ export interface WorkspacePickerOptions {
   // "See the demo" buttons are gone - so an unwired picker leaves the demo reachable only by typing
   // #demo into the address bar.
   onDemo(enter: boolean): void;
+  // The root of the workspace entering the demo lands you in. The row is named after it, so the
+  // workspace you click is the workspace you arrive in; without it the menu offered a row called
+  // one thing and produced another. Passed in rather than imported so this control keeps knowing
+  // nothing about the scenario module.
+  demoRoot: string;
 }
 
 export interface WorkspacePicker {
@@ -176,10 +181,14 @@ export function initWorkspacePicker(
     );
   };
 
-  // An ACTION, not a scope, and only ever an entrance. It sits apart from the radio group above because
-  // entering the demo is not choosing which workspace to look at - it changes whether anything on
-  // screen is real. Keeping it in the same radio group would have made "am I looking at fabricated
-  // data" one of the workspaces.
+  // Named after the WORKSPACE it opens - the same name, with the same "demo" tag, that the row will
+  // carry once you are inside. It read "Demo data" tagged "sample", which named neither the thing you
+  // land in nor the mode you land in, and left the menu answering "which workspace" with the word
+  // "data" in one row and a workspace name in every other.
+  //
+  // Still an ACTION rather than a radio: it reloads the tab into demo mode rather than setting a
+  // scope, and it is only ever an entrance. The hairline above it is what carries that distinction
+  // now that the text no longer does.
   const demoRow = (): HTMLLIElement => {
     const li = document.createElement("li");
     li.className = "pf-v6-c-menu__list-item console-shell-scope__demorow";
@@ -188,16 +197,18 @@ export function initWorkspacePicker(
     b.type = "button";
     b.className = "pf-v6-c-menu__item";
     b.setAttribute("role", "menuitem");
-    b.title = "Explore a populated console with no daemon running";
+    b.title =
+      opts.demoRoot +
+      " - a fabricated workspace. Explore a populated console with no daemon running.";
     const main = document.createElement("span");
     main.className = "pf-v6-c-menu__item-main";
     const t = document.createElement("span");
     t.className = "pf-v6-c-menu__item-text";
-    t.textContent = "Demo data";
+    t.textContent = shortName(opts.demoRoot);
     main.append(t);
     const tag = document.createElement("span");
     tag.className = "console-shell-scope__tag";
-    tag.textContent = "sample";
+    tag.textContent = "demo";
     main.append(tag);
     b.append(main);
     b.addEventListener("click", () => {
