@@ -168,24 +168,30 @@
 #node-list li.console-graph-nodelist__more { display: block; flex-basis: 100%; width: 100%; padding: 0.35rem 0.2rem 0; font-size: 0.68rem; color: var(--pf-t--global--text--color--subtle); }
 #node-list li.console-graph-nodelist__empty { display: block; flex-basis: 100%; width: 100%; padding: 0.15rem 0.2rem; font-size: 0.72rem; color: var(--pf-t--global--text--color--subtle); }
 
-.console-graph-stage { position: relative; min-width: 0; overflow: hidden; }
-#graph-canvas { display: block; width: 100%; height: 100%; cursor: grab; touch-action: none; }
-/* Built-in action buttons floating at the stage's top-right: a RESPONSIVE PatternFly Toolbar (a
-   pf-m-toggle-group that collapses behind a kebab below lg - shared ../toolbar.ts). The overlay
-   geometry (absolute top-right, translucent button fill so they sit legibly over the canvas) is
-   component-less stage chrome, so it stays container-scoped; the buttons + toolbar are PF. The
-   overrides below strip the toolbar's own padding/background/width so it stays a tight floating
-   overlay rather than a full-width bar. */
+/* A COLUMN: a header bar, then the canvas taking the rest. The stage used to be a bare positioning
+   context with the canvas filling it and the tools floating on top. */
+.console-graph-stage { position: relative; min-width: 0; overflow: hidden; display: flex; flex-direction: column; }
+#graph-canvas { display: block; width: 100%; flex: 1 1 auto; min-height: 0; cursor: grab; touch-action: none; }
+/* The stage HEADER: the surface's own title bar, the way the other apps carry one, rather than
+   buttons floating over the drawing. Floating cost twice. It covered the graph, so stageInsets had
+   to measure it and every fit had to reserve a margin for it - a permanent bite out of the canvas
+   taken to avoid an overlap that only a floating bar creates. And it was the only place actions
+   could go, so anything action-shaped got pushed back down into the filter row instead, which is
+   how a text input ended up with three buttons welded to it.
+   Still the same RESPONSIVE PatternFly Toolbar (pf-m-toggle-group collapsing behind a kebab below
+   lg, shared ../toolbar.ts); only its geometry changed. */
 .console-graph-stage__tools {
-  position: absolute; top: 0.6rem; right: 0.6rem; z-index: 3;
-  width: auto; padding: 0; background: transparent;
+  flex: 0 0 auto; z-index: 3;
+  width: 100%; padding: 0.35rem 0.6rem;
+  background: var(--pf-t--global--background--color--secondary--default);
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
 }
 .console-graph-stage__tools .pf-v6-c-toolbar__content { padding: 0; }
 .console-graph-stage__tools .pf-v6-c-toolbar__content-section { column-gap: 0.4rem; align-items: center; }
-.console-graph-stage__tools .pf-v6-c-button {
-  font-size: 0.72rem;
-  background: color-mix(in srgb, var(--pf-t--global--background--color--primary--default) 90%, transparent);
-}
+/* The actions sit at the trailing edge; the provenance badge keeps the leading edge, which is what
+   a header bar is for - a reading on the left, what you can do on the right. */
+.console-graph-stage__tools .pf-m-toggle-group { margin-inline-start: auto; }
+.console-graph-stage__tools .pf-v6-c-button { font-size: 0.72rem; }
 .console-graph-stage__tools .console-render-btn__icon { width: 0.95em; height: 0.95em; flex: 0 0 auto; }
 /* The live/snapshot provenance badges are PF Labels; PF's .pf-v6-c-label sets `display`,
    which outspecifies the [hidden] attribute's UA `display:none`, so in demo/snapshot-less

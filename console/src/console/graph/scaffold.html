@@ -98,11 +98,9 @@
                 <span class="pf-v6-c-button__text">Ask</span>
               </button>
             </div>
-            <div class="pf-v6-c-input-group__item">
-              <button id="search-copy-btn" type="button" class="pf-v6-c-button pf-m-control" title="Copy this query as a shell command" aria-label="Copy magus query command">
-                <span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span>
-              </button>
-            </div>
+            <!-- Copy-as-shell-command used to be the third button welded to this input. It does not
+                 help you WRITE a query, which is what the other two do - it exports the one you
+                 already have, alongside Fit and Open file. It moved to the stage header. -->
           </div>
         </div>
         <!-- SCOPE: every emphasis currently applied, in one place. A query, a view, a local-graph
@@ -219,6 +217,9 @@
                   <button class="pf-v6-c-button pf-m-plain" type="button" data-overflow-toggle aria-expanded="false" aria-label="Stage tools" title="Fit, open a graph file, fullscreen">
                     <span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></span>
                   </button>
+                </div>
+                <div class="pf-v6-c-toolbar__item">
+                  <button id="search-copy-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Copy this query as a shell command" aria-label="Copy magus query command"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Copy</span></button>
                 </div>
                 <div class="pf-v6-c-toolbar__item">
                   <button id="fit-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Zoom to fit the whole graph (or the current matches)"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Fit</span></button>

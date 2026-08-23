@@ -1172,13 +1172,16 @@ function startSimulation() {
         .distance(55)
         .strength(0.4),
     )
-    // Repulsion is what makes the layout say anything, but only the SHORT-RANGE half of it.
-    // Raising the strength alone (-60 to -180) and letting it reach further just inflates the
-    // periphery: the low-degree nodes sail out, the fit zooms out to hold them, and the core
-    // that needed the room arrives back on screen smaller and denser than it started. Pushing
-    // hard over a SHORTER range spends the force where the crowding is, so clusters separate
-    // while the graph's overall extent stays roughly put.
-    .force("charge", forceManyBody().strength(-180).distanceMax(250))
+    // Repulsion reaches the WHOLE graph. It used to stop at distanceMax(250), on the reasoning
+    // that a shorter range spends the force where the crowding is and keeps the overall extent
+    // put. It does keep the extent put, and that is the problem: past 250 units the only force
+    // left acting was the centering spring below, so at every scale larger than a cluster the
+    // layout was not answering to the data at all - it was answering to "pull everything toward
+    // one point". A round outline with evenly-filled interior is what that produces, and it will
+    // produce one for ANY graph, which makes the shape a property of these settings rather than
+    // of the workspace. The complaint that the periphery inflates is really a complaint about the
+    // camera: framing is fitView's job, and it does it.
+    .force("charge", forceManyBody().strength(-180))
     // NO forceCenter. It centers by measuring the centroid of every node and translating the whole
     // set, and it writes `node.x -= sx` UNCONDITIONALLY - it is the one force in d3 that ignores
     // fx/fy pinning. parkHiddenNodes pins everything outside the projection at PARKED_X (-1e6), so
@@ -1200,8 +1203,19 @@ function startSimulation() {
       "collide",
       forceCollide<GNode>().radius((d) => nodeReach(d) + NODE_GAP),
     )
-    .force("x", forceX(simCenter.x).strength(0.02))
-    .force("y", forceY(simCenter.y).strength(0.02))
+    // A WEAK tether, not a shaping force. At 0.02 these springs were strong enough to be the only
+    // thing acting at long range once charge was truncated, and between them they decided the
+    // outline: pulling every node toward one point, isotropically, from a disc-shaped seed, makes a
+    // disc - and the reader has no way to tell that circle from a fact about the workspace. It is
+    // not one. Nothing in the data says the graph is round, or that its periphery is equidistant
+    // from its middle, or that its density is even.
+    //
+    // What the tether is still for is keeping a disconnected component - and this graph has 556
+    // nodes with no dependency edge at all - from drifting to infinity under pure repulsion, since
+    // nothing else acts on a node with no links. 0.002 holds them in the frame over the settle
+    // without setting the shape of anything that does have edges.
+    .force("x", forceX(simCenter.x).strength(0.002))
+    .force("y", forceY(simCenter.y).strength(0.002))
     .force("halo", haloForce)
     // d3's default decay spends about 300 ticks - five seconds - before it comes to rest, which is
     // a long time to watch a graph wobble before it is worth reading, and far too long for the
@@ -2116,12 +2130,16 @@ function centerOn(id: string) {
 
 // fitView frames a set of nodes (or all when ids is null) in the viewport - the
 // zoom-to-fit / reset-view action. Reuses the shared zoomBehavior + transform.
-// The stage floats chrome over the canvas rather than beside it. These are the pieces that do,
-// measured live so a hidden one (the toolbar collapses to a kebab) contributes nothing. The
-// explain card is NOT here, and neither the legend nor the result line is any more: all three sit
-// beside the canvas now, so listing them would reserve a margin for something that covers
-// nothing - and the framing gets the whole left edge back.
-const STAGE_OVERLAYS = [".console-graph-stage__tools"];
+// Which stage chrome COVERS the canvas, so the framing can center the graph in what is actually
+// visible. Nothing does any more: the stage tools were the last overlay and they are a header bar
+// above the canvas now, which the canvas is simply laid out below. The explain card, the legend and
+// the result line all left earlier for the same reason - they sit beside the canvas, so listing one
+// reserves a margin against something that covers nothing.
+//
+// Kept as a list rather than deleted along with stageInsets: the insets are threaded through every
+// fit and re-center, and the next overlay - a floating minimap, a toast - has one line to add and
+// no plumbing to rediscover. An empty list costs a loop that does not run.
+const STAGE_OVERLAYS: string[] = [];
 
 // stageInsets measures how far the stage chrome covers the canvas, so the framing below can
 // center the graph in what the operator can see instead of behind the legend.
