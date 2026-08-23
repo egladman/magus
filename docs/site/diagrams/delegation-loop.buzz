@@ -20,7 +20,7 @@ export fun delegationLoopDiagram() > Diagram {
         eyebrow = "delegation",
         title = "A declared plan, released early, verified by diff",
         desc = "An orchestrator checkpoints the working state, partitions the work by write "
-            + "set using graph evidence, and declares one ledger row per unit: goal, "
+            + "set using graph evidence, and declares one ledger row per delegation: goal, "
             + "checkpoint, owned paths. Workers release paths as soon as they are done with "
             + "them, so the plan shrinks while it runs, and the Plan surface renders the "
             + "rows, their overlaps and their staleness for whoever is watching. The "

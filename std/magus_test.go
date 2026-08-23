@@ -302,9 +302,9 @@ func TestLedgerIsServedInProcess(t *testing.T) {
 
 	report, err := MagusListLedger(ctx)
 	require.NoError(t, err, "a workspace with a cache directory answers here, with no subprocess")
-	require.Len(t, report.Units, 1)
-	assert.Equal(t, "u1", report.Units[0].ID)
-	assert.Equal(t, types.StateRunning, report.Units[0].State)
+	require.Len(t, report.Delegations, 1)
+	assert.Equal(t, "u1", report.Delegations[0].ID)
+	assert.Equal(t, types.StateRunning, report.Delegations[0].State)
 }
 
 // TestLedgerNeedsAWorkspace mirrors TestInsightNeedsAWorkspace: there is no `magus
@@ -377,7 +377,7 @@ func TestClearLedgerReportsHowManyRowsItDropped(t *testing.T) {
 
 	report, err := MagusListLedger(ctx)
 	require.NoError(t, err)
-	assert.Empty(t, report.Units)
+	assert.Empty(t, report.Delegations)
 }
 
 // TestLedgerAndTheMCPToolAgree pins that the Buzz binding and the magus_ledger MCP
@@ -394,8 +394,8 @@ func TestLedgerAndTheMCPToolAgree(t *testing.T) {
 	require.NoError(t, err)
 
 	store := ledger.NewStore(ledger.Location{CacheDir: cacheDir})
-	units, err := store.List()
+	delegations, err := store.List()
 	require.NoError(t, err)
-	require.Len(t, units, 1)
-	assert.Equal(t, "shared row", units[0].Goal)
+	require.Len(t, delegations, 1)
+	assert.Equal(t, "shared row", delegations[0].Goal)
 }

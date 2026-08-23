@@ -95,7 +95,7 @@ func (s *Service) ListActivityEvents(_ context.Context, req *connect.Request[act
 			Session:       e.Session,
 			Workspace:     e.Workspace,
 			Action:        e.Action,
-			Unit:          e.Unit,
+			Unit:          e.Delegation, // the proto keeps the "unit" spelling: it is the console's wire
 			Outcome:       encodeOutcome(e.Outcome),
 			Error:         e.Error,
 			RequestRef:    e.RequestRef,

@@ -125,12 +125,12 @@ func TestWithSessionJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 	}
 }
 
-// The unit is stamped in the shared wiring, not per command, for the same reason the fact shape
-// is: `magus sessions` is a view of the repository, and a unit that only `run` recorded would
+// The delegation is stamped in the shared wiring, not per command, for the same reason the fact shape
+// is: `magus sessions` is a view of the repository, and a delegation that only `run` recorded would
 // read as a fleet that stopped working the moment it ran `affected`.
-func TestWithSessionJournalStampsTheUnitOnEveryVerb(t *testing.T) {
+func TestWithSessionJournalStampsTheDelegationOnEveryVerb(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(trail.EnvUnit, "fleet/f3")
+	t.Setenv(trail.EnvDelegation, "fleet/f3")
 
 	for verb, args := range map[string][]string{
 		"run":      {"ci", "api"},
@@ -149,20 +149,20 @@ func TestWithSessionJournalStampsTheUnitOnEveryVerb(t *testing.T) {
 
 			summaries := sessions.Summarize(fold)
 			require.Len(t, summaries, 1)
-			assert.Equal(t, "fleet/f3", summaries[0].Unit)
+			assert.Equal(t, "fleet/f3", summaries[0].Delegation)
 			require.Len(t, summaries[0].Targets, 1)
-			assert.Equal(t, "fleet/f3", summaries[0].Targets[0].Unit)
+			assert.Equal(t, "fleet/f3", summaries[0].Targets[0].Delegation)
 		})
 	}
 }
 
-// A unit that fails the id rule is dropped rather than stamped, which is what keeps the trail's
+// A delegation that fails the id rule is dropped rather than stamped, which is what keeps the trail's
 // redaction exemption honest. The drop happens in the wiring, because that is where the
 // environment is read; the note explaining it is asserted in internal/trail, where the one-time
 // gate can be reset. Here the observable fact is that nothing was attributed.
-func TestWithSessionJournalDropsAnInvalidUnit(t *testing.T) {
+func TestWithSessionJournalDropsAnInvalidDelegation(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	t.Setenv(trail.EnvUnit, "not a unit id")
+	t.Setenv(trail.EnvDelegation, "not a delegation id")
 	root := t.TempDir()
 
 	handlers := withSessionJournal(nil, root, "run", []string{"build"})
@@ -176,9 +176,9 @@ func TestWithSessionJournalDropsAnInvalidUnit(t *testing.T) {
 
 	summaries := sessions.Summarize(fold)
 	require.Len(t, summaries, 1)
-	assert.Empty(t, summaries[0].Unit)
+	assert.Empty(t, summaries[0].Delegation)
 	require.Len(t, summaries[0].Targets, 1)
-	assert.Empty(t, summaries[0].Targets[0].Unit)
+	assert.Empty(t, summaries[0].Targets[0].Delegation)
 }
 
 // An unwritable store must cost the run nothing: journaling is best-effort, and a handler

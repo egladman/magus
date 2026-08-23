@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2376,
-  "edge_count": 6252,
+  "edge_count": 6253,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -36203,6 +36203,14 @@
       "relation": "documents",
       "confidence": "inferred",
       "score": 0.6,
+      "provenance": "docs/reference/codes/sandbox/MGS3005.md"
+    },
+    {
+      "source": "doc:docs/reference/codes/sandbox/MGS3005.md",
+      "target": "doc:docs/concepts/workspace.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
       "provenance": "docs/reference/codes/sandbox/MGS3005.md"
     },
     {

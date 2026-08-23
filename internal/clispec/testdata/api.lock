@@ -115,12 +115,12 @@ flag diff/watch
 flag explain/global
 flag explain/refresh
 flag hook/agent-name
+flag hook/delegation
 flag hook/event
 flag hook/observe
 flag hook/path
 flag hook/session
 flag hook/transcript
-flag hook/unit
 flag init/dry-run
 flag init/force
 flag init/global

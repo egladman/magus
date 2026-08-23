@@ -101,13 +101,13 @@ func renderSessionsText(summaries []sessions.Summary, fold sessions.Fold, dir st
 	}
 
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "SESSION\tLAST\tHOST\tUNIT\tFACTS\tTARGETS")
+	fmt.Fprintln(tw, "SESSION\tLAST\tHOST\tDELEGATION\tFACTS\tTARGETS")
 	for _, s := range summaries {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%d\t%s\n",
 			s.Session,
 			time.UnixMilli(s.LastMs).Format("2006-01-02 15:04:05"),
 			orDash(s.Host),
-			orDash(s.Unit),
+			orDash(s.Delegation),
 			s.Facts,
 			orDash(summarizeTargets(s.Targets)))
 	}

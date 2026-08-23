@@ -184,11 +184,11 @@ func TestAppendAgentCommand_PathUsesFallbackActorAndAction(t *testing.T) {
 }
 
 // TestAppendAgentSpawn_RecordsHandedContext is the delegation-audit round trip: the event line
-// says who handed work to whom and which unit it belongs to, and the context itself is reachable
+// says who handed work to whom and which delegation it belongs to, and the context itself is reachable
 // only through the blob - never inlined, because a delegation prompt is routinely kilobytes.
 func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 	dir := t.TempDir()
-	handed := "unit: notes-store-6b\n\nAudit the notes store write boundary and report back."
+	handed := "delegation: notes-store-6b\n\nAudit the notes store write boundary and report back."
 	AppendAgentSpawn(t.Context(), dir, AgentSpawn{
 		Workspace: "/repo/magus",
 		Host:      "claude-code",
@@ -209,14 +209,14 @@ func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 	requestRef := event.RequestRef
 	event.Ts, event.RequestRef, event.RequestBytes = 0, "", 0
 	require.Equal(t, Event{
-		Kind:      KindAgentSpawn,
-		Actor:     "agent",
-		Host:      "claude-code",
-		Session:   "abc123",
-		Workspace: "/repo/magus",
-		Action:    "Explore",
-		Unit:      "notes-store-6b",
-		Outcome:   OutcomeOK,
+		Kind:       KindAgentSpawn,
+		Actor:      "agent",
+		Host:       "claude-code",
+		Session:    "abc123",
+		Workspace:  "/repo/magus",
+		Action:     "Explore",
+		Delegation: "notes-store-6b",
+		Outcome:    OutcomeOK,
 	}, event) // Preview included: the handed context belongs in the blob, never on the line.
 
 	request, err := ReadBlob(dir, requestRef)
@@ -230,7 +230,7 @@ func TestAppendAgentSpawn_RecordsHandedContext(t *testing.T) {
 		Event:         "PreToolUse",
 		Tool:          "Task",
 		Child:         "Explore",
-		Unit:          "notes-store-6b",
+		Delegation:    "notes-store-6b",
 		Context:       handed,
 	}, gotRequest)
 }
@@ -248,103 +248,112 @@ func TestAppendAgentSpawn_RequiresContextAndFallsBackToAGenericAction(t *testing
 	require.Len(t, events, 1)
 	require.Equal(t, "agent", events[0].Actor)
 	require.Equal(t, "agent.spawn", events[0].Action, "an unlabelled callee still says a spawn happened")
-	require.Empty(t, events[0].Unit)
+	require.Empty(t, events[0].Delegation)
 }
 
-// TestUnitFromContext pins the cooperative correlation marker: present, absent, and every shape
-// of malformed or misplaced. A marker that is not the first non-blank line yields no unit, and
+// TestDelegationFromContext pins the cooperative correlation marker: present, absent, and every shape
+// of malformed or misplaced. A marker that is not the first non-blank line yields no delegation, and
 // neither does a malformed one - never a wrong one. The whole contract is that an uncorrelated
 // spawn is the designed outcome.
-func TestUnitFromContext(t *testing.T) {
+//
+// Both spellings are pinned. "unit:" is the marker this contract shipped under, and an
+// orchestrator prompt written before the rename still has to join, so the legacy cases
+// below are the compat guarantee rather than leftovers.
+func TestDelegationFromContext(t *testing.T) {
 	for name, tc := range map[string]struct {
 		context string
 		want    string
 	}{
-		"first line":           {"unit: MGS1021\nthen the work", "MGS1021"},
-		"indented":             {"  \tunit: feat/spawn-capture  \nrest", "feat/spawn-capture"},
-		"after leading blanks": {"\n  \n\nunit: a.b:c_d-1\n", "a.b:c_d-1"},
-		"first marker wins":    {"unit: one\nunit: two", "one"},
-		"absent":               {"just a prompt with no marker", ""},
-		"empty id":             {"unit:\nrest", ""},
-		"only whitespace id":   {"unit:   \nrest", ""},
-		"prose after the id":   {"unit: MGS1021 the notes one", ""},
-		"not at line start":    {"see unit: MGS1021 in the ledger", ""},
-		"wrong key":            {"units: MGS1021", ""},
-		"illegal characters":   {"unit: MGS1021!", ""},
+		"first line":               {"delegation: MGS1021\nthen the work", "MGS1021"},
+		"indented":                 {"  \tdelegation: feat/spawn-capture  \nrest", "feat/spawn-capture"},
+		"after leading blanks":     {"\n  \n\ndelegation: a.b:c_d-1\n", "a.b:c_d-1"},
+		"legacy marker":            {"unit: feat/spawn-capture\nrest", "feat/spawn-capture"},
+		"legacy marker indented":   {"  \tunit: a.b:c_d-1  \nrest", "a.b:c_d-1"},
+		"legacy after blank lines": {"\n  \n\nunit: MGS1021\n", "MGS1021"},
+		"legacy empty id":          {"unit:\nrest", ""},
+		"first marker wins":        {"delegation: one\nunit: two", "one"},
+		"absent":                   {"just a prompt with no marker", ""},
+		"empty id":                 {"delegation:\nrest", ""},
+		"only whitespace id":       {"delegation:   \nrest", ""},
+		"prose after the id":       {"delegation: MGS1021 the notes one", ""},
+		"not at line start":        {"see delegation: MGS1021 in the ledger", ""},
+		"wrong key":                {"delegations: MGS1021", ""},
+		"illegal characters":       {"delegation: MGS1021!", ""},
 		// The reason the marker has to LEAD: both of these carry a well-formed marker that
 		// this handoff did not write - one quoted below the prompt's own opening line, one
 		// pushed out of the head by a pathological first line. A wrong join is worse than none.
-		"below the first line": {"do this\nunit: a.b:c_d-1\n", ""},
-		"past the head cap":    {strings.Repeat(" ", unitScanBytes) + "unit: MGS1021", ""},
+		"below the first line":        {"do this\ndelegation: a.b:c_d-1\n", ""},
+		"legacy below the first line": {"do this\nunit: a.b:c_d-1\n", ""},
+		"past the head cap":           {strings.Repeat(" ", delegationScanBytes) + "delegation: MGS1021", ""},
 	} {
 		t.Run(name, func(t *testing.T) {
-			require.Equal(t, tc.want, unitFromContext(tc.context))
+			require.Equal(t, tc.want, delegationFromContext(tc.context))
 		})
 	}
 }
 
-func TestUnitFromEnv_ReadsAValidID(t *testing.T) {
-	t.Setenv(EnvUnit, "  feat/spawn-capture  ")
-	require.Equal(t, "feat/spawn-capture", UnitFromEnv(), "surrounding whitespace is formatting, not part of the id")
+func TestDelegationFromEnv_ReadsAValidID(t *testing.T) {
+	t.Setenv(EnvDelegation, "  feat/spawn-capture  ")
+	require.Equal(t, "feat/spawn-capture", DelegationFromEnv(), "surrounding whitespace is formatting, not part of the id")
 
-	t.Setenv(EnvUnit, "")
-	require.Empty(t, UnitFromEnv(), "an unset channel is a session that claims no unit, not an error")
+	t.Setenv(EnvDelegation, "")
+	require.Empty(t, DelegationFromEnv(), "an unset channel is a session that claims no delegation, not an error")
 }
 
-// The note is what keeps a typo'd MAGUS_DELEGATION_UNIT from looking like a fleet that simply never
+// The note is what keeps a typo'd MAGUS_DELEGATION from looking like a fleet that simply never
 // attributed anything: the value is dropped either way, and only the note says why.
-func TestUnitFromEnv_DropsAnInvalidIDWithANote(t *testing.T) {
-	t.Setenv(EnvUnit, "not a unit id")
-	unitEnvNoteOnce = sync.Once{} // another test in this binary may already have spent it
-	t.Cleanup(func() { unitEnvNoteOnce = sync.Once{} })
+func TestDelegationFromEnv_DropsAnInvalidIDWithANote(t *testing.T) {
+	t.Setenv(EnvDelegation, "not a delegation id")
+	delegationEnvNoteOnce = sync.Once{} // another test in this binary may already have spent it
+	t.Cleanup(func() { delegationEnvNoteOnce = sync.Once{} })
 
 	logged := captureWarnings(t, func() {
-		require.Empty(t, UnitFromEnv())
-		require.Empty(t, UnitFromEnv())
+		require.Empty(t, DelegationFromEnv())
+		require.Empty(t, DelegationFromEnv())
 	})
 
-	assert.Equal(t, 1, strings.Count(logged, "MAGUS_DELEGATION_UNIT"), "the environment cannot change under a running worker, so the note cannot repeat")
+	assert.Equal(t, 1, strings.Count(logged, "MAGUS_DELEGATION"), "the environment cannot change under a running worker, so the note cannot repeat")
 	assert.Contains(t, logged, "letters, digits", "the note names the rule the value failed")
-	assert.NotContains(t, logged, "not a unit id", "the value failed the charset that makes a unit safe to log unredacted")
+	assert.NotContains(t, logged, "not a delegation id", "the value failed the charset that makes a delegation safe to log unredacted")
 }
 
 // A hook observes a command, not a delegation, so the environment is the only channel that can
-// attribute one - and it is what lights up the console drawer's unit column for runs.
-func TestAppendAgentCommand_UnitFallsBackToTheEnvironment(t *testing.T) {
-	t.Setenv(EnvUnit, "fleet/f3")
+// attribute one - and it is what lights up the console drawer's delegation column for runs.
+func TestAppendAgentCommand_DelegationFallsBackToTheEnvironment(t *testing.T) {
+	t.Setenv(EnvDelegation, "fleet/f3")
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "magus run test .", Decision: "pass"})
 
 	events, err := ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Equal(t, "fleet/f3", events[0].Unit)
+	assert.Equal(t, "fleet/f3", events[0].Delegation)
 }
 
-func TestAppendAgentCommand_SuppliedUnitBeatsTheEnvironment(t *testing.T) {
-	t.Setenv(EnvUnit, "fleet/from-env")
+func TestAppendAgentCommand_SuppliedDelegationBeatsTheEnvironment(t *testing.T) {
+	t.Setenv(EnvDelegation, "fleet/from-env")
 	dir := t.TempDir()
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Unit: "fleet/supplied"})
-	// A supplied unit that could not be stamped is not an error and not a stamp: the process's
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls", Delegation: "fleet/supplied"})
+	// A supplied delegation that could not be stamped is not an error and not a stamp: the process's
 	// own claim is still better than a value that failed the charset.
-	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls -l", Unit: "not a unit id"})
+	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls -l", Delegation: "not a delegation id"})
 
 	events, err := ReadRecent(dir, 2)
 	require.NoError(t, err)
 	require.Len(t, events, 2)
-	assert.Equal(t, "fleet/from-env", events[0].Unit, "newest first: the malformed supplied unit fell through")
-	assert.Equal(t, "fleet/supplied", events[1].Unit)
+	assert.Equal(t, "fleet/from-env", events[0].Delegation, "newest first: the malformed supplied delegation fell through")
+	assert.Equal(t, "fleet/supplied", events[1].Delegation)
 }
 
-func TestAppendAgentCommand_NoUnitAnywhereStaysUncorrelated(t *testing.T) {
-	t.Setenv(EnvUnit, "")
+func TestAppendAgentCommand_NoDelegationAnywhereStaysUncorrelated(t *testing.T) {
+	t.Setenv(EnvDelegation, "")
 	dir := t.TempDir()
 	AppendAgentCommand(t.Context(), dir, AgentCommand{Tool: "Bash", Command: "ls"})
 
 	events, err := ReadRecent(dir, 1)
 	require.NoError(t, err)
 	require.Len(t, events, 1)
-	assert.Empty(t, events[0].Unit, "a missing join is the designed outcome, never an invented one")
+	assert.Empty(t, events[0].Delegation, "a missing join is the designed outcome, never an invented one")
 }
 
 func TestWriteBlob_RoundTripAndDedup(t *testing.T) {

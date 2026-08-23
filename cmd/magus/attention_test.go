@@ -20,9 +20,9 @@ import (
 func attentionTestRoot(t *testing.T) string {
 	t.Helper()
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
-	// A developer running with MAGUS_DELEGATION_UNIT set would otherwise have it stamped on every request
+	// A developer running with MAGUS_DELEGATION set would otherwise have it stamped on every request
 	// these tests raise. A test that wants one sets it after this call.
-	t.Setenv(trail.EnvUnit, "")
+	t.Setenv(trail.EnvDelegation, "")
 	global = globalFlags{}
 	return t.TempDir()
 }
@@ -85,16 +85,16 @@ func TestAttentionListShowsAnOpenRequest(t *testing.T) {
 	assert.Contains(t, out, "Nothing here closes on its own.")
 }
 
-func TestAttentionListShowsTheRaisingUnit(t *testing.T) {
+func TestAttentionListShowsTheRaisingDelegation(t *testing.T) {
 	root := attentionTestRoot(t)
-	t.Setenv(trail.EnvUnit, "fleet/f3")
+	t.Setenv(trail.EnvDelegation, "fleet/f3")
 	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision on the schema")))
 
 	out := captureStdout(t, func() {
 		require.NoError(t, attentionCmd(context.Background(), root, nil))
 	})
 
-	assert.Contains(t, out, "UNIT")
+	assert.Contains(t, out, "DELEGATION")
 	assert.Contains(t, out, "fleet/f3", "the queue says which slice of the fleet is blocked")
 }
 
@@ -106,7 +106,7 @@ func TestAttentionListRendersAnUnattributedRequestWithADash(t *testing.T) {
 		require.NoError(t, attentionCmd(context.Background(), root, nil))
 	})
 
-	// ID, AGE, OUTCOME, SOURCE, UNIT, WHERE, MESSAGE...
+	// ID, AGE, OUTCOME, SOURCE, DELEGATION, WHERE, MESSAGE...
 	var cells []string
 	for _, line := range strings.Split(out, "\n") {
 		if strings.HasPrefix(line, "att-") {
@@ -118,25 +118,25 @@ func TestAttentionListRendersAnUnattributedRequestWithADash(t *testing.T) {
 	assert.Equal(t, "-", cells[4], "an unattributed request reads like an unknown SOURCE, not like a blank")
 }
 
-// The unit is attribution, so changing it must not move the row a person is about to dispose of.
-// Re-raising the same block under a new unit re-uses the id, and the queue still holds one row.
-func TestRecordAttentionOpenKeepsTheIDWhenTheUnitChanges(t *testing.T) {
+// The delegation is attribution, so changing it must not move the row a person is about to dispose of.
+// Re-raising the same block under a new delegation re-uses the id, and the queue still holds one row.
+func TestRecordAttentionOpenKeepsTheIDWhenTheDelegationChanges(t *testing.T) {
 	root := attentionTestRoot(t)
-	t.Setenv(trail.EnvUnit, "fleet/f3")
+	t.Setenv(trail.EnvDelegation, "fleet/f3")
 	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
 	first := openRequestIDs(t, root)
 	require.Len(t, first, 1)
 
-	t.Setenv(trail.EnvUnit, "fleet/f9")
+	t.Setenv(trail.EnvDelegation, "fleet/f9")
 	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
 
 	assert.Equal(t, first, openRequestIDs(t, root), "a re-partitioned fleet must not re-key an open request")
 }
 
-// The store carries the unit, not just the rendering: the console reads these records too.
-func TestRecordAttentionOpenStoresTheUnit(t *testing.T) {
+// The store carries the delegation, not just the rendering: the console reads these records too.
+func TestRecordAttentionOpenStoresTheDelegation(t *testing.T) {
 	root := attentionTestRoot(t)
-	t.Setenv(trail.EnvUnit, "fleet/f3")
+	t.Setenv(trail.EnvDelegation, "fleet/f3")
 	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
 
 	dir, err := sessions.Dir(root)
@@ -145,14 +145,14 @@ func TestRecordAttentionOpenStoresTheUnit(t *testing.T) {
 	require.NoError(t, err)
 	open := sessions.AttentionQueue(fold)
 	require.Len(t, open, 1)
-	assert.Equal(t, "fleet/f3", open[0].Unit)
+	assert.Equal(t, "fleet/f3", open[0].Delegation)
 }
 
 // An id that fails the rule attributes nothing rather than smuggling free text into a field the
 // trail carries unredacted. internal/trail asserts the note that explains the drop.
-func TestRecordAttentionOpenDropsAnInvalidUnit(t *testing.T) {
+func TestRecordAttentionOpenDropsAnInvalidDelegation(t *testing.T) {
 	root := attentionTestRoot(t)
-	t.Setenv(trail.EnvUnit, "not a unit id")
+	t.Setenv(trail.EnvDelegation, "not a delegation id")
 	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
 
 	dir, err := sessions.Dir(root)
@@ -161,7 +161,7 @@ func TestRecordAttentionOpenDropsAnInvalidUnit(t *testing.T) {
 	require.NoError(t, err)
 	open := sessions.AttentionQueue(fold)
 	require.Len(t, open, 1)
-	assert.Empty(t, open[0].Unit)
+	assert.Empty(t, open[0].Delegation)
 }
 
 func TestAttentionListEmptyStateNamesTheProducer(t *testing.T) {

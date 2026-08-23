@@ -43,14 +43,14 @@ func TestSummarizeTargetsCollapsesRepeats(t *testing.T) {
 	assert.Equal(t, "build api (pass), build web (fail), lint web (pass, cached)", got)
 }
 
-// sessionsUnitCell returns the UNIT cell of the row for session, which is the column the console
+// sessionsDelegationCell returns the DELEGATION cell of the row for session, which is the column the console
 // drawer's join is waiting on. Reading it positionally rather than searching the whole listing is
 // what makes the "-" case assertable: a dash appears in every unattributed column.
-func sessionsUnitCell(t *testing.T, out, session string) string {
+func sessionsDelegationCell(t *testing.T, out, session string) string {
 	t.Helper()
 	for _, line := range strings.Split(out, "\n") {
 		fields := strings.Fields(line)
-		// SESSION, date, time, HOST, UNIT, FACTS, TARGETS...
+		// SESSION, date, time, HOST, DELEGATION, FACTS, TARGETS...
 		if len(fields) > 4 && fields[0] == session {
 			return fields[4]
 		}
@@ -59,25 +59,25 @@ func sessionsUnitCell(t *testing.T, out, session string) string {
 	return ""
 }
 
-func TestSessionsRendersTheUnitColumnAttributedAndNot(t *testing.T) {
+func TestSessionsRendersTheDelegationColumnAttributedAndNot(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	global = globalFlags{}
 	root := t.TempDir()
 
-	t.Setenv(trail.EnvUnit, "fleet/f3")
-	recordSession(t, root, "run", []string{"build"}, "invUnit")
+	t.Setenv(trail.EnvDelegation, "fleet/f3")
+	recordSession(t, root, "run", []string{"build"}, "invDelegation")
 
-	// A person at a keyboard carries no unit, and the same store has to render both.
-	t.Setenv(trail.EnvUnit, "")
+	// A person at a keyboard carries no delegation, and the same store has to render both.
+	t.Setenv(trail.EnvDelegation, "")
 	recordSession(t, root, "run", []string{"test"}, "invBare")
 
 	out := captureStdout(t, func() {
 		require.NoError(t, sessionsCmd(context.Background(), root, nil))
 	})
 
-	assert.Contains(t, out, "UNIT")
-	assert.Equal(t, "fleet/f3", sessionsUnitCell(t, out, "invUnit"))
-	assert.Equal(t, "-", sessionsUnitCell(t, out, "invBare"), "an unattributed session reads like an unknown HOST, not like a blank")
+	assert.Contains(t, out, "DELEGATION")
+	assert.Equal(t, "fleet/f3", sessionsDelegationCell(t, out, "invDelegation"))
+	assert.Equal(t, "-", sessionsDelegationCell(t, out, "invBare"), "an unattributed session reads like an unknown HOST, not like a blank")
 }
 
 func TestSessionsRejectsPositionalArguments(t *testing.T) {

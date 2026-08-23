@@ -99,33 +99,38 @@ type Record struct {
 // reaches magus only through the hook payloads internal/trail records, and joining
 // the two stores is later work. An empty Host means "not known", never "a human".
 //
-// Unit is the work-ledger unit the session was launched under, from the MAGUS_DELEGATION_UNIT environment
-// channel (trail.UnitFromEnv). Attribution is cooperative: an empty Unit means the session
-// claimed none, which is the designed outcome for anything a person started by hand, never an
-// error and never a session that belongs to no work.
+// Delegation is the delegation the session was launched under, from the MAGUS_DELEGATION
+// environment channel (trail.DelegationFromEnv). Attribution is cooperative: an empty
+// Delegation means the session claimed none, which is the designed outcome for anything a
+// person started by hand, never an error and never a session that belongs to no work.
+//
+// Its wire key was renamed with the field rather than pinned. A record written before the
+// rename carries "unit" and decodes with an empty Delegation, so it reads as unattributed
+// instead of wrong, and this store is machine-local and pruned, so those records age out
+// rather than needing a reader that understands both spellings.
 type SessionStart struct {
-	Host      string `json:"host,omitempty"`
-	Workspace string `json:"workspace,omitempty"`
-	Command   string `json:"command,omitempty"`
-	Version   string `json:"version,omitempty"`
-	Unit      string `json:"unit,omitempty"`
+	Host       string `json:"host,omitempty"`
+	Workspace  string `json:"workspace,omitempty"`
+	Command    string `json:"command,omitempty"`
+	Version    string `json:"version,omitempty"`
+	Delegation string `json:"delegation,omitempty"`
 }
 
 // TargetResult is the payload of one target finishing. Replayed distinguishes a
 // cache hit from work that actually ran, which is the difference between a session
 // that did something and one that confirmed something.
 //
-// Unit repeats the producing session's [SessionStart.Unit] rather than being read off the
+// Delegation repeats the producing session's [SessionStart.Delegation] rather than being read off the
 // envelope, because a fact is routinely read on its own: the activity drawer joins one target
-// result to a unit without holding the session-start record that opened the file.
+// result to a delegation without holding the session-start record that opened the file.
 type TargetResult struct {
-	Target   string `json:"target"`
-	Project  string `json:"project,omitempty"`
-	Outcome  string `json:"outcome"`
-	DurMs    int64  `json:"dur_ms,omitempty"`
-	Replayed bool   `json:"replayed,omitempty"`
-	Ref      string `json:"ref,omitempty"`
-	Unit     string `json:"unit,omitempty"`
+	Target     string `json:"target"`
+	Project    string `json:"project,omitempty"`
+	Outcome    string `json:"outcome"`
+	DurMs      int64  `json:"dur_ms,omitempty"`
+	Replayed   bool   `json:"replayed,omitempty"`
+	Ref        string `json:"ref,omitempty"`
+	Delegation string `json:"delegation,omitempty"`
 }
 
 // sessionRE is the session-id shape, which doubles as the session file's basename:
@@ -447,15 +452,15 @@ func readLine(br *bufio.Reader, limit int) ([]byte, bool, error) {
 
 // Summary is one session as a reader meets it: who, when, and what it ran.
 type Summary struct {
-	Session   string         `json:"session"`
-	Host      string         `json:"host,omitempty"`
-	Unit      string         `json:"unit,omitempty"`
-	Workspace string         `json:"workspace,omitempty"`
-	Command   string         `json:"command,omitempty"`
-	StartedMs int64          `json:"started_ms"`
-	LastMs    int64          `json:"last_ms"`
-	Facts     int            `json:"facts"`
-	Targets   []TargetResult `json:"targets,omitempty"`
+	Session    string         `json:"session"`
+	Host       string         `json:"host,omitempty"`
+	Delegation string         `json:"delegation,omitempty"`
+	Workspace  string         `json:"workspace,omitempty"`
+	Command    string         `json:"command,omitempty"`
+	StartedMs  int64          `json:"started_ms"`
+	LastMs     int64          `json:"last_ms"`
+	Facts      int            `json:"facts"`
+	Targets    []TargetResult `json:"targets,omitempty"`
 }
 
 // Summarize groups a fold into one entry per session, most recent activity first.
@@ -483,7 +488,7 @@ func Summarize(fold Fold) []Summary {
 		case KindSessionStart:
 			var start SessionStart
 			if json.Unmarshal(rec.Payload, &start) == nil {
-				s.Host, s.Workspace, s.Command, s.Unit = start.Host, start.Workspace, start.Command, start.Unit
+				s.Host, s.Workspace, s.Command, s.Delegation = start.Host, start.Workspace, start.Command, start.Delegation
 			}
 		case KindTargetResult:
 			var result TargetResult

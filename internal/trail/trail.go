@@ -85,12 +85,12 @@ const (
 	// one. The handed context lands in the request blob and only its REF rides the event, because
 	// a delegation prompt is routinely kilobytes.
 	//
-	// Correlation to a work-ledger unit is COOPERATIVE, not enforced. Nothing in the host event
-	// names a magus unit, and magus cannot infer one from prose, so the event's Unit is stamped
-	// only when the handed context carries the documented marker (see unitFromContext): its
-	// FIRST non-blank line reading "unit: <id>". An orchestrator that wants the join writes the
-	// marker; one that does not gets an event with an empty Unit, which is a missing join rather
-	// than a wrong one - and a "unit:" line quoted deeper in a prompt stamps nothing, because a
+	// Correlation to a delegation is COOPERATIVE, not enforced. Nothing in the host event
+	// names a magus delegation, and magus cannot infer one from prose, so the event's Delegation is stamped
+	// only when the handed context carries the documented marker (see delegationFromContext): its
+	// FIRST non-blank line reading "delegation: <id>". An orchestrator that wants the join writes the
+	// marker; one that does not gets an event with an empty Delegation, which is a missing join rather
+	// than a wrong one - and a "delegation:" line quoted deeper in a prompt stamps nothing, because a
 	// wrong join is worse than none.
 	KindAgentSpawn Kind = "agent_spawn"
 	// KindMemory is the console MemoryService door onto the durable magus_memory files. Unlike the
@@ -135,15 +135,24 @@ const (
 // duplication is deliberate: a reader grouping a page of 200 rows by agent host must not have to
 // fetch 200 blobs to do it. They stay short, so the "lines stay small" invariant holds.
 type Event struct {
-	Ts            int64  `json:"ts"`                      // unix milliseconds at the action's start
-	Kind          Kind   `json:"kind"`                    // one of the Kind* constants
-	Actor         string `json:"actor"`                   // who: an agent id, "daemon", a user
-	UserAgent     string `json:"user_agent,omitempty"`    // caller's HTTP User-Agent, when known (MCP over HTTP)
-	Host          string `json:"host,omitempty"`          // the agent host that produced the action, as its own wrapper named itself; "" when the producer could not know
-	Session       string `json:"session,omitempty"`       // the host's own session id, when its event carried one
-	Workspace     string `json:"workspace,omitempty"`     // repo-relative or absolute root the action pertained to; "" for daemon-wide (an MCP call is not bound to one workspace)
-	Action        string `json:"action"`                  // the specific action: a tool name, a job command, "connector.create"
-	Unit          string `json:"unit,omitempty"`          // work-ledger unit this action belongs to, when the producer could correlate one (a delegation marker, or the MAGUS_DELEGATION_UNIT channel); "" when uncorrelated
+	Ts        int64  `json:"ts"`                   // unix milliseconds at the action's start
+	Kind      Kind   `json:"kind"`                 // one of the Kind* constants
+	Actor     string `json:"actor"`                // who: an agent id, "daemon", a user
+	UserAgent string `json:"user_agent,omitempty"` // caller's HTTP User-Agent, when known (MCP over HTTP)
+	Host      string `json:"host,omitempty"`       // the agent host that produced the action, as its own wrapper named itself; "" when the producer could not know
+	Session   string `json:"session,omitempty"`    // the host's own session id, when its event carried one
+	Workspace string `json:"workspace,omitempty"`  // repo-relative or absolute root the action pertained to; "" for daemon-wide (an MCP call is not bound to one workspace)
+	Action    string `json:"action"`               // the specific action: a tool name, a job command, "connector.create"
+	// Delegation is the delegation this action belongs to, when the producer could
+	// correlate one (a marker line, or the MAGUS_DELEGATION channel); "" when
+	// uncorrelated.
+	//
+	// The wire key was renamed along with the field rather than pinned, unlike the
+	// ledger's: a row written before the rename carries "unit" and decodes with an
+	// empty Delegation, so it shows blank in the column instead of wrong. This store
+	// is machine-local and capped at maxEvents, so that gap ages out with rotation
+	// rather than needing a reader that understands both spellings.
+	Delegation    string `json:"delegation,omitempty"`
 	Outcome       string `json:"outcome"`                 // one of the Outcome* constants
 	Error         string `json:"error,omitempty"`         // error text when Outcome is OutcomeError
 	DurMs         int64  `json:"dur_ms,omitempty"`        // wall-clock, on call-shaped actions
@@ -169,7 +178,7 @@ type Event struct {
 // the path is what a reader follows to see the rest. A host that exposes no transcript sends
 // none, exactly as with the other identity fields.
 //
-// Unit is the work-ledger unit a producer already knew this observation belongs to, and is
+// Delegation is the delegation a producer already knew this observation belongs to, and is
 // usually empty: a hook observes a command, not a delegation, so nothing in the host event names
 // one and [AppendAgentCommand] falls back to the environment channel.
 type AgentCommand struct {
@@ -185,7 +194,7 @@ type AgentCommand struct {
 	Decision   string
 	Reason     string
 	Context    string
-	Unit       string
+	Delegation string
 }
 
 const agentCommandSchemaVersion = 1
@@ -247,17 +256,17 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 	reqRef, reqBytes := WriteBlob(ctx, base, "agent", request)
 	respRef, respBytes := WriteBlob(ctx, base, "agent", response)
 
-	// A supplied unit is what the producer could correlate at the observation itself and wins;
-	// MAGUS_DELEGATION_UNIT is this process's own claim about itself and fills the gap. A supplied one that
-	// fails types.ValidUnitID falls through to the environment rather than being stamped, on the same
+	// A supplied delegation is what the producer could correlate at the observation itself and wins;
+	// MAGUS_DELEGATION is this process's own claim about itself and fills the gap. A supplied one that
+	// fails types.ValidDelegationID falls through to the environment rather than being stamped, on the same
 	// reasoning as everywhere else: no join beats a wrong one.
 	//
 	// The prompt-marker contract is deliberately NOT run here. An observation carries a command
-	// line and a guard's reason, not a delegation prompt, and a "unit:" line inside either is
+	// line and a guard's reason, not a delegation prompt, and a "delegation:" line inside either is
 	// quoted prose rather than an orchestrator's assertion.
-	unit := command.Unit
-	if !types.ValidUnitID(unit) {
-		unit = UnitFromEnv()
+	delegation := command.Delegation
+	if !types.ValidDelegationID(delegation) {
+		delegation = DelegationFromEnv()
 	}
 
 	action := command.Tool
@@ -280,7 +289,7 @@ func AppendAgentCommand(ctx context.Context, base string, command AgentCommand) 
 		Session:       command.Session,
 		Workspace:     command.Workspace,
 		Action:        action,
-		Unit:          unit,
+		Delegation:    delegation,
 		Outcome:       OutcomeOK,
 		RequestRef:    reqRef,
 		RequestBytes:  reqBytes,
@@ -318,7 +327,7 @@ type agentSpawnRequest struct {
 	Event         string `json:"event,omitempty"`
 	Tool          string `json:"tool,omitempty"`
 	Child         string `json:"child,omitempty"`
-	Unit          string `json:"unit,omitempty"`
+	Delegation    string `json:"delegation,omitempty"`
 	Context       string `json:"context"`
 }
 
@@ -338,10 +347,10 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 	// A delegation prompt is free text an agent composed, and an orchestrator that pastes a
 	// connector token into a sub-agent's instructions is exactly the delegation worth auditing
 	// WITHOUT persisting the token. Redacted before the marker scan so a redaction can never
-	// invent or destroy a unit id after the fact.
+	// invent or destroy a delegation id after the fact.
 	spawn.Context = secret.RedactString(ctx, spawn.Context)
 	spawn.Child = secret.RedactString(ctx, spawn.Child)
-	unit := unitFromContext(spawn.Context)
+	delegation := delegationFromContext(spawn.Context)
 	request, _ := json.Marshal(agentSpawnRequest{
 		SchemaVersion: agentSpawnSchemaVersion,
 		Host:          spawn.Host,
@@ -349,7 +358,7 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		Event:         spawn.Event,
 		Tool:          spawn.Tool,
 		Child:         spawn.Child,
-		Unit:          unit,
+		Delegation:    delegation,
 		Context:       spawn.Context,
 	})
 	reqRef, reqBytes := WriteBlob(ctx, base, "spawn", request)
@@ -373,93 +382,109 @@ func AppendAgentSpawn(ctx context.Context, base string, spawn AgentSpawn) {
 		Session:      spawn.Session,
 		Workspace:    spawn.Workspace,
 		Action:       action,
-		Unit:         unit,
+		Delegation:   delegation,
 		Outcome:      OutcomeOK,
 		RequestRef:   reqRef,
 		RequestBytes: reqBytes,
 	})
 }
 
-// EnvUnit names the environment variable a worker process carries its work-ledger unit in. It is
+// EnvDelegation names the environment variable a worker process carries its delegation in. It is
 // exported so a spawner and a worker cannot disagree about the spelling of the channel.
-const EnvUnit = "MAGUS_DELEGATION_UNIT"
+const EnvDelegation = "MAGUS_DELEGATION"
 
-// unitEnvNoteOnce holds the malformed-unit note to one per process. The environment does not
+// delegationEnvNoteOnce holds the malformed-delegation note to one per process. The environment does not
 // change under a running worker, so the same bad value would otherwise be reported once per
 // event and drown the run in one repeated fact.
-var unitEnvNoteOnce sync.Once
+var delegationEnvNoteOnce sync.Once
 
-// UnitFromEnv returns the work-ledger unit this process was launched under, or "" when it was
+// DelegationFromEnv returns the delegation this process was launched under, or "" when it was
 // launched under none.
 //
-// This is the second of the two unit channels, and the two say different things. The delegation
-// marker (see unitFromContext) is the ORCHESTRATOR's assertion about a handoff it is making;
-// MAGUS_DELEGATION_UNIT is the WORKER's own claim about itself. Where both are available the marker wins:
+// This is the second of the two delegation channels, and the two say different things. The delegation
+// marker (see delegationFromContext) is the ORCHESTRATOR's assertion about a handoff it is making;
+// MAGUS_DELEGATION is the WORKER's own claim about itself. Where both are available the marker wins:
 // the party doing the partitioning is the one that knows the partition.
 //
-// A value failing [types.ValidUnitID] yields "" plus a one-time note. Dropping it rather than stamping
-// it is what keeps the redaction exemption honest; the note is what keeps a typo'd unit from
+// A value failing [types.ValidDelegationID] yields "" plus a one-time note. Dropping it rather than stamping
+// it is what keeps the redaction exemption honest; the note is what keeps a typo'd delegation from
 // looking like a fleet that simply never attributed anything.
-func UnitFromEnv() string {
-	id := strings.TrimSpace(os.Getenv(EnvUnit))
+func DelegationFromEnv() string {
+	id := strings.TrimSpace(os.Getenv(EnvDelegation))
 	if id == "" {
 		return ""
 	}
-	if !types.ValidUnitID(id) {
-		unitEnvNoteOnce.Do(func() {
+	if !types.ValidDelegationID(id) {
+		delegationEnvNoteOnce.Do(func() {
 			// The value itself is deliberately not logged: it failed the charset check that
-			// makes a unit safe to carry unredacted, so it is the one string here that could
+			// makes a delegation safe to carry unredacted, so it is the one string here that could
 			// be anything at all.
 			slog.WarnContext(context.Background(),
-				"magus: ignoring MAGUS_DELEGATION_UNIT and recording no unit for this process: a unit id is letters, digits and -_./: only, and never empty",
+				"magus: ignoring MAGUS_DELEGATION and recording no delegation for this process: a delegation id is letters, digits and -_./: only, and never empty",
 				slog.Int("length", len(id)),
-				slog.Int("max_length", types.MaxUnitIDLen))
+				slog.Int("max_length", types.MaxDelegationIDLen))
 		})
 		return ""
 	}
 	return id
 }
 
-// unitScanBytes bounds the head of the handed context the marker may appear in. The marker
+// delegationScanBytes bounds the head of the handed context the marker may appear in. The marker
 // leads the prompt, so this is a cap on one pathological first line rather than a window to
 // search: it keeps a multi-megabyte single-line payload from being scanned at all.
-const unitScanBytes = 4096
+const delegationScanBytes = 4096
 
-// unitFromContext returns the work-ledger unit a delegation prompt declares, or "" when it
-// declares none. THE MARKER CONTRACT, documented once here and in the host glue pages:
+// delegationMarkers are the prefixes the marker line may carry, in preference order.
+// "delegation:" is the spelling to write.
 //
-//	the FIRST non-blank line of the handed context, trimmed, reading exactly "unit: <id>"
+// compat(until: no orchestrator prompt still leads with "unit:"): "unit:" is the
+// spelling this contract shipped under, and is still honored so a prompt template
+// written before the rename keeps joining its spawns to a ledger row. Dropping it
+// looks like a spawn event with an empty Delegation next to a declared row nobody
+// joined, so observe it by grepping the prompts a host actually sends for "unit:".
+var delegationMarkers = []string{"delegation:", "unit:"}
+
+// delegationFromContext returns the delegation a prompt declares, or "" when it declares
+// none. THE MARKER CONTRACT, documented once here and in the host glue pages:
 //
-// First line, not anywhere in the head: a delegation prompt routinely quotes things - a ledger
-// listing, a file, another agent's transcript - and a "unit: <id>" line lifted from any of them
-// would stamp the event with a unit that has nothing to do with this handoff. A marker an
-// orchestrator wrote is at the top, and a marker in quoted prose is not; the position is the
-// only thing that separates them. Leading blank lines are formatting and are skipped.
+//	the FIRST non-blank line of the handed context, trimmed, reading exactly
+//	"delegation: <id>" (or the older "unit: <id>")
 //
-// The id itself has to satisfy [types.ValidUnitID], which is where the charset and its reasoning live.
+// First line, not anywhere in the head: a delegation prompt routinely quotes things - a
+// ledger listing, a file, another agent's transcript - and a marker line lifted from any
+// of them would stamp the event with a delegation that has nothing to do with this
+// handoff. A marker an orchestrator wrote is at the top, and a marker in quoted prose is
+// not; the position is the only thing that separates them. Leading blank lines are
+// formatting and are skipped.
 //
-// Anything else - no marker, an empty id, an id carrying spaces or punctuation outside the set,
-// a marker below the first line - yields "". Correlation is cooperative: a missing join is the
-// designed outcome, never an error.
-func unitFromContext(handed string) string {
+// The id itself has to satisfy [types.ValidDelegationID], which is where the charset and
+// its reasoning live.
+//
+// Anything else - no marker, an empty id, an id carrying spaces or punctuation outside
+// the set, a marker below the first line - yields "". Correlation is cooperative: a
+// missing join is the designed outcome, never an error.
+func delegationFromContext(handed string) string {
 	head := handed
-	if len(head) > unitScanBytes {
-		head = head[:unitScanBytes]
+	if len(head) > delegationScanBytes {
+		head = head[:delegationScanBytes]
 	}
 	for _, line := range strings.Split(head, "\n") {
 		line = strings.TrimSpace(line)
 		if line == "" {
 			continue
 		}
-		rest, found := strings.CutPrefix(line, "unit:")
-		if !found {
-			return "" // the prompt leads with something else, so it declares no unit
+		for _, marker := range delegationMarkers {
+			rest, found := strings.CutPrefix(line, marker)
+			if !found {
+				continue
+			}
+			id := strings.TrimSpace(rest)
+			if !types.ValidDelegationID(id) {
+				return ""
+			}
+			return id
 		}
-		id := strings.TrimSpace(rest)
-		if !types.ValidUnitID(id) {
-			return ""
-		}
-		return id
+		return "" // the prompt leads with something else, so it declares no delegation
 	}
 	return ""
 }
@@ -886,12 +911,12 @@ func validRef(ref string) bool {
 // redactEvent masks every free-text field on an event.
 //
 // The structural fields are deliberately left alone: Kind, Outcome, Actor, Host, Session,
-// Workspace, Unit and the blob refs are enumerated values, identities and content addresses, none
+// Workspace, Delegation and the blob refs are enumerated values, identities and content addresses, none
 // of which a credential can occupy, and all of which a reader filters on by exact match. Redacting
 // them would break the activity view to protect nothing - the same reasoning that leaves slog
-// attribute KEYS alone in internal/secret. Unit is the one of those derived from free text - a
-// delegation prompt, or the MAGUS_DELEGATION_UNIT environment channel - rather than supplied by a caller,
-// which is why every channel that can stamp one runs it through [types.ValidUnitID]'s bare-identifier
+// attribute KEYS alone in internal/secret. Delegation is the one of those derived from free text - a
+// delegation prompt, or the MAGUS_DELEGATION environment channel - rather than supplied by a caller,
+// which is why every channel that can stamp one runs it through [types.ValidDelegationID]'s bare-identifier
 // rule before it can reach this exemption.
 func redactEvent(ctx context.Context, e Event) Event {
 	e.Action = secret.RedactString(ctx, e.Action)

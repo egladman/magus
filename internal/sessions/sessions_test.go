@@ -335,15 +335,15 @@ func TestSummarizeOrdersMostRecentFirst(t *testing.T) {
 	assert.Equal(t, []string{"new", "mid", "old"}, ids)
 }
 
-// The unit rides BOTH payloads, and the target result is the one that matters: a reader joining
-// one fact to a unit does not hold the session-start record that opened the file.
-func TestUnitSurvivesTheStoreOnBothPayloads(t *testing.T) {
+// The delegation rides BOTH payloads, and the target result is the one that matters: a reader joining
+// one fact to a delegation does not hold the session-start record that opened the file.
+func TestDelegationSurvivesTheStoreOnBothPayloads(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 
-	w, err := Open(dir, "sess1", SessionStart{Workspace: "/repo", Command: "run build", Unit: "fleet/f3"})
+	w, err := Open(dir, "sess1", SessionStart{Workspace: "/repo", Command: "run build", Delegation: "fleet/f3"})
 	require.NoError(t, err)
-	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass, Unit: "fleet/f3"}))
+	require.NoError(t, w.Append(KindTargetResult, TargetResult{Target: "build", Outcome: OutcomePass, Delegation: "fleet/f3"}))
 
 	fold, err := ReadAll(dir)
 	require.NoError(t, err)
@@ -351,20 +351,20 @@ func TestUnitSurvivesTheStoreOnBothPayloads(t *testing.T) {
 
 	var start SessionStart
 	require.NoError(t, json.Unmarshal(fold.Records[0].Payload, &start))
-	assert.Equal(t, "fleet/f3", start.Unit)
+	assert.Equal(t, "fleet/f3", start.Delegation)
 
 	var result TargetResult
 	require.NoError(t, json.Unmarshal(fold.Records[1].Payload, &result))
-	assert.Equal(t, "fleet/f3", result.Unit)
+	assert.Equal(t, "fleet/f3", result.Delegation)
 
 	sessions := Summarize(fold)
 	require.Len(t, sessions, 1)
-	assert.Equal(t, "fleet/f3", sessions[0].Unit, "the view reads the unit off the session, not off each fact")
+	assert.Equal(t, "fleet/f3", sessions[0].Delegation, "the view reads the delegation off the session, not off each fact")
 }
 
 // The field is additive: a session file written before it existed still reads, and the sessions in it
 // summarize as unattributed rather than as damage.
-func TestASessionWrittenWithoutAUnitStillReads(t *testing.T) {
+func TestASessionWrittenWithoutADelegationStillReads(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
 	path := filepath.Join(dir, "sess1.jsonl")
@@ -380,9 +380,9 @@ func TestASessionWrittenWithoutAUnitStillReads(t *testing.T) {
 
 	sessions := Summarize(fold)
 	require.Len(t, sessions, 1)
-	assert.Empty(t, sessions[0].Unit)
+	assert.Empty(t, sessions[0].Delegation)
 	require.Len(t, sessions[0].Targets, 1)
-	assert.Empty(t, sessions[0].Targets[0].Unit)
+	assert.Empty(t, sessions[0].Targets[0].Delegation)
 }
 
 func TestReadAllMissingStoreIsEmptyNotAnError(t *testing.T) {

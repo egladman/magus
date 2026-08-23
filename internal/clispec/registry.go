@@ -1088,7 +1088,7 @@ base in yourself on the others, then run resolve.`,
 		},
 		{
 			Name:  "checkpoint",
-			Short: "Print the working state's identity, for recording what a delegated unit was handed; writes nothing",
+			Short: "Print the working state's identity, for recording what a delegation was handed; writes nothing",
 		},
 		{Name: "merge-driver", Short: "The per-file merge driver git and hg invoke; you do not run this by hand"},
 	},
@@ -1097,7 +1097,7 @@ base in yourself on the others, then run resolve.`,
 		{"Classify the dirty tree, stage nothing", "magus vcs add --dry-run"},
 		{"Settle a conflicted merge", "magus vcs resolve"},
 		{"Merge the base in and settle it in one step", "magus vcs resolve --against origin/main"},
-		{"Record what a delegated unit was handed", "magus vcs checkpoint"},
+		{"Record what a delegation was handed", "magus vcs checkpoint"},
 		{"The one citable token, for a ledger cell", "magus vcs checkpoint -o name"},
 	},
 }
@@ -1455,22 +1455,22 @@ which is an opaque label the caller chooses rather than a set magus knows: a
 magus that enumerated hosts would need a release per host, and a wrapper that
 cannot extract a session id must still be able to get a verdict.
 
---unit is the exception: it IS policy. It names the delegation unit the caller is
-acting as, and a write is then graded against that unit's declared write boundary
+--delegation is the exception: it IS policy. It names the delegation the caller is
+acting as, and a write is then graded against that delegation's declared write boundary
 in this workspace's delegation ledger. Inside its owned paths passes; inside its
-forbidden paths, or inside another live unit's owned paths, is denied and the
-reason names the owning unit. It defaults to $MAGUS_DELEGATION_UNIT, and the flag wins when
+forbidden paths, or inside another live delegation's owned paths, is denied and the
+reason names the owning delegation. It defaults to $MAGUS_DELEGATION, and the flag wins when
 both are set.
 
-A call that names no valid unit while a fleet is running is ADVISED and never
-blocked: a person editing their own repository has no unit id, and the guard is a
+A call that names no valid delegation while a fleet is running is ADVISED and never
+blocked: a person editing their own repository has no delegation id, and the guard is a
 seatbelt for harnesses that opt in rather than a sandbox. With no ledger, or with
-no unit in it declared or running, nothing is graded and nothing is read.`,
+no delegation in it declared or running, nothing is graded and nothing is read.`,
 	Usage: "magus hook [--path] [flags]",
 	Flags: []Flag{
 		{Name: "path", Kind: FlagBool, Doc: "Judge the input as a file path an edit is about to write, not as a shell command"},
 		{Name: "observe", Kind: FlagBool, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
-		{Name: "unit", Kind: FlagString, Doc: "The delegation unit this call is acting as, graded against the ledger's declared write boundary (defaults to $MAGUS_DELEGATION_UNIT)"},
+		{Name: "delegation", Kind: FlagString, Doc: "The delegation this call is acting as, graded against the ledger's declared write boundary (defaults to $MAGUS_DELEGATION)"},
 		{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this invocation came from (attribution only)"},
 		{Name: "session", Kind: FlagString, Doc: "The host's own session id for this invocation"},
 		{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
@@ -1481,7 +1481,7 @@ no unit in it declared or running, nothing is graded and nothing is read.`,
 		{"Judge a path an edit is about to write", "printf '%s' 'MAGUS.md' | magus hook --path"},
 		{"Record a path an agent read, without judging it", "printf '%s' 'internal/cache/output.go' | magus hook --observe"},
 		{"Machine-readable verdict", "printf '%s' 'rm -rf /' | magus hook -o json"},
-		{"Grade a write as a delegation unit", "printf '%s' 'internal/ledger/store.go' | magus hook --path --unit f2-guard"},
+		{"Grade a write as a delegation", "printf '%s' 'internal/ledger/store.go' | magus hook --path --delegation f2-guard"},
 	},
 	// The status IS the enforcement here: a host that reads only the exit code
 	// blocks on 2 and runs the command on 0, so a wrapper author has to be told

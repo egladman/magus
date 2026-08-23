@@ -66,7 +66,7 @@ base in yourself on the others, then run resolve.
 : Settle an in-progress merge's conflicted generated files, then regenerate once
 
 **checkpoint**
-: Print the working state's identity, for recording what a delegated unit was handed; writes nothing
+: Print the working state's identity, for recording what a delegation was handed; writes nothing
 
 **merge-driver**
 : The per-file merge driver git and hg invoke; you do not run this by hand
@@ -97,7 +97,7 @@ magus vcs resolve
 magus vcs resolve --against origin/main
 ```
 
-*Record what a delegated unit was handed*
+*Record what a delegation was handed*
 
 ```sh
 magus vcs checkpoint

@@ -9,12 +9,12 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ErrUnknownUnit reports a registration against an id no row carries, and ErrNoBase one
+// ErrUnknownDelegation reports a registration against an id no row carries, and ErrNoBase one
 // that named no base. Sentinels rather than bare strings so a door can tell a worker's
 // mistake from a store failure; the wrapped messages carry the id and the next step.
 var (
-	ErrUnknownUnit = errors.New("ledger: unknown unit")
-	ErrNoBase      = errors.New("ledger: a registration needs the base the worker landed on")
+	ErrUnknownDelegation = errors.New("ledger: unknown delegation")
+	ErrNoBase            = errors.New("ledger: a registration needs the base the worker landed on")
 )
 
 // Register records the base a worker reports it actually landed on and returns the row
@@ -26,21 +26,21 @@ var (
 // of it, and decides.
 //
 // It is the ONE write here that does not create the row it names. Put and Update declare a
-// unit and advance one with the same call, which is right for an orchestrator writing its
+// delegation and advance one with the same call, which is right for an orchestrator writing its
 // own plan; a WORKER registering an id nothing declared was handed the wrong id, and a row
 // invented for it would bury that under a plausible-looking ledger entry.
-func (s *Store) Register(ctx context.Context, id, reportedBase string) (types.DelegationUnit, error) {
+func (s *Store) Register(ctx context.Context, id, reportedBase string) (types.Delegation, error) {
 	base := strings.TrimSpace(reportedBase)
 	if base == "" {
-		return types.DelegationUnit{}, fmt.Errorf("%w, in the form `magus vcs checkpoint -o name` prints"+
+		return types.Delegation{}, fmt.Errorf("%w, in the form `magus vcs checkpoint -o name` prints"+
 			" (`<rev>`, or `<rev>+<digest>` when the tree is dirty). Run that in the tree you are working in"+
 			" and register what it prints", ErrNoBase)
 	}
-	return s.mutate(ctx, id, func(cur *types.DelegationUnit, exists bool, now int64) error {
+	return s.mutate(ctx, id, func(cur *types.Delegation, exists bool, now int64) error {
 		if !exists {
 			return fmt.Errorf("%w %q: nothing declared it, so there is no checkpoint to register against."+
 				" Check the declared ids with `magus_ledger list` and register under the id the"+
-				" orchestrator handed you", ErrUnknownUnit, id)
+				" orchestrator handed you", ErrUnknownDelegation, id)
 		}
 		cur.ReportedBase = base
 		cur.BaseVerdict = CompareBase(cur.Checkpoint, base)
@@ -49,7 +49,7 @@ func (s *Store) Register(ctx context.Context, id, reportedBase string) (types.De
 	})
 }
 
-// CompareBase compares the checkpoint a unit was handed with the base its worker
+// CompareBase compares the checkpoint a delegation was handed with the base its worker
 // reported, both as `magus vcs checkpoint -o name` prints them: `<rev>` for a clean tree,
 // `<rev>+<digest>` for a dirty one.
 //
@@ -83,14 +83,14 @@ func baseRevision(token string) string {
 //
 // Derived from the row, never stored. The verdict is the fact; this is one rendering of
 // it, and a stored sentence would be a second thing to keep true when the wording changes.
-func RegistrationAdvice(u types.DelegationUnit) string {
+func RegistrationAdvice(u types.Delegation) string {
 	switch u.BaseVerdict {
 	case types.BaseMatch:
-		return fmt.Sprintf("registered unit %s on %s, which is the checkpoint it was handed. Nothing to reconcile; carry on.",
+		return fmt.Sprintf("registered delegation %s on %s, which is the checkpoint it was handed. Nothing to reconcile; carry on.",
 			u.ID, u.ReportedBase)
 
 	case types.BaseRevisionMatch:
-		return fmt.Sprintf("registered unit %s on revision %s, which IS the revision it was handed,"+
+		return fmt.Sprintf("registered delegation %s on revision %s, which IS the revision it was handed,"+
 			" but the uncommitted patch is not: the checkpoint digest is %s and yours is %s."+
 			" A checkpoint is a revision plus a dirty-patch digest, so you share the commit and not the working tree."+
 			" Materialize the files you touch from the checkpoint, or have the orchestrator re-cut the checkpoint"+
@@ -98,16 +98,16 @@ func RegistrationAdvice(u types.DelegationUnit) string {
 			u.ID, baseRevision(u.ReportedBase), patchDigestOf(u.Checkpoint), patchDigestOf(u.ReportedBase))
 
 	case types.BaseDiverged:
-		return fmt.Sprintf("registered unit %s, and it DIVERGED: your base %s is not the checkpoint %s the unit was handed."+
+		return fmt.Sprintf("registered delegation %s, and it DIVERGED: your base %s is not the checkpoint %s the delegation was handed."+
 			" Respawn from %s, or materialize the files you touch from it before you edit them,"+
 			" so what you write lands on the tree the plan was cut against.",
 			u.ID, baseRevision(u.ReportedBase), baseRevision(u.Checkpoint), baseRevision(u.Checkpoint))
 
 	// BaseUnknown, the only verdict a registered row can carry that is not above.
 	default:
-		return fmt.Sprintf("registered unit %s on %s. It carries no checkpoint, so there is nothing to compare"+
+		return fmt.Sprintf("registered delegation %s on %s. It carries no checkpoint, so there is nothing to compare"+
 			" your base against and the verdict is unknown rather than a match."+
-			" Have the orchestrator put one on the unit (`magus vcs checkpoint -o name`) before the next handoff,"+
+			" Have the orchestrator put one on the delegation (`magus vcs checkpoint -o name`) before the next handoff,"+
 			" so a later reader can tell whether a worker was on the base it was given.",
 			u.ID, u.ReportedBase)
 	}

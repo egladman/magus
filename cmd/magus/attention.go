@@ -152,14 +152,14 @@ func renderAttentionText(requests []sessions.AttentionRequest, dir string) error
 
 	now := time.Now()
 	tw := tabwriter.NewWriter(os.Stdout, 0, 0, 2, ' ', 0)
-	fmt.Fprintln(tw, "ID\tAGE\tOUTCOME\tSOURCE\tUNIT\tWHERE\tMESSAGE")
+	fmt.Fprintln(tw, "ID\tAGE\tOUTCOME\tSOURCE\tDELEGATION\tWHERE\tMESSAGE")
 	for _, req := range requests {
 		fmt.Fprintf(tw, "%s\t%s\t%s\t%s\t%s\t%s\t%s\n",
 			req.ID,
 			orDash(formatDur(now.Sub(time.UnixMilli(req.OpenedMs)))),
 			orDash(req.Outcome),
 			orDash(req.Source),
-			orDash(req.Unit),
+			orDash(req.Delegation),
 			orDash(req.Where),
 			attentionOneLine(req.Message))
 	}
@@ -300,8 +300,8 @@ func recordAttentionOpen(root string, ev types.Event) error {
 		// Not an input to the id, on purpose - see sessions.RequestID. It rides the payload so
 		// the queue can say WHOSE work is blocked without the row's identity moving when a
 		// fleet re-partitions.
-		Unit:    trail.UnitFromEnv(),
-		Message: ev.Message,
+		Delegation: trail.DelegationFromEnv(),
+		Message:    ev.Message,
 	}
 	_, _, err = sessions.OpenRequest(dir, ev.Source.ID, open, sessions.SessionStart{
 		Workspace: root,

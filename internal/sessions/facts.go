@@ -38,7 +38,7 @@ type FactHandler struct {
 //
 // It lives HERE rather than in the CLI because the daemon executes adopted runs itself
 // (cmd/magus/main.go dispatchAdopted), so "who produces a session fact" is not a
-// CLI-only question. start.Unit is read by the CALLER for that reason - see
+// CLI-only question. start.Delegation is read by the CALLER for that reason - see
 // cmd/magus/journalhook.go, which documents what the daemon gets wrong today.
 func NewFactHandler(root string, start SessionStart) slog.Handler {
 	dir, err := Dir(root)
@@ -77,13 +77,13 @@ func (h *FactHandler) Handle(_ context.Context, r slog.Record) error {
 		h.writer = w
 	}
 	if err := h.writer.Append(KindTargetResult, TargetResult{
-		Target:   e.Target,
-		Project:  e.Project,
-		Outcome:  factOutcome(e.Status),
-		DurMs:    e.DurMs,
-		Replayed: e.Status == journal.StatusCached,
-		Ref:      e.Ref,
-		Unit:     h.start.Unit,
+		Target:     e.Target,
+		Project:    e.Project,
+		Outcome:    factOutcome(e.Status),
+		DurMs:      e.DurMs,
+		Replayed:   e.Status == journal.StatusCached,
+		Ref:        e.Ref,
+		Delegation: h.start.Delegation,
 	}); err != nil {
 		// One failed append means the store is unwritable (a full disk, a read-only
 		// state dir); retrying per target would repeat the same failure once per

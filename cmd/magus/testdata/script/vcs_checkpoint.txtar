@@ -2,7 +2,7 @@
 #
 # The design law is the part worth a test: a checkpoint resolves and records, it never
 # mints. No tag, no stash, no ref, no file. That is what makes it safe to take one per
-# delegated unit, and it is invisible in the output - the only way to hold the line is to
+# delegation, and it is invisible in the output - the only way to hold the line is to
 # assert on the repository after the command has run.
 #
 # The rest is the two forms a ledger uses. -o name is the single citable token: the

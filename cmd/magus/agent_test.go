@@ -1333,7 +1333,7 @@ func TestHookCmd_ObserveWithNoInputRecordsNothing(t *testing.T) {
 
 // TestHookCmd_RecordsSpawnFromEnvelope covers the delegation surface end to end: a host payload
 // carrying a prompt rather than a command is recorded as a spawn, with the handed context in the
-// blob and the cooperative unit marker stamped onto the event.
+// blob and the cooperative delegation marker stamped onto the event.
 //
 // It also pins the thing that must NOT happen. The prompt below quotes `git stash`, which the
 // command guard denies. A spawn is not a guard surface, so the verdict is a pass and the
@@ -1344,7 +1344,7 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 	ctx := context.WithValue(context.Background(), hookActivityLocationKey{}, hookActivityLocation{base: dir, workspace: "/repo/magus"})
 	envelope := `{"hook_event_name":"PreToolUse","session_id":"abc123","tool_name":"Task",` +
 		`"tool_input":{"description":"audit the store","subagent_type":"Explore",` +
-		`"prompt":"unit: notes-store-6b\nDo not run git stash anywhere."}}`
+		`"prompt":"delegation: notes-store-6b\nDo not run git stash anywhere."}}`
 
 	var out bytes.Buffer
 	require.NoError(t, hookCmd(ctx, strings.NewReader(envelope), &out,
@@ -1359,21 +1359,21 @@ func TestHookCmd_RecordsSpawnFromEnvelope(t *testing.T) {
 	requestRef := got.RequestRef
 	got.Ts, got.RequestRef, got.RequestBytes = 0, "", 0
 	assert.Equal(t, trail.Event{
-		Kind:      trail.KindAgentSpawn,
-		Actor:     "agent",
-		Host:      "claude-code",
-		Session:   "abc123",
-		Workspace: "/repo/magus",
-		Action:    "Explore",
-		Unit:      "notes-store-6b",
-		Outcome:   trail.OutcomeOK,
+		Kind:       trail.KindAgentSpawn,
+		Actor:      "agent",
+		Host:       "claude-code",
+		Session:    "abc123",
+		Workspace:  "/repo/magus",
+		Action:     "Explore",
+		Delegation: "notes-store-6b",
+		Outcome:    trail.OutcomeOK,
 	}, got)
 
 	body, err := trail.ReadBlob(dir, requestRef)
 	require.NoError(t, err)
 	assert.JSONEq(t, `{"schema_version":1,"host":"claude-code","session":"abc123","event":"PreToolUse",`+
-		`"tool":"Task","child":"Explore","unit":"notes-store-6b",`+
-		`"context":"unit: notes-store-6b\nDo not run git stash anywhere."}`, string(body))
+		`"tool":"Task","child":"Explore","delegation":"notes-store-6b",`+
+		`"context":"delegation: notes-store-6b\nDo not run git stash anywhere."}`, string(body))
 }
 
 // TestHookCmd_SpawnWithoutMarkerOrLabel holds the two halves of the cooperative contract: an
@@ -1394,7 +1394,7 @@ func TestHookCmd_SpawnWithoutMarkerOrLabel(t *testing.T) {
 	require.Len(t, events, 1)
 	assert.Equal(t, trail.KindAgentSpawn, events[0].Kind)
 	assert.Equal(t, "agent.spawn", events[0].Action)
-	assert.Empty(t, events[0].Unit)
+	assert.Empty(t, events[0].Delegation)
 }
 
 // TestDecodeHookEnvelope_CommandStillWinsOverPrompt guards the ordering that makes the spawn
@@ -1481,14 +1481,14 @@ func TestHookPathMode(t *testing.T) {
 	}
 }
 
-// fleetFixture stands up a workspace root and a delegation ledger holding units, and
+// fleetFixture stands up a workspace root and a delegation ledger holding delegations, and
 // returns the context pinning both plus the root. Everything lands in temporary
 // directories, so a guard test never reads or writes the checkout's real ledger.
-func fleetFixture(t *testing.T, units ...types.DelegationUnit) (context.Context, string) {
+func fleetFixture(t *testing.T, delegations ...types.Delegation) (context.Context, string) {
 	t.Helper()
 	root, cacheDir := t.TempDir(), t.TempDir()
 	store := ledger.NewStore(ledger.Location{CacheDir: cacheDir, Root: root})
-	for _, u := range units {
+	for _, u := range delegations {
 		_, err := store.Put(t.Context(), u)
 		require.NoError(t, err)
 	}
@@ -1496,18 +1496,18 @@ func fleetFixture(t *testing.T, units ...types.DelegationUnit) (context.Context,
 	return context.WithValue(t.Context(), hookActivityLocationKey{}, location), root
 }
 
-// fleetUnits is the two-unit plan most cases below grade against: two live workers with
+// fleetDelegations is the two-delegation plan most cases below grade against: two live workers with
 // disjoint owned paths, one of them declaring a forbidden subtree inside its own.
-func fleetUnits() []types.DelegationUnit {
-	return []types.DelegationUnit{
+func fleetDelegations() []types.Delegation {
+	return []types.Delegation{
 		{
-			ID:         "unit-a",
+			ID:         "delegation-a",
 			Goal:       "own the ledger store\nacceptance: List stays cheap",
 			OwnedPaths: []string{"internal/ledger/**"},
 			State:      types.StateRunning,
 		},
 		{
-			ID:             "unit-b",
+			ID:             "delegation-b",
 			Goal:           "grade writes in the guard",
 			OwnedPaths:     []string{"cmd/magus/**", "docs/guard.md"},
 			ForbiddenPaths: []string{"cmd/magus/gen/**"},
@@ -1517,30 +1517,30 @@ func fleetUnits() []types.DelegationUnit {
 }
 
 // TestGradeDelegatedWriteDenies pins the two denials and the fact each one must carry:
-// the owning unit's id, its goal's first line, and a next step. A denial that only says
+// the owning delegation's id, its goal's first line, and a next step. A denial that only says
 // no sends the agent around the guard, which is the failure the whole ledger design is
 // built to avoid.
 func TestGradeDelegatedWriteDenies(t *testing.T) {
-	ctx, root := fleetFixture(t, fleetUnits()...)
+	ctx, root := fleetFixture(t, fleetDelegations()...)
 
-	t.Run("inside another live unit's owned paths", func(t *testing.T) {
-		got := gradeDelegatedWrite(ctx, "unit-b", filepath.Join(root, "internal/ledger/store.go"))
+	t.Run("inside another live delegation's owned paths", func(t *testing.T) {
+		got := gradeDelegatedWrite(ctx, "delegation-b", filepath.Join(root, "internal/ledger/store.go"))
 		require.Equal(t, "deny", got.Decision)
-		assert.Contains(t, got.Reason, "unit-a", "the denial must name the owner")
+		assert.Contains(t, got.Reason, "delegation-a", "the denial must name the owner")
 		assert.Contains(t, got.Reason, "own the ledger store", "the denial must carry the owner's goal")
 		assert.NotContains(t, got.Reason, "acceptance:",
 			"only the goal's FIRST line belongs in a denial; the criteria block would bury the next step")
 		assert.Contains(t, got.Reason, "re-partition", "the denial must name a next step")
-		assert.Contains(t, got.Reason, "unit-b", "the denial must say who magus thinks is writing")
+		assert.Contains(t, got.Reason, "delegation-b", "the denial must say who magus thinks is writing")
 	})
 
-	t.Run("inside the acting unit's own forbidden paths", func(t *testing.T) {
-		// Also pins the precedence: cmd/magus/gen is inside unit-b's owned tree AND on its
+	t.Run("inside the acting delegation's own forbidden paths", func(t *testing.T) {
+		// Also pins the precedence: cmd/magus/gen is inside delegation-b's owned tree AND on its
 		// forbidden list, and the more specific declaration is the one that decides.
-		got := gradeDelegatedWrite(ctx, "unit-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
+		got := gradeDelegatedWrite(ctx, "delegation-b", filepath.Join(root, "cmd/magus/gen/cli_flags.go"))
 		require.Equal(t, "deny", got.Decision)
 		assert.Contains(t, got.Reason, "FORBIDDEN")
-		assert.Contains(t, got.Reason, "unit-b")
+		assert.Contains(t, got.Reason, "delegation-b")
 		assert.Contains(t, got.Reason, "cmd/magus/gen/**", "the denial must quote the declaration it matched")
 	})
 }
@@ -1549,23 +1549,23 @@ func TestGradeDelegatedWriteDenies(t *testing.T) {
 // no opinion, which is different from clearing the write: a later rule still gets to
 // speak, and the empty Decision is what leaves room for it.
 func TestGradeDelegatedWritePasses(t *testing.T) {
-	ctx, root := fleetFixture(t, fleetUnits()...)
+	ctx, root := fleetFixture(t, fleetDelegations()...)
 
-	t.Run("inside the acting unit's own owned paths", func(t *testing.T) {
-		assert.Empty(t, gradeDelegatedWrite(ctx, "unit-b", filepath.Join(root, "cmd/magus/agent.go")).Decision)
+	t.Run("inside the acting delegation's own owned paths", func(t *testing.T) {
+		assert.Empty(t, gradeDelegatedWrite(ctx, "delegation-b", filepath.Join(root, "cmd/magus/agent.go")).Decision)
 	})
 
-	t.Run("ground no live unit claims", func(t *testing.T) {
+	t.Run("ground no live delegation claims", func(t *testing.T) {
 		// An orchestrator's owned set is a plan, not a census. Denying here would block a
-		// unit from a file nobody is competing for.
-		assert.Empty(t, gradeDelegatedWrite(ctx, "unit-b", filepath.Join(root, "README.md")).Decision)
+		// delegation from a file nobody is competing for.
+		assert.Empty(t, gradeDelegatedWrite(ctx, "delegation-b", filepath.Join(root, "README.md")).Decision)
 	})
 
 	t.Run("outside the workspace", func(t *testing.T) {
-		assert.Empty(t, gradeDelegatedWrite(ctx, "unit-b", filepath.Join(t.TempDir(), "elsewhere.go")).Decision)
+		assert.Empty(t, gradeDelegatedWrite(ctx, "delegation-b", filepath.Join(t.TempDir(), "elsewhere.go")).Decision)
 	})
 
-	t.Run("un-enrolled on ground no unit claims", func(t *testing.T) {
+	t.Run("un-enrolled on ground no delegation claims", func(t *testing.T) {
 		assert.Empty(t, gradeDelegatedWrite(ctx, "", filepath.Join(root, "README.md")).Decision)
 	})
 }
@@ -1575,23 +1575,23 @@ func TestGradeDelegatedWritePasses(t *testing.T) {
 func TestGradeDelegatedWriteIdleFleet(t *testing.T) {
 	t.Run("no ledger at all", func(t *testing.T) {
 		ctx, root := fleetFixture(t)
-		assert.Empty(t, gradeDelegatedWrite(ctx, "unit-b", filepath.Join(root, "internal/ledger/store.go")).Decision)
+		assert.Empty(t, gradeDelegatedWrite(ctx, "delegation-b", filepath.Join(root, "internal/ledger/store.go")).Decision)
 	})
 
-	t.Run("every unit terminal", func(t *testing.T) {
-		units := fleetUnits()
-		units[0].State, units[1].State = types.StatePass, types.StateNoReturn
-		ctx, root := fleetFixture(t, units...)
-		// A finished unit has stopped competing for its paths, which is the rule
+	t.Run("every delegation terminal", func(t *testing.T) {
+		delegations := fleetDelegations()
+		delegations[0].State, delegations[1].State = types.StatePass, types.StateNoReturn
+		ctx, root := fleetFixture(t, delegations...)
+		// A finished delegation has stopped competing for its paths, which is the rule
 		// types.delegationOverlaps applies when it decides which pairs to report.
-		assert.Empty(t, gradeDelegatedWrite(ctx, "unit-b", filepath.Join(root, "internal/ledger/store.go")).Decision)
+		assert.Empty(t, gradeDelegatedWrite(ctx, "delegation-b", filepath.Join(root, "internal/ledger/store.go")).Decision)
 	})
 
 	t.Run("no state recorded", func(t *testing.T) {
-		units := fleetUnits()
-		units[0].State, units[1].State = "", ""
-		ctx, root := fleetFixture(t, units...)
-		assert.Empty(t, gradeDelegatedWrite(ctx, "unit-b", filepath.Join(root, "internal/ledger/store.go")).Decision)
+		delegations := fleetDelegations()
+		delegations[0].State, delegations[1].State = "", ""
+		ctx, root := fleetFixture(t, delegations...)
+		assert.Empty(t, gradeDelegatedWrite(ctx, "delegation-b", filepath.Join(root, "internal/ledger/store.go")).Decision)
 	})
 
 	t.Run("no trail location", func(t *testing.T) {
@@ -1599,7 +1599,7 @@ func TestGradeDelegatedWriteIdleFleet(t *testing.T) {
 		// hookActivityTrail up from the CWD to this checkout's real cache dir, and the test
 		// would then grade against whatever plan the developer is actually running.
 		ctx := context.WithValue(t.Context(), hookActivityLocationKey{}, hookActivityLocation{})
-		assert.Empty(t, gradeDelegatedWrite(ctx, "unit-b", "internal/ledger/store.go").Decision)
+		assert.Empty(t, gradeDelegatedWrite(ctx, "delegation-b", "internal/ledger/store.go").Decision)
 	})
 }
 
@@ -1608,48 +1608,48 @@ func TestGradeDelegatedWriteIdleFleet(t *testing.T) {
 // fleet" from "part of it and not saying so", and blocking a person in their own checkout
 // is the wrong way to be wrong.
 func TestGradeDelegatedWriteUnenrolled(t *testing.T) {
-	ctx, root := fleetFixture(t, fleetUnits()...)
+	ctx, root := fleetFixture(t, fleetDelegations()...)
 	got := gradeDelegatedWrite(ctx, "", filepath.Join(root, "internal/ledger/store.go"))
 	require.Equal(t, "advise", got.Decision)
-	assert.Contains(t, got.Context, "unit-a", "the advisory must name the unit already working there")
+	assert.Contains(t, got.Context, "delegation-a", "the advisory must name the delegation already working there")
 	assert.Contains(t, got.Context, "own the ledger store")
-	assert.Contains(t, got.Context, "MAGUS_DELEGATION_UNIT", "the advisory must say how to enroll")
+	assert.Contains(t, got.Context, "MAGUS_DELEGATION", "the advisory must say how to enroll")
 	assert.Contains(t, got.Context, "seatbelt", "the advisory must say why it is not a block")
 }
 
-// TestGradeDelegatedWriteInvalidUnitID pins the treated-as-absent contract. A typo'd id
+// TestGradeDelegatedWriteInvalidDelegationID pins the treated-as-absent contract. A typo'd id
 // must not silently buy un-enrolled treatment: erroring would block the tool call over
 // metadata, so the notice is the whole signal the writer gets.
-func TestGradeDelegatedWriteInvalidUnitID(t *testing.T) {
-	ctx, root := fleetFixture(t, fleetUnits()...)
+func TestGradeDelegatedWriteInvalidDelegationID(t *testing.T) {
+	ctx, root := fleetFixture(t, fleetDelegations()...)
 
 	t.Run("on unclaimed ground the notice stands alone", func(t *testing.T) {
-		got := gradeDelegatedWrite(ctx, "unit b!", filepath.Join(root, "README.md"))
+		got := gradeDelegatedWrite(ctx, "delegation b!", filepath.Join(root, "README.md"))
 		require.Equal(t, "advise", got.Decision)
-		assert.Contains(t, got.Context, "not a valid unit id")
-		assert.Contains(t, got.Context, "MAGUS_DELEGATION_UNIT")
+		assert.Contains(t, got.Context, "not a valid delegation id")
+		assert.Contains(t, got.Context, "MAGUS_DELEGATION")
 	})
 
 	t.Run("over-long ids are invalid too", func(t *testing.T) {
-		got := gradeDelegatedWrite(ctx, strings.Repeat("u", types.MaxUnitIDLen+1), filepath.Join(root, "README.md"))
+		got := gradeDelegatedWrite(ctx, strings.Repeat("u", types.MaxDelegationIDLen+1), filepath.Join(root, "README.md"))
 		require.Equal(t, "advise", got.Decision)
-		assert.Contains(t, got.Context, "not a valid unit id")
+		assert.Contains(t, got.Context, "not a valid delegation id")
 	})
 
 	t.Run("on owned ground it advises rather than denying", func(t *testing.T) {
 		// The id is unusable, so the write is graded as un-enrolled - and an un-enrolled
-		// write is never denied, even on another unit's ground.
-		got := gradeDelegatedWrite(ctx, "unit b!", filepath.Join(root, "internal/ledger/store.go"))
+		// write is never denied, even on another delegation's ground.
+		got := gradeDelegatedWrite(ctx, "delegation b!", filepath.Join(root, "internal/ledger/store.go"))
 		require.Equal(t, "advise", got.Decision)
-		assert.Contains(t, got.Context, "not a valid unit id")
-		assert.Contains(t, got.Context, "unit-a")
+		assert.Contains(t, got.Context, "not a valid delegation id")
+		assert.Contains(t, got.Context, "delegation-a")
 	})
 
 	t.Run("a valid id nobody declared is un-enrolled, not denied", func(t *testing.T) {
-		got := gradeDelegatedWrite(ctx, "unit-z", filepath.Join(root, "internal/ledger/store.go"))
+		got := gradeDelegatedWrite(ctx, "delegation-z", filepath.Join(root, "internal/ledger/store.go"))
 		require.Equal(t, "advise", got.Decision)
-		assert.Contains(t, got.Context, "unit-a")
-		assert.NotContains(t, got.Context, "not a valid unit id")
+		assert.Contains(t, got.Context, "delegation-a")
+		assert.NotContains(t, got.Context, "not a valid delegation id")
 	})
 }
 
@@ -1658,11 +1658,11 @@ func TestGradeDelegatedWriteInvalidUnitID(t *testing.T) {
 // instead, because a boundary that silently stopped being checked looks exactly like a
 // fleet nobody declared.
 func TestGradeDelegatedWriteCorruptLedger(t *testing.T) {
-	ctx, root := fleetFixture(t, fleetUnits()...)
+	ctx, root := fleetFixture(t, fleetDelegations()...)
 	location := ctx.Value(hookActivityLocationKey{}).(hookActivityLocation)
 	require.NoError(t, os.WriteFile(filepath.Join(location.base, "ledger", "units.json"), []byte("{not json"), 0o644))
 
-	got := gradeDelegatedWrite(ctx, "unit-b", filepath.Join(root, "internal/ledger/store.go"))
+	got := gradeDelegatedWrite(ctx, "delegation-b", filepath.Join(root, "internal/ledger/store.go"))
 	assert.NotEqual(t, "deny", got.Decision, "a ledger magus cannot read must never block an edit")
 	require.Equal(t, "advise", got.Decision)
 	assert.Contains(t, got.Context, "could not be read")
@@ -1686,7 +1686,7 @@ func TestDeclarationCovering(t *testing.T) {
 		{"cmd/magus/agent.go", "cmd/magus/agent_test.go", false},
 		{"internal/ledger", "internal/ledgerkeeper/store.go", false},
 		{"console/src/**/*.ts", "console/src/a/b.ts", true},
-		// The case types.pathsIntersect deliberately gets "wrong": two units splitting one
+		// The case types.pathsIntersect deliberately gets "wrong": two delegations splitting one
 		// directory by extension do NOT collide, and truncating both to "console/src" would
 		// deny an edit nobody is competing for.
 		{"console/src/**/*.css", "console/src/a/b.ts", false},
@@ -1709,14 +1709,14 @@ func TestDeclarationCovering(t *testing.T) {
 	})
 }
 
-// The unit-id shape itself is pinned in internal/trail's TestValidUnitID; the guard's
-// treated-as-absent behavior for a bad id is pinned by TestGradeDelegatedWriteInvalidUnitID.
+// The delegation-id shape itself is pinned in internal/trail's TestValidDelegationID; the guard's
+// treated-as-absent behavior for a bad id is pinned by TestGradeDelegatedWriteInvalidDelegationID.
 
 // TestHookCmdGradesAgainstTheLedger drives the wire contract rather than the grader: the
 // flag reaches the rule, a denial exits with the blocking status, and the flag outranks
 // the environment.
 func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
-	ctx, root := fleetFixture(t, fleetUnits()...)
+	ctx, root := fleetFixture(t, fleetDelegations()...)
 	run := func(stdin string, args ...string) (string, error) {
 		global = globalFlags{}
 		var out strings.Builder
@@ -1725,16 +1725,16 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 	}
 	owned := filepath.Join(root, "internal/ledger/store.go")
 
-	t.Run("--unit denies a write into another unit's paths", func(t *testing.T) {
-		got, err := run(owned, "--path", "--unit", "unit-b", "-o", "name")
+	t.Run("--delegation denies a write into another delegation's paths", func(t *testing.T) {
+		got, err := run(owned, "--path", "--delegation", "delegation-b", "-o", "name")
 		var silent errSilent
 		require.ErrorAs(t, err, &silent)
 		require.Equal(t, guardDenyExitCode, silent.exitCode)
 		assert.Equal(t, "deny\n", got)
 	})
 
-	t.Run("MAGUS_DELEGATION_UNIT supplies the default", func(t *testing.T) {
-		t.Setenv(envHookUnit, "unit-b")
+	t.Run("MAGUS_DELEGATION supplies the default", func(t *testing.T) {
+		t.Setenv(envHookDelegation, "delegation-b")
 		_, err := run(owned, "--path", "-o", "name")
 		var silent errSilent
 		require.ErrorAs(t, err, &silent)
@@ -1742,10 +1742,10 @@ func TestHookCmdGradesAgainstTheLedger(t *testing.T) {
 	})
 
 	t.Run("the flag wins over the environment", func(t *testing.T) {
-		// The path belongs to unit-a. Acting AS unit-a it is the writer's own ground, so a
-		// pass here proves the flag replaced the environment's unit-b rather than joining it.
-		t.Setenv(envHookUnit, "unit-b")
-		_, err := run(owned, "--path", "--unit", "unit-a", "-o", "name")
+		// The path belongs to delegation-a. Acting AS delegation-a it is the writer's own ground, so a
+		// pass here proves the flag replaced the environment's delegation-b rather than joining it.
+		t.Setenv(envHookDelegation, "delegation-b")
+		_, err := run(owned, "--path", "--delegation", "delegation-a", "-o", "name")
 		require.NoError(t, err, "acting as the owner must not be denied")
 	})
 }

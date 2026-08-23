@@ -266,7 +266,7 @@ lives in [doctrine.md](doctrine.md).
 ### Session
 
 One magus process's recorded facts - the targets it finished, their outcomes,
-and the unit it acted as - kept in a repo-scoped store every worktree shares.
+and the delegation it acted as - kept in a repo-scoped store every worktree shares.
 `magus sessions` lists them; the store prunes itself by last-fact age.
 
 ### Attention request
@@ -282,17 +282,17 @@ The human act of closing an attention request: a judgment rendered, recorded
 with who and why. Distinct from resolving a review thread or a merge conflict -
 a disposition answers a request; it does not merge anything.
 
-### Delegation unit
+### Delegation
 
 One row of the delegation ledger: a piece of work an orchestrating agent handed
 out, with its goal, the checkpoint it was cut against, and the paths it owns or
 must not touch. The ledger records; the agent guard is what reads those facts
 back when grading a write. See [doctrine.md](doctrine.md).
 
-### Unit id
+### Delegation id
 
-The short identifier a worker carries (the `--unit` flag or `MAGUS_DELEGATION_UNIT`) so
-its runs, journal facts, and guard verdicts attribute to its delegation unit.
+The short identifier a worker carries (the `--delegation` flag or `MAGUS_DELEGATION`) so
+its runs, journal facts, and guard verdicts attribute to its delegation.
 Letters, digits and `-_./:` only.
 
 ### Advisor

@@ -394,13 +394,13 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// host. A wrapper that cannot extract a session id must still get a verdict;
 	// erroring here would block a tool call over metadata.
 	hf := gen.BindHook(fset)
-	// The environment supplies the DEFAULT, so an explicit --unit still wins: a shell
+	// The environment supplies the DEFAULT, so an explicit --delegation still wins: a shell
 	// that exported the variable for a whole session must not outrank a per-call
 	// override. Same shape `magus run` uses for MAGUS_SHARD.
-	// trail.UnitFromEnv, never a raw Getenv: the journal producers read the variable
+	// trail.DelegationFromEnv, never a raw Getenv: the journal producers read the variable
 	// through the same helper, and two readers with different trimming rules split one
-	// exported unit into a journal identity and an unguarded write.
-	envDefault(fset, flagHookUnit, trail.UnitFromEnv())
+	// exported delegation into a journal identity and an unguarded write.
+	envDefault(fset, flagHookDelegation, trail.DelegationFromEnv())
 	// The whole display set, not a hand-rolled -o: this command used to define
 	// its own output flag and so silently lacked -s, -q, -v and --tee. That gap
 	// is the reason for the rule - a flag accepted on most commands teaches
@@ -421,7 +421,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	}
 	// Read through Lookup rather than off a bound variable so the value is the same
 	// whichever registration above owns the flag. Goes with the TODO there.
-	actingUnit := hf.Unit
+	actingDelegation := hf.Delegation
 
 	input, hasInput := readGuardInput(in)
 	who := hookAttribution{Host: hf.AgentName, Session: hf.Session, Transcript: hf.Transcript, Event: hf.Event}
@@ -472,9 +472,9 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 		// The delegation ledger speaks first. It is the only path rule whose verdict is
 		// about a CONCURRENT AGENT rather than about the file itself, so nothing else can
 		// outrank it: the regeneration advice below is still true after a collision, and
-		// saying that instead would let two units edit one path in silence.
+		// saying that instead would let two delegations edit one path in silence.
 		context := ""
-		switch g := gradeDelegatedWrite(ctx, actingUnit, input.Value); g.Decision {
+		switch g := gradeDelegatedWrite(ctx, actingDelegation, input.Value); g.Decision {
 		case "deny":
 			verdict.Decision = "deny"
 			verdict.Reason = g.Reason
@@ -755,12 +755,12 @@ func resolveSymlinks(path string) string {
 	}
 }
 
-// Where the acting unit's identity comes from. Both spellings name the same thing so a
+// Where the acting delegation's identity comes from. Both spellings name the same thing so a
 // harness can pick whichever it can set: a wrapper that builds an argv passes the flag,
 // and a worker that only inherits an environment exports the variable.
 const (
-	flagHookUnit = "unit"
-	envHookUnit  = trail.EnvUnit
+	flagHookDelegation = "delegation"
+	envHookDelegation  = trail.EnvDelegation
 )
 
 // writeGrade is what the delegation ledger has to say about one write. Separate from
@@ -778,19 +778,19 @@ type writeGrade struct {
 //
 // The ledger RECORDS and the guard ENFORCES. That split is deliberate (internal/ledger's
 // package doc argues it): a store that quietly gated writes would become something agents
-// route around, while a guard denial is loud, names the owning unit, and teaches. This is
+// route around, while a guard denial is loud, names the owning delegation, and teaches. This is
 // the reader that turns those declared facts into a verdict, and the only one.
 //
 // It is a SEATBELT FOR COOPERATING HARNESSES, NOT A SANDBOX. An un-enrolled writer - a
-// person editing their own repo with no MAGUS_DELEGATION_UNIT set - is advised and never blocked.
+// person editing their own repo with no MAGUS_DELEGATION set - is advised and never blocked.
 // magus cannot tell "not part of the fleet" from "part of it and not saying so", and of
 // the two ways to be wrong, blocking a human in their own checkout is the one that must
 // not happen.
 //
-// Every uncertainty fails OPEN with at most an advisory: no ledger, no live units, a file
+// Every uncertainty fails OPEN with at most an advisory: no ledger, no live delegations, a file
 // that will not parse, a path outside the workspace. A rule the guard cannot evaluate must
 // not block a tool call.
-func gradeDelegatedWrite(ctx context.Context, actingUnit, writePath string) writeGrade {
+func gradeDelegatedWrite(ctx context.Context, actingDelegation, writePath string) writeGrade {
 	writePath = strings.TrimSpace(writePath)
 	if writePath == "" {
 		return writeGrade{}
@@ -800,10 +800,10 @@ func gradeDelegatedWrite(ctx context.Context, actingUnit, writePath string) writ
 		return writeGrade{}
 	}
 	store := ledger.NewStore(ledger.Location{CacheDir: location.base, Root: location.workspace})
-	units, err := store.List()
+	delegations, err := store.List()
 	if err != nil {
 		// An ABSENT ledger is not this branch: the store reads it as an empty one, which
-		// falls through to the no-live-units return below and costs a stat. Only a file
+		// falls through to the no-live-delegations return below and costs a stat. Only a file
 		// that exists and will not parse arrives here, and it is worth a word, because a
 		// delegation whose boundary silently stopped being checked looks exactly like one
 		// nobody declared.
@@ -811,7 +811,7 @@ func gradeDelegatedWrite(ctx context.Context, actingUnit, writePath string) writ
 			"magus workspace: no delegation boundary was checked for this write. Re-declare the plan with the magus_ledger tool if delegated work is meant to be running.\n"+
 				"This workspace's delegation ledger could not be read: %v. The guard fails open rather than blocking on a file it cannot parse, so an owned-path collision would pass unnoticed until someone reads the diff.", err)}
 	}
-	live := liveDelegationUnits(units)
+	live := liveDelegations(delegations)
 	if len(live) == 0 {
 		return writeGrade{}
 	}
@@ -823,28 +823,28 @@ func gradeDelegatedWrite(ctx context.Context, actingUnit, writePath string) writ
 	}
 
 	notice := ""
-	if actingUnit != "" && !types.ValidUnitID(actingUnit) {
+	if actingDelegation != "" && !types.ValidDelegationID(actingDelegation) {
 		// Treated as absent rather than rejected: an id magus cannot parse is an id it
 		// cannot look up either, and erroring would block the tool call over metadata. The
 		// notice is what keeps a typo from silently buying un-enrolled treatment.
 		notice = fmt.Sprintf(
-			"magus workspace: fix the unit id and re-run, so the guard can grade this write against your unit's declared boundary.\n"+
-				"%s=%q is not a valid unit id (at most %d characters of A-Za-z0-9-_./:), so this call was graded as if it named no unit.\n",
-			envHookUnit, actingUnit, types.MaxUnitIDLen)
-		actingUnit = ""
+			"magus workspace: fix the delegation id and re-run, so the guard can grade this write against your delegation's declared boundary.\n"+
+				"%s=%q is not a valid delegation id (at most %d characters of A-Za-z0-9-_./:), so this call was graded as if it named no delegation.\n",
+			envHookDelegation, actingDelegation, types.MaxDelegationIDLen)
+		actingDelegation = ""
 	}
 
-	if me, enrolled := liveUnit(live, actingUnit); enrolled {
-		return gradeAgainstOwnUnit(me, live, rel)
+	if me, enrolled := liveDelegation(live, actingDelegation); enrolled {
+		return gradeAgainstOwnDelegation(me, live, rel)
 	}
 	// An id that is valid but names no LIVE row lands here too, and that is the intent: a
-	// unit whose plan already ended has no boundary left to grade against, and denying on
+	// delegation whose plan already ended has no boundary left to grade against, and denying on
 	// one would block work whose ledger row is simply stale.
 	if owner, owned := ownerOf(live, rel, ""); owned {
 		return writeGrade{Decision: "advise", Context: notice + fmt.Sprintf(
-			"magus workspace: if you are unit %s, set %s=%s (or pass --unit %s) so the guard grades your writes; if you are not, expect a concurrent agent to be editing this file and coordinate before you save.\n"+
-				"%s is inside the paths delegation unit %s (%s) declared it owns, and that unit is %s. This is an advisory and not a block: the guard is a seatbelt for harnesses that opt in, not a sandbox, so an editor magus cannot attribute is never stopped from writing its own repository.",
-			owner.ID, envHookUnit, owner.ID, owner.ID, rel, owner.ID, goalLine(owner), owner.State)}
+			"magus workspace: if you are delegation %s, set %s=%s (or pass --delegation %s) so the guard grades your writes; if you are not, expect a concurrent agent to be editing this file and coordinate before you save.\n"+
+				"%s is inside the paths delegation %s (%s) declared it owns, and that delegation is %s. This is an advisory and not a block: the guard is a seatbelt for harnesses that opt in, not a sandbox, so an editor magus cannot attribute is never stopped from writing its own repository.",
+			owner.ID, envHookDelegation, owner.ID, owner.ID, rel, owner.ID, goalLine(owner), owner.State)}
 	}
 	if notice != "" {
 		return writeGrade{Decision: "advise", Context: strings.TrimRight(notice, "\n")}
@@ -852,17 +852,17 @@ func gradeDelegatedWrite(ctx context.Context, actingUnit, writePath string) writ
 	return writeGrade{}
 }
 
-// gradeAgainstOwnUnit judges a write made by a unit that IS in the live set.
+// gradeAgainstOwnDelegation judges a write made by a delegation that IS in the live set.
 //
 // Forbidden beats owned, because a forbidden entry inside an owned tree is the more
-// specific of two declarations the same orchestrator wrote. A write that no live unit
+// specific of two declarations the same orchestrator wrote. A write that no live delegation
 // claims passes: an orchestrator's owned set is a plan, not a census, and denying on
-// unclaimed ground would block a unit from a file nobody is competing for.
-func gradeAgainstOwnUnit(me types.DelegationUnit, live []types.DelegationUnit, rel string) writeGrade {
+// unclaimed ground would block a delegation from a file nobody is competing for.
+func gradeAgainstOwnDelegation(me types.Delegation, live []types.Delegation, rel string) writeGrade {
 	if decl, forbidden := declarationCovering(me.ForbiddenPaths, rel); forbidden {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
 			"magus workspace: work inside your own owned paths, or report a checkpoint to the orchestrator and ask for the boundary to be widened before you touch this.\n"+
-				"%s is covered by %q, which your delegation unit %s (%s) declared FORBIDDEN. The declaration is the orchestrator's, recorded in this workspace's ledger; magus is reading it back, not inventing a rule.",
+				"%s is covered by %q, which your delegation %s (%s) declared FORBIDDEN. The declaration is the orchestrator's, recorded in this workspace's ledger; magus is reading it back, not inventing a rule.",
 			rel, decl, me.ID, goalLine(me))}
 	}
 	if _, mine := declarationCovering(me.OwnedPaths, rel); mine {
@@ -870,20 +870,20 @@ func gradeAgainstOwnUnit(me types.DelegationUnit, live []types.DelegationUnit, r
 	}
 	if owner, owned := ownerOf(live, rel, me.ID); owned {
 		return writeGrade{Decision: "deny", Reason: fmt.Sprintf(
-			"magus workspace: edit inside your own owned paths, or ask the orchestrator to re-partition the plan. If unit %s has finished with this file, have it release the path by shrinking its owned_paths with the magus_ledger tool, then retry.\n"+
-				"%s is owned by delegation unit %s (%s), which is %s right now, and you are unit %s. Two agents editing one path is the collision the delegation ledger exists to make visible; this guard is where the declaration gets read.",
+			"magus workspace: edit inside your own owned paths, or ask the orchestrator to re-partition the plan. If delegation %s has finished with this file, have it release the path by shrinking its owned_paths with the magus_ledger tool, then retry.\n"+
+				"%s is owned by delegation %s (%s), which is %s right now, and you are delegation %s. Two agents editing one path is the collision the delegation ledger exists to make visible; this guard is where the declaration gets read.",
 			owner.ID, rel, owner.ID, goalLine(owner), owner.State, me.ID)}
 	}
 	return writeGrade{}
 }
 
-// liveDelegationUnits are the rows a write can still collide with: declared and running.
+// liveDelegations are the rows a write can still collide with: declared and running.
 // A terminal row has stopped competing for its paths, which is the same rule
 // types.delegationOverlaps applies when it decides which pairs to report. A row with no
 // state at all is not live either - it has not said it is.
-func liveDelegationUnits(units []types.DelegationUnit) []types.DelegationUnit {
-	live := make([]types.DelegationUnit, 0, len(units))
-	for _, u := range units {
+func liveDelegations(delegations []types.Delegation) []types.Delegation {
+	live := make([]types.Delegation, 0, len(delegations))
+	for _, u := range delegations {
 		if u.State == types.StateDeclared || u.State == types.StateRunning {
 			live = append(live, u)
 		}
@@ -891,26 +891,26 @@ func liveDelegationUnits(units []types.DelegationUnit) []types.DelegationUnit {
 	return live
 }
 
-// liveUnit finds the acting unit's own row. An empty id matches nothing, so an
+// liveDelegation finds the acting delegation's own row. An empty id matches nothing, so an
 // un-enrolled caller cannot collide with a row whose id was never written.
-func liveUnit(live []types.DelegationUnit, id string) (types.DelegationUnit, bool) {
+func liveDelegation(live []types.Delegation, id string) (types.Delegation, bool) {
 	if id == "" {
-		return types.DelegationUnit{}, false
+		return types.Delegation{}, false
 	}
-	i := slices.IndexFunc(live, func(u types.DelegationUnit) bool { return u.ID == id })
+	i := slices.IndexFunc(live, func(u types.Delegation) bool { return u.ID == id })
 	if i < 0 {
-		return types.DelegationUnit{}, false
+		return types.Delegation{}, false
 	}
 	return live[i], true
 }
 
-// ownerOf finds the live unit whose owned paths cover rel, skipping the id in exclude.
+// ownerOf finds the live delegation whose owned paths cover rel, skipping the id in exclude.
 //
-// Ledger order breaks ties. Two units declaring one path is an overlap the ledger already
+// Ledger order breaks ties. Two delegations declaring one path is an overlap the ledger already
 // reports as a fact, and naming the first-recorded one keeps the guard's answer stable
 // between two runs over the same file - an answer that changes run to run is one nobody
 // can act on.
-func ownerOf(live []types.DelegationUnit, rel, exclude string) (types.DelegationUnit, bool) {
+func ownerOf(live []types.Delegation, rel, exclude string) (types.Delegation, bool) {
 	for _, u := range live {
 		if u.ID == exclude {
 			continue
@@ -919,7 +919,7 @@ func ownerOf(live []types.DelegationUnit, rel, exclude string) (types.Delegation
 			return u, true
 		}
 	}
-	return types.DelegationUnit{}, false
+	return types.Delegation{}, false
 }
 
 // declarationCovering reports which declaration covers rel, and whether any did. rel is
@@ -940,7 +940,7 @@ func declarationCovering(decls []string, rel string) (string, bool) {
 		decl := path.Clean(strings.TrimSpace(raw))
 		if decl == "." || decl == "/" {
 			// A blank entry, or one that names the whole tree by naming nothing, would put
-			// its unit on every path in the plan. types.pathsIntersect refuses the same
+			// its delegation on every path in the plan. types.pathsIntersect refuses the same
 			// entry for the same reason. An explicit "**" is a different thing and stands.
 			continue
 		}
@@ -977,10 +977,10 @@ func workspaceRelative(root, p string) (string, bool) {
 	return filepath.ToSlash(rel), true
 }
 
-// goalLine is the unit's goal reduced to its first line. Goal holds the goal AND its
-// acceptance criteria as one block (see types.DelegationUnit), and pasting all of that
+// goalLine is the delegation's goal reduced to its first line. Goal holds the goal AND its
+// acceptance criteria as one block (see types.Delegation), and pasting all of that
 // into a denial would bury the next step under it.
-func goalLine(u types.DelegationUnit) string {
+func goalLine(u types.Delegation) string {
 	line, _, _ := strings.Cut(strings.TrimSpace(u.Goal), "\n")
 	if line == "" {
 		return "no goal recorded"

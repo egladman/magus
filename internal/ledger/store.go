@@ -4,10 +4,10 @@
 // It RECORDS AND REFUSES NOTHING. Nothing here gates a run or blocks a write; the AGENT
 // GUARD is what consults these rows to grade one, and it is a separate thing that READS
 // this store. Register does compute a verdict - whether a worker's reported base is the
-// checkpoint its unit was handed - and that is a fact recorded on the row and handed back
+// checkpoint its delegation was handed - and that is a fact recorded on the row and handed back
 // to the caller, not a gate: the registration succeeds either way and what to do about a
 // divergence is the caller's and the orchestrator's call. Enforcement stays outside for
-// the reason types.DelegationUnit gives: a store that refused would make the ledger
+// the reason types.Delegation gives: a store that refused would make the ledger
 // something agents route around, and a ledger nobody keeps honestly grades nothing. The
 // store's whole job is that a plan an agent stated in a prompt stops being trapped in one
 // session's transcript.
@@ -22,13 +22,13 @@
 // historical; this is neither - Put upserts a row in place, Clear wipes the book, and
 // nothing is archived. What it does share is the part that earns the name: it is written
 // to be checked AGAINST reality later, which is exactly the skill's "compare the ledger
-// against the actual diff since each unit's checkpoint" step. Read it as a book of
+// against the actual diff since each delegation's checkpoint" step. Read it as a book of
 // declared intent kept for reconciliation, not as a durable record of what happened. The
 // vocabulary came from the delegation skill, which is also where the row shape is defined
-// (see types.DelegationUnit).
+// (see types.Delegation).
 //
 // It is the INTENT layer of three, and naming the other two is what keeps them apart -
-// they are flat stores joined by unit id at render time, never a storage hierarchy:
+// they are flat stores joined by delegation id at render time, never a storage hierarchy:
 //
 //   - intent - this package. What an orchestrating agent SAID it would hand out.
 //     Declared up front, mutable, one plan at a time.
@@ -63,10 +63,10 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// ErrNoID reports a unit with no id. The id is what Put upserts on, so a row without
+// ErrNoID reports a delegation with no id. The id is what Put upserts on, so a row without
 // one could never be updated or referred to again - it is unaddressable, not merely
 // incomplete.
-var ErrNoID = errors.New("ledger: a unit needs an id")
+var ErrNoID = errors.New("ledger: a delegation needs an id")
 
 // Store is the workspace's delegation ledger, a single JSON file under the cache
 // directory. Every operation reads the file, acts, and writes it back, so a Store is
@@ -109,7 +109,7 @@ type Location struct {
 	// written to <CacheDir>/ledger/units.json.
 	CacheDir string
 	// Root is the workspace a row's paths are relative to, read for one purpose:
-	// digesting a path at the moment a unit releases it (see Update). A Store built
+	// digesting a path at the moment a delegation releases it (see Update). A Store built
 	// with an empty root still records releases - it just cannot say what was in them.
 	Root string
 }
@@ -120,22 +120,28 @@ func NewStore(loc Location) *Store {
 	return &Store{path: filepath.Join(loc.CacheDir, "ledger", "units.json"), root: loc.Root}
 }
 
-// unitsFile is the on-disk envelope. An object rather than a bare array so a later
+// ledgerFile is the on-disk envelope. An object rather than a bare array so a later
 // field (a plan identity, a schema version) can be added without every existing reader
 // failing to parse the file.
-type unitsFile struct {
-	Units []types.DelegationUnit `json:"units"`
+type ledgerFile struct {
+	// compat(until: no cache directory still holds a ledger written before the
+	// delegation rename): the on-disk key stays "units", as does the file name. A
+	// running plan lives in this file, and a renamed key would read every declared row
+	// back as an empty ledger - which the guard cannot tell from "nobody delegated",
+	// so it would silently stop grading writes. Observe it is safe to drop when no
+	// units.json predating the rename is left to load.
+	Delegations []types.Delegation `json:"units"`
 }
 
-// Put records one unit, replacing any row with the same id IN PLACE. Position is
+// Put records one delegation, replacing any row with the same id IN PLACE. Position is
 // preserved on update because the ledger is a table a person reads top to bottom, and
 // a row that jumped to the bottom every time its state changed would reorder itself
 // exactly when it is being watched.
 //
 // It stamps Created on the first write and Updated on every write, ignoring whatever
 // the caller passed for either. The stored row is returned.
-func (s *Store) Put(ctx context.Context, u types.DelegationUnit) (types.DelegationUnit, error) {
-	return s.Update(ctx, u.ID, func(cur *types.DelegationUnit) { *cur = u })
+func (s *Store) Put(ctx context.Context, u types.Delegation) (types.Delegation, error) {
+	return s.Update(ctx, u.ID, func(cur *types.Delegation) { *cur = u })
 }
 
 // Update applies apply to the row with this id and writes the result back, all while
@@ -144,8 +150,8 @@ func (s *Store) Put(ctx context.Context, u types.DelegationUnit) (types.Delegati
 // fields of one row each read it before the other wrote, and the second write reverts the
 // first - whether the two are goroutines or separate magus processes.
 //
-// The row is CREATED when absent, matching Put: apply then sees a zero unit carrying
-// only the id, so declaring a unit and advancing one are the same call. Created is
+// The row is CREATED when absent, matching Put: apply then sees a zero delegation carrying
+// only the id, so declaring a delegation and advancing one are the same call. Created is
 // preserved from the stored row and Updated is stamped on every write, exactly as Put
 // does, and the id is the key - whatever apply writes into ID is overwritten with it.
 //
@@ -164,8 +170,8 @@ func (s *Store) Put(ctx context.Context, u types.DelegationUnit) (types.Delegati
 // row - the merge is already done and abandoning it would lose the state change - but it
 // stops hashing files, so a caller that walked away does not keep the store's lock while
 // the disk is read.
-func (s *Store) Update(ctx context.Context, id string, apply func(*types.DelegationUnit)) (types.DelegationUnit, error) {
-	return s.mutate(ctx, id, func(cur *types.DelegationUnit, _ bool, _ int64) error {
+func (s *Store) Update(ctx context.Context, id string, apply func(*types.Delegation)) (types.Delegation, error) {
+	return s.mutate(ctx, id, func(cur *types.Delegation, _ bool, _ int64) error {
 		apply(cur)
 		return nil
 	})
@@ -183,23 +189,23 @@ func (s *Store) Update(ctx context.Context, id string, apply func(*types.Delegat
 //
 // apply may fail, which is what lets that refusal be decided where it has to be: under
 // the lock, after the row is known present or absent. Nothing is written when it does.
-func (s *Store) mutate(ctx context.Context, id string, apply func(cur *types.DelegationUnit, exists bool, now int64) error) (types.DelegationUnit, error) {
+func (s *Store) mutate(ctx context.Context, id string, apply func(cur *types.Delegation, exists bool, now int64) error) (types.Delegation, error) {
 	if strings.TrimSpace(id) == "" {
-		return types.DelegationUnit{}, ErrNoID
+		return types.Delegation{}, ErrNoID
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	var stored types.DelegationUnit
+	var stored types.Delegation
 	err := s.withFileLock(ctx, func() error {
 		f, err := s.read()
 		if err != nil {
 			return err
 		}
-		i := slices.IndexFunc(f.Units, func(e types.DelegationUnit) bool { return e.ID == id })
-		var prev types.DelegationUnit
+		i := slices.IndexFunc(f.Delegations, func(e types.Delegation) bool { return e.ID == id })
+		var prev types.Delegation
 		if i >= 0 {
-			prev = f.Units[i]
+			prev = f.Delegations[i]
 		}
 		u := prev.Clone()
 		u.ID = id
@@ -214,9 +220,9 @@ func (s *Store) mutate(ctx context.Context, id string, apply func(cur *types.Del
 		u.Releases = s.releases(ctx, prev, u, now)
 		if i >= 0 {
 			u.Created = prev.Created
-			f.Units[i] = u
+			f.Delegations[i] = u
 		} else {
-			f.Units = append(f.Units, u)
+			f.Delegations = append(f.Delegations, u)
 		}
 		if werr := s.write(f); werr != nil {
 			return werr
@@ -225,14 +231,14 @@ func (s *Store) mutate(ctx context.Context, id string, apply func(cur *types.Del
 		return nil
 	})
 	if err != nil {
-		return types.DelegationUnit{}, err
+		return types.Delegation{}, err
 	}
 	return stored, nil
 }
 
 // List returns every row in the order it was first recorded. The rows are copies, so a
 // caller may keep or mutate them without reaching back into the file's next read.
-func (s *Store) List() ([]types.DelegationUnit, error) {
+func (s *Store) List() ([]types.Delegation, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
@@ -240,8 +246,8 @@ func (s *Store) List() ([]types.DelegationUnit, error) {
 	if err != nil {
 		return nil, err
 	}
-	out := make([]types.DelegationUnit, len(f.Units))
-	for i, u := range f.Units {
+	out := make([]types.Delegation, len(f.Delegations))
+	for i, u := range f.Delegations {
 		out[i] = u.Clone()
 	}
 	return out, nil
@@ -258,7 +264,7 @@ func (s *Store) Clear(ctx context.Context) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 
-	return s.withFileLock(ctx, func() error { return s.write(unitsFile{}) })
+	return s.withFileLock(ctx, func() error { return s.write(ledgerFile{}) })
 }
 
 // releases carries the row's recorded releases forward and adds the paths this write
@@ -268,7 +274,7 @@ func (s *Store) Clear(ctx context.Context) error {
 // released the same path tells a reader nothing they can act on. A path released twice
 // keeps its position and takes the NEWER digest, because the version the next agent
 // inherits is the one left behind last.
-func (s *Store) releases(ctx context.Context, prev, next types.DelegationUnit, now int64) []types.DelegationRelease {
+func (s *Store) releases(ctx context.Context, prev, next types.Delegation, now int64) []types.DelegationRelease {
 	out := slices.DeleteFunc(slices.Clone(prev.Releases), func(r types.DelegationRelease) bool {
 		return slices.Contains(next.OwnedPaths, r.Path)
 	})
@@ -352,7 +358,7 @@ func (s *Store) digest(ctx context.Context, declared string) string {
 }
 
 // maxDigestBytes bounds one release digest, because the hash is computed while the store
-// holds its mutex. 32 MiB is far above the source files a unit actually releases and far
+// holds its mutex. 32 MiB is far above the source files a delegation actually releases and far
 // below the build artifact that would otherwise stall every other ledger caller for as
 // long as it takes to read it; a path over the cap records unreadable, which is what it
 // is from the reader's side.
@@ -360,17 +366,17 @@ const maxDigestBytes = 32 << 20
 
 // read loads the file. An absent file is an empty ledger, not a failure: nothing has
 // been recorded yet in this workspace.
-func (s *Store) read() (unitsFile, error) {
+func (s *Store) read() (ledgerFile, error) {
 	raw, err := os.ReadFile(s.path)
 	if errors.Is(err, os.ErrNotExist) {
-		return unitsFile{}, nil
+		return ledgerFile{}, nil
 	}
 	if err != nil {
-		return unitsFile{}, err
+		return ledgerFile{}, err
 	}
-	var f unitsFile
+	var f ledgerFile
 	if err := json.Unmarshal(raw, &f); err != nil {
-		return unitsFile{}, err
+		return ledgerFile{}, err
 	}
 	return f, nil
 }
@@ -427,7 +433,7 @@ const (
 )
 
 // write replaces the file atomically, so a reader never sees a half-written ledger.
-func (s *Store) write(f unitsFile) error {
+func (s *Store) write(f ledgerFile) error {
 	raw, err := json.MarshalIndent(f, "", "  ")
 	if err != nil {
 		return err
