@@ -23,7 +23,9 @@ import (
 
 	"github.com/bmatcuk/doublestar/v4"
 	"github.com/egladman/magus/internal/agent"
+	"github.com/egladman/magus/internal/describe"
 	json "github.com/egladman/magus/internal/json"
+	"github.com/egladman/magus/types"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -866,6 +868,64 @@ func TestRootProjectDeclaresTheConfigsItsToolsRead(t *testing.T) {
 			"%s is read by %s but no root source glob names it, so editing it reruns every\n"+
 				"root target while keying none of them. Declare it in this magusfile's sources.",
 			path, reader)
+	}
+}
+
+// wholeTreeFootprints are the root targets that compile or analyze the entire Go
+// module, mapped to the globs whose absence from the target's own footprint would make
+// a Go edit replay instead of re-measure. Two entries because two targets run the whole
+// tree; every other readsFiles in this magusfile narrows deliberately (compress-cgo-test
+// to one package, lint-build to libs/testlayout) and must keep its narrow footprint.
+var wholeTreeFootprints = map[string][]string{
+	"test": {"**/*.go", "go.mod", "go.sum"},
+	"lint": {"**/*.go", "go.mod", "go.sum", ".golangci.yml"},
+}
+
+// TestWholeTreeTargetsKeyOnTheGoTree pins the footprint replacement that made this
+// repository's own suite report a false green.
+//
+// ctx.readsFiles REPLACES a target's footprint rather than adding to it: buildStep keeps
+// the magusfiles and the target's spell sources, drops the project and spell globs, then
+// folds the declared refs in. So a call added to key four files the project does not
+// claim - the console palette that types/kindpalette_drift_test.go reads - silently
+// deleted **/*.go from the key of the target that runs every Go test. It held long enough
+// for ~8,400 new lines of *_test.go to land and replay against the cached verdict with the
+// coverage profile untouched; only --no-cache re-measured. `magus affected` still selected
+// "." for those edits, because project claims and a target's key are computed separately,
+// which is what kept it invisible.
+//
+// Structural rather than a text scan: it reads the same static extraction buildStep
+// depends on, so a footprint moved into a helper or reworded still gets graded.
+func TestWholeTreeTargetsKeyOnTheGoTree(t *testing.T) {
+	body, err := os.ReadFile(rootMagusfile)
+	require.NoError(t, err, "read %s", rootMagusfile)
+
+	nodes := describe.Extract(string(body))
+	require.NotEmpty(t, nodes, "%s yielded no target nodes; the parse failed", rootMagusfile)
+
+	byName := make(map[string]types.TargetGraphNode, len(nodes))
+	for _, n := range nodes {
+		byName[n.Name] = n
+	}
+
+	for target, required := range wholeTreeFootprints {
+		node, ok := byName[target]
+		require.True(t, ok, "%s declares no %q target", rootMagusfile, target)
+		if len(node.ReadsFiles) == 0 {
+			continue // no replacement, so the target still inherits the project baseline
+		}
+		var declared []string
+		for _, ref := range node.ReadsFiles {
+			declared = append(declared, ref.Glob)
+		}
+		for _, glob := range required {
+			assert.Contains(t, declared, glob,
+				"target %q declares a ctx.readsFiles footprint, which REPLACES the project and\n"+
+					"spell source globs, but does not name %q - so an edit to it produces a cache HIT\n"+
+					"and %q replays a verdict computed against different code. Restate the tree the\n"+
+					"target actually reads, or drop the footprint declaration entirely.",
+				target, glob, target)
+		}
 	}
 }
 

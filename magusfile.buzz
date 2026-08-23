@@ -1783,6 +1783,26 @@ export fun test(ctx: magus\Context, args: [str]) > void !> any {
     // profiles are undeclared residue, restored by nothing, and the badge target
     // finds no file to measure whenever the suite replays.
     ctx.writesFiles("coverage.out", "coverage.hand.out");
+    // The tree this suite compiles and runs, restated. It is NOT redundant with the
+    // project's sources: a ctx.readsFiles call REPLACES a target's footprint rather than
+    // adding to it (buildStep in run.go keeps only the magusfiles, then folds these refs
+    // in), so the console declaration below - added to key four files the project does not
+    // claim - deleted **/*.go, go.mod and every other project and spell glob from this
+    // target's key. Measured: ~8,400 new lines of *_test.go landed and `magus run test .`
+    // replayed the cached verdict, coverage profile untouched, until --no-cache. The same
+    // note is on go_build, which never grew a readsFiles and so still keys on the tree.
+    //
+    // The go spell's globs (spells/golang/spell.buzz mgs_listRequiredGlobs), because
+    // .s/.S/.c/.h compile into packages and .txtar carries the behavior fixtures; **/*.buzz
+    // because the suite parses this repo's spell sources; **/*.md because
+    // internal/selfupdate's trust-anchor test reads docs/setup/verify.md; mise.toml and
+    // magus.yaml because they pin the toolchain the suite runs under and the policy it
+    // resolves. Spell-declared ignore dirs still prune the walk - baseStep sets
+    // step.IgnoreDirs before the replacement and the replacement does not touch it - so
+    // these globs do not descend into node_modules or a leftover worktree.
+    ctx.readsFiles("**/*.go", "**/*.txtar", "**/*.s", "**/*.S", "**/*.c", "**/*.h",
+                   "go.mod", "go.sum", "go.work", "go.work.sum",
+                   "**/*.buzz", "**/*.md", "mise.toml", "magus.yaml");
     // types/kindpalette_drift_test.go reads CONSOLE sources to lock the node-kind palette to
     // the Kind* constants. None of those paths is a declared source of this project, so
     // without this the suite replays from cache on every console-only edit and the gate stays
@@ -2014,6 +2034,18 @@ export fun lint(ctx: magus\Context, args: [str]) > void !> any {
     // `--version` on a custom binary carries a build timestamp that moves every
     // rebuild.
     ctx.readsFiles("libs/testlayout/.custom-gcl.yml", "libs/testlayout/**/*.go");
+    // The tree this target analyzes, restated for the reason the same block on `test`
+    // gives: a readsFiles call REPLACES the footprint, so the linter-version declaration
+    // above dropped **/*.go, .golangci.yml and every markdown and shell glob out of this
+    // key. golangci-lint and go vet compile the module (hence the assembly and cgo globs),
+    // markdownlint reads the markdown and .markdownlintignore, shellcheck the shell, and
+    // .golangci.yml is the rule set whose edit must never replay the verdict from the old
+    // one. No **/*.txtar: nothing here parses the fixtures.
+    ctx.readsFiles("**/*.go", "**/*.s", "**/*.S", "**/*.c", "**/*.h",
+                   "go.mod", "go.sum", "go.work", "go.work.sum", ".golangci.yml",
+                   "**/*.md", ".markdownlintignore",
+                   "**/*.sh", "**/*.bash", ".shellcheckrc",
+                   "mise.toml", "magus.yaml");
     // The linter cache lives inside this checkout, not at the user-global default.
     // golangci-lint (v2.12) keys package results by module-relative path + content,
     // relocatable across checkouts - but each stored issue carries the ABSOLUTE file
