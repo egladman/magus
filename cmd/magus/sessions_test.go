@@ -80,6 +80,37 @@ func TestSessionsRendersTheDelegationColumnAttributedAndNot(t *testing.T) {
 	assert.Equal(t, "-", sessionsDelegationCell(t, out, "invBare"), "an unattributed session reads like an unknown HOST, not like a blank")
 }
 
+// The listing answers "what happened", but its reader is often looking for "what needs
+// me" - so an open queue gets one cross-reference line, and a quiet queue gets silence
+// rather than a reassurance nobody asked for.
+func TestSessionsCrossReferencesAnOpenAttentionQueue(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	global = globalFlags{}
+	root := t.TempDir()
+	recordSession(t, root, "run", []string{"build"}, "invQuiet")
+
+	out := captureStdout(t, func() {
+		require.NoError(t, sessionsCmd(context.Background(), root, nil))
+	})
+	assert.NotContains(t, out, "attention request", "a quiet queue earns no footer")
+
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	_, opened, err := sessions.OpenRequest(dir, "agent-1", sessions.AttentionOpen{
+		Outcome: "waiting",
+		Source:  "claude/Notification",
+		Where:   root,
+		Message: "needs the deploy key",
+	}, sessions.SessionStart{Workspace: root})
+	require.NoError(t, err)
+	require.True(t, opened)
+
+	out = captureStdout(t, func() {
+		require.NoError(t, sessionsCmd(context.Background(), root, nil))
+	})
+	assert.Contains(t, out, "1 attention request(s) open; `magus attention` lists them")
+}
+
 func TestSessionsRejectsPositionalArguments(t *testing.T) {
 	err := sessionsCmd(context.Background(), t.TempDir(), []string{"yesterday"})
 	require.Error(t, err)

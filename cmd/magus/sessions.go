@@ -115,6 +115,13 @@ func renderSessionsText(summaries []sessions.Summary, fold sessions.Fold, dir st
 		return err
 	}
 
+	if open := len(sessions.AttentionQueue(fold)); open > 0 {
+		// One glance covers both surfaces: history is what this listing answers, but a
+		// reader scanning it is often looking for the thing that needs them, and that
+		// lives in the other view of the same store.
+		fmt.Fprintf(os.Stdout, "\n%d attention request(s) open; `magus attention` lists them\n", open)
+	}
+
 	if fold.Skipped > 0 {
 		// Surfaced rather than swallowed: a skipped line is a fact that happened and
 		// cannot be shown, which is exactly the thing a silent reader would misreport
