@@ -41,8 +41,7 @@ var adviceDirRel = filepath.Join(".github", "actions", "advice")
 // added one, and the failure mode of getting that wrong is a `magus diff` that pushes.
 //
 // Two lesser reasons: the directory also holds `advice.buzz`, which is the shared library
-// and not an advisor at all, and `api-surface.buzz`, which action.yml does not run. And
-// filename order is not the order action.yml chose.
+// and not an advisor at all. And filename order is not the order action.yml chose.
 //
 // first-contribution.buzz is the one read-only advisor deliberately left out: it asks the
 // forge who opened the pull request, through its own `gh` call rather than through
@@ -63,6 +62,7 @@ var localAdvisors = []string{
 	"skip-cache.buzz",
 	"conformance.buzz",
 	"missing-target.buzz",
+	"api-surface.buzz",
 }
 
 // runLocalAdvisors runs the read-only PR advisors against the local tree and returns
