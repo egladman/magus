@@ -351,18 +351,26 @@ let lifecycleAbort: AbortController | null = null;
 // close/reopen adds a generation and each chord fires its command one more time.
 let uninstallKeys: (() => void) | null = null;
 
-// The graph stays gently "alive": the simulation never fully cools, so nodes
-// keep drifting (the Obsidian-like wobble). Stilled when motion is suppressed,
-// and paused when the tab is hidden (see boot) so it isn't a background CPU drain.
+// The graph SETTLES and stays settled. It used to hold alphaTarget at 0.006 forever - an
+// Obsidian-like drift - on the assumption that a floor that low scales every force down to a
+// gentle wobble. It does not: d3's collide force takes no alpha (d3-force/src/collide.js, `function
+// force()` against every other force's `function force(alpha)`), so in the crowded core it resolves
+// overlaps at FULL magnitude on every tick while charge and link answer at 0.006. The result was a
+// fixed-amplitude buzz that could not damp out, because the force driving it never read the number
+// that was supposed to be damping it - and it could never end either: d3 stops at
+// `alpha < alphaMin` (0.001), which a target of 0.006 makes unreachable by construction.
+//
+// So the target is d3's own 0 and the timer stops on its own. Energy is now something an EVENT
+// spends - a drag, a filter, a layout change, new data - each of which already calls alpha().restart()
+// at its own site.
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
 // The OS preference, or the console's own Motion setting. One predicate rather than the media query
 // tested in five places, which is how a new switch reaches four of them and misses the fifth. The
-// console's CSS kill cannot reach the wobble, the particles or the camera glides - they are JS.
+// console's CSS kill cannot reach the opening burst, the particles or the camera glides - they are JS.
 function motionSuppressed(): boolean {
   return reducedMotion.matches || document.documentElement.dataset.motion === "reduced";
 }
-const idleAlpha = () => (motionSuppressed() ? 0 : 0.006);
 
 // ---- motion layer (flow particles + live recency pulses) ------------------
 // Motion is OFF outside two states: an active path/subset view (blast, trace,
@@ -385,8 +393,8 @@ const motionEligible = () => !motionSuppressed() && !document.hidden && (flowOn 
 
 // motionLoop keeps draw() repainting once per frame while motionEligible();
 // the moment it isn't (view cleared, tab hidden, reduced-motion turned on, or
-// pulses expired), it zeroes motionRaf and stops re-arming itself - CPU drops
-// back to the sim's own idle wobble, not zero (that baseline is unaffected).
+// pulses expired), it zeroes motionRaf and stops re-arming itself - and with the layout settled
+// there is no other repaint loop, so CPU drops to zero.
 function motionLoop() {
   if (!motionEligible()) {
     motionRaf = 0;
@@ -1028,6 +1036,62 @@ function seedBigBang() {
 // Clear space held between two settled marks, in world units.
 const NODE_GAP = 6;
 
+// ---- selection halo --------------------------------------------------------
+// Selecting a node pushes everything that is NOT in its neighborhood out of a disc around it, so
+// the marks answering "what is this connected to" are read against background instead of against a
+// thousand unrelated ones.
+//
+// Dimming cannot do this, and the reason is worth stating: draw() drops a non-neighborhood node to
+// alpha 0.12, which is a PER-NODE operation, while legibility is about AGGREGATE ink. Two thousand
+// marks at 12% lay down far more of it than three marks at 100%, so on a full graph the selection
+// is read against fog however hard the dimming is pushed. Moving the fog is what clears it.
+//
+// Force mode only: the DAG and radial layouts compute final coordinates and pin every node, so
+// there is nothing to displace and displacing it would be a layout nobody asked for.
+const HALO_RADIUS = 120;
+
+let haloFocus: string | null = null;
+let haloKeep = new Set<string>();
+
+// A d3 force, so the displacement resolves TOGETHER with link, charge and collide rather than
+// against them. A node shoved out by hand would be hauled back by its own edges on the next tick,
+// or land on top of a neighbour collide had already spaced.
+function haloForce(alpha: number): void {
+  if (!haloFocus) return;
+  const f = graph.byId.get(haloFocus);
+  if (!f || f.x == null) return;
+  for (const n of graph.nodes) {
+    if (n === f || haloKeep.has(n.id) || n.x == null) continue;
+    const dx = n.x - f.x;
+    const dy = n.y - f.y;
+    // A node sitting exactly on the focus has no direction to be pushed in. Give it one rather than
+    // dividing by zero and writing NaN into a position the layout never recovers from.
+    const d = Math.hypot(dx, dy) || 0.001;
+    if (d >= HALO_RADIUS) continue;
+    const push = (HALO_RADIUS - d) * alpha * 0.9;
+    // d3 initializes vx/vy when the simulation starts, but they are optional on its node datum and
+    // a node added by a live graph update is seen here before that happens.
+    n.vx = (n.vx ?? 0) + (dx / d) * push;
+    n.vy = (n.vy ?? 0) + (dy / d) * push;
+  }
+}
+
+// setHalo aims the displacement at a node, or clears it. Clearing puts nothing back: the graph is
+// settled by then, the ordinary forces reclaim the space at the next disturbance, and restoring by
+// hand would spend a second animation on a reader who has already moved on.
+function setHalo(id: string | null): void {
+  if (isDagMode() || !sim) {
+    haloFocus = null;
+    return;
+  }
+  if (id === haloFocus) return;
+  haloFocus = id;
+  haloKeep = id ? new Set(neighborhood(id, 1)) : new Set();
+  // Enough to open the disc and re-settle what it displaced, and no more. A full alpha(1) restart
+  // would re-run the entire layout and throw away the arrangement the reader had just learned.
+  sim.alpha(0.35).restart();
+}
+
 function startSimulation() {
   if (sim) sim?.stop(); // stop the prior run (e.g. after loading a new file) - its timer would keep ticking
   const { w, h } = resizeCanvas();
@@ -1063,10 +1127,10 @@ function startSimulation() {
     )
     .force("x", forceX(simCenter.x).strength(0.02))
     .force("y", forceY(simCenter.y).strength(0.02))
-    .alphaTarget(idleAlpha()) // decay toward a small floor, not 0, so it keeps gently moving
-    // d3's default decay spends about 300 ticks - five seconds - reaching that floor, which is
+    .force("halo", haloForce)
+    // d3's default decay spends about 300 ticks - five seconds - before it comes to rest, which is
     // a long time to watch a graph wobble before it is worth reading, and far too long for the
-    // opening burst to feel like one event. This settles in roughly a second.
+    // opening burst to feel like one event. This settles in roughly a second, and then stops.
     .alphaDecay(0.06)
     .on("tick", draw);
 }
@@ -1375,7 +1439,7 @@ function draw() {
     // Blur is divided by the zoom so the halo stays a constant size on screen instead of
     // ballooning as the view zooms in. Skipped when the neighborhood is large: a canvas shadow
     // is redrawn per node per frame, and a hub with hundreds of neighbors would pay for it on
-    // every tick of a simulation that never fully cools.
+    // every tick of the opening settle and every frame the motion layer runs.
     const glowing = glowNeighborhood && lit(n.id);
     if (glowing) {
       ctx.shadowColor = th.accent;
@@ -1619,7 +1683,7 @@ function setupZoomDrag() {
         draw();
         return;
       }
-      if (!event.active) sim?.alphaTarget(idleAlpha()); // back to the gentle floor, not a dead stop
+      if (!event.active) sim?.alphaTarget(0); // let the disturbance the drag made settle out
       event.subject.fx = null;
       event.subject.fy = null;
     });
@@ -1938,6 +2002,7 @@ function selectNode(id: string | null, center: boolean) {
   }
 
   selected = id;
+  setHalo(id);
   renderCard(id);
   updateHash();
   if (id && center) centerOn(id);
@@ -2005,10 +2070,10 @@ let cameraOwnedByOperator = false;
 // it rather than re-framing, and a pan, zoom or fit releases it.
 let centeredOn: string | null = null;
 
-// The node currently held still because the pointer is on it. The simulation never fully cools -
-// that gentle drift is deliberate - but it means a node can wander out from under a stationary
-// cursor, dropping the highlight and darkening the neighborhood while the reader did nothing.
-// So the thing being pointed at stops; its neighbors carry on moving around it.
+// The node currently held still because the pointer is on it. A settled graph does not move, but
+// a settling one does, and a node that wanders out from under a stationary cursor drops the
+// highlight and darkens the neighborhood while the reader did nothing. So the thing being pointed
+// at stops; its neighbors carry on settling around it.
 let hoverPinned: string | null = null;
 
 function pinHovered(id: string | null) {
@@ -2140,8 +2205,8 @@ function revealWholeGraph() {
 // from waitForCanvasWidth, whose ~1s cap suits a load the operator is already watching; this one
 // waits out a surface mounted hidden, where there is nothing to be late for.
 //
-// A TIMER, not requestAnimationFrame: rAF stops entirely while the page is not being rendered -
-// the same pause the idle wobble relies on - and the whole point here is to wait out a surface
+// A TIMER, not requestAnimationFrame: rAF stops entirely while the page is not being rendered,
+// and the whole point here is to wait out a surface
 // that is not being rendered yet, so an rAF poll deadlocks on exactly the case it exists for.
 function whenCanvasSized(): Promise<void> {
   return new Promise((resolve) => {
@@ -5542,13 +5607,10 @@ function bootWireEvents() {
   // Both settings apply live. draw() unconditionally because shapes are a paint-time property and a
   // stilled canvas has no next tick to pick them up on.
   motionObserver = new MutationObserver(() => {
-    if (sim) {
-      // motionEligible, not just motionSuppressed: the dag layouts hold their own coordinates and a
-      // restart would shake a settled Sugiyama apart, and a hidden or backgrounded surface has no
-      // reason to spin the simulation back up.
-      if (!motionEligible() || isDagMode() || !surfaceVisible) sim.alpha(0).stop();
-      else sim.alphaTarget(idleAlpha()).restart();
-    }
+    // Only ever a STOP. Turning motion off mid-settle cuts the opening burst short, which is the
+    // point of the setting; turning it back on has nothing to resume, because a settled graph is
+    // what full motion looks like too.
+    if (sim && (!motionEligible() || isDagMode() || !surfaceVisible)) sim.alpha(0).stop();
     draw();
   });
   motionObserver.observe(root, {
@@ -5601,9 +5663,8 @@ function bootWireEvents() {
     { signal: lifecycleSignal },
   );
 
-  // Keep the gentle wobble from being a background CPU drain: stop the sim while
-  // the tab is hidden, resume when it returns. Also honor a live change to the
-  // reduced-motion preference. In a dag mode the sim stays stopped (no wobble).
+  // Keep an unfinished settle from ticking against a canvas nobody can see: stop the sim while
+  // the tab is hidden, resume it when the tab returns. In a dag mode the sim is stopped already.
   // startMotion() re-arms the motion loop on the same two triggers -
   // it self-checks motionEligible(), so it's a no-op when there's nothing to
   // animate or the tab/preference still says not to.
@@ -5612,7 +5673,9 @@ function bootWireEvents() {
     () => {
       if (sim) {
         if (document.hidden) sim.stop();
-        else if (!isDagMode()) sim.alphaTarget(idleAlpha()).restart();
+        // restart() without an alpha() resumes from wherever the settle had got to, so a tab hidden
+        // mid-burst finishes it and one hidden after it settled ticks once and stops again.
+        else if (!isDagMode()) sim.restart();
       }
       if (!document.hidden) startMotion();
     },
@@ -5621,7 +5684,7 @@ function bootWireEvents() {
   reducedMotion.addEventListener(
     "change",
     () => {
-      if (sim && !isDagMode()) sim.alphaTarget(idleAlpha()).restart();
+      // The layout itself is unaffected either way now - only the particle/pulse layer is.
       startMotion();
     },
     { signal: lifecycleSignal },
@@ -5846,23 +5909,22 @@ async function bootLive() {
 }
 
 // deactivate tears down everything with a lifetime when the console unmounts a graph tab or pane: it
-// stops the force simulation (its rAF wobble is the main background CPU drain), cancels the
+// stops the force simulation, cancels the
 // motion loop and clears its state, aborts a live SSE stream and cancels its reconnect timer,
 // disconnects the stage ResizeObserver and the theme MutationObserver, and removes the
 // window/document lifecycle listeners (via the one AbortController). Idempotent. The standalone
 // page never calls it (the graph lives for the page's lifetime); the console's graph PageModule
 // calls it on deactivate.
-// setVisible is the console's surface contract (page.ts). Here it is not a formality: the force
-// simulation decays toward a small non-zero floor so the drawing keeps gently moving, which
-// deactivate() below calls "the main background CPU drain" - and until now only CLOSING the tab
-// stopped it. A backgrounded graph went on ticking and repainting a canvas nobody could see.
+// setVisible is the console's surface contract (page.ts). Here it is not a formality: a graph
+// backgrounded mid-settle would go on ticking and repainting a canvas nobody could see, and until
+// this existed only CLOSING the tab stopped it.
 //
-// Stopped rather than throttled, and restarted at the same idle floor on return, so what comes back
-// is the layout the reader left rather than one that drifted while they were elsewhere.
+// Stopped rather than throttled, so what comes back is the layout the reader left rather than one
+// that drifted while they were elsewhere.
 export function setVisible(visible: boolean): void {
   surfaceVisible = visible;
   if (visible) {
-    if (sim) sim.alphaTarget(idleAlpha()).restart();
+    if (sim) sim.restart(); // finishes an interrupted settle; a no-op on one that finished
     publishLiveStatus();
     if (liveRefreshPending) {
       liveRefreshPending = false;
@@ -5884,6 +5946,10 @@ export function deactivate(): void {
   // own window outlived the surface it drives, still calling applyQuery on a torn-down graph.
   queryBuilder?.close();
   detailMode = "auto";
+  // The same hazard a third time: a halo left aimed at a node of the CLOSED graph would displace
+  // whatever id happens to collide with it in the reopened one.
+  haloFocus = null;
+  haloKeep = new Set();
   if (sim) sim?.stop();
   if (motionRaf) {
     cancelAnimationFrame(motionRaf);
