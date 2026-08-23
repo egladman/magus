@@ -8,6 +8,7 @@ import (
 	"testing"
 
 	"github.com/egladman/magus/internal/journal"
+	"github.com/egladman/magus/internal/proc"
 	"github.com/egladman/magus/internal/sessions"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/stretchr/testify/assert"
@@ -56,7 +57,7 @@ func TestWithSessionJournalRecordsAffectedResults(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()
 
-	handlers := withSessionJournal(nil, root, "affected", []string{"ci", "--base", "main"})
+	handlers := withSessionJournal(context.Background(), nil, root, "affected", []string{"ci", "--base", "main"})
 	require.Len(t, handlers, 1)
 
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass, DurMs: 20, Ref: "out1"})
@@ -93,11 +94,11 @@ func TestWithSessionJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 
 	result := journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusCached, DurMs: 7, Ref: "out9"}
 
-	runHandlers := withSessionJournal(nil, runRoot, "run", []string{"ci", "api"})
+	runHandlers := withSessionJournal(context.Background(), nil, runRoot, "run", []string{"ci", "api"})
 	require.Len(t, runHandlers, 1)
 	emitJournalEvent(t, runHandlers[0], result)
 
-	affectedHandlers := withSessionJournal(nil, affectedRoot, "affected", []string{"ci"})
+	affectedHandlers := withSessionJournal(context.Background(), nil, affectedRoot, "affected", []string{"ci"})
 	require.Len(t, affectedHandlers, 1)
 	emitJournalEvent(t, affectedHandlers[0], result)
 
@@ -138,7 +139,7 @@ func TestWithSessionJournalStampsTheDelegationOnEveryVerb(t *testing.T) {
 	} {
 		t.Run(verb, func(t *testing.T) {
 			root := t.TempDir()
-			handlers := withSessionJournal(nil, root, verb, args)
+			handlers := withSessionJournal(context.Background(), nil, root, verb, args)
 			require.Len(t, handlers, 1)
 			emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusPass})
 
@@ -156,6 +157,57 @@ func TestWithSessionJournalStampsTheDelegationOnEveryVerb(t *testing.T) {
 	}
 }
 
+// The delegation a forwarded run carries beats the environment, because on an adopted run this
+// code executes in the DAEMON and the environment it would otherwise read belongs to whoever
+// started the daemon. Without the preference every daemon-adopted run in a fleet is attributed
+// to one stranger, or to nobody - the defect this wiring exists to close.
+func TestWithSessionJournalPrefersTheForwardedDelegation(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv(trail.EnvDelegation, "fleet/daemon-env")
+	root := t.TempDir()
+
+	ctx := proc.WithDelegation(context.Background(), "fleet/client")
+	handlers := withSessionJournal(ctx, nil, root, "run", []string{"ci", "api"})
+	require.Len(t, handlers, 1)
+	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "ci", Project: "api", Status: journal.StatusPass})
+
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	fold, err := sessions.ReadAll(dir)
+	require.NoError(t, err)
+
+	summaries := sessions.Summarize(fold)
+	require.Len(t, summaries, 1)
+	assert.Equal(t, "fleet/client", summaries[0].Delegation)
+	require.Len(t, summaries[0].Targets, 1)
+	assert.Equal(t, "fleet/client", summaries[0].Targets[0].Delegation)
+}
+
+// The other half of the precedence: a plain CLI run carries no forwarded delegation, and the
+// environment channel must still be read. A context-only implementation would leave every
+// unadopted run unattributed, which is the same bug with the cases swapped.
+func TestWithSessionJournalFallsBackToTheEnvironmentWithoutAForwardedDelegation(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv(trail.EnvDelegation, "fleet/local")
+	root := t.TempDir()
+
+	// An invalid forwarded id stores nothing, so this is also the "the wire lied" case: the
+	// context carries none and the local environment is what remains.
+	ctx := proc.WithDelegation(context.Background(), "not a delegation id")
+	handlers := withSessionJournal(ctx, nil, root, "run", []string{"build"})
+	require.Len(t, handlers, 1)
+	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
+
+	dir, err := sessions.Dir(root)
+	require.NoError(t, err)
+	fold, err := sessions.ReadAll(dir)
+	require.NoError(t, err)
+
+	summaries := sessions.Summarize(fold)
+	require.Len(t, summaries, 1)
+	assert.Equal(t, "fleet/local", summaries[0].Delegation)
+}
+
 // A delegation that fails the id rule is dropped rather than stamped, which is what keeps the trail's
 // redaction exemption honest. The drop happens in the wiring, because that is where the
 // environment is read; the note explaining it is asserted in internal/trail, where the one-time
@@ -165,7 +217,7 @@ func TestWithSessionJournalDropsAnInvalidDelegation(t *testing.T) {
 	t.Setenv(trail.EnvDelegation, "not a delegation id")
 	root := t.TempDir()
 
-	handlers := withSessionJournal(nil, root, "run", []string{"build"})
+	handlers := withSessionJournal(context.Background(), nil, root, "run", []string{"build"})
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Status: journal.StatusPass})
 
@@ -194,7 +246,7 @@ func TestWithSessionJournalSurvivesAnUnwritableStore(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Dir(dir), 0o755))
 	require.NoError(t, os.WriteFile(dir, []byte("blocked\n"), 0o644))
 
-	handlers := withSessionJournal(nil, root, "affected", []string{"ci"})
+	handlers := withSessionJournal(context.Background(), nil, root, "affected", []string{"ci"})
 	require.Len(t, handlers, 1, "the store is only opened on the first fact, so wiring still succeeds")
 
 	rec := captureJournalRecord(t, journal.Event{Kind: journal.KindResult, Inv: "inv1", Target: "build", Project: "api", Status: journal.StatusPass})
@@ -217,6 +269,6 @@ func TestWithSessionJournalLeavesHandlersAloneWithoutAStateDir(t *testing.T) {
 	t.Setenv("LocalAppData", "")
 
 	existing := []slog.Handler{&journalRecordSink{}}
-	got := withSessionJournal(existing, t.TempDir(), "affected", []string{"ci"})
+	got := withSessionJournal(context.Background(), existing, t.TempDir(), "affected", []string{"ci"})
 	assert.Equal(t, existing, got)
 }

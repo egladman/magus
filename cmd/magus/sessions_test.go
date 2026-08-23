@@ -26,7 +26,7 @@ func emitJournalEvent(t *testing.T, h slog.Handler, e journal.Event) {
 // the only producer the CLI has. It returns the session id so a row can be found by it.
 func recordSession(t *testing.T, root, verb string, args []string, inv string) string {
 	t.Helper()
-	handlers := withSessionJournal(nil, root, verb, args)
+	handlers := withSessionJournal(context.Background(), nil, root, verb, args)
 	require.Len(t, handlers, 1)
 	emitJournalEvent(t, handlers[0], journal.Event{Kind: journal.KindResult, Inv: inv, Target: "build", Status: journal.StatusPass})
 	return inv

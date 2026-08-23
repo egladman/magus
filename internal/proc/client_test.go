@@ -17,6 +17,7 @@ import (
 	"github.com/egladman/magus/internal/cache"
 	json "github.com/egladman/magus/internal/json"
 	"github.com/egladman/magus/internal/proc/endpoint"
+	"github.com/egladman/magus/internal/trail"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -45,6 +46,31 @@ func TestForwardRoundTrip(t *testing.T) {
 	args, ok := gotArgs.Load().([]string)
 	assert.True(t, ok)
 	assert.Len(t, args, 3)
+}
+
+// TestForwardCarriesTheDelegation exercises the whole seam rather than the request struct: the
+// client reads MAGUS_DELEGATION, the server validates it, and the adopted handler sees it. A run
+// launched under a delegation used to lose it the moment the daemon adopted the run, because proc
+// forwarded argv, cwd and root and no environment at all.
+func TestForwardCarriesTheDelegation(t *testing.T) {
+	got := make(chan string, 1)
+	srv, err := New(Options{
+		Handler: func(ctx context.Context, _ []string) error {
+			got <- DelegationFromContext(ctx)
+			return nil
+		},
+	})
+	require.NoError(t, err)
+	defer srv.Close()
+	require.NoError(t, srv.Start())
+
+	t.Setenv("MAGUS_DAEMON_SOCKET", srv.Addr())
+	t.Setenv(trail.EnvDelegation, "fleet/f3")
+
+	code, err := Forward(context.Background(), []string{"run", "build"}, "test", "")
+	require.NoError(t, err)
+	assert.Equal(t, 0, code)
+	assert.Equal(t, "fleet/f3", <-got)
 }
 
 func TestForwardHandlerError(t *testing.T) {
