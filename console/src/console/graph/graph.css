@@ -186,8 +186,16 @@
   background: var(--pf-t--global--background--color--secondary--default);
   border-block-end: 1px solid var(--pf-t--global--border--color--default);
 }
-.console-graph-stage__tools .pf-v6-c-toolbar__content { padding: 0; }
-.console-graph-stage__tools .pf-v6-c-toolbar__content-section { column-gap: 0.4rem; align-items: center; }
+.console-graph-stage__tools .pf-v6-c-toolbar__content { padding: 0; min-width: 0; }
+/* WRAPS, because the stage is not a fixed width: it is a pane, and the console splits panes. Five
+   buttons need about 486px and a split stage was measured at 385, so without this the row simply
+   ran on past the stage's right edge and Fullscreen sat underneath the details card - present to
+   the DOM and to a hit test, invisible to a reader. PF's own toggle-group collapse is keyed to the
+   VIEWPORT, which cannot see a narrow pane inside a wide window. */
+.console-graph-stage__tools .pf-v6-c-toolbar__content-section {
+  column-gap: 0.4rem; row-gap: 0.3rem; align-items: center; flex-wrap: wrap; min-width: 0;
+}
+.console-graph-stage__tools .pf-m-toggle-group { flex-wrap: wrap; row-gap: 0.3rem; min-width: 0; }
 /* The actions sit at the trailing edge; the provenance badge keeps the leading edge, which is what
    a header bar is for - a reading on the left, what you can do on the right. */
 .console-graph-stage__tools .pf-m-toggle-group { margin-inline-start: auto; }

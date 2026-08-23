@@ -60,7 +60,18 @@
              not an inline addon - as an addon it ate a third of the 18rem sidebar and truncated the
              field to "kind:...". Keeps #node-search and #search-copy-btn (main.ts wires them by id). -->
         <div class="console-graph-sidebar__search">
-          <p class="console-graph-querybar__prompt" id="query-prompt">magus query</p>
+          <!-- The help glyph belongs to the SECTION LABEL, like Arrangement's, Color's and Graph's.
+               It used to be a pf-m-control button welded to the input, which made the one help
+               affordance on the surface that is not a circle - console.css's own note says the
+               shared glyph exists so that "every console app's help affordance is an identical
+               circle (the graph query prompt, the log filter)", and this was the query prompt. -->
+          <div class="console-graph-display__sublabelrow">
+            <p class="console-graph-querybar__prompt" id="query-prompt">magus query</p>
+            <!-- attachHelpPopover (main.ts) upgrades this into a tap-to-open popover, reading the
+                 title= below as its body and stripping the attribute - a bare title tooltip never
+                 fires on touch, so on mobile this used to do nothing. -->
+            <button id="graph-query-help" type="button" class="console-render-help-glyph" aria-label="Query syntax" title="Filter the graph by typing terms. Free text matches names; kind:spell / project:web / relation:uses / id:build filter by field; a leading hyphen excludes. Terms combine with AND. Full list under Reference > Search syntax.">?</button>
+          </div>
           <div class="pf-v6-c-input-group console-graph-querybar">
             <div class="pf-v6-c-input-group__item pf-m-fill">
               <span class="pf-v6-c-form-control">
@@ -72,32 +83,10 @@
                 <datalist id="node-suggestions"></datalist>
               </span>
             </div>
-            <div class="pf-v6-c-input-group__item">
-              <!-- attachHelpPopover (main.ts) upgrades this into a tap-to-open popover, reading the
-                   title= below as its body and stripping the attribute - a bare title tooltip never
-                   fires on touch, so on mobile this button used to do nothing. -->
-              <button id="graph-query-help" type="button" class="pf-v6-c-button pf-m-control" aria-label="Query syntax" title="Filter the graph by typing terms. Free text matches names; kind:spell / project:web / relation:uses / id:build filter by field; a leading hyphen excludes. Terms combine with AND. Full list under Reference > Search syntax.">
-                <span class="pf-v6-c-button__text" aria-hidden="true">?</span>
-              </button>
-            </div>
-            <div class="pf-v6-c-input-group__item">
-              <!-- Opens the question builder (querybuilder.ts). It replaced two columns of prebuilt
-                   chips: those ran the right query and taught nothing, because the string they
-                   typed was never shown.
-
-                   It is NAMED, and it no longer uses a three-dot glyph. Vertical dots are the
-                   universal overflow-menu affordance, so drawn that way - third in a row of four
-                   identically-styled control buttons - the one control that teaches the query
-                   language read as "more options for this text field", and the only thing saying
-                   otherwise was an aria-label a sighted reader never receives. Sliders are the
-                   filter-builder convention, and the word carries the rest. -->
-              <button id="query-builder-btn" type="button" class="pf-v6-c-button pf-m-control" title="Build a filter, or run a view, without knowing the query syntax" aria-label="Ask the graph">
-                <span class="pf-v6-c-button__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="10" cy="8" r="2.6" fill="currentColor"/><circle cx="16" cy="16" r="2.6" fill="currentColor"/></svg>
-                </span>
-                <span class="pf-v6-c-button__text">Ask</span>
-              </button>
-            </div>
+            <!-- NOTHING hangs off this field any more. Ask moved to the stage header and the syntax
+                 help became the circle beside the label above, so the input is just the input. It
+                 carried three buttons in an 18rem column, which is how the one control that teaches
+                 the query language ended up indistinguishable from an overflow menu. -->
             <!-- Copy-as-shell-command used to be the third button welded to this input. It does not
                  help you WRITE a query, which is what the other two do - it exports the one you
                  already have, alongside Fit and Open file. It moved to the stage header. -->
@@ -217,6 +206,20 @@
                   <button class="pf-v6-c-button pf-m-plain" type="button" data-overflow-toggle aria-expanded="false" aria-label="Stage tools" title="Fit, open a graph file, fullscreen">
                     <span class="pf-v6-c-button__icon"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><circle cx="12" cy="5" r="2"/><circle cx="12" cy="12" r="2"/><circle cx="12" cy="19" r="2"/></svg></span>
                   </button>
+                </div>
+                <div class="pf-v6-c-toolbar__item">
+                  <!-- Opens the question builder (querybuilder.ts). It replaced two columns of
+                       prebuilt chips: those ran the right query and taught nothing, because the
+                       string they typed was never shown.
+
+                       It lives in the HEADER, not welded to the search field, and it is named. As a
+                       three-dot glyph third in a row of four identical control buttons, the one
+                       control that teaches the query language read as "more options for this text
+                       field" - and the only thing saying otherwise was an aria-label a sighted
+                       reader never receives. Sliders are the filter-builder convention; the word
+                       carries the rest. First in the group because Ask and Copy are the two that
+                       act on the QUERY, ahead of the three that act on the canvas. -->
+                  <button id="query-builder-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Build a filter, or run a view, without knowing the query syntax" aria-label="Ask the graph"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-hidden="true"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="10" cy="8" r="2.6" fill="currentColor"/><circle cx="16" cy="16" r="2.6" fill="currentColor"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Ask</span></button>
                 </div>
                 <div class="pf-v6-c-toolbar__item">
                   <button id="search-copy-btn" class="pf-v6-c-button pf-m-secondary pf-m-small" type="button" title="Copy this query as a shell command" aria-label="Copy magus query command"><span class="pf-v6-c-button__icon pf-m-start"><svg class="console-render-btn__icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></span><span class="pf-v6-c-button__text console-render-btn__label">Copy</span></button>
