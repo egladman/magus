@@ -2,7 +2,14 @@
 
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { type Rect, fitTransform, overlayInsets, recenterOn, usableCenter } from "./viewport";
+import {
+  type Rect,
+  canvasOwnsGesture,
+  fitTransform,
+  overlayInsets,
+  recenterOn,
+  usableCenter,
+} from "./viewport";
 
 const STAGE: Rect = { left: 0, top: 0, right: 600, bottom: 400 };
 const rect = (left: number, top: number, right: number, bottom: number): Rect => ({
@@ -127,4 +134,26 @@ test("recentring on the middle of the box it fitted is the fit itself", () => {
   const fit = fitTransform(box, 600, 400);
   const t = recenterOn(fit, { x: 500, y: 400 }, 600, 400);
   assert.ok(Math.abs(t.x - fit.x) < 1e-9 && Math.abs(t.y - fit.y) < 1e-9);
+});
+
+// One finger belongs to the page wherever CSS has not given the canvas the whole gesture.
+test("canvasOwnsGesture: a wheel or mouse gesture always drives the canvas", () => {
+  for (const type of ["wheel", "mousedown", "dblclick"]) {
+    assert.equal(canvasOwnsGesture(type, "pan-y", 0), true);
+    assert.equal(canvasOwnsGesture(type, "none", 0), true);
+  }
+});
+
+test("canvasOwnsGesture: one finger scrolls the page where the canvas shares the gesture", () => {
+  assert.equal(canvasOwnsGesture("touchstart", "pan-y", 1), false);
+  assert.equal(canvasOwnsGesture("touchstart", "auto", 1), false);
+});
+
+test("canvasOwnsGesture: two fingers drive the canvas even when it shares the gesture", () => {
+  assert.equal(canvasOwnsGesture("touchstart", "pan-y", 2), true);
+  assert.equal(canvasOwnsGesture("touchstart", "pan-y", 3), true);
+});
+
+test("canvasOwnsGesture: touch-action none means one finger drives (fullscreen, desktop)", () => {
+  assert.equal(canvasOwnsGesture("touchstart", "none", 1), true);
 });

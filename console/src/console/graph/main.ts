@@ -61,7 +61,7 @@ import {
 } from "./types.js";
 import { LAYERED_COL_W, LAYERED_MAX, layoutLayered, layoutWaves } from "./layout.js";
 import { CARD_COL_W, DOT_R_PX, cardDetail, drawCard, measureCards } from "./cards.js";
-import { punchRing, shapeOfNode, traceNodeShape } from "./shapes.js";
+import { nodeReach, punchRing, shapeOfNode, traceNodeShape } from "./shapes.js";
 import { createQueryBuilder, type QueryBuilder } from "./querybuilder.js";
 import { RADIAL_MAX_RINGS, RADIAL_RING_R, layoutRadial } from "./radial.js";
 import { nodeDurationMs, formatDuration } from "./duration.js";
@@ -77,6 +77,7 @@ import {
   NO_INSETS,
   type Rect,
   type WorldBox,
+  canvasOwnsGesture,
   fitTransform,
   overlayInsets,
   recenterOn,
@@ -1024,6 +1025,9 @@ function seedBigBang() {
   }
 }
 
+// Clear space held between two settled marks, in world units.
+const NODE_GAP = 6;
+
 function startSimulation() {
   if (sim) sim?.stop(); // stop the prior run (e.g. after loading a new file) - its timer would keep ticking
   const { w, h } = resizeCanvas();
@@ -1046,9 +1050,16 @@ function startSimulation() {
     // while the graph's overall extent stays roughly put.
     .force("charge", forceManyBody().strength(-180).distanceMax(250))
     .force("center", forceCenter(simCenter.x, simCenter.y))
+    // Collide is what actually sets the spacing in the crowded core - charge is saturated there,
+    // so raising it only inflates the periphery (above). Two things decide whether a reader can
+    // tell one mark from the next. It has to measure the MARK: sizing on d.r let 18.7% of the
+    // demo graph's nodes draw over a neighbour while the simulation reported nothing touching,
+    // because an area-normalized triangle reaches 1.66x its r. And the gap has to be worth
+    // seeing: NODE_GAP is a shade wider than a median mark (r ~ 5.3), which turns the settled
+    // core from a lattice of touching shapes into separable ones, for 4% more extent.
     .force(
       "collide",
-      forceCollide<GNode>().radius((d) => d.r + 2),
+      forceCollide<GNode>().radius((d) => nodeReach(d) + NODE_GAP),
     )
     .force("x", forceX(simCenter.x).strength(0.02))
     .force("y", forceY(simCenter.y).strength(0.02))
@@ -1552,10 +1563,20 @@ function nodeAtPointer(event: MouseEvent): GNode | null | undefined {
   return best;
 }
 
+// Whether this gesture drives the graph or the page scrolling behind it. CSS owns the
+// distinction (graph.css sets touch-action per layout); this only reads its verdict.
+function canvasTakesGesture(event: Event): boolean {
+  return canvasOwnsGesture(
+    event.type,
+    getComputedStyle(canvas).touchAction,
+    (event as TouchEvent).touches?.length ?? 0,
+  );
+}
+
 function setupZoomDrag() {
   zoomBehavior = d3zoom<HTMLCanvasElement, unknown>()
     .scaleExtent([0.1, 8])
-    .filter((event) => !event.button && event.type !== "dblclick")
+    .filter((event) => !event.button && event.type !== "dblclick" && canvasTakesGesture(event))
     .on("zoom", (event) => {
       // sourceEvent is null for the programmatic transforms fitView applies; a real wheel or
       // drag means the operator has framed the graph themselves and the load-time reveal must
@@ -1570,6 +1591,9 @@ function setupZoomDrag() {
   select(canvas).call(zoomBehavior);
 
   const dragBehavior = d3drag<HTMLCanvasElement, unknown, GNode | undefined>()
+    // A one-finger drag on a node would fight the page scroll it is also starting; let the scroll
+    // win, and leave dragging to the layouts where the canvas owns the touch outright.
+    .filter((event) => !event.ctrlKey && !event.button && canvasTakesGesture(event))
     .subject((event) => nodeAtPointer(event.sourceEvent) ?? undefined)
     .on("start", (event) => {
       if (!event.subject) return;
@@ -1600,6 +1624,11 @@ function setupZoomDrag() {
       event.subject.fy = null;
     });
   select(canvas).call(dragBehavior);
+  // d3-drag writes touch-action:none inline, which outranks the stylesheet and would make the
+  // canvas swallow every touch on a phone. graph.css already sets touch-action per layout (none
+  // where the canvas owns the gesture, pan-y where the page has to be able to scroll past it), so
+  // drop the inline value and let those rules decide.
+  select(canvas).style("touch-action", null);
 
   canvas.addEventListener("click", (event) => {
     const n = nodeAtPointer(event);
