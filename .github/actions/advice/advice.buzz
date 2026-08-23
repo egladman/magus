@@ -198,7 +198,9 @@ export fun linkTerms(text: str) > str {
     final parts = text.split("`");
     var done = mut [];
     var i = 0;
-    var joined = "";
+    // The backticks come back via join rather than by re-prepending one per segment: the
+    // separator is what split() removed, so putting it back is the join's job.
+    final pieces = mut [<str>];
     foreach (part in parts) {
         var piece = part;
         // Odd segments sit between backticks. Leave them exactly as written. A table row
@@ -220,11 +222,10 @@ export fun linkTerms(text: str) > str {
                     + piece.sub(at + term.len());
             }
         }
-        if (i > 0) { joined = joined + "`"; }
-        joined = joined + piece;
+        pieces.append(piece);
         i = i + 1;
     }
-    return joined;
+    return pieces.join("`");
 }
 
 // linkCodes turns a bare diagnostic code into a link to its page. Inline, for the same
@@ -247,20 +248,23 @@ export fun codeURL(code: str) > str {
 }
 
 export fun linkCodes(text: str) > str {
-    var joined = "";
+    final parts = mut [<str>];
     var rest = text;
     while (true) {
         final at = rest.indexOf("MGS");
-        if (at == null) { return joined + rest; }
+        if (at == null) {
+            parts.append(rest);
+            return parts.join("");
+        }
         final code = rest.sub(at, len: 7);
         // Only a full MGS#### token, and only when it is not already inside a link or a
         // URL - doctor already prints "see: <url>" for some findings.
         final before = rest.sub(0, len: at);
         final linked = before.split("[").len() > before.split("]").len();
         if (code.len() == 7 and !linked and before.indexOf("codes/") == null) {
-            joined = joined + before + "[" + code + "](" + codeURL(code) + ")";
+            parts.append(before + "[" + code + "](" + codeURL(code) + ")");
         } else {
-            joined = joined + rest.sub(0, len: at + 3);
+            parts.append(rest.sub(0, len: at + 3));
             rest = rest.sub(at + 3);
             continue;
         }
