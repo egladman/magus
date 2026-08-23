@@ -24,6 +24,29 @@ export interface Insets {
 
 export const NO_INSETS: Insets = { left: 0, right: 0, top: 0, bottom: 0 };
 
+/**
+ * canvasOwnsGesture decides whether a starting gesture belongs to the canvas or to the page
+ * scrolling behind it. Everything that is not a touch does: a wheel, a mouse drag, a trackpad
+ * pinch have no scroll to compete with here.
+ *
+ * A touch is shared. Where the canvas is a block in a scrolling column - the stacked narrow
+ * layout - one finger has to be able to scroll straight past it, or half the screen is a dead
+ * zone the reader cannot swipe out of. Two fingers are unambiguous and drive the graph.
+ *
+ * `touchAction` is the canvas's computed touch-action, and it is the source of that distinction:
+ * `none` means CSS has already given the element every gesture (desktop, fullscreen), so one
+ * finger drives. Reading it rather than re-testing the breakpoint keeps the rule stated once, in
+ * the stylesheet that sets it.
+ */
+export function canvasOwnsGesture(
+  eventType: string,
+  touchAction: string,
+  touchCount: number,
+): boolean {
+  if (eventType !== "touchstart") return true;
+  return touchAction === "none" || touchCount > 1;
+}
+
 const EDGES = ["left", "right", "top", "bottom"] as const;
 
 /**

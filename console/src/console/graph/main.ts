@@ -77,6 +77,7 @@ import {
   NO_INSETS,
   type Rect,
   type WorldBox,
+  canvasOwnsGesture,
   fitTransform,
   overlayInsets,
   recenterOn,
@@ -1562,10 +1563,20 @@ function nodeAtPointer(event: MouseEvent): GNode | null | undefined {
   return best;
 }
 
+// Whether this gesture drives the graph or the page scrolling behind it. CSS owns the
+// distinction (graph.css sets touch-action per layout); this only reads its verdict.
+function canvasTakesGesture(event: Event): boolean {
+  return canvasOwnsGesture(
+    event.type,
+    getComputedStyle(canvas).touchAction,
+    (event as TouchEvent).touches?.length ?? 0,
+  );
+}
+
 function setupZoomDrag() {
   zoomBehavior = d3zoom<HTMLCanvasElement, unknown>()
     .scaleExtent([0.1, 8])
-    .filter((event) => !event.button && event.type !== "dblclick")
+    .filter((event) => !event.button && event.type !== "dblclick" && canvasTakesGesture(event))
     .on("zoom", (event) => {
       // sourceEvent is null for the programmatic transforms fitView applies; a real wheel or
       // drag means the operator has framed the graph themselves and the load-time reveal must
@@ -1580,6 +1591,9 @@ function setupZoomDrag() {
   select(canvas).call(zoomBehavior);
 
   const dragBehavior = d3drag<HTMLCanvasElement, unknown, GNode | undefined>()
+    // A one-finger drag on a node would fight the page scroll it is also starting; let the scroll
+    // win, and leave dragging to the layouts where the canvas owns the touch outright.
+    .filter((event) => !event.ctrlKey && !event.button && canvasTakesGesture(event))
     .subject((event) => nodeAtPointer(event.sourceEvent) ?? undefined)
     .on("start", (event) => {
       if (!event.subject) return;
@@ -1610,6 +1624,11 @@ function setupZoomDrag() {
       event.subject.fy = null;
     });
   select(canvas).call(dragBehavior);
+  // d3-drag writes touch-action:none inline, which outranks the stylesheet and would make the
+  // canvas swallow every touch on a phone. graph.css already sets touch-action per layout (none
+  // where the canvas owns the gesture, pan-y where the page has to be able to scroll past it), so
+  // drop the inline value and let those rules decide.
+  select(canvas).style("touch-action", null);
 
   canvas.addEventListener("click", (event) => {
     const n = nodeAtPointer(event);

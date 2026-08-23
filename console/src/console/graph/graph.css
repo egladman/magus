@@ -415,38 +415,59 @@
 .console-graph-card__noteslink { margin-inline-start: 0.7rem; padding: 0; border: 0; background: transparent; color: var(--console-accent); cursor: pointer; font: inherit; font-size: 0.78rem; }
 .console-graph-card__noteslink:hover { text-decoration: underline; }
 
-/* Narrow screens: stack the columns - the sidebar, then the canvas, then the detail card. */
+/* Narrow screens: one scrolling column - the sidebar, then the canvas, then the detail card. */
 @media (max-width: 900px) {
-  /* grid-template-rows must be reset here - the desktop rule's minmax(0, 1fr) single row
-     otherwise survives into this stacked layout and collapses the whole app to ~1px tall (grid-
-     auto-rows alone only sizes rows ADDED beyond the explicit template; it does not replace it).
-     The sidebar's children (search box, count row, node list) then overflowed and painted UNDER
-     the canvas (.console-graph-stage sits later in DOM with no stacking context of its own),
-     so a tap meant for "N nodes, N edges" landed on a graph node instead. */
-  /* Stack into one column, and size the whole panel to the SAME budget the desktop rule above
-     uses - the pane the console shell actually hands this surface.
-     The three rows now SHARE that budget as fractions of it. Sizing them from the viewport did
-     not work: the sidebar and the detail column were content-sized rows capped at 40svh and
-     50svh, so together they could claim 90% of the VIEWPORT out of a panel that is the viewport
-     minus the shell's chrome (a doubled title bar plus the status bar, ~123px on a phone). Both
-     rows are sized before the stage's 1fr gets anything, so the canvas - the reason this surface
-     exists - was left a band of whatever those two did not want, sometimes nothing at all. As
-     fractions the stage keeps three fifths of the panel at every height, and the two panels
-     around it, which already scroll inside themselves, take a fifth each. */
+  /* The desktop rule fills the pane exactly and hides its overflow, which on a phone turned each
+     of the three regions into a keyhole with its own scrollbar: 573px of sidebar inside a 134px
+     row, a second scroller (the legend) nested inside THAT, and no document scroll to fall back
+     on - so every swipe landed in some region's scroller and nothing ever reached the thing below
+     it. The shell already gives each surface a scrolling pane; here the surface simply takes its
+     content height and lets that pane do the scrolling, which is what a phone reader expects. */
   .console-graph-app {
-    grid-template-columns: 1fr;
-    grid-template-rows: minmax(0, 1fr) minmax(0, 3fr) minmax(0, 1fr);
-    grid-auto-rows: min-content;
-    flex: 1;
-    min-height: 320px;
+    display: flex;
+    flex-direction: column;
+    flex: 0 0 auto;
+    height: auto;
+    min-height: 0;
+    overflow: visible;
   }
-  .console-graph-stage { height: auto; min-height: 0; }
+  /* Stage first: the sidebar's full height is most of a phone screen, so in DOM order the graph -
+     the reason this surface exists - landed entirely below the fold. Reordered, the reader lands
+     on the graph and swipes down to the controls and then the details, one continuous column. */
+  .console-graph-stage { order: -1; }
+  /* No internal scrollers in the stacked flow: a swipe anywhere in the sidebar or the detail card
+     scrolls the page, not a 134px window onto four times its own content. #node-list below keeps
+     its cap - it is a deliberately bounded result list, not a region that got squeezed. */
+  .console-graph-sidebar,
+  .console-graph-detail,
+  #explain-card,
+  .console-graph-legend {
+    max-height: none;
+    overflow: visible;
+  }
+  /* Each region takes its content height. The desktop rules make these flex children that may
+     shrink (flex: 1 1 auto, min-height: 0) because there they share one fixed-height row; left in
+     place with overflow visible, the detail card shrank below its content and painted over the
+     sidebar instead of sitting after it. */
+  .console-graph-stage,
+  .console-graph-sidebar,
+  .console-graph-detail,
+  #explain-card {
+    flex: 0 0 auto;
+    min-height: auto;
+  }
   .console-graph-sidebar { border-right: 0; border-bottom: 1px solid var(--pf-t--global--border--color--default); }
   .console-graph-detail { border-left: 0; border-top: 1px solid var(--pf-t--global--border--color--default); }
-  /* Mobile canvas chrome: the stage tools collapse behind the PF kebab toggle (pf-m-show-on-lg,
-     shared ../toolbar.ts) - no bespoke label-dropping here. The legend needs no mobile rule of
-     its own any more: it lives in the sidebar, which is already capped and scrolls. */
-  .console-graph-legend { max-height: 9rem; }
+  /* The canvas needs a definite height once it is a block in a scrolling column rather than a
+     grid row. Roughly two thirds of the screen: enough to read the graph, little enough that the
+     detail card below it is visibly there to scroll to. */
+  .console-graph-stage { height: min(68svh, 560px); }
+  /* One finger belongs to the page. touch-action:pan-y hands the browser a vertical swipe, so a
+     scroll that starts on the canvas carries on past it instead of dying in a dead zone; two
+     fingers still reach d3-zoom to pan and pinch (canvasOwnsGesture in viewport.ts reads this
+     very property, so the breakpoint is stated once, here). Fullscreen below restores
+     touch-action:none, because there the canvas IS the page and one finger should drive it. */
+  #graph-canvas { touch-action: pan-y; }
   /* The count/chevron toggle row is the tap target for the stats disclosure below; give it
      comfortable tap padding and a legible chevron (it was ~9px, effectively untappable). */
   .console-graph-sidebar__count { padding-block: 0.55rem; }
@@ -454,14 +475,15 @@
   /* The node cloud stays IN FLOW here and scrolls inside its own box. It used to be a
      position:fixed card that JS anchored under #list-toggle, which worked only while the toggle
      was the LAST thing in the sidebar - once the results moved above the View and Source
-     sections, that floating card covered them. In flow it cannot: the sidebar's row is capped at
-     a fifth of the panel and it scrolls itself, so a long list moves the sidebar's own scrollbar
-     and never touches the canvas. */
+     sections, that floating card covered them. */
   #node-list {
     max-height: min(40svh, 320px);
     overflow-y: auto;
   }
 }
+
+/* Fullscreen on any width: the canvas is the whole page, so it owns every gesture again. */
+.console-graph-app:fullscreen #graph-canvas { touch-action: none; }
 
 /* Reference disclosures (Views, Search syntax, Colors and forces, Loading a graph by URL):
    an uppercase, muted, tracked summary label over a bordered, tinted panel (the PF secondary
