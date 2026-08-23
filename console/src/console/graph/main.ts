@@ -5495,6 +5495,14 @@ function bootWireEvents() {
   const kindHelpBtn = el("graphkind-note");
   if (kindHelpBtn) attachHelpPopover(kindHelpBtn);
 
+  // Arrangement and Color: the two controls that decide what the canvas looks like, and the two a
+  // reader is most likely to mistake for each other. Same treatment, so the answer arrives on a tap
+  // rather than only on a hover no touch device produces.
+  for (const id of ["arrangement-help", "color-help"] as const) {
+    const btn = el(id);
+    if (btn) attachHelpPopover(btn);
+  }
+
   // Wire the projection unfold button ("Show full graph").
   const unfoldBtnWire = el("projection-unfold-btn");
   if (unfoldBtnWire) {

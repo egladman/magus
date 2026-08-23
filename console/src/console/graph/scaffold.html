@@ -135,7 +135,13 @@
              override for the arrangement axis, and main.ts drives selection and each button's
              disabled/title from syncLayoutToggle. -->
         <div class="console-graph-sidebar__modes" data-control-size="compact">
+          <div class="console-graph-display__sublabelrow">
           <p class="console-graph-sidebar__modeslabel" id="arrangement-label">Arrangement</p>
+          <!-- Each button already carries its own title, but a reader has to hover four of them one
+               at a time to learn that they answer four different questions rather than restyling
+               one answer. This says what the axis IS, which is the part no per-button tooltip can. -->
+          <button id="arrangement-help" type="button" class="console-render-help-glyph" aria-label="What arrangement changes" title="How the nodes are POSITIONED. Force lets physics find clusters and hubs - best for exploring. Layered ranks nodes left to right so dependency direction reads off the page. Waves groups into the sets magus can run at the same time. Radial rings one node by hops, so pick a node first. The nodes and edges are identical in all four; only where they sit changes.">?</button>
+          </div>
           <div class="pf-v6-c-toggle-group console-graph-display__layoutgroup" role="group" aria-labelledby="arrangement-label">
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="force" title="Free-floating physics layout: clusters and highly-connected hubs pop out. Best for exploring the whole graph."><span class="pf-v6-c-toggle-group__text">Force</span></button></div>
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-layout="layered" title="Left-to-right dependency flow: what depends on what, arranged in tiers. Best for reading direction."><span class="pf-v6-c-toggle-group__text">Layered</span></button></div>
@@ -147,7 +153,12 @@
                spent two full rows of a 20rem column on controls that together do not fill one. -->
           <div class="console-graph-sidebar__viewpair">
           <div class="console-graph-sidebar__viewcell">
+          <div class="console-graph-display__sublabelrow">
           <p class="console-graph-display__sublabel" id="color-label">Color</p>
+          <!-- Paired with Arrangement's: the two controls look alike and are not, and the thing
+               worth saying is that this one moves nothing. -->
+          <button id="color-help" type="button" class="console-render-help-glyph" aria-label="What color changes" title="What the node colors MEAN - nothing moves. By default a node is colored by its kind, the legend below. A preset overrides that: Project gives each project a hue so boundaries show, Spell does the same for the toolchain, Depth shades by how deep a node sits in the dependency chain, and Duration shades by how long it took to run once the graph carries timing. Click an active preset to clear it.">?</button>
+          </div>
           <div class="pf-v6-c-toggle-group console-graph-colorgroup__presetrow" role="group" aria-labelledby="color-label">
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="project" title="Give each project its own hue, so the boundaries show on the canvas."><span class="pf-v6-c-toggle-group__text">Project</span></button></div>
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button console-graph-colorgroup__preset" data-preset="spell" title="Give each spell its own hue, so the toolchain shows as an architectural layer."><span class="pf-v6-c-toggle-group__text">Spell</span></button></div>
