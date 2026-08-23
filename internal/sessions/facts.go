@@ -50,7 +50,7 @@ func NewFactHandler(root string, start SessionStart) slog.Handler {
 
 func (h *FactHandler) Enabled(context.Context, slog.Level) bool { return true }
 
-func (h *FactHandler) Handle(_ context.Context, r slog.Record) error {
+func (h *FactHandler) Handle(ctx context.Context, r slog.Record) error {
 	e, ok := journal.EventFromRecord(r)
 	if !ok || e.Kind != journal.KindResult || e.Target == "" {
 		return nil
@@ -71,7 +71,7 @@ func (h *FactHandler) Handle(_ context.Context, r slog.Record) error {
 	if h.writer == nil {
 		w, err := Open(h.dir, e.Inv, h.start)
 		if err != nil {
-			h.stopRecording(err)
+			h.stopRecording(ctx, err)
 			return nil
 		}
 		h.writer = w
@@ -88,7 +88,7 @@ func (h *FactHandler) Handle(_ context.Context, r slog.Record) error {
 		// One failed append means the store is unwritable (a full disk, a read-only
 		// state dir); retrying per target would repeat the same failure once per
 		// result and slow the run down to prove it.
-		h.stopRecording(err)
+		h.stopRecording(ctx, err)
 	}
 	return nil
 }
@@ -100,11 +100,11 @@ func (h *FactHandler) Handle(_ context.Context, r slog.Record) error {
 // repository: nothing recorded, and `magus session` then reporting in good faith that
 // no session has run yet. The warning is what keeps that empty state honest.
 //
-// The caller holds h.mu. slog.Warn cannot re-enter it: a plain log record carries no
+// The caller holds h.mu. slog.WarnContext cannot re-enter it: a plain log record carries no
 // journal event, so Handle returns before it reaches the lock.
-func (h *FactHandler) stopRecording(err error) {
+func (h *FactHandler) stopRecording(ctx context.Context, err error) {
 	h.broken = true
-	slog.Warn("magus: this run was not recorded in the session store, so `magus session` will not list it; check the store is writable and has space",
+	slog.WarnContext(ctx, "magus: this run was not recorded in the session store, so `magus session` will not list it; check the store is writable and has space",
 		slog.String("store", h.dir),
 		slog.String("error", err.Error()))
 }

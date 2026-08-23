@@ -158,7 +158,7 @@ func startDaemonBackground(ctx context.Context, cfg config.Config, subArgs []str
 	if os.Getenv(daemonDetachEnv) != "" {
 		return 0, false // we are the detached child: run the daemon in the foreground
 	}
-	if hasBoolFlag(subArgs, "foreground") {
+	if wantsForeground(subArgs) {
 		return 0, false // explicit foreground for a supervisor / debugging
 	}
 
@@ -249,11 +249,11 @@ func isServerStartHelp(subArgs []string) bool {
 	return false
 }
 
-// hasBoolFlag reports whether -name or --name appears in args. Used to detect --foreground
-// before the formal flag parse, so the backgrounding decision is made in startup().
-func hasBoolFlag(args []string, name string) bool {
+// wantsForeground detects --foreground before the formal flag parse, so the
+// backgrounding decision is made in startup().
+func wantsForeground(args []string) bool {
 	for _, a := range args {
-		if a == "-"+name || a == "--"+name {
+		if a == "-foreground" || a == "--foreground" {
 			return true
 		}
 	}

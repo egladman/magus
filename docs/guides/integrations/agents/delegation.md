@@ -29,13 +29,13 @@ partition by write set rather than by affected project, prove the delegations ca
 collide, bound the fan-out, match a model to each delegation. This page is the surface
 that skill writes to and reads from.
 
-| step                     | surface                                              |
-| ------------------------ | ---------------------------------------------------- |
-| Record the working state | `magus vcs checkpoint`, `magus_vcs_checkpoint`       |
-| Hand out the delegations | the host's own spawn - recorded, never judged        |
-| Declare the plan         | `magus_ledger` (`op=put`)                            |
-| Watch it                 | the console Plan surface, `GET /api/v1/ledger`       |
-| Verify                   | the actual diff since each delegation's checkpoint   |
+| step                     | surface                                            |
+| ------------------------ | -------------------------------------------------- |
+| Record the working state | `magus vcs checkpoint`, `magus_vcs_checkpoint`     |
+| Hand out the delegations | the host's own spawn - recorded, never judged      |
+| Declare the plan         | `magus_ledger` (`op=put`)                          |
+| Watch it                 | the console Plan surface, `GET /api/v1/ledger`     |
+| Verify                   | the actual diff since each delegation's checkpoint |
 
 No surface in that table enforces anything. The ledger is a declaration, the
 checkpoint is a reading, and the Plan surface renders both; a worker that writes

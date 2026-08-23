@@ -98,12 +98,12 @@ func TestIsServerStartHelpSkipsTheSubcommand(t *testing.T) {
 	assert.False(t, isServerStartHelp([]string{"help"}), "the subcommand itself is not a help flag")
 }
 
-func TestHasBoolFlag(t *testing.T) {
-	assert.True(t, hasBoolFlag([]string{"start", "--foreground"}, "foreground"))
-	assert.True(t, hasBoolFlag([]string{"start", "-foreground"}, "foreground"))
+func TestWantsForeground(t *testing.T) {
+	assert.True(t, wantsForeground([]string{"start", "--foreground"}))
+	assert.True(t, wantsForeground([]string{"start", "-foreground"}))
 	// A pre-parse scanner takes only the bare spellings; an =value form is not a bool.
-	assert.False(t, hasBoolFlag([]string{"start", "--foreground=true"}, "foreground"))
-	assert.False(t, hasBoolFlag([]string{"start"}, "foreground"))
+	assert.False(t, wantsForeground([]string{"start", "--foreground=true"}))
+	assert.False(t, wantsForeground([]string{"start"}))
 }
 
 // TestConsoleURLsDegradeToEmpty pins the contract both link builders share: a disabled
