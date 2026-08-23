@@ -27,7 +27,7 @@ import (
 // session that the notification is meant to help.
 //
 // This is the ONLY producer of attention requests. An event that means the work
-// has stopped until a person acts also opens a durable request `magus attention`
+// has stopped until a person acts also opens a durable request `magus session attention`
 // lists; there is deliberately no `attention raise` twin, because one ingest path
 // is what keeps the queue's contents traceable to a single normalization.
 func notifyCmd(ctx context.Context, root string, in io.Reader, out io.Writer, args []string) error {

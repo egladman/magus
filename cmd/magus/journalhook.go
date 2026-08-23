@@ -16,7 +16,7 @@ import (
 // verb is the subcommand ("run", "affected") the recorded command line begins with;
 // args is the rest of it.
 //
-// It is shared rather than written per command on purpose: `magus sessions` is a view
+// It is shared rather than written per command on purpose: `magus session` is a view
 // of the repository, so a target result must land in the store in the same shape no
 // matter which command produced it. Two copies of the wiring would drift, and the
 // drift would read as a gap in the history rather than as a bug.

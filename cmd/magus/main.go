@@ -27,8 +27,7 @@
 //	magus server <start|stop>            manage the persistent daemon (MCP starts alongside it)
 //	magus completion <shell>            print a shell completion script
 //	magus init [flags]                  bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)
-//	magus hook [flags]                  evaluate one command or file path against the guard rules
-//	magus notify [flags]                raise one attention event from stdin (typed JSON or plain text)
+//	magus session <subcommand>          what sessions did and are blocked on; hosts write via hook and notify
 //	magus self update [flags]           update magus to the latest release
 //	magus version                       print version info
 //	magus help                          show this message
