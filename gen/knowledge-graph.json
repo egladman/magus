@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2374,
-  "edge_count": 6049,
+  "edge_count": 6050,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -44037,6 +44037,14 @@
     {
       "source": "doc:docs/reference/skills/magus-delegate-multi-agent.md",
       "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/reference/skills/magus-delegate-multi-agent.md"
+    },
+    {
+      "source": "doc:docs/reference/skills/magus-delegate-multi-agent.md",
+      "target": "doc:docs/reference/manpage/magus-session.md",
       "relation": "references",
       "confidence": "inferred",
       "score": 0.6,

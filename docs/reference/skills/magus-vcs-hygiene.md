@@ -5,8 +5,8 @@ description: "Safe git operations in a magus workspace (any repo with magusfile.
 tags: [agents, skills, magus-vcs-hygiene]
 aliases:
   - reference/skills/magus-vcs
-skill_full_bytes: 7482
-skill_simple_bytes: 5469
+skill_full_bytes: 8104
+skill_simple_bytes: 5975
 ---
 
 # magus-vcs-hygiene
@@ -30,9 +30,9 @@ An installed copy carries a provenance stamp, so `magus doctor` can tell you whe
 | `license` | `GPL-3.0-or-later` |
 | `compatibility` | `any-agent` |
 | `source` | `magus` |
-| `agent-skill-version` | `41` |
+| `agent-skill-version` | `43` |
 | `knowledge-schema-version` | `9` |
-| `skill-content` | `380a4acf8b72` |
+| `skill-content` | `f5ec6d457981` |
 | `skill-variant` | `full` |
 
 The `skill-content` digest covers this skill alone, and both permutations below report it: they go stale together, never one silently, and a change to another skill does not move it.
@@ -120,6 +120,15 @@ REPORTS every undeclared path instead of sweeping it in, which is the one thing
 `git add -A` cannot do. Pass `--untracked` when one of those undeclared paths is
 genuinely a new source file. Staging specific paths by hand stays fine; the long
 form below is what it automates, and what to fall back to.
+
+Read the change before you stage it. `magus diff --cost` orders the uncommitted
+changeset by what it can BREAK rather than alphabetically, folds the generated
+files away, and appends what landing it costs: which projects rebuild, who has been
+changing them, an estimate from recorded run times, what the workspace's advisors
+say, and any human-authored note anchored to a file or symbol you touched.
+None of it is a verdict - nothing is gated on it and the exit code is unchanged -
+and each section says when it could not measure something, so an empty one reads as
+"nobody looked" rather than as a clean bill of health.
 
 For a rare VCS fact that needs Magus's portable VCS module rather than porcelain,
 use one inline Buzz evaluation:
@@ -251,6 +260,14 @@ It stages sources and generated outputs together (they belong in one commit) and
 REPORTS every undeclared path instead of sweeping it in. Pass `--untracked` when one of those undeclared paths is
 genuinely a new source file. Staging specific paths by hand stays fine; the long
 form below is what it automates, and what to fall back to.
+
+Read the change before you stage it. `magus diff --cost` orders the uncommitted
+changeset by what it can BREAK rather than alphabetically, folds the generated
+files away, and appends what landing it costs: which projects rebuild, who has been
+changing them, an estimate from recorded run times, what the workspace's advisors
+say, and any human-authored note anchored to a file or symbol you touched - context, never a
+verdict, and an empty section means nobody could measure it rather than nothing
+found.
 
 For a rare VCS fact that needs Magus's portable VCS module rather than porcelain,
 use one inline Buzz evaluation:
