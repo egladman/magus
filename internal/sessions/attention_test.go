@@ -186,7 +186,7 @@ func TestAttentionIgnoresUnknownKindsAndMalformedPayloads(t *testing.T) {
 	assert.Equal(t, "att-1", open[0].ID)
 }
 
-// The queue is a view over the SAME store `magus sessions` reads, so an attention
+// The queue is a view over the SAME store `magus session` reads, so an attention
 // record has to survive the file round trip and still count as session activity.
 func TestAttentionRoundTripsThroughTheStore(t *testing.T) {
 	t.Parallel()

@@ -325,24 +325,24 @@ Magus process. Do not replace it with sleep loops, repeated `ps`, or a waiting
 agent.
 
 A blocked worker RAISES rather than stalling quietly. Piping the block to `magus
-notify --outcome waiting` (blocked on input) or `--outcome permission` (blocked on
+session notify --outcome waiting` (blocked on input) or `--outcome permission` (blocked on
 approval) opens a durable request in this repository; no other outcome opens one.
-`magus attention` lists what is open{{if .Full}}, keyed by repository identity rather
+`magus session attention` lists what is open{{if .Full}}, keyed by repository identity rather
 than by checkout path, so a request raised inside a worker's own isolated tree is
-listed in yours{{end}}, and `magus attention ls -q` prints nothing and exits 1 on an
+listed in yours{{end}}, and `magus session attention -q` prints nothing and exits 1 on an
 empty queue, which is the form to test from a loop. Nothing closes a request by
-itself: the orchestrator, or any human, disposes it with `magus attention dispose
+itself: the orchestrator, or any human, disposes it with `magus session dispose
 <id> --reason "<why>"`{{if .Full}}. There is no expiry and no auto-dispose, because a
 request magus could answer on its own would not have needed a person{{end}}. A worker
 that raised one waits for the disposition instead of choosing for itself.
 
-`magus sessions` is how the root audits what a delegation actually RAN, as opposed
+`magus session` is how the root audits what a delegation actually RAN, as opposed
 to what it reported. Each session carries the delegation it was launched under -
 the same `MAGUS_DELEGATION` channel - along with the targets it finished and how
 they ended, and the store is keyed by repository identity, so a worker in its own
 worktree is still listed here{{if .Full}}. Attribution is cooperative: an empty
 delegation means the session claimed none, which is the ordinary answer for anything
-a person ran by hand, never an error{{end}}. `magus sessions --since 2h -o json` is the
+a person ran by hand, never an error{{end}}. `magus session --since 2h -o json` is the
 form that answers what the fleet has been doing.
 
 {{if .Full}}Course-correct at explicit checkpoints: after a child proposes new

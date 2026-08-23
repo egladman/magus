@@ -256,7 +256,7 @@ func (w *Writer) resume() {
 func (w *Writer) Append(kind string, payload any) error {
 	// The message bound is applied HERE rather than at the producer because it
 	// protects the store, not the caller: a message is whatever a hook piped to
-	// `magus notify` on stdin, and one unbounded line is a line every future reader of
+	// `magus session notify` on stdin, and one unbounded line is a line every future reader of
 	// this repository pays for. A producer that forgets is the case this exists for.
 	if open, ok := payload.(AttentionOpen); ok {
 		payload = open.bounded()

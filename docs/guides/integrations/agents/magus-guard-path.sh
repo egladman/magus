@@ -82,7 +82,7 @@ transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty")
 # exiting non-zero - which leaves the host with no verdict rather than an unattributed one. Try with
 # attribution, fall back to the call this script made before it existed.
 guard() {
-  printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" hook --path "$@" -o "template=$HOST_RESPONSE"
+  printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" session hook --path "$@" -o "template=$HOST_RESPONSE"
 }
 # Same discrimination as magus-guard-command.sh, and for the same reason now that this
 # surface can render a deny: a DENY exits non-zero (2) with the verdict on stdout, so a

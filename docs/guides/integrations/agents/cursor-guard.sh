@@ -68,7 +68,7 @@ case "$event" in
 	# fired. The template renders the deny reason or the advise context, and
 	# nothing at all for a pass. magus re-roots the absolute path Cursor sends
 	# onto the workspace itself.
-	verdict=$(printf '%s' "$event" | jq -r '.file_path' | "$GUARD_MAGUS_BIN" hook --path --agent-name cursor \
+	verdict=$(printf '%s' "$event" | jq -r '.file_path' | "$GUARD_MAGUS_BIN" session hook --path --agent-name cursor \
 		-o 'template={{if eq .decision "deny"}}{{.reason}}{{else if eq .decision "advise"}}{{.context}}{{end}}' 2>/dev/null)
 	[ -n "$verdict" ] || exit 0
 	# Cursor surfaces a non-blocking hook's stderr, so the message goes there as
@@ -89,12 +89,12 @@ if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
 	exit 0
 fi
 
-# Captured and printed rather than piped straight through, because `magus hook` exits
+# Captured and printed rather than piped straight through, because `magus session hook` exits
 # non-zero on a deny and Cursor reads a non-zero hook as a CRASH - which it fails open on,
 # unless failClosed is set. Letting that status escape would turn every block into an
 # allow, silently, which is the one outcome worse than not installing the guard. Cursor's
 # channel is the JSON on stdout; this exits 0 so that JSON is what it acts on.
-verdict=$(printf '%s' "$event" | jq -r '.command' | "$GUARD_MAGUS_BIN" hook --agent-name cursor \
+verdict=$(printf '%s' "$event" | jq -r '.command' | "$GUARD_MAGUS_BIN" session hook --agent-name cursor \
 	-o 'template={{if eq .decision "deny"}}{"permission":"deny","user_message":{{toJson .reason}},"agent_message":{{toJson .reason}}}{{else}}{"permission":"allow"}{{end}}' 2>/dev/null)
 [ -n "$verdict" ] || verdict='{"permission":"allow"}'
 printf '%s' "$verdict"

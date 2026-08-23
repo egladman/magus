@@ -16,18 +16,63 @@ import (
 // The store is grow-only, so an unbounded default would get slower forever.
 const sessionsDefaultLimit = 20
 
-// sessionsCmd shows what recent magus sessions did, folded across every worktree of
-// this repository.
+// sessionCmd is the whole session family behind one noun. The grouping is the point:
+// every subverb reads or writes the one store keyed by repository identity, none needs
+// the magusfile to load, and the machine ingest (hook, notify) lives beside the human
+// reads instead of burning top-level names no person types.
 //
-// It is NOT the console's Activity surface, and the two no longer share a name: the
-// console's Activity reads internal/trail (actions taken against the daemon) and
-// keeps the Activity name, while this reads internal/sessions (facts a session
-// produced). The two stores are still meant to converge; until they do, each is named
-// after what it holds rather than both after one word.
-func sessionsCmd(_ context.Context, root string, args []string) error {
+// The listing is NOT the console's Activity surface: Activity reads internal/trail
+// (actions against the daemon), this reads internal/sessions (facts a session
+// produced). The stores are meant to converge; until they do, each is named after
+// what it holds.
+func sessionCmd(ctx context.Context, root string, args []string) error {
+	verb, rest := "ls", args
+	// A leading flag belongs to the default verb, so `magus session -o json` and
+	// `magus session --since 2h` read as listings rather than unknown subcommands.
+	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
+		verb, rest = args[0], args[1:]
+	}
+	switch verb {
+	case "help":
+		sessionUsage()
+		return nil
+	case "ls":
+		return sessionList(root, rest)
+	case "attention":
+		return attentionList(root, rest)
+	case "dispose":
+		return attentionDispose(root, rest)
+	case "hook":
+		return hookCmd(ctx, os.Stdin, os.Stdout, rest)
+	case "notify":
+		return notifyCmd(ctx, root, os.Stdin, os.Stdout, rest)
+	default:
+		return usagef("magus session: unknown subcommand %q (want ls, attention, dispose, hook, or notify); the bare command lists recent sessions, bounded by --limit and --since", verb)
+	}
+}
+
+func sessionUsage() {
+	fmt.Fprintln(os.Stderr, "Usage: magus session [ls] [--limit <n>] [--since <when>]")
+	fmt.Fprintln(os.Stderr, "       magus session attention [flags]")
+	fmt.Fprintln(os.Stderr, "       magus session dispose <id> [-reason <text>]")
+	fmt.Fprintln(os.Stderr, "       magus session hook [flags]      # machine: guard verdicts, wired by agent hosts")
+	fmt.Fprintln(os.Stderr, "       magus session notify [flags]    # machine: event ingest, wired by agent hosts")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "One store, two sides. Humans read it: `session` lists what recent sessions")
+	fmt.Fprintln(os.Stderr, "did across every worktree of this repository, `session attention` lists the")
+	fmt.Fprintln(os.Stderr, "blocks agents raised, and `session dispose` closes one - nothing closes a")
+	fmt.Fprintln(os.Stderr, "request automatically. Agent hosts write it: their hooks pipe events through")
+	fmt.Fprintln(os.Stderr, "`session hook` and `session notify`.")
+	fmt.Fprintln(os.Stderr, "")
+	fmt.Fprintln(os.Stderr, "Run `magus session <subcommand> -h` for each subverb's flags.")
+}
+
+// sessionList shows what recent magus sessions did, folded across every worktree of
+// this repository.
+func sessionList(root string, args []string) error {
 	var limit int
 	var since string
-	rest, err := cmdParse("sessions", args, func(fs *flag.FlagSet) {
+	rest, err := cmdParse("session", args, func(fs *flag.FlagSet) {
 		fs.IntVar(&limit, "limit", sessionsDefaultLimit, "Show at most this many sessions (0 for all)")
 		fs.StringVar(&since, "since", "", "Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
 	})
@@ -35,10 +80,10 @@ func sessionsCmd(_ context.Context, root string, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus sessions: takes no arguments (got %q); use --limit to bound the listing and --since to bound its age", rest[0])
+		return usagef("magus session: takes no arguments (got %q); use --limit to bound the listing and --since to bound its age", rest[0])
 	}
 	if limit < 0 {
-		return usagef("magus sessions: --limit must be zero or more (got %d); 0 lists every session", limit)
+		return usagef("magus session: --limit must be zero or more (got %d); 0 lists every session", limit)
 	}
 	cutoff, err := parseSince(since)
 	if err != nil {
@@ -47,7 +92,7 @@ func sessionsCmd(_ context.Context, root string, args []string) error {
 
 	root = resolveRootOrEmpty(root)
 	if root == "" {
-		return fmt.Errorf("magus sessions: no workspace here: the session store is keyed by repository, so run from inside one or pass --root <path>")
+		return fmt.Errorf("magus session: no workspace here: the session store is keyed by repository, so run from inside one or pass --root <path>")
 	}
 	dir, err := sessions.Dir(root)
 	if err != nil {
@@ -116,10 +161,9 @@ func renderSessionsText(summaries []sessions.Summary, fold sessions.Fold, dir st
 	}
 
 	if open := len(sessions.AttentionQueue(fold)); open > 0 {
-		// One glance covers both surfaces: history is what this listing answers, but a
-		// reader scanning it is often looking for the thing that needs them, and that
-		// lives in the other view of the same store.
-		fmt.Fprintf(os.Stdout, "\n%d attention request(s) open; `magus attention` lists them\n", open)
+		// A reader of the history is often looking for what needs them; one line
+		// points at the other view of the same store.
+		fmt.Fprintf(os.Stdout, "\n%d attention request(s) open; `magus session attention` lists them\n", open)
 	}
 
 	if fold.Skipped > 0 {
@@ -184,7 +228,7 @@ func parseSince(raw string) (time.Time, error) {
 	if ts, err := time.Parse(time.RFC3339, raw); err == nil {
 		return ts, nil
 	}
-	return time.Time{}, usagef("magus sessions: --since %q is neither a duration nor an RFC3339 timestamp; write a duration back from now (2h, 45m, 168h) or an instant (2006-01-02T15:04:05Z)", raw)
+	return time.Time{}, usagef("magus session: --since %q is neither a duration nor an RFC3339 timestamp; write a duration back from now (2h, 45m, 168h) or an instant (2006-01-02T15:04:05Z)", raw)
 }
 
 // sessionsSince drops the sessions whose last fact predates cutoff.

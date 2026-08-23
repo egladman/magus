@@ -71,13 +71,13 @@ This repository's own `.claude/settings.json` points at the templates in
 `docs/guides/integrations/agents/` rather than at a private copy, and a test
 fails if it stops doing so. What magus dogfoods is what you download.
 
-`magus hook` also reads Claude Code's event JSON directly: `tool_input.command`,
+`magus session hook` also reads Claude Code's event JSON directly: `tool_input.command`,
 `tool_input.file_path`, `session_id` and `hook_event_name` are the fields it
 knows, and a payload carrying a file path is judged as a write without `--path`.
 So one command serves both matchers, with no `jq` and no script:
 
 ```sh
-magus hook -o 'template={{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
+magus session hook -o 'template={{if eq .decision "deny"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","permissionDecision":"deny","permissionDecisionReason":{{toJson .reason}}}}{{else if eq .decision "advise"}}{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":{{toJson .context}}}}{{end}}'
 ```
 
 What it trades away is the templates' handling of a magus that is missing or too
@@ -102,7 +102,7 @@ record one:
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; [ -n \"$GUARD_MAGUS_BIN\" ] && \"$GUARD_MAGUS_BIN\" hook --agent-name claude-code >/dev/null 2>&1; exit 0",
+            "command": "GUARD_MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; [ -n \"$GUARD_MAGUS_BIN\" ] && \"$GUARD_MAGUS_BIN\" session hook --agent-name claude-code >/dev/null 2>&1; exit 0",
             "timeout": 10
           }
         ]
@@ -130,7 +130,7 @@ hand the sub-agent.
 
 ## Notifications
 
-`magus notify` turns a host event into a desktop notification. It does not
+`magus session notify` turns a host event into a desktop notification. It does not
 send an event to the daemon or Console. Wire `Notification` (it fires on a
 permission prompt and when the agent goes idle waiting for input), and `Stop` or
 `SubagentStop` for completion.
@@ -143,7 +143,7 @@ permission prompt and when the agent goes idle waiting for input), and `Stop` or
         "hooks": [
           {
             "type": "command",
-            "command": "GUARD_MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; [ -n \"$GUARD_MAGUS_BIN\" ] && jq -c '{schema_version: 1, outcome: .hook_event_name, source: {kind: \"agent\"}, message: .message}' | \"$GUARD_MAGUS_BIN\" notify --desktop >/dev/null 2>&1; exit 0"
+            "command": "GUARD_MAGUS_BIN=\"$([ -x ./magus ] && printf %s ./magus || command -v magus 2>/dev/null)\"; [ -n \"$GUARD_MAGUS_BIN\" ] && jq -c '{schema_version: 1, outcome: .hook_event_name, source: {kind: \"agent\"}, message: .message}' | \"$GUARD_MAGUS_BIN\" session notify --desktop >/dev/null 2>&1; exit 0"
           }
         ]
       }

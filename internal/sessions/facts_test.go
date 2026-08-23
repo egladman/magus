@@ -114,7 +114,7 @@ func TestFactHandlerIgnoresEverythingButResults(t *testing.T) {
 }
 
 // Two invocations against two worktrees of one repo must land in one store, which is
-// what makes `magus sessions` a cross-worktree view rather than a per-checkout one.
+// what makes `magus session` a cross-worktree view rather than a per-checkout one.
 func TestFactHandlerFoldsSessionsFromEveryWorktree(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 
@@ -148,7 +148,7 @@ func TestFactHandlerFoldsSessionsFromEveryWorktree(t *testing.T) {
 }
 
 // A store that cannot be written is the case where silence lies: nothing is recorded,
-// and `magus sessions` then reports in good faith that no session has run.
+// and `magus session` then reports in good faith that no session has run.
 func TestFactHandlerWarnsOnceWhenTheStoreIsUnwritable(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
 	root := t.TempDir()

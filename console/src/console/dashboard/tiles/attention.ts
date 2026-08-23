@@ -1,8 +1,8 @@
 // attention.ts - the "needs attention" hero: the first thing the eye lands on.
 //
 // Its headline is the ATTENTION QUEUE - the durable list of blocks agents have raised that are
-// waiting on a person, read from GET /api/v1/attention, the same queue `magus attention` lists
-// and disposes from any worktree of this repo.
+// waiting on a person, read from GET /api/v1/attention, the same queue `magus session attention`
+// lists and `magus session dispose` closes from any worktree of this repo.
 //
 // It used to derive that headline from the live run counts instead: failing targets shouted
 // "Attention needed", otherwise "All clear". That verdict predates the queue and can now
@@ -41,7 +41,7 @@ const REQUEST_TIMEOUT_MS = 10_000;
 // QUEUE_LIST_MAX caps the rows drawn, with a residual count, for the reason every other list on
 // this board is capped: a hook that fires on every prompt can raise a handful of blocks at once,
 // and thirty rows would push the headline itself off a Big Picture panel. Nothing is hidden -
-// the residual line says how many more, and `magus attention` lists them all.
+// the residual line says how many more, and `magus session attention` lists them all.
 const QUEUE_LIST_MAX = 5;
 
 // One document-level listener closes any open chip menu on an outside click, rather than one per
@@ -149,8 +149,8 @@ export function verdictFor(read: AttentionRead, nowMs: number = Date.now()): Ver
       state: "clear",
       line: "Nobody waiting",
       sub:
-        "No agent is blocked on a person. Requests arrive through `magus notify` and close" +
-        " only when someone disposes of them.",
+        "No agent is blocked on a person. Requests arrive through `magus session notify` and" +
+        " close only when someone disposes of them.",
     };
   }
   const oldest = read.requests[0];
@@ -319,9 +319,9 @@ export function attentionTile(): Tile {
     verdict,
     helpGlyph(
       "This headline reads the attention queue: blocks an agent raised that are waiting on a" +
-        " person, the same queue `magus attention` lists. Nothing closes a request but you" +
-        " disposing of it. The failing/running/queued counts below are live run activity and do" +
-        " NOT feed this verdict - a failing target is not a request, and an empty queue over a" +
+        " person, the same queue `magus session attention` lists. Nothing closes a request but" +
+        " you disposing of it. The failing/running/queued counts below are live run activity and" +
+        " do NOT feed this verdict - a failing target is not a request, and an empty queue over a" +
         " red build is both facts being true at once.",
       "this verdict",
     ),
@@ -552,14 +552,14 @@ export function attentionTile(): Tile {
   //
   // The id is shown in full and in mono, because it is the handle for the OTHER surface: a
   // person reading this tile on a shared screen closes the request from their terminal with
-  // `magus attention dispose <id>`, and a truncated id cannot be typed.
+  // `magus session dispose <id>`, and a truncated id cannot be typed.
   function requestRow(req: AttentionRequest, nowMs: number): HTMLElement {
     const li = h("li", "console-dashboard-attention__row");
     li.dataset.outcome = req.outcome;
 
     const head = h("div", "console-dashboard-attention__head");
     const id = h("code", "console-dashboard-attention__id", req.id);
-    id.title = "magus attention dispose " + req.id;
+    id.title = "magus session dispose " + req.id;
     head.append(id);
 
     const age = ageLabel(req.opened_ms, nowMs);
@@ -578,7 +578,7 @@ export function attentionTile(): Tile {
 
     const message = h("p", "console-dashboard-attention__message", firstLine(req.message));
     // The full text, unflattened, for the reader who needs more than the summary line. The row
-    // stays one line tall either way; `magus attention ls -o json` is the unabridged copy.
+    // stays one line tall either way; `magus session attention -o json` is the unabridged copy.
     if (req.message) message.title = req.message;
 
     li.append(head, message);
@@ -695,7 +695,7 @@ export function attentionTile(): Tile {
           "console-dashboard-attention__more",
           "+" +
             (read.requests.length - shown.length) +
-            " more; `magus attention` lists the whole queue",
+            " more; `magus session attention` lists the whole queue",
         ),
       );
     }

@@ -4,7 +4,7 @@
 // door owns the markup, the poll and the composer.
 //
 // The queue is the durable list of blocks agents have raised that are waiting on a PERSON:
-// `magus notify` opens a request when an event's outcome is waiting or permission, and
+// `magus session notify` opens a request when an event's outcome is waiting or permission, and
 // nothing closes one but somebody deciding to. That is why this module has a write at all -
 // see disposeAttention - and why it has exactly one.
 //
@@ -17,7 +17,7 @@ import { authHeaders } from "../../../lib/daemon";
 // ---- the wire shape --------------------------------------------------------
 
 // AttentionRequest mirrors one row of GET /api/v1/attention's JSON, which is the same shape
-// `magus attention ls -o json` prints. Hand-written rather than generated because it rides the
+// `magus session attention -o json` prints. Hand-written rather than generated because it rides the
 // plain /api routes, the same as the delegation ledger beside it.
 //
 // Every field but the id is optional here even where the route always sends it: this is parsed
@@ -114,8 +114,8 @@ const MESSAGE_MAX = 140;
 // An agent writes whatever it likes, newlines included, and ONE row per request is what makes
 // the queue scannable. The first non-empty line is taken rather than the whole message joined,
 // because agent text is routinely a summary line followed by a transcript, and the summary is
-// the part a person triages on. Nothing is lost: the full message is what `magus attention ls
-// -o json` carries, and the row's title attribute holds it too.
+// the part a person triages on. Nothing is lost: the full message is what `magus session
+// attention -o json` carries, and the row's title attribute holds it too.
 export function firstLine(message: string): string {
   for (const raw of message.split("\n")) {
     const line = raw.trim().replace(/\s+/g, " ");

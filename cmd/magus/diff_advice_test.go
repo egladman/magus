@@ -148,9 +148,8 @@ func TestCollectAdviceSurvivesABrokenAdvisor(t *testing.T) {
 	if !strings.Contains(notes[0], "broken.buzz") || !strings.Contains(notes[0], "broken on purpose") {
 		t.Errorf("note = %q, want it to name the advisor and the error", notes[0])
 	}
-	// The stamp is applied here, where a failure is distinguishable from a warning; the
-	// renderer prints notes verbatim, so an unstamped failure would read as a warning
-	// from an advisor that ran.
+	// The renderer prints notes verbatim, so an unstamped failure would read as a
+	// warning from an advisor that ran.
 	if !strings.HasPrefix(notes[0], "could not run: ") {
 		t.Errorf("note = %q, want the could-not-run stamp on a failure", notes[0])
 	}
@@ -163,7 +162,7 @@ func TestCollectAdviceSurvivesABrokenAdvisor(t *testing.T) {
 }
 
 // A warning is not a failure: the advisor ran and published, so its note must not carry
-// the could-not-run stamp - ten warnings once rendered as ten dead advisors.
+// the could-not-run stamp.
 func TestCollectAdviceDoesNotStampAWarningAsAFailure(t *testing.T) {
 	dir := stubAdviceDir(t, map[string]string{"warned.buzz": warningAdvisor})
 

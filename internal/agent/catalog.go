@@ -43,10 +43,13 @@ import (
 // DELEGATION, in the skill, the ledger table, and the tools it names.
 // 42: the delegation runtime reaches the skills - magus-delegate-multi-agent
 // teaches ledger register, MAGUS_DELEGATION enrollment and the guard's
-// deny/advise split, attention events for a blocked worker, and `magus sessions`
-// as the audit of what a delegation ran; both it and magus-vcs-hygiene read
+// deny/advise split, attention events for a blocked worker, and the session
+// audit of what a delegation ran; both it and magus-vcs-hygiene read
 // `magus diff --cost` before landing.
-const SkillVersion = 42
+// 43: the session CLI family (`magus session`, `session attention`, `session
+// dispose`, `session hook`, `session notify`) replaces the sessions/attention/
+// notify/hook top-level verbs in the skill text; there are no compat aliases.
+const SkillVersion = 43
 
 const skillLicense = "GPL-3.0-or-later"
 

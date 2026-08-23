@@ -117,7 +117,7 @@ func agentUsageErr() error {
 // hookUsage describes the guard, which is a different command from `agent` despite
 // sharing this file: it reads one command or path and answers with a verdict.
 func hookUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus hook [--path] [flags]   # the command or path arrives on stdin")
+	fmt.Fprintln(w, "Usage: magus session hook [--path] [flags]   # the command or path arrives on stdin")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Evaluate ONE shell command, or one file path an edit is about to write,")
 	fmt.Fprintln(w, "against this workspace's guard rules, and report a deny/advise/pass")
@@ -132,8 +132,8 @@ func hookUsage(w io.Writer) {
 	fmt.Fprintln(w, "Examples:")
 	// Fprintf with %% : vet rejects a Printf directive inside an Fprintln, and the
 	// example is worth more than the convenience. notifyUsage does the same.
-	fmt.Fprintf(w, "  printf '%%s' 'go build ./...' | magus hook\n")
-	fmt.Fprintf(w, "  printf '%%s' 'MAGUS.md' | magus hook --path\n")
+	fmt.Fprintf(w, "  printf '%%s' 'go build ./...' | magus session hook\n")
+	fmt.Fprintf(w, "  printf '%%s' 'MAGUS.md' | magus session hook --path\n")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Flags:")
 	fmt.Fprintln(w, "  --path                judge the input as a file path an edit is about to")
@@ -372,7 +372,7 @@ type guardVerdict struct {
 	Context       string `json:"context,omitempty"` // advise: context to inject alongside the allowed call
 }
 
-// hookCmd implements `magus hook`: evaluate one shell command or file path read
+// hookCmd implements `magus session hook`: evaluate one shell command or file path read
 // from stdin and emit a verdict. The caller owns extraction from its
 // host-specific event shape; magus owns only the host-neutral policy.
 //
@@ -393,7 +393,7 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// magus knows, because a magus that enumerated hosts would need a release per
 	// host. A wrapper that cannot extract a session id must still get a verdict;
 	// erroring here would block a tool call over metadata.
-	hf := gen.BindHook(fset)
+	hf := gen.BindSessionHook(fset)
 	// The environment supplies the DEFAULT, so an explicit --delegation still wins: a shell
 	// that exported the variable for a whole session must not outrank a per-call
 	// override. Same shape `magus run` uses for MAGUS_SHARD.
@@ -407,13 +407,13 @@ func hookCmd(ctx context.Context, in io.Reader, out io.Writer, args []string) er
 	// callers it is unreliable everywhere.
 	bindDisplayFlags(fset)
 	// hookUsage, not agentUsage: `hook` and `agent` share this file, and pointing at the
-	// wrong one makes `magus hook -h` answer a question nobody asked.
+	// wrong one makes `magus session hook -h` answer a question nobody asked.
 	fset.Usage = func() { hookUsage(os.Stderr) }
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	if len(fset.Args()) != 0 {
-		return usagef("magus hook: takes no positional arguments (read the command or path from stdin)")
+		return usagef("magus session hook: takes no positional arguments (read the command or path from stdin)")
 	}
 	opts, err := ResolveOutput(global.output)
 	if err != nil {

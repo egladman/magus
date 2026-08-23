@@ -29,7 +29,7 @@ func plantStore(t *testing.T) (root, dir string) {
 }
 
 // raise files one open request through the package's own producer, so the planted store holds
-// records written exactly the way `magus notify` writes them.
+// records written exactly the way `magus session notify` writes them.
 func raise(t *testing.T, dir, agentSession, message string) string {
 	t.Helper()
 	id, opened, err := sessions.OpenRequest(dir, agentSession, sessions.AttentionOpen{
@@ -162,7 +162,7 @@ func TestAttentionHandler_DisposeStampsTheConsoleAsTheSurface(t *testing.T) {
 	}
 	var found bool
 	for _, s := range sessions.Summarize(fold) {
-		if !strings.HasPrefix(s.Command, "attention dispose ") {
+		if !strings.HasPrefix(s.Command, "session dispose ") {
 			continue
 		}
 		found = true

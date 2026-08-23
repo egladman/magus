@@ -35,7 +35,7 @@ func TestAppendReadRoundTrip(t *testing.T) {
 }
 
 // Open must not create the file: a magus command that records no fact should leave
-// no session behind, or `magus sessions` fills up with runs that did nothing.
+// no session behind, or `magus session` fills up with runs that did nothing.
 func TestOpenWritesNothingUntilTheFirstFact(t *testing.T) {
 	t.Parallel()
 	dir := t.TempDir()
@@ -54,7 +54,7 @@ func TestOpenWritesNothingUntilTheFirstFact(t *testing.T) {
 	assert.Len(t, fold.Records, 2)
 }
 
-// A message is whatever a hook piped to `magus notify`, so an unbounded one is one
+// A message is whatever a hook piped to `magus session notify`, so an unbounded one is one
 // process's decision that every later read of this repository pays for. The bound is
 // applied at write time, which is what makes it hold for a producer that never heard
 // of it.

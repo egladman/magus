@@ -47,7 +47,7 @@ type AttentionOpen struct {
 
 // MaxMessageBytes bounds the Message one [AttentionOpen] may carry into the store.
 //
-// The message is whatever a producer piped to `magus notify` on stdin, and in
+// The message is whatever a producer piped to `magus session notify` on stdin, and in
 // practice that is a hook forwarding an agent's text - a prompt, a tool argument, a
 // transcript tail. The store is grow-only and every reader folds the WHOLE store
 // into memory, so one unbounded message is a cost every later read of this repository
@@ -351,7 +351,7 @@ func OpenRequest(dir, agentSession string, open AttentionOpen, start SessionStar
 	if slices.ContainsFunc(AttentionQueue(fold), func(req AttentionRequest) bool { return req.ID == open.Request }) {
 		return open.Request, false, nil
 	}
-	start.Command = "notify"
+	start.Command = "session notify"
 	w, err := Open(dir, NewID(), start)
 	if err != nil {
 		return open.Request, false, err
@@ -392,7 +392,7 @@ func DisposeRequest(dir, ref, reason string, start SessionStart) (AttentionReque
 		return req, &DisposedError{ID: id, DisposedBy: req.DisposedBy, DisposedMs: req.DisposedMs}
 	}
 
-	start.Command = "attention dispose " + id
+	start.Command = "session dispose " + id
 	w, err := Open(dir, NewID(), start)
 	if err != nil {
 		return AttentionRequest{}, err

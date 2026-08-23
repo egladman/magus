@@ -196,7 +196,7 @@ token as the rest of the console. Start it with `magus server start`; see
 
 ## The spawn is recorded, never judged
 
-Wire your host's sub-agent tool to the same `magus hook` call as the rest of
+Wire your host's sub-agent tool to the same `magus session hook` call as the rest of
 [the guard](guard.md). A payload carrying a `prompt` rather than a command or a
 file path is a delegation handoff: magus records it as an `agent_spawn` event on
 the local Activity Trail and returns `pass` without evaluating a single rule.

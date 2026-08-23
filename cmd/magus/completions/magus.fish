@@ -22,8 +22,7 @@ function __magus_subcommands
         vcs        'staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)' \
         doctor     'validate the workspace' \
         config     'view or update magus configuration' \
-        sessions   'show what recent magus sessions did, folded across every worktree of this repo' \
-        attention  'list the blocks agents raised and dispose of one (ls, dispose)' \
+        session    'what sessions did and what they are blocked on: humans read (ls, attention) and dispose; hosts write (hook, notify)' \
         memory     'durable cross-session project memory (ls, get, put, delete, verify)' \
         notes      'human-authored notes committed to the repo (ls, get, edit, verify)' \
         diff       'read uncommitted changes in the order they deserve attention, generated folded' \
@@ -33,8 +32,6 @@ function __magus_subcommands
         man        'install the man pages embedded in this binary' \
         init       'bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)' \
         agent      'install the knowledge-graph agent skills into a repo (agent install <dir>)' \
-        hook       'evaluate one shell command or file path against the magus guard rules (deny/advise/pass verdict)' \
-        notify     'normalize an attention event and optionally notify the local desktop' \
         self       'manage the magus binary (self update / install)' \
         version    'print version, commit, and build date' \
         help       'show this message'

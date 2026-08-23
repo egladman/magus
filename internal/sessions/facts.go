@@ -97,14 +97,14 @@ func (h *FactHandler) Handle(_ context.Context, r slog.Record) error {
 // once - h.broken gates every later Handle, so this cannot repeat per target.
 //
 // Failing silently is what made an unwritable store indistinguishable from an idle
-// repository: nothing recorded, and `magus sessions` then reporting in good faith that
+// repository: nothing recorded, and `magus session` then reporting in good faith that
 // no session has run yet. The warning is what keeps that empty state honest.
 //
 // The caller holds h.mu. slog.Warn cannot re-enter it: a plain log record carries no
 // journal event, so Handle returns before it reaches the lock.
 func (h *FactHandler) stopRecording(err error) {
 	h.broken = true
-	slog.Warn("magus: this run was not recorded in the session store, so `magus sessions` will not list it; check the store is writable and has space",
+	slog.Warn("magus: this run was not recorded in the session store, so `magus session` will not list it; check the store is writable and has space",
 		slog.String("store", h.dir),
 		slog.String("error", err.Error()))
 }

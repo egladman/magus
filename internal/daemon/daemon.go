@@ -290,7 +290,7 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			ledgerH := status.NewLedgerHandler(opts.Ledger, log)
 			// The attention queue: blocks agents raised that are waiting on a person. Read off
 			// the per-repository session store, which is keyed on repo identity rather than the
-			// checkout, so the console lists what `magus attention` lists from any worktree.
+			// checkout, so the console lists what `magus session attention` lists from any worktree.
 			attentionH := status.NewAttentionHandler(opts.Magus.Root(), opts.Version, log)
 
 			bridgeMux := http.NewServeMux()

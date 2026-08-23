@@ -257,3 +257,12 @@ development/evals/
 # magus activity was renamed to magus sessions before either shipped in a
 # release; the store-collision review that forced it is in the branch history.
 reference/manpage/magus-activity/
+
+# sessions, attention, notify and hook were folded into one magus session
+# family, and a manpage page is generated per command, so the four top-level
+# pages no longer exist. Not aliased: the successor is a single page carrying
+# all four verbs, at reference/manpage/magus-session/.
+reference/manpage/magus-sessions/
+reference/manpage/magus-attention/
+reference/manpage/magus-notify/
+reference/manpage/magus-hook/

@@ -59,7 +59,7 @@ Every route on the console's `/api/v1/` surface, enumerated:
 | `GET /api/v1/output?ref=<ref>`     | One run's verbatim captured output, by [output reference](../concepts/cache/output-refs.md)                                        |
 | `GET /api/v1/plan`                 | The derived run plan: the target DAG the engine resolves, with each node's live state                                              |
 | `GET /api/v1/ledger`               | The delegation plan an agent [declared](../guides/integrations/agents/delegation.md); magus enforces none of it                    |
-| `GET /api/v1/attention`            | The attention queue: blocks waiting on a person, same shape as `magus attention ls -o json`                                        |
+| `GET /api/v1/attention`            | The attention queue: blocks waiting on a person, same shape as `magus session attention -o json`                                   |
 | `POST /api/v1/attention`           | Dispose one request (`{"id","reason"}`). Nothing else closes one                                                                   |
 
 One more route sits under `/api/v1/` without belonging to this read surface:

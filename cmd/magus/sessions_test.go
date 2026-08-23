@@ -72,7 +72,7 @@ func TestSessionsRendersTheDelegationColumnAttributedAndNot(t *testing.T) {
 	recordSession(t, root, "run", []string{"test"}, "invBare")
 
 	out := captureStdout(t, func() {
-		require.NoError(t, sessionsCmd(context.Background(), root, nil))
+		require.NoError(t, sessionCmd(context.Background(), root, nil))
 	})
 
 	assert.Contains(t, out, "DELEGATION")
@@ -90,7 +90,7 @@ func TestSessionsCrossReferencesAnOpenAttentionQueue(t *testing.T) {
 	recordSession(t, root, "run", []string{"build"}, "invQuiet")
 
 	out := captureStdout(t, func() {
-		require.NoError(t, sessionsCmd(context.Background(), root, nil))
+		require.NoError(t, sessionCmd(context.Background(), root, nil))
 	})
 	assert.NotContains(t, out, "attention request", "a quiet queue earns no footer")
 
@@ -106,20 +106,20 @@ func TestSessionsCrossReferencesAnOpenAttentionQueue(t *testing.T) {
 	require.True(t, opened)
 
 	out = captureStdout(t, func() {
-		require.NoError(t, sessionsCmd(context.Background(), root, nil))
+		require.NoError(t, sessionCmd(context.Background(), root, nil))
 	})
-	assert.Contains(t, out, "1 attention request(s) open; `magus attention` lists them")
+	assert.Contains(t, out, "1 attention request(s) open; `magus session attention` lists them")
 }
 
 func TestSessionsRejectsPositionalArguments(t *testing.T) {
-	err := sessionsCmd(context.Background(), t.TempDir(), []string{"yesterday"})
+	err := sessionCmd(context.Background(), t.TempDir(), []string{"yesterday"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "--limit")
 	assert.Contains(t, err.Error(), "--since", "the rejected word is a time, so the error names the flag that takes one")
 }
 
 func TestSessionsRejectsANegativeLimit(t *testing.T) {
-	err := sessionsCmd(context.Background(), t.TempDir(), []string{"--limit=-1"})
+	err := sessionCmd(context.Background(), t.TempDir(), []string{"--limit=-1"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "zero or more")
 	assert.Contains(t, err.Error(), "0 lists every session", "the error names the value that means what -1 was reaching for")
@@ -188,13 +188,13 @@ func TestSessionsSaysWhenTheWINDOWIsEmptyRatherThanTheStore(t *testing.T) {
 	// A cutoff ahead of the recorded fact is the deterministic way to empty the window;
 	// a short duration would race the millisecond the fact was stamped in.
 	out := captureStdout(t, func() {
-		require.NoError(t, sessionsCmd(context.Background(), root, []string{"--since", "2099-01-01T00:00:00Z"}))
+		require.NoError(t, sessionCmd(context.Background(), root, []string{"--since", "2099-01-01T00:00:00Z"}))
 	})
 	assert.Contains(t, out, "no sessions in that window")
 	assert.NotContains(t, out, "no sessions recorded yet")
 
 	out = captureStdout(t, func() {
-		require.NoError(t, sessionsCmd(context.Background(), root, []string{"--since", "24h"}))
+		require.NoError(t, sessionCmd(context.Background(), root, []string{"--since", "24h"}))
 	})
 	assert.Contains(t, out, "invOld", "a session inside the window is still listed")
 }

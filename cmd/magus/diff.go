@@ -1383,9 +1383,9 @@ func preflightAdvisorLines(sections []adviceSection, failed []string) []string {
 		}
 	}
 	// Named rather than counted: which advisor went quiet is what a reader needs to decide
-	// whether the silence above it means anything. Each note already says whether it is a
-	// warning from an advisor that ran or a "could not run" failure; restamping them all
-	// as failures here reported every warning as a dead advisor.
+	// whether the silence above it means anything. Printed verbatim - each note already
+	// says whether it is a warning or a "could not run" failure, and only collectAdvice
+	// can tell the two apart.
 	for _, f := range failed {
 		out = append(out, "      "+f)
 	}

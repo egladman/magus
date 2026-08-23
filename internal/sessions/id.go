@@ -20,7 +20,7 @@ import (
 // It is [journal.NewInvocationID] plus a per-process suffix, and the suffix is the whole
 // reason this function exists. That id is a millisecond stamp and a counter that resets
 // with the process, so two magus processes starting in the same millisecond both mint
-// the same first id. Attention producers hit exactly that case: `magus notify` fires
+// the same first id. Attention producers hit exactly that case: `magus session notify` fires
 // from an agent hook, several hosts can fire at once, and each writes with its counter
 // at 1. A collision is not a lost write - [Writer.resume] continues the numbering
 // already in the file - but the two invocations then share one session, and the store

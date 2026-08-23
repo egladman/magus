@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"errors"
 	"flag"
 	"fmt"
@@ -17,61 +16,26 @@ import (
 	"github.com/egladman/magus/types"
 )
 
-// attentionCmd is the queue of blocks waiting on a person: what agents raised, and
-// the one command that closes one.
+// The attention queue: blocks waiting on a person - what agents raised, and the one
+// command that closes one. Both subverbs live under sessionCmd.
 //
 // Discovery is automated and disposition is not, which is the whole shape of the
 // feature (docs/doctrine.md, "Manual on purpose"). There is no expiry, no
 // auto-dispose flag and no severity inference to add later: a request that magus
 // could close by itself would not have needed a person, and the queue exists
 // precisely for the ones that do.
-func attentionCmd(_ context.Context, root string, args []string) error {
-	// The dispatcher hands this command the --root FLAG, which is empty unless somebody
-	// passed one: attention loads no workspace, so nothing downstream resolves it. Left
-	// empty it would key the store on "", and every repository on the machine would
-	// share one queue that belongs to none of them.
+
+// attentionRoot resolves the repository the queue belongs to. The dispatcher hands
+// these subverbs the --root FLAG, which is empty unless somebody passed one: the queue
+// loads no workspace, so nothing downstream resolves it. Left empty it would key the
+// store on "", and every repository on the machine would share one queue that belongs
+// to none of them.
+func attentionRoot(root string) (string, error) {
 	root = resolveRootOrEmpty(root)
 	if root == "" {
-		return fmt.Errorf("magus attention: no magus workspace found from this directory, and the queue is per-repository; run it inside a workspace, or name one with --root <path>")
+		return "", fmt.Errorf("magus session: no magus workspace found from this directory, and the queue is per-repository; run it inside a workspace, or name one with --root <path>")
 	}
-
-	verb, rest := "ls", args
-	// A leading flag belongs to the default verb, so `magus attention -o json` reads
-	// as a listing rather than an unknown subcommand.
-	if len(args) > 0 && !strings.HasPrefix(args[0], "-") {
-		verb, rest = args[0], args[1:]
-	}
-	switch verb {
-	case "help":
-		attentionUsage()
-		return nil
-	case "ls":
-		return attentionList(root, rest)
-	case "dispose":
-		return attentionDispose(root, rest)
-	default:
-		return usagef("magus attention: unknown subcommand %q (want ls or dispose); run `magus attention` to list open requests", verb)
-	}
-}
-
-func attentionUsage() {
-	fmt.Fprintln(os.Stderr, "Usage: magus attention [ls] [flags]")
-	fmt.Fprintln(os.Stderr, "       magus attention dispose <id> [-reason <text>]")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "List the blocks agents have raised in this repository and close one.")
-	fmt.Fprintln(os.Stderr, "A request is opened by `magus notify` when the event's outcome is waiting")
-	fmt.Fprintln(os.Stderr, "or permission, and stays open until a person disposes of it. Nothing")
-	fmt.Fprintln(os.Stderr, "closes a request automatically.")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "The queue is keyed by repository identity, so every git worktree of this")
-	fmt.Fprintln(os.Stderr, "repo lists and disposes the same requests.")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "With -q, ls prints nothing and answers with its exit status: 0 when a request")
-	fmt.Fprintln(os.Stderr, "is open, 1 when the queue is empty. That is the form to test in a shell")
-	fmt.Fprintln(os.Stderr, "prompt or a wrapper script.")
-	fmt.Fprintln(os.Stderr, "")
-	fmt.Fprintln(os.Stderr, "dispose takes a full id or any unambiguous prefix of one; an ambiguous")
-	fmt.Fprintln(os.Stderr, "prefix is refused and names the candidates.")
+	return root, nil
 }
 
 type attentionListOutput struct {
@@ -80,9 +44,13 @@ type attentionListOutput struct {
 }
 
 func attentionList(root string, args []string) error {
-	rest, err := cmdParse("attention ls", args, func(fs *flag.FlagSet) {
+	root, err := attentionRoot(root)
+	if err != nil {
+		return err
+	}
+	rest, err := cmdParse("session attention", args, func(fs *flag.FlagSet) {
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus attention ls [flags]")
+			fmt.Fprintln(os.Stderr, "Usage: magus session attention [flags]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "List every open request, oldest first. Disposed requests are not listed;")
 			fmt.Fprintln(os.Stderr, "they stay in the session store and are visible with -o json after disposal.")
@@ -100,7 +68,7 @@ func attentionList(root string, args []string) error {
 		return err
 	}
 	if len(rest) > 0 {
-		return usagef("magus attention ls: takes no arguments (got %q); close one request with `magus attention dispose <id>`", rest[0])
+		return usagef("magus session attention: takes no arguments (got %q); close one request with `magus session dispose <id>`", rest[0])
 	}
 
 	dir, err := sessions.Dir(root)
@@ -146,7 +114,7 @@ func renderAttentionText(requests []sessions.AttentionRequest, dir string) error
 		// An empty queue is the good state, so this says how a request would get here
 		// rather than reporting a fault.
 		fmt.Fprintf(os.Stdout, "no open attention requests in %s\n", dir)
-		fmt.Fprintln(os.Stdout, "requests arrive through `magus notify`: an agent hook raising an event whose outcome is waiting or permission opens one, and it stays open until someone runs `magus attention dispose <id>`")
+		fmt.Fprintln(os.Stdout, "requests arrive through `magus session notify`: an agent hook raising an event whose outcome is waiting or permission opens one, and it stays open until someone runs `magus session dispose <id>`")
 		return nil
 	}
 
@@ -166,7 +134,7 @@ func renderAttentionText(requests []sessions.AttentionRequest, dir string) error
 	if err := tw.Flush(); err != nil {
 		return err
 	}
-	fmt.Fprintf(os.Stdout, "\n%d open request(s); close one with `magus attention dispose <id> -reason <text>`. Nothing here closes on its own.\n", len(requests))
+	fmt.Fprintf(os.Stdout, "\n%d open request(s); close one with `magus session dispose <id> -reason <text>`. Nothing here closes on its own.\n", len(requests))
 	return nil
 }
 
@@ -178,11 +146,15 @@ func attentionOneLine(s string) string {
 }
 
 func attentionDispose(root string, args []string) error {
+	root, err := attentionRoot(root)
+	if err != nil {
+		return err
+	}
 	var reason string
-	rest, err := cmdParse("attention dispose", args, func(fs *flag.FlagSet) {
+	rest, err := cmdParse("session dispose", args, func(fs *flag.FlagSet) {
 		fs.StringVar(&reason, "reason", "", "Record why the request is being closed, alongside the disposition")
 		fs.Usage = func() {
-			fmt.Fprintln(os.Stderr, "Usage: magus attention dispose <id> [-reason <text>]")
+			fmt.Fprintln(os.Stderr, "Usage: magus session dispose <id> [-reason <text>]")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Close one open request. The disposition is appended to the session store,")
 			fmt.Fprintln(os.Stderr, "so every worktree of this repo sees the request close. A request closes")
@@ -200,7 +172,7 @@ func attentionDispose(root string, args []string) error {
 		return err
 	}
 	if len(rest) != 1 {
-		return usagef("magus attention dispose: needs exactly one request id (got %d); run `magus attention` to list the open ids", len(rest))
+		return usagef("magus session dispose: needs exactly one request id (got %d); run `magus session attention` to list the open ids", len(rest))
 	}
 
 	dir, err := sessions.Dir(root)
@@ -249,11 +221,11 @@ func disposeError(err error, ref, dir string) error {
 	)
 	switch {
 	case errors.Is(err, sessions.ErrNoRequest):
-		return fmt.Errorf("magus attention dispose: no request matches %q in the session store at %s; run `magus attention` to list the open ids", ref, dir)
+		return fmt.Errorf("magus session dispose: no request matches %q in the session store at %s; run `magus session attention` to list the open ids", ref, dir)
 	case errors.As(err, &ambiguous):
-		return fmt.Errorf("magus attention dispose: %w; name one of them, or add enough characters to tell them apart", ambiguous)
+		return fmt.Errorf("magus session dispose: %w; name one of them, or add enough characters to tell them apart", ambiguous)
 	case errors.As(err, &disposed):
-		return fmt.Errorf("magus attention dispose: %w; a request closes once and stays closed, so run `magus attention` to see what is still open", disposed)
+		return fmt.Errorf("magus session dispose: %w; a request closes once and stays closed, so run `magus session attention` to see what is still open", disposed)
 	}
 	return err
 }
@@ -348,7 +320,7 @@ func attentionWhere(where *types.EventLocation) string {
 // silently never reached the queue is a block nobody will ever be shown, so it says
 // so rather than swallowing it.
 func noteAttentionOpenFailure(err error) {
-	slog.Warn("magus notify: the attention request was not recorded, so `magus attention` will not list it",
+	slog.Warn("magus session notify: the attention request was not recorded, so `magus session attention` will not list it",
 		slog.String("error", err.Error()))
 }
 
@@ -357,6 +329,6 @@ func noteAttentionOpenFailure(err error) {
 // the desktop alert still fires - and says what the producer has to change, because
 // an agent whose blocks never reach the queue has no other symptom.
 func noteMissingAttentionSource() {
-	slog.Warn("magus notify: the event carries no source.id, so no attention request was opened; a request id keys on the agent session that raised the block, and an empty one would merge unrelated producers into a single row",
+	slog.Warn("magus session notify: the event carries no source.id, so no attention request was opened; a request id keys on the agent session that raised the block, and an empty one would merge unrelated producers into a single row",
 		slog.String("next", "have the agent wrapper send source.id, the host's own session identifier, in the event envelope"))
 }

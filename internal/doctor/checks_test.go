@@ -273,7 +273,7 @@ func TestGlobOutputs_CrossesDirectories(t *testing.T) {
 }
 
 // writeGuardCanaryStub writes root/magus as a stub binary standing in for the
-// real one: the canary only cares that `magus hook -o name` prints a decision
+// real one: the canary only cares that `magus session hook -o name` prints a decision
 // on stdout and exits accordingly, never about actual guard rules.
 func writeGuardCanaryStub(t *testing.T, root, body string) {
 	t.Helper()
@@ -328,7 +328,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		require.NoError(t, os.MkdirAll(settingsDir, 0o755))
 		settingsPath := filepath.Join(settingsDir, "settings.json")
 		require.NoError(t, os.WriteFile(settingsPath,
-			[]byte(`{"hooks":{"PreToolUse":[{"hooks":[{"command":"magus hook -o json"}]}]}}`), 0o600))
+			[]byte(`{"hooks":{"PreToolUse":[{"hooks":[{"command":"magus session hook -o json"}]}]}}`), 0o600))
 
 		c := checkGuardWiring(context.Background(), root, t.TempDir(), testCanaryBudget)
 		require.Equal(t, types.DoctorOK, c.Status)
@@ -406,7 +406,7 @@ func TestCheckGuardWiring(t *testing.T) {
 		staleVersion := agent.GuardTemplateVersion - 1
 		pluginPath := filepath.Join(pluginsDir, "guard.ts")
 		require.NoError(t, os.WriteFile(pluginPath,
-			[]byte(fmt.Sprintf("// magus hook\n// %s %d\n", agent.GuardTemplateMarker, staleVersion)), 0o644))
+			[]byte(fmt.Sprintf("// magus session hook\n// %s %d\n", agent.GuardTemplateMarker, staleVersion)), 0o644))
 
 		c := checkGuardWiring(context.Background(), root, t.TempDir(), testCanaryBudget)
 		require.Equal(t, types.DoctorFail, c.Status)

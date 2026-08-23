@@ -1830,7 +1830,7 @@ func TestSimpleInstallShipsAFullTwinForEverySkill(t *testing.T) {
 }
 
 // TestDecodeHookEnvelope pins reading a host's hook payload directly. Without it, wiring
-// the guard means `jq -r .tool_input.command | magus hook` - an extra dependency on the
+// the guard means `jq -r .tool_input.command | magus session hook` - an extra dependency on the
 // critical path of every tool call, in the one place that must not fail.
 func TestDecodeHookEnvelope(t *testing.T) {
 	cmdPayload := `{"hook_event_name":"PreToolUse","session_id":"s1","tool_name":"Bash",` +

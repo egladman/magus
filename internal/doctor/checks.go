@@ -1864,7 +1864,7 @@ func checkGuardWiring(ctx context.Context, root, home string, budget time.Durati
 
 	canaryCtx, cancel := context.WithTimeout(ctx, budget)
 	defer cancel()
-	cmd := exec.CommandContext(canaryCtx, bin, "hook", "-o", "name")
+	cmd := exec.CommandContext(canaryCtx, bin, "session", "hook", "-o", "name")
 	cmd.Dir = root
 	cmd.Stdin = strings.NewReader("git stash")
 	stdout, runErr := cmd.Output()

@@ -2,7 +2,7 @@
 //
 // That file proves the plugin ASKS magus correctly (the argv shape, stdin-not-argv,
 // the top-level `hook` subcommand) against a Bun.spawn shim that never runs a real
-// process. It cannot catch the other half: a future `magus hook` flag or behavior
+// process. It cannot catch the other half: a future `magus session hook` flag or behavior
 // change that the plugin's call no longer matches. That is the OpenCode incident's
 // exact class - the plugin invoked a removed subcommand for weeks because nothing
 // executed it against a real binary.

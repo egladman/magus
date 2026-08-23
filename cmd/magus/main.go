@@ -258,12 +258,6 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// workspace resolution and must not forward to a daemon (the install is
 		// local to the caller's directory).
 		return dispatchProfile{needsConfig: true}
-	case "hook", "notify":
-		// hook and notify read stdin and emit one record; they need no workspace
-		// resolution and must not forward to a daemon (a hook is the LAST thing
-		// that should be routed through a remote process; a notify must reach
-		// the local OS notifier, not one on the daemon's host).
-		return dispatchProfile{needsConfig: true}
 	case "vcs":
 		// Never forwarded, never preloaded. Every vcs verb writes the CALLER's index and
 		// working tree, so a daemon serving another workspace must not adopt one.
@@ -276,18 +270,15 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// staged and stop `git rebase --continue`, resolve would splice a section between
 		// conflict markers. Each verb opens what it needs under its own guard.
 		return dispatchProfile{needsConfig: true}
-	case "sessions":
-		// Reads a file store keyed by repository identity: it needs the root PATH but
-		// never the magusfile, and it must stay readable when the workspace does not
-		// load - a broken magusfile is exactly when someone asks what the last runs
-		// did. Not forwarded either; there is no warm daemon state to reuse for a
-		// listing that is one directory read.
-		return dispatchProfile{needsConfig: true}
-	case "attention":
-		// Same store, same reasons as sessions. It must additionally stay usable while
-		// the workspace is broken: an agent blocked on a person is exactly the state a
-		// half-finished edit produces, and a queue that needed a loadable magusfile
-		// would go dark when it is needed most.
+	case "session":
+		// The whole family reads or writes a file store keyed by repository identity:
+		// it needs the root PATH but never the magusfile, and it must stay usable when
+		// the workspace does not load - a broken magusfile is exactly when someone asks
+		// what the last runs did, and an agent blocked on a person is exactly the state
+		// a half-finished edit produces. Never forwarded: the hook subverb is the LAST
+		// thing that should route through a remote process, notify must reach the local
+		// OS notifier rather than one on the daemon's host, and a listing is one
+		// directory read with no warm daemon state to reuse.
 		return dispatchProfile{needsConfig: true}
 	case "status":
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true}
@@ -785,10 +776,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return doctorCmd(ctx, root, rc, subArgs)
 	case "config":
 		return configCmd(ctx, root, globalCfg, subArgs)
-	case "sessions":
-		return sessionsCmd(ctx, root, subArgs)
-	case "attention":
-		return attentionCmd(ctx, root, subArgs)
+	case "session":
+		return sessionCmd(ctx, root, subArgs)
 	case "memory":
 		return memoryCmd(ctx, root, subArgs)
 	case "notes":
@@ -807,10 +796,6 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return initCmd(ctx, root, subArgs)
 	case "agent":
 		return agentCmd(ctx, subArgs)
-	case "hook":
-		return hookCmd(ctx, os.Stdin, os.Stdout, subArgs)
-	case "notify":
-		return notifyCmd(ctx, root, os.Stdin, os.Stdout, subArgs)
 	case "self":
 		return selfCmd(ctx, root, subArgs)
 	case "buzz":

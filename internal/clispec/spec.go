@@ -65,7 +65,7 @@ type Command struct {
 // ExitCode is one documented exit status.
 //
 // Codes are not unique across a command's list only because they are unique in
-// what they mean: `magus hook` exits 2 both for a denied command and for input it
+// what they mean: `magus session hook` exits 2 both for a denied command and for input it
 // could not parse. Where one code carries two meanings, say both in Meaning rather
 // than listing the code twice, which reads as a bug in the table.
 type ExitCode struct {

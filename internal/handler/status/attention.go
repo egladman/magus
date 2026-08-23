@@ -26,7 +26,7 @@ const consoleSessionHost = "console"
 // AttentionHandler serves /api/v1/attention: the blocks agents have raised in this repository
 // and waiting on a person, plus the one write that closes one.
 //
-// GET answers {"requests":[...],"store":"<dir>"} - the same shape `magus attention ls -o json`
+// GET answers {"requests":[...],"store":"<dir>"} - the same shape `magus session attention -o json`
 // prints, so the console and the terminal cannot come to describe one queue differently. The
 // requests are sessions.AttentionRequest values, which is what makes the two identical by
 // construction rather than by review.
@@ -128,7 +128,7 @@ func (h *AttentionHandler) dispose(w http.ResponseWriter, r *http.Request) {
 		disposeStatus(w, err, body.ID)
 		return
 	}
-	// The disposed request as the store now reads it, matching what `magus attention dispose
+	// The disposed request as the store now reads it, matching what `magus session dispose
 	// -o json` prints. The caller re-reads the queue on its next poll; answering with the row
 	// that closed lets it say WHICH one closed without waiting for that.
 	writeJSON(w, req)

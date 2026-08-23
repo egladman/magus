@@ -33,13 +33,13 @@ import (
 func notifyCmd(ctx context.Context, root string, in io.Reader, out io.Writer, args []string) error {
 	fset := flag.NewFlagSet("notify", flag.ContinueOnError)
 	bindDisplayFlags(fset)
-	nf := gen.BindNotify(fset)
+	nf := gen.BindSessionNotify(fset)
 	fset.Usage = func() { notifyUsage(os.Stderr) }
 	if err := fset.Parse(reorderFlagsFirst(fset, args)); err != nil {
 		return err
 	}
 	if len(fset.Args()) != 0 {
-		return usagef("magus notify: takes no positional arguments (read the event from stdin)")
+		return usagef("magus session notify:takes no positional arguments (read the event from stdin)")
 	}
 	opts, err := ResolveOutput(global.output)
 	if err != nil {
@@ -48,7 +48,7 @@ func notifyCmd(ctx context.Context, root string, in io.Reader, out io.Writer, ar
 
 	body, readErr := io.ReadAll(in)
 	if readErr != nil {
-		return fmt.Errorf("magus notify: read stdin: %w", readErr)
+		return fmt.Errorf("magus session notify:read stdin: %w", readErr)
 	}
 
 	ev := eventFromStdin(body)
@@ -107,7 +107,7 @@ func eventFromStdin(body []byte) types.Event {
 // same working plain-text notification.
 func noteUnusableEnvelope(err error, ev types.Event) {
 	if err != nil {
-		slog.Warn("magus notify: stdin looks like a JSON envelope but did not parse, so it was sent as plain text; no attention request can be opened from a prose message",
+		slog.Warn("magus session notify:stdin looks like a JSON envelope but did not parse, so it was sent as plain text; no attention request can be opened from a prose message",
 			slog.String("error", err.Error()))
 		return
 	}
@@ -121,7 +121,7 @@ func noteUnusableEnvelope(err error, ev types.Event) {
 	if ev.Source.Kind == "" {
 		missing = append(missing, "source.kind")
 	}
-	slog.Warn("magus notify: stdin parsed as JSON but is not a complete event envelope, so it was sent as plain text; no attention request can be opened from a prose message",
+	slog.Warn("magus session notify:stdin parsed as JSON but is not a complete event envelope, so it was sent as plain text; no attention request can be opened from a prose message",
 		slog.String("missing", strings.Join(missing, ", ")),
 		slog.String("next", "send message, outcome and source.kind together, and source.id to make the event addressable as a request"))
 }
@@ -191,17 +191,17 @@ func severityForOutcome(outcome types.EventOutcome) types.EventSeverity {
 }
 
 func notifyUsage(w io.Writer) {
-	fmt.Fprintln(w, "Usage: magus notify [--outcome <vocab>] [--desktop]")
+	fmt.Fprintln(w, "Usage: magus session notify [--outcome <vocab>] [--desktop]")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Raise one canonical attention event. Input may be plain text, a complete")
 	fmt.Fprintln(w, "types.Event JSON envelope. --desktop additionally raises an OS notification.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "An event whose outcome is waiting or permission also opens a durable request")
-	fmt.Fprintln(w, "in this repository, which `magus attention` lists and only a person closes.")
+	fmt.Fprintln(w, "in this repository, which `magus session attention` lists and only a person closes.")
 	fmt.Fprintln(w, "")
 	fmt.Fprintln(w, "Examples:")
-	fmt.Fprintf(w, "  printf '%%s\\n' 'needs approval' | magus notify --outcome permission --desktop\n")
-	fmt.Fprintf(w, "  printf '%%s\\n' '{\"outcome\":\"permission\",\"source\":{\"kind\":\"agent\"},\"message\":\"needs approval\"}' | magus notify --desktop\n")
+	fmt.Fprintf(w, "  printf '%%s\\n' 'needs approval' | magus session notify --outcome permission --desktop\n")
+	fmt.Fprintf(w, "  printf '%%s\\n' '{\"outcome\":\"permission\",\"source\":{\"kind\":\"agent\"},\"message\":\"needs approval\"}' | magus session notify --desktop\n")
 }
 
 func renderNotification(ev types.Event) (title, body string) {

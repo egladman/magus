@@ -187,7 +187,7 @@ Validate the workspace and return what every check found: {workspace, checks, su
 
 ### attention
 
-List the OPEN attention requests of this repository's session store: {requests, store}, each request {id, outcome, source, where, delegation, message, ...} as `magus attention -o json` reports them. Read-only by design: a magusfile may refuse to proceed while a request is open, but disposing one is a human act (see the workspace doctrine's Manual-on-purpose table), so no method here closes anything - the person runs `magus attention dispose <id> -reason <text>`. Runs a nested magus, so it works from a `magus buzz` script as well as a magusfile; opts.root and opts.dir as on doctor. Raises only when the subprocess cannot run or its output cannot decode.
+List the OPEN attention requests of this repository's session store: {requests, store}, each request {id, outcome, source, where, delegation, message, ...} as `magus session attention -o json` reports them. Read-only by design: a magusfile may refuse to proceed while a request is open, but disposing one is a human act (see the workspace doctrine's Manual-on-purpose table), so no method here closes anything - the person runs `magus session dispose <id> -reason <text>`. Runs a nested magus, so it works from a `magus buzz` script as well as a magusfile; opts.root and opts.dir as on doctor. Raises only when the subprocess cannot run or its output cannot decode.
 
 **Signature:** `magus\attention(args, [opts]) → map[string]any` · [source](https://github.com/egladman/magus/blob/main/std/magus.go#L759)
 

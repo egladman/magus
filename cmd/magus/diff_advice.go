@@ -117,10 +117,9 @@ func collectAdvice(ctx context.Context, dir string, files []string, base string)
 			notes = append(notes, fmt.Sprintf("%s: %s", file, w))
 		}
 		if err != nil {
-			// Classified here rather than at render time: warnings and failures share
-			// one ordered stream, and only this frame knows which is which. An advisor
-			// with ten warnings still ran; painting them all "could not run" reports
-			// ten dead advisors that each published a finding.
+			// Stamped here, not at render time: warnings and failures share one ordered
+			// stream, and only this frame knows which is which. An advisor with ten
+			// warnings still ran and published.
 			notes = append(notes, fmt.Sprintf("could not run: %s: %v", file, err))
 		}
 	}

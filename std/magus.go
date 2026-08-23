@@ -214,7 +214,7 @@ var Magus = Module{
 		},
 		{
 			Name: "attention",
-			Doc:  "List the OPEN attention requests of this repository's session store: {requests, store}, each request {id, outcome, source, where, delegation, message, ...} as `magus attention -o json` reports them. Read-only by design: a magusfile may refuse to proceed while a request is open, but disposing one is a human act (see the workspace doctrine's Manual-on-purpose table), so no method here closes anything - the person runs `magus attention dispose <id> -reason <text>`. Runs a nested magus, so it works from a `magus buzz` script as well as a magusfile; opts.root and opts.dir as on doctor. Raises only when the subprocess cannot run or its output cannot decode.",
+			Doc:  "List the OPEN attention requests of this repository's session store: {requests, store}, each request {id, outcome, source, where, delegation, message, ...} as `magus session attention -o json` reports them. Read-only by design: a magusfile may refuse to proceed while a request is open, but disposing one is a human act (see the workspace doctrine's Manual-on-purpose table), so no method here closes anything - the person runs `magus session dispose <id> -reason <text>`. Runs a nested magus, so it works from a `magus buzz` script as well as a magusfile; opts.root and opts.dir as on doctor. Raises only when the subprocess cannot run or its output cannot decode.",
 			Args: []Arg{
 				{Name: "args", Type: TypeStringSlice},
 				{Name: "opts", Type: TypeAnyMap, Optional: true},
@@ -549,7 +549,7 @@ func MagusBustCache(ctx context.Context, projectPath string) error {
 // typed magus.<name>(...) method. magus.cmd warns when its first arg names one,
 // nudging authors toward the clearer, signature-stable wrapper.
 var typedMagusSubcommands = map[string]bool{
-	"run": true, "describe": true, "doctor": true, "attention": true,
+	"run": true, "describe": true, "doctor": true, "session": true,
 }
 
 // errNoWorkspace is the MGS1022 error a magus.* member raises when it is called
@@ -757,7 +757,7 @@ func MagusDescribe(ctx context.Context, args []string, opts map[string]any) (typ
 // disposal is deliberately absent from this surface, because a script that closes
 // requests is the auto-disposition the doctrine's Manual-on-purpose table rules out.
 func MagusAttention(ctx context.Context, args []string, opts map[string]any) (map[string]any, error) {
-	return runMagusJSON[map[string]any](ctx, "attention", args, opts)
+	return runMagusJSON[map[string]any](ctx, "session", append([]string{"attention"}, args...), opts)
 }
 
 // MagusDoctor validates the workspace and returns the typed report.

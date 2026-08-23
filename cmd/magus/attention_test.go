@@ -70,7 +70,7 @@ func TestAttentionListShowsAnOpenRequest(t *testing.T) {
 	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision on the schema")))
 
 	out := captureStdout(t, func() {
-		require.NoError(t, attentionCmd(context.Background(), root, nil))
+		require.NoError(t, sessionCmd(context.Background(), root, []string{"attention"}))
 	})
 
 	assert.Contains(t, out, "OUTCOME")
@@ -81,7 +81,7 @@ func TestAttentionListShowsAnOpenRequest(t *testing.T) {
 	assert.Contains(t, out, "/repo")
 	assert.Contains(t, out, "needs a decision on the schema")
 	assert.Contains(t, out, "1 open request(s)")
-	assert.Contains(t, out, "magus attention dispose", "the listing names the one command that closes a request")
+	assert.Contains(t, out, "magus session dispose", "the listing names the one command that closes a request")
 	assert.Contains(t, out, "Nothing here closes on its own.")
 }
 
@@ -91,7 +91,7 @@ func TestAttentionListShowsTheRaisingDelegation(t *testing.T) {
 	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision on the schema")))
 
 	out := captureStdout(t, func() {
-		require.NoError(t, attentionCmd(context.Background(), root, nil))
+		require.NoError(t, sessionCmd(context.Background(), root, []string{"attention"}))
 	})
 
 	assert.Contains(t, out, "DELEGATION")
@@ -103,7 +103,7 @@ func TestAttentionListRendersAnUnattributedRequestWithADash(t *testing.T) {
 	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
 
 	out := captureStdout(t, func() {
-		require.NoError(t, attentionCmd(context.Background(), root, nil))
+		require.NoError(t, sessionCmd(context.Background(), root, []string{"attention"}))
 	})
 
 	// ID, AGE, OUTCOME, SOURCE, DELEGATION, WHERE, MESSAGE...
@@ -168,13 +168,13 @@ func TestAttentionListEmptyStateNamesTheProducer(t *testing.T) {
 	root := attentionTestRoot(t)
 
 	out := captureStdout(t, func() {
-		require.NoError(t, attentionCmd(context.Background(), root, []string{"ls"}))
+		require.NoError(t, sessionCmd(context.Background(), root, []string{"attention"}))
 	})
 
 	assert.Contains(t, out, "no open attention requests")
-	assert.Contains(t, out, "magus notify", "an empty queue has to say how a request would ever get here")
+	assert.Contains(t, out, "magus session notify", "an empty queue has to say how a request would ever get here")
 	assert.Contains(t, out, "waiting or permission")
-	assert.Contains(t, out, "magus attention dispose <id>")
+	assert.Contains(t, out, "magus session dispose <id>")
 }
 
 func TestAttentionListJSONCarriesTheRecordsAndTheStore(t *testing.T) {
@@ -184,7 +184,7 @@ func TestAttentionListJSONCarriesTheRecordsAndTheStore(t *testing.T) {
 	require.NoError(t, err)
 
 	out := captureStdout(t, func() {
-		require.NoError(t, attentionCmd(context.Background(), root, []string{"ls", "-o", "json"}))
+		require.NoError(t, sessionCmd(context.Background(), root, []string{"attention", "-o", "json"}))
 	})
 
 	assert.Contains(t, out, `"requests"`)
@@ -201,7 +201,7 @@ func TestAttentionListNameFormatPrintsIDsOnly(t *testing.T) {
 	require.Len(t, ids, 1)
 
 	out := captureStdout(t, func() {
-		require.NoError(t, attentionCmd(context.Background(), root, []string{"ls", "-o", "name"}))
+		require.NoError(t, sessionCmd(context.Background(), root, []string{"attention", "-o", "name"}))
 	})
 	assert.Equal(t, ids[0]+"\n", out)
 }
@@ -211,11 +211,11 @@ func TestAttentionDisposeUnknownIDNamesTheMechanismAndTheNextStep(t *testing.T) 
 	dir, err := sessions.Dir(root)
 	require.NoError(t, err)
 
-	err = attentionCmd(context.Background(), root, []string{"dispose", "att-doesnotexist"})
+	err = sessionCmd(context.Background(), root, []string{"dispose", "att-doesnotexist"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "att-doesnotexist")
 	assert.Contains(t, err.Error(), dir, "the error names the store it looked in")
-	assert.Contains(t, err.Error(), "magus attention", "and the command that lists the ids that do exist")
+	assert.Contains(t, err.Error(), "magus session attention", "and the command that lists the ids that do exist")
 }
 
 func TestAttentionDisposeClosesOnceAndRefusesASecondTime(t *testing.T) {
@@ -225,7 +225,7 @@ func TestAttentionDisposeClosesOnceAndRefusesASecondTime(t *testing.T) {
 	require.Len(t, ids, 1)
 
 	out := captureStdout(t, func() {
-		require.NoError(t, attentionCmd(context.Background(), root, []string{"dispose", ids[0], "-reason", "pushed it myself"}))
+		require.NoError(t, sessionCmd(context.Background(), root, []string{"dispose", ids[0], "-reason", "pushed it myself"}))
 	})
 	assert.Contains(t, out, "disposed "+ids[0])
 	assert.Contains(t, out, "needs approval to push")
@@ -233,28 +233,28 @@ func TestAttentionDisposeClosesOnceAndRefusesASecondTime(t *testing.T) {
 
 	assert.Empty(t, openRequestIDs(t, root), "a disposed request leaves the queue")
 
-	err := attentionCmd(context.Background(), root, []string{"dispose", ids[0]})
+	err := sessionCmd(context.Background(), root, []string{"dispose", ids[0]})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "already disposed")
-	assert.Contains(t, err.Error(), "magus attention")
+	assert.Contains(t, err.Error(), "magus session attention")
 }
 
 func TestAttentionDisposeNeedsExactlyOneID(t *testing.T) {
 	root := attentionTestRoot(t)
 
-	err := attentionCmd(context.Background(), root, []string{"dispose"})
+	err := sessionCmd(context.Background(), root, []string{"dispose"})
 	require.ErrorContains(t, err, "exactly one request id")
 
-	err = attentionCmd(context.Background(), root, []string{"dispose", "att-1", "att-2"})
+	err = sessionCmd(context.Background(), root, []string{"dispose", "att-1", "att-2"})
 	require.ErrorContains(t, err, "exactly one request id")
 }
 
 func TestAttentionRejectsAnUnknownSubcommand(t *testing.T) {
 	root := attentionTestRoot(t)
 
-	err := attentionCmd(context.Background(), root, []string{"resolve", "att-1"})
+	err := sessionCmd(context.Background(), root, []string{"resolve", "att-1"})
 	require.ErrorContains(t, err, `unknown subcommand "resolve"`)
-	require.ErrorContains(t, err, "want ls or dispose")
+	require.ErrorContains(t, err, "want ls, attention, dispose, hook, or notify")
 }
 
 func TestRecordAttentionOpenOnlyForBlockedOutcomes(t *testing.T) {
@@ -327,7 +327,7 @@ func TestNotifyOpensARequestThatAttentionLists(t *testing.T) {
 
 	global = globalFlags{}
 	listed := captureStdout(t, func() {
-		require.NoError(t, attentionCmd(context.Background(), root, nil))
+		require.NoError(t, sessionCmd(context.Background(), root, []string{"attention"}))
 	})
 	assert.Contains(t, listed, "needs approval to push")
 	assert.Contains(t, listed, "permission")
@@ -378,7 +378,7 @@ func TestAttentionQuietAnswersWithTheExitStatus(t *testing.T) {
 
 	global.quiet = true
 	out := captureStdout(t, func() {
-		err := attentionCmd(context.Background(), root, []string{"ls"})
+		err := sessionCmd(context.Background(), root, []string{"attention"})
 		var silent errSilent
 		require.ErrorAs(t, err, &silent)
 		assert.Equal(t, 1, silent.exitCode, "nothing is open")
@@ -389,7 +389,7 @@ func TestAttentionQuietAnswersWithTheExitStatus(t *testing.T) {
 
 	global.quiet = true
 	out = captureStdout(t, func() {
-		assert.NoError(t, attentionCmd(context.Background(), root, []string{"ls"}), "a request is open")
+		assert.NoError(t, sessionCmd(context.Background(), root, []string{"attention"}), "a request is open")
 	})
 	assert.Empty(t, out)
 }
@@ -400,7 +400,7 @@ func TestAttentionDisposeAcceptsAnUnambiguousPrefix(t *testing.T) {
 	id := openRequestIDs(t, root)[0]
 
 	out := captureStdout(t, func() {
-		require.NoError(t, attentionCmd(context.Background(), root, []string{"dispose", id[:8]}))
+		require.NoError(t, sessionCmd(context.Background(), root, []string{"dispose", id[:8]}))
 	})
 	assert.Contains(t, out, "disposed "+id, "the confirmation names the full id, not the prefix that was typed")
 	assert.Empty(t, openRequestIDs(t, root))
@@ -416,7 +416,7 @@ func TestAttentionDisposeRefusesAnAmbiguousPrefixAndNamesTheCandidates(t *testin
 	ids := openRequestIDs(t, root)
 	require.Len(t, ids, 2)
 
-	err := attentionCmd(context.Background(), root, []string{"dispose", "att-"})
+	err := sessionCmd(context.Background(), root, []string{"dispose", "att-"})
 	require.Error(t, err)
 	for _, id := range ids {
 		assert.Contains(t, err.Error(), id, "a person cannot choose between candidates the error does not name")
@@ -428,8 +428,8 @@ func TestAttentionDisposeReportsAPrefixThatMatchesNothing(t *testing.T) {
 	root := attentionTestRoot(t)
 	require.NoError(t, recordAttentionOpen(root, blockedEvent("needs a decision")))
 
-	err := attentionCmd(context.Background(), root, []string{"dispose", "att-zzzz"})
+	err := sessionCmd(context.Background(), root, []string{"dispose", "att-zzzz"})
 	require.Error(t, err)
 	assert.Contains(t, err.Error(), "no request matches")
-	assert.Contains(t, err.Error(), "magus attention", "the refusal names how to see the open ids")
+	assert.Contains(t, err.Error(), "magus session attention", "the refusal names how to see the open ids")
 }

@@ -267,13 +267,13 @@ lives in [doctrine.md](doctrine.md).
 
 One magus process's recorded facts - the targets it finished, their outcomes,
 and the delegation it acted as - kept in a repo-scoped store every worktree shares.
-`magus sessions` lists them; the store prunes itself by last-fact age.
+`magus session` lists them; the store prunes itself by last-fact age.
 
 ### Attention request
 
-A durable "an agent is blocked" record, opened when a `magus notify` event
-carries the waiting or permission outcome and held until a person disposes it.
-`magus attention` lists what is open. Nothing closes one on its own - see
+A durable "an agent is blocked" record, opened when a `magus session notify`
+event carries the waiting or permission outcome and held until a person disposes
+it. `magus session attention` lists what is open. Nothing closes one on its own - see
 [doctrine.md](doctrine.md).
 
 ### Dispose

@@ -13,7 +13,7 @@
 # because only it knows which of your host's tools look.
 #
 # Contract: reads the host's event as JSON on stdin, selects the path with jq,
-# and pipes it into `magus hook --observe`. It prints NOTHING and always exits
+# and pipes it into `magus session hook --observe`. It prints NOTHING and always exits
 # 0 - see the note on that below, which is load-bearing rather than tidy.
 # Override any of the variables below:
 #
@@ -94,10 +94,10 @@ transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty" 2>/d
 # A magus too old for --observe rejects the flag and exits non-zero. That is a
 # real state worth knowing about once, but not once per read, so it is reported
 # through the trail's own absence rather than through the session: if reads are
-# missing from `magus activity`, the binary is too old. Both streams are
+# missing from `magus session`, the binary is too old. Both streams are
 # discarded because a flag-parse error would otherwise reach the host as this
 # hook's response on every read.
-printf '%s' "$path" | "$GUARD_MAGUS_BIN" hook --observe \
+printf '%s' "$path" | "$GUARD_MAGUS_BIN" session hook --observe \
   --agent-name "$GUARD_AGENT_NAME" --session "$session" --transcript "$transcript" \
   --event PreToolUse >/dev/null 2>&1
 

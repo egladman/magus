@@ -85,7 +85,7 @@ func TestWithSessionJournalRecordsAffectedResults(t *testing.T) {
 	assert.Equal(t, uint64(1), fold.Records[0].Seq)
 }
 
-// `magus sessions` is a view of the repository, so a fact must not carry a trace of which
+// `magus session` is a view of the repository, so a fact must not carry a trace of which
 // command produced it. Comparing the raw payload bytes is what pins that: a field added
 // to one path and not the other would diverge here before anyone noticed in the view.
 func TestWithSessionJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
@@ -127,7 +127,7 @@ func TestWithSessionJournalWritesTheSameFactForRunAndAffected(t *testing.T) {
 }
 
 // The delegation is stamped in the shared wiring, not per command, for the same reason the fact shape
-// is: `magus sessions` is a view of the repository, and a delegation that only `run` recorded would
+// is: `magus session` is a view of the repository, and a delegation that only `run` recorded would
 // read as a fleet that stopped working the moment it ran `affected`.
 func TestWithSessionJournalStampsTheDelegationOnEveryVerb(t *testing.T) {
 	t.Setenv("XDG_STATE_HOME", t.TempDir())
