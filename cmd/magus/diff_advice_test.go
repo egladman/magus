@@ -43,6 +43,19 @@ fun main() > void !> any {
 }
 `
 
+// warningAdvisor trips BZZ3002 (string rebuilt in a loop) and still publishes, the shape
+// of every shipped advisor that lints imperfectly but runs.
+const warningAdvisor = `import "advice";
+
+fun main() > void !> any {
+    var text = "";
+    foreach (part in ["still", "standing"]) {
+        text = text + part;
+    }
+    advice\publish("", pr: "", name: "warned", title: "Ran anyway", body: text);
+}
+`
+
 const retractingAdvisor = `import "advice";
 
 fun main() > void !> any {
@@ -135,11 +148,39 @@ func TestCollectAdviceSurvivesABrokenAdvisor(t *testing.T) {
 	if !strings.Contains(notes[0], "broken.buzz") || !strings.Contains(notes[0], "broken on purpose") {
 		t.Errorf("note = %q, want it to name the advisor and the error", notes[0])
 	}
+	// The stamp is applied here, where a failure is distinguishable from a warning; the
+	// renderer prints notes verbatim, so an unstamped failure would read as a warning
+	// from an advisor that ran.
+	if !strings.HasPrefix(notes[0], "could not run: ") {
+		t.Errorf("note = %q, want the could-not-run stamp on a failure", notes[0])
+	}
 	if len(sections) != 2 {
 		t.Fatalf("sections = %+v, want the two working advisors", sections)
 	}
 	if sections[0].Name != "echo" || sections[1].Name != "quiet" {
 		t.Errorf("sections = %+v, want them in the order they were listed", sections)
+	}
+}
+
+// A warning is not a failure: the advisor ran and published, so its note must not carry
+// the could-not-run stamp - ten warnings once rendered as ten dead advisors.
+func TestCollectAdviceDoesNotStampAWarningAsAFailure(t *testing.T) {
+	dir := stubAdviceDir(t, map[string]string{"warned.buzz": warningAdvisor})
+
+	sections, notes, err := collectAdvice(context.Background(), dir, []string{"warned.buzz"}, "main")
+	if err != nil {
+		t.Fatalf("collectAdvice: %v", err)
+	}
+	if len(sections) != 1 {
+		t.Fatalf("sections = %+v, want the advisor's finding: it ran", sections)
+	}
+	if len(notes) == 0 {
+		t.Fatal("want the warning surfaced as a note")
+	}
+	for _, n := range notes {
+		if strings.HasPrefix(n, "could not run: ") {
+			t.Errorf("note = %q, want no could-not-run stamp on a warning", n)
+		}
 	}
 }
 

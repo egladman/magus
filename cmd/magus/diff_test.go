@@ -220,7 +220,7 @@ func preflightFixture() diffPreflight {
 		Advisors: []adviceSection{
 			{Name: "public-surface", Title: "A public symbol changed", Body: "types.Diff is exported.\nBump the minor."},
 		},
-		AdvisorNotes: []string{"coverage: no profile loaded"},
+		AdvisorNotes: []string{"could not run: coverage: no profile loaded"},
 		Anchors: []anchorHit{
 			{Note: "cache-invalidation-pairs", Kind: "file", Target: "internal/cache/cache.go"},
 			{Note: "secret-value-type", Kind: "symbol", Target: "m types/Secret#", Drift: "drifted-anchor"},
