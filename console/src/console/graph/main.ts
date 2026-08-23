@@ -90,6 +90,7 @@ import {
   dependencyDegrees,
   disconnected,
   mostDependedOn,
+  opensProjected,
   projectOwners as computeProjectOwners,
 } from "./views.js";
 import { flavorOf, isTargetGraph, targetGraphToNodeLink } from "./target-adapter.js";
@@ -2369,15 +2370,30 @@ let pendingFit: { ids: Set<string> | null; glideMs?: number } | null = null;
 let pendingFitArmed = false;
 
 // worldBox is the bounding box of `ids` (or of every placed node when null), in world units.
+// framable reports whether a node counts toward the FRAMING - which has to mean exactly "draw()
+// paints it", because a fit that measures something invisible frames empty canvas.
+//
+// Two ways a node is on the list but off the screen, and both have bitten:
+//   parked   - pinned at PARKED_X (-1e6) while a projection is up. Counting these measures a box a
+//              million units wide, so the fit clamps to its minimum scale and translates by
+//              ~100,000; the few nodes that ARE visible land off-canvas and the stage reads blank.
+//   hidden   - outside an active projection but NOT parked, which is the state unparkNodes leaves
+//              them in: it scatters the released set over a disc to avoid a singularity, so their
+//              coordinates become ordinary while the projection still declines to draw them. That
+//              one is quieter and worse. The box stays a sane size, so nothing looks broken - it is
+//              just centred on 2364 invisible nodes, which pushes the ten real ones a couple of
+//              hundred pixels off to one side. The fit is a stable fixed point the whole time, so
+//              pressing Fit again changes nothing and the framing looks like a layout problem.
+function framable(n: GNode): boolean {
+  if (n.x == null || n.x === PARKED_X) return false;
+  if (!projectionUnfolded && projectionSet && !projectionSet.has(n.id)) return false;
+  return true;
+}
+
 // Null when nothing in the set has a position yet. In a card mode the box measures the drawn
 // card rather than the dot radius, so a fit does not clip the labels it exists to make readable.
 function worldBox(ids: Set<string> | null): WorldBox | null {
-  // PARKED nodes are excluded from the extent. They sit at PARKED_X (-1e6) precisely because they
-  // are not on screen, so counting them measures a box a million units wide: the fit answers by
-  // clamping to its minimum scale and translating by ~100,000, which puts the handful of nodes that
-  // ARE visible off the canvas and leaves it blank. Every framing goes through here, so the Fit
-  // button did this too on any projected graph - press it and the graph vanished.
-  const pts = graph.nodes.filter((n) => n.x != null && n.x !== PARKED_X && (!ids || ids.has(n.id)));
+  const pts = graph.nodes.filter((n) => framable(n) && (!ids || ids.has(n.id)));
   if (!pts.length) return null;
   let minX = Infinity,
     minY = Infinity,
@@ -2399,9 +2415,9 @@ function worldBox(ids: Set<string> | null): WorldBox | null {
 // a graph that was just REPLACED has nothing on screen the eye was tracking, so animating from
 // the old camera reads as a move rather than as an arrival.
 function fitView(ids: Set<string> | null, glideMs?: number) {
-  // Same parked-node exclusion worldBox applies below: this guard only asks whether there is
-  // anything to frame, and a parked node is not something to frame.
-  const pts = graph.nodes.filter((n) => n.x != null && n.x !== PARKED_X && (!ids || ids.has(n.id)));
+  // Same visibility rule worldBox applies below: this guard only asks whether there is anything to
+  // frame, and a node nobody can see is not something to frame.
+  const pts = graph.nodes.filter((n) => framable(n) && (!ids || ids.has(n.id)));
   if (!pts.length || !zoomBehavior) return; // setupZoomDrag has not run yet
   if (canvas.clientWidth <= 0) {
     // Carry glideMs through the deferral. Dropping it turned frameNewGraph's deliberate SNAP back
@@ -5231,17 +5247,10 @@ function computeDefaultProjection(hasFragmentDirective: boolean) {
   // expand on demand, Sourcegraph opens on nothing - and this graph already carries the way back
   // out, the "Show full graph" unfold.
   //
-  // The threshold was 2500, chosen as a PERFORMANCE guard against janking the reveal. That made it
-  // useless for legibility twice over: it is a judgement about frame budget rather than about
-  // reading, and magus's own graph - the flagship demo, and the graph most readers meet first - is
-  // 2376 nodes, so the flagship case cleared the guard by 5% and opened as fog.
-  //
-  // The number below is a legibility judgement and not a measurement: it is the rough point where
-  // a force layout stops separating clusters and starts stacking them. Below it the full graph is
-  // still worth showing, and collapsing a 40-node workspace to four project dots would be the
-  // worse first impression.
-  const LEGIBLE_NODE_COUNT = 250;
-  if (!hasFragmentDirective && graph && graph.nodes.length > LEGIBLE_NODE_COUNT) {
+  // opensProjected (views.ts) owns the threshold and the reasoning behind it. It lives there rather
+  // than inline because it is the one behavioral constant here a reader is most likely to change on
+  // a hunch, and pure it can be pinned by a test that states what each side of the line is for.
+  if (graph && opensProjected(graph.nodes.length, hasFragmentDirective)) {
     const ps = buildProjectionSet();
     if (ps) {
       projectionUnfolded = false;
