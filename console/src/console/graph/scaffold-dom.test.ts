@@ -78,6 +78,24 @@ test("no LIVE view control is hard-coded in the scaffold", () => {
   );
 });
 
+// The builder is the only control that teaches the query language, and it sits third in a row of
+// four identically-styled control buttons. Drawn as vertical dots it read as this text field's
+// overflow menu, which is what that glyph means everywhere else, and the aria-label saying
+// otherwise reaches nobody who can see. A visible word is what makes it findable.
+test("the query builder is named, and is not drawn as an overflow menu", () => {
+  const host = parse();
+  const btn = host.querySelector<HTMLElement>("#query-builder-btn");
+  assert.ok(btn, "the builder is the one way to ask without knowing the syntax");
+  assert.equal(btn.querySelector(".pf-v6-c-button__text")?.textContent, "Ask");
+  // Three same-sized circles in a column is the kebab, whatever the markup calls it.
+  const dots = [...btn.querySelectorAll("svg circle")];
+  const xs = new Set(dots.map((c) => c.getAttribute("cx")));
+  assert.ok(
+    !(dots.length >= 3 && xs.size === 1),
+    "a vertical column of three dots is an overflow menu to every reader who has used software",
+  );
+});
+
 test("data-conditional is the only mechanism for data-backed visibility", () => {
   // The marker used to mean two things: a CSS rule scoped to .console-graph-views__chip, plus a
   // separately-set `hidden` for anything else (a PF button outspecifies a bare attribute

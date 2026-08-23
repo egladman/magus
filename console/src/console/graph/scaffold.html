@@ -83,11 +83,19 @@
             <div class="pf-v6-c-input-group__item">
               <!-- Opens the question builder (querybuilder.ts). It replaced two columns of prebuilt
                    chips: those ran the right query and taught nothing, because the string they
-                   typed was never shown. -->
-              <button id="query-builder-btn" type="button" class="pf-v6-c-button pf-m-control" title="Build a filter, or run a view" aria-label="Ask the graph">
+                   typed was never shown.
+
+                   It is NAMED, and it no longer uses a three-dot glyph. Vertical dots are the
+                   universal overflow-menu affordance, so drawn that way - third in a row of four
+                   identically-styled control buttons - the one control that teaches the query
+                   language read as "more options for this text field", and the only thing saying
+                   otherwise was an aria-label a sighted reader never receives. Sliders are the
+                   filter-builder convention, and the word carries the rest. -->
+              <button id="query-builder-btn" type="button" class="pf-v6-c-button pf-m-control" title="Build a filter, or run a view, without knowing the query syntax" aria-label="Ask the graph">
                 <span class="pf-v6-c-button__icon" aria-hidden="true">
-                  <svg viewBox="0 0 24 24" width="16" height="16" fill="currentColor"><circle cx="12" cy="5" r="1.8"/><circle cx="12" cy="12" r="1.8"/><circle cx="12" cy="19" r="1.8"/></svg>
+                  <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="8" x2="20" y2="8"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="10" cy="8" r="2.6" fill="currentColor"/><circle cx="16" cy="16" r="2.6" fill="currentColor"/></svg>
                 </span>
+                <span class="pf-v6-c-button__text">Ask</span>
               </button>
             </div>
             <div class="pf-v6-c-input-group__item">
