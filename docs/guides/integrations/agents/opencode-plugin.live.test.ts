@@ -80,6 +80,10 @@ type SpawnCall = { bin: string; argv: string[]; stdin: string };
  * magus binary instead of a canned reply.
  */
 function stubBunWithRealChild(bin: string): SpawnCall[] {
+  // The plugin resolves its own binary (GUARD_MAGUS_BIN, ./magus from ITS cwd, PATH).
+  // Under the test runner the cwd is this directory, so without the env pin it falls
+  // through to PATH - a released magus that may predate the subcommands under test.
+  process.env.GUARD_MAGUS_BIN = bin;
   const calls: SpawnCall[] = [];
   const spawn = (spawned: string[], opts: { stdin?: Uint8Array }) => {
     const stdin = opts.stdin ? new TextDecoder().decode(opts.stdin) : "";
