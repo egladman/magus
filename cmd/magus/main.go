@@ -214,6 +214,23 @@ func hasDetachFlag(args []string) bool {
 	return false
 }
 
+// isForensicAffected reports whether an `affected` invocation selects one of the forensic
+// modes affectedUsage lists that reason about the set without executing a target:
+// --explain, --plan, --impact. --bisect is excluded deliberately - it runs the target once
+// per candidate commit, so it wants the shared pool a forward buys.
+//
+// It reuses affected()'s own routing predicates rather than restating them, so the forward
+// decision agrees with what the handler does locally - the property isUsageOnlyInvocation
+// exists for one layer up. That includes NOT stopping at "--": affected() routes on a
+// bare scan too, and a guard here that disagreed would forward an invocation the handler
+// then answers as a forensic mode.
+func isForensicAffected(subArgs []string) bool {
+	if _, _, ok := parseExplainArgs(subArgs); ok {
+		return true
+	}
+	return hasModeFlag(subArgs, "plan") || hasModeFlag(subArgs, "impact")
+}
+
 // resolveProfile returns the work profile for a subcommand; defaults to "needs everything".
 func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	switch sub {
@@ -299,6 +316,16 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// with silence and exit 0 - observed before this guard existed. It needs no
 		// workspace either: it hands off an argv and returns.
 		if hasDetachFlag(subArgs) {
+			return dispatchProfile{needsConfig: true}
+		}
+		// A forensic mode runs nothing, so there is no pool to share, and its report IS
+		// its stdout. An adopted call has nowhere to put that: RunReply carries an exit
+		// code and an error string and never output, so the daemon runs the mode in its
+		// OWN process and prints the report on ITS stdout. A caller that CAPTURES the
+		// child - magus\affectedImpact forks `affected --impact -o json` and decodes it -
+		// then reads an empty stdout at exit 0 and reports an undecodable report. Same
+		// shape as the usage bug above, one layer down.
+		if sub == "affected" && isForensicAffected(subArgs) {
 			return dispatchProfile{needsConfig: true}
 		}
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true}

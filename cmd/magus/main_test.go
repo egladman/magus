@@ -44,6 +44,19 @@ func TestResolveProfileRunAffectedUsageSkipsForward(t *testing.T) {
 		{"affected -h", "affected", []string{"-h"}, usageOnly},
 		{"affected --help", "affected", []string{"--help"}, usageOnly},
 		{"affected target still forwards", "affected", []string{"ci"}, full},
+		// A forensic mode runs nothing, so a forward buys no pool and costs the report:
+		// the daemon prints it on its own stdout and the client exits 0 with an empty one.
+		// That is what made magus\affectedImpact - which forks `affected --impact -o json`
+		// and decodes the child's stdout - fail with "decode report:" and an empty stderr
+		// whenever the caller had a daemon to forward to.
+		{"affected --impact stays local", "affected", []string{"--impact"}, usageOnly},
+		{"affected --impact with a base stays local", "affected", []string{"--impact", "--base", "origin/main", "-o", "json"}, usageOnly},
+		{"affected --explain stays local", "affected", []string{"--explain", "docs"}, usageOnly},
+		{"affected --plan stays local", "affected", []string{"ci", "--plan"}, usageOnly},
+		// --bisect runs the target once per candidate commit, so it still wants the pool.
+		{"affected --bisect still forwards", "affected", []string{"--bisect", "docs"}, full},
+		{"a longer mode flag is a different flag", "affected", []string{"ci", "--impactful"}, full},
+		{"run is never a forensic mode", "run", []string{"build", "--impact"}, full},
 		{"server stop never forwards", "server", []string{"stop"}, serverProfile},
 		{"server start never forwards", "server", []string{"start"}, serverProfile},
 		{"server job never forwards", "server", []string{"job", "sync-graph"}, serverProfile},
