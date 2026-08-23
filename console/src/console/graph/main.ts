@@ -22,10 +22,12 @@ import {
   forceSimulation,
   forceLink,
   forceManyBody,
-  forceCenter,
   forceCollide,
   forceX,
   forceY,
+  type ForceX,
+  type ForceY,
+  type ForceLink,
   type Simulation,
 } from "d3-force";
 import { zoom as d3zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } from "d3-zoom";
@@ -827,13 +829,55 @@ function applyRadialMode(): Set<string> | null {
 // simulation moves it, and a fitView over bounds a million units wide collapses the zoom to its
 // floor, so the canvas comes back blank.
 function unparkNodes() {
+  // Released onto a DISC, never onto a point. Setting every one of them to (0, 0) stacks two
+  // thousand nodes on one coordinate, which is the singularity seedBigBang was written to avoid:
+  // many-body repulsion grows without bound as distance goes to zero, so they detonate, and a
+  // layout that settles in about a second freezes the starburst instead of spending the rest of
+  // the session hauling it back. Same disc, same sizing rule, same reason.
+  const { w, h } = resizeCanvas();
+  const c = usableCenter(w, h, stageInsets());
+  const radius = 24 + Math.sqrt(graph.nodes.length) * 9.6;
+  let released = 0;
   for (const n of graph.nodes) {
     if (n.fx !== PARKED_X) continue;
     n.fx = null;
     n.fy = null;
-    n.x = 0;
-    n.y = 0;
+    const a = Math.random() * 2 * Math.PI;
+    const r = Math.sqrt(Math.random()) * radius;
+    n.x = c.x + Math.cos(a) * r;
+    n.y = c.y + Math.sin(a) * r;
+    n.vx = 0;
+    n.vy = 0;
+    released++;
   }
+  syncSimMembership(null);
+  // The released nodes have positions but no arrangement; without this the graph would hold the
+  // scatter it was just given, since the layout no longer runs on its own.
+  if (released) sim?.alpha(0.9).restart();
+}
+
+// syncSimMembership decides which nodes the SIMULATION runs over - `keep` when a projection is
+// active, every node when it is null.
+//
+// Pinning a node at PARKED_X is not enough to take it out of the layout, and that is the whole
+// reason this exists. A pin only stops the tick loop writing the node's own position; every force
+// still reads it and still answers. forceLink then holds links from the ten visible nodes to two
+// thousand parked ones, pulls each pair to its 55-unit target, and since only the parked end is
+// pinned, the VISIBLE end is what moves - dragged most of a million units to the parking
+// coordinate, where the fit collapses to its floor and the canvas reads blank.
+//
+// Restricting membership is also what the parking was for: the comment on PARKED_X says the point
+// is not to spend cycles on the hidden set, and until now it spent them anyway.
+function syncSimMembership(keep: Set<string> | null): void {
+  if (!sim) return;
+  const nodes = keep ? graph.nodes.filter((n) => keep.has(n.id)) : graph.nodes;
+  const links = keep
+    ? graph.links.filter((e) => keep.has(endpointId(e.source)) && keep.has(endpointId(e.target)))
+    : graph.links;
+  // Nodes BEFORE links: d3 re-initializes every force against the new node list, and the link
+  // force resolves its endpoint ids against exactly that list.
+  sim.nodes(nodes);
+  (sim.force("link") as ForceLink<GNode, GLink> | undefined)?.links(links);
 }
 
 // unpinAllNodes hands every node back to the simulation - the pins a DAG or radial layout set
@@ -1020,7 +1064,19 @@ function seedBigBang() {
   if (isDagMode() || motionSuppressed() || !graph?.nodes.length) return;
   const { w, h } = resizeCanvas();
   const c = usableCenter(w, h, stageInsets());
-  const radius = 24 + Math.sqrt(graph.nodes.length) * 3;
+  // Sized to the area the nodes will SETTLE into, not to an arbitrary multiple of sqrt(n). A mark
+  // plus its clear space occupies about (2r + NODE_GAP) across - roughly 17 world units at the
+  // median r of 5.3 - so a disc that already holds them without overlap has radius
+  // sqrt(n * 17^2 / pi), which is 9.6 * sqrt(n).
+  //
+  // The old coefficient was 3, seeding 2374 nodes into a disc of radius 170 when they need 468.
+  // Nothing about the burst survives that: charge is -180 out to a range of 250, so at that
+  // density essentially every pair repels at full strength at once, and the graph detonates to a
+  // ±40,000-unit extent that the fit can only answer by clamping to its minimum scale. It looked
+  // survivable only because the simulation never used to stop - it spent the rest of the session
+  // quietly hauling the debris back in under the 0.02-strength centering forces, and a layout that
+  // settles cannot do that. Seeding at the settled density means there is no debris.
+  const radius = 24 + Math.sqrt(graph.nodes.length) * 9.6;
   for (const n of graph.nodes) {
     // sqrt() on the radius keeps the disc evenly filled instead of clumping at the center,
     // which is the same singularity in miniature.
@@ -1092,6 +1148,16 @@ function setHalo(id: string | null): void {
   sim.alpha(0.35).restart();
 }
 
+// recenterSimulation re-aims the centering springs after the stage changes size. It retargets the
+// existing forces rather than installing a fresh centering force, because the obvious spelling -
+// sim.force("center", forceCenter(...)) - is what put a million units between the graph and the
+// canvas; see the note against the charge force below.
+function recenterSimulation(x: number, y: number): void {
+  if (!sim) return;
+  (sim.force("x") as ForceX<GNode> | undefined)?.x(x);
+  (sim.force("y") as ForceY<GNode> | undefined)?.y(y);
+}
+
 function startSimulation() {
   if (sim) sim?.stop(); // stop the prior run (e.g. after loading a new file) - its timer would keep ticking
   const { w, h } = resizeCanvas();
@@ -1113,7 +1179,16 @@ function startSimulation() {
     // hard over a SHORTER range spends the force where the crowding is, so clusters separate
     // while the graph's overall extent stays roughly put.
     .force("charge", forceManyBody().strength(-180).distanceMax(250))
-    .force("center", forceCenter(simCenter.x, simCenter.y))
+    // NO forceCenter. It centers by measuring the centroid of every node and translating the whole
+    // set, and it writes `node.x -= sx` UNCONDITIONALLY - it is the one force in d3 that ignores
+    // fx/fy pinning. parkHiddenNodes pins everything outside the projection at PARKED_X (-1e6), so
+    // on a projected graph the centroid sits near -1e6 and forceCenter answers by shoving all of it
+    // - the ten visible nodes included - about a million units the other way, off any canvas. The
+    // two had never met: parking only happens on a projected load, and the projection only used to
+    // engage above 2500 nodes, which the graph this console ships with (2374) never reached.
+    //
+    // forceX/forceY below do the same job as a spring on VELOCITY, which the tick loop then ignores
+    // for any node holding fx/fy. Centering that respects the pins is centering that cannot do this.
     // Collide is what actually sets the spacing in the crowded core - charge is saturated there,
     // so raising it only inflates the periphery (above). Two things decide whether a reader can
     // tell one mark from the next. It has to measure the MARK: sizing on d.r let 18.7% of the
@@ -5175,6 +5250,10 @@ function parkHiddenNodes() {
         n.y = PARKED_X;
       }
     }
+    // The pins alone leave every parked node in the layout; syncSimMembership is what takes them
+    // out of it. See its comment for what happens when it does not.
+    syncSimMembership(projectionSet);
+    sim?.alpha(0.6).restart();
   }
 }
 
@@ -5585,7 +5664,7 @@ function bootWireEvents() {
         resizeCanvas();
         if (sim) {
           const c = usableCenter(canvas.clientWidth, canvas.clientHeight, stageInsets());
-          sim.force("center", forceCenter(c.x, c.y));
+          recenterSimulation(c.x, c.y);
           sim.alpha(0.15).restart();
         }
         draw();
@@ -5647,7 +5726,7 @@ function bootWireEvents() {
       resizeCanvas();
       if (sim) {
         const c = usableCenter(canvas.clientWidth, canvas.clientHeight, stageInsets());
-        sim.force("center", forceCenter(c.x, c.y));
+        recenterSimulation(c.x, c.y);
         sim.alpha(0.1).restart();
       }
       // Selecting a node narrows the stage by the explain card's width, and a DAG layout keeps
