@@ -1231,6 +1231,14 @@ function startSimulation() {
     // opening burst to feel like one event. This settles in roughly a second, and then stops.
     .alphaDecay(0.06)
     .on("tick", draw);
+  // Every simulation gets its final framing armed HERE, on the object that will emit the "end" it
+  // hangs on. Arming it at the call sites that start a layout instead loses it the moment two of
+  // them race: activate() runs twice on a `magus graph open` deep link - the standalone page boots
+  // the surface, then opening it from the rail activates it again - and the second pass builds a
+  // NEW simulation while the settle fit sits on the discarded one. What that looks like is a graph
+  // framed by one of the early beats, at the size it was a third of a second in, and never framed
+  // again as it expands: the whole layout ends up two and a half times the canvas.
+  armSettleFit();
 }
 
 function draw() {
@@ -2337,7 +2345,6 @@ function revealWholeGraph() {
         fitView(null);
       }, at);
     }
-    armSettleFit();
   });
 }
 
