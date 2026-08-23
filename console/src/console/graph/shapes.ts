@@ -48,6 +48,25 @@ const K_HEXAGON = Math.sqrt(AREA / ((3 * Math.sqrt(3)) / 2));
 const RING_HOLE = 0.52;
 const K_RING = 1 / Math.sqrt(1 - RING_HOLE * RING_HOLE);
 
+// An equilateral triangle's centroid sits below its circumcentre, so the mark is nudged down by
+// this fraction of s to stop it looking like it floats above its own edges. Both traceNodeShape
+// and REACH_BY_SHAPE read it: the nudge moves the bottom corners further from the node's centre,
+// which is what makes the triangle the widest-reaching mark of the six.
+const TRI_NUDGE = 0.125;
+
+// How far each mark's outline actually reaches, as a multiple of r. Area normalization buys equal
+// ink at the cost of equal extent: every polygon spills past the circle of radius r, a triangle by
+// two thirds. Anything that reasons about a node's footprint - the collide force above all - has to
+// measure the mark, not r, or shaped nodes overlap while the simulation reports them clear.
+const REACH_BY_SHAPE: Readonly<Record<NodeShape, number>> = {
+  circle: 1,
+  square: K_SQUARE * Math.SQRT2, // corner, not edge
+  triangle: K_TRIANGLE * Math.hypot(0.866, 0.5 + TRI_NUDGE), // a nudged-down bottom corner
+  diamond: K_DIAMOND,
+  hexagon: K_HEXAGON,
+  ring: K_RING,
+};
+
 // traceNodeShape lays the path and nothing else, so a fill and a selection stroke share one
 // definition of the outline.
 export function traceNodeShape(
@@ -66,9 +85,7 @@ export function traceNodeShape(
     }
     case "triangle": {
       const s = r * K_TRIANGLE;
-      // Nudged down because an equilateral triangle's centroid sits below its circumcentre;
-      // centered on the circumcentre it looks like it is floating above its own edges.
-      const cy = y + s * 0.125;
+      const cy = y + s * TRI_NUDGE;
       ctx.moveTo(x, cy - s);
       ctx.lineTo(x + s * 0.866, cy + s * 0.5);
       ctx.lineTo(x - s * 0.866, cy + s * 0.5);
@@ -124,4 +141,11 @@ export function punchRing(
 
 export function shapeOfNode(n: GNode): NodeShape {
   return SHAPE_BY_KIND[n.kind] ?? "circle";
+}
+
+// nodeReach is the radius of the smallest circle containing the node's drawn mark - its footprint
+// for spacing purposes, always >= n.r. Callers that want clear space between two marks must add
+// their own gap; this is the outline itself.
+export function nodeReach(n: GNode): number {
+  return n.r * REACH_BY_SHAPE[shapeOfNode(n)];
 }
