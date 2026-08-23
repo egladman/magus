@@ -691,9 +691,40 @@ function neighborhood(id: string, depth: number) {
 
 // ---- layered DAG layout (see layout.ts for the pure Sugiyama algorithm) ----
 
-// PARKED_X is the off-canvas coordinate hidden nodes are pinned to (radial's unplaced set, the
-// default projection's non-projects) so the force simulation does not waste cycles on them.
-const PARKED_X = -1e6;
+// hiddenNodes is the set of ids the canvas is NOT drawing right now: the non-projects under a
+// default projection, and the nodes radial could not place. It is the single answer to "is this on
+// screen", and `shown` below is the only way anything should ask.
+//
+// It replaced a sentinel COORDINATE. Hidden nodes used to be pinned at x = y = -1e6, which put
+// "invisible" in the same field as "where", and every consumer then had to remember to filter for
+// a magic number. Two bugs came straight out of that, both found by looking at the screen rather
+// than by any test:
+//   - fitView measured the sentinel, so the extent came out a million units wide, the scale clamped
+//     to its floor and the canvas went blank.
+//   - unparking had to INVENT positions for everything it released (a random disc, to avoid two
+//     thousand nodes landing on one point and detonating under repulsion). Those invented
+//     coordinates are ordinary numbers, so the released-but-still-hidden nodes silently rejoined
+//     the extent while the projection still declined to draw them, and every fit centred on 2364
+//     things nobody could see.
+// Neither is reachable now. Visibility is not a coordinate, hiding does not move anything, and a
+// hidden node simply keeps the position it already had - so unfolding resumes the arrangement it
+// left instead of scattering to a fresh one.
+let hiddenNodes = new Set<string>();
+
+// shown reports whether a node is on screen: it has a position, and nothing is hiding it. Every
+// draw, fit, and hit test keys off this, so they cannot disagree about what is visible - which is
+// exactly how the framing bugs above happened.
+function shown(n: GNode): boolean {
+  return n.x != null && !hiddenNodes.has(n.id);
+}
+
+// setHidden is the ONE place visibility changes. It also re-scopes the simulation, because the two
+// have to move together: a node left in the layout still answers to link and charge, so hiding it
+// without removing it means the visible nodes get dragged toward wherever it sits.
+function setHidden(ids: Iterable<string> | null): void {
+  hiddenNodes = ids ? new Set(ids) : new Set();
+  syncSimMembership();
+}
 
 // applyLayoutedMode: switch to layered layout for the visible node/link set.
 // Returns false (with a status message) when the scale guard fires.
@@ -761,9 +792,9 @@ function reapplyDagLayout(): boolean {
 // placed set (everything within RADIAL_MAX_RINGS hops of the center, over the
 // visible subset) rather than accepting matchSet as-is - it narrows matchSet
 // to that placed set afterward so the node list/status agree with what's
-// drawn. Nodes that were visible but fell outside the placed set are parked
-// off-canvas (fx/fy = PARKED_X, the same convention parkHiddenNodes uses) so they
-// don't sit stacked at the origin. Stops the force simulation - radial pins
+// drawn. Nodes that were visible but fell outside the placed set are HIDDEN
+// (setHidden, the same mechanism the default projection uses); they keep their
+// positions, which nothing reads while they are hidden. Stops the force simulation - radial pins
 // fx/fy like the dag modes, even though it is not one (see isDagMode).
 // Jump straight to radial when a node is already selected, else arm a one-shot pick that
 // switchLayout("radial")s on the next selectNode (see selectNode).
@@ -794,16 +825,9 @@ function applyRadialMode(): Set<string> | null {
   radialCenter = center;
   const placed = new Set<string>();
   for (const ring of rings) for (const id of ring) placed.add(id);
-  let hiddenCount = 0;
-  for (const n of subset) {
-    if (!placed.has(n.id)) {
-      n.fx = PARKED_X;
-      n.fy = PARKED_X;
-      n.x = PARKED_X;
-      n.y = PARKED_X;
-      hiddenCount++;
-    }
-  }
+  const unplaced = subset.filter((n) => !placed.has(n.id)).map((n) => n.id);
+  const hiddenCount = unplaced.length;
+  setHidden(unplaced);
   matchSet = placed;
   const centerNode = graph.byId.get(center);
   setStatus(
@@ -825,55 +849,35 @@ function applyRadialMode(): Set<string> | null {
   return placed;
 }
 
-// unparkNodes releases only the nodes sitting at the parking coordinate, returning them to the
-// origin. Resetting x/y is not optional: a released node keeps its parked coordinate until the
-// simulation moves it, and a fitView over bounds a million units wide collapses the zoom to its
-// floor, so the canvas comes back blank.
-function unparkNodes() {
-  // Released onto a DISC, never onto a point. Setting every one of them to (0, 0) stacks two
-  // thousand nodes on one coordinate, which is the singularity seedBigBang was written to avoid:
-  // many-body repulsion grows without bound as distance goes to zero, so they detonate, and a
-  // layout that settles in about a second freezes the starburst instead of spending the rest of
-  // the session hauling it back. Same disc, same sizing rule, same reason.
-  const { w, h } = resizeCanvas();
-  const c = usableCenter(w, h, stageInsets());
-  const radius = 24 + Math.sqrt(graph.nodes.length) * 9.6;
-  let released = 0;
-  for (const n of graph.nodes) {
-    if (n.fx !== PARKED_X) continue;
-    n.fx = null;
-    n.fy = null;
-    const a = Math.random() * 2 * Math.PI;
-    const r = Math.sqrt(Math.random()) * radius;
-    n.x = c.x + Math.cos(a) * r;
-    n.y = c.y + Math.sin(a) * r;
-    n.vx = 0;
-    n.vy = 0;
-    released++;
-  }
-  syncSimMembership(null);
-  // The released nodes have positions but no arrangement; without this the graph would hold the
-  // scatter it was just given, since the layout no longer runs on its own.
-  if (released) sim?.alpha(0.9).restart();
+// revealHidden puts everything back on screen - the way out of a projection or a radial view.
+//
+// It moves NOTHING. Each node still holds the position it had when it was hidden, so unfolding
+// resumes the arrangement the reader last saw rather than throwing it away. The version that
+// invented a fresh scatter here had to, because the sentinel had overwritten the real coordinates
+// and there was nothing left to resume.
+function revealHidden() {
+  if (!hiddenNodes.size) return;
+  setHidden(null);
+  // The revealed nodes have positions but have not been laid out against each other since before
+  // they were hidden, and the layout does not run on its own any more.
+  sim?.alpha(0.9).restart();
 }
 
-// syncSimMembership decides which nodes the SIMULATION runs over - `keep` when a projection is
-// active, every node when it is null.
+// syncSimMembership scopes the SIMULATION to the visible nodes.
 //
-// Pinning a node at PARKED_X is not enough to take it out of the layout, and that is the whole
-// reason this exists. A pin only stops the tick loop writing the node's own position; every force
-// still reads it and still answers. forceLink then holds links from the ten visible nodes to two
-// thousand parked ones, pulls each pair to its 55-unit target, and since only the parked end is
-// pinned, the VISIBLE end is what moves - dragged most of a million units to the parking
-// coordinate, where the fit collapses to its floor and the canvas reads blank.
+// Hiding a node in the drawing is not enough to take it out of the layout, and that is the whole
+// reason this exists. Every force still reads a node the canvas is skipping, so forceLink holds
+// links from the ten visible nodes to two thousand hidden ones and pulls each pair to its 55-unit
+// target. Only one end is pinned, so the VISIBLE end is what moves.
 //
-// Restricting membership is also what the parking was for: the comment on PARKED_X says the point
-// is not to spend cycles on the hidden set, and until now it spent them anyway.
-function syncSimMembership(keep: Set<string> | null): void {
+// Keeping the hidden set out is also the performance point the parking was originally for: the sim
+// was spending every tick on the full soup while a tenth of it was on screen.
+function syncSimMembership(): void {
   if (!sim) return;
-  const nodes = keep ? graph.nodes.filter((n) => keep.has(n.id)) : graph.nodes;
-  const links = keep
-    ? graph.links.filter((e) => keep.has(endpointId(e.source)) && keep.has(endpointId(e.target)))
+  const hide = hiddenNodes;
+  const nodes = hide.size ? graph.nodes.filter((n) => !hide.has(n.id)) : graph.nodes;
+  const links = hide.size
+    ? graph.links.filter((e) => !hide.has(endpointId(e.source)) && !hide.has(endpointId(e.target)))
     : graph.links;
   // Nodes BEFORE links: d3 re-initializes every force against the new node list, and the link
   // force resolves its endpoint ids against exactly that list.
@@ -881,17 +885,14 @@ function syncSimMembership(keep: Set<string> | null): void {
   (sim.force("link") as ForceLink<GNode, GLink> | undefined)?.links(links);
 }
 
-// unpinAllNodes hands every node back to the simulation - the pins a DAG or radial layout set
-// as well as the parking pins - and lifts any parked node off PARKED_X on the way out.
+// unpinAllNodes hands every node back to the simulation - the pins a DAG or radial layout set - and
+// puts anything a previous view was hiding back on screen.
 function unpinAllNodes() {
   for (const n of graph.nodes) {
     n.fx = null;
     n.fy = null;
-    if (n.x === PARKED_X) {
-      n.x = 0;
-      n.y = 0;
-    }
   }
+  setHidden(null);
 }
 
 // layoutBlockedReason says whether a mode can run right now; the returned string is
@@ -942,7 +943,7 @@ function switchLayout(mode: LayoutMode) {
       return;
     }
   } else if (layoutMode === "radial") {
-    unparkNodes();
+    revealHidden();
     radialCenter = null;
     radialRings = null;
     // Radial narrowed matchSet to its placed set, and every control that produced the PREVIOUS one
@@ -1185,11 +1186,14 @@ function startSimulation() {
     .force("charge", forceManyBody().strength(-180))
     // NO forceCenter. It centers by measuring the centroid of every node and translating the whole
     // set, and it writes `node.x -= sx` UNCONDITIONALLY - it is the one force in d3 that ignores
-    // fx/fy pinning. parkHiddenNodes pins everything outside the projection at PARKED_X (-1e6), so
-    // on a projected graph the centroid sits near -1e6 and forceCenter answers by shoving all of it
-    // - the ten visible nodes included - about a million units the other way, off any canvas. The
-    // two had never met: parking only happens on a projected load, and the projection only used to
-    // engage above 2500 nodes, which the graph this console ships with (2374) never reached.
+    // fx/fy pinning, so it drags pinned nodes around by the centroid of everything else. It is
+    // still wrong even now that no node is parked off-canvas: a DAG layout and radial both pin
+    // every node they place, and a centroid translation moves those computed coordinates.
+    //
+    // It went unnoticed for as long as it did because the projection - the state that used to put
+    // 2364 nodes at a sentinel coordinate a million units away, dragging the visible ten off any
+    // canvas - only engaged above 2500 nodes, which the graph this console ships with (2374) never
+    // reached.
     //
     // forceX/forceY below do the same job as a spring on VELOCITY, which the tick loop then ignores
     // for any node holding fx/fy. Centering that respects the pins is centering that cannot do this.
@@ -1362,10 +1366,10 @@ function draw() {
   // Edges first, under the nodes. Dim edges not touching the highlighted node;
   // under a query filter, dim edges not between two matches, so the
   // matching subgraph stands out instead of a full bright web.
-  // projectionActive: hide all non-projection nodes/edges from the draw.
-  // (Same flag computed below for nodes; computed here first for edges.)
-  // projectionActive is the projection id set when the default projection is showing, else null;
-  // holding the Set (not a bool) lets its truthiness narrow away the nullable in the checks below.
+  // projectionActive says whether the DEFAULT PROJECTION is the thing on screen. It no longer
+  // decides what is drawn - `shown` does, from hiddenNodes - and is only consulted for the DIMMING
+  // rule below: while the projection stands in for the selection, a match set must not also fade
+  // half of it. Holding the Set rather than a bool lets its truthiness narrow the nullable.
   const projectionActive: Set<string> | null =
     !projectionUnfolded && projectionSet && !query && !focusId && !activeView
       ? projectionSet
@@ -1377,9 +1381,10 @@ function draw() {
     // By draw time d3-force has resolved source/target from id strings to the node objects.
     const s = e.source as GNode,
       t = e.target as GNode;
-    if (s.x == null || t.x == null) continue; // not "!s.x": a node validly at x=0 must still draw
-    // Default projection: only draw edges where both endpoints are in the projection.
-    if (projectionActive && !(projectionActive.has(s.id) && projectionActive.has(t.id))) continue;
+    // An edge is drawn only when BOTH ends are. `shown` covers the position check too - it is
+    // `x != null` plus "nothing is hiding it", and a half-drawn edge running to a node the reader
+    // cannot see is a line pointing at nothing.
+    if (!shown(s) || !shown(t)) continue;
     // Card side-attach: when cards are active, lines attach to card sides
     // (the lower-x endpoint's right edge -> the higher-x endpoint's left
     // edge) instead of centers, so edges terminate at the card border. sx/sy
@@ -1531,9 +1536,7 @@ function draw() {
   // active, fade non-matches; when the default projection is active (no query),
   // fully hide nodes outside the projection set (projects only).
   for (const n of graph.nodes) {
-    if (n.x == null) continue;
-    // Default projection: hide non-project nodes entirely (not dimmed; truly absent).
-    if (projectionActive && !projectionActive.has(n.id)) continue;
+    if (!shown(n)) continue;
     let alpha = 1;
     if (scope) alpha = scope.has(n.id) || lit(n.id) ? 1 : 0.12;
     else if (highlight) alpha = lit(n.id) ? 1 : 0.15;
@@ -1655,8 +1658,7 @@ function draw() {
   const lineH = 13 / transform.k; // ~1.2x the 11px font, in world units
   const labelCandidates = [];
   for (const n of graph.nodes) {
-    if (n.x == null) continue;
-    if (projectionActive && !projectionActive.has(n.id)) continue;
+    if (!shown(n)) continue;
     if (cardsActive() && n.w) continue; // the label is painted inside the card
     // Two exemptions from the zoom floor, both where the reader ASKED for a name: the hovered node
     // and everything ONE HOP from it (the point of pointing at a node is to learn what it is
@@ -1718,7 +1720,7 @@ function nodeAtPointer(event: MouseEvent): GNode | null | undefined {
     const hitR = (DOT_R_PX + 5) / transform.k;
     for (let i = graph.nodes.length - 1; i >= 0; i--) {
       const n = graph.nodes[i];
-      if (n.x == null) continue;
+      if (!shown(n)) continue;
       if (dots) {
         if ((px - n.x) ** 2 + (py - n.y) ** 2 <= hitR * hitR) return n;
         continue;
@@ -1729,13 +1731,16 @@ function nodeAtPointer(event: MouseEvent): GNode | null | undefined {
     return null;
   }
   // In layered mode the simulation may be stopped, but sim.find still works on
-  // the node positions. Fall back to a manual scan when sim is null (shouldn't
-  // happen, but be safe).
+  // the node positions. It searches the simulation's OWN node list, which setHidden keeps scoped to
+  // the visible set - so a hidden node is unreachable here for the same reason it is unreachable
+  // by the forces. Fall back to a manual scan when sim is null (shouldn't happen, but be safe);
+  // that scan has to apply the visibility rule itself, or clicking empty canvas could select
+  // something nobody can see.
   if (sim) return sim.find(px, py, 30 / transform.k);
   let best = null,
     bestDist = 30 / transform.k;
   for (const n of graph.nodes) {
-    if (n.x == null) continue;
+    if (!shown(n)) continue;
     const d = Math.sqrt((n.x - px) ** 2 + (n.y - py) ** 2);
     if (d < bestDist) {
       bestDist = d;
@@ -2073,7 +2078,7 @@ function selectNode(id: string | null, center: boolean) {
       // Unfold this project: show its contains neighborhood.
       projectionUnfolded = true;
       projectionSet = null;
-      unparkNodes();
+      revealHidden();
       const projectNeighborhood = new Set([id]);
       for (const e of graph.links) {
         const s = endpointId(e.source),
@@ -2214,8 +2219,11 @@ function pinHovered(id: string | null) {
 
 function releaseHoverPin() {
   if (!hoverPinned) return;
+  // The guard used to be "unless this node is parked", to avoid freeing a pin that meant hidden
+  // rather than hovered. Hiding no longer uses a pin, so there is nothing to tell apart: only a
+  // hovered node is ever recorded here, and releasing it is the whole job.
   const n = graph?.byId.get(hoverPinned);
-  if (n && n.fx !== PARKED_X) {
+  if (n) {
     n.fx = null;
     n.fy = null;
   }
@@ -2370,30 +2378,11 @@ let pendingFit: { ids: Set<string> | null; glideMs?: number } | null = null;
 let pendingFitArmed = false;
 
 // worldBox is the bounding box of `ids` (or of every placed node when null), in world units.
-// framable reports whether a node counts toward the FRAMING - which has to mean exactly "draw()
-// paints it", because a fit that measures something invisible frames empty canvas.
-//
-// Two ways a node is on the list but off the screen, and both have bitten:
-//   parked   - pinned at PARKED_X (-1e6) while a projection is up. Counting these measures a box a
-//              million units wide, so the fit clamps to its minimum scale and translates by
-//              ~100,000; the few nodes that ARE visible land off-canvas and the stage reads blank.
-//   hidden   - outside an active projection but NOT parked, which is the state unparkNodes leaves
-//              them in: it scatters the released set over a disc to avoid a singularity, so their
-//              coordinates become ordinary while the projection still declines to draw them. That
-//              one is quieter and worse. The box stays a sane size, so nothing looks broken - it is
-//              just centred on 2364 invisible nodes, which pushes the ten real ones a couple of
-//              hundred pixels off to one side. The fit is a stable fixed point the whole time, so
-//              pressing Fit again changes nothing and the framing looks like a layout problem.
-function framable(n: GNode): boolean {
-  if (n.x == null || n.x === PARKED_X) return false;
-  if (!projectionUnfolded && projectionSet && !projectionSet.has(n.id)) return false;
-  return true;
-}
-
 // Null when nothing in the set has a position yet. In a card mode the box measures the drawn
 // card rather than the dot radius, so a fit does not clip the labels it exists to make readable.
 function worldBox(ids: Set<string> | null): WorldBox | null {
-  const pts = graph.nodes.filter((n) => framable(n) && (!ids || ids.has(n.id)));
+  // `shown`, not just "has a position": a fit that measures something invisible frames empty canvas.
+  const pts = graph.nodes.filter((n) => shown(n) && (!ids || ids.has(n.id)));
   if (!pts.length) return null;
   let minX = Infinity,
     minY = Infinity,
@@ -2417,7 +2406,8 @@ function worldBox(ids: Set<string> | null): WorldBox | null {
 function fitView(ids: Set<string> | null, glideMs?: number) {
   // Same visibility rule worldBox applies below: this guard only asks whether there is anything to
   // frame, and a node nobody can see is not something to frame.
-  const pts = graph.nodes.filter((n) => framable(n) && (!ids || ids.has(n.id)));
+  // `shown`, not just "has a position": a fit that measures something invisible frames empty canvas.
+  const pts = graph.nodes.filter((n) => shown(n) && (!ids || ids.has(n.id)));
   if (!pts.length || !zoomBehavior) return; // setupZoomDrag has not run yet
   if (canvas.clientWidth <= 0) {
     // Carry glideMs through the deferral. Dropping it turned frameNewGraph's deliberate SNAP back
@@ -3657,7 +3647,7 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   } else {
     startSimulation();
   }
-  parkHiddenNodes(); // after the sim is built: the projection reduces the visible set
+  hideNonProjects(); // after the sim is built: the projection reduces the visible set
   draw();
   revealWholeGraph();
   syncGraphKindToggle();
@@ -3865,7 +3855,7 @@ function unfoldProjection() {
   matchSet = null;
   if (searchEl) searchEl.value = "";
   query = "";
-  if (graph) unparkNodes();
+  if (graph) revealHidden();
   renderList();
   const btn = el("projection-unfold-btn");
   if (btn) btn.hidden = true;
@@ -4869,7 +4859,11 @@ function applyPositions(newNodes: GNode[], prevPos: Map<string, NodePos>) {
     if (p) {
       n.x = p.x;
       n.y = p.y;
-      if (p.fx != null && p.fx !== PARKED_X) {
+      // Every remembered pin is a real one now. This used to exclude the parking coordinate, so
+      // that a refresh landing under a projection did not carry a "hidden" pin into the new graph
+      // and freeze a node there; hiding does not pin any more, so a recorded fx can only have come
+      // from a DAG layout, radial, or a drag - all of which are worth restoring.
+      if (p.fx != null) {
         n.fx = p.fx;
         n.fy = p.fy;
       }
@@ -4994,7 +4988,7 @@ function liveApplyGraphUpdate(data: GraphPayload) {
   // that cached flag instead of re-probing durations itself.
   syncConditionalViews();
   recomputeMatchSet();
-  parkHiddenNodes(); // re-park if the default projection is still active
+  hideNonProjects(); // re-park if the default projection is still active
 
   renderLegend();
   renderList();
@@ -5301,26 +5295,15 @@ function applyLayoutAndSimulation(requestedLayout: string, flavor: GraphFlavor) 
   }
 }
 
-// parkHiddenNodes moves every node outside the active default projection far
-// off-canvas so the force sim does not waste cycles on the full soup while
-// only project nodes are visible. Shared by boot(), bootLive(), and
-// liveApplyGraphUpdate (a live refresh that lands while the projection is
-// still active must re-park the same way a fresh load does).
-function parkHiddenNodes() {
-  if (!projectionUnfolded && projectionSet) {
-    for (const n of graph.nodes) {
-      if (!projectionSet.has(n.id)) {
-        n.fx = PARKED_X;
-        n.fy = PARKED_X;
-        n.x = PARKED_X;
-        n.y = PARKED_X;
-      }
-    }
-    // The pins alone leave every parked node in the layout; syncSimMembership is what takes them
-    // out of it. See its comment for what happens when it does not.
-    syncSimMembership(projectionSet);
-    sim?.alpha(0.6).restart();
-  }
+// hideNonProjects takes everything outside the active default projection off screen, so only the
+// project nodes are drawn and only they are in the layout. Shared by boot(), bootLive(), and
+// liveApplyGraphUpdate (a live refresh landing while the projection is still up has to re-hide the
+// nodes it just added, the same way a fresh load does).
+function hideNonProjects() {
+  if (projectionUnfolded || !projectionSet) return;
+  const keep = projectionSet;
+  setHidden(graph.nodes.filter((n) => !keep.has(n.id)).map((n) => n.id));
+  sim?.alpha(0.6).restart();
 }
 
 // finishInteractiveSetup wires zoom/drag, restores any view/query/layout/preset
@@ -5416,7 +5399,7 @@ function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void
 
   const initialParams = hashParams();
   applyLayoutAndSimulation(initialParams.layout, flavor);
-  parkHiddenNodes();
+  hideNonProjects();
 
   syncGraphKindToggle();
 }
@@ -6045,7 +6028,7 @@ async function bootLive() {
     renderList();
 
     applyLayoutAndSimulation(params.layout, graphFlavor);
-    parkHiddenNodes();
+    hideNonProjects();
     finishInteractiveSetup();
 
     // Not awaited: this decorates a view the reader has to open, so the first paint never waits
