@@ -266,3 +266,9 @@ reference/manpage/magus-sessions/
 reference/manpage/magus-attention/
 reference/manpage/magus-notify/
 reference/manpage/magus-hook/
+
+# Tag pages exist only while some page carries the tag; these three were carried
+# solely by the folded manpage pages above, so they retire with them.
+tags/desktop/
+tags/magus-hook/
+tags/policy/
