@@ -683,9 +683,21 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
 .console-graph-querybar .pf-v6-c-button.pf-m-control {
   padding-inline: 0.45rem; padding-block: 0.25rem;
   font-size: 0.78rem; line-height: 1.4;
+  /* CENTER the contents, and center them the same way in both buttons. "?" is a bare text node and
+     Ask is an icon plus a word, so left to PF's own grid they sat on two different baselines and
+     the row read as three unrelated pills at three heights. inline-flex puts one cross-axis rule
+     over both. */
+  display: inline-flex; align-items: center; justify-content: center; gap: 0.3rem;
 }
-/* Size the copy-as-command SVG icon to sit level with the neighboring "?" help control's glyph. */
+/* Every icon in the row on one size, keyed to the row's own font size rather than to the SVG's
+   intrinsic width attribute - Ask's glyph ships at 16px, which is taller than the "?" beside it at
+   this font size and was what tipped the two out of alignment. `block` kills the inline-baseline
+   descender gap that would reintroduce a few pixels of it. */
+.console-graph-querybar .pf-v6-c-button svg { width: 0.95em; height: 0.95em; flex: 0 0 auto; display: block; }
 .console-graph-querybar .console-render-btn__icon { width: 0.9em; height: 0.9em; flex: 0 0 auto; }
+/* PF gives the icon slot its own margin for a full-size button; at this scale the flex gap above is
+   the whole spacing story and the margin just pushes the word off-centre. */
+.console-graph-querybar .pf-v6-c-button__icon { margin: 0; display: inline-flex; align-items: center; }
 
 /* Graph source: which graph is loaded (build vs knowledge) - sits above Display mode since
    the graph you are viewing is more fundamental than how it is arranged. Same framed-row
