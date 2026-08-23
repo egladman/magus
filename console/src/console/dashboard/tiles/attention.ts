@@ -1,9 +1,19 @@
-// attention.ts - the "needs attention" hero: the first thing the eye lands on. It answers
-// "is anything failing? what's running?" at a glance, before any metric tile. Three loud
-// counts (failing / running / queued) plus a one-line verdict derived from the live status
-// frame: failing targets shout in red, otherwise a degraded/down daemon warns, otherwise a
-// calm "all clear". When something is failing AND the dashboard is live, the failing count
-// deep-links into that run's log so the fix is one click away.
+// attention.ts - the "needs attention" hero: the first thing the eye lands on.
+//
+// Its headline is the ATTENTION QUEUE - the durable list of blocks agents have raised that are
+// waiting on a person, read from GET /api/v1/attention, the same queue `magus attention` lists
+// and disposes from any worktree of this repo.
+//
+// It used to derive that headline from the live run counts instead: failing targets shouted
+// "Attention needed", otherwise "All clear". That verdict predates the queue and can now
+// DISAGREE with it in both directions - a board reading "All clear" while three agents sit
+// blocked, or "Attention needed" over a queue nobody has to touch. Two things called attention
+// on one screen, and the reader has to work out which is lying. So the verdict comes from the
+// queue now, and only from the queue.
+//
+// The failing/running/queued counts stay, as FACTS about live runs rather than as a verdict:
+// they carry the deep links into the failing run's log and the rerun commands, and a failure is
+// still worth seeing next to the queue. They just no longer decide what the headline says.
 //
 // This is deliberately NOT a collapsible Card: the summary is always visible - it is the
 // board's headline, not a foldable panel.
@@ -13,6 +23,26 @@ import { ALL_WORKSPACES, onWorkspaceScope, workspaceScope } from "../../../lib/s
 import { h, helpGlyph, type Tile } from "./card";
 import { logsLink } from "../../../lib/daemon";
 import { showToast } from "../../../lib/refresh-toast";
+import {
+  ageLabel,
+  disposeAttention,
+  firstLine,
+  loadAttention,
+  type AttentionRead,
+  type AttentionRequest,
+} from "./attentionQueue";
+
+// The poll cadence and request budget the delegation tile reads its ledger on. Same numbers on
+// purpose: both tiles poll a small JSON route on the same daemon, and two boards refreshing at
+// two rhythms would make one of them look stuck.
+const REFRESH_MS = 4_000;
+const REQUEST_TIMEOUT_MS = 10_000;
+
+// QUEUE_LIST_MAX caps the rows drawn, with a residual count, for the reason every other list on
+// this board is capped: a hook that fires on every prompt can raise a handful of blocks at once,
+// and thirty rows would push the headline itself off a Big Picture panel. Nothing is hidden -
+// the residual line says how many more, and `magus attention` lists them all.
+const QUEUE_LIST_MAX = 5;
 
 // One document-level listener closes any open chip menu on an outside click, rather than one per
 // chip: the list is rebuilt on every status frame, so per-chip listeners would accumulate against
@@ -34,9 +64,9 @@ if (typeof document !== "undefined") {
 }
 
 // firstFailedInv returns the invocation id of the earliest run carrying a failed target,
-// so the failing count can deep-link into the run whose log an operator needs. Exported so
-// the Big Picture tile (tiles/bigPicture.ts) can compute the same TV-friendly verdict without
-// duplicating the scan.
+// so the failing count can deep-link into the run whose log an operator needs. Exported for the
+// tests beside this file; the Big Picture tile this comment used to name as the other consumer
+// derives its own headline and imports nothing from here.
 export function firstFailedInv(status: StatusView): string {
   for (const run of status.runs) {
     if (run.targets.some((t) => t.state === "failed")) return run.inv;
@@ -84,49 +114,54 @@ export interface Verdict {
   sub: string;
 }
 
-// verdictFor derives the one-line headline + detail from a status frame and its failing count, in
-// priority order: failing targets, then an unhealthy daemon, then all clear. Exported so the
-// Big Picture tile can show the identical verdict at TV scale without re-deriving the rule.
-// `scoped` says the reader has narrowed this tab to one workspace. These counts CANNOT narrow with
-// them - there is one pool behind every workspace on a daemon, and pool.running is its occupancy, not
-// yours. So when a scope is on, the numbers name whose they are. Without that the board says "5
-// targets running" directly above a tile saying nothing is running in your workspace, and the reader
-// has to work out which one is lying. Neither is; they are answering different questions.
-export function verdictFor(
-  status: StatusView,
-  failing: number,
-  opts: { scoped?: boolean } = {},
-): Verdict {
-  const scoped = opts.scoped ?? false;
-  const running = status.pool.running;
-  const whose = scoped ? " on this daemon" : "";
-  const down = status.health.cls === "fail";
-  const degraded = status.health.cls === "warn";
-  if (failing > 0) {
-    return {
-      state: "attention",
-      line: "Attention needed",
-      sub:
-        (failing === 1 ? "1 target is failing" : failing + " targets are failing") +
-        (scoped ? " on this daemon" : ""),
-    };
-  }
-  if (down || degraded) {
+// verdictFor derives the headline from the ATTENTION QUEUE, and from nothing else.
+//
+// The queue is the only source here on purpose. Every other signal on this board - failing
+// targets, daemon health, pool depth - is something magus observed; a request is something a
+// person was asked for and has not yet given. Folding an observation in would let the headline
+// say "Attention needed" over an empty queue, and a reader who clears that twice stops reading
+// the one line on the board that means somebody is waiting on them.
+//
+// The three reads that are not "ok" get their own verdicts rather than being flattened into a
+// calm one: a daemon with no attention route, and a daemon that could not be read, both mean
+// the queue is UNKNOWN. Rendering unknown as "no open requests" is the single worst thing this
+// tile could do, because it is indistinguishable from the good state.
+export function verdictFor(read: AttentionRead, nowMs: number = Date.now()): Verdict {
+  if (read.kind === "absent") {
     return {
       state: "warn",
-      line: down ? "Daemon down" : "Daemon degraded",
-      sub: "The pool is up but the daemon reports " + status.health.label + ".",
+      line: "Queue unavailable",
+      sub:
+        "This daemon does not serve an attention queue, so nothing here can say whether" +
+        " anyone is blocked.",
     };
   }
+  if (read.kind === "unreadable") {
+    return {
+      state: "warn",
+      line: "Queue unreadable",
+      sub: "The attention queue could not be read, so this is not a report that nobody is waiting.",
+    };
+  }
+  const n = read.requests.length;
+  if (n === 0) {
+    return {
+      state: "clear",
+      line: "Nobody waiting",
+      sub:
+        "No agent is blocked on a person. Requests arrive through `magus notify` and close" +
+        " only when someone disposes of them.",
+    };
+  }
+  const oldest = read.requests[0];
+  const age = ageLabel(oldest.opened_ms, nowMs);
   return {
-    state: "clear",
-    line: "All clear",
+    state: "attention",
+    line: n === 1 ? "1 request waiting" : n + " requests waiting",
     sub:
-      running > 0
-        ? (running === 1 ? "1 target running" : running + " targets running") +
-          whose +
-          ", nothing failing"
-        : "Nothing failing, pool is idle",
+      "Blocked on a person, oldest first" +
+      (age ? ", waiting " + age : "") +
+      ". Nothing closes a request on its own.",
   };
 }
 
@@ -275,20 +310,28 @@ export function attentionTile(): Tile {
   const verdict = h("p", "console-dashboard-hero__verdict");
   // The glyph is a SIBLING of the verdict, never a child of it.
   //
-  // render() sets verdict.textContent on every status frame, and textContent replaces the element's
-  // entire child list - so a button appended inside it is destroyed by the first frame that lands,
-  // about a second after mount. It is the kind of bug that looks like the feature was never wired:
-  // the markup is right at construction and gone before anyone looks.
+  // renderQueue() sets verdict.textContent on every poll, and textContent replaces the element's
+  // entire child list - so a button appended inside it is destroyed by the first read that lands,
+  // seconds after mount. It is the kind of bug that looks like the feature was never wired: the
+  // markup is right at construction and gone before anyone looks.
   const verdictRow = h("div", "console-dashboard-hero__verdictrow");
   verdictRow.append(
     verdict,
     helpGlyph(
-      "Failing targets outrank everything, then daemon health. All clear means nothing is broken," +
-        " not that nothing is running. Anything failing is named below and opens its own output.",
+      "This headline reads the attention queue: blocks an agent raised that are waiting on a" +
+        " person, the same queue `magus attention` lists. Nothing closes a request but you" +
+        " disposing of it. The failing/running/queued counts below are live run activity and do" +
+        " NOT feed this verdict - a failing target is not a request, and an empty queue over a" +
+        " red build is both facts being true at once.",
       "this verdict",
     ),
   );
   const detail = h("p", "console-dashboard-hero__detail");
+  // The first paint, before any read has landed. No data-state is set with it, so the hero keeps
+  // its neutral accent rule: the queue is UNKNOWN at this moment, and both the calm colour and
+  // the loud one would be claims the tile has no basis for yet.
+  verdict.textContent = "Reading the queue";
+  detail.textContent = "Blocks agents raised that are waiting on a person.";
   headline.append(verdictRow, detail);
 
   const metrics = h("div", "console-dashboard-hero__metrics");
@@ -334,6 +377,19 @@ export function attentionTile(): Tile {
   // Capped, with a residual count, for the same reason every other list on this board is: a broken
   // dependency can fail thirty targets at once, and thirty rows would push the verdict itself off a
   // Big Picture panel. The cap is generous enough that the common case (a handful) shows in full.
+  // The attention queue itself: one row per open request, straight under the verdict it is the
+  // subject of. Above the failing-target list because it outranks it - a failing target is work
+  // magus can tell you about, a request is work waiting on YOU.
+  const queueList = h("ul", "console-dashboard-attention__list");
+  queueList.hidden = true;
+  // A polite live region: a request appearing is the one thing on this board a reader needs to
+  // learn about without watching it. Polite rather than assertive because a queue row is a
+  // request, not an alarm - agents request, people dispose, and nothing here interrupts.
+  queueList.setAttribute("aria-live", "polite");
+  const queueNote = h("p", "console-dashboard-attention__note");
+  queueNote.hidden = true;
+  headline.append(queueList, queueNote);
+
   const FAIL_LIST_MAX = 6;
   const failList = h("ul", "console-dashboard-hero__faillist");
   failList.hidden = true;
@@ -368,10 +424,9 @@ export function attentionTile(): Tile {
     } else {
       metrics.removeAttribute("title");
     }
-    const v = verdictFor(status, failing, { scoped });
-    root.dataset.state = v.state;
-    verdict.textContent = v.line;
-    detail.textContent = v.sub;
+    // No verdict is set here. The headline belongs to the queue (renderQueue), and a status
+    // frame arriving about once a second must not overwrite it - that is precisely how the two
+    // came to disagree, with whichever repainted last winning the line.
 
     // Wire the failing count into the failing run's log when we are live and have an inv.
     const inv = failing > 0 ? firstFailedInv(status) : "";
@@ -480,8 +535,203 @@ export function attentionTile(): Tile {
     failList.replaceChildren(...rows);
   }
 
-  // The verdict names whose counts these are, so it has to repaint when the tab's scope changes and
-  // not only when the daemon pushes a frame.
+  // ---- the queue ------------------------------------------------------------
+
+  let host = "";
+  let lastRead = 0;
+  let reading = false;
+  let controller: AbortController | null = null;
+  let request = 0;
+  // torndown, not "disposed": this tile has a domain meaning for that word - closing a request -
+  // and a teardown flag wearing it would read as one at every call site.
+  let torndown = false;
+  let visible = true;
+
+  // requestRow draws one open request: what to close, how long it has waited, what kind of block
+  // it is, and the first line of what the agent said.
+  //
+  // The id is shown in full and in mono, because it is the handle for the OTHER surface: a
+  // person reading this tile on a shared screen closes the request from their terminal with
+  // `magus attention dispose <id>`, and a truncated id cannot be typed.
+  function requestRow(req: AttentionRequest, nowMs: number): HTMLElement {
+    const li = h("li", "console-dashboard-attention__row");
+    li.dataset.outcome = req.outcome;
+
+    const head = h("div", "console-dashboard-attention__head");
+    const id = h("code", "console-dashboard-attention__id", req.id);
+    id.title = "magus attention dispose " + req.id;
+    head.append(id);
+
+    const age = ageLabel(req.opened_ms, nowMs);
+    if (age) head.append(h("span", "console-dashboard-attention__age", age));
+    if (req.outcome) {
+      const outcome = h("span", "pf-v6-c-label pf-m-compact console-dashboard-attention__outcome");
+      outcome.append(h("span", "pf-v6-c-label__content", req.outcome));
+      head.append(outcome);
+    }
+    // Which slice of a fleet's work is blocked. Absent for anything a person started by hand,
+    // which is the ordinary case and not worth a placeholder.
+    if (req.delegation) {
+      head.append(h("span", "console-dashboard-attention__delegation", req.delegation));
+    }
+    head.append(disposeControl(req));
+
+    const message = h("p", "console-dashboard-attention__message", firstLine(req.message));
+    // The full text, unflattened, for the reader who needs more than the summary line. The row
+    // stays one line tall either way; `magus attention ls -o json` is the unabridged copy.
+    if (req.message) message.title = req.message;
+
+    li.append(head, message);
+    return li;
+  }
+
+  // disposeControl is the button and the one-line reason composer behind it.
+  //
+  // A composer rather than a prompt(): the diff surface settled this for the same act. A
+  // prompt() steals focus from the page, cannot show WHICH request is being closed, and hides
+  // the message the reason is about while it is being typed. The composer sits in the row.
+  //
+  // Closing a request is the one write this tile makes, and it happens only here - one click,
+  // one reason, one id. There is deliberately no "dispose all": a queue cleared without being
+  // read is the failure mode the queue exists to prevent.
+  function disposeControl(req: AttentionRequest): HTMLElement {
+    const wrap = h("span", "console-dashboard-attention__dispose");
+    const btn = document.createElement("button");
+    btn.type = "button";
+    btn.className = "pf-v6-c-button pf-m-link pf-m-inline console-dashboard-attention__disposebtn";
+    btn.append(h("span", "pf-v6-c-button__text", "Dispose"));
+    btn.title = "Close this request. Say why, so the store records who answered it and what for.";
+    btn.setAttribute("aria-expanded", "false");
+    wrap.append(btn);
+
+    const close = (): void => {
+      wrap.querySelector(".console-dashboard-attention__composer")?.remove();
+      btn.hidden = false;
+      btn.setAttribute("aria-expanded", "false");
+    };
+
+    btn.addEventListener("click", () => {
+      const box = h("span", "console-dashboard-attention__composer");
+      const inputWrap = h("span", "pf-v6-c-form-control");
+      const input = h("input", "pf-v6-c-form-control__text");
+      input.type = "text";
+      input.setAttribute("aria-label", "Why request " + req.id + " is being closed");
+      // A reason is offered, never demanded. Somebody closing a block they just answered in
+      // person has nothing to narrate, and a required field would be filled with "done".
+      input.placeholder = "Why (optional). Enter to dispose, Esc to cancel.";
+      input.addEventListener("keydown", (e) => {
+        e.stopPropagation(); // the board's single-letter keys must not fire mid-sentence
+        if (e.key === "Escape") {
+          e.preventDefault();
+          close();
+          return;
+        }
+        if (e.key !== "Enter") return;
+        e.preventDefault();
+        const reason = input.value.trim();
+        close();
+        void send(req, reason);
+      });
+      inputWrap.append(input);
+      box.append(inputWrap);
+      btn.hidden = true;
+      btn.setAttribute("aria-expanded", "true");
+      wrap.append(box);
+      input.focus();
+    });
+    return wrap;
+  }
+
+  // send posts the disposal and says what came back. A REFUSAL (unknown id, ambiguous prefix,
+  // already closed by somebody else) is reported in the daemon's own words rather than as a
+  // failure: each one is the daemon working, and each names what the person does next.
+  async function send(req: AttentionRequest, reason: string): Promise<void> {
+    if (!host) {
+      showToast("Attention", "Not connected to a daemon, so nothing can be disposed.", "error");
+      return;
+    }
+    const res = await disposeAttention(host, req.id, reason);
+    if (torndown) return;
+    if (res.kind === "ok") {
+      showToast("Attention", "Disposed " + req.id + ".", "ok");
+      // Re-read rather than dropping the row locally: another worktree may have closed
+      // something else in the meantime, and the store is what every surface agrees on.
+      lastRead = 0;
+      refresh();
+      return;
+    }
+    showToast("Attention", res.detail, "error");
+    lastRead = 0;
+    refresh();
+  }
+
+  // renderQueue paints the headline and the rows from one read. Every non-ok read gets its own
+  // words - see verdictFor - so an unknown queue never renders as a calm one.
+  function renderQueue(read: AttentionRead): void {
+    const v = verdictFor(read);
+    root.dataset.state = v.state;
+    verdict.textContent = v.line;
+    detail.textContent = v.sub;
+
+    if (read.kind !== "ok" || read.requests.length === 0) {
+      queueList.hidden = true;
+      queueList.replaceChildren();
+      // The store path on the empty state, so a reader who expected a request knows which queue
+      // was actually consulted - two worktrees of one repo share it, and a wrong root is the
+      // failure that looks exactly like a quiet day.
+      const store = read.kind === "ok" ? read.store : "";
+      queueNote.textContent = store ? "Queue: " + store : "";
+      queueNote.hidden = !queueNote.textContent;
+      return;
+    }
+
+    const now = Date.now();
+    const shown = read.requests.slice(0, QUEUE_LIST_MAX);
+    const rows = shown.map((req) => requestRow(req, now));
+    if (read.requests.length > shown.length) {
+      rows.push(
+        h(
+          "li",
+          "console-dashboard-attention__more",
+          "+" +
+            (read.requests.length - shown.length) +
+            " more; `magus attention` lists the whole queue",
+        ),
+      );
+    }
+    queueList.replaceChildren(...rows);
+    queueList.hidden = false;
+    queueNote.hidden = true;
+    queueNote.textContent = "";
+  }
+
+  const refresh = (): void => {
+    if (!visible || !host || reading) return;
+    reading = true;
+    lastRead = Date.now();
+    const current = ++request;
+    controller = new AbortController();
+    const timeout = window.setTimeout(() => {
+      if (current === request) controller?.abort();
+    }, REQUEST_TIMEOUT_MS);
+    void loadAttention(host, controller.signal)
+      .then((read) => {
+        // A composer the reader is typing into must survive a poll landing under them. The
+        // repaint is skipped rather than deferred: the next tick is 4s away, and the read it
+        // brings will be fresher than this one.
+        if (torndown || current !== request) return;
+        if (queueList.querySelector(".console-dashboard-attention__composer")) return;
+        renderQueue(read);
+      })
+      .finally(() => {
+        window.clearTimeout(timeout);
+        if (current === request) reading = false;
+      });
+  };
+  const interval = window.setInterval(refresh, REFRESH_MS);
+
+  // The counts name whose they are, so they repaint when the tab's scope changes and not only
+  // when the daemon pushes a frame.
   let latest: DashboardState | null = null;
   const repaint = (): void => {
     if (latest?.status) render(latest.status, latest.liveHost, latest.conn.state === "demo");
@@ -493,8 +743,51 @@ export function attentionTile(): Tile {
     update(s: DashboardState) {
       latest = s;
       repaint();
+
+      if (s.conn.state === "demo") {
+        // The demo shows the queue's SHAPE without inventing a block. A fabricated request
+        // would put a Dispose button on the showcase that closes nothing, and a reader who
+        // presses it learns the wrong thing about the one control on this board that writes.
+        host = "";
+        request++;
+        reading = false;
+        controller?.abort();
+        if (visible) renderQueue({ kind: "ok", requests: [], store: "" });
+        return;
+      }
+      const nextHost = s.liveHost ?? "";
+      if (nextHost !== host) {
+        host = nextHost;
+        lastRead = 0;
+        request++;
+        reading = false;
+        controller?.abort();
+      }
+      if (!host) {
+        // No daemon, so the queue genuinely cannot be read. Said out loud rather than left at
+        // whatever the last connected read showed: a stale "nobody waiting" outlives the
+        // connection that earned it, and this is the tile where that reads as reassurance.
+        renderQueue({ kind: "unreadable", detail: "not connected to a daemon" });
+        return;
+      }
+      if (visible && Date.now() - lastRead >= REFRESH_MS) refresh();
+    },
+    setVisible(nextVisible) {
+      visible = nextVisible;
+      if (visible) {
+        lastRead = 0;
+        refresh();
+        return;
+      }
+      request++;
+      reading = false;
+      controller?.abort();
     },
     destroy() {
+      torndown = true;
+      request++;
+      controller?.abort();
+      window.clearInterval(interval);
       offScope();
     },
   };

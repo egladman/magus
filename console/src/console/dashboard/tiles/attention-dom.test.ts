@@ -16,7 +16,24 @@ import {
   reproduceCommand,
   verdictFor,
 } from "./attention";
+import type { AttentionRequest } from "./attentionQueue";
 import type { StatusView } from "../state";
+
+// request builds one open queue row. Only opened_ms varies across these tests; the rest satisfy
+// the wire shape.
+function request(openedMs: number): AttentionRequest {
+  return {
+    id: "att-0123456789ab",
+    session: "agent-1",
+    opened_ms: openedMs,
+    outcome: "waiting",
+    severity: "",
+    source: "claude/Notification",
+    where: "/repo",
+    delegation: "",
+    message: "needs the deploy key",
+  };
+}
 
 // statusWith builds the minimum StatusView the hero reads. Only the fields under test are
 // meaningful; the rest satisfy the type.
@@ -93,12 +110,38 @@ test("inspectCommand is empty when there is no ref to fetch", () => {
   assert.equal(inspectCommand(""), "", "an unfetchable ref must not become an offered command");
 });
 
-test("the verdict and the failure list agree about whether anything is wrong", () => {
-  const clear = statusWith([{ label: "svc/api:test", state: "passed" }]);
-  assert.equal(verdictFor(clear, countFailing(clear)).state, "clear");
-  assert.equal(failingTargets(clear).length, 0);
-
+// The verdict reads the attention QUEUE and nothing else. This is the regression the tile was
+// rewritten for: it used to derive "Attention needed" from the failing count, so the board could
+// shout over an empty queue, or read "All clear" while agents sat blocked. Two things called
+// attention on one screen, and no way to tell which one was lying.
+test("the verdict comes from the queue, never from failing targets", () => {
   const broken = statusWith([{ label: "svc/api:test", state: "failed" }]);
-  assert.equal(verdictFor(broken, countFailing(broken)).state, "attention");
-  assert.equal(failingTargets(broken).length, 1);
+  assert.equal(failingTargets(broken).length, 1, "the run really is failing");
+  // A failing target is not a request. Nobody has been asked for anything, so nobody is waiting.
+  assert.equal(verdictFor({ kind: "ok", requests: [], store: "/s" }).state, "clear");
+
+  // ...and a request waiting is attention even with a perfectly green board.
+  const clear = statusWith([{ label: "svc/api:test", state: "passed" }]);
+  assert.equal(countFailing(clear), 0);
+  const waiting = verdictFor({ kind: "ok", requests: [request(0)], store: "/s" });
+  assert.equal(waiting.state, "attention");
+  assert.equal(waiting.line, "1 request waiting");
+});
+
+// An unknown queue must never render as a calm one. "absent" and "unreadable" are the two reads
+// where the tile does not KNOW whether anyone is blocked, and showing the good state for either is
+// indistinguishable from nobody waiting - which is the one thing this tile must not say by mistake.
+test("a queue that could not be read does not read as an empty one", () => {
+  assert.equal(verdictFor({ kind: "absent" }).state, "warn");
+  assert.equal(verdictFor({ kind: "unreadable", detail: "boom" }).state, "warn");
+  assert.notEqual(
+    verdictFor({ kind: "absent" }).line,
+    verdictFor({ kind: "ok", requests: [], store: "/s" }).line,
+  );
+});
+
+test("the verdict names how long the oldest request has waited", () => {
+  const now = 10 * 60 * 1000;
+  const v = verdictFor({ kind: "ok", requests: [request(now - 5 * 60 * 1000)], store: "/s" }, now);
+  assert.match(v.sub, /waiting 5m/);
 });
