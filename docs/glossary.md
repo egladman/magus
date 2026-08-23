@@ -257,6 +257,50 @@ A stable `MGSxxxx` identifier attached to a magus warning or error, so it can be
 referenced and looked up; some are guardrails (see [wards](concepts/wards.md)), others hard
 errors.
 
+## Sessions and delegation
+
+The vocabulary of magus watching work happen: who ran what, what an agent is
+blocked on, and which agent owns which paths. The policy behind these terms
+lives in [doctrine.md](doctrine.md).
+
+### Session
+
+One magus process's recorded facts - the targets it finished, their outcomes,
+and the delegation it acted as - kept in a repo-scoped store every worktree shares.
+`magus session` lists them; the store prunes itself by last-fact age.
+
+### Attention request
+
+A durable "an agent is blocked" record, opened when a `magus session notify`
+event carries the waiting or permission outcome and held until a person disposes
+it. `magus session attention` lists what is open. Nothing closes one on its own - see
+[doctrine.md](doctrine.md).
+
+### Dispose
+
+The human act of closing an attention request: a judgment rendered, recorded
+with who and why. Distinct from resolving a review thread or a merge conflict -
+a disposition answers a request; it does not merge anything.
+
+### Delegation
+
+One row of the delegation ledger: a piece of work an orchestrating agent handed
+out, with its goal, the checkpoint it was cut against, and the paths it owns or
+must not touch. The ledger records; the agent guard is what reads those facts
+back when grading a write. See [doctrine.md](doctrine.md).
+
+### Delegation id
+
+The short identifier a worker carries (the `--delegation` flag or `MAGUS_DELEGATION`) so
+its runs, journal facts, and guard verdicts attribute to its delegation.
+Letters, digits and `-_./:` only.
+
+### Advisor
+
+One read-only check from the advice suite: it reads the changeset through magus
+and writes one titled section of findings. The same advisors run as a pull
+request comment in CI and inside `magus diff --cost` locally.
+
 ## Console
 
 The vocabulary of the browser app. These terms name things you only meet in the

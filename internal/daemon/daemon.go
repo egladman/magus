@@ -288,6 +288,10 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// it introduces no third notion of what ran.
 			planH := status.NewPlanHandler(svc, outputStore, opts.Magus.Root(), log)
 			ledgerH := status.NewLedgerHandler(opts.Ledger, log)
+			// The attention queue: blocks agents raised that are waiting on a person. Read off
+			// the per-repository session store, which is keyed on repo identity rather than the
+			// checkout, so the console lists what `magus session attention` lists from any worktree.
+			attentionH := status.NewAttentionHandler(opts.Magus.Root(), opts.Version, log)
 
 			bridgeMux := http.NewServeMux()
 			// The JSON /api/v1/status route is GONE: the typed StatusService Connect route
@@ -327,6 +331,12 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// the store the magus_ledger MCP tool writes. Read-only here - the write door is
 			// the tool - and magus enforces none of it.
 			bridgeMux.Handle("/api/v1/ledger", cors(ledgerH))
+			// Attention queue: GET lists the open requests, POST disposes one. The write is a
+			// PERSON closing a block through their own surface (docs/doctrine.md, "Manual on
+			// purpose"), which is why it sits here on the loopback bridge and NOT in the LAN
+			// share subset below - a share link is handed to a phone, and disposing a request
+			// is exactly the judgment a link cannot be trusted with.
+			bridgeMux.Handle("/api/v1/attention", cors(attentionH))
 			// Wrap every /api/ route with rebind + header-only bearer auth.
 			httpServer.Handle("/api/", httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyConsoleBearer, bridgeMux)))
 

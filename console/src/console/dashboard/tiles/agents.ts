@@ -1,10 +1,10 @@
 // agents.ts - who is driving magus right now, and through which tool.
 //
 // magus is increasingly operated by agents rather than by hands: every Claude Code, Codex, Cursor
-// and OpenCode session funnels its shell and file-edit calls through the same `magus hook` guard,
-// and every MCP call goes through the daemon. All of it lands in the activity trail. Until this
-// tile, none of it reached the dashboard - the board could tell you the pool was saturated but not
-// that three agents were the reason, and it could not show a guard denial at all.
+// and OpenCode session funnels its shell and file-edit calls through the same `magus session hook`
+// guard, and every MCP call goes through the daemon. All of it lands in the activity trail. Until
+// this tile, none of it reached the dashboard - the board could tell you the pool was saturated but
+// not that three agents were the reason, and it could not show a guard denial at all.
 //
 // == The metric is "active recently", NOT "running now" ==
 //

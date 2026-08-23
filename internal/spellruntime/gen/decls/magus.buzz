@@ -425,7 +425,7 @@ export object DelegationRelease {
     releasedAt: int = 0,
 }
 
-export object DelegationUnit {
+export object Delegation {
     id: str = "",
     parent: str = "",
     goal: str = "",
@@ -438,24 +438,28 @@ export object DelegationUnit {
     state: str = "",
     readOnly: bool = false,
     releases: [DelegationRelease] = [],
+    reportedBase: str = "",
+    baseVerdict: str = "",
+    registered: int = 0,
     created: int = 0,
     updated: int = 0,
 }
 
 export object DelegationOverlap {
-    unitA: str = "",
-    unitB: str = "",
+    delegationA: str = "",
+    delegationB: str = "",
     pathsA: [str] = [],
     pathsB: [str] = [],
 }
 
 export object DelegationReport {
-    units: [DelegationUnit] = [],
+    delegations: [Delegation] = [],
     overlaps: [DelegationOverlap] = [],
 }
 
 export extern fun affected(base: str = "") > Affected !> any;
 export extern fun affectedImpact(base: str = "", opts: {str: any} = {<str: any>}) > Impact !> any;
+export extern fun attention(args: [str], opts: {str: any} = {<str: any>}) > {str: any} !> any;
 export extern fun bustCache(project_path: str = "") > void !> any;
 export extern fun canonicalName(name: str) > str;
 export extern fun cmd(sub: str, args: [str], opts: {str: any} = {<str: any>}) > ExecResult !> any;
@@ -507,10 +511,11 @@ export object workspace {
     static extern fun provider(spell: {str: any}) > void;
 }
 
-// The declared delegation ledger: what an orchestrating agent said about work it handed out, recorded so a human can see the plan the agents are running. Rows are DECLARATIONS - magus records them and enforces nothing; see the field docs on types.DelegationUnit. This namespace and the magus_ledger MCP tool are the only doors onto it - there is deliberately no `magus ledger` CLI subcommand. Bound by hand in internal/interp/bindings (buildLedgerNS), not generated: a Namespace's methods are Extern by construction (see std.Namespace), so there is no Impl for codegen to reflect a trampoline from, the same reason magus\secret.read is hand-bound.
+// The declared delegation ledger: what an orchestrating agent said about work it handed out, recorded so a human can see the plan the agents are running. Rows are DECLARATIONS - this store records them and refuses nothing; the agent guard is what reads them to grade a write, and register's verdict is a fact it hands back rather than a gate. See the field docs on types.Delegation. This namespace and the magus_ledger MCP tool are the only doors onto it - there is deliberately no `magus ledger` CLI subcommand. Bound by hand in internal/interp/bindings (buildLedgerNS), not generated: a Namespace's methods are Extern by construction (see std.Namespace), so there is no Impl for codegen to reflect a trampoline from, the same reason magus\secret.read is hand-bound.
 export object ledger {
     static extern fun clear() > int !> any;
     static extern fun list() > DelegationReport !> any;
-    static extern fun put(id: str, opts: {str: any} = {<str: any>}) > DelegationUnit !> any;
+    static extern fun put(id: str, opts: {str: any} = {<str: any>}) > Delegation !> any;
+    static extern fun register(id: str, reported_base: str) > {str: any} !> any;
 }
 

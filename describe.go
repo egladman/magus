@@ -738,23 +738,24 @@ func resolveChain(chain []types.ChainStep, projectPath string) []types.ChainStep
 // path.Join(Project, Rel) without re-anchoring. An unresolvable path is dropped.
 func resolveNodeRefs(nodes []types.TargetGraphNode, projectPath string) {
 	for i := range nodes {
-		if len(nodes[i].CrossDependencies) > 0 {
-			resolved := make([]types.CrossTargetRef, 0, len(nodes[i].CrossDependencies))
-			for _, ref := range nodes[i].CrossDependencies {
+		n := &nodes[i]
+		if len(n.CrossDependencies) > 0 {
+			resolved := make([]types.CrossTargetRef, 0, len(n.CrossDependencies))
+			for _, ref := range n.CrossDependencies {
 				r, err := file.ResolveImport(ref.Project, projectPath)
 				if err != nil {
 					continue
 				}
 				resolved = append(resolved, types.CrossTargetRef{Project: r, Target: ref.Target})
 			}
-			nodes[i].CrossDependencies = resolved
+			n.CrossDependencies = resolved
 		}
-		if len(nodes[i].Chain) > 0 {
-			nodes[i].Chain = resolveChain(nodes[i].Chain, projectPath)
+		if len(n.Chain) > 0 {
+			n.Chain = resolveChain(n.Chain, projectPath)
 		}
-		if len(nodes[i].ReadsFiles) > 0 {
-			resolved := make([]types.InputRef, 0, len(nodes[i].ReadsFiles))
-			for _, ref := range nodes[i].ReadsFiles {
+		if len(n.ReadsFiles) > 0 {
+			resolved := make([]types.InputRef, 0, len(n.ReadsFiles))
+			for _, ref := range n.ReadsFiles {
 				if ref.Project == "" {
 					resolved = append(resolved, types.InputRef{Project: projectPath, Glob: ref.Glob})
 					continue
@@ -765,7 +766,7 @@ func resolveNodeRefs(nodes []types.TargetGraphNode, projectPath string) {
 				}
 				resolved = append(resolved, types.InputRef{Project: r, Glob: ref.Glob})
 			}
-			nodes[i].ReadsFiles = resolved
+			n.ReadsFiles = resolved
 		}
 	}
 }

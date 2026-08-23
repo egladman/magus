@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -228,6 +229,67 @@ func TestRunAdoptsClientAncestry(t *testing.T) {
 	require.NoError(t, s.run(RunRequest{Args: []string{"run", "build"}, Ancestors: want}, &reply))
 	assert.Equal(t, 0, reply.ExitCode)
 	assert.Equal(t, want, <-got, "the handler must see the ancestry the client sent")
+}
+
+// TestRunAdoptsClientDelegation pins the other half of the same seam the ancestry uses. The
+// daemon runs the work in its own process, so the delegation it would read from the environment is
+// whoever started the daemon; only the request carries the delegation of the process that ASKED.
+func TestRunAdoptsClientDelegation(t *testing.T) {
+	got := make(chan string, 1)
+	s := newJobService(func(ctx context.Context, _ []string) error {
+		got <- DelegationFromContext(ctx)
+		return nil
+	})
+
+	var reply RunReply
+	require.NoError(t, s.run(RunRequest{Args: []string{"run", "build"}, Delegation: "fleet/f3"}, &reply))
+	assert.Equal(t, 0, reply.ExitCode)
+	assert.Equal(t, "fleet/f3", <-got)
+}
+
+// The wire is not a trusted channel: any local process may dial the socket, and a delegation id is
+// exempt from the trail's redaction. Validating server-side is what stops a forwarded value
+// carrying a credential onto an event line - the client's own check is not the server's.
+func TestRunDropsAnInvalidClientDelegation(t *testing.T) {
+	for name, id := range map[string]string{
+		"spaces":   "not a delegation id",
+		"newlines": "fleet/f3\nsecret=hunter2",
+		"toolong":  strings.Repeat("a", types.MaxDelegationIDLen+1),
+	} {
+		t.Run(name, func(t *testing.T) {
+			got := make(chan string, 1)
+			s := newJobService(func(ctx context.Context, _ []string) error {
+				got <- DelegationFromContext(ctx)
+				return nil
+			})
+
+			var reply RunReply
+			require.NoError(t, s.run(RunRequest{Args: []string{"run", "build"}, Delegation: id}, &reply))
+			assert.Empty(t, <-got, "an id that fails the rule is dropped, matching the environment reader")
+		})
+	}
+}
+
+// TestRunRequestDelegationCrossesTheWire pins the field on the frame rather than on the struct: a
+// tag typo would leave every assertion above green while the daemon still saw nothing. The
+// missing-field case is the compatibility half - an older client sends no delegation and must
+// decode to "" rather than failing the frame.
+func TestRunRequestDelegationCrossesTheWire(t *testing.T) {
+	var buf bytes.Buffer
+	require.NoError(t, writeFrame(&buf, typeRun, RunRequest{
+		Args: []string{"run", "build"}, Cwd: "/w", Protocol: ProtocolV2, Delegation: "fleet/f3",
+	}))
+
+	typ, line, err := readFrame(&buf)
+	require.NoError(t, err)
+	require.Equal(t, typeRun, typ)
+	var got RunRequest
+	require.NoError(t, json.Unmarshal(line, &got))
+	assert.Equal(t, "fleet/f3", got.Delegation)
+
+	var old RunRequest
+	require.NoError(t, json.Unmarshal([]byte(`{"type":"run","args":["run","build"],"cwd":"/w"}`), &old))
+	assert.Empty(t, old.Delegation)
 }
 
 // TestRunWithholdsReportedError pins that a failure the handler already explained does not

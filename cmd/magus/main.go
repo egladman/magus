@@ -27,8 +27,7 @@
 //	magus server <start|stop>            manage the persistent daemon (MCP starts alongside it)
 //	magus completion <shell>            print a shell completion script
 //	magus init [flags]                  bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)
-//	magus hook [flags]                  evaluate one command or file path against the guard rules
-//	magus notify [flags]                raise one attention event from stdin (typed JSON or plain text)
+//	magus session <subcommand>          what sessions did and are blocked on; hosts write via hook and notify
 //	magus self update [flags]           update magus to the latest release
 //	magus version                       print version info
 //	magus help                          show this message
@@ -214,6 +213,23 @@ func hasDetachFlag(args []string) bool {
 	return false
 }
 
+// isForensicAffected reports whether an `affected` invocation selects one of the forensic
+// modes affectedUsage lists that reason about the set without executing a target:
+// --explain, --plan, --impact. --bisect is excluded deliberately - it runs the target once
+// per candidate commit, so it wants the shared pool a forward buys.
+//
+// It reuses affected()'s own routing predicates rather than restating them, so the forward
+// decision agrees with what the handler does locally - the property isUsageOnlyInvocation
+// exists for one layer up. That includes NOT stopping at "--": affected() routes on a
+// bare scan too, and a guard here that disagreed would forward an invocation the handler
+// then answers as a forensic mode.
+func isForensicAffected(subArgs []string) bool {
+	if _, _, ok := parseExplainArgs(subArgs); ok {
+		return true
+	}
+	return hasModeFlag(subArgs, "plan") || hasModeFlag(subArgs, "impact")
+}
+
 // resolveProfile returns the work profile for a subcommand; defaults to "needs everything".
 func resolveProfile(sub string, subArgs []string) dispatchProfile {
 	switch sub {
@@ -241,12 +257,6 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// workspace resolution and must not forward to a daemon (the install is
 		// local to the caller's directory).
 		return dispatchProfile{needsConfig: true}
-	case "hook", "notify":
-		// hook and notify read stdin and emit one record; they need no workspace
-		// resolution and must not forward to a daemon (a hook is the LAST thing
-		// that should be routed through a remote process; a notify must reach
-		// the local OS notifier, not one on the daemon's host).
-		return dispatchProfile{needsConfig: true}
 	case "vcs":
 		// Never forwarded, never preloaded. Every vcs verb writes the CALLER's index and
 		// working tree, so a daemon serving another workspace must not adopt one.
@@ -258,6 +268,16 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// write each verb defers: merge-driver would dirty the tree against what git
 		// staged and stop `git rebase --continue`, resolve would splice a section between
 		// conflict markers. Each verb opens what it needs under its own guard.
+		return dispatchProfile{needsConfig: true}
+	case "session":
+		// The whole family reads or writes a file store keyed by repository identity:
+		// it needs the root PATH but never the magusfile, and it must stay usable when
+		// the workspace does not load - a broken magusfile is exactly when someone asks
+		// what the last runs did, and an agent blocked on a person is exactly the state
+		// a half-finished edit produces. Never forwarded: the hook subverb is the LAST
+		// thing that should route through a remote process, notify must reach the local
+		// OS notifier rather than one on the daemon's host, and a listing is one
+		// directory read with no warm daemon state to reuse.
 		return dispatchProfile{needsConfig: true}
 	case "status":
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true}
@@ -286,6 +306,16 @@ func resolveProfile(sub string, subArgs []string) dispatchProfile {
 		// with silence and exit 0 - observed before this guard existed. It needs no
 		// workspace either: it hands off an argv and returns.
 		if hasDetachFlag(subArgs) {
+			return dispatchProfile{needsConfig: true}
+		}
+		// A forensic mode runs nothing, so there is no pool to share, and its report IS
+		// its stdout. An adopted call has nowhere to put that: RunReply carries an exit
+		// code and an error string and never output, so the daemon runs the mode in its
+		// OWN process and prints the report on ITS stdout. A caller that CAPTURES the
+		// child - magus\affectedImpact forks `affected --impact -o json` and decodes it -
+		// then reads an empty stdout at exit 0 and reports an undecodable report. Same
+		// shape as the usage bug above, one layer down.
+		if sub == "affected" && isForensicAffected(subArgs) {
 			return dispatchProfile{needsConfig: true}
 		}
 		return dispatchProfile{needsConfig: true, needsDaemonFwd: true, needsWorkspace: true}
@@ -745,6 +775,8 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return doctorCmd(ctx, root, rc, subArgs)
 	case "config":
 		return configCmd(ctx, root, globalCfg, subArgs)
+	case "session":
+		return sessionCmd(ctx, root, subArgs)
 	case "memory":
 		return memoryCmd(ctx, root, subArgs)
 	case "notes":
@@ -763,10 +795,6 @@ func dispatchSub(ctx context.Context, root string, rc runConfig, sub string, sub
 		return initCmd(ctx, root, subArgs)
 	case "agent":
 		return agentCmd(ctx, subArgs)
-	case "hook":
-		return hookCmd(ctx, os.Stdin, os.Stdout, subArgs)
-	case "notify":
-		return notifyCmd(ctx, os.Stdin, os.Stdout, subArgs)
 	case "self":
 		return selfCmd(ctx, root, subArgs)
 	case "buzz":

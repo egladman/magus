@@ -76,7 +76,7 @@ fun main() > void !> any {
         return;
     }
 
-    proc\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+    advice\fetchBase(base, refspec: false);
     final diff = proc\exec("git", args: ["diff", "-U0", "origin/" + base + "..." + head, "--", "*.buzz"],
         dir: ".", opts: {"allow_failure": true}).stdout;
     final names = added(diff);

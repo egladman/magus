@@ -19,7 +19,7 @@ import (
 //
 // Three provider namespaces are wired by the runtime rather than declared here, so they do not appear in the method list below: `magus\cache.remote(<spell>)` selects a remote cache provider, `magus\ci.provider(<spell>)` a CI provider, and `magus\secret.provider(<spell>)` / `magus\secret.read(<ref>)` a secret provider and the credentials read through it. Each takes an imported spell handle. `magus\secret.endpoint(<grant>)` serves the case `read` cannot: it returns a loopback base URL a CHILD PROCESS is pointed at instead of the real API, so magus attaches the credential on the way upstream and the child never holds it. It takes an object with ref/host/header/prefix fields, declared in your own magusfile. For your own code, `read` is the ordinary choice. See [Secrets](../../concepts/secrets.md), [Remote cache](../../concepts/cache/remote.md) and [CI integration](../../guides/integrations/ci.md).
 //
-// `import "magus"` resolves in a `magus buzz` script as well as in a magusfile, and a script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, `where` and `insight` all answer in-process, and so does `magus\ledger` (list, put, clear): the delegation ledger an orchestrating agent declares about work it handed out (see types.DelegationUnit). There is deliberately no `magus ledger` CLI subcommand, so this namespace and the magus_ledger MCP tool are the only doors onto it. Only the members that DECLARE into the workspace being loaded (`magus\project`, the provider selections above) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script - there is nothing for them to declare into. Run a script outside any workspace and the reading members raise it too, since there is no workspace to read. The nested-command methods (`cmd`, `run`, `describe`, `doctor`) work there either way and discover the workspace themselves.
+// `import "magus"` resolves in a `magus buzz` script as well as in a magusfile, and a script run inside a workspace reads that workspace: `projects`, `affected`, `projectGraph`, `where` and `insight` all answer in-process, and so does `magus\ledger` (list, put, register, clear): the delegation ledger an orchestrating agent declares about work it handed out (see types.Delegation). There is deliberately no `magus ledger` CLI subcommand, so this namespace and the magus_ledger MCP tool are the only doors onto it. Only the members that DECLARE into the workspace being loaded (`magus\project`, the provider selections above) raise [MGS1022](../codes/magusfile/MGS1022.md) in a script - there is nothing for them to declare into. Run a script outside any workspace and the reading members raise it too, since there is no workspace to read. The nested-command methods (`cmd`, `run`, `describe`, `doctor`) work there either way and discover the workspace themselves.
 func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 	_ = ctx
 	_ = sess
@@ -141,6 +141,15 @@ func RegisterMagus(ctx context.Context, sess *buzz.Session) vm.Value {
 			return vm.Null, HostError(err)
 		}
 		return buzzValueMagusDoctorReport(ret0), nil
+	}))
+	m.MapSet("attention", vm.DirectValue("magus.attention", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
+		args := StrSlice(bzArgs, 0)
+		opts := AnyMap(bzArgs, 1)
+		ret0, err := std.MagusAttention(ctx, args, opts)
+		if err != nil {
+			return vm.Null, HostError(err)
+		}
+		return AnyMapVal(ret0), nil
 	}))
 	m.MapSet("diagnoseDrift", vm.DirectValue("magus.diagnoseDrift", func(ctx context.Context, bzArgs []vm.Value) (vm.Value, error) {
 		outputs := StrSlice(bzArgs, 0)

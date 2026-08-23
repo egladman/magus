@@ -34,25 +34,25 @@ func TestLedgerTool(t *testing.T) {
 		require.True(t, ok)
 		return got
 	}
-	units := func(t *testing.T, resp spells.InvokeResponse) []types.DelegationUnit {
+	delegations := func(t *testing.T, resp spells.InvokeResponse) []types.Delegation {
 		t.Helper()
-		return report(t, resp).Units
+		return report(t, resp).Delegations
 	}
 
 	t.Run("an unwritten ledger lists empty", func(t *testing.T) {
-		assert.Empty(t, units(t, invoke(t, nil)), "op defaults to list")
+		assert.Empty(t, delegations(t, invoke(t, nil)), "op defaults to list")
 	})
 
 	t.Run("put records the declared row", func(t *testing.T) {
 		resp := invoke(t, map[string]any{
-			"op": "put", "id": "unit-a", "goal": "ship the store; TestStoreRoundTrip passes",
+			"op": "put", "id": "delegation-a", "goal": "ship the store; TestStoreRoundTrip passes",
 			"checkpoint": "60dc9151", "owned_paths": "internal/ledger types/delegation.go",
 			"forbidden_paths": "MAGUS.md", "tier": "standard", "validation": "magus run test",
 			"state": "running",
 		})
-		got, ok := resp.Data.(types.DelegationUnit)
+		got, ok := resp.Data.(types.Delegation)
 		require.True(t, ok, "Data is the record itself, so the console and the tool cannot disagree")
-		assert.Equal(t, "unit-a", got.ID)
+		assert.Equal(t, "delegation-a", got.ID)
 		assert.Equal(t, []string{"internal/ledger", "types/delegation.go"}, got.OwnedPaths)
 		assert.Equal(t, []string{"MAGUS.md"}, got.ForbiddenPaths)
 		assert.Equal(t, types.StateRunning, got.State)
@@ -60,19 +60,19 @@ func TestLedgerTool(t *testing.T) {
 	})
 
 	t.Run("put upserts by id", func(t *testing.T) {
-		invoke(t, map[string]any{"op": "put", "id": "unit-b", "state": "declared", "depends_on": "unit-a"})
-		invoke(t, map[string]any{"op": "put", "id": "unit-a", "state": "pass"})
+		invoke(t, map[string]any{"op": "put", "id": "delegation-b", "state": "declared", "depends_on": "delegation-a"})
+		invoke(t, map[string]any{"op": "put", "id": "delegation-a", "state": "pass"})
 
-		got := units(t, invoke(t, map[string]any{"op": "list"}))
-		require.Len(t, got, 2, "the second put on unit-a replaced its row rather than adding one")
-		assert.Equal(t, "unit-a", got[0].ID)
+		got := delegations(t, invoke(t, map[string]any{"op": "list"}))
+		require.Len(t, got, 2, "the second put on delegation-a replaced its row rather than adding one")
+		assert.Equal(t, "delegation-a", got[0].ID)
 		assert.Equal(t, types.StatePass, got[0].State)
-		assert.Equal(t, []string{"unit-a"}, got[1].DependsOn)
+		assert.Equal(t, []string{"delegation-a"}, got[1].DependsOn)
 	})
 
-	t.Run("a read-only unit carries no paths", func(t *testing.T) {
+	t.Run("a read-only delegation carries no paths", func(t *testing.T) {
 		resp := invoke(t, map[string]any{"op": "put", "id": "scout", "read_only": true, "state": "no_return"})
-		got := resp.Data.(types.DelegationUnit)
+		got := resp.Data.(types.Delegation)
 		assert.True(t, got.ReadOnly)
 		assert.Empty(t, got.OwnedPaths)
 		assert.Equal(t, types.StateNoReturn, got.State, "no_return is its own terminal state, not fail")
@@ -82,16 +82,16 @@ func TestLedgerTool(t *testing.T) {
 		resp := invoke(t, map[string]any{"op": "clear"})
 		data := resp.Data.(map[string]any)
 		assert.Equal(t, 3, data["cleared"], "a destructive op says what it destroyed")
-		assert.Empty(t, units(t, invoke(t, map[string]any{"op": "list"})))
+		assert.Empty(t, delegations(t, invoke(t, map[string]any{"op": "list"})))
 	})
 
 	t.Run("a lifecycle put touches only the fields it names", func(t *testing.T) {
 		invoke(t, map[string]any{
-			"op": "put", "id": "unit-life", "goal": "the declared goal",
+			"op": "put", "id": "delegation-life", "goal": "the declared goal",
 			"checkpoint": "abc123", "owned_paths": "internal/ledger", "tier": "opus",
 		})
-		resp := invoke(t, map[string]any{"op": "put", "id": "unit-life", "state": "pass"})
-		got, ok := resp.Data.(types.DelegationUnit)
+		resp := invoke(t, map[string]any{"op": "put", "id": "delegation-life", "state": "pass"})
+		got, ok := resp.Data.(types.Delegation)
 		require.True(t, ok)
 		assert.Equal(t, types.StatePass, got.State)
 		assert.Equal(t, "the declared goal", got.Goal, "state advance must not erase the row")
@@ -102,16 +102,16 @@ func TestLedgerTool(t *testing.T) {
 
 	t.Run("a json array of paths records paths, not nothing", func(t *testing.T) {
 		resp := invoke(t, map[string]any{
-			"op": "put", "id": "unit-arr", "owned_paths": []any{"a/b", "c d"},
+			"op": "put", "id": "delegation-arr", "owned_paths": []any{"a/b", "c d"},
 		})
-		got, ok := resp.Data.(types.DelegationUnit)
+		got, ok := resp.Data.(types.Delegation)
 		require.True(t, ok)
 		assert.Equal(t, []string{"a/b", "c d"}, got.OwnedPaths, "array elements are paths verbatim; only the string form splits on spaces")
 	})
 
 	t.Run("an unrecognized state is rejected, not stored", func(t *testing.T) {
 		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{
-			"op": "put", "id": "unit-bad", "state": "passed",
+			"op": "put", "id": "delegation-bad", "state": "passed",
 		}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "no_return")
@@ -125,35 +125,71 @@ func TestLedgerTool(t *testing.T) {
 	t.Run("an unknown op is rejected, not silently listed", func(t *testing.T) {
 		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{"op": "delete"}})
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "list, put, clear")
+		assert.Contains(t, err.Error(), "list, put, register, clear")
+	})
+
+	// register is the worker's door: it reports the base it actually landed on and is
+	// told how that compares with the checkpoint the delegation was handed. The comparison
+	// itself is covered in internal/ledger; what this asserts is that the tool answers
+	// with BOTH halves - the row for a reader, and Text for the worker, which is the only
+	// op here that sets it.
+	t.Run("register records the reported base and returns the verdict", func(t *testing.T) {
+		invoke(t, map[string]any{"op": "put", "id": "delegation-reg", "checkpoint": "aaaa1111", "state": "declared"})
+
+		resp := invoke(t, map[string]any{"op": "register", "id": "delegation-reg", "reported_base": "bbbb2222"})
+		got, ok := resp.Data.(types.Delegation)
+		require.True(t, ok)
+		assert.Equal(t, types.BaseDiverged, got.BaseVerdict)
+		assert.Equal(t, "bbbb2222", got.ReportedBase)
+		assert.NotZero(t, got.Registered)
+		assert.Contains(t, resp.Text, "aaaa1111", "the reading names the checkpoint the delegation was handed")
+		assert.Contains(t, resp.Text, "bbbb2222", "and the base the worker reported")
+		assert.Contains(t, resp.Text, "Respawn from", "and what to do about it")
+
+		var found bool
+		for _, u := range delegations(t, invoke(t, map[string]any{"op": "list"})) {
+			if u.ID == "delegation-reg" {
+				found = true
+				assert.Equal(t, types.BaseDiverged, u.BaseVerdict, "the verdict is stored, not only returned")
+			}
+		}
+		assert.True(t, found, "nothing was refused: the diverged row is in the ledger like any other")
+	})
+
+	t.Run("register on an unknown id names where the declared ids are", func(t *testing.T) {
+		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{
+			"op": "register", "id": "never-declared", "reported_base": "aaaa1111",
+		}})
+		require.ErrorIs(t, err, ledger.ErrUnknownDelegation)
+		assert.Contains(t, err.Error(), "magus_ledger list")
 	})
 
 	// Every reader answers a wrong-typed field the same way. Dropping one while state and
 	// read_only error would tell a client sending goal=3 that its put succeeded and hand
 	// back a row without the field it thought it wrote.
 	for name, params := range map[string]map[string]any{
-		"a non-string goal":            {"op": "put", "id": "unit-typed", "goal": 3},
-		"a non-string tier":            {"op": "put", "id": "unit-typed", "tier": true},
-		"a non-list owned_paths":       {"op": "put", "id": "unit-typed", "owned_paths": 7},
-		"a list with a non-string":     {"op": "put", "id": "unit-typed", "depends_on": []any{"a", 2}},
-		"a non-string state":           {"op": "put", "id": "unit-typed", "state": 1},
-		"a non-boolean read_only":      {"op": "put", "id": "unit-typed", "read_only": "yes"},
-		"a non-string forbidden_paths": {"op": "put", "id": "unit-typed", "forbidden_paths": map[string]any{}},
+		"a non-string goal":            {"op": "put", "id": "delegation-typed", "goal": 3},
+		"a non-string tier":            {"op": "put", "id": "delegation-typed", "tier": true},
+		"a non-list owned_paths":       {"op": "put", "id": "delegation-typed", "owned_paths": 7},
+		"a list with a non-string":     {"op": "put", "id": "delegation-typed", "depends_on": []any{"a", 2}},
+		"a non-string state":           {"op": "put", "id": "delegation-typed", "state": 1},
+		"a non-boolean read_only":      {"op": "put", "id": "delegation-typed", "read_only": "yes"},
+		"a non-string forbidden_paths": {"op": "put", "id": "delegation-typed", "forbidden_paths": map[string]any{}},
 	} {
 		t.Run(name+" is rejected, not dropped", func(t *testing.T) {
 			_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: params})
 			require.Error(t, err)
 
-			got := units(t, invoke(t, map[string]any{"op": "list"}))
+			got := delegations(t, invoke(t, map[string]any{"op": "list"}))
 			for _, u := range got {
-				assert.NotEqual(t, "unit-typed", u.ID, "a rejected put writes no row")
+				assert.NotEqual(t, "delegation-typed", u.ID, "a rejected put writes no row")
 			}
 		})
 	}
 
 	t.Run("every mistyped param is reported at once", func(t *testing.T) {
 		_, err := tool.Invoke(context.Background(), spells.InvokeRequest{Params: map[string]any{
-			"op": "put", "id": "unit-typed", "goal": 3, "read_only": "yes",
+			"op": "put", "id": "delegation-typed", "goal": 3, "read_only": "yes",
 		}})
 		require.Error(t, err)
 		assert.Contains(t, err.Error(), "goal")
@@ -162,7 +198,7 @@ func TestLedgerTool(t *testing.T) {
 }
 
 // TestLedgerToolListAnswersOverlapsAndReleases covers what a list is FOR beyond the
-// rows: two units claiming one tree, and the version of a path a finished editor left
+// rows: two delegations claiming one tree, and the version of a path a finished editor left
 // behind. Both are answers an orchestrator would otherwise have to derive by hand from
 // a table it wrote itself.
 func TestLedgerToolListAnswersOverlapsAndReleases(t *testing.T) {
@@ -183,8 +219,8 @@ func TestLedgerToolListAnswersOverlapsAndReleases(t *testing.T) {
 	got, ok := invoke(map[string]any{"op": "list"}).Data.(types.DelegationReport)
 	require.True(t, ok)
 	require.Len(t, got.Overlaps, 1)
-	assert.Equal(t, "u1", got.Overlaps[0].UnitA)
-	assert.Equal(t, "u2", got.Overlaps[0].UnitB)
+	assert.Equal(t, "u1", got.Overlaps[0].DelegationA)
+	assert.Equal(t, "u2", got.Overlaps[0].DelegationB)
 	assert.Equal(t, []string{"shared.go"}, got.Overlaps[0].PathsA)
 	assert.Equal(t, []string{"shared.go"}, got.Overlaps[0].PathsB)
 
@@ -194,14 +230,14 @@ func TestLedgerToolListAnswersOverlapsAndReleases(t *testing.T) {
 	got, ok = invoke(map[string]any{"op": "list"}).Data.(types.DelegationReport)
 	require.True(t, ok)
 	assert.Empty(t, got.Overlaps, "the released path is no longer claimed twice")
-	require.Len(t, got.Units[0].Releases, 1)
-	assert.Equal(t, "shared.go", got.Units[0].Releases[0].Path)
-	assert.Contains(t, got.Units[0].Releases[0].Digest, "sha256:")
-	assert.NotZero(t, got.Units[0].Updated, "every put re-stamps the row a reader watches for staleness")
+	require.Len(t, got.Delegations[0].Releases, 1)
+	assert.Equal(t, "shared.go", got.Delegations[0].Releases[0].Path)
+	assert.Contains(t, got.Delegations[0].Releases[0].Digest, "sha256:")
+	assert.NotZero(t, got.Delegations[0].Updated, "every put re-stamps the row a reader watches for staleness")
 }
 
 // TestLedgerToolPutMergesConcurrently is why a put goes through Store.Update. Two
-// writers advance different fields of one unit - an orchestrator moving the state, a
+// writers advance different fields of one delegation - an orchestrator moving the state, a
 // worker recording its checkpoint - and both have to survive. Reading the row with List
 // and writing it back with Put releases the store's lock in between, so each writer
 // merges onto a row it read before the other wrote, and the second write reverts the

@@ -68,8 +68,12 @@ what was muted and by whom.
 | `blast-radius`          | the change reaches a large share of the workspace, with the chain that pulled each project in                       |
 | `doctor`                | `magus doctor` reports a failing or advisory check                                                                  |
 | `version-floor`         | the pull request raises `required_version`, which every contributor must act on                                     |
+| `conformance`           | a new target's name diverges from what the rest of the workspace already calls the same work                        |
+| `missing-target`        | a changed project lacks a target that projects of the same kind overwhelmingly have                                 |
+| `api-surface`           | the change touches symbols reachable outside the project that defines them, which is what a version bump is about   |
 | `first-contribution`    | the author has no merged pull request here yet                                                                      |
 | `fix-generated-drift`   | off by default; regenerates drifted files and pushes them, and only with a label                                    |
+| `fix-merge-conflict`    | off by default; merges the base in, settles conflicts in generated files by regenerating, and pushes                |
 
 `blast-radius` takes a `fanout-share` (default `0.5`): the share of the workspace a
 change must reach before it says anything. It is a share rather than a count because

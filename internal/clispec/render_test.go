@@ -38,6 +38,30 @@ func TestInitCommandHasSynopsis(t *testing.T) {
 	assert.Contains(t, content, ".B magus\n.RI \"init [flags]\"", "SYNOPSIS names the command")
 }
 
+// TestExitStatusRoffSectionIsOptional pins both halves of the contract: a command
+// declaring codes gets the section, and one declaring none gets no empty heading.
+func TestExitStatusRoffSectionIsOptional(t *testing.T) {
+	with := Command{
+		Name:  "guard",
+		Short: "judge one command",
+		Usage: "magus guard [flags]",
+		ExitStatus: []ExitCode{
+			{0, "allowed"},
+			{2, "denied, and also a well-formed call magus could not parse"},
+		},
+	}
+	rendered := string(renderCommandRoff(with, "2026-07-26", "v1.2.3"))
+	assert.Contains(t, rendered, ".SH EXIT STATUS")
+	assert.Contains(t, rendered, `\fB0\fR`)
+	assert.Contains(t, rendered, `\fB2\fR`)
+	// The meaning is escaped like any other prose: an unescaped hyphen renders as a
+	// soft-hyphen break rather than a minus.
+	assert.Contains(t, rendered, `well\-formed`)
+
+	without := Command{Name: "guard", Short: "judge one command", Usage: "magus guard [flags]"}
+	assert.NotContains(t, string(renderCommandRoff(without, "2026-07-26", "v1.2.3")), "EXIT STATUS")
+}
+
 func TestRoffPagesAreDeterministic(t *testing.T) {
 	first := RoffPages("", "")
 	second := RoffPages("", "")

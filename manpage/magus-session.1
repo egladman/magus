@@ -1,0 +1,205 @@
+.TH MAGUS-SESSION 1 "" "magus" "magus Manual"
+.SH NAME
+magus\-session \- What sessions did and what they are blocked on: humans read and dispose, hosts write
+.SH SYNOPSIS
+.B magus
+.RI "session [ls] [flags]"
+.SH DESCRIPTION
+One noun over the repository's session store, with a human side and a
+machine side.
+.PP
+Humans read it. The bare command lists past magus sessions with the targets
+each one ran and how those runs ended; `session attention` lists the requests
+agents have raised \- work blocked on input or on approval \- and
+`session dispose` closes one. Nothing closes a request automatically: there is
+no expiry, no severity inference and no auto\-dispose flag, because a request
+magus could answer by itself would not have needed a person \- see the doctrine
+page.
+.PP
+Agent hosts write it. Their hooks pipe every event through `session hook`
+(one command or path, judged against the guard rules and recorded) and
+`session notify` (one attention event, normalized; a waiting or permission
+outcome opens a durable request). No person types those two; they exist to be
+wired.
+.PP
+The store is keyed by repository identity rather than by checkout path, so
+every git worktree of one repo reads and writes the same records \- what
+another worktree just finished, and what it is blocked on, is visible here
+without a daemon, a network, or a shared branch. It is append\-only and never
+rewritten; a line left half\-written by a killed process is skipped and counted
+rather than failing the read.
+.PP
+The listing takes \-\-limit to bound by count and \-\-since to bound by AGE, as a
+duration back from now (2h, 45m, 168h) or an RFC3339 instant. \-\-since compares
+against each session's last fact, not its first, so a long session that is
+still working stays listed however long ago it began.
+.SH OPTIONS
+.RS
+.TP
+\fB\-\-limit\fR \fIint\fR
+Show at most this many sessions (0 for all)
+.TP
+\fB\-\-since\fR \fIstring\fR
+Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp
+.RE
+.SS session dispose options
+.RS
+.TP
+\fB\-\-reason\fR \fIstring\fR
+Record why the request is being closed, alongside the disposition
+.RE
+.SS session hook options
+.RS
+.TP
+\fB\-\-agent\-name\fR \fIstring\fR
+Name of the agent host this invocation came from (attribution only)
+.TP
+\fB\-\-delegation\fR \fIstring\fR
+The delegation this call is acting as, graded against the ledger's declared write boundary (defaults to $MAGUS_DELEGATION)
+.TP
+\fB\-\-event\fR \fIstring\fR
+The host's hook event name (e.g. PreToolUse)
+.TP
+\fB\-\-observe\fR
+Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass
+.TP
+\fB\-\-path\fR
+Judge the input as a file path an edit is about to write, not as a shell command
+.TP
+\fB\-\-session\fR \fIstring\fR
+The host's own session id for this invocation
+.TP
+\fB\-\-transcript\fR \fIstring\fR
+Path to the host's own log of this session, recorded as a pointer; magus never opens it
+.RE
+.SS session notify options
+.RS
+.TP
+\fB\-\-desktop\fR
+Also raise an OS notification
+.TP
+\fB\-\-outcome\fR \fIstring\fR
+Outcome vocabulary for the event
+.RE
+.SH SUBCOMMANDS
+.RS
+.TP
+\fBls\fR
+List past sessions and the targets they ran (the default)
+.TP
+\fBattention\fR
+List the open requests agents raised, oldest first; with \-q, print nothing and exit 1 when the queue is empty
+.TP
+\fBdispose\fR
+Close one open request by id or unambiguous id prefix
+.TP
+\fBhook\fR
+Evaluate one shell command or file path against the magus guard rules
+.TP
+\fBnotify\fR
+Normalize an attention event and optionally notify the local desktop
+.RE
+.SH EXIT STATUS
+.RS
+.TP
+\fB0\fR
+Sessions or requests were listed, a request was disposed, an event was normalized and emitted, or hook judged the input allowed (pass, or advise, which attaches context and does not block; \-\-observe always lands here). A plain listing exits 0 whether or not anything was listed, because an empty queue is the good state. notify's delivery is best\-effort and never changes this: a desktop notification that could not be raised, and a durable request that could not be opened, are both reported as warnings and still exit 0.
+.TP
+\fB1\fR
+dispose: the request named is not in the store, or was already disposed \- a request closes once and stays closed. attention with \-q: the queue is empty, so a prompt or a watch loop can branch on the status instead of parsing the listing. notify: stdin could not be read (unparsable input is not this case \- text that is not a complete event envelope becomes the event's message rather than an error).
+.TP
+\fB2\fR
+Misuse: an unknown subcommand, an argument to a listing, or a dispose naming other than exactly one id. For hook, also a DENIED command \- deny and malformed input share the code deliberately: a guard that could not parse its input has not cleared the command either, so a host that blocks on 2 fails closed in both cases.
+.RE
+.SH EXAMPLES
+\fIShow recent sessions\fR
+.PP
+.EX
+magus session
+.EE
+.PP
+\fIShow today's work\fR
+.PP
+.EX
+magus session --since 24h
+.EE
+.PP
+\fIFull session records as JSON\fR
+.PP
+.EX
+magus session -o json
+.EE
+.PP
+\fIList open attention requests\fR
+.PP
+.EX
+magus session attention
+.EE
+.PP
+\fIAsk whether anyone is waiting\fR
+.PP
+.EX
+magus session attention -q
+.EE
+.PP
+\fIClose one request, saying why\fR
+.PP
+.EX
+magus session dispose att-3f9c -reason "approved and pushed by hand"
+.EE
+.PP
+\fIJudge a shell command (host\-wired)\fR
+.PP
+.EX
+printf '%s' 'go build ./...' | magus session hook
+.EE
+.PP
+\fIRecord a path an agent read, without judging it\fR
+.PP
+.EX
+printf '%s' 'internal/cache/output.go' | magus session hook --observe
+.EE
+.PP
+\fIGrade a write as a delegation\fR
+.PP
+.EX
+printf '%s' 'internal/ledger/store.go' | magus session hook --path --delegation f2-guard
+.EE
+.PP
+\fIRaise a permission prompt on the desktop (host\-wired)\fR
+.PP
+.EX
+printf '%s\(rsn' 'needs approval' | magus session notify --outcome permission --desktop
+.EE
+.PP
+.SH SEE ALSO
+\fBmagus\fR(1),
+\fBmagus\-ls\fR(1),
+\fBmagus\-describe\fR(1),
+\fBmagus\-run\fR(1),
+\fBmagus\-x\fR(1),
+\fBmagus\-where\fR(1),
+\fBmagus\-affected\fR(1),
+\fBmagus\-graph\fR(1),
+\fBmagus\-query\fR(1),
+\fBmagus\-explain\fR(1),
+\fBmagus\-path\fR(1),
+\fBmagus\-refs\fR(1),
+\fBmagus\-watch\fR(1),
+\fBmagus\-status\fR(1),
+\fBmagus\-clean\fR(1),
+\fBmagus\-vcs\fR(1),
+\fBmagus\-doctor\fR(1),
+\fBmagus\-config\fR(1),
+\fBmagus\-memory\fR(1),
+\fBmagus\-notes\fR(1),
+\fBmagus\-diff\fR(1),
+\fBmagus\-server\fR(1),
+\fBmagus\-buzz\fR(1),
+\fBmagus\-completion\fR(1),
+\fBmagus\-man\fR(1),
+\fBmagus\-init\fR(1),
+\fBmagus\-agent\fR(1),
+\fBmagus\-self\fR(1),
+\fBmagus\-version\fR(1)
+.br

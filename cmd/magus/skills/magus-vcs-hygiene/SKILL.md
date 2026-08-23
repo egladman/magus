@@ -82,6 +82,17 @@ REPORTS every undeclared path instead of sweeping it in{{if .Full}}, which is th
 genuinely a new source file. Staging specific paths by hand stays fine; the long
 form below is what it automates, and what to fall back to.
 
+Read the change before you stage it. `magus diff --cost` orders the uncommitted
+changeset by what it can BREAK rather than alphabetically, folds the generated
+files away, and appends what landing it costs: which projects rebuild, who has been
+changing them, an estimate from recorded run times, what the workspace's advisors
+say, and any human-authored note anchored to a file or symbol you touched{{if .Full}}.
+None of it is a verdict - nothing is gated on it and the exit code is unchanged -
+and each section says when it could not measure something, so an empty one reads as
+"nobody looked" rather than as a clean bill of health{{else}} - context, never a
+verdict, and an empty section means nobody could measure it rather than nothing
+found{{end}}.
+
 For a rare VCS fact that needs Magus's portable VCS module rather than porcelain,
 use one inline Buzz evaluation:
 

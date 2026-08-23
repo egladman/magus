@@ -35,7 +35,7 @@ func TestStoreDigestRefusesWhatItCannotHash(t *testing.T) {
 	require.NoError(t, big.Close())
 
 	s := NewStore(Location{CacheDir: t.TempDir(), Root: root})
-	_, err = s.Put(ctx, types.DelegationUnit{
+	_, err = s.Put(ctx, types.Delegation{
 		ID:         "u1",
 		OwnedPaths: []string{"escape.go", "pipe", "big.bin"},
 		State:      types.StateRunning,
@@ -46,13 +46,13 @@ func TestStoreDigestRefusesWhatItCannotHash(t *testing.T) {
 	// really about is a HANG: os.Open on a fifo blocks until somebody writes to it, and
 	// it would block holding the store's mutex, wedging every other ledger caller.
 	type result struct {
-		unit types.DelegationUnit
-		err  error
+		delegation types.Delegation
+		err        error
 	}
 	done := make(chan result, 1)
 	go func() {
-		u, uerr := s.Update(ctx, "u1", func(u *types.DelegationUnit) { u.OwnedPaths = nil })
-		done <- result{unit: u, err: uerr}
+		u, uerr := s.Update(ctx, "u1", func(u *types.Delegation) { u.OwnedPaths = nil })
+		done <- result{delegation: u, err: uerr}
 	}()
 
 	var got result
@@ -63,8 +63,8 @@ func TestStoreDigestRefusesWhatItCannotHash(t *testing.T) {
 	}
 	require.NoError(t, got.err)
 
-	digests := make(map[string]string, len(got.unit.Releases))
-	for _, r := range got.unit.Releases {
+	digests := make(map[string]string, len(got.delegation.Releases))
+	for _, r := range got.delegation.Releases {
 		digests[r.Path] = r.Digest
 	}
 	assert.Equal(t, types.DigestAbsent, digests["escape.go"],
@@ -85,9 +85,9 @@ func TestStoreDigestFollowsALinkThatStaysInside(t *testing.T) {
 	require.NoError(t, os.Symlink(filepath.Join(root, "real.go"), filepath.Join(root, "link.go")))
 
 	s := NewStore(Location{CacheDir: t.TempDir(), Root: root})
-	_, err := s.Put(ctx, types.DelegationUnit{ID: "u1", OwnedPaths: []string{"link.go"}})
+	_, err := s.Put(ctx, types.Delegation{ID: "u1", OwnedPaths: []string{"link.go"}})
 	require.NoError(t, err)
-	stored, err := s.Update(ctx, "u1", func(u *types.DelegationUnit) { u.OwnedPaths = nil })
+	stored, err := s.Update(ctx, "u1", func(u *types.Delegation) { u.OwnedPaths = nil })
 	require.NoError(t, err)
 	require.Len(t, stored.Releases, 1)
 	assert.Equal(t, "sha256:"+hashOf(t, filepath.Join(root, "real.go")), stored.Releases[0].Digest)

@@ -1,14 +1,14 @@
 ---
 title: The guard
-description: What magus hook denies, what it explains, and why - the four deny triggers, the file-path surface, the verdict contract a host wires into, and the observations magus records.
-tags: [agents, guard, hooks, magus hook, telemetry, activity]
+description: What magus session hook denies, what it explains, and why - the four deny triggers, the file-path surface, the verdict contract a host wires into, and the observations magus records.
+tags: [agents, guard, hooks, magus session hook, telemetry, activity]
 ---
 
 # The guard
 
 Most agent hosts can run a hook before executing a shell command or writing a
 file. magus supplies the rule evaluation; the host supplies the hook that calls
-it. `magus hook` reads one command or one path, applies the rules, and returns a
+it. `magus session hook` reads one command or one path, applies the rules, and returns a
 neutral verdict.
 
 Wiring is per host: [Claude Code](claude-code.md), [Codex](codex.md),
@@ -172,7 +172,7 @@ Everything else passes.
 
 ## The file surface
 
-`magus hook --path <file>` judges a file path rather than a command. Two of its
+`magus session hook --path <file>` judges a file path rather than a command. Two of its
 rules are definitive rather than heuristic, because both read DECLARATIONS: the
 generated-output rule classifies the path against every target's declared
 outputs, and the notes rule against the declared notes store. The first advises,
@@ -198,9 +198,9 @@ schema-versioned envelope, `-o yaml`, `-o name` for the bare decision word, or
 `-o template` lists the fields.
 
 ```sh
-printf '%s' 'git stash' | magus hook -o json
-printf '%s' 'go test ./...' | magus hook -o name
-printf '%s' 'MAGUS.md' | magus hook --path -o name
+printf '%s' 'git stash' | magus session hook -o json
+printf '%s' 'go test ./...' | magus session hook -o name
+printf '%s' 'MAGUS.md' | magus session hook --path -o name
 ```
 
 A deny exits 2 with the verdict on stdout; a pass and an advise exit 0. An
@@ -231,7 +231,7 @@ older than agents. Read it before you run it.
 
 ## What magus records
 
-Every `magus hook` invocation with a readable command or path appends one
+Every `magus session hook` invocation with a readable command or path appends one
 `agent_command` event to the local Activity Trail. This is product telemetry for
 improving agent support: which host tool an agent selected, whether it reached a
 magus surface or a raw command, and which guidance would move that workflow onto
@@ -259,7 +259,7 @@ schema version plus `decision` and, where applicable, `reason` or `context`.
 a view can group a page of observations without fetching a payload per row.
 
 No local process can discover which agent host started it, so the wrapper passes
-the name in with `magus hook --agent-name`; a wrapper that does not leaves the
+the name in with `magus session hook --agent-name`; a wrapper that does not leaves the
 field empty rather than guessing. An MCP call has no wrapper to ask and is
 attributed from its HTTP `User-Agent` instead.
 

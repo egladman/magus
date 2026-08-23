@@ -1,6 +1,6 @@
 ---
 title: Any other host
-description: The host-neutral contract - install the guidance where your host reads it, pipe the event to magus hook, render the verdict with -o template - for an agent host magus does not document by name.
+description: The host-neutral contract - install the guidance where your host reads it, pipe the event to magus session hook, render the verdict with -o template - for an agent host magus does not document by name.
 tags: [agents, guard, hooks, integration, template]
 ---
 
@@ -46,10 +46,10 @@ Any client that takes a Streamable HTTP URL plus a bearer token can connect; see
 ## Guard hook
 
 The wiring is the same shape everywhere: get the command or path out of the host
-event, hand it to `magus hook`, and render the verdict into the host's reply.
+event, hand it to `magus session hook`, and render the verdict into the host's reply.
 
 ```sh
-printf '%s' "$command" | magus hook -o 'template=<your host reply>'
+printf '%s' "$command" | magus session hook -o 'template=<your host reply>'
 ```
 
 If your host writes its payload as JSON with `tool_input.command` or
@@ -87,11 +87,11 @@ grew.
 ## Delegation capture
 
 Separate from the guard, and the same shape: pipe the host's pre-tool event to
-`magus hook` when the tool being called is the one that hands work to a
+`magus session hook` when the tool being called is the one that hands work to a
 sub-agent.
 
 ```sh
-printf '%s' "$event" | magus hook --agent-name <your host> >/dev/null 2>&1; exit 0
+printf '%s' "$event" | magus session hook --agent-name <your host> >/dev/null 2>&1; exit 0
 ```
 
 magus recognizes a delegation by the FIELD it carries, never by a tool name it
@@ -161,7 +161,7 @@ never opted in.
 
 ## Notifications
 
-Wire any event that means a human is needed to `magus notify`; see [Attention hooks](notifications.md).
+Wire any event that means a human is needed to `magus session notify`; see [Attention hooks](notifications.md).
 
 ## Coverage and limits
 
@@ -173,7 +173,7 @@ records that for the documented four.
 ## Verify
 
 ```sh
-printf '%s' 'git stash' | magus hook -o name
+printf '%s' 'git stash' | magus session hook -o name
 magus doctor
 ```
 

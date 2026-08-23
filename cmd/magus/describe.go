@@ -13,6 +13,7 @@ import (
 	"os"
 	"slices"
 	"strings"
+	"time"
 
 	"github.com/egladman/magus"
 	"github.com/egladman/magus/internal/cache"
@@ -564,8 +565,10 @@ func describeTargetNoun(ctx context.Context, root string, args []string) error {
 			fmt.Fprintln(os.Stderr, types.EvaluatedTargetDefinition)
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "--cache computes the target's cache key exactly as a run would and shows")
-			fmt.Fprintln(os.Stderr, "its component classes; --against <ref> then diffs the live key against a")
-			fmt.Fprintln(os.Stderr, "stored run's, naming the exact source/env/tool line that disagrees (the")
+			fmt.Fprintln(os.Stderr, "its component classes, then compares that key against the last run recorded")
+			fmt.Fprintln(os.Stderr, "here and names the first input that moved (why a run now would MISS).")
+			fmt.Fprintln(os.Stderr, "--against <ref> replaces that peer with a stored run of your choosing,")
+			fmt.Fprintln(os.Stderr, "naming the exact source/env/tool line that disagrees (the")
 			fmt.Fprintln(os.Stderr, "works-on-my-machine explainer).")
 			fmt.Fprintln(os.Stderr, "")
 			fmt.Fprintln(os.Stderr, "Flags (global flags also accepted, see `magus -h`):")
@@ -619,6 +622,7 @@ type targetCacheReport struct {
 	// target declares is the whole bug class this exists to make visible.
 	KeyInputs []string            `json:"key_inputs,omitempty"`
 	Against   *targetCacheAgainst `json:"against,omitempty"`
+	LastRun   *targetCacheLastRun `json:"last_run,omitempty"`
 }
 
 type targetCacheAgainst struct {
@@ -626,6 +630,31 @@ type targetCacheAgainst struct {
 	Key     string               `json:"key"` // the stored run's full cache key
 	Matches bool                 `json:"matches"`
 	Diff    []cache.KeyInputDiff `json:"diff,omitempty"`
+}
+
+// targetCacheLastRun is the negative half of the cache lens: the newest entry recorded
+// for this target HERE, whether a run now would replay a stored entry, and the first key
+// input that moved when it would not. --against answers the same question about a peer
+// the caller names; this answers it about the run the caller already made, which is the
+// one they have when they ask why the cache missed.
+type targetCacheLastRun struct {
+	Recorded bool      `json:"recorded"`
+	Ref      string    `json:"ref,omitempty"`
+	Key      string    `json:"key,omitempty"`
+	At       time.Time `json:"at,omitempty"`
+	// KeyMatches is whether the NEWEST entry's key equals the live key. WouldReplay is the
+	// question the reader actually asked - would a run now hit at all - and the two come
+	// apart: an edit and a revert leave the newest entry keyed to the edited tree while an
+	// older entry still sits at the live key and replays. ReplaysRef names the entry a run
+	// would reach, and is set whenever WouldReplay is.
+	KeyMatches  bool                  `json:"key_matches"`
+	WouldReplay bool                  `json:"would_replay"`
+	ReplaysRef  string                `json:"replays_ref,omitempty"`
+	Differences int                   `json:"differences,omitempty"`
+	First       *cache.KeyInputChange `json:"first_difference,omitempty"`
+	// Explanation names the mechanism behind the verdict and the next step, so the JSON
+	// consumer is not left to reassemble the sentence the text renderer prints.
+	Explanation string `json:"explanation"`
 }
 
 // describeTargetCache answers "what cache key would this target mint RIGHT NOW, and
@@ -702,10 +731,12 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 		if kerr != nil {
 			return kerr
 		}
-		// Mask before comparing or showing: the store persists masked lines, so both
-		// sides must be masked to be byte-comparable - and a live env value must not
-		// print merely because this machine holds it.
-		lines = cache.MaskKeyInputs(lines)
+		// Digest AND redact before comparing or showing, in that order and both: the store
+		// applies the same pair at write, so anything skipped here reads as a difference
+		// on every run rather than as drift. Digesting hides env values, which must not
+		// print merely because this machine holds them; redaction is what covers a
+		// registered credential riding a non-env class.
+		lines = cache.RedactKeyInputs(ctx, cache.DigestEnvValues(lines))
 		r := targetCacheReport{
 			Project:      e.Project,
 			Target:       e.Target,
@@ -719,11 +750,10 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 			r.KeyInputs = lines
 		}
 		if against != "" {
-			// The VERDICT is key equality, never the line diff: DiffKeyInputs is a
-			// set difference (multiplicity and order collapse), so an empty diff
+			// The VERDICT is key equality, never the line diff: DiffKeyInputs pairs
+			// inputs by identity (multiplicity and order collapse), so an empty diff
 			// cannot prove two keys equal. The lines explain the verdict; they do
-			// not decide it. A stored descriptor predating descriptor v2 carries no
-			// key, so fall back to the lines it does have.
+			// not decide it. compat: see hashOfKeyInputs for the keyless fallback.
 			matches := key == storedKey
 			if storedKey == "" {
 				matches = hashOfKeyInputs(storedLines) == hashOfKeyInputs(lines)
@@ -735,6 +765,13 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 			if !matches {
 				mismatched = true
 			}
+		} else if rec, rerr := m.LastRecordedRun(e.Project, e.Target); !errors.Is(rerr, types.ErrNoCache) {
+			// With no peer named, the peer is this machine's own last run of the target.
+			// It never gates the exit code the way --against does: a differing key here
+			// is the NORMAL state after any edit, and failing on it would break every
+			// script that reads `--cache` for a predicted ref.
+			lr := newTargetCacheLastRun(e.Project, e.Target, rec, rerr, key, rec.WouldReplay(key), lines)
+			r.LastRun = &lr
 		}
 		reports = append(reports, r)
 	}
@@ -781,6 +818,11 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 				fmt.Printf("    %s\n", line)
 			}
 		}
+		if r.LastRun != nil {
+			for _, line := range lastRunLines(*r.LastRun) {
+				fmt.Println(line)
+			}
+		}
 		if r.Against == nil {
 			fmt.Println()
 			continue
@@ -812,8 +854,119 @@ func describeTargetCache(ctx context.Context, root string, pos []string, against
 	return nil
 }
 
-// hashOfKeyInputs digests a key-input set for equality comparison, used only when a
-// stored descriptor predates the v2 field carrying the key itself.
+// newTargetCacheLastRun turns the last recorded entry for project:target into the miss
+// explanation for liveKey. lookupErr wrapping fs.ErrNotExist is the "nothing recorded
+// yet" case, which is an answer rather than a failure. liveLines must already be digested
+// and redacted, like the lines the store persists.
+//
+// liveKeyReplays is [cache.RecordedRun.WouldReplay] for liveKey, and it gates the whole
+// miss explanation: a true there means a run HITS, whatever the newest entry's key says.
+func newTargetCacheLastRun(project, target string, rec cache.RecordedRun, lookupErr error, liveKey string, liveKeyReplays bool, liveLines []string) targetCacheLastRun {
+	switch {
+	case errors.Is(lookupErr, fs.ErrNotExist):
+		return targetCacheLastRun{Explanation: fmt.Sprintf(
+			"nothing recorded for this target here, so there is nothing to compare against: run `magus run %s %s` once and this section will name what moved.",
+			target, project)}
+	case lookupErr != nil:
+		return targetCacheLastRun{Explanation: fmt.Sprintf(
+			"the last recorded entry could not be read, so there is nothing to compare against: %v", lookupErr)}
+	}
+	lr := targetCacheLastRun{
+		Recorded:   true,
+		Ref:        cache.PortableRef(rec.Key),
+		Key:        rec.Key,
+		At:         rec.CreatedAt,
+		KeyMatches: rec.Key == liveKey,
+	}
+	lr.WouldReplay = liveKeyReplays || lr.KeyMatches
+	if lr.WouldReplay {
+		lr.ReplaysRef = cache.PortableRef(liveKey)
+	}
+	if lr.KeyMatches {
+		lr.Explanation = "the live key hashes to the same value, so a run now replays that entry instead of executing."
+		return lr
+	}
+	if lr.WouldReplay {
+		lr.Explanation = fmt.Sprintf(
+			"a run now HITS: an OLDER entry here is already stored under the live key, so a run replays %s and never reaches %s. An edit and a revert leave the cache exactly this way. Next: `magus query output %s` reads the entry that would replay.",
+			lr.ReplaysRef, lr.Ref, lr.ReplaysRef)
+		return lr
+	}
+	if rec.KeyInputs == nil {
+		lr.Explanation = fmt.Sprintf(
+			"a run now MISSES, but that entry predates key-input persistence, so no input can be named: run `magus run %s %s` once to record them, then ask again.",
+			target, project)
+		return lr
+	}
+	changes := cache.FirstKeyInputChange(rec.KeyInputs, liveLines)
+	lr.Differences = len(changes)
+	if len(changes) > 0 {
+		lr.First = &changes[0]
+	}
+	// A differing key with no differing input means the two sides disagree on
+	// multiplicity or order, which the pairing collapses; say so rather than
+	// claiming nothing changed while the ref plainly moved.
+	if lr.Differences == 0 {
+		lr.Explanation = fmt.Sprintf(
+			"a run now MISSES, but no single input differs: the keys disagree on the ORDER or repetition of inputs, which this comparison collapses. Next: `magus describe target %s %s --cache --inputs` to read the key line by line.",
+			target, project)
+		return lr
+	}
+	noun := "inputs"
+	if lr.Differences == 1 {
+		noun = "input"
+	}
+	lr.Explanation = fmt.Sprintf(
+		"a run now MISSES: the cache key is a hash of these inputs and %d %s moved since. Next: `magus describe target %s %s --cache --inputs` to see every line.",
+		lr.Differences, noun, target, project)
+	return lr
+}
+
+// lastRunLines renders the miss explanation as the text section, indented to match the
+// key/components blocks above it.
+func lastRunLines(lr targetCacheLastRun) []string {
+	if !lr.Recorded {
+		return []string{"  last recorded run: none", "    " + lr.Explanation}
+	}
+	verdict := "DIFFERS"
+	switch {
+	case lr.KeyMatches:
+		verdict = "MATCHES"
+	case lr.WouldReplay:
+		verdict = "DIFFERS; the live key HITS an older entry"
+	}
+	out := []string{fmt.Sprintf("  last recorded run: %s  %s  %s", lr.At.UTC().Format(time.RFC3339), lr.Ref, verdict)}
+	if lr.First != nil {
+		side := func(value string, absent bool) string {
+			if absent {
+				return "(absent)"
+			}
+			if value == "" {
+				return "(present)"
+			}
+			return value
+		}
+		out = append(out,
+			"    first differing input: "+lr.First.Input,
+			"      - recorded  "+side(lr.First.Recorded, lr.First.RecordedAbsent),
+			"      + live      "+side(lr.First.Live, lr.First.LiveAbsent))
+	}
+	return append(out, "    "+lr.Explanation)
+}
+
+// hashOfKeyInputs digests a key-input set for equality comparison. It is the THIRD
+// spelling of "do these two keys agree" in this command - after key equality and the
+// identity pairing behind [cache.FirstKeyInputChange] - and the only order-sensitive one:
+// it hashes the lines in hash order, so a reordering reads as a difference where the
+// pairing collapses it. That is the correct behavior HERE, since it stands in for the key
+// itself, and the wrong behavior for naming what a reader should go fix.
+//
+// compat(until: no store still serves a descriptor written without a key field): a
+// descriptor predating OutputDescriptor.Key carries no key for --against to compare, and
+// falling back to the lines it does have is what keeps such a ref answerable at all rather
+// than reporting every comparison as a mismatch. Observe it is safe to drop by checking
+// that every .json descriptor under the cache's outputs/ tree - including any store a ref
+// was imported from - carries a non-empty "key".
 func hashOfKeyInputs(lines []string) string {
 	sum := sha256.Sum256([]byte(strings.Join(lines, "\n")))
 	return hex.EncodeToString(sum[:])

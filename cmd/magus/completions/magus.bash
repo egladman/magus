@@ -29,7 +29,7 @@ _magus_complete() {
     cur="${COMP_WORDS[COMP_CWORD]}"
 
 # magus-utils:subcommands:begin
-    local subcommands="ls describe run x where affected query explain path refs graph watch status clean vcs doctor config memory notes diff server buzz completion man init agent hook notify self version help"
+    local subcommands="ls describe run x where affected query explain path refs graph watch status clean vcs doctor config session memory notes diff server buzz completion man init agent self version help"
 # magus-utils:subcommands:end
     local nouns="spell charm target project workspace module mcp-tool"
     local lenses="hotspots affinity ownership trend unreferenced report"
@@ -60,6 +60,17 @@ _magus_complete() {
     cmd="${COMP_WORDS[1]}"
 
     case "$cmd" in
+        attention)
+            # dispose wants an open request id; ids come from the queue itself, the
+            # same way run's targets come from the workspace. Elsewhere the verb list
+            # is static.
+            if [[ "$COMP_CWORD" -eq 2 ]]; then
+                COMPREPLY=( $(compgen -W "ls dispose" -- "$cur") )
+            elif [[ "${COMP_WORDS[2]}" == "dispose" && "$COMP_CWORD" -eq 3 ]]; then
+                COMPREPLY=( $(compgen -W "$(magus attention -o name 2>/dev/null)" -- "$cur") )
+            fi
+            return 0
+            ;;
         run)
             # Everything after --then is the chain's, so its verbs win over run's own
             # flags and project names.

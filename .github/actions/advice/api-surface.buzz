@@ -18,7 +18,6 @@
 // all three read magus\diff, so nobody maintains a second opinion about which files matter.
 //
 // Reads REPO, PR_NUMBER, PR_BASE, PR_HEAD_SHA.
-import "proc";
 import "advice";
 import "magus";
 import "std";

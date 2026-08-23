@@ -85,6 +85,9 @@ Validate the workspace. See \fBmagus\-doctor\fR(1).
 \fBconfig\fR
 View or update magus configuration. See \fBmagus\-config\fR(1).
 .TP
+\fBsession\fR
+What sessions did and what they are blocked on: humans read and dispose, hosts write. See \fBmagus\-session\fR(1).
+.TP
 \fBmemory\fR
 Durable cross\-session project memory. See \fBmagus\-memory\fR(1).
 .TP
@@ -111,12 +114,6 @@ Bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver). See \fBmagus
 .TP
 \fBagent\fR
 Install the knowledge\-graph agent skills into a repo. See \fBmagus\-agent\fR(1).
-.TP
-\fBhook\fR
-Evaluate one shell command or file path against the magus guard rules. See \fBmagus\-hook\fR(1).
-.TP
-\fBnotify\fR
-Normalize an attention event and optionally notify the local desktop. See \fBmagus\-notify\fR(1).
 .TP
 \fBself\fR
 Manage the magus binary (update, install\-shorthand). See \fBmagus\-self\fR(1).
@@ -290,6 +287,7 @@ MAGUS_CACHE_DIR.
 \fBmagus\-vcs\fR(1),
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
+\fBmagus\-session\fR(1),
 \fBmagus\-memory\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
@@ -299,8 +297,6 @@ MAGUS_CACHE_DIR.
 \fBmagus\-man\fR(1),
 \fBmagus\-init\fR(1),
 \fBmagus\-agent\fR(1),
-\fBmagus\-hook\fR(1),
-\fBmagus\-notify\fR(1),
 \fBmagus\-self\fR(1),
 \fBmagus\-version\fR(1)
 .br

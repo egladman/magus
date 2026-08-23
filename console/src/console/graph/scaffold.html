@@ -153,12 +153,18 @@
                different graph entirely is the stage toolbar's Open file. main.ts drives selection
                and disabled/title from syncGraphKindToggle/switchGraphKind. -->
           <div class="console-graph-sidebar__viewcell">
+          <div class="console-graph-display__sublabelrow">
           <p class="console-graph-display__sublabel" id="graphkind-label">Graph</p>
+          <!-- Why the switch is unavailable, on the shared "?" glyph (console-render-help-glyph +
+               attachHelpPopover in main.ts) rather than a line of italic text under the control:
+               it is one fact about the session, and a permanent row of it cost more of a 20rem
+               column than it earned. syncGraphKindToggle shows the glyph only when not live. -->
+          <button id="graphkind-note" type="button" class="console-render-help-glyph" hidden aria-label="Why the graph switch is unavailable" title="Live workspace only">?</button>
+          </div>
           <div class="pf-v6-c-toggle-group console-graph-display__kindgroup" role="group" aria-labelledby="graphkind-label">
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="targets" title="The target graph: targets and what they depend on. Switch requires a live workspace (magus graph export --open --follow)."><span class="pf-v6-c-toggle-group__text">Target</span></button></div>
             <div class="pf-v6-c-toggle-group__item"><button type="button" class="pf-v6-c-toggle-group__button" data-graphkind="knowledge" title="The full code graph: projects, targets, spells, modules, files, docs. Switch requires a live workspace (magus graph export --open --follow)."><span class="pf-v6-c-toggle-group__text">Knowledge</span></button></div>
           </div>
-          <p id="graphkind-note" class="console-graph-display__unavailable" hidden></p>
           </div>
           </div>
           <p class="console-graph-display__controlhint">Color paints over the kind palette; click an active one to clear it.</p>

@@ -21,8 +21,111 @@ import "assert";
 // The comment marker identifies OUR comment among everyone else's. Never rendered.
 final comment_marker = "<!-- magus:advice -->";
 
+// The MODE: where a composed section goes. Unset means the pull request, which is what
+// every CI step gets and what the rest of this file is about. "local" means the caller
+// reads the sections off stdout instead - `magus diff` runs these same advisors against
+// the local working diff, where there is no pull request to write into and no business
+// reaching the forge at all.
+//
+// One environment variable rather than a flag per advisor, because an advisor is a script
+// with no argv of its own: the composite action hands it everything through the
+// environment, so a local driver has to speak the same way or the advisors would need two
+// input paths.
+//
+// MAGUS_INTERNAL_ is what the prefix says: this pair is the handshake between `magus diff`
+// and these scripts, not a knob to set by hand. Nothing supports it and nothing keeps it
+// stable - the driver in cmd/magus/diff_advice.go holds the only other copy of both names,
+// and the two move together in one commit.
+final mode_env = "MAGUS_INTERNAL_ADVICE_MODE";
+final mode_local = "local";
+
+// The base to compare against in local mode, set by the driver. A BRANCH NAME rather than
+// a rev, which is what the name insists on: the advisors compare against `origin/<base>`,
+// the same thing PR_BASE means in CI, so local mode changes where the value comes from and
+// not what it is.
+final base_env = "MAGUS_INTERNAL_ADVICE_BASE_BRANCH";
+
+// Stand-ins for the two pull-request facts a local run does not have. Both must be
+// NON-EMPTY: every advisor guards on "PR_NUMBER, PR_BASE and PR_HEAD_SHA set together"
+// and reads all three empty as "not a pull request, say nothing", which locally would
+// silence the entire set rather than run it.
+final local_pr = "local";
+// HEAD, not the working tree, and the difference is real rather than pedantic: the
+// advisors compare with `git diff <base>...<head>` and `git merge-tree <base> <head>`, and
+// a rev is the only thing either form accepts. Uncommitted work is therefore outside what
+// a local advisor sees. Closing that gap means changing the git forms in each advisor,
+// which changes what they MEASURE - a separate decision from where their output goes.
+final local_head = "HEAD";
+
+// collecting reports whether this run writes to the caller instead of to the forge.
+export fun collecting() > bool { return (os\env(mode_env) ?? "") == mode_local; }
+
+// localFallback maps a pull-request variable to what a local run uses in its place. Pure
+// over the base, so the local contract is pinned by a test rather than by an environment
+// this file would have to mutate to observe.
+export fun localFallback(name: str, base: str) > str {
+    if (name == "PR_BASE") { return base; }
+    if (name == "PR_NUMBER") { return local_pr; }
+    if (name == "PR_HEAD_SHA") { return local_head; }
+    return "";
+}
+
 // env reads a variable, returning "" rather than null so callers can compare directly.
-export fun env(name: str) > str { return os\env(name) ?? ""; }
+//
+// In local mode it also SUPPLIES the pull-request facts nobody set, so an advisor goes
+// on reading its inputs through this one helper and grows no local branch of its own. A
+// name that IS set always wins: a developer who exported PR_BASE meant it.
+export fun env(name: str) > str {
+    final set = os\env(name) ?? "";
+    if (set != "" or !collecting()) { return set; }
+    return localFallback(name, base: os\env(base_env) ?? "");
+}
+
+// fetchBase brings refs/remotes/origin/<base> up to date before an advisor compares
+// against it, and is the single place that decides whether to reach the network at all.
+//
+// In local mode it fetches NOTHING. `magus diff` is a read-only report on a working tree:
+// it runs on a laptop that may be offline, and under --watch it re-fires on every save, so
+// a network round trip and a write to refs/remotes/ are both wrong there - a report is not
+// allowed to change the repository it is reporting on. It reads whatever origin/<base> the
+// clone already has, which may be days old; staleBaseNote is how an advisor says so.
+//
+// refspec selects the explicit "+refs/heads/<base>:refs/remotes/origin/<base>" form and
+// throws when it fails. A bare `git fetch origin <base>` writes FETCH_HEAD and updates
+// refs/remotes/origin/<base> only when remote.origin.fetch already covers it - which
+// actions/checkout does NOT configure on a pull_request - and it exits 0 either way. A
+// caller that cannot proceed without the ref passes true; the rest keep the bare form,
+// which is the command they have always run and the one CI still runs unchanged.
+export fun fetchBase(base: str, refspec: bool) > void !> str {
+    if (collecting()) { return; }
+    if (!refspec) {
+        proc\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+        return;
+    }
+    final fetched = proc\exec("git", args: ["fetch", "--no-tags", "origin",
+        "+refs/heads/" + base + ":refs/remotes/origin/" + base], dir: ".",
+        opts: {"allow_failure": true});
+    if (!fetched.ok) { throw "advice: git fetch " + base + ": " + fetched.stderr; }
+}
+
+// staleBaseText is the disclaimer itself. Pure over the base, so its wording is pinned by
+// a test rather than by an environment this file would have to mutate to observe - the
+// same split localFallback makes, for the same reason.
+export fun staleBaseText(base: str) > str {
+    return "\n_Compared against `origin/" + base + "`, which this run did not fetch: a "
+        + "local run stays off the network. `git fetch origin " + base + "` refreshes it._\n";
+}
+
+// staleBaseNote is the line an advisor appends to its section when it compared against a
+// base that nothing refreshed. Empty in CI, where fetchBase has just fetched.
+//
+// Saying nothing would be the lie. A local finding derived from a week-old origin/main is
+// not wrong - it is an answer about a week-old main - and only the reader knows whether
+// that distinction matters to what they are about to do.
+export fun staleBaseNote(base: str) > str {
+    if (!collecting()) { return ""; }
+    return staleBaseText(base);
+}
 
 export fun beginMarker(name: str) > str { return "<!-- magus:advice:" + name + ":begin -->"; }
 export fun endMarker(name: str) > str { return "<!-- magus:advice:" + name + ":end -->"; }
@@ -312,6 +415,10 @@ export fun silences(labels: [str], name: str) > bool {
 
 // silenced asks GitHub for this pull request's labels and applies the rule above.
 export fun silenced(repo: str, pr: str, name: str) > bool !> any {
+    // Labels live on a pull request. Local mode has none, and must not reach the forge
+    // to find out, so nothing is silenced there. Muting a local advisor is a job for
+    // whoever asked for the run, not for a label on a change that may not exist yet.
+    if (collecting()) { return false; }
     final res = proc\exec("gh", args: ["api", "repos/" + repo + "/issues/" + pr + "/labels"],
         dir: ".", opts: {"quiet": true, "allow_failure": true});
     if (!res.ok) { return false; }
@@ -337,10 +444,35 @@ fun find(repo: str, pr: str) > str !> any {
     return "";
 }
 
+// sectionLine renders one section as the single JSON line the collect sink emits. Pure,
+// so the shape the Go driver parses is pinned by a test here rather than by its one call
+// site - the two sit in different languages and cannot share a type.
+export fun sectionLine(name: str, title: str, body: str) > str {
+    return serialize\jsonEncode({"name": name, "title": title, "body": body});
+}
+
 // publish upserts one advisor's section into the PR's magus comment. An empty body
 // retracts the section, and a comment left with no sections at all is emptied to the
 // bare marker rather than deleted - deleting would lose the thread's history.
+//
+// In local mode it writes the section to stdout instead and touches nothing else. The
+// section is emitted even when the body is EMPTY: a retraction says "this advisor looked
+// and found nothing", which is exactly what a reader of a local run wants to know, and it
+// is what lets the caller show a per-advisor verdict rather than a list of complaints.
 export fun publish(repo: str, pr: str, name: str, title: str, body: str) > void !> any {
+    if (collecting()) {
+        std\print(sectionLine(name, title: title, body: body));
+        return;
+    }
+    // Neither a pull request to write to nor a sink to write to. Reaching gh from here
+    // would build `repos//issues//comments` and fail on the far side, blaming GitHub for
+    // a missing local variable, so say which of the two modes is missing its input.
+    if (repo == "" or pr == "") {
+        throw "advice: nowhere to publish \"" + name + "\". For a pull request, set REPO "
+            + "and PR_NUMBER (the advice composite action passes both). A local run is "
+            + "driven by magus diff, which sets " + mode_env + "=" + mode_local + " and "
+            + "reads each section back as one JSON line instead of posting it.";
+    }
     final id = find(repo, pr: pr);
     var current = "";
     if (id != "") {
@@ -473,6 +605,69 @@ test "silences mutes one advisor by name" {
 
 test "silences mutes everything with the bare label" {
     std\assert(silences(["magus:silence"], name: "doctor"), message: "blanket silence");
+}
+
+test "the collect sink emits one JSON line per section" {
+    final line = sectionLine("unclaimed", title: "Files no project claims (2)", body: "a\nb");
+    std\assert(line.indexOf("\n") == null, message: "one line: the driver reads these line by line");
+    std\assert(line.indexOf("\"name\":\"unclaimed\"") != null, message: "names the section");
+    std\assert(line.indexOf("\"title\":\"Files no project claims (2)\"") != null, message: "carries the summary line");
+    std\assert(line.indexOf("\"body\":\"a\\nb\"") != null, message: "a newline in the body is escaped, not emitted");
+}
+
+test "a retraction is still a section" {
+    // An empty body removes the PR section, and a local reader needs the same fact:
+    // "this advisor ran and found nothing" is not the same as "this advisor did not run".
+    final line = sectionLine("doctor", title: "Workspace health", body: "");
+    std\assert(line.indexOf("\"name\":\"doctor\"") != null, message: "the advisor is still named");
+    std\assert(line.indexOf("\"body\":\"\"") != null, message: "and the empty body is carried, not dropped");
+}
+
+test "local mode supplies the pull-request facts a working tree has not got" {
+    assert\equal(localFallback("PR_BASE", base: "main"), want: "main",
+        message: "the base is the driver's, passed through");
+    std\assert(localFallback("PR_NUMBER", base: "main") != "",
+        message: "non-empty, or every advisor reads the run as 'not a pull request' and says nothing");
+    std\assert(localFallback("PR_HEAD_SHA", base: "main") != "",
+        message: "same guard: all three must be set together");
+}
+
+test "local mode invents nothing beyond those three" {
+    assert\equal(localFallback("GH_TOKEN", base: "main"), want: "",
+        message: "a credential is never conjured for a local run");
+    assert\equal(localFallback("FIX_LABEL", base: "main"), want: "",
+        message: "consent for a writer is not something a local default can give");
+}
+
+test "the stale-base note names the ref and the way to refresh it" {
+    final note = staleBaseText("main");
+    std\assert(note.indexOf("origin/main") != null,
+        message: "names the ref the finding was actually measured against");
+    std\assert(note.indexOf("git fetch origin main") != null,
+        message: "and the command that makes it current, so the reader is not left guessing");
+}
+
+test "a CI run has no staleness to disclaim" {
+    // The test runner leaves the mode variable unset, which IS CI mode, and there
+    // fetchBase has just fetched. An inverted gate here would hang a "this run did not
+    // fetch" line on every pull request comment magus writes.
+    //
+    // The local branch is NOT reachable from here: collecting() reads os\env, and
+    // os\with_env deliberately does not touch this process's own environment, so nothing
+    // in-file can put the run into local mode. That half is pinned in Go instead, by
+    // TestLocalModeReadsAStaleBaseWithoutFetching, which sets the variable for real.
+    assert\equal(staleBaseNote("main"), want: "", message: "CI refreshed the ref itself");
+}
+
+test "the local-mode variables are spelled as the driver spells them" {
+    // cmd/magus/diff_advice.go holds the only other copy of these three strings, and
+    // nothing at runtime couples the two: rename one side alone and collecting() stays
+    // false, so env() supplies no pull-request facts and every advisor reaches publish()
+    // with an empty repo and pr - ten "nowhere to publish" notes and not one finding.
+    assert\equal(mode_env, want: "MAGUS_INTERNAL_ADVICE_MODE", message: "the mode variable");
+    assert\equal(mode_local, want: "local", message: "and the value that turns local mode on");
+    assert\equal(base_env, want: "MAGUS_INTERNAL_ADVICE_BASE_BRANCH",
+        message: "the base BRANCH, which is why the name says branch and not ref");
 }
 
 test "silences ignores unrelated labels" {

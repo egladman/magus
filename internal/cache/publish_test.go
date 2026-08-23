@@ -59,7 +59,7 @@ func TestRemoteHitResolvesProducersRef(t *testing.T) {
 
 	lines, err := cB.outputs.KeyInputsByRef(rA.Ref)
 	require.NoError(t, err, "the key inputs travel too, so B can diff its key against A's")
-	assert.Equal(t, rA.Hash, hashOfLines(MaskKeyInputs(lines)), "the imported lines re-derive the shared key")
+	assert.Equal(t, rA.Hash, hashOfLines(DigestEnvValues(lines)), "the imported lines re-derive the shared key")
 
 	// Ref equality alone proves nothing - refs are key-derived, so B would compute
 	// A's ref even if the artifact shipped no sidecars at all. Assert what actually

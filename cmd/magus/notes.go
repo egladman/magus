@@ -559,7 +559,7 @@ func notesVerify(ctx context.Context, root string, args []string) error {
 		return fmt.Errorf("magus notes verify: %d note(s) are structurally valid, but their anchors were NOT checked because the knowledge graph would not load: %w", report.Notes, resErr)
 	}
 	for _, st := range stores {
-		anchorIssues, err := store.ResolveAnchors(ctx, st.dir, res.ForScope(string(st.scope)))
+		anchorIssues, err := store.AnchorIssues(ctx, st.dir, res.ForScope(string(st.scope)))
 		if err != nil {
 			return err
 		}

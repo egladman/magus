@@ -33,10 +33,7 @@ fun conflicted(base: str, head: str) > [str] !> str {
     // only updates refs/remotes/origin/<base> when remote.origin.fetch already covers it -
     // which actions/checkout does NOT configure on a pull_request. It exits 0 either way, so
     // without this the merge-tree below runs against a ref that does not exist.
-    final fetched = proc\exec("git", args: ["fetch", "--no-tags", "origin",
-        "+refs/heads/" + base + ":refs/remotes/origin/" + base], dir: ".",
-        opts: {"allow_failure": true});
-    if (!fetched.ok) { throw "merge-conflict-advice: git fetch " + base + ": " + fetched.stderr; }
+    advice\fetchBase(base, refspec: true);
 
     // core.quotePath would C-quote a non-ASCII path ("gen/caf\303\251.json", quotes and all),
     // and that string reaches describeFile, matches no output glob, and gets reported to the

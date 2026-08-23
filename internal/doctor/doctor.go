@@ -169,6 +169,7 @@ func (r *runner) run(wsErr error) types.DoctorReport {
 		r.checkMagusfileSyntax(projects),
 		r.checkSpellDocs(project.DefaultSpellRegistry().All()),
 		r.checkSpellContract(),
+		r.checkDiagnosticDocs(),
 		r.checkGraphCycles(),
 		r.checkGuardBinary(),
 		r.checkObserverRecording(),

@@ -10,7 +10,7 @@
 //
 // This is the half that was missing when the plugin shipped broken for months. It
 // invoked `magus agent hook` (a subcommand that no longer exists) and passed the
-// command in argv (which `magus hook` rejects, because it reads stdin), so it
+// command in argv (which `magus session hook` rejects, because it reads stdin), so it
 // never received a verdict at all - and its fail-open arm logged one line per tool
 // call and allowed everything. Both mistakes are argv-and-stdin mistakes, which is
 // exactly what the assertions below pin.
@@ -104,9 +104,12 @@ test("a shell command is judged over stdin by the top-level hook subcommand", as
   assert.equal(calls.length, 1);
   // The exact contract, spelled out rather than pattern-matched: these are the two
   // things that were wrong, and a loose assertion would have passed on both.
-  assert.deepEqual(calls[0].argv, ["hook", "--agent-name", "opencode", "-o", "json"]);
+  assert.deepEqual(calls[0].argv, ["session", "hook", "--agent-name", "opencode", "-o", "json"]);
   assert.equal(calls[0].stdin, "git stash");
-  assert.ok(!calls[0].argv.includes("agent"), "`magus agent hook` was removed; hook is top level");
+  assert.ok(
+    !calls[0].argv.includes("agent"),
+    "`magus agent hook` was removed; hook lives under session",
+  );
   assert.ok(!calls[0].argv.includes("--"), "the command goes on stdin; hook takes no positionals");
 });
 
@@ -118,7 +121,15 @@ test("a file write is judged on the path surface, also over stdin", async () => 
     await h["tool.execute.before"]({ tool: "write" }, { args: { filePath: "gen/index.json" } });
   });
 
-  assert.deepEqual(calls[0].argv, ["hook", "--path", "--agent-name", "opencode", "-o", "json"]);
+  assert.deepEqual(calls[0].argv, [
+    "session",
+    "hook",
+    "--path",
+    "--agent-name",
+    "opencode",
+    "-o",
+    "json",
+  ]);
   assert.equal(calls[0].stdin, "gen/index.json");
   // Declared advise=human: OpenCode has no context-injection arm, so an advise
   // reaches the person and never the model. It must not throw.

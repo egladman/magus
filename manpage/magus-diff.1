@@ -3,7 +3,7 @@
 magus\-diff \- Read the working tree's changes in the order they deserve attention
 .SH SYNOPSIS
 .B magus
-.RI "diff [\-\-generated] [\-\-tui] [\-\-watch] [<patch\-file>|\-] [flags]"
+.RI "diff [\-\-generated] [\-\-cost] [\-\-tui] [\-\-watch] [<patch\-file>|\-] [flags]"
 .SH DESCRIPTION
 Read the working tree's uncommitted changes, annotated and ordered.
 .PP
@@ -26,8 +26,21 @@ model \- it reports who can see the thing you changed and lets you decide.
 .PP
 The console's Diff surface reads the same annotations over the same session,
 and an agent can join that session through the magus_diff MCP tool.
+.PP
+\-\-cost appends what landing the change costs: which projects rebuild and
+which were merely edited, who has been changing them, an estimate of the
+rebuild from recorded run durations, what the workspace's advisors say, and
+which human\-authored notes anchor a file or symbol you touched. It is context
+and never a verdict \- nothing is gated on it and the exit code is unchanged;
+the name is not "preflight" because in this workspace's magusfiles a preflight
+target IS a gate, and this flag must never read as one. Each section says when
+it could not measure something, so an empty one reads as "nobody looked"
+rather than as a clean bill of health.
 .SH OPTIONS
 .RS
+.TP
+\fB\-\-cost\fR
+Append what landing this costs: reach, ownership, an estimate from recorded run times, advisors, and note anchors
 .TP
 \fB\-\-generated\fR
 Include declared target outputs, which are folded away by default
@@ -37,6 +50,18 @@ Read the changeset interactively, joined to the session the console and an agent
 .TP
 \fB\-\-watch\fR
 Re\-read and re\-render whenever the working tree changes
+.RE
+.SH EXIT STATUS
+.RS
+.TP
+\fB0\fR
+The changeset was read and rendered. This is the status whether or not anything changed: unlike git diff \-\-exit\-code, a non\-empty changeset is not a failure, and no flag makes it one.
+.TP
+\fB1\fR
+The changeset could not be read \- an unreadable patch file, or stdin, or a working tree the VCS would not report on.
+.TP
+\fB2\fR
+Misuse: more than one patch argument, an argument that is neither a readable patch nor \-, or a flag combination that cannot hold (\-\-tui with \-\-watch, with a patch argument, or with \-o json). \-\-tui at a non\-interactive terminal also exits 2, since the request cannot be served as asked.
 .RE
 .SH EXAMPLES
 \fIRead what you are about to commit\fR
@@ -49,6 +74,12 @@ magus diff
 .PP
 .EX
 magus diff --generated
+.EE
+.PP
+\fIEverything to know before landing it\fR
+.PP
+.EX
+magus diff --cost
 .EE
 .PP
 \fINavigate it hunk by hunk and mark what you have read\fR
@@ -82,6 +113,7 @@ magus diff -o json
 \fBmagus\-vcs\fR(1),
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
+\fBmagus\-session\fR(1),
 \fBmagus\-memory\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-server\fR(1),
@@ -90,8 +122,6 @@ magus diff -o json
 \fBmagus\-man\fR(1),
 \fBmagus\-init\fR(1),
 \fBmagus\-agent\fR(1),
-\fBmagus\-hook\fR(1),
-\fBmagus\-notify\fR(1),
 \fBmagus\-self\fR(1),
 \fBmagus\-version\fR(1)
 .br

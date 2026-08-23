@@ -58,7 +58,7 @@ Stage a change the way this workspace's declarations say it should be staged
 Settle an in\-progress merge's conflicted generated files, then regenerate once
 .TP
 \fBcheckpoint\fR
-Print the working state's identity, for recording what a delegated unit was handed; writes nothing
+Print the working state's identity, for recording what a delegation was handed; writes nothing
 .TP
 \fBmerge\-driver\fR
 The per\-file merge driver git and hg invoke; you do not run this by hand
@@ -88,7 +88,7 @@ magus vcs resolve
 magus vcs resolve --against origin/main
 .EE
 .PP
-\fIRecord what a delegated unit was handed\fR
+\fIRecord what a delegation was handed\fR
 .PP
 .EX
 magus vcs checkpoint
@@ -118,6 +118,7 @@ magus vcs checkpoint -o name
 \fBmagus\-clean\fR(1),
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
+\fBmagus\-session\fR(1),
 \fBmagus\-memory\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
@@ -127,8 +128,6 @@ magus vcs checkpoint -o name
 \fBmagus\-man\fR(1),
 \fBmagus\-init\fR(1),
 \fBmagus\-agent\fR(1),
-\fBmagus\-hook\fR(1),
-\fBmagus\-notify\fR(1),
 \fBmagus\-self\fR(1),
 \fBmagus\-version\fR(1)
 .br

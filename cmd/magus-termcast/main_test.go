@@ -1,11 +1,17 @@
 package main
 
 import (
+	"context"
+	"fmt"
+	"math"
 	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/egladman/magus/internal/interactive/screen"
+	"github.com/egladman/magus/internal/proc/run"
 )
 
 // repoFile reads a path relative to the repo root. The tests run in the command's
@@ -139,5 +145,231 @@ func TestStripSGR(t *testing.T) {
 	got := stripSGR("\x1b[33m[warn]\x1b[0m probe failed\x1b[2m spell=go\x1b[0m")
 	if want := "[warn] probe failed spell=go"; got != want {
 		t.Errorf("stripSGR = %q, want %q", got, want)
+	}
+}
+
+// TestStripSGRDropsATruncatedSequence pins what happens at the end of the input.
+// A capture is cut at a frame boundary, so the last line can end mid-sequence,
+// and the loop has to stop rather than emit the introducer as text.
+func TestStripSGRDropsATruncatedSequence(t *testing.T) {
+	for _, tc := range []struct{ in, want string }{
+		{"done\x1b", "done"},
+		{"done\x1b[", "done"},
+		{"done\x1b[38;5;73", "done"},
+		{"a\x1bXb", "ab"}, // an escape that is not CSI: the introducer alone goes
+	} {
+		if got := stripSGR(tc.in); got != tc.want {
+			t.Errorf("stripSGR(%q) = %q, want %q", tc.in, got, tc.want)
+		}
+	}
+}
+
+// TestVariantPath pins the naming contract the README and docs links depend on:
+// the dark variant keeps the unsuffixed name every existing reference points at.
+func TestVariantPath(t *testing.T) {
+	if got := variantPath("assets/gen/core-loop.svg", ""); got != "assets/gen/core-loop.svg" {
+		t.Errorf("dark variant = %q, want the unsuffixed path", got)
+	}
+	if got := variantPath("assets/gen/core-loop.svg", "-light"); got != "assets/gen/core-loop-light.svg" {
+		t.Errorf("light variant = %q", got)
+	}
+}
+
+// TestCheckNoiseSeparatesTheTwoRecordings guards the one difference between the
+// core loop and the showcase: a "[fail]" is a broken recording machine in the
+// first and the entire subject in the second. A "[warn]" is an environment
+// problem in both, so allowFailures must not wave it through.
+func TestCheckNoiseSeparatesTheTwoRecordings(t *testing.T) {
+	failure := "$ magus run ci\n\x1b[31m[fail]\x1b[0m api build\n"
+	if err := checkNoise(failure, false); err == nil {
+		t.Error("a [fail] in the core loop must be refused")
+	}
+	if err := checkNoise(failure, true); err != nil {
+		t.Errorf("a [fail] is the showcase's subject, not an error: %v", err)
+	}
+
+	warning := "$ magus run ci\n\x1b[33m[warn]\x1b[0m probe failed\n"
+	for _, allowFailures := range []bool{false, true} {
+		if err := checkNoise(warning, allowFailures); err == nil {
+			t.Errorf("a [warn] must be refused with allowFailures=%v", allowFailures)
+		}
+	}
+}
+
+// TestCheckNoiseQuotesThreeLinesThenCounts keeps a broken recording's diagnostic
+// readable: the escape sequences are stripped so a log that is not a terminal
+// shows the text, and a capture full of warnings does not paste the whole run
+// into one error.
+func TestCheckNoiseQuotesThreeLinesThenCounts(t *testing.T) {
+	var capture strings.Builder
+	for i := range 5 {
+		fmt.Fprintf(&capture, "\x1b[33m[warn]\x1b[0m probe %d failed\n", i)
+	}
+	err := checkNoise(capture.String(), false)
+	if err == nil {
+		t.Fatal("five warning lines must be refused")
+	}
+	msg := err.Error()
+	for _, want := range []string{"(5 warning or failure lines)", "[warn] probe 0 failed", "... and 2 more"} {
+		if !strings.Contains(msg, want) {
+			t.Errorf("diagnostic does not contain %q:\n%s", want, msg)
+		}
+	}
+	if strings.Contains(msg, "\x1b") {
+		t.Error("the diagnostic still carries escape sequences; it is unreadable in a log")
+	}
+	if strings.Contains(msg, "probe 3 failed") {
+		t.Error("more than three lines were quoted")
+	}
+}
+
+// TestSplitNeedsAPrompt pins the frame boundary: the prompt is the only reliable
+// one in the stream, so a capture without it yields no segments rather than one
+// segment holding the whole session.
+func TestSplitNeedsAPrompt(t *testing.T) {
+	if segs := split("plain output with no prompt\n"); segs != nil {
+		t.Errorf("split found %d segments in a promptless capture", len(segs))
+	}
+
+	segs := split("noise\n" + prompt + "one\n" + prompt + "two\n")
+	if len(segs) != 2 {
+		t.Fatalf("split gave %d segments, want 2", len(segs))
+	}
+	if !strings.HasPrefix(segs[0], "noise\n"+prompt) {
+		t.Errorf("the pty's startup noise belongs on the first frame, not in one of its own: %q", segs[0])
+	}
+	if !strings.HasPrefix(segs[1], prompt) {
+		t.Errorf("every later segment opens with the prompt line: %q", segs[1])
+	}
+}
+
+func TestReplayRejectsACaptureWithNoCommands(t *testing.T) {
+	if _, err := replay("nothing that looks like a session"); err == nil {
+		t.Error("replay accepted a capture with no command segments")
+	}
+}
+
+func TestRenderFileNamesTheRemedyForAMissingCapture(t *testing.T) {
+	_, err := renderFile(filepath.Join(t.TempDir(), "absent.capture"), screen.DarkTheme)
+	if err == nil {
+		t.Fatal("renderFile accepted a missing capture")
+	}
+	if !strings.Contains(err.Error(), "-record") {
+		t.Errorf("the error does not say how to produce the capture: %v", err)
+	}
+}
+
+// TestPaceScalesWithWhatAFrameAdds pins the pacing rule, which is the one part
+// of the picture that is staged rather than recorded: a dense frame holds longer
+// than a sparse one, up to a cap, and the payoff frame overrides both.
+func TestPaceScalesWithWhatAFrameAdds(t *testing.T) {
+	p := pace{base: 0.28, perLine: 0.028, max: 0.85, last: 1.3}
+	for _, tc := range []struct {
+		what        string
+		i, n, added int
+		want        float64
+	}{
+		{"a frame that adds nothing still gets a beat", 0, 4, 0, 0.28},
+		{"each added line buys dwell", 1, 4, 5, 0.28 + 5*0.028},
+		{"a dense frame is capped", 2, 4, 100, 0.85},
+		{"the payoff frame overrides the scale", 3, 4, 0, 1.3},
+	} {
+		// A delta, not equality: the want column is written as arithmetic
+		// (0.28 + 5*0.028) and float addition does not round-trip exactly.
+		if got := p.hold(tc.i, tc.n, tc.added); math.Abs(got-tc.want) > 1e-9 {
+			t.Errorf("%s: hold(%d, %d, %d) = %v, want %v", tc.what, tc.i, tc.n, tc.added, got, tc.want)
+		}
+	}
+}
+
+// TestHoldsPacesEveryFrame walks the real recording, because holds measures each
+// frame against its predecessor and the first against an empty screen - a shape
+// no synthetic pair of frames exercises.
+func TestHoldsPacesEveryFrame(t *testing.T) {
+	frames, err := replay(repoFile(t, capturePath))
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	holds := corePace.holds(frames)
+	if len(holds) != len(frames) {
+		t.Fatalf("paced %d holds for %d frames", len(holds), len(frames))
+	}
+	if holds[len(holds)-1] != corePace.last {
+		t.Errorf("the last frame holds for %v, want the payoff dwell %v", holds[len(holds)-1], corePace.last)
+	}
+	for i, h := range holds[:len(holds)-1] {
+		if h < corePace.base || h > corePace.max {
+			t.Errorf("frame %d holds for %v, outside [%v, %v]", i, h, corePace.base, corePace.max)
+		}
+	}
+}
+
+// TestAddedCountsWhatScrolledAway is the reason added() is not a subtraction of
+// row counts: a frame that filled the screen and pushed the earlier output off
+// the top added all of it, and the row count alone would report zero.
+func TestAddedCountsWhatScrolledAway(t *testing.T) {
+	frames, err := replay(repoFile(t, capturePath))
+	if err != nil {
+		t.Fatalf("replay: %v", err)
+	}
+	for i := 1; i < len(frames); i++ {
+		if n := added(frames[i-1], frames[i]); n < 0 {
+			t.Errorf("frame %d added %d lines; a frame can never add a negative number", i, n)
+		}
+	}
+	if n := added(frames[len(frames)-1], frames[0]); n != 0 {
+		t.Errorf("going backwards added %d lines, want the clamp to 0", n)
+	}
+}
+
+func TestWriteWritesTheRenderedSVG(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "out.svg")
+	write(path, "<svg/>")
+
+	got, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read back: %v", err)
+	}
+	if string(got) != "<svg/>" {
+		t.Errorf("wrote %q", got)
+	}
+}
+
+func TestMaterializeReportsAMissingFixture(t *testing.T) {
+	// The tests run in the command's own directory, where tapes/ does not exist.
+	if err := materialize(t.TempDir()); err == nil {
+		t.Error("materialize accepted a missing fixture")
+	} else if !strings.Contains(err.Error(), fixturePath) {
+		t.Errorf("the error does not name the fixture it could not read: %v", err)
+	}
+}
+
+// TestMaterializeLeavesAResolvableBaseRef is the check the third act of the
+// recording depends on. magus resolves the affected set against origin/main, a
+// remote-tracking name a fresh fixture does not have; without it `git merge-base`
+// exits 128, magus falls back to every project, and the narrowing the recording
+// exists to show silently stops happening while still looking plausible.
+func TestMaterializeLeavesAResolvableBaseRef(t *testing.T) {
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("git is not installed")
+	}
+	t.Chdir("../..") // fixturePath is relative to the repo root
+
+	dir := t.TempDir()
+	if err := materialize(dir); err != nil {
+		t.Fatalf("materialize: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(dir, "magusfile.buzz")); err != nil {
+		t.Errorf("the demo workspace has no root magusfile: %v", err)
+	}
+	res, err := run.Exec(context.Background(), "git",
+		[]string{"merge-base", "origin/main", "HEAD"},
+		run.ExecOptions{Dir: dir, Quiet: true, Capture: true})
+	if err != nil {
+		t.Fatalf("git merge-base: %v", err)
+	}
+	if res.Code != 0 {
+		t.Errorf("origin/main does not resolve in the materialized fixture (exit %d): %s",
+			res.Code, strings.TrimSpace(res.Stdout+res.Stderr))
 	}
 }

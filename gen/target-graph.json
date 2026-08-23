@@ -831,6 +831,62 @@
           "reads_files": [
             {
               "project": ".",
+              "glob": "**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "**/*.txtar"
+            },
+            {
+              "project": ".",
+              "glob": "**/*.s"
+            },
+            {
+              "project": ".",
+              "glob": "**/*.S"
+            },
+            {
+              "project": ".",
+              "glob": "**/*.c"
+            },
+            {
+              "project": ".",
+              "glob": "**/*.h"
+            },
+            {
+              "project": ".",
+              "glob": "go.mod"
+            },
+            {
+              "project": ".",
+              "glob": "go.sum"
+            },
+            {
+              "project": ".",
+              "glob": "go.work"
+            },
+            {
+              "project": ".",
+              "glob": "go.work.sum"
+            },
+            {
+              "project": ".",
+              "glob": "**/*.buzz"
+            },
+            {
+              "project": ".",
+              "glob": "**/*.md"
+            },
+            {
+              "project": ".",
+              "glob": "mise.toml"
+            },
+            {
+              "project": ".",
+              "glob": "magus.yaml"
+            },
+            {
+              "project": ".",
               "glob": "console/src/styles/tokens.css"
             },
             {
@@ -1005,6 +1061,74 @@
             {
               "project": ".",
               "glob": "libs/testlayout/**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "**/*.go"
+            },
+            {
+              "project": ".",
+              "glob": "**/*.s"
+            },
+            {
+              "project": ".",
+              "glob": "**/*.S"
+            },
+            {
+              "project": ".",
+              "glob": "**/*.c"
+            },
+            {
+              "project": ".",
+              "glob": "**/*.h"
+            },
+            {
+              "project": ".",
+              "glob": "go.mod"
+            },
+            {
+              "project": ".",
+              "glob": "go.sum"
+            },
+            {
+              "project": ".",
+              "glob": "go.work"
+            },
+            {
+              "project": ".",
+              "glob": "go.work.sum"
+            },
+            {
+              "project": ".",
+              "glob": ".golangci.yml"
+            },
+            {
+              "project": ".",
+              "glob": "**/*.md"
+            },
+            {
+              "project": ".",
+              "glob": ".markdownlintignore"
+            },
+            {
+              "project": ".",
+              "glob": "**/*.sh"
+            },
+            {
+              "project": ".",
+              "glob": "**/*.bash"
+            },
+            {
+              "project": ".",
+              "glob": ".shellcheckrc"
+            },
+            {
+              "project": ".",
+              "glob": "mise.toml"
+            },
+            {
+              "project": ".",
+              "glob": "magus.yaml"
             },
             {
               "project": ".",

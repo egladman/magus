@@ -27,6 +27,7 @@ import (
 	"io/fs"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	iclispec "github.com/egladman/magus/internal/clispec"
@@ -256,6 +257,9 @@ func renderCommandMD(seg iclispec.Command) []byte {
 		}
 	}
 
+	// Before Examples, matching the roff renderer's man(7) section order.
+	writeExitStatusMD(&m, seg.ExitStatus)
+
 	if len(seg.Examples) > 0 {
 		m.h2("Examples")
 		for _, ex := range seg.Examples {
@@ -268,6 +272,16 @@ func renderCommandMD(seg iclispec.Command) []byte {
 
 	writeSeeAlsoMD(&m, seg.Name)
 	return m.bytes()
+}
+
+func writeExitStatusMD(m *mdBuf, codes []iclispec.ExitCode) {
+	if len(codes) == 0 {
+		return
+	}
+	m.h2("Exit status")
+	for _, code := range codes {
+		m.def(mdB(strconv.Itoa(code.Code)), mdEsc(code.Meaning))
+	}
 }
 
 func writeEnvSectionMD(m *mdBuf) {

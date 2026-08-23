@@ -6,7 +6,7 @@
 # bashisms; nothing in it is magus-internal.
 #
 # Contract: reads the host's event as JSON on stdin, selects its command with
-# jq, then pipes the command into magus hook. It writes the host's response on
+# jq, then pipes the command into magus session hook. It writes the host's response on
 # stdout and exits 0 either way. Override any of the variables below:
 #
 #   HOST_EVENT_PATH  dot-path to the command inside your host's event
@@ -21,7 +21,7 @@
 #   GUARD_UNAVAILABLE_RESPONSE  what to print when magus cannot be found, so a
 #                    host can choose its own fail-open or fail-closed stance
 #   GUARD_FAILED_RESPONSE  the same, for a magus that IS found but cannot judge
-#                    the command (too old for `hook`, cannot load the workspace)
+#                    the command (too old for `session hook`, cannot load the workspace)
 #
 # The defaults are Claude Code's event and response shape.
 #
@@ -75,7 +75,7 @@ fi
 [ -n "$GUARD_MAGUS_BIN" ] || { [ -x ./magus ] && GUARD_MAGUS_BIN=./magus; }
 [ -n "$GUARD_MAGUS_BIN" ] || GUARD_MAGUS_BIN=$(command -v magus 2>/dev/null)
 [ -n "$GUARD_UNAVAILABLE_RESPONSE" ] || GUARD_UNAVAILABLE_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: magus is not on PATH, so its deny and advise rules are unenforced right now. Install magus, or set GUARD_MAGUS_BIN to its path, to restore the guard."}}'
-[ -n "$GUARD_FAILED_RESPONSE" ] || GUARD_FAILED_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: the magus binary was found but could not judge this command, so its deny and advise rules are unenforced right now. It is probably too old for the hook subcommand, or cannot load this workspace - run magus hook by hand to see the error, then rebuild or update it to restore the guard."}}'
+[ -n "$GUARD_FAILED_RESPONSE" ] || GUARD_FAILED_RESPONSE='{"hookSpecificOutput":{"hookEventName":"PreToolUse","additionalContext":"magus guard is NOT running: the magus binary was found but could not judge this command, so its deny and advise rules are unenforced right now. It is probably too old for the session hook subcommand, or cannot load this workspace - run magus session hook by hand to see the error, then rebuild or update it to restore the guard."}}'
 
 if [ -z "$GUARD_MAGUS_BIN" ] || [ ! -x "$GUARD_MAGUS_BIN" ]; then
   printf '%s' "$GUARD_UNAVAILABLE_RESPONSE"
@@ -102,7 +102,7 @@ transcript=$(printf '%s' "$event" | jq -r ".$HOST_TRANSCRIPT_PATH // empty")
 # before attribution existed. One extra process only on an older binary, and none once the flags are
 # in a release.
 guard() {
-  printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" hook "$@" -o "template=$HOST_RESPONSE"
+  printf '%s' "$event" | jq -r ".$HOST_EVENT_PATH" | "$GUARD_MAGUS_BIN" session hook "$@" -o "template=$HOST_RESPONSE"
 }
 # A DENY exits non-zero (2) with the verdict on stdout, so a bare `||` retry would treat
 # every blocked command as "this binary rejected the attribution flags" and judge it a
@@ -119,7 +119,7 @@ fi
 
 # A PASS and a BROKEN GUARD both render nothing, and telling them apart is the whole
 # point of this block. A pass exits 0 with empty output because there was nothing to
-# say; a binary that cannot run - too old for `hook`, unable to load the workspace,
+# say; a binary that cannot run - too old for `session hook`, unable to load the workspace,
 # half-written by a concurrent build - exits non-zero with empty output, and printing
 # that as a pass silently disables every rule with nothing anywhere saying so.
 #

@@ -106,7 +106,7 @@ implementation serve several hosts.
 ## Notifications
 
 Codex runs a program on its notify setting. Shape the event into the canonical
-envelope and pipe it to `magus notify`, exactly as the other hosts do - see
+envelope and pipe it to `magus session notify`, exactly as the other hosts do - see
 [Attention hooks](notifications.md) for the envelope and the vocabulary.
 
 ## Coverage and limits

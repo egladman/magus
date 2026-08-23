@@ -111,6 +111,17 @@ inputs:
       raising.
     required: false
     default: '0.8'
+  api-surface:
+    description: >
+      Comment when the pull request changes symbols a consumer can see: reachable from
+      outside the project that defines them, or exported from the module. That is the
+      version-bump conversation, and it is the one a reviewer usually has too late.
+
+      States EVIDENCE and never a verdict. It reports who can see what you changed and
+      does not decide whether it broke - deciding that needs signature compatibility
+      against the base, which magus does not index.
+    required: false
+    default: 'true'
   first-contribution:
     description: >
       Welcome someone opening their first pull request here, with the two repository
@@ -332,6 +343,19 @@ runs:
         MIN_COHORT: ${{ inputs.missing-target-min-cohort }}
         MIN_SHARE: ${{ inputs.missing-target-min-share }}
       run: magus buzz "$GITHUB_ACTION_PATH/missing-target.buzz"
+
+    - name: Advise on changed API surface
+      if: inputs.api-surface == 'true'
+      shell: bash
+      env:
+        BUZZ_INCLUDE_PATH: ${{ github.action_path }}
+        GH_TOKEN: ${{ inputs.token }}
+        REPO: ${{ github.repository }}
+        GITHUB_RUN_ID: ${{ github.run_id }}
+        PR_NUMBER: ${{ inputs.pr-number }}
+        PR_BASE: ${{ inputs.base-ref }}
+        PR_HEAD_SHA: ${{ inputs.head-sha }}
+      run: magus buzz "$GITHUB_ACTION_PATH/api-surface.buzz"
 
     - name: Welcome a first-time contributor
       if: inputs.first-contribution == 'true'

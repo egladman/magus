@@ -3,8 +3,8 @@
 Count the WRITE SETS your change needs - the distinct groups of files that must be
 edited - not the projects a change invalidates. That distinction decides everything
 here, and getting it backwards is the standard way fan-out goes wrong: a one-line
-edit in a central package invalidates half the workspace and is still one unit of
-editing{{if .Full}}, and delegating it produces several agents editing one file{{end}}.
+edit in a central package invalidates half the workspace and is still one edit{{if .Full}},
+and delegating it produces several agents editing one file{{end}}.
 
 `magus affected <target> --plan` partitions VALIDATION - which targets to run,
 grouped for runner balance. It is not an edit assignment and not a proof of write
@@ -26,14 +26,14 @@ You do not need to be asked{{if .Full}}. "Split this across agents" is one way i
 several disjoint write sets you can name is another{{end}}.
 
 Fan-out is not inherently expensive{{if .Full}}. What costs is unbounded fan-out:
-workers that delegate without a shrinking scope, units with no acceptance criteria
+workers that delegate without a shrinking scope, delegations with no acceptance criteria
 so nobody can say when to stop, and a principal tier assigned to mechanical edits.
 Each of those is a choice made below, not a property of delegating{{end}}. Say what a
 round will cost when the user is deciding, and prefer the smallest fan-out that
 covers the work.
 
-Delegate when the units are genuinely independent. If the graph supports only one
-coherent edit unit, keep the work local - fanning out one unit adds coordination
+Delegate when the delegations are genuinely independent. If the graph supports only one
+coherent write set, keep the work local - fanning out one delegation adds coordination
 and buys nothing. The root agent owns the goal, the budget, the topology,
 integration, and final verification, and never delegates those.
 
@@ -49,8 +49,8 @@ loop's partition and collision decisions; it does not replace the loop.
 Run this control loop:
 
 1. State the top-level goal, constraints, and observable acceptance criteria.
-2. Map the affected graph and propose collision-resistant edit units.
-3. Give every unit its own goal, ownership boundary, and acceptance criteria.
+2. Map the affected graph and propose collision-resistant edit delegations.
+3. Give every delegation its own goal, ownership boundary, and acceptance criteria.
 4. Delegate within one global cost and concurrency budget.
 5. Observe agents and Magus processes through their separate control planes.
 6. Evaluate evidence, revise ownership or ordering when assumptions change, and
@@ -62,10 +62,10 @@ never a worker's prose. A worker that ran a filtered subset, or quietly restated
 criteria into something it did pass, reports success either way{{if .Full}} - and a
 transcript cannot tell you which happened{{end}}.
 
-An agent may report that its edits are done, but no unit is complete until its
+An agent may report that its edits are done, but no delegation is complete until its
 acceptance criteria and assigned validation pass. The root agent, not a worker,
 decides whether the top-level goal is complete.{{else}}Treat graph engineering as
-an acceptance-criteria loop with graph-derived work units: define, partition,
+an acceptance-criteria loop with graph-derived delegations: define, partition,
 delegate, observe, evaluate, course-correct, integrate. A worker is not complete
 until its criteria and assigned validation pass; the root agent decides whether
 the top-level goal is complete.{{end}}
@@ -73,20 +73,31 @@ the top-level goal is complete.{{end}}
 ## Set one topology boundary
 
 Before spawning, state one compact budget: maximum simultaneously active agents,
-effort tier per unit, whether isolated worktrees are available, and how deep
+effort tier per delegation, whether isolated worktrees are available, and how deep
 delegation may nest. Editing costs the workspace nothing; what contends is
-VALIDATION - the magus runs a unit triggers - so size that cap from the live
+VALIDATION - the magus runs a delegation triggers - so size that cap from the live
 pool (`magus status`) rather than a fixed number, and serialize validations
 that share a worktree even when their write sets are disjoint. Ask before
 exceeding the budget.
 
 Assign validation from the pipeline the workspace composed, not from convention:
 `magus describe target ci <project>` names what `ci` chains and in what order,
-so a unit gets the narrowest target from that decomposition and the integrator
+so a delegation gets the narrowest target from that decomposition and the integrator
 re-runs the described order, with `magus affected ci` re-proving the whole
 composition{{if .Full}}. A worker hand-sequencing lint, format, and test is re-deriving an
 order the magusfile already owns, and the step it forgets fails silently by
 omission{{end}}.
+
+Decide each delegation's validation PLANE with its target. A worker environment that
+cannot execute magus at all - an isolated tree with no usable binary, or a
+guard that routes raw language tools back to targets it cannot run - cannot
+validate anything it writes. Mark that delegation's validation ROOT-DEFERRED in the
+ledger before spawning: the worker writes the tests, stops at the static checks
+its environment does run, and says so; the root executes the delegation's target
+centrally before accepting{{if .Full}}. Leaving each worker to discover the wall
+spends its budget on the discovery, once per worker, and its report then reads
+"done" with nothing executed - which the acceptance-evidence rule above already
+refuses to accept{{end}}.
 
 A worker may delegate again. What it may not do is delegate without shrinking the
 problem{{if .Full}} - that is the shape that does not terminate, and the cost people
@@ -94,28 +105,28 @@ attribute to "multi-agent" is almost always this{{end}}. Three rules give it a
 definitive end:
 
 - **Every level narrows.** A child's scope is a strict subset of its parent's. A
-  worker that would hand on its whole unit should do the work instead.
-- **Depth is capped.** Two levels below the root by default: root delegates units,
-  a unit may delegate parts, and those parts do the work{{if .Full}}. Deeper than that
+  worker that would hand on its whole delegation should do the work instead.
+- **Depth is capped.** Two levels below the root by default: root delegates delegations,
+  a delegation may delegate parts, and those parts do the work{{if .Full}}. Deeper than that
   and the root can no longer say what is running or why{{end}}. Say so if you need more.
-- **Every unit carries acceptance criteria down with it.** A child inherits its
-  parent's criteria plus its own. A unit nobody can evaluate is a unit that cannot
+- **Every delegation carries acceptance criteria down with it.** A child inherits its
+  parent's criteria plus its own. A delegation nobody can evaluate is a delegation that cannot
   end, which is what makes depth dangerous rather than the nesting itself.
-- **A unit that fails its criteria twice is not re-delegated.** The root does it
-  locally, or serializes it behind whatever keeps breaking it{{if .Full}}. Two units
+- **A delegation that fails its criteria twice is not re-delegated.** The root does it
+  locally, or serializes it behind whatever keeps breaking it{{if .Full}}. Two delegations
   with an undeclared dependency each break the other's criteria, and re-delegating
   the failing one satisfies every rule above while alternating forever; the budget
   is what ends it{{end}}.
 - **Whatever the parent does not delegate, the parent still owns.** A strict subset
-  leaks by construction: split "no caller of X remains" into per-project units and
-  the callers in no project belong to nobody, so every unit passes and the goal is
+  leaks by construction: split "no caller of X remains" into per-project delegations and
+  the callers in no project belong to nobody, so every delegation passes and the goal is
   unmet. Carry a remainder row at each level and close it explicitly.
 
-Pick the model that FITS the unit. That is the whole rule, and it runs both ways:
+Pick the model that FITS the delegation. That is the whole rule, and it runs both ways:
 a mechanical rename does not need the strongest model available, and an ambiguous
 API boundary does not get the cheapest one because it looked like less work{{if .Full}}.
 Matching the tier to the work is the only cost decision worth making here - past
-that, cost is not your call to agonize over, and a unit done badly by an
+that, cost is not your call to agonize over, and a delegation done badly by an
 under-powered worker costs more than the model it saved{{end}}.
 
 Map work to provider capabilities without assuming model names:
@@ -133,14 +144,14 @@ integration pass or final release gate.
 
 Nested delegation is allowed when the host supports it, but it does not create a
 new budget or a private ownership map. Before a child spawns descendants, it must
-report the proposed units to its parent. The root ledger must then record those
+report the proposed delegations to its parent. The root ledger must then record those
 descendants, their parent, effort tier, criteria, and owned paths. Descendants
 inherit the ancestor's forbidden paths and may subdivide only the ancestor's
 owned paths. Apply worker and cost caps globally, not once per parent.
 
 Keep one integration owner at the root even when the delegation tree is deep.
 {{if .Full}}A child may coordinate its descendants, but it may not accept changes
-outside its own unit, relax top-level acceptance criteria, or hide additional
+outside its own delegation, relax top-level acceptance criteria, or hide additional
 fan-out from the root. Prefer a shallow tree unless a child has a genuinely
 separable area and enough context to partition it better than the root.{{else}}A child coordinates its descendants but may not relax the root's criteria.{{end}}
 
@@ -165,12 +176,12 @@ history-balanced execution group, not an edit assignment or proof of write
 isolation. Use it only as the first partition. If paths are not known, query the
 task's symbols, files, and projects before producing a stdin plan.
 
-## Prove that units do not collide
+## Prove that delegations do not collide
 
-Classify the union of every unit's proposed paths in one call:
+Classify the union of every delegation's proposed paths in one call:
 
 ```sh
-magus describe file <both units' paths>... -o json
+magus describe file <both delegations' paths>... -o json
 ```
 
 Read the facts: `overlaps` lists each declaration covering more than one
@@ -178,11 +189,11 @@ proposed path - a shared write set by construction; `claims[].target` names the
 target that regenerates a path (generated outputs have one integration owner,
 never hand-edited by workers); `depends_on` carries the owner's direct edges.
 Affinity stays with `magus_insight lens=affinity`, and `magus refs <symbol>`
-when two units may touch the same API{{if .Full}}; `magus path <a> <b>` settles
-a suspicious pair{{end}}. A read-only unit has no write set, so it is outside
+when two delegations may touch the same API{{if .Full}}; `magus path <a> <b>` settles
+a suspicious pair{{end}}. A read-only delegation has no write set, so it is outside
 this analysis entirely.
 
-Two units may run together only when:
+Two delegations may run together only when:
 
 - The combined classification reports no overlaps - source write sets and
   declared outputs disjoint.
@@ -198,7 +209,7 @@ warning. When evidence is incomplete, reduce parallelism.
 
 ## Maintain the global delegation ledger
 
-Before spawning, record one row per unit - including the checkpoint it was handed
+Before spawning, record one row per delegation - including the checkpoint it was handed
 (`magus vcs checkpoint -o name`: the revision, plus a dirty-patch digest when the
 tree is not clean) - and keep descendants in the same table:
 {{if .Full}}
@@ -206,13 +217,37 @@ The same checkpoint is what a later incremental re-review diffs from (see the
 magus-change-summary skill) - review time and handoff time read the same object.
 {{end}}
 
-| Unit | Parent | Checkpoint | Goal and acceptance criteria | Owned paths | Forbidden paths | Depends on | Tier | Validation | State |
+| Delegation | Parent | Checkpoint | Goal and acceptance criteria | Owned paths | Forbidden paths | Depends on | Tier | Validation | State |
 |---|---|---|---|---|---|---|---|---|---|
 
-Every worker prompt must include its row, relevant graph evidence, and the global
-spawn rule. Require the worker to preserve unrelated changes, stay inside owned
-paths, avoid generated outputs, run only its assigned Magus target, and return
-changed paths, validation evidence, descendants it created, and unresolved risks.
+Every worker prompt must include its row, its DELEGATION ID, relevant graph
+evidence, and the global spawn rule. Require the worker to export
+`MAGUS_DELEGATION=<its id>` before it works{{if .Full}} - that environment channel is
+what tells the agent guard whose declared boundary to grade a write against, and a
+worker that never exports it is graded as an editor magus cannot attribute{{else}} -
+the guard grades its writes only when that is set{{end}}. Require it to preserve
+unrelated changes, stay inside owned paths, avoid generated outputs, run only its
+assigned Magus target, and return changed paths, validation evidence, descendants
+it created, and unresolved risks.
+
+The checkpoint you recorded is what you HANDED the delegation; the base it
+actually LANDED ON is a separate fact, because hosts that isolate workers in
+per-worker trees routinely branch them from an older revision than the tree you
+partitioned{{if .Full}} - and every diff-since-checkpoint in Integrate and verify
+silently lies when the recorded base is not the real one{{end}}. A worker's first
+required act is registering it: run `magus vcs checkpoint -o name` in ITS OWN tree
+and call `magus_ledger op=register id=<its row> reported_base=<that token>`. The
+answer is a verdict recorded on the row - match, revision-match (same revision,
+different uncommitted patch), diverged, or unknown - plus a reading of it that
+names both tokens and the next step. It is a FACT and not a gate: every verdict
+registers, diverged included{{if .Full}}, because refusing would leave the orchestrator
+with no record that a worker went to the wrong base, which is the one case the
+record exists for{{end}}. Acting on it is still yours: respawn from the right
+revision, or have the worker materialize the files it builds on from the intended
+one (`git show <rev>:<path> > <path>`, verifying each blob against
+`git rev-parse <rev>:<path>`) and re-put the row's checkpoint{{if .Full}}. A worker
+that edits stale content without noticing reports clean validation against a tree
+nobody will ever merge{{end}}.
 Also name any fact that will READ as drift to the worker's snapshot - a project
 deleted this session, a rename, an index regenerated underneath it - never a
 generic "expect drift" line{{if .Full}}, which only primes the worker to dismiss real
@@ -221,27 +256,42 @@ an investigation or a helpful revert of something correct{{end}}.
 
 Ownership ends when EDITING ends, not when the worker exits. A worker that has
 finished writing a contested path announces the release immediately - shrink the
-unit's `owned_paths` with another `magus_ledger` put, or message the orchestrator
-if the host supports it - and then carries on validating{{if .Full}}. A waiting unit
+delegation's `owned_paths` with another `magus_ledger` put, or message the orchestrator
+if the host supports it - and then carries on validating{{if .Full}}. A waiting delegation
 starts against the released file while the first is still running tests, which
 is most of a worker's lifetime; holding every path to exit serializes agents on
 time they spend not editing{{end}}.
 
 That put records each dropped path with the digest it carried at that moment.
-Hand the digest to the unit taking the path over: it names the version being
+Hand the digest to the delegation taking the path over: it names the version being
 inherited, and one that no longer matches at verification means the waiter built
 on a tree the releaser never saw.
 
 Re-put the row on every state change. `op=list` then answers two questions you
-would otherwise derive by hand: which live units claim intersecting
+would otherwise derive by hand: which live delegations claim intersecting
 `owned_paths`, and how long since each row was touched. Both are facts, not
-verdicts - magus transitions nothing, so a row that has gone quiet is a unit YOU
+verdicts - magus transitions nothing, so a row that has gone quiet is a delegation YOU
 decide is possibly dead, and a reported overlap is a pair you either intended or
 must repartition.
 
-Owned and Forbidden paths are prompt text, not an enforced boundary - step 1 of
-Integrate and verify is where it is actually checked, against that checkpoint. A
-read-only unit carries an abbreviated row: no Owned paths, no Forbidden paths. Every
+The ledger RECORDS and the agent guard GRADES. A worker that exported
+`MAGUS_DELEGATION` has each file write judged against these declarations as it
+happens: inside its own owned paths passes; inside its forbidden paths, or inside
+another live delegation's owned paths, is DENIED, and the denial names the owning
+delegation. A writer magus cannot attribute - a person in their own checkout, or a
+worker that never enrolled - is ADVISED and never blocked, and every uncertainty
+fails open the same way{{if .Full}}: no ledger, no live delegations, a ledger file
+that will not parse{{end}}. It is a seatbelt for harnesses that opt in, not a
+sandbox. So a denied worker
+COORDINATES and never works around: ask the orchestrator to re-partition, or have
+the owning delegation release the path with the `owned_paths` put above once it has
+finished editing, then retry{{if .Full}}. Editing anyway from an un-enrolled shell, or
+dropping the delegation id to buy advisory treatment, turns a denial you could have
+acted on into a collision nobody sees until integration{{end}}. Step 1 of Integrate
+and verify checks the same boundary against the checkpoint, and that is the half
+that does not depend on a worker cooperating.
+
+A read-only delegation carries an abbreviated row: no Owned paths, no Forbidden paths. Every
 row ends in pass, fail, or NO-RETURN, and the root writes which{{if .Full}}: silence
 is not a pass, and a worker that dies, stalls, or is killed is a different state
 from one that failed its criteria{{else}}: silence is not a pass{{end}}.
@@ -256,7 +306,7 @@ evaluate its descendants before reporting upward.{{end}}
 
 Run workers non-blocking by default, and block on one only when your next action
 requires its result. An agent spawned merely to wait, poll, or repeat discovery the
-root already owns is not an edit unit and spends budget for nothing.
+root already owns is not an edit delegation and spends budget for nothing.
 
 ## Observe through the correct control plane
 
@@ -274,6 +324,27 @@ state and adoption. It does not show an agent that is thinking without running a
 Magus process. Do not replace it with sleep loops, repeated `ps`, or a waiting
 agent.
 
+A blocked worker RAISES rather than stalling quietly. Piping the block to `magus
+session notify --outcome waiting` (blocked on input) or `--outcome permission` (blocked on
+approval) opens a durable request in this repository; no other outcome opens one.
+`magus session attention` lists what is open{{if .Full}}, keyed by repository identity rather
+than by checkout path, so a request raised inside a worker's own isolated tree is
+listed in yours{{end}}, and `magus session attention -q` prints nothing and exits 1 on an
+empty queue, which is the form to test from a loop. Nothing closes a request by
+itself: the orchestrator, or any human, disposes it with `magus session dispose
+<id> --reason "<why>"`{{if .Full}}. There is no expiry and no auto-dispose, because a
+request magus could answer on its own would not have needed a person{{end}}. A worker
+that raised one waits for the disposition instead of choosing for itself.
+
+`magus session` is how the root audits what a delegation actually RAN, as opposed
+to what it reported. Each session carries the delegation it was launched under -
+the same `MAGUS_DELEGATION` channel - along with the targets it finished and how
+they ended, and the store is keyed by repository identity, so a worker in its own
+worktree is still listed here{{if .Full}}. Attribution is cooperative: an empty
+delegation means the session claimed none, which is the ordinary answer for anything
+a person ran by hand, never an error{{end}}. `magus session --since 2h -o json` is the
+form that answers what the fleet has been doing.
+
 {{if .Full}}Course-correct at explicit checkpoints: after a child proposes new
 descendants, when a worker discovers a new API or generated-output dependency,
 when ownership drifts, when criteria repeatedly fail, and when status shows
@@ -288,20 +359,27 @@ sent mid-flight.
 
 ## Integrate and verify
 
-As units finish:
+As delegations finish:
 
-1. Compare the ledger against the ACTUAL diff since each unit's checkpoint, not
+1. Compare the ledger against the ACTUAL diff since each delegation's checkpoint, not
    the paths it reported (`magus graph diff --rev <revision>` for the domain; a
    differing dirty digest means it saw a tree you are not diffing).
-2. Verify each unit's acceptance criteria and evidence before accepting it.
-3. Resolve cross-unit API changes centrally; never assign the same seam twice.
+2. Verify each delegation's acceptance criteria and evidence before accepting it.
+3. Resolve cross-delegation API changes centrally; never assign the same seam twice.
 4. Regenerate declared outputs once after source work converges.
 5. Re-run `magus affected <target> --plan` over the actual diff. If its shape
    invalidates the original partition, stop parallel integration and reconcile.
-6. Run `magus affected ci` and evaluate the top-level acceptance criteria.
+6. Read the integrated changeset with `magus diff --cost` before landing it: what
+   the fleet's combined edit reaches, who else has been changing it, an estimate of
+   the rebuild from recorded run times, what the advisors say, and any note anchored
+   to a file it touched. Context, never a verdict{{if .Full}} - nothing gates on it and
+   the exit code is unchanged - and a section that is empty means nobody could
+   measure it, not that nothing was found{{else}}, and an empty section means nobody
+   could measure it rather than nothing found{{end}}.
+7. Run `magus affected ci` and evaluate the top-level acceptance criteria.
 
 {{if .Full}}Parallelism is an optimization, not the objective. Fewer
-well-isolated units are usually cheaper than wide fan-out followed by conflict
+well-isolated delegations are usually cheaper than wide fan-out followed by conflict
 repair, and the graph is evidence for that judgment rather than permission to
-spawn every possible worker.{{else}}Prefer fewer proven-independent units over
+spawn every possible worker.{{else}}Prefer fewer proven-independent delegations over
 wide fan-out and conflict repair.{{end}}

@@ -3,6 +3,7 @@ package ledger
 import (
 	"crypto/sha256"
 	"encoding/hex"
+	"fmt"
 	"os"
 	"path/filepath"
 	"sync"
@@ -13,8 +14,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func unit(id string) types.DelegationUnit {
-	return types.DelegationUnit{
+func delegation(id string) types.Delegation {
+	return types.Delegation{
 		ID:             id,
 		Goal:           "goal for " + id,
 		Checkpoint:     "abc123",
@@ -31,42 +32,42 @@ func TestStoreRoundTrip(t *testing.T) {
 
 	tests := []struct {
 		name string
-		puts []types.DelegationUnit
-		want []types.DelegationUnit
+		puts []types.Delegation
+		want []types.Delegation
 	}{
 		{
 			name: "an unwritten ledger is empty, not an error",
 		},
 		{
 			name: "rows come back in the order they were first recorded",
-			puts: []types.DelegationUnit{unit("a"), unit("b"), unit("c")},
-			want: []types.DelegationUnit{unit("a"), unit("b"), unit("c")},
+			puts: []types.Delegation{delegation("a"), delegation("b"), delegation("c")},
+			want: []types.Delegation{delegation("a"), delegation("b"), delegation("c")},
 		},
 		{
 			name: "a second put on the same id replaces the row in place",
-			puts: []types.DelegationUnit{
-				unit("a"), unit("b"),
+			puts: []types.Delegation{
+				delegation("a"), delegation("b"),
 				{ID: "a", Goal: "revised", State: types.StatePass},
 			},
-			want: []types.DelegationUnit{
+			want: []types.Delegation{
 				// The replacement carries no owned paths, so the row's paths were
 				// released by it - see TestStorePutRecordsReleasedPaths.
 				{
 					ID: "a", Goal: "revised", State: types.StatePass,
 					Releases: []types.DelegationRelease{{Path: "internal/a", Digest: types.DigestAbsent}},
 				},
-				unit("b"),
+				delegation("b"),
 			},
 		},
 		{
 			name: "a read-only row carries no paths by design",
-			puts: []types.DelegationUnit{{ID: "scout", Goal: "inventory", ReadOnly: true, State: types.StateRunning}},
-			want: []types.DelegationUnit{{ID: "scout", Goal: "inventory", ReadOnly: true, State: types.StateRunning}},
+			puts: []types.Delegation{{ID: "scout", Goal: "inventory", ReadOnly: true, State: types.StateRunning}},
+			want: []types.Delegation{{ID: "scout", Goal: "inventory", ReadOnly: true, State: types.StateRunning}},
 		},
 		{
 			name: "no_return is stored as its own terminal state",
-			puts: []types.DelegationUnit{{ID: "a", State: types.StateNoReturn}},
-			want: []types.DelegationUnit{{ID: "a", State: types.StateNoReturn}},
+			puts: []types.Delegation{{ID: "a", State: types.StateNoReturn}},
+			want: []types.Delegation{{ID: "a", State: types.StateNoReturn}},
 		},
 	}
 
@@ -104,7 +105,7 @@ func TestStorePutRequiresAnID(t *testing.T) {
 
 	ctx := t.Context()
 	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
-	_, err := s.Put(ctx, types.DelegationUnit{Goal: "no id"})
+	_, err := s.Put(ctx, types.Delegation{Goal: "no id"})
 	require.ErrorIs(t, err, ErrNoID, "a row with no id could never be updated or referred to again")
 
 	got, err := s.List()
@@ -117,16 +118,16 @@ func TestStorePutPreservesCreatedOnUpdate(t *testing.T) {
 
 	ctx := t.Context()
 	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
-	first, err := s.Put(ctx, unit("a"))
+	first, err := s.Put(ctx, delegation("a"))
 	require.NoError(t, err)
 
-	second, err := s.Put(ctx, types.DelegationUnit{ID: "a", State: types.StateFail})
+	second, err := s.Put(ctx, types.Delegation{ID: "a", State: types.StateFail})
 	require.NoError(t, err)
 	assert.Equal(t, first.Created, second.Created, "an update keeps the row's original creation time")
 
 	// A caller-supplied timestamp is a fact about the caller's clock, so the store
 	// ignores it rather than recording a time the row was not written at.
-	third, err := s.Put(ctx, types.DelegationUnit{ID: "a", Created: 1, Updated: 1})
+	third, err := s.Put(ctx, types.Delegation{ID: "a", Created: 1, Updated: 1})
 	require.NoError(t, err)
 	assert.Equal(t, first.Created, third.Created)
 	assert.NotEqual(t, int64(1), third.Updated)
@@ -141,15 +142,15 @@ func TestStoreUpdateMergesUnderOneLock(t *testing.T) {
 
 	ctx := t.Context()
 	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
-	_, err := s.Put(ctx, unit("a"))
+	_, err := s.Put(ctx, delegation("a"))
 	require.NoError(t, err)
 
 	const rounds = 25
 	var wg sync.WaitGroup
 	errs := make(chan error, 2*rounds)
-	for _, apply := range []func(*types.DelegationUnit){
-		func(u *types.DelegationUnit) { u.State = types.StatePass },
-		func(u *types.DelegationUnit) { u.Checkpoint = "deadbeef" },
+	for _, apply := range []func(*types.Delegation){
+		func(u *types.Delegation) { u.State = types.StatePass },
+		func(u *types.Delegation) { u.Checkpoint = "deadbeef" },
 	} {
 		wg.Add(1)
 		go func() {
@@ -174,26 +175,79 @@ func TestStoreUpdateMergesUnderOneLock(t *testing.T) {
 	assert.Equal(t, "goal for a", got[0].Goal, "neither merge erased the row it did not name")
 }
 
-// TestStoreUpdateCreatesTheRowItMerges keeps declaring a unit and advancing one the same
+// TestStoreUpdateSurvivesSeparateStores is the CROSS-PROCESS half, and the one the
+// in-process mutex cannot cover: two Stores on one directory share no mutex, exactly as
+// the CLI, the daemon, and a registering worker do not. Only the file lock stops their
+// read-modify-writes from interleaving, and the symptom when it does is a DROPPED ROW -
+// the loser read the ledger before the winner appended, so its write puts back a file
+// that never held the winner's delegation.
+//
+// Two Stores in one process is as close as a Go test gets to two processes: the flock is
+// per open handle and each Store opens its own, so the kernel arbitrates between them the
+// same way. What it cannot reproduce is a lock the OS declines to make exclusive within a
+// process, which is why this is a regression test for the drop and not a proof of the
+// lock.
+func TestStoreUpdateSurvivesSeparateStores(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	dir := t.TempDir()
+	root := t.TempDir()
+
+	const rounds = 30
+	var wg sync.WaitGroup
+	errs := make(chan error, 2*rounds)
+	for w := range 2 {
+		s := NewStore(Location{CacheDir: dir, Root: root})
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for i := range rounds {
+				_, err := s.Put(ctx, delegation(fmt.Sprintf("w%d-%d", w, i)))
+				errs <- err
+			}
+		}()
+	}
+	wg.Wait()
+	close(errs)
+	for e := range errs {
+		require.NoError(t, e)
+	}
+
+	got, err := NewStore(Location{CacheDir: dir, Root: root}).List()
+	require.NoError(t, err)
+	ids := make([]string, len(got))
+	for i, u := range got {
+		ids[i] = u.ID
+	}
+	assert.Len(t, ids, 2*rounds, "every row both writers appended is still there: %v", ids)
+	for w := range 2 {
+		for i := range rounds {
+			assert.Contains(t, ids, fmt.Sprintf("w%d-%d", w, i))
+		}
+	}
+}
+
+// TestStoreUpdateCreatesTheRowItMerges keeps declaring a delegation and advancing one the same
 // call: a merge onto an id nothing has written yet starts from a zero row carrying the id.
 func TestStoreUpdateCreatesTheRowItMerges(t *testing.T) {
 	t.Parallel()
 
 	ctx := t.Context()
 	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
-	stored, err := s.Update(ctx, "fresh", func(u *types.DelegationUnit) { u.State = types.StateRunning })
+	stored, err := s.Update(ctx, "fresh", func(u *types.Delegation) { u.State = types.StateRunning })
 	require.NoError(t, err)
 	assert.Equal(t, "fresh", stored.ID)
 	assert.Equal(t, types.StateRunning, stored.State)
 	assert.NotZero(t, stored.Created)
 
-	_, err = s.Update(ctx, "", func(*types.DelegationUnit) {})
+	_, err = s.Update(ctx, "", func(*types.Delegation) {})
 	require.ErrorIs(t, err, ErrNoID, "a merge with no id has no row to address")
 }
 
 // TestStorePutRecordsReleasedPaths is the early-release rule the skill teaches, seen
 // from the store: a worker that has finished editing a contested path shrinks its
-// owned_paths, and the row then has to say WHICH version of that path the waiting unit
+// owned_paths, and the row then has to say WHICH version of that path the waiting delegation
 // inherits. A release with no digest would leave the waiter guessing.
 func TestStorePutRecordsReleasedPaths(t *testing.T) {
 	t.Parallel()
@@ -205,7 +259,7 @@ func TestStorePutRecordsReleasedPaths(t *testing.T) {
 	require.NoError(t, os.MkdirAll(filepath.Join(root, "pkg"), 0o755))
 
 	s := NewStore(Location{CacheDir: t.TempDir(), Root: root})
-	_, err := s.Put(ctx, types.DelegationUnit{
+	_, err := s.Put(ctx, types.Delegation{
 		ID:         "u1",
 		OwnedPaths: []string{"kept.go", "released.go", "pkg", "gone.go"},
 		State:      types.StateRunning,
@@ -213,9 +267,9 @@ func TestStorePutRecordsReleasedPaths(t *testing.T) {
 	require.NoError(t, err)
 	before, err := s.List()
 	require.NoError(t, err)
-	assert.Empty(t, before[0].Releases, "declaring a unit releases nothing")
+	assert.Empty(t, before[0].Releases, "declaring a delegation releases nothing")
 
-	stored, err := s.Put(ctx, types.DelegationUnit{
+	stored, err := s.Put(ctx, types.Delegation{
 		ID:         "u1",
 		OwnedPaths: []string{"kept.go"},
 		State:      types.StateRunning,
@@ -238,7 +292,7 @@ func TestStorePutRecordsReleasedPaths(t *testing.T) {
 		Path: "gone.go", Digest: types.DigestAbsent, ReleasedAt: stored.Releases[2].ReleasedAt,
 	}, stored.Releases[2])
 	for _, r := range stored.Releases {
-		assert.NotEqual(t, "kept.go", r.Path, "a path the unit still owns was not released")
+		assert.NotEqual(t, "kept.go", r.Path, "a path the delegation still owns was not released")
 	}
 }
 
@@ -253,28 +307,28 @@ func TestStoreReleasesFollowTheOwnedSet(t *testing.T) {
 	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("one\n"), 0o644))
 
 	s := NewStore(Location{CacheDir: t.TempDir(), Root: root})
-	_, err := s.Put(ctx, types.DelegationUnit{ID: "u1", OwnedPaths: []string{"a.go"}})
+	_, err := s.Put(ctx, types.Delegation{ID: "u1", OwnedPaths: []string{"a.go"}})
 	require.NoError(t, err)
 
-	released, err := s.Update(ctx, "u1", func(u *types.DelegationUnit) { u.OwnedPaths = nil })
+	released, err := s.Update(ctx, "u1", func(u *types.Delegation) { u.OwnedPaths = nil })
 	require.NoError(t, err)
 	require.Len(t, released.Releases, 1)
 	first := released.Releases[0].Digest
 
-	advanced, err := s.Update(ctx, "u1", func(u *types.DelegationUnit) { u.State = types.StateRunning })
+	advanced, err := s.Update(ctx, "u1", func(u *types.Delegation) { u.State = types.StateRunning })
 	require.NoError(t, err)
 	assert.Equal(t, released.Releases, advanced.Releases, "a state advance neither releases nor forgets anything")
 
 	// Owned again, edited, released again: the row keeps ONE entry, carrying the version
 	// the next agent actually inherits.
-	_, err = s.Update(ctx, "u1", func(u *types.DelegationUnit) { u.OwnedPaths = []string{"a.go"} })
+	_, err = s.Update(ctx, "u1", func(u *types.Delegation) { u.OwnedPaths = []string{"a.go"} })
 	require.NoError(t, err)
 	reowned, err := s.List()
 	require.NoError(t, err)
-	assert.Empty(t, reowned[0].Releases, "a path the unit owns again is not a path it released")
+	assert.Empty(t, reowned[0].Releases, "a path the delegation owns again is not a path it released")
 
 	require.NoError(t, os.WriteFile(filepath.Join(root, "a.go"), []byte("two\n"), 0o644))
-	again, err := s.Update(ctx, "u1", func(u *types.DelegationUnit) { u.OwnedPaths = nil })
+	again, err := s.Update(ctx, "u1", func(u *types.Delegation) { u.OwnedPaths = nil })
 	require.NoError(t, err)
 	require.Len(t, again.Releases, 1)
 	assert.NotEqual(t, first, again.Releases[0].Digest, "the second release digests the file as it stands now")
@@ -294,20 +348,20 @@ func TestStoreClear(t *testing.T) {
 
 	ctx := t.Context()
 	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
-	require.NoError(t, s.Clear(), "clearing a ledger that was never written is not an error")
+	require.NoError(t, s.Clear(ctx), "clearing a ledger that was never written is not an error")
 
-	_, err := s.Put(ctx, unit("a"))
+	_, err := s.Put(ctx, delegation("a"))
 	require.NoError(t, err)
-	_, err = s.Put(ctx, unit("b"))
+	_, err = s.Put(ctx, delegation("b"))
 	require.NoError(t, err)
 
-	require.NoError(t, s.Clear())
+	require.NoError(t, s.Clear(ctx))
 	got, err := s.List()
 	require.NoError(t, err)
 	assert.Empty(t, got, "a fresh plan starts from an empty ledger")
 
 	// One plan per workspace: nothing was archived, so a put after a clear is row one.
-	_, err = s.Put(ctx, unit("c"))
+	_, err = s.Put(ctx, delegation("c"))
 	require.NoError(t, err)
 	got, err = s.List()
 	require.NoError(t, err)
@@ -321,7 +375,7 @@ func TestStorePersistsAcrossStores(t *testing.T) {
 	ctx := t.Context()
 	dir := t.TempDir()
 	first := NewStore(Location{CacheDir: dir, Root: t.TempDir()})
-	_, err := first.Put(ctx, unit("a"))
+	_, err := first.Put(ctx, delegation("a"))
 	require.NoError(t, err)
 
 	// The point of the store: a plan outlives the process that declared it.
@@ -341,7 +395,7 @@ func TestStoreListReturnsCopies(t *testing.T) {
 
 	ctx := t.Context()
 	s := NewStore(Location{CacheDir: t.TempDir(), Root: t.TempDir()})
-	_, err := s.Put(ctx, unit("a"))
+	_, err := s.Put(ctx, delegation("a"))
 	require.NoError(t, err)
 
 	got, err := s.List()

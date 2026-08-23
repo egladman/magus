@@ -58,6 +58,7 @@ _magus() {
                 'vcs:staging and conflict resolution that knows what is generated (add, resolve, merge-driver, checkpoint)'
                 'doctor:validate the workspace'
                 'config:view or update magus configuration'
+                'session:what sessions did and what they are blocked on\: humans read (ls, attention) and dispose; hosts write (hook, notify)'
                 'memory:durable cross-session project memory (ls, get, put, delete, verify)'
                 'notes:human-authored notes committed to the repo (ls, get, edit, verify)'
                 'diff:read uncommitted changes in the order they deserve attention, generated folded'
@@ -67,8 +68,6 @@ _magus() {
                 'man:install the man pages embedded in this binary'
                 'init:bootstrap a workspace (magus.yaml + magusfile.buzz + merge driver)'
                 'agent:install the knowledge-graph agent skills into a repo (agent install <dir>)'
-                'hook:evaluate one shell command or file path against the magus guard rules (deny/advise/pass verdict)'
-                'notify:normalize an attention event and optionally notify the local desktop'
                 'self:manage the magus binary (self update / install)'
                 'version:print version, commit, and build date'
                 'help:show this message'
@@ -78,6 +77,18 @@ _magus() {
             ;;
         args)
             case $words[1] in
+                attention)
+                    # dispose completes from the live queue, the way run completes
+                    # targets from the workspace.
+                    if (( CURRENT == 2 )); then
+                        local -a verbs=('ls:list the open requests' 'dispose:close one request with a reason')
+                        _describe 'verb' verbs
+                    elif [[ $words[2] == dispose ]] && (( CURRENT == 3 )); then
+                        local -a ids
+                        ids=("${(@f)$(magus attention -o name 2>/dev/null)}")
+                        _describe 'request id' ids
+                    fi
+                    ;;
                 run)
                     local -a run_flags=(--dry-run --graph --upstream --depth --timeout --skip --shard --n-shards --no-volatility-retry --race --step --no-default-charms)
                     if [[ $words[CURRENT] == -* ]]; then

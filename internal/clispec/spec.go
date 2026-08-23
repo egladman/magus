@@ -50,6 +50,27 @@ type Command struct {
 	Examples []Example // EXAMPLES section entries
 	Children []Command // navigational subcommands (e.g. "github" under "ci")
 	Targets  []Target  // project-scoped targets dispatched by this command
+
+	// ExitStatus documents the codes this command exits with, in ascending order.
+	// Empty renders no section at all, which is the right answer for a command that
+	// only ever follows the CLI-wide contract (0 success, 1 failure, 2 misuse) - a
+	// section repeating that on ninety pages teaches nobody anything.
+	//
+	// Populate it where a reader would otherwise guess WRONG: a code carrying a
+	// command-specific meaning, or a code a neighbouring tool has trained them to
+	// expect and this one does not use.
+	ExitStatus []ExitCode
+}
+
+// ExitCode is one documented exit status.
+//
+// Codes are not unique across a command's list only because they are unique in
+// what they mean: `magus session hook` exits 2 both for a denied command and for input it
+// could not parse. Where one code carries two meanings, say both in Meaning rather
+// than listing the code twice, which reads as a bug in the table.
+type ExitCode struct {
+	Code    int    // the process exit status
+	Meaning string // what it tells the caller; plain text, no roff or Markdown markup
 }
 
 // FlagKind is the value type a flag binds, and so which flag.FlagSet method

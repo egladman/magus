@@ -94,6 +94,18 @@ Run code generation for selected projects
 \fBci\fR
 Run the magusfile's ci target read\-only (affected\-set anchor)
 .RE
+.SH EXIT STATUS
+.RS
+.TP
+\fB0\fR
+Every selected project's target succeeded, whether it ran or replayed from cache.
+.TP
+\fB1\fR
+At least one target failed. The failure was already reported with the path to its captured log, so there is no second error line here. This is the default failure status, not the only one: a magusfile calling os.exit(code) has that code honored verbatim, so a target may exit with a status this list does not name.
+.TP
+\fB2\fR
+Misuse: an unknown target, no project matched the filters, or a flag that does not apply to this invocation.
+.RE
 .SH EXAMPLES
 \fIBuild everything\fR
 .PP
@@ -179,6 +191,7 @@ magus run build -o jsonl --tee build.jsonl
 \fBmagus\-vcs\fR(1),
 \fBmagus\-doctor\fR(1),
 \fBmagus\-config\fR(1),
+\fBmagus\-session\fR(1),
 \fBmagus\-memory\fR(1),
 \fBmagus\-notes\fR(1),
 \fBmagus\-diff\fR(1),
@@ -188,8 +201,6 @@ magus run build -o jsonl --tee build.jsonl
 \fBmagus\-man\fR(1),
 \fBmagus\-init\fR(1),
 \fBmagus\-agent\fR(1),
-\fBmagus\-hook\fR(1),
-\fBmagus\-notify\fR(1),
 \fBmagus\-self\fR(1),
 \fBmagus\-version\fR(1)
 .br

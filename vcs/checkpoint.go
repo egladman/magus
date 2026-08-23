@@ -14,7 +14,7 @@ import (
 // carrying it, whether the tree is dirty, and a digest of the uncommitted patch.
 //
 // It READS. Nothing here writes a tag, a stash, a ref, or a file, and nothing about
-// the tree is different afterwards - so a caller recording one per delegated unit
+// the tree is different afterwards - so a caller recording one per delegation
 // pays only the cost of the probes, and a checkpoint nobody kept has cost nothing.
 // magus emits the facts; whoever holds the ledger decides what they mean.
 //

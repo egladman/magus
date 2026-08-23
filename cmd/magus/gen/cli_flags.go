@@ -139,6 +139,8 @@ const (
 	FlagDescribeTargetInputs = "inputs"
 	// describe target: --no-default-charms
 	FlagDescribeTargetNoDefaultCharms = "no-default-charms"
+	// diff: --cost
+	FlagDiffCost = "cost"
 	// diff: --generated
 	FlagDiffGenerated = "generated"
 	// diff: --tui
@@ -189,18 +191,6 @@ const (
 	FlagGraphStatsRefresh = "refresh"
 	// graph stats: --symbols
 	FlagGraphStatsSymbols = "symbols"
-	// hook: --agent-name
-	FlagHookAgentName = "agent-name"
-	// hook: --event
-	FlagHookEvent = "event"
-	// hook: --observe
-	FlagHookObserve = "observe"
-	// hook: --path
-	FlagHookPath = "path"
-	// hook: --session
-	FlagHookSession = "session"
-	// hook: --transcript
-	FlagHookTranscript = "transcript"
 	// init: --dry-run
 	FlagInitDryRun = "dry-run"
 	// init: --force
@@ -221,10 +211,6 @@ const (
 	FlagMemoryPutStatus = "status"
 	// memory put: --type
 	FlagMemoryPutType = "type"
-	// notify: --desktop
-	FlagNotifyDesktop = "desktop"
-	// notify: --outcome
-	FlagNotifyOutcome = "outcome"
 	// path: --global
 	FlagPathGlobal = "global"
 	// path: --refresh
@@ -309,6 +295,30 @@ const (
 	FlagServerStopServices = "services"
 	// server stop: --socket
 	FlagServerStopSocket = "socket"
+	// session dispose: --reason
+	FlagSessionDisposeReason = "reason"
+	// session hook: --agent-name
+	FlagSessionHookAgentName = "agent-name"
+	// session hook: --delegation
+	FlagSessionHookDelegation = "delegation"
+	// session hook: --event
+	FlagSessionHookEvent = "event"
+	// session hook: --observe
+	FlagSessionHookObserve = "observe"
+	// session hook: --path
+	FlagSessionHookPath = "path"
+	// session hook: --session
+	FlagSessionHookSession = "session"
+	// session hook: --transcript
+	FlagSessionHookTranscript = "transcript"
+	// session notify: --desktop
+	FlagSessionNotifyDesktop = "desktop"
+	// session notify: --outcome
+	FlagSessionNotifyOutcome = "outcome"
+	// session: --limit
+	FlagSessionLimit = "limit"
+	// session: --since
+	FlagSessionSince = "since"
 	// status: --W
 	FlagStatusW = "W"
 	// status: --c
@@ -357,7 +367,7 @@ func BindDescribeTarget(fs *flag.FlagSet) *DescribeTargetFlags {
 	var f DescribeTargetFlags
 	fs.BoolVar(&f.Explain, FlagDescribeTargetExplain, false, "For a ref with charms: show the per-charm argv trace (base then each charm)")
 	fs.BoolVar(&f.Explain, FlagDescribeTargetE, false, "Short for --explain")
-	fs.BoolVar(&f.Cache, FlagDescribeTargetCache, false, "Show the live cache key, the ref a run would print, and the component classes behind it")
+	fs.BoolVar(&f.Cache, FlagDescribeTargetCache, false, "Show the live cache key, the ref a run would print, the component classes behind it, and what moved since the last recorded run")
 	fs.StringVar(&f.Against, FlagDescribeTargetAgainst, "", "With --cache: diff the live key inputs against the stored lines behind an output `ref`")
 	fs.BoolVar(&f.Inputs, FlagDescribeTargetInputs, false, "With --cache: list every key input line, so you can confirm a declared file was actually hashed")
 	fs.BoolVar(&f.NoDefaultCharms, FlagDescribeTargetNoDefaultCharms, false, "With --cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)")
@@ -891,6 +901,70 @@ func BindConfigConsoleTokenCreate(fs *flag.FlagSet) *ConfigConsoleTokenCreateFla
 	return &f
 }
 
+// SessionFlags are the flags declared for `magus session`.
+type SessionFlags struct {
+	Limit int    // --limit
+	Since string // --since
+}
+
+// BindSession registers `magus session`'s flags on fs and returns the destination.
+func BindSession(fs *flag.FlagSet) *SessionFlags {
+	var f SessionFlags
+	fs.IntVar(&f.Limit, FlagSessionLimit, 0, "Show at most this many sessions (0 for all)")
+	fs.StringVar(&f.Since, FlagSessionSince, "", "Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp")
+	return &f
+}
+
+// SessionDisposeFlags are the flags declared for `magus session dispose`.
+type SessionDisposeFlags struct {
+	Reason string // --reason
+}
+
+// BindSessionDispose registers `magus session dispose`'s flags on fs and returns the destination.
+func BindSessionDispose(fs *flag.FlagSet) *SessionDisposeFlags {
+	var f SessionDisposeFlags
+	fs.StringVar(&f.Reason, FlagSessionDisposeReason, "", "Record why the request is being closed, alongside the disposition")
+	return &f
+}
+
+// SessionHookFlags are the flags declared for `magus session hook`.
+type SessionHookFlags struct {
+	Path       bool   // --path
+	Observe    bool   // --observe
+	Delegation string // --delegation
+	AgentName  string // --agent-name
+	Session    string // --session
+	Transcript string // --transcript
+	Event      string // --event
+}
+
+// BindSessionHook registers `magus session hook`'s flags on fs and returns the destination.
+func BindSessionHook(fs *flag.FlagSet) *SessionHookFlags {
+	var f SessionHookFlags
+	fs.BoolVar(&f.Path, FlagSessionHookPath, false, "Judge the input as a file path an edit is about to write, not as a shell command")
+	fs.BoolVar(&f.Observe, FlagSessionHookObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
+	fs.StringVar(&f.Delegation, FlagSessionHookDelegation, "", "The delegation this call is acting as, graded against the ledger's declared write boundary (defaults to $MAGUS_DELEGATION)")
+	fs.StringVar(&f.AgentName, FlagSessionHookAgentName, "", "Name of the agent host this invocation came from (attribution only)")
+	fs.StringVar(&f.Session, FlagSessionHookSession, "", "The host's own session id for this invocation")
+	fs.StringVar(&f.Transcript, FlagSessionHookTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
+	fs.StringVar(&f.Event, FlagSessionHookEvent, "", "The host's hook event name (e.g. PreToolUse)")
+	return &f
+}
+
+// SessionNotifyFlags are the flags declared for `magus session notify`.
+type SessionNotifyFlags struct {
+	Outcome string // --outcome
+	Desktop bool   // --desktop
+}
+
+// BindSessionNotify registers `magus session notify`'s flags on fs and returns the destination.
+func BindSessionNotify(fs *flag.FlagSet) *SessionNotifyFlags {
+	var f SessionNotifyFlags
+	fs.StringVar(&f.Outcome, FlagSessionNotifyOutcome, "", "Outcome vocabulary for the event")
+	fs.BoolVar(&f.Desktop, FlagSessionNotifyDesktop, false, "Also raise an OS notification")
+	return &f
+}
+
 // MemoryPutFlags are the flags declared for `magus memory put`.
 type MemoryPutFlags struct {
 	Type   string // --type
@@ -910,6 +984,7 @@ func BindMemoryPut(fs *flag.FlagSet) *MemoryPutFlags {
 // DiffFlags are the flags declared for `magus diff`.
 type DiffFlags struct {
 	Generated bool // --generated
+	Cost      bool // --cost
 	Tui       bool // --tui
 	Watch     bool // --watch
 }
@@ -918,6 +993,7 @@ type DiffFlags struct {
 func BindDiff(fs *flag.FlagSet) *DiffFlags {
 	var f DiffFlags
 	fs.BoolVar(&f.Generated, FlagDiffGenerated, false, "Include declared target outputs, which are folded away by default")
+	fs.BoolVar(&f.Cost, FlagDiffCost, false, "Append what landing this costs: reach, ownership, an estimate from recorded run times, advisors, and note anchors")
 	fs.BoolVar(&f.Tui, FlagDiffTui, false, "Read the changeset interactively, joined to the session the console and an agent share")
 	fs.BoolVar(&f.Watch, FlagDiffWatch, false, "Re-read and re-render whenever the working tree changes")
 	return &f
@@ -1009,42 +1085,6 @@ func BindAgent(fs *flag.FlagSet) *AgentFlags {
 	fs.BoolVar(&f.DryRun, FlagAgentDryRun, false, "Print what would be written and removed without touching the filesystem (agent install)")
 	fs.BoolVar(&f.Tar, FlagAgentTar, false, "Stream a tar archive to stdout instead of writing files (agent install)")
 	fs.BoolVar(&f.Global, FlagAgentGlobal, false, "Allow absolute destination paths in write mode (agent install)")
-	return &f
-}
-
-// HookFlags are the flags declared for `magus hook`.
-type HookFlags struct {
-	Path       bool   // --path
-	Observe    bool   // --observe
-	AgentName  string // --agent-name
-	Session    string // --session
-	Transcript string // --transcript
-	Event      string // --event
-}
-
-// BindHook registers `magus hook`'s flags on fs and returns the destination.
-func BindHook(fs *flag.FlagSet) *HookFlags {
-	var f HookFlags
-	fs.BoolVar(&f.Path, FlagHookPath, false, "Judge the input as a file path an edit is about to write, not as a shell command")
-	fs.BoolVar(&f.Observe, FlagHookObserve, false, "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass")
-	fs.StringVar(&f.AgentName, FlagHookAgentName, "", "Name of the agent host this invocation came from (attribution only)")
-	fs.StringVar(&f.Session, FlagHookSession, "", "The host's own session id for this invocation")
-	fs.StringVar(&f.Transcript, FlagHookTranscript, "", "Path to the host's own log of this session, recorded as a pointer; magus never opens it")
-	fs.StringVar(&f.Event, FlagHookEvent, "", "The host's hook event name (e.g. PreToolUse)")
-	return &f
-}
-
-// NotifyFlags are the flags declared for `magus notify`.
-type NotifyFlags struct {
-	Outcome string // --outcome
-	Desktop bool   // --desktop
-}
-
-// BindNotify registers `magus notify`'s flags on fs and returns the destination.
-func BindNotify(fs *flag.FlagSet) *NotifyFlags {
-	var f NotifyFlags
-	fs.StringVar(&f.Outcome, FlagNotifyOutcome, "", "Outcome vocabulary for the event")
-	fs.BoolVar(&f.Desktop, FlagNotifyDesktop, false, "Also raise an OS notification")
 	return &f
 }
 

@@ -18,7 +18,7 @@ import "std";
 final section = "unclaimed";
 
 fun changed(base: str, head: str) > [str] !> any {
-    proc\exec("git", args: ["fetch", "--no-tags", "origin", base], dir: ".", opts: {});
+    advice\fetchBase(base, refspec: false);
     final res = proc\exec("git", args: ["diff", "--name-only", "origin/" + base + "..." + head],
         dir: ".", opts: {"allow_failure": true});
     var paths = mut [];

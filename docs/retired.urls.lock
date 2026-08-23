@@ -253,3 +253,22 @@ tags/magus-vcs/
 # The evals project was deleted before 0.4.0 shipped its harness; the page has no
 # successor to redirect to.
 development/evals/
+
+# magus activity was renamed to magus sessions before either shipped in a
+# release; the store-collision review that forced it is in the branch history.
+reference/manpage/magus-activity/
+
+# sessions, attention, notify and hook were folded into one magus session
+# family, and a manpage page is generated per command, so the four top-level
+# pages no longer exist. Not aliased: the successor is a single page carrying
+# all four verbs, at reference/manpage/magus-session/.
+reference/manpage/magus-sessions/
+reference/manpage/magus-attention/
+reference/manpage/magus-notify/
+reference/manpage/magus-hook/
+
+# Tag pages exist only while some page carries the tag; these three were carried
+# solely by the folded manpage pages above, so they retire with them.
+tags/desktop/
+tags/magus-hook/
+tags/policy/

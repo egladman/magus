@@ -72,7 +72,11 @@ body[data-dash-native] { margin: 0; }
 .console-dashboard-section h2 { margin: 0; font-size: var(--pf-t--global--font--size--lg); }
 .console-dashboard-section p { margin: 0; color: var(--pf-t--global--text--color--subtle); font-size: var(--pf-t--global--font--size--sm); }
 @media (max-width: 700px) {
-  .console-dashboard-section { align-items: flex-start; flex-direction: column; gap: 0.15rem; }
+  /* Wrap instead of stacking the whole row: the descriptive sentence still takes a line of its
+     own (it has no room beside an h2 at this width), but the "?" hint is one glyph and belongs
+     on the title's line - stacked, it reads as a stray control rather than part of the heading. */
+  .console-dashboard-section { flex-wrap: wrap; gap: 0.15rem 0.7rem; }
+  .console-dashboard-section p { flex-basis: 100%; }
 }
 
 .console-dashboard-orchestration {
@@ -1515,6 +1519,56 @@ a.console-dashboard-row .console-dashboard-row__cmd::after { content: " \2197"; 
 .console-dashboard-hero[data-state="warn"] .console-dashboard-hero__verdict      { color: var(--console-status-warn-text); }
 .console-dashboard-hero[data-state="attention"] .console-dashboard-hero__verdict { color: var(--console-status-danger-text); }
 .console-dashboard-hero__detail { margin: 0.15rem 0 0; font-size: 0.8rem; color: var(--pf-t--global--text--color--subtle); }
+
+/* The attention queue: one row per block waiting on a person, under the verdict it is the subject
+   of. A COLUMN rather than the chip row the failing targets use - each row carries a message and a
+   control, so it needs a line of its own, and the queue is short by construction (a request only
+   exists until somebody closes it). Its own block rather than console-dashboard-hero__queue*, which
+   is already spoken for by the queued-target count in the metrics row. */
+.console-dashboard-attention__list {
+  display: flex; flex-direction: column; gap: 0.35rem;
+  list-style: none; margin: 0.9rem 0 0.15rem; padding: 0;
+}
+.console-dashboard-attention__row {
+  padding: 0.35rem 0.5rem;
+  border: 1px solid var(--pf-t--global--border--color--default);
+  border-left: 3px solid var(--console-status-warn);
+  border-radius: 2px;
+  min-width: 0;
+}
+/* A permission block is somebody being asked to authorize something, which is the one outcome a
+   reader should be able to pick out of the column without reading it. */
+.console-dashboard-attention__row[data-outcome="permission"] { border-left-color: var(--console-status-danger); }
+.console-dashboard-attention__head { display: flex; flex-wrap: wrap; align-items: center; gap: 0.4rem; min-width: 0; }
+.console-dashboard-attention__id {
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.72rem;
+}
+.console-dashboard-attention__age,
+.console-dashboard-attention__delegation {
+  font-size: 0.7rem;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-dashboard-attention__delegation { font-family: var(--pf-t--global--font--family--mono); }
+/* The dispose control sits at the far end of the row, away from the id it closes: it is the one
+   write on this board, and it should not be a mis-click away from reading. */
+.console-dashboard-attention__dispose { margin-left: auto; display: inline-flex; align-items: center; }
+.console-dashboard-attention__disposebtn { font-size: 0.72rem; }
+/* The reason composer replaces the button in place, so the row does not reflow under the reader
+   as they start typing. */
+.console-dashboard-attention__composer { display: inline-flex; min-width: 14rem; }
+.console-dashboard-attention__message {
+  margin: 0.2rem 0 0;
+  font-size: 0.76rem;
+  color: var(--pf-t--global--text--color--subtle);
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.console-dashboard-attention__more,
+.console-dashboard-attention__note {
+  font-size: 0.7rem;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-dashboard-attention__note { margin: 0.5rem 0 0; font-family: var(--pf-t--global--font--family--mono); overflow-wrap: anywhere; }
 /* The failing-target list. Full width under the verdict and counts, so it reads as the ANSWER to
    the headline rather than as a fourth metric. Chips rather than a bulleted column: the common case
    is two or three short labels, and a column of them would push the hero taller than its Big

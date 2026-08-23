@@ -3487,15 +3487,12 @@ function syncGraphKindToggle() {
     btn.disabled = !liveHost;
     btn.title = liveHost ? GRAPHKIND_TITLES[kind] : GRAPHKIND_LIVE_HINT;
   });
-  // Say WHY on the surface, not only on hover. A disabled control with the reason buried in a
-  // title attribute reads as broken: you click Target, nothing happens, and the explanation is
-  // somewhere you have to already suspect. Most sessions are a snapshot or the demo, so this is
-  // the common case, not the edge one.
+  // Say WHY on the surface, not only on hover. A disabled control whose reason lives in a title=
+  // reads as broken: you click Target, nothing happens, and the explanation is somewhere you have
+  // to already suspect. The "?" beside the label is that marker - visible on touch, where a
+  // native tooltip never fires - and it carries the reason as its popover (bootWireEvents).
   const note = el("graphkind-note");
-  if (note) {
-    note.textContent = liveHost ? "" : "Live workspace only";
-    note.hidden = !!liveHost;
-  }
+  if (note) note.hidden = !!liveHost;
 }
 
 // switchGraphKind switches the live-loaded graph between the target and knowledge
@@ -5307,6 +5304,11 @@ function bootWireEvents() {
   // the title is already gone by then.
   const queryHelpBtn = el("graph-query-help");
   if (queryHelpBtn) attachHelpPopover(queryHelpBtn);
+
+  // The Graph switch's "?" carries the same treatment: syncGraphKindToggle only shows or hides it,
+  // so the reason it holds is wired here once, from the title= the scaffold ships.
+  const kindHelpBtn = el("graphkind-note");
+  if (kindHelpBtn) attachHelpPopover(kindHelpBtn);
 
   // Wire the projection unfold button ("Show full graph").
   const unfoldBtnWire = el("projection-unfold-btn");

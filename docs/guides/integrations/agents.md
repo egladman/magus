@@ -62,7 +62,7 @@ wire the guard hook. Both are on your host's page.
 The shared reference pages sit behind those: [Skills](agents/skills.md) for the
 install surface, [The guard](agents/guard.md) for what is denied and why,
 [Guard hook templates](agents/guard-templates.md) for the two files Claude Code
-and Codex run, [Attention hooks](agents/notifications.md) for `magus notify`,
+and Codex run, [Attention hooks](agents/notifications.md) for `magus session notify`,
 and [Delegation](agents/delegation.md) for the surface an agent uses when it
 fans work out across several.
 

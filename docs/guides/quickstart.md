@@ -170,9 +170,9 @@ pass. It parses the shell rather than pattern-matching it, so a command cannot
 evade the guard by adding an environment prefix or a shell indirection:
 
 ```sh
-printf '%s' 'go test ./...' | magus hook -o name               # deny: magus run test covers this
-printf '%s' 'env -u GOROOT go test ./...' | magus hook -o name # deny: same command, prefix peeled
-printf '%s' 'magus run test' | magus hook -o name              # pass
+printf '%s' 'go test ./...' | magus session hook -o name               # deny: magus run test covers this
+printf '%s' 'env -u GOROOT go test ./...' | magus session hook -o name # deny: same command, prefix peeled
+printf '%s' 'magus run test' | magus session hook -o name              # pass
 ```
 
 It denies on four triggers: what cannot be undone (whole-tree VCS operations),

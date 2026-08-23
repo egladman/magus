@@ -301,6 +301,17 @@ func (m *Magus) OutputKeyInputs(ref string) ([]string, error) {
 	return cache.NewOutputStore(resolveCacheDir(m.ws.Root, m.cfg)).KeyInputsByRef(ref)
 }
 
+// LastRecordedRun returns the most recent cache entry recorded for target in projectPath
+// together with the key inputs behind it - the peer `describe target --cache` compares a
+// live key against to explain why a run here would MISS. Wraps fs.ErrNotExist when
+// nothing is recorded for that target; [types.ErrNoCache] on an Inspect workspace.
+func (m *Magus) LastRecordedRun(projectPath, target string) (cache.RecordedRun, error) {
+	if m.cache == nil {
+		return cache.RecordedRun{}, types.ErrNoCache
+	}
+	return m.cache.LastRecordedRun(projectPath, target)
+}
+
 // InvocationByID resolves an invocation id (OutputDescriptor.Inv) to its run header - the command
 // lineage (subcommand/args/trigger), timing, and outcome - read from the union run log. It is the
 // lineage source for `magus query output <ref> --meta` and the viewer. Returns fs.ErrNotExist when

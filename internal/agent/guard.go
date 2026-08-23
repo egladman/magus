@@ -25,7 +25,7 @@ const GuardSchemaVersion = 1
 var guardDecisions = []string{"pass", "advise", "deny"}
 
 // guardSurfaces is every input the guard judges: a shell command, or a file
-// path an edit is about to write (`magus hook --path`). A host wires each
+// path an edit is about to write (`magus session hook --path`). A host wires each
 // surface to a different one of its events, and a host that cannot wire one
 // covers less - which is a coverage difference to record, not to hide.
 var guardSurfaces = []string{"command", "path"}

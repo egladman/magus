@@ -11,7 +11,7 @@ Read the working tree's changes in the order they deserve attention
 
 ## Synopsis
 
-**magus** diff [--generated] [--tui] [--watch] [\<patch-file\>|-] [flags]
+**magus** diff [--generated] [--cost] [--tui] [--watch] [\<patch-file\>|-] [flags]
 
 ## Description
 
@@ -37,7 +37,20 @@ model - it reports who can see the thing you changed and lets you decide.
 The console's Diff surface reads the same annotations over the same session,
 and an agent can join that session through the magus_diff MCP tool.
 
+--cost appends what landing the change costs: which projects rebuild and
+which were merely edited, who has been changing them, an estimate of the
+rebuild from recorded run durations, what the workspace's advisors say, and
+which human-authored notes anchor a file or symbol you touched. It is context
+and never a verdict - nothing is gated on it and the exit code is unchanged;
+the name is not "preflight" because in this workspace's magusfiles a preflight
+target IS a gate, and this flag must never read as one. Each section says when
+it could not measure something, so an empty one reads as "nobody looked"
+rather than as a clean bill of health.
+
 ## Options
+
+**--cost**
+: Append what landing this costs: reach, ownership, an estimate from recorded run times, advisors, and note anchors
 
 **--generated**
 : Include declared target outputs, which are folded away by default
@@ -47,6 +60,17 @@ and an agent can join that session through the magus_diff MCP tool.
 
 **--watch**
 : Re-read and re-render whenever the working tree changes
+
+## Exit status
+
+**0**
+: The changeset was read and rendered. This is the status whether or not anything changed: unlike git diff --exit-code, a non-empty changeset is not a failure, and no flag makes it one.
+
+**1**
+: The changeset could not be read - an unreadable patch file, or stdin, or a working tree the VCS would not report on.
+
+**2**
+: Misuse: more than one patch argument, an argument that is neither a readable patch nor -, or a flag combination that cannot hold (--tui with --watch, with a patch argument, or with -o json). --tui at a non-interactive terminal also exits 2, since the request cannot be served as asked.
 
 ## Examples
 
@@ -60,6 +84,12 @@ magus diff
 
 ```sh
 magus diff --generated
+```
+
+*Everything to know before landing it*
+
+```sh
+magus diff --cost
 ```
 
 *Navigate it hunk by hunk and mark what you have read*
@@ -76,5 +106,5 @@ magus diff -o json
 
 ## See Also
 
-[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-server**(1)](magus-server.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-hook**(1)](magus-hook.md), [**magus-notify**(1)](magus-notify.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
+[**magus**(1)](magus.md), [**magus-ls**(1)](magus-ls.md), [**magus-describe**(1)](magus-describe.md), [**magus-run**(1)](magus-run.md), [**magus-x**(1)](magus-x.md), [**magus-where**(1)](magus-where.md), [**magus-affected**(1)](magus-affected.md), [**magus-graph**(1)](magus-graph.md), [**magus-query**(1)](magus-query.md), [**magus-explain**(1)](magus-explain.md), [**magus-path**(1)](magus-path.md), [**magus-refs**(1)](magus-refs.md), [**magus-watch**(1)](magus-watch.md), [**magus-status**(1)](magus-status.md), [**magus-clean**(1)](magus-clean.md), [**magus-vcs**(1)](magus-vcs.md), [**magus-doctor**(1)](magus-doctor.md), [**magus-config**(1)](magus-config.md), [**magus-session**(1)](magus-session.md), [**magus-memory**(1)](magus-memory.md), [**magus-notes**(1)](magus-notes.md), [**magus-server**(1)](magus-server.md), [**magus-buzz**(1)](magus-buzz.md), [**magus-completion**(1)](magus-completion.md), [**magus-man**(1)](magus-man.md), [**magus-init**(1)](magus-init.md), [**magus-agent**(1)](magus-agent.md), [**magus-self**(1)](magus-self.md), [**magus-version**(1)](magus-version.md)
 

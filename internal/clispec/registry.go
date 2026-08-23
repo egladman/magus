@@ -22,6 +22,7 @@ var All = []Command{
 	vcsCommand,
 	doctorCommand,
 	configCommand,
+	sessionCommand,
 	memoryCommand,
 	notesCommand,
 	diffCommand,
@@ -31,8 +32,6 @@ var All = []Command{
 	manCommand,
 	initCommand,
 	agentCommand,
-	hookCommand,
-	notifyCommand,
 	selfCommand,
 	versionCommand,
 }
@@ -109,7 +108,7 @@ step at a time.`,
 			Flags: []Flag{
 				{Name: "explain", Kind: FlagBool, Doc: "For a ref with charms: show the per-charm argv trace (base then each charm)"},
 				{Name: "e", Kind: FlagBool, AliasOf: "explain", Doc: "Short for --explain"},
-				{Name: "cache", Kind: FlagBool, Doc: "Show the live cache key, the ref a run would print, and the component classes behind it"},
+				{Name: "cache", Kind: FlagBool, Doc: "Show the live cache key, the ref a run would print, the component classes behind it, and what moved since the last recorded run"},
 				{Name: "against", Kind: FlagString, Doc: "With --cache: diff the live key inputs against the stored lines behind an output `ref`"},
 				{Name: "inputs", Kind: FlagBool, Doc: "With --cache: list every key input line, so you can confirm a declared file was actually hashed"},
 				{Name: "no-default-charms", Kind: FlagBool, Doc: "With --cache: ignore magus.yaml default_charms when keying, matching a run made the same way (CI)"},
@@ -203,6 +202,11 @@ the rw charm (e.g. 'magus run format:rw') to mutate files.`,
 		{"Graph in Mermaid format", "magus run build --graph -o mermaid"},
 		{"Graph dependents of api/gateway", "magus run build api/gateway --graph --upstream"},
 		{"Stream JSONL target events to a file", "magus run build -o jsonl --tee build.jsonl"},
+	},
+	ExitStatus: []ExitCode{
+		{0, "Every selected project's target succeeded, whether it ran or replayed from cache."},
+		{1, "At least one target failed. The failure was already reported with the path to its captured log, so there is no second error line here. This is the default failure status, not the only one: a magusfile calling os.exit(code) has that code honored verbatim, so a target may exit with a status this list does not name."},
+		{2, "Misuse: an unknown target, no project matched the filters, or a flag that does not apply to this invocation."},
 	},
 }
 
@@ -335,6 +339,11 @@ history to find the commit that introduced a regression.`,
 		{"Emit a CI shard plan for the affected set", "magus affected ci --plan"},
 		{"Shard a test plan across at most four workers", "magus affected test --plan --max-shards 4"},
 		{"Bisect a regression in myapp", "magus affected --bisect ./apps/myapp"},
+	},
+	ExitStatus: []ExitCode{
+		{0, "Every affected project's target succeeded. An empty affected set is also 0: nothing changed is a pass, not a fault, so a CI job gating on this stays green on a docs-only commit."},
+		{1, "At least one target failed, already reported with the path to its captured log."},
+		{2, "Misuse: no target named, or --step without an interactive terminal."},
 	},
 }
 
@@ -1076,7 +1085,7 @@ base in yourself on the others, then run resolve.`,
 		},
 		{
 			Name:  "checkpoint",
-			Short: "Print the working state's identity, for recording what a delegated unit was handed; writes nothing",
+			Short: "Print the working state's identity, for recording what a delegation was handed; writes nothing",
 		},
 		{Name: "merge-driver", Short: "The per-file merge driver git and hg invoke; you do not run this by hand"},
 	},
@@ -1085,8 +1094,175 @@ base in yourself on the others, then run resolve.`,
 		{"Classify the dirty tree, stage nothing", "magus vcs add --dry-run"},
 		{"Settle a conflicted merge", "magus vcs resolve"},
 		{"Merge the base in and settle it in one step", "magus vcs resolve --against origin/main"},
-		{"Record what a delegated unit was handed", "magus vcs checkpoint"},
+		{"Record what a delegation was handed", "magus vcs checkpoint"},
 		{"The one citable token, for a ledger cell", "magus vcs checkpoint -o name"},
+	},
+}
+
+var sessionCommand = Command{
+	Name:        "session",
+	Short:       "What sessions did and what they are blocked on: humans read and dispose, hosts write",
+	Description: "One family over the repository's session store: list what sessions ran, list the blocks agents raised, close one by hand, and take the host-hook ingest that writes it all.",
+	Tags:        []string{"cli", "magus session", "sessions", "attention", "history", "worktrees", "agents", "guard"},
+	Long: `One noun over the repository's session store, with a human side and a
+machine side.
+
+Humans read it. The bare command lists past magus sessions with the targets
+each one ran and how those runs ended; ` + "`session attention`" + ` lists the requests
+agents have raised - work blocked on input or on approval - and
+` + "`session dispose`" + ` closes one. Nothing closes a request automatically: there is
+no expiry, no severity inference and no auto-dispose flag, because a request
+magus could answer by itself would not have needed a person - see the doctrine
+page.
+
+Agent hosts write it. Their hooks pipe every event through ` + "`session hook`" + `
+(one command or path, judged against the guard rules and recorded) and
+` + "`session notify`" + ` (one attention event, normalized; a waiting or permission
+outcome opens a durable request). No person types those two; they exist to be
+wired.
+
+The store is keyed by repository identity rather than by checkout path, so
+every git worktree of one repo reads and writes the same records - what
+another worktree just finished, and what it is blocked on, is visible here
+without a daemon, a network, or a shared branch. It is append-only and never
+rewritten; a line left half-written by a killed process is skipped and counted
+rather than failing the read.
+
+The listing takes --limit to bound by count and --since to bound by AGE, as a
+duration back from now (2h, 45m, 168h) or an RFC3339 instant. --since compares
+against each session's last fact, not its first, so a long session that is
+still working stays listed however long ago it began.`,
+	Usage: "magus session [ls] [flags]",
+	Flags: []Flag{
+		{Name: "limit", Kind: FlagInt, Doc: "Show at most this many sessions (0 for all)"},
+		{Name: "since", Kind: FlagString, Doc: "Show only sessions active since this point: a duration back from now (2h, 45m, 168h) or an RFC3339 timestamp"},
+	},
+	Children: []Command{
+		{Name: "ls", Short: "List past sessions and the targets they ran (the default)"},
+		{
+			Name:  "attention",
+			Short: "List the open requests agents raised, oldest first; with -q, print nothing and exit 1 when the queue is empty",
+			Long: `List the requests agents have raised in this repository.
+
+A request is opened by ` + "`session notify`" + `: an event whose outcome is waiting
+(blocked on input) or permission (blocked on approval) becomes a durable
+request instead of a notification that scrolls past. Any other outcome opens
+nothing.
+
+With the global -q, print nothing and answer with the exit status instead:
+0 when at least one request is open, 1 when the queue is empty. Neither status
+reports a fault - an empty queue is the good state - so this is the form to
+test from a shell prompt or a wrapper script.`,
+		},
+		{
+			Name:  "dispose",
+			Short: "Close one open request by id or unambiguous id prefix",
+			Long: `Close one open request. A request closes once and stays closed;
+re-raising a block that is already open updates nothing and adds no second row.
+
+The id may be any unambiguous prefix of a request id, the way a short revision
+names a commit. An ambiguous prefix is refused and names every candidate rather
+than picking one, because the id addresses a person's decision to close a
+block.`,
+			Flags: []Flag{
+				{Name: "reason", Kind: FlagString, Doc: "Record why the request is being closed, alongside the disposition"},
+			},
+		},
+		{
+			Name:        "hook",
+			Short:       "Evaluate one shell command or file path against the magus guard rules",
+			Description: "Read one shell command, or one path an edit is about to write, and report a deny, advise, or pass verdict for an agent host's pre-tool-use hook.",
+			Long: `Evaluate ONE shell command, or one file path an edit is about to write,
+against this workspace's guard rules, and report a deny, advise, or pass
+verdict.
+
+It is built for an agent host's pre-tool-use hook. The input arrives on
+stdin, so nothing has to survive being quoted through a shell twice.
+
+Two input shapes are accepted. Plain text is the command (or the path)
+itself. A JSON envelope from a host that writes one needs neither --path nor
+a JSON tool to unwrap it: the envelope already says what is about to run and
+whether it is a write. An explicit flag still wins, because a wrapper that
+passed one meant it.
+
+--observe records a path the agent merely REACHED, without judging it. No rule
+applies to a read, so the verdict is always pass and the activity event
+previews as observed rather than as a guard decision. Which of a host's tools
+only look is the wrapper's knowledge, never magus's.
+
+--agent-name, --session, --transcript, and --event are attribution, not policy.
+They record who produced the observation on the activity event, and the verdict
+never reads them. All are optional and unvalidated, including the host name,
+which is an opaque label the caller chooses rather than a set magus knows: a
+magus that enumerated hosts would need a release per host, and a wrapper that
+cannot extract a session id must still be able to get a verdict.
+
+--delegation is the exception: it IS policy. It names the delegation the caller is
+acting as, and a write is then graded against that delegation's declared write boundary
+in this workspace's delegation ledger. Inside its owned paths passes; inside its
+forbidden paths, or inside another live delegation's owned paths, is denied and the
+reason names the owning delegation. It defaults to $MAGUS_DELEGATION, and the flag wins when
+both are set.
+
+A call that names no valid delegation while a fleet is running is ADVISED and never
+blocked: a person editing their own repository has no delegation id, and the guard is a
+seatbelt for harnesses that opt in rather than a sandbox. With no ledger, or with
+no delegation in it declared or running, nothing is graded and nothing is read.`,
+			Usage: "magus session hook [--path] [flags]",
+			Flags: []Flag{
+				{Name: "path", Kind: FlagBool, Doc: "Judge the input as a file path an edit is about to write, not as a shell command"},
+				{Name: "observe", Kind: FlagBool, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
+				{Name: "delegation", Kind: FlagString, Doc: "The delegation this call is acting as, graded against the ledger's declared write boundary (defaults to $MAGUS_DELEGATION)"},
+				{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this invocation came from (attribution only)"},
+				{Name: "session", Kind: FlagString, Doc: "The host's own session id for this invocation"},
+				{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
+				{Name: "event", Kind: FlagString, Doc: "The host's hook event name (e.g. PreToolUse)"},
+			},
+		},
+		{
+			Name:        "notify",
+			Short:       "Normalize an attention event and optionally notify the local desktop",
+			Description: "Raise one canonical attention event from plain text or a JSON envelope, and optionally surface it as an operating-system notification.",
+			Long: `Raise one canonical attention event.
+
+The input is read from stdin and may be plain text or a complete event JSON
+envelope. Either way the result is one normalized event, so a caller that
+knows nothing about magus's event schema can still raise a well-formed one.
+
+--outcome names the event's outcome vocabulary. --desktop additionally
+raises an operating-system notification, which is the part a human notices;
+without it the event is recorded and nothing pops up.
+
+An event whose outcome is waiting (blocked on input) or permission (blocked on
+approval) additionally opens a durable request in this repository, listed by
+` + "`session attention`" + ` and closed only by a person. Any other outcome opens
+none. This is the only command that opens one.`,
+			Usage: "magus session notify [--outcome <vocab>] [--desktop]",
+			Flags: []Flag{
+				{Name: "outcome", Kind: FlagString, Doc: "Outcome vocabulary for the event"},
+				{Name: "desktop", Kind: FlagBool, Doc: "Also raise an OS notification"},
+			},
+		},
+	},
+	Examples: []Example{
+		{"Show recent sessions", "magus session"},
+		{"Show today's work", "magus session --since 24h"},
+		{"Full session records as JSON", "magus session -o json"},
+		{"List open attention requests", "magus session attention"},
+		{"Ask whether anyone is waiting", "magus session attention -q"},
+		{"Close one request, saying why", `magus session dispose att-3f9c -reason "approved and pushed by hand"`},
+		{"Judge a shell command (host-wired)", "printf '%s' 'go build ./...' | magus session hook"},
+		{"Record a path an agent read, without judging it", "printf '%s' 'internal/cache/output.go' | magus session hook --observe"},
+		{"Grade a write as a delegation", "printf '%s' 'internal/ledger/store.go' | magus session hook --path --delegation f2-guard"},
+		{"Raise a permission prompt on the desktop (host-wired)", "printf '%s\\n' 'needs approval' | magus session notify --outcome permission --desktop"},
+	},
+	// The status IS the enforcement for hook: a host that reads only the exit code
+	// blocks on 2 and runs the command on 0, so a wrapper author has to be told
+	// that advise passes and that 2 is overloaded.
+	ExitStatus: []ExitCode{
+		{0, "Sessions or requests were listed, a request was disposed, an event was normalized and emitted, or hook judged the input allowed (pass, or advise, which attaches context and does not block; --observe always lands here). A plain listing exits 0 whether or not anything was listed, because an empty queue is the good state. notify's delivery is best-effort and never changes this: a desktop notification that could not be raised, and a durable request that could not be opened, are both reported as warnings and still exit 0."},
+		{1, "dispose: the request named is not in the store, or was already disposed - a request closes once and stays closed. attention with -q: the queue is empty, so a prompt or a watch loop can branch on the status instead of parsing the listing. notify: stdin could not be read (unparsable input is not this case - text that is not a complete event envelope becomes the event's message rather than an error)."},
+		{2, "Misuse: an unknown subcommand, an argument to a listing, or a dispose naming other than exactly one id. For hook, also a DENIED command - deny and malformed input share the code deliberately: a guard that could not parse its input has not cleared the command either, so a host that blocks on 2 fails closed in both cases."},
 	},
 }
 
@@ -1160,18 +1336,38 @@ needs a base-side index magus does not keep and language semantics it does not
 model - it reports who can see the thing you changed and lets you decide.
 
 The console's Diff surface reads the same annotations over the same session,
-and an agent can join that session through the magus_diff MCP tool.`,
-	Usage: "magus diff [--generated] [--tui] [--watch] [<patch-file>|-] [flags]",
+and an agent can join that session through the magus_diff MCP tool.
+
+--cost appends what landing the change costs: which projects rebuild and
+which were merely edited, who has been changing them, an estimate of the
+rebuild from recorded run durations, what the workspace's advisors say, and
+which human-authored notes anchor a file or symbol you touched. It is context
+and never a verdict - nothing is gated on it and the exit code is unchanged;
+the name is not "preflight" because in this workspace's magusfiles a preflight
+target IS a gate, and this flag must never read as one. Each section says when
+it could not measure something, so an empty one reads as "nobody looked"
+rather than as a clean bill of health.`,
+	Usage: "magus diff [--generated] [--cost] [--tui] [--watch] [<patch-file>|-] [flags]",
 	Flags: []Flag{
 		{Name: "generated", Kind: FlagBool, Doc: "Include declared target outputs, which are folded away by default"},
+		{Name: "cost", Kind: FlagBool, Doc: "Append what landing this costs: reach, ownership, an estimate from recorded run times, advisors, and note anchors"},
 		{Name: "tui", Kind: FlagBool, Doc: "Read the changeset interactively, joined to the session the console and an agent share"},
 		{Name: "watch", Kind: FlagBool, Doc: "Re-read and re-render whenever the working tree changes"},
 	},
 	Examples: []Example{
 		{"Read what you are about to commit", "magus diff"},
 		{"Include the generated files too", "magus diff --generated"},
+		{"Everything to know before landing it", "magus diff --cost"},
 		{"Navigate it hunk by hunk and mark what you have read", "magus diff --tui"},
 		{"Machine-readable, for a script or a Buzz advisor", "magus diff -o json"},
+	},
+	// Documented because git trained everyone to expect the opposite: there is no
+	// --exit-code here, and a script testing the status for "anything changed?"
+	// silently never fires.
+	ExitStatus: []ExitCode{
+		{0, "The changeset was read and rendered. This is the status whether or not anything changed: unlike git diff --exit-code, a non-empty changeset is not a failure, and no flag makes it one."},
+		{1, "The changeset could not be read - an unreadable patch file, or stdin, or a working tree the VCS would not report on."},
+		{2, "Misuse: more than one patch argument, an argument that is neither a readable patch nor -, or a flag combination that cannot hold (--tui with --watch, with a patch argument, or with -o json). --tui at a non-interactive terminal also exits 2, since the request cannot be served as asked."},
 	},
 }
 
@@ -1300,76 +1496,5 @@ paths-relative-to-<dir> case. Absolute destinations are refused unless
 		{"See what a prune would remove first", "magus agent install .claude/skills --prune --dry-run"},
 		{"Install anywhere via tar", "magus agent install --tar | tar -xf - -C ~/.config/opencode/skills"},
 		{"Print a starter AGENTS.md", "magus agent sample"},
-	},
-}
-
-var hookCommand = Command{
-	Name:        "hook",
-	Short:       "Evaluate one shell command or file path against the magus guard rules",
-	Description: "Read one shell command, or one path an edit is about to write, and report a deny, advise, or pass verdict for an agent host's pre-tool-use hook.",
-	Tags:        []string{"cli", "magus hook", "guard", "agents", "policy", "pre-tool-use"},
-	Long: `Evaluate ONE shell command, or one file path an edit is about to write,
-against this workspace's guard rules, and report a deny, advise, or pass
-verdict.
-
-It is built for an agent host's pre-tool-use hook. The input arrives on
-stdin, so nothing has to survive being quoted through a shell twice.
-
-Two input shapes are accepted. Plain text is the command (or the path)
-itself. A JSON envelope from a host that writes one needs neither --path nor
-a JSON tool to unwrap it: the envelope already says what is about to run and
-whether it is a write. An explicit flag still wins, because a wrapper that
-passed one meant it.
-
---observe records a path the agent merely REACHED, without judging it. No rule
-applies to a read, so the verdict is always pass and the activity event
-previews as observed rather than as a guard decision. Which of a host's tools
-only look is the wrapper's knowledge, never magus's.
-
---agent-name, --session, --transcript, and --event are attribution, not policy.
-They record who produced the observation on the activity event, and the verdict
-never reads them. All are optional and unvalidated, including the host name,
-which is an opaque label the caller chooses rather than a set magus knows: a
-magus that enumerated hosts would need a release per host, and a wrapper that
-cannot extract a session id must still be able to get a verdict.`,
-	Usage: "magus hook [--path] [flags]",
-	Flags: []Flag{
-		{Name: "path", Kind: FlagBool, Doc: "Judge the input as a file path an edit is about to write, not as a shell command"},
-		{Name: "observe", Kind: FlagBool, Doc: "Record the input as a path the agent reached, without judging it: no rule applies and the verdict is always pass"},
-		{Name: "agent-name", Kind: FlagString, Doc: "Name of the agent host this invocation came from (attribution only)"},
-		{Name: "session", Kind: FlagString, Doc: "The host's own session id for this invocation"},
-		{Name: "transcript", Kind: FlagString, Doc: "Path to the host's own log of this session, recorded as a pointer; magus never opens it"},
-		{Name: "event", Kind: FlagString, Doc: "The host's hook event name (e.g. PreToolUse)"},
-	},
-	Examples: []Example{
-		{"Judge a shell command", "printf '%s' 'go build ./...' | magus hook"},
-		{"Judge a path an edit is about to write", "printf '%s' 'MAGUS.md' | magus hook --path"},
-		{"Record a path an agent read, without judging it", "printf '%s' 'internal/cache/output.go' | magus hook --observe"},
-		{"Machine-readable verdict", "printf '%s' 'rm -rf /' | magus hook -o json"},
-	},
-}
-
-var notifyCommand = Command{
-	Name:        "notify",
-	Short:       "Normalize an attention event and optionally notify the local desktop",
-	Description: "Raise one canonical attention event from plain text or a JSON envelope, and optionally surface it as an operating-system notification.",
-	Tags:        []string{"cli", "magus notify", "notifications", "events", "attention", "desktop"},
-	Long: `Raise one canonical attention event.
-
-The input is read from stdin and may be plain text or a complete event JSON
-envelope. Either way the result is one normalized event, so a caller that
-knows nothing about magus's event schema can still raise a well-formed one.
-
---outcome names the event's outcome vocabulary. --desktop additionally
-raises an operating-system notification, which is the part a human notices;
-without it the event is recorded and nothing pops up.`,
-	Usage: "magus notify [--outcome <vocab>] [--desktop]",
-	Flags: []Flag{
-		{Name: "outcome", Kind: FlagString, Doc: "Outcome vocabulary for the event"},
-		{Name: "desktop", Kind: FlagBool, Doc: "Also raise an OS notification"},
-	},
-	Examples: []Example{
-		{"Raise a permission prompt on the desktop", "printf '%s\\n' 'needs approval' | magus notify --outcome permission --desktop"},
-		{"Raise a pre-built event envelope", `printf '%s\n' '{"outcome":"permission","source":{"kind":"agent"},"message":"needs approval"}' | magus notify --desktop`},
 	},
 }
