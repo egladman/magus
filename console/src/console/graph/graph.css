@@ -415,8 +415,7 @@
 .console-graph-card__noteslink { margin-inline-start: 0.7rem; padding: 0; border: 0; background: transparent; color: var(--console-accent); cursor: pointer; font: inherit; font-size: 0.78rem; }
 .console-graph-card__noteslink:hover { text-decoration: underline; }
 
-/* Narrow screens: stack the columns; canvas gets a fixed height, the list and card
-   flow beneath it. */
+/* Narrow screens: stack the columns - the sidebar, then the canvas, then the detail card. */
 @media (max-width: 900px) {
   /* grid-template-rows must be reset here - the desktop rule's minmax(0, 1fr) single row
      otherwise survives into this stacked layout and collapses the whole app to ~1px tall (grid-
@@ -425,21 +424,25 @@
      the canvas (.console-graph-stage sits later in DOM with no stacking context of its own),
      so a tap meant for "N nodes, N edges" landed on a graph node instead. */
   /* Stack into one column, and size the whole panel to the SAME budget the desktop rule above
-     uses - the pane the console shell actually hands this surface. The stacked rows used to be
-     40svh of sidebar plus 60svh of stage, which sums to the whole viewport and so could never
-     fit inside a pane that is the viewport minus the shell's chrome: the bottom of the canvas
-     fell outside the app's overflow:hidden box, unreachable and with no scroll to it. The stage
-     takes what the sidebar leaves instead of claiming a fixed slice. */
+     uses - the pane the console shell actually hands this surface.
+     The three rows now SHARE that budget as fractions of it. Sizing them from the viewport did
+     not work: the sidebar and the detail column were content-sized rows capped at 40svh and
+     50svh, so together they could claim 90% of the VIEWPORT out of a panel that is the viewport
+     minus the shell's chrome (a doubled title bar plus the status bar, ~123px on a phone). Both
+     rows are sized before the stage's 1fr gets anything, so the canvas - the reason this surface
+     exists - was left a band of whatever those two did not want, sometimes nothing at all. As
+     fractions the stage keeps three fifths of the panel at every height, and the two panels
+     around it, which already scroll inside themselves, take a fifth each. */
   .console-graph-app {
     grid-template-columns: 1fr;
-    grid-template-rows: auto minmax(0, 1fr);
+    grid-template-rows: minmax(0, 1fr) minmax(0, 3fr) minmax(0, 1fr);
     grid-auto-rows: min-content;
     flex: 1;
     min-height: 320px;
   }
   .console-graph-stage { height: auto; min-height: 0; }
-  .console-graph-sidebar { max-height: 40svh; border-right: 0; border-bottom: 1px solid var(--pf-t--global--border--color--default); }
-  .console-graph-detail { border-left: 0; border-top: 1px solid var(--pf-t--global--border--color--default); max-height: 50svh; }
+  .console-graph-sidebar { border-right: 0; border-bottom: 1px solid var(--pf-t--global--border--color--default); }
+  .console-graph-detail { border-left: 0; border-top: 1px solid var(--pf-t--global--border--color--default); }
   /* Mobile canvas chrome: the stage tools collapse behind the PF kebab toggle (pf-m-show-on-lg,
      shared ../toolbar.ts) - no bespoke label-dropping here. The legend needs no mobile rule of
      its own any more: it lives in the sidebar, which is already capped and scrolls. */
@@ -451,9 +454,9 @@
   /* The node cloud stays IN FLOW here and scrolls inside its own box. It used to be a
      position:fixed card that JS anchored under #list-toggle, which worked only while the toggle
      was the LAST thing in the sidebar - once the results moved above the View and Source
-     sections, that floating card covered them. In flow it cannot: the sidebar is capped at
-     40svh and scrolls itself, so a long list moves the sidebar's own scrollbar and never
-     touches the canvas. */
+     sections, that floating card covered them. In flow it cannot: the sidebar's row is capped at
+     a fifth of the panel and it scrolls itself, so a long list moves the sidebar's own scrollbar
+     and never touches the canvas. */
   #node-list {
     max-height: min(40svh, 320px);
     overflow-y: auto;
@@ -690,6 +693,9 @@ main .console-graph-views > summary:not([role]), main .console-graph-views[open]
   color: var(--pf-t--global--text--color--subtle);
 }
 .console-graph-sidebar__viewcell .console-graph-display__sublabel { margin-top: 0; }
+/* A sub-heading that carries the shared "?" beside it. Baseline, not center: the glyph is taller
+   than the 0.72rem label, and centered it dragged the label's own line off the row above it. */
+.console-graph-display__sublabelrow { display: flex; align-items: baseline; gap: 0.35rem; }
 .console-graph-sidebar__modeslabel {
   margin: 0 0 0.35rem; padding: 0;
   font-size: 0.62rem; font-weight: 600; text-transform: uppercase; letter-spacing: 0.06em;

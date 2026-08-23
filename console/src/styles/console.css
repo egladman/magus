@@ -528,6 +528,10 @@ body[data-console-fill] .console-graph-app:has(#graph-empty-state:not([hidden]))
   color: var(--pf-t--global--text--color--subtle); font-size: 0.7rem; font-weight: 700;
 }
 .console-render-help-glyph:hover, .console-render-help-glyph:focus-visible { color: var(--pf-t--global--text--color--regular); border-color: var(--pf-t--global--text--color--regular); }
+/* Restore [hidden] semantics: the display above is an author rule, so it beats the attribute's UA
+   display:none (the same trap PF's Labels spring in the graph's stage tools). A glyph that explains
+   why a control is unavailable has to disappear when the control is not. */
+.console-render-help-glyph[hidden] { display: none; }
 
 /* Help popover: the click-to-toggle panel the shared "?" affordance (ui/help-popover.ts) opens. A hover
    title= tooltip is invisible on touch, so every surface's "?" now opens this instead. position:fixed +
