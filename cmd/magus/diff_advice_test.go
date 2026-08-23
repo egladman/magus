@@ -80,8 +80,7 @@ const staleBaseAdvisor = `import "advice";
 
 fun main() > void !> any {
     advice\fetchBase("magus-advice-no-such-base", refspec: true);
-    advice\publish("", pr: "", name: "stale", title: "Stale base",
-        body: advice\staleBaseNote(advice\env("PR_BASE")));
+    advice\publish("", pr: "", name: "stale", title: "Stale base", body: advice\env("PR_BASE"));
 }
 `
 
@@ -221,15 +220,11 @@ func TestLocalModeReadsAStaleBaseWithoutFetching(t *testing.T) {
 	if len(sections) != 1 {
 		t.Fatalf("sections = %+v, want exactly one", sections)
 	}
-	// Not fetching is only half the contract. A finding measured against a base that may be
-	// weeks old is not wrong, but it answers a question about that older base, and the
-	// section has to say so or the reader cannot tell.
-	body := sections[0].Body
-	if !strings.Contains(body, "origin/main") {
-		t.Errorf("Body = %q, want it to name the unfetched ref it compared against", body)
-	}
-	if !strings.Contains(body, "git fetch origin main") {
-		t.Errorf("Body = %q, want it to name the command that refreshes the base", body)
+	// The advisor saw the driver's base rather than a pull request's. Saying that the base
+	// went unfetched is the DRIVER's line, once for the whole set - see
+	// TestPreflightBaseSeparatesOldFromAbsent - so no section carries the disclaimer.
+	if body := sections[0].Body; body != "main" {
+		t.Errorf("Body = %q, want the local base the driver supplied", body)
 	}
 }
 

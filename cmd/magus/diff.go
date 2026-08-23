@@ -28,6 +28,7 @@ import (
 	"github.com/egladman/magus/internal/review"
 	"github.com/egladman/magus/internal/trail"
 	"github.com/egladman/magus/types"
+	"github.com/egladman/magus/vcs"
 )
 
 // diffCmd implements `magus diff`: the working tree's changes, annotated and ordered by
@@ -1146,10 +1147,29 @@ type diffPreflight struct {
 	Advisors  []adviceSection  `json:"advisors,omitempty"  yaml:"advisors,omitempty"`
 	// AdvisorNotes names each advisor that could not run. Surfaced rather than swallowed, so
 	// an empty advisor list reads as "they all passed" only when it is one.
-	AdvisorNotes []string         `json:"advisor_notes,omitempty" yaml:"advisor_notes,omitempty"`
-	Anchors      []anchorHit      `json:"anchors,omitempty"       yaml:"anchors,omitempty"`
-	Rationale    []rationaleHit   `json:"rationale,omitempty"     yaml:"rationale,omitempty"`
-	Review       *preflightReview `json:"review,omitempty"        yaml:"review,omitempty"`
+	AdvisorNotes []string `json:"advisor_notes,omitempty" yaml:"advisor_notes,omitempty"`
+	// AdvisorBase qualifies everything the advisors said. nil when the backend cannot date a
+	// revision, which is a different fact from a base that is merely old.
+	AdvisorBase *preflightAdvisorBase `json:"advisor_base,omitempty" yaml:"advisor_base,omitempty"`
+	Anchors     []anchorHit           `json:"anchors,omitempty"      yaml:"anchors,omitempty"`
+	Rationale   []rationaleHit        `json:"rationale,omitempty"    yaml:"rationale,omitempty"`
+	Review      *preflightReview      `json:"review,omitempty"       yaml:"review,omitempty"`
+}
+
+// preflightAdvisorBase is the revision the advisors compared against, and how current this
+// clone's copy of it is.
+//
+// It is stated ONCE for the whole set rather than per section: a local run never fetches, so
+// the caveat is identical under every advisor, and repeating it ten times is how a reader
+// learns to skip it.
+type preflightAdvisorBase struct {
+	// Ref is the revision as the advisors spell it, so a reader can run the same comparison
+	// by hand.
+	Ref string `json:"ref" yaml:"ref"`
+	// Tip is when Ref's commit was authored, RFC3339, and empty when Ref names nothing in
+	// this clone. The AGE a reader sees is derived from this at render rather than stored:
+	// a report teed to a file and read tomorrow must not still claim today's number.
+	Tip string `json:"tip,omitempty" yaml:"tip,omitempty"`
 }
 
 // preflightReach is the blast radius: what was edited, and what rebuilds because of it.
@@ -1238,6 +1258,7 @@ func collectPreflight(ctx context.Context, m *magus.Magus, rootOverride string, 
 	if err != nil {
 		p.AdvisorNotes = append(p.AdvisorNotes, fmt.Sprintf("advisors did not run: %v", err))
 	}
+	p.AdvisorBase = preflightAdvisorBaseOf(ctx, m, base)
 
 	// rootOverride, not m.Root(): the workspace loaders are once-per-process and keyed on
 	// the override they were first handed, so the anchors' graph load must spell the root
@@ -1385,7 +1406,7 @@ func preflightLines(p diffPreflight) []string {
 		preflightReachLines(p.Reach),
 		preflightOwnershipLines(p.Ownership),
 		preflightCostLines(p.Cost),
-		preflightAdvisorLines(p.Advisors, p.AdvisorNotes),
+		preflightAdvisorLines(p.Advisors, p.AdvisorNotes, p.AdvisorBase),
 		preflightAnchorLines(p.Anchors),
 		preflightRationaleLines(p.Rationale),
 		preflightReviewLines(p.Review),
@@ -1460,21 +1481,111 @@ func preflightCostLines(c *preflightCost) []string {
 	return append(out, preflightMoreLine(len(c.Projects))...)
 }
 
-func preflightAdvisorLines(sections []adviceSection, failed []string) []string {
-	if len(sections) == 0 && len(failed) == 0 {
-		return []string{"ADVISORS: nothing to report"}
+// preflightAdvisorBaseOf dates this clone's copy of the ref the advisors compared against.
+//
+// nil whenever the answer would be a guess: no VCS, or a backend that cannot date a
+// revision. A ref the clone does not HAVE is not that case - it resolves to a
+// preflightAdvisorBase with no Tip, because "you have never fetched this" is the single most
+// useful thing the report can say about why nine advisors went quiet.
+func preflightAdvisorBaseOf(ctx context.Context, m *magus.Magus, base string) *preflightAdvisorBase {
+	res, err := vcs.Resolve(ctx, m.Root(), "", m.VCSOptions())
+	if err != nil || res.VCS == nil {
+		return nil
 	}
-	out := []string{fmt.Sprintf("ADVISORS: %d finding%s", len(sections), pluralSuffix(len(sections), "", "s"))}
+	timer, ok := res.VCS.(types.RevTimeReporter)
+	if !ok {
+		return nil
+	}
+	// "origin/" + base is the spelling the advisors themselves use, not a normalization of
+	// it: the line exists so a reader can run the same comparison by hand, and a ref that
+	// reads differently here than in advice.buzz would send them at the wrong one.
+	ref := "origin/" + base
+	tip, found, err := timer.RevTime(ctx, m.Root(), ref)
+	if err != nil {
+		return nil
+	}
+	if !found {
+		return &preflightAdvisorBase{Ref: ref}
+	}
+	return &preflightAdvisorBase{Ref: ref, Tip: tip.Format(time.RFC3339)}
+}
+
+// preflightAdvisorBaseLine states what the advisors measured against, and how old it is.
+//
+// The age is computed here rather than carried, so it describes when the report is READ.
+// An unparsable Tip degrades to naming the ref: the ref alone is still true, and a
+// malformed date is not worth losing the rest of the line over.
+func preflightAdvisorBaseLine(b *preflightAdvisorBase) string {
+	if b == nil {
+		return ""
+	}
+	refresh := "`git fetch origin " + strings.TrimPrefix(b.Ref, "origin/") + "` brings it forward"
+	if b.Tip == "" {
+		return fmt.Sprintf("BASE: %s is not in this clone, so the advisors below had nothing to "+
+			"compare against; %s", b.Ref, refresh)
+	}
+	tip, err := time.Parse(time.RFC3339, b.Tip)
+	if err != nil {
+		return fmt.Sprintf("BASE: %s, as this clone has it - a local run stays off the network; %s", b.Ref, refresh)
+	}
+	return fmt.Sprintf("BASE: %s, tip %s old - a local run stays off the network, so anything "+
+		"merged since is outside what the advisors saw; %s",
+		b.Ref, preflightAge(time.Since(tip)), refresh)
+}
+
+// preflightAge renders a duration at one unit of precision. A reader deciding whether to
+// fetch needs the order of magnitude ("3 days"), and "3 days 4 hours 11 minutes" buries it.
+func preflightAge(d time.Duration) string {
+	switch {
+	case d < time.Minute:
+		return "seconds"
+	case d < time.Hour:
+		return fmt.Sprintf("%d minute%s", int(d.Minutes()), pluralSuffix(int(d.Minutes()), "", "s"))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%d hour%s", int(d.Hours()), pluralSuffix(int(d.Hours()), "", "s"))
+	default:
+		days := int(d.Hours() / 24)
+		return fmt.Sprintf("%d day%s", days, pluralSuffix(days, "", "s"))
+	}
+}
+
+func preflightAdvisorLines(sections []adviceSection, failed []string, base *preflightAdvisorBase) []string {
+	// Prepended to whichever headline follows, including "nothing to report": a clean set
+	// measured against a ref from last week is the case where the caveat matters MOST, and
+	// hanging it off a finding count would drop it exactly there.
+	var out []string
+	if line := preflightAdvisorBaseLine(base); line != "" {
+		out = append(out, line)
+	}
+	if len(sections) == 0 && len(failed) == 0 {
+		return append(out, "ADVISORS: nothing to report")
+	}
+	// An empty Body is a RETRACTION - that advisor ran and found nothing - so it is not a
+	// finding, and counting sections rather than findings reported ten of them where there
+	// was one, each rendered as a title with nothing underneath. A reader who learns the
+	// headline overstates by an order of magnitude stops reading the section.
+	var found []adviceSection
+	var clear []string
 	for _, s := range sections {
-		out = append(out, "      "+s.Title)
-		body := strings.TrimRight(s.Body, "\n")
-		if body == "" {
-			// Split would answer [""] and emit a line of nothing but indentation.
+		if strings.TrimRight(s.Body, "\n") == "" {
+			clear = append(clear, s.Name)
 			continue
 		}
-		for _, line := range strings.Split(body, "\n") {
+		found = append(found, s)
+	}
+	out = append(out, fmt.Sprintf("ADVISORS: %d finding%s", len(found), pluralSuffix(len(found), "", "s")))
+	for _, s := range found {
+		out = append(out, "      "+s.Title)
+		for _, line := range strings.Split(strings.TrimRight(s.Body, "\n"), "\n") {
 			out = append(out, "        "+line)
 		}
+	}
+	// Named, not just counted, and kept apart from the notes below: "ran and found nothing"
+	// and "could not run" are the two ways a section goes quiet, and only one of them is
+	// news about the change.
+	if len(clear) > 0 {
+		out = append(out, fmt.Sprintf("      %d ran and found nothing: %s",
+			len(clear), strings.Join(clear, ", ")))
 	}
 	// Named rather than counted: which advisor went quiet is what a reader needs to decide
 	// whether the silence above it means anything. Printed verbatim - each note already

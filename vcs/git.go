@@ -351,6 +351,27 @@ func (v gitVCS) Metadata(ctx context.Context, dir string) (types.VCSMeta, error)
 	}, nil
 }
 
+// RevTime reads rev's commit date with `git log -1 --format=%ct`, which prints a Unix
+// timestamp and so needs no layout guess the way Metadata's %ci would.
+//
+// A rev git cannot resolve exits non-zero, so the probe's error is discarded the way
+// Metadata discards its optional reads: asking about `origin/main` in a clone that has
+// never fetched it is how a fresh checkout legitimately answers, and reporting that as a
+// failure would make the caller unable to tell "not here" from "the probe broke". The one
+// error left is a %ct that did not parse, which means git answered something this code
+// does not understand.
+func (v gitVCS) RevTime(ctx context.Context, dir, rev string) (time.Time, bool, error) {
+	out, _ := vcsOutput(ctx, dir, "git", "log", "-1", "--format=%ct", rev, "--")
+	if out == "" {
+		return time.Time{}, false, nil
+	}
+	secs, err := strconv.ParseInt(out, 10, 64)
+	if err != nil {
+		return time.Time{}, false, fmt.Errorf("git log %s: parse %q: %w", rev, out, err)
+	}
+	return time.Unix(secs, 0), true, nil
+}
+
 // Dirty reports whether the working tree (optionally scoped to paths) has
 // uncommitted changes, via `git status --porcelain`. Non-empty output = dirty.
 func (v gitVCS) Dirty(ctx context.Context, dir string, paths []string) (bool, error) {

@@ -88,7 +88,9 @@ export fun env(name: str) > str {
 // it runs on a laptop that may be offline, and under --watch it re-fires on every save, so
 // a network round trip and a write to refs/remotes/ are both wrong there - a report is not
 // allowed to change the repository it is reporting on. It reads whatever origin/<base> the
-// clone already has, which may be days old; staleBaseNote is how an advisor says so.
+// clone already has, which may be days old. Saying so is the DRIVER's job, not an advisor's:
+// the caveat is identical under every section, so `magus diff --cost` states the base and its
+// age once for the whole set (preflightAdvisorBaseLine) rather than ten times.
 //
 // refspec selects the explicit "+refs/heads/<base>:refs/remotes/origin/<base>" form and
 // throws when it fails. A bare `git fetch origin <base>` writes FETCH_HEAD and updates
@@ -106,25 +108,6 @@ export fun fetchBase(base: str, refspec: bool) > void !> str {
         "+refs/heads/" + base + ":refs/remotes/origin/" + base], dir: ".",
         opts: {"allow_failure": true});
     if (!fetched.ok) { throw "advice: git fetch " + base + ": " + fetched.stderr; }
-}
-
-// staleBaseText is the disclaimer itself. Pure over the base, so its wording is pinned by
-// a test rather than by an environment this file would have to mutate to observe - the
-// same split localFallback makes, for the same reason.
-export fun staleBaseText(base: str) > str {
-    return "\n_Compared against `origin/" + base + "`, which this run did not fetch: a "
-        + "local run stays off the network. `git fetch origin " + base + "` refreshes it._\n";
-}
-
-// staleBaseNote is the line an advisor appends to its section when it compared against a
-// base that nothing refreshed. Empty in CI, where fetchBase has just fetched.
-//
-// Saying nothing would be the lie. A local finding derived from a week-old origin/main is
-// not wrong - it is an answer about a week-old main - and only the reader knows whether
-// that distinction matters to what they are about to do.
-export fun staleBaseNote(base: str) > str {
-    if (!collecting()) { return ""; }
-    return staleBaseText(base);
 }
 
 export fun beginMarker(name: str) > str { return "<!-- magus:advice:" + name + ":begin -->"; }
@@ -637,26 +620,6 @@ test "local mode invents nothing beyond those three" {
         message: "a credential is never conjured for a local run");
     assert\equal(localFallback("FIX_LABEL", base: "main"), want: "",
         message: "consent for a writer is not something a local default can give");
-}
-
-test "the stale-base note names the ref and the way to refresh it" {
-    final note = staleBaseText("main");
-    std\assert(note.indexOf("origin/main") != null,
-        message: "names the ref the finding was actually measured against");
-    std\assert(note.indexOf("git fetch origin main") != null,
-        message: "and the command that makes it current, so the reader is not left guessing");
-}
-
-test "a CI run has no staleness to disclaim" {
-    // The test runner leaves the mode variable unset, which IS CI mode, and there
-    // fetchBase has just fetched. An inverted gate here would hang a "this run did not
-    // fetch" line on every pull request comment magus writes.
-    //
-    // The local branch is NOT reachable from here: collecting() reads os\env, and
-    // os\with_env deliberately does not touch this process's own environment, so nothing
-    // in-file can put the run into local mode. That half is pinned in Go instead, by
-    // TestLocalModeReadsAStaleBaseWithoutFetching, which sets the variable for real.
-    assert\equal(staleBaseNote("main"), want: "", message: "CI refreshed the ref itself");
 }
 
 test "the local-mode variables are spelled as the driver spells them" {

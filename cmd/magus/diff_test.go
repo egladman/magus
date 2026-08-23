@@ -219,8 +219,20 @@ func preflightFixture() diffPreflight {
 		},
 		Advisors: []adviceSection{
 			{Name: "public-surface", Title: "A public symbol changed", Body: "types.Diff is exported.\nBump the minor."},
+			// A retraction sits in the fixture because every real run has several: it must not
+			// read as a finding, and it must not read as an advisor that failed either.
+			{Name: "retracted", Title: "Nothing to retract"},
 		},
-		AdvisorNotes: []string{"could not run: coverage: no profile loaded"},
+		// A real advisor filename, in the shape collectAdvice stamps. An invented one
+		// ("coverage") read as evidence that a coverage advisor exists; none does, and a
+		// planning pass spent a work item on teaching it to find a profile.
+		AdvisorNotes: []string{"could not run: doctor.buzz: main() returned 1"},
+		// Relative to now, not a fixed date: the rendered age is computed at read time, so a
+		// literal tip would make the expected line drift by a day every day.
+		AdvisorBase: &preflightAdvisorBase{
+			Ref: "origin/main",
+			Tip: time.Now().Add(-50 * time.Hour).Format(time.RFC3339),
+		},
 		Anchors: []anchorHit{
 			{Note: "cache-invalidation-pairs", Kind: "file", Target: "internal/cache/cache.go"},
 			{Note: "secret-value-type", Kind: "symbol", Target: "m types/Secret#", Drift: "drifted-anchor"},
@@ -257,11 +269,13 @@ func TestPreflightRendersEverySection(t *testing.T) {
 		"      root ci ~3m20s (18 runs), 40% cache hits",
 		"      docs test ~1m0s (1 run)",
 		"",
+		"BASE: origin/main, tip 2 days old - a local run stays off the network, so anything merged since is outside what the advisors saw; `git fetch origin main` brings it forward",
 		"ADVISORS: 1 finding",
 		"      A public symbol changed",
 		"        types.Diff is exported.",
 		"        Bump the minor.",
-		"      could not run: coverage: no profile loaded",
+		"      1 ran and found nothing: retracted",
+		"      could not run: doctor.buzz: main() returned 1",
 		"",
 		"ANCHORS: 2 notes anchored to what you changed",
 		"      note cache-invalidation-pairs anchors file:internal/cache/cache.go",
@@ -309,6 +323,72 @@ func TestPreflightEmptyFormsSayNobodyLooked(t *testing.T) {
 
 	// The one number that must never appear: a reach nobody has ever timed is not free.
 	assert.NotContains(t, strings.Join(lines, "\n"), "~0s")
+}
+
+// TestPreflightCountsFindingsNotSections pins the headline against the retraction shape every
+// real run produces: eleven advisors publish, one has something to say, and ten publish an
+// empty body to withdraw whatever they said last time.
+func TestPreflightCountsFindingsNotSections(t *testing.T) {
+	lines := preflightAdvisorLines([]adviceSection{
+		{Name: "unclaimed", Title: "Files no project claims"},
+		{Name: "conformance", Title: "A target name diverges", Body: "rename it\n"},
+		{Name: "skip-cache", Title: "A target opted out of the cache"},
+	}, nil, nil)
+
+	assert.Equal(t, []string{
+		"ADVISORS: 1 finding",
+		"      A target name diverges",
+		"        rename it",
+		"      2 ran and found nothing: unclaimed, skip-cache",
+	}, lines)
+}
+
+// TestPreflightBaseSeparatesOldFromAbsent pins the distinction the line exists for.
+//
+// A base nobody fetched and a base that is merely stale produce the same silent advisors, and
+// only one of them is a finding about the code. Collapsing them would make an unfetched clone
+// read as a clean review.
+func TestPreflightBaseSeparatesOldFromAbsent(t *testing.T) {
+	stale := preflightAdvisorBaseLine(&preflightAdvisorBase{
+		Ref: "origin/main",
+		Tip: time.Now().Add(-9 * 24 * time.Hour).Format(time.RFC3339),
+	})
+	assert.Contains(t, stale, "tip 9 days old")
+	assert.Contains(t, stale, "`git fetch origin main`")
+
+	absent := preflightAdvisorBaseLine(&preflightAdvisorBase{Ref: "origin/main"})
+	assert.Contains(t, absent, "is not in this clone")
+	assert.NotContains(t, absent, "tip ")
+
+	// Nil is neither: a backend that cannot date a revision has not measured the base, and
+	// inventing "fresh" for it is the one answer that would mislead.
+	assert.Empty(t, preflightAdvisorBaseLine(nil))
+}
+
+// TestPreflightBaseQualifiesAnEmptyAdvisorSet is the case the caveat matters most in: no
+// findings against a week-old base is not the same news as no findings against today's.
+func TestPreflightBaseQualifiesAnEmptyAdvisorSet(t *testing.T) {
+	lines := preflightAdvisorLines(nil, nil, &preflightAdvisorBase{Ref: "origin/main"})
+	require.Len(t, lines, 2)
+	assert.Contains(t, lines[0], "origin/main")
+	assert.Equal(t, "ADVISORS: nothing to report", lines[1])
+}
+
+// TestPreflightAgeKeepsOneUnit pins the rounding. A reader is deciding whether to fetch, and
+// the order of magnitude is the whole decision.
+func TestPreflightAgeKeepsOneUnit(t *testing.T) {
+	for _, tc := range []struct {
+		d    time.Duration
+		want string
+	}{
+		{30 * time.Second, "seconds"},
+		{time.Minute, "1 minute"},
+		{90 * time.Minute, "1 hour"},
+		{25 * time.Hour, "1 day"},
+		{50 * time.Hour, "2 days"},
+	} {
+		assert.Equal(t, tc.want, preflightAge(tc.d), tc.d.String())
+	}
 }
 
 // TestPreflightListsReportWhatTheyLeftOff guards the bound on every section list. A reach of

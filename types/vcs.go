@@ -321,6 +321,24 @@ type DefaultRefReporter interface {
 	DefaultRef(ctx context.Context, dir string) (string, error)
 }
 
+// RevTimeReporter is an optional capability (sibling of RemoteReporter) for VCSDriver
+// implementations that can report when a named revision was committed.
+//
+// Separate from Metadata's CommitDate, which describes the checked-out commit and is
+// opaque display text. This one answers it for an ARBITRARY rev and returns a real
+// time.Time, because the caller does arithmetic on it: how far behind a comparison base
+// has fallen is a number, not a banner string.
+type RevTimeReporter interface {
+	// RevTime returns the commit date of rev in the repository containing dir.
+	//
+	// found is false when rev names nothing in this clone, which is an ordinary
+	// state rather than an error - a base branch never fetched into a fresh clone
+	// resolves to nothing, and a caller reporting staleness has to tell "old" from
+	// "not here". err is reserved for a backend that answered something it cannot
+	// itself read back.
+	RevTime(ctx context.Context, dir, rev string) (t time.Time, found bool, err error)
+}
+
 // TrackedFileReporter is an optional capability (sibling of RemoteReporter) for
 // VCSDriver implementations that can report which paths the VCS actually tracks.
 //

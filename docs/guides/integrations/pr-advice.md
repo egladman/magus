@@ -13,6 +13,9 @@ finding stops being true.
 
 None of it blocks a merge. The checks do that.
 
+The same advisors run at the keyboard - `magus diff --cost`, before you push. See
+[Before the push](#before-the-push-the-same-advisors-locally).
+
 ## Turning it off
 
 Every advisor is an input, and every input defaults to `true`. Set the one you do
@@ -55,6 +58,48 @@ back on the next push.
 
 The label is visible on the pull request, which is the point: the next reader can see
 what was muted and by whom.
+
+## Before the push: the same advisors, locally
+
+The advisors are not pull-request-only. `magus diff --cost` runs the read-only ones
+against your working tree, in process, before you push:
+
+```sh
+magus diff --cost
+```
+
+Same scripts, same graph, same wording - the difference is where the answers go. In CI
+they are composed into one comment; locally they are a section of the preflight report,
+where acting on a finding still costs one edit rather than a review round trip.
+
+Four things differ, all deliberate:
+
+**Labels do not apply.** `magus:silence` is a fact about a pull request, and a local run
+has none. Nothing is silenced at the keyboard, on purpose: you asked for the report, so
+you want everything in it. Silencing is a decision to record where the next reader can
+see it, which is the pull request.
+
+**The base is whatever your clone has.** A local run never fetches. `magus diff` is a
+read-only report, it may run offline, and under `--watch` it re-fires on every save -
+none of which may write `refs/remotes/`. So it compares against the `origin/<base>` in
+your clone as it stands, and the report says how old that is:
+
+```text
+BASE: origin/main, tip 6 days old - a local run stays off the network, so anything
+merged since is outside what the advisors saw; `git fetch origin main` brings it forward
+```
+
+This is the one place local and CI legitimately disagree. CI fetches the base before it
+compares, so a finding that appears in the comment and not on your machine usually means
+your `origin/main` is behind, not that the advisor changed its mind. Fetch and rerun
+before you go looking for a bug.
+
+**Committed work only.** The advisors compare revisions (`git diff <base>...HEAD`), so a
+local run measures your commits, not your uncommitted edits. The rest of `magus diff`
+reads the working tree; the advisor section does not.
+
+**`first-contribution` does not run.** It asks the forge who opened the pull request,
+which is not a question a working tree can answer.
 
 ## What each advisor says
 
