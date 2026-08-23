@@ -861,6 +861,10 @@ function revealHidden() {
   // The revealed nodes have positions but have not been laid out against each other since before
   // they were hidden, and the layout does not run on its own any more.
   sim?.alpha(0.9).restart();
+  // Frame it when that finishes. Going from ten nodes to two thousand changes the extent by orders
+  // of magnitude, so this is the single biggest re-framing the surface ever does - and the one the
+  // boot-time reveal cannot cover, since its own settle fit fired long before.
+  armSettleFit();
 }
 
 // syncSimMembership scopes the SIMULATION to the visible nodes.
@@ -2295,8 +2299,9 @@ function glideTo(to: ZoomTransform, ms = 340) {
 // Frames at which the load-time reveal re-checks the framing of a FORCE layout. A cold force
 // layout keeps spreading for seconds, so a single early fit frames a cloud that then grows
 // straight back out of view - which is how a 2373-node graph came to land cropped to a corner.
-// The first beat is quick feedback, the last one catches the settled extent. A DAG layout needs
-// none of this: layoutLayered places every node in one pass, so its extent is final at once.
+// These are FEEDBACK, keeping the camera roughly on the graph while it expands; the final framing
+// is armSettleFit's, off the simulation's own "end". A DAG layout needs neither: layoutLayered
+// places every node in one pass, so its extent is final at once.
 const REVEAL_BEATS_MS = [300, 750, 1400];
 
 // revealWholeGraph frames the graph on load so it lands centered instead of cropped. Radial
@@ -2332,7 +2337,32 @@ function revealWholeGraph() {
         fitView(null);
       }, at);
     }
+    armSettleFit();
   });
+}
+
+// armSettleFit takes the FINAL framing off the clock and hangs it on the simulation actually
+// stopping. d3 fires "end" the tick alpha drops below alphaMin, which is the only moment anyone can
+// honestly call the extent final.
+//
+// The beats above cannot know that moment: they are wall-clock guesses, and the last one at 1400ms
+// was calibrated against a layout whose repulsion stopped at 250 units. With charge reaching the
+// whole graph it keeps spreading longer - alphaDecay 0.06 against alphaMin 0.001 needs
+// ln(0.001)/ln(0.94) ~ 112 ticks, about 1.86s - so that beat now frames a graph still on its way
+// outward and leaves the cold view cropped. Rather than move a magic number that would go stale
+// again the next time a force changes, ask the simulation.
+//
+// ONE SHOT, unhooked as it fires: "end" also fires after a drag settles and after every filter
+// that restarts the layout, and refitting the camera then would yank the view out from under
+// whoever caused it.
+function armSettleFit(): void {
+  if (!sim) return;
+  const onSettled = (): void => {
+    sim?.on("end", null);
+    if (cameraOwnedByOperator || isDagMode() || activeView || focusId || query) return;
+    fitView(null);
+  };
+  sim.on("end", onSettled);
 }
 
 // whenCanvasSized resolves once the canvas has a non-zero box, or gives up after ~20s. Distinct
