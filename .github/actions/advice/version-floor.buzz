@@ -60,8 +60,8 @@ fun main() > void !> any {
     }
 
     advice\fetchBase(base, refspec: false);
-    final diff = proc\exec("git", args: ["diff", "origin/" + base + "..." + head, "--", "magus.yaml"],
-        dir: ".", opts: {"allow_failure": true}).stdout;
+    final diff = proc\exec("git", args: ["diff", advice\diffRange(base, head: head), "--", "magus.yaml"],
+        dir: ".", opts: {"quiet": true, "allow_failure": true}).stdout;
     final floor = raised(diff);
     if (floor == "") {
         // Retract: a floor raise that was reverted must not leave the note behind.

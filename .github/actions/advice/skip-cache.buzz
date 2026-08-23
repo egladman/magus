@@ -64,8 +64,8 @@ fun main() > void !> any {
     }
 
     advice\fetchBase(base, refspec: false);
-    final diff = proc\exec("git", args: ["diff", "origin/" + base + "..." + head, "--", "*.buzz"],
-        dir: ".", opts: {"allow_failure": true}).stdout;
+    final diff = proc\exec("git", args: ["diff", advice\diffRange(base, head: head), "--", "*.buzz"],
+        dir: ".", opts: {"quiet": true, "allow_failure": true}).stdout;
     final entries = optedOut(diff);
     if (entries.len() == 0) {
         advice\publish(repo, pr: pr, name: section, title: "A target opted out of the cache", body: "");

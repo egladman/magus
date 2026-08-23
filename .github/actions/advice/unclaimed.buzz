@@ -18,8 +18,8 @@ final section = "unclaimed";
 
 fun changed(base: str, head: str) > [str] !> any {
     advice\fetchBase(base, refspec: false);
-    final res = proc\exec("git", args: ["diff", "--name-only", "origin/" + base + "..." + head],
-        dir: ".", opts: {"allow_failure": true});
+    final res = proc\exec("git", args: ["diff", "--name-only", advice\diffRange(base, head: head)],
+        dir: ".", opts: {"quiet": true, "allow_failure": true});
     var paths = mut [];
     foreach (line in res.stdout.split("\n")) {
         if (line != "") { paths.append(line); }

@@ -40,7 +40,7 @@ fun conflicted(base: str, head: str) > [str] !> str {
     // author as their file.
     final res = proc\exec("git", args: ["-c", "core.quotePath=false", "merge-tree",
         "--write-tree", "--name-only", "--no-messages", "origin/" + base, head], dir: ".",
-        opts: {"allow_failure": true});
+        opts: {"quiet": true, "allow_failure": true});
     if (res.code == 0) { return mut [<str>]; }
     if (res.code != 1) { throw "merge-conflict-advice: git merge-tree: " + res.stderr; }
 

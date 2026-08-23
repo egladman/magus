@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -60,6 +61,17 @@ const retractingAdvisor = `import "advice";
 
 fun main() > void !> any {
     advice\publish("", pr: "", name: "quiet", title: "Nothing to report", body: "");
+}
+`
+
+// rangeAdvisor publishes the rev spec diffRange handed it. Only the driver can put an
+// advisor into local mode (advice.buzz decides on os\env), so the local half of the range
+// contract is only reachable from here.
+const rangeAdvisor = `import "advice";
+
+fun main() > void !> any {
+    advice\publish("", pr: "", name: "range", title: "Range",
+        body: advice\diffRange(advice\env("PR_BASE"), head: advice\env("PR_HEAD_SHA")));
 }
 `
 
@@ -198,6 +210,39 @@ func TestCollectAdviceKeepsWarningsFromAnAdvisorThatFailed(t *testing.T) {
 	last := notes[len(notes)-1]
 	if !strings.HasPrefix(last, "could not run: ") {
 		t.Errorf("last note = %q, want the could-not-run stamp last, after any warnings", last)
+	}
+}
+
+// TestLocalModeDiffsTheWorkingTree pins the half of the range contract advice.buzz cannot
+// reach: only a driver that really sets the mode variable puts an advisor into local mode.
+//
+// The assertion is the REV the advisors are handed, not the diff it produces, because the
+// behaviour being bought is git's: `git diff <commit>` with no second rev compares the
+// WORKING TREE against that commit, where `base...head` stops at the last commit. Choosing
+// the merge base is this code's decision and the only part worth pinning.
+func TestLocalModeDiffsTheWorkingTree(t *testing.T) {
+	// The advisors run git against the process working directory, which under `go test` is
+	// this package inside magus's own repository - a real clone with a real history.
+	out, err := exec.Command("git", "merge-base", "origin/main", "HEAD").Output()
+	if err != nil {
+		t.Skip("origin/main is not in this clone, which is the fallback path below, not this one")
+	}
+	want := strings.TrimSpace(string(out))
+
+	dir := stubAdviceDir(t, map[string]string{"range.buzz": rangeAdvisor})
+	sections, notes, err := collectAdvice(context.Background(), dir, []string{"range.buzz"}, "main")
+	if err != nil {
+		t.Fatalf("collectAdvice: %v", err)
+	}
+	if len(notes) != 0 {
+		t.Fatalf("notes = %v, want none", notes)
+	}
+	if len(sections) != 1 {
+		t.Fatalf("sections = %+v, want exactly one", sections)
+	}
+	if got := sections[0].Body; got != want {
+		t.Errorf("range = %q, want the merge base %q: a three-dot range would stop at the "+
+			"last commit and report the uncommitted change as absent", got, want)
 	}
 }
 

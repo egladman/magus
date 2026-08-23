@@ -76,8 +76,8 @@ fun main() > void !> any {
     }
 
     advice\fetchBase(base, refspec: false);
-    final diff = proc\exec("git", args: ["diff", "-U0", "origin/" + base + "..." + head, "--", "*.buzz"],
-        dir: ".", opts: {"allow_failure": true}).stdout;
+    final diff = proc\exec("git", args: ["diff", "-U0", advice\diffRange(base, head: head), "--", "*.buzz"],
+        dir: ".", opts: {"quiet": true, "allow_failure": true}).stdout;
     final names = added(diff);
     if (names.len() == 0) {
         advice\publish(repo, pr: pr, name: section, title: "New targets without declared outputs", body: "");

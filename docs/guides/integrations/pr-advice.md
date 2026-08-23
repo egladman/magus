@@ -94,9 +94,12 @@ compares, so a finding that appears in the comment and not on your machine usual
 your `origin/main` is behind, not that the advisor changed its mind. Fetch and rerun
 before you go looking for a bug.
 
-**Committed work only.** The advisors compare revisions (`git diff <base>...HEAD`), so a
-local run measures your commits, not your uncommitted edits. The rest of `magus diff`
-reads the working tree; the advisor section does not.
+**Uncommitted edits count.** CI diffs the pull request's commits, `base...head`. A local
+run diffs the working tree against the merge base, so the change it describes is the one
+you are about to commit rather than the one you already did. Committed work is still
+included - the merge base is the same starting point either way. Untracked files are
+outside both: `git diff` reports tracked paths, so a brand new file no project claims is
+invisible until you `git add` it.
 
 **`first-contribution` does not run.** It asks the forge who opened the pull request,
 which is not a question a working tree can answer.

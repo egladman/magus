@@ -110,7 +110,38 @@ export fun fetchBase(base: str, refspec: bool) > void !> str {
     if (!fetched.ok) { throw "advice: git fetch " + base + ": " + fetched.stderr; }
 }
 
-export fun beginMarker(name: str) > str { return "<!-- magus:advice:" + name + ":begin -->"; }
+// diffRange is the revision argument an advisor's `git diff` takes, and it is the one place
+// local mode and CI deliberately MEASURE different things rather than route the same answer
+// somewhere else.
+//
+// CI gets the three-dot form. A pull request is a set of commits, and `base...head` is the
+// diff from where the branch left the base - what a reviewer of that pull request reads, and
+// unaffected by whatever else landed on the base meanwhile.
+//
+// Local gets the merge base on its own, which `git diff` reads as "compare the WORKING TREE
+// against this commit". At the keyboard the change under review is the one you are about to
+// commit; advice that waits for the commit has missed the moment acting on it was cheap.
+// Nothing is lost by it - the merge base is the same point the three-dot form starts from,
+// so local strictly ADDS the uncommitted delta to what CI would have said.
+//
+// Untracked files stay outside both. `git diff` reports tracked paths, and unioning in
+// `ls-files --others` would change what the three name-only advisors count while doing
+// nothing for the three that parse a patch - a separate decision, per advisor.
+export fun diffRange(base: str, head: str) > str !> any {
+    if (!collecting()) { return "origin/" + base + "..." + head; }
+    final merged = proc\exec("git", args: ["merge-base", "origin/" + base, head],
+        dir: ".", opts: {"quiet": true, "allow_failure": true});
+    // A base this clone cannot resolve is ordinary locally - nothing ever fetched it - and
+    // the three-dot form is what to hand back, not an error. It then fails inside the
+    // advisor's own git call exactly as it always has, every caller already tolerates that
+    // failure, and `magus diff --cost` prints a BASE line saying the ref is missing. One
+    // failure, one place, one explanation.
+    if (!merged.ok) { return "origin/" + base + "..." + head; }
+    return merged.stdout.trim();
+}
+
+export fun beginMarker(name: str) > str {
+ return "<!-- magus:advice:" + name + ":begin -->"; }
 export fun endMarker(name: str) > str { return "<!-- magus:advice:" + name + ":end -->"; }
 
 // The preface. A reader landing on this comment in someone else's repository has no idea
@@ -620,6 +651,15 @@ test "local mode invents nothing beyond those three" {
         message: "a credential is never conjured for a local run");
     assert\equal(localFallback("FIX_LABEL", base: "main"), want: "",
         message: "consent for a writer is not something a local default can give");
+}
+
+test "CI diffs the pull request's commits" {
+    // The runner leaves the mode variable unset, which IS CI mode. The local branch is not
+    // reachable from here - collecting() reads os\env and os\with_env does not touch this
+    // process's own environment - so the merge-base half is pinned in Go instead, by
+    // TestLocalModeDiffsTheWorkingTree.
+    assert\equal(diffRange("main", head: "abc123"), want: "origin/main...abc123",
+        message: "three-dot: what a reviewer of those commits reads");
 }
 
 test "the local-mode variables are spelled as the driver spells them" {
