@@ -220,22 +220,34 @@ magus-change-summary skill) - review time and handoff time read the same object.
 | Delegation | Parent | Checkpoint | Goal and acceptance criteria | Owned paths | Forbidden paths | Depends on | Tier | Validation | State |
 |---|---|---|---|---|---|---|---|---|---|
 
-Every worker prompt must include its row, relevant graph evidence, and the global
-spawn rule. Require the worker to preserve unrelated changes, stay inside owned
-paths, avoid generated outputs, run only its assigned Magus target, and return
-changed paths, validation evidence, descendants it created, and unresolved risks.
+Every worker prompt must include its row, its DELEGATION ID, relevant graph
+evidence, and the global spawn rule. Require the worker to export
+`MAGUS_DELEGATION=<its id>` before it works{{if .Full}} - that environment channel is
+what tells the agent guard whose declared boundary to grade a write against, and a
+worker that never exports it is graded as an editor magus cannot attribute{{else}} -
+the guard grades its writes only when that is set{{end}}. Require it to preserve
+unrelated changes, stay inside owned paths, avoid generated outputs, run only its
+assigned Magus target, and return changed paths, validation evidence, descendants
+it created, and unresolved risks.
 
-The checkpoint you recorded is what you HANDED the delegation; a worker's first
-required act is reporting the base it actually LANDED ON, because hosts that
-isolate workers in per-worker trees routinely branch them from an older
-revision than the tree you partitioned{{if .Full}} - and every diff-since-checkpoint
-in Integrate and verify silently lies when the recorded base is not the real
-one{{end}}. When the bases differ, either respawn from the right revision or have
-the worker materialize the files it builds on from the intended revision
-(`git show <rev>:<path> > <path>`, verifying each blob against
-`git rev-parse <rev>:<path>`) and record the intended revision as the row's
-checkpoint{{if .Full}}. A worker that edits stale content without noticing
-reports clean validation against a tree nobody will ever merge{{end}}.
+The checkpoint you recorded is what you HANDED the delegation; the base it
+actually LANDED ON is a separate fact, because hosts that isolate workers in
+per-worker trees routinely branch them from an older revision than the tree you
+partitioned{{if .Full}} - and every diff-since-checkpoint in Integrate and verify
+silently lies when the recorded base is not the real one{{end}}. A worker's first
+required act is registering it: run `magus vcs checkpoint -o name` in ITS OWN tree
+and call `magus_ledger op=register id=<its row> reported_base=<that token>`. The
+answer is a verdict recorded on the row - match, revision-match (same revision,
+different uncommitted patch), diverged, or unknown - plus a reading of it that
+names both tokens and the next step. It is a FACT and not a gate: every verdict
+registers, diverged included{{if .Full}}, because refusing would leave the orchestrator
+with no record that a worker went to the wrong base, which is the one case the
+record exists for{{end}}. Acting on it is still yours: respawn from the right
+revision, or have the worker materialize the files it builds on from the intended
+one (`git show <rev>:<path> > <path>`, verifying each blob against
+`git rev-parse <rev>:<path>`) and re-put the row's checkpoint{{if .Full}}. A worker
+that edits stale content without noticing reports clean validation against a tree
+nobody will ever merge{{end}}.
 Also name any fact that will READ as drift to the worker's snapshot - a project
 deleted this session, a rename, an index regenerated underneath it - never a
 generic "expect drift" line{{if .Full}}, which only primes the worker to dismiss real
@@ -262,9 +274,24 @@ verdicts - magus transitions nothing, so a row that has gone quiet is a delegati
 decide is possibly dead, and a reported overlap is a pair you either intended or
 must repartition.
 
-Owned and Forbidden paths are prompt text, not an enforced boundary - step 1 of
-Integrate and verify is where it is actually checked, against that checkpoint. A
-read-only delegation carries an abbreviated row: no Owned paths, no Forbidden paths. Every
+The ledger RECORDS and the agent guard GRADES. A worker that exported
+`MAGUS_DELEGATION` has each file write judged against these declarations as it
+happens: inside its own owned paths passes; inside its forbidden paths, or inside
+another live delegation's owned paths, is DENIED, and the denial names the owning
+delegation. A writer magus cannot attribute - a person in their own checkout, or a
+worker that never enrolled - is ADVISED and never blocked, and every uncertainty
+fails open the same way{{if .Full}}: no ledger, no live delegations, a ledger file
+that will not parse{{end}}. It is a seatbelt for harnesses that opt in, not a
+sandbox. So a denied worker
+COORDINATES and never works around: ask the orchestrator to re-partition, or have
+the owning delegation release the path with the `owned_paths` put above once it has
+finished editing, then retry{{if .Full}}. Editing anyway from an un-enrolled shell, or
+dropping the delegation id to buy advisory treatment, turns a denial you could have
+acted on into a collision nobody sees until integration{{end}}. Step 1 of Integrate
+and verify checks the same boundary against the checkpoint, and that is the half
+that does not depend on a worker cooperating.
+
+A read-only delegation carries an abbreviated row: no Owned paths, no Forbidden paths. Every
 row ends in pass, fail, or NO-RETURN, and the root writes which{{if .Full}}: silence
 is not a pass, and a worker that dies, stalls, or is killed is a different state
 from one that failed its criteria{{else}}: silence is not a pass{{end}}.
@@ -297,6 +324,27 @@ state and adoption. It does not show an agent that is thinking without running a
 Magus process. Do not replace it with sleep loops, repeated `ps`, or a waiting
 agent.
 
+A blocked worker RAISES rather than stalling quietly. Piping the block to `magus
+notify --outcome waiting` (blocked on input) or `--outcome permission` (blocked on
+approval) opens a durable request in this repository; no other outcome opens one.
+`magus attention` lists what is open{{if .Full}}, keyed by repository identity rather
+than by checkout path, so a request raised inside a worker's own isolated tree is
+listed in yours{{end}}, and `magus attention ls -q` prints nothing and exits 1 on an
+empty queue, which is the form to test from a loop. Nothing closes a request by
+itself: the orchestrator, or any human, disposes it with `magus attention dispose
+<id> --reason "<why>"`{{if .Full}}. There is no expiry and no auto-dispose, because a
+request magus could answer on its own would not have needed a person{{end}}. A worker
+that raised one waits for the disposition instead of choosing for itself.
+
+`magus sessions` is how the root audits what a delegation actually RAN, as opposed
+to what it reported. Each session carries the delegation it was launched under -
+the same `MAGUS_DELEGATION` channel - along with the targets it finished and how
+they ended, and the store is keyed by repository identity, so a worker in its own
+worktree is still listed here{{if .Full}}. Attribution is cooperative: an empty
+delegation means the session claimed none, which is the ordinary answer for anything
+a person ran by hand, never an error{{end}}. `magus sessions --since 2h -o json` is the
+form that answers what the fleet has been doing.
+
 {{if .Full}}Course-correct at explicit checkpoints: after a child proposes new
 descendants, when a worker discovers a new API or generated-output dependency,
 when ownership drifts, when criteria repeatedly fail, and when status shows
@@ -321,7 +369,14 @@ As delegations finish:
 4. Regenerate declared outputs once after source work converges.
 5. Re-run `magus affected <target> --plan` over the actual diff. If its shape
    invalidates the original partition, stop parallel integration and reconcile.
-6. Run `magus affected ci` and evaluate the top-level acceptance criteria.
+6. Read the integrated changeset with `magus diff --cost` before landing it: what
+   the fleet's combined edit reaches, who else has been changing it, an estimate of
+   the rebuild from recorded run times, what the advisors say, and any note anchored
+   to a file it touched. Context, never a verdict{{if .Full}} - nothing gates on it and
+   the exit code is unchanged - and a section that is empty means nobody could
+   measure it, not that nothing was found{{else}}, and an empty section means nobody
+   could measure it rather than nothing found{{end}}.
+7. Run `magus affected ci` and evaluate the top-level acceptance criteria.
 
 {{if .Full}}Parallelism is an optimization, not the objective. Fewer
 well-isolated delegations are usually cheaper than wide fan-out followed by conflict

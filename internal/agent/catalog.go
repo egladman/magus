@@ -41,7 +41,12 @@ import (
 // cannot execute magus gets ROOT-DEFERRED validation up front.
 // 41: the vocabulary drops "unit" - a row of the delegation ledger is a
 // DELEGATION, in the skill, the ledger table, and the tools it names.
-const SkillVersion = 41
+// 42: the delegation runtime reaches the skills - magus-delegate-multi-agent
+// teaches ledger register, MAGUS_DELEGATION enrollment and the guard's
+// deny/advise split, attention events for a blocked worker, and `magus sessions`
+// as the audit of what a delegation ran; both it and magus-vcs-hygiene read
+// `magus diff --cost` before landing.
+const SkillVersion = 42
 
 const skillLicense = "GPL-3.0-or-later"
 
