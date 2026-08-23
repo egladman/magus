@@ -1323,6 +1323,22 @@ function draw() {
   // The highlight must never suppress the scope: a selection left over from an earlier click
   // would otherwise cancel the emphasis of every view and query run after it, so a chain the
   // result line reports would not be the thing drawn on the canvas.
+  // An INK BUDGET for edges. Per-edge alpha is the wrong unit on a dense graph: the reader sees
+  // accumulated ink, and 6050 edges at 0.14 each composite to a solid wall long before the tenth
+  // one overlaps. Scaling alpha down as the edge count rises keeps the TOTAL roughly constant, so
+  // overlap starts encoding something instead of destroying it - where many edges run together the
+  // bundle darkens and reads as a trunk, where few do the line stays faint. That is the standard
+  // treatment for a hairball (Gephi and Cytoscape both draw dense graphs this way), and it is the
+  // cheap half of edge bundling: the ink concentrates on the shared paths without routing them.
+  //
+  // Clamped at 1 so a small graph is untouched - below the reference count there is no overdraw to
+  // budget for. The floor is set by what a LONE edge has to be: at rest the base alpha is 0.3, so
+  // 0.25 puts a single unshared edge at 7.5% against the background - faint, but followable by eye
+  // from one end to the other, which is the whole job of drawing it. It also means about thirteen
+  // edges have to run together before the bundle saturates, so the darkening is reporting real
+  // sharing rather than the third or fourth crossing.
+  const EDGE_INK_REFERENCE = 800;
+  const edgeInk = Math.min(1, Math.max(0.25, EDGE_INK_REFERENCE / Math.max(1, graph.links.length)));
   const highlight = selected || hoverId;
   const near = neighbors(highlight);
   const lit = (id: string) => id === highlight || !!near?.has(id);
@@ -1390,7 +1406,8 @@ function draw() {
     // Everything non-incident keeps ONE color and only changes alpha. Dimming used to swap muted
     // for border at the same time as dropping alpha 5.5x, and the two compounded into a jolt.
     ctx.strokeStyle = incident ? th.accent : th.muted;
-    ctx.globalAlpha = incident || criticalEdge ? 1 : active ? th.edgeAlpha : th.edgeDimAlpha;
+    ctx.globalAlpha =
+      incident || criticalEdge ? 1 : (active ? th.edgeAlpha : th.edgeDimAlpha) * edgeInk;
     ctx.lineWidth = incident
       ? 1.6 / transform.k
       : criticalEdge
@@ -2265,7 +2282,11 @@ const REVEAL_BEATS_MS = [300, 750, 1400];
 // revealWholeGraph frames the graph on load so it lands centered instead of cropped. Radial
 // frames itself in applyRadialMode, and a projection is already its own subset.
 function revealWholeGraph() {
-  if (!projectionUnfolded || !graph?.nodes.length) return;
+  // A PROJECTION gets framed too. It used to be excluded on the grounds that it is already its own
+  // subset - true, and beside the point: a subset still has an extent, the forces still decide it,
+  // and it is now what every cold load opens on rather than a fallback for a graph too big to draw.
+  // Unframed, the ten project nodes landed in a corner of an otherwise empty canvas.
+  if (!graph?.nodes.length) return;
   // Only view/q/node name a SUBSET whose own framing must win. #data= and #src= say where the
   // graph came from, not what to look at, so treating them as directives left every
   // `magus graph open` link - and the whole targets flavor, which arrives that way - opening on
@@ -2340,7 +2361,12 @@ let pendingFitArmed = false;
 // Null when nothing in the set has a position yet. In a card mode the box measures the drawn
 // card rather than the dot radius, so a fit does not clip the labels it exists to make readable.
 function worldBox(ids: Set<string> | null): WorldBox | null {
-  const pts = graph.nodes.filter((n) => n.x != null && (!ids || ids.has(n.id)));
+  // PARKED nodes are excluded from the extent. They sit at PARKED_X (-1e6) precisely because they
+  // are not on screen, so counting them measures a box a million units wide: the fit answers by
+  // clamping to its minimum scale and translating by ~100,000, which puts the handful of nodes that
+  // ARE visible off the canvas and leaves it blank. Every framing goes through here, so the Fit
+  // button did this too on any projected graph - press it and the graph vanished.
+  const pts = graph.nodes.filter((n) => n.x != null && n.x !== PARKED_X && (!ids || ids.has(n.id)));
   if (!pts.length) return null;
   let minX = Infinity,
     minY = Infinity,
@@ -2362,7 +2388,9 @@ function worldBox(ids: Set<string> | null): WorldBox | null {
 // a graph that was just REPLACED has nothing on screen the eye was tracking, so animating from
 // the old camera reads as a move rather than as an arrival.
 function fitView(ids: Set<string> | null, glideMs?: number) {
-  const pts = graph.nodes.filter((n) => n.x != null && (!ids || ids.has(n.id)));
+  // Same parked-node exclusion worldBox applies below: this guard only asks whether there is
+  // anything to frame, and a parked node is not something to frame.
+  const pts = graph.nodes.filter((n) => n.x != null && n.x !== PARKED_X && (!ids || ids.has(n.id)));
   if (!pts.length || !zoomBehavior) return; // setupZoomDrag has not run yet
   if (canvas.clientWidth <= 0) {
     // Carry glideMs through the deferral. Dropping it turned frameNewGraph's deliberate SNAP back
