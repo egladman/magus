@@ -1711,6 +1711,33 @@ function draw() {
     }
     if (clash) continue;
     placedLabels.push({ x: lx, y: ly, w: lw });
+    // The SUBJECT gets the text colour; its neighbours get the muted one. Hovering reveals the whole
+    // one-hop neighbourhood at once, and drawing every one of those in th.text made the darkest
+    // thing on the canvas arrive as a cluster: measured on this graph, the resting view contains
+    // ZERO near-black pixels and a single hover produced 3,544 of them, every one #151515 - the
+    // label colour, not the edges and not the glow, which is where the eye reads "a lot of black".
+    // Muting the context restores the hierarchy the highlight is supposed to express: one thing is
+    // being pointed at, the rest are what it touches.
+    ctx.fillStyle = n.id === highlight ? th.text : th.muted;
+    // A HALO, not a reposition. The placement scan above only keeps labels off each OTHER; what a
+    // label actually lands on is edges, and at 6050 of them there is no free space to move it to -
+    // solving that by position means a constraint solver over every edge segment, per frame, in the
+    // one loop that already runs per node per frame.
+    //
+    // Stroking the glyphs in the background colour first knocks a small hole in whatever is behind
+    // them, so the text reads over lines wherever it happens to sit. This is the cartographic
+    // convention (Mapbox calls it a text halo; Gephi and Cytoscape both ship one) and it costs one
+    // extra stroke per drawn label rather than a solver.
+    //
+    // round joins so the halo does not grow spikes off the corners of letterforms, and it is drawn
+    // UNDER the fill so the glyph keeps its own weight.
+    ctx.save();
+    ctx.strokeStyle = th.bg;
+    ctx.lineWidth = 3 / transform.k;
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
+    ctx.strokeText(n.label, lx, n.y);
+    ctx.restore();
     ctx.fillText(n.label, lx, n.y);
   }
   ctx.restore();
