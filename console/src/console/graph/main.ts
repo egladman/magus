@@ -5092,12 +5092,24 @@ async function fetchLiveStatus() {
 // buildProjectionSet is willing to collapse. Shared by boot() and bootLive()
 // so the two boot paths cannot drift on this decision.
 function computeDefaultProjection(hasFragmentDirective: boolean) {
-  // Default view is the FULL graph: the whole workspace at a glance is the wow moment
-  // on load. The projects-only projection is kept only as a scale guard for very large
-  // graphs, where a cold force layout of many thousands of nodes would jank the reveal;
-  // there it collapses to project nodes with the "Show full graph" unfold still offered.
-  const PROJECTION_GUARD = 2500; // node count above which we collapse on load for perf
-  if (!hasFragmentDirective && graph && graph.nodes.length > PROJECTION_GUARD) {
+  // A cold load opens PROJECTED, not on the whole graph. The whole graph was the default on the
+  // argument that a workspace at a glance is the wow moment; what it actually renders past a few
+  // hundred nodes is a hairball, and the one thing a reader can do with a hairball is fail to read
+  // it. Every comparable tool declines to draw everything - Nx and Turborepo open on projects and
+  // expand on demand, Sourcegraph opens on nothing - and this graph already carries the way back
+  // out, the "Show full graph" unfold.
+  //
+  // The threshold was 2500, chosen as a PERFORMANCE guard against janking the reveal. That made it
+  // useless for legibility twice over: it is a judgement about frame budget rather than about
+  // reading, and magus's own graph - the flagship demo, and the graph most readers meet first - is
+  // 2376 nodes, so the flagship case cleared the guard by 5% and opened as fog.
+  //
+  // The number below is a legibility judgement and not a measurement: it is the rough point where
+  // a force layout stops separating clusters and starts stacking them. Below it the full graph is
+  // still worth showing, and collapsing a 40-node workspace to four project dots would be the
+  // worse first impression.
+  const LEGIBLE_NODE_COUNT = 250;
+  if (!hasFragmentDirective && graph && graph.nodes.length > LEGIBLE_NODE_COUNT) {
     const ps = buildProjectionSet();
     if (ps) {
       projectionUnfolded = false;
