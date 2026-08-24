@@ -4,7 +4,7 @@
   "directed": true,
   "multigraph": false,
   "node_count": 2376,
-  "edge_count": 6054,
+  "edge_count": 6058,
   "source_base": "https://github.com/egladman/magus/blob/main",
   "nodes": [
     {
@@ -27224,6 +27224,14 @@
     },
     {
       "source": "doc:README.md",
+      "target": "doc:docs/doctrine.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "README.md"
+    },
+    {
+      "source": "doc:README.md",
       "target": "doc:docs/guides/debugging.md",
       "relation": "references",
       "confidence": "extracted",
@@ -30408,6 +30416,14 @@
     },
     {
       "source": "doc:docs/doctrine.md",
+      "target": "doc:docs/reference/manpage/magus-doctor.md",
+      "relation": "references",
+      "confidence": "inferred",
+      "score": 0.6,
+      "provenance": "docs/doctrine.md"
+    },
+    {
+      "source": "doc:docs/doctrine.md",
       "target": "doc:docs/scope.md",
       "relation": "references",
       "confidence": "extracted",
@@ -31384,6 +31400,14 @@
     },
     {
       "source": "doc:docs/guides/integrations/agents.md",
+      "target": "doc:docs/doctrine.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents.md",
       "target": "doc:docs/guides/integrations/agents/any-host.md",
       "relation": "references",
       "confidence": "extracted",
@@ -31493,6 +31517,14 @@
       "confidence": "inferred",
       "score": 0.6,
       "provenance": "docs/guides/integrations/agents.md"
+    },
+    {
+      "source": "doc:docs/guides/integrations/agents/any-host.md",
+      "target": "doc:docs/doctrine.md",
+      "relation": "references",
+      "confidence": "extracted",
+      "score": 1,
+      "provenance": "docs/guides/integrations/agents/any-host.md"
     },
     {
       "source": "doc:docs/guides/integrations/agents/any-host.md",
