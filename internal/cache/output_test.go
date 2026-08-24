@@ -548,6 +548,91 @@ func TestInvocationEventsByID(t *testing.T) {
 	assert.ErrorIs(t, err, fs.ErrNotExist, "an aged-out run log surfaces as fs.ErrNotExist")
 }
 
+// TestListRunLogsReadsHeadAndTailOnly is the run browser's feed: the invocation list has to come off
+// bounded reads, because a journal holds every output line its run captured and listing hundreds of
+// them by parsing each in full would read hundreds of megabytes to paint a sidebar. The padding here
+// is what makes that observable - it is larger than the tail window, so a whole-file read would be
+// the only way to reach the started event from the end, and a whole-file parse the only way to reach
+// the finished event from the start.
+func TestListRunLogsReadsHeadAndTailOnly(t *testing.T) {
+	dir := t.TempDir()
+	runs := filepath.Join(dir, RunsDir)
+	require.NoError(t, os.MkdirAll(runs, 0o755))
+
+	write := func(name string, evs ...journal.Event) string {
+		p := filepath.Join(runs, name+".jsonl")
+		f, err := os.Create(p)
+		require.NoError(t, err)
+		enc := json.NewEncoder(f)
+		for _, e := range evs {
+			require.NoError(t, enc.Encode(e))
+		}
+		require.NoError(t, f.Close())
+		return p
+	}
+	padding := make([]journal.Event, 0, 400)
+	for i := 0; i < 400; i++ {
+		padding = append(padding, journal.Event{Kind: journal.KindOutput, Ts: 200, Text: strings.Repeat("x", 400)})
+	}
+
+	sweep := append([]journal.Event{
+		{Kind: journal.KindStarted, Ts: 100, MagusVersion: "v9", Command: &journal.Command{Arguments: []string{"affected", "ci"}, Trigger: journal.TriggerCI}},
+	}, padding...)
+	sweep = append(sweep, journal.Event{Kind: journal.KindFinished, Ts: 900, Status: journal.StatusFail})
+	sweepPath := write("invsweep", sweep...)
+	require.Greater(t, fileSize(t, sweepPath), int64(runTailWindow), "the padding must exceed the tail window")
+
+	// An interrupted run: a started event and output, but no finished event to read an outcome from.
+	killedPath := write("invkilled",
+		journal.Event{Kind: journal.KindStarted, Ts: 10, Command: &journal.Command{Arguments: []string{"run", "build"}, Trigger: journal.TriggerRun}},
+		journal.Event{Kind: journal.KindOutput, Ts: 40, Text: "compiling"},
+	)
+	require.NoError(t, os.WriteFile(filepath.Join(runs, "notes.txt"), []byte("ignored"), 0o644))
+
+	base := time.Unix(1_700_000_000, 0)
+	require.NoError(t, os.Chtimes(killedPath, base, base))
+	require.NoError(t, os.Chtimes(sweepPath, base.Add(time.Minute), base.Add(time.Minute)))
+
+	got := NewOutputStore(dir).ListRunLogs(0)
+	require.Len(t, got, 2, "only .jsonl journals list")
+	assert.Equal(t, "invsweep", got[0].Inv, "newest by modtime first")
+	assert.Equal(t, []string{"affected", "ci"}, got[0].Arguments)
+	assert.Equal(t, journal.TriggerCI, got[0].Trigger)
+	assert.Equal(t, int64(100), got[0].StartedMs)
+	assert.Equal(t, int64(900), got[0].FinishedMs)
+	assert.Equal(t, journal.StatusFail, got[0].Status)
+	assert.Equal(t, "v9", got[0].MagusVersion)
+
+	assert.Equal(t, "invkilled", got[1].Inv)
+	assert.Empty(t, got[1].Status, "no finished event means no outcome to claim")
+	assert.Equal(t, int64(40), got[1].FinishedMs, "the last event still dates the run")
+
+	assert.Len(t, NewOutputStore(dir).ListRunLogs(1), 1, "a positive limit keeps the newest")
+	assert.Empty(t, NewOutputStore(t.TempDir()).ListRunLogs(0), "a store with no runs dir lists nothing")
+}
+
+func fileSize(t *testing.T, path string) int64 {
+	t.Helper()
+	info, err := os.Stat(path)
+	require.NoError(t, err)
+	return info.Size()
+}
+
+// A journal whose first line is not a started event has no command lineage to report, but it is
+// still a run that happened - listing it without an argv beats hiding it.
+func TestListRunLogsKeepsAJournalWithNoStartedEvent(t *testing.T) {
+	dir := t.TempDir()
+	runs := filepath.Join(dir, RunsDir)
+	require.NoError(t, os.MkdirAll(runs, 0o755))
+	require.NoError(t, os.WriteFile(filepath.Join(runs, "invodd.jsonl"), []byte("not json\n"), 0o644))
+
+	got := NewOutputStore(dir).ListRunLogs(0)
+	require.Len(t, got, 1)
+	assert.Equal(t, "invodd", got[0].Inv)
+	assert.Empty(t, got[0].Arguments)
+	assert.Zero(t, got[0].StartedMs)
+}
+
 // TestLooksLikeInvocationID pins the recognizer that keeps a pasted invocation id out of the
 // graph grammar, where it matched nothing and reported `matches: 0` - which reads as "no such
 // run" rather than "wrong command".

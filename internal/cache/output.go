@@ -1,11 +1,13 @@
 package cache
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -894,6 +896,142 @@ func (s *OutputStore) InvocationEventsByID(inv string) (journal.Invocation, []jo
 		return journal.Invocation{}, nil, err
 	}
 	return journal.InvocationFromEvents(inv, events), events, nil
+}
+
+// RunLog summarizes one retained invocation journal - the row the console's run browser lists
+// so a reader can find a past run by the COMMAND that produced it rather than by a ref id
+// somebody printed on a terminal.
+//
+// It is deliberately not [journal.Invocation]: rebuilding one of those means reading a whole
+// stream, and a journal holds every output line the run captured, so listing 500 of them would
+// read hundreds of megabytes to show a list. Every field here comes off the two lifecycle
+// events that bracket the file - the first line and the last - which [OutputStore.ListRunLogs]
+// reads with bounded seeks.
+type RunLog struct {
+	Inv          string   `json:"inv"`
+	Arguments    []string `json:"arguments,omitempty"` // full argv, subcommand included
+	Trigger      string   `json:"trigger,omitempty"`   // one of journal's Trigger* constants
+	StartedMs    int64    `json:"started_ms"`
+	FinishedMs   int64    `json:"finished_ms,omitempty"`
+	Status       string   `json:"status,omitempty"` // pass|fail; empty when the run was interrupted
+	MagusVersion string   `json:"magus_version,omitempty"`
+	SizeBytes    int64    `json:"size_bytes,omitempty"`
+}
+
+// runTailWindow bounds the tail read ListRunLogs does per journal looking for the finished
+// event. The finished event is the last line, so any window past one line is slack for the
+// interrupted case; 64 KiB covers a long final output line without reading a large stream.
+const runTailWindow = 64 << 10
+
+// ListRunLogs returns the newest retained invocation journals, newest first by modtime, capped
+// at limit (limit <= 0 returns every retained one). It is the run browser's feed and the
+// invocation-addressed counterpart to [OutputStore.ListDescriptors], which lists stored OUTPUTS.
+//
+// Cost is bounded per journal, not per event: a head read for the started event and a tail read
+// for the finished one. A run killed before it finished has no finished event, so its Status is
+// empty and FinishedMs falls back to the last event the tail window holds - the same honest
+// degradation [journal.InvocationFromEvents] makes.
+//
+// Best-effort throughout: an unreadable dir, an unparsable line, or a journal whose head is not
+// a started event yields fewer rows, never an error.
+func (s *OutputStore) ListRunLogs(limit int) []RunLog {
+	files, err := os.ReadDir(s.runsDir())
+	if err != nil {
+		return nil
+	}
+	type entry struct {
+		name string
+		mod  time.Time
+		size int64
+	}
+	var entries []entry
+	for _, f := range files {
+		if f.IsDir() || !strings.HasSuffix(f.Name(), runExt) {
+			continue
+		}
+		info, err := f.Info()
+		if err != nil {
+			continue
+		}
+		entries = append(entries, entry{name: f.Name(), mod: info.ModTime(), size: info.Size()})
+	}
+	slices.SortFunc(entries, func(a, b entry) int { return b.mod.Compare(a.mod) })
+	if limit > 0 && len(entries) > limit {
+		entries = entries[:limit]
+	}
+	out := make([]RunLog, 0, len(entries))
+	for _, e := range entries {
+		r := RunLog{Inv: strings.TrimSuffix(e.name, runExt), SizeBytes: e.size}
+		path := filepath.Join(s.runsDir(), e.name)
+		if head, ok := readRunHead(path); ok {
+			r.StartedMs = head.Ts
+			r.MagusVersion = head.MagusVersion
+			if head.Command != nil {
+				r.Arguments = head.Command.Arguments
+				r.Trigger = head.Command.Trigger
+			}
+		}
+		if tail, ok := readRunTail(path, e.size); ok {
+			r.FinishedMs = tail.Ts
+			if tail.Kind == journal.KindFinished {
+				r.Status = tail.Status
+			}
+		}
+		out = append(out, r)
+	}
+	return out
+}
+
+// readRunHead reads a journal's first line and returns it when it is the started event - the
+// only event carrying the run's command lineage and magus version.
+func readRunHead(path string) (journal.Event, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return journal.Event{}, false
+	}
+	defer f.Close()
+	line, err := bufio.NewReader(io.LimitReader(f, runTailWindow)).ReadBytes('\n')
+	if err != nil && len(line) == 0 {
+		return journal.Event{}, false
+	}
+	var ev journal.Event
+	if json.Unmarshal(bytes.TrimSpace(line), &ev) != nil || ev.Kind != journal.KindStarted {
+		return journal.Event{}, false
+	}
+	return ev, true
+}
+
+// readRunTail reads the last complete event in a journal's final runTailWindow bytes. It is the
+// finished event on a run that ended; on an interrupted one it is whatever the run got to, which
+// still dates the run even though its outcome is unknown.
+func readRunTail(path string, size int64) (journal.Event, bool) {
+	f, err := os.Open(path)
+	if err != nil {
+		return journal.Event{}, false
+	}
+	defer f.Close()
+	off := max(size-runTailWindow, 0)
+	if _, err := f.Seek(off, io.SeekStart); err != nil {
+		return journal.Event{}, false
+	}
+	data, err := io.ReadAll(f)
+	if err != nil {
+		return journal.Event{}, false
+	}
+	lines := bytes.Split(data, []byte{'\n'})
+	// A window that starts mid-file almost certainly opens mid-line; that partial first line is
+	// never the one wanted, and scanning backwards reaches the wanted line before it anyway.
+	for i := len(lines) - 1; i >= 0; i-- {
+		line := bytes.TrimSpace(lines[i])
+		if len(line) == 0 {
+			continue
+		}
+		var ev journal.Event
+		if json.Unmarshal(line, &ev) == nil && ev.Kind != "" {
+			return ev, true
+		}
+	}
+	return journal.Event{}, false
 }
 
 // invPattern matches a full invocation id: the literal "inv" then the base-36 timestamp and

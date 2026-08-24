@@ -282,6 +282,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			diffSessionH := status.NewDiffSessionHandler(diffSessions, diffRoot, log)
 			outputsH := viewer.NewOutputsHandler(outputStore, log)
 			outputH := viewer.NewOutputHandler(outputStore, log)
+			runsH := viewer.NewRunsHandler(outputStore, log)
+			runH := viewer.NewRunHandler(outputStore, log)
 			// The DERIVED plan: the target DAG the engine computes for plain work. It reads
 			// the same two sources the console already trusts - the service for structure and
 			// live pool state, the output store for each node's last outcome and its ref - so
@@ -322,6 +324,14 @@ func (s *Daemon) Serve(ctx context.Context) error {
 			// per request (a shallow keep-last-K scan), matching the other read-only /api JSON routes.
 			bridgeMux.Handle("/api/v1/outputs", cors(outputsH))
 			bridgeMux.Handle("/api/v1/output", cors(outputH))
+			// The invocation half of the same browser: /api/v1/runs lists the retained run journals by
+			// the command that produced them, and /api/v1/run?inv= serves one back as the same Journal
+			// protobuf a `#data=` link carries, so a browsed run renders structurally rather than as a
+			// wall of text. It reaches no further than /api/v1/output already does - the journal holds
+			// the bytes that route serves, plus the argv, which a `magus query output --open` link has
+			// always carried in its fragment.
+			bridgeMux.Handle("/api/v1/runs", cors(runsH))
+			bridgeMux.Handle("/api/v1/run", cors(runH))
 			// Human run view: every plain run has a plan, and an agent-declared one is not the
 			// only shape worth showing. Loopback only, like the diff routes and unlike /api/v1/outputs:
 			// this one names every target in the workspace, which a share link handed to a phone
@@ -351,6 +361,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 				"/api/v1/insight": insightH,
 				"/api/v1/outputs": outputsH,
 				"/api/v1/output":  outputH,
+				"/api/v1/runs":    runsH,
+				"/api/v1/run":     runH,
 			}
 
 			// Derived-metrics Connect service for the /dashboard. Mounted only when the
@@ -445,6 +457,8 @@ func (s *Daemon) Serve(ctx context.Context) error {
 				"/api/v1/insight": insightH,
 				"/api/v1/outputs": outputsH,
 				"/api/v1/output":  outputH,
+				"/api/v1/runs":    runsH,
+				"/api/v1/run":     runH,
 			} {
 				httpServer.Handle(path, httpx.GuardRebind(allowed, httpx.BearerGuard(auth.VerifyConsoleReadBearer, h)))
 			}
