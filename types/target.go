@@ -145,6 +145,9 @@ type Target struct {
 	//
 	// Undeclared (0) and an unmeasurable host both mean "take one slot", which is
 	// exactly the behavior that existed before this field.
+	//
+	// A COMPOSED target inherits the largest declaration in its chain; see
+	// ChainMemoryMB, which is the figure both halves of admission actually read.
 	MemoryMB int `json:"memory_mb,omitempty" buzz:"memory_mb"`
 	// Drift is what happens when this target's declared outputs move under a read-only
 	// run. Empty is the DEFAULT, which gates any target that declares outputs - see
@@ -313,4 +316,50 @@ func (t Target) Key() []string {
 		return nil
 	}
 	return []string{"target:" + t.Name}
+}
+
+// ChainMemoryMB is the largest memory declaration anywhere in what a target will
+// actually run: its own, and every target it composes with ctx.needs, transitively.
+// It returns the figure and the target that declared it.
+//
+// Without the fold a declaration is INERT for the command people run: only `ci` is
+// scheduled as a step, so the `test` it composes reaches neither the limiter nor
+// machine-wide admission. The MAXIMUM, not the sum, because a chain runs in order.
+//
+// lookup resolves a cross-project step and may return nil, in which case that step
+// contributes nothing rather than a guess. It lives here because admission and
+// doctor must agree on one figure.
+func ChainMemoryMB(p *Project, target string, lookup func(path string) *Project) (mb int, declaredBy string) {
+	seen := map[string]bool{}
+
+	var walk func(proj *Project, name string) (int, string)
+	walk = func(proj *Project, name string) (int, string) {
+		if proj == nil {
+			return 0, ""
+		}
+		key := proj.Path + "\x00" + name
+		if seen[key] {
+			return 0, "" // a cycle is rejected elsewhere; here it must simply terminate
+		}
+		seen[key] = true
+
+		peak, from := proj.TargetPolicies[name].MemoryMB, ""
+		if peak > 0 {
+			from = name
+		}
+		for _, step := range proj.TargetChains[name] {
+			next := proj
+			if step.Project != "" {
+				if lookup == nil {
+					continue
+				}
+				next = lookup(step.Project)
+			}
+			if stepMB, stepFrom := walk(next, step.Target); stepMB > peak {
+				peak, from = stepMB, stepFrom
+			}
+		}
+		return peak, from
+	}
+	return walk(p, target)
 }

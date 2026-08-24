@@ -134,7 +134,24 @@ const (
 	// is resolved by stat rather than the walk and reaches the key normally. Only a
 	// pattern is unmatchable, and only because letting one reach into a pruned tree is
 	// what pruning exists to prevent (a bare **/*.js would hash all of node_modules).
-	UnmatchableSourceGlob     DiagnosticCode = "MGS1029"
+	UnmatchableSourceGlob DiagnosticCode = "MGS1029"
+	// MemoryDeclarationDrift is a target whose memory_mb disagrees with the peak
+	// resident memory magus has actually measured for it, in either direction, or
+	// that declares nothing while measurably taking a material share of the machine.
+	//
+	// This is what keeps memory_mb honest. A declared figure is only as good as its
+	// declarations, and declarations rot silently: a target written at 2GB grows to
+	// 9GB over a year and the gate quietly stops protecting anything, while a target
+	// declared far above what it uses refuses peers that would have fit. magus already
+	// records a peak per target, so the disagreement is a fact it holds rather than a
+	// question for the author.
+	//
+	// Advice, never a failure. The measurement is a maximum over recent runs on
+	// whatever machines happened to run them, and the author is entitled to declare a
+	// figure that differs deliberately - a ceiling for a target whose peak varies with
+	// its input, say. magus reports what it measured; the number in the magusfile
+	// stays a human's to write.
+	MemoryDeclarationDrift    DiagnosticCode = "MGS1030"
 	PathReadDenied            DiagnosticCode = "MGS2001"
 	PathWriteDenied           DiagnosticCode = "MGS2002"
 	EnvStripped               DiagnosticCode = "MGS2003"
@@ -217,7 +234,7 @@ var allDiagnosticCodes = []DiagnosticCode{
 	SelfStalingOutput, OutputOwnedByTwoTargets, WorkspaceNeedsNewerMagus,
 	MagusfileOnlyMember, ProviderPathRejected, ProviderProjectShadowed,
 	MagusfileAPIRemoved, CacheableSecretRead, SecretGrantInvalid, UndeclaredSeedingFile,
-	UnmatchableSourceGlob,
+	UnmatchableSourceGlob, MemoryDeclarationDrift,
 	PathReadDenied, PathWriteDenied, EnvStripped, AllowlistUnresolved,
 	SandboxUnsupported, PathShimSuspected, ExecDenied, DaemonSocketWithheld,
 	SandboxPolicyMismatch, SecretTooShortToMask,
