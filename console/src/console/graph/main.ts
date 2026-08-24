@@ -22,10 +22,12 @@ import {
   forceSimulation,
   forceLink,
   forceManyBody,
-  forceCenter,
   forceCollide,
   forceX,
   forceY,
+  type ForceX,
+  type ForceY,
+  type ForceLink,
   type Simulation,
 } from "d3-force";
 import { zoom as d3zoom, zoomIdentity, type ZoomBehavior, type ZoomTransform } from "d3-zoom";
@@ -88,6 +90,7 @@ import {
   dependencyDegrees,
   disconnected,
   mostDependedOn,
+  opensProjected,
   projectOwners as computeProjectOwners,
 } from "./views.js";
 import { flavorOf, isTargetGraph, targetGraphToNodeLink } from "./target-adapter.js";
@@ -351,18 +354,26 @@ let lifecycleAbort: AbortController | null = null;
 // close/reopen adds a generation and each chord fires its command one more time.
 let uninstallKeys: (() => void) | null = null;
 
-// The graph stays gently "alive": the simulation never fully cools, so nodes
-// keep drifting (the Obsidian-like wobble). Stilled when motion is suppressed,
-// and paused when the tab is hidden (see boot) so it isn't a background CPU drain.
+// The graph SETTLES and stays settled. It used to hold alphaTarget at 0.006 forever - an
+// Obsidian-like drift - on the assumption that a floor that low scales every force down to a
+// gentle wobble. It does not: d3's collide force takes no alpha (d3-force/src/collide.js, `function
+// force()` against every other force's `function force(alpha)`), so in the crowded core it resolves
+// overlaps at FULL magnitude on every tick while charge and link answer at 0.006. The result was a
+// fixed-amplitude buzz that could not damp out, because the force driving it never read the number
+// that was supposed to be damping it - and it could never end either: d3 stops at
+// `alpha < alphaMin` (0.001), which a target of 0.006 makes unreachable by construction.
+//
+// So the target is d3's own 0 and the timer stops on its own. Energy is now something an EVENT
+// spends - a drag, a filter, a layout change, new data - each of which already calls alpha().restart()
+// at its own site.
 const reducedMotion = matchMedia("(prefers-reduced-motion: reduce)");
 
 // The OS preference, or the console's own Motion setting. One predicate rather than the media query
 // tested in five places, which is how a new switch reaches four of them and misses the fifth. The
-// console's CSS kill cannot reach the wobble, the particles or the camera glides - they are JS.
+// console's CSS kill cannot reach the opening burst, the particles or the camera glides - they are JS.
 function motionSuppressed(): boolean {
   return reducedMotion.matches || document.documentElement.dataset.motion === "reduced";
 }
-const idleAlpha = () => (motionSuppressed() ? 0 : 0.006);
 
 // ---- motion layer (flow particles + live recency pulses) ------------------
 // Motion is OFF outside two states: an active path/subset view (blast, trace,
@@ -385,8 +396,8 @@ const motionEligible = () => !motionSuppressed() && !document.hidden && (flowOn 
 
 // motionLoop keeps draw() repainting once per frame while motionEligible();
 // the moment it isn't (view cleared, tab hidden, reduced-motion turned on, or
-// pulses expired), it zeroes motionRaf and stops re-arming itself - CPU drops
-// back to the sim's own idle wobble, not zero (that baseline is unaffected).
+// pulses expired), it zeroes motionRaf and stops re-arming itself - and with the layout settled
+// there is no other repaint loop, so CPU drops to zero.
 function motionLoop() {
   if (!motionEligible()) {
     motionRaf = 0;
@@ -680,9 +691,40 @@ function neighborhood(id: string, depth: number) {
 
 // ---- layered DAG layout (see layout.ts for the pure Sugiyama algorithm) ----
 
-// PARKED_X is the off-canvas coordinate hidden nodes are pinned to (radial's unplaced set, the
-// default projection's non-projects) so the force simulation does not waste cycles on them.
-const PARKED_X = -1e6;
+// hiddenNodes is the set of ids the canvas is NOT drawing right now: the non-projects under a
+// default projection, and the nodes radial could not place. It is the single answer to "is this on
+// screen", and `shown` below is the only way anything should ask.
+//
+// It replaced a sentinel COORDINATE. Hidden nodes used to be pinned at x = y = -1e6, which put
+// "invisible" in the same field as "where", and every consumer then had to remember to filter for
+// a magic number. Two bugs came straight out of that, both found by looking at the screen rather
+// than by any test:
+//   - fitView measured the sentinel, so the extent came out a million units wide, the scale clamped
+//     to its floor and the canvas went blank.
+//   - unparking had to INVENT positions for everything it released (a random disc, to avoid two
+//     thousand nodes landing on one point and detonating under repulsion). Those invented
+//     coordinates are ordinary numbers, so the released-but-still-hidden nodes silently rejoined
+//     the extent while the projection still declined to draw them, and every fit centred on 2364
+//     things nobody could see.
+// Neither is reachable now. Visibility is not a coordinate, hiding does not move anything, and a
+// hidden node simply keeps the position it already had - so unfolding resumes the arrangement it
+// left instead of scattering to a fresh one.
+let hiddenNodes = new Set<string>();
+
+// shown reports whether a node is on screen: it has a position, and nothing is hiding it. Every
+// draw, fit, and hit test keys off this, so they cannot disagree about what is visible - which is
+// exactly how the framing bugs above happened.
+function shown(n: GNode): boolean {
+  return n.x != null && !hiddenNodes.has(n.id);
+}
+
+// setHidden is the ONE place visibility changes. It also re-scopes the simulation, because the two
+// have to move together: a node left in the layout still answers to link and charge, so hiding it
+// without removing it means the visible nodes get dragged toward wherever it sits.
+function setHidden(ids: Iterable<string> | null): void {
+  hiddenNodes = ids ? new Set(ids) : new Set();
+  syncSimMembership();
+}
 
 // applyLayoutedMode: switch to layered layout for the visible node/link set.
 // Returns false (with a status message) when the scale guard fires.
@@ -750,9 +792,9 @@ function reapplyDagLayout(): boolean {
 // placed set (everything within RADIAL_MAX_RINGS hops of the center, over the
 // visible subset) rather than accepting matchSet as-is - it narrows matchSet
 // to that placed set afterward so the node list/status agree with what's
-// drawn. Nodes that were visible but fell outside the placed set are parked
-// off-canvas (fx/fy = PARKED_X, the same convention parkHiddenNodes uses) so they
-// don't sit stacked at the origin. Stops the force simulation - radial pins
+// drawn. Nodes that were visible but fell outside the placed set are HIDDEN
+// (setHidden, the same mechanism the default projection uses); they keep their
+// positions, which nothing reads while they are hidden. Stops the force simulation - radial pins
 // fx/fy like the dag modes, even though it is not one (see isDagMode).
 // Jump straight to radial when a node is already selected, else arm a one-shot pick that
 // switchLayout("radial")s on the next selectNode (see selectNode).
@@ -783,16 +825,9 @@ function applyRadialMode(): Set<string> | null {
   radialCenter = center;
   const placed = new Set<string>();
   for (const ring of rings) for (const id of ring) placed.add(id);
-  let hiddenCount = 0;
-  for (const n of subset) {
-    if (!placed.has(n.id)) {
-      n.fx = PARKED_X;
-      n.fy = PARKED_X;
-      n.x = PARKED_X;
-      n.y = PARKED_X;
-      hiddenCount++;
-    }
-  }
+  const unplaced = subset.filter((n) => !placed.has(n.id)).map((n) => n.id);
+  const hiddenCount = unplaced.length;
+  setHidden(unplaced);
   matchSet = placed;
   const centerNode = graph.byId.get(center);
   setStatus(
@@ -814,31 +849,54 @@ function applyRadialMode(): Set<string> | null {
   return placed;
 }
 
-// unparkNodes releases only the nodes sitting at the parking coordinate, returning them to the
-// origin. Resetting x/y is not optional: a released node keeps its parked coordinate until the
-// simulation moves it, and a fitView over bounds a million units wide collapses the zoom to its
-// floor, so the canvas comes back blank.
-function unparkNodes() {
-  for (const n of graph.nodes) {
-    if (n.fx !== PARKED_X) continue;
-    n.fx = null;
-    n.fy = null;
-    n.x = 0;
-    n.y = 0;
-  }
+// revealHidden puts everything back on screen - the way out of a projection or a radial view.
+//
+// It moves NOTHING. Each node still holds the position it had when it was hidden, so unfolding
+// resumes the arrangement the reader last saw rather than throwing it away. The version that
+// invented a fresh scatter here had to, because the sentinel had overwritten the real coordinates
+// and there was nothing left to resume.
+function revealHidden() {
+  if (!hiddenNodes.size) return;
+  setHidden(null);
+  // The revealed nodes have positions but have not been laid out against each other since before
+  // they were hidden, and the layout does not run on its own any more.
+  sim?.alpha(0.9).restart();
+  // Frame it when that finishes. Going from ten nodes to two thousand changes the extent by orders
+  // of magnitude, so this is the single biggest re-framing the surface ever does - and the one the
+  // boot-time reveal cannot cover, since its own settle fit fired long before.
+  armSettleFit();
 }
 
-// unpinAllNodes hands every node back to the simulation - the pins a DAG or radial layout set
-// as well as the parking pins - and lifts any parked node off PARKED_X on the way out.
+// syncSimMembership scopes the SIMULATION to the visible nodes.
+//
+// Hiding a node in the drawing is not enough to take it out of the layout, and that is the whole
+// reason this exists. Every force still reads a node the canvas is skipping, so forceLink holds
+// links from the ten visible nodes to two thousand hidden ones and pulls each pair to its 55-unit
+// target. Only one end is pinned, so the VISIBLE end is what moves.
+//
+// Keeping the hidden set out is also the performance point the parking was originally for: the sim
+// was spending every tick on the full soup while a tenth of it was on screen.
+function syncSimMembership(): void {
+  if (!sim) return;
+  const hide = hiddenNodes;
+  const nodes = hide.size ? graph.nodes.filter((n) => !hide.has(n.id)) : graph.nodes;
+  const links = hide.size
+    ? graph.links.filter((e) => !hide.has(endpointId(e.source)) && !hide.has(endpointId(e.target)))
+    : graph.links;
+  // Nodes BEFORE links: d3 re-initializes every force against the new node list, and the link
+  // force resolves its endpoint ids against exactly that list.
+  sim.nodes(nodes);
+  (sim.force("link") as ForceLink<GNode, GLink> | undefined)?.links(links);
+}
+
+// unpinAllNodes hands every node back to the simulation - the pins a DAG or radial layout set - and
+// puts anything a previous view was hiding back on screen.
 function unpinAllNodes() {
   for (const n of graph.nodes) {
     n.fx = null;
     n.fy = null;
-    if (n.x === PARKED_X) {
-      n.x = 0;
-      n.y = 0;
-    }
   }
+  setHidden(null);
 }
 
 // layoutBlockedReason says whether a mode can run right now; the returned string is
@@ -889,7 +947,7 @@ function switchLayout(mode: LayoutMode) {
       return;
     }
   } else if (layoutMode === "radial") {
-    unparkNodes();
+    revealHidden();
     radialCenter = null;
     radialRings = null;
     // Radial narrowed matchSet to its placed set, and every control that produced the PREVIOUS one
@@ -1012,7 +1070,19 @@ function seedBigBang() {
   if (isDagMode() || motionSuppressed() || !graph?.nodes.length) return;
   const { w, h } = resizeCanvas();
   const c = usableCenter(w, h, stageInsets());
-  const radius = 24 + Math.sqrt(graph.nodes.length) * 3;
+  // Sized to the area the nodes will SETTLE into, not to an arbitrary multiple of sqrt(n). A mark
+  // plus its clear space occupies about (2r + NODE_GAP) across - roughly 17 world units at the
+  // median r of 5.3 - so a disc that already holds them without overlap has radius
+  // sqrt(n * 17^2 / pi), which is 9.6 * sqrt(n).
+  //
+  // The old coefficient was 3, seeding 2374 nodes into a disc of radius 170 when they need 468.
+  // Nothing about the burst survives that: charge is -180 out to a range of 250, so at that
+  // density essentially every pair repels at full strength at once, and the graph detonates to a
+  // ±40,000-unit extent that the fit can only answer by clamping to its minimum scale. It looked
+  // survivable only because the simulation never used to stop - it spent the rest of the session
+  // quietly hauling the debris back in under the 0.02-strength centering forces, and a layout that
+  // settles cannot do that. Seeding at the settled density means there is no debris.
+  const radius = 24 + Math.sqrt(graph.nodes.length) * 9.6;
   for (const n of graph.nodes) {
     // sqrt() on the radius keeps the disc evenly filled instead of clumping at the center,
     // which is the same singularity in miniature.
@@ -1028,6 +1098,72 @@ function seedBigBang() {
 // Clear space held between two settled marks, in world units.
 const NODE_GAP = 6;
 
+// ---- selection halo --------------------------------------------------------
+// Selecting a node pushes everything that is NOT in its neighborhood out of a disc around it, so
+// the marks answering "what is this connected to" are read against background instead of against a
+// thousand unrelated ones.
+//
+// Dimming cannot do this, and the reason is worth stating: draw() drops a non-neighborhood node to
+// alpha 0.12, which is a PER-NODE operation, while legibility is about AGGREGATE ink. Two thousand
+// marks at 12% lay down far more of it than three marks at 100%, so on a full graph the selection
+// is read against fog however hard the dimming is pushed. Moving the fog is what clears it.
+//
+// Force mode only: the DAG and radial layouts compute final coordinates and pin every node, so
+// there is nothing to displace and displacing it would be a layout nobody asked for.
+const HALO_RADIUS = 120;
+
+let haloFocus: string | null = null;
+let haloKeep = new Set<string>();
+
+// A d3 force, so the displacement resolves TOGETHER with link, charge and collide rather than
+// against them. A node shoved out by hand would be hauled back by its own edges on the next tick,
+// or land on top of a neighbour collide had already spaced.
+function haloForce(alpha: number): void {
+  if (!haloFocus) return;
+  const f = graph.byId.get(haloFocus);
+  if (!f || f.x == null) return;
+  for (const n of graph.nodes) {
+    if (n === f || haloKeep.has(n.id) || n.x == null) continue;
+    const dx = n.x - f.x;
+    const dy = n.y - f.y;
+    // A node sitting exactly on the focus has no direction to be pushed in. Give it one rather than
+    // dividing by zero and writing NaN into a position the layout never recovers from.
+    const d = Math.hypot(dx, dy) || 0.001;
+    if (d >= HALO_RADIUS) continue;
+    const push = (HALO_RADIUS - d) * alpha * 0.9;
+    // d3 initializes vx/vy when the simulation starts, but they are optional on its node datum and
+    // a node added by a live graph update is seen here before that happens.
+    n.vx = (n.vx ?? 0) + (dx / d) * push;
+    n.vy = (n.vy ?? 0) + (dy / d) * push;
+  }
+}
+
+// setHalo aims the displacement at a node, or clears it. Clearing puts nothing back: the graph is
+// settled by then, the ordinary forces reclaim the space at the next disturbance, and restoring by
+// hand would spend a second animation on a reader who has already moved on.
+function setHalo(id: string | null): void {
+  if (isDagMode() || !sim) {
+    haloFocus = null;
+    return;
+  }
+  if (id === haloFocus) return;
+  haloFocus = id;
+  haloKeep = id ? new Set(neighborhood(id, 1)) : new Set();
+  // Enough to open the disc and re-settle what it displaced, and no more. A full alpha(1) restart
+  // would re-run the entire layout and throw away the arrangement the reader had just learned.
+  sim.alpha(0.35).restart();
+}
+
+// recenterSimulation re-aims the centering springs after the stage changes size. It retargets the
+// existing forces rather than installing a fresh centering force, because the obvious spelling -
+// sim.force("center", forceCenter(...)) - is what put a million units between the graph and the
+// canvas; see the note against the charge force below.
+function recenterSimulation(x: number, y: number): void {
+  if (!sim) return;
+  (sim.force("x") as ForceX<GNode> | undefined)?.x(x);
+  (sim.force("y") as ForceY<GNode> | undefined)?.y(y);
+}
+
 function startSimulation() {
   if (sim) sim?.stop(); // stop the prior run (e.g. after loading a new file) - its timer would keep ticking
   const { w, h } = resizeCanvas();
@@ -1042,14 +1178,29 @@ function startSimulation() {
         .distance(55)
         .strength(0.4),
     )
-    // Repulsion is what makes the layout say anything, but only the SHORT-RANGE half of it.
-    // Raising the strength alone (-60 to -180) and letting it reach further just inflates the
-    // periphery: the low-degree nodes sail out, the fit zooms out to hold them, and the core
-    // that needed the room arrives back on screen smaller and denser than it started. Pushing
-    // hard over a SHORTER range spends the force where the crowding is, so clusters separate
-    // while the graph's overall extent stays roughly put.
-    .force("charge", forceManyBody().strength(-180).distanceMax(250))
-    .force("center", forceCenter(simCenter.x, simCenter.y))
+    // Repulsion reaches the WHOLE graph. It used to stop at distanceMax(250), on the reasoning
+    // that a shorter range spends the force where the crowding is and keeps the overall extent
+    // put. It does keep the extent put, and that is the problem: past 250 units the only force
+    // left acting was the centering spring below, so at every scale larger than a cluster the
+    // layout was not answering to the data at all - it was answering to "pull everything toward
+    // one point". A round outline with evenly-filled interior is what that produces, and it will
+    // produce one for ANY graph, which makes the shape a property of these settings rather than
+    // of the workspace. The complaint that the periphery inflates is really a complaint about the
+    // camera: framing is fitView's job, and it does it.
+    .force("charge", forceManyBody().strength(-180))
+    // NO forceCenter. It centers by measuring the centroid of every node and translating the whole
+    // set, and it writes `node.x -= sx` UNCONDITIONALLY - it is the one force in d3 that ignores
+    // fx/fy pinning, so it drags pinned nodes around by the centroid of everything else. It is
+    // still wrong even now that no node is parked off-canvas: a DAG layout and radial both pin
+    // every node they place, and a centroid translation moves those computed coordinates.
+    //
+    // It went unnoticed for as long as it did because the projection - the state that used to put
+    // 2364 nodes at a sentinel coordinate a million units away, dragging the visible ten off any
+    // canvas - only engaged above 2500 nodes, which the graph this console ships with (2374) never
+    // reached.
+    //
+    // forceX/forceY below do the same job as a spring on VELOCITY, which the tick loop then ignores
+    // for any node holding fx/fy. Centering that respects the pins is centering that cannot do this.
     // Collide is what actually sets the spacing in the crowded core - charge is saturated there,
     // so raising it only inflates the periphery (above). Two things decide whether a reader can
     // tell one mark from the next. It has to measure the MARK: sizing on d.r let 18.7% of the
@@ -1061,14 +1212,33 @@ function startSimulation() {
       "collide",
       forceCollide<GNode>().radius((d) => nodeReach(d) + NODE_GAP),
     )
-    .force("x", forceX(simCenter.x).strength(0.02))
-    .force("y", forceY(simCenter.y).strength(0.02))
-    .alphaTarget(idleAlpha()) // decay toward a small floor, not 0, so it keeps gently moving
-    // d3's default decay spends about 300 ticks - five seconds - reaching that floor, which is
+    // A WEAK tether, not a shaping force. At 0.02 these springs were strong enough to be the only
+    // thing acting at long range once charge was truncated, and between them they decided the
+    // outline: pulling every node toward one point, isotropically, from a disc-shaped seed, makes a
+    // disc - and the reader has no way to tell that circle from a fact about the workspace. It is
+    // not one. Nothing in the data says the graph is round, or that its periphery is equidistant
+    // from its middle, or that its density is even.
+    //
+    // What the tether is still for is keeping a disconnected component - and this graph has 556
+    // nodes with no dependency edge at all - from drifting to infinity under pure repulsion, since
+    // nothing else acts on a node with no links. 0.002 holds them in the frame over the settle
+    // without setting the shape of anything that does have edges.
+    .force("x", forceX(simCenter.x).strength(0.002))
+    .force("y", forceY(simCenter.y).strength(0.002))
+    .force("halo", haloForce)
+    // d3's default decay spends about 300 ticks - five seconds - before it comes to rest, which is
     // a long time to watch a graph wobble before it is worth reading, and far too long for the
-    // opening burst to feel like one event. This settles in roughly a second.
+    // opening burst to feel like one event. This settles in roughly a second, and then stops.
     .alphaDecay(0.06)
     .on("tick", draw);
+  // Every simulation gets its final framing armed HERE, on the object that will emit the "end" it
+  // hangs on. Arming it at the call sites that start a layout instead loses it the moment two of
+  // them race: activate() runs twice on a `magus graph open` deep link - the standalone page boots
+  // the surface, then opening it from the rail activates it again - and the second pass builds a
+  // NEW simulation while the settle fit sits on the discarded one. What that looks like is a graph
+  // framed by one of the early beats, at the size it was a third of a second in, and never framed
+  // again as it expands: the whole layout ends up two and a half times the canvas.
+  armSettleFit();
 }
 
 function draw() {
@@ -1170,6 +1340,33 @@ function draw() {
   // The highlight must never suppress the scope: a selection left over from an earlier click
   // would otherwise cancel the emphasis of every view and query run after it, so a chain the
   // result line reports would not be the thing drawn on the canvas.
+  // An INK BUDGET for edges. Per-edge alpha is the wrong unit on a dense graph: the reader sees
+  // accumulated ink, and 6050 edges at 0.14 each composite to a solid wall long before the tenth
+  // one overlaps. Scaling alpha down as the edge count rises keeps the TOTAL roughly constant, so
+  // overlap starts encoding something instead of destroying it - where many edges run together the
+  // bundle darkens and reads as a trunk, where few do the line stays faint. That is the standard
+  // treatment for a hairball (Gephi and Cytoscape both draw dense graphs this way), and it is the
+  // cheap half of edge bundling: the ink concentrates on the shared paths without routing them.
+  //
+  // The reference count is MEASURED, not chosen. Rasterizing this graph's 6050 edges at fit zoom
+  // and counting how many strokes touch each pixel gives the overdraw distribution: 11.0% of the
+  // canvas takes ink at all, and among those pixels the depth is 2 at the median, 6 at p90, 17 at
+  // p99, 30 at p99.9, and 92 at the worst. Accumulated opacity at depth d is 1 - (1 - a)^d, so
+  // asking that the p99 pixel land at 0.9 - full-black reserved for the real trunks, nothing below
+  // them saturating - solves to a = 0.127. Against the resting base alpha of 0.3 that is a
+  // multiplier of 0.4, and 0.4 * 6050 is where the reference below comes from.
+  //
+  // One measurement calibrates the whole curve, because overdraw scales with edge count at a fixed
+  // viewport: a 2400-edge graph has roughly p99 = 7, which the same rule leaves at full 0.3 and
+  // which composites to 0.91 there. So the linear law lands on the same target at both ends rather
+  // than only at the one that was measured.
+  //
+  // Clamped at 1 so a graph below the reference is untouched - it has no overdraw to budget for -
+  // and floored so that a graph past ~16k edges still leaves a trace instead of vanishing.
+  // Re-measure with the raster count if the node radii, the line width, or the default zoom change;
+  // all three move the depth distribution and none of them move this constant.
+  const EDGE_INK_REFERENCE = 2400;
+  const edgeInk = Math.min(1, Math.max(0.15, EDGE_INK_REFERENCE / Math.max(1, graph.links.length)));
   const highlight = selected || hoverId;
   const near = neighbors(highlight);
   const lit = (id: string) => id === highlight || !!near?.has(id);
@@ -1181,10 +1378,10 @@ function draw() {
   // Edges first, under the nodes. Dim edges not touching the highlighted node;
   // under a query filter, dim edges not between two matches, so the
   // matching subgraph stands out instead of a full bright web.
-  // projectionActive: hide all non-projection nodes/edges from the draw.
-  // (Same flag computed below for nodes; computed here first for edges.)
-  // projectionActive is the projection id set when the default projection is showing, else null;
-  // holding the Set (not a bool) lets its truthiness narrow away the nullable in the checks below.
+  // projectionActive says whether the DEFAULT PROJECTION is the thing on screen. It no longer
+  // decides what is drawn - `shown` does, from hiddenNodes - and is only consulted for the DIMMING
+  // rule below: while the projection stands in for the selection, a match set must not also fade
+  // half of it. Holding the Set rather than a bool lets its truthiness narrow the nullable.
   const projectionActive: Set<string> | null =
     !projectionUnfolded && projectionSet && !query && !focusId && !activeView
       ? projectionSet
@@ -1196,9 +1393,10 @@ function draw() {
     // By draw time d3-force has resolved source/target from id strings to the node objects.
     const s = e.source as GNode,
       t = e.target as GNode;
-    if (s.x == null || t.x == null) continue; // not "!s.x": a node validly at x=0 must still draw
-    // Default projection: only draw edges where both endpoints are in the projection.
-    if (projectionActive && !(projectionActive.has(s.id) && projectionActive.has(t.id))) continue;
+    // An edge is drawn only when BOTH ends are. `shown` covers the position check too - it is
+    // `x != null` plus "nothing is hiding it", and a half-drawn edge running to a node the reader
+    // cannot see is a line pointing at nothing.
+    if (!shown(s) || !shown(t)) continue;
     // Card side-attach: when cards are active, lines attach to card sides
     // (the lower-x endpoint's right edge -> the higher-x endpoint's left
     // edge) instead of centers, so edges terminate at the card border. sx/sy
@@ -1237,7 +1435,8 @@ function draw() {
     // Everything non-incident keeps ONE color and only changes alpha. Dimming used to swap muted
     // for border at the same time as dropping alpha 5.5x, and the two compounded into a jolt.
     ctx.strokeStyle = incident ? th.accent : th.muted;
-    ctx.globalAlpha = incident || criticalEdge ? 1 : active ? th.edgeAlpha : th.edgeDimAlpha;
+    ctx.globalAlpha =
+      incident || criticalEdge ? 1 : (active ? th.edgeAlpha : th.edgeDimAlpha) * edgeInk;
     ctx.lineWidth = incident
       ? 1.6 / transform.k
       : criticalEdge
@@ -1349,9 +1548,7 @@ function draw() {
   // active, fade non-matches; when the default projection is active (no query),
   // fully hide nodes outside the projection set (projects only).
   for (const n of graph.nodes) {
-    if (n.x == null) continue;
-    // Default projection: hide non-project nodes entirely (not dimmed; truly absent).
-    if (projectionActive && !projectionActive.has(n.id)) continue;
+    if (!shown(n)) continue;
     let alpha = 1;
     if (scope) alpha = scope.has(n.id) || lit(n.id) ? 1 : 0.12;
     else if (highlight) alpha = lit(n.id) ? 1 : 0.15;
@@ -1375,7 +1572,7 @@ function draw() {
     // Blur is divided by the zoom so the halo stays a constant size on screen instead of
     // ballooning as the view zooms in. Skipped when the neighborhood is large: a canvas shadow
     // is redrawn per node per frame, and a hub with hundreds of neighbors would pay for it on
-    // every tick of a simulation that never fully cools.
+    // every tick of the opening settle and every frame the motion layer runs.
     const glowing = glowNeighborhood && lit(n.id);
     if (glowing) {
       ctx.shadowColor = th.accent;
@@ -1473,8 +1670,7 @@ function draw() {
   const lineH = 13 / transform.k; // ~1.2x the 11px font, in world units
   const labelCandidates = [];
   for (const n of graph.nodes) {
-    if (n.x == null) continue;
-    if (projectionActive && !projectionActive.has(n.id)) continue;
+    if (!shown(n)) continue;
     if (cardsActive() && n.w) continue; // the label is painted inside the card
     // Two exemptions from the zoom floor, both where the reader ASKED for a name: the hovered node
     // and everything ONE HOP from it (the point of pointing at a node is to learn what it is
@@ -1515,6 +1711,33 @@ function draw() {
     }
     if (clash) continue;
     placedLabels.push({ x: lx, y: ly, w: lw });
+    // The SUBJECT gets the text colour; its neighbours get the muted one. Hovering reveals the whole
+    // one-hop neighbourhood at once, and drawing every one of those in th.text made the darkest
+    // thing on the canvas arrive as a cluster: measured on this graph, the resting view contains
+    // ZERO near-black pixels and a single hover produced 3,544 of them, every one #151515 - the
+    // label colour, not the edges and not the glow, which is where the eye reads "a lot of black".
+    // Muting the context restores the hierarchy the highlight is supposed to express: one thing is
+    // being pointed at, the rest are what it touches.
+    ctx.fillStyle = n.id === highlight ? th.text : th.muted;
+    // A HALO, not a reposition. The placement scan above only keeps labels off each OTHER; what a
+    // label actually lands on is edges, and at 6050 of them there is no free space to move it to -
+    // solving that by position means a constraint solver over every edge segment, per frame, in the
+    // one loop that already runs per node per frame.
+    //
+    // Stroking the glyphs in the background colour first knocks a small hole in whatever is behind
+    // them, so the text reads over lines wherever it happens to sit. This is the cartographic
+    // convention (Mapbox calls it a text halo; Gephi and Cytoscape both ship one) and it costs one
+    // extra stroke per drawn label rather than a solver.
+    //
+    // round joins so the halo does not grow spikes off the corners of letterforms, and it is drawn
+    // UNDER the fill so the glyph keeps its own weight.
+    ctx.save();
+    ctx.strokeStyle = th.bg;
+    ctx.lineWidth = 3 / transform.k;
+    ctx.lineJoin = "round";
+    ctx.miterLimit = 2;
+    ctx.strokeText(n.label, lx, n.y);
+    ctx.restore();
     ctx.fillText(n.label, lx, n.y);
   }
   ctx.restore();
@@ -1536,7 +1759,7 @@ function nodeAtPointer(event: MouseEvent): GNode | null | undefined {
     const hitR = (DOT_R_PX + 5) / transform.k;
     for (let i = graph.nodes.length - 1; i >= 0; i--) {
       const n = graph.nodes[i];
-      if (n.x == null) continue;
+      if (!shown(n)) continue;
       if (dots) {
         if ((px - n.x) ** 2 + (py - n.y) ** 2 <= hitR * hitR) return n;
         continue;
@@ -1547,13 +1770,16 @@ function nodeAtPointer(event: MouseEvent): GNode | null | undefined {
     return null;
   }
   // In layered mode the simulation may be stopped, but sim.find still works on
-  // the node positions. Fall back to a manual scan when sim is null (shouldn't
-  // happen, but be safe).
+  // the node positions. It searches the simulation's OWN node list, which setHidden keeps scoped to
+  // the visible set - so a hidden node is unreachable here for the same reason it is unreachable
+  // by the forces. Fall back to a manual scan when sim is null (shouldn't happen, but be safe);
+  // that scan has to apply the visibility rule itself, or clicking empty canvas could select
+  // something nobody can see.
   if (sim) return sim.find(px, py, 30 / transform.k);
   let best = null,
     bestDist = 30 / transform.k;
   for (const n of graph.nodes) {
-    if (n.x == null) continue;
+    if (!shown(n)) continue;
     const d = Math.sqrt((n.x - px) ** 2 + (n.y - py) ** 2);
     if (d < bestDist) {
       bestDist = d;
@@ -1619,7 +1845,7 @@ function setupZoomDrag() {
         draw();
         return;
       }
-      if (!event.active) sim?.alphaTarget(idleAlpha()); // back to the gentle floor, not a dead stop
+      if (!event.active) sim?.alphaTarget(0); // let the disturbance the drag made settle out
       event.subject.fx = null;
       event.subject.fy = null;
     });
@@ -1891,7 +2117,7 @@ function selectNode(id: string | null, center: boolean) {
       // Unfold this project: show its contains neighborhood.
       projectionUnfolded = true;
       projectionSet = null;
-      unparkNodes();
+      revealHidden();
       const projectNeighborhood = new Set([id]);
       for (const e of graph.links) {
         const s = endpointId(e.source),
@@ -1938,6 +2164,7 @@ function selectNode(id: string | null, center: boolean) {
   }
 
   selected = id;
+  setHalo(id);
   renderCard(id);
   updateHash();
   if (id && center) centerOn(id);
@@ -1976,12 +2203,16 @@ function centerOn(id: string) {
 
 // fitView frames a set of nodes (or all when ids is null) in the viewport - the
 // zoom-to-fit / reset-view action. Reuses the shared zoomBehavior + transform.
-// The stage floats chrome over the canvas rather than beside it. These are the pieces that do,
-// measured live so a hidden one (the toolbar collapses to a kebab) contributes nothing. The
-// explain card is NOT here, and neither the legend nor the result line is any more: all three sit
-// beside the canvas now, so listing them would reserve a margin for something that covers
-// nothing - and the framing gets the whole left edge back.
-const STAGE_OVERLAYS = [".console-graph-stage__tools"];
+// Which stage chrome COVERS the canvas, so the framing can center the graph in what is actually
+// visible. Nothing does any more: the stage tools were the last overlay and they are a header bar
+// above the canvas now, which the canvas is simply laid out below. The explain card, the legend and
+// the result line all left earlier for the same reason - they sit beside the canvas, so listing one
+// reserves a margin against something that covers nothing.
+//
+// Kept as a list rather than deleted along with stageInsets: the insets are threaded through every
+// fit and re-center, and the next overlay - a floating minimap, a toast - has one line to add and
+// no plumbing to rediscover. An empty list costs a loop that does not run.
+const STAGE_OVERLAYS: string[] = [];
 
 // stageInsets measures how far the stage chrome covers the canvas, so the framing below can
 // center the graph in what the operator can see instead of behind the legend.
@@ -2005,10 +2236,10 @@ let cameraOwnedByOperator = false;
 // it rather than re-framing, and a pan, zoom or fit releases it.
 let centeredOn: string | null = null;
 
-// The node currently held still because the pointer is on it. The simulation never fully cools -
-// that gentle drift is deliberate - but it means a node can wander out from under a stationary
-// cursor, dropping the highlight and darkening the neighborhood while the reader did nothing.
-// So the thing being pointed at stops; its neighbors carry on moving around it.
+// The node currently held still because the pointer is on it. A settled graph does not move, but
+// a settling one does, and a node that wanders out from under a stationary cursor drops the
+// highlight and darkens the neighborhood while the reader did nothing. So the thing being pointed
+// at stops; its neighbors carry on settling around it.
 let hoverPinned: string | null = null;
 
 function pinHovered(id: string | null) {
@@ -2027,8 +2258,11 @@ function pinHovered(id: string | null) {
 
 function releaseHoverPin() {
   if (!hoverPinned) return;
+  // The guard used to be "unless this node is parked", to avoid freeing a pin that meant hidden
+  // rather than hovered. Hiding no longer uses a pin, so there is nothing to tell apart: only a
+  // hovered node is ever recorded here, and releasing it is the whole job.
   const n = graph?.byId.get(hoverPinned);
-  if (n && n.fx !== PARKED_X) {
+  if (n) {
     n.fx = null;
     n.fy = null;
   }
@@ -2100,14 +2334,19 @@ function glideTo(to: ZoomTransform, ms = 340) {
 // Frames at which the load-time reveal re-checks the framing of a FORCE layout. A cold force
 // layout keeps spreading for seconds, so a single early fit frames a cloud that then grows
 // straight back out of view - which is how a 2373-node graph came to land cropped to a corner.
-// The first beat is quick feedback, the last one catches the settled extent. A DAG layout needs
-// none of this: layoutLayered places every node in one pass, so its extent is final at once.
+// These are FEEDBACK, keeping the camera roughly on the graph while it expands; the final framing
+// is armSettleFit's, off the simulation's own "end". A DAG layout needs neither: layoutLayered
+// places every node in one pass, so its extent is final at once.
 const REVEAL_BEATS_MS = [300, 750, 1400];
 
 // revealWholeGraph frames the graph on load so it lands centered instead of cropped. Radial
 // frames itself in applyRadialMode, and a projection is already its own subset.
 function revealWholeGraph() {
-  if (!projectionUnfolded || !graph?.nodes.length) return;
+  // A PROJECTION gets framed too. It used to be excluded on the grounds that it is already its own
+  // subset - true, and beside the point: a subset still has an extent, the forces still decide it,
+  // and it is now what every cold load opens on rather than a fallback for a graph too big to draw.
+  // Unframed, the ten project nodes landed in a corner of an otherwise empty canvas.
+  if (!graph?.nodes.length) return;
   // Only view/q/node name a SUBSET whose own framing must win. #data= and #src= say where the
   // graph came from, not what to look at, so treating them as directives left every
   // `magus graph open` link - and the whole targets flavor, which arrives that way - opening on
@@ -2136,12 +2375,36 @@ function revealWholeGraph() {
   });
 }
 
+// armSettleFit takes the FINAL framing off the clock and hangs it on the simulation actually
+// stopping. d3 fires "end" the tick alpha drops below alphaMin, which is the only moment anyone can
+// honestly call the extent final.
+//
+// The beats above cannot know that moment: they are wall-clock guesses, and the last one at 1400ms
+// was calibrated against a layout whose repulsion stopped at 250 units. With charge reaching the
+// whole graph it keeps spreading longer - alphaDecay 0.06 against alphaMin 0.001 needs
+// ln(0.001)/ln(0.94) ~ 112 ticks, about 1.86s - so that beat now frames a graph still on its way
+// outward and leaves the cold view cropped. Rather than move a magic number that would go stale
+// again the next time a force changes, ask the simulation.
+//
+// ONE SHOT, unhooked as it fires: "end" also fires after a drag settles and after every filter
+// that restarts the layout, and refitting the camera then would yank the view out from under
+// whoever caused it.
+function armSettleFit(): void {
+  if (!sim) return;
+  const onSettled = (): void => {
+    sim?.on("end", null);
+    if (cameraOwnedByOperator || isDagMode() || activeView || focusId || query) return;
+    fitView(null);
+  };
+  sim.on("end", onSettled);
+}
+
 // whenCanvasSized resolves once the canvas has a non-zero box, or gives up after ~20s. Distinct
 // from waitForCanvasWidth, whose ~1s cap suits a load the operator is already watching; this one
 // waits out a surface mounted hidden, where there is nothing to be late for.
 //
-// A TIMER, not requestAnimationFrame: rAF stops entirely while the page is not being rendered -
-// the same pause the idle wobble relies on - and the whole point here is to wait out a surface
+// A TIMER, not requestAnimationFrame: rAF stops entirely while the page is not being rendered,
+// and the whole point here is to wait out a surface
 // that is not being rendered yet, so an rAF poll deadlocks on exactly the case it exists for.
 function whenCanvasSized(): Promise<void> {
   return new Promise((resolve) => {
@@ -2182,7 +2445,8 @@ let pendingFitArmed = false;
 // Null when nothing in the set has a position yet. In a card mode the box measures the drawn
 // card rather than the dot radius, so a fit does not clip the labels it exists to make readable.
 function worldBox(ids: Set<string> | null): WorldBox | null {
-  const pts = graph.nodes.filter((n) => n.x != null && (!ids || ids.has(n.id)));
+  // `shown`, not just "has a position": a fit that measures something invisible frames empty canvas.
+  const pts = graph.nodes.filter((n) => shown(n) && (!ids || ids.has(n.id)));
   if (!pts.length) return null;
   let minX = Infinity,
     minY = Infinity,
@@ -2204,7 +2468,10 @@ function worldBox(ids: Set<string> | null): WorldBox | null {
 // a graph that was just REPLACED has nothing on screen the eye was tracking, so animating from
 // the old camera reads as a move rather than as an arrival.
 function fitView(ids: Set<string> | null, glideMs?: number) {
-  const pts = graph.nodes.filter((n) => n.x != null && (!ids || ids.has(n.id)));
+  // Same visibility rule worldBox applies below: this guard only asks whether there is anything to
+  // frame, and a node nobody can see is not something to frame.
+  // `shown`, not just "has a position": a fit that measures something invisible frames empty canvas.
+  const pts = graph.nodes.filter((n) => shown(n) && (!ids || ids.has(n.id)));
   if (!pts.length || !zoomBehavior) return; // setupZoomDrag has not run yet
   if (canvas.clientWidth <= 0) {
     // Carry glideMs through the deferral. Dropping it turned frameNewGraph's deliberate SNAP back
@@ -3444,7 +3711,7 @@ function replaceGraph(data: GraphPayload | TargetGraphOutput, statusMsg: string)
   } else {
     startSimulation();
   }
-  parkHiddenNodes(); // after the sim is built: the projection reduces the visible set
+  hideNonProjects(); // after the sim is built: the projection reduces the visible set
   draw();
   revealWholeGraph();
   syncGraphKindToggle();
@@ -3652,7 +3919,7 @@ function unfoldProjection() {
   matchSet = null;
   if (searchEl) searchEl.value = "";
   query = "";
-  if (graph) unparkNodes();
+  if (graph) revealHidden();
   renderList();
   const btn = el("projection-unfold-btn");
   if (btn) btn.hidden = true;
@@ -4656,7 +4923,11 @@ function applyPositions(newNodes: GNode[], prevPos: Map<string, NodePos>) {
     if (p) {
       n.x = p.x;
       n.y = p.y;
-      if (p.fx != null && p.fx !== PARKED_X) {
+      // Every remembered pin is a real one now. This used to exclude the parking coordinate, so
+      // that a refresh landing under a projection did not carry a "hidden" pin into the new graph
+      // and freeze a node there; hiding does not pin any more, so a recorded fx can only have come
+      // from a DAG layout, radial, or a drag - all of which are worth restoring.
+      if (p.fx != null) {
         n.fx = p.fx;
         n.fy = p.fy;
       }
@@ -4781,7 +5052,7 @@ function liveApplyGraphUpdate(data: GraphPayload) {
   // that cached flag instead of re-probing durations itself.
   syncConditionalViews();
   recomputeMatchSet();
-  parkHiddenNodes(); // re-park if the default projection is still active
+  hideNonProjects(); // re-park if the default projection is still active
 
   renderLegend();
   renderList();
@@ -5027,12 +5298,17 @@ async function fetchLiveStatus() {
 // buildProjectionSet is willing to collapse. Shared by boot() and bootLive()
 // so the two boot paths cannot drift on this decision.
 function computeDefaultProjection(hasFragmentDirective: boolean) {
-  // Default view is the FULL graph: the whole workspace at a glance is the wow moment
-  // on load. The projects-only projection is kept only as a scale guard for very large
-  // graphs, where a cold force layout of many thousands of nodes would jank the reveal;
-  // there it collapses to project nodes with the "Show full graph" unfold still offered.
-  const PROJECTION_GUARD = 2500; // node count above which we collapse on load for perf
-  if (!hasFragmentDirective && graph && graph.nodes.length > PROJECTION_GUARD) {
+  // A cold load opens PROJECTED, not on the whole graph. The whole graph was the default on the
+  // argument that a workspace at a glance is the wow moment; what it actually renders past a few
+  // hundred nodes is a hairball, and the one thing a reader can do with a hairball is fail to read
+  // it. Every comparable tool declines to draw everything - Nx and Turborepo open on projects and
+  // expand on demand, Sourcegraph opens on nothing - and this graph already carries the way back
+  // out, the "Show full graph" unfold.
+  //
+  // opensProjected (views.ts) owns the threshold and the reasoning behind it. It lives there rather
+  // than inline because it is the one behavioral constant here a reader is most likely to change on
+  // a hunch, and pure it can be pinned by a test that states what each side of the line is for.
+  if (graph && opensProjected(graph.nodes.length, hasFragmentDirective)) {
     const ps = buildProjectionSet();
     if (ps) {
       projectionUnfolded = false;
@@ -5083,22 +5359,15 @@ function applyLayoutAndSimulation(requestedLayout: string, flavor: GraphFlavor) 
   }
 }
 
-// parkHiddenNodes moves every node outside the active default projection far
-// off-canvas so the force sim does not waste cycles on the full soup while
-// only project nodes are visible. Shared by boot(), bootLive(), and
-// liveApplyGraphUpdate (a live refresh that lands while the projection is
-// still active must re-park the same way a fresh load does).
-function parkHiddenNodes() {
-  if (!projectionUnfolded && projectionSet) {
-    for (const n of graph.nodes) {
-      if (!projectionSet.has(n.id)) {
-        n.fx = PARKED_X;
-        n.fy = PARKED_X;
-        n.x = PARKED_X;
-        n.y = PARKED_X;
-      }
-    }
-  }
+// hideNonProjects takes everything outside the active default projection off screen, so only the
+// project nodes are drawn and only they are in the layout. Shared by boot(), bootLive(), and
+// liveApplyGraphUpdate (a live refresh landing while the projection is still up has to re-hide the
+// nodes it just added, the same way a fresh load does).
+function hideNonProjects() {
+  if (projectionUnfolded || !projectionSet) return;
+  const keep = projectionSet;
+  setHidden(graph.nodes.filter((n) => !keep.has(n.id)).map((n) => n.id));
+  sim?.alpha(0.6).restart();
 }
 
 // finishInteractiveSetup wires zoom/drag, restores any view/query/layout/preset
@@ -5194,7 +5463,7 @@ function renderLoadedGraph(loaded: { data: GraphPayload; source: string }): void
 
   const initialParams = hashParams();
   applyLayoutAndSimulation(initialParams.layout, flavor);
-  parkHiddenNodes();
+  hideNonProjects();
 
   syncGraphKindToggle();
 }
@@ -5338,6 +5607,14 @@ function bootWireEvents() {
   // so the reason it holds is wired here once, from the title= the scaffold ships.
   const kindHelpBtn = el("graphkind-note");
   if (kindHelpBtn) attachHelpPopover(kindHelpBtn);
+
+  // Arrangement and Color: the two controls that decide what the canvas looks like, and the two a
+  // reader is most likely to mistake for each other. Same treatment, so the answer arrives on a tap
+  // rather than only on a hover no touch device produces.
+  for (const id of ["arrangement-help", "color-help"] as const) {
+    const btn = el(id);
+    if (btn) attachHelpPopover(btn);
+  }
 
   // Wire the projection unfold button ("Show full graph").
   const unfoldBtnWire = el("projection-unfold-btn");
@@ -5508,7 +5785,7 @@ function bootWireEvents() {
         resizeCanvas();
         if (sim) {
           const c = usableCenter(canvas.clientWidth, canvas.clientHeight, stageInsets());
-          sim.force("center", forceCenter(c.x, c.y));
+          recenterSimulation(c.x, c.y);
           sim.alpha(0.15).restart();
         }
         draw();
@@ -5542,13 +5819,10 @@ function bootWireEvents() {
   // Both settings apply live. draw() unconditionally because shapes are a paint-time property and a
   // stilled canvas has no next tick to pick them up on.
   motionObserver = new MutationObserver(() => {
-    if (sim) {
-      // motionEligible, not just motionSuppressed: the dag layouts hold their own coordinates and a
-      // restart would shake a settled Sugiyama apart, and a hidden or backgrounded surface has no
-      // reason to spin the simulation back up.
-      if (!motionEligible() || isDagMode() || !surfaceVisible) sim.alpha(0).stop();
-      else sim.alphaTarget(idleAlpha()).restart();
-    }
+    // Only ever a STOP. Turning motion off mid-settle cuts the opening burst short, which is the
+    // point of the setting; turning it back on has nothing to resume, because a settled graph is
+    // what full motion looks like too.
+    if (sim && (!motionEligible() || isDagMode() || !surfaceVisible)) sim.alpha(0).stop();
     draw();
   });
   motionObserver.observe(root, {
@@ -5573,7 +5847,7 @@ function bootWireEvents() {
       resizeCanvas();
       if (sim) {
         const c = usableCenter(canvas.clientWidth, canvas.clientHeight, stageInsets());
-        sim.force("center", forceCenter(c.x, c.y));
+        recenterSimulation(c.x, c.y);
         sim.alpha(0.1).restart();
       }
       // Selecting a node narrows the stage by the explain card's width, and a DAG layout keeps
@@ -5601,9 +5875,8 @@ function bootWireEvents() {
     { signal: lifecycleSignal },
   );
 
-  // Keep the gentle wobble from being a background CPU drain: stop the sim while
-  // the tab is hidden, resume when it returns. Also honor a live change to the
-  // reduced-motion preference. In a dag mode the sim stays stopped (no wobble).
+  // Keep an unfinished settle from ticking against a canvas nobody can see: stop the sim while
+  // the tab is hidden, resume it when the tab returns. In a dag mode the sim is stopped already.
   // startMotion() re-arms the motion loop on the same two triggers -
   // it self-checks motionEligible(), so it's a no-op when there's nothing to
   // animate or the tab/preference still says not to.
@@ -5612,7 +5885,9 @@ function bootWireEvents() {
     () => {
       if (sim) {
         if (document.hidden) sim.stop();
-        else if (!isDagMode()) sim.alphaTarget(idleAlpha()).restart();
+        // restart() without an alpha() resumes from wherever the settle had got to, so a tab hidden
+        // mid-burst finishes it and one hidden after it settled ticks once and stops again.
+        else if (!isDagMode()) sim.restart();
       }
       if (!document.hidden) startMotion();
     },
@@ -5621,7 +5896,7 @@ function bootWireEvents() {
   reducedMotion.addEventListener(
     "change",
     () => {
-      if (sim && !isDagMode()) sim.alphaTarget(idleAlpha()).restart();
+      // The layout itself is unaffected either way now - only the particle/pulse layer is.
       startMotion();
     },
     { signal: lifecycleSignal },
@@ -5817,7 +6092,7 @@ async function bootLive() {
     renderList();
 
     applyLayoutAndSimulation(params.layout, graphFlavor);
-    parkHiddenNodes();
+    hideNonProjects();
     finishInteractiveSetup();
 
     // Not awaited: this decorates a view the reader has to open, so the first paint never waits
@@ -5846,23 +6121,22 @@ async function bootLive() {
 }
 
 // deactivate tears down everything with a lifetime when the console unmounts a graph tab or pane: it
-// stops the force simulation (its rAF wobble is the main background CPU drain), cancels the
+// stops the force simulation, cancels the
 // motion loop and clears its state, aborts a live SSE stream and cancels its reconnect timer,
 // disconnects the stage ResizeObserver and the theme MutationObserver, and removes the
 // window/document lifecycle listeners (via the one AbortController). Idempotent. The standalone
 // page never calls it (the graph lives for the page's lifetime); the console's graph PageModule
 // calls it on deactivate.
-// setVisible is the console's surface contract (page.ts). Here it is not a formality: the force
-// simulation decays toward a small non-zero floor so the drawing keeps gently moving, which
-// deactivate() below calls "the main background CPU drain" - and until now only CLOSING the tab
-// stopped it. A backgrounded graph went on ticking and repainting a canvas nobody could see.
+// setVisible is the console's surface contract (page.ts). Here it is not a formality: a graph
+// backgrounded mid-settle would go on ticking and repainting a canvas nobody could see, and until
+// this existed only CLOSING the tab stopped it.
 //
-// Stopped rather than throttled, and restarted at the same idle floor on return, so what comes back
-// is the layout the reader left rather than one that drifted while they were elsewhere.
+// Stopped rather than throttled, so what comes back is the layout the reader left rather than one
+// that drifted while they were elsewhere.
 export function setVisible(visible: boolean): void {
   surfaceVisible = visible;
   if (visible) {
-    if (sim) sim.alphaTarget(idleAlpha()).restart();
+    if (sim) sim.restart(); // finishes an interrupted settle; a no-op on one that finished
     publishLiveStatus();
     if (liveRefreshPending) {
       liveRefreshPending = false;
@@ -5884,6 +6158,10 @@ export function deactivate(): void {
   // own window outlived the surface it drives, still calling applyQuery on a torn-down graph.
   queryBuilder?.close();
   detailMode = "auto";
+  // The same hazard a third time: a halo left aimed at a node of the CLOSED graph would displace
+  // whatever id happens to collide with it in the reopened one.
+  haloFocus = null;
+  haloKeep = new Set();
   if (sim) sim?.stop();
   if (motionRaf) {
     cancelAnimationFrame(motionRaf);

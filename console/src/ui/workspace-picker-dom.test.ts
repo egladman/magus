@@ -17,7 +17,10 @@ function mount() {
   host.dataset.workspacePickerHost = "";
   document.body.append(host);
   const demoCalls: boolean[] = [];
-  const picker = initWorkspacePicker(host, { onDemo: (enter) => demoCalls.push(enter) });
+  const picker = initWorkspacePicker(host, {
+    onDemo: (enter) => demoCalls.push(enter),
+    demoRoot: ACME,
+  });
   const btn = host.querySelector<HTMLButtonElement>("#console-scope-btn");
   assert.ok(btn);
   return { host, picker, btn, demoCalls };
@@ -51,12 +54,22 @@ describe("the workspace scope control", () => {
   });
 
   // The six per-surface "See the demo" buttons are gone; this row is the only way in.
-  test("the menu offers the demo, and asks to enter it", () => {
+  //
+  // Named after the WORKSPACE it opens and tagged "demo" - not called "Demo data" and tagged
+  // "sample", which named neither. Every surface's empty state tells a reader to look for this name,
+  // so the row and the hints have to agree or the instruction sends them hunting for a row that is
+  // not there.
+  test("the menu offers the demo under the name it lands you in", () => {
     const { host, picker, btn, demoCalls } = mount();
     picker.setWorkspaces(BOTH);
     btn.click();
-    const demo = menuItems(host).find((i) => i.textContent?.includes("Demo data"));
+    // By the ROW, not by the title: the demo row is now named after the same workspace the real
+    // acme root above it is, so matching on text or title would find that one first.
+    const demo = menuItems(host).find((i) => i.closest(".console-shell-scope__demorow"));
     assert.ok(demo, "no way into the demo");
+    assert.match(demo.textContent ?? "", /acme/, "the row must name the workspace it opens");
+    assert.match(demo.textContent ?? "", /demo/, "and mark it as fabricated");
+    assert.doesNotMatch(demo.textContent ?? "", /Demo data|sample/);
     demo.click();
     assert.deepEqual(demoCalls, [true]);
   });
@@ -98,7 +111,7 @@ describe("the workspace scope control", () => {
       items.slice(1, 3).map((b) => b.title),
       BOTH,
     );
-    assert.ok(items[3].textContent?.includes("Demo data"));
+    assert.match(items[3].textContent ?? "", /acmedemo|acme\s*demo/);
   });
 
   test("picking scopes the browser tab", () => {

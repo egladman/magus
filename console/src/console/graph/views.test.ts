@@ -4,7 +4,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import type { GLink, GNode } from "./types";
-import { dependencyDegrees, disconnected, mostDependedOn, projectOwners } from "./views";
+import {
+  LEGIBLE_NODE_COUNT,
+  dependencyDegrees,
+  disconnected,
+  mostDependedOn,
+  opensProjected,
+  projectOwners,
+} from "./views";
 
 function node(id: string): GNode {
   return { id, kind: "target", label: id } as unknown as GNode;
@@ -187,4 +194,29 @@ test("a containment cycle terminates", () => {
   ];
   const owner = projectOwners(nodes, links);
   assert.equal(owner.get("b"), "project:web");
+});
+
+// What a cold load opens on. These pin the DECISION, not the number - the number is a judgement and
+// may well move, but each of these cases says what one side of the line is for, so moving it means
+// answering them rather than editing a constant on a hunch.
+test("a graph too big to read whole opens projected", () => {
+  // magus's own graph, which is the one most readers meet first. It is the case the previous
+  // threshold got wrong: that guard sat at 2500 for frame-budget reasons, so this opened as a
+  // 2374-node hairball.
+  assert.equal(opensProjected(2374, false), true);
+});
+
+test("a graph small enough to read whole opens whole", () => {
+  // Collapsing this to a handful of project dots hides a picture that was already legible, which is
+  // the worse first impression - the reason the rule is a threshold and not "always project".
+  assert.equal(opensProjected(40, false), false);
+  assert.equal(opensProjected(LEGIBLE_NODE_COUNT, false), false, "the threshold itself is legible");
+  assert.equal(opensProjected(LEGIBLE_NODE_COUNT + 1, false), true);
+});
+
+test("a fragment directive is never overridden by the projection", () => {
+  // #view/#q/#node name a specific thing to look at. Answering with a projects-only summary answers
+  // a question nobody asked, and it breaks every `magus graph open` link.
+  assert.equal(opensProjected(2374, true), false);
+  assert.equal(opensProjected(40, true), false);
 });

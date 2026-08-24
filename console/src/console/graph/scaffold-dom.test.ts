@@ -45,15 +45,19 @@ test("Clear is a live control, not reference copy", () => {
 // The question chips moved into querybuilder.ts, which builds its cards in JS. What the scaffold
 // still owes is the way IN: without this button the views and the filter grammar are unreachable,
 // and nothing else in the markup would show it missing.
+//
+// This used to require the trigger to sit inside the query bar, "next to the input it writes into".
+// It sits in the stage header now. Adjacency to the field is what made it a fourth button hanging
+// off an 18rem input, which is the shape that made the surface's one teaching control read as that
+// field's overflow menu. What has to hold is that the trigger EXISTS and is LIVE - the placement is
+// a design call, and pinning it here only made the test a second opinion on that call.
 test("the query builder has a live trigger", () => {
   const host = parse();
   const btn = host.querySelector("#query-builder-btn");
-  assert.ok(btn, "expected the builder trigger beside the filter input");
+  assert.ok(btn, "without this button the views and the filter grammar are unreachable");
+  // A reference block is cloned id-stripped and hidden at its source, so a control wired by id from
+  // inside one is dead both ways. That is the assertion worth keeping.
   assert.equal(btn.closest("[data-ref-section]"), null, "the trigger must not be reference copy");
-  assert.ok(
-    btn.closest(".console-graph-sidebar__search"),
-    "the trigger belongs in the query bar, next to the input it writes into",
-  );
 });
 
 test("the remember-workspace checkbox sits in the live sidebar", () => {
@@ -75,6 +79,24 @@ test("no LIVE view control is hard-coded in the scaffold", () => {
     live.map((el) => el.getAttribute("data-view")),
     [],
     "views are built by querybuilder.ts from viewUnavailable(); a static one cannot know if it applies",
+  );
+});
+
+// The builder is the only control that teaches the query language, and it sits third in a row of
+// four identically-styled control buttons. Drawn as vertical dots it read as this text field's
+// overflow menu, which is what that glyph means everywhere else, and the aria-label saying
+// otherwise reaches nobody who can see. A visible word is what makes it findable.
+test("the query builder is named, and is not drawn as an overflow menu", () => {
+  const host = parse();
+  const btn = host.querySelector<HTMLElement>("#query-builder-btn");
+  assert.ok(btn, "the builder is the one way to ask without knowing the syntax");
+  assert.equal(btn.querySelector(".pf-v6-c-button__text")?.textContent, "Ask");
+  // Three same-sized circles in a column is the kebab, whatever the markup calls it.
+  const dots = [...btn.querySelectorAll("svg circle")];
+  const xs = new Set(dots.map((c) => c.getAttribute("cx")));
+  assert.ok(
+    !(dots.length >= 3 && xs.size === 1),
+    "a vertical column of three dots is an overflow menu to every reader who has used software",
   );
 });
 

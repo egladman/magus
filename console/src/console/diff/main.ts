@@ -1753,10 +1753,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // injected (scripts/surface-stubs.mjs), so the Workspace menu is always on screen - there is no
     // shell-less page that would need a different sentence.
     if (offerDemo) {
-      emptyBody.append(
-        " ",
-        "Pick Demo data from the Workspace menu to see a fabricated changeset.",
-      );
+      emptyBody.append(" ", "Pick acme from the Workspace menu to see a fabricated changeset.");
     }
   };
 

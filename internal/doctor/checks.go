@@ -1441,9 +1441,18 @@ func (r *runner) checkStaleSockets() types.DoctorCheck {
 		return types.DoctorCheck{Name: "sockets", Status: types.DoctorFail, Message: fmt.Sprintf("scan %s: %v", sockDir, err)}
 	}
 
+	// This process serves a socket of its own (proc.Server names it magus-<pid>-<rand>.sock), and
+	// counting it made the check fail whenever a daemon was actually running: doctor plus the daemon
+	// is two live sockets, so the one state the check exists to bless reported "multiple daemons
+	// running". It only ever passed when nothing was serving.
+	self := fmt.Sprintf("magus-%d-", os.Getpid())
+
 	var stale, live []string
 	for _, e := range entries {
 		if e.IsDir() || !strings.HasPrefix(e.Name(), "magus-") || !strings.HasSuffix(e.Name(), ".sock") {
+			continue
+		}
+		if strings.HasPrefix(e.Name(), self) {
 			continue
 		}
 		p := filepath.Join(sockDir, e.Name())
