@@ -155,7 +155,7 @@ func TestPlatformCPUs(t *testing.T) {
 
 // TestPlatformMemory: zero is UNKNOWN, not "no memory", so a caller branches on it
 // rather than sizing work off it. Either answer is legitimate here - the host may
-// be a platform hostmem cannot measure.
+// be a platform mem cannot measure.
 func TestPlatformMemory(t *testing.T) {
 	got, err := PlatformMemory(context.Background())
 	require.NoError(t, err)

@@ -1,6 +1,6 @@
-//go:build darwin
+//go:build darwin && noffi
 
-package hostmem
+package mem
 
 import (
 	"context"
@@ -15,6 +15,12 @@ import (
 // Darwin publishes no MemAvailable equivalent. Inactive pages are the closest
 // analogue to Linux's reclaimable cache; wired and active pages are excluded
 // because a new allocation cannot have them without paging.
+//
+// By forking vm_stat(1) and parsing it, which is what the whole package used to
+// do. The dynamic build asks the kernel directly instead
+// (available_mach_darwin.go), but that needs dlopen, and `noffi` exists to keep
+// dlopen out of the archives magus ships as static. vm_stat prints
+// host_statistics64, so this is the same source at the cost of a process per sample.
 //
 // A watchdog input, so it may be approximate. It may not be confidently wrong in
 // the tight direction, which is why a partial parse yields 0.

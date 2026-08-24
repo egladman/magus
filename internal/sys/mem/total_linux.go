@@ -1,6 +1,6 @@
 //go:build linux
 
-package hostmem
+package mem
 
 import (
 	"bufio"

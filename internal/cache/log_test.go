@@ -188,6 +188,30 @@ func TestPrettyHandlerPlainOutput(t *testing.T) {
 		), "gc: corrupt manifest foo.json")
 	})
 
+	// The crisis line. It renders like cache.warn rather than through
+	// handleGeneric, which would lead with the record name and bury the sentence
+	// in an attribute dump. The assertions pin both halves: the sentence reaches
+	// the body, and the record name does not.
+	t.Run("cache.memory", func(t *testing.T) {
+		t.Parallel()
+		// Inlined rather than through assertPlain: the point of this case is as
+		// much what the line must NOT carry as what it must.
+		var buf bytes.Buffer
+		h := newTestHandler(&buf)
+		require.NoError(t, h.Handle(context.Background(), buildRecord(
+			"cache.memory",
+			slog.String("msg", "this run has pushed 512MB into swap (2048MB used in total, 300MB of 16384MB memory available); paging is what makes a machine stop responding rather than a target fail; running: .:test"),
+			slog.Int64("available_mb", 300),
+			slog.Int64("total_mb", 16384),
+			slog.String("running", ".:test"),
+		)), "Handle")
+		out := buf.String()
+		assert.Contains(t, out, "pushed 512MB into swap")
+		assert.Contains(t, out, "running: .:test", "the warning must name what to kill")
+		assert.NotContains(t, out, "cache.memory", "the event name is not the message")
+		assert.NotContains(t, out, "available_mb=", "the figures are already in the sentence")
+	})
+
 	t.Run("cache.dry.banner", func(t *testing.T) {
 		t.Parallel()
 		assertPlain(t, buildRecord("cache.dry.banner"), "dry run: commands shown, not executed")
