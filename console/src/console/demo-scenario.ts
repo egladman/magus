@@ -319,6 +319,48 @@ export function scenarioRuns(now: number): ScenarioRun[] {
 // A ref shaped like the CI sweep's outputs but deliberately absent from scenarioRuns: it aged out
 // of the retained store, so the agent's later magus_output lookup for it fails. This is the join
 // key for the "failed lookup for a pruned ref" beat in the trail.
+// ScenarioInvocation is one COMMAND in the scenario - the unit the run browser lists and the log
+// viewer opens. scenarioRuns records what each TARGET did; this records what was asked for, which no
+// run row carries and which is how a person actually remembers a run ("the affected ci I kicked off
+// before lunch"). Derived rather than stored: the story is already fully determined by the runs, and
+// a second hand-maintained table would be one more thing to keep in step with it.
+export interface ScenarioInvocation {
+  inv: string;
+  arguments: string[]; // full argv, subcommand included
+  trigger: string; // journal Trigger vocabulary: run | affected | ci | direct
+  startMs: number;
+  endMs: number;
+  failed: boolean;
+}
+
+// scenarioInvocations folds the run history into its invocations, NEWEST FIRST, spanning each one
+// from its first target's start to its last one's end.
+export function scenarioInvocations(now: number): ScenarioInvocation[] {
+  const order: ScenarioInvocation[] = [];
+  const byId = new Map<string, ScenarioInvocation>();
+  for (const r of scenarioRuns(now)) {
+    const seen = byId.get(r.inv);
+    if (seen) {
+      seen.startMs = Math.min(seen.startMs, r.startMs);
+      seen.endMs = Math.max(seen.endMs, r.endMs);
+      seen.failed = seen.failed || r.state === "failed";
+      continue;
+    }
+    const ci = r.inv === INV_CI;
+    const inv: ScenarioInvocation = {
+      inv: r.inv,
+      arguments: ci ? ["affected", "ci"] : ["run", r.target.split(":")[0], r.project],
+      trigger: ci ? "ci" : r.trigger === "mcp" ? "direct" : "run",
+      startMs: r.startMs,
+      endMs: r.endMs,
+      failed: r.state === "failed",
+    };
+    byId.set(r.inv, inv);
+    order.push(inv);
+  }
+  return order;
+}
+
 export const PRUNED_REF = "outci7a9";
 
 // ---- activity trail --------------------------------------------------------

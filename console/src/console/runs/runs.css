@@ -1,0 +1,355 @@
+/* runs.css - the Runs surface: a toolbar over a facets / list / detail split.
+   Its own sheet rather than a reuse of logs.css: that sheet's geometry is tuned to a 10-19rem rail
+   docked inside the viewer, and this is a full page whose three columns each want their own scroll.
+   Shares only the console's semantic tokens, which is the layer meant to be shared. */
+
+.console-runs {
+  display: flex;
+  flex-direction: column;
+  block-size: 100%;
+  min-block-size: 0;
+  background: var(--pf-t--global--background--color--primary--default);
+}
+
+/* --- Toolbar ------------------------------------------------------------------
+   ONE control scale on this row, the same rule logs.css states for its view toolbar: PF's
+   pf-m-small shrinks padding AND font while pf-m-compact shrinks only padding, so no pairing of the
+   two lines up. Everything here takes the default and the input sets the row's height. */
+.console-runs__bar {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.6rem 0.9rem;
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--console-chrome);
+}
+.console-runs__search { flex: 0 1 26rem; min-inline-size: 8rem; }
+.console-runs__help { flex: 0 0 auto; }
+/* The readout, not a control: how many runs are showing and how many of them failed. Tabular so the
+   digits do not jitter as it updates on every keystroke. */
+/* One phrase, never broken across lines: "35 runs, 3 failed" wrapped to "35 / runs, 3 / failed" on a
+   phone, which reads as three numbers rather than as one sentence. */
+.console-runs__count {
+  white-space: nowrap;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-runs__refresh { margin-inline-start: auto; }
+
+/* --- Facet strip ---------------------------------------------------------------
+   Full width under the toolbar, NOT a third column. These are a control for the query box directly
+   above them; a column charged a third of the page's width, permanently, to hold what is usually a
+   dozen short chips - and took that width from the two things a reader is comparing.
+
+   It wraps rather than scrolling sideways: a value you cannot see is a value you will not use, and
+   discovery is the entire job here. The height is capped so a workspace with a long vocabulary
+   cannot push the list off screen; past the cap the strip scrolls. */
+.console-runs__facets {
+  flex: 0 0 auto;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.9rem;
+  max-block-size: 6.5rem;
+  overflow-y: auto;
+  padding: 0.45rem 0.9rem 0.5rem;
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  background: var(--console-chrome);
+}
+.console-runs__facets:empty { display: none; }
+/* One facet: its heading and its values on the same baseline, kept together so a wrap never orphans
+   a heading from the chips it names. */
+.console-runs__facet {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0.15rem 0.3rem;
+}
+.console-runs__facet-head {
+  margin: 0 0.1rem 0 0;
+  font-size: 0.66rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-runs__facet-value {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 0.3rem;
+  padding: 0.1rem 0.4rem;
+  border: 1px solid transparent;
+  border-radius: 999px;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.75rem;
+  line-height: 1.5;
+  cursor: pointer;
+}
+.console-runs__facet-value:hover { background: var(--pf-t--global--background--color--action--plain--hover); }
+.console-runs__facet-value.pf-m-selected {
+  background: var(--pf-t--global--background--color--control--default);
+  border-color: var(--pf-t--global--border--color--default);
+  font-weight: 600;
+}
+.console-runs__facet-label {
+  display: inline-flex;
+  align-items: baseline;
+  max-inline-size: 14rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.console-runs__facet-count {
+  font-size: 0.68rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+/* --- Body split ---------------------------------------------------------------
+   Two independently scrolling columns: the runs, and the one you picked. min-inline-size:0 is what
+   keeps a long command line from setting a column's width - a flex item defaults to min-content, and
+   one `magus affected ci --no-default-charms` would otherwise push the detail pane off screen. */
+.console-runs__body {
+  flex: 1 1 auto;
+  display: flex;
+  min-block-size: 0;
+}
+.console-runs__list {
+  flex: 1 1 24rem;
+  min-inline-size: 0;
+  overflow: auto;
+  border-inline-end: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-runs__detail {
+  flex: 1 1 30rem;
+  min-inline-size: 0;
+  overflow: auto;
+  padding: 1rem 1.1rem 2rem;
+}
+
+/* --- Status dot ---------------------------------------------------------------
+   Same vocabulary as the log viewer's run tree (logs.css), restated rather than imported because
+   these two sheets load independently and a shared rule would bind their load order. */
+.console-runs__dot {
+  display: inline-block;
+  inline-size: 7px;
+  block-size: 7px;
+  margin-inline-end: 0.45rem;
+  border-radius: 50%;
+  flex: 0 0 auto;
+  background: var(--pf-t--global--text--color--subtle);
+}
+.console-runs__dot[data-status="pass"] { background: var(--console-status-ok); }
+.console-runs__dot[data-status="fail"] { background: var(--console-status-danger); }
+.console-runs__dot[data-status="mixed"] { background: var(--console-status-warn); }
+
+/* --- Run list -----------------------------------------------------------------
+   Two lines per row: the command that produced the run, then its when/how-long/how-many. The
+   command is the identity because it is what a person remembers; the invocation id is machine
+   vocabulary and lives in the detail pane. */
+.console-runs__row {
+  inline-size: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  padding: 0.8rem 1rem;
+  border: 0;
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: start;
+  cursor: pointer;
+}
+.console-runs__row:hover { background: var(--pf-t--global--background--color--action--plain--hover); }
+.console-runs__row.pf-m-current {
+  background: var(--pf-t--global--background--color--control--default);
+  box-shadow: inset 3px 0 0 var(--pf-t--global--color--brand--default);
+}
+.console-runs__row-head { display: flex; align-items: center; min-inline-size: 0; }
+.console-runs__row-cmd {
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.88rem;
+  line-height: 1.45;
+}
+/* Indented to the command above it, not to the row - the dot's width plus its gap - so the two lines
+   read as one block instead of as a heading with an unrelated line beneath. */
+.console-runs__row-meta {
+  padding-inline-start: calc(7px + 0.45rem);
+  font-size: 0.74rem;
+  line-height: 1.45;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+/* --- Detail pane ----------------------------------------------------------------
+   Three blocks with real separation: what ran, the facts about it, then its targets. The previous
+   version stacked five lines of differently-shaped text at one size and let a reader sort it out. */
+.console-runs__detail-head {
+  margin-block-end: 1.4rem;
+  padding-block-end: 1.1rem;
+  border-block-end: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-runs__detail-title {
+  display: flex;
+  align-items: baseline;
+  gap: 0.6rem;
+  margin-block-end: 0.9rem;
+}
+.console-runs__detail-cmd {
+  margin: 0;
+  min-inline-size: 0;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 1.05rem;
+  font-weight: 600;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}
+/* The outcome as a WORD beside the command. The dot in the list carries it in colour alone, which
+   is the one reader it does not reach. */
+.console-runs__pill {
+  flex: 0 0 auto;
+  padding: 0.05rem 0.5rem;
+  border-radius: 999px;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--pf-t--global--text--color--regular);
+  background: var(--pf-t--global--background--color--control--default);
+}
+.console-runs__pill[data-status="pass"] {
+  color: var(--console-status-ok-text);
+  background: color-mix(in srgb, var(--console-status-ok) 16%, transparent);
+}
+.console-runs__pill[data-status="fail"] {
+  color: var(--console-status-danger-text);
+  background: color-mix(in srgb, var(--console-status-danger) 16%, transparent);
+}
+.console-runs__pill[data-status="mixed"] {
+  color: var(--console-status-warn-text);
+  background: color-mix(in srgb, var(--console-status-warn) 16%, transparent);
+}
+
+/* The facts grid: a label column sized to its content and a value column taking the rest, so the
+   values line up and the eye can run down either one. */
+.console-runs__facts {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 0.3rem 0.9rem;
+  margin: 0 0 0.9rem;
+  font-size: 0.78rem;
+}
+.console-runs__fact-label {
+  margin: 0;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  line-height: 1.6;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-runs__fact-value {
+  margin: 0;
+  min-inline-size: 0;
+  line-height: 1.6;
+  overflow-wrap: anywhere;
+}
+/* The parenthetical half of a fact ("1h ago" beside the clock time): same row, lower contrast, so
+   it reads as a gloss on the value rather than as a second value. */
+.console-runs__fact-extra {
+  margin-inline-start: 0.5rem;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.console-runs__section-head {
+  margin: 0 0 0.4rem;
+  font-size: 0.68rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--pf-t--global--text--color--subtle);
+}
+.console-runs__targets { display: flex; flex-direction: column; }
+.console-runs__target {
+  padding: 0.7rem 0;
+  border-block-start: 1px solid var(--pf-t--global--border--color--default);
+}
+.console-runs__target-line { display: flex; align-items: baseline; gap: 0.5rem; min-inline-size: 0; }
+.console-runs__target-name {
+  flex: 1 1 auto;
+  min-inline-size: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.85rem;
+  font-weight: 600;
+}
+.console-runs__target-dur {
+  flex: 0 0 auto;
+  font-size: 0.74rem;
+  font-variant-numeric: tabular-nums;
+  color: var(--pf-t--global--text--color--subtle);
+}
+/* Everything a target says sits in ONE indented block under its name - the ref, the failure, the
+   link - so the pane reads as a list of targets rather than as a stack of loose lines. The indent
+   is the dot's width plus its gap, the same measure the list rows use. */
+.console-runs__target-body {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.3rem;
+  margin-block-start: 0.3rem;
+  padding-inline-start: calc(7px + 0.45rem);
+}
+.console-runs__target-ref {
+  font-family: var(--pf-t--global--font--family--mono);
+  font-size: 0.72rem;
+  color: var(--pf-t--global--text--color--subtle);
+}
+/* The failure text, not a decoration: it is usually the reason the reader came to this page, so it
+   gets the danger hue and is allowed to wrap in full rather than truncating. */
+.console-runs__target-error {
+  margin: 0;
+  font-size: 0.78rem;
+  line-height: 1.5;
+  color: var(--console-status-danger-text);
+  overflow-wrap: anywhere;
+}
+.console-runs__open { font-size: 0.76rem; }
+.console-runs__note {
+  margin: 0.5rem 0 0;
+  font-size: 0.8rem;
+  line-height: 1.55;
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+/* --- Empty states -------------------------------------------------------------- */
+.console-runs__empty { padding: 2.5rem 1.5rem; max-inline-size: 34rem; }
+.console-runs__empty-title { margin: 0; font-size: 1rem; font-weight: 600; }
+.console-runs__empty .pf-v6-c-button { margin-block-start: 0.9rem; }
+
+/* --- Narrow ---------------------------------------------------------------------
+   Below the shell's own breakpoint the two columns stack: a 375px viewport cannot carry a list
+   beside a detail pane, and squeezing them makes both unusable rather than one. The facet strip
+   already spans the width, so it needs nothing here beyond a lower height cap. */
+@media (max-width: 63.999rem) {
+  .console-runs__facets { max-block-size: 5rem; }
+  .console-runs__body { flex-direction: column; overflow: auto; }
+  .console-runs__list,
+  .console-runs__detail {
+    flex: 0 0 auto;
+    overflow: visible;
+    border-inline-end: 0;
+  }
+  .console-runs__list { border-block-end: 1px solid var(--pf-t--global--border--color--default); }
+}

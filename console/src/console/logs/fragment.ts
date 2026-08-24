@@ -48,6 +48,23 @@ export function viewerParams(): ViewerParams {
   return out;
 }
 
+// setFragmentParam writes one #-fragment directive through replaceState (no history spam),
+// preserving every other part; an empty value drops the directive. It is what turns a run-browser
+// selection into a reloadable address - and, like everything else in the fragment, it is never
+// transmitted to a server.
+export function setFragmentParam(key: string, value: string): void {
+  const kept: string[] = [];
+  for (const part of location.hash.replace(/^#/, "").split("&")) {
+    if (!part) continue;
+    const eq = part.indexOf("=");
+    if ((eq < 0 ? part : part.slice(0, eq)) === key) continue;
+    kept.push(part);
+  }
+  if (value) kept.push(key + "=" + encodeURIComponent(value));
+  const frag = kept.join("&");
+  history.replaceState(null, "", location.pathname + location.search + (frag ? "#" + frag : ""));
+}
+
 // base64ToBytes decodes a base64 (standard alphabet) string to bytes - the framing the live
 // SSE stream uses for each protobuf Event.
 export function base64ToBytes(b64: string): Uint8Array {
