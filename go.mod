@@ -9,6 +9,7 @@ require (
 	github.com/Masterminds/sprig/v3 v3.3.0
 	github.com/bmatcuk/doublestar/v4 v4.10.0
 	github.com/cbroglie/mustache v1.4.0
+	github.com/ebitengine/purego v0.10.2
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/fatih/color v1.19.0
 	github.com/fsnotify/fsnotify v1.10.1
@@ -83,7 +84,6 @@ require (
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/dlclark/regexp2 v1.12.0 // indirect
-	github.com/ebitengine/purego v0.10.2 // indirect
 	github.com/egladman/magus/libs/diagnostics v0.0.0
 	github.com/egladman/magus/libs/gopherbuzz v0.0.0
 	github.com/gabriel-vasile/mimetype v1.4.15 // indirect

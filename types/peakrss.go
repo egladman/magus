@@ -15,10 +15,24 @@ import (
 // return capture above it in this package: a context-scoped collector written
 // by code far below the orchestrator and read once by the orchestrator.
 //
-// The aggregate is a MAXIMUM, never a sum. A target that forks a compiler, then
-// a linker, then a test binary reached its high-water mark in whichever one
-// peaked; adding them together would describe a machine that never existed. It
-// is the peak that decides whether two targets fit on one runner.
+// The aggregate ACROSS EXECS is a maximum, never a sum: a target that forks a
+// compiler, then a linker, then a test binary reached its high-water mark in
+// whichever one peaked, and adding those would describe a machine that never
+// existed.
+//
+// What each exec contributes is a different question, and one this package used to
+// get wrong. It is not one process: `go test` runs package binaries concurrently
+// (-p defaults to GOMAXPROCS), each under -race carrying the race detector's
+// shadow memory, and the kernel will not total them. wait4's ru_maxrss propagates
+// up a reaped subtree as a MAXIMUM, so a driver that forked four concurrent 800MB
+// children reports 801MB, measured on darwin. One instant of a real
+// `go test -race ./internal/...` held 3.11GiB across 17 processes while the
+// largest single one was 1.28GiB.
+//
+// run.ExecResult.MaxRSSBytes therefore folds the kernel's figure together with a
+// sampled total of the live process tree, and reports the larger. A figure here is
+// still a FLOOR, because sampling only sees the instants it looks at, but it no
+// longer misses concurrency by construction.
 
 type peakRSSKey struct{}
 

@@ -1,9 +1,11 @@
 package main
 
 import (
+	"errors"
 	"testing"
 
 	"github.com/egladman/magus/internal/config"
+	"github.com/stretchr/testify/assert"
 )
 
 // TestResolveProfileRunAffectedUsageSkipsForward pins the fix for the silent
@@ -188,4 +190,14 @@ func TestSnapshotGlobalsRestoresDryRun(t *testing.T) {
 		t.Fatalf("globalCfg.DryRun = true on a dispatch that never asked for it: the bug this test pins")
 	}
 	restore()
+}
+
+// The exit-code contract magus does keep: 0 for success, 2 for a misuse the
+// invocation never got past, 1 for work that ran and failed. There is deliberately
+// no code for "the machine was busy" - magus no longer refuses work on that ground.
+func TestExitCodeOf(t *testing.T) {
+	assert.Equal(t, 0, exitCodeOf(nil))
+	assert.Equal(t, 1, exitCodeOf(errors.New("go exited 1")))
+	assert.Equal(t, 1, exitCodeOf(errors.Join(errors.New("go exited 1"), nil)))
+	assert.Equal(t, exitUsage, exitCodeOf(usagef("no such target")))
 }

@@ -83,8 +83,20 @@ type ExecResult struct {
 	// spikes to 4GB while linking is a 4GB process for the purpose of deciding what can
 	// run alongside it, and the spike is the part that takes a machine down.
 	//
-	// The kernel already counted it - this is read off the same ProcessState the exit
-	// code comes from, so it costs no sampling, no timer, and no extra syscall.
+	// Two readings folded to whichever is larger, because each is blind where the
+	// other sees.
+	//
+	// The kernel's own figure costs nothing (it is read off the same ProcessState
+	// the exit code comes from) and never misses a spike, but it folds a subtree as
+	// a MAXIMUM: wait4 propagates ru_maxrss up by taking the largest process, never
+	// the sum. Measured on darwin, a driver that forked four concurrent 800MB
+	// children reports 801MB. That alone reports the biggest process in a tree
+	// rather than what the tree held together.
+	//
+	// So a sampler also totals the live process tree while the command runs (see
+	// treesample.go), which catches concurrency but only at the instants it looks.
+	// The maximum of the two cannot be smaller than what magus reported before
+	// sampling existed, and is a floor rather than a true peak either way.
 	MaxRSSBytes int64
 }
 
@@ -168,12 +180,20 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 
 	slog.DebugContext(ctx, "run.exec", "cmd", name, "args", args, "dir", c.Dir, "tty", opts.TTY)
 
+	// Start and Wait rather than Run, so the pid is known to THIS goroutine before
+	// the sampler is handed it. Behaviorally identical (Run is Start plus Wait);
+	// the split exists only so nothing reads c.Process concurrently.
+	sampler := newTreeSampler()
 	var runErr error
 	if opts.TTY {
-		runErr = runOnPTY(c, outW, &outBuf, opts)
+		runErr = runOnPTY(c, outW, &outBuf, opts, sampler.follow)
 	} else {
-		runErr = c.Run()
+		if runErr = c.Start(); runErr == nil {
+			sampler.follow(c.Process.Pid)
+			runErr = c.Wait()
+		}
 	}
+	treePeak := sampler.stop()
 	runErr = classifyMissingBinary(runErr, name, c.ProcessState != nil)
 	if ctx.Err() != nil {
 		KillGroup(c) // reap grandchildren that ignored the graceful signal
@@ -183,7 +203,12 @@ func Exec(ctx context.Context, name string, args []string, opts ExecOptions) (Ex
 	if c.ProcessState != nil {
 		res.Started = true
 		res.Code = c.ProcessState.ExitCode()
-		res.MaxRSSBytes = maxRSSBytes(c.ProcessState)
+		// The larger of the two readings, because each is blind where the other
+		// sees. rusage is exact for one process and never misses a spike, but folds
+		// a subtree as a maximum; the sampler sums the whole tree but only at the
+		// instants it looked. Taking the max is strictly better than either alone
+		// and cannot report less than magus reported before sampling existed.
+		res.MaxRSSBytes = max(maxRSSBytes(c.ProcessState), treePeak)
 		// Report it upward as well as returning it. The caller that wants this
 		// number is the shard planner, which is several layers away and has no
 		// path to an individual ExecResult; the context collector is what

@@ -25,7 +25,11 @@ import (
 //  3. Copy master -> writers until EIO, which is how a pty master reports "the
 //     slave side is gone" and is the normal end of a session rather than a fault.
 //  4. Only then Wait, so no output is dropped between exit and the final read.
-func runOnPTY(c *exec.Cmd, w io.Writer, capture *bytes.Buffer, opts ExecOptions) error {
+//
+// onStarted is called once with the child's pid, from this goroutine, as soon as
+// it exists. It is how the caller follows the process tree without reading
+// c.Process across a goroutine boundary, which races with Start.
+func runOnPTY(c *exec.Cmd, w io.Writer, capture *bytes.Buffer, opts ExecOptions, onStarted func(int)) error {
 	if !ptySupported {
 		_, _, err := openPTY(0, 0) // returns the platform's explanatory error
 		return err
@@ -57,6 +61,9 @@ func runOnPTY(c *exec.Cmd, w io.Writer, capture *bytes.Buffer, opts ExecOptions)
 	if err := c.Start(); err != nil {
 		slave.Close()
 		return err
+	}
+	if onStarted != nil {
+		onStarted(c.Process.Pid)
 	}
 	// Step 2, and the whole reason this function exists.
 	slave.Close()

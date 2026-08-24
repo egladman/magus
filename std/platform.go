@@ -9,7 +9,7 @@ import (
 
 	"strings"
 
-	"github.com/egladman/magus/internal/hostmem"
+	"github.com/egladman/magus/internal/sys/mem"
 )
 
 //go:generate go run ../cmd/magus-utils bindings -module platform -lang buzz -out ../internal/interp/bindings/gen/platform.go
@@ -116,7 +116,7 @@ var Platform = Module{
 		},
 		{
 			Name:    "memory_bytes",
-			Doc:     "The machine's total physical memory in BYTES, or 0 when it cannot be determined (any host other than Linux or macOS). Note magus.project targets take memory_mb in MEGABYTES. Size work that scales on memory rather than cores with this: `go test` defaults its package parallelism to the CPU count, which is the wrong axis under -race, where each test binary carries the race detector's shadow memory. Branch on 0 rather than treating it as \"no memory\".",
+			Doc:     "How much memory this process may commit, in BYTES, or 0 when it cannot be determined (any host other than Linux or macOS). Narrowed by a container's memory ceiling where there is one, the way cpus() honors a CPU quota. Note magus.project targets take memory_mb in MEGABYTES. Size work that scales on memory rather than cores with this: `go test` defaults its package parallelism to the CPU count, which is the wrong axis under -race, where each test binary carries the race detector's shadow memory. Branch on 0 rather than treating it as \"no memory\".",
 			Returns: []Ret{{Type: TypeInt}},
 			Impl:    PlatformMemory,
 		},
@@ -129,8 +129,13 @@ var Platform = Module{
 	},
 }
 
-// PlatformMemory returns the machine's total physical memory in bytes, or 0 when
+// PlatformMemory returns the memory this process may commit in bytes, or 0 when
 // it cannot be determined.
+//
+// Narrowed by a container's memory ceiling where there is one, for the reason
+// PlatformCPUs below reports GOMAXPROCS rather than NumCPU: inside a container the
+// machine's figure and the one that actually bounds the work disagree, and a
+// magusfile sizing its parallelism wants the second.
 //
 // Zero is UNKNOWN, not "none". Every caller has to branch on it, which is the
 // honest shape: guessing a size here would make a magusfile's parallelism depend
@@ -141,7 +146,7 @@ var Platform = Module{
 // a 32-bit host with over 2GB, where a silently wrapped number would size a
 // magusfile's parallelism off nonsense - see the deferred 32-bit plan.
 func PlatformMemory(ctx context.Context) (int, error) {
-	b := hostmem.TotalBytes(ctx)
+	b := mem.UsableBytes(ctx)
 	if b <= 0 || b > int64(math.MaxInt) {
 		return 0, nil
 	}

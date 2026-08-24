@@ -160,6 +160,7 @@ func (r *runner) run(wsErr error) types.DoctorReport {
 		r.checkConfigFile(),
 		r.checkCacheWritable(),
 		r.checkConcurrencySizing(),
+		r.checkMemoryDeclarations(projects),
 		r.checkCacheYield(projects),
 		r.checkLanguageCoverage(projects),
 		r.checkCITarget(projects),

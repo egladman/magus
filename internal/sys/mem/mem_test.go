@@ -1,10 +1,10 @@
-// hostmem_test.go deliberately has no hostmem.go beside it. Both readings it covers are
-// platform-split across total_{darwin,linux,other}.go and available_{darwin,linux,other}.go,
-// and what these tests assert is the RELATIONSHIP between the two - which belongs to
-// neither file. Splitting it per reader would lose the only assertion worth making on an
+// mem_test.go deliberately has no mem.go beside it. Both readings it covers are
+// platform-split across total_{darwin,linux,other}.go and available_*.go, and what
+// these tests assert is the RELATIONSHIP between the two, which belongs to neither
+// file. Splitting it per reader would lose the only assertion worth making on an
 // arbitrary host.
 
-package hostmem
+package mem
 
 import (
 	"context"
@@ -55,4 +55,37 @@ func TestAvailableIsNotFreeMemory(t *testing.T) {
 		"available (%d) is under 1%% of total (%d) - either this host is genuinely "+
 			"thrashing, or the reading picked up free rather than available memory",
 		avail, total)
+}
+
+// The v1 sentinel case is why UsableBytes takes a minimum rather than trying to
+// recognize either cgroup version's spelling of unlimited: a ceiling larger than
+// the machine describes no ceiling at all.
+func TestNarrowToLimit(t *testing.T) {
+	const total = 16 << 30
+	for _, tc := range []struct {
+		name         string
+		total, limit int64
+		want         int64
+	}{
+		{"no limit is the machine", total, 0, total},
+		{"a real container ceiling wins", total, 4 << 30, 4 << 30},
+		{"a ceiling above the machine is no ceiling", total, 9223372036854771712, total},
+		{"a ceiling equal to the machine changes nothing", total, total, total},
+		{"an unmeasurable host inside a measured container", 0, 4 << 30, 4 << 30},
+		{"both unknown stays unknown", 0, 0, 0},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assert.Equal(t, tc.want, narrowToLimit(tc.total, tc.limit))
+		})
+	}
+}
+
+// UsableBytes never exceeds the machine, whatever this host reports.
+func TestUsableNeverExceedsTotal(t *testing.T) {
+	ctx := context.Background()
+	if total := TotalBytes(ctx); total > 0 {
+		assert.LessOrEqual(t, UsableBytes(ctx), total)
+	} else {
+		assert.Zero(t, TotalBytes(ctx), "an unmeasurable host reports UNKNOWN")
+	}
 }

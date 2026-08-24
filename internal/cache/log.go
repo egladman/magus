@@ -723,6 +723,19 @@ func (h *PrettyHandler) Handle(ctx context.Context, r slog.Record) error {
 		h.paintStatus()
 	case "cache.warn":
 		h.printf("%s %s\n", glyph(colorize, "warn", colYellow), recordStr(r, "msg"))
+	case "cache.memory":
+		// The sentence as the body, like cache.warn above. Without this arm the
+		// record fell through to handleGeneric and rendered as
+		// `cache.memory msg=<the whole sentence> available_mb=...`, putting the
+		// event NAME where the reader looks and the one clause that says what to
+		// do inside an attribute dump. This is the line most likely to be read on
+		// a machine that is already thrashing, and the least able to afford that.
+		//
+		// Nothing trails it dimmed, because there is nothing left to say:
+		// LogMemoryPressure builds msg with every figure it also attaches as an
+		// attribute, plus the running targets, so a trailer would print the same
+		// numbers twice.
+		h.printf("%s %s\n", glyph(colorize, "warn", colYellow), recordStr(r, "msg"))
 	case "cache.pool":
 		// A live occupancy sample, folded into the row pinned at the top of
 		// the sticky region. Deliberately not printed on a non-TTY: this
