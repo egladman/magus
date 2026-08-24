@@ -167,20 +167,42 @@ disarmed the guard for that call, and magus now sends it nothing.
   lands on the wrong project. A `cd` into a temp or scratchpad copy is denied
   instead, because that one changes what the answer means rather than only where
   it runs.
+- `time magus ...`, `timeout 5m magus ...`, and `magus ... && echo done`: magus
+  already reports each target's duration and verdict, already takes `--timeout`,
+  and already reports success through its exit status.
 
-Everything else passes.
+Everything else about the command itself passes. Two rules then read state
+outside the command line, and speak only into the silence the rules above leave:
+
+- The CI gate, when this workspace's run log shows it has already run several
+  times in the last two hours at real cost: it runs everything the diff reaches
+  by construction, and it is the target worth saving for the end. The rule reads
+  the command, so running a narrower target draws silence rather than an
+  advisory arguing with what it just asked for.
+- A binary older than the guard rules in the tree: appended to every verdict,
+  including a deny, because a stale binary's verdicts are all suspect rather
+  than only the ones that matched.
 
 ## The file surface
 
-`magus session hook --path <file>` judges a file path rather than a command. Two of its
-rules are definitive rather than heuristic, because both read DECLARATIONS: the
+`magus session hook --path <file>` judges a file path rather than a command. Three of its
+rules are definitive rather than heuristic, because each reads DECLARATIONS: the
 generated-output rule classifies the path against every target's declared
-outputs, and the notes rule against the declared notes store. The first advises,
-because a hand-edited generated file is wasteful rather than destructive; the
-second denies, on the provenance trigger.
+outputs, the notes rule against the declared notes store, and the delegation rule
+against what concurrent delegations declared they own (see
+[delegation](delegation.md)). The first advises, because a hand-edited generated
+file is wasteful rather than destructive; the other two deny, on the provenance
+trigger and on a collision no later rule can outrank.
 
-Both say nothing on any uncertainty. A rule fired on a guess trains the reader
-to ignore it, and a deny fired on a guess blocks real work.
+The rest are heuristics on the path, and each only fills a silence the
+definitive rules leave: a cross-host instruction file (`AGENTS.md`, `CLAUDE.md`)
+is where a workspace decision goes to be invisible to the next checkout, an
+installed skill is generated and the next `--force` install erases the edit, and
+a new source directory is a structural choice worth making deliberately rather
+than by where a file happened to land.
+
+All of them say nothing on any uncertainty. A rule fired on a guess trains the
+reader to ignore it, and a deny fired on a guess blocks real work.
 
 Wire this to your host's file-editing tool, not its shell tool.
 

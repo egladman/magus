@@ -1,6 +1,6 @@
 ---
 title: Doctrine
-description: "The standing decisions about what magus automates and what it leaves to your judgment: refusals explain themselves, and disposition stays with a person."
+description: "The standing decisions about what magus automates and what it leaves to your judgment: refusals explain themselves, host wiring stays yours, and disposition stays with a person."
 tags: [doctrine, design, judgment, agents, philosophy]
 ---
 
@@ -27,6 +27,39 @@ Automated review is wrong at a steady rate, and wrong in a characteristic way:
 the confident finding that "fixes" behavior somebody chose on purpose. The
 person deciding whether a proposal lands is the one who catches those findings.
 If magus applied them itself, they would ship unexamined.
+
+## The host wiring is yours
+
+magus owns the guard rules and the verdict. It does not own an integration with
+your agent host. The rules come from one binary and are identical everywhere;
+the part that knows your host - which event field carries the command, which
+reply channel reaches the model, what happens when the binary cannot be found -
+is a template you copy and edit. Adding a host is your change, not a magus
+release.
+
+The contract is small enough to hold in your head. `magus session hook` takes
+the thing to judge on stdin, either plain text or a payload keyed by FIELD
+(`tool_input.command`, `file_path`, `prompt`), never by a host name or a tool
+name. `-o template=` renders the verdict into whatever shape the host's reply
+takes. `TestNoHostSpecificBehaviorInCode` fails the build when a host name
+reaches a code path rather than a documented path on disk, and the
+`magus-guard-coverage:` line each template carries feeds a parity gate that
+fails when a host was never asked about a decision the contract grew.
+
+A layer that made every host work with no friction is what is being traded away
+here, and it is worth being plain about the trade. Agent hosts change their
+event shapes and hook names on their own schedule. A workspace whose
+integration lives inside magus waits for a magus release to get unblocked; a
+workspace that owns fifteen lines of shell edits them that afternoon. The cost
+is charged up front and on purpose: you read your host's hook documentation
+once, and there is no zero-configuration path.
+
+The second cost of such a layer is the one nobody sees until it matters. A
+guard you did not wire is a guard whose failure mode you do not know, and this
+one fails OPEN by design, so a hook that quietly stopped judging looks exactly
+like a session with nothing to deny. That is why every shipped template says so
+visibly rather than exiting quietly. Whoever runs the guard should be able to
+read what it does and repair it without us.
 
 ## A refusal carries its reason
 
@@ -74,6 +107,17 @@ prose; the doctrine holds while error messages get the same care as code.
 The explain lenses cover verdicts magus computes. magus captures and replays
 the output of the tools a target drives, but it cannot make a third-party
 tool's reasoning inspectable; the lens stops at the tool boundary.
+
+The host boundary is not as clean as the entry above states it. The binary
+still knows a handful of host paths: `magus doctor` inventories the config
+locations it can name when it reports on guard wiring, and `agent install`
+probes the conventional skill directories. Both are read-only conveniences over
+locations on disk, and a host neither one names still works, but extending
+either list is a magus release. The envelope field names came from one host's
+payload shape rather than from a neutral design, so a host that spells them
+differently reshapes its payload before piping it. And the OpenCode plugin
+carries a type-check and tests because it is real TypeScript, which is more
+upkeep than a shell template and more than an example should need.
 
 The line between automated and manual moves as a mechanism earns confidence.
 To move a row out of the table above, edit this page in the same commit that

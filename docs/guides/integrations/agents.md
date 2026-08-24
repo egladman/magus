@@ -59,6 +59,13 @@ wire the guard hook. Both are on your host's page.
 | [OpenCode](agents/opencode.md)       | `.opencode/skills/`           | a TypeScript plugin          |
 | [Any other host](agents/any-host.md) | wherever it reads them        | your own few lines of config |
 
+What you wire is yours. magus ships the rules and the verdict; the host-shaped
+few lines that carry an event in and a reply back are a template you copy and
+own, so a host magus has never heard of works the same way and a host that
+changes next month is your edit rather than a magus release.
+[Doctrine](../../doctrine.md#the-host-wiring-is-yours) records that trade and
+what it costs you.
+
 The shared reference pages sit behind those: [Skills](agents/skills.md) for the
 install surface, [The guard](agents/guard.md) for what is denied and why,
 [Guard hook templates](agents/guard-templates.md) for the two files Claude Code
