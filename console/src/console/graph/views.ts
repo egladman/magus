@@ -174,3 +174,24 @@ export function projectOwners(
   }
   return owner;
 }
+
+// LEGIBLE_NODE_COUNT is the graph size above which a cold load opens on the projects-only
+// projection instead of the whole graph.
+//
+// The number is a legibility judgement and not a measurement: it is roughly where a force layout
+// stops separating clusters and starts stacking them. Below it the whole graph is still worth
+// showing, and collapsing a 40-node workspace to four project dots would be the worse first
+// impression.
+//
+// It replaced a threshold of 2500 that was chosen as a PERFORMANCE guard - the size above which a
+// cold layout would jank the reveal. That made it useless for legibility twice over: it answers a
+// question about frame budget rather than about reading, and magus's own graph, the one most
+// readers meet first, is 2374 nodes. The flagship case cleared the guard by 5% and opened as fog.
+export const LEGIBLE_NODE_COUNT = 250;
+
+// opensProjected decides whether a cold load shows the projection. A fragment directive
+// (view/q/node, and the data/src pair that names where a graph came from) always wins: it asks for
+// a specific thing to look at, and overriding that with a summary answers a question nobody asked.
+export function opensProjected(nodeCount: number, hasFragmentDirective: boolean): boolean {
+  return !hasFragmentDirective && nodeCount > LEGIBLE_NODE_COUNT;
+}

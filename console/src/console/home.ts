@@ -580,7 +580,7 @@ export function buildLauncher(surfaces: Launchable[], open: (pageId: string) => 
   demoLabel.textContent = "Try the demo";
   const demoHint = document.createElement("span");
   demoHint.setAttribute("data-empty-hint", "");
-  demoHint.textContent = "Pick Demo data from the Workspace menu. Sample data, no daemon needed.";
+  demoHint.textContent = "Pick acme from the Workspace menu. Demo data, no daemon needed.";
   demoWay.append(demoLabel, demoHint);
 
   ways.append(pickWay, demoWay);

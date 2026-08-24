@@ -9,7 +9,10 @@
 // (home.ts) is NOT a tab - it is the outlet's empty state, shown whenever zero tabs are open.
 
 import { castWorkspaceSigil } from "./cast";
-import { WORKSPACE_ROOT as DEMO_WORKSPACE_ROOT } from "./demo-scenario";
+import {
+  WORKSPACE_ROOT as DEMO_WORKSPACE_ROOT,
+  WORKSPACE_ROOTS as DEMO_WORKSPACES,
+} from "./demo-scenario";
 import { exchangeOperatorToken } from "../lib/token-exchange";
 import {
   openTab,
@@ -1262,7 +1265,10 @@ export function startConsole(
     location.reload();
   };
   const workspacePicker = actionsHost
-    ? initWorkspacePicker(actionsHost, { onDemo: (enter) => (enter ? launchDemo() : leaveDemo()) })
+    ? initWorkspacePicker(actionsHost, {
+        onDemo: (enter) => (enter ? launchDemo() : leaveDemo()),
+        demoRoot: DEMO_WORKSPACE_ROOT,
+      })
     : null;
   // The first-sight cast belongs to the SHELL, not to the launcher. It used to run from the launcher's
   // paint, which meant it fired only if you happened to be looking at the zero-tab screen when the
@@ -2081,7 +2087,7 @@ export function startConsole(
       pulse.set({
         running: 5,
         queued: 2,
-        workspaces: [DEMO_WORKSPACE_ROOT, "~/Repos/magus"],
+        workspaces: [...DEMO_WORKSPACES],
         // 412 hits averaging a bit over three minutes each - a plausible afternoon, and enough to
         // show the headline figure the demo exists to show.
         cache: { hits: 412, misses: 77, savedMs: 79_200_000 },
@@ -2090,7 +2096,7 @@ export function startConsole(
       // The picker is fed here too. Its list otherwise arrives only from the dashboard's publisher,
       // so in the demo the workspace menu stayed empty until that one surface happened to be mounted -
       // and the scope control is in the title bar, where it is visible long before any surface is.
-      const demoRoots = [DEMO_WORKSPACE_ROOT, "~/Repos/magus"];
+      const demoRoots = DEMO_WORKSPACES;
       workspacePicker?.setWorkspaces(demoRoots);
       castSeen(demoRoots);
       return;

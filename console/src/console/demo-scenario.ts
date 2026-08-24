@@ -58,6 +58,13 @@ const MIN = 60_000;
 export const WORKSPACE = "acme";
 export const WORKSPACE_ROOT = "~/Repos/acme";
 
+// Every workspace the demo publishes, in menu order. Two, not one: with a single entry the scope
+// control is a question with one answer, and nothing about scoping is demonstrable without a daemon.
+// The second is magus's own repo because the Graph surface's demo is a committed export of it - the
+// one demo path whose data is real rather than fabricated, so a workspace list omitting it would
+// leave that graph belonging to nothing on screen.
+export const WORKSPACE_ROOTS: string[] = [WORKSPACE_ROOT, "~/Repos/magus"];
+
 // The Go module path the workspace's packages live under, so `go test` package lines read the way
 // they do in a real repo (the grafana/grafana shape: one module, many nested packages).
 const GOMOD = "github.com/acme/acme";

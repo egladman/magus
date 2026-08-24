@@ -312,7 +312,7 @@ function buildScaffold(host: HTMLElement): Refs {
   const demoHint = h(
     "span",
     undefined,
-    "Pick Demo data from the Workspace menu. Sample notes, no daemon needed.",
+    "Pick acme from the Workspace menu. Demo notes, no daemon needed.",
   );
   demoHint.dataset.emptyHint = "";
   wayDemo.append(demoLabel, demoHint);
