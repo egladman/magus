@@ -643,10 +643,21 @@ of how you like to work - a dependency graph cycle, an unparsable magusfile,
 two targets claiming one output - and exits non-zero. [advice] is a
 convention magus recommends, such as target naming or language coverage; it
 is reported and exits zero, because ci is the one target name magus reserves
-and the rest of the layout is yours. No flag promotes advice to failure.`,
+and the rest of the layout is yours. No flag promotes advice to failure.
+
+Every finding is reported under a stable check name (vcs-base-ref,
+cacheable-secret-reads). --list prints them all with what each looks at,
+without running any, so the name can be looked up rather than provoked.`,
 	Usage: "magus doctor [flags]",
+	Flags: []Flag{
+		{Name: "probe", Kind: FlagBool, Doc: "Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)"},
+		{Name: "fix", Kind: FlagBool, Doc: "Run the remedy each finding names, where one exists (see --dry-run to list them first)"},
+		{Name: "list", Kind: FlagBool, Doc: "Print every check magus would run - name, subject, and MGS code - without running any of them"},
+	},
 	Examples: []Example{
 		{"Run all checks", "magus doctor"},
+		{"Name every check without running one", "magus doctor --list"},
+		{"The check names alone, for scripting", "magus doctor --list -o name"},
 		{"JSON report", "magus doctor -o json"},
 	},
 }

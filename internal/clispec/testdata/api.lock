@@ -112,6 +112,9 @@ flag diff/cost
 flag diff/generated
 flag diff/tui
 flag diff/watch
+flag doctor/fix
+flag doctor/list
+flag doctor/probe
 flag explain/global
 flag explain/refresh
 flag init/dry-run

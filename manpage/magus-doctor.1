@@ -24,11 +24,39 @@ two targets claiming one output \- and exits non\-zero. [advice] is a
 convention magus recommends, such as target naming or language coverage; it
 is reported and exits zero, because ci is the one target name magus reserves
 and the rest of the layout is yours. No flag promotes advice to failure.
+.PP
+Every finding is reported under a stable check name (vcs\-base\-ref,
+cacheable\-secret\-reads). \-\-list prints them all with what each looks at,
+without running any, so the name can be looked up rather than provoked.
+.SH OPTIONS
+.RS
+.TP
+\fB\-\-fix\fR
+Run the remedy each finding names, where one exists (see \-\-dry\-run to list them first)
+.TP
+\fB\-\-list\fR
+Print every check magus would run \- name, subject, and MGS code \- without running any of them
+.TP
+\fB\-\-probe\fR
+Run each declared tool\-readiness probe instead of only listing it (forks a process per gated tool)
+.RE
 .SH EXAMPLES
 \fIRun all checks\fR
 .PP
 .EX
 magus doctor
+.EE
+.PP
+\fIName every check without running one\fR
+.PP
+.EX
+magus doctor --list
+.EE
+.PP
+\fIThe check names alone, for scripting\fR
+.PP
+.EX
+magus doctor --list -o name
 .EE
 .PP
 \fIJSON report\fR

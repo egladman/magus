@@ -30,7 +30,7 @@ const worktreesDirRel = ".claude/worktrees"
 // directory therefore reads as stale without shelling out to git, which keeps the
 // check cheap enough to run every time and correct when git is unavailable.
 func checkStaleWorktrees(root string) types.DoctorCheck {
-	const name = "stale worktrees"
+	const name = "stale-worktrees"
 	dir := filepath.Join(root, filepath.FromSlash(worktreesDirRel))
 
 	entries, err := os.ReadDir(dir)

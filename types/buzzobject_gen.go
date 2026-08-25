@@ -509,19 +509,21 @@ func (v Diff) BuzzObject() BuzzObject {
 
 func (v DoctorCheck) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"name":    v.Name,
-		"status":  string(v.Status),
-		"message": v.Message,
-		"details": v.Details,
-		"fix":     v.Fix,
+		"name":     v.Name,
+		"status":   string(v.Status),
+		"message":  v.Message,
+		"details":  v.Details,
+		"evidence": string(v.Evidence),
+		"fix":      v.Fix,
 	}
 }
 
 func (v DoctorSummary) BuzzObject() BuzzObject {
 	return BuzzObject{
-		"ok":     v.OK,
-		"fail":   v.Fail,
-		"advice": v.Advice,
+		"ok":      v.OK,
+		"fail":    v.Fail,
+		"advice":  v.Advice,
+		"unknown": v.Unknown,
 	}
 }
 

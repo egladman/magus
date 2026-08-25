@@ -147,6 +147,12 @@ const (
 	FlagDiffTui = "tui"
 	// diff: --watch
 	FlagDiffWatch = "watch"
+	// doctor: --fix
+	FlagDoctorFix = "fix"
+	// doctor: --list
+	FlagDoctorList = "list"
+	// doctor: --probe
+	FlagDoctorProbe = "probe"
 	// explain: --global
 	FlagExplainGlobal = "global"
 	// explain: --refresh
@@ -769,6 +775,22 @@ type VCSResolveFlags struct {
 func BindVCSResolve(fs *flag.FlagSet) *VCSResolveFlags {
 	var f VCSResolveFlags
 	fs.StringVar(&f.Against, FlagVCSResolveAgainst, "", "Merge this `ref` first, then settle what it conflicts with")
+	return &f
+}
+
+// DoctorFlags are the flags declared for `magus doctor`.
+type DoctorFlags struct {
+	Probe bool // --probe
+	Fix   bool // --fix
+	List  bool // --list
+}
+
+// BindDoctor registers `magus doctor`'s flags on fs and returns the destination.
+func BindDoctor(fs *flag.FlagSet) *DoctorFlags {
+	var f DoctorFlags
+	fs.BoolVar(&f.Probe, FlagDoctorProbe, false, "Run each declared tool-readiness probe instead of only listing it (forks a process per gated tool)")
+	fs.BoolVar(&f.Fix, FlagDoctorFix, false, "Run the remedy each finding names, where one exists (see --dry-run to list them first)")
+	fs.BoolVar(&f.List, FlagDoctorList, false, "Print every check magus would run - name, subject, and MGS code - without running any of them")
 	return &f
 }
 

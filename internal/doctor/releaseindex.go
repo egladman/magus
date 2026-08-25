@@ -30,7 +30,7 @@ const releaseIndexWarnWindow = 45 * 24 * time.Hour
 // would be `magus self update` refusing to run for everyone at once. That is the
 // outage this whole area exists to have fixed, arriving by a different door.
 func (r *runner) checkReleaseIndexExpiry() types.DoctorCheck {
-	const name = "release index"
+	const name = "release-index"
 
 	data, err := os.ReadFile(filepath.Join(r.root, servedIndexPath))
 	if os.IsNotExist(err) {
@@ -121,7 +121,7 @@ func roughly(d time.Duration) string {
 //
 // So the command is named in the message and the human runs it.
 func (r *runner) checkRegistryFreshness() types.DoctorCheck {
-	const name = "registry"
+	const name = "registry-freshness"
 
 	cached, err := registry.Load()
 	if err != nil {

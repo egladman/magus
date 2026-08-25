@@ -21,23 +21,23 @@ env MAGUS_VCS_ENABLED=false
 
 # The finding itself: configured below what the machine sizes to.
 exec magus --concurrency 2 doctor
-stdout 'concurrency sizing: concurrency is undersized'
+stdout 'concurrency-sizing: concurrency is undersized'
 stdout '2 of the 6'
 
 # --dry-run names the remedy and runs nothing.
 exec magus --concurrency 2 doctor --fix --dry-run
-stdout 'would fix concurrency sizing: magus config set key=concurrency,value=6'
+stdout 'would fix concurrency-sizing: magus config set key=concurrency,value=6'
 ! stdout 'applied'
 ! grep 'concurrency' magus.yaml
 
 # --fix applies it, through `config set`.
 exec magus --concurrency 2 doctor --fix
-stdout 'fixing concurrency sizing: magus config set key=concurrency,value=6'
+stdout 'fixing concurrency-sizing: magus config set key=concurrency,value=6'
 grep 'concurrency: 6' magus.yaml
 
 # And with the value now fitting, the finding is gone.
 exec magus doctor
-stdout 'concurrency sizing: 6, which is what this machine sizes to'
+stdout 'concurrency-sizing: 6, which is what this machine sizes to'
 
 -- magus.yaml --
 {}

@@ -8,7 +8,6 @@ import (
 
 	"github.com/egladman/magus/internal/agent"
 	"github.com/egladman/magus/internal/config"
-	"github.com/egladman/magus/project"
 	"github.com/egladman/magus/schema"
 	"github.com/egladman/magus/types"
 )
@@ -98,6 +97,9 @@ type runner struct {
 	// GET. Each used to invent its own context.Background(), so a `magus_doctor` an
 	// agent cancelled kept dialing and walking regardless.
 	ctx context.Context
+	// wsErr is the workspace load error, held on the runner so checkWorkspace can be a
+	// registry entry like every other check rather than a special case in the loop.
+	wsErr error
 }
 
 // Run executes all doctor checks. ws may be nil when workspace loading failed;
@@ -131,78 +133,40 @@ func (r *runner) runCtx() context.Context {
 }
 
 func (r *runner) run(wsErr error) types.DoctorReport {
-	var out types.DoctorReport
-	out.Checks = append(
-		out.Checks,
-		r.checkJSONCodec(), r.checkStaleSockets(), r.checkMCPTokens(), r.checkTerminal(),
-	)
+	r.wsErr = wsErr
 
-	if wsErr != nil {
-		out.Checks = append(out.Checks, types.DoctorCheck{
-			Name:    "workspace",
-			Status:  types.DoctorFail,
-			Message: wsErr.Error(),
-		})
-		out.Summary.Fail++
-		return out
+	var projects []*types.Project
+	var out types.DoctorReport
+	if wsErr == nil {
+		projects = r.ws.All()
+		out.Workspace = r.ws.Root()
 	}
 
-	projects := r.ws.All()
-	out.Workspace = r.ws.Root()
-	out.Checks = append(out.Checks, types.DoctorCheck{
-		Name:    "workspace",
-		Status:  types.DoctorOK,
-		Message: fmt.Sprintf("%d projects discovered", len(projects)),
-	})
-
-	out.Checks = append(
-		out.Checks,
-		r.checkConfigFile(),
-		r.checkCacheWritable(),
-		r.checkConcurrencySizing(),
-		r.checkMemoryDeclarations(projects),
-		r.checkCacheYield(projects),
-		r.checkLanguageCoverage(projects),
-		r.checkCITarget(projects),
-		r.checkSchemaFloor(projects),
-		r.checkNearDuplicateServices(projects),
-		r.checkStaleServiceSuppressions(projects),
-		r.checkMagusfileSyntax(projects),
-		r.checkSpellDocs(project.DefaultSpellRegistry().All()),
-		r.checkSpellContract(),
-		r.checkDiagnosticDocs(),
-		r.checkGraphCycles(),
-		r.checkGuardBinary(),
-		r.checkObserverRecording(),
-		r.checkGuardWiring(),
-		r.checkAgentSkills(),
-		r.checkReleaseIndexExpiry(),
-		r.checkRegistryFreshness(),
-		r.checkSymlinks(),
-		r.checkGraphBounds(),
-		r.checkGeneratedDrift(),
-		r.checkStaleWorktrees(),
-		r.checkEnvVars(),
-		r.checkTargetNameConventions(projects),
-		r.checkBespokePhaseFragmentTargets(projects),
-		r.checkUnreachedFootprintDecls(projects),
-		r.checkCacheableSecretReads(projects),
-		r.checkRedundantFootprintGlobs(projects),
-		r.checkDeadOutputGlobs(projects),
-		r.checkUndeclaredSeedingFiles(projects),
-		r.checkUnmatchableSourceGlobs(projects),
-		r.checkOutputOwnedByTwoTargets(projects),
-		r.checkSelfStalingOutputs(projects),
-		r.checkCharmTargetCollision(projects),
-		r.checkHasCharmTypos(projects),
-		r.checkReadinessProbes(projects),
-		r.checkStaleShadowAcks(),
-		r.checkVCSBaseRef(),
-		r.checkWorkspaceRegistration(),
-		r.checkBridgeReachability(),
-	)
+	for _, def := range allChecks {
+		if def.NeedsWorkspace && wsErr != nil {
+			continue
+		}
+		c := def.run(r, projects)
+		// The registry is authoritative for the name, so a check body cannot report
+		// itself under one identifier while the listing advertises another. Evidence is
+		// only a DEFAULT here: a check that could not look, or looked harder than usual,
+		// has already said so and that answer wins.
+		c.Name = def.Name
+		if c.Evidence == "" {
+			c.Evidence = def.Evidence
+		}
+		out.Checks = append(out.Checks, c)
+	}
 
 	for _, c := range out.Checks {
+		// A check that did not run is counted as unknown whatever status it carries.
+		// Those checks return DoctorOK because there was nothing to report, and
+		// tallying that as a pass is how "44 ok" came to include checks that never
+		// looked at anything.
+		if c.Evidence == types.EvidenceUnknown {
+			out.Summary.Unknown++
+			continue
+		}
 		switch c.Status {
 		case types.DoctorOK:
 			out.Summary.OK++
@@ -213,4 +177,18 @@ func (r *runner) run(wsErr error) types.DoctorReport {
 		}
 	}
 	return out
+}
+
+// checkWorkspace reports whether the magusfile loaded, and is the hinge every check
+// below it in the registry hangs on: a failure here skips them rather than running them
+// against a workspace that is not there.
+func (r *runner) checkWorkspace(projects []*types.Project) types.DoctorCheck {
+	if r.wsErr != nil {
+		return types.DoctorCheck{Name: "workspace", Status: types.DoctorFail, Message: r.wsErr.Error()}
+	}
+	return types.DoctorCheck{
+		Name:    "workspace",
+		Status:  types.DoctorOK,
+		Message: fmt.Sprintf("%d projects discovered", len(projects)),
+	}
 }
