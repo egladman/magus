@@ -89,8 +89,11 @@ func diffCmd(ctx context.Context, root string, args []string) error {
 		// The agent guard denies --ack outright, but it fails OPEN where it is not wired,
 		// and a receipt minted by a script is precisely the laundering this refuses. Not a
 		// usage error: the flags are fine and the caller is not a person.
+		// 2, matching --tui at a non-interactive terminal: the flags are fine and the
+		// request cannot be served as asked, which the documented taxonomy separates from
+		// a 1 (the changeset could not be read).
 		fmt.Fprintln(os.Stderr, "magus: diff --ack records that a person read this, so it needs an interactive terminal")
-		return types.ExitError{Code: 1}
+		return errSilent{exitCode: 2}
 	}
 	if rf.Cost && rf.Tui {
 		// Refused rather than ignored. The viewer has nowhere to put a report, so accepting the

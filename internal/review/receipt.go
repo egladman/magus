@@ -121,6 +121,13 @@ func Record(cacheDir string, add []Receipt) error {
 		return err
 	}
 	for _, r := range add {
+		// A re-ack with no reason keeps the one already on the record. Overwriting it
+		// would let the note explaining why forty files were covered in one keystroke
+		// vanish on the next plain `--ack`, silently, leaving a receipt that reads as
+		// though somebody sat down with the file.
+		if r.Reason == "" {
+			r.Reason = cur[r.Path].Reason
+		}
 		cur[r.Path] = r
 	}
 	list := make([]Receipt, 0, len(cur))

@@ -122,3 +122,32 @@ func TestDigestFileIsByteExact(t *testing.T) {
 		assert.NotEqual(t, base, write(body), "%s must void the receipt", name)
 	}
 }
+
+// A re-ack must not silently drop the note explaining why a file was covered in bulk.
+// Losing it turns a stamped receipt into one that reads as though somebody sat down with
+// the file - the exact conflation the reason exists to prevent.
+func TestRecordKeepsAnEarlierReasonWhenTheNewOneIsBlank(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+
+	require.NoError(t, Record(dir, []Receipt{{Path: "a.go", Digest: "one", At: now, Reason: "codemod output"}}))
+	require.NoError(t, Record(dir, []Receipt{{Path: "a.go", Digest: "two", At: now}}))
+
+	s, err := Load(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "codemod output", s["a.go"].Reason)
+	assert.True(t, s.Covers("a.go", "two"), "the digest still moves to the new content")
+}
+
+// ...but an explicit new reason replaces the old one: the reader said something newer.
+func TestRecordReplacesAnEarlierReasonWhenGivenOne(t *testing.T) {
+	dir := t.TempDir()
+	now := time.Now()
+
+	require.NoError(t, Record(dir, []Receipt{{Path: "a.go", Digest: "one", At: now, Reason: "codemod output"}}))
+	require.NoError(t, Record(dir, []Receipt{{Path: "a.go", Digest: "two", At: now, Reason: "read it properly"}}))
+
+	s, err := Load(dir)
+	require.NoError(t, err)
+	assert.Equal(t, "read it properly", s["a.go"].Reason)
+}
