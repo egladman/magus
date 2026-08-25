@@ -218,3 +218,84 @@ test("the diff sizes itself from its own pane, not the window", async () => {
     globalThis.ResizeObserver = realRO;
   }
 });
+
+// The review half, mounted. Everything below is the production path with the showcase's
+// fabricated review: the chips, the placement of a colleague's remark against the hunks on
+// screen, and the send box that shows the batch before it leaves.
+test("#demo places the review's threads beside the code they are about", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  const threads = [...document.querySelectorAll('.console-diff-row[data-author="review"]')];
+  assert.ok(threads.length > 0, "a colleague's remark has to reach the stream");
+
+  const chips = [...document.querySelectorAll(".console-diff-toolbar__stats .pf-v6-c-label")].map(
+    (el) => el.textContent,
+  );
+  assert.ok(chips.includes("#482"), "the open review is named");
+  // One human comment in the fixture is already published, so the draft count is what is left
+  // to send rather than everything the reader has written.
+  assert.ok(chips.includes("1 draft"), `want one draft, got ${chips.join(", ")}`);
+  // A thread on a file this changeset does not touch has nowhere in the stream to sit. It is
+  // counted rather than dropped: "your colleague said nothing" is the one thing this surface
+  // must never say by accident.
+  assert.ok(chips.includes("1 elsewhere"));
+
+  dispose.deactivate();
+});
+
+test("#demo shows the batch before it sends it, and sending clears the drafts", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.publish"));
+  const box = document.querySelector<HTMLElement>(".console-diff-composer--batch");
+  assert.ok(box, "publishing has to show what is about to leave");
+  assert.match(box?.textContent ?? "", /Send 1 remark to #482/);
+  // The listing names WHERE each remark lands, because a host anchors an inline comment to a
+  // line and a draft that cannot be placed has to be visible as such before the send.
+  assert.match(box?.textContent ?? "", /libs\/authkit\/claims\.go:22/);
+
+  const input = box?.querySelector<HTMLInputElement>("input");
+  assert.ok(input);
+  input.value = "self-review pass";
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  await settle();
+
+  assert.equal(document.querySelector(".console-diff-composer--batch"), null, "the box closes");
+  const chips = [...document.querySelectorAll(".console-diff-toolbar__stats .pf-v6-c-label")].map(
+    (el) => el.textContent,
+  );
+  assert.ok(
+    !chips.some((c) => c?.endsWith("draft") || c?.endsWith("drafts")),
+    `nothing is left to send, got ${chips.join(", ")}`,
+  );
+
+  dispose.deactivate();
+});
+
+// Pressing send with nothing drafted must say so. The alternative is a key that appears broken:
+// the reader presses it, no box opens, and nothing anywhere explains why.
+test("#demo answers a send with nothing drafted", async () => {
+  location.hash = "#demo";
+  const dispose = activate(document.body);
+  await settle();
+
+  assert.ok(dispatchCommand("diff.publish"));
+  const input = document.querySelector<HTMLInputElement>(".console-diff-composer--batch input");
+  assert.ok(input);
+  input.value = "";
+  input.dispatchEvent(new KeyboardEvent("keydown", { key: "Enter", bubbles: true }));
+  await settle();
+
+  assert.ok(dispatchCommand("diff.publish"));
+  assert.equal(document.querySelector(".console-diff-composer--batch"), null);
+  assert.match(
+    document.querySelector(".console-diff-collaboration")?.textContent ?? "",
+    /Nothing drafted/,
+  );
+
+  dispose.deactivate();
+});

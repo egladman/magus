@@ -16,6 +16,7 @@ import {
   fileOfRow,
   heightOf,
   maxLineChars,
+  placeThreads,
   storyText,
   ROW_HEIGHT,
   FILE_ROW_HEIGHT,
@@ -513,4 +514,80 @@ test("activeFileTarget falls back to the generated toggle for a real row with no
 
 test("activeFileTarget is nothing before the first file heading", () => {
   assert.equal(activeFileTarget(-1, false), "none");
+});
+
+// A thread's anchor is a line of the REVIEW, and the review is not the changeset in front of
+// the reader: the working tree moves, and a pull request covers commits this diff does not. So
+// each thread has to be placed against what is actually on screen.
+const THREAD_PATCH = [
+  "diff --git a/x.ts b/x.ts",
+  "--- a/x.ts",
+  "+++ b/x.ts",
+  "@@ -10,3 +10,3 @@",
+  " ten",
+  "-old eleven",
+  "+new eleven",
+  " twelve",
+  "",
+].join("\n");
+
+function thread(id: string, path: string, line: number) {
+  return { id, path, line, author: "dana", body: `remark ${id}` };
+}
+
+test("a thread lands on the hunk holding its line", () => {
+  const files = patchFixture(THREAD_PATCH);
+  const placed = placeThreads(files, [thread("t1", "x.ts", 11)]);
+  assert.deepEqual([...placed.atHunk.keys()], [commentKey("x.ts", 0)]);
+  assert.equal(placed.atFile.size, 0);
+  assert.equal(placed.elsewhere.length, 0);
+});
+
+// The line moved out from under the remark. It still belongs to this file and the reader still
+// has to hear it - a surface that dropped it would be claiming a colleague said nothing.
+test("a thread on a line this changeset does not contain falls back to its file", () => {
+  const files = patchFixture(THREAD_PATCH);
+  const placed = placeThreads(files, [thread("t1", "x.ts", 400)]);
+  assert.equal(placed.atHunk.size, 0);
+  assert.deepEqual([...placed.atFile.keys()], ["x.ts"]);
+});
+
+// A thread on a file this changeset does not touch has nowhere in the stream to go. It is
+// named rather than swallowed, so the caller can list it.
+test("a thread on a file outside the changeset is kept as elsewhere", () => {
+  const files = patchFixture(THREAD_PATCH);
+  const placed = placeThreads(files, [thread("t1", "other.ts", 2)]);
+  assert.equal(placed.atHunk.size, 0);
+  assert.equal(placed.atFile.size, 0);
+  assert.deepEqual(
+    placed.elsewhere.map((t) => t.path),
+    ["other.ts"],
+  );
+});
+
+// What a colleague already said is context for what you are about to write, so it precedes
+// this session's own remarks on the same hunk.
+test("threads render above the session's own comments on the same hunk", () => {
+  const files = patchFixture(THREAD_PATCH);
+  const comments = byHunk([
+    {
+      id: "c1",
+      path: "x.ts",
+      hunk: 0,
+      author: "human" as const,
+      body: "mine",
+      resolved: false,
+    },
+  ]);
+  const rows = buildRows(
+    files,
+    "unified",
+    comments,
+    undefined,
+    placeThreads(files, [thread("t1", "x.ts", 11)]),
+  );
+  assert.deepEqual(
+    rows.map((r) => r.kind),
+    ["file", "hunk", "thread", "comment", "line", "line", "line", "line"],
+  );
 });

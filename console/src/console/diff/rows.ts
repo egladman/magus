@@ -11,7 +11,7 @@
 // the kind of index arithmetic that is wrong until it is tested.
 
 import type { DiffFile, DiffLine, Hunk } from "./parse";
-import type { DiffComment, DiffTouch } from "./session";
+import type { DiffComment, DiffTouch, ReviewThread } from "./session";
 
 export type ViewMode = "unified" | "split";
 
@@ -38,6 +38,79 @@ export function byHunk(comments: readonly DiffComment[]): Map<string, DiffCommen
   return out;
 }
 
+// anchorLine picks the new-side line a remark about this hunk should hang on.
+//
+// The last ADDED line when there is one, else the last line that exists on the new side. A
+// reader commenting on a hunk is nearly always commenting on what the change introduced, and
+// the last one is where their eye finished.
+//
+// Undefined for a hunk that only DELETES: it has no new-side line, and every line it does have
+// is gone from the file the host would anchor against. Left unset rather than guessed, so the
+// composer can say the remark cannot be placed instead of the host silently refusing it or,
+// worse, accepting it against the wrong code.
+export function anchorLine(hunk: Hunk): number | undefined {
+  let lastAdd: number | undefined;
+  let lastOnNewSide: number | undefined;
+  for (const line of hunk.lines) {
+    if (line.newLine === null) continue;
+    lastOnNewSide = line.newLine;
+    if (line.kind === "add") lastAdd = line.newLine;
+  }
+  return lastAdd ?? lastOnNewSide;
+}
+
+// PlacedThreads is where each of the host's comment threads belongs in THIS changeset.
+//
+// Three buckets because a thread is anchored to a line of the review, and the review is not
+// the changeset in front of the reader: the working tree has moved since a colleague wrote
+// their remark, and a pull request covers commits this diff does not. So a thread lands on a
+// hunk when the line is one the reader can see, falls back to the file when it is not, and
+// otherwise names a file that is not in this changeset at all.
+//
+// The third bucket is the one that matters. Silently dropping those threads would make the
+// surface claim a colleague said nothing, which is the single worst thing a review reader can
+// be told, so the caller lists them instead.
+export interface PlacedThreads {
+  readonly atHunk: Map<string, ReviewThread[]>;
+  readonly atFile: Map<string, ReviewThread[]>;
+  readonly elsewhere: readonly ReviewThread[];
+}
+
+// placeThreads resolves each thread's (path, line) anchor against the changeset's hunks.
+//
+// The new side, always. A host anchors an inline comment to the line as it stands AFTER the
+// change, which is the side the reader is looking at; matching the old side would land a
+// remark about new code on whatever used to be there.
+export function placeThreads(
+  files: readonly DiffFile[],
+  threads: readonly ReviewThread[],
+): PlacedThreads {
+  const atHunk = new Map<string, ReviewThread[]>();
+  const atFile = new Map<string, ReviewThread[]>();
+  const elsewhere: ReviewThread[] = [];
+  const byPath = new Map(files.map((f) => [f.path, f]));
+
+  for (const t of threads) {
+    const file = byPath.get(t.path);
+    if (!file) {
+      elsewhere.push(t);
+      continue;
+    }
+    const hunk = file.hunks.findIndex(
+      (h) => t.line >= h.newStart && t.line < h.newStart + h.newCount,
+    );
+    if (hunk < 0) push(atFile, t.path, t);
+    else push(atHunk, commentKey(t.path, hunk), t);
+  }
+  return { atHunk, atFile, elsewhere };
+}
+
+function push(into: Map<string, ReviewThread[]>, key: string, t: ReviewThread): void {
+  const at = into.get(key);
+  if (at) at.push(t);
+  else into.set(key, [t]);
+}
+
 // Row is one rendered line of the stream. `file` and `hunk` rows are the headings; `line` is
 // unified content; `pair` is split content, where either side may be absent because an
 // add-only or delete-only run has nothing to sit opposite it.
@@ -46,6 +119,7 @@ export type Row =
   | { readonly kind: "hunk"; readonly file: DiffFile; readonly hunk: Hunk; readonly index: number }
   | { readonly kind: "line"; readonly file: DiffFile; readonly hunk: Hunk; readonly line: DiffLine }
   | { readonly kind: "comment"; readonly file: DiffFile; readonly comment: DiffComment }
+  | { readonly kind: "thread"; readonly file: DiffFile; readonly thread: ReviewThread }
   | { readonly kind: "story"; readonly file: DiffFile; readonly touch: DiffTouch }
   | {
       readonly kind: "pair";
@@ -67,10 +141,17 @@ export function buildRows(
   mode: ViewMode,
   comments?: Map<string, DiffComment[]>,
   touches?: Map<string, readonly DiffTouch[]>,
+  threads?: PlacedThreads,
 ): Row[] {
   const rows: Row[] = [];
   for (const file of files) {
     rows.push({ kind: "file", file });
+    // A thread whose line this changeset does not contain still belongs to this file, so it
+    // sits under the heading rather than being dropped. A colleague said it; the reader hears
+    // it, even when the line it was about has since moved.
+    for (const thread of threads?.atFile.get(file.path) ?? []) {
+      rows.push({ kind: "thread", file, thread });
+    }
     // The story sits under the FILE heading rather than under a hunk, because that is the
     // granularity the trail records: an agent wrote the file, and what it had read applies to
     // the edit as a whole. Pinning it to one hunk would claim a precision the data lacks.
@@ -79,6 +160,11 @@ export function buildRows(
     }
     file.hunks.forEach((hunk, index) => {
       rows.push({ kind: "hunk", file, hunk, index });
+      // The host's threads first, then this session's own remarks. What a colleague already
+      // said is context for what you are about to write, not a footnote to it.
+      for (const thread of threads?.atHunk.get(commentKey(file.path, index)) ?? []) {
+        rows.push({ kind: "thread", file, thread });
+      }
       for (const c of comments?.get(commentKey(file.path, index)) ?? []) {
         rows.push({ kind: "comment", file, comment: c });
       }

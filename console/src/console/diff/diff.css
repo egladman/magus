@@ -1107,3 +1107,58 @@
 .console-diff-row__text-part {
   background: inherit;
 }
+
+/* A thread already on the host's review: the comment row's shape, deliberately NOT its colors.
+ * The reader has to be able to tell at a glance what is still theirs to send from what the
+ * world has already seen. */
+.console-diff-row--comment[data-author="review"] {
+  border-inline-start-color: var(--pf-t--global--icon--color--status--info--default);
+  background: var(--pf-t--global--background--color--primary--default);
+}
+
+/* The send box lists the batch above the summary field, so it stacks where the one-line
+ * composer sits on a single row. Capped and scrollable: a long pass is exactly when reading
+ * the set before it leaves matters most, and it must not push its own send field off screen. */
+.console-diff-composer--batch {
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.console-diff-composer--batch[data-failed] {
+  border-block-start-color: var(--pf-t--global--icon--color--status--danger--default);
+}
+
+.console-diff-composer__batch {
+  max-height: 30vh;
+  overflow-y: auto;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  font-size: var(--pf-t--global--font--size--xs);
+}
+
+.console-diff-composer__batch li {
+  display: flex;
+  gap: var(--pf-t--global--spacer--sm);
+  padding-block: 2px;
+}
+
+/* A draft with no new-side line is one no host can place, so the publisher drops it. Marked
+ * here, BEFORE the send, rather than discovered afterwards as a remark that quietly never
+ * arrived. */
+.console-diff-composer__batch li[data-unplaceable] {
+  color: var(--pf-t--global--text--color--status--warning--default);
+}
+
+.console-diff-composer__at {
+  flex: 0 0 auto;
+  font-family: var(--pf-t--global--font--family--mono);
+  color: var(--pf-t--global--text--color--subtle);
+}
+
+.console-diff-composer__body {
+  flex: 1 1 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

@@ -20,7 +20,7 @@
 // The fixture is a plain-data module by design (no DOM, no fetch, no protobuf), so
 // demo.test.ts can assert the patch and the annotations agree without mounting anything.
 
-import type { DiffSession, SessionOp } from "./session";
+import type { DiffSession, ReviewInfo, SessionOp } from "./session";
 
 // The patch is an array of lines rather than one template literal because Go struct tags are
 // backtick-quoted: a template literal would need every one of them escaped, and an escaped
@@ -281,6 +281,9 @@ export function demoSession(): DiffSession {
         id: "cm1",
         path: "libs/authkit/claims.go",
         hunk: 0,
+        // The new-side line the remark hangs on, which is what a host anchors an inline
+        // comment to. Inside hunk 0's range (+14,14), so the batch can place it.
+        line: 22,
         author: "human",
         body: "Audience is repeated on the wire. Does a token minted for two services verify at both, or is the first one authoritative?",
         resolved: false,
@@ -298,9 +301,14 @@ export function demoSession(): DiffSession {
         id: "cm3",
         path: "apps/dashboard/src/api/session.ts",
         hunk: 0,
+        line: 41,
         author: "human",
         body: "canReach was the only reader of scope, so this is the whole web-side change.",
         resolved: true,
+        // Already sent, so the showcase has both states side by side: what the reader still
+        // holds and what the world has seen. A surface where those look the same is one where
+        // pressing send is a guess.
+        published: true,
       },
     ],
     suggestions: [
@@ -324,6 +332,68 @@ export function demoSession(): DiffSession {
         declined: false,
       },
     ],
+  };
+}
+
+// demoReview is the pull request the acme branch has open, and what has already been said on
+// it. Same story as everything else in this file: the claims contract grew an audience, and
+// the people who consume it are asking about it in public.
+//
+// The four threads cover every way a remark can land, which is the point of having four. Two
+// sit on hunks the reader can see. One is on a file in this changeset but a line outside its
+// hunks, because the code moved after the remark was written. One is on a file this changeset
+// does not touch at all, because a review covers commits a working diff does not.
+//
+// The last two are why placement is not just a lookup: a surface that dropped them would be
+// telling the reader a colleague said nothing, which is the worst thing a review can say.
+export function demoReview(): ReviewInfo {
+  return {
+    number: 482,
+    repo: "acme/acme",
+    threads: [
+      {
+        id: "th1",
+        path: "libs/authkit/claims.go",
+        line: 24,
+        author: "priya",
+        body: "Audience as a slice means a token can verify at two services. Was that the intent, or should it be one?",
+      },
+      {
+        id: "th2",
+        path: "services/identity/internal/token/verify.go",
+        line: 34,
+        author: "marcus",
+        body: "Membership is right, but this is the third hand-rolled audience check. Worth a helper on Claims before a fourth.",
+      },
+      {
+        id: "th4",
+        path: "services/gateway/internal/mint/token.go",
+        line: 204,
+        author: "marcus",
+        body: "Whatever we settle on here, the minter's docstring still describes the single-audience shape.",
+      },
+      {
+        id: "th3",
+        path: "services/gateway/internal/proxy/auth.go",
+        line: 88,
+        author: "priya",
+        body: "Gateway mints scope-only tokens on the health path. It will start failing Valid the moment this lands.",
+      },
+    ],
+  };
+}
+
+// applyDemoPublish is the showcase's send: the drafts stop being drafts.
+//
+// It marks rather than removes, because that is what publishing does - the remark is still
+// yours and still beside the code, it has simply also left. A showcase that deleted them would
+// teach the reader that sending loses their work.
+export function applyDemoPublish(session: DiffSession): DiffSession {
+  return {
+    ...session,
+    comments: (session.comments ?? []).map((c) =>
+      c.author === "human" ? { ...c, published: true } : c,
+    ),
   };
 }
 
@@ -357,6 +427,7 @@ export function applyDemoOp(session: DiffSession, op: SessionOp): DiffSession {
             id: `cm${comments.length + 1}`,
             path: op.path,
             hunk: op.hunk,
+            line: op.line,
             author: "human",
             body: op.body,
             resolved: false,

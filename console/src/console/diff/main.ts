@@ -43,9 +43,12 @@ import {
   rowOffsets,
   rowAt,
   fileOfRow,
+  anchorLine,
   maxLineChars,
+  placeThreads,
   storyText,
   LINE_PREFIX_CHARS,
+  type PlacedThreads,
   type Row,
   type ViewMode,
 } from "./rows";
@@ -56,14 +59,18 @@ import {
   fetchPatch,
   fetchContext,
   fetchSession,
+  fetchReview,
   fetchReviewSession,
   mutate,
+  publish,
   HttpError,
+  type DiffComment,
   type DiffSession,
   type DiffAnnotation,
   type DiffTouch,
+  type ReviewInfo,
 } from "./session";
-import { demoSession, applyDemoOp } from "./demo";
+import { demoSession, demoReview, applyDemoPublish, applyDemoOp } from "./demo";
 import { DEMO_FILES } from "./gen/demo";
 import { registerCommand, unregisterCommand } from "../commands";
 import { resolveDaemonHost, parseHash, adoptDaemonOrigin, wantsDemo } from "../../lib/daemon";
@@ -107,6 +114,13 @@ interface State {
   mode: ViewMode;
   cursor: number;
   session: DiffSession | null;
+  // review is which pull request this branch has open and what has been said on it, or a
+  // closed target carrying the reason. Null until the lookup lands - and it lands LAST, after
+  // the patch and the annotations, because it is the only one that leaves the machine.
+  review: ReviewInfo | null;
+  // threads is review.threads resolved against the hunks actually on screen. Rebuilt with the
+  // rows, since a fold or a mode switch changes which hunk a line sits in.
+  threads: PlacedThreads | null;
   viewed: Set<string>;
   // digestByRow maps a hunk row index to the digest the daemon computed for that hunk. Filled
   // in full at rebuild - the browser hashes nothing, so every digest is known before the first
@@ -293,6 +307,8 @@ export function activate(host: HTMLElement): SurfaceInstance {
     mode: paneNarrow ? "unified" : modeCell.get(),
     cursor: -1,
     session: null,
+    review: null,
+    threads: null,
     viewed: new Set(),
     digestByRow: new Map(),
     // Open. The activity view folds its sections shut because a run's output is long and
@@ -562,6 +578,18 @@ export function activate(host: HTMLElement): SurfaceInstance {
         t.title = row.touch.transcript;
         el.append(t);
       }
+      return el;
+    }
+    if (row.kind === "thread") {
+      // A colleague's remark, already on the host's review. It renders in the comment row's
+      // shape and NOT in its colors: the reader has to be able to tell at a glance what is
+      // still theirs to send from what the world has already seen.
+      const el = h("div", "console-diff-row console-diff-row--comment");
+      el.dataset.author = "review";
+      const who = h("span", "console-diff-row__who");
+      who.textContent = row.thread.author || "review";
+      el.append(who, h("span", "console-diff-row__comment", row.thread.body));
+      el.append(label("on the review", "pf-m-blue"));
       return el;
     }
     if (row.kind === "comment") {
@@ -889,6 +917,15 @@ export function activate(host: HTMLElement): SurfaceInstance {
     void collaborationNotice.offsetWidth;
     collaborationNotice.classList.add("is-flash");
   };
+  // transientNotice is an answer to something the reader just pressed - why the send did
+  // nothing, most of the time. It outranks the collaboration sentence while it stands and is
+  // cleared by the next command, so it lasts exactly as long as the question it answers.
+  let transientNotice = "";
+  const flashPublishNotice = (text: string): void => {
+    transientNotice = text;
+    renderToolbar();
+    flashCollaborationNotice();
+  };
   const setCollaboration = (next: CollaborationState): void => {
     if (state.collaboration === next) return;
     state.collaboration = next;
@@ -1086,7 +1123,17 @@ export function activate(host: HTMLElement): SurfaceInstance {
     for (const f of state.session?.diff?.files ?? []) {
       if (f.touches?.length) touches.set(f.path, f.touches);
     }
-    state.rows = buildRows(state.files, state.mode, byHunk(state.session?.comments ?? []), touches);
+    // Placed against the files ACTUALLY on screen, on every rebuild: folding the generated
+    // group or switching to split changes which hunk a line sits in, and a placement computed
+    // once would leave a colleague's remark pinned to whatever used to be there.
+    state.threads = state.review ? placeThreads(state.files, state.review.threads) : null;
+    state.rows = buildRows(
+      state.files,
+      state.mode,
+      byHunk(state.session?.comments ?? []),
+      touches,
+      state.threads ?? undefined,
+    );
     state.hunks = hunkRowIndexes(state.rows);
     state.hunkOrdinalByRow = hunkOrdinal(state.rows);
     state.fileRows = fileRowIndexes(state.rows);
@@ -1118,6 +1165,43 @@ export function activate(host: HTMLElement): SurfaceInstance {
 
   const UNRANKED_TITLE =
     "No symbol index. Files use path order. Run magus graph build to order them by impact.";
+
+  // reviewChips says where this pass is going and what is waiting for it.
+  //
+  // Nothing at all until the lookup lands, and nothing when no review is open. A branch with no
+  // pull request is the ordinary state of most branches most of the time, and a chip saying so
+  // on every one of them would be a permanent complaint about nothing.
+  const reviewChips = (): HTMLElement[] => {
+    const info = state.review;
+    if (!info?.number) return [];
+    const chips = [
+      label(`#${info.number}`, "pf-m-blue", info.repo ? `Open on ${info.repo}` : "The open review"),
+    ];
+    const pending = drafts().length;
+    if (pending > 0) {
+      chips.push(
+        label(
+          `${pending} ${pending === 1 ? "draft" : "drafts"}`,
+          "pf-m-orange",
+          "Written, not sent. Press s to read the batch and send it.",
+        ),
+      );
+    }
+    // Threads on files this changeset does not touch have nowhere in the stream to sit. Counted
+    // rather than dropped: "your colleague said nothing" is the one thing a review surface must
+    // never say by accident.
+    const elsewhere = state.threads?.elsewhere.length ?? 0;
+    if (elsewhere > 0) {
+      chips.push(
+        label(
+          `${elsewhere} elsewhere`,
+          undefined,
+          "Comments on the review, on files this changeset does not touch",
+        ),
+      );
+    }
+    return chips;
+  };
 
   const renderToolbar = (): void => {
     const s = stats(state.changeset);
@@ -1233,7 +1317,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
       ),
     );
     if (state.collaboration !== "live") chips.push(label(collaboration.text, collaboration.tone));
-    collaborationNotice.textContent = collaboration.notice;
+    // The review chips come last: they describe what happens to this pass when it is over,
+    // which is the least urgent thing on a row about what is in front of the reader now.
+    chips.push(...reviewChips());
+    collaborationNotice.textContent = transientNotice || collaboration.notice;
     statsEl.replaceChildren(...chips);
   };
 
@@ -1551,7 +1638,13 @@ export function activate(host: HTMLElement): SurfaceInstance {
       const body = input.value.trim();
       close();
       if (!body) return;
-      sync({ op: "comment", path: row.file.path, hunk: row.index, body });
+      sync({
+        op: "comment",
+        path: row.file.path,
+        hunk: row.index,
+        line: anchorLine(row.hunk),
+        body,
+      });
     });
     inputWrap.append(input);
     box.append(where, inputWrap);
@@ -1559,6 +1652,140 @@ export function activate(host: HTMLElement): SurfaceInstance {
     // on every scroll frame, so a composer living in it would be destroyed mid-sentence.
     scroll.append(box);
     input.focus();
+  };
+
+  // loadReview asks which review is open and what has already been said on it, then re-lays the
+  // stream so the threads take their places in it.
+  //
+  // Never throws and never degrades the session: a forge that cannot be reached is a diff with
+  // no review attached, which is what this surface was before any of this existed.
+  const loadReview = async (): Promise<void> => {
+    if (disposed) return;
+    if (demo) {
+      state.review = demoReview();
+      await rebuild();
+      return;
+    }
+    const hp = host_();
+    if (!hp) return;
+    const info = await fetchReview(hp, controller.signal);
+    if (disposed) return;
+    state.review = info;
+    await rebuild();
+  };
+
+  // drafts are the remarks that have not left yet: written by the person, on this session.
+  //
+  // An agent's remark is NEVER here. It reaches the session over MCP, and the daemon derives
+  // the published set from the session rather than from the request, so this is the same
+  // filter stated on both sides rather than a rule one side could relax.
+  const drafts = (): DiffComment[] =>
+    (state.session?.comments ?? []).filter((c) => c.author === "human" && !c.published);
+
+  // composePublish shows the batch that is about to leave and asks for the line that heads it.
+  //
+  // The listing is the point, and it is why this is not a one-key send. Publishing is the one
+  // act on this surface a colleague can see, so the reader gets to read what they wrote as a
+  // SET before it goes - which is the whole argument for drafting in the first place: the
+  // fifth remark often changes your mind about the first.
+  const composePublish = (): void => {
+    const pending = drafts();
+    if (!state.review?.number || pending.length === 0) {
+      flashPublishNotice(
+        pending.length === 0
+          ? "Nothing drafted. Press c to comment on a hunk."
+          : (state.review?.reason ?? "No review is open for this branch."),
+      );
+      return;
+    }
+    const existing = scroll.querySelector<HTMLInputElement>(".console-diff-composer__input input");
+    if (existing) {
+      existing.focus();
+      return;
+    }
+
+    const box = h("div", "console-diff-composer console-diff-composer--batch");
+    const where = h("span", "console-diff-composer__where");
+    where.textContent = `Send ${pending.length} ${pending.length === 1 ? "remark" : "remarks"} to #${state.review.number}`;
+    const listing = h("ul", "console-diff-composer__batch");
+    for (const d of pending) {
+      const item = h("li");
+      const at = h("span", "console-diff-composer__at", `${d.path}:${d.line ?? "?"}`);
+      // A draft with no line is one no host can place, so the publisher drops it rather than
+      // guessing. Said here, before the send, rather than discovered afterwards as a remark
+      // that quietly never arrived.
+      if (!d.line) item.dataset.unplaceable = "";
+      item.append(at, h("span", "console-diff-composer__body", d.body));
+      listing.append(item);
+    }
+    const inputWrap = h("span", "pf-v6-c-form-control console-diff-composer__input");
+    const input = h("input", "pf-v6-c-form-control__text");
+    input.type = "text";
+    input.placeholder = "One line about the pass as a whole. Enter to send, Esc to cancel.";
+    const close = (): void => {
+      box.remove();
+      scroll.focus();
+    };
+    input.addEventListener("keydown", (e) => {
+      e.stopPropagation();
+      if (e.key === "Escape") {
+        e.preventDefault();
+        close();
+        return;
+      }
+      if (e.key !== "Enter") return;
+      e.preventDefault();
+      const summary = input.value.trim();
+      input.disabled = true;
+      where.textContent = "Sending...";
+      void sendDrafts(summary).then((failure) => {
+        if (disposed) return;
+        if (!failure) {
+          close();
+          return;
+        }
+        // The box STAYS OPEN on failure, holding what the reader typed. A send that failed
+        // has changed nothing, so the next thing they do is try again - and retyping the
+        // summary would be a punishment for the forge being down.
+        input.disabled = false;
+        where.textContent = failure;
+        box.dataset.failed = "";
+        input.focus();
+      });
+    });
+    inputWrap.append(input);
+    box.append(where, listing, inputWrap);
+    scroll.append(box);
+    input.focus();
+  };
+
+  // sendDrafts publishes and returns the failure to show, or "" when the batch left.
+  //
+  // A string rather than a thrown error, because the caller's job is to put the reason in front
+  // of the reader: "no pull request for this branch" and "the host refused a comment on a line
+  // it cannot see" send them to different places, and a boolean would send them to neither.
+  const sendDrafts = async (summary: string): Promise<string> => {
+    if (demo) {
+      // The showcase sends for real, into memory. Publishing is the one act here a colleague
+      // would see, so a reader trying it must find out what it does rather than meeting a
+      // disabled button and guessing.
+      if (state.session) applySession(applyDemoPublish(state.session));
+      return "";
+    }
+    const hp = host_();
+    if (!hp) return "Connect a daemon to publish.";
+    try {
+      const next = await publish(hp, summary, controller.signal);
+      if (disposed) return "";
+      applySession(next);
+      // Re-read the review, so what just left comes back as a thread beside the code it is
+      // about. Without it the remarks would vanish from the surface at the moment they became
+      // the only permanent thing on it.
+      await loadReview();
+      return "";
+    } catch (error) {
+      return error instanceof Error ? error.message : String(error);
+    }
   };
 
   // resolveHere closes the first unresolved comment on the hunk the cursor is in. Either party
@@ -1712,6 +1939,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
       key: "r",
     },
     {
+      id: "diff.publish",
+      label: "Diff: send your drafts to the review",
+      run: composePublish,
+      key: "s",
+    },
+    {
       id: "diff.context.peek",
       label: "Diff: peek surrounding code for this hunk",
       run: () => {
@@ -1754,6 +1987,12 @@ export function activate(host: HTMLElement): SurfaceInstance {
       const run = byKey.get(e.key);
       if (!run) return;
       e.preventDefault();
+      // A notice answers the key that provoked it, so the next key retires it. Cleared before
+      // the command runs, since the command may well set a new one.
+      if (transientNotice) {
+        transientNotice = "";
+        renderToolbar();
+      }
       run();
     },
     { signal: controller.signal },
@@ -1816,7 +2055,7 @@ export function activate(host: HTMLElement): SurfaceInstance {
       root.dataset.phase = "ready";
       root.dataset.overview = "off";
       applySession(sess, false);
-      await rebuild();
+      await loadReview();
       scroll.focus();
       return;
     }
@@ -1892,6 +2131,10 @@ export function activate(host: HTMLElement): SurfaceInstance {
       state.changeset = order(parsed, sess);
       await rebuild();
       startPolling();
+      // PHASE THREE: the review. Last, and not awaited by anything above it, because it is the
+      // only call that leaves this machine - a forge taking ten seconds must cost the reader
+      // nothing but a chip that arrives late.
+      void loadReview();
     } catch {
       // Keep the reader available, but never imply that comments, read marks, or suggestions are
       // synchronized when the pairing step did not complete.
