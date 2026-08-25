@@ -111,7 +111,19 @@ func (e *earnedSync) SetViewed(digest string, on bool) {
 // not meet an error about bookkeeping.
 func (e *earnedSync) close() {
 	defer e.diffSync.close()
+	if add := e.finished(); len(add) > 0 {
+		_ = review.Record(e.cacheDir, add)
+	}
+}
 
+// pending is how many files the reader has finished but not yet had recorded, for the line
+// the viewer prints on the way out. Reading it before close is the point: a reader is told
+// what their session earned at the moment they finish it, not the next time they happen to
+// run a report.
+func (e *earnedSync) pending() int { return len(e.finished()) }
+
+// finished is every file whose hunks were all marked read in a session that touched it.
+func (e *earnedSync) finished() []review.Receipt {
 	var add []review.Receipt
 	for path, total := range e.hunksOf {
 		if !e.live[path] {
@@ -133,7 +145,5 @@ func (e *earnedSync) close() {
 		}
 		add = append(add, review.Receipt{Path: path, Digest: content, At: e.now()})
 	}
-	if len(add) > 0 {
-		_ = review.Record(e.cacheDir, add)
-	}
+	return add
 }

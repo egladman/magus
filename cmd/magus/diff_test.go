@@ -761,3 +761,21 @@ func TestDiffBridgeSendAfterCloseIsSafe(t *testing.T) {
 		t.Fatal("a send after close blocked")
 	}
 }
+
+// TestDiffNextStepLinesTeachTheWorkflow pins the pointers at the end of the default report.
+//
+// That report is the funnel mouth - the surface everybody runs - and it used to name the
+// console and nothing else, so `--tui` and `--cost` existed only in `-h` prose and the man
+// page. The best teaching in the product sat furthest from the entrance.
+func TestDiffNextStepLinesTeachTheWorkflow(t *testing.T) {
+	got := strings.Join(diffNextStepLines(3), "\n")
+	assert.Contains(t, got, "magus diff --tui")
+	assert.Contains(t, got, "magus diff --cost")
+	// The exit, named with the entrance: --tui takes over the screen, and an invitation into
+	// a full-screen mode that does not say how to leave gets declined once and never retaken.
+	assert.Contains(t, got, "q leaves it")
+
+	// Nothing to read is nothing to suggest: a clean tree or an all-generated changeset has
+	// no reading to offer, and a pointer there suggests doing nothing.
+	assert.Nil(t, diffNextStepLines(0))
+}

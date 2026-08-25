@@ -371,7 +371,20 @@ export function activate(host: HTMLElement): SurfaceInstance {
   collaborationNotice.addEventListener("animationend", () =>
     collaborationNotice.classList.remove("is-flash"),
   );
-  toolbar.append(statsEl, collaborationNotice);
+  // The keys, stated on screen, the way the terminal viewer states them in its footer - and
+  // for the reason recorded there: a viewer whose bindings are only in the documentation is
+  // a viewer nobody drives with anything but the arrow keys.
+  //
+  // The console's hold-"?" cheat sheet cannot carry these: it renders only commands that
+  // resolve to a chord in the console-wide keymap, and these are surface-local single keys
+  // that never enter it. Until then the only summary lived inside the Esc overview - behind
+  // the one key a first-time reader is least likely to try.
+  const keysEl = h(
+    "div",
+    "console-diff-toolbar__keys",
+    "]/[ hunk   }/{ file   v read   u next unread   . generated   Esc overview",
+  );
+  toolbar.append(statsEl, collaborationNotice, keysEl);
   // Keep context outside the fixed-height virtual stream.
   const context = h("aside", "console-diff-context");
   context.hidden = true;
@@ -1434,7 +1447,8 @@ export function activate(host: HTMLElement): SurfaceInstance {
       h(
         "p",
         "console-diff-overview__hint",
-        "Esc returns to the diff. ] and [ step hunks, } and { step files, v marks read, . folds generated.",
+        "Esc returns to the diff. ] and [ step hunks, } and { step files, v marks read, " +
+          "u jumps to the next file needing attention, . folds generated.",
       ),
     );
     overview.replaceChildren(box);

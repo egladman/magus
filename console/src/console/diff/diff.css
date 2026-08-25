@@ -329,6 +329,26 @@
   flex-wrap: wrap;
 }
 
+/* The key legend sits at the trailing edge and is the first thing to go when the toolbar runs
+   out of room: it teaches a reader who does not know the bindings, and a reader who does has
+   already stopped looking at it. Text tier rather than the icon one, for the contrast reason
+   in the note below. */
+.console-diff-toolbar__keys {
+  margin-inline-start: auto;
+  color: var(--pf-t--global--text--color--subtle);
+  font-size: var(--pf-t--global--font--size--body--sm);
+  font-family: var(--pf-t--global--font--family--mono);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+@media (max-width: 60rem) {
+  .console-diff-toolbar__keys {
+    display: none;
+  }
+}
+
 /* aria-live sentences, so the text tier rather than the icon one: the icon value is 1.97:1 on the
    toolbar ground in light. See the tier note in tokens.css. */
 .console-diff-collaboration:not(:empty) {

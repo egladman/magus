@@ -448,7 +448,8 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths [
 	files := diffTUIFiles(rev, diff.ParseHunks(patch))
 	// Wrapped so finishing a file in the viewer leaves a receipt behind it. The marks were
 	// always explicit; this is what makes them outlive the session.
-	sync = newEarnedSync(sync, m.Root(), m.CacheDir(), files, sess.Viewed)
+	earned := newEarnedSync(sync, m.Root(), m.CacheDir(), files, sess.Viewed)
+	sync = earned
 	// Closed here rather than inside difftui: how a Sync gets its writes out - inline, or over a
 	// goroutine that has to be drained - is this file's business, and the viewer stays ignorant
 	// of it. Deferred before Run, so it also runs on the interrupts Run RETURNS from: `q`,
@@ -472,7 +473,17 @@ func runDiffTUI(ctx context.Context, m *magus.Magus, patch, base string, paths [
 		// Called at quit rather than computed here, so the line reports the fold the reader
 		// LEFT in: `.` changes what is on the page, and a summary fixed at the opening state
 		// would describe a session nobody had.
-		Summary: func(unfolded bool) string { return diffCountsLine(rev, unfolded) },
+		// The counts the reader left in, plus what their reading EARNED. Receipts were minted
+		// silently, so `v` read as a session bookmark and the receipt vocabulary in `--cost`
+		// arrived later with no referent - the reader had done the work and never been told
+		// it counted. Said at quit, once, naming where to see it.
+		Summary: func(unfolded bool) string {
+			line := diffCountsLine(rev, unfolded)
+			if n := earned.pending(); n > 0 {
+				line += fmt.Sprintf("; %d file(s) now carry a read receipt (magus diff --cost)", n)
+			}
+			return line
+		},
 	})
 }
 
@@ -881,6 +892,10 @@ func diffUsage(w *os.File) {
 	fmt.Fprintln(w, "                owns them, an estimate from recorded run times, what the")
 	fmt.Fprintln(w, "                advisors say, and which notes anchor what you changed.")
 	fmt.Fprintln(w, "                It gates nothing and changes no exit code.")
+	fmt.Fprintln(w, "  --ack         record that you have read the named changed files, or all of")
+	fmt.Fprintln(w, "                them when you name none. Needs a terminal.")
+	fmt.Fprintln(w, "  --reason      an optional note kept with an --ack")
+	fmt.Fprintln(w, "  --watch       re-read and re-render whenever the working tree changes")
 }
 
 // diffHistoryCommits bounds the git-log walk the churn lenses do. 500 matches what the
@@ -1006,16 +1021,56 @@ func printDiffText(rev types.Diff, showGenerated bool, link func(string) string,
 		}
 	}
 
+	// What to do NEXT, which this report used to leave entirely unsaid.
+	//
+	// It named only the console, so the one surface everybody runs advertised a different
+	// program and never its own review workflow: `--tui` and `--cost` appear in `-h` prose
+	// and in the man page, and nowhere a reader of this output would meet them. The best
+	// teaching magus has - the REVIEW section, the viewer's key footer - sat furthest from
+	// the entrance, and the entrance taught nothing.
+	//
+	// Two lines, at a terminal only, and only when there is something to read: a reader who
+	// already knows loses two lines, and a reader who does not gets the whole workflow.
+	if tty.IsTerminalWriter(os.Stdout, tty.SystemProbe) {
+		for _, line := range diffNextStepLines(len(primary)) {
+			fmt.Println(line)
+		}
+	}
 	// The same changeset in the console's Diff surface. The link carries no token (see
 	// printJobWatchHint), so the terminal check is no longer a secrecy measure - it is an
 	// invitation to go look at something, and a pipe is not a person. Keeping it means
 	// `magus diff > file` stays data.
 	if tty.IsTerminalWriter(os.Stdout, tty.SystemProbe) {
 		if u := consoleDiffURL(); u != "" {
-			fmt.Printf("\nopen in console: %s\n%s\n", u, authHint)
+			fmt.Printf("open in console: %s\n%s\n", u, authHint)
 		}
 	}
 	return nil
+}
+
+// diffNextStepLines names what a reader can do with the changeset they were just shown.
+//
+// This report used to end without saying. It named the console and nothing else, so the one
+// surface everybody runs advertised a different program and never its own review workflow -
+// `--tui` and `--cost` lived in `-h` prose and the man page, nowhere a reader of this output
+// would meet them. The best teaching magus has, the REVIEW section and the viewer's key
+// footer, sat furthest from the entrance while the entrance taught nothing.
+//
+// Nothing when nothing was listed: a clean tree or an all-generated changeset has no reading
+// to offer, and a suggestion there is a suggestion to do nothing.
+func diffNextStepLines(readable int) []string {
+	if readable == 0 {
+		return nil
+	}
+	// The exit is named in the same breath as the entrance. --tui takes over the screen, and
+	// an invitation into a full-screen mode that does not say how to leave it is the kind
+	// that gets declined once and never taken again. The viewer's own footer says `q quit`
+	// too, but that is only readable by someone already inside.
+	return []string{
+		"",
+		"read it interactively: magus diff --tui   (q leaves it)",
+		"what landing it costs: magus diff --cost",
+	}
 }
 
 func printDiffFile(f types.DiffFile, link func(string) string) {
